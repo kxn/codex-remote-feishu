@@ -193,8 +193,6 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentPathPickerUp,
 		FeishuUIIntentPathPickerSelect,
 		FeishuUIIntentPathPickerPage,
-		FeishuUIIntentTargetPickerSelectMode,
-		FeishuUIIntentTargetPickerSelectSource,
 		FeishuUIIntentTargetPickerSelectWorkspace,
 		FeishuUIIntentTargetPickerSelectSession,
 		FeishuUIIntentTargetPickerPage,

@@ -17,40 +17,6 @@ func parseTargetPickerCardAction(
 	surfaceSessionID, chatID, operatorID, messageID string,
 ) (control.Action, bool) {
 	switch actionPayloadKind(value) {
-	case cardActionKindTargetPickerSelectMode:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		targetValue := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTargetValue))
-		if pickerID == "" || targetValue == "" {
-			return control.Action{}, false
-		}
-		return control.Action{
-			Kind:              control.ActionTargetPickerSelectMode,
-			GatewayID:         strings.TrimSpace(env.GatewayID),
-			SurfaceSessionID:  surfaceSessionID,
-			ChatID:            chatID,
-			ActorUserID:       operatorID,
-			MessageID:         messageID,
-			PickerID:          pickerID,
-			TargetPickerValue: targetValue,
-			Inbound:           meta,
-		}, true
-	case cardActionKindTargetPickerSelectSource:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		targetValue := selectflow.RecoverCallbackValue(value, event.Event.Action, cardTargetPickerSourceFieldName, cardActionPayloadKeyTargetValue)
-		if pickerID == "" || targetValue == "" {
-			return control.Action{}, false
-		}
-		return control.Action{
-			Kind:              control.ActionTargetPickerSelectSource,
-			GatewayID:         strings.TrimSpace(env.GatewayID),
-			SurfaceSessionID:  surfaceSessionID,
-			ChatID:            chatID,
-			ActorUserID:       operatorID,
-			MessageID:         messageID,
-			PickerID:          pickerID,
-			TargetPickerValue: targetValue,
-			Inbound:           meta,
-		}, true
 	case cardActionKindTargetPickerSelectWorkspace:
 		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
 		workspaceKey := selectflow.TargetPickerWorkspaceFlow.RecoverSelectedValue(value, event.Event.Action)

@@ -17,27 +17,6 @@ func TestParseCardActionTriggerEventBuildsTargetPickerSelectActions(t *testing.T
 		wantValue string
 	}{
 		{
-			name: "mode from payload",
-			payload: map[string]any{
-				"kind":         cardActionKindTargetPickerSelectMode,
-				"picker_id":    "picker-1",
-				"target_value": string(control.FeishuTargetPickerModeAddWorkspace),
-			},
-			wantKind:  control.ActionTargetPickerSelectMode,
-			wantValue: string(control.FeishuTargetPickerModeAddWorkspace),
-		},
-		{
-			name: "source from option fallback",
-			payload: map[string]any{
-				"kind":       cardActionKindTargetPickerSelectSource,
-				"picker_id":  "picker-1",
-				"field_name": cardTargetPickerSourceFieldName,
-			},
-			option:    string(control.FeishuTargetPickerSourceGitURL),
-			wantKind:  control.ActionTargetPickerSelectSource,
-			wantValue: string(control.FeishuTargetPickerSourceGitURL),
-		},
-		{
 			name: "workspace from form value",
 			payload: map[string]any{
 				"kind":      cardActionKindTargetPickerSelectWorkspace,
@@ -90,7 +69,7 @@ func TestParseCardActionTriggerEventBuildsTargetPickerSelectActions(t *testing.T
 				t.Fatalf("unexpected target picker action: %#v", action)
 			}
 			switch tt.wantKind {
-			case control.ActionTargetPickerSelectMode, control.ActionTargetPickerSelectSource, control.ActionTargetPickerSelectSession:
+			case control.ActionTargetPickerSelectSession:
 				if action.TargetPickerValue != tt.wantValue {
 					t.Fatalf("target picker value = %q, want %q", action.TargetPickerValue, tt.wantValue)
 				}

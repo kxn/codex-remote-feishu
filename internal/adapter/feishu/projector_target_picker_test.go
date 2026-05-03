@@ -491,67 +491,13 @@ func TestTargetPickerEditingCardUsesStepHeaderInsteadOfSummary(t *testing.T) {
 	}
 }
 
-func TestTargetPickerElementsRenderSourceChoicesAsSingleStepPage(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
-		PickerID:          "picker-1",
-		Title:             "选择工作区与会话",
-		Page:              control.FeishuTargetPickerPageSource,
-		SelectedMode:      control.FeishuTargetPickerModeAddWorkspace,
-		SelectedSource:    control.FeishuTargetPickerSourceGitURL,
-		ShowModeSwitch:    true,
-		ShowSourceSelect:  true,
-		SourcePlaceholder: "选择工作区来源",
-		ConfirmLabel:      "填写 Git URL",
-		CanConfirm:        false,
-		ModeOptions: []control.FeishuTargetPickerModeOption{
-			{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
-			{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
-		},
-		SourceOptions: []control.FeishuTargetPickerSourceOption{
-			{Value: control.FeishuTargetPickerSourceLocalDirectory, Label: "本地目录", MetaText: "选择已经存在的目录", Available: true},
-			{Value: control.FeishuTargetPickerSourceGitURL, Label: "Git URL", MetaText: "需要本机已安装 git 后才能使用", Available: false, UnavailableReason: "当前机器未检测到 git"},
-		},
-		AddModeSummary:        "完成后会进入新会话待命",
-		SourceUnavailableHint: "当前机器未检测到 `git`",
-	}, "life-3")
-
-	var sawSourceSelect bool
-	var sawConfirm bool
-	for _, action := range cardActionsFromElements(elements) {
-		switch cardValueMap(action)[cardActionPayloadKeyKind] {
-		case cardActionKindTargetPickerSelectSource:
-			sawSourceSelect = true
-		case cardActionKindTargetPickerConfirm:
-			sawConfirm = true
-		}
-	}
-	if !sawSourceSelect {
-		t.Fatalf("expected source page to render source selection callbacks, got %#v", elements)
-	}
-	if sawConfirm {
-		t.Fatalf("expected source page to advance by clicking a choice instead of rendering a footer confirm, got %#v", elements)
-	}
-}
-
 func TestTargetPickerElementsRenderLocalDirectoryOpenPathAction(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
-		PickerID:         "picker-1",
-		Title:            "选择工作区与会话",
-		Page:             control.FeishuTargetPickerPageLocalDirectory,
-		SelectedMode:     control.FeishuTargetPickerModeAddWorkspace,
-		SelectedSource:   control.FeishuTargetPickerSourceLocalDirectory,
-		ShowModeSwitch:   true,
-		ShowSourceSelect: true,
-		ConfirmLabel:     "接入并继续",
-		CanConfirm:       false,
-		ModeOptions: []control.FeishuTargetPickerModeOption{
-			{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
-			{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
-		},
-		SourceOptions: []control.FeishuTargetPickerSourceOption{
-			{Value: control.FeishuTargetPickerSourceLocalDirectory, Label: "本地目录", Available: true},
-			{Value: control.FeishuTargetPickerSourceGitURL, Label: "Git URL", Available: true},
-		},
+		PickerID:     "picker-1",
+		Title:        "选择工作区与会话",
+		Page:         control.FeishuTargetPickerPageLocalDirectory,
+		ConfirmLabel: "接入并继续",
+		CanConfirm:   false,
 	}, "life-4")
 
 	var sawOpenPath bool
@@ -574,11 +520,8 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 		PickerID:                 "picker-1",
 		Title:                    "选择工作区与会话",
 		Page:                     control.FeishuTargetPickerPageGit,
-		SelectedMode:             control.FeishuTargetPickerModeAddWorkspace,
-		SelectedSource:           control.FeishuTargetPickerSourceGitURL,
-		ShowModeSwitch:           true,
-		ShowSourceSelect:         true,
 		CanGoBack:                true,
+		BackCommandText:          "/workspace",
 		ConfirmLabel:             "克隆并继续",
 		CanConfirm:               false,
 		ConfirmValidatesOnSubmit: true,
@@ -586,14 +529,6 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 		GitRepoURL:               "https://github.com/kxn/codex-remote-feishu.git",
 		GitDirectoryName:         "crf",
 		GitFinalPath:             "/data/dl/crf",
-		ModeOptions: []control.FeishuTargetPickerModeOption{
-			{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
-			{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
-		},
-		SourceOptions: []control.FeishuTargetPickerSourceOption{
-			{Value: control.FeishuTargetPickerSourceLocalDirectory, Label: "本地目录", Available: true},
-			{Value: control.FeishuTargetPickerSourceGitURL, Label: "Git URL", Available: true},
-		},
 	}, "life-5")
 
 	var form map[string]any
@@ -660,7 +595,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 			if cardValueMap(action)[cardActionPayloadKeyTargetValue] == control.FeishuTargetPickerPathFieldGitParentDir {
 				sawOpenPath = true
 			}
-		case cardActionKindTargetPickerBack:
+		case cardActionKindPageAction:
 			sawBack = true
 		case cardActionKindTargetPickerConfirm:
 			sawConfirm = true
@@ -683,8 +618,6 @@ func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *t
 		PickerID:                 "picker-1",
 		Title:                    "从 Worktree 新建工作区",
 		Page:                     control.FeishuTargetPickerPageWorktree,
-		SelectedMode:             control.FeishuTargetPickerModeAddWorkspace,
-		SelectedSource:           control.FeishuTargetPickerSourceGitWorktree,
 		ConfirmLabel:             "创建并进入",
 		CanConfirm:               false,
 		ConfirmValidatesOnSubmit: true,
@@ -773,25 +706,14 @@ func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *test
 			PickerID:         "picker-1",
 			Title:            "选择工作区与会话",
 			Page:             control.FeishuTargetPickerPageGit,
-			SelectedMode:     control.FeishuTargetPickerModeAddWorkspace,
-			SelectedSource:   control.FeishuTargetPickerSourceGitURL,
-			ShowModeSwitch:   true,
-			ShowSourceSelect: true,
 			CanGoBack:        true,
+			BackCommandText:  "/workspace",
 			ConfirmLabel:     "克隆并继续",
 			CanConfirm:       true,
 			GitParentDir:     "/data/dl",
 			GitRepoURL:       "https://github.com/kxn/codex-remote-feishu.git",
 			GitDirectoryName: "crf",
 			GitFinalPath:     "/data/dl/crf",
-			ModeOptions: []control.FeishuTargetPickerModeOption{
-				{Value: control.FeishuTargetPickerModeExistingWorkspace, Label: "已有工作区"},
-				{Value: control.FeishuTargetPickerModeAddWorkspace, Label: "添加工作区", Selected: true},
-			},
-			SourceOptions: []control.FeishuTargetPickerSourceOption{
-				{Value: control.FeishuTargetPickerSourceLocalDirectory, Label: "本地目录", Available: true},
-				{Value: control.FeishuTargetPickerSourceGitURL, Label: "Git URL", Available: true},
-			},
 		},
 	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {

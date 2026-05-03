@@ -36,10 +36,8 @@ const (
 	cardActionPayloadKeyDaemonLifecycleID     = frontstagecontract.CardActionPayloadKeyDaemonLifecycleID
 	cardPathPickerDirectorySelectFieldName    = frontstagecontract.CardPathPickerDirectorySelectFieldName
 	cardPathPickerFileSelectFieldName         = frontstagecontract.CardPathPickerFileSelectFieldName
-	cardTargetPickerModeFieldName             = frontstagecontract.CardTargetPickerModeFieldName
 	cardTargetPickerWorkspaceFieldName        = frontstagecontract.CardTargetPickerWorkspaceFieldName
 	cardTargetPickerSessionFieldName          = frontstagecontract.CardTargetPickerSessionFieldName
-	cardTargetPickerSourceFieldName           = frontstagecontract.CardTargetPickerSourceFieldName
 	cardSelectionThreadFieldName              = frontstagecontract.CardSelectionThreadFieldName
 	cardThreadHistoryTurnFieldName            = frontstagecontract.CardThreadHistoryTurnFieldName
 	cardActionPayloadDefaultCommandFieldName  = frontstagecontract.CardActionPayloadDefaultCommandFieldName
@@ -71,8 +69,6 @@ const (
 	cardActionKindPathPickerPage              = frontstagecontract.CardActionKindPathPickerPage
 	cardActionKindPathPickerConfirm           = frontstagecontract.CardActionKindPathPickerConfirm
 	cardActionKindPathPickerCancel            = frontstagecontract.CardActionKindPathPickerCancel
-	cardActionKindTargetPickerSelectMode      = frontstagecontract.CardActionKindTargetPickerSelectMode
-	cardActionKindTargetPickerSelectSource    = frontstagecontract.CardActionKindTargetPickerSelectSource
 	cardActionKindTargetPickerSelectWorkspace = frontstagecontract.CardActionKindTargetPickerSelectWorkspace
 	cardActionKindTargetPickerSelectSession   = frontstagecontract.CardActionKindTargetPickerSelectSession
 	cardActionKindTargetPickerPage            = frontstagecontract.CardActionKindTargetPickerPage

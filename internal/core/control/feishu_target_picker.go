@@ -1,8 +1,6 @@
 package control
 
 import (
-	"time"
-
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
@@ -26,27 +24,10 @@ const (
 	FeishuTargetPickerSessionNewThread FeishuTargetPickerSessionKind = "new_thread"
 )
 
-type FeishuTargetPickerMode string
-
-const (
-	FeishuTargetPickerModeExistingWorkspace FeishuTargetPickerMode = "existing_workspace"
-	FeishuTargetPickerModeAddWorkspace      FeishuTargetPickerMode = "add_workspace"
-)
-
-type FeishuTargetPickerSourceKind string
-
-const (
-	FeishuTargetPickerSourceLocalDirectory FeishuTargetPickerSourceKind = "local_directory"
-	FeishuTargetPickerSourceGitURL         FeishuTargetPickerSourceKind = "git_url"
-	FeishuTargetPickerSourceGitWorktree    FeishuTargetPickerSourceKind = "git_worktree"
-)
-
 type FeishuTargetPickerPage string
 
 const (
-	FeishuTargetPickerPageMode           FeishuTargetPickerPage = "mode"
 	FeishuTargetPickerPageTarget         FeishuTargetPickerPage = "target"
-	FeishuTargetPickerPageSource         FeishuTargetPickerPage = "source"
 	FeishuTargetPickerPageLocalDirectory FeishuTargetPickerPage = "local_directory"
 	FeishuTargetPickerPageGit            FeishuTargetPickerPage = "git"
 	FeishuTargetPickerPageWorktree       FeishuTargetPickerPage = "worktree"
@@ -107,19 +88,13 @@ type FeishuTargetPickerView struct {
 	CanGoBack                bool
 	BackLabel                string
 	BackCommandText          string
-	SelectedMode             FeishuTargetPickerMode
-	SelectedSource           FeishuTargetPickerSourceKind
-	ShowModeSwitch           bool
 	ShowWorkspaceSelect      bool
 	ShowSessionSelect        bool
-	ShowSourceSelect         bool
 	WorkspaceSelectionLocked bool
 	LockedWorkspaceKey       string
 	AllowNewThread           bool
-	ModePlaceholder          string
 	WorkspacePlaceholder     string
 	SessionPlaceholder       string
-	SourcePlaceholder        string
 	WorkspaceCursor          int
 	SessionCursor            int
 	SelectedWorkspaceKey     string
@@ -134,13 +109,8 @@ type FeishuTargetPickerView struct {
 	ConfirmValidatesOnSubmit bool
 	CanConfirm               bool
 	Hint                     string
-	ModeOptions              []FeishuTargetPickerModeOption
 	WorkspaceOptions         []FeishuTargetPickerWorkspaceOption
 	SessionOptions           []FeishuTargetPickerSessionOption
-	SourceOptions            []FeishuTargetPickerSourceOption
-	AddModeSummary           string
-	AddModeDetail            string
-	SourceUnavailableHint    string
 	LocalDirectoryPath       string
 	GitParentDir             string
 	GitRepoURL               string
@@ -151,15 +121,6 @@ type FeishuTargetPickerView struct {
 	WorktreeFinalPath        string
 	Messages                 []FeishuTargetPickerMessage
 	SourceMessages           []FeishuTargetPickerMessage
-}
-
-type FeishuTargetPickerModeOption struct {
-	Value             FeishuTargetPickerMode
-	Label             string
-	MetaText          string
-	Selected          bool
-	Available         bool
-	UnavailableReason string
 }
 
 type FeishuTargetPickerWorkspaceOption struct {
@@ -177,29 +138,9 @@ type FeishuTargetPickerSessionOption struct {
 	MetaText string
 }
 
-type FeishuTargetPickerSourceOption struct {
-	Value             FeishuTargetPickerSourceKind
-	Label             string
-	MetaText          string
-	Available         bool
-	UnavailableReason string
-}
-
 type FeishuTargetPickerMessage struct {
 	Level FeishuTargetPickerMessageLevel
 	Text  string
-}
-
-type TargetPickerResult struct {
-	PickerID     string
-	Source       TargetPickerRequestSource
-	Mode         FeishuTargetPickerMode
-	SourceKind   FeishuTargetPickerSourceKind
-	WorkspaceKey string
-	SessionValue string
-	OwnerUserID  string
-	CreatedAt    time.Time
-	ExpiresAt    time.Time
 }
 
 func NormalizeFeishuTargetPickerView(view FeishuTargetPickerView) FeishuTargetPickerView {

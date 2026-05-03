@@ -19,29 +19,7 @@ func targetPickerDefaultPage(source control.TargetPickerRequestSource) control.F
 	}
 }
 
-func targetPickerNormalizePage(page control.FeishuTargetPickerPage, source control.TargetPickerRequestSource, mode control.FeishuTargetPickerMode, sourceKind control.FeishuTargetPickerSourceKind) control.FeishuTargetPickerPage {
-	_ = page
-	_ = mode
-	_ = sourceKind
-	return targetPickerDefaultPage(source)
-}
-
-func targetPickerAdvancePage(page control.FeishuTargetPickerPage, mode control.FeishuTargetPickerMode, sourceKind control.FeishuTargetPickerSourceKind) control.FeishuTargetPickerPage {
-	_ = mode
-	_ = sourceKind
-	return page
-}
-
-func targetPickerPreviousPage(page control.FeishuTargetPickerPage, source control.TargetPickerRequestSource) control.FeishuTargetPickerPage {
-	_ = source
-	return page
-}
-
-func targetPickerCanGoBack(page control.FeishuTargetPickerPage, source control.TargetPickerRequestSource) bool {
-	return targetPickerPreviousPage(page, source) != page
-}
-
-func targetPickerViewStageLabel(record *activeTargetPickerRecord, page control.FeishuTargetPickerPage, mode control.FeishuTargetPickerMode, source control.FeishuTargetPickerSourceKind) string {
+func targetPickerViewStageLabel(record *activeTargetPickerRecord, page control.FeishuTargetPickerPage) string {
 	if record == nil {
 		return ""
 	}
@@ -55,7 +33,7 @@ func targetPickerViewStageLabel(record *activeTargetPickerRecord, page control.F
 		case targetPickerPendingUseThread:
 			return "目标/处理中"
 		case targetPickerPendingNewThread:
-			if mode == control.FeishuTargetPickerModeAddWorkspace && source == control.FeishuTargetPickerSourceLocalDirectory {
+			if page == control.FeishuTargetPickerPageLocalDirectory || record.Source == control.TargetPickerRequestSourceDir {
 				return "目录/处理中"
 			}
 			return "目标/处理中"
@@ -79,15 +57,6 @@ func targetPickerViewStageLabel(record *activeTargetPickerRecord, page control.F
 		case control.FeishuTargetPickerPageWorktree:
 			return "Worktree"
 		default:
-			if source == control.FeishuTargetPickerSourceGitWorktree {
-				return "Worktree"
-			}
-			if source == control.FeishuTargetPickerSourceGitURL {
-				return "Git"
-			}
-			if mode == control.FeishuTargetPickerModeAddWorkspace {
-				return "目录"
-			}
 			return "切换"
 		}
 	}

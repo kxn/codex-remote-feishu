@@ -86,12 +86,6 @@ func TargetPickerTheme(view control.FeishuTargetPickerView) string {
 	}
 }
 
-func targetPickerModePageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
-	return targetPickerChoicePageElements(
-		targetPickerModeChoiceItems(view, daemonLifecycleID),
-	)
-}
-
 func targetPickerLockedWorkspaceSections(view control.FeishuTargetPickerView) []control.FeishuCardTextSection {
 	lines := make([]string, 0, 2)
 	if label := strings.TrimSpace(view.SelectedWorkspaceLabel); label != "" {
@@ -109,93 +103,6 @@ func targetPickerLockedWorkspaceSections(view control.FeishuTargetPickerView) []
 	}}
 }
 
-func targetPickerSourcePageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
-	return targetPickerChoicePageElements(
-		targetPickerSourceChoiceItems(view, daemonLifecycleID),
-	)
-}
-
-type targetPickerChoiceItem struct {
-	Label    string
-	MetaText string
-	Payload  map[string]any
-	Selected bool
-	Disabled bool
-}
-
-func targetPickerModeChoiceItems(view control.FeishuTargetPickerView, daemonLifecycleID string) []targetPickerChoiceItem {
-	items := make([]targetPickerChoiceItem, 0, len(view.ModeOptions))
-	for _, option := range view.ModeOptions {
-		label := strings.TrimSpace(option.Label)
-		if label == "" || option.Value == "" {
-			continue
-		}
-		available := option.Available || strings.TrimSpace(option.UnavailableReason) == ""
-		metaText := strings.TrimSpace(option.MetaText)
-		if !available && strings.TrimSpace(option.UnavailableReason) != "" {
-			metaText = strings.TrimSpace(firstNonEmpty(metaText, option.UnavailableReason))
-		}
-		items = append(items, targetPickerChoiceItem{
-			Label:    label,
-			MetaText: metaText,
-			Payload:  stampActionValue(targetPickerPayload(view, actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectMode, view.PickerID, string(option.Value))), daemonLifecycleID),
-			Selected: option.Selected,
-			Disabled: !available,
-		})
-	}
-	return items
-}
-
-func targetPickerSourceChoiceItems(view control.FeishuTargetPickerView, daemonLifecycleID string) []targetPickerChoiceItem {
-	items := make([]targetPickerChoiceItem, 0, len(view.SourceOptions))
-	for _, option := range view.SourceOptions {
-		label := strings.TrimSpace(option.Label)
-		value := strings.TrimSpace(string(option.Value))
-		if label == "" || value == "" {
-			continue
-		}
-		metaText := strings.TrimSpace(option.MetaText)
-		if !option.Available && strings.TrimSpace(option.UnavailableReason) != "" {
-			metaText = strings.TrimSpace(firstNonEmpty(metaText, option.UnavailableReason))
-		}
-		items = append(items, targetPickerChoiceItem{
-			Label:    label,
-			MetaText: metaText,
-			Payload:  stampActionValue(targetPickerPayload(view, actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectSource, view.PickerID, value)), daemonLifecycleID),
-			Selected: option.Value == view.SelectedSource,
-			Disabled: !option.Available,
-		})
-	}
-	return items
-}
-
-func targetPickerChoicePageElements(items []targetPickerChoiceItem) []map[string]any {
-	elements := make([]map[string]any, 0, len(items)*2)
-	for _, item := range items {
-		label := strings.TrimSpace(item.Label)
-		if label == "" || len(item.Payload) == 0 {
-			continue
-		}
-		buttonType := "default"
-		if item.Selected {
-			buttonType = "primary"
-		}
-		elements = append(elements, cardCallbackButtonElement(
-			label,
-			buttonType,
-			item.Payload,
-			item.Disabled,
-			"fill",
-		))
-		if metaText := strings.TrimSpace(item.MetaText); metaText != "" {
-			if block := cardPlainTextBlockElement(metaText); len(block) != 0 {
-				elements = append(elements, block)
-			}
-		}
-	}
-	return elements
-}
-
 func targetPickerEditingFooterButtons(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	buttons := []map[string]any{
 		cardCallbackButtonElement("取消", "default", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID)), daemonLifecycleID), false, ""),
@@ -205,29 +112,35 @@ func targetPickerEditingFooterButtons(view control.FeishuTargetPickerView, daemo
 			buttons = append(buttons, back)
 		}
 	}
-	if view.Page == control.FeishuTargetPickerPageMode || view.Page == control.FeishuTargetPickerPageSource {
-		return buttons
-	}
 	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID), targetPickerConfirmDisabled(view), "fill"))
 	return buttons
 }
 
 func targetPickerBackButtonElement(view control.FeishuTargetPickerView, daemonLifecycleID string) map[string]any {
-	label := strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步"))
-	if commandText := strings.TrimSpace(view.BackCommandText); commandText != "" {
-		action, ok := control.ParseFeishuTextAction(commandText)
-		if !ok {
-			return nil
-		}
-		return cardCallbackButtonElement(
-			label,
-			"default",
-			stampActionValue(actionPayloadPageAction(string(action.Kind), control.FeishuActionArgumentText(action.Text)), daemonLifecycleID),
-			false,
-			"",
-		)
+	payload := targetPickerBackActionPayload(view)
+	if len(payload) == 0 {
+		return nil
 	}
-	return cardCallbackButtonElement(label, "default", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID)), daemonLifecycleID), false, "")
+	label := strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步"))
+	return cardCallbackButtonElement(
+		label,
+		"default",
+		stampActionValue(payload, daemonLifecycleID),
+		false,
+		"",
+	)
+}
+
+func targetPickerBackActionPayload(view control.FeishuTargetPickerView) map[string]any {
+	commandText := strings.TrimSpace(view.BackCommandText)
+	if commandText == "" {
+		return nil
+	}
+	action, ok := control.ParseFeishuTextAction(commandText)
+	if !ok {
+		return nil
+	}
+	return actionPayloadPageAction(string(action.Kind), control.FeishuActionArgumentText(action.Text))
 }
 
 func targetPickerLocalDirectoryElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
@@ -381,16 +294,18 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 		buttons = append(buttons, cancelButton)
 	}
 	if view.CanGoBack {
-		backButton := cardFormActionButtonElement(
-			strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步")),
-			"default",
-			stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerBack, view.PickerID)), daemonLifecycleID),
-			false,
-			"",
-		)
-		if len(backButton) != 0 {
-			backButton["name"] = "target_picker_back"
-			buttons = append(buttons, backButton)
+		if payload := targetPickerBackActionPayload(view); len(payload) != 0 {
+			backButton := cardFormActionButtonElement(
+				strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步")),
+				"default",
+				stampActionValue(payload, daemonLifecycleID),
+				false,
+				"",
+			)
+			if len(backButton) != 0 {
+				backButton["name"] = "target_picker_back"
+				buttons = append(buttons, backButton)
+			}
 		}
 	}
 	confirmButton := cardFormActionButtonElement(

@@ -472,9 +472,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
 			Inbound:          meta,
 		}, true
-	case cardActionKindTargetPickerSelectMode,
-		cardActionKindTargetPickerSelectSource,
-		cardActionKindTargetPickerSelectWorkspace,
+	case cardActionKindTargetPickerSelectWorkspace,
 		cardActionKindTargetPickerSelectSession,
 		cardActionKindTargetPickerPage,
 		cardActionKindTargetPickerOpenPathPicker,

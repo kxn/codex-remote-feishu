@@ -100,30 +100,6 @@ func targetPickerSessionOption(view *control.FeishuTargetPickerView, value strin
 	return control.FeishuTargetPickerSessionOption{}, false
 }
 
-func targetPickerModeOption(view *control.FeishuTargetPickerView, value control.FeishuTargetPickerMode) (control.FeishuTargetPickerModeOption, bool) {
-	if view == nil {
-		return control.FeishuTargetPickerModeOption{}, false
-	}
-	for _, option := range view.ModeOptions {
-		if option.Value == value {
-			return option, true
-		}
-	}
-	return control.FeishuTargetPickerModeOption{}, false
-}
-
-func targetPickerSourceOption(view *control.FeishuTargetPickerView, value control.FeishuTargetPickerSourceKind) (control.FeishuTargetPickerSourceOption, bool) {
-	if view == nil {
-		return control.FeishuTargetPickerSourceOption{}, false
-	}
-	for _, option := range view.SourceOptions {
-		if option.Value == value {
-			return option, true
-		}
-	}
-	return control.FeishuTargetPickerSourceOption{}, false
-}
-
 func requestPromptFromEvent(t *testing.T, event eventcontract.Event) *control.FeishuRequestView {
 	t.Helper()
 	if event.RequestView == nil {

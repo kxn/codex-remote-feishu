@@ -80,8 +80,6 @@ const (
 	ActionPathPickerPage              ActionKind = "surface.path_picker.page"
 	ActionPathPickerConfirm           ActionKind = "surface.path_picker.confirm"
 	ActionPathPickerCancel            ActionKind = "surface.path_picker.cancel"
-	ActionTargetPickerSelectMode      ActionKind = "surface.target_picker.select_mode"
-	ActionTargetPickerSelectSource    ActionKind = "surface.target_picker.select_source"
 	ActionTargetPickerSelectWorkspace ActionKind = "surface.target_picker.select_workspace"
 	ActionTargetPickerSelectSession   ActionKind = "surface.target_picker.select_session"
 	ActionTargetPickerPage            ActionKind = "surface.target_picker.page"

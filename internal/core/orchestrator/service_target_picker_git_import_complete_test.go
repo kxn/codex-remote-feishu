@@ -30,12 +30,11 @@ func TestCompleteTargetPickerGitImportEntersNewThreadReadyAndClearsPicker(t *tes
 		ActorUserID:      "user-1",
 	})
 	record := &activeTargetPickerRecord{
-		PickerID:     "picker-1",
-		OwnerUserID:  "user-1",
-		Source:       control.TargetPickerRequestSourceList,
-		SelectedMode: control.FeishuTargetPickerModeAddWorkspace,
-		Stage:        control.FeishuTargetPickerStageProcessing,
-		PendingKind:  targetPickerPendingGitImport,
+		PickerID:    "picker-1",
+		OwnerUserID: "user-1",
+		Source:      control.TargetPickerRequestSourceGit,
+		Stage:       control.FeishuTargetPickerStageProcessing,
+		PendingKind: targetPickerPendingGitImport,
 	}
 	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
 	svc.setActiveTargetPicker(surface, record)
@@ -104,12 +103,11 @@ func TestCompleteTargetPickerGitImportAttachFailureMentionsDirectoryPreserved(t 
 		ActorUserID:      "user-1",
 	})
 	record := &activeTargetPickerRecord{
-		PickerID:     "picker-1",
-		OwnerUserID:  "user-1",
-		Source:       control.TargetPickerRequestSourceList,
-		SelectedMode: control.FeishuTargetPickerModeAddWorkspace,
-		Stage:        control.FeishuTargetPickerStageProcessing,
-		PendingKind:  targetPickerPendingGitImport,
+		PickerID:    "picker-1",
+		OwnerUserID: "user-1",
+		Source:      control.TargetPickerRequestSourceGit,
+		Stage:       control.FeishuTargetPickerStageProcessing,
+		PendingKind: targetPickerPendingGitImport,
 	}
 	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
 	svc.setActiveTargetPicker(surface, record)
@@ -144,13 +142,12 @@ func TestCompleteTargetPickerGitImportStartsFreshWorkspacePreparationOnSameCard(
 		ActorUserID:      "user-1",
 	})
 	record := &activeTargetPickerRecord{
-		PickerID:     "picker-1",
-		OwnerUserID:  "user-1",
-		Source:       control.TargetPickerRequestSourceList,
-		SelectedMode: control.FeishuTargetPickerModeAddWorkspace,
-		Stage:        control.FeishuTargetPickerStageProcessing,
-		PendingKind:  targetPickerPendingGitImport,
-		GitRepoURL:   "https://github.com/kxn/codex-remote-feishu.git",
+		PickerID:    "picker-1",
+		OwnerUserID: "user-1",
+		Source:      control.TargetPickerRequestSourceGit,
+		Stage:       control.FeishuTargetPickerStageProcessing,
+		PendingKind: targetPickerPendingGitImport,
+		GitRepoURL:  "https://github.com/kxn/codex-remote-feishu.git",
 	}
 	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
 	svc.setActiveTargetPicker(surface, record)

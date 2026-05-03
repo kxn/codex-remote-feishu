@@ -37,7 +37,7 @@ func TestHandleGatewayActionPathPickerCancelTargetPickerPatchesOwnerCard(t *test
 	if op.Kind != feishu.OperationUpdateCard || op.MessageID != messageID {
 		t.Fatalf("expected owner-card update for cancel, got %#v", op)
 	}
-	if op.CardTitle != "切换工作区与会话" {
+	if op.CardTitle != "从目录新建工作区" {
 		t.Fatalf("expected cancel to return to target picker card, got %#v", op)
 	}
 	runtime := app.service.SurfaceUIRuntime("surface-1")
@@ -72,7 +72,7 @@ func TestHandleGatewayActionPathPickerConfirmTargetPickerPatchesOwnerCard(t *tes
 	if op.Kind != feishu.OperationUpdateCard || op.MessageID != messageID {
 		t.Fatalf("expected owner-card update for confirm, got %#v", op)
 	}
-	if op.CardTitle != "切换工作区与会话" {
+	if op.CardTitle != "从目录新建工作区" {
 		t.Fatalf("expected confirm to return to target picker card, got %#v", op)
 	}
 	runtime := app.service.SurfaceUIRuntime("surface-1")
@@ -101,7 +101,7 @@ func newTargetPickerPathReturnTestApp(t *testing.T, gateway *recordingGateway) *
 func openTargetPickerLocalDirectoryPathPickerForTest(t *testing.T, app *App, gateway *recordingGateway, messageID string) (string, string) {
 	t.Helper()
 	result := app.HandleGatewayAction(context.Background(), control.Action{
-		Kind:             control.ActionListInstances,
+		Kind:             control.ActionWorkspaceNewDir,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
 		ChatID:           "chat-1",
@@ -115,37 +115,7 @@ func openTargetPickerLocalDirectoryPathPickerForTest(t *testing.T, app *App, gat
 	runtime := app.service.SurfaceUIRuntime("surface-1")
 	targetPickerID := runtime.ActiveTargetPickerID
 	if targetPickerID == "" {
-		t.Fatalf("expected active target picker after /list")
-	}
-
-	result = app.HandleGatewayAction(context.Background(), control.Action{
-		Kind:              control.ActionTargetPickerSelectMode,
-		SurfaceSessionID:  "surface-1",
-		GatewayID:         "app-1",
-		ChatID:            "chat-1",
-		ActorUserID:       "user-1",
-		PickerID:          targetPickerID,
-		TargetPickerValue: string(control.FeishuTargetPickerModeAddWorkspace),
-		MessageID:         messageID,
-		Inbound:           &control.ActionInboundMeta{CardDaemonLifecycleID: app.daemonLifecycleID},
-	})
-	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected mode select to replace card inline, got %#v", result)
-	}
-
-	result = app.HandleGatewayAction(context.Background(), control.Action{
-		Kind:              control.ActionTargetPickerSelectSource,
-		SurfaceSessionID:  "surface-1",
-		GatewayID:         "app-1",
-		ChatID:            "chat-1",
-		ActorUserID:       "user-1",
-		PickerID:          targetPickerID,
-		TargetPickerValue: string(control.FeishuTargetPickerSourceLocalDirectory),
-		MessageID:         messageID,
-		Inbound:           &control.ActionInboundMeta{CardDaemonLifecycleID: app.daemonLifecycleID},
-	})
-	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected source select to replace card inline, got %#v", result)
+		t.Fatalf("expected active target picker after /workspace new dir")
 	}
 
 	result = app.HandleGatewayAction(context.Background(), control.Action{

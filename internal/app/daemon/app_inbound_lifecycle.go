@@ -218,9 +218,7 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "解除接管", "/detach"
 	case control.ActionPathPickerEnter, control.ActionPathPickerUp, control.ActionPathPickerSelect, control.ActionPathPickerPage, control.ActionPathPickerConfirm, control.ActionPathPickerCancel:
 		return "路径选择器卡片动作", ""
-	case control.ActionTargetPickerSelectMode,
-		control.ActionTargetPickerSelectSource,
-		control.ActionTargetPickerSelectWorkspace,
+	case control.ActionTargetPickerSelectWorkspace,
 		control.ActionTargetPickerSelectSession,
 		control.ActionTargetPickerPage,
 		control.ActionTargetPickerOpenPathPicker,

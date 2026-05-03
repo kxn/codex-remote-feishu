@@ -124,8 +124,6 @@ type FeishuUITargetPickerContext struct {
 	WorkspaceSelectionLocked bool
 	LockedWorkspaceKey       string
 	AllowNewThread           bool
-	SelectedMode             FeishuTargetPickerMode
-	SelectedSource           FeishuTargetPickerSourceKind
 	SelectedWorkspaceKey     string
 	SelectedSessionValue     string
 }

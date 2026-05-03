@@ -18,10 +18,6 @@ func targetPickerEditingElements(view control.FeishuTargetPickerView, daemonLife
 
 func targetPickerEditingPageElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	switch view.Page {
-	case control.FeishuTargetPickerPageMode:
-		return targetPickerModePageElements(view, daemonLifecycleID)
-	case control.FeishuTargetPickerPageSource:
-		return targetPickerSourcePageElements(view, daemonLifecycleID)
 	case control.FeishuTargetPickerPageLocalDirectory:
 		return targetPickerLocalDirectoryElements(view, daemonLifecycleID)
 	case control.FeishuTargetPickerPageGit:

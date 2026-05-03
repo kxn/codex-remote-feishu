@@ -159,27 +159,6 @@ func targetPickerThreadValue(threadID string) string {
 	return targetPickerThreadPrefix + threadID
 }
 
-func targetPickerSupportsAddWorkspace(source control.TargetPickerRequestSource) bool {
-	switch source {
-	case control.TargetPickerRequestSourceDir,
-		control.TargetPickerRequestSourceGit,
-		control.TargetPickerRequestSourceWorktree:
-		return true
-	default:
-		return false
-	}
-}
-
-func targetPickerDefaultMode(source control.TargetPickerRequestSource) control.FeishuTargetPickerMode {
-	if targetPickerSupportsAddWorkspace(source) {
-		return control.FeishuTargetPickerModeAddWorkspace
-	}
-	if targetPickerRequiresExistingWorkspace(source) {
-		return control.FeishuTargetPickerModeExistingWorkspace
-	}
-	return control.FeishuTargetPickerModeExistingWorkspace
-}
-
 func targetPickerRequiresExistingWorkspace(source control.TargetPickerRequestSource) bool {
 	switch source {
 	case control.TargetPickerRequestSourceList,
@@ -203,126 +182,11 @@ func targetPickerUsesSessionSelection(source control.TargetPickerRequestSource) 
 	return targetPickerRequiresExistingWorkspace(source)
 }
 
-func normalizeTargetPickerMode(value string) control.FeishuTargetPickerMode {
-	switch control.FeishuTargetPickerMode(strings.TrimSpace(value)) {
-	case control.FeishuTargetPickerModeExistingWorkspace, control.FeishuTargetPickerModeAddWorkspace:
-		return control.FeishuTargetPickerMode(strings.TrimSpace(value))
-	default:
-		return ""
-	}
-}
-
-func targetPickerModeOptions(addSupported, hasExistingWorkspace bool, selected control.FeishuTargetPickerMode) []control.FeishuTargetPickerModeOption {
-	if !addSupported {
-		return nil
-	}
-	return []control.FeishuTargetPickerModeOption{
-		{
-			Value:             control.FeishuTargetPickerModeExistingWorkspace,
-			Label:             "进入已有工作区",
-			MetaText:          "切到一个已有工作区里的某个会话",
-			Selected:          selected == control.FeishuTargetPickerModeExistingWorkspace,
-			Available:         hasExistingWorkspace,
-			UnavailableReason: targetPickerModeUnavailableReason(hasExistingWorkspace),
-		},
-		{
-			Value:     control.FeishuTargetPickerModeAddWorkspace,
-			Label:     "新建工作区",
-			MetaText:  "接入目录或克隆仓库后，直接进入一个新会话",
-			Selected:  selected == control.FeishuTargetPickerModeAddWorkspace,
-			Available: true,
-		},
-	}
-}
-
-func targetPickerModeAvailable(options []control.FeishuTargetPickerModeOption, value control.FeishuTargetPickerMode) bool {
-	for _, option := range options {
-		if option.Value == value {
-			return targetPickerModeOptionAvailable(option)
-		}
-	}
-	return false
-}
-
-func targetPickerModeOptionAvailable(option control.FeishuTargetPickerModeOption) bool {
-	return option.Available || strings.TrimSpace(option.UnavailableReason) == ""
-}
-
-func targetPickerModeUnavailableReason(hasExistingWorkspace bool) string {
-	if hasExistingWorkspace {
-		return ""
-	}
-	return "当前没有已有工作区可进入，请先新建工作区。"
-}
-
-func normalizeTargetPickerSourceKind(value string) control.FeishuTargetPickerSourceKind {
-	switch control.FeishuTargetPickerSourceKind(strings.TrimSpace(value)) {
-	case control.FeishuTargetPickerSourceLocalDirectory,
-		control.FeishuTargetPickerSourceGitURL,
-		control.FeishuTargetPickerSourceGitWorktree:
-		return control.FeishuTargetPickerSourceKind(strings.TrimSpace(value))
-	default:
-		return ""
-	}
-}
-
-func (s *Service) targetPickerSourceOptions() []control.FeishuTargetPickerSourceOption {
-	options := []control.FeishuTargetPickerSourceOption{{
-		Value:     control.FeishuTargetPickerSourceLocalDirectory,
-		Label:     "已有目录",
-		MetaText:  "接入本机上已经存在的目录，并在完成后进入新会话待命",
-		Available: true,
-	}}
-	gitOption := control.FeishuTargetPickerSourceOption{
-		Value:     control.FeishuTargetPickerSourceGitURL,
-		Label:     "从 Git URL",
-		MetaText:  "填写仓库地址后拉取到本地，并在完成后进入新会话待命",
-		Available: s.config.GitAvailable,
-	}
-	if !gitOption.Available {
-		gitOption.MetaText = "需要本机已安装 git 后才能使用"
-		gitOption.UnavailableReason = "当前机器未检测到 `git`，暂时不能直接从 Git URL 导入。"
-	}
-	options = append(options, gitOption)
-	return options
-}
-
-func targetPickerDefaultSourceKind(source control.TargetPickerRequestSource) control.FeishuTargetPickerSourceKind {
-	switch source {
-	case control.TargetPickerRequestSourceGit:
-		return control.FeishuTargetPickerSourceGitURL
-	case control.TargetPickerRequestSourceDir:
-		return control.FeishuTargetPickerSourceLocalDirectory
-	case control.TargetPickerRequestSourceWorktree:
-		return control.FeishuTargetPickerSourceGitWorktree
-	default:
-		return ""
-	}
-}
-
 func targetPickerAllowsNewThread(source control.TargetPickerRequestSource, allowNewThread bool) bool {
 	if !allowNewThread {
 		return false
 	}
 	return targetPickerUsesSessionSelection(source)
-}
-
-func targetPickerHasSourceOption(options []control.FeishuTargetPickerSourceOption, value control.FeishuTargetPickerSourceKind) bool {
-	for _, option := range options {
-		if option.Value == value {
-			return true
-		}
-	}
-	return false
-}
-
-func targetPickerDefaultSourceSelection(options []control.FeishuTargetPickerSourceOption) control.FeishuTargetPickerSourceKind {
-	for _, option := range options {
-		if option.Value != "" {
-			return option.Value
-		}
-	}
-	return ""
 }
 
 func targetPickerSessionOptionIndex(options []control.FeishuTargetPickerSessionOption, value string) int {
@@ -345,24 +209,6 @@ func normalizeTargetPickerDropdownCursor(cursor int, optionCount int) int {
 		return optionCount - 1
 	}
 	return cursor
-}
-
-func targetPickerSourceAvailable(options []control.FeishuTargetPickerSourceOption, value control.FeishuTargetPickerSourceKind) bool {
-	for _, option := range options {
-		if option.Value == value {
-			return option.Available
-		}
-	}
-	return false
-}
-
-func targetPickerSourceUnavailableReason(options []control.FeishuTargetPickerSourceOption, value control.FeishuTargetPickerSourceKind) string {
-	for _, option := range options {
-		if option.Value == value {
-			return strings.TrimSpace(option.UnavailableReason)
-		}
-	}
-	return ""
 }
 
 func targetPickerWorkspaceOptions(entries []workspaceSelectionEntry) []control.FeishuTargetPickerWorkspaceOption {

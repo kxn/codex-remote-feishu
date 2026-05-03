@@ -57,8 +57,8 @@ func TestActionPayloadRequestControlOmitsEmptyOptionalFields(t *testing.T) {
 }
 
 func TestActionPayloadTargetPickerValueOmitsEmptyTargetValue(t *testing.T) {
-	payload := actionPayloadTargetPickerValue(cardActionKindTargetPickerSelectSource, "picker-1", "")
-	if payload[cardActionPayloadKeyKind] != cardActionKindTargetPickerSelectSource || payload[cardActionPayloadKeyPickerID] != "picker-1" {
+	payload := actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, "picker-1", "")
+	if payload[cardActionPayloadKeyKind] != cardActionKindTargetPickerOpenPathPicker || payload[cardActionPayloadKeyPickerID] != "picker-1" {
 		t.Fatalf("unexpected target picker payload: %#v", payload)
 	}
 	if _, ok := payload[cardActionPayloadKeyTargetValue]; ok {

@@ -108,7 +108,7 @@
 | `show_threads` / `show_all_threads` / `show_scoped_threads` | `feishu-ui-owned` | headless 主链下当前也只负责重新打开 `/workspace list` 切换卡；`vscode` 下会刷新当前实例的结构化 thread dropdown，不再维持旧分页 prompt；两条路径当前都会默认排除 `source=review` 的 detached review thread，不把 review session 当普通候选展示 |
 | `thread_selection_page` | `feishu-ui-owned` | VS Code 结构化 thread dropdown 的 byte-budget 翻页动作；payload 携带 `view_mode + cursor(start-index)`。命中当前 surface 时 controller 会按当前 surface 状态重建 `FeishuThreadSelectionView`，projector 再按 transport budget 切出新页并 inline replace 当前卡，不引入 owner runtime |
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | headless 主链下当前只负责用指定 workspace 重新打开 `/workspace list` 切换卡；legacy selection path 下才继续承担旧分页导航 |
-| `target_picker_select_mode` / `target_picker_select_source` / `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 headless 主路径实际使用的是四张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` / `worktree` 直接落各自业务页，因此 `target_picker_select_workspace` 是 `/workspace list` 与 `/workspace new worktree` 都会使用的主路径回调，`target_picker_select_session` 则只服务 `/workspace list`；`target_picker_select_mode` / `target_picker_select_source` 只保留 transport/runtime 兼容。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace、显式改选 session，或在 worktree 卡上切换基准工作区时，都会按当前卡状态重建 picker read model |
+| `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 headless 主路径实际使用的是四张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` / `worktree` 直接落各自业务页，因此 `target_picker_select_workspace` 是 `/workspace list` 与 `/workspace new worktree` 都会使用的主路径回调，`target_picker_select_session` 则只服务 `/workspace list`；旧 `target_picker_select_mode` / `target_picker_select_source` 与 mode/source 中间页已经删除，不再是 callback contract。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace、显式改选 session，或在 worktree 卡上切换基准工作区时，都会按当前卡状态重建 picker read model |
 | `target_picker_page` | `feishu-ui-owned` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页动作；payload 携带 `picker_id + field_name + cursor(start-index)`。命中当前 active picker 时继续 inline replace 当前卡，不直接改 route。target page 的 workspace lane 翻页会把 cursor 指向的新 workspace 设为当前工作区并重算 session 候选；session lane 翻页会保留 workspace cursor / 选中工作区，但若原 session 掉出可见页则清空选中并禁用 confirm。worktree 页的 workspace lane 翻页则只更新基准工作区选择，并保留同卡 branch / directory 草稿 |
 | `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡 |
 | `target_picker_cancel` | `feishu-ui-owned` | target picker 的显式退出动作；命中当前 active picker owner flow 时，会把当前卡同步 replace 成 sealed terminal card；普通编辑态是 `已取消`，Git import processing 态是 `已取消导入`，worktree processing 态是 `已取消创建`，并会分别 best-effort 停掉 clone / prepare 或 `git worktree add`；随后清掉 active target picker / owner-card flow |
@@ -156,7 +156,7 @@
   - projector 直接以它为 owner 生成 `target_picker_*` callback payload
   - dropdown 刷新与 confirm 已不再经由 `FeishuDirectSelectionPrompt` 兜底
   - `Page` / `StageLabel` / `Question` 当前仍是 editing / processing / terminal 的稳定页头合同，但 headless 主路径已经改成：`/workspace list` 直接落 `Page=target`，`/workspace new dir` 直接落 `Page=local_directory`，`/workspace new git` 直接落 `Page=git`，`/workspace new worktree` 直接落 `Page=worktree`
-  - `FeishuTargetPickerPageMode` / `FeishuTargetPickerPageSource` 仍保留在 DTO / callback 协议里做兼容，但当前主路径默认不会把它们投影给 headless 用户
+  - 旧 `FeishuTargetPickerPageMode` / `FeishuTargetPickerPageSource` 与对应 callback 协议已经删除，不再作为 DTO 兼容字段保留
 - `control.FeishuSelectionView` 当前已经是 live selection UI 的主载体：
   - VS Code `/list` 的 instance selection、VS Code `/use` / `/useall` 的 thread selection，以及 kick-thread confirm，当前都直接跨 `UIEvent` 边界携带 `FeishuSelectionView`
   - title / layout / context / hidden-entry hint 当前统一由 `control.DeriveFeishuSelectionSemantics(...)` 派生，orchestrator 的 `FeishuSelectionContext` 与 adapter projector 共用这一份语义 owner，不再各自重复推导
@@ -214,8 +214,6 @@
 | `show_all_workspaces` / `show_recent_workspaces` | `page` | headless 主链下重新打开 `/workspace list` 切换卡；旧分页字段继续保留 transport 兼容 |
 | `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | headless 主链下重新打开 `/workspace list` 切换卡；旧分页字段继续保留 transport 兼容 |
 | `show_workspace_threads` | `workspace_key`、`page`、`return_page` | headless 主链下以指定 workspace 重新打开 `/workspace list` 切换卡，并预填当前 workspace；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
-| `target_picker_select_mode` | `picker_id`、`target_value` | 兼容保留的模式页回调；gateway 直接从 payload 里的 `target_value` 取当前模式，但当前 headless 主路径默认不会发出这类回调 |
-| `target_picker_select_source` | `picker_id`、`target_value` | 兼容保留的来源页回调；当前 projector 仍支持把 `local_directory` / `git_url` 写入 payload，但当前 headless 主路径默认不会发出这类回调 |
 | `target_picker_select_workspace` | `picker_id`、`field_name` | `/workspace list` 切换卡与 `/workspace new worktree` 基准工作区下拉的回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取工作区键 |
 | `target_picker_select_session` | `picker_id`、`field_name` | `/workspace list` 切换卡的会话下拉回调；gateway 从 `form_value[field_name]` / `option` / `options` 中提取 thread；当前 headless 卡不再发出 `new_thread` |
 | `target_picker_page` | `picker_id`、`field_name`、`cursor` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页回调；`field_name` 区分 workspace / session lane，`cursor` 是动态 byte-budget 分页使用的 start-index。target page 的 workspace 翻页会把对应 cursor 处的 workspace 设为当前选择并重算 session 列表；session 翻页会保留 workspace 状态，但显式清空当前 session 选择，避免 invisible confirm。worktree workspace 翻页会保留 branch / directory 草稿，只重算基准工作区与目标路径预览 |
@@ -426,8 +424,6 @@ MCP request 卡片当前新增的可视语义：
 - `ActionPathPickerEnter`
 - `ActionPathPickerUp`
 - `ActionPathPickerSelect`
-- `ActionTargetPickerSelectMode`
-- `ActionTargetPickerSelectSource`
 - `ActionTargetPickerSelectWorkspace`
 - `ActionTargetPickerSelectSession`
 - `ActionTargetPickerPage`
@@ -502,7 +498,7 @@ MCP request 卡片当前新增的可视语义：
   - `/sendfile` cancel 当前也会把当前 picker 卡封成 `已取消发送文件` 终态，而不是把旧卡留在原地再额外 append 一条取消 notice
   - `/sendfile` 启动成功后，真实文件消息会直接出现在聊天流里作为成功结果；不再额外补一张成功确认卡。只有后台异步失败才补轻量 notice
   - `target_picker_cancel` 当前会直接把这张 owner card 封成 terminal 状态；普通编辑态为 `已取消`，Git import processing 态为 `已取消导入`，Worktree processing 态为 `已取消创建`，并会分别 best-effort 停止 clone / prepare 或 `git worktree add`
-  - target picker 的 processing / terminal 阶段当前也不再把整张卡覆写成纯状态块；`模式 / 来源 / 工作区 / 会话 / 目录 / 仓库 / 落地目录 / 目标路径` 等业务上下文会继续保留在业务区，状态推进与终态结果统一进入 notice 区
+  - target picker 的 processing / terminal 阶段当前也不再把整张卡覆写成纯状态块；`工作区 / 会话 / 目录 / 仓库 / 落地目录 / 目标路径` 等业务上下文会继续保留在业务区，状态推进与终态结果统一进入 notice 区
   - `从目录新建` 的主按钮当前仍会前置阻塞已知必败条件；只有目录可接入时，`接入并继续` 才会启用
   - `从 GIT URL 新建` 与 `从 Worktree 新建` 因依赖 Feishu 文本输入，当前不再把 `克隆并继续` / `创建并进入` 的可点击性绑定到 live preview；按钮保持可点，提交后再由服务端做 repo / branch / 目录名 / 基准工作区 / 最终路径 / 环境检查，并把阻塞原因保留在同卡提示区
   - 若当前机器缺少 `git`，`从 GIT URL 新建` 与 `从 Worktree 新建` 仍可直接打开；相关不可用说明会先显示在卡面上，用户点击确认后若仍不可执行，服务端会继续把错误留在同一张卡片里

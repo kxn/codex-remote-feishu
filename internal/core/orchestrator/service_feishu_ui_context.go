@@ -137,8 +137,6 @@ func (s *Service) buildFeishuTargetPickerContextFromView(surface *state.SurfaceC
 		WorkspaceSelectionLocked: view.WorkspaceSelectionLocked,
 		LockedWorkspaceKey:       strings.TrimSpace(view.LockedWorkspaceKey),
 		AllowNewThread:           view.AllowNewThread,
-		SelectedMode:             view.SelectedMode,
-		SelectedSource:           view.SelectedSource,
 		SelectedWorkspaceKey:     strings.TrimSpace(view.SelectedWorkspaceKey),
 		SelectedSessionValue:     strings.TrimSpace(view.SelectedSessionValue),
 	}

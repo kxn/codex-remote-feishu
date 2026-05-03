@@ -865,9 +865,6 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 	if view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("expected only free workspace to remain selectable, got %#v", view)
 	}
-	if view.ShowModeSwitch {
-		t.Fatalf("expected list picker to stop exposing add-workspace mode switch, got %#v", view)
-	}
 	freeOption, ok := targetPickerWorkspaceOption(view, "/data/dl/web")
 	if !ok || strings.Contains(freeOption.MetaText, "当前被其他飞书会话接管") {
 		t.Fatalf("expected busy workspace to be omitted from picker, got %#v", view.WorkspaceOptions)
@@ -1426,7 +1423,7 @@ func TestShowWorkspaceThreadsSupportsPersistedOnlyWorkspace(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceWorkspace || !testutil.SamePath(view.SelectedWorkspaceKey, "/data/dl/picdetect") {
 		t.Fatalf("unexpected persisted-only workspace target picker: %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected persisted-only workspace picker to start on direct target page, got %#v", view)
 	}
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-picdetect")); !ok {
@@ -1580,7 +1577,7 @@ func TestNormalModeListWithoutOnlineWorkspacesShowsCreateWorkspacePicker(t *test
 	if len(view.WorkspaceOptions) != 0 {
 		t.Fatalf("expected no existing workspace options when runtime is empty, got %#v", view.WorkspaceOptions)
 	}
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected empty runtime to stay on blocked target page, got %#v", view)
 	}
 	if len(view.Messages) == 0 || !strings.Contains(view.Messages[0].Text, "当前还没有可切换的工作区") {
@@ -1903,7 +1900,7 @@ func TestShowAllThreadsDisablesWorkspaceClaimedThreadInNormalMode(t *testing.T) 
 		t.Fatalf("expected add-workspace picker instead of unavailable notice, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected claimed-only workspace case to stay on blocked target page, got %#v", view)
 	}
 	if len(view.Messages) == 0 || !strings.Contains(view.Messages[0].Text, "当前还没有可切换的工作区") {

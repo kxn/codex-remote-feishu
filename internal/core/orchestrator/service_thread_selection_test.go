@@ -211,7 +211,7 @@ func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testi
 	if view.Source != control.TargetPickerRequestSourceUse || view.SelectedWorkspaceKey != "/data/dl" {
 		t.Fatalf("expected scoped /use to stay on current workspace, got %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected scoped /use to start on direct target page, got %#v", view)
 	}
 	if len(view.SessionOptions) != 6 || view.SelectedSessionValue != "" {
@@ -249,7 +249,7 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceUseAll || view.SelectedWorkspaceKey != "/data/dl" {
 		t.Fatalf("expected attached /useall to keep current workspace selected, got %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected attached /useall to start on direct target page, got %#v", view)
 	}
 	if len(view.WorkspaceOptions) != 1 || len(view.SessionOptions) != 2 {
@@ -647,7 +647,7 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 	if view.Source != control.TargetPickerRequestSourceWorkspace || view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("unexpected workspace target picker: %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected workspace-scoped picker to start on direct target page, got %#v", view)
 	}
 	if !view.WorkspaceSelectionLocked || view.ShowWorkspaceSelect {

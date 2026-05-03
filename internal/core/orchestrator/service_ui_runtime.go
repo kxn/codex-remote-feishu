@@ -86,8 +86,6 @@ type activeTargetPickerRecord struct {
 	BackCommandText       string
 	LockedWorkspaceKey    string
 	AllowNewThread        bool
-	SelectedMode          control.FeishuTargetPickerMode
-	SelectedSource        control.FeishuTargetPickerSourceKind
 	WorkspaceCursor       int
 	SessionCursor         int
 	SelectedWorkspaceKey  string

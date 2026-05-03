@@ -41,8 +41,6 @@ const (
 	FeishuUIIntentPathPickerPage              FeishuUIIntentKind = "path_picker_page"
 	FeishuUIIntentPathPickerConfirm           FeishuUIIntentKind = "path_picker_confirm"
 	FeishuUIIntentPathPickerCancel            FeishuUIIntentKind = "path_picker_cancel"
-	FeishuUIIntentTargetPickerSelectMode      FeishuUIIntentKind = "target_picker_select_mode"
-	FeishuUIIntentTargetPickerSelectSource    FeishuUIIntentKind = "target_picker_select_source"
 	FeishuUIIntentTargetPickerSelectWorkspace FeishuUIIntentKind = "target_picker_select_workspace"
 	FeishuUIIntentTargetPickerSelectSession   FeishuUIIntentKind = "target_picker_select_session"
 	FeishuUIIntentTargetPickerPage            FeishuUIIntentKind = "target_picker_page"
@@ -111,10 +109,6 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerConfirm, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
 	case ActionPathPickerCancel:
 		return &FeishuUIIntent{Kind: FeishuUIIntentPathPickerCancel, PickerID: action.PickerID, ActorUserID: action.ActorUserID}, true
-	case ActionTargetPickerSelectMode:
-		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectMode, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
-	case ActionTargetPickerSelectSource:
-		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectSource, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerSelectWorkspace:
 		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerSelectWorkspace, PickerID: action.PickerID, WorkspaceKey: action.WorkspaceKey, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerSelectSession:

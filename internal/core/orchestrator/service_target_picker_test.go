@@ -816,9 +816,6 @@ func TestTargetPickerListPrefersRealWorkspaceWhileExposeAddModeSwitch(t *testing
 	if len(view.WorkspaceOptions) != 1 {
 		t.Fatalf("expected one real workspace in existing-workspace mode, got %#v", view.WorkspaceOptions)
 	}
-	if view.ShowModeSwitch {
-		t.Fatalf("expected /list target picker to stop exposing add-workspace mode switch, got %#v", view)
-	}
 	if view.Page != control.FeishuTargetPickerPageTarget || view.ConfirmLabel != "切换" || view.CanConfirm {
 		t.Fatalf("expected /list picker to start directly at target page with empty session, got %#v", view)
 	}
@@ -943,7 +940,7 @@ func TestTargetPickerShowThreadsOnAttachedWorkspaceKeepsSessionEmptyWhenRouteUnb
 	if view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("expected current workspace to remain selected, got %#v", view)
 	}
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ShowModeSwitch || view.CanConfirm || view.ConfirmLabel != "切换" {
+	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected /use picker to start on direct target page, got %#v", view)
 	}
 	if view.SelectedSessionValue != "" {
@@ -1445,7 +1442,7 @@ func TestTargetPickerAddWorkspaceGitSourceShowsDisabledHintWhenGitMissing(t *tes
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	}))
-	if view.Page != control.FeishuTargetPickerPageGit || view.SelectedSource != control.FeishuTargetPickerSourceGitURL {
+	if view.Page != control.FeishuTargetPickerPageGit {
 		t.Fatalf("expected direct git page, got %#v", view)
 	}
 	if view.CanConfirm {
@@ -1483,7 +1480,7 @@ func TestTargetPickerWorktreeConfirmDispatchesCreateCommand(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 	}))
-	if view.Page != control.FeishuTargetPickerPageWorktree || view.SelectedSource != control.FeishuTargetPickerSourceGitWorktree {
+	if view.Page != control.FeishuTargetPickerPageWorktree {
 		t.Fatalf("expected direct worktree page, got %#v", view)
 	}
 	if normalizeWorkspaceClaimKey(view.SelectedWorkspaceKey) != normalizeWorkspaceClaimKey(workspaceRoot) {

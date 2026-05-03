@@ -128,8 +128,6 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 		BackCommandText:      strings.TrimSpace(opts.BackCommandText),
 		LockedWorkspaceKey:   lockedWorkspaceKey,
 		AllowNewThread:       opts.AllowNewThread,
-		SelectedMode:         targetPickerDefaultMode(source),
-		SelectedSource:       control.FeishuTargetPickerSourceLocalDirectory,
 		WorkspaceCursor:      -1,
 		SessionCursor:        -1,
 		SelectedWorkspaceKey: selectedWorkspaceKey,
@@ -137,49 +135,6 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 		CreatedAt:            s.now(),
 		ExpiresAt:            expiresAt,
 	}, nil
-}
-
-func (s *Service) handleTargetPickerSelectMode(surface *state.SurfaceConsoleRecord, pickerID, value, actorUserID string, answers map[string][]string) []eventcontract.Event {
-	record, blocked := s.requireActiveTargetPicker(surface, pickerID, actorUserID)
-	if blocked != nil {
-		return blocked
-	}
-	resetTargetPickerEditingState(record)
-	s.applyTargetPickerDraftAnswers(record, answers)
-	mode := normalizeTargetPickerMode(value)
-	if mode == "" {
-		return notice(surface, "target_picker_selection_missing", "当前选择的模式无效，请重新选择。")
-	}
-	record.SelectedMode = mode
-	if mode == control.FeishuTargetPickerModeExistingWorkspace {
-		record.SelectedSessionValue = targetPickerAutoSession
-	}
-	record.Page = targetPickerAdvancePage(control.FeishuTargetPickerPageMode, mode, record.SelectedSource)
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
-}
-
-func (s *Service) handleTargetPickerSelectSource(surface *state.SurfaceConsoleRecord, pickerID, value, actorUserID string, answers map[string][]string) []eventcontract.Event {
-	record, blocked := s.requireActiveTargetPicker(surface, pickerID, actorUserID)
-	if blocked != nil {
-		return blocked
-	}
-	resetTargetPickerEditingState(record)
-	s.applyTargetPickerDraftAnswers(record, answers)
-	sourceKind := normalizeTargetPickerSourceKind(value)
-	if sourceKind == "" {
-		return notice(surface, "target_picker_selection_missing", "当前选择的工作区来源无效，请重新选择。")
-	}
-	record.SelectedSource = sourceKind
-	record.Page = targetPickerAdvancePage(control.FeishuTargetPickerPageSource, record.SelectedMode, sourceKind)
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
 }
 
 func (s *Service) handleTargetPickerSelectWorkspace(surface *state.SurfaceConsoleRecord, pickerID, workspaceKey, actorUserID string, answers map[string][]string) []eventcontract.Event {
@@ -209,10 +164,6 @@ func (s *Service) handleTargetPickerSelectWorkspace(surface *state.SurfaceConsol
 	record.SelectedWorkspaceKey = normalizeTargetPickerWorkspaceSelection(workspaceKey)
 	record.SessionCursor = 0
 	record.SelectedSessionValue = ""
-	if targetPickerNormalizePage(record.Page, record.Source, record.SelectedMode, record.SelectedSource) == control.FeishuTargetPickerPageMode &&
-		record.SelectedMode == control.FeishuTargetPickerModeExistingWorkspace {
-		record.Page = control.FeishuTargetPickerPageTarget
-	}
 	view, err := s.buildTargetPickerView(surface, record)
 	if err != nil {
 		return notice(surface, "target_picker_unavailable", err.Error())
@@ -228,10 +179,6 @@ func (s *Service) handleTargetPickerSelectSession(surface *state.SurfaceConsoleR
 	resetTargetPickerEditingState(record)
 	s.applyTargetPickerDraftAnswers(record, answers)
 	record.SelectedSessionValue = strings.TrimSpace(value)
-	if targetPickerNormalizePage(record.Page, record.Source, record.SelectedMode, record.SelectedSource) == control.FeishuTargetPickerPageMode &&
-		record.SelectedMode == control.FeishuTargetPickerModeExistingWorkspace {
-		record.Page = control.FeishuTargetPickerPageTarget
-	}
 	view, err := s.buildTargetPickerView(surface, record)
 	if err != nil {
 		return notice(surface, "target_picker_unavailable", err.Error())
@@ -285,14 +232,6 @@ func (s *Service) handleTargetPickerBack(surface *state.SurfaceConsoleRecord, pi
 	if err != nil {
 		return notice(surface, "target_picker_unavailable", err.Error())
 	}
-	if !targetPickerCanGoBack(view.Page, record.Source) {
-		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
-	}
-	record.Page = targetPickerPreviousPage(view.Page, record.Source)
-	view, err = s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
 	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
 }
 
@@ -322,81 +261,38 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 		return blocked
 	}
 	s.applyTargetPickerDraftAnswers(record, answers)
-	requestedMode := normalizeTargetPickerMode(string(record.SelectedMode))
-	requestedSourceKind := normalizeTargetPickerSourceKind(string(record.SelectedSource))
 	requestedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.SelectedWorkspaceKey)
 	requestedSessionValue := strings.TrimSpace(record.SelectedSessionValue)
 	lockedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.LockedWorkspaceKey)
-	if requestedMode == control.FeishuTargetPickerModeExistingWorkspace {
-		if key := normalizeTargetPickerWorkspaceSelection(workspaceKey); key != "" {
-			if lockedWorkspaceKey != "" && key != lockedWorkspaceKey {
-				setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
-					Level: control.FeishuTargetPickerMessageWarning,
-					Text:  "当前工作区已锁定，请在当前工作区内重新确认会话。",
-				})
-				view, err := s.buildTargetPickerView(surface, record)
-				if err != nil {
-					return notice(surface, "target_picker_unavailable", err.Error())
-				}
-				return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
-			}
-			record.SelectedWorkspaceKey = key
-			requestedWorkspaceKey = key
-		}
-		if lockedWorkspaceKey != "" {
-			record.SelectedWorkspaceKey = lockedWorkspaceKey
-			requestedWorkspaceKey = lockedWorkspaceKey
-		}
-		if strings.TrimSpace(sessionValue) != "" {
-			record.SelectedSessionValue = strings.TrimSpace(sessionValue)
-			requestedSessionValue = strings.TrimSpace(sessionValue)
-		}
-	}
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	if view.Page == control.FeishuTargetPickerPageMode &&
-		requestedMode == control.FeishuTargetPickerModeExistingWorkspace &&
-		(requestedWorkspaceKey != "" || requestedSessionValue != "") {
-		record.Page = control.FeishuTargetPickerPageTarget
-		view, err = s.buildTargetPickerView(surface, record)
-		if err != nil {
-			return notice(surface, "target_picker_unavailable", err.Error())
-		}
-	}
-	switch view.Page {
-	case control.FeishuTargetPickerPageMode, control.FeishuTargetPickerPageSource:
-		if !view.CanConfirm {
-			message := "请先选择这次要做什么。"
-			if view.Page == control.FeishuTargetPickerPageSource {
-				message = "请选择一个可用的工作区来源后再继续。"
-				if reason := targetPickerSourceUnavailableReason(view.SourceOptions, view.SelectedSource); reason != "" {
-					message = reason
-				}
-			}
+	if key := normalizeTargetPickerWorkspaceSelection(workspaceKey); key != "" {
+		if lockedWorkspaceKey != "" && key != lockedWorkspaceKey {
 			setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
-				Level: control.FeishuTargetPickerMessageDanger,
-				Text:  message,
+				Level: control.FeishuTargetPickerMessageWarning,
+				Text:  "当前工作区已锁定，请在当前工作区内重新确认会话。",
 			})
-			view, err = s.buildTargetPickerView(surface, record)
+			view, err := s.buildTargetPickerView(surface, record)
 			if err != nil {
 				return notice(surface, "target_picker_unavailable", err.Error())
 			}
 			return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
 		}
-		record.Page = targetPickerAdvancePage(view.Page, view.SelectedMode, view.SelectedSource)
-		view, err = s.buildTargetPickerView(surface, record)
-		if err != nil {
-			return notice(surface, "target_picker_unavailable", err.Error())
-		}
-		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
+		record.SelectedWorkspaceKey = key
+		requestedWorkspaceKey = key
 	}
-	if view.SelectedMode != requestedMode ||
-		view.SelectedSource != requestedSourceKind ||
-		(requestedMode == control.FeishuTargetPickerModeExistingWorkspace &&
-			((requestedWorkspaceKey != "" && view.SelectedWorkspaceKey != requestedWorkspaceKey) ||
-				(requestedSessionValue != "" && view.SelectedSessionValue != requestedSessionValue))) {
+	if lockedWorkspaceKey != "" {
+		record.SelectedWorkspaceKey = lockedWorkspaceKey
+		requestedWorkspaceKey = lockedWorkspaceKey
+	}
+	if strings.TrimSpace(sessionValue) != "" {
+		record.SelectedSessionValue = strings.TrimSpace(sessionValue)
+		requestedSessionValue = strings.TrimSpace(sessionValue)
+	}
+	view, err := s.buildTargetPickerView(surface, record)
+	if err != nil {
+		return notice(surface, "target_picker_unavailable", err.Error())
+	}
+	if (requestedWorkspaceKey != "" && view.SelectedWorkspaceKey != requestedWorkspaceKey) ||
+		(requestedSessionValue != "" && view.SelectedSessionValue != requestedSessionValue) {
 		setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageWarning,
 			Text:  "可选目标刚刚发生变化，请在最新卡片上重新确认。",
@@ -409,23 +305,19 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 	}
 	if !view.CanConfirm {
 		message := "请选择工作区和会话后再确认。"
-		if view.Page == control.FeishuTargetPickerPageLocalDirectory || view.Page == control.FeishuTargetPickerPageGit || view.Page == control.FeishuTargetPickerPageWorktree {
-			switch view.SelectedSource {
-			case control.FeishuTargetPickerSourceLocalDirectory:
-				localState := s.buildTargetPickerLocalDirectoryState(surface, record)
-				message = targetPickerFirstBlockingMessage(localState.Messages)
-				if message == "" {
-					message = "请先选择一个可接入的本地目录。"
-				}
-			case control.FeishuTargetPickerSourceGitURL:
-				gitState := s.buildTargetPickerGitImportState(record)
-				message = targetPickerGitImportValidationMessage(record, gitState.Messages)
-			case control.FeishuTargetPickerSourceGitWorktree:
-				worktreeState := s.buildTargetPickerWorktreeState(record)
-				message = targetPickerWorktreeValidationMessage(record, worktreeState.Messages)
-			default:
-				message = "请选择一个可用的工作区来源后再确认。"
+		switch view.Page {
+		case control.FeishuTargetPickerPageLocalDirectory:
+			localState := s.buildTargetPickerLocalDirectoryState(surface, record)
+			message = targetPickerFirstBlockingMessage(localState.Messages)
+			if message == "" {
+				message = "请先选择一个可接入的本地目录。"
 			}
+		case control.FeishuTargetPickerPageGit:
+			gitState := s.buildTargetPickerGitImportState(record)
+			message = targetPickerGitImportValidationMessage(record, gitState.Messages)
+		case control.FeishuTargetPickerPageWorktree:
+			worktreeState := s.buildTargetPickerWorktreeState(record)
+			message = targetPickerWorktreeValidationMessage(record, worktreeState.Messages)
 		}
 		setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
@@ -437,38 +329,23 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 		}
 		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
 	}
-	result := control.TargetPickerResult{
-		PickerID:     record.PickerID,
-		Source:       record.Source,
-		Mode:         view.SelectedMode,
-		SourceKind:   view.SelectedSource,
-		WorkspaceKey: view.SelectedWorkspaceKey,
-		SessionValue: view.SelectedSessionValue,
-		OwnerUserID:  record.OwnerUserID,
-		CreatedAt:    record.CreatedAt,
-		ExpiresAt:    record.ExpiresAt,
-	}
-	return s.dispatchTargetPickerConfirmed(surface, flow, record, result, view)
+	return s.dispatchTargetPickerConfirmed(surface, flow, record, view)
 }
 
-func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, record *activeTargetPickerRecord, result control.TargetPickerResult, view control.FeishuTargetPickerView) []eventcontract.Event {
+func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, record *activeTargetPickerRecord, view control.FeishuTargetPickerView) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
-	if result.Mode == control.FeishuTargetPickerModeAddWorkspace {
-		switch normalizeTargetPickerSourceKind(string(result.SourceKind)) {
-		case control.FeishuTargetPickerSourceLocalDirectory:
-			return s.confirmTargetPickerLocalDirectory(surface, flow, record, view)
-		case control.FeishuTargetPickerSourceGitURL:
-			return s.confirmTargetPickerGitImport(surface, flow, record, view)
-		case control.FeishuTargetPickerSourceGitWorktree:
-			return s.confirmTargetPickerWorktree(surface, flow, record, view)
-		default:
-			return notice(surface, "target_picker_selection_missing", "请选择一个可用的工作区来源后再确认。")
-		}
+	switch view.Page {
+	case control.FeishuTargetPickerPageLocalDirectory:
+		return s.confirmTargetPickerLocalDirectory(surface, flow, record, view)
+	case control.FeishuTargetPickerPageGit:
+		return s.confirmTargetPickerGitImport(surface, flow, record, view)
+	case control.FeishuTargetPickerPageWorktree:
+		return s.confirmTargetPickerWorktree(surface, flow, record, view)
 	}
-	workspaceKey := normalizeTargetPickerWorkspaceSelection(result.WorkspaceKey)
-	sessionValue := strings.TrimSpace(result.SessionValue)
+	workspaceKey := normalizeTargetPickerWorkspaceSelection(view.SelectedWorkspaceKey)
+	sessionValue := strings.TrimSpace(view.SelectedSessionValue)
 	if workspaceKey == "" || sessionValue == "" {
 		return notice(surface, "target_picker_selection_missing", "请选择工作区和会话后再确认。")
 	}
@@ -581,13 +458,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	if record.Source == control.TargetPickerRequestSourceWorktree {
 		workspaceEntries = s.filterGitWorkspaceSelectionEntries(workspaceEntries)
 	}
-	mode := targetPickerDefaultMode(record.Source)
-	record.SelectedMode = mode
-
-	modeOptions := []control.FeishuTargetPickerModeOption(nil)
-	sourceOptions := []control.FeishuTargetPickerSourceOption(nil)
-	sourceKind := targetPickerDefaultSourceKind(record.Source)
-	record.SelectedSource = sourceKind
+	page := targetPickerDefaultPage(record.Source)
+	record.Page = page
 
 	lockedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.LockedWorkspaceKey)
 	workspaceSelectionLocked := lockedWorkspaceKey != ""
@@ -644,8 +516,6 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	}
 	sessionCursor = normalizeTargetPickerDropdownCursor(sessionCursor, len(sessionOptions))
 	record.SessionCursor = sessionCursor
-	page := targetPickerNormalizePage(record.Page, record.Source, mode, sourceKind)
-	record.Page = page
 
 	selectedWorkspaceLabel, selectedWorkspaceMeta := targetPickerSelectedWorkspaceSummary(workspaceOptions, selectedWorkspace)
 	if workspaceSelectionLocked && selectedWorkspace != "" && strings.TrimSpace(selectedWorkspaceLabel) == "" {
@@ -680,7 +550,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	confirmValidatesOnSubmit := false
 	canConfirm := false
 	backCommandText := strings.TrimSpace(record.BackCommandText)
-	canGoBack := stage == control.FeishuTargetPickerStageEditing && (backCommandText != "" || targetPickerCanGoBack(page, record.Source))
+	canGoBack := stage == control.FeishuTargetPickerStageEditing && backCommandText != ""
 	backLabel := ""
 	if canGoBack {
 		backLabel = "返回上一层"
@@ -723,11 +593,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		canConfirm = selectedWorkspace != "" && selectedSession != ""
 	}
 	record.GitFinalPath = gitFinalPath
-	showModeSwitch := false
 	showWorkspaceSelect := page == control.FeishuTargetPickerPageTarget && !workspaceSelectionLocked
 	showSessionSelect := page == control.FeishuTargetPickerPageTarget
-	showSourceSelect := false
-	sourceUnavailableHint := targetPickerSourceUnavailableReason(sourceOptions, sourceKind)
 	canCancelProcessing := stage == control.FeishuTargetPickerStageProcessing &&
 		(record.PendingKind == targetPickerPendingGitImport || record.PendingKind == targetPickerPendingWorktreeCreate)
 	processingCancelLabel := ""
@@ -739,8 +606,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		}
 	}
 	bodySections := targetPickerBodySections(
-		mode,
-		sourceKind,
+		page,
 		selectedWorkspaceLabel,
 		selectedWorkspaceMeta,
 		selectedSessionLabel,
@@ -762,7 +628,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		CatalogBackend:           agentproto.NormalizeBackend(record.CatalogBackend),
 		Stage:                    stage,
 		Page:                     page,
-		StageLabel:               targetPickerViewStageLabel(record, page, mode, sourceKind),
+		StageLabel:               targetPickerViewStageLabel(record, page),
 		Question:                 targetPickerViewQuestion(record, page),
 		BodySections:             bodySections,
 		NoticeSections:           noticeSections,
@@ -775,19 +641,13 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		CanGoBack:                canGoBack,
 		BackLabel:                backLabel,
 		BackCommandText:          backCommandText,
-		SelectedMode:             mode,
-		SelectedSource:           sourceKind,
-		ShowModeSwitch:           showModeSwitch,
 		ShowWorkspaceSelect:      showWorkspaceSelect,
 		ShowSessionSelect:        showSessionSelect,
-		ShowSourceSelect:         showSourceSelect,
 		WorkspaceSelectionLocked: workspaceSelectionLocked,
 		LockedWorkspaceKey:       lockedWorkspaceKey,
 		AllowNewThread:           record.AllowNewThread,
-		ModePlaceholder:          "选择模式",
 		WorkspacePlaceholder:     "选择工作区",
 		SessionPlaceholder:       "选择会话",
-		SourcePlaceholder:        "选择工作区来源",
 		WorkspaceCursor:          workspaceCursor,
 		SessionCursor:            sessionCursor,
 		SelectedWorkspaceKey:     selectedWorkspace,
@@ -800,13 +660,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		ConfirmValidatesOnSubmit: confirmValidatesOnSubmit,
 		CanConfirm:               canConfirm,
 		Hint:                     hint,
-		ModeOptions:              modeOptions,
 		WorkspaceOptions:         workspaceOptions,
 		SessionOptions:           sessionOptions,
-		SourceOptions:            sourceOptions,
-		AddModeSummary:           "",
-		AddModeDetail:            "",
-		SourceUnavailableHint:    sourceUnavailableHint,
 		LocalDirectoryPath:       localDirectoryPath,
 		GitParentDir:             gitParentDir,
 		GitRepoURL:               gitRepoURL,
