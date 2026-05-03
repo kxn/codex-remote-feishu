@@ -77,15 +77,34 @@ func TestParseFeishuTextActionRecognizesRestartCommand(t *testing.T) {
 }
 
 func TestParseFeishuTextActionRecognizesRepairCommand(t *testing.T) {
-	action, ok := ParseFeishuTextAction("/repair")
+	tests := []string{
+		"/repair",
+		"/repair daemon",
+	}
+	for _, input := range tests {
+		action, ok := ParseFeishuTextAction(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionRepairCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionRepairCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
+func TestParseFeishuMenuActionRecognizesRepairDaemon(t *testing.T) {
+	action, ok := ParseFeishuMenuAction("repair_daemon")
 	if !ok {
-		t.Fatal("expected /repair to be parsed")
+		t.Fatal("expected repair_daemon menu key to be parsed")
 	}
 	if action.Kind != ActionRepairCommand {
 		t.Fatalf("action kind = %q, want %q", action.Kind, ActionRepairCommand)
 	}
-	if action.Text != "/repair" {
-		t.Fatalf("action text = %q, want /repair", action.Text)
+	if action.Text != "/repair daemon" {
+		t.Fatalf("action text = %q, want /repair daemon", action.Text)
 	}
 }
 

@@ -12,6 +12,16 @@ func commandOption(commandText, menuKey, value, label, description string) Feish
 	}
 }
 
+func normalizeRepairMenuArgument(value string) (string, bool) {
+	mode := strings.ToLower(strings.TrimSpace(value))
+	switch mode {
+	case "daemon":
+		return mode, true
+	default:
+		return "", false
+	}
+}
+
 func normalizeVerboseMenuArgument(suffix string) (string, bool) {
 	value := strings.ToLower(strings.TrimSpace(suffix))
 	switch value {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -281,6 +282,113 @@ func TestRepairCommandRechecksManagedHeadlessBeforeRestore(t *testing.T) {
 	}
 	if pending := app.service.Surface("surface-1").PendingHeadless; pending != nil {
 		t.Fatalf("repair must not start headless restore, got %#v", pending)
+	}
+}
+
+func TestParseRepairCommandTextRecognizesDaemon(t *testing.T) {
+	parsed, err := parseRepairCommandText("/repair daemon")
+	if err != nil {
+		t.Fatalf("parseRepairCommandText: %v", err)
+	}
+	if parsed.Mode != repairCommandDaemon {
+		t.Fatalf("mode = %q, want %q", parsed.Mode, repairCommandDaemon)
+	}
+}
+
+func TestRepairDaemonCommandRestartsManagedDaemon(t *testing.T) {
+	gateway := &fakeAdminGatewayController{}
+	app := newRepairTestApp(t, gateway)
+	app.service.MaterializeSurface("surface-1", "main", "chat-1", "user-1")
+	statePath := filepath.Join(app.headlessRuntime.Paths.DataDir, "install-state.json")
+	if err := install.WriteState(statePath, install.InstallState{
+		StatePath:       statePath,
+		ConfigPath:      filepath.Join(app.headlessRuntime.Paths.ConfigDir, "config.json"),
+		ServiceManager:  install.ServiceManagerSystemdUser,
+		InstalledBinary: "/bin/codex-remote",
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	called := make(chan install.InstallState, 1)
+	app.restartDaemon = func(_ context.Context, stateValue install.InstallState) error {
+		called <- stateValue
+		return nil
+	}
+	app.sendAgentCommand = func(string, agentproto.Command) error {
+		t.Fatal("repair daemon must not restart provider child")
+		return nil
+	}
+
+	events := app.handleDaemonCommand(control.DaemonCommand{
+		Kind:             control.DaemonCommandRepair,
+		GatewayID:        "main",
+		SurfaceSessionID: "surface-1",
+		Text:             "/repair daemon",
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "repair_daemon_restart_started" {
+		t.Fatalf("expected daemon restart started notice, got %#v", events)
+	}
+
+	select {
+	case stateValue := <-called:
+		if stateValue.ServiceManager != install.ServiceManagerSystemdUser {
+			t.Fatalf("ServiceManager = %q, want %q", stateValue.ServiceManager, install.ServiceManagerSystemdUser)
+		}
+		if stateValue.StatePath != statePath {
+			t.Fatalf("StatePath = %q, want %q", stateValue.StatePath, statePath)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for daemon restart hook")
+	}
+	waitForRepairOperation(t, gateway, "已向托管 lifecycle manager 发起 daemon 重启")
+	if len(gateway.upserted) != 0 {
+		t.Fatalf("repair daemon must not reconnect Feishu runtime, got %#v", gateway.upserted)
+	}
+}
+
+func TestRepairDaemonCommandReportsUnsupportedDetachedDaemon(t *testing.T) {
+	gateway := &fakeAdminGatewayController{}
+	app := newRepairTestApp(t, gateway)
+	app.service.MaterializeSurface("surface-1", "main", "chat-1", "user-1")
+	statePath := filepath.Join(app.headlessRuntime.Paths.DataDir, "install-state.json")
+	if err := install.WriteState(statePath, install.InstallState{
+		StatePath:       statePath,
+		ConfigPath:      filepath.Join(app.headlessRuntime.Paths.ConfigDir, "config.json"),
+		ServiceManager:  install.ServiceManagerDetached,
+		InstalledBinary: "/bin/codex-remote",
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	called := make(chan struct{}, 1)
+	app.restartDaemon = func(_ context.Context, stateValue install.InstallState) error {
+		called <- struct{}{}
+		return install.RestartInstalledDaemon(context.Background(), stateValue)
+	}
+	app.sendAgentCommand = func(string, agentproto.Command) error {
+		t.Fatal("repair daemon must not restart provider child")
+		return nil
+	}
+
+	events := app.handleDaemonCommand(control.DaemonCommand{
+		Kind:             control.DaemonCommandRepair,
+		GatewayID:        "main",
+		SurfaceSessionID: "surface-1",
+		Text:             "/repair daemon",
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "repair_daemon_restart_started" {
+		t.Fatalf("expected daemon restart started notice, got %#v", events)
+	}
+
+	waitForRepairOperation(t, gateway, "无法从飞书重启 daemon")
+	waitForRepairOperation(t, gateway, "server/supervisor")
+	select {
+	case <-called:
+		t.Fatal("repair daemon must not call restart hook for detached manager")
+	default:
+	}
+	if len(gateway.upserted) != 0 {
+		t.Fatalf("repair daemon must not reconnect Feishu runtime, got %#v", gateway.upserted)
 	}
 }
 

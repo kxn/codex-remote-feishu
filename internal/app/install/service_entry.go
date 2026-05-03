@@ -203,17 +203,7 @@ func runServiceRestart(ctx context.Context, statePath string, stdout io.Writer) 
 	if err != nil {
 		return err
 	}
-	if err := ensureSystemdUserConfigured(state); err != nil {
-		return err
-	}
-	state, err = installSystemdUserUnit(ctx, state)
-	if err != nil {
-		return err
-	}
-	if err := WriteState(statePath, state); err != nil {
-		return err
-	}
-	if err := systemdUserRestart(ctx, state); err != nil {
+	if err := RestartInstalledDaemon(ctx, state); err != nil {
 		return err
 	}
 	_, err = io.WriteString(stdout, "systemd user service restarted\n")

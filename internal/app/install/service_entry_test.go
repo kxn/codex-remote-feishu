@@ -127,6 +127,70 @@ func TestRunServiceStartRejectsDetachedManager(t *testing.T) {
 	}
 }
 
+func TestRestartInstalledDaemonUsesSystemdUserLifecycle(t *testing.T) {
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+	statePath := defaultInstallStatePath(baseDir)
+	state := InstallState{
+		BaseDir:         baseDir,
+		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		StatePath:       statePath,
+		ServiceManager:  ServiceManagerSystemdUser,
+		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      statePath,
+		BaseDir:        baseDir,
+		ServiceManager: state.ServiceManager,
+	})
+
+	originalGOOS := serviceRuntimeGOOS
+	originalRunner := systemctlUserRunner
+	serviceRuntimeGOOS = "linux"
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		systemctlUserRunner = originalRunner
+	}()
+	var calls []string
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "", nil
+	}
+
+	if err := RestartInstalledDaemon(context.Background(), state); err != nil {
+		t.Fatalf("RestartInstalledDaemon: %v", err)
+	}
+	if len(calls) != 2 {
+		t.Fatalf("systemctl calls = %#v, want daemon-reload + restart", calls)
+	}
+	if calls[0] != "daemon-reload" || !strings.HasPrefix(calls[1], "restart ") {
+		t.Fatalf("systemctl calls = %#v, want daemon-reload then restart", calls)
+	}
+	updated, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if updated.ServiceManager != ServiceManagerSystemdUser || strings.TrimSpace(updated.ServiceUnitPath) == "" {
+		t.Fatalf("expected restarted state to stay systemd_user with unit path, got %#v", updated)
+	}
+}
+
+func TestRestartInstalledDaemonRejectsDetachedManager(t *testing.T) {
+	originalRunner := systemctlUserRunner
+	defer func() {
+		systemctlUserRunner = originalRunner
+	}()
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		t.Fatalf("detached restart must not call systemctl, got %#v", args)
+		return "", nil
+	}
+
+	err := RestartInstalledDaemon(context.Background(), InstallState{ServiceManager: ServiceManagerDetached})
+	if err == nil || !strings.Contains(err.Error(), "install-user") {
+		t.Fatalf("RestartInstalledDaemon error = %v, want install-user guidance", err)
+	}
+}
+
 func TestRenderSystemdUserUnitEscapesPathsWithoutQuotedAssignments(t *testing.T) {
 	originalGOOS := serviceRuntimeGOOS
 	originalShellLookup := systemdShellEnvLookup

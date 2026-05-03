@@ -122,6 +122,7 @@ type App struct {
 	gitWorkspaceWorktrees       map[string]*gitWorkspaceWorktreeRuntime
 	startHeadless               func(relayruntime.HeadlessLaunchOptions) (int, error)
 	stopProcess                 func(int, time.Duration) error
+	restartDaemon               func(context.Context, install.InstallState) error
 	sendAgentCommand            func(string, agentproto.Command) error
 	ingress                     *ingressPump
 	ingressCancel               context.CancelFunc
@@ -195,6 +196,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		gitWorkspaceWorktrees:       map[string]*gitWorkspaceWorktreeRuntime{},
 		startHeadless:               relayruntime.StartDetachedWrapper,
 		stopProcess:                 relayruntime.TerminateProcess,
+		restartDaemon:               install.RestartInstalledDaemon,
 		ingress:                     newIngressPump(),
 		relayConnections:            map[string]*relayConnectionState{},
 		adminAuth:                   authManager,

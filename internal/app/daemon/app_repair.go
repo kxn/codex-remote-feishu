@@ -5,13 +5,23 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+)
+
+type repairCommandMode = control.RepairCommandMode
+type parsedRepairCommand = control.ParsedRepairCommand
+
+const (
+	repairCommandDefault = control.RepairCommandDefault
+	repairCommandDaemon  = control.RepairCommandDaemon
 )
 
 type repairChildAction string
@@ -23,6 +33,8 @@ const (
 	repairChildActionSkipBusy        repairChildAction = "skip_busy"
 	repairChildActionSkipUnsupported repairChildAction = "skip_unsupported"
 )
+
+const repairDaemonRestartDelay = 300 * time.Millisecond
 
 type repairPlan struct {
 	SurfaceID      string
@@ -46,6 +58,24 @@ type repairRunResult struct {
 }
 
 func (a *App) handleRepairDaemonCommand(command control.DaemonCommand) []eventcontract.Event {
+	parsed, err := parseRepairCommandText(command.Text)
+	if err != nil {
+		return []eventcontract.Event{repairNoticeEvent(
+			command.SurfaceSessionID,
+			"repair_usage_error",
+			err.Error(),
+		)}
+	}
+	if parsed.Mode == repairCommandDaemon {
+		surfaceID := strings.TrimSpace(command.SurfaceSessionID)
+		go a.runRepairDaemonRestartCommand(surfaceID)
+		return []eventcontract.Event{repairNoticeEvent(
+			surfaceID,
+			"repair_daemon_restart_started",
+			"正在尝试重启当前托管 daemon。飞书可能会短暂安静；重启完成后请重新发送 /status 或继续操作。",
+		)}
+	}
+
 	plan := a.repairPlanLocked(command)
 	go a.runRepairCommand(plan)
 	return []eventcontract.Event{repairNoticeEvent(
@@ -53,6 +83,14 @@ func (a *App) handleRepairDaemonCommand(command control.DaemonCommand) []eventco
 		"repair_started",
 		"正在修复当前飞书连接和运行时；如果当前实例可安全重启，会自动重启 provider child。",
 	)}
+}
+
+func parseRepairCommandText(text string) (parsedRepairCommand, error) {
+	parsed, err := control.ParseFeishuRepairCommandText(text)
+	if err == nil {
+		return parsed, nil
+	}
+	return parsedRepairCommand{}, fmt.Errorf("`/repair` 支持 `/repair` 或 `/repair daemon`。")
 }
 
 func (a *App) repairPlanLocked(command control.DaemonCommand) repairPlan {
@@ -183,6 +221,78 @@ func (a *App) runRepairCommand(plan repairPlan) {
 	}
 
 	a.finishRepairCommand(plan.SurfaceID, result)
+}
+
+func (a *App) runRepairDaemonRestartCommand(surfaceID string) {
+	time.Sleep(repairDaemonRestartDelay)
+	stateValue, ok, err := a.loadRepairDaemonRestartState()
+	if err == nil && !ok {
+		err = fmt.Errorf("当前 install-state 不存在，无法确认 daemon 由安装 lifecycle manager 托管")
+	}
+	if err != nil {
+		a.finishRepairDaemonRestartCommand(surfaceID, fmt.Sprintf("无法从飞书重启 daemon：%v。请在 server/supervisor 侧重启。", err), false)
+		return
+	}
+	if stateValue.ServiceManager != install.ServiceManagerSystemdUser {
+		a.finishRepairDaemonRestartCommand(surfaceID, fmt.Sprintf("无法从飞书重启 daemon：当前 service manager 是 `%s`，不是托管 systemd user service。请在 server/supervisor 侧重启。", stateValue.ServiceManager), false)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	restart := a.restartDaemon
+	if restart == nil {
+		restart = install.RestartInstalledDaemon
+	}
+	if err := restart(ctx, stateValue); err != nil {
+		a.finishRepairDaemonRestartCommand(surfaceID, fmt.Sprintf("daemon 重启未发起：%v。请在 server/supervisor 侧重启。", err), false)
+		return
+	}
+	a.finishRepairDaemonRestartCommand(surfaceID, "已向托管 lifecycle manager 发起 daemon 重启；如果当前进程马上断开，请等待服务恢复后继续。", true)
+}
+
+func (a *App) loadRepairDaemonRestartState() (install.InstallState, bool, error) {
+	path := a.installStatePath()
+	configPath := strings.TrimSpace(a.serverIdentity.ConfigPath)
+
+	a.upgradeStateIOMu.Lock()
+	statePtr, err := loadInstallStateIfPresent(path)
+	currentBinary, binaryErr := a.currentBinaryPath()
+	a.upgradeStateIOMu.Unlock()
+	if err != nil {
+		return install.InstallState{}, false, err
+	}
+	if statePtr == nil {
+		return install.InstallState{}, false, nil
+	}
+	if binaryErr != nil {
+		return install.InstallState{}, false, binaryErr
+	}
+
+	stateValue := *statePtr
+	install.ApplyStateMetadata(&stateValue, install.StateMetadataOptions{
+		StatePath:       path,
+		InstalledBinary: currentBinary,
+		CurrentVersion:  a.currentBinaryVersion(),
+	})
+	stateValue.ConfigPath = firstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), configPath)
+	stateValue.StatePath = path
+	stateValue.InstalledBinary = firstNonEmpty(strings.TrimSpace(stateValue.InstalledBinary), currentBinary)
+	stateValue.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(stateValue.CurrentBinaryPath), currentBinary)
+	return stateValue, true, nil
+}
+
+func (a *App) finishRepairDaemonRestartCommand(surfaceID, text string, success bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.shuttingDown {
+		return
+	}
+	code := "repair_daemon_restart_failed"
+	if success {
+		code = "repair_daemon_restart_requested"
+	}
+	a.handleUIEventsLocked(context.Background(), []eventcontract.Event{repairNoticeEvent(surfaceID, code, text)})
 }
 
 func (a *App) reconnectFeishuRuntimeForRepair(gatewayID string) (string, bool, error) {

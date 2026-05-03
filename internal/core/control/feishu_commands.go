@@ -917,51 +917,8 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{prefix: "upgrade-", kind: ActionUpgradeCommand, parseArgument: normalizeUpgradeMenuArgument},
 		},
 	},
-	{
-		definition: FeishuCommandDefinition{
-			ID:               FeishuCommandRepair,
-			GroupID:          FeishuCommandGroupMaintenance,
-			Title:            "修复连接",
-			CanonicalSlash:   "/repair",
-			CanonicalMenuKey: "repair",
-			ArgumentKind:     FeishuCommandArgumentNone,
-			Description:      "一键修复当前飞书会话的断联状态：重连当前 bot runtime，并在当前实例空闲时重启 provider child；不会重启 daemon 或修改全局 Codex 配置。",
-			ShowInHelp:       true,
-			ShowInMenu:       true,
-		},
-		textExact: []feishuCommandMatch{
-			{alias: "/repair", action: Action{Kind: ActionRepairCommand, Text: "/repair"}},
-		},
-		menuExact: []feishuCommandMatch{
-			{alias: "repair", action: Action{Kind: ActionRepairCommand, Text: "/repair"}},
-		},
-	},
-	{
-		definition: FeishuCommandDefinition{
-			ID:               FeishuCommandRestart,
-			GroupID:          FeishuCommandGroupMaintenance,
-			Title:            "重启运行时",
-			CanonicalSlash:   "/restart",
-			CanonicalMenuKey: "restart",
-			ArgumentKind:     FeishuCommandArgumentChoice,
-			ArgumentFormHint: "child",
-			ArgumentFormNote: "例如 child。",
-			ArgumentSubmit:   "执行",
-			Description:      "查看可用的运行时重启操作；`/restart child` 重启当前 attached instance 的 provider child，不重启 daemon。",
-			Examples:         []string{"/restart", "/restart child"},
-			Options: []FeishuCommandOption{
-				commandOption("/restart", "restart", "child", "child", "重启当前 attached instance 的 provider child。"),
-			},
-			ShowInHelp: true,
-			ShowInMenu: true,
-		},
-		textPrefixes: []feishuCommandPrefixMatch{
-			{alias: "/restart", kind: ActionRestartCommand},
-		},
-		menuExact: []feishuCommandMatch{
-			{alias: "restart", action: Action{Kind: ActionRestartCommand, Text: "/restart"}},
-		},
-	},
+	repairCommandSpec(),
+	restartCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandPatch,
