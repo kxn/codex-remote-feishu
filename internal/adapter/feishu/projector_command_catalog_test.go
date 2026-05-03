@@ -78,8 +78,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	}
 	relatedRow := cardElementButtons(t, ops[0].CardElements[5])
 	relatedValue := cardButtonPayload(t, relatedRow[0])
-	assertPageActionPayloadMatchesCommand(t, relatedValue, "/menu send_settings")
-	assertCatalogProvenancePayloadMatchesCommand(t, relatedValue, agentproto.BackendClaude, "/menu send_settings")
+	assertPageLocalActionPayloadMatchesCommand(t, relatedValue, "/menu send_settings")
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected command catalog with form to use V2 in #120, got %#v", ops[0])
 	}
@@ -105,8 +104,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 	assertPageSubmitPayload(t, renderedSubmitValue, control.ActionModelCommand, "", "command_args")
 	assertCatalogProvenancePayloadMatchesCommand(t, renderedSubmitValue, agentproto.BackendClaude, "/model")
 	renderedRelatedValue := renderedButtonCallbackValue(t, renderedElements[5])
-	assertPageActionPayloadMatchesCommand(t, renderedRelatedValue, "/menu send_settings")
-	assertCatalogProvenancePayloadMatchesCommand(t, renderedRelatedValue, agentproto.BackendClaude, "/menu send_settings")
+	assertPageLocalActionPayloadMatchesCommand(t, renderedRelatedValue, "/menu send_settings")
 }
 
 func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testing.T) {

@@ -34,6 +34,32 @@ func TestActionPayloadPageSubmitDefaultsFieldName(t *testing.T) {
 	}
 }
 
+func TestActionPayloadPageLocalSubmitDefaultsFieldName(t *testing.T) {
+	payload := ActionPayloadPageLocalSubmit("show_menu", "", "")
+	if payload[CardActionPayloadKeyKind] != CardActionKindPageLocalSubmit {
+		t.Fatalf("unexpected payload kind: %#v", payload)
+	}
+	if payload[CardActionPayloadKeyFieldName] != CardActionPayloadDefaultCommandFieldName {
+		t.Fatalf("expected default command field, got %#v", payload)
+	}
+	if _, ok := payload[CardActionPayloadKeyActionArgPrefix]; ok {
+		t.Fatalf("did not expect empty action arg prefix, got %#v", payload)
+	}
+}
+
+func TestActionPayloadPageLocalActionUsesCanonicalKind(t *testing.T) {
+	payload := ActionPayloadPageLocalAction("surface.command.menu", "send_settings")
+	if payload[CardActionPayloadKeyKind] != CardActionKindPageLocalAction {
+		t.Fatalf("unexpected payload kind: %#v", payload)
+	}
+	if payload[CardActionPayloadKeyActionKind] != "surface.command.menu" {
+		t.Fatalf("unexpected action kind: %#v", payload)
+	}
+	if payload[CardActionPayloadKeyActionArg] != "send_settings" {
+		t.Fatalf("unexpected action arg: %#v", payload)
+	}
+}
+
 func TestActionPayloadRequestControlOmitsEmptyOptionalFields(t *testing.T) {
 	payload := ActionPayloadRequestControl("req-1", "request_user_input", RequestControlCancelTurn, "", 0)
 	if payload[CardActionPayloadKeyKind] != CardActionKindRequestControl {

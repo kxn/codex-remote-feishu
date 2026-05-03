@@ -58,10 +58,12 @@ const (
 	cardActionKindRequestRespond              = frontstagecontract.CardActionKindRequestRespond
 	cardActionKindRequestControl              = frontstagecontract.CardActionKindRequestControl
 	cardActionKindPageAction                  = frontstagecontract.CardActionKindPageAction
+	cardActionKindPageLocalAction             = frontstagecontract.CardActionKindPageLocalAction
 	cardActionKindUpgradeOwnerFlow            = frontstagecontract.CardActionKindUpgradeOwnerFlow
 	cardActionKindVSCodeMigrateOwnerFlow      = frontstagecontract.CardActionKindVSCodeMigrateOwnerFlow
 	cardActionKindPlanProposal                = frontstagecontract.CardActionKindPlanProposal
 	cardActionKindPageSubmit                  = frontstagecontract.CardActionKindPageSubmit
+	cardActionKindPageLocalSubmit             = frontstagecontract.CardActionKindPageLocalSubmit
 	cardActionKindSubmitRequestForm           = frontstagecontract.CardActionKindSubmitRequestForm
 	cardActionKindPathPickerEnter             = frontstagecontract.CardActionKindPathPickerEnter
 	cardActionKindPathPickerUp                = frontstagecontract.CardActionKindPathPickerUp

@@ -57,10 +57,12 @@ const (
 	cardActionKindRequestRespond              = frontstagecontract.CardActionKindRequestRespond
 	cardActionKindRequestControl              = frontstagecontract.CardActionKindRequestControl
 	cardActionKindPageAction                  = frontstagecontract.CardActionKindPageAction
+	cardActionKindPageLocalAction             = frontstagecontract.CardActionKindPageLocalAction
 	cardActionKindUpgradeOwnerFlow            = frontstagecontract.CardActionKindUpgradeOwnerFlow
 	cardActionKindVSCodeMigrateOwnerFlow      = frontstagecontract.CardActionKindVSCodeMigrateOwnerFlow
 	cardActionKindPlanProposal                = frontstagecontract.CardActionKindPlanProposal
 	cardActionKindPageSubmit                  = frontstagecontract.CardActionKindPageSubmit
+	cardActionKindPageLocalSubmit             = frontstagecontract.CardActionKindPageLocalSubmit
 	cardActionKindSubmitRequestForm           = frontstagecontract.CardActionKindSubmitRequestForm
 	cardActionKindPathPickerEnter             = frontstagecontract.CardActionKindPathPickerEnter
 	cardActionKindPathPickerUp                = frontstagecontract.CardActionKindPathPickerUp
@@ -92,10 +94,12 @@ var (
 	actionPayloadUseThreadField         = frontstagecontract.ActionPayloadUseThreadField
 	actionPayloadKickThreadConfirm      = frontstagecontract.ActionPayloadKickThreadConfirm
 	actionPayloadPageAction             = frontstagecontract.ActionPayloadPageAction
+	actionPayloadPageLocalAction        = frontstagecontract.ActionPayloadPageLocalAction
 	actionPayloadWithCatalog            = frontstagecontract.ActionPayloadWithCatalog
 	actionPayloadUpgradeOwnerFlow       = frontstagecontract.ActionPayloadUpgradeOwnerFlow
 	actionPayloadVSCodeMigrateOwnerFlow = frontstagecontract.ActionPayloadVSCodeMigrateOwnerFlow
 	actionPayloadPageSubmit             = frontstagecontract.ActionPayloadPageSubmit
+	actionPayloadPageLocalSubmit        = frontstagecontract.ActionPayloadPageLocalSubmit
 	actionPayloadRequestRespond         = frontstagecontract.ActionPayloadRequestRespond
 	actionPayloadRequestControl         = frontstagecontract.ActionPayloadRequestControl
 	actionPayloadSubmitRequestForm      = frontstagecontract.ActionPayloadSubmitRequestForm

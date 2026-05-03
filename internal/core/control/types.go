@@ -129,6 +129,7 @@ type Action struct {
 	Request             *ActionRequestResponse
 	RequestControl      *ActionRequestControl
 	OwnerFlow           *ActionOwnerCardFlow
+	LocalPageAction     bool
 	CatalogFamilyID     string
 	CatalogVariantID    string
 	CatalogBackend      agentproto.Backend
@@ -449,6 +450,7 @@ type CommandCatalogForm struct {
 	CatalogVariantID string
 	CatalogBackend   agentproto.Backend
 	SubmitLabel      string
+	SubmitValue      map[string]any
 	Field            CommandCatalogFormField
 }
 

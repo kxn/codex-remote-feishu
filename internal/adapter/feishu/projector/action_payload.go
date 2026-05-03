@@ -55,7 +55,9 @@ const (
 	cardActionKindRequestRespond              = frontstagecontract.CardActionKindRequestRespond
 	cardActionKindRequestControl              = frontstagecontract.CardActionKindRequestControl
 	cardActionKindPageAction                  = frontstagecontract.CardActionKindPageAction
+	cardActionKindPageLocalAction             = frontstagecontract.CardActionKindPageLocalAction
 	cardActionKindPageSubmit                  = frontstagecontract.CardActionKindPageSubmit
+	cardActionKindPageLocalSubmit             = frontstagecontract.CardActionKindPageLocalSubmit
 	cardActionKindSubmitRequestForm           = frontstagecontract.CardActionKindSubmitRequestForm
 	cardActionKindPathPickerEnter             = frontstagecontract.CardActionKindPathPickerEnter
 	cardActionKindPathPickerSelect            = frontstagecontract.CardActionKindPathPickerSelect
@@ -86,8 +88,10 @@ var (
 	actionPayloadThreadSelectionCursor = frontstagecontract.ActionPayloadThreadSelectionCursor
 	actionPayloadKickThreadConfirm     = frontstagecontract.ActionPayloadKickThreadConfirm
 	actionPayloadPageAction            = frontstagecontract.ActionPayloadPageAction
+	actionPayloadPageLocalAction       = frontstagecontract.ActionPayloadPageLocalAction
 	actionPayloadWithCatalog           = frontstagecontract.ActionPayloadWithCatalog
 	actionPayloadPageSubmit            = frontstagecontract.ActionPayloadPageSubmit
+	actionPayloadPageLocalSubmit       = frontstagecontract.ActionPayloadPageLocalSubmit
 	actionPayloadRequestRespond        = frontstagecontract.ActionPayloadRequestRespond
 	actionPayloadRequestControl        = frontstagecontract.ActionPayloadRequestControl
 	actionPayloadPathPicker            = frontstagecontract.ActionPayloadPathPicker

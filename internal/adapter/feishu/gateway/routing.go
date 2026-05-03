@@ -271,12 +271,20 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			},
 			Inbound: meta,
 		}, true
-	case cardActionKindPageAction:
+	case cardActionKindPageAction, cardActionKindPageLocalAction:
 		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionKind)))
 		if actionKind == "" {
 			return control.Action{}, false
 		}
 		actionArg := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionArg))
+		catalogFamilyID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID))
+		catalogVariantID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID))
+		catalogBackend := agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend))))
+		if kind == cardActionKindPageLocalAction {
+			catalogFamilyID = ""
+			catalogVariantID = ""
+			catalogBackend = ""
+		}
 		return control.Action{
 			Kind:             actionKind,
 			GatewayID:        gatewayID,
@@ -285,9 +293,10 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
-			CatalogFamilyID:  strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID)),
-			CatalogVariantID: strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID)),
-			CatalogBackend:   agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend)))),
+			CatalogFamilyID:  catalogFamilyID,
+			CatalogVariantID: catalogVariantID,
+			CatalogBackend:   catalogBackend,
+			LocalPageAction:  kind == cardActionKindPageLocalAction,
 			Inbound:          meta,
 		}, true
 	case cardActionKindUpgradeOwnerFlow:
@@ -345,7 +354,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			OptionID:         optionID,
 			Inbound:          meta,
 		}, true
-	case cardActionKindPageSubmit:
+	case cardActionKindPageSubmit, cardActionKindPageLocalSubmit:
 		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionKind)))
 		if actionKind == "" {
 			return control.Action{}, false
@@ -362,6 +371,14 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			}
 			actionArg += argValue
 		}
+		catalogFamilyID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID))
+		catalogVariantID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID))
+		catalogBackend := agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend))))
+		if kind == cardActionKindPageLocalSubmit {
+			catalogFamilyID = ""
+			catalogVariantID = ""
+			catalogBackend = ""
+		}
 		return control.Action{
 			Kind:             actionKind,
 			GatewayID:        gatewayID,
@@ -370,9 +387,10 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
-			CatalogFamilyID:  strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID)),
-			CatalogVariantID: strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID)),
-			CatalogBackend:   agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend)))),
+			CatalogFamilyID:  catalogFamilyID,
+			CatalogVariantID: catalogVariantID,
+			CatalogBackend:   catalogBackend,
+			LocalPageAction:  kind == cardActionKindPageLocalSubmit,
 			Inbound:          meta,
 		}, true
 	case cardActionKindSubmitRequestForm:

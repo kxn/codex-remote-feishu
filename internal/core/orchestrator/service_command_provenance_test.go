@@ -84,3 +84,22 @@ func TestApplySurfaceActionRejectsCardCommandWhenSurfaceContextChanged(t *testin
 		t.Fatalf("notice code = %q, want %q", events[0].Notice.Code, "command_entry_expired")
 	}
 }
+
+func TestApplySurfaceActionDoesNotRejectLocalPageActionWithoutCatalogProvenance(t *testing.T) {
+	now := time.Date(2026, 5, 3, 10, 15, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-card-3",
+		Text:             "/menu send_settings",
+		LocalPageAction:  true,
+		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-3"},
+	})
+	if len(events) == 1 && events[0].Notice != nil && events[0].Notice.Code == "command_entry_expired" {
+		t.Fatalf("expected local page action to bypass command provenance rejection, got %#v", events)
+	}
+}

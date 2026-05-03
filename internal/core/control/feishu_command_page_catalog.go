@@ -152,6 +152,9 @@ func cloneCommandCatalogForm(form *CommandCatalogForm) *CommandCatalogForm {
 	cloned.CommandText = strings.TrimSpace(form.CommandText)
 	cloned.CatalogFamilyID = strings.TrimSpace(form.CatalogFamilyID)
 	cloned.CatalogVariantID = strings.TrimSpace(form.CatalogVariantID)
+	if len(form.SubmitValue) != 0 {
+		cloned.SubmitValue = cloneActionPayload(form.SubmitValue)
+	}
 	cloned.Field = CommandCatalogFormField{
 		Name:         strings.TrimSpace(form.Field.Name),
 		Kind:         form.Field.Kind,

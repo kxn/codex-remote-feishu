@@ -92,7 +92,7 @@ func TestHandleGatewayActionWorkspaceMenuFlowKeepsParentBackNavigation(t *testin
 	if workspaceResult == nil || workspaceResult.ReplaceCurrentCard == nil {
 		t.Fatalf("expected workspace root replacement result, got %#v", workspaceResult)
 	}
-	if !operationHasActionValue(*workspaceResult.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) {
+	if !operationHasActionValue(*workspaceResult.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionShowCommandMenu)) {
 		t.Fatalf("expected workspace root opened from menu to keep menu back action, got %#v", workspaceResult.ReplaceCurrentCard.CardElements)
 	}
 
@@ -172,8 +172,8 @@ func TestHandleGatewayActionMenuConfigFlowKeepsReturnToGroupAfterApply(t *testin
 	if configResult == nil || configResult.ReplaceCurrentCard == nil {
 		t.Fatalf("expected autowhip config replacement result, got %#v", configResult)
 	}
-	if !operationHasActionValue(*configResult.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) ||
-		!operationHasActionValue(*configResult.ReplaceCurrentCard, "page_action", "action_arg", "send_settings") {
+	if !operationHasActionValue(*configResult.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionShowCommandMenu)) ||
+		!operationHasActionValue(*configResult.ReplaceCurrentCard, "page_local_action", "action_arg", "send_settings") {
 		t.Fatalf("expected config page to keep return-to-group action, got %#v", configResult.ReplaceCurrentCard.CardElements)
 	}
 
@@ -192,8 +192,8 @@ func TestHandleGatewayActionMenuConfigFlowKeepsReturnToGroupAfterApply(t *testin
 	if applyResult == nil || applyResult.ReplaceCurrentCard == nil {
 		t.Fatalf("expected autowhip apply replacement result, got %#v", applyResult)
 	}
-	if !operationHasActionValue(*applyResult.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) ||
-		!operationHasActionValue(*applyResult.ReplaceCurrentCard, "page_action", "action_arg", "send_settings") {
+	if !operationHasActionValue(*applyResult.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionShowCommandMenu)) ||
+		!operationHasActionValue(*applyResult.ReplaceCurrentCard, "page_local_action", "action_arg", "send_settings") {
 		t.Fatalf("expected applied config card to keep return-to-group action, got %#v", applyResult.ReplaceCurrentCard.CardElements)
 	}
 }

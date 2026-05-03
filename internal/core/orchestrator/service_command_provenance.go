@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Service) rejectExpiredCommandEntry(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
-	if surface == nil || !action.IsCardAction() || !control.ActionRoutesThroughFeishuCommandCatalog(action) {
+	if surface == nil || !action.IsCardAction() || action.LocalPageAction || !control.ActionRoutesThroughFeishuCommandCatalog(action) {
 		return nil
 	}
 	if !control.HasStrictFeishuCommandCatalogProvenance(action) {

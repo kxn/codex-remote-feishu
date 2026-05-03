@@ -58,10 +58,12 @@ const (
 	CardActionKindRequestRespond              = "request_respond"
 	CardActionKindRequestControl              = "request_control"
 	CardActionKindPageAction                  = "page_action"
+	CardActionKindPageLocalAction             = "page_local_action"
 	CardActionKindUpgradeOwnerFlow            = "upgrade_owner_flow"
 	CardActionKindVSCodeMigrateOwnerFlow      = "vscode_migrate_owner_flow"
 	CardActionKindPlanProposal                = "plan_proposal"
 	CardActionKindPageSubmit                  = "page_submit"
+	CardActionKindPageLocalSubmit             = "page_local_submit"
 	CardActionKindSubmitRequestForm           = "submit_request_form"
 	CardActionKindPathPickerEnter             = "path_picker_enter"
 	CardActionKindPathPickerUp                = "path_picker_up"
@@ -192,6 +194,17 @@ func ActionPayloadPageAction(actionKind, actionArg string) map[string]any {
 	return payload
 }
 
+func ActionPayloadPageLocalAction(actionKind, actionArg string) map[string]any {
+	payload := map[string]any{
+		CardActionPayloadKeyKind:       CardActionKindPageLocalAction,
+		CardActionPayloadKeyActionKind: strings.TrimSpace(actionKind),
+	}
+	if strings.TrimSpace(actionArg) != "" {
+		payload[CardActionPayloadKeyActionArg] = strings.TrimSpace(actionArg)
+	}
+	return payload
+}
+
 func ActionPayloadWithCatalog(value map[string]any, familyID, variantID, backend string) map[string]any {
 	if len(value) == 0 {
 		return value
@@ -239,6 +252,22 @@ func ActionPayloadPageSubmit(actionKind, actionArgPrefix, fieldName string) map[
 	}
 	payload := map[string]any{
 		CardActionPayloadKeyKind:       CardActionKindPageSubmit,
+		CardActionPayloadKeyActionKind: strings.TrimSpace(actionKind),
+		CardActionPayloadKeyFieldName:  fieldName,
+	}
+	if strings.TrimSpace(actionArgPrefix) != "" {
+		payload[CardActionPayloadKeyActionArgPrefix] = strings.TrimSpace(actionArgPrefix)
+	}
+	return payload
+}
+
+func ActionPayloadPageLocalSubmit(actionKind, actionArgPrefix, fieldName string) map[string]any {
+	fieldName = strings.TrimSpace(fieldName)
+	if fieldName == "" {
+		fieldName = CardActionPayloadDefaultCommandFieldName
+	}
+	payload := map[string]any{
+		CardActionPayloadKeyKind:       CardActionKindPageLocalSubmit,
 		CardActionPayloadKeyActionKind: strings.TrimSpace(actionKind),
 		CardActionPayloadKeyFieldName:  fieldName,
 	}

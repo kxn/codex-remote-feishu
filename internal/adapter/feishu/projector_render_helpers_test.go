@@ -221,6 +221,28 @@ func assertPageActionPayloadMatchesCommand(t *testing.T, value map[string]any, c
 	}
 }
 
+func assertPageLocalActionPayloadMatchesCommand(t *testing.T, value map[string]any, commandText string) {
+	t.Helper()
+	action, ok := control.ParseFeishuTextActionWithoutCatalog(commandText)
+	if !ok {
+		t.Fatalf("expected parseable command text %q", commandText)
+	}
+	if value["kind"] != "page_local_action" {
+		t.Fatalf("expected page_local_action payload, got %#v", value)
+	}
+	if value["action_kind"] != string(action.Kind) {
+		t.Fatalf("unexpected action kind payload: %#v", value)
+	}
+	wantArg := control.FeishuActionArgumentText(action.Text)
+	gotArg := strings.TrimSpace(stringAnyValue(value["action_arg"]))
+	if gotArg != wantArg {
+		t.Fatalf("unexpected action arg payload: got %q want %q in %#v", gotArg, wantArg, value)
+	}
+	if _, ok := value[cardActionPayloadKeyCatalogFamilyID]; ok {
+		t.Fatalf("did not expect catalog provenance on local page action, got %#v", value)
+	}
+}
+
 func assertPageSubmitPayload(t *testing.T, value map[string]any, actionKind control.ActionKind, actionArgPrefix, fieldName string) {
 	t.Helper()
 	if value["kind"] != "page_submit" {

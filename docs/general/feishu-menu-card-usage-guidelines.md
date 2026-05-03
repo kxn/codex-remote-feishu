@@ -1,8 +1,8 @@
 # 飞书菜单卡使用规约
 
 > Type: `general`
-> Updated: `2026-04-22`
-> Summary: 固化菜单卡的 launcher/owner/terminal 契约与扩展清单，禁止回退到旧菜单基座或半菜单半业务混合实现。
+> Updated: `2026-05-03`
+> Summary: 固化菜单卡的 launcher/owner/terminal 契约、页面本地导航 callback substrate 与扩展清单，禁止回退到旧菜单基座或半菜单半业务混合实现。
 
 ## 1. 文档定位
 
@@ -32,6 +32,8 @@
 - action 级入口契约由 `internal/core/control/feishu_ui_lifecycle.go` 统一定义
 - 菜单运行态由 `command_menu` owner flow 承载，禁止新增平行“菜单状态容器”
 - 菜单 flow role 只允许 `launcher -> owner` 单向切换，不允许回跳成 launcher
+- 菜单层 `返回上一层` / `返回菜单` / 进入子页默认必须投影为 `page_local_action` 或 `page_local_submit`
+- `page_action` / `page_submit` 只保留给真正需要继续走命令 provenance 的动作，不再拿来表达纯前台导航
 
 ## 3. 菜单卡与业务卡边界
 
@@ -40,6 +42,7 @@
 具体要求：
 
 - 菜单内可返回：仅限菜单层级（首页/分组/配置页）
+- 菜单层返回/回根/进入子页：默认是当前卡内的本地导航，不重放 slash command
 - 进入业务后不可返回菜单：业务未结束前，所有进度、成功、失败、取消都在业务 owner card 内收口
 - `help/status` 归类为 terminal：结果即完成，不再视为可继续返回的 preview
 
@@ -71,7 +74,7 @@
 新增或改造菜单项时，必须按顺序完成：
 
 1. 在 `ResolveFeishuFrontstageActionContract(...)` 明确动作归类（`keep/enter_owner/enter_terminal`）。
-2. 在菜单视图层接入入口，并确认 breadcrumb / 返回行为仅发生在菜单层级。
+2. 在菜单视图层接入入口，并确认 breadcrumb / 返回行为仅发生在菜单层级；`keep` 类动作默认走本地 callback substrate，而不是命令重放。
 3. 如果进入业务，确保 owner flow 全程单卡推进，终态 sealed，且不回跳菜单。
 4. 为新增路径补回归：
    - `internal/core/control/inline_replacement_test.go`
@@ -85,6 +88,7 @@
 每次菜单改动至少核对：
 
 - 是否只通过统一 action contract 决定 launcher disposition
+- 是否把本地菜单导航留在 `page_local_action/page_local_submit`，而不是退回命令 provenance
 - 是否仍不存在旧链路（submission anchor / bare continuation / MenuFlow substrate）
 - 是否新增了“菜单与业务混住”的路径
 - 是否覆盖菜单回退、业务收口、旧卡点击拒绝三类用例

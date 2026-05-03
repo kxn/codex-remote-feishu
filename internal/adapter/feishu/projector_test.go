@@ -606,7 +606,7 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 		t.Fatalf("unexpected button label: %#v", actionRow[0])
 	}
 	value := cardButtonPayload(t, actionRow[0])
-	assertPageActionPayloadMatchesCommand(t, value, "/list")
+	assertPageLocalActionPayloadMatchesCommand(t, value, "/list")
 	if ops[0].cardEnvelope != cardEnvelopeV2 || ops[0].card == nil {
 		t.Fatalf("expected button-only command catalog to use structured V2 send path, got %#v", ops[0])
 	}
@@ -616,7 +616,7 @@ func TestProjectInteractiveCommandCatalogAddsRunCommandButtons(t *testing.T) {
 		t.Fatalf("expected rendered V2 command catalog to avoid legacy action rows, got %#v", renderedElements)
 	}
 	renderedValue := renderedButtonCallbackValue(t, renderedElements[3])
-	assertPageActionPayloadMatchesCommand(t, renderedValue, "/list")
+	assertPageLocalActionPayloadMatchesCommand(t, renderedValue, "/list")
 }
 
 func TestProjectCompactCommandCatalogStacksButtonsWithoutEntryMarkdown(t *testing.T) {
@@ -811,7 +811,7 @@ func TestProjectInteractiveCommandCatalogRelatedButtonsUseV2WhenNoForm(t *testin
 		t.Fatalf("expected divider before related button, got %#v", renderedElements)
 	}
 	renderedValue := renderedButtonCallbackValue(t, renderedElements[2])
-	assertPageActionPayloadMatchesCommand(t, renderedValue, "/menu")
+	assertPageLocalActionPayloadMatchesCommand(t, renderedValue, "/menu")
 }
 
 func TestProjectRequestPromptAsCard(t *testing.T) {

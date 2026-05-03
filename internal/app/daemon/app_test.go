@@ -268,7 +268,7 @@ func TestHandleGatewayActionReplacesMenuCardForCardNavigation(t *testing.T) {
 	if result.ReplaceCurrentCard.CardTitle != "命令菜单" {
 		t.Fatalf("unexpected replacement card: %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) {
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionShowCommandMenu)) {
 		t.Fatalf("expected replacement submenu card to include back-to-home command, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
@@ -328,7 +328,7 @@ func TestHandleGatewayActionReplacesMenuCardForRootNavigation(t *testing.T) {
 	}
 	for _, button := range operationCardButtons(*result.ReplaceCurrentCard) {
 		value := cardButtonPayload(button)
-		if len(value) == 0 || value["kind"] != "page_action" {
+		if len(value) == 0 || value["kind"] != "page_local_action" {
 			continue
 		}
 		if value["action_kind"] == string(control.ActionShowCommandMenu) && value["action_arg"] == nil {
@@ -462,8 +462,8 @@ func TestHandleGatewayActionReplacesBareModeCardForCardNavigation(t *testing.T) 
 	if result.ReplaceCurrentCard.CardTitle != "切换模式" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) ||
-		!operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_arg", "maintenance") {
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionShowCommandMenu)) ||
+		!operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_arg", "maintenance") {
 		t.Fatalf("expected replacement mode card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
@@ -522,8 +522,8 @@ func TestHandleGatewayActionReplacesBareModelCardForCardNavigation(t *testing.T)
 	if result.ReplaceCurrentCard.CardTitle != "使用模型" {
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionShowCommandMenu)) ||
-		!operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_arg", "send_settings") {
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionShowCommandMenu)) ||
+		!operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_arg", "send_settings") {
 		t.Fatalf("expected replacement model card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }
@@ -697,10 +697,10 @@ func TestHandleGatewayActionRerendersMenuFromCurrentSurfaceStateWithoutViewSessi
 	if result == nil || result.ReplaceCurrentCard == nil {
 		t.Fatalf("expected inline replacement result, got %#v", result)
 	}
-	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionNewThread)) {
+	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionNewThread)) {
 		t.Fatalf("expected rerendered menu to reflect current attached state, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
-	if operationHasActionValue(*result.ReplaceCurrentCard, "page_action", "action_kind", string(control.ActionFollowLocal)) {
+	if operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionFollowLocal)) {
 		t.Fatalf("expected current_work menu not to show /follow, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }

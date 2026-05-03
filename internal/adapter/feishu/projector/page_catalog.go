@@ -89,26 +89,29 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 }
 
 func pageFormElement(form control.CommandCatalogForm, pageBackend controlBackend, daemonLifecycleID string) (map[string]any, bool) {
-	actionKind, ok := control.ActionKindForFeishuCommandID(strings.TrimSpace(form.CommandID))
-	if !ok {
-		return nil, false
-	}
 	field := form.Field
 	formName := commandCatalogFormName(form)
-	submitValue := actionPayloadPageSubmit(
-		string(actionKind),
-		control.FeishuActionArgumentText(form.CommandText),
-		strings.TrimSpace(field.Name),
-	)
-	if resolved, ok := resolveCatalogActionForPage(control.Action{
-		Kind:             actionKind,
-		Text:             strings.TrimSpace(form.CommandText),
-		CommandID:        strings.TrimSpace(form.CommandID),
-		CatalogFamilyID:  strings.TrimSpace(form.CatalogFamilyID),
-		CatalogVariantID: strings.TrimSpace(form.CatalogVariantID),
-		CatalogBackend:   pageCatalogBackend(pageBackend, form.CatalogBackend),
-	}, pageCatalogBackend(pageBackend, form.CatalogBackend)); ok {
-		submitValue = actionPayloadWithCatalog(submitValue, resolved.FamilyID, resolved.VariantID, string(resolved.Backend))
+	submitValue := cloneActionPayload(form.SubmitValue)
+	if len(submitValue) == 0 {
+		actionKind, ok := control.ActionKindForFeishuCommandID(strings.TrimSpace(form.CommandID))
+		if !ok {
+			return nil, false
+		}
+		submitValue = actionPayloadPageSubmit(
+			string(actionKind),
+			control.FeishuActionArgumentText(form.CommandText),
+			strings.TrimSpace(field.Name),
+		)
+		if resolved, ok := resolveCatalogActionForPage(control.Action{
+			Kind:             actionKind,
+			Text:             strings.TrimSpace(form.CommandText),
+			CommandID:        strings.TrimSpace(form.CommandID),
+			CatalogFamilyID:  strings.TrimSpace(form.CatalogFamilyID),
+			CatalogVariantID: strings.TrimSpace(form.CatalogVariantID),
+			CatalogBackend:   pageCatalogBackend(pageBackend, form.CatalogBackend),
+		}, pageCatalogBackend(pageBackend, form.CatalogBackend)); ok {
+			submitValue = actionPayloadWithCatalog(submitValue, resolved.FamilyID, resolved.VariantID, string(resolved.Backend))
+		}
 	}
 	submitValue = stampActionValue(submitValue, daemonLifecycleID)
 	submitButton := cardFormSubmitButtonElement(firstNonEmpty(strings.TrimSpace(form.SubmitLabel), "执行"), submitValue)
@@ -149,16 +152,20 @@ func pageButtons(buttons []control.CommandCatalogButton, pageBackend controlBack
 			if label == "" {
 				label = commandText
 			}
-			payload = actionPayloadPageAction(string(resolved.Action.Kind), control.FeishuActionArgumentText(resolved.Action.Text))
-			if enriched, ok := resolveCatalogActionForPage(control.Action{
-				Kind:             resolved.Action.Kind,
-				Text:             resolved.Action.Text,
-				CommandID:        firstNonEmpty(strings.TrimSpace(button.CommandID), strings.TrimSpace(resolved.Action.CommandID)),
-				CatalogFamilyID:  firstNonEmpty(strings.TrimSpace(button.CatalogFamilyID), strings.TrimSpace(resolved.FamilyID)),
-				CatalogVariantID: firstNonEmpty(strings.TrimSpace(button.CatalogVariantID), strings.TrimSpace(resolved.VariantID)),
-				CatalogBackend:   pageCatalogBackend(pageBackend, button.CatalogBackend),
-			}, pageCatalogBackend(pageBackend, button.CatalogBackend)); ok {
-				payload = actionPayloadWithCatalog(payload, enriched.FamilyID, enriched.VariantID, string(enriched.Backend))
+			if shouldUseLocalPageAction(resolved.Action) {
+				payload = actionPayloadPageLocalAction(string(resolved.Action.Kind), control.FeishuActionArgumentText(resolved.Action.Text))
+			} else {
+				payload = actionPayloadPageAction(string(resolved.Action.Kind), control.FeishuActionArgumentText(resolved.Action.Text))
+				if enriched, ok := resolveCatalogActionForPage(control.Action{
+					Kind:             resolved.Action.Kind,
+					Text:             resolved.Action.Text,
+					CommandID:        firstNonEmpty(strings.TrimSpace(button.CommandID), strings.TrimSpace(resolved.Action.CommandID)),
+					CatalogFamilyID:  firstNonEmpty(strings.TrimSpace(button.CatalogFamilyID), strings.TrimSpace(resolved.FamilyID)),
+					CatalogVariantID: firstNonEmpty(strings.TrimSpace(button.CatalogVariantID), strings.TrimSpace(resolved.VariantID)),
+					CatalogBackend:   pageCatalogBackend(pageBackend, button.CatalogBackend),
+				}, pageCatalogBackend(pageBackend, button.CatalogBackend)); ok {
+					payload = actionPayloadWithCatalog(payload, enriched.FamilyID, enriched.VariantID, string(enriched.Backend))
+				}
 			}
 		case control.CommandCatalogButtonOpenURL:
 			openURL := strings.TrimSpace(button.OpenURL)
@@ -218,6 +225,27 @@ func pageCompactButtonElements(buttons []control.CommandCatalogButton, pageBacke
 
 func resolveCatalogActionForPage(action control.Action, backend controlBackend) (control.ResolvedCommand, bool) {
 	return control.ResolveFeishuActionCatalog(control.CatalogContext{Backend: backend}, action)
+}
+
+func shouldUseLocalPageAction(action control.Action) bool {
+	binding, ok := control.ResolveFeishuCommandBindingFromAction(action)
+	if !ok {
+		return false
+	}
+	switch binding.Kind {
+	case control.FeishuCommandBindingDaemonCommand:
+		return false
+	case control.FeishuCommandBindingConfigFlow:
+		_, ok := control.FeishuUIIntentFromAction(action)
+		return ok
+	case control.FeishuCommandBindingInlinePage,
+		control.FeishuCommandBindingWorkspaceSession,
+		control.FeishuCommandBindingTerminalPage,
+		control.FeishuCommandBindingOwnerEntry:
+		return true
+	default:
+		return false
+	}
 }
 
 func pageCatalogBackend(pageBackend, itemBackend controlBackend) controlBackend {
