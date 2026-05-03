@@ -236,12 +236,36 @@ func displaySnapshotAccessMode(value string) string {
 }
 
 func formatSnapshotEffectivePromptPlain(summary control.PromptRouteSummary) string {
+	if summary.UsesLocalRequestedOverrides {
+		return formatSnapshotLocalRequestedPromptPlain(summary)
+	}
 	return strings.Join([]string{
 		"Plan " + displaySnapshotPlanMode(summary.EffectivePlanMode),
 		"模型 " + displaySnapshotValue(summary.EffectiveModel),
 		"推理 " + displaySnapshotValue(summary.EffectiveReasoningEffort),
 		"权限 " + displaySnapshotAccessMode(summary.EffectiveAccessMode),
 	}, "，")
+}
+
+func formatSnapshotLocalRequestedPromptPlain(summary control.PromptRouteSummary) string {
+	parts := []string{
+		snapshotOverridePart("模型", summary.OverrideModel, displaySnapshotValue),
+		snapshotOverridePart("推理", summary.OverrideReasoningEffort, displaySnapshotValue),
+		snapshotOverridePart("权限", summary.OverrideAccessMode, displaySnapshotAccessMode),
+	}
+	if summary.PlanModeOverrideSet {
+		parts = append(parts, "Plan "+displaySnapshotPlanMode(summary.OverridePlanMode))
+	} else {
+		parts = append(parts, "Plan 不覆盖")
+	}
+	return strings.Join(parts, "，") + "（未覆盖的项目跟随 VS Code 当前状态）"
+}
+
+func snapshotOverridePart(label, value string, format func(string) string) string {
+	if strings.TrimSpace(value) == "" {
+		return label + " 不覆盖"
+	}
+	return label + " " + format(value)
 }
 
 func displaySnapshotPlanMode(value string) string {
@@ -252,6 +276,12 @@ func displaySnapshotPlanMode(value string) string {
 }
 
 func snapshotPlanModeText(summary control.PromptRouteSummary, dispatch control.DispatchSummary) string {
+	if summary.UsesLocalRequestedOverrides {
+		if !summary.PlanModeOverrideSet {
+			return "跟随 VS Code 当前状态"
+		}
+		return "飞书覆盖：" + displaySnapshotPlanMode(summary.OverridePlanMode)
+	}
 	mode := displaySnapshotPlanMode(summary.EffectivePlanMode)
 	if strings.EqualFold(strings.TrimSpace(summary.EffectivePlanMode), "on") &&
 		(strings.TrimSpace(dispatch.ActiveItemStatus) != "" || dispatch.QueuedCount > 0) {

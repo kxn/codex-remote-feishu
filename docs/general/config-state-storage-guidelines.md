@@ -195,6 +195,7 @@
 - 如果 backend 主动退出某状态，例如 Claude `ExitPlanMode`，本地不应因为旧的持久 desired state 又强行切回去
 - 飞书端 UI 应展示“当前 backend 状态”和“下一条飞书消息覆盖”之间的区别
 - VS Code 模式下，observed state 只能作为展示和本地入队时的参考；没有飞书显式 requested override 时，prompt command 不应把 observed model / reasoning / access / plan 再作为 override 下发给 backend
+- VS Code 模式下，状态投影也必须遵守同一语义：没有飞书显式 requested override 时，应显示“不覆盖 / 跟随 VS Code 当前状态”，不能把 observed/default effective 值渲染成“下条飞书消息”会强制下发的配置
 - VS Code 模式下，`/plan on|off` 属于显式 requested override；`/plan clear` 会回到“跟随 backend 当前状态”，后续 prompt 不再携带 plan override
 - 没有完成底层调研前，不应把这类配置做成永久默认值
 

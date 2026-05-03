@@ -55,8 +55,11 @@ func (s *Service) buildConfigCommandViewState(
 
 	view.Config.CurrentValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.CurrentValueKey)
 	view.Config.EffectiveValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.EffectiveValueKey)
+	view.Config.EffectiveValueSource = resolveConfigFlowValueSource(summary, flow.EffectiveValueKey)
 	view.Config.OverrideValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideValueKey)
 	view.Config.OverrideExtraValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideExtraValueKey)
+	view.Config.UsesLocalRequestedOverrides = summary.UsesLocalRequestedOverrides
+	view.Config.PlanModeOverrideSet = summary.PlanModeOverrideSet
 	switch flow.CommandID {
 	case control.FeishuCommandCodexProvider:
 		view.Config.FormOptions = s.codexProviderCommandOptions()
@@ -70,6 +73,24 @@ func (s *Service) buildConfigCommandViewState(
 		}
 	}
 	return view
+}
+
+func resolveConfigFlowValueSource(summary control.PromptRouteSummary, key control.FeishuConfigFlowValueKey) string {
+	switch key {
+	case control.FeishuConfigFlowValuePromptEffectiveReasoning:
+		return strings.TrimSpace(summary.EffectiveReasoningEffortSource)
+	case control.FeishuConfigFlowValuePromptEffectiveAccess:
+		return strings.TrimSpace(summary.EffectiveAccessModeSource)
+	case control.FeishuConfigFlowValuePromptEffectiveModel:
+		return strings.TrimSpace(summary.EffectiveModelSource)
+	case control.FeishuConfigFlowValuePromptObservedThreadPlan:
+		if strings.TrimSpace(summary.ObservedThreadPlanMode) != "" {
+			return "thread"
+		}
+		return ""
+	default:
+		return ""
+	}
 }
 
 func mergeConfigCardStateFromAction(

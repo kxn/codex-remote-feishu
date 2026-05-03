@@ -17,18 +17,21 @@ type FeishuCatalogMenuView struct {
 }
 
 type FeishuCatalogConfigView struct {
-	CatalogFamilyID    string
-	CatalogVariantID   string
-	CatalogBackend     agentproto.Backend
-	CommandID          string
-	RequiresAttachment bool
-	CurrentValue       string
-	EffectiveValue     string
-	OverrideValue      string
-	OverrideExtraValue string
-	FormDefaultValue   string
-	FormOptions        []CommandCatalogFormFieldOption
-	StatusKind         string
-	StatusText         string
-	Sealed             bool
+	CatalogFamilyID             string
+	CatalogVariantID            string
+	CatalogBackend              agentproto.Backend
+	CommandID                   string
+	RequiresAttachment          bool
+	CurrentValue                string
+	EffectiveValue              string
+	EffectiveValueSource        string
+	OverrideValue               string
+	OverrideExtraValue          string
+	UsesLocalRequestedOverrides bool
+	PlanModeOverrideSet         bool
+	FormDefaultValue            string
+	FormOptions                 []CommandCatalogFormFieldOption
+	StatusKind                  string
+	StatusText                  string
+	Sealed                      bool
 }

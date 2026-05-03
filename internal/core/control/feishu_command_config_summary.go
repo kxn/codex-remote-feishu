@@ -65,7 +65,7 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	case FeishuCommandClaudeProfile:
 		return []FeishuCardTextSection{
 			singleValueCardSection("当前配置", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, state.DefaultClaudeProfileName))),
-			singleValueCardSection("切换方式", "切换后会重启当前工作区，并恢复该配置最近一次的推理、权限和 Plan 记忆。"),
+			singleValueCardSection("切换方式", "切换后会重启当前工作区，并恢复该配置最近一次的推理临时覆盖。"),
 		}
 	case FeishuCommandAutoWhip:
 		return []FeishuCardTextSection{singleValueCardSection("当前", autoWhipDisplayValue(view.CurrentValue))}
@@ -75,29 +75,17 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 			singleValueCardSection("作用范围", "只处理上游可重试失败，不影响 AutoWhip"),
 		}
 	case FeishuCommandReasoning:
-		return dualValueCardSections(
-			"当前", commandDisplayValue(view.EffectiveValue, "未设置"),
-			"飞书覆盖", commandDisplayValue(view.OverrideValue, "无"),
-		)
+		return promptValueCardSections(view)
 	case FeishuCommandAccess:
-		return dualValueCardSections(
-			"当前", commandDisplayValue(view.EffectiveValue, "未设置"),
-			"飞书覆盖", commandDisplayValue(view.OverrideValue, "无"),
-		)
+		return promptValueCardSections(view)
 	case FeishuCommandPlan:
-		sections := []FeishuCardTextSection{
-			singleValueCardSection("当前", planModeDisplayValue(view.CurrentValue)),
-			singleValueCardSection("作用范围", "只影响后续新 turn"),
-		}
+		sections := planValueCardSections(view)
 		if observed := strings.TrimSpace(view.EffectiveValue); observed != "" {
 			sections = append(sections, singleValueCardSection("会话最近本地模式", planModeDisplayValue(observed)))
 		}
 		return sections
 	case FeishuCommandModel:
-		sections := dualValueCardSections(
-			"当前模型", commandDisplayValue(view.EffectiveValue, "未设置"),
-			"飞书覆盖", commandDisplayValue(view.OverrideValue, "无"),
-		)
+		sections := promptValueCardSections(view)
 		if value := strings.TrimSpace(view.OverrideExtraValue); value != "" {
 			sections = append(sections, singleValueCardSection("附带推理覆盖", value))
 		}
@@ -107,6 +95,59 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	default:
 		return nil
 	}
+}
+
+func promptValueCardSections(view FeishuCatalogConfigView) []FeishuCardTextSection {
+	currentLabel := "下条消息"
+	if view.UsesLocalRequestedOverrides {
+		currentLabel = sharedAuthorityCurrentValueLabel(view.EffectiveValueSource)
+	}
+	return dualValueCardSections(
+		currentLabel,
+		commandDisplayValue(view.EffectiveValue, "未设置"),
+		"飞书覆盖",
+		promptOverrideDisplayValue(view),
+	)
+}
+
+func sharedAuthorityCurrentValueLabel(source string) string {
+	switch strings.TrimSpace(source) {
+	case "thread", "cwd_default", "workspace_default":
+		return "当前观察到"
+	default:
+		return "当前参考"
+	}
+}
+
+func promptOverrideDisplayValue(view FeishuCatalogConfigView) string {
+	if strings.TrimSpace(view.OverrideValue) != "" {
+		return strings.TrimSpace(view.OverrideValue)
+	}
+	if view.UsesLocalRequestedOverrides {
+		return "无（跟随 VS Code 当前状态）"
+	}
+	return "无"
+}
+
+func planValueCardSections(view FeishuCatalogConfigView) []FeishuCardTextSection {
+	if view.UsesLocalRequestedOverrides {
+		sections := []FeishuCardTextSection{
+			singleValueCardSection("飞书覆盖", planOverrideDisplayValue(view)),
+			singleValueCardSection("作用范围", "只影响后续新 turn"),
+		}
+		return sections
+	}
+	return []FeishuCardTextSection{
+		singleValueCardSection("下条消息", planModeDisplayValue(view.CurrentValue)),
+		singleValueCardSection("作用范围", "只影响后续新 turn"),
+	}
+}
+
+func planOverrideDisplayValue(view FeishuCatalogConfigView) string {
+	if !view.PlanModeOverrideSet {
+		return "无（跟随 VS Code 当前状态）"
+	}
+	return planModeDisplayValue(view.CurrentValue)
 }
 
 func commandConfigFeedbackSection(view FeishuCatalogConfigView) (FeishuCardTextSection, bool) {
