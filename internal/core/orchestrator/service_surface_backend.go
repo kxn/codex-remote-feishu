@@ -72,6 +72,37 @@ func (s *Service) surfaceWorkspaceDefaultsBackend(surface *state.SurfaceConsoleR
 	return agentproto.BackendCodex
 }
 
-func (s *Service) workspaceDefaultsStorageKey(workspaceKey string, backend agentproto.Backend) string {
-	return state.WorkspaceDefaultsStorageKey(workspaceKey, backend)
+func (s *Service) surfaceWorkspaceDefaultsContract(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) state.InstanceBackendContract {
+	backend := s.surfaceWorkspaceDefaultsBackend(surface, inst)
+	observed := state.ObservedInstanceBackendContract(inst)
+	if surface != nil {
+		desired := s.surfaceDesiredContract(surface)
+		contract := state.InstanceBackendContract{Backend: backend}
+		switch backend {
+		case agentproto.BackendClaude:
+			if desired.Backend == agentproto.BackendClaude {
+				contract.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(desired)
+			}
+			if contract.ClaudeProfileID == "" && observed.Backend == agentproto.BackendClaude {
+				contract.ClaudeProfileID = observed.ClaudeProfileID
+			}
+		default:
+			if desired.Backend == agentproto.BackendCodex {
+				contract.CodexProviderID = state.EffectiveSurfaceCodexProviderID(desired)
+			}
+			if contract.CodexProviderID == "" && observed.Backend == agentproto.BackendCodex {
+				contract.CodexProviderID = observed.CodexProviderID
+			}
+		}
+		return state.NormalizeObservedInstanceBackendContract(contract)
+	}
+	return observed
+}
+
+func (s *Service) workspaceDefaultsStorageKey(workspaceKey string, contract state.InstanceBackendContract) string {
+	return state.WorkspaceDefaultsStorageKey(workspaceKey, contract)
+}
+
+func (s *Service) legacyWorkspaceDefaultsStorageKey(workspaceKey string, backend agentproto.Backend) string {
+	return state.LegacyWorkspaceDefaultsStorageKey(workspaceKey, backend)
 }

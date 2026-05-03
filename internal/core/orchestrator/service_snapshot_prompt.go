@@ -234,11 +234,21 @@ func (s *Service) resolveWorkspaceDefaults(inst *state.InstanceRecord, surface *
 	if workspaceKey == "" || s.root == nil || len(s.root.WorkspaceDefaults) == 0 {
 		return state.ModelConfigRecord{}, false
 	}
-	defaultsKey := s.workspaceDefaultsStorageKey(workspaceKey, s.surfaceWorkspaceDefaultsBackend(surface, inst))
+	contract := s.surfaceWorkspaceDefaultsContract(surface, inst)
+	defaultsKey := s.workspaceDefaultsStorageKey(workspaceKey, contract)
 	if defaultsKey == "" {
 		return state.ModelConfigRecord{}, false
 	}
 	defaults, ok := s.root.WorkspaceDefaults[defaultsKey]
+	defaults = compactModelConfig(defaults)
+	if ok && !modelConfigRecordEmpty(defaults) {
+		return defaults, true
+	}
+	legacyKey := s.legacyWorkspaceDefaultsStorageKey(workspaceKey, contract.Backend)
+	if legacyKey == "" || legacyKey == defaultsKey {
+		return state.ModelConfigRecord{}, false
+	}
+	defaults, ok = s.root.WorkspaceDefaults[legacyKey]
 	defaults = compactModelConfig(defaults)
 	if !ok || modelConfigRecordEmpty(defaults) {
 		return state.ModelConfigRecord{}, false
@@ -246,9 +256,10 @@ func (s *Service) resolveWorkspaceDefaults(inst *state.InstanceRecord, surface *
 	return defaults, true
 }
 
-func (s *Service) updateWorkspaceDefaults(workspaceKey string, backend agentproto.Backend, apply func(*state.ModelConfigRecord)) {
+func (s *Service) updateWorkspaceDefaults(workspaceKey string, contract state.InstanceBackendContract, apply func(*state.ModelConfigRecord)) {
 	workspaceKey = state.ResolveWorkspaceKey(workspaceKey)
-	defaultsKey := s.workspaceDefaultsStorageKey(workspaceKey, backend)
+	contract = state.NormalizeObservedInstanceBackendContract(contract)
+	defaultsKey := s.workspaceDefaultsStorageKey(workspaceKey, contract)
 	if defaultsKey == "" || apply == nil || s.root == nil {
 		return
 	}
@@ -256,6 +267,12 @@ func (s *Service) updateWorkspaceDefaults(workspaceKey string, backend agentprot
 		s.root.WorkspaceDefaults = map[string]state.ModelConfigRecord{}
 	}
 	current := compactModelConfig(s.root.WorkspaceDefaults[defaultsKey])
+	if modelConfigRecordEmpty(current) {
+		legacyKey := s.legacyWorkspaceDefaultsStorageKey(workspaceKey, contract.Backend)
+		if legacyKey != "" && legacyKey != defaultsKey {
+			current = compactModelConfig(s.root.WorkspaceDefaults[legacyKey])
+		}
+	}
 	apply(&current)
 	current = compactModelConfig(current)
 	if modelConfigRecordEmpty(current) {
@@ -277,7 +294,7 @@ func (s *Service) backfillLegacyWorkspaceDefaults(inst *state.InstanceRecord) {
 	if len(candidates) == 0 {
 		return
 	}
-	s.updateWorkspaceDefaults(workspaceKey, state.EffectiveInstanceBackend(inst), func(current *state.ModelConfigRecord) {
+	s.updateWorkspaceDefaults(workspaceKey, state.ObservedInstanceBackendContract(inst), func(current *state.ModelConfigRecord) {
 		for _, candidate := range candidates {
 			if current.Model == "" && candidate.Model != "" {
 				current.Model = candidate.Model

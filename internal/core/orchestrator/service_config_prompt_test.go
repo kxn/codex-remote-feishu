@@ -93,7 +93,10 @@ func TestObserveConfigVSCodeDoesNotPersistWorkspaceDefaults(t *testing.T) {
 		AccessMode:      agentproto.AccessModeConfirm,
 	})
 
-	if defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey("/data/dl/droid", agentproto.BackendCodex)]; defaults != (state.ModelConfigRecord{}) {
+	if defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey("/data/dl/droid", state.InstanceBackendContract{
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: state.DefaultCodexProviderID,
+	})]; defaults != (state.ModelConfigRecord{}) {
 		t.Fatalf("expected vscode config observation not to persist workspace defaults, got %#v", defaults)
 	}
 
@@ -249,7 +252,10 @@ func TestUpsertInstanceBackfillsLegacyCWDDefaultsIntoWorkspaceDefaults(t *testin
 		},
 	})
 
-	defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, agentproto.BackendCodex)]
+	defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: state.DefaultCodexProviderID,
+	})]
 	if defaults.Model != "gpt-5.4" || defaults.ReasoningEffort != "high" || defaults.AccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("expected legacy defaults backfilled into workspace defaults, got %#v", defaults)
 	}
@@ -271,11 +277,17 @@ func TestResolveWorkspaceDefaultsPartitionsByBackend(t *testing.T) {
 	now := time.Date(2026, 4, 28, 6, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	workspaceKey := "/data/dl/droid"
-	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, agentproto.BackendCodex)] = state.ModelConfigRecord{
+	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: state.DefaultCodexProviderID,
+	})] = state.ModelConfigRecord{
 		Model:           "gpt-5.4",
 		ReasoningEffort: "high",
 	}
-	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, agentproto.BackendClaude)] = state.ModelConfigRecord{
+	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: state.DefaultClaudeProfileID,
+	})] = state.ModelConfigRecord{
 		Model:           "claude-sonnet",
 		ReasoningEffort: "medium",
 	}

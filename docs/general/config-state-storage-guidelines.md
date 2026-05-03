@@ -70,6 +70,13 @@
 
 如果某个配置值可能只对某个 provider 或 profile 有效，key 里必须包含 provider/profile 维度。不要只用 `backend + workspaceKey` 存模型名或 reasoning 档位，否则切换 provider/profile 后可能复用不兼容的默认值。
 
+当前 `Root.WorkspaceDefaults` 的持久化 key 必须按 backend 身份隔离：
+
+- Codex: `codex + codexProviderID + workspaceKey`
+- Claude: `claude + claudeProfileID + workspaceKey`
+
+旧版 `backend + workspaceKey` 只能作为兼容读取或迁移来源，不应作为新写入目标。
+
 ## 3. 配置分类规则
 
 ### 3.1 Display Only
