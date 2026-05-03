@@ -98,6 +98,13 @@ func (s *Service) resolveHeadlessContract(surface *state.SurfaceConsoleRecord, c
 		}
 	}
 	if ctx.PreferredManaged != nil && strings.TrimSpace(ctx.CWD) != "" {
+		if headlessThreadWorkspaceMustMatch(ctx.PreferredManaged) && !cwdBelongsToInstanceWorkspace(ctx.PreferredManaged, ctx.CWD) {
+			return contractResolution{
+				Mode:             contractResolutionRestartManaged,
+				RestartInstance:  ctx.PreferredManaged,
+				IncompatibleSeen: incompatibleSeen,
+			}
+		}
 		if s.surfaceInstanceCompatibleForAttach(surface, ctx.PreferredManaged) {
 			return contractResolution{
 				Mode:     contractResolutionReuseManaged,

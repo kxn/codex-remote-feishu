@@ -155,3 +155,39 @@ func TestTransitionSurfaceRouteCoreRejectsConflictingAttachWithoutMutation(t *te
 		t.Fatalf("expected thread-2 claim to stay on surface-2, got %#v", claim)
 	}
 }
+
+func TestTransitionSurfaceRouteCoreRejectsHeadlessThreadOutsideAttachedWorkspace(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "repo-a",
+		WorkspaceRoot: "/data/dl/repo-a",
+		WorkspaceKey:  "/data/dl/repo-a",
+		Backend:       "claude",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-a": {ThreadID: "thread-a", Name: "A", CWD: "/data/dl/repo-a", Loaded: true},
+			"thread-b": {ThreadID: "thread-b", Name: "B", CWD: "/data/dl/repo-b", Loaded: true},
+		},
+	})
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	inst := svc.root.Instances["inst-1"]
+
+	if svc.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID: "inst-1",
+		WorkspaceKey:       "/data/dl/repo-b",
+		RouteMode:          state.RouteModePinned,
+		SelectedThreadID:   "thread-b",
+		ThreadClaimPolicy:  surfaceRouteThreadClaimKnown,
+	}) {
+		t.Fatal("expected headless route transition to reject thread outside attached workspace")
+	}
+	if surface.AttachedInstanceID != "" || surface.SelectedThreadID != "" || surface.ClaimedWorkspaceKey != "" {
+		t.Fatalf("expected failed transition to leave surface untouched, got %#v", surface)
+	}
+}

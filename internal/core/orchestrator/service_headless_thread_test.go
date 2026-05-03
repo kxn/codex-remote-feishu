@@ -1424,6 +1424,85 @@ func TestUseThreadAttachedNormalIgnoresPollutedCurrentInstanceThreadVisibility(t
 	}
 }
 
+func TestUseThreadAttachedHeadlessPersistedCrossWorkspaceStartsNewHeadless(t *testing.T) {
+	now := time.Date(2026, 5, 3, 15, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "profile-a", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-claude-a",
+		DisplayName:     "repo-a",
+		WorkspaceRoot:   "/data/dl/repo-a",
+		WorkspaceKey:    "/data/dl/repo-a",
+		ShortName:       "repo-a",
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: "profile-a",
+		Source:          "headless",
+		Managed:         true,
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-a": {ThreadID: "thread-a", Name: "当前会话", CWD: "/data/dl/repo-a", Loaded: true},
+		},
+	})
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		byIDByBackend: map[agentproto.Backend]map[string]state.ThreadRecord{
+			agentproto.BackendClaude: {
+				"thread-b": {
+					ThreadID:   "thread-b",
+					Name:       "其他工作区会话",
+					Preview:    "来自 persisted catalog",
+					CWD:        "/data/dl/repo-b",
+					Loaded:     true,
+					LastUsedAt: now.Add(-1 * time.Minute),
+				},
+			},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/repo-a",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-a",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:                control.ActionUseThread,
+		SurfaceSessionID:    "surface-1",
+		ChatID:              "chat-1",
+		ActorUserID:         "user-1",
+		ThreadID:            "thread-b",
+		AllowCrossWorkspace: true,
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "" || surface.PendingHeadless == nil {
+		t.Fatalf("expected persisted cross-workspace switch to detach current instance and start pending headless, got %#v", surface)
+	}
+	if surface.PendingHeadless.ThreadID != "thread-b" || surface.PendingHeadless.ThreadCWD != "/data/dl/repo-b" {
+		t.Fatalf("expected pending headless to target repo-b thread, got %#v", surface.PendingHeadless)
+	}
+	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound || surface.ClaimedWorkspaceKey != "/data/dl/repo-b" {
+		t.Fatalf("expected surface to wait unbound on repo-b instead of reusing repo-a instance, got %#v", surface)
+	}
+	var sawStartHeadless bool
+	for _, event := range events {
+		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandStartHeadless {
+			sawStartHeadless = true
+			break
+		}
+	}
+	if !sawStartHeadless {
+		t.Fatalf("expected persisted cross-workspace switch to start headless restore, got %#v", events)
+	}
+}
+
 func TestUseThreadDetachedPrefersMatchingVisibleWorkspaceInstance(t *testing.T) {
 	now := time.Date(2026, 4, 7, 18, 28, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

@@ -171,7 +171,7 @@ func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.Su
 	surface.Backend = instanceBackend
 	s.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
-	if isHeadlessInstance(inst) && strings.TrimSpace(threadCWD(view)) != "" {
+	if isHeadlessInstance(inst) && strings.TrimSpace(threadCWD(view)) != "" && !cwdBelongsToInstanceWorkspace(inst, threadCWD(view)) {
 		s.retargetManagedHeadlessInstance(inst, threadCWD(view))
 	}
 

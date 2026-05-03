@@ -247,13 +247,13 @@ func freezeRoute(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord
 		return "", surface.PreparedThreadCWD, state.RouteModeNewThreadReady, true
 	case surface.RouteMode == state.RouteModeFollowLocal && surface.SelectedThreadID != "":
 		threadID = surface.SelectedThreadID
-		if thread := inst.Threads[threadID]; threadVisible(thread) {
+		if thread := inst.Threads[threadID]; threadVisible(thread) && (!headlessThreadWorkspaceMustMatch(inst) || threadBelongsToInstanceWorkspace(inst, thread)) {
 			cwd = thread.CWD
 			return threadID, cwd, state.RouteModeFollowLocal, false
 		}
 	case surface.RouteMode == state.RouteModePinned && surface.SelectedThreadID != "":
 		threadID = surface.SelectedThreadID
-		if thread := inst.Threads[threadID]; threadVisible(thread) {
+		if thread := inst.Threads[threadID]; threadVisible(thread) && (!headlessThreadWorkspaceMustMatch(inst) || threadBelongsToInstanceWorkspace(inst, thread)) {
 			cwd = thread.CWD
 			return threadID, cwd, state.RouteModePinned, false
 		}

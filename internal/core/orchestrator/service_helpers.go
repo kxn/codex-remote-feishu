@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -16,6 +17,10 @@ func isVSCodeInstance(inst *state.InstanceRecord) bool {
 		return false
 	}
 	return strings.EqualFold(firstNonEmpty(inst.Source, "vscode"), "vscode")
+}
+
+func headlessThreadWorkspaceMustMatch(inst *state.InstanceRecord) bool {
+	return isHeadlessInstance(inst) && state.EffectiveInstanceBackend(inst) == agentproto.BackendClaude
 }
 
 func metadataString(metadata map[string]any, key string) string {

@@ -235,6 +235,11 @@ func (s *Service) canTransitionSurfaceRouteCore(surface *state.SurfaceConsoleRec
 	if next.SelectedThreadID == "" {
 		return true
 	}
+	if surfaceUsesWorkspaceClaimsRaw(surface) && inst != nil && headlessThreadWorkspaceMustMatch(inst) {
+		if thread := inst.Threads[next.SelectedThreadID]; thread != nil && threadVisible(thread) && !threadBelongsToInstanceWorkspace(inst, thread) {
+			return false
+		}
+	}
 	if owner := s.threadClaimSurface(next.SelectedThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return false
 	}
@@ -242,7 +247,13 @@ func (s *Service) canTransitionSurfaceRouteCore(surface *state.SurfaceConsoleRec
 	case surfaceRouteThreadClaimKnown:
 		return true
 	case surfaceRouteThreadClaimVisible:
-		return inst != nil && threadVisible(inst.Threads[next.SelectedThreadID])
+		if inst == nil || !threadVisible(inst.Threads[next.SelectedThreadID]) {
+			return false
+		}
+		if headlessThreadWorkspaceMustMatch(inst) {
+			return threadBelongsToInstanceWorkspace(inst, inst.Threads[next.SelectedThreadID])
+		}
+		return true
 	default:
 		return false
 	}

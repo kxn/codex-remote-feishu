@@ -446,11 +446,18 @@ func threadBelongsToInstanceWorkspace(inst *state.InstanceRecord, thread *state.
 	if inst == nil || thread == nil {
 		return false
 	}
+	return cwdBelongsToInstanceWorkspace(inst, thread.CWD)
+}
+
+func cwdBelongsToInstanceWorkspace(inst *state.InstanceRecord, cwd string) bool {
+	if inst == nil {
+		return false
+	}
 	if isVSCodeInstance(inst) {
 		return true
 	}
 	root := normalizeWorkspaceClaimKey(inst.WorkspaceRoot)
-	cwd := normalizeWorkspaceClaimKey(thread.CWD)
+	cwd = normalizeWorkspaceClaimKey(cwd)
 	if root == "" || cwd == "" {
 		return true
 	}
