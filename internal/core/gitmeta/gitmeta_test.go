@@ -241,6 +241,7 @@ func createGitRepoForTest(t *testing.T) string {
 		t.Fatalf("mkdir repo root: %v", err)
 	}
 	runGitTestCommand(t, repoRoot, "init", "-q")
+	disableGitAutoMaintenanceForTest(t, repoRoot)
 	if err := os.WriteFile(filepath.Join(repoRoot, "README.md"), []byte("hello\n"), 0o644); err != nil {
 		t.Fatalf("write repo file: %v", err)
 	}
@@ -257,7 +258,15 @@ func createUnbornGitRepoForTest(t *testing.T) string {
 		t.Fatalf("mkdir repo root: %v", err)
 	}
 	runGitTestCommand(t, repoRoot, "init", "-q")
+	disableGitAutoMaintenanceForTest(t, repoRoot)
 	return repoRoot
+}
+
+func disableGitAutoMaintenanceForTest(t *testing.T, repoRoot string) {
+	t.Helper()
+	runGitTestCommand(t, repoRoot, "config", "gc.auto", "0")
+	runGitTestCommand(t, repoRoot, "config", "gc.autoDetach", "false")
+	runGitTestCommand(t, repoRoot, "config", "maintenance.auto", "false")
 }
 
 func unbornBranchNameForTest(t *testing.T, repoRoot string) string {
