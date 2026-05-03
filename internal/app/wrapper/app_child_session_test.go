@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 )
 
 type blockingReader struct {
@@ -97,4 +100,106 @@ func TestStdoutLoopIgnoresClosedPipeAfterSessionCancel(t *testing.T) {
 		t.Fatalf("expected canceled session to suppress closed-pipe error, got %v", err)
 	default:
 	}
+}
+
+type nopWriteCloser struct {
+	io.Writer
+}
+
+func (nopWriteCloser) Close() error { return nil }
+
+type restartOrderFakeRuntime struct {
+	launchSawCurrentStopped bool
+	currentStopped          <-chan struct{}
+	next                    *childSession
+}
+
+func (r *restartOrderFakeRuntime) Backend() agentproto.Backend {
+	return agentproto.BackendClaude
+}
+
+func (r *restartOrderFakeRuntime) Capabilities() agentproto.Capabilities {
+	return agentproto.Capabilities{}
+}
+
+func (r *restartOrderFakeRuntime) Launch(context.Context, *App, *debuglog.RawLogger, func(agentproto.ErrorInfo)) (*childSession, error) {
+	select {
+	case <-r.currentStopped:
+		r.launchSawCurrentStopped = true
+	default:
+	}
+	return r.next, nil
+}
+
+func (r *restartOrderFakeRuntime) ObserveClient([]byte) (runtimeObserveResult, error) {
+	return runtimeObserveResult{}, nil
+}
+
+func (r *restartOrderFakeRuntime) ObserveServer([]byte) (runtimeObserveResult, error) {
+	return runtimeObserveResult{}, nil
+}
+
+func (r *restartOrderFakeRuntime) TranslateCommand(agentproto.Command) (runtimeCommandResult, error) {
+	return runtimeCommandResult{}, nil
+}
+
+func (r *restartOrderFakeRuntime) PrepareChildRestart(string, agentproto.Target) error {
+	return nil
+}
+
+func (r *restartOrderFakeRuntime) BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error) {
+	return nil, "", false, nil
+}
+
+func (r *restartOrderFakeRuntime) CancelChildRestartRestore(string) {}
+
+func TestRestartChildSessionStopsCurrentIOBeforeLaunchingReplacement(t *testing.T) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	currentStopped := make(chan struct{})
+	currentWriteDone := make(chan struct{})
+	currentStdoutDone := make(chan struct{})
+	current := &childSession{
+		writeDone:  currentWriteDone,
+		stdoutDone: currentStdoutDone,
+		cancel: func() {
+			select {
+			case <-currentStopped:
+			default:
+				close(currentStopped)
+				close(currentWriteDone)
+				close(currentStdoutDone)
+			}
+		},
+	}
+	next := &childSession{
+		stdin:   nopWriteCloser{Writer: io.Discard},
+		stdout:  strings.NewReader(""),
+		stderr:  strings.NewReader(""),
+		waitErr: make(chan error, 1),
+	}
+	runtime := &restartOrderFakeRuntime{
+		currentStopped: currentStopped,
+		next:           next,
+	}
+	app := &App{runtime: runtime}
+	writeCh := make(chan []byte, 1)
+	errCh := make(chan error, 1)
+	var activeGeneration int64
+
+	restarted, err := app.restartChildSession(ctx, restartRequest{CommandID: "cmd-restart"}, current, io.Discard, io.Discard, writeCh, nil, newCommandResponseTracker(), newRuntimeTurnTracker(), &activeGeneration, 2, errCh, nil, nil)
+	if err != nil {
+		t.Fatalf("restartChildSession: %v", err)
+	}
+	if restarted != next {
+		t.Fatalf("restartChildSession returned unexpected child: got %p want %p", restarted, next)
+	}
+	if !runtime.launchSawCurrentStopped {
+		t.Fatal("expected replacement launch to start only after current child IO was fenced")
+	}
+
+	cancel()
+	waitForSessionIOStopped(next, 2*time.Second)
 }

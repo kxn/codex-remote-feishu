@@ -158,6 +158,13 @@ func (a *App) restartChildSession(ctx context.Context, request restartRequest, c
 	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartTarget(request.Target)); err != nil {
 		return nil, err
 	}
+	// Restart must fence old child IO before the new child is launched. The
+	// wrapper runtime and write channel are shared across generations, so
+	// allowing both children to overlap can leak late old-child state into the
+	// new generation or let stale writers consume frames intended for the new
+	// child.
+	signalStopChildSession(current, a.debugf)
+	waitForSessionIOStopped(current, wrapperChildWaitTimeout)
 	next, err := a.runtime.Launch(ctx, a, rawLogger, reportProblem)
 	if err != nil {
 		return nil, agentproto.ErrorInfo{
@@ -179,10 +186,6 @@ func (a *App) restartChildSession(ctx context.Context, request restartRequest, c
 			CommandID: request.CommandID,
 		}
 	}
-	// Restart should synchronously fence old IO before returning, but it should
-	// not block the relay ack path on the old child fully exiting.
-	signalStopChildSession(current, a.debugf)
-	waitForSessionIOStopped(current, wrapperChildWaitTimeout)
 	startChildSessionIO(ctx, next, parentStdout, parentStderr, writeCh, a.runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, a.debugf, rawLogger, reportProblem)
 	restoreClient := client
 	if !request.EmitEvent {
