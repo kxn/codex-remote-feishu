@@ -530,20 +530,19 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 		}
 		return notice(surface, "surface_plan_mode_current", text)
 	}
-	surface.PlanMode = target
-	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	text := fmt.Sprintf("已将当前飞书会话的 Plan mode 切换为 %s。", target)
 	if surface.ActiveQueueItemID != "" || len(surface.QueuedQueueItemIDs) != 0 {
 		text += " 当前已在执行或排队的消息不受影响。"
 	}
-	if commandCardOwnsInlineResult(action) {
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-			Sealed:     true,
-			StatusKind: "success",
-			StatusText: text,
-		})
-	}
-	return notice(surface, "surface_plan_mode_updated", text)
+	return s.applySurfaceSettingChange(surface, action, func() {
+		surface.PlanMode = target
+	}, func() surfaceSettingFeedback {
+		return surfaceSettingFeedback{
+			NoticeCode:     "surface_plan_mode_updated",
+			NoticeText:     text,
+			CardStatusText: text,
+		}
+	})
 }
 
 func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
@@ -551,29 +550,21 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-				StatusKind: "error",
-				StatusText: s.notAttachedText(surface),
-			})
-		}
-		return notice(surface, "not_attached", s.notAttachedText(surface))
+	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
+	if blocked != nil {
+		return blocked
 	}
 	if len(parts) == 2 && isClearCommand(parts[1]) {
-		surface.PromptOverride.Model = ""
-		surface.PromptOverride.ReasoningEffort = ""
-		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
-		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
-		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-				Sealed:     true,
-				StatusKind: "success",
-				StatusText: "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。",
-			})
-		}
-		return notice(surface, "surface_override_cleared", "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。")
+		return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+			override.Model = ""
+			override.ReasoningEffort = ""
+		}, func(control.PromptRouteSummary) surfaceSettingFeedback {
+			return surfaceSettingFeedback{
+				NoticeCode:     "surface_override_cleared",
+				NoticeText:     "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。",
+				CardStatusText: "已清除飞书临时模型覆盖。之后从飞书发送的消息将恢复使用底层真实配置。",
+			}
+		})
 	}
 	if len(parts) > 3 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
@@ -582,11 +573,10 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
-	override := surface.PromptOverride
-	override.Model = parts[1]
+	effort := ""
 	if len(parts) == 3 {
 		backend := s.surfaceBackend(surface)
-		effort, ok := control.NormalizeReasoningEffortForBackend(backend, parts[2])
+		normalizedEffort, ok := control.NormalizeReasoningEffortForBackend(backend, parts[2])
 		if !ok {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind:       "error",
@@ -594,19 +584,20 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 				FormDefaultValue: actionCommandArgumentText(action),
 			})
 		}
-		override.ReasoningEffort = effort
+		effort = normalizedEffort
 	}
-	surface.PromptOverride = override
-	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
-	if commandCardOwnsInlineResult(action) {
-		_ = summary
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-			Sealed:     true,
-			StatusKind: "success",
-			StatusText: "已更新飞书临时模型覆盖。",
-		})
-	}
-	return notice(surface, "surface_override_updated", formatOverrideNotice(summary, "已更新飞书临时模型覆盖。"))
+	return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+		override.Model = parts[1]
+		if len(parts) == 3 {
+			override.ReasoningEffort = effort
+		}
+	}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
+		return surfaceSettingFeedback{
+			NoticeCode:     "surface_override_updated",
+			NoticeText:     formatOverrideNotice(summary, "已更新飞书临时模型覆盖。"),
+			CardStatusText: "已更新飞书临时模型覆盖。",
+		}
+	})
 }
 
 func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
@@ -614,28 +605,20 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-				StatusKind: "error",
-				StatusText: s.notAttachedText(surface),
-			})
-		}
-		return notice(surface, "not_attached", s.notAttachedText(surface))
+	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
+	if blocked != nil {
+		return blocked
 	}
 	if len(parts) == 2 && isClearCommand(parts[1]) {
-		surface.PromptOverride.ReasoningEffort = ""
-		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
-		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
-		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-				Sealed:     true,
-				StatusKind: "success",
-				StatusText: "已清除飞书临时推理强度覆盖。",
-			})
-		}
-		return notice(surface, "surface_override_reasoning_cleared", "已清除飞书临时推理强度覆盖。")
+		return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+			override.ReasoningEffort = ""
+		}, func(control.PromptRouteSummary) surfaceSettingFeedback {
+			return surfaceSettingFeedback{
+				NoticeCode:     "surface_override_reasoning_cleared",
+				NoticeText:     "已清除飞书临时推理强度覆盖。",
+				CardStatusText: "已清除飞书临时推理强度覆盖。",
+			}
+		})
 	}
 	backend := s.surfaceBackend(surface)
 	effort, ok := "", false
@@ -649,18 +632,15 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
-	surface.PromptOverride.ReasoningEffort = effort
-	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
-	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
-	if commandCardOwnsInlineResult(action) {
-		_ = summary
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-			Sealed:     true,
-			StatusKind: "success",
-			StatusText: "已更新飞书临时推理强度覆盖。",
-		})
-	}
-	return notice(surface, "surface_override_updated", formatOverrideNotice(summary, "已更新飞书临时推理强度覆盖。"))
+	return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+		override.ReasoningEffort = effort
+	}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
+		return surfaceSettingFeedback{
+			NoticeCode:     "surface_override_updated",
+			NoticeText:     formatOverrideNotice(summary, "已更新飞书临时推理强度覆盖。"),
+			CardStatusText: "已更新飞书临时推理强度覆盖。",
+		}
+	})
 }
 
 func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
@@ -668,15 +648,9 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil {
-		if commandCardOwnsInlineResult(action) {
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-				StatusKind: "error",
-				StatusText: s.notAttachedText(surface),
-			})
-		}
-		return notice(surface, "not_attached", s.notAttachedText(surface))
+	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
+	if blocked != nil {
+		return blocked
 	}
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
@@ -686,19 +660,15 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 		})
 	}
 	if isClearCommand(parts[1]) {
-		surface.PromptOverride.AccessMode = ""
-		surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
-		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
-		summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
-		if commandCardOwnsInlineResult(action) {
-			_ = summary
-			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-				Sealed:     true,
-				StatusKind: "success",
-				StatusText: "已恢复飞书默认执行权限。",
-			})
-		}
-		return notice(surface, "surface_access_reset", formatOverrideNotice(summary, "已恢复飞书默认执行权限。"))
+		return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+			override.AccessMode = ""
+		}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
+			return surfaceSettingFeedback{
+				NoticeCode:     "surface_access_reset",
+				NoticeText:     formatOverrideNotice(summary, "已恢复飞书默认执行权限。"),
+				CardStatusText: "已恢复飞书默认执行权限。",
+			}
+		})
 	}
 	mode := agentproto.NormalizeAccessMode(parts[1])
 	if mode == "" {
@@ -708,17 +678,13 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
-	surface.PromptOverride.AccessMode = mode
-	surface.PromptOverride = compactPromptOverride(surface.PromptOverride)
-	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
-	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
-	if commandCardOwnsInlineResult(action) {
-		_ = summary
-		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
-			Sealed:     true,
-			StatusKind: "success",
-			StatusText: "已更新飞书执行权限模式。",
-		})
-	}
-	return notice(surface, "surface_access_updated", formatOverrideNotice(summary, "已更新飞书执行权限模式。"))
+	return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+		override.AccessMode = mode
+	}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
+		return surfaceSettingFeedback{
+			NoticeCode:     "surface_access_updated",
+			NoticeText:     formatOverrideNotice(summary, "已更新飞书执行权限模式。"),
+			CardStatusText: "已更新飞书执行权限模式。",
+		}
+	})
 }

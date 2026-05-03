@@ -148,6 +148,87 @@ func TestClaudeReasoningCommandUsesMaxAndClearDeletesWorkspaceProfileSnapshot(t 
 	}
 }
 
+func TestClaudeReasoningAndAccessCommandsShareWorkspaceProfileSnapshotContract(t *testing.T) {
+	now := time.Date(2026, 5, 3, 9, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/repo"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-claude-1",
+		WorkspaceRoot:   workspaceKey,
+		WorkspaceKey:    workspaceKey,
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: "devseek",
+		Online:          true,
+		Threads:         map[string]*state.ThreadRecord{},
+	})
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.Backend = agentproto.BackendClaude
+	surface.ClaudeProfileID = "devseek"
+	surface.AttachedInstanceID = "inst-claude-1"
+
+	key := state.ClaudeWorkspaceProfileSnapshotStorageKey(workspaceKey, agentproto.BackendClaude, "devseek")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReasoningCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/reasoning max",
+	})
+	if len(events) != 1 || surface.PromptOverride.ReasoningEffort != "max" {
+		t.Fatalf("expected reasoning max to apply, events=%#v override=%#v", events, surface.PromptOverride)
+	}
+	if got := svc.root.ClaudeWorkspaceProfileSnapshots[key]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
+		ReasoningEffort: "max",
+		PlanMode:        state.PlanModeSettingOff,
+	}) {
+		t.Fatalf("expected reasoning-only snapshot, got %#v", got)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAccessCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/access confirm",
+	})
+	if len(events) != 1 || surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected access confirm to apply, events=%#v override=%#v", events, surface.PromptOverride)
+	}
+	if got := svc.root.ClaudeWorkspaceProfileSnapshots[key]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
+		ReasoningEffort: "max",
+		AccessMode:      agentproto.AccessModeConfirm,
+		PlanMode:        state.PlanModeSettingOff,
+	}) {
+		t.Fatalf("expected reasoning+access snapshot, got %#v", got)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAccessCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/access clear",
+	})
+	if len(events) != 1 || surface.PromptOverride.AccessMode != "" {
+		t.Fatalf("expected access clear to reset override, events=%#v override=%#v", events, surface.PromptOverride)
+	}
+	if got := svc.root.ClaudeWorkspaceProfileSnapshots[key]; got != (state.ClaudeWorkspaceProfileSnapshotRecord{
+		ReasoningEffort: "max",
+		PlanMode:        state.PlanModeSettingOff,
+	}) {
+		t.Fatalf("expected reasoning-only snapshot after access clear, got %#v", got)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReasoningCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/reasoning clear",
+	})
+	if len(events) != 1 || surface.PromptOverride != (state.ModelConfigRecord{}) {
+		t.Fatalf("expected reasoning clear to reset override, events=%#v override=%#v", events, surface.PromptOverride)
+	}
+	if _, ok := svc.root.ClaudeWorkspaceProfileSnapshots[key]; ok {
+		t.Fatalf("expected empty snapshot to be deleted, got %#v", svc.root.ClaudeWorkspaceProfileSnapshots[key])
+	}
+}
+
 func TestClaudeModelCommandIsRejectedBecauseModelLivesInProfile(t *testing.T) {
 	now := time.Date(2026, 5, 3, 9, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
