@@ -32,7 +32,7 @@ func TestHandleGatewayActionBlocksMenuWhilePathPickerActive(t *testing.T) {
 		t.Fatalf("expected active picker open event, got %#v", events)
 	}
 	before := len(gateway.operations)
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

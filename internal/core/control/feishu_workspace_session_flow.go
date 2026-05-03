@@ -11,8 +11,10 @@ type FeishuWorkspaceSessionFlow struct {
 }
 
 func ResolveFeishuWorkspaceSessionFlowFromAction(action Action) (FeishuWorkspaceSessionFlow, bool) {
-	if flow, ok := ResolveFeishuWorkspaceSessionFlowForFamily(action.CatalogFamilyID); ok {
-		return flow, true
+	if familyID, ok := FeishuCommandFamilyIDFromAction(action); ok {
+		if flow, ok := ResolveFeishuWorkspaceSessionFlowForFamily(familyID); ok {
+			return flow, true
+		}
 	}
 	switch action.Kind {
 	case ActionListInstances:

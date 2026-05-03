@@ -2,22 +2,43 @@ package control
 
 import "strings"
 
-// ParseFeishuTextActionWithoutCatalog parses slash-style text into an action
-// shape but intentionally strips catalog provenance. Runtime callers that need
-// backend-aware command routing must follow with ResolveFeishuActionCatalog.
+// ParseFeishuTextActionWithoutCatalog parses slash-style text into a syntax-only
+// action shape. Runtime callers that need backend-aware command routing must
+// resolve catalog provenance later with the current surface context.
 func ParseFeishuTextActionWithoutCatalog(text string) (Action, bool) {
-	resolved, ok := ResolveFeishuTextCommand(CatalogContext{}, text)
-	if !ok {
-		return Action{}, false
-	}
-	return actionWithoutCatalogProvenance(resolved.Action), true
+	return parseFeishuTextAction(text)
 }
 
 func ResolveFeishuTextCommand(ctx CatalogContext, text string) (ResolvedCommand, bool) {
 	ctx = NormalizeCatalogContext(ctx)
+	action, ok := parseFeishuTextAction(text)
+	if !ok {
+		return ResolvedCommand{}, false
+	}
+	return resolvedCommandFromCommandID(ctx, action.CommandID, action)
+}
+
+// ParseFeishuMenuActionWithoutCatalog parses menu callback keys into a
+// syntax-only action shape. Runtime callers that need backend-aware command
+// routing must resolve catalog provenance later with the current surface
+// context.
+func ParseFeishuMenuActionWithoutCatalog(eventKey string) (Action, bool) {
+	return parseFeishuMenuAction(eventKey)
+}
+
+func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedCommand, bool) {
+	ctx = NormalizeCatalogContext(ctx)
+	action, ok := parseFeishuMenuAction(eventKey)
+	if !ok {
+		return ResolvedCommand{}, false
+	}
+	return resolvedCommandFromCommandID(ctx, action.CommandID, action)
+}
+
+func parseFeishuTextAction(text string) (Action, bool) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
-		return ResolvedCommand{}, false
+		return Action{}, false
 	}
 	fields := strings.Fields(trimmed)
 	if len(fields) > 0 {
@@ -25,10 +46,9 @@ func ResolveFeishuTextCommand(ctx CatalogContext, text string) (ResolvedCommand,
 		for _, spec := range feishuCommandSpecs {
 			for _, prefix := range spec.textPrefixes {
 				if first == prefix.alias {
-					return resolvedFeishuCommandFromSpec(ctx, spec, Action{
-						Kind:      prefix.kind,
-						Text:      trimmed,
-						CommandID: spec.definition.ID,
+					return parsedFeishuCommandAction(spec, Action{
+						Kind: prefix.kind,
+						Text: trimmed,
 					}), true
 				}
 			}
@@ -41,30 +61,17 @@ func ResolveFeishuTextCommand(ctx CatalogContext, text string) (ResolvedCommand,
 				if strings.TrimSpace(action.Text) == "" {
 					action.Text = trimmed
 				}
-				action.CommandID = spec.definition.ID
-				return resolvedFeishuCommandFromSpec(ctx, spec, action), true
+				return parsedFeishuCommandAction(spec, action), true
 			}
 		}
 	}
-	return ResolvedCommand{}, false
+	return Action{}, false
 }
 
-// ParseFeishuMenuActionWithoutCatalog parses menu callback keys into an action
-// shape but intentionally strips catalog provenance. Runtime callers that need
-// backend-aware command routing must follow with ResolveFeishuActionCatalog.
-func ParseFeishuMenuActionWithoutCatalog(eventKey string) (Action, bool) {
-	resolved, ok := ResolveFeishuMenuCommand(CatalogContext{}, eventKey)
-	if !ok {
-		return Action{}, false
-	}
-	return actionWithoutCatalogProvenance(resolved.Action), true
-}
-
-func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedCommand, bool) {
-	ctx = NormalizeCatalogContext(ctx)
+func parseFeishuMenuAction(eventKey string) (Action, bool) {
 	trimmed := strings.TrimSpace(eventKey)
 	if trimmed == "" {
-		return ResolvedCommand{}, false
+		return Action{}, false
 	}
 	lower := strings.ToLower(trimmed)
 	for _, spec := range feishuCommandSpecs {
@@ -72,16 +79,15 @@ func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedComm
 			if strings.HasPrefix(lower, dynamic.prefix) {
 				argument, ok := dynamic.parseArgument(trimmed[len(dynamic.prefix):])
 				if !ok {
-					return ResolvedCommand{}, false
+					return Action{}, false
 				}
 				text := BuildFeishuActionText(dynamic.kind, argument)
 				if strings.TrimSpace(text) == "" {
-					return ResolvedCommand{}, false
+					return Action{}, false
 				}
-				return resolvedFeishuCommandFromSpec(ctx, spec, Action{
-					Kind:      dynamic.kind,
-					Text:      text,
-					CommandID: spec.definition.ID,
+				return parsedFeishuCommandAction(spec, Action{
+					Kind: dynamic.kind,
+					Text: text,
 				}), true
 			}
 		}
@@ -91,12 +97,14 @@ func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedComm
 		for _, match := range spec.menuExact {
 			if normalized == NormalizeFeishuMenuEventKey(match.alias) {
 				action := match.action
-				action.CommandID = spec.definition.ID
-				return resolvedFeishuCommandFromSpec(ctx, spec, action), true
+				if strings.TrimSpace(action.Text) == "" {
+					action.Text = strings.TrimSpace(spec.definition.CanonicalSlash)
+				}
+				return parsedFeishuCommandAction(spec, action), true
 			}
 		}
 	}
-	return ResolvedCommand{}, false
+	return Action{}, false
 }
 
 func NormalizeFeishuMenuEventKey(value string) string {
@@ -114,9 +122,7 @@ func NormalizeFeishuMenuEventKey(value string) string {
 	return b.String()
 }
 
-func actionWithoutCatalogProvenance(action Action) Action {
-	action.CatalogFamilyID = ""
-	action.CatalogVariantID = ""
-	action.CatalogBackend = ""
+func parsedFeishuCommandAction(spec feishuCommandSpec, action Action) Action {
+	action.CommandID = strings.TrimSpace(spec.definition.ID)
 	return action
 }

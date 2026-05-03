@@ -247,7 +247,7 @@ func TestHandleGatewayActionReplacesMenuCardForCardNavigation(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -281,7 +281,7 @@ func TestHandleGatewayActionReplacesMenuCardForRootNavigation(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	submenu := app.HandleGatewayAction(context.Background(), control.Action{
+	submenu := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -296,7 +296,7 @@ func TestHandleGatewayActionReplacesMenuCardForRootNavigation(t *testing.T) {
 		t.Fatalf("expected submenu replacement result, got %#v", submenu)
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -353,7 +353,7 @@ func TestHandleGatewayActionRejectsOldNavigationCardAndShowsExpiredNotice(t *tes
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
 	before := len(gateway.operations)
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -399,7 +399,7 @@ func TestHandleGatewayActionRejectsOldPathPickerCardAndPreservesActivePicker(t *
 	pickerID := events[0].PathPickerView.PickerID
 	before := len(gateway.operations)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionPathPickerUp,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -429,7 +429,7 @@ func TestHandleGatewayActionReplacesBareModeCardForCardNavigation(t *testing.T) 
 		StartedAt: time.Date(2026, 4, 10, 10, 0, 0, 0, time.UTC),
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
-	app.HandleGatewayAction(context.Background(), control.Action{
+	handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -441,7 +441,7 @@ func TestHandleGatewayActionReplacesBareModeCardForCardNavigation(t *testing.T) 
 		},
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionModeCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -489,7 +489,7 @@ func TestHandleGatewayActionReplacesBareModelCardForCardNavigation(t *testing.T)
 		ActorUserID:      "user-1",
 		InstanceID:       "inst-1",
 	})
-	app.HandleGatewayAction(context.Background(), control.Action{
+	handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -501,7 +501,7 @@ func TestHandleGatewayActionReplacesBareModelCardForCardNavigation(t *testing.T)
 		},
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionModelCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -536,7 +536,7 @@ func TestHandleGatewayActionReplacesCardOwnedParameterApply(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionAutoWhipCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -581,7 +581,7 @@ func TestHandleGatewayActionReplacesCardOwnedModelPresetApply(t *testing.T) {
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionModelCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -615,7 +615,7 @@ func TestHandleGatewayActionKeepsTypedParameterApplyAppendOnly(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionAutoWhipCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -643,7 +643,7 @@ func TestHandleGatewayActionKeepsTypedHelpAppendOnly(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandHelp,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -682,7 +682,7 @@ func TestHandleGatewayActionRerendersMenuFromCurrentSurfaceStateWithoutViewSessi
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -736,7 +736,7 @@ func TestHandleGatewayActionReplacesScopedThreadCardForCardNavigation(t *testing
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowScopedThreads,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -781,7 +781,7 @@ func TestHandleGatewayActionReplacesWorkspaceThreadCardForCardNavigation(t *test
 		},
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowWorkspaceThreads,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -834,7 +834,7 @@ func TestHandleGatewayActionReplacesExpandedWorkspaceListCardForCardNavigation(t
 		})
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowAllWorkspaces,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -889,7 +889,7 @@ func TestHandleGatewayActionReplacesExpandedThreadWorkspaceCardForCardNavigation
 		})
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowAllThreadWorkspaces,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

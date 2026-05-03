@@ -17,7 +17,7 @@ func TestHandleGatewayActionPathPickerCancelTargetPickerPatchesOwnerCard(t *test
 	messageID := "om-target-picker-1"
 	_, pathPickerID := openTargetPickerLocalDirectoryPathPickerForTest(t, app, gateway, messageID)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionPathPickerCancel,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
@@ -52,7 +52,7 @@ func TestHandleGatewayActionPathPickerConfirmTargetPickerPatchesOwnerCard(t *tes
 	messageID := "om-target-picker-2"
 	_, pathPickerID := openTargetPickerLocalDirectoryPathPickerForTest(t, app, gateway, messageID)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionPathPickerConfirm,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
@@ -100,7 +100,7 @@ func newTargetPickerPathReturnTestApp(t *testing.T, gateway *recordingGateway) *
 
 func openTargetPickerLocalDirectoryPathPickerForTest(t *testing.T, app *App, gateway *recordingGateway, messageID string) (string, string) {
 	t.Helper()
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionWorkspaceNewDir,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
@@ -118,7 +118,7 @@ func openTargetPickerLocalDirectoryPathPickerForTest(t *testing.T, app *App, gat
 		t.Fatalf("expected active target picker after /workspace new dir")
 	}
 
-	result = app.HandleGatewayAction(context.Background(), control.Action{
+	result = handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:              control.ActionTargetPickerOpenPathPicker,
 		SurfaceSessionID:  "surface-1",
 		GatewayID:         "app-1",

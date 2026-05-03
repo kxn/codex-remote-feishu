@@ -59,7 +59,7 @@ func TestUpgradeLatestFromStampedCardUsesUpdateCard(t *testing.T) {
 		return install.ReleaseInfo{TagName: "v1.1.0"}, nil
 	}
 
-	app.HandleAction(context.Background(), control.Action{
+	applyGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionUpgradeCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

@@ -553,7 +553,7 @@ func TestHandleGatewayActionPathPickerCancelSendFileSealsMenuCard(t *testing.T) 
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionSendFile,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
@@ -570,7 +570,7 @@ func TestHandleGatewayActionPathPickerCancelSendFileSealsMenuCard(t *testing.T) 
 		t.Fatalf("expected active picker after menu handoff")
 	}
 
-	cancel := app.HandleGatewayAction(context.Background(), control.Action{
+	cancel := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionPathPickerCancel,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
@@ -621,7 +621,7 @@ func TestHandleGatewayActionPathPickerConfirmSendFilePreflightFailureKeepsMenuCa
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionSendFile,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
@@ -634,7 +634,7 @@ func TestHandleGatewayActionPathPickerConfirmSendFilePreflightFailureKeepsMenuCa
 		t.Fatalf("expected menu sendfile picker replacement, got %#v", result)
 	}
 	pickerID := app.service.SurfaceUIRuntime("surface-1").ActivePathPickerID
-	app.HandleGatewayAction(context.Background(), control.Action{
+	handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionPathPickerSelect,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",
@@ -645,7 +645,7 @@ func TestHandleGatewayActionPathPickerConfirmSendFilePreflightFailureKeepsMenuCa
 		MessageID:        "om-menu-sendfile-3",
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: app.daemonLifecycleID},
 	})
-	confirm := app.HandleGatewayAction(context.Background(), control.Action{
+	confirm := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionPathPickerConfirm,
 		SurfaceSessionID: "surface-1",
 		GatewayID:        "app-1",

@@ -77,6 +77,9 @@ func TestCompactMenuActionBindsOwnerFlowToCurrentCard(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		MessageID:        "om-menu-compact-1",
+		CatalogFamilyID:  control.FeishuCommandCompact,
+		CatalogVariantID: "compact.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 	catalog, _ := requireCompactStartEvents(t, events)

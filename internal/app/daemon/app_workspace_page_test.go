@@ -87,7 +87,7 @@ func TestHandleGatewayActionReplacesWorkspaceNavigationCardsInline(t *testing.T)
 				},
 			})
 
-			result := app.HandleGatewayAction(context.Background(), control.Action{
+			result := handleGatewayActionForTest(context.Background(), app, control.Action{
 				Kind:             tt.kind,
 				Text:             tt.text,
 				GatewayID:        "app-1",

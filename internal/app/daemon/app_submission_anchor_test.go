@@ -18,7 +18,7 @@ func TestHandleGatewayActionReplacesMenuCardWithStatusCard(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionStatus,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -55,7 +55,7 @@ func TestHandleGatewayActionKeepsTypedStatusAppendOnly(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionStatus,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -80,7 +80,7 @@ func TestHandleGatewayActionContinuesBareUpgradeInPlace(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionUpgradeCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -111,7 +111,7 @@ func TestHandleGatewayActionContinuesBareCronInPlace(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionCronCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

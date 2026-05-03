@@ -196,7 +196,7 @@
 
 - callback payload schema 已收束到 [internal/core/frontstagecontract/callback_payload.go](../../internal/core/frontstagecontract/callback_payload.go)
 - projector、gateway、daemon owner-card producer 与 orchestrator owner-card producer 现在共用这份 schema 常量/构造 helper，不再继续各自扩一份裸字符串约定
-- `page_action` / `page_submit` 当前除 `action_kind` 与参数字段外，还会在有来源上下文时附带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 解析后会直接回填 `Action.Catalog*`，旧 payload 仍保持兼容
+- `page_action` / `page_submit` 当前除 `action_kind` 与参数字段外，还会在有来源上下文时附带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 解析后会直接回填 `Action.Catalog*`。当前 live 命令入口要求这组 provenance 完整可用：缺失字段、legacy default variant，或当前 surface 上下文已变化的旧卡，都会在 runtime 收到 `command_entry_expired`
 - `request_respond` / `submit_request_form` 与 `upgrade_owner_flow` / `vscode_migrate_owner_flow` 当前在 gateway 解析后只写入 `Action.Request` / `Action.OwnerFlow` family；这些回调不再依赖 root `Action.Request*` 或 root `PickerID/OptionID` 兼容字段作为 live 路径输入
 - 分页导航与 target/path picker / selection dropdown 当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view、thread selection view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target/path picker / VS Code thread dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
 - workspace/session family 的 selection / target picker callback 当前也会在有来源上下文时继续补写 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`。这意味着 bare `/list` `/use` `/useall`、菜单按钮、selection refresh、target-picker 翻页/确认这些后续动作，都能继续把 family provenance 带回 gateway / orchestrator，而不是只剩 `ActionKind` / `field_name`。
@@ -224,8 +224,8 @@
 | `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；命中当前 history owner-card flow 时同样先切 loading；gateway 继续兼容 `form_value[field_name]` / `option` / `options` 取值 |
 | `upgrade_owner_flow` | `picker_id`、`option_id` | `/upgrade latest` 与 `/upgrade codex` 共用的 daemon owner-card 显式动作；gateway 只解析 `picker_id` / `option_id`，daemon 再按 flow id 前缀路由到 release 或 Codex flow。release flow 当前使用 `check` / `confirm` / `cancel`，Codex flow 当前使用 `check` / `confirm`；两者都要求命中当前 active flow id，旧卡或他人卡片不会继续改写升级状态。首卡若没有现成 `message_id`，会先以 page `TrackingKey` append，待 gateway 分配 `message_id` 后再回写到对应 owner flow，后续 checking / confirm-ready / running / terminal 一律 patch 同一张卡 |
 | `plan_proposal` | `picker_id`、`option_id` | 提案计划卡的 owner-flow callback；`option_id` 当前只用 `execute` / `execute_new` / `cancel`。gateway 只负责按当前 active proposal id 解析回 `ActionPlanProposalDecision`；真正的 `PlanMode=off`、继续派发 follow-up turn，以及 seal 当前卡，仍由 orchestrator 决定 |
-| `page_action` | `action_kind`、`action_arg(可选)`、`catalog_family_id(可选)`、`catalog_variant_id(可选)`、`catalog_backend(可选)` | page 卡按钮的结构化动作；gateway 解析后直接写回 `Action.Kind`，并用 `BuildFeishuActionText` 生成 canonical `Action.Text`；若 payload 携带 catalog provenance，也会同步写回 `Action.Catalog*`。当前 `/bendtomywill` success card 的“回滚最近一次修补”会用这条 payload 携带 `action_kind=surface.command.turn_patch.rollback` 与 `action_arg=patch_id`；`/cron list` 的“立即触发”按钮现在也显式走这条 payload，使用 `action_kind=surface.command.cron` 与 `action_arg=run <record-id>`，daemon 只在 card-action 路径兼容这类内部 run 动作，直接文本输入 `/cron run <record-id>` 已不再视为用户命令；review family 的 final-card footer 也走这条 payload：`surface.button.review_start` 只出现在普通 final card 的 uncommitted 入口，`surface.command.review + action_arg=commit <full-sha>` 用于普通 final card 的 commit review footer，`surface.button.review_discard` / `surface.button.review_apply` 只出现在 review session final card |
-| `page_submit` | `action_kind`、`field_name`、`action_arg_prefix(可选)`、`catalog_family_id(可选)`、`catalog_variant_id(可选)`、`catalog_backend(可选)` | page 卡表单提交；gateway 从 `form_value[field_name]`/`option` 取参数，按 `action_arg_prefix + 参数` 组装后写回 `Action.Text`；若 payload 携带 catalog provenance，也会同步写回 `Action.Catalog*`。当前 `/review commit` picker 就是这条路径：`action_kind=surface.command.review`、`field_name=commit_sha`、`action_arg_prefix=commit`，最终会拼成 canonical `/review commit <full-sha>` |
+| `page_action` | `action_kind`、`action_arg(可选)`、`catalog_family_id`、`catalog_variant_id`、`catalog_backend` | page 卡按钮的结构化动作；gateway 解析后直接写回 `Action.Kind`，并用 `BuildFeishuActionText` 生成 canonical `Action.Text`；命令类 live 按钮当前要求 payload 自带完整 catalog provenance，缺失字段、legacy default variant 或当前 surface 上下文变化时，runtime 会拒绝为 `command_entry_expired`。当前 `/bendtomywill` success card 的“回滚最近一次修补”会用这条 payload 携带 `action_kind=surface.command.turn_patch.rollback` 与 `action_arg=patch_id`；`/cron list` 的“立即触发”按钮现在也显式走这条 payload，使用 `action_kind=surface.command.cron` 与 `action_arg=run <record-id>`，daemon 只在 card-action 路径兼容这类内部 run 动作，直接文本输入 `/cron run <record-id>` 已不再视为用户命令；review family 的 final-card footer 也走这条 payload：`surface.button.review_start` 只出现在普通 final card 的 uncommitted 入口，`surface.command.review + action_arg=commit <full-sha>` 用于普通 final card 的 commit review footer，`surface.button.review_discard` / `surface.button.review_apply` 只出现在 review session final card |
+| `page_submit` | `action_kind`、`field_name`、`action_arg_prefix(可选)`、`catalog_family_id`、`catalog_variant_id`、`catalog_backend` | page 卡表单提交；gateway 从 `form_value[field_name]`/`option` 取参数，按 `action_arg_prefix + 参数` 组装后写回 `Action.Text`；命令类 live 表单当前同样要求 payload 自带完整 catalog provenance，缺失字段、legacy default variant 或当前 surface 上下文变化时，runtime 会拒绝为 `command_entry_expired`。当前 `/review commit` picker 就是这条路径：`action_kind=surface.command.review`、`field_name=commit_sha`、`action_arg_prefix=commit`，最终会拼成 canonical `/review commit <full-sha>` |
 | `path_picker_enter` | `picker_id`、`entry_name` 或 `field_name + selected option` | 进入当前 active picker 里的一个子目录；`/sendfile` 文件模式下通常来自目录下拉 |
 | `path_picker_up` | `picker_id` | 回到当前 active picker 的上一级目录 |
 | `path_picker_select` | `picker_id`、`entry_name` 或 `field_name + selected option` | 在当前 active picker 里选择一个文件或目录；`/sendfile` 文件模式下通常来自文件下拉，当前只更新待发送文件，不直接触发发送 |
@@ -242,7 +242,8 @@
 
 - `page_submit`
   - 必须携带 `value.action_kind`，并按它直接回填 `Action.Kind`
-  - 若 payload 同时带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`，gateway 会直接把它们回填到 `Action.Catalog*`；缺失时继续兼容旧 payload，不阻断当前卡片
+  - 命令类 live 表单必须同时带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 会直接把它们回填到 `Action.Catalog*`
+  - 若 provenance 缺失、仍是 legacy default variant，或当前 surface 上下文已变化，runtime 会直接返回 `command_entry_expired`，不再按当前 surface best-effort 补猜
   - `field_name` 为空时默认读取 `command_args`
   - 命令表单当前同时兼容普通 `input` 与 `select_static`
   - 对带文本输入的 page form，提交按钮当前默认保持可点；参数格式、环境前置条件或业务校验失败统一在提交后由服务端回写到当前卡片，而不是要求前端先禁用按钮
@@ -252,8 +253,8 @@
   - 该路径不再依赖 `command_text`，避免 page 卡回调退化成裸文本重解析
 - `page_action`
   - 必须携带 `value.action_kind`，并按它直接回填 `Action.Kind`
-  - 若 payload 同时带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`，gateway 会直接把它们回填到 `Action.Catalog*`
-  - 若 payload 不带 catalog provenance，服务端仍会在进入产品状态机前按当前 surface context 做 best-effort provenance 补齐，保证旧卡兼容
+  - 命令类 live 按钮必须同时带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 会直接把它们回填到 `Action.Catalog*`
+  - 若 provenance 缺失、仍是 legacy default variant，或当前 surface 上下文已变化，runtime 会直接返回 `command_entry_expired`，不再按当前 surface context 做 best-effort provenance 补齐
 - `submit_request_form`
   - 优先把 `form_value` 整体转成 `request_answers`
   - `request_user_input` 与 form 模式 `mcp_server_elicitation` 当前都只会为“需要手填”的字段渲染 form input（纯选项题不再渲染自由输入框）

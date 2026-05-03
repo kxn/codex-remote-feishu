@@ -125,7 +125,7 @@ func TestHandleGatewayActionModeSwitchAvoidsExplicitMigrationPrompt(t *testing.T
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionModeCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -262,7 +262,7 @@ func TestDaemonVSCodeMigrateCommandOpensOwnerFlowAndAppliesManagedShim(t *testin
 	}
 	flowID := requiredCallbackPickerID(t, *prompt, "迁移并重新接入", vscodeMigrationOwnerPayloadKind)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionVSCodeMigrate,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -360,7 +360,7 @@ func TestHandleGatewayActionStampedModeSwitchAutoMigratesLegacySettings(t *testi
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionModeCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -413,7 +413,7 @@ func TestHandleGatewayActionKeepsLaterVSCodeGuidanceOnSameCard(t *testing.T) {
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, true)
 	app.service.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeVSCode, agentproto.BackendCodex, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
-	prompt := app.HandleGatewayAction(context.Background(), control.Action{
+	prompt := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionVSCodeMigrateCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -430,7 +430,7 @@ func TestHandleGatewayActionKeepsLaterVSCodeGuidanceOnSameCard(t *testing.T) {
 	}
 	flowID := requiredCallbackPickerID(t, *prompt.ReplaceCurrentCard, "重新接入扩展入口", vscodeMigrationOwnerPayloadKind)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionVSCodeMigrate,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

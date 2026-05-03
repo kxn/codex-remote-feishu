@@ -91,3 +91,46 @@ func TestResolveFeishuActionCatalogFallsBackToPatchRollbackRoute(t *testing.T) {
 		t.Fatalf("BuildFeishuActionText(rollback) = %q", got)
 	}
 }
+
+func TestHasStrictFeishuCommandCatalogProvenanceRejectsLegacyDefaultVariant(t *testing.T) {
+	if HasStrictFeishuCommandCatalogProvenance(Action{
+		CatalogFamilyID:  FeishuCommandMode,
+		CatalogVariantID: defaultFeishuCommandDisplayVariantID(FeishuCommandMode),
+		CatalogBackend:   agentproto.BackendClaude,
+	}) {
+		t.Fatal("expected legacy default variant to fail strict provenance check")
+	}
+	if !HasStrictFeishuCommandCatalogProvenance(Action{
+		CatalogFamilyID:  FeishuCommandMode,
+		CatalogVariantID: "mode.claude.normal",
+		CatalogBackend:   agentproto.BackendClaude,
+	}) {
+		t.Fatal("expected contextual variant to pass strict provenance check")
+	}
+}
+
+func TestMatchesFeishuCommandCatalogContextRequiresExactCurrentContext(t *testing.T) {
+	action := Action{
+		CatalogFamilyID:  FeishuCommandMode,
+		CatalogVariantID: "mode.claude.normal",
+		CatalogBackend:   agentproto.BackendClaude,
+	}
+	if !MatchesFeishuCommandCatalogContext(action, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "normal",
+	}) {
+		t.Fatal("expected matching current context to pass")
+	}
+	if MatchesFeishuCommandCatalogContext(action, CatalogContext{
+		Backend:     agentproto.BackendCodex,
+		ProductMode: "normal",
+	}) {
+		t.Fatal("expected backend mismatch to fail")
+	}
+	if MatchesFeishuCommandCatalogContext(action, CatalogContext{
+		Backend:     agentproto.BackendClaude,
+		ProductMode: "vscode",
+	}) {
+		t.Fatal("expected product mode mismatch to fail")
+	}
+}

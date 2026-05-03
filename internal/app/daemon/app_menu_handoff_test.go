@@ -31,7 +31,7 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInNormalMode(t *testin
 		},
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionListInstances,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -61,7 +61,7 @@ func TestHandleGatewayActionWorkspaceMenuFlowKeepsParentBackNavigation(t *testin
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	menuResult := app.HandleGatewayAction(context.Background(), control.Action{
+	menuResult := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -77,7 +77,7 @@ func TestHandleGatewayActionWorkspaceMenuFlowKeepsParentBackNavigation(t *testin
 		t.Fatalf("expected menu root replacement result, got %#v", menuResult)
 	}
 
-	workspaceResult := app.HandleGatewayAction(context.Background(), control.Action{
+	workspaceResult := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionWorkspaceRoot,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -96,7 +96,7 @@ func TestHandleGatewayActionWorkspaceMenuFlowKeepsParentBackNavigation(t *testin
 		t.Fatalf("expected workspace root opened from menu to keep menu back action, got %#v", workspaceResult.ReplaceCurrentCard.CardElements)
 	}
 
-	targetPickerResult := app.HandleGatewayAction(context.Background(), control.Action{
+	targetPickerResult := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionWorkspaceNewDir,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -141,7 +141,7 @@ func TestHandleGatewayActionMenuConfigFlowKeepsReturnToGroupAfterApply(t *testin
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	menuResult := app.HandleGatewayAction(context.Background(), control.Action{
+	menuResult := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -157,7 +157,7 @@ func TestHandleGatewayActionMenuConfigFlowKeepsReturnToGroupAfterApply(t *testin
 		t.Fatalf("expected menu settings replacement result, got %#v", menuResult)
 	}
 
-	configResult := app.HandleGatewayAction(context.Background(), control.Action{
+	configResult := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionAutoWhipCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -177,7 +177,7 @@ func TestHandleGatewayActionMenuConfigFlowKeepsReturnToGroupAfterApply(t *testin
 		t.Fatalf("expected config page to keep return-to-group action, got %#v", configResult.ReplaceCurrentCard.CardElements)
 	}
 
-	applyResult := app.HandleGatewayAction(context.Background(), control.Action{
+	applyResult := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionAutoWhipCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -222,7 +222,7 @@ func TestHandleGatewayActionReplacesMenuCardForListHandoffInVSCodeMode(t *testin
 		Online:        true,
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionListInstances,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -259,7 +259,7 @@ func TestHandleGatewayActionReplacesMenuCardForVSCodeListEmptyState(t *testing.T
 		Text:             "/mode vscode",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionListInstances,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -309,7 +309,7 @@ func TestHandleGatewayActionReplacesMenuCardForVSCodeDetachedThreadCommands(t *t
 				Text:             "/mode vscode",
 			})
 
-			result := app.HandleGatewayAction(context.Background(), control.Action{
+			result := handleGatewayActionForTest(context.Background(), app, control.Action{
 				Kind:             tt.kind,
 				GatewayID:        "app-1",
 				SurfaceSessionID: "surface-1",
@@ -362,7 +362,7 @@ func TestHandleGatewayActionReplacesVSCodeInstanceSelectionCardForAttachResult(t
 		Online:        true,
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionAttachInstance,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -420,7 +420,7 @@ func TestHandleGatewayActionReplacesVSCodeThreadSelectionCardForUseResult(t *tes
 		InstanceID:       "inst-vscode-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionUseThread,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -471,7 +471,7 @@ func TestHandleGatewayActionReplacesMenuCardForSendFileHandoff(t *testing.T) {
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionSendFile,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -501,7 +501,7 @@ func TestHandleGatewayActionReplacesMenuCardForHelpHandoff(t *testing.T) {
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandHelp,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -533,7 +533,7 @@ func TestHandleGatewayActionUpdatesMenuCardForSteerAllNoopHandoff(t *testing.T) 
 	})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionSteerAll,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -595,7 +595,7 @@ func TestHandleGatewayActionSealsMenuCardForStopHandoff(t *testing.T) {
 		ThreadID:         "thread-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionStop,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -652,7 +652,7 @@ func TestHandleGatewayActionSealsMenuCardForNewThreadHandoff(t *testing.T) {
 		ThreadID:         "thread-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionNewThread,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -714,7 +714,7 @@ func TestHandleGatewayActionSealsMenuCardForFollowHandoff(t *testing.T) {
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionFollowLocal,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -767,7 +767,7 @@ func TestHandleGatewayActionSealsMenuCardForDetachHandoff(t *testing.T) {
 		InstanceID:       "inst-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionDetach,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -831,7 +831,7 @@ func TestHandleGatewayActionUpdatesMenuCardForCompactOwnerFlow(t *testing.T) {
 		ThreadID:         "thread-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionCompact,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -888,7 +888,7 @@ func TestHandleGatewayActionReplacesMenuCardForReviewHandoff(t *testing.T) {
 		ThreadID:         "thread-1",
 	})
 
-	menuResult := app.HandleGatewayAction(context.Background(), control.Action{
+	menuResult := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowCommandMenu,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -904,7 +904,7 @@ func TestHandleGatewayActionReplacesMenuCardForReviewHandoff(t *testing.T) {
 		t.Fatalf("expected menu group replacement result, got %#v", menuResult)
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionReviewCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -943,7 +943,7 @@ func TestHandleGatewayActionReplacesMenuCardWhenSendFileUnavailable(t *testing.T
 		Text:             "/mode vscode",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionSendFile,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

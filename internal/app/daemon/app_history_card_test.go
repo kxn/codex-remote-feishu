@@ -54,7 +54,7 @@ func TestHandleGatewayActionReplacesHistoryCardAndContinuesQuery(t *testing.T) {
 		ThreadID:         "thread-1",
 	})
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionShowHistory,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

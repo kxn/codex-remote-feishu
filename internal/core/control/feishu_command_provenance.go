@@ -110,6 +110,43 @@ func FeishuCommandIDForActionKind(kind ActionKind) (string, bool) {
 	return commandID, ok
 }
 
+func FeishuCommandFamilyIDFromAction(action Action) (string, bool) {
+	if familyID := strings.TrimSpace(action.CatalogFamilyID); familyID != "" {
+		return familyID, true
+	}
+	if commandID := strings.TrimSpace(action.CommandID); commandID != "" {
+		return commandID, true
+	}
+	return FeishuCommandIDForActionKind(action.Kind)
+}
+
+func ActionRoutesThroughFeishuCommandCatalog(action Action) bool {
+	_, ok := FeishuCommandFamilyIDFromAction(action)
+	return ok
+}
+
+func HasStrictFeishuCommandCatalogProvenance(action Action) bool {
+	familyID := strings.TrimSpace(action.CatalogFamilyID)
+	variantID := strings.TrimSpace(action.CatalogVariantID)
+	backend := agentproto.NormalizeBackend(action.CatalogBackend)
+	if familyID == "" || variantID == "" || backend == "" {
+		return false
+	}
+	return variantID != defaultFeishuCommandDisplayVariantID(familyID)
+}
+
+func MatchesFeishuCommandCatalogContext(action Action, ctx CatalogContext) bool {
+	if !HasStrictFeishuCommandCatalogProvenance(action) {
+		return false
+	}
+	ctx = NormalizeCatalogContext(ctx)
+	if agentproto.NormalizeBackend(action.CatalogBackend) != ctx.Backend {
+		return false
+	}
+	expectedVariantID := FeishuCommandVariantIDForContext(action.CatalogFamilyID, ctx)
+	return strings.TrimSpace(action.CatalogVariantID) == expectedVariantID
+}
+
 func firstNonZeroBackend(values ...agentproto.Backend) agentproto.Backend {
 	for _, value := range values {
 		if normalized := agentproto.NormalizeBackend(value); normalized != "" {

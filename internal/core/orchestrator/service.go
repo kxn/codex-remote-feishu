@@ -363,6 +363,9 @@ func (s *Service) SetPersistedThreadCatalog(catalog PersistedThreadCatalog) {
 func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Event {
 	surface := s.ensureSurface(action)
 	action = s.resolveCatalogActionFromSurfaceContext(surface, action)
+	if blocked := s.rejectExpiredCommandEntry(surface, action); blocked != nil {
+		return s.filterEventsForSurfaceVisibility(blocked)
+	}
 	s.pruneExpiredPathPicker(surface)
 	if surface.Abandoning {
 		switch action.Kind {

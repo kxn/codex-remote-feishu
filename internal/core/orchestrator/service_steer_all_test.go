@@ -35,6 +35,9 @@ func TestSteerAllMenuActionNoEligibleQueueSealsCurrentCard(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		MessageID:        "om-menu-steer-1",
+		CatalogFamilyID:  control.FeishuCommandSteerAll,
+		CatalogVariantID: "steerall.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 
@@ -136,6 +139,9 @@ func TestSteerAllMenuActionAcceptedPatchesSameCard(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		MessageID:        "om-menu-steer-2",
+		CatalogFamilyID:  control.FeishuCommandSteerAll,
+		CatalogVariantID: "steerall.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 	if len(events) != 2 || events[1].Command == nil {
@@ -213,6 +219,9 @@ func TestSteerAllMenuActionRejectedPatchesSameCard(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		MessageID:        "om-menu-steer-3",
+		CatalogFamilyID:  control.FeishuCommandSteerAll,
+		CatalogVariantID: "steerall.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 	if len(events) != 2 || events[1].Command == nil {

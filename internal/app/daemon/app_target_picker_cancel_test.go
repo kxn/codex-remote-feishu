@@ -47,7 +47,7 @@ func TestHandleGatewayActionReplacesTargetPickerWithCancelNotice(t *testing.T) {
 		t.Fatal("expected target picker to become active")
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionTargetPickerCancel,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",

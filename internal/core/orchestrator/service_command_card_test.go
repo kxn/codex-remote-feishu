@@ -20,6 +20,9 @@ func TestCardOwnedVerboseApplyReturnsSealedCommandCard(t *testing.T) {
 		ActorUserID:      "user-1",
 		MessageID:        "om-card-1",
 		Text:             "/verbose quiet",
+		CatalogFamilyID:  control.FeishuCommandVerbose,
+		CatalogVariantID: "verbose.codex.normal",
+		CatalogBackend:   "codex",
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 	if len(events) != 1 {
@@ -70,6 +73,9 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 		ActorUserID:      "user-1",
 		MessageID:        "om-card-1",
 		Text:             "/model gpt-5.4 wrong",
+		CatalogFamilyID:  control.FeishuCommandModel,
+		CatalogVariantID: "model.codex.normal",
+		CatalogBackend:   "codex",
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 	if len(events) != 1 {
@@ -103,6 +109,9 @@ func TestCardOwnedReasoningApplyWithoutAttachmentShowsRecoveryCard(t *testing.T)
 		ActorUserID:      "user-1",
 		MessageID:        "om-card-1",
 		Text:             "/reasoning high",
+		CatalogFamilyID:  control.FeishuCommandReasoning,
+		CatalogVariantID: "reasoning.codex.normal",
+		CatalogBackend:   "codex",
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 	if len(events) != 1 {

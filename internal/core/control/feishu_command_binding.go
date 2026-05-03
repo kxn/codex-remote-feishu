@@ -32,8 +32,8 @@ func ResolveFeishuCommandBindingByFamilyID(familyID string) (FeishuCommandBindin
 }
 
 func ResolveFeishuCommandBindingFromAction(action Action) (FeishuCommandBinding, bool) {
-	if resolved, ok := ResolveFeishuActionCatalog(CatalogContext{}, action); ok {
-		if binding, ok := ResolveFeishuCommandBindingByFamilyID(resolved.FamilyID); ok {
+	if familyID, ok := FeishuCommandFamilyIDFromAction(action); ok {
+		if binding, ok := ResolveFeishuCommandBindingByFamilyID(familyID); ok {
 			return binding, true
 		}
 	}

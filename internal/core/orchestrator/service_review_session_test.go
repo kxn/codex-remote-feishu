@@ -649,6 +649,9 @@ func TestReviewRootActionStartsUncommittedReview(t *testing.T) {
 		SurfaceSessionID: surface.SurfaceSessionID,
 		MessageID:        "om-review-root-1",
 		Text:             "/review uncommitted",
+		CatalogFamilyID:  control.FeishuCommandReview,
+		CatalogVariantID: "review.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 
@@ -669,6 +672,9 @@ func TestReviewRootActionOpensCommitPicker(t *testing.T) {
 		SurfaceSessionID: surface.SurfaceSessionID,
 		MessageID:        "om-review-root-1",
 		Text:             "/review commit",
+		CatalogFamilyID:  control.FeishuCommandReview,
+		CatalogVariantID: "review.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 
@@ -793,6 +799,9 @@ func TestStartReviewCommitFromPickerUsesStoredContext(t *testing.T) {
 		MessageID:        "om-review-picker-1",
 		ActorUserID:      "user-1",
 		Text:             "/review commit " + latest.SHA,
+		CatalogFamilyID:  control.FeishuCommandReview,
+		CatalogVariantID: "review.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: "life-picker",
 		},
@@ -840,6 +849,9 @@ func TestStartReviewCommitFromPickerRejectsInstanceSwitch(t *testing.T) {
 		MessageID:        "om-review-picker-1",
 		ActorUserID:      "user-1",
 		Text:             "/review commit deadbeef",
+		CatalogFamilyID:  control.FeishuCommandReview,
+		CatalogVariantID: "review.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: "life-picker",
 		},

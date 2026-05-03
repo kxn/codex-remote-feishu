@@ -382,7 +382,7 @@ func TestHandleGatewayActionStartsDetachedReviewFromFinalCard(t *testing.T) {
 		Final:      true,
 	}, "msg-1", "om-final-1", app.daemonLifecycleID)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionReviewStart,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -415,7 +415,7 @@ func TestHandleGatewayActionStartsDetachedReviewFromCurrentThreadCommand(t *test
 		return nil
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionReviewCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -446,7 +446,7 @@ func TestHandleGatewayActionShowsReviewRootPageInPlace(t *testing.T) {
 		return nil
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionReviewCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -491,7 +491,7 @@ func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCard(t *testing.T
 		Final:      true,
 	}, "msg-1", "om-final-1", app.daemonLifecycleID)
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionReviewCommand,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -535,7 +535,7 @@ func TestHandleGatewayActionAppliesReviewResultBackToParentThread(t *testing.T) 
 		LastReviewText: "建议先补一条 review 回归测试。",
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionReviewApply,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
@@ -571,7 +571,7 @@ func TestHandleGatewayActionRejectsExpiredReviewCard(t *testing.T) {
 		return nil
 	}
 
-	result := app.HandleGatewayAction(context.Background(), control.Action{
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
 		Kind:             control.ActionReviewStart,
 		GatewayID:        "app-1",
 		SurfaceSessionID: "surface-1",
