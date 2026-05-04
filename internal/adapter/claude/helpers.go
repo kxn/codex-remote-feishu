@@ -603,7 +603,7 @@ func buildQuestionMetadata(questions []agentproto.RequestQuestion) []map[string]
 	return out
 }
 
-func buildClaudeTokenUsage(result map[string]any) *agentproto.ThreadTokenUsage {
+func buildClaudeTokenUsage(result map[string]any, previous *agentproto.ThreadTokenUsage) *agentproto.ThreadTokenUsage {
 	usageMap := lookupMap(result, "usage")
 	if len(usageMap) == 0 {
 		return nil
@@ -612,21 +612,25 @@ func buildClaudeTokenUsage(result map[string]any) *agentproto.ThreadTokenUsage {
 	cacheReadTokens := lookupIntFromAny(usageMap["cache_read_input_tokens"])
 	cacheCreateTokens := lookupIntFromAny(usageMap["cache_creation_input_tokens"])
 	outputTokens := lookupIntFromAny(usageMap["output_tokens"])
-	total := inputTokens + cacheReadTokens + cacheCreateTokens + outputTokens
+	totalInputTokens := inputTokens + cacheReadTokens + cacheCreateTokens
+	totalTokens := totalInputTokens + outputTokens
+	last := agentproto.TokenUsageBreakdown{
+		InputTokens:       totalInputTokens,
+		CachedInputTokens: cacheReadTokens,
+		OutputTokens:      outputTokens,
+		TotalTokens:       totalTokens,
+	}
 
 	usage := &agentproto.ThreadTokenUsage{
-		Total: agentproto.TokenUsageBreakdown{
-			InputTokens:       inputTokens,
-			CachedInputTokens: cacheReadTokens + cacheCreateTokens,
-			OutputTokens:      outputTokens,
-			TotalTokens:       total,
-		},
-		Last: agentproto.TokenUsageBreakdown{
-			InputTokens:       inputTokens,
-			CachedInputTokens: cacheReadTokens + cacheCreateTokens,
-			OutputTokens:      outputTokens,
-			TotalTokens:       total,
-		},
+		Total: last,
+		Last:  last,
+	}
+	if previous != nil {
+		usage.Total = addTokenUsageBreakdown(previous.Total, last)
+		if previous.ModelContextWindow != nil {
+			value := *previous.ModelContextWindow
+			usage.ModelContextWindow = &value
+		}
 	}
 	bestWindow := 0
 	for _, modelUsage := range lookupMap(result, "modelUsage") {
@@ -639,7 +643,19 @@ func buildClaudeTokenUsage(result map[string]any) *agentproto.ThreadTokenUsage {
 		}
 	}
 	if bestWindow > 0 {
-		usage.ModelContextWindow = &bestWindow
+		if usage.ModelContextWindow == nil || bestWindow > *usage.ModelContextWindow {
+			usage.ModelContextWindow = &bestWindow
+		}
 	}
 	return usage
+}
+
+func addTokenUsageBreakdown(left, right agentproto.TokenUsageBreakdown) agentproto.TokenUsageBreakdown {
+	return agentproto.TokenUsageBreakdown{
+		InputTokens:           left.InputTokens + right.InputTokens,
+		CachedInputTokens:     left.CachedInputTokens + right.CachedInputTokens,
+		OutputTokens:          left.OutputTokens + right.OutputTokens,
+		ReasoningOutputTokens: left.ReasoningOutputTokens + right.ReasoningOutputTokens,
+		TotalTokens:           left.TotalTokens + right.TotalTokens,
+	}
 }

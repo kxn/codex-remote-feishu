@@ -25,6 +25,7 @@ type Translator struct {
 	model          string
 	cwd            string
 	permissionMode string
+	threadUsage    map[string]*agentproto.ThreadTokenUsage
 
 	activeTurn   *turnState
 	pendingTurns []*turnState
@@ -119,6 +120,7 @@ func NewTranslator(instanceID string) *Translator {
 		toolStates:            map[string]*toolState{},
 		pendingRequests:       map[string]*pendingRequest{},
 		pendingControlReplies: map[string]pendingControlReply{},
+		threadUsage:           map[string]*agentproto.ThreadTokenUsage{},
 	}
 }
 

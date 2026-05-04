@@ -899,7 +899,8 @@ func (t *Translator) observeResultMessage(message map[string]any) Result {
 			)
 		}
 	}
-	if usage := buildClaudeTokenUsage(message); usage != nil {
+	if usage := buildClaudeTokenUsage(message, t.threadUsage[t.activeTurn.ThreadID]); usage != nil {
+		t.threadUsage[t.activeTurn.ThreadID] = agentproto.CloneThreadTokenUsage(usage)
 		events = append(events, agentproto.Event{
 			Kind:       agentproto.EventThreadTokenUsageUpdated,
 			CommandID:  t.activeTurn.CommandID,
