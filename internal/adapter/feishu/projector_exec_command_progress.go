@@ -99,7 +99,7 @@ func execCommandProgressLines(progress control.ExecCommandProgress) []string {
 func normalizedExecProgressTimeline(progress control.ExecCommandProgress) []control.ExecCommandProgressTimelineItem {
 	timeline := append([]control.ExecCommandProgressTimelineItem(nil), progress.Timeline...)
 	if len(timeline) == 0 {
-		timeline = control.BuildExecCommandProgressTimeline(progress)
+		return nil
 	}
 	items := make([]control.ExecCommandProgressTimelineItem, 0, len(timeline))
 	for _, item := range timeline {

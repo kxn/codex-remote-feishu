@@ -170,8 +170,10 @@ func (s *Service) replayThreadUpdate(surface *state.SurfaceConsoleRecord, inst *
 				Entries: []control.ExecCommandProgressEntry{
 					compactCompletionProgressEntry("context_compaction"),
 				},
+				Timeline: []control.ExecCommandProgressTimelineItem{
+					compactCompletionProgressTimelineItem("context_compaction"),
+				},
 			}
-			progress.Timeline = control.BuildExecCommandProgressTimeline(*progress)
 			return []eventcontract.Event{{
 				Kind:                eventcontract.KindExecCommandProgress,
 				GatewayID:           surface.GatewayID,

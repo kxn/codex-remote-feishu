@@ -42,6 +42,18 @@ func compactCompletionProgressEntry(itemID string) control.ExecCommandProgressEn
 	}
 }
 
+func compactCompletionProgressTimelineItem(itemID string) control.ExecCommandProgressTimelineItem {
+	entry := compactCompletionProgressEntry(itemID)
+	return control.ExecCommandProgressTimelineItem{
+		ID:      entry.ItemID,
+		Kind:    entry.Kind,
+		Label:   entry.Label,
+		Summary: entry.Summary,
+		Status:  entry.Status,
+		LastSeq: 1,
+	}
+}
+
 func (r *serviceProgressRuntime) renderCompactNotice(instanceID string, event agentproto.Event) []eventcontract.Event {
 	inst := r.service.root.Instances[instanceID]
 	if binding := r.service.turns.compactTurns[instanceID]; binding != nil && strings.TrimSpace(binding.TurnID) != "" && binding.TurnID == strings.TrimSpace(event.TurnID) {

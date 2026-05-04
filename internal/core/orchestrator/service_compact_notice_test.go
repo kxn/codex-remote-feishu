@@ -189,8 +189,8 @@ func TestContextCompactionStoresReplayWhenNoSurfaceAndReplaysOnce(t *testing.T) 
 	}
 	var sawProgress bool
 	for _, event := range attach {
-		if event.ExecCommandProgress != nil && len(event.ExecCommandProgress.Entries) == 1 {
-			entry := event.ExecCommandProgress.Entries[0]
+		if event.ExecCommandProgress != nil && len(event.ExecCommandProgress.Timeline) == 1 {
+			entry := event.ExecCommandProgress.Timeline[0]
 			if entry.Kind == "context_compaction" && entry.Label == "压缩" && entry.Summary == "上下文已压缩。" {
 				sawProgress = true
 			}
@@ -247,8 +247,8 @@ func TestContextCompactionReplayShowsSharedProgressWhenAttachedSurfaceNormal(t *
 	})
 	var sawProgress bool
 	for _, event := range attach {
-		if event.ExecCommandProgress != nil && len(event.ExecCommandProgress.Entries) == 1 {
-			entry := event.ExecCommandProgress.Entries[0]
+		if event.ExecCommandProgress != nil && len(event.ExecCommandProgress.Timeline) == 1 {
+			entry := event.ExecCommandProgress.Timeline[0]
 			if entry.Kind == "context_compaction" && entry.Summary == "上下文已压缩。" {
 				sawProgress = true
 			}
