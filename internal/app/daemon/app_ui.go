@@ -376,21 +376,32 @@ func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feis
 		return
 	}
 	for _, operation := range operations {
-		if operation.Kind != feishu.OperationSendCard && operation.Kind != feishu.OperationUpdateCard {
-			continue
+		switch operation.Kind {
+		case feishu.OperationSendCard, feishu.OperationUpdateCard:
+			if strings.TrimSpace(operation.MessageID) == "" {
+				continue
+			}
+			a.service.RecordExecCommandProgressSegmentWindow(
+				event.SurfaceSessionID,
+				progressPayload.Progress.ThreadID,
+				progressPayload.Progress.TurnID,
+				progressPayload.Progress.ItemID,
+				operation.MessageID,
+				operation.ProgressCardStartSeq,
+				operation.ProgressCardEndSeq,
+			)
+		case feishu.OperationDeleteMessage:
+			if strings.TrimSpace(operation.MessageID) == "" {
+				continue
+			}
+			a.service.ClearExecCommandProgressSegmentMessage(
+				event.SurfaceSessionID,
+				progressPayload.Progress.ThreadID,
+				progressPayload.Progress.TurnID,
+				progressPayload.Progress.ItemID,
+				operation.MessageID,
+			)
 		}
-		if strings.TrimSpace(operation.MessageID) == "" {
-			continue
-		}
-		a.service.RecordExecCommandProgressSegmentWindow(
-			event.SurfaceSessionID,
-			progressPayload.Progress.ThreadID,
-			progressPayload.Progress.TurnID,
-			progressPayload.Progress.ItemID,
-			operation.MessageID,
-			operation.ProgressCardStartSeq,
-			operation.ProgressCardEndSeq,
-		)
 	}
 }
 

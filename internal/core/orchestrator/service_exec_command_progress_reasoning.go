@@ -113,13 +113,5 @@ func (s *Service) handleReasoningSummaryProgressCompleted(instanceID string, eve
 	if !surfaceShowsVisibleReasoning(surface.Verbosity) {
 		return nil
 	}
-	events := s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
-	if state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityVerbose {
-		for i := range events {
-			if events[i].ExecCommandProgress != nil {
-				events[i].ExecCommandProgress.DeleteIfEmpty = true
-			}
-		}
-	}
-	return events
+	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }

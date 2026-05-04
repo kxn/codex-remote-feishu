@@ -193,3 +193,63 @@ func TestRecordUIEventDeliveryAppendsNewProgressSegmentAndRollsOverRunningEntrie
 		t.Fatalf("expected running entry to roll into the new segment, got seq=%d progress=%#v", seq, progress)
 	}
 }
+
+func TestRecordUIEventDeliveryClearsDeletedExecProgressSegmentAndAllowsReuse(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surfaces := app.service.Surfaces()
+	if len(surfaces) != 1 {
+		t.Fatalf("expected one surface, got %d", len(surfaces))
+	}
+	surface := surfaces[0]
+	surface.ActiveExecProgress = &state.ExecCommandProgressRecord{
+		ThreadID:        "thread-1",
+		TurnID:          "turn-1",
+		ItemID:          "reasoning-1",
+		ActiveSegmentID: "segment-1",
+		Segments: []state.ExecCommandProgressSegmentRecord{{
+			SegmentID: "segment-1",
+			MessageID: "om-progress-1",
+			StartSeq:  1,
+		}},
+		Status:        "running",
+		LastEmittedAt: time.Date(2026, 5, 4, 10, 1, 0, 0, time.UTC),
+	}
+	event := eventcontract.Event{
+		SurfaceSessionID: "surface-1",
+		ExecCommandProgress: &control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "reasoning-1",
+		},
+	}
+
+	app.recordUIEventDelivery(event, []feishu.Operation{
+		{Kind: feishu.OperationDeleteMessage, MessageID: "om-progress-1"},
+	})
+
+	progress := surface.ActiveExecProgress
+	if progress == nil {
+		t.Fatal("expected active progress state to survive delete delivery")
+	}
+	if activeProgressMessageID(progress) != "" {
+		t.Fatalf("expected deleted progress card to detach from active segment, got %#v", progress)
+	}
+	if len(progress.Segments) != 1 || progress.ActiveSegmentID != "segment-1" || activeProgressStartSeq(progress) != 1 {
+		t.Fatalf("expected segment identity and window to remain reusable after delete, got %#v", progress)
+	}
+
+	app.recordUIEventDelivery(event, []feishu.Operation{
+		{Kind: feishu.OperationSendCard, MessageID: "om-progress-2", ProgressCardStartSeq: 7, ProgressCardEndSeq: 12},
+	})
+
+	if activeProgressMessageID(progress) != "om-progress-2" {
+		t.Fatalf("expected deleted progress segment to accept a new card message, got %#v", progress)
+	}
+	if len(progress.Segments) != 1 || activeProgressStartSeq(progress) != 7 || progress.Segments[0].EndSeq != 12 {
+		t.Fatalf("expected resend to reuse the same segment with updated window, got %#v", progress)
+	}
+}

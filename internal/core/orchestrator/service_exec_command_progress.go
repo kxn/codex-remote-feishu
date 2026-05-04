@@ -332,6 +332,29 @@ func (s *Service) RecordExecCommandProgressSegmentWindow(surfaceID, threadID, tu
 	}
 }
 
+func (s *Service) ClearExecCommandProgressSegmentMessage(surfaceID, threadID, turnID, itemID, messageID string) {
+	if strings.TrimSpace(surfaceID) == "" || strings.TrimSpace(messageID) == "" {
+		return
+	}
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil || surface.ActiveExecProgress == nil {
+		return
+	}
+	progress := surface.ActiveExecProgress
+	if progress.ThreadID != strings.TrimSpace(threadID) || progress.TurnID != strings.TrimSpace(turnID) {
+		return
+	}
+	if strings.TrimSpace(itemID) != "" && progress.ItemID != strings.TrimSpace(itemID) {
+		return
+	}
+	for i := range progress.Segments {
+		if strings.TrimSpace(progress.Segments[i].MessageID) != strings.TrimSpace(messageID) {
+			continue
+		}
+		progress.Segments[i].MessageID = ""
+	}
+}
+
 func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, progress *state.ExecCommandProgressRecord, threadID, turnID string, final bool) []eventcontract.Event {
 	if surface == nil || progress == nil {
 		return nil

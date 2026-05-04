@@ -616,7 +616,7 @@ MCP request 卡片当前新增的可视语义：
   - gateway 层的 oversized card trim 仍保留为最后一道兜底，但共享过程卡当前不应以它作为主路径
 - `reasoning_summary` 当前进入普通 timeline：verbose 下 Codex reasoning summary 与 Claude thinking 都按真实发生顺序沉淀为过程行；同一 item + summary index 的 delta 原地累计更新，不同 summary index 保留为不同历史行。reasoning/thinking delta 会先更新 active progress 内存行并标记 dirty；第一段会立即建卡，之后同一工作中卡因 reasoning/thinking 主动 patch 时按约 1 秒窗口合并。普通工具/文件/搜索等过程事件若本来要 patch，会自然携带最新 reasoning/thinking 行并刷新水位；`reasoning_summary` item completed、assistant 正文真正 flush 为可见 `block.committed` 前，以及 turn completed finalization 前都会强制 flush dirty reasoning，避免最后一段 thinking 丢失。
 - 共享过程卡的 projector 不再把整段 timeline 压成单个 markdown body；当前改成“每个可见行一个 markdown element”，避免单行语法异常把后续行一起污染
-  - reasoning 行是历史记录；普通进度继续追加时不会清掉它，assistant 正文真正 flush 成可见文本块时才终结 active progress 生命周期，不再额外 patch 旧卡撤回 reasoning 行；turn 完成/失败/中断时若仍有 active progress，会把 running 行按最终状态封口后再清理内存态。
+  - reasoning 行是历史记录；普通进度继续追加时不会清掉它，assistant 正文真正 flush 成可见文本块时才终结 active progress 生命周期，不再额外 patch 旧卡撤回 reasoning 行；verbose 下若这张卡一度只有尾部 `思考中...` 占位，thinking 结束后也不会再主动撤回整张旧卡；turn 完成/失败/中断时若仍有 active progress，会把 running 行按最终状态封口后再清理内存态。
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要
   - `mcp_tool_call` 会以 `MCP：server.tool` 的行级摘要进入同一张卡；完成态会补耗时，失败态会内联失败原因
   - `dynamic_tool_call` 会按 `tool + 参数` 的形式进入同一张卡；若同一 turn 内连续出现同名 tool，则会复用同一行并按首次出现顺序持续追加参数（例如 `Read：a.cpp` -> `Read：a.cpp b.cpp`）；失败态会在该行内补 `（失败）`
@@ -814,7 +814,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_codex_upgrade_owner_card_test.go](../../internal/app/daemon/app_codex_upgrade_owner_card_test.go)
   - 锁定 `/upgrade codex` owner-card 的即时打开、重复检查、confirm-time 重校验回退、旧卡失效，以及 running / terminal 只留在 initiator surface 的语义
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 行级摘要的投影边界、首卡顶层 append / active segment patch 语义、超预算时改为新开 progress segment card、running 项在新段中的 carry-over 快照、`file_change` 在 normal/verbose/chatty 下的分层投影、单条可见行超预算时的预算裁剪，以及 reasoning 在 `chatty` 下保留明细、在 `verbose` 下收口成尾部 `思考中...` 占位并在必要时删除空占位卡的投影规则
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 行级摘要的投影边界、首卡顶层 append / active segment patch 语义、超预算时改为新开 progress segment card、running 项在新段中的 carry-over 快照、`file_change` 在 normal/verbose/chatty 下的分层投影、单条可见行超预算时的预算裁剪，以及 reasoning 在 `chatty` 下保留明细、在 `verbose` 下收口成尾部 `思考中...` 占位但不因占位消失而自动撤卡的投影规则
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
   - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
@@ -830,7 +830,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_plan_update_test.go](../../internal/core/orchestrator/service_plan_update_test.go)
   - 锁定 `turn.plan.updated + planSnapshot` 会投影为 append-only `当前计划` 卡、同内容快照去重、pending assistant text 在计划卡前 flush，以及非重复计划更新会切断当前 active shared-progress segment，确保后续过程重新开“工作中”卡而不是 patch 旧卡
 - [internal/app/daemon/app_ui_progress_test.go](../../internal/app/daemon/app_ui_progress_test.go)
-  - 锁定共享过程卡在 `message.patch` / 新 segment send 回来时都会把 active progress 的 `segment message_id + start_seq + end_seq` 回写到当前 owner，并在 rollover 时把仍在 running 的项接到新 active segment
+  - 锁定共享过程卡在 `message.patch` / 新 segment send 回来时都会把 active progress 的 `segment message_id + start_seq + end_seq` 回写到当前 owner，并在 progress 卡被 `message.delete` 后及时摘掉旧 `message_id`，保证后续同一 active segment 可以安全重发；同时在 rollover 时把仍在 running 的项接到新 active segment
 - [internal/core/orchestrator/service_mcp_tool_call_progress_test.go](../../internal/core/orchestrator/service_mcp_tool_call_progress_test.go)
   - 锁定 `mcp_tool_call` 已并入共享过程卡：started/failed 的同卡复用、去重与行级摘要更新语义
 - [internal/core/orchestrator/service_compact_notice_test.go](../../internal/core/orchestrator/service_compact_notice_test.go)

@@ -1903,7 +1903,7 @@ func TestReasoningSummaryProgressVerboseReattachesPlaceholderOnNextProgressCard(
 	}
 }
 
-func TestReasoningSummaryProgressVerbosePlaceholderDisappearsOnCompletion(t *testing.T) {
+func TestReasoningSummaryProgressVerbosePlaceholderCompletionDoesNotRequestCardDeletion(t *testing.T) {
 	now := time.Date(2026, 5, 4, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -1936,8 +1936,8 @@ func TestReasoningSummaryProgressVerbosePlaceholderDisappearsOnCompletion(t *tes
 		t.Fatalf("expected reasoning completion to emit one progress update, got %#v", completed)
 	}
 	progress := completed[0].ExecCommandProgress
-	if len(progress.Timeline) != 0 || !progress.DeleteIfEmpty {
-		t.Fatalf("expected verbose placeholder removal to retract an otherwise-empty progress card, got %#v", progress)
+	if len(progress.Timeline) != 0 || progress.DeleteIfEmpty {
+		t.Fatalf("expected verbose placeholder completion to leave the old card in place, got %#v", progress)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveReasoning != nil {
 		t.Fatalf("expected active reasoning state to clear on completion, got %#v", svc.root.Surfaces["surface-1"].ActiveReasoning)
