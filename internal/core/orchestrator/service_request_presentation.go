@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -315,22 +316,83 @@ func requestPermissionLines(permissions []map[string]any) []string {
 		return nil
 	}
 	lines := make([]string, 0, len(permissions))
+	seen := make(map[string]struct{}, len(permissions))
 	for _, permission := range permissions {
-		name := firstNonEmpty(
-			lookupStringFromAny(permission["title"]),
-			lookupStringFromAny(permission["name"]),
-			lookupStringFromAny(permission["permission"]),
-			lookupStringFromAny(permission["scope"]),
-		)
-		if code := firstNonEmpty(lookupStringFromAny(permission["name"]), lookupStringFromAny(permission["permission"])); code != "" && code != name {
-			name += " (`" + code + "`)"
+		for _, line := range requestPermissionRecordLines(permission) {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			line = "- " + line
+			if _, ok := seen[line]; ok {
+				continue
+			}
+			seen[line] = struct{}{}
+			lines = append(lines, line)
 		}
-		if name == "" {
-			name = "(unknown)"
-		}
-		lines = append(lines, "- "+name)
 	}
 	return lines
+}
+
+func requestPermissionRecordLines(permission map[string]any) []string {
+	if len(permission) == 0 {
+		return nil
+	}
+	if rules := metadataRequestMapList(permission["rules"]); len(rules) != 0 {
+		lines := make([]string, 0, len(rules))
+		fallbackTool := requestPermissionStringValue(permission, "toolName", "tool_name", "tool")
+		for _, rule := range rules {
+			if line := requestPermissionRuleLine(rule, fallbackTool); line != "" {
+				lines = append(lines, line)
+			}
+		}
+		if len(lines) != 0 {
+			return lines
+		}
+	}
+	if line := requestPermissionRuleLine(permission, ""); line != "" {
+		return []string{line}
+	}
+	name := requestPermissionStringValue(permission, "title", "label", "displayName", "description", "name", "permission", "scope", "id")
+	if name == "" {
+		return nil
+	}
+	if code := requestPermissionStringValue(permission, "name", "permission", "scope", "id"); code != "" && code != name {
+		name += " (`" + code + "`)"
+	}
+	return []string{name}
+}
+
+func requestPermissionRuleLine(rule map[string]any, fallbackTool string) string {
+	if len(rule) == 0 {
+		return ""
+	}
+	toolName := firstNonEmpty(requestPermissionStringValue(rule, "toolName", "tool_name", "tool"), fallbackTool)
+	ruleContent := requestPermissionStringValue(rule, "ruleContent", "rule_content", "rule", "pattern")
+	if toolName != "" && ruleContent != "" {
+		return toolName + ": " + ruleContent
+	}
+	return ruleContent
+}
+
+func requestPermissionStringValue(record map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value := requestPermissionScalarString(record[key]); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func requestPermissionScalarString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	default:
+		return ""
+	}
 }
 
 func metadataRequestMapList(source any) []map[string]any {
