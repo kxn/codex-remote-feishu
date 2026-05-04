@@ -638,7 +638,7 @@ func TestClaudeTranslatorPlanDeclineInterruptsTurn(t *testing.T) {
 			"subtype":     "can_use_tool",
 			"tool_name":   "ExitPlanMode",
 			"tool_use_id": "call-plan-1",
-			"input":       map[string]any{},
+			"input":       map[string]any{"plan": planText},
 		},
 	})
 	if len(requestStarted.Events) != 1 {
@@ -722,26 +722,29 @@ func TestClaudeTranslatorPlanDeclineInterruptsTurn(t *testing.T) {
 	}
 }
 
-func TestClaudeTranslatorPlanRequestFallsBackToLatestPlanFile(t *testing.T) {
+func TestClaudeTranslatorPlanRequestUsesControlRequestPlan(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	threadID, turnID := startClaudeTurn(t, tr, "plan")
-
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	planDir := filepath.Join(homeDir, ".claude-all", "plans")
-	if err := os.MkdirAll(planDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", planDir, err)
-	}
-	planText := "1. Inspect README.txt line 1.\n2. Replace it with the approved text."
-	planFile := filepath.Join(planDir, "fresh-plan.md")
-	if err := os.WriteFile(planFile, []byte(planText+"\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", planFile, err)
-	}
 
 	observeClaude(t, tr, map[string]any{
 		"type": "assistant",
 		"message": map[string]any{
-			"id":    "msg-plan-fallback-1",
+			"id":    "msg-plan-summary-1",
+			"type":  "message",
+			"role":  "assistant",
+			"model": "mimo-v2.5-pro",
+			"content": []any{
+				map[string]any{"type": "text", "text": "short summary should not be used"},
+			},
+		},
+	})
+
+	planText := "1. Inspect README.txt line 1.\n2. Replace it with the approved text."
+
+	observeClaude(t, tr, map[string]any{
+		"type": "assistant",
+		"message": map[string]any{
+			"id":    "msg-plan-request-1",
 			"type":  "message",
 			"role":  "assistant",
 			"model": "mimo-v2.5-pro",
@@ -758,12 +761,12 @@ func TestClaudeTranslatorPlanRequestFallsBackToLatestPlanFile(t *testing.T) {
 
 	requestStarted := observeClaude(t, tr, map[string]any{
 		"type":       "control_request",
-		"request_id": "req-plan-fallback-1",
+		"request_id": "req-plan-request-1",
 		"request": map[string]any{
 			"subtype":     "can_use_tool",
 			"tool_name":   "ExitPlanMode",
 			"tool_use_id": "call-plan-fallback-1",
-			"input":       map[string]any{},
+			"input":       map[string]any{"plan": planText},
 		},
 	})
 	if len(requestStarted.Events) != 1 {
@@ -774,20 +777,16 @@ func TestClaudeTranslatorPlanRequestFallsBackToLatestPlanFile(t *testing.T) {
 		t.Fatalf("unexpected plan request event: %#v", event)
 	}
 	if event.RequestPrompt == nil || event.RequestPrompt.Body != planText {
-		t.Fatalf("expected latest plan file fallback body, got %#v", event.RequestPrompt)
+		t.Fatalf("expected control_request plan body, got %#v", event.RequestPrompt)
 	}
-	if lookupStringFromAny(event.Metadata["planBodySource"]) != "latest_plan_file" {
-		t.Fatalf("expected latest_plan_file source, got %#v", event.Metadata)
-	}
-	if lookupStringFromAny(event.Metadata["planFilePath"]) != planFile {
-		t.Fatalf("expected plan file path metadata, got %#v", event.Metadata)
+	if lookupStringFromAny(event.Metadata["planBodySource"]) != "request.input.plan" {
+		t.Fatalf("expected request.input.plan source, got %#v", event.Metadata)
 	}
 }
 
-func TestClaudeTranslatorPlanResolvedUsesToolResultFilePathFallback(t *testing.T) {
+func TestClaudeTranslatorPlanRequestDoesNotInventFallbackBody(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	threadID, turnID := startClaudeTurn(t, tr, "plan")
-	t.Setenv("HOME", t.TempDir())
 
 	observeClaude(t, tr, map[string]any{
 		"type": "assistant",
@@ -820,7 +819,7 @@ func TestClaudeTranslatorPlanResolvedUsesToolResultFilePathFallback(t *testing.T
 		t.Fatalf("expected one request.started event, got %#v", requestStarted.Events)
 	}
 	if requestStarted.Events[0].RequestPrompt == nil || requestStarted.Events[0].RequestPrompt.Body != "Claude 计划如下，请确认后继续。" {
-		t.Fatalf("expected generic body before file fallback materializes, got %#v", requestStarted.Events[0].RequestPrompt)
+		t.Fatalf("expected generic body when input.plan is absent, got %#v", requestStarted.Events[0].RequestPrompt)
 	}
 
 	payloads, err := tr.TranslateCommand(agentproto.Command{
@@ -840,11 +839,6 @@ func TestClaudeTranslatorPlanResolvedUsesToolResultFilePathFallback(t *testing.T
 		t.Fatalf("expected one control_response payload, got %d", len(payloads))
 	}
 
-	planFile := filepath.Join(t.TempDir(), "tool-result-plan.md")
-	planText := "1. Update README.txt line 1.\n2. Save the file without further edits."
-	if err := os.WriteFile(planFile, []byte(planText+"\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(%s): %v", planFile, err)
-	}
 	resolved := observeClaude(t, tr, map[string]any{
 		"type": "user",
 		"message": map[string]any{
@@ -860,7 +854,7 @@ func TestClaudeTranslatorPlanResolvedUsesToolResultFilePathFallback(t *testing.T
 		},
 		"tool_use_result": map[string]any{
 			"feedback": "Approved. Execute the plan.",
-			"filePath": planFile,
+			"filePath": filepath.Join(t.TempDir(), "tool-result-plan.md"),
 		},
 	})
 	if len(resolved.Events) != 1 || resolved.Events[0].Kind != agentproto.EventRequestResolved {
@@ -870,14 +864,11 @@ func TestClaudeTranslatorPlanResolvedUsesToolResultFilePathFallback(t *testing.T
 	if event.ThreadID != threadID || event.TurnID != turnID {
 		t.Fatalf("unexpected resolved plan event ids: %#v", event)
 	}
-	if lookupStringFromAny(event.Metadata["body"]) != planText {
-		t.Fatalf("expected plan body from tool_result file path, got %#v", event.Metadata)
+	if _, ok := event.Metadata["body"]; ok {
+		t.Fatalf("expected no synthesized plan body, got %#v", event.Metadata)
 	}
-	if lookupStringFromAny(event.Metadata["planBodySource"]) != "tool_result.filePath" {
-		t.Fatalf("expected tool_result.filePath source, got %#v", event.Metadata)
-	}
-	if lookupStringFromAny(event.Metadata["planFilePath"]) != planFile {
-		t.Fatalf("expected resolved plan file path, got %#v", event.Metadata)
+	if _, ok := event.Metadata["planBodySource"]; ok {
+		t.Fatalf("expected no synthesized plan body source, got %#v", event.Metadata)
 	}
 }
 

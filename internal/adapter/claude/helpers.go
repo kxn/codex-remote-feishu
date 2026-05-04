@@ -8,12 +8,9 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
-
-const claudeLatestPlanGuessFreshness = 15 * time.Minute
 
 func claudeHomeDir() string {
 	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
@@ -559,92 +556,6 @@ func sortedMetadataKeys(metadata map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-func resolvePlanConfirmationRequestBody(assistantText string) (string, string, string) {
-	if body := strings.TrimSpace(assistantText); body != "" {
-		return body, "assistant_text", ""
-	}
-	return guessLatestClaudePlanBody()
-}
-
-func resolvePlanConfirmationResolvedBody(currentBody, currentSource, hintedPath string) (string, string, string) {
-	currentBody = strings.TrimSpace(currentBody)
-	currentSource = strings.TrimSpace(currentSource)
-	if currentSource == "assistant_text" && currentBody != "" {
-		return currentBody, currentSource, ""
-	}
-	if body, path, ok := readClaudePlanBodyFromPath(hintedPath); ok {
-		return body, "tool_result.filePath", path
-	}
-	if currentBody != "" {
-		return currentBody, currentSource, ""
-	}
-	return guessLatestClaudePlanBody()
-}
-
-func guessLatestClaudePlanBody() (string, string, string) {
-	planPath, ok := guessLatestClaudePlanFilePath()
-	if !ok {
-		return "", "", ""
-	}
-	body, path, ok := readClaudePlanBodyFromPath(planPath)
-	if !ok {
-		return "", "", ""
-	}
-	return body, "latest_plan_file", path
-}
-
-func readClaudePlanBodyFromPath(rawPath string) (string, string, bool) {
-	planPath := strings.TrimSpace(rawPath)
-	if planPath == "" {
-		return "", "", false
-	}
-	data, err := os.ReadFile(planPath)
-	if err != nil {
-		return "", "", false
-	}
-	body := strings.TrimSpace(string(data))
-	if body == "" {
-		return "", "", false
-	}
-	return body, planPath, true
-}
-
-func guessLatestClaudePlanFilePath() (string, bool) {
-	homeDir := claudeHomeDir()
-	if homeDir == "" {
-		return "", false
-	}
-	candidates := []string{
-		filepath.Join(homeDir, ".claude-all", "plans"),
-		filepath.Join(homeDir, ".claude", "plans"),
-	}
-	var latestPath string
-	var latestModTime time.Time
-	for _, dir := range candidates {
-		entries, err := filepath.Glob(filepath.Join(dir, "*.md"))
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			info, err := os.Stat(entry)
-			if err != nil || info.IsDir() {
-				continue
-			}
-			if latestPath == "" || info.ModTime().After(latestModTime) {
-				latestPath = entry
-				latestModTime = info.ModTime()
-			}
-		}
-	}
-	if latestPath == "" {
-		return "", false
-	}
-	if !latestModTime.IsZero() && time.Since(latestModTime) > claudeLatestPlanGuessFreshness {
-		return "", false
-	}
-	return latestPath, true
 }
 
 func sanitizeQuestionID(value string, index int) string {

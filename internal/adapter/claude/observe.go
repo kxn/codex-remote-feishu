@@ -617,25 +617,11 @@ func (t *Translator) observeInternalToolResult(message, block map[string]any, to
 		metadata["questions"] = buildQuestionMetadata(buildAgentQuestions(request.Questions))
 	}
 	if tool.Name == "ExitPlanMode" {
-		planFileHint := strings.TrimSpace(lookupStringFromAny(metadata["filePath"]))
-		planBody, planBodySource, planFilePath := resolvePlanConfirmationResolvedBody(request.PlanBody, request.PlanBodySource, planFileHint)
-		if planBodySource == "" {
-			planBodySource = request.PlanBodySource
+		if request.PlanBody != "" {
+			metadata["body"] = request.PlanBody
 		}
-		if planFilePath == "" {
-			planFilePath = request.PlanFilePath
-		}
-		if planBody != "" {
-			request.PlanBody = planBody
-			metadata["body"] = planBody
-		}
-		if planBodySource != "" {
-			request.PlanBodySource = planBodySource
-			metadata["planBodySource"] = planBodySource
-		}
-		if planFilePath != "" {
-			request.PlanFilePath = planFilePath
-			metadata["planFilePath"] = planFilePath
+		if request.PlanBodySource != "" {
+			metadata["planBodySource"] = request.PlanBodySource
 		}
 	}
 	delete(t.pendingRequests, request.RequestID)
@@ -763,7 +749,11 @@ func (t *Translator) observeAskUserQuestionRequest(requestID, toolName, toolUseI
 }
 
 func (t *Translator) observePlanConfirmationRequest(requestID, toolName, toolUseID string, input map[string]any) Result {
-	planBody, planBodySource, planFilePath := resolvePlanConfirmationRequestBody(t.activeTurn.LastAssistantText)
+	planBody := strings.TrimSpace(lookupStringFromAny(input["plan"]))
+	planBodySource := ""
+	if planBody != "" {
+		planBodySource = "request.input.plan"
+	}
 	body := planBody
 	if body == "" {
 		body = "Claude 计划如下，请确认后继续。"
@@ -785,9 +775,6 @@ func (t *Translator) observePlanConfirmationRequest(requestID, toolName, toolUse
 	if planBodySource != "" {
 		metadata["planBodySource"] = planBodySource
 	}
-	if planFilePath != "" {
-		metadata["planFilePath"] = planFilePath
-	}
 	request := &pendingRequest{
 		RequestID:          requestID,
 		ThreadID:           t.activeTurn.ThreadID,
@@ -799,7 +786,6 @@ func (t *Translator) observePlanConfirmationRequest(requestID, toolName, toolUse
 		Input:              input,
 		PlanBody:           planBody,
 		PlanBodySource:     planBodySource,
-		PlanFilePath:       planFilePath,
 		InterruptOnDecline: true,
 	}
 	t.pendingRequests[requestID] = request

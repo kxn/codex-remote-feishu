@@ -102,7 +102,6 @@ type pendingRequest struct {
 	ItemID             string
 	PlanBody           string
 	PlanBodySource     string
-	PlanFilePath       string
 	Questions          []pendingQuestion
 	InterruptOnDecline bool
 	Decision           string
