@@ -549,6 +549,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		if event.ReasoningEffort != "" {
 			thread.ExplicitReasoningEffort = event.ReasoningEffort
 		}
+		if event.AccessMode != "" {
+			thread.ObservedAccessMode = agentproto.NormalizeAccessMode(event.AccessMode)
+		}
 		if event.PlanMode != "" {
 			thread.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(event.PlanMode))
 		}
@@ -611,6 +614,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			}
 			if thread.ReasoningEffort != "" {
 				current.ExplicitReasoningEffort = thread.ReasoningEffort
+			}
+			if thread.AccessMode != "" {
+				current.ObservedAccessMode = agentproto.NormalizeAccessMode(thread.AccessMode)
 			}
 			if thread.ForkedFromID != "" {
 				current.ForkedFromID = thread.ForkedFromID

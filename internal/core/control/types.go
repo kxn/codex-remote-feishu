@@ -262,6 +262,7 @@ type PromptRouteSummary struct {
 	PlanModeOverrideSet            bool
 	UsesLocalRequestedOverrides    bool
 	EffectivePlanMode              string
+	ObservedThreadAccessMode       string
 	ObservedThreadPlanMode         string
 	EffectiveModel                 string
 	EffectiveReasoningEffort       string

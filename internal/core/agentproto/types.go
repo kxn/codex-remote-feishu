@@ -130,6 +130,7 @@ type ThreadSnapshotRecord struct {
 	CWD             string               `json:"cwd,omitempty"`
 	Model           string               `json:"model,omitempty"`
 	ReasoningEffort string               `json:"reasoningEffort,omitempty"`
+	AccessMode      string               `json:"accessMode,omitempty"`
 	PlanMode        string               `json:"planMode,omitempty"`
 	Loaded          bool                 `json:"loaded"`
 	Archived        bool                 `json:"archived"`

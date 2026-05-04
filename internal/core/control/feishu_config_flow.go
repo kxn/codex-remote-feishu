@@ -5,21 +5,22 @@ import "strings"
 type FeishuConfigFlowValueKey string
 
 const (
-	FeishuConfigFlowValueNone                     FeishuConfigFlowValueKey = ""
-	FeishuConfigFlowValueSurfaceProductMode       FeishuConfigFlowValueKey = "surface_product_mode"
-	FeishuConfigFlowValueSurfaceCodexProvider     FeishuConfigFlowValueKey = "surface_codex_provider"
-	FeishuConfigFlowValueSurfaceClaudeProfile     FeishuConfigFlowValueKey = "surface_claude_profile"
-	FeishuConfigFlowValueSurfaceAutoWhip          FeishuConfigFlowValueKey = "surface_auto_whip"
-	FeishuConfigFlowValueSurfaceAutoContinue      FeishuConfigFlowValueKey = "surface_auto_continue"
-	FeishuConfigFlowValueSurfacePlanMode          FeishuConfigFlowValueKey = "surface_plan_mode"
-	FeishuConfigFlowValueSurfaceVerbosity         FeishuConfigFlowValueKey = "surface_verbosity"
-	FeishuConfigFlowValuePromptEffectiveReasoning FeishuConfigFlowValueKey = "prompt_effective_reasoning"
-	FeishuConfigFlowValuePromptOverrideReasoning  FeishuConfigFlowValueKey = "prompt_override_reasoning"
-	FeishuConfigFlowValuePromptEffectiveAccess    FeishuConfigFlowValueKey = "prompt_effective_access"
-	FeishuConfigFlowValuePromptOverrideAccess     FeishuConfigFlowValueKey = "prompt_override_access"
-	FeishuConfigFlowValuePromptObservedThreadPlan FeishuConfigFlowValueKey = "prompt_observed_thread_plan"
-	FeishuConfigFlowValuePromptEffectiveModel     FeishuConfigFlowValueKey = "prompt_effective_model"
-	FeishuConfigFlowValuePromptOverrideModel      FeishuConfigFlowValueKey = "prompt_override_model"
+	FeishuConfigFlowValueNone                       FeishuConfigFlowValueKey = ""
+	FeishuConfigFlowValueSurfaceProductMode         FeishuConfigFlowValueKey = "surface_product_mode"
+	FeishuConfigFlowValueSurfaceCodexProvider       FeishuConfigFlowValueKey = "surface_codex_provider"
+	FeishuConfigFlowValueSurfaceClaudeProfile       FeishuConfigFlowValueKey = "surface_claude_profile"
+	FeishuConfigFlowValueSurfaceAutoWhip            FeishuConfigFlowValueKey = "surface_auto_whip"
+	FeishuConfigFlowValueSurfaceAutoContinue        FeishuConfigFlowValueKey = "surface_auto_continue"
+	FeishuConfigFlowValueSurfacePlanMode            FeishuConfigFlowValueKey = "surface_plan_mode"
+	FeishuConfigFlowValueSurfaceVerbosity           FeishuConfigFlowValueKey = "surface_verbosity"
+	FeishuConfigFlowValuePromptEffectiveReasoning   FeishuConfigFlowValueKey = "prompt_effective_reasoning"
+	FeishuConfigFlowValuePromptOverrideReasoning    FeishuConfigFlowValueKey = "prompt_override_reasoning"
+	FeishuConfigFlowValuePromptObservedThreadAccess FeishuConfigFlowValueKey = "prompt_observed_thread_access"
+	FeishuConfigFlowValuePromptEffectiveAccess      FeishuConfigFlowValueKey = "prompt_effective_access"
+	FeishuConfigFlowValuePromptOverrideAccess       FeishuConfigFlowValueKey = "prompt_override_access"
+	FeishuConfigFlowValuePromptObservedThreadPlan   FeishuConfigFlowValueKey = "prompt_observed_thread_plan"
+	FeishuConfigFlowValuePromptEffectiveModel       FeishuConfigFlowValueKey = "prompt_effective_model"
+	FeishuConfigFlowValuePromptOverrideModel        FeishuConfigFlowValueKey = "prompt_override_model"
 )
 
 type FeishuConfigFlowDefinition struct {
@@ -82,6 +83,7 @@ func (k FeishuConfigFlowValueKey) UsesPromptSummary() bool {
 	switch k {
 	case FeishuConfigFlowValuePromptEffectiveReasoning,
 		FeishuConfigFlowValuePromptOverrideReasoning,
+		FeishuConfigFlowValuePromptObservedThreadAccess,
 		FeishuConfigFlowValuePromptEffectiveAccess,
 		FeishuConfigFlowValuePromptOverrideAccess,
 		FeishuConfigFlowValuePromptObservedThreadPlan,
@@ -150,6 +152,7 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 		BareCommand:        "/access",
 		IntentKind:         FeishuUIIntentShowAccessCatalog,
 		PageBuilder:        accessPageViewFromCommandConfigView,
+		CurrentValueKey:    FeishuConfigFlowValuePromptObservedThreadAccess,
 		EffectiveValueKey:  FeishuConfigFlowValuePromptEffectiveAccess,
 		OverrideValueKey:   FeishuConfigFlowValuePromptOverrideAccess,
 		RequiresAttachment: true,

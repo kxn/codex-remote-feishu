@@ -214,6 +214,7 @@ type ThreadRecord struct {
 	RuntimeStatus           *agentproto.ThreadRuntimeStatus
 	ExplicitModel           string
 	ExplicitReasoningEffort string
+	ObservedAccessMode      string
 	ObservedPlanMode        PlanModeSetting
 	LastModelReroute        *agentproto.TurnModelReroute
 	Loaded                  bool

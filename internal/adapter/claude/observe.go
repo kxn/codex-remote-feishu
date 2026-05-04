@@ -10,6 +10,9 @@ import (
 
 func (t *Translator) observeSystemMessage(message map[string]any) Result {
 	subtype := strings.TrimSpace(lookupStringFromAny(message["subtype"]))
+	previousModel := strings.TrimSpace(t.model)
+	previousCWD := strings.TrimSpace(t.cwd)
+	previousPermissionMode := strings.TrimSpace(t.permissionMode)
 	switch subtype {
 	case "init":
 		if sessionID := strings.TrimSpace(lookupStringFromAny(message["session_id"])); sessionID != "" {
@@ -35,7 +38,34 @@ func (t *Translator) observeSystemMessage(message map[string]any) Result {
 			t.permissionMode = mode
 		}
 	}
-	return Result{}
+	events := t.observedPermissionConfigEvents(previousModel, previousCWD, previousPermissionMode)
+	return Result{Events: events}
+}
+
+func (t *Translator) observedPermissionConfigEvents(previousModel, previousCWD, previousPermissionMode string) []agentproto.Event {
+	threadID := strings.TrimSpace(t.sessionID)
+	if threadID == "" {
+		return nil
+	}
+	model := strings.TrimSpace(t.model)
+	cwd := strings.TrimSpace(t.cwd)
+	nativeMode := strings.TrimSpace(t.permissionMode)
+	selection := claudePermissionSelectionFromNative(nativeMode)
+	changed := model != strings.TrimSpace(previousModel) ||
+		cwd != strings.TrimSpace(previousCWD) ||
+		nativeMode != strings.TrimSpace(previousPermissionMode)
+	if !changed && selection.AccessMode == "" && strings.TrimSpace(selection.PlanMode) == "" {
+		return nil
+	}
+	return []agentproto.Event{{
+		Kind:        agentproto.EventConfigObserved,
+		ThreadID:    threadID,
+		CWD:         cwd,
+		Model:       model,
+		AccessMode:  selection.AccessMode,
+		PlanMode:    selection.PlanMode,
+		ConfigScope: "thread",
+	}}
 }
 
 func shouldRefreshTurnThreadIDOnInit(turn *turnState, previousSessionID string) bool {
@@ -861,10 +891,13 @@ func (t *Translator) observeControlResponse(message map[string]any) Result {
 		return Result{}
 	}
 	delete(t.pendingControlReplies, requestID)
+	var events []agentproto.Event
 	if pending.Kind == "set_permission_mode" && strings.TrimSpace(pending.DesiredPermissionMode) != "" {
+		previousPermissionMode := strings.TrimSpace(t.permissionMode)
 		t.permissionMode = strings.TrimSpace(pending.DesiredPermissionMode)
+		events = t.observedPermissionConfigEvents(strings.TrimSpace(t.model), strings.TrimSpace(t.cwd), previousPermissionMode)
 	}
-	return Result{Suppress: true}
+	return Result{Events: events, Suppress: true}
 }
 
 func (t *Translator) observeResultMessage(message map[string]any) Result {

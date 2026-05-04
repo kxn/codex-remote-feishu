@@ -90,6 +90,9 @@ func sessionMetaToThreadRecord(meta claude.SessionMeta) *state.ThreadRecord {
 		State:         string(agentproto.ThreadRuntimeStatusTypeNotLoaded),
 		RuntimeStatus: &agentproto.ThreadRuntimeStatus{Type: agentproto.ThreadRuntimeStatusTypeNotLoaded},
 		ExplicitModel: strings.TrimSpace(meta.Model),
+		ObservedAccessMode: agentproto.NormalizeAccessMode(
+			strings.TrimSpace(meta.AccessMode),
+		),
 		ObservedPlanMode: state.NormalizePlanModeSetting(
 			state.PlanModeSetting(strings.TrimSpace(meta.PlanMode)),
 		),

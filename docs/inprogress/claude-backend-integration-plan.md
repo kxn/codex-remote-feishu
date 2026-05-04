@@ -903,7 +903,7 @@ Claude runtime 分三块：
 
 | Claude native carrier | 本地语义 | canonical 承接位 | 当前结论 |
 | --- | --- | --- | --- |
-| `system:init` | 会话 ready、`session_id`、模型、cwd、permission mode | runtime host 内部 session bind；不单独投影成用户可见 event | 现有 carrier 足够；属于 runtime/session 初始化，不需要新增上层 event |
+| `system:init` / `system:status` | 会话 ready、`session_id`、模型、cwd、permission mode | runtime host 内部 session bind + `config.observed(thread)` | 当前通过标准 `EventConfigObserved` 回填 Claude thread observed access/plan，不再只停留在 wrapper-local `permissionMode` 字段 |
 | `stream_event.message_start` | 新一轮 assistant turn 真正进入 running | `turn.started` | 作为 Claude live turn 的主起点 |
 | `assistant.text` | assistant 正文输出 | `item.started / item.delta / item.completed` with `itemKind=agent_message` | 现有文本 item 语义可直接复用 |
 | `assistant.thinking` | provider-native reasoning / hidden chain-of-thought side channel | `item.delta` with `itemKind=reasoning_summary`；前台保留过滤后的 raw thinking，adapter 仅窄清洗已知系统 info block | pre-MVP 不需要新增公开 reasoning carrier，但需要流式 side-channel 可见边界抑制 |
@@ -915,7 +915,7 @@ Claude runtime 分三块：
 | `user.tool_result`（`AskUserQuestion`） | 用户答案回流，带 questions/answers 回显 | `request.resolved`；answers 进 request metadata/history sidecar | request 关闭应绑定匹配的 `tool_use_id` / request correlation，不应只靠本地发送成功 |
 | assistant 先输出的计划正文 | `ExitPlanMode` 前的真实 plan body 主来源 | `item.delta / item.completed` with `itemKind=plan`，并作为 `plan_confirmation` body source | 现有 `plan` item 可承接自由文本计划，不要求先变成结构化 steps |
 | `control_request(can_use_tool + ExitPlanMode)` | 真正可外部响应的计划确认 request | `request.started` with `type=approval` + `semanticKind=plan_confirmation` + `interruptOnDecline=true` | `control_request.input` 只当审批载体，不当计划正文 |
-| `user.tool_result`（`ExitPlanMode`） | allow/deny 结果与 `tool_use_result.filePath` sidecar | `request.resolved` + plan file fallback sidecar | `filePath` 是高精度 fallback，优先级高于“去猜最新 plan 文件” |
+| `user.tool_result`（`ExitPlanMode`） | allow/deny 结果与 `tool_use_result.filePath` sidecar | `request.resolved` + plan file fallback sidecar | `filePath` 是高精度 fallback，优先级高于“去猜最新 plan 文件”；当 `decision=accept` 时，本地 surface 还应在这条 resolved 闭环上同步清掉旧 `PlanMode` override |
 | `user.tool_result`（`EnterPlanMode`） | mode 进入确认与提示文本 | adapter-local mode transition / history sidecar | 当前无需新增上层 request 或 item |
 | `result` | native turn 终态、usage、最终 result text | `turn.completed` + `thread.token_usage.updated` | `status` 需要综合 `subtype`、`is_error`、interrupt state 与 final text materialization |
 | `stdout EOF / child exit without result` | native turn 缺失终态 | synthetic `turn.completed` | 这是 `#495` runtime-exit reconciliation 的职责，不是 Claude native 自带 carrier |

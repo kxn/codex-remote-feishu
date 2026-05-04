@@ -20,10 +20,11 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 	access = agentproto.NormalizeAccessMode(access)
 	backend := state.EffectiveInstanceBackend(inst)
 	vscode := isVSCodeInstance(inst)
+	claudeHeadless := !vscode && agentproto.NormalizeBackend(backend) == agentproto.BackendClaude
 	codexHeadless := !vscode && agentproto.NormalizeBackend(backend) == agentproto.BackendCodex
 	switch scope {
 	case "cwd_default":
-		if codexHeadless {
+		if codexHeadless || claudeHeadless {
 			return
 		}
 		s.updateInstanceCWDDefaults(inst, cwdDefaultKey, func(current *state.ModelConfigRecord) {
@@ -66,6 +67,9 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 			if effort != "" {
 				thread.ExplicitReasoningEffort = effort
 			}
+			if access != "" {
+				thread.ObservedAccessMode = access
+			}
 			if strings.TrimSpace(planMode) != "" {
 				thread.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(planMode))
 			}
@@ -75,7 +79,7 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 				current.AccessMode = access
 			})
 		}
-		if access != "" && workspaceKey != "" && !vscode && !codexHeadless {
+		if access != "" && workspaceKey != "" && !vscode && !codexHeadless && !claudeHeadless {
 			s.updateWorkspaceDefaults(workspaceKey, state.ObservedInstanceBackendContract(inst), func(current *state.ModelConfigRecord) {
 				current.AccessMode = access
 			})

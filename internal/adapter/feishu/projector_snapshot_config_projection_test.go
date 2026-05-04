@@ -47,3 +47,36 @@ func TestProjectSnapshotShowsVSCodeNoOverrideAsFollowCurrentState(t *testing.T) 
 		t.Fatalf("vscode status must not render effective defaults as forced overrides, got %q", rendered)
 	}
 }
+
+func TestProjectSnapshotShowsObservedThreadAccess(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode: "normal",
+			Backend:     "claude",
+			Attachment: control.AttachmentSummary{
+				InstanceID:  "inst-1",
+				DisplayName: "droid",
+				Source:      "headless",
+				RouteMode:   "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				CWD:                      "/data/dl/droid",
+				EffectiveAccessMode:      "confirm",
+				EffectivePlanMode:        "off",
+				ObservedThreadAccessMode: "confirm",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"会话最近本地权限：confirm",
+		"下条飞书消息：Plan 关闭，模型 未知，推理 未知，权限 confirm",
+	) {
+		t.Fatalf("expected snapshot to show observed thread access, got %q", rendered)
+	}
+}

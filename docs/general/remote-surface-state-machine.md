@@ -182,13 +182,16 @@ surface 不是单一枚举，而是五层正交状态叠加。
       2. 离开该 workspace 或切走该 profile 前，只把当前临时 `ReasoningEffort` 覆盖写回独立的 `workspace+profile` 持久化 store。
       3. 若目标 `workspace+profile` 没有快照，则会恢复成空 override + `PlanMode=off`，不会沿用别的 workspace/profile 残留值。
       4. `Model`、`AccessMode` 与 `PlanMode` 明确不在这套快照里；Claude workspace/profile 恢复时会主动清掉这些临时运行态，不把它们当作可持久化热改能力。
-   7. 若某轮 turn 结束时缓存了 `item/plan/delta` 最终正文，surface 会在 final 落完后追加一张“提案计划”手动 handoff 卡；这张卡不是 request gate，不阻塞后续输入，但命中新的输入、route 变化、turn 变化或用户显式点击动作后都会 seal。
+   7. Claude `ExitPlanMode` 被批准后，本地 surface 不会在“用户点了批准”时立刻清掉 `PlanMode`；只有等到对应 `request.resolved(plan_confirmation + accept)` 真正到达，才会同步清理显式 plan override。`decline` / cancel / 过期都不会误清。
+   8. 若某轮 turn 结束时缓存了 `item/plan/delta` 最终正文，surface 会在 final 落完后追加一张“提案计划”手动 handoff 卡；这张卡不是 request gate，不阻塞后续输入，但命中新的输入、route 变化、turn 变化或用户显式点击动作后都会 seal。
       对 `keep_surface_selection` 的 detached-branch turn，这张卡仍回原 surface，并按 source/main thread 判断是否 suppress，不会因为 execution thread 不同而被误吞。
-   8. 点击提案计划卡的 `直接执行` / `清空上下文并执行`，会先把当前 surface 的 `PlanMode` 切回显式 `off`，再继续派发 follow-up turn；`取消` 只 seal 卡片，不改 route。
+   9. 点击提案计划卡的 `直接执行` / `清空上下文并执行`，会先把当前 surface 的 `PlanMode` 切回显式 `off`，再继续派发 follow-up turn；`取消` 只 seal 卡片，不改 route。
 9. `PromptOverride` 当前承载飞书侧显式 model / reasoning / access requested override：
    1. headless 主链为了保持现有执行合同，queue item 仍会冻结最终 effective model / reasoning / access。
-   2. `vscode` 主链只冻结飞书显式 requested override；observed cwd/thread config 仍可用于 `/status` / 参数卡展示，但不会在没有本地显式覆盖时被重新下发给 backend。
-   3. Codex translator 收到 empty access override 时不会改写 `approvalPolicy` / `sandboxPolicy`；只有显式 `full` / `confirm` 才会下发对应权限策略。
+   2. Claude headless 的 runtime `permissionMode` 现在会通过标准 `config.observed(thread)` 回填 thread observed access/plan；`/status`、`/access`、`/plan` 和 headless prompt freeze 都读这条 observed state，而不是把它误持久成 workspace default。
+   3. Claude headless 在没有飞书显式 `/access` override 时，下一条 prompt 的 base access 会优先跟随当前 thread observed access；旧的 Claude workspace default access 不再参与这条解析。
+   4. `vscode` 主链只冻结飞书显式 requested override；observed cwd/thread config 仍可用于 `/status` / 参数卡展示，但不会在没有本地显式覆盖时被重新下发给 backend。
+   5. Codex translator 收到 empty access override 时不会改写 `approvalPolicy` / `sandboxPolicy`；只有显式 `full` / `confirm` 才会下发对应权限策略。
 10. headless workspace-first 主链当前已经完成这一轮产品收窄：
    1. bare `/workspace` 是工作会话父页，固定展示 `切换`、`从目录新建`、`从 GIT URL 新建`、`解除接管` 四个入口；bare `/workspace new` 是只含三条新建路径的子页。
    2. `/workspace list` 与 alias `/list` / `/use` / `/useall` / `show_workspace_threads` 都收敛到同一张 `切换工作会话` 卡。

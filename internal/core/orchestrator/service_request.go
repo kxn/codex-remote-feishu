@@ -163,16 +163,36 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 
 func (s *Service) resolveRequestPrompt(instanceID string, event agentproto.Event) []eventcontract.Event {
 	if event.RequestID != "" {
+		var events []eventcontract.Event
 		for _, surface := range s.findAttachedSurfaces(instanceID) {
 			if surface.PendingRequests == nil {
 				continue
 			}
+			request := surface.PendingRequests[event.RequestID]
+			events = append(events, s.handleResolvedRequestPrompt(surface, request, event)...)
 			delete(surface.PendingRequests, event.RequestID)
 			clearSurfaceRequestCaptureByRequestID(surface, event.RequestID)
 		}
-		return nil
+		return events
 	}
 	s.clearRequestsForTurn(instanceID, event.ThreadID, event.TurnID)
+	return nil
+}
+
+func (s *Service) handleResolvedRequestPrompt(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, event agentproto.Event) []eventcontract.Event {
+	if surface == nil || request == nil {
+		return nil
+	}
+	if requestPromptBackend(request) != agentproto.BackendClaude {
+		return nil
+	}
+	if requestPromptSemanticKind(request) != control.RequestSemanticPlanConfirmation {
+		return nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "decision")), "accept") {
+		return nil
+	}
+	clearSurfacePlanModeOverride(surface)
 	return nil
 }
 

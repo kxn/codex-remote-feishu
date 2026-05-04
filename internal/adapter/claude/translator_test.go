@@ -564,8 +564,8 @@ func TestClaudeTranslatorInitRefreshesPendingTurnToResumedSession(t *testing.T) 
 		"model":          "mimo-v2.5-pro",
 		"permissionMode": "default",
 	})
-	if len(started.Events) != 0 {
-		t.Fatalf("expected init refresh to stay silent, got %#v", started.Events)
+	if len(started.Events) != 1 || started.Events[0].Kind != agentproto.EventConfigObserved {
+		t.Fatalf("expected init refresh to emit only config.observed, got %#v", started.Events)
 	}
 
 	started = observeClaude(t, tr, map[string]any{
