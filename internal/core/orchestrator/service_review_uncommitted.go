@@ -62,6 +62,10 @@ func reviewStartFromEntry(entry reviewEntryContext, target agentproto.ReviewTarg
 }
 
 func (s *Service) CanOfferUncommittedReviewForFinalBlock(surfaceID string, block render.Block) bool {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if !s.reviewCommandAllowedForSurface(surface, block.InstanceID) {
+		return false
+	}
 	return s.resolveUncommittedReviewStartForBlock(surfaceID, block).Ready
 }
 

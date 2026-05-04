@@ -364,6 +364,43 @@ func TestDeliverUIEventAddsCommitReviewButtonWhenFinalBodyMentionsRecentCommit(t
 	}
 }
 
+func TestDeliverUIEventDoesNotAddReviewButtonsInClaudeMode(t *testing.T) {
+	app, gateway, repoRoot := newReviewModeAppForTest(t)
+	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
+	writeReviewModeRepoFile(t, repoRoot, "docs/pending.md", "pending review change\n")
+	app.service.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	app.service.Instance("inst-1").Backend = agentproto.BackendClaude
+
+	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
+		Kind:             eventcontract.KindBlockCommitted,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "msg-1",
+		Block: &render.Block{
+			Kind:       render.BlockAssistantMarkdown,
+			InstanceID: "inst-1",
+			ThreadID:   "thread-main",
+			TurnID:     "turn-main-1",
+			ItemID:     "item-main-1",
+			Text:       "这轮已经生成 commit `" + shortSHA + "`，并且还有未提交修改。",
+			Final:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("deliver final block in claude mode: %v", err)
+	}
+
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 {
+		t.Fatalf("expected one final card, got %#v", ops)
+	}
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
+		t.Fatalf("did not expect uncommitted review button in claude mode, got %#v", ops[0].CardElements)
+	}
+	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewCommand)) {
+		t.Fatalf("did not expect commit review button in claude mode, got %#v", ops[0].CardElements)
+	}
+}
+
 func TestHandleGatewayActionStartsDetachedReviewFromFinalCard(t *testing.T) {
 	app, gateway, repoRoot := newReviewModeAppForTest(t)
 	writeReviewModeRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")

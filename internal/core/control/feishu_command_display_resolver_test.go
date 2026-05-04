@@ -201,6 +201,9 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesClaudeVisibleProfile(t 
 	if profile.IncludesFamily(FeishuCommandModel) {
 		t.Fatalf("expected claude visible profile to hide model, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSendSettings))
 	}
+	if profile.IncludesFamily(FeishuCommandReview) {
+		t.Fatalf("expected claude visible profile to hide review, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools))
+	}
 }
 
 func TestBuildFeishuCommandMenuHomePageUsesProfileAwareRootEntry(t *testing.T) {

@@ -294,6 +294,10 @@ func (s *Service) ResolveFinalBlockCommitReviewTargets(surfaceID string, block r
 	if rawBody == "" {
 		return nil
 	}
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if !s.reviewCommandAllowedForSurface(surface, block.InstanceID) {
+		return nil
+	}
 	entry := s.resolveReviewEntryForBlock(surfaceID, block)
 	if !entry.Ready {
 		return nil

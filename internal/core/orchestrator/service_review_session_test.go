@@ -522,6 +522,41 @@ func TestStartReviewFromFinalCardBuildsDetachedReviewCommand(t *testing.T) {
 	}
 }
 
+func TestStartReviewFromFinalCardRejectedInClaudeMode(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
+	svc.MaterializeSurfaceResume(surface.SurfaceSessionID, surface.GatewayID, surface.ChatID, surface.ActorUserID, state.ProductModeNormal, agentproto.BackendClaude, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.root.Instances["inst-1"].Backend = agentproto.BackendClaude
+
+	finalBlock := render.Block{
+		Kind:       render.BlockAssistantMarkdown,
+		InstanceID: "inst-1",
+		ThreadID:   "thread-main",
+		TurnID:     "turn-main-1",
+		ItemID:     "item-main-1",
+		Text:       "已经处理完成。",
+		Final:      true,
+	}
+	svc.RecordFinalCardMessage(surface.SurfaceSessionID, finalBlock, "msg-user-1", "om-final-1", "life-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewStart,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-final-1",
+		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+	})
+
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected single rejection notice, got %#v", events)
+	}
+	if events[0].Notice.Code != "command_rejected" || !strings.Contains(events[0].Notice.Text, "/review") {
+		t.Fatalf("unexpected rejection notice: %#v", events[0].Notice)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("did not expect review session to start in claude mode, got %#v", surface.ReviewSession)
+	}
+}
+
 func TestStartReviewCommandBuildsDetachedReviewCommandFromCurrentThread(t *testing.T) {
 	svc, surface, repoRoot := newReviewSessionService(t)
 	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
