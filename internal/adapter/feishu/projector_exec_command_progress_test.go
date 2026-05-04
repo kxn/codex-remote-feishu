@@ -279,24 +279,6 @@ func TestProjectExecCommandProgressDoesNotRetractEmptyTransientCard(t *testing.T
 	}
 }
 
-func TestProjectExecCommandProgressDeletesEmptyPlaceholderCardWhenRequested(t *testing.T) {
-	projector := NewProjector()
-	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
-		Kind:             eventcontract.KindExecCommandProgress,
-		SurfaceSessionID: "surface-1",
-		SourceMessageID:  "om-source-1",
-		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
-			ThreadID:      "thread-1",
-			TurnID:        "turn-1",
-			ItemID:        "reasoning-1",
-			DeleteIfEmpty: true,
-		}, "om-progress-1", 1),
-	})
-	if len(ops) != 1 || ops[0].Kind != OperationDeleteMessage || ops[0].MessageID != "om-progress-1" {
-		t.Fatalf("expected explicit empty-placeholder update to delete the old card, got %#v", ops)
-	}
-}
-
 func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

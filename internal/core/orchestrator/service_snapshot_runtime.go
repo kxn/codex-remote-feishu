@@ -370,7 +370,7 @@ func (s *Service) restorePendingSteer(key string, notice *control.Notice) []even
 	}
 	events = append(events, s.dispatchNext(surface)...)
 	events = append(events, s.finishSurfaceAfterWork(surface)...)
-	return events
+	return s.insertExecCommandProgressBoundary(binding.InstanceID, binding.ThreadID, binding.TurnID, events)
 }
 
 func (s *Service) restorePendingSteersForInstance(instanceID string) []eventcontract.Event {

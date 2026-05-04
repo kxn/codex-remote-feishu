@@ -14,32 +14,10 @@ import (
 func (p *Projector) projectExecCommandProgress(chatID string, event eventcontract.Event, progress control.ExecCommandProgress) []Operation {
 	renderedLines := execCommandProgressRenderedLines(progress)
 	if len(renderedLines) == 0 {
-		if progress.DeleteIfEmpty {
-			if messageID := strings.TrimSpace(activeExecCommandProgressSegmentMessageID(progress)); messageID != "" {
-				return []Operation{{
-					Kind:             OperationDeleteMessage,
-					GatewayID:        event.GatewayID,
-					SurfaceSessionID: event.SurfaceSessionID,
-					ChatID:           chatID,
-					MessageID:        messageID,
-				}}
-			}
-		}
 		return nil
 	}
 	window := execProgressCardWindow(progress, renderedLines)
 	if len(window.Lines) == 0 {
-		if progress.DeleteIfEmpty {
-			if messageID := strings.TrimSpace(activeExecCommandProgressSegmentMessageID(progress)); messageID != "" {
-				return []Operation{{
-					Kind:             OperationDeleteMessage,
-					GatewayID:        event.GatewayID,
-					SurfaceSessionID: event.SurfaceSessionID,
-					ChatID:           chatID,
-					MessageID:        messageID,
-				}}
-			}
-		}
 		return nil
 	}
 	lines := execProgressRenderedContent(window.Lines)

@@ -1936,7 +1936,7 @@ func TestReasoningSummaryProgressVerbosePlaceholderCompletionDoesNotRequestCardD
 		t.Fatalf("expected reasoning completion to emit one progress update, got %#v", completed)
 	}
 	progress := completed[0].ExecCommandProgress
-	if len(progress.Timeline) != 0 || progress.DeleteIfEmpty {
+	if len(progress.Timeline) != 0 {
 		t.Fatalf("expected verbose placeholder completion to leave the old card in place, got %#v", progress)
 	}
 	if svc.root.Surfaces["surface-1"].ActiveReasoning != nil {

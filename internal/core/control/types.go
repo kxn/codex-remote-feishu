@@ -597,7 +597,6 @@ type ExecCommandProgress struct {
 	ActiveSegmentID string
 	Segments        []ExecCommandProgressSegment
 	Verbosity       string
-	DeleteIfEmpty   bool
 	Blocks          []ExecCommandProgressBlock
 	Entries         []ExecCommandProgressEntry
 	Timeline        []ExecCommandProgressTimelineItem

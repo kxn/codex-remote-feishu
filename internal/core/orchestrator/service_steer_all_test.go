@@ -282,6 +282,71 @@ func TestSteerAllCommandRejectedRestoresOriginalQueueOrder(t *testing.T) {
 	}
 }
 
+func TestSteerAllCommandRejectedSealsCurrentSharedProgressSegment(t *testing.T) {
+	now := time.Date(2026, 4, 14, 10, 16, 0, 0, time.UTC)
+	svc := newSteerAllServiceFixture(&now)
+	surface := svc.root.Surfaces["surface-1"]
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{
+			"command": "go test ./...",
+		},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial shared progress event, got %#v", started)
+	}
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+	if active := svc.root.Surfaces["surface-1"].ActiveExecProgress; active == nil || activeExecCommandProgressSegmentMessageID(active) != "om-progress-1" {
+		t.Fatalf("expected active shared progress segment to bind the current card, got %#v", active)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionSteerAll,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	if len(events) != 2 || events[1].Command == nil {
+		t.Fatalf("expected steer command, got %#v", events)
+	}
+
+	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-all-progress-1")
+	rejected := svc.HandleCommandRejected("inst-1", agentproto.CommandAck{
+		CommandID: "cmd-steer-all-progress-1",
+		Accepted:  false,
+		Error:     "steer rejected",
+	})
+	if len(rejected) == 0 || rejected[0].Notice == nil || rejected[0].Notice.Code != "steer_failed" {
+		t.Fatalf("expected steer_failed notice, got %#v", rejected)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected steer failure to seal the current shared progress card, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+
+	next := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{
+			"command": "git status --short",
+		},
+	})
+	if len(next) != 1 || next[0].ExecCommandProgress == nil {
+		t.Fatalf("expected subsequent progress to reopen on a fresh card, got %#v", next)
+	}
+	if active := svc.root.Surfaces["surface-1"].ActiveExecProgress; active == nil || activeExecCommandProgressSegmentMessageID(active) != "" {
+		t.Fatalf("expected reopened shared progress segment to start without the sealed card binding, got %#v", active)
+	}
+}
+
 func TestSteerAllMenuActionRejectedPatchesSameCard(t *testing.T) {
 	now := time.Date(2026, 4, 19, 8, 20, 0, 0, time.UTC)
 	svc := newSteerAllServiceFixture(&now)
