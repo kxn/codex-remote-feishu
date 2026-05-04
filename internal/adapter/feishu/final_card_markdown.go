@@ -2,6 +2,8 @@ package feishu
 
 import "strings"
 
+const finalCardMarkdownTableLimit = 5
+
 func finalReplyCardDocument(title, subtitle, body, themeKey string, extraElements []map[string]any) *cardDocument {
 	components := make([]cardComponent, 0, len(extraElements)+1)
 	if strings.TrimSpace(body) != "" {
@@ -25,6 +27,23 @@ func renderFinalCardMarkdown(text string) string {
 			continue
 		}
 		out.WriteString(renderFinalCardMarkdownInline(segment.text))
+	}
+	return out.String()
+}
+
+func normalizeFinalCardSource(text string) string {
+	segments := splitFinalCardFenceSegments(text)
+	if len(segments) == 0 {
+		return ""
+	}
+	var out strings.Builder
+	tableCount := 0
+	for _, segment := range segments {
+		if segment.fenced {
+			out.WriteString(segment.text)
+			continue
+		}
+		out.WriteString(normalizeFinalCardMarkdownTables(segment.text, &tableCount))
 	}
 	return out.String()
 }
@@ -99,6 +118,108 @@ func finalCardFenceMarker(line string) (byte, int, bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+func normalizeFinalCardMarkdownTables(text string, tableCount *int) string {
+	if text == "" {
+		return ""
+	}
+	lines := strings.SplitAfter(text, "\n")
+	if len(lines) == 0 {
+		return text
+	}
+	var out strings.Builder
+	for i := 0; i < len(lines); {
+		if !startsFinalCardMarkdownTable(lines, i) {
+			out.WriteString(lines[i])
+			i++
+			continue
+		}
+		end := endFinalCardMarkdownTable(lines, i)
+		block := strings.Join(lines[i:end], "")
+		*tableCount = *tableCount + 1
+		if *tableCount <= finalCardMarkdownTableLimit {
+			out.WriteString(block)
+		} else {
+			out.WriteString(renderOverflowFinalCardTable(block))
+		}
+		i = end
+	}
+	return out.String()
+}
+
+func startsFinalCardMarkdownTable(lines []string, index int) bool {
+	if index < 0 || index+1 >= len(lines) {
+		return false
+	}
+	return isFinalCardMarkdownTableHeaderLine(lines[index]) && isFinalCardMarkdownTableSeparatorLine(lines[index+1])
+}
+
+func endFinalCardMarkdownTable(lines []string, start int) int {
+	end := start + 2
+	for end < len(lines) && isFinalCardMarkdownTableRowLine(lines[end]) {
+		end++
+	}
+	return end
+}
+
+func isFinalCardMarkdownTableHeaderLine(line string) bool {
+	line = strings.TrimSpace(strings.TrimRight(line, "\n"))
+	if line == "" || strings.Contains(line, "```") || strings.Contains(line, "~~~") {
+		return false
+	}
+	return strings.Count(line, "|") >= 1
+}
+
+func isFinalCardMarkdownTableSeparatorLine(line string) bool {
+	line = strings.TrimSpace(strings.TrimRight(line, "\n"))
+	if line == "" || !strings.Contains(line, "|") || !strings.Contains(line, "-") {
+		return false
+	}
+	if strings.HasPrefix(line, "|") {
+		line = strings.TrimPrefix(line, "|")
+	}
+	if strings.HasSuffix(line, "|") {
+		line = strings.TrimSuffix(line, "|")
+	}
+	parts := strings.Split(line, "|")
+	if len(parts) < 2 {
+		return false
+	}
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return false
+		}
+		part = strings.Trim(part, ":")
+		if len(part) < 3 {
+			return false
+		}
+		for _, ch := range part {
+			if ch != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isFinalCardMarkdownTableRowLine(line string) bool {
+	line = strings.TrimSpace(strings.TrimRight(line, "\n"))
+	return line != "" && strings.Contains(line, "|")
+}
+
+func renderOverflowFinalCardTable(block string) string {
+	hasTrailingNewline := strings.HasSuffix(block, "\n")
+	block = strings.TrimRight(block, "\n")
+	if block == "" {
+		return ""
+	}
+	rendered := markdownFencedCodeBlock("text", block)
+	if hasTrailingNewline {
+		return rendered + "\n"
+	}
+	return rendered
 }
 
 func renderFinalCardMarkdownInline(text string) string {

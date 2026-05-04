@@ -1,7 +1,7 @@
 # Feishu Card API Constraints
 
 > Type: `general`
-> Updated: `2026-04-25`
+> Updated: `2026-05-04`
 > Summary: 固化当前仓库进行飞书卡片、消息卡片 patch、CardKit 流式更新设计时必须先考虑的平台硬约束、频控和降级基线。
 
 ## 1. 文档定位
@@ -68,7 +68,34 @@
 
 - `https://open.feishu.cn/document/server-docs/im-v1/message-card/patch`
 
-### 3.3 Card JSON 2.0 的结构限制
+### 3.3 Table 数量限制
+
+除了 transport bytes 与组件数，飞书对单卡中的 table 数量也存在单独上限。
+
+当前仓库把这条约束视为必须单独预算的一维，而不是默认把它并入“30 KB / 200 elements”里一起猜。
+
+当前已确认的证据有两类：
+
+- 运行态已观察到真实失败：`ErrCode: 11310; ErrMsg: card table number over limit; ErrorValue: table`
+- 飞书公开内容文档中也明确写到：一张卡片最多 `5` 个 Table，超出的表格以文本方式展示
+
+这里需要特别说明：
+
+1. 上述 `5 个 Table` 来自飞书公开内容产品文档，不是当前 message create OpenAPI 文档里的正式字段契约。
+2. 但它与当前仓库在运行时遇到的 `table number over limit` 现象一致，足以作为当前实现的保守预算基线。
+3. 因此当前仓库的实现纪律是：**不要把 table 数量预算寄托给 transport-size split**。
+
+当前仓库基线：
+
+1. final assistant markdown 默认按 **单卡最多 5 个 table** 做保守预算。
+2. 超额 table 应在 projector / adapter 层先改写成非 table 形态，例如 fenced text block。
+3. 只有完成这一步后，才继续进入 transport-size split / trim 判断。
+
+来源：
+
+- `https://www.feishu.cn/content/7gprunv5`
+
+### 3.4 Card JSON 2.0 的结构限制
 
 飞书新版卡片 JSON 2.0 当前有几个重要结构边界：
 
@@ -91,7 +118,7 @@
 - `https://open.feishu.cn/document/feishu-cards/card-json-v2-components/containers/form-container`
 - `https://open.feishu.cn/document/feishu-cards/card-json-v2-components/containers/column-set`
 
-### 3.4 CardKit 卡片实体的有效期与发送约束
+### 3.5 CardKit 卡片实体的有效期与发送约束
 
 CardKit 卡片实体本身也有生命周期限制：
 
@@ -104,7 +131,7 @@ CardKit 卡片实体本身也有生命周期限制：
 
 - `https://open.feishu.cn/document/cardkit-v1/card/create`
 
-### 3.5 CardKit 流式更新的频率限制
+### 3.6 CardKit 流式更新的频率限制
 
 流式更新卡片文档明确写到：
 
@@ -121,7 +148,7 @@ CardKit 卡片实体本身也有生命周期限制：
 
 - `https://open.feishu.cn/document/cardkit-v1/streaming-updates-openapi-overview`
 
-### 3.6 OpenAPI 频控基线
+### 3.7 OpenAPI 频控基线
 
 相关接口常见的 OpenAPI 频控等级包括：
 
@@ -142,7 +169,7 @@ CardKit 卡片实体本身也有生命周期限制：
 - `https://open.feishu.cn/document/server-docs/api-call-guide/frequency-control`
 - `https://open.feishu.cn/document/server-docs/im-v1/message/create`
 
-### 3.7 交互回调时限与延时更新 token 约束
+### 3.8 交互回调时限与延时更新 token 约束
 
 卡片交互回调当前至少有两条必须硬记的限制：
 
@@ -158,7 +185,7 @@ CardKit 卡片实体本身也有生命周期限制：
 
 - `https://open.feishu.cn/document/uAjLw4CM/ukzMukzMukzM/feishu-cards/handle-card-callbacks`
 
-### 3.8 流式更新与交互之间的时序限制
+### 3.9 流式更新与交互之间的时序限制
 
 飞书的流式更新文档还给出了一个非常关键的行为限制：
 
@@ -259,15 +286,16 @@ CardKit 卡片实体本身也有生命周期限制：
 
 ## 6. 当前仓库的默认设计检查清单
 
-以后只要出现飞书卡片相关方案，至少先回答下面 5 个问题：
+以后只要出现飞书卡片相关方案，至少先回答下面 6 个问题：
 
 1. **体积预算**：最坏情况下这张卡大约多大，是否接近 `30 KB`
 2. **组件预算**：最坏情况下元素/组件数量是否可能接近 `200`
-3. **更新预算**：同一消息或同一卡片每秒最多会更新多少次
-4. **交互预算**：是否依赖 3 秒回调、30 分钟 token、最多 2 次延时更新这类约束
-5. **降级路径**：超限后是截断、摘要、分页、分卡，还是改走文本 / 文件 / 链接
+3. **table 预算**：单卡里是否可能出现过多 table，是否需要先把超额 table 改写成非 table 形态
+4. **更新预算**：同一消息或同一卡片每秒最多会更新多少次
+5. **交互预算**：是否依赖 3 秒回调、30 分钟 token、最多 2 次延时更新这类约束
+6. **降级路径**：超限后是截断、摘要、分页、分卡，还是改走文本 / 文件 / 链接
 
-如果这 5 个问题里有任何一个答不出来，就说明方案还没有达到可开工标准。
+如果这 6 个问题里有任何一个答不出来，就说明方案还没有达到可开工标准。
 
 ## 7. 当前仓库的实现纪律
 

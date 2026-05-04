@@ -14,6 +14,7 @@ type finalReplyChunk struct {
 }
 
 func splitFinalReplyBodies(rawBody, primaryTitle, primarySubtitle string, primaryElements []map[string]any) []finalReplyChunk {
+	rawBody = normalizeFinalCardSource(rawBody)
 	primary := newFinalReplyChunk(primaryTitle, primarySubtitle, rawBody, primaryElements)
 	if finalReplyChunkFits(primary) {
 		return []finalReplyChunk{primary}
