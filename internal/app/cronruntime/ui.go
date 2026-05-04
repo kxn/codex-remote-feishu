@@ -165,11 +165,7 @@ func parseCronClockText(value string) (int, int, bool) {
 }
 
 func UsageEvents(surfaceID, formDefault, message string) []eventcontract.Event {
-	page := control.FeishuPageViewFromCommandPageView(
-		control.NormalizeFeishuPageView(
-			BuildRootPageView(nil, OwnerView{}, "", false, formDefault, "error", message),
-		),
-	)
+	page := control.NormalizeFeishuPageView(BuildRootPageView(nil, OwnerView{}, "", false, formDefault, "error", message))
 	return []eventcontract.Event{
 		eventcontract.NewEventFromPayload(
 			eventcontract.PagePayload{View: page},

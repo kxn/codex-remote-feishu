@@ -31,7 +31,7 @@ func (s *Service) pageEvent(surface *state.SurfaceConsoleRecord, view control.Fe
 
 func (s *Service) pageEventFromCatalogView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) eventcontract.Event {
 	page := s.commandPageFromView(surface, view)
-	return s.pageEvent(surface, control.FeishuPageViewFromCommandPageView(page))
+	return s.pageEvent(surface, control.NormalizeFeishuPageView(page))
 }
 
 func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, sourceMessageID string) eventcontract.Event {
@@ -45,7 +45,7 @@ func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, source
 		}
 	}
 	view := s.buildCommandMenuView(surface, raw)
-	page := control.FeishuPageViewFromCommandPageView(s.commandPageFromView(surface, view))
+	page := control.NormalizeFeishuPageView(s.commandPageFromView(surface, view))
 	phase := commandLauncherPhaseHome
 	if strings.TrimSpace(groupID) != "" {
 		phase = commandLauncherPhaseGroup
@@ -60,7 +60,7 @@ func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, source
 }
 
 func (s *Service) configPageEventFromCatalogView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) eventcontract.Event {
-	page := control.FeishuPageViewFromCommandPageView(s.commandPageFromView(surface, view))
+	page := control.NormalizeFeishuPageView(s.commandPageFromView(surface, view))
 	flow := s.activeCommandLauncherFlow(surface)
 	if flow != nil && flow.Role == frontstageFlowRoleLauncher {
 		s.markCommandLauncherConfigPhase(surface)
@@ -78,7 +78,7 @@ func (s *Service) configPageEventFromCatalogView(surface *state.SurfaceConsoleRe
 
 func (s *Service) helpTerminalPageEvent(surface *state.SurfaceConsoleRecord) eventcontract.Event {
 	view := s.buildCommandHelpView(surface)
-	page := control.FeishuPageViewFromCommandPageView(s.commandPageFromView(surface, view))
+	page := control.NormalizeFeishuPageView(s.commandPageFromView(surface, view))
 	page.Sealed = true
 	page.Interactive = false
 	page.RelatedButtons = nil

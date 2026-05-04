@@ -496,7 +496,7 @@ func (a *App) handleFeishuAppRetryApply(w http.ResponseWriter, r *http.Request) 
 	if err := a.applyRuntimeFeishuConfig(loaded.Config, gatewayID); err != nil {
 		summary, ok, summaryErr := a.adminFeishuAppSummary(loaded, gatewayID)
 		if summaryErr != nil || !ok {
-			summary = pending.Summary
+			summary = pendingFeishuAppSummary(gatewayID, pending)
 		}
 		a.writeFeishuRuntimeApplyError(w, gatewayID, summary, pending.Action, "failed to retry feishu runtime apply", err)
 		return

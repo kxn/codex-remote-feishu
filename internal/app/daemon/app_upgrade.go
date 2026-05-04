@@ -423,7 +423,7 @@ func (a *App) promptPendingUpgradeOnSurfaceLocked(surfaceID string, stateValue i
 		return []eventcontract.Event{upgradeOwnerConfirmEvent(surface.SurfaceSessionID, flow, stateValue)}
 	}
 	page := buildUpgradePromptPageView(stateValue)
-	pageView := control.FeishuPageViewFromCommandPageView(page)
+	pageView := control.NormalizeFeishuPageView(page)
 	return []eventcontract.Event{
 		eventcontract.NewEventFromPayload(
 			eventcontract.PagePayload{View: pageView},

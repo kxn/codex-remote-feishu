@@ -121,7 +121,7 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 			}},
 		}}
 	}
-	return control.FeishuPageViewFromCommandPageView(view)
+	return control.NormalizeFeishuPageView(view)
 }
 
 func proposalDetourLabel(proposal *activePlanProposalRecord) string {

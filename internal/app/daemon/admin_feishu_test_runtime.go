@@ -137,38 +137,15 @@ func (a *App) startFeishuAppTest(ctx context.Context, gatewayID string, kind fei
 
 func feishuAppEventSubscriptionTestOperation(app adminFeishuAppSummary, test feishuAppTestContext) feishu.Operation {
 	events := feishuEventRequirementLines(feishuapp.DefaultManifest().Events)
-	return feishu.Operation{
-		Kind:            feishu.OperationSendCard,
+	return feishu.EventSubscriptionTestCardOperation(feishu.EventSubscriptionTestCardRequest{
 		GatewayID:       app.ID,
 		ReceiveID:       test.Recipient.ReceiveID,
 		ReceiveIDType:   test.Recipient.ReceiveIDType,
 		AttentionUserID: feishuAppTestAttentionUserID(test.Recipient),
-		CardTitle:       "事件订阅测试",
-		CardThemeKey:    "info",
-		CardElements: []map[string]any{
-			{
-				"tag":     "markdown",
-				"content": fmt.Sprintf("我们开始测试飞书事件订阅，请确保机器人在 [飞书后台](%s) 配置订阅方式为长连接，并添加以下事件：", strings.TrimSpace(app.ConsoleLinks.Events)),
-			},
-			{
-				"tag": "div",
-				"text": map[string]any{
-					"tag":     "plain_text",
-					"content": strings.Join(events, "\n"),
-				},
-			},
-			{
-				"tag": "div",
-				"text": map[string]any{
-					"tag": "plain_text",
-					"content": fmt.Sprintf(
-						"请在这里回复“%s”，保证我能收到消息。\n如果我没有回应，请去飞书后台确认增加事件配置以后是否发布了新版本。需要发布以后才会生效。",
-						strings.TrimSpace(test.Phrase),
-					),
-				},
-			},
-		},
-	}
+		EventConsoleURL: app.ConsoleLinks.Events,
+		Events:          events,
+		Phrase:          test.Phrase,
+	})
 }
 
 func feishuAppCallbackTestOperation(app adminFeishuAppSummary, recipient feishuAppWebTestRecipient, daemonLifecycleID string) feishu.Operation {
@@ -177,47 +154,15 @@ func feishuAppCallbackTestOperation(app adminFeishuAppSummary, recipient feishuA
 		frontstagecontract.ActionPayloadPageAction(string(control.ActionFeishuAppTestCallback), ""),
 		daemonLifecycleID,
 	)
-	return feishu.Operation{
-		Kind:            feishu.OperationSendCard,
+	return feishu.CallbackTestCardOperation(feishu.CallbackTestCardRequest{
 		GatewayID:       app.ID,
 		ReceiveID:       recipient.ReceiveID,
 		ReceiveIDType:   recipient.ReceiveIDType,
 		AttentionUserID: feishuAppTestAttentionUserID(recipient),
-		CardTitle:       "回调测试",
-		CardThemeKey:    "info",
-		CardElements: []map[string]any{
-			{
-				"tag":     "markdown",
-				"content": fmt.Sprintf("我们开始测试飞书回调配置，请确保机器人在 [飞书后台](%s) 配置回调订阅方式为长连接，并添加以下回调：", strings.TrimSpace(app.ConsoleLinks.Callback)),
-			},
-			{
-				"tag": "div",
-				"text": map[string]any{
-					"tag":     "plain_text",
-					"content": strings.Join(callbacks, "\n"),
-				},
-			},
-			{
-				"tag": "div",
-				"text": map[string]any{
-					"tag":     "plain_text",
-					"content": "请点击下方按钮完成验证。\n如果没有响应，请去飞书后台确认增加回调配置以后是否发布了新版本。需要发布以后才会生效。",
-				},
-			},
-			{
-				"tag":  "button",
-				"type": "primary",
-				"text": map[string]any{
-					"tag":     "plain_text",
-					"content": "点此测试回调",
-				},
-				"behaviors": []map[string]any{{
-					"type":  "callback",
-					"value": value,
-				}},
-			},
-		},
-	}
+		CallbackURL:     app.ConsoleLinks.Callback,
+		Callbacks:       callbacks,
+		CallbackValue:   value,
+	})
 }
 
 func feishuAppTestAttentionUserID(recipient feishuAppWebTestRecipient) string {

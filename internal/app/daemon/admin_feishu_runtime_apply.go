@@ -12,7 +12,7 @@ const (
 )
 
 type feishuRuntimeApplyPendingState struct {
-	Summary   adminFeishuAppSummary
+	GatewayID string
 	Action    string
 	Error     string
 	UpdatedAt time.Time
@@ -40,15 +40,15 @@ func (a *App) feishuRuntimeApplyPendingState(gatewayID string) (feishuRuntimeApp
 
 func (a *App) markFeishuRuntimeApplyPending(summary adminFeishuAppSummary, action string, err error) feishuRuntimeApplyPendingState {
 	now := time.Now().UTC()
-	summary.RuntimeApply = nil
+	gatewayID := canonicalGatewayID(summary.ID)
 	pending := feishuRuntimeApplyPendingState{
-		Summary:   summary,
+		GatewayID: gatewayID,
 		Action:    strings.TrimSpace(action),
 		Error:     strings.TrimSpace(err.Error()),
 		UpdatedAt: now,
 	}
 	a.feishuRuntime.mu.Lock()
-	a.feishuRuntime.runtimeApply[canonicalGatewayID(summary.ID)] = pending
+	a.feishuRuntime.runtimeApply[gatewayID] = pending
 	a.feishuRuntime.mu.Unlock()
 	return pending
 }
@@ -70,6 +70,15 @@ func applyFeishuRuntimePending(summary adminFeishuAppSummary, pending feishuRunt
 		RetryAvailable: true,
 	}
 	return summary
+}
+
+func pendingFeishuAppSummary(gatewayID string, pending feishuRuntimeApplyPendingState) adminFeishuAppSummary {
+	gatewayID = canonicalGatewayID(firstNonEmpty(gatewayID, pending.GatewayID))
+	return adminFeishuAppSummary{
+		ID:      gatewayID,
+		Name:    gatewayID,
+		Enabled: true,
+	}
 }
 
 func (a *App) writeFeishuRuntimeApplyError(w http.ResponseWriter, gatewayID string, summary adminFeishuAppSummary, action string, message string, err error) {

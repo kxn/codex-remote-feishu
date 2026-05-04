@@ -37,6 +37,10 @@ type FeishuPageView struct {
 
 func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 	commandID := strings.TrimSpace(view.CommandID)
+	pageID := strings.TrimSpace(view.PageID)
+	if pageID == "" {
+		pageID = commandID
+	}
 	def, _ := FeishuCommandDefinitionByID(commandID)
 	allowCommandGroupFallback := commandID != FeishuCommandMenu
 	title := strings.TrimSpace(view.Title)
@@ -72,7 +76,7 @@ func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 		relatedButtons = FeishuCommandBackButtons(def.GroupID)
 	}
 	return FeishuPageView{
-		PageID:                        strings.TrimSpace(view.PageID),
+		PageID:                        pageID,
 		CommandID:                     commandID,
 		CatalogBackend:                agentproto.NormalizeBackend(view.CatalogBackend),
 		Title:                         title,
@@ -143,32 +147,4 @@ func pageFeedbackSection(statusKind, statusText string) (FeishuCardTextSection, 
 		Label: label,
 		Lines: []string{text},
 	}, true
-}
-
-func FeishuPageViewFromCommandPageView(view FeishuPageView) FeishuPageView {
-	return NormalizeFeishuPageView(FeishuPageView{
-		PageID:                        strings.TrimSpace(view.CommandID),
-		CommandID:                     strings.TrimSpace(view.CommandID),
-		CatalogBackend:                agentproto.NormalizeBackend(view.CatalogBackend),
-		Title:                         strings.TrimSpace(view.Title),
-		DetourLabel:                   strings.TrimSpace(view.DetourLabel),
-		MessageID:                     strings.TrimSpace(view.MessageID),
-		TrackingKey:                   strings.TrimSpace(view.TrackingKey),
-		ThemeKey:                      strings.TrimSpace(view.ThemeKey),
-		Patchable:                     view.Patchable,
-		Breadcrumbs:                   cloneCommandBreadcrumbs(view.Breadcrumbs),
-		SummarySections:               cloneNormalizedFeishuCardSections(view.SummarySections),
-		BodySections:                  cloneNormalizedFeishuCardSections(view.BodySections),
-		NoticeSections:                cloneNormalizedFeishuCardSections(view.NoticeSections),
-		StatusKind:                    strings.TrimSpace(view.StatusKind),
-		StatusText:                    strings.TrimSpace(view.StatusText),
-		Phase:                         view.Phase,
-		ActionPolicy:                  view.ActionPolicy,
-		Interactive:                   view.Interactive,
-		Sealed:                        view.Sealed,
-		DisplayStyle:                  view.DisplayStyle,
-		Sections:                      cloneCommandCatalogSections(view.Sections),
-		RelatedButtons:                cloneCommandCatalogButtons(view.RelatedButtons),
-		SuppressDefaultRelatedButtons: view.SuppressDefaultRelatedButtons,
-	})
 }

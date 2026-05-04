@@ -61,9 +61,11 @@ func (a *App) adminFeishuApps(loaded config.LoadedAppConfig) ([]adminFeishuAppSu
 		if seen[gatewayID] {
 			continue
 		}
-		summary := pending.Summary
+		summary := pendingFeishuAppSummary(gatewayID, pending)
 		if status, ok := statuses[gatewayID]; ok && status.GatewayID != "" {
 			statusCopy := status
+			summary.Name = firstNonEmpty(strings.TrimSpace(status.Name), summary.Name)
+			summary.Enabled = !status.Disabled
 			summary.Status = &statusCopy
 		}
 		summaries = append(summaries, applyFeishuRuntimePending(summary, pending))

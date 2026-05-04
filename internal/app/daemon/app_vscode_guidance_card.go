@@ -253,7 +253,7 @@ func statusKindFromThemeKey(theme string) string {
 
 func vscodeMigrationPageEvent(surfaceID string, flow *vscodeMigrationFlowRecord, inlineReplace bool, title string, summary []string, statusText, theme string, buttons []control.CommandCatalogButton) eventcontract.Event {
 	page := buildVSCodeMigrationPageView(flow, inlineReplace, title, summary, statusText, theme, buttons)
-	view := control.FeishuPageViewFromCommandPageView(page)
+	view := control.NormalizeFeishuPageView(page)
 	return surfacePagePayloadEvent(surfaceID, eventcontract.PagePayload{View: view}, false)
 }
 

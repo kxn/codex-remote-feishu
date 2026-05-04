@@ -8,7 +8,6 @@ import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 type FeishuUIDTOwner string
 
 const (
-	FeishuUIDTOwnerDirectDTO     FeishuUIDTOwner = "feishu_direct_dto"
 	FeishuUIDTOwnerSelection     FeishuUIDTOwner = "feishu_selection_view"
 	FeishuUIDTOwnerPage          FeishuUIDTOwner = "feishu_page_view"
 	FeishuUIDTOwnerRequest       FeishuUIDTOwner = "feishu_request_view"

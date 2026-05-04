@@ -8,7 +8,7 @@ import (
 )
 
 func commandPageEvent(surfaceID string, view control.FeishuPageView) eventcontract.Event {
-	page := control.FeishuPageViewFromCommandPageView(control.NormalizeFeishuPageView(view))
+	page := control.NormalizeFeishuPageView(view)
 	return surfacePagePayloadEvent(surfaceID, eventcontract.PagePayload{View: page}, false)
 }
 
