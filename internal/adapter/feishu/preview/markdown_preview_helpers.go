@@ -356,6 +356,9 @@ func previewLexicalAbsolutePath(target string) (string, bool) {
 	if len(target) >= 4 && isPreviewPathSeparator(target[0]) && isASCIILetter(target[1]) && target[2] == ':' && isPreviewPathSeparator(target[3]) {
 		return target[1:], true
 	}
+	if len(target) >= 2 && isPreviewPathSeparator(target[0]) && isPreviewPathSeparator(target[1]) {
+		return target, true
+	}
 	if filepath.IsAbs(target) {
 		return target, true
 	}

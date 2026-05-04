@@ -106,10 +106,22 @@ func parseMarkdownLinkAt(text string, start int) (end int, label, target string,
 	if labelEnd+1 >= len(text) || text[labelEnd+1] != '(' {
 		return 0, "", "", false
 	}
-	targetEnd := strings.IndexByte(text[labelEnd+2:], ')')
-	if targetEnd < 0 {
-		return 0, "", "", false
+	targetStart := labelEnd + 2
+	depth := 0
+	for i := targetStart; i < len(text); i++ {
+		switch text[i] {
+		case '\\':
+			if i+1 < len(text) {
+				i++
+			}
+		case '(':
+			depth++
+		case ')':
+			if depth == 0 {
+				return i + 1, text[start+1 : labelEnd], text[targetStart:i], true
+			}
+			depth--
+		}
 	}
-	targetEnd += labelEnd + 2
-	return targetEnd + 1, text[start+1 : labelEnd], text[labelEnd+2 : targetEnd], true
+	return 0, "", "", false
 }

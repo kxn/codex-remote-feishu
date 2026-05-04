@@ -421,7 +421,7 @@ func parseStandalonePreviewReferenceWhole(text string) (rawTarget, display strin
 	if text == "" {
 		return "", "", false
 	}
-	if !looksLikeStandalonePreviewTarget(text) {
+	if !looksLikeDelimitedPreviewTarget(text) {
 		return "", "", false
 	}
 	return normalizeStandalonePreviewDisplay(text), normalizeStandalonePreviewDisplay(text), true
@@ -441,7 +441,7 @@ func parseStandalonePreviewReferenceAt(text string, start int) (end int, rawTarg
 			return 0, "", "", false
 		}
 		candidate := text[start:candidateEnd]
-		if !looksLikeStandalonePreviewTarget(candidate) {
+		if !looksLikeDelimitedPreviewTarget(candidate) {
 			return 0, "", "", false
 		}
 		display = normalizeStandalonePreviewDisplay(candidate)
@@ -533,8 +533,22 @@ func normalizeStandalonePreviewDisplay(text string) string {
 }
 
 func looksLikeStandalonePreviewTarget(text string) bool {
+	return looksLikePreviewTarget(text, false)
+}
+
+func looksLikeDelimitedPreviewTarget(text string) bool {
+	return looksLikePreviewTarget(text, true)
+}
+
+func looksLikePreviewTarget(text string, allowSpaces bool) bool {
 	target := normalizeStandalonePreviewDisplay(text)
-	if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "#") || strings.ContainsAny(target, " \t\r\n") {
+	if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "#") || strings.ContainsAny(target, "\t\r\n") {
+		return false
+	}
+	if !allowSpaces && strings.Contains(target, " ") {
+		return false
+	}
+	if allowSpaces && strings.ContainsAny(target, "|<>") {
 		return false
 	}
 	if strings.ContainsAny(target, "[]`") {
@@ -558,6 +572,20 @@ func looksLikeStandalonePreviewTarget(text string) bool {
 		return true
 	}
 	return filepath.Ext(base) != ""
+}
+
+func normalizePreviewReferenceTarget(rawTarget string) (string, bool) {
+	target := strings.TrimSpace(rawTarget)
+	if target == "" {
+		return "", false
+	}
+	if strings.HasPrefix(target, "<") && strings.HasSuffix(target, ">") {
+		target = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(target, "<"), ">"))
+	}
+	if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "#") || strings.ContainsAny(target, "\t\r\n") {
+		return "", false
+	}
+	return target, true
 }
 
 func (p *DriveMarkdownPreviewer) materializePreviewTarget(ctx context.Context, ref PreviewReference, req FinalBlockPreviewRequest, scopeKey string, principals []previewPrincipal, runtime *previewRewriteRuntime) (*PreviewPublishResult, bool, error) {
@@ -627,21 +655,12 @@ type markdownFilePreviewHandler struct {
 func (h markdownFilePreviewHandler) ID() string { return "markdown_file" }
 
 func (h markdownFilePreviewHandler) Match(_ FinalBlockPreviewRequest, ref PreviewReference) bool {
-	target := strings.TrimSpace(ref.RawTarget)
-	if target == "" {
-		return false
-	}
-	if strings.HasPrefix(target, "<") && strings.HasSuffix(target, ">") {
-		target = strings.TrimPrefix(strings.TrimSuffix(target, ">"), "<")
-	}
-	if idx := strings.IndexAny(target, " \t\n"); idx >= 0 {
-		target = target[:idx]
-	}
-	if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "#") {
+	target, ok := normalizePreviewReferenceTarget(ref.RawTarget)
+	if !ok {
 		return false
 	}
 	cleanTarget, _, _ := splitPreviewLocationSuffix(target)
-	_, _, ok := previewArtifactMetadata(cleanTarget)
+	_, _, ok = previewArtifactMetadata(cleanTarget)
 	return ok
 }
 
@@ -922,17 +941,8 @@ func (p *DriveMarkdownPreviewer) ensureRootFolder(ctx context.Context, runtime *
 }
 
 func (p *DriveMarkdownPreviewer) resolvePreviewPath(rawTarget string, req MarkdownPreviewRequest) (string, bool, error) {
-	target := strings.TrimSpace(rawTarget)
-	if target == "" {
-		return "", false, nil
-	}
-	if strings.HasPrefix(target, "<") && strings.HasSuffix(target, ">") {
-		target = strings.TrimPrefix(strings.TrimSuffix(target, ">"), "<")
-	}
-	if idx := strings.IndexAny(target, " \t\n"); idx >= 0 {
-		target = target[:idx]
-	}
-	if target == "" || strings.Contains(target, "://") || strings.HasPrefix(target, "#") {
+	target, ok := normalizePreviewReferenceTarget(rawTarget)
+	if !ok {
 		return "", false, nil
 	}
 
