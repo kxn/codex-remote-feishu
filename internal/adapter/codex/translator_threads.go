@@ -259,6 +259,13 @@ func parseThreadHistoryItems(source any) []agentproto.ThreadHistoryItemRecord {
 					record.ExitCode = &value
 				}
 			}
+		} else if itemKind == "delegated_task" {
+			if metadata := extractItemMetadata(itemKind, itemMap); len(metadata) != 0 {
+				record.Metadata = metadata
+				if strings.TrimSpace(record.Text) == "" {
+					record.Text = buildDelegatedTaskText(metadata)
+				}
+			}
 		}
 		if record.ItemID == "" && record.Kind == "" && record.Text == "" && record.Command == "" {
 			continue

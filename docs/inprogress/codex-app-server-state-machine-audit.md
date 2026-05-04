@@ -300,7 +300,7 @@
 - `enteredReviewMode` / `exitedReviewMode`
   - 虽然 generic `item/started/completed` 能把它们作为原始 item type 吞进来，但没有专门语义，也没有产品化路径。
 - `collabToolCall`
-  - 官方文档里的名字是 `collabToolCall`；当前 normalizer 识别的是 `collabAgentToolCall` / `collab_agent_tool_call`，未见对官方命名的显式兼容。
+  - 现已兼容官方 `collabToolCall` 与遗留 `collabAgentToolCall` / `collab_agent_tool_call`，并统一收口为 canonical `delegated_task` 语义。
 - `imageView`
   - 官方文档列出了 `imageView` item，当前没有专门 normalizer/metadata 抽取。
 - `rawResponseItem/completed`
@@ -525,7 +525,7 @@
 | `turn/plan/updated` | 严格遵循 | 有结构化 plan snapshot |
 | `turn/diff/updated` | 严格遵循 | authoritative turn 聚合 diff 已进入 canonical event 并可进入 final summary |
 | `model/rerouted` | 遵循但有适配压缩 | 已保留 `fromModel` / `toModel` / `reason` 并更新 thread 当前有效模型，但尚未单独做用户提示 |
-| 通用 `item/started` / `item/completed` | 部分遵循 | 主流 item 已接；review/imageView/collab 命名仍有缺口 |
+| 通用 `item/started` / `item/completed` | 部分遵循 | 主流 item 已接；review/imageView 等剩余 item 仍有缺口，collab 已统一收口到 `delegated_task` |
 | `item/mcpToolCall/progress` | 遵循但有适配压缩 | translator 已标准化 typed progress event，但产品 UI 仍未深度表达 |
 | `item/reasoning/summaryPartAdded` | 未遵循/未实现 | 缺失 |
 | command/file approval 多步状态机 | 部分遵循 | relay/Feishu/headless 已承接 `item/commandExecution/requestApproval` 与 `item/fileChange/requestApproval`，并把 command/file/network approval 归一化成可渲染 request；更细的专用决策 UI 仍未补齐 |

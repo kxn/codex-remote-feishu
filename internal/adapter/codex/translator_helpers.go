@@ -179,8 +179,8 @@ func normalizeItemKind(raw string) string {
 		return "mcp_tool_call"
 	case "dynamicToolCall", "dynamic_tool_call":
 		return "dynamic_tool_call"
-	case "collabAgentToolCall", "collab_agent_tool_call":
-		return "collab_agent_tool_call"
+	case "collabToolCall", "collabAgentToolCall", "collab_agent_tool_call":
+		return "delegated_task"
 	default:
 		return raw
 	}
@@ -254,6 +254,46 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 		}
 		if text, ok := metadata["text"].(string); !ok || strings.TrimSpace(text) == "" {
 			if text := extractDynamicToolSummaryText(item); text != "" {
+				metadata["text"] = text
+			}
+		}
+	case "delegated_task":
+		if subagentType := firstNonEmptyString(
+			lookupStringFromAny(item["subagentType"]),
+			lookupStringFromAny(item["subagent_type"]),
+			lookupStringFromAny(item["agentType"]),
+			lookupStringFromAny(item["agent_type"]),
+			lookupString(item, "input", "subagentType"),
+			lookupString(item, "input", "subagent_type"),
+			lookupString(item, "input", "agentType"),
+			lookupString(item, "input", "agent_type"),
+			lookupString(item, "invocation", "subagentType"),
+			lookupString(item, "invocation", "subagent_type"),
+			lookupString(item, "invocation", "agentType"),
+			lookupString(item, "invocation", "agent_type"),
+			lookupString(item, "task", "subagentType"),
+			lookupString(item, "task", "subagent_type"),
+		); subagentType != "" {
+			metadata["subagentType"] = subagentType
+		}
+		if description := firstNonEmptyString(
+			lookupStringFromAny(item["description"]),
+			lookupString(item, "input", "description"),
+			lookupString(item, "invocation", "description"),
+			lookupString(item, "task", "description"),
+		); description != "" {
+			metadata["description"] = description
+		}
+		if prompt := firstNonEmptyString(
+			lookupStringFromAny(item["prompt"]),
+			lookupString(item, "input", "prompt"),
+			lookupString(item, "invocation", "prompt"),
+			lookupString(item, "task", "prompt"),
+		); prompt != "" {
+			metadata["prompt"] = prompt
+		}
+		if text, ok := metadata["text"].(string); !ok || strings.TrimSpace(text) == "" {
+			if text := buildDelegatedTaskText(metadata); text != "" {
 				metadata["text"] = text
 			}
 		}
@@ -587,6 +627,24 @@ func extractDynamicToolSummaryText(item map[string]any) string {
 		return rendered
 	}
 	return ""
+}
+
+func buildDelegatedTaskText(metadata map[string]any) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	description := strings.TrimSpace(lookupStringFromAny(metadata["description"]))
+	subagentType := strings.TrimSpace(lookupStringFromAny(metadata["subagentType"]))
+	switch {
+	case description != "" && subagentType != "":
+		return "Task (" + subagentType + "): " + description
+	case description != "":
+		return "Task: " + description
+	case subagentType != "":
+		return "Task (" + subagentType + ")"
+	default:
+		return "Task"
+	}
 }
 
 func extractTextFromContentArray(source any) string {

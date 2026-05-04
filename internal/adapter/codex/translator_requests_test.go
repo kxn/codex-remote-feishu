@@ -723,6 +723,50 @@ func TestObserveServerDynamicToolCallExtractsArgumentsMetadata(t *testing.T) {
 	}
 }
 
+func TestObserveServerDelegatedTaskStartedMapsOfficialKind(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	started, err := tr.ObserveServer([]byte(`{"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"task-1","type":"collabToolCall","status":"inProgress","subagentType":"Explore","description":"Audit the repository","prompt":"Look for risky coupling"}}}`))
+	if err != nil {
+		t.Fatalf("observe delegated task started: %v", err)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one event, got %#v", started.Events)
+	}
+	event := started.Events[0]
+	if event.Kind != agentproto.EventItemStarted || event.ItemKind != "delegated_task" || event.Status != "inProgress" {
+		t.Fatalf("unexpected delegated task started event: %#v", event)
+	}
+	if event.Metadata["subagentType"] != "Explore" || event.Metadata["description"] != "Audit the repository" || event.Metadata["prompt"] != "Look for risky coupling" {
+		t.Fatalf("unexpected delegated task metadata: %#v", event.Metadata)
+	}
+	if event.Metadata["text"] != "Task (Explore): Audit the repository" {
+		t.Fatalf("expected delegated task history/progress text fallback, got %#v", event.Metadata)
+	}
+}
+
+func TestObserveServerDelegatedTaskCompletedMapsLegacyKindAndNestedInput(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	completed, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"task-2","type":"collabAgentToolCall","status":"completed","input":{"subagent_type":"Implement","description":"Refactor the adapter","prompt":"Keep behavior stable"}}}}`))
+	if err != nil {
+		t.Fatalf("observe delegated task completed: %v", err)
+	}
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one event, got %#v", completed.Events)
+	}
+	event := completed.Events[0]
+	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "delegated_task" || event.Status != "completed" {
+		t.Fatalf("unexpected delegated task completed event: %#v", event)
+	}
+	if event.Metadata["subagentType"] != "Implement" || event.Metadata["description"] != "Refactor the adapter" || event.Metadata["prompt"] != "Keep behavior stable" {
+		t.Fatalf("unexpected delegated task nested metadata: %#v", event.Metadata)
+	}
+	if event.Metadata["text"] != "Task (Implement): Refactor the adapter" {
+		t.Fatalf("expected delegated task text fallback from nested input, got %#v", event.Metadata)
+	}
+}
+
 func TestObserveServerCompletedLegacyAssistantMessageMapsToAgentMessage(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	result, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"item-1","type":"assistant_message","text":"hello"}}}`))
@@ -974,6 +1018,47 @@ func TestObserveThreadHistoryReadResultEmitsStructuredHistoryEvent(t *testing.T)
 	}
 	if turn.Items[1].Kind != "command_execution" || turn.Items[1].Command != "npm test" || turn.Items[1].ExitCode == nil || *turn.Items[1].ExitCode != 1 {
 		t.Fatalf("expected command execution item details, got %#v", turn.Items[1])
+	}
+}
+
+func TestObserveThreadHistoryReadDelegatedTaskUsesCanonicalKindAndFallbackText(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	payloads, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-history-task-1",
+		Kind:      agentproto.CommandThreadHistoryRead,
+		Target: agentproto.Target{
+			ThreadID: "thread-1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("translate history read: %v", err)
+	}
+	var request map[string]any
+	if err := json.Unmarshal(payloads[0], &request); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	requestID, _ := request["id"].(string)
+
+	result, err := tr.ObserveServer([]byte(`{"id":"` + requestID + `","result":{"thread":{"id":"thread-1","turns":[{"id":"turn-1","status":"completed","items":[{"id":"task-1","type":"collab_agent_tool_call","status":"completed","input":{"subagent_type":"Explore","description":"Audit the repository"}}]}]}}}`))
+	if err != nil {
+		t.Fatalf("observe history result: %v", err)
+	}
+	if !result.Suppress || len(result.Events) != 1 {
+		t.Fatalf("expected one suppressed history event, got %#v", result)
+	}
+	event := result.Events[0]
+	if event.Kind != agentproto.EventThreadHistoryRead || event.ThreadHistory == nil || len(event.ThreadHistory.Turns) != 1 {
+		t.Fatalf("unexpected history event: %#v", event)
+	}
+	items := event.ThreadHistory.Turns[0].Items
+	if len(items) != 1 {
+		t.Fatalf("expected one history item, got %#v", items)
+	}
+	if items[0].Kind != "delegated_task" || items[0].Text != "Task (Explore): Audit the repository" {
+		t.Fatalf("expected canonical delegated task history item, got %#v", items[0])
+	}
+	if items[0].Metadata["description"] != "Audit the repository" || items[0].Metadata["subagentType"] != "Explore" {
+		t.Fatalf("expected delegated task history metadata, got %#v", items[0].Metadata)
 	}
 }
 
