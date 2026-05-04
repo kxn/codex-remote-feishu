@@ -707,6 +707,7 @@ button {
 }
 
 .field input,
+.field select,
 .code-textarea {
   width: 100%;
   min-width: 0;
@@ -719,14 +720,25 @@ button {
   font-size: 0.875rem;
 }
 
+.field select {
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14' fill='none'%3E%3Cpath d='M3.5 5.25 7 8.75l3.5-3.5' stroke='%2364758b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 0.875rem 0.875rem;
+}
+
 .field input:focus,
+.field select:focus,
 .code-textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-.field input:disabled {
+.field input:disabled,
+.field select:disabled {
   background: var(--surface-subtle);
 }
 
@@ -1634,6 +1646,7 @@ button {
   }
 
   .field input,
+  .field select,
   .code-textarea {
     height: 2.625rem;
   }

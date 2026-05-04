@@ -14,10 +14,12 @@ import (
 func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Codex.Providers = []config.CodexProviderConfig{{
-		ID:      "team-proxy",
-		Name:    "Team Proxy",
-		BaseURL: "https://proxy.example/v1",
-		APIKey:  "provider-secret",
+		ID:              "team-proxy",
+		Name:            "Team Proxy",
+		BaseURL:         "https://proxy.example/v1",
+		APIKey:          "provider-secret",
+		Model:           "gpt-5.4",
+		ReasoningEffort: "xhigh",
 	}}
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -75,6 +77,8 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 		`model_providers.team-proxy.name="Team Proxy"`,
 		`model_providers.team-proxy.base_url="https://proxy.example/v1"`,
 		`model_providers.team-proxy.env_key="CODEX_REMOTE_CODEX_PROVIDER_API_KEY"`,
+		`model="gpt-5.4"`,
+		`model_reasoning_effort="xhigh"`,
 	} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("expected launch args to contain %q, got %#v", want, captured.Args)

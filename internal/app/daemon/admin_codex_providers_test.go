@@ -15,7 +15,9 @@ func TestAdminCodexProvidersCRUDAndRedaction(t *testing.T) {
 	createRec := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/providers", `{
   "name":"Team Proxy",
   "baseURL":"https://proxy.internal/v1",
-  "apiKey":"secret-key"
+  "apiKey":"secret-key",
+  "model":"gpt-5.4",
+  "reasoningEffort":"high"
 }`)
 	if createRec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want 201 body=%s", createRec.Code, createRec.Body.String())
@@ -30,13 +32,17 @@ func TestAdminCodexProvidersCRUDAndRedaction(t *testing.T) {
 	if createResp.Provider.ID != "team-proxy" || !createResp.Provider.HasAPIKey || createResp.Provider.BuiltIn || createResp.Provider.ReadOnly {
 		t.Fatalf("unexpected create response: %#v", createResp.Provider)
 	}
+	if createResp.Provider.Model != "gpt-5.4" || createResp.Provider.ReasoningEffort != "high" {
+		t.Fatalf("expected create response to include model and reasoning, got %#v", createResp.Provider)
+	}
 	if got := app.service.CodexProviders(); len(got) != 2 || got[1].ID != "team-proxy" {
 		t.Fatalf("expected runtime catalog to include default + team-proxy after create, got %#v", got)
 	}
 
 	retryRec := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/providers", `{
   "name":"Team Proxy",
-  "baseURL":"https://proxy.retry/v1"
+  "baseURL":"https://proxy.retry/v1",
+  "model":"gpt-5.5"
 }`)
 	if retryRec.Code != http.StatusCreated {
 		t.Fatalf("retry create status = %d, want 201 body=%s", retryRec.Code, retryRec.Body.String())
@@ -51,6 +57,9 @@ func TestAdminCodexProvidersCRUDAndRedaction(t *testing.T) {
 	}
 	if loaded.Config.Codex.Providers[0].APIKey != "secret-key" || loaded.Config.Codex.Providers[0].BaseURL != "https://proxy.retry/v1" {
 		t.Fatalf("expected retry create to update visible fields and keep key, got %#v", loaded.Config.Codex.Providers)
+	}
+	if loaded.Config.Codex.Providers[0].Model != "gpt-5.5" || loaded.Config.Codex.Providers[0].ReasoningEffort != "" {
+		t.Fatalf("expected retry create to update model and allow clearing reasoning, got %#v", loaded.Config.Codex.Providers[0])
 	}
 
 	listRec := performAdminRequest(t, app, http.MethodGet, "/api/admin/codex/providers", "")
@@ -70,6 +79,9 @@ func TestAdminCodexProvidersCRUDAndRedaction(t *testing.T) {
 	if listResp.Providers[1].ID != "team-proxy" || listResp.Providers[1].BaseURL != "https://proxy.retry/v1" || !listResp.Providers[1].Persisted {
 		t.Fatalf("unexpected custom provider view: %#v", listResp.Providers[1])
 	}
+	if listResp.Providers[1].Model != "gpt-5.5" || listResp.Providers[1].ReasoningEffort != "" {
+		t.Fatalf("expected list view to reflect model/reasoning, got %#v", listResp.Providers[1])
+	}
 
 	configRec := performAdminRequest(t, app, http.MethodGet, "/api/admin/config", "")
 	if configRec.Code != http.StatusOK {
@@ -85,10 +97,14 @@ func TestAdminCodexProvidersCRUDAndRedaction(t *testing.T) {
 	if len(configResp.Config.Codex.Providers) != 1 || !configResp.Config.Codex.Providers[0].HasAPIKey {
 		t.Fatalf("unexpected redacted codex config: %#v", configResp.Config.Codex)
 	}
+	if configResp.Config.Codex.Providers[0].Model != "gpt-5.5" {
+		t.Fatalf("expected redacted config to keep model, got %#v", configResp.Config.Codex.Providers[0])
+	}
 
 	updateRec := performAdminRequest(t, app, http.MethodPut, "/api/admin/codex/providers/team-proxy", `{
   "name":"Team Proxy 2",
-  "baseURL":"https://proxy.second/v1"
+  "baseURL":"https://proxy.second/v1",
+  "reasoningEffort":"xhigh"
 }`)
 	if updateRec.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want 200 body=%s", updateRec.Code, updateRec.Body.String())
@@ -103,6 +119,9 @@ func TestAdminCodexProvidersCRUDAndRedaction(t *testing.T) {
 	if updateResp.Provider.BaseURL != "https://proxy.second/v1" {
 		t.Fatalf("expected updated base url, got %#v", updateResp.Provider)
 	}
+	if updateResp.Provider.Model != "" || updateResp.Provider.ReasoningEffort != "xhigh" {
+		t.Fatalf("expected update response to clear model and update reasoning, got %#v", updateResp.Provider)
+	}
 	if got := app.service.CodexProviders(); len(got) != 2 || got[1].ID != "team-proxy-2" || got[1].Name != "Team Proxy 2" {
 		t.Fatalf("expected runtime catalog to reflect update, got %#v", got)
 	}
@@ -116,6 +135,9 @@ func TestAdminCodexProvidersCRUDAndRedaction(t *testing.T) {
 	}
 	if loaded.Config.Codex.Providers[0].ID != "team-proxy-2" || loaded.Config.Codex.Providers[0].APIKey != "secret-key" || loaded.Config.Codex.Providers[0].BaseURL != "https://proxy.second/v1" {
 		t.Fatalf("expected renamed provider to keep key and update base settings, got %#v", loaded.Config.Codex.Providers[0])
+	}
+	if loaded.Config.Codex.Providers[0].Model != "" || loaded.Config.Codex.Providers[0].ReasoningEffort != "xhigh" {
+		t.Fatalf("expected renamed provider to keep cleared model and updated reasoning, got %#v", loaded.Config.Codex.Providers[0])
 	}
 
 	readOnlyRec := performAdminRequest(t, app, http.MethodDelete, "/api/admin/codex/providers/default", "")
@@ -194,5 +216,15 @@ func TestAdminCodexProviderValidationAndReservedNames(t *testing.T) {
 }`)
 	if emptyUpdateRec.Code != http.StatusBadRequest {
 		t.Fatalf("update empty name status = %d, want 400 body=%s", emptyUpdateRec.Code, emptyUpdateRec.Body.String())
+	}
+
+	invalidReasoningRec := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/providers", `{
+  "name":"Bad Reasoning",
+  "baseURL":"https://proxy.internal/v1",
+  "apiKey":"secret-key",
+  "reasoningEffort":"turbo"
+}`)
+	if invalidReasoningRec.Code != http.StatusBadRequest {
+		t.Fatalf("create invalid reasoning status = %d, want 400 body=%s", invalidReasoningRec.Code, invalidReasoningRec.Body.String())
 	}
 }

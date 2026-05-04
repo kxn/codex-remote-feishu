@@ -21,10 +21,12 @@ type CodexSettings struct {
 }
 
 type CodexProviderConfig struct {
-	ID      string `json:"id,omitempty"`
-	Name    string `json:"name,omitempty"`
-	BaseURL string `json:"baseURL,omitempty"`
-	APIKey  string `json:"apiKey,omitempty"`
+	ID              string `json:"id,omitempty"`
+	Name            string `json:"name,omitempty"`
+	BaseURL         string `json:"baseURL,omitempty"`
+	APIKey          string `json:"apiKey,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
 type CodexProvider struct {
@@ -103,6 +105,16 @@ func IsReservedCodexProviderName(name string) bool {
 	return NormalizeCodexProviderNameForReservedCheck(name) == "openai"
 }
 
+func NormalizeCodexReasoningEffort(value string) string {
+	effort := strings.ToLower(strings.TrimSpace(value))
+	switch effort {
+	case "low", "medium", "high", "xhigh":
+		return effort
+	default:
+		return ""
+	}
+}
+
 func NormalizeCodexProviders(providers []CodexProviderConfig) []CodexProviderConfig {
 	if len(providers) == 0 {
 		return nil
@@ -113,10 +125,12 @@ func NormalizeCodexProviders(providers []CodexProviderConfig) []CodexProviderCon
 	}
 	for _, provider := range providers {
 		current := CodexProviderConfig{
-			ID:      strings.TrimSpace(provider.ID),
-			Name:    strings.TrimSpace(provider.Name),
-			BaseURL: strings.TrimSpace(provider.BaseURL),
-			APIKey:  strings.TrimSpace(provider.APIKey),
+			ID:              strings.TrimSpace(provider.ID),
+			Name:            strings.TrimSpace(provider.Name),
+			BaseURL:         strings.TrimSpace(provider.BaseURL),
+			APIKey:          strings.TrimSpace(provider.APIKey),
+			Model:           strings.TrimSpace(provider.Model),
+			ReasoningEffort: NormalizeCodexReasoningEffort(provider.ReasoningEffort),
 		}
 		current.ID = nextCodexProviderID(current.ID, current.Name, used)
 		if current.Name == "" {
@@ -170,11 +184,17 @@ func PrepareCodexProviderUpdate(existing []CodexProviderConfig, currentID string
 }
 
 func ValidateCodexProviderConfig(provider CodexProviderConfig) error {
+	rawReasoningEffort := strings.TrimSpace(provider.ReasoningEffort)
 	provider = CodexProviderConfig{
-		ID:      strings.TrimSpace(provider.ID),
-		Name:    strings.TrimSpace(provider.Name),
-		BaseURL: strings.TrimSpace(provider.BaseURL),
-		APIKey:  strings.TrimSpace(provider.APIKey),
+		ID:              strings.TrimSpace(provider.ID),
+		Name:            strings.TrimSpace(provider.Name),
+		BaseURL:         strings.TrimSpace(provider.BaseURL),
+		APIKey:          strings.TrimSpace(provider.APIKey),
+		Model:           strings.TrimSpace(provider.Model),
+		ReasoningEffort: NormalizeCodexReasoningEffort(provider.ReasoningEffort),
+	}
+	if rawReasoningEffort != "" && provider.ReasoningEffort == "" {
+		return fmt.Errorf("codex provider reasoningEffort is invalid")
 	}
 	if provider.Name == "" {
 		return fmt.Errorf("codex provider name is required")
@@ -201,12 +221,19 @@ func CodexProviderLaunchOverrides(provider CodexProvider) []string {
 	if provider.BuiltIn {
 		return nil
 	}
-	return []string{
+	overrides := []string{
 		"-c", codexProviderOverride("model_provider", provider.ID),
 		"-c", codexProviderOverride("model_providers."+provider.ID+".name", provider.Name),
 		"-c", codexProviderOverride("model_providers."+provider.ID+".base_url", provider.BaseURL),
 		"-c", codexProviderOverride("model_providers."+provider.ID+".env_key", CodexProviderAPIKeyEnv),
 	}
+	if value := strings.TrimSpace(provider.Model); value != "" {
+		overrides = append(overrides, "-c", codexProviderOverride("model", value))
+	}
+	if value := NormalizeCodexReasoningEffort(provider.ReasoningEffort); value != "" {
+		overrides = append(overrides, "-c", codexProviderOverride("model_reasoning_effort", value))
+	}
+	return overrides
 }
 
 func codexProviderOverride(key, value string) string {
@@ -232,10 +259,12 @@ func prepareCodexProviderConfig(existing []CodexProviderConfig, currentID string
 		providerID = CodexProviderIDFromName(name)
 	}
 	provider := CodexProviderConfig{
-		ID:      providerID,
-		Name:    name,
-		BaseURL: strings.TrimSpace(requested.BaseURL),
-		APIKey:  strings.TrimSpace(requested.APIKey),
+		ID:              providerID,
+		Name:            name,
+		BaseURL:         strings.TrimSpace(requested.BaseURL),
+		APIKey:          strings.TrimSpace(requested.APIKey),
+		Model:           strings.TrimSpace(requested.Model),
+		ReasoningEffort: strings.TrimSpace(requested.ReasoningEffort),
 	}
 	if currentID != "" && provider.APIKey == "" {
 		provider.APIKey = strings.TrimSpace(current.APIKey)
@@ -243,6 +272,7 @@ func prepareCodexProviderConfig(existing []CodexProviderConfig, currentID string
 	if err := ValidateCodexProviderConfig(provider); err != nil {
 		return CodexProviderConfig{}, err
 	}
+	provider.ReasoningEffort = NormalizeCodexReasoningEffort(provider.ReasoningEffort)
 	if existingIndex := IndexOfCodexProvider(normalizedExisting, provider.ID); existingIndex >= 0 && existingIndex != currentIndex {
 		return CodexProviderConfig{}, fmt.Errorf("codex provider id %q already exists", provider.ID)
 	}

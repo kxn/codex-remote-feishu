@@ -30,6 +30,8 @@ type CodexProviderDraft = {
   name: string;
   baseURL: string;
   apiKey: string;
+  model: string;
+  reasoningEffort: string;
 };
 
 type CodexProviderSectionProps = {
@@ -40,6 +42,7 @@ type CodexProviderSectionProps = {
 };
 
 const newCodexProviderID = "new-codex-provider";
+const codexReasoningOptions = ["low", "medium", "high", "xhigh"] as const;
 
 export function CodexProviderSection(props: CodexProviderSectionProps) {
   const { providers, loadError, setProviders, onReload } = props;
@@ -489,6 +492,40 @@ function renderDetailCard(props: DetailCardProps) {
               }
             />
           </label>
+
+          <label className="field">
+            <span>默认模型</span>
+            <input
+              value={draft.model}
+              placeholder="例如：gpt-5.4"
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  model: event.target.value,
+                }))
+              }
+            />
+          </label>
+
+          <label className="field">
+            <span>默认推理强度</span>
+            <select
+              value={draft.reasoningEffort}
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  reasoningEffort: event.target.value,
+                }))
+              }
+            >
+              <option value="">不设置</option>
+              {codexReasoningOptions.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
 
         <div className="button-row">
@@ -529,6 +566,8 @@ function createEmptyDraft(): CodexProviderDraft {
     name: "",
     baseURL: "",
     apiKey: "",
+    model: "",
+    reasoningEffort: "",
   };
 }
 
@@ -537,6 +576,8 @@ function createDraftFromProvider(provider: CodexProviderSummary): CodexProviderD
     name: providerTitle(provider),
     baseURL: provider.baseURL?.trim() || "",
     apiKey: "",
+    model: provider.model?.trim() || "",
+    reasoningEffort: normalizeCodexReasoningEffort(provider.reasoningEffort),
   };
 }
 
@@ -558,6 +599,8 @@ function buildCreatePayload(draft: CodexProviderDraft): CodexProviderWriteReques
     name: draft.name.trim(),
     baseURL: draft.baseURL.trim(),
     apiKey: draft.apiKey.trim(),
+    model: draft.model.trim(),
+    reasoningEffort: normalizeCodexReasoningEffort(draft.reasoningEffort),
   };
 }
 
@@ -565,6 +608,8 @@ function buildUpdatePayload(draft: CodexProviderDraft): CodexProviderWriteReques
   const payload: CodexProviderWriteRequest = {
     name: draft.name.trim(),
     baseURL: draft.baseURL.trim(),
+    model: draft.model.trim(),
+    reasoningEffort: normalizeCodexReasoningEffort(draft.reasoningEffort),
   };
   const apiKey = optionalString(draft.apiKey);
   if (apiKey) {
@@ -617,7 +662,17 @@ function providerCardSummary(provider: CodexProviderSummary): string {
   if (provider.builtIn) {
     return "本机默认配置";
   }
-  return provider.baseURL?.trim() || "自定义连接配置";
+  const parts = [
+    provider.baseURL?.trim() || "",
+    provider.model?.trim() ? `模型 ${provider.model.trim()}` : "",
+    normalizeCodexReasoningEffort(provider.reasoningEffort)
+      ? `推理 ${normalizeCodexReasoningEffort(provider.reasoningEffort)}`
+      : "",
+  ].filter(Boolean);
+  if (parts.length === 0) {
+    return "自定义连接配置";
+  }
+  return parts.join(" · ");
 }
 
 function describeCodexProviderError(error: unknown): string {
@@ -629,6 +684,8 @@ function describeCodexProviderError(error: unknown): string {
         return "请填写端点地址。";
       case "codex_provider_api_key_required":
         return "请填写 API Key。";
+      case "codex_provider_reasoning_effort_invalid":
+        return "默认推理强度不可用，请重新选择。";
       case "codex_provider_reserved_name":
         return "这个名称不能使用，请换一个名字。";
       case "duplicate_codex_provider_name":
@@ -642,4 +699,11 @@ function describeCodexProviderError(error: unknown): string {
     }
   }
   return formatError(error);
+}
+
+function normalizeCodexReasoningEffort(value: string | undefined): string {
+  const trimmed = value?.trim().toLowerCase() ?? "";
+  return codexReasoningOptions.includes(trimmed as (typeof codexReasoningOptions)[number])
+    ? trimmed
+    : "";
 }

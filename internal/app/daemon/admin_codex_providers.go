@@ -13,13 +13,15 @@ type adminCodexSettingsView struct {
 }
 
 type adminCodexProviderView struct {
-	ID        string `json:"id"`
-	Name      string `json:"name,omitempty"`
-	BaseURL   string `json:"baseURL,omitempty"`
-	HasAPIKey bool   `json:"hasApiKey"`
-	BuiltIn   bool   `json:"builtIn,omitempty"`
-	Persisted bool   `json:"persisted"`
-	ReadOnly  bool   `json:"readOnly,omitempty"`
+	ID              string `json:"id"`
+	Name            string `json:"name,omitempty"`
+	BaseURL         string `json:"baseURL,omitempty"`
+	HasAPIKey       bool   `json:"hasApiKey"`
+	Model           string `json:"model,omitempty"`
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	BuiltIn         bool   `json:"builtIn,omitempty"`
+	Persisted       bool   `json:"persisted"`
+	ReadOnly        bool   `json:"readOnly,omitempty"`
 }
 
 type codexProvidersResponse struct {
@@ -31,9 +33,11 @@ type codexProviderResponse struct {
 }
 
 type codexProviderWriteRequest struct {
-	Name    *string `json:"name"`
-	BaseURL *string `json:"baseURL"`
-	APIKey  *string `json:"apiKey"`
+	Name            *string `json:"name"`
+	BaseURL         *string `json:"baseURL"`
+	APIKey          *string `json:"apiKey"`
+	Model           *string `json:"model"`
+	ReasoningEffort *string `json:"reasoningEffort"`
 }
 
 func (a *App) handleCodexProvidersList(w http.ResponseWriter, _ *http.Request) {
@@ -259,21 +263,25 @@ func adminCodexProvidersView(cfg config.AppConfig) []adminCodexProviderView {
 
 func adminCodexProviderViewFromConfig(provider config.CodexProvider) adminCodexProviderView {
 	return adminCodexProviderView{
-		ID:        strings.TrimSpace(provider.ID),
-		Name:      strings.TrimSpace(provider.Name),
-		BaseURL:   strings.TrimSpace(provider.BaseURL),
-		HasAPIKey: strings.TrimSpace(provider.APIKey) != "",
-		BuiltIn:   provider.BuiltIn,
-		Persisted: !provider.BuiltIn,
-		ReadOnly:  provider.BuiltIn,
+		ID:              strings.TrimSpace(provider.ID),
+		Name:            strings.TrimSpace(provider.Name),
+		BaseURL:         strings.TrimSpace(provider.BaseURL),
+		HasAPIKey:       strings.TrimSpace(provider.APIKey) != "",
+		Model:           strings.TrimSpace(provider.Model),
+		ReasoningEffort: config.NormalizeCodexReasoningEffort(provider.ReasoningEffort),
+		BuiltIn:         provider.BuiltIn,
+		Persisted:       !provider.BuiltIn,
+		ReadOnly:        provider.BuiltIn,
 	}
 }
 
 func codexProviderConfigFromRequest(req codexProviderWriteRequest) config.CodexProviderConfig {
 	return config.CodexProviderConfig{
-		Name:    optionalStringValue(req.Name),
-		BaseURL: optionalStringValue(req.BaseURL),
-		APIKey:  optionalStringValue(req.APIKey),
+		Name:            optionalStringValue(req.Name),
+		BaseURL:         optionalStringValue(req.BaseURL),
+		APIKey:          optionalStringValue(req.APIKey),
+		Model:           optionalStringValue(req.Model),
+		ReasoningEffort: optionalStringValue(req.ReasoningEffort),
 	}
 }
 
@@ -308,6 +316,11 @@ func writeCodexProviderConfigError(w http.ResponseWriter, err error) {
 		writeAPIError(w, http.StatusBadRequest, apiError{
 			Code:    "codex_provider_api_key_required",
 			Message: "codex provider apiKey is required",
+		})
+	case strings.Contains(err.Error(), "reasoningEffort is invalid"):
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "codex_provider_reasoning_effort_invalid",
+			Message: "codex provider reasoningEffort is invalid",
 		})
 	case strings.Contains(err.Error(), "cannot be replaced"):
 		writeAPIError(w, http.StatusConflict, apiError{

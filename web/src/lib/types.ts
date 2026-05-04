@@ -122,6 +122,8 @@ export interface CodexProviderSummary {
   name?: string;
   baseURL?: string;
   hasApiKey: boolean;
+  model?: string;
+  reasoningEffort?: string;
   builtIn?: boolean;
   persisted: boolean;
   readOnly?: boolean;
@@ -139,6 +141,8 @@ export interface CodexProviderWriteRequest {
   name?: string;
   baseURL?: string;
   apiKey?: string;
+  model?: string;
+  reasoningEffort?: string;
 }
 
 export interface FeishuAppMutation {

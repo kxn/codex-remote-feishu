@@ -46,14 +46,18 @@ func TestPrepareCodexProviderCreateRequiresAPIKey(t *testing.T) {
 
 func TestPrepareCodexProviderUpdatePreservesExistingAPIKey(t *testing.T) {
 	existing := []CodexProviderConfig{{
-		ID:      "proxy",
-		Name:    "Proxy",
-		BaseURL: "https://proxy.example/v1",
-		APIKey:  "saved-secret",
+		ID:              "proxy",
+		Name:            "Proxy",
+		BaseURL:         "https://proxy.example/v1",
+		APIKey:          "saved-secret",
+		Model:           "gpt-5.4",
+		ReasoningEffort: "high",
 	}}
 	provider, err := PrepareCodexProviderUpdate(existing, "proxy", CodexProviderConfig{
-		Name:    "Proxy",
-		BaseURL: "https://proxy-2.example/v1",
+		Name:            "Proxy",
+		BaseURL:         "https://proxy-2.example/v1",
+		Model:           "gpt-5.5",
+		ReasoningEffort: "xhigh",
 	})
 	if err != nil {
 		t.Fatalf("PrepareCodexProviderUpdate: %v", err)
@@ -64,15 +68,20 @@ func TestPrepareCodexProviderUpdatePreservesExistingAPIKey(t *testing.T) {
 	if provider.BaseURL != "https://proxy-2.example/v1" {
 		t.Fatalf("provider.BaseURL = %q", provider.BaseURL)
 	}
+	if provider.Model != "gpt-5.5" || provider.ReasoningEffort != "xhigh" {
+		t.Fatalf("expected model/reasoning update, got %#v", provider)
+	}
 }
 
 func TestWriteAppConfigNormalizesCodexProviders(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	cfg := DefaultAppConfig()
 	cfg.Codex.Providers = []CodexProviderConfig{{
-		Name:    " Team Proxy ",
-		BaseURL: " https://proxy.example/v1 ",
-		APIKey:  " secret ",
+		Name:            " Team Proxy ",
+		BaseURL:         " https://proxy.example/v1 ",
+		APIKey:          " secret ",
+		Model:           " gpt-5.4 ",
+		ReasoningEffort: " XHIGH ",
 	}}
 
 	if err := WriteAppConfig(configPath, cfg); err != nil {
@@ -89,14 +98,19 @@ func TestWriteAppConfigNormalizesCodexProviders(t *testing.T) {
 	if provider.ID != "team-proxy" || provider.Name != "Team Proxy" || provider.BaseURL != "https://proxy.example/v1" || provider.APIKey != "secret" {
 		t.Fatalf("unexpected provider after normalization: %#v", provider)
 	}
+	if provider.Model != "gpt-5.4" || provider.ReasoningEffort != "xhigh" {
+		t.Fatalf("expected normalized model/reasoning, got %#v", provider)
+	}
 }
 
 func TestCodexProviderLaunchOverridesForCustomProvider(t *testing.T) {
 	overrides := CodexProviderLaunchOverrides(CodexProvider{
 		CodexProviderConfig: CodexProviderConfig{
-			ID:      "team-proxy",
-			Name:    "Team Proxy",
-			BaseURL: "https://proxy.example/v1",
+			ID:              "team-proxy",
+			Name:            "Team Proxy",
+			BaseURL:         "https://proxy.example/v1",
+			Model:           "gpt-5.4",
+			ReasoningEffort: "high",
 		},
 	})
 	want := []string{
@@ -104,8 +118,22 @@ func TestCodexProviderLaunchOverridesForCustomProvider(t *testing.T) {
 		"-c", `model_providers.team-proxy.name="Team Proxy"`,
 		"-c", `model_providers.team-proxy.base_url="https://proxy.example/v1"`,
 		"-c", `model_providers.team-proxy.env_key="CODEX_REMOTE_CODEX_PROVIDER_API_KEY"`,
+		"-c", `model="gpt-5.4"`,
+		"-c", `model_reasoning_effort="high"`,
 	}
 	if strings.Join(overrides, "\x00") != strings.Join(want, "\x00") {
 		t.Fatalf("CodexProviderLaunchOverrides() = %#v, want %#v", overrides, want)
+	}
+}
+
+func TestPrepareCodexProviderCreateRejectsInvalidReasoningEffort(t *testing.T) {
+	_, err := PrepareCodexProviderCreate(nil, CodexProviderConfig{
+		Name:            "Proxy",
+		BaseURL:         "https://proxy.example/v1",
+		APIKey:          "secret",
+		ReasoningEffort: "turbo",
+	})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "reasoningeffort") {
+		t.Fatalf("expected reasoningEffort error, got %v", err)
 	}
 }

@@ -16,6 +16,8 @@ describe("CodexProviderSection", () => {
         name: "Team Proxy",
         baseURL: "https://proxy.internal/v1",
         hasApiKey: true,
+        model: "gpt-5.4",
+        reasoningEffort: "high",
         builtIn: false,
         persisted: true,
         readOnly: false,
@@ -31,6 +33,8 @@ describe("CodexProviderSection", () => {
               name: body.name,
               baseURL: body.baseURL,
               hasApiKey: true,
+              model: body.model,
+              reasoningEffort: body.reasoningEffort,
               builtIn: false,
               persisted: true,
               readOnly: false,
@@ -48,6 +52,8 @@ describe("CodexProviderSection", () => {
               name: body.name,
               baseURL: body.baseURL,
               hasApiKey: true,
+              model: body.model,
+              reasoningEffort: body.reasoningEffort,
               builtIn: false,
               persisted: true,
               readOnly: false,
@@ -82,6 +88,9 @@ describe("CodexProviderSection", () => {
     await user.type(screen.getByLabelText(/名称/), "Team Proxy 2");
     await user.clear(screen.getByLabelText(/端点地址/));
     await user.type(screen.getByLabelText(/端点地址/), "https://proxy.second/v1");
+    await user.clear(screen.getByLabelText("默认模型"));
+    await user.type(screen.getByLabelText("默认模型"), "gpt-5.5");
+    await user.selectOptions(screen.getByLabelText("默认推理强度"), "xhigh");
     const apiKeyInput = screen.getByPlaceholderText("输入 API Key") as HTMLInputElement;
     await user.type(apiKeyInput, "updated-secret");
     expect(apiKeyInput.value).toBe("updated-secret");
@@ -96,6 +105,8 @@ describe("CodexProviderSection", () => {
       name: "Team Proxy 2",
       baseURL: "https://proxy.second/v1",
       apiKey: "updated-secret",
+      model: "gpt-5.5",
+      reasoningEffort: "xhigh",
     });
     expect(await screen.findByRole("button", { name: /Team Proxy 2/ })).toBeInTheDocument();
 
@@ -106,6 +117,8 @@ describe("CodexProviderSection", () => {
     await user.type(screen.getByLabelText(/名称/), "新代理");
     await user.type(screen.getByLabelText(/端点地址/), "https://proxy.new/v1");
     await user.type(screen.getByLabelText(/API Key/), "new-secret");
+    await user.type(screen.getByLabelText("默认模型"), "gpt-5.4");
+    await user.selectOptions(screen.getByLabelText("默认推理强度"), "medium");
     await user.click(screen.getByRole("button", { name: "保存配置" }));
 
     const createCall = calls.find(
@@ -116,6 +129,8 @@ describe("CodexProviderSection", () => {
       name: "新代理",
       baseURL: "https://proxy.new/v1",
       apiKey: "new-secret",
+      model: "gpt-5.4",
+      reasoningEffort: "medium",
     });
   });
 
