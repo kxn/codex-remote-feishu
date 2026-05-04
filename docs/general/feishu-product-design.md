@@ -1,7 +1,7 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-05-02`
+> Updated: `2026-05-04`
 > Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron`、结构化计划更新与共享过程卡的产品语义；其中 `autocontinue` 现由 orchestrator 本地 codex/gateway error-family policy 驱动，不再直接依赖 upstream `willRetry`。
 
 ## 1. 文档定位
@@ -110,7 +110,7 @@ alias 仍继续兼容，但不再作为主展示入口：
   - 会补查被引用消息
   - 引用文本会作为额外提示文本带入
   - 引用图文混合消息时，会把其中的文本和图片一起带入
-  - 若 reply 目标命中当前 surface 正在 processing 的 source message，且 reply 当前消息属于文本 / 图片输入，则不会把被引用原消息再次重发，而是把“当前 reply 自身内容”直接 steer 进当前 running turn
+  - 若 reply 目标命中当前 surface 正在 processing 的 source message，且 reply 当前消息属于文本 / 本地图片输入，则不会把被引用原消息再次重发，而是把“当前 reply 自身内容”直接 steer 进当前 running turn
 - `merge_forward`
   - 正文转发聊天记录不会再拍平成普通 prose 摘要
   - 当前会先尽早 ACK，再在 per-surface FIFO lane 里展开整棵转发树
@@ -459,7 +459,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - queued 文本被点赞后，目标 item 会先离开普通 queue，进入 `steering`
 - wrapper 对 `turn.steer` 返回 `accepted=true` 后，该 item 记为 `steered`
 - 若 dispatch 失败或 wrapper reject，则恢复到原 queue 位置
-- 若用户 reply 当前 processing 的 source message，且 reply 内容是当前 v1 支持的文本 / 图片，则会直接创建一个临时 steering item：
+- 若用户 reply 当前 processing 的 source message，且 reply 内容是当前 v1 支持的文本 / 本地图片，则会直接创建一个临时 steering item：
   - 立即给这条 reply 自己加 `OneSecond`
   - 发送 `turn.steer`
   - steering 成功后给这条 reply 自己补 `ThumbsUp`
