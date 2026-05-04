@@ -34,7 +34,7 @@ func (p *Projector) formatFinalWorktreeSummaryLine(summary *control.FinalTurnSum
 	if !worktree.Dirty {
 		return "**工作区** " + formatNeutralTextTag("干净")
 	}
-	labels := displaypath.ShortestUniqueSuffixes(worktree.Files)
+	labels := displaypath.FileLabels(worktree.Files)
 	limit := len(worktree.Files)
 	if limit > maxEmbeddedWorktreePaths {
 		limit = maxEmbeddedWorktreePaths

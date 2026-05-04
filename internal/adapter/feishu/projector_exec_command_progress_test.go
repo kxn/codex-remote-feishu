@@ -429,6 +429,45 @@ func TestProjectExecCommandProgressRendersFileChangeSummaryInNormal(t *testing.T
 	}
 }
 
+func TestProjectExecCommandProgressPreservesLongUniqueBasenameInFileChangeSummary(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID:  "thread-1",
+			TurnID:    "turn-1",
+			ItemID:    "file-1",
+			Verbosity: "normal",
+			Entries: []control.ExecCommandProgressEntry{{
+				ItemID:  "file-1::long-name",
+				Kind:    "file_change",
+				Label:   "修改",
+				Summary: "service_exec_command_progress_test.go",
+				FileChange: &control.ExecCommandProgressFileChange{
+					Path:         "internal/core/orchestrator/service_exec_command_progress_test.go",
+					Kind:         "update",
+					Diff:         "@@ -1 +1 @@\n-old\n+new",
+					AddedLines:   1,
+					RemovedLines: 1,
+				},
+				LastSeq: 1,
+			}},
+		}, "om-progress-1", 1),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if !strings.Contains(body, markdownCodeSpan("service_exec_command_progress_test.go")) {
+		t.Fatalf("expected long basename to stay complete, got %#v", ops[0])
+	}
+	if strings.Contains(body, markdownCodeSpan("ervice_exec_command_progress_test.go")) {
+		t.Fatalf("expected long basename not to lose its prefix, got %#v", ops[0])
+	}
+}
+
 func TestProjectExecCommandProgressRendersFileChangeDiffInVerbose(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

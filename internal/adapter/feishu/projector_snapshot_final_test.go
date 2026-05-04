@@ -313,6 +313,33 @@ func TestProjectFinalAssistantBlockEmbedsFileChangeSummary(t *testing.T) {
 	}
 }
 
+func TestProjectFinalAssistantBlockPreservesLongUniqueBasenameInFileSummary(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:            eventcontract.KindBlockCommitted,
+		SourceMessageID: "msg-long-file",
+		Block: &render.Block{
+			Kind:  render.BlockAssistantMarkdown,
+			Text:  "已完成修改。",
+			Final: true,
+		},
+		FileChangeSummary: &control.FileChangeSummary{
+			FileCount:    1,
+			AddedLines:   22,
+			RemovedLines: 22,
+			Files: []control.FileChangeSummaryEntry{
+				{Path: "internal/core/orchestrator/service_exec_command_progress_test.go", AddedLines: 22, RemovedLines: 22},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardElements[1]["content"] != "1. <text_tag color='neutral'>service_exec_command_progress_test.go</text_tag>  <font color='green'>+22</font> <font color='red'>-22</font>" {
+		t.Fatalf("expected full long basename in final file summary, got %#v", ops[0].CardElements[1])
+	}
+}
+
 func TestProjectFinalAssistantBlockIncludesTurnDiffViewLink(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
@@ -663,7 +690,7 @@ func TestProjectFinalAssistantBlockAppendsDirtyWorktreeSummary(t *testing.T) {
 			ModifiedCount:  3,
 			UntrackedCount: 1,
 			Files: []string{
-				"internal/core/orchestrator/service.go",
+				"internal/core/orchestrator/service_exec_command_progress_test.go",
 				"internal/adapter/feishu/service.go",
 				"README.md",
 				"docs/general/remote-surface-state-machine.md",
@@ -689,7 +716,7 @@ func TestProjectFinalAssistantBlockAppendsDirtyWorktreeSummary(t *testing.T) {
 	if len(ops[0].CardElements) != 2 {
 		t.Fatalf("expected elapsed footer plus worktree footer, got %#v", ops[0].CardElements)
 	}
-	if ops[0].CardElements[1]["content"] != "**工作区** <text_tag color='neutral'>有改动</text_tag> <text_tag color='neutral'>3修改</text_tag> <text_tag color='neutral'>1未跟踪</text_tag> <text_tag color='neutral'>orchestrator/service.go</text_tag> <text_tag color='neutral'>feishu/service.go</text_tag> <text_tag color='neutral'>README.md</text_tag>" {
+	if ops[0].CardElements[1]["content"] != "**工作区** <text_tag color='neutral'>有改动</text_tag> <text_tag color='neutral'>3修改</text_tag> <text_tag color='neutral'>1未跟踪</text_tag> <text_tag color='neutral'>service_exec_command_progress_test.go</text_tag> <text_tag color='neutral'>service.go</text_tag> <text_tag color='neutral'>README.md</text_tag>" {
 		t.Fatalf("unexpected dirty worktree footer: %#v", ops[0].CardElements[1])
 	}
 }

@@ -83,7 +83,7 @@ func targetPickerWorkspaceShortTails(entries []workspaceSelectionEntry) map[stri
 		keys = append(keys, workspaceKey)
 		paths = append(paths, workspaceKey)
 	}
-	raw := displaypath.ShortestUniqueSuffixes(paths)
+	raw := displaypath.PathLabels(paths)
 	resolved := make(map[string]string, len(keys))
 	for _, key := range keys {
 		resolved[key] = strings.TrimSpace(raw[displaypath.Normalize(key)])

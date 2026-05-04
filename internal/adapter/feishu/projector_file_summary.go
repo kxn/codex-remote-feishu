@@ -33,11 +33,11 @@ func fileChangeDisplayLabels(files []control.FileChangeSummaryEntry) map[string]
 			paths = append(paths, movePath)
 		}
 	}
-	return displaypath.ShortestUniqueSuffixes(paths)
+	return displaypath.FileLabels(paths)
 }
 
 func fileChangeDisplayLabel(path string, labels map[string]string) string {
-	return displaypath.DisplayLabel(path, labels)
+	return displaypath.FileLabel(path, labels)
 }
 
 func formatFileChangeCountsMarkdown(added, removed int) string {

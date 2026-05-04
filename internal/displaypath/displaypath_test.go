@@ -2,28 +2,46 @@ package displaypath
 
 import "testing"
 
-func TestShortestUniqueSuffixes(t *testing.T) {
-	labels := ShortestUniqueSuffixes([]string{
-		"/data/dl/app/repo",
-		"/data/dl/feature/repo",
-		"/data/dl/app/service",
+func TestFileLabelsUseShortestUniqueSuffixesWithoutTruncatingBasename(t *testing.T) {
+	labels := FileLabels([]string{
+		"/data/dl/fschannel4/internal/core/orchestrator/service_exec_command_progress_test.go",
+		"/data/dl/fschannel4/internal/adapter/feishu/projector_exec_command_progress_test.go",
+		"/data/dl/fschannel4/internal/core/orchestrator/service.go",
+		"/data/dl/fschannel4/internal/adapter/feishu/service.go",
 	})
-	if got := labels["data/dl/app/repo"]; got != "app/repo" {
-		t.Fatalf("repo label = %q, want %q", got, "app/repo")
+	if got := labels["data/dl/fschannel4/internal/core/orchestrator/service_exec_command_progress_test.go"]; got != "service_exec_command_progress_test.go" {
+		t.Fatalf("long unique basename label = %q, want %q", got, "service_exec_command_progress_test.go")
 	}
-	if got := labels["data/dl/feature/repo"]; got != "feature/repo" {
-		t.Fatalf("feature repo label = %q, want %q", got, "feature/repo")
+	if got := labels["data/dl/fschannel4/internal/adapter/feishu/projector_exec_command_progress_test.go"]; got != "projector_exec_command_progress_test.go" {
+		t.Fatalf("second long unique basename label = %q, want %q", got, "projector_exec_command_progress_test.go")
 	}
-	if got := labels["data/dl/app/service"]; got != "service" {
-		t.Fatalf("service label = %q, want %q", got, "service")
+	if got := labels["data/dl/fschannel4/internal/core/orchestrator/service.go"]; got != "orchestrator/service.go" {
+		t.Fatalf("conflicting basename label = %q, want %q", got, "orchestrator/service.go")
+	}
+	if got := labels["data/dl/fschannel4/internal/adapter/feishu/service.go"]; got != "feishu/service.go" {
+		t.Fatalf("second conflicting basename label = %q, want %q", got, "feishu/service.go")
 	}
 }
 
-func TestDisplayLabelFallsBackToClampedPath(t *testing.T) {
-	path := "/very/long/path/that/keeps/going/and/going/project"
-	got := DisplayLabel(path, nil)
-	if got == "" || len(got) > maxLabelLen {
-		t.Fatalf("DisplayLabel() = %q, want non-empty clamped label", got)
+func TestPathLabelsKeepFrontAndBackSegments(t *testing.T) {
+	labels := PathLabels([]string{
+		"/dl/data/test/aaaa/bbbb/cccc/abcd",
+	})
+	if got := labels["dl/data/test/aaaa/bbbb/cccc/abcd"]; got != "dl/.../abcd" {
+		t.Fatalf("long path compact label = %q, want %q", got, "dl/.../abcd")
+	}
+}
+
+func TestPathLabelsAlternateAcrossFrontAndBackUntilUnique(t *testing.T) {
+	labels := PathLabels([]string{
+		"/data/dl/alice/repo",
+		"/data/dl/bob/repo",
+	})
+	if got := labels["data/dl/alice/repo"]; got != "data/.../alice/repo" {
+		t.Fatalf("alice path label = %q, want %q", got, "data/.../alice/repo")
+	}
+	if got := labels["data/dl/bob/repo"]; got != "data/.../bob/repo" {
+		t.Fatalf("bob path label = %q, want %q", got, "data/.../bob/repo")
 	}
 }
 

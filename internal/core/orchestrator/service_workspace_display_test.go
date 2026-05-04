@@ -54,11 +54,11 @@ func TestTargetPickerWorkspaceMetaByKeyUpgradesSameBranchToShortTail(t *testing.
 	}
 
 	metaByKey := targetPickerWorkspaceMetaByKey(entries)
-	if got := metaByKey["/data/dl/alice/repo"]; got != "main@alice/repo" {
-		t.Fatalf("alice workspace meta = %q, want %q", got, "main@alice/repo")
+	if got := metaByKey["/data/dl/alice/repo"]; got != "main@data/.../alice/repo" {
+		t.Fatalf("alice workspace meta = %q, want %q", got, "main@data/.../alice/repo")
 	}
-	if got := metaByKey["/data/dl/bob/repo"]; got != "main@bob/repo" {
-		t.Fatalf("bob workspace meta = %q, want %q", got, "main@bob/repo")
+	if got := metaByKey["/data/dl/bob/repo"]; got != "main@data/.../bob/repo" {
+		t.Fatalf("bob workspace meta = %q, want %q", got, "main@data/.../bob/repo")
 	}
 }
 
