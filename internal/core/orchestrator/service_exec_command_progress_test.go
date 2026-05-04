@@ -45,6 +45,17 @@ func activeProgressStartSeq(progress *control.ExecCommandProgress) int {
 	return progress.Segments[len(progress.Segments)-1].StartSeq
 }
 
+func timelineItemAt(t *testing.T, progress *control.ExecCommandProgress, index int) control.ExecCommandProgressTimelineItem {
+	t.Helper()
+	if progress == nil {
+		t.Fatal("expected exec command progress payload")
+	}
+	if index < 0 || index >= len(progress.Timeline) {
+		t.Fatalf("expected timeline index %d within %#v", index, progress.Timeline)
+	}
+	return progress.Timeline[index]
+}
+
 func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -72,14 +83,12 @@ func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.
 		t.Fatalf("expected progress card to reply to source message, got %#v", started[0])
 	}
 	progress := started[0].ExecCommandProgress
-	if progress.Command != "npm test" || progress.CWD != "/data/dl/droid" || progress.Status != "running" || progress.Final {
+	if progress.ItemID != "cmd-1" || progress.Verbosity != string(state.SurfaceVerbosityVerbose) {
 		t.Fatalf("unexpected start progress payload: %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].Label != "执行" || progress.Entries[0].Summary != "npm test" {
-		t.Fatalf("expected command entry on shared progress card, got %#v", progress.Entries)
-	}
-	if len(progress.Commands) != 1 || progress.Commands[0] != "npm test" {
-		t.Fatalf("expected first command history, got %#v", progress)
+	first := timelineItemAt(t, progress, 0)
+	if len(progress.Timeline) != 1 || first.Kind != "command_execution" || first.Label != "执行" || first.Summary != "npm test" || first.Status != "running" {
+		t.Fatalf("expected command entry on shared progress card, got %#v", progress.Timeline)
 	}
 
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
@@ -102,11 +111,8 @@ func TestExecCommandProgressVerboseEmitsStartAndTracksCommandHistory(t *testing.
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected second start to update same card, got %#v", progress)
 	}
-	if len(progress.Entries) != 2 || progress.Entries[0].Summary != "npm test" || progress.Entries[1].Summary != "go test ./..." {
-		t.Fatalf("expected shared progress entries to accumulate, got %#v", progress.Entries)
-	}
-	if len(progress.Commands) != 2 || progress.Commands[0] != "npm test" || progress.Commands[1] != "go test ./..." {
-		t.Fatalf("expected accumulated command history, got %#v", progress)
+	if len(progress.Timeline) != 2 || progress.Timeline[0].Summary != "npm test" || progress.Timeline[1].Summary != "go test ./..." {
+		t.Fatalf("expected command timeline to accumulate, got %#v", progress.Timeline)
 	}
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -257,20 +263,17 @@ func TestFileChangeProgressNormalVerbosityShowsSharedProgressCard(t *testing.T) 
 	if progress.Verbosity != string(state.SurfaceVerbosityNormal) || progress.ItemID != "file-1" {
 		t.Fatalf("unexpected file_change progress payload: %#v", progress)
 	}
-	if len(progress.Entries) != 2 {
-		t.Fatalf("expected one shared progress entry per changed file, got %#v", progress.Entries)
-	}
-	if progress.Entries[0].Kind != "file_change" || progress.Entries[0].Label != "修改" || progress.Entries[0].FileChange == nil {
-		t.Fatalf("expected first file change entry to stay structured, got %#v", progress.Entries)
-	}
-	if progress.Entries[0].FileChange.Path != "internal/core/orchestrator/service.go" || progress.Entries[0].FileChange.AddedLines != 1 || progress.Entries[0].FileChange.RemovedLines != 1 {
-		t.Fatalf("unexpected first file change payload: %#v", progress.Entries[0].FileChange)
-	}
-	if progress.Entries[1].FileChange == nil || progress.Entries[1].FileChange.MovePath != "docs/guide-v2.md" {
-		t.Fatalf("expected rename payload to stay structured, got %#v", progress.Entries[1].FileChange)
-	}
 	if len(progress.Timeline) != 2 || progress.Timeline[0].Kind != "file_change" || progress.Timeline[1].Kind != "file_change" {
 		t.Fatalf("expected file changes to enter canonical shared progress timeline, got %#v", progress.Timeline)
+	}
+	if progress.Timeline[0].Label != "修改" || progress.Timeline[0].FileChange == nil {
+		t.Fatalf("expected first file change timeline item to stay structured, got %#v", progress.Timeline)
+	}
+	if progress.Timeline[0].FileChange.Path != "internal/core/orchestrator/service.go" || progress.Timeline[0].FileChange.AddedLines != 1 || progress.Timeline[0].FileChange.RemovedLines != 1 {
+		t.Fatalf("unexpected first file change payload: %#v", progress.Timeline[0].FileChange)
+	}
+	if progress.Timeline[1].FileChange == nil || progress.Timeline[1].FileChange.MovePath != "docs/guide-v2.md" {
+		t.Fatalf("expected rename payload to stay structured, got %#v", progress.Timeline[1].FileChange)
 	}
 }
 
@@ -320,11 +323,11 @@ func TestFileChangeProgressCompletedReusesExistingSharedProgressCard(t *testing.
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected completed file_change to reuse existing card, got %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].FileChange == nil {
-		t.Fatalf("expected updated file_change entry, got %#v", progress.Entries)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].FileChange == nil {
+		t.Fatalf("expected updated file_change timeline item, got %#v", progress.Timeline)
 	}
-	if progress.Entries[0].FileChange.AddedLines != 2 || progress.Entries[0].FileChange.RemovedLines != 1 {
-		t.Fatalf("expected completed file_change to refresh line counts, got %#v", progress.Entries[0].FileChange)
+	if progress.Timeline[0].FileChange.AddedLines != 2 || progress.Timeline[0].FileChange.RemovedLines != 1 {
+		t.Fatalf("expected completed file_change to refresh line counts, got %#v", progress.Timeline[0].FileChange)
 	}
 }
 
@@ -419,14 +422,14 @@ func TestWebSearchSharesExecCommandProgressCardInVerbose(t *testing.T) {
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected web search to reuse command progress card, got %#v", progress)
 	}
-	if len(progress.Entries) != 2 {
-		t.Fatalf("expected command and web search entries on same card, got %#v", progress.Entries)
+	if len(progress.Timeline) != 2 {
+		t.Fatalf("expected command and web search items on same card, got %#v", progress.Timeline)
 	}
-	if progress.Entries[0].Label != "执行" || progress.Entries[0].Summary != "npm test" {
-		t.Fatalf("expected first shared entry to stay command execution, got %#v", progress.Entries)
+	if progress.Timeline[0].Label != "执行" || progress.Timeline[0].Summary != "npm test" {
+		t.Fatalf("expected first timeline item to stay command execution, got %#v", progress.Timeline)
 	}
-	if progress.Entries[1].Label != "搜索" || progress.Entries[1].Summary != "正在搜索网络" {
-		t.Fatalf("expected second shared entry to be web search, got %#v", progress.Entries)
+	if progress.Timeline[1].Label != "搜索" || progress.Timeline[1].Summary != "正在搜索网络" {
+		t.Fatalf("expected second timeline item to be web search, got %#v", progress.Timeline)
 	}
 }
 
@@ -477,8 +480,8 @@ func TestDelegatedTaskProgressNormalVerbosityEmitsEntry(t *testing.T) {
 		t.Fatalf("expected delegated task progress card, got %#v", events)
 	}
 	progress := events[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "delegated_task" || progress.Entries[0].Summary != "Explore · Audit the repository" {
-		t.Fatalf("unexpected delegated task entry: %#v", progress.Entries)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "delegated_task" || progress.Timeline[0].Summary != "Explore · Audit the repository" {
+		t.Fatalf("unexpected delegated task timeline item: %#v", progress.Timeline)
 	}
 }
 
@@ -525,11 +528,11 @@ func TestDelegatedTaskProgressCompletionUpdatesSameEntry(t *testing.T) {
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected delegated task completion to reuse same card, got %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "delegated_task" || progress.Entries[0].Status != "completed" {
-		t.Fatalf("unexpected delegated task completion entry: %#v", progress.Entries)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "delegated_task" || progress.Timeline[0].Status != "completed" {
+		t.Fatalf("unexpected delegated task completion item: %#v", progress.Timeline)
 	}
-	if progress.Entries[0].Summary != "Explore · Audit the repository" {
-		t.Fatalf("expected delegated task completion to keep summary, got %#v", progress.Entries[0])
+	if progress.Timeline[0].Summary != "Explore · Audit the repository" {
+		t.Fatalf("expected delegated task completion to keep summary, got %#v", progress.Timeline[0])
 	}
 }
 
@@ -558,11 +561,11 @@ func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 		t.Fatalf("expected dynamic tool progress start, got %#v", first)
 	}
 	progress := first[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || progress.Blocks[0].Kind != "exploration" || progress.Blocks[0].Status != "running" {
-		t.Fatalf("expected dynamic tool read to enter exploration block, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "read" || progress.Timeline[0].Status != "running" {
+		t.Fatalf("expected dynamic tool read to enter timeline, got %#v", progress.Timeline)
 	}
-	if len(progress.Blocks[0].Rows) != 1 || progress.Blocks[0].Rows[0].Kind != "read" || len(progress.Blocks[0].Rows[0].Items) != 1 || progress.Blocks[0].Rows[0].Items[0] != "a.cpp" {
-		t.Fatalf("unexpected dynamic tool first exploration row: %#v", progress.Blocks[0].Rows)
+	if len(progress.Timeline[0].Items) != 1 || progress.Timeline[0].Items[0] != "a.cpp" {
+		t.Fatalf("unexpected dynamic tool first exploration row: %#v", progress.Timeline[0])
 	}
 
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
@@ -587,12 +590,12 @@ func TestDynamicToolCallProgressVerboseMergesSameToolRows(t *testing.T) {
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected dynamic tool update to reuse same card, got %#v", progress)
 	}
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
-		t.Fatalf("expected merged exploration block, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "read" {
+		t.Fatalf("expected merged exploration timeline item, got %#v", progress.Timeline)
 	}
-	items := progress.Blocks[0].Rows[0].Items
+	items := progress.Timeline[0].Items
 	if len(items) != 2 || items[0] != "a.cpp" || items[1] != "b.cpp" {
-		t.Fatalf("expected same tool to merge into one read row, got %#v", progress.Blocks[0].Rows)
+		t.Fatalf("expected same tool to merge into one read row, got %#v", progress.Timeline[0])
 	}
 }
 
@@ -673,11 +676,11 @@ func TestDynamicToolCallProgressFailedStatusMarksMergedRow(t *testing.T) {
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected failure to update existing progress card, got %#v", progress)
 	}
-	if len(progress.Blocks) != 1 || progress.Blocks[0].Status != "failed" {
-		t.Fatalf("expected failed dynamic tool exploration block, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Status != "failed" {
+		t.Fatalf("expected failed dynamic tool exploration item, got %#v", progress.Timeline)
 	}
-	if len(progress.Blocks[0].Rows) != 1 || len(progress.Blocks[0].Rows[0].Items) != 1 || progress.Blocks[0].Rows[0].Items[0] != "a.cpp" {
-		t.Fatalf("expected failed block to keep read row, got %#v", progress.Blocks)
+	if len(progress.Timeline[0].Items) != 1 || progress.Timeline[0].Items[0] != "a.cpp" {
+		t.Fatalf("expected failed item to keep read row, got %#v", progress.Timeline)
 	}
 }
 
@@ -704,14 +707,11 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 		t.Fatalf("expected read exploration start, got %#v", readStarted)
 	}
 	progress := readStarted[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || progress.Blocks[0].Kind != "exploration" || progress.Blocks[0].Status != "running" {
-		t.Fatalf("expected exploration block after read start, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "read" || progress.Timeline[0].Status != "running" {
+		t.Fatalf("expected exploration read item after read start, got %#v", progress.Timeline)
 	}
-	if len(progress.Blocks[0].Rows) != 1 || progress.Blocks[0].Rows[0].Kind != "read" || len(progress.Blocks[0].Rows[0].Items) != 1 || progress.Blocks[0].Rows[0].Items[0] != "internal/core/control/types.go" {
-		t.Fatalf("unexpected read exploration row: %#v", progress.Blocks[0].Rows)
-	}
-	if len(progress.Entries) != 0 {
-		t.Fatalf("expected exploration command to avoid duplicate legacy entries, got %#v", progress.Entries)
+	if len(progress.Timeline[0].Items) != 1 || progress.Timeline[0].Items[0] != "internal/core/control/types.go" {
+		t.Fatalf("unexpected read exploration row: %#v", progress.Timeline[0])
 	}
 
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
@@ -734,11 +734,11 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected search start to update same card, got %#v", progress)
 	}
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
-		t.Fatalf("expected shared exploration block with two rows, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 2 {
+		t.Fatalf("expected shared exploration timeline with two rows, got %#v", progress.Timeline)
 	}
-	if progress.Blocks[0].Rows[1].Kind != "search" || progress.Blocks[0].Rows[1].Summary != "compact" || progress.Blocks[0].Rows[1].Secondary != "internal/" {
-		t.Fatalf("unexpected search exploration row: %#v", progress.Blocks[0].Rows)
+	if progress.Timeline[1].Kind != "search" || progress.Timeline[1].Summary != "compact" || progress.Timeline[1].Secondary != "internal/" {
+		t.Fatalf("unexpected search exploration row: %#v", progress.Timeline)
 	}
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -770,8 +770,8 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 	if len(finished) != 1 || finished[0].ExecCommandProgress == nil {
 		t.Fatalf("expected final exploration completion update, got %#v", finished)
 	}
-	if finished[0].ExecCommandProgress.Blocks[0].Status != "completed" {
-		t.Fatalf("expected exploration block to flip completed, got %#v", finished[0].ExecCommandProgress.Blocks)
+	if len(finished[0].ExecCommandProgress.Timeline) == 0 || finished[0].ExecCommandProgress.Timeline[0].Status != "completed" {
+		t.Fatalf("expected exploration timeline to flip completed, got %#v", finished[0].ExecCommandProgress.Timeline)
 	}
 }
 
@@ -798,8 +798,8 @@ func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.
 		t.Fatalf("expected first read start, got %#v", first)
 	}
 	progress := first[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 || progress.Blocks[0].Rows[0].Kind != "read" {
-		t.Fatalf("expected first read row, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "read" {
+		t.Fatalf("expected first read row, got %#v", progress.Timeline)
 	}
 
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
@@ -819,11 +819,11 @@ func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.
 		t.Fatalf("expected list update, got %#v", second)
 	}
 	progress = second[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
-		t.Fatalf("expected read + list rows, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 2 {
+		t.Fatalf("expected read + list rows, got %#v", progress.Timeline)
 	}
-	if progress.Blocks[0].Rows[1].Kind != "list" || progress.Blocks[0].Rows[1].Summary != "ls -la" {
-		t.Fatalf("expected upstream-style list summary, got %#v", progress.Blocks[0].Rows)
+	if progress.Timeline[1].Kind != "list" || progress.Timeline[1].Summary != "ls -la" {
+		t.Fatalf("expected upstream-style list summary, got %#v", progress.Timeline)
 	}
 
 	third := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -841,10 +841,10 @@ func TestCommandExecutionExplorationProgressKeepsSeparatedReadGroups(t *testing.
 		t.Fatalf("expected second read update, got %#v", third)
 	}
 	progress = third[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 3 {
-		t.Fatalf("expected separated read groups around list row, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 3 {
+		t.Fatalf("expected separated read groups around list row, got %#v", progress.Timeline)
 	}
-	rows := progress.Blocks[0].Rows
+	rows := progress.Timeline
 	if rows[0].Kind != "read" || len(rows[0].Items) != 1 || rows[0].Items[0] != "foo.txt" {
 		t.Fatalf("unexpected first read row: %#v", rows)
 	}
@@ -879,8 +879,8 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 		t.Fatalf("expected first read row, got %#v", first)
 	}
 	progress := first[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
-		t.Fatalf("expected first read block row, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "read" {
+		t.Fatalf("expected first read block row, got %#v", progress.Timeline)
 	}
 
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", progress.ItemID, "om-progress-1")
@@ -900,11 +900,11 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 		t.Fatalf("expected exec entry update, got %#v", second)
 	}
 	progress = second[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "npm test" {
-		t.Fatalf("expected exec entry barrier, got %#v", progress.Entries)
+	if len(progress.Timeline) != 2 || progress.Timeline[1].Kind != "command_execution" || progress.Timeline[1].Summary != "npm test" {
+		t.Fatalf("expected exec entry barrier, got %#v", progress.Timeline)
 	}
-	if progress.Entries[0].LastSeq != 2 {
-		t.Fatalf("expected exec entry to carry visible order seq, got %#v", progress.Entries)
+	if progress.Timeline[1].LastSeq != 2 {
+		t.Fatalf("expected exec entry to carry visible order seq, got %#v", progress.Timeline)
 	}
 
 	third := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -922,17 +922,20 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 		t.Fatalf("expected second read update, got %#v", third)
 	}
 	progress = third[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
-		t.Fatalf("expected exec entry to break read merge, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 3 {
+		t.Fatalf("expected exec entry to break read merge, got %#v", progress.Timeline)
 	}
-	rows := progress.Blocks[0].Rows
+	rows := progress.Timeline
 	if rows[0].Kind != "read" || len(rows[0].Items) != 1 || rows[0].Items[0] != "foo.txt" {
 		t.Fatalf("unexpected first read row: %#v", rows)
 	}
-	if rows[1].Kind != "read" || len(rows[1].Items) != 1 || rows[1].Items[0] != "bar.txt" {
+	if rows[1].Kind != "command_execution" || rows[1].Summary != "npm test" {
+		t.Fatalf("unexpected exec barrier row: %#v", rows)
+	}
+	if rows[2].Kind != "read" || len(rows[2].Items) != 1 || rows[2].Items[0] != "bar.txt" {
 		t.Fatalf("unexpected second read row: %#v", rows)
 	}
-	if rows[0].LastSeq != 1 || rows[1].LastSeq != 3 {
+	if rows[0].LastSeq != 1 || rows[2].LastSeq != 3 {
 		t.Fatalf("expected read rows to preserve visible order seq across entry barrier, got %#v", rows)
 	}
 }
@@ -960,8 +963,8 @@ func TestCommandExecutionExplorationProgressOnlyMergesSameReadCommand(t *testing
 		t.Fatalf("expected first read row, got %#v", first)
 	}
 	progress := first[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
-		t.Fatalf("expected first read row, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "read" {
+		t.Fatalf("expected first read row, got %#v", progress.Timeline)
 	}
 
 	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -979,10 +982,10 @@ func TestCommandExecutionExplorationProgressOnlyMergesSameReadCommand(t *testing
 		t.Fatalf("expected second read update, got %#v", second)
 	}
 	progress = second[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 2 {
-		t.Fatalf("expected different read commands to stay separated, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 2 {
+		t.Fatalf("expected different read commands to stay separated, got %#v", progress.Timeline)
 	}
-	rows := progress.Blocks[0].Rows
+	rows := progress.Timeline
 	if rows[0].Kind != "read" || len(rows[0].Items) != 1 || rows[0].Items[0] != "foo.txt" {
 		t.Fatalf("unexpected first read row: %#v", rows)
 	}
@@ -1014,15 +1017,12 @@ func TestCommandExecutionExplorationProgressRecognizesQuotedRgRegexSearch(t *tes
 		t.Fatalf("expected regex search exploration update, got %#v", started)
 	}
 	progress := started[0].ExecCommandProgress
-	if len(progress.Blocks) != 1 || len(progress.Blocks[0].Rows) != 1 {
-		t.Fatalf("expected single exploration block row, got %#v", progress.Blocks)
+	if len(progress.Timeline) != 1 {
+		t.Fatalf("expected single exploration block row, got %#v", progress.Timeline)
 	}
-	row := progress.Blocks[0].Rows[0]
+	row := progress.Timeline[0]
 	if row.Kind != "search" || row.Summary != "surfaceProgressLabel|renderSurfaceProgressBlockRow" || row.Secondary != "web/src/routes/admin/helpers.ts" {
 		t.Fatalf("unexpected regex search exploration row: %#v", row)
-	}
-	if len(progress.Entries) != 0 {
-		t.Fatalf("expected regex search not to fall back to legacy entry, got %#v", progress.Entries)
 	}
 }
 
@@ -1191,7 +1191,7 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 	for _, event := range finished {
 		if event.Kind == eventcontract.KindExecCommandProgress && event.ExecCommandProgress != nil {
 			sawFinalProgress = true
-			if len(event.ExecCommandProgress.Entries) != 1 || event.ExecCommandProgress.Entries[0].Status != "failed" {
+			if len(event.ExecCommandProgress.Timeline) != 1 || event.ExecCommandProgress.Timeline[0].Status != "failed" {
 				t.Fatalf("expected final progress update to mark command failed, got %#v", event.ExecCommandProgress)
 			}
 		}
@@ -1227,9 +1227,6 @@ func TestReasoningSummaryProgressChattyEmitsEnglishTimelineEntry(t *testing.T) {
 		t.Fatalf("expected one reasoning progress event, got %#v", events)
 	}
 	progress := events[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "reasoning_summary" || progress.Entries[0].Summary != "Considering Git commands" {
-		t.Fatalf("expected reasoning to surface as english timeline entry, got %#v", progress)
-	}
 	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "reasoning_summary" || progress.Timeline[0].Summary != "Considering Git commands" {
 		t.Fatalf("expected reasoning timeline item, got %#v", progress.Timeline)
 	}

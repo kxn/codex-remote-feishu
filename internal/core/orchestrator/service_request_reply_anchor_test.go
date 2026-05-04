@@ -174,7 +174,7 @@ func TestRemoteRequestPromptCutsSharedProgressSegment(t *testing.T) {
 	if activeProgressMessageID(progress) != "" {
 		t.Fatalf("expected fresh shared progress after request boundary instead of patching old card, got %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].ItemID != "cmd-2" {
+	if len(progress.Timeline) != 1 || progress.Timeline[0].ID != "cmd-2" {
 		t.Fatalf("expected fresh shared progress state after request boundary, got %#v", progress)
 	}
 }

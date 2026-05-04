@@ -535,16 +535,6 @@ type ImageOutput struct {
 	ImageBase64 string
 }
 
-type ExecCommandProgressEntry struct {
-	ItemID     string
-	Kind       string
-	Label      string
-	Summary    string
-	Status     string
-	FileChange *ExecCommandProgressFileChange
-	LastSeq    int
-}
-
 type ExecCommandProgressFileChange struct {
 	Path         string
 	MovePath     string
@@ -566,22 +556,6 @@ type ExecCommandProgressTimelineItem struct {
 	LastSeq    int
 }
 
-type ExecCommandProgressBlockRow struct {
-	RowID     string
-	Kind      string
-	Items     []string
-	Summary   string
-	Secondary string
-	LastSeq   int
-}
-
-type ExecCommandProgressBlock struct {
-	BlockID string
-	Kind    string
-	Status  string
-	Rows    []ExecCommandProgressBlockRow
-}
-
 type ExecCommandProgressSegment struct {
 	SegmentID string
 	MessageID string
@@ -597,14 +571,7 @@ type ExecCommandProgress struct {
 	ActiveSegmentID string
 	Segments        []ExecCommandProgressSegment
 	Verbosity       string
-	Blocks          []ExecCommandProgressBlock
-	Entries         []ExecCommandProgressEntry
 	Timeline        []ExecCommandProgressTimelineItem
-	Commands        []string
-	Command         string
-	CWD             string
-	Status          string
-	Final           bool
 }
 
 type DaemonCommandKind string

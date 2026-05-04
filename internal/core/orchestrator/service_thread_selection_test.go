@@ -1093,7 +1093,7 @@ func TestTurnCompletedEmbedsFileChangeSummaryIntoFinalAssistantBlock(t *testing.
 	if events[0].ExecCommandProgress.Verbosity != string(state.SurfaceVerbosityNormal) {
 		t.Fatalf("expected file change progress to inherit normal verbosity, got %#v", events[0].ExecCommandProgress)
 	}
-	if len(events[0].ExecCommandProgress.Entries) != 1 || events[0].ExecCommandProgress.Entries[0].Kind != "file_change" {
+	if len(events[0].ExecCommandProgress.Timeline) != 1 || events[0].ExecCommandProgress.Timeline[0].Kind != "file_change" {
 		t.Fatalf("expected structured file change entry on shared progress card, got %#v", events[0].ExecCommandProgress)
 	}
 	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{

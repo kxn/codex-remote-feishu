@@ -192,34 +192,24 @@ func normalizeExecProgressTimelineItem(item control.ExecCommandProgressTimelineI
 func renderExecProgressTimelineItem(item control.ExecCommandProgressTimelineItem, verbose bool, fileLabels map[string]string) string {
 	switch strings.ToLower(strings.TrimSpace(item.Kind)) {
 	case "read", "list", "search":
-		return renderExecProgressBlockRow(control.ExecCommandProgressBlockRow{
-			Kind:      item.Kind,
-			Items:     append([]string(nil), item.Items...),
-			Summary:   item.Summary,
-			Secondary: item.Secondary,
-		})
+		return renderExecProgressExplorationItem(item)
 	default:
-		return renderExecProgressEntry(control.ExecCommandProgressEntry{
-			Kind:       item.Kind,
-			Label:      item.Label,
-			Summary:    item.Summary,
-			FileChange: item.FileChange,
-		}, verbose, fileLabels)
+		return renderExecProgressEntityItem(item, verbose, fileLabels)
 	}
 }
 
-func renderExecProgressBlockRow(row control.ExecCommandProgressBlockRow) string {
-	switch strings.ToLower(strings.TrimSpace(row.Kind)) {
+func renderExecProgressExplorationItem(item control.ExecCommandProgressTimelineItem) string {
+	switch strings.ToLower(strings.TrimSpace(item.Kind)) {
 	case "read":
-		return execProgressPrefixedMarkdown("读取", strings.Join(execProgressReadNames(row.Items), "、"))
+		return execProgressPrefixedMarkdown("读取", strings.Join(execProgressReadNames(item.Items), "、"))
 	case "list":
-		return execProgressPrefixedMarkdown("列目录", renderExecProgressEntitySummary(row.Summary, 60))
+		return execProgressPrefixedMarkdown("列目录", renderExecProgressEntitySummary(item.Summary, 60))
 	case "search":
-		return execProgressPrefixedMarkdown("搜索", renderExecProgressSearchSummary(row.Summary, row.Secondary, 60))
+		return execProgressPrefixedMarkdown("搜索", renderExecProgressSearchSummary(item.Summary, item.Secondary, 60))
 	default:
-		text := row.Summary
-		if text == "" && len(row.Items) != 0 {
-			text = strings.Join(row.Items, " ")
+		text := item.Summary
+		if text == "" && len(item.Items) != 0 {
+			text = strings.Join(item.Items, " ")
 		}
 		return truncateExecProgressSummary(text, 60)
 	}
@@ -246,46 +236,46 @@ func execProgressReadNames(items []string) []string {
 	return names
 }
 
-func renderExecProgressEntry(entry control.ExecCommandProgressEntry, verbose bool, fileLabels map[string]string) string {
-	label := strings.TrimSpace(entry.Label)
+func renderExecProgressEntityItem(item control.ExecCommandProgressTimelineItem, verbose bool, fileLabels map[string]string) string {
+	label := strings.TrimSpace(item.Label)
 	if label == "" {
 		label = "工作中"
 	}
-	switch strings.TrimSpace(entry.Kind) {
+	switch strings.TrimSpace(item.Kind) {
 	case "command_execution":
-		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 30))
+		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(item.Summary, 30))
 	case "reasoning_summary":
-		return strings.TrimSpace(entry.Summary)
+		return strings.TrimSpace(item.Summary)
 	case "reasoning_placeholder":
-		return strings.TrimSpace(entry.Summary)
+		return strings.TrimSpace(item.Summary)
 	case "web_search":
 		if label == "搜索" {
-			return execProgressPrefixedMarkdown(label, renderExecProgressSearchSummary(entry.Summary, "", 40))
+			return execProgressPrefixedMarkdown(label, renderExecProgressSearchSummary(item.Summary, "", 40))
 		}
-		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(item.Summary, 40))
 	case "delegated_task":
-		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(item.Summary, 40))
 	case "mcp_tool_call", "dynamic_tool_call":
-		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(label, renderExecProgressEntitySummary(item.Summary, 40))
 	case "file_change":
-		return renderExecProgressFileChangeEntry(entry, verbose, fileLabels)
+		return renderExecProgressFileChangeItem(item, verbose, fileLabels)
 	case "context_compaction":
-		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(item.Summary, 40))
 	default:
-		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(entry.Summary, 40))
+		return execProgressPrefixedMarkdown(label, truncateExecProgressSummary(item.Summary, 40))
 	}
 }
 
-func renderExecProgressFileChangeEntry(entry control.ExecCommandProgressEntry, verbose bool, fileLabels map[string]string) string {
-	if entry.FileChange == nil {
-		return execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"), renderExecProgressEntitySummary(entry.Summary, 40))
+func renderExecProgressFileChangeItem(item control.ExecCommandProgressTimelineItem, verbose bool, fileLabels map[string]string) string {
+	if item.FileChange == nil {
+		return execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(item.Label), "修改"), renderExecProgressEntitySummary(item.Summary, 40))
 	}
-	file := execProgressFileChangeSummaryEntry(*entry.FileChange)
-	line := execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(entry.Label), "修改"), renderExecProgressFileChangePathMarkdown(file, fileLabels)+"  "+formatFileChangeCountsMarkdown(file.AddedLines, file.RemovedLines))
+	file := execProgressFileChangeSummaryEntry(*item.FileChange)
+	line := execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(item.Label), "修改"), renderExecProgressFileChangePathMarkdown(file, fileLabels)+"  "+formatFileChangeCountsMarkdown(file.AddedLines, file.RemovedLines))
 	if !verbose {
 		return line
 	}
-	diff := truncateExecProgressFileChangeDiff(strings.TrimSpace(entry.FileChange.Diff))
+	diff := truncateExecProgressFileChangeDiff(strings.TrimSpace(item.FileChange.Diff))
 	if diff == "" {
 		return line
 	}

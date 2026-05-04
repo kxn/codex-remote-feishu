@@ -240,7 +240,7 @@ func TestTurnPlanUpdateCutsSharedProgressSegment(t *testing.T) {
 	if activeProgressMessageID(progress) != "" {
 		t.Fatalf("expected new shared progress to start a fresh card instead of patching old card, got %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].ItemID != "cmd-2" {
+	if len(progress.Timeline) != 1 || progress.Timeline[0].ID != "cmd-2" {
 		t.Fatalf("expected fresh shared progress state after plan boundary, got %#v", progress)
 	}
 }

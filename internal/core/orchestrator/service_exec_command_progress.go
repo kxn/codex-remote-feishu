@@ -74,19 +74,14 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
 		return nil
 	}
-	command, cwd := execprogress.CommandMetadata(event)
+	command, _ := execprogress.CommandMetadata(event)
 	if command == "" {
 		return nil
 	}
 	progress := s.ensureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	prevItemID := strings.TrimSpace(progress.ItemID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
-	progress.Command = command
-	progress.Commands = execprogress.AppendCommandHistory(progress.Commands, command)
-	if strings.TrimSpace(cwd) != "" {
-		progress.CWD = cwd
-	}
-	progress.Status = execprogress.NormalizeStatus(event.Status, false)
+	status := execprogress.NormalizeStatus(event.Status, false)
 	explorationChanged := false
 	if changed, ok := execprogress.UpsertExplorationProgressForCommandExecution(progress, event, false); ok {
 		explorationChanged = changed
@@ -97,7 +92,7 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 			Kind:    "command_execution",
 			Label:   "执行",
 			Summary: command,
-			Status:  progress.Status,
+			Status:  status,
 		})
 	}
 	if !explorationChanged && prevItemID != "" && prevItemID == progress.ItemID && !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
@@ -132,17 +127,15 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 	if progress == nil {
 		return nil
 	}
-	command, cwd := execprogress.CommandMetadata(event)
-	if strings.TrimSpace(event.ItemID) != "" {
-		progress.ItemID = strings.TrimSpace(event.ItemID)
+	command, _ := execprogress.CommandMetadata(event)
+	itemID := strings.TrimSpace(event.ItemID)
+	if itemID == "" {
+		itemID = strings.TrimSpace(progress.ItemID)
 	}
-	if command != "" {
-		progress.Command = command
+	if itemID != "" {
+		progress.ItemID = itemID
 	}
-	if strings.TrimSpace(cwd) != "" {
-		progress.CWD = cwd
-	}
-	progress.Status = execprogress.NormalizeStatus(event.Status, true)
+	status := execprogress.NormalizeStatus(event.Status, true)
 	if changed, ok := execprogress.UpsertExplorationProgressForCommandExecution(progress, event, true); ok {
 		progress.ItemID = execprogress.ExplorationBlockID
 		if changed && s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
@@ -150,15 +143,15 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 		}
 		return nil
 	}
-	if !execprogress.HasEntry(progress, event.ItemID, "command_execution") {
+	if itemID == "" || !execprogress.HasEntry(progress, itemID, "command_execution") {
 		return nil
 	}
 	execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
-		ItemID:  strings.TrimSpace(event.ItemID),
+		ItemID:  itemID,
 		Kind:    "command_execution",
 		Label:   "执行",
-		Summary: firstNonEmpty(command, progress.Command),
-		Status:  progress.Status,
+		Summary: command,
+		Status:  status,
 	})
 	return nil
 }
@@ -370,7 +363,6 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	if snapshot == nil {
 		return nil
 	}
-	snapshot.Final = final
 	snapshot.DetourLabel = remoteBindingDetourLabel(s.lookupRemoteTurn(progress.InstanceID, threadID, turnID))
 	outbound := eventcontract.Event{
 		Kind:                eventcontract.KindExecCommandProgress,

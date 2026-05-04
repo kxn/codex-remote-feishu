@@ -167,9 +167,6 @@ func (s *Service) replayThreadUpdate(surface *state.SurfaceConsoleRecord, inst *
 			}
 			progress := &control.ExecCommandProgress{
 				ThreadID: threadID,
-				Entries: []control.ExecCommandProgressEntry{
-					compactCompletionProgressEntry("context_compaction"),
-				},
 				Timeline: []control.ExecCommandProgressTimelineItem{
 					compactCompletionProgressTimelineItem("context_compaction"),
 				},

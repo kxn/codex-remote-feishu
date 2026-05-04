@@ -35,7 +35,7 @@ func TestMCPToolCallProgressUsesSharedProcessCard(t *testing.T) {
 		t.Fatalf("expected mcp progress to reply to original source message, got %#v", started[0])
 	}
 	progress := started[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "mcp_tool_call" || progress.Entries[0].Label != "MCP" || progress.Entries[0].Summary != "docs.lookup" {
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "mcp_tool_call" || progress.Timeline[0].Label != "MCP" || progress.Timeline[0].Summary != "docs.lookup" {
 		t.Fatalf("unexpected shared start progress payload: %#v", progress)
 	}
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "mcp-1", "om-progress-1")
@@ -85,8 +85,8 @@ func TestMCPToolCallProgressUsesSharedProcessCard(t *testing.T) {
 	if activeProgressMessageID(progress) != "om-progress-1" {
 		t.Fatalf("expected failed mcp update to reuse shared card, got %#v", progress)
 	}
-	if len(progress.Entries) != 1 || progress.Entries[0].Summary != "docs.lookup（失败：connector timeout）" {
-		t.Fatalf("unexpected failed shared progress payload: %#v", progress.Entries)
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Summary != "docs.lookup（失败：connector timeout）" {
+		t.Fatalf("unexpected failed shared progress payload: %#v", progress.Timeline)
 	}
 }
 
@@ -191,7 +191,7 @@ func TestMCPToolCallProgressNormalVerbosityShowsSharedProcessCard(t *testing.T) 
 		t.Fatalf("expected normal verbosity to show mcp progress, got %#v", started)
 	}
 	progress := started[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "mcp_tool_call" || progress.Entries[0].Summary != "docs.lookup" {
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "mcp_tool_call" || progress.Timeline[0].Summary != "docs.lookup" {
 		t.Fatalf("unexpected normal mcp progress payload: %#v", progress)
 	}
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "mcp-1", "om-progress-1")
@@ -217,7 +217,7 @@ func TestMCPToolCallProgressNormalVerbosityShowsSharedProcessCard(t *testing.T) 
 		t.Fatalf("expected normal verbosity to update mcp progress on completion, got %#v", completed)
 	}
 	progress = completed[0].ExecCommandProgress
-	if activeProgressMessageID(progress) != "om-progress-1" || len(progress.Entries) != 1 || progress.Entries[0].Summary != "docs.lookup（12 ms）" {
+	if activeProgressMessageID(progress) != "om-progress-1" || len(progress.Timeline) != 1 || progress.Timeline[0].Summary != "docs.lookup（12 ms）" {
 		t.Fatalf("unexpected normal completion payload: %#v", progress)
 	}
 }

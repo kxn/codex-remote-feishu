@@ -46,11 +46,8 @@ func TestContextCompactionRendersSingleNoticeOnAttachedSurface(t *testing.T) {
 		t.Fatalf("expected compact progress event, got %#v", events)
 	}
 	progress := events[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "context_compaction" || progress.Entries[0].Label != "压缩" || progress.Entries[0].Summary != "上下文已压缩。" {
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "context_compaction" || progress.Timeline[0].Label != "压缩" || progress.Timeline[0].Summary != "上下文已压缩。" {
 		t.Fatalf("unexpected compact progress payload: %#v", progress)
-	}
-	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "context_compaction" || progress.Timeline[0].Summary != "上下文已压缩。" {
-		t.Fatalf("expected compact progress to populate canonical timeline, got %#v", progress.Timeline)
 	}
 	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay != nil {
 		t.Fatalf("expected delivered compact notice not to leave replay, got %#v", replay)
@@ -92,7 +89,7 @@ func TestContextCompactionNormalVerbosityShowsAttachedSurfaceCard(t *testing.T) 
 		t.Fatalf("expected normal verbosity to show compact card, got %#v", events)
 	}
 	progress := events[0].ExecCommandProgress
-	if len(progress.Entries) != 1 || progress.Entries[0].Kind != "context_compaction" || progress.Entries[0].Summary != "上下文已压缩。" {
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "context_compaction" || progress.Timeline[0].Summary != "上下文已压缩。" {
 		t.Fatalf("unexpected compact progress payload in normal verbosity: %#v", progress)
 	}
 	if replay := svc.root.Instances["inst-1"].Threads["thread-1"].UndeliveredReplay; replay != nil {

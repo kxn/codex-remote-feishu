@@ -15,7 +15,6 @@ func (s *Service) handleFileChangeProgressStarted(instanceID string, event agent
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
-	progress.Status = execprogress.NormalizeStatus(event.Status, false)
 	if !execprogress.UpsertFileChangeProgressEntries(progress, event, false) {
 		return nil
 	}
@@ -29,7 +28,6 @@ func (s *Service) handleFileChangeProgressCompleted(instanceID string, event age
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
-	progress.Status = execprogress.NormalizeStatus(event.Status, true)
 	if !execprogress.UpsertFileChangeProgressEntries(progress, event, true) {
 		return nil
 	}

@@ -370,10 +370,6 @@ type ExecCommandProgressRecord struct {
 	Segments             []ExecCommandProgressSegmentRecord
 	Verbosity            SurfaceVerbosity
 	Entries              []ExecCommandProgressEntryRecord
-	Commands             []string
-	Command              string
-	CWD                  string
-	Status               string
 	Exploration          *ExecCommandProgressExplorationRecord
 	Reasoning            *ExecCommandProgressReasoningRecord
 	DynamicToolItemGroup map[string]string

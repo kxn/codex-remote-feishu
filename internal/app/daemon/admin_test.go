@@ -321,7 +321,6 @@ func TestRuntimeStatusPayloadOmitsSurfaceProgressSummaries(t *testing.T) {
 		InstanceID: "inst-1",
 		ThreadID:   "thread-1",
 		TurnID:     "turn-1",
-		Status:     "running",
 		Exploration: &state.ExecCommandProgressExplorationRecord{
 			Block: state.ExecCommandProgressBlockRecord{
 				BlockID: "exploration",

@@ -10,9 +10,6 @@ import (
 )
 
 func progressWithTimeline(progress control.ExecCommandProgress) *control.ExecCommandProgress {
-	if len(progress.Timeline) == 0 {
-		progress.Timeline = control.BuildExecCommandProgressTimeline(progress)
-	}
 	return &progress
 }
 
@@ -28,6 +25,48 @@ func progressWithActiveSegment(progress control.ExecCommandProgress, messageID s
 	return progressWithTimeline(progress)
 }
 
+func timelineItem(id, kind, label, summary, status string, seq int) control.ExecCommandProgressTimelineItem {
+	return control.ExecCommandProgressTimelineItem{
+		ID:      id,
+		Kind:    kind,
+		Label:   label,
+		Summary: summary,
+		Status:  status,
+		LastSeq: seq,
+	}
+}
+
+func timelineReadItem(id string, items []string, status string, seq int) control.ExecCommandProgressTimelineItem {
+	return control.ExecCommandProgressTimelineItem{
+		ID:      id,
+		Kind:    "read",
+		Items:   append([]string(nil), items...),
+		Status:  status,
+		LastSeq: seq,
+	}
+}
+
+func timelineListItem(id, summary, status string, seq int) control.ExecCommandProgressTimelineItem {
+	return control.ExecCommandProgressTimelineItem{
+		ID:      id,
+		Kind:    "list",
+		Summary: summary,
+		Status:  status,
+		LastSeq: seq,
+	}
+}
+
+func timelineSearchItem(id, summary, secondary, status string, seq int) control.ExecCommandProgressTimelineItem {
+	return control.ExecCommandProgressTimelineItem{
+		ID:        id,
+		Kind:      "search",
+		Summary:   summary,
+		Secondary: secondary,
+		Status:    status,
+		LastSeq:   seq,
+	}
+}
+
 func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
@@ -39,9 +78,9 @@ func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 			TurnID:      "turn-1",
 			ItemID:      "cmd-1",
 			DetourLabel: "临时会话 · 分支",
-			Commands: []string{
-				`/bin/bash -lc "npm test"`,
-				`bash -lc 'go test ./...'`,
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("cmd-1", "command_execution", "执行", `/bin/bash -lc "npm test"`, "", 1),
+				timelineItem("cmd-2", "command_execution", "执行", `bash -lc 'go test ./...'`, "", 2),
 			},
 		}),
 	})
@@ -95,9 +134,9 @@ func TestProjectExecCommandProgressUpdatesExistingCard(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-1",
-			Command:  "npm test",
-			Status:   "completed",
-			Final:    true,
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("cmd-1", "command_execution", "执行", "npm test", "completed", 1),
+			},
 		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
@@ -122,9 +161,9 @@ func TestProjectExecCommandProgressRendersReasoningSummaryInsideTimeline(t *test
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-1",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "npm test", LastSeq: 1},
-				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: "Thinking.", LastSeq: 2},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("cmd-1", "command_execution", "执行", "npm test", "", 1),
+				timelineItem("reasoning-1", "reasoning_summary", "", "Thinking.", "", 2),
 			},
 		}),
 	})
@@ -152,21 +191,9 @@ func TestProjectExecCommandProgressUsesCanonicalTimelineOnly(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "compact-1",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "running",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read-legacy", Kind: "read", Items: []string{"legacy.txt"}, LastSeq: 1},
-				},
-			}},
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-legacy", Kind: "command_execution", Label: "执行", Summary: "legacy command", LastSeq: 2},
-			},
-			Commands: []string{`bash -lc "legacy command"`},
 			Timeline: []control.ExecCommandProgressTimelineItem{
-				{ID: "read-1", Kind: "read", Items: []string{"foo.txt"}, LastSeq: 1},
-				{ID: "compact-1", Kind: "context_compaction", Summary: "上下文已压缩。", LastSeq: 2},
+				timelineReadItem("read-1", []string{"foo.txt"}, "", 1),
+				timelineItem("compact-1", "context_compaction", "", "上下文已压缩。", "", 2),
 			},
 		},
 	})
@@ -192,19 +219,10 @@ func TestProjectExecCommandProgressDoesNotRenderFallbackCommandsAlongsideExplora
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "exploration",
-			Commands: []string{
-				`bash -lc "cat foo.txt"`,
-				`bash -lc "cat bar.txt"`,
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineReadItem("read-1", []string{"foo.txt"}, "running", 1),
+				timelineReadItem("read-2", []string{"bar.txt"}, "running", 2),
 			},
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "running",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read-1", Kind: "read", Items: []string{"foo.txt"}, LastSeq: 1},
-					{RowID: "read-2", Kind: "read", Items: []string{"bar.txt"}, LastSeq: 2},
-				},
-			}},
 		}),
 	})
 	if len(ops) != 1 {
@@ -229,21 +247,10 @@ func TestProjectExecCommandProgressKeepsRealEntriesOnSameTimelineAsExplorationRo
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "compact-1",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "running",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read-1", Kind: "read", Items: []string{"foo.txt"}, LastSeq: 1},
-					{RowID: "read-2", Kind: "read", Items: []string{"bar.txt"}, LastSeq: 3},
-				},
-			}},
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "compact-1", Kind: "context_compaction", Label: "压缩", Summary: "上下文已压缩。", LastSeq: 2},
-			},
-			Commands: []string{
-				`bash -lc "cat foo.txt"`,
-				`bash -lc "cat bar.txt"`,
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineReadItem("read-1", []string{"foo.txt"}, "running", 1),
+				timelineItem("compact-1", "context_compaction", "压缩", "上下文已压缩。", "completed", 2),
+				timelineReadItem("read-2", []string{"bar.txt"}, "running", 3),
 			},
 		}),
 	})
@@ -289,21 +296,14 @@ func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "web-1",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: `bash -lc "go test ./..."`},
-				{ItemID: "web-1", Kind: "web_search", Label: "搜索", Summary: "上海天气"},
-				{ItemID: "web-2", Kind: "web_search", Label: "打开网页", Summary: "https://example.com/weather"},
-				{ItemID: "mcp-1", Kind: "mcp_tool_call", Label: "MCP", Summary: "docs.lookup（12 ms）"},
-				{ItemID: "compact-1", Kind: "context_compaction", Summary: "上下文已压缩。"},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineReadItem("read", []string{"a.cpp", "b.cpp"}, "completed", 1),
+				timelineItem("cmd-1", "command_execution", "执行", `bash -lc "go test ./..."`, "", 2),
+				timelineItem("web-1", "web_search", "搜索", "上海天气", "", 3),
+				timelineItem("web-2", "web_search", "打开网页", "https://example.com/weather", "", 4),
+				timelineItem("mcp-1", "mcp_tool_call", "MCP", "docs.lookup（12 ms）", "", 5),
+				timelineItem("compact-1", "context_compaction", "", "上下文已压缩。", "", 6),
 			},
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "completed",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read", Kind: "read", Items: []string{"a.cpp", "b.cpp"}},
-				},
-			}},
 		}),
 	})
 	if len(ops) != 1 {
@@ -334,8 +334,8 @@ func TestProjectExecCommandProgressKeepsWebSearchStatusPlainText(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "web-1",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "web-1", Kind: "web_search", Label: "搜索", Summary: "正在搜索网络"},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("web-1", "web_search", "搜索", "正在搜索网络", "", 1),
 			},
 		}),
 	})
@@ -358,8 +358,8 @@ func TestProjectExecCommandProgressRendersDelegatedTask(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "task-1",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "task-1", Kind: "delegated_task", Label: "Task", Summary: "Explore · Audit the repository", LastSeq: 1},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("task-1", "delegated_task", "Task", "Explore · Audit the repository", "", 1),
 			},
 		}),
 	})
@@ -383,8 +383,8 @@ func TestProjectExecCommandProgressRendersFileChangeSummaryInNormal(t *testing.T
 			TurnID:    "turn-1",
 			ItemID:    "file-1",
 			Verbosity: "normal",
-			Entries: []control.ExecCommandProgressEntry{{
-				ItemID:  "file-1::service.go",
+			Timeline: []control.ExecCommandProgressTimelineItem{{
+				ID:      "file-1::service.go",
 				Kind:    "file_change",
 				Label:   "修改",
 				Summary: "service.go",
@@ -422,8 +422,8 @@ func TestProjectExecCommandProgressPreservesLongUniqueBasenameInFileChangeSummar
 			TurnID:    "turn-1",
 			ItemID:    "file-1",
 			Verbosity: "normal",
-			Entries: []control.ExecCommandProgressEntry{{
-				ItemID:  "file-1::long-name",
+			Timeline: []control.ExecCommandProgressTimelineItem{{
+				ID:      "file-1::long-name",
 				Kind:    "file_change",
 				Label:   "修改",
 				Summary: "service_exec_command_progress_test.go",
@@ -461,8 +461,8 @@ func TestProjectExecCommandProgressRendersFileChangeDiffInVerbose(t *testing.T) 
 			TurnID:    "turn-1",
 			ItemID:    "file-1",
 			Verbosity: "verbose",
-			Entries: []control.ExecCommandProgressEntry{{
-				ItemID:  "file-1::guide",
+			Timeline: []control.ExecCommandProgressTimelineItem{{
+				ID:      "file-1::guide",
 				Kind:    "file_change",
 				Label:   "修改",
 				Summary: "docs/guide.md -> docs/guide-v2.md",
@@ -501,8 +501,8 @@ func TestProjectExecCommandProgressRendersFileChangeDiffInChatty(t *testing.T) {
 			TurnID:    "turn-1",
 			ItemID:    "file-1",
 			Verbosity: "chatty",
-			Entries: []control.ExecCommandProgressEntry{{
-				ItemID:  "file-1::guide",
+			Timeline: []control.ExecCommandProgressTimelineItem{{
+				ID:      "file-1::guide",
 				Kind:    "file_change",
 				Label:   "修改",
 				Summary: "docs/guide.md -> docs/guide-v2.md",
@@ -536,17 +536,10 @@ func TestProjectExecCommandProgressInterleavesExplorationRowsAndEntriesByVisible
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-3",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "running",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read-1", Kind: "read", Items: []string{"foo.txt"}, LastSeq: 1},
-					{RowID: "read-2", Kind: "read", Items: []string{"bar.txt"}, LastSeq: 3},
-				},
-			}},
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: "npm test", LastSeq: 2},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineReadItem("read-1", []string{"foo.txt"}, "running", 1),
+				timelineItem("cmd-2", "command_execution", "执行", "npm test", "", 2),
+				timelineReadItem("read-2", []string{"bar.txt"}, "running", 3),
 			},
 		}),
 	})
@@ -575,9 +568,9 @@ func TestProjectExecCommandProgressRendersEachLineAsSeparatePlainTextElement(t *
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-2",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: `bash -lc "rg -n 'x' | sed -n '1,2p'"`, LastSeq: 1},
-				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: `bash -lc "rg --files -g '*.css' -g '*.scss'"`, LastSeq: 2},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("cmd-1", "command_execution", "执行", `bash -lc "rg -n 'x' | sed -n '1,2p'"`, "", 1),
+				timelineItem("cmd-2", "command_execution", "执行", `bash -lc "rg --files -g '*.css' -g '*.scss'"`, "", 2),
 			},
 		}),
 	})
@@ -614,18 +607,11 @@ func TestProjectExecCommandProgressKeepsDynamicTextOutOfMarkdownElements(t *test
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "mcp-1",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "completed",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read-1", Kind: "read", Items: []string{"docs/[draft].md"}, LastSeq: 1},
-					{RowID: "search-1", Kind: "search", Summary: "`compact` [todo]", Secondary: "internal/[core]", LastSeq: 2},
-				},
-			}},
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "echo \"[link](demo)\" `code`", LastSeq: 3},
-				{ItemID: "mcp-1", Kind: "mcp_tool_call", Label: "MCP", Summary: "docs.lookup [spec](demo) `fast`", LastSeq: 4},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineReadItem("read-1", []string{"docs/[draft].md"}, "completed", 1),
+				timelineSearchItem("search-1", "`compact` [todo]", "internal/[core]", "completed", 2),
+				timelineItem("cmd-1", "command_execution", "执行", "echo \"[link](demo)\" `code`", "", 3),
+				timelineItem("mcp-1", "mcp_tool_call", "MCP", "docs.lookup [spec](demo) `fast`", "", 4),
 			},
 		}),
 	})
@@ -660,15 +646,9 @@ func TestProjectExecCommandProgressKeepsDynamicTextOutOfMarkdownElements(t *test
 
 func TestProjectExecCommandProgressDropsOldLinesWhenOversized(t *testing.T) {
 	projector := NewProjector()
-	entries := make([]control.ExecCommandProgressEntry, 0, 480)
+	entries := make([]control.ExecCommandProgressTimelineItem, 0, 480)
 	for i := 1; i <= 480; i++ {
-		entries = append(entries, control.ExecCommandProgressEntry{
-			ItemID:  "cmd-" + strconv.Itoa(i),
-			Kind:    "command_execution",
-			Label:   "执行",
-			Summary: "go test ./pkg/" + strconv.Itoa(i),
-			LastSeq: i,
-		})
+		entries = append(entries, timelineItem("cmd-"+strconv.Itoa(i), "command_execution", "执行", "go test ./pkg/"+strconv.Itoa(i), "", i))
 	}
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
@@ -677,7 +657,7 @@ func TestProjectExecCommandProgressDropsOldLinesWhenOversized(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-480",
-			Entries:  entries,
+			Timeline: entries,
 		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
@@ -712,24 +692,10 @@ func TestProjectExecCommandProgressDropsOldLinesWhenOversized(t *testing.T) {
 
 func TestProjectExecCommandProgressCarriesRunningEntryIntoNewSegment(t *testing.T) {
 	projector := NewProjector()
-	entries := make([]control.ExecCommandProgressEntry, 0, 481)
-	entries = append(entries, control.ExecCommandProgressEntry{
-		ItemID:  "cmd-active",
-		Kind:    "command_execution",
-		Label:   "执行",
-		Summary: "go test ./active",
-		Status:  "running",
-		LastSeq: 1,
-	})
+	entries := make([]control.ExecCommandProgressTimelineItem, 0, 481)
+	entries = append(entries, timelineItem("cmd-active", "command_execution", "执行", "go test ./active", "running", 1))
 	for i := 2; i <= 481; i++ {
-		entries = append(entries, control.ExecCommandProgressEntry{
-			ItemID:  "cmd-" + strconv.Itoa(i),
-			Kind:    "command_execution",
-			Label:   "执行",
-			Summary: "go test ./pkg/" + strconv.Itoa(i),
-			Status:  "completed",
-			LastSeq: i,
-		})
+		entries = append(entries, timelineItem("cmd-"+strconv.Itoa(i), "command_execution", "执行", "go test ./pkg/"+strconv.Itoa(i), "completed", i))
 	}
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind:             eventcontract.KindExecCommandProgress,
@@ -738,7 +704,7 @@ func TestProjectExecCommandProgressCarriesRunningEntryIntoNewSegment(t *testing.
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-481",
-			Entries:  entries,
+			Timeline: entries,
 		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
@@ -765,11 +731,11 @@ func TestProjectExecCommandProgressUsesStoredWindowStartSeq(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-4",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "go test ./one", LastSeq: 1},
-				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: "go test ./two", LastSeq: 2},
-				{ItemID: "cmd-3", Kind: "command_execution", Label: "执行", Summary: "go test ./three", LastSeq: 3},
-				{ItemID: "cmd-4", Kind: "command_execution", Label: "执行", Summary: "go test ./four", LastSeq: 4},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("cmd-1", "command_execution", "执行", "go test ./one", "", 1),
+				timelineItem("cmd-2", "command_execution", "执行", "go test ./two", "", 2),
+				timelineItem("cmd-3", "command_execution", "执行", "go test ./three", "", 3),
+				timelineItem("cmd-4", "command_execution", "执行", "go test ./four", "", 4),
 			},
 		}, "om-progress-2", 3),
 	})
@@ -797,9 +763,9 @@ func TestProjectExecCommandProgressFallsBackWhenStoredWindowIsStale(t *testing.T
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-2",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "cmd-1", Kind: "command_execution", Label: "执行", Summary: "go test ./one", LastSeq: 1},
-				{ItemID: "cmd-2", Kind: "command_execution", Label: "执行", Summary: "go test ./two", LastSeq: 2},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("cmd-1", "command_execution", "执行", "go test ./one", "", 1),
+				timelineItem("cmd-2", "command_execution", "执行", "go test ./two", "", 2),
 			},
 		}, "om-progress-3", 99),
 	})
@@ -824,8 +790,8 @@ func TestProjectExecCommandProgressKeepsLongReasoningSummaryUntilCardBudget(t *t
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "reasoning-1",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: summary, LastSeq: 1},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("reasoning-1", "reasoning_summary", "", summary, "", 1),
 			},
 		}, "om-progress-1", 1),
 	})
@@ -847,8 +813,8 @@ func TestProjectExecCommandProgressTruncatesSingleReasoningLineOnlyAtCardBudget(
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "reasoning-1",
-			Entries: []control.ExecCommandProgressEntry{
-				{ItemID: "reasoning-1", Kind: "reasoning_summary", Summary: summary, LastSeq: 1},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("reasoning-1", "reasoning_summary", "", summary, "", 1),
 			},
 		}, "om-progress-1", 1),
 	})
@@ -878,16 +844,11 @@ func TestProjectExecCommandProgressRendersExplorationBlockStatuses(t *testing.T)
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "exploration",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "running",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read", Kind: "read", Items: []string{"docs/README.md", "internal/core/control/types.go"}},
-					{RowID: "list::internal/core", Kind: "list", Summary: "internal/core"},
-					{RowID: "search::compact::internal/", Kind: "search", Summary: "compact", Secondary: "internal/"},
-				},
-			}},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineReadItem("read", []string{"docs/README.md", "internal/core/control/types.go"}, "running", 1),
+				timelineListItem("list::internal/core", "internal/core", "running", 2),
+				timelineSearchItem("search::compact::internal/", "compact", "internal/", "running", 3),
+			},
 		}),
 	})
 	if len(ops) != 1 {
@@ -912,14 +873,9 @@ func TestProjectExecCommandProgressRendersExploredHeaderForFailedExploration(t *
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "exploration",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "failed",
-				Rows: []control.ExecCommandProgressBlockRow{
-					{RowID: "read::1", Kind: "read", Items: []string{"/dev/null"}},
-				},
-			}},
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineReadItem("read::1", []string{"/dev/null"}, "failed", 1),
+			},
 		}),
 	})
 	if len(ops) != 1 {
@@ -941,20 +897,11 @@ func TestProjectExecCommandProgressKeepsMergedReadFilenamesVisible(t *testing.T)
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "read-1",
-			Blocks: []control.ExecCommandProgressBlock{{
-				BlockID: "exploration",
-				Kind:    "exploration",
-				Status:  "completed",
-				Rows: []control.ExecCommandProgressBlockRow{{
-					RowID: "read-1",
-					Kind:  "read",
-					Items: []string{
-						"/tmp/alpha-really-long-file-name.md",
-						"/tmp/beta-really-long-file-name.md",
-						"/tmp/gamma-really-long-file-name.md",
-					},
-				}},
-			}},
+			Timeline: []control.ExecCommandProgressTimelineItem{timelineReadItem("read-1", []string{
+				"/tmp/alpha-really-long-file-name.md",
+				"/tmp/beta-really-long-file-name.md",
+				"/tmp/gamma-really-long-file-name.md",
+			}, "completed", 1)},
 		}),
 	})
 	if len(ops) != 1 {
@@ -976,8 +923,8 @@ func TestProjectExecCommandProgressTruncatesLongCommandSummary(t *testing.T) {
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "cmd-1",
-			Commands: []string{
-				`/bin/bash -lc "python scripts/really_long_task.py --workspace /tmp/demo --mode dry-run --verbose"`,
+			Timeline: []control.ExecCommandProgressTimelineItem{
+				timelineItem("cmd-1", "command_execution", "执行", `/bin/bash -lc "python scripts/really_long_task.py --workspace /tmp/demo --mode dry-run --verbose"`, "", 1),
 			},
 		}),
 	})

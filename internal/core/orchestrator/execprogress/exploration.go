@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -24,45 +23,6 @@ type explorationAction struct {
 type ExplorationAction = explorationAction
 
 var explorationShellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)
-
-func Blocks(progress *state.ExecCommandProgressRecord) []control.ExecCommandProgressBlock {
-	if progress == nil {
-		return nil
-	}
-	blocks := make([]control.ExecCommandProgressBlock, 0, 1)
-	if progress.Exploration != nil {
-		if block := cloneExecCommandProgressBlock(progress.Exploration.Block); block != nil {
-			blocks = append(blocks, *block)
-		}
-	}
-	if len(blocks) == 0 {
-		return nil
-	}
-	return blocks
-}
-
-func cloneExecCommandProgressBlock(block state.ExecCommandProgressBlockRecord) *control.ExecCommandProgressBlock {
-	rows := make([]control.ExecCommandProgressBlockRow, 0, len(block.Rows))
-	for _, row := range block.Rows {
-		rows = append(rows, control.ExecCommandProgressBlockRow{
-			RowID:     row.RowID,
-			Kind:      row.Kind,
-			Items:     append([]string(nil), row.Items...),
-			Summary:   row.Summary,
-			Secondary: row.Secondary,
-			LastSeq:   row.LastSeq,
-		})
-	}
-	if strings.TrimSpace(block.BlockID) == "" && strings.TrimSpace(block.Kind) == "" && len(rows) == 0 {
-		return nil
-	}
-	return &control.ExecCommandProgressBlock{
-		BlockID: block.BlockID,
-		Kind:    block.Kind,
-		Status:  block.Status,
-		Rows:    rows,
-	}
-}
 
 func UpsertExplorationProgressForCommandExecution(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) (bool, bool) {
 	command, _ := CommandMetadata(event)

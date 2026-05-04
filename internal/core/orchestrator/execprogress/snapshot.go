@@ -15,7 +15,6 @@ func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandPro
 	if progress == nil {
 		return nil
 	}
-	snapshotEntries := snapshotVisibleEntries(progress)
 	segments := make([]control.ExecCommandProgressSegment, 0, len(progress.Segments))
 	for _, segment := range progress.Segments {
 		segments = append(segments, control.ExecCommandProgressSegment{
@@ -32,46 +31,9 @@ func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandPro
 		ActiveSegmentID: progress.ActiveSegmentID,
 		Segments:        segments,
 		Verbosity:       string(progress.Verbosity),
-		Blocks:          Blocks(progress),
-		Entries:         snapshotEntries,
-		Commands:        append([]string(nil), progress.Commands...),
-		Command:         progress.Command,
-		CWD:             progress.CWD,
-		Status:          progress.Status,
+		Timeline:        Timeline(progress),
 	}
-	snapshot.Timeline = snapshotTimeline(progress, snapshotEntries)
 	return snapshot
-}
-
-func snapshotVisibleEntries(progress *state.ExecCommandProgressRecord) []control.ExecCommandProgressEntry {
-	entries := visibleExecCommandProgressEntries(progress)
-	snapshotEntries := make([]control.ExecCommandProgressEntry, 0, len(entries))
-	for _, entry := range entries {
-		snapshotEntries = append(snapshotEntries, control.ExecCommandProgressEntry{
-			ItemID:     entry.ItemID,
-			Kind:       entry.Kind,
-			Label:      entry.Label,
-			Summary:    entry.Summary,
-			Status:     entry.Status,
-			FileChange: CloneFileChange(entry.FileChange),
-			LastSeq:    entry.LastSeq,
-		})
-	}
-	return snapshotEntries
-}
-
-func snapshotTimeline(progress *state.ExecCommandProgressRecord, entries []control.ExecCommandProgressEntry) []control.ExecCommandProgressTimelineItem {
-	if progress == nil {
-		return nil
-	}
-	// Timeline is the canonical outward contract; legacy carriers remain only as
-	// compatibility mirrors until the wider DTO cleanup lands.
-	return control.BuildExecCommandProgressTimeline(control.ExecCommandProgress{
-		Blocks:   Blocks(progress),
-		Entries:  append([]control.ExecCommandProgressEntry(nil), entries...),
-		Commands: append([]string(nil), progress.Commands...),
-		Command:  progress.Command,
-	})
 }
 
 func visibleExecCommandProgressEntries(progress *state.ExecCommandProgressRecord) []state.ExecCommandProgressEntryRecord {
@@ -213,14 +175,6 @@ func CommandMetadata(event agentproto.Event) (string, string) {
 	return strings.TrimSpace(command), strings.TrimSpace(cwd)
 }
 
-func AppendCommandHistory(commands []string, command string) []string {
-	command = strings.TrimSpace(command)
-	if command == "" {
-		return commands
-	}
-	return append(commands, command)
-}
-
 func HasEntry(progress *state.ExecCommandProgressRecord, itemID, kind string) bool {
 	if progress == nil {
 		return false
@@ -247,9 +201,6 @@ func UpsertEntry(progress *state.ExecCommandProgressRecord, entry state.ExecComm
 	entry.Label = strings.TrimSpace(entry.Label)
 	entry.Summary = strings.TrimSpace(entry.Summary)
 	entry.Status = strings.TrimSpace(entry.Status)
-	if entry.Summary == "" {
-		return
-	}
 	for i := range progress.Entries {
 		current := &progress.Entries[i]
 		if entry.ItemID != "" && current.ItemID == entry.ItemID {
@@ -274,6 +225,9 @@ func UpsertEntry(progress *state.ExecCommandProgressRecord, entry state.ExecComm
 			}
 			return
 		}
+	}
+	if entry.Summary == "" {
+		return
 	}
 	progress.LastVisibleSeq++
 	entry.LastSeq = progress.LastVisibleSeq

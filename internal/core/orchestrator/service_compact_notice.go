@@ -31,19 +31,8 @@ func compactCompletionProgressEntryRecord(itemID string) state.ExecCommandProgre
 	}
 }
 
-func compactCompletionProgressEntry(itemID string) control.ExecCommandProgressEntry {
-	entry := compactCompletionProgressEntryRecord(itemID)
-	return control.ExecCommandProgressEntry{
-		ItemID:  entry.ItemID,
-		Kind:    entry.Kind,
-		Label:   entry.Label,
-		Summary: entry.Summary,
-		Status:  entry.Status,
-	}
-}
-
 func compactCompletionProgressTimelineItem(itemID string) control.ExecCommandProgressTimelineItem {
-	entry := compactCompletionProgressEntry(itemID)
+	entry := compactCompletionProgressEntryRecord(itemID)
 	return control.ExecCommandProgressTimelineItem{
 		ID:      entry.ItemID,
 		Kind:    entry.Kind,

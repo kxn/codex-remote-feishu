@@ -72,7 +72,6 @@ func TestRecordUIEventDeliveryTracksExecProgressPatchedWindowStart(t *testing.T)
 			MessageID: "om-progress-1",
 			StartSeq:  1,
 		}},
-		Status:        "running",
 		LastEmittedAt: time.Date(2026, 4, 19, 10, 1, 0, 0, time.UTC),
 	}
 
@@ -113,7 +112,6 @@ func TestRecordUIEventDeliveryTracksExecProgressFromPayloadFirstEvent(t *testing
 			MessageID: "om-progress-1",
 			StartSeq:  1,
 		}},
-		Status:        "running",
 		LastEmittedAt: time.Date(2026, 4, 19, 10, 1, 0, 0, time.UTC),
 	}
 
@@ -161,7 +159,6 @@ func TestRecordUIEventDeliveryAppendsNewProgressSegmentAndRollsOverRunningEntrie
 			{ItemID: "cmd-latest", Kind: "command_execution", Summary: "go test ./latest", Status: "completed", LastSeq: 120},
 		},
 		LastVisibleSeq: 120,
-		Status:         "running",
 		LastEmittedAt:  time.Date(2026, 5, 2, 10, 1, 0, 0, time.UTC),
 	}
 
@@ -215,7 +212,6 @@ func TestRecordUIEventDeliveryClearsDeletedExecProgressSegmentAndAllowsReuse(t *
 			MessageID: "om-progress-1",
 			StartSeq:  1,
 		}},
-		Status:        "running",
 		LastEmittedAt: time.Date(2026, 5, 4, 10, 1, 0, 0, time.UTC),
 	}
 	event := eventcontract.Event{
