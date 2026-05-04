@@ -27,6 +27,9 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 	if planMode := snapshotPlanModeText(snapshot.NextPrompt, snapshot.Dispatch); planMode != "" {
 		lines = append(lines, snapshotLine("Plan mode", planMode))
 	}
+	if observedAccessMode := snapshotObservedThreadAccessModeText(snapshot.NextPrompt); observedAccessMode != "" {
+		lines = append(lines, snapshotLine("会话最近本地权限", observedAccessMode))
+	}
 	if observedPlanMode := snapshotObservedThreadPlanModeText(snapshot.NextPrompt); observedPlanMode != "" {
 		lines = append(lines, snapshotLine("会话最近本地模式", observedPlanMode))
 	}
@@ -295,6 +298,13 @@ func snapshotObservedThreadPlanModeText(summary control.PromptRouteSummary) stri
 		return ""
 	}
 	return displaySnapshotPlanMode(summary.ObservedThreadPlanMode)
+}
+
+func snapshotObservedThreadAccessModeText(summary control.PromptRouteSummary) string {
+	if agentproto.NormalizeAccessMode(summary.ObservedThreadAccessMode) == "" {
+		return ""
+	}
+	return displaySnapshotAccessMode(summary.ObservedThreadAccessMode)
 }
 
 func snapshotShouldShowPromptCWD(workspaceKey, cwd string) bool {

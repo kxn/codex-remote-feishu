@@ -138,3 +138,113 @@ func TestPlanConfirmationDeclineRequestsInterruptOnDecline(t *testing.T) {
 		t.Fatalf("unexpected plan bridge contract: %#v", req)
 	}
 }
+
+func TestClaudePlanConfirmationAcceptClearsPlanOverrideOnlyAfterResolved(t *testing.T) {
+	now := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-1",
+		DisplayName:     "droid",
+		WorkspaceRoot:   "/data/dl/droid",
+		WorkspaceKey:    "/data/dl/droid",
+		ShortName:       "droid",
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: state.DefaultClaudeProfileID,
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", Text: "/mode claude"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	surface := svc.root.Surfaces["surface-1"]
+	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-plan-1",
+		Metadata: map[string]any{
+			"requestType":   "approval",
+			"requestMethod": "tool/ExitPlanMode",
+			"body":          "Claude 计划如下，请确认是否继续。",
+			"options": []map[string]any{
+				{"id": "accept", "label": "批准"},
+				{"id": "decline", "label": "拒绝"},
+			},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "om-card-accept",
+		Request:          testRequestAction("req-plan-1", "approval", "accept", nil, 0),
+	})
+	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
+		t.Fatalf("expected plan override to stay until request.resolved, got %#v", surface)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestResolved,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-plan-1",
+		Metadata: map[string]any{
+			"decision": "accept",
+		},
+	})
+	if surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+		t.Fatalf("expected request.resolved accept to clear plan override, got %#v", surface)
+	}
+}
+
+func TestClaudePlanConfirmationDeclineKeepsPlanOverride(t *testing.T) {
+	now := time.Date(2026, 5, 4, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-1",
+		DisplayName:     "droid",
+		WorkspaceRoot:   "/data/dl/droid",
+		WorkspaceKey:    "/data/dl/droid",
+		ShortName:       "droid",
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: state.DefaultClaudeProfileID,
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", Text: "/mode claude"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	surface := svc.root.Surfaces["surface-1"]
+	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
+	surface.PendingRequests = map[string]*state.RequestPromptRecord{
+		"req-plan-1": {
+			RequestID:    "req-plan-1",
+			RequestType:  "approval",
+			SemanticKind: control.RequestSemanticPlanConfirmation,
+			Backend:      agentproto.BackendClaude,
+		},
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestResolved,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-plan-1",
+		Metadata: map[string]any{
+			"decision": "decline",
+		},
+	})
+	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
+		t.Fatalf("expected decline to keep plan override, got %#v", surface)
+	}
+}

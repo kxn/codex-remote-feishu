@@ -241,6 +241,7 @@ func buildSessionThreadSnapshot(meta claudeSessionMeta, runtime RuntimeStateSnap
 		Preview:       strings.TrimSpace(meta.Preview),
 		CWD:           strings.TrimSpace(meta.CWD),
 		Model:         model,
+		AccessMode:    accessMode,
 		PlanMode:      planMode,
 		Loaded:        loaded,
 		Archived:      false,

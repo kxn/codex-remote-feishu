@@ -41,6 +41,20 @@ func TestPlanConfigPageShowsVSCodeNoOverrideState(t *testing.T) {
 	}
 }
 
+func TestAccessConfigPageShowsObservedThreadAccess(t *testing.T) {
+	page := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:            FeishuCommandAccess,
+		CatalogBackend:       agentproto.BackendClaude,
+		CurrentValue:         agentproto.AccessModeConfirm,
+		EffectiveValue:       agentproto.AccessModeConfirm,
+		EffectiveValueSource: "thread",
+	})
+	text := configPageSummaryText(page)
+	if !strings.Contains(text, "会话最近本地权限\nconfirm") {
+		t.Fatalf("expected access page to show observed thread access, got %q", text)
+	}
+}
+
 func configPageSummaryText(page FeishuPageView) string {
 	var parts []string
 	for _, section := range page.SummarySections {

@@ -26,10 +26,14 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 		override = surface.PromptOverride
 	}
 	threadTitle := ""
+	observedThreadAccessMode := ""
 	observedThreadPlanMode := ""
 	if threadID != "" {
 		thread := inst.Threads[threadID]
 		threadTitle = displayThreadTitle(inst, thread, threadID)
+		if thread != nil && agentproto.NormalizeAccessMode(thread.ObservedAccessMode) != "" {
+			observedThreadAccessMode = agentproto.NormalizeAccessMode(thread.ObservedAccessMode)
+		}
 		if thread != nil && strings.TrimSpace(string(thread.ObservedPlanMode)) != "" {
 			observedThreadPlanMode = string(state.NormalizePlanModeSetting(thread.ObservedPlanMode))
 		}
@@ -59,6 +63,7 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 		PlanModeOverrideSet:            planModeOverrideSet,
 		UsesLocalRequestedOverrides:    usesLocalRequestedOverrides,
 		EffectivePlanMode:              effectivePlanMode,
+		ObservedThreadAccessMode:       observedThreadAccessMode,
 		ObservedThreadPlanMode:         observedThreadPlanMode,
 		EffectiveModel:                 resolution.EffectiveModel.Value,
 		EffectiveReasoningEffort:       resolution.EffectiveReasoningEffort.Value,
@@ -227,6 +232,8 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 	if inst == nil {
 		return model, effort, access
 	}
+	backend := s.promptConfigBackend(inst, surface)
+	claudeHeadless := agentproto.NormalizeBackend(backend) == agentproto.BackendClaude
 	s.backfillLegacyWorkspaceDefaults(inst)
 	if thread := inst.Threads[threadID]; thread != nil {
 		if cwd == "" {
@@ -238,6 +245,11 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 		if thread.ExplicitReasoningEffort != "" {
 			effort = configValue{Value: thread.ExplicitReasoningEffort, Source: "thread"}
 		}
+		if claudeHeadless {
+			if observed := agentproto.NormalizeAccessMode(thread.ObservedAccessMode); observed != "" {
+				access = configValue{Value: observed, Source: "thread"}
+			}
+		}
 	}
 	if defaults, ok := s.resolveWorkspaceDefaults(inst, surface, cwd); ok {
 		if model.Value == "" && defaults.Model != "" {
@@ -246,7 +258,7 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 		if effort.Value == "" && defaults.ReasoningEffort != "" {
 			effort = configValue{Value: defaults.ReasoningEffort, Source: "workspace_default"}
 		}
-		if defaults.AccessMode != "" {
+		if !claudeHeadless && defaults.AccessMode != "" {
 			access = configValue{Value: defaults.AccessMode, Source: "workspace_default"}
 		}
 	}
@@ -259,7 +271,7 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 			if effort.Value == "" && defaults.ReasoningEffort != "" {
 				effort = configValue{Value: defaults.ReasoningEffort, Source: "cwd_default"}
 			}
-			if access.Value == "" && defaults.AccessMode != "" {
+			if !claudeHeadless && access.Value == "" && defaults.AccessMode != "" {
 				access = configValue{Value: defaults.AccessMode, Source: "cwd_default"}
 			}
 		}
