@@ -660,8 +660,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		if len(planEvents) == 0 {
 			return s.filterEventsForSurfaceVisibility(preface)
 		}
-		events := append(preface, s.flushAndSealExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)...)
-		return s.filterEventsForSurfaceVisibility(append(events, planEvents...))
+		events := append(preface, planEvents...)
+		events = s.insertExecCommandProgressBoundary(instanceID, event.ThreadID, event.TurnID, events)
+		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventTurnStarted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		preface = append(preface, s.maybeSealPlanProposalForTurnStart(instanceID, event.ThreadID, event.TurnID)...)
@@ -783,15 +784,19 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		}
 		events := append(preface, s.handleProcessProgressItemCompleted(instanceID, event)...)
 		events = append(events, s.completeItem(instanceID, event)...)
+		events = s.insertExecCommandProgressBoundary(instanceID, event.ThreadID, event.TurnID, events)
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventRequestStarted:
-		return s.filterEventsForSurfaceVisibility(append(preface, s.presentRequestPrompt(instanceID, event)...))
+		events := append(preface, s.presentRequestPrompt(instanceID, event)...)
+		events = s.insertExecCommandProgressBoundary(instanceID, event.ThreadID, event.TurnID, events)
+		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventRequestResolved:
 		return s.filterEventsForSurfaceVisibility(append(preface, s.resolveRequestPrompt(instanceID, event)...))
 	case agentproto.EventSystemError:
 		problem := problemFromEvent(event)
 		events := append(preface, s.handleCompactProblem(instanceID, problem)...)
 		events = append(events, s.handleProblem(instanceID, problem)...)
+		events = s.insertExecCommandProgressBoundary(instanceID, event.ThreadID, event.TurnID, events)
 		return s.filterEventsForSurfaceVisibility(events)
 	default:
 		return s.filterEventsForSurfaceVisibility(preface)

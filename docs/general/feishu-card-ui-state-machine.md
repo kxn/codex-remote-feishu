@@ -548,8 +548,8 @@ MCP request 卡片当前新增的可视语义：
 - `/upgrade` 命令族当前还明确收成“page vs execute”两类共享分类：`/upgrade` 与 `/upgrade track` 属于 page subpage，会继续命中 stamped current-card replace；`/upgrade latest`、`/upgrade dev`、`/upgrade local`、`/upgrade codex` 与 `/upgrade track <track>` 都属于立即执行分支，不再依赖零散 token heuristics 区分。
 - `/upgrade latest` 当前不走 callback 同步 replace；但只要进入 daemon owner-card 流，同一张升级卡会继续通过 `message.patch` 在 `checking -> confirm -> running/cancelling -> restarting(sealed)` 之间推进，不再依赖“再次发送 `/upgrade latest`”。
 - `/upgrade codex` 当前也属于立即执行命令，不走 callback 同步 replace；若入口来自 stamped `/upgrade` 根页当前卡，daemon 会直接把这张根页卡交给 Codex upgrade owner-card flow。Codex 卡片当前先即时打开，不自动跑最新版本查询；只有点击 `检查更新` 才会异步 lookup latest。检查结果无论是“已是最新”“发现新版本但暂时不能升级”“发现新版本且可升级”，都会回到同一张可再次检查的 owner card；真正进入升级后只在 initiator surface 的同卡上继续 patch `running -> success/failed`，其它 surface 默认保持静默，只有用户主动输入时才收到缓存提示。
-- turn-owned 的投递策略当前已经改成“高价值文本 reply、过程卡仍顶层 append”：
-  - `当前计划`、request prompt、共享过程卡、图片输出、preview supplement、turn-owned notice 当前都固定顶层 append，不再继承 `SourceMessageID`
+- turn-owned 的投递策略当前已经改成“可见结果按各自车道投递，但共享过程卡会在前台边界前主动切段”：
+  - `当前计划`、request prompt、图片输出、preview supplement、turn-owned notice、普通/最终 assistant 文本，当前都会各自按事件自己的 delivery 规则选择 reply-thread 或顶层 append；shared progress 自身仍维持独立 patchable progress-card family
   - 文本触发 `/history` 的首张 patchable history card 仍保持顶层 append；它属于 owner-card / history 混合路径，也不跟随 turn reply anchor
   - final reply（含 overflow continuation）继续 reply 到 turn anchor；later replay 若命中已记录的 reply anchor，也会优先回到原回复链
   - 非 final 的 assistant 普通文本（当前只限 `render.BlockAssistantMarkdown` / `render.BlockAssistantCode`）现在也会沿用当前 turn reply anchor；是否真正可见仍由 surface verbosity 过滤决定，quiet 下不会因为 reply thread 改动而强行变可见
@@ -606,6 +606,8 @@ MCP request 卡片当前新增的可视语义：
   - 若同一 turn 内继续收到新的可见过程项，则优先对当前 active progress segment card 做 `message.patch`；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call`、`file_change`、`context_compaction` 与 `reasoning_summary` 累积到同一条共享“工作中”时间线里
   - assistant 正文这条路径当前以“真正要对用户发出可见文本块”的边界切段：`agent_message delta/completed` 只会累计 pending text，不会单独终止共享过程；真正 flush 成 `block.committed` 前会先 flush dirty reasoning，再 seal 当前 active progress，后续过程项必须重新开新段
   - 非重复 `turn.plan.updated + planSnapshot` 会单独 append `当前计划` 卡，并成为共享过程卡的产品分段边界：发计划卡前先 flush dirty reasoning，再终止当前 active progress；后续过程项必须重新开“工作中”卡，不能继续 patch 计划卡之前的旧共享过程卡
+  - 除 assistant 正文与 plan 之外，当前其余 turn-owned append-only 前台输出也统一共享这条边界规则：`request prompt`、图片输出、`steer_user_supplement` reply-thread 文本、以及 turn 内直接抛出的可见 notice，在真正投递这些结果前也会先 seal 当前 active progress；后续过程项必须重新开“工作中”卡，而不是继续 patch 这些前台结果之前的旧 progress card
+  - 这条“前台边界先切 progress”规则只作用于 turn-owned append-only 结果；inline replace request/page 刷新、pending input 状态、selection/path/target/history 这类 UI 导航/状态反馈不算共享过程卡边界
   - 若 projector 发现当前 active progress card 在 Feishu payload 限制内已无法继续容纳新增的可见行，则不会再依赖 gateway 的尾部截断来“省略后文”；当前实现会：
     - 当前 active segment 就地 seal，不再继续 patch 旧卡
     - 直接新开下一张共享过程卡，形成同一 turn 下的 progress-card family
@@ -836,7 +838,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_compact_notice_test.go](../../internal/core/orchestrator/service_compact_notice_test.go)
   - 锁定 `context_compaction` 已并入共享过程卡：attached normal / verbose 都会进入 `整理` 行，quiet 保持静默；无 surface 时的 replay 也只在 normal / verbose attach 下可见，并继续保持顶层 append-only
 - [internal/core/orchestrator/service_image_output_test.go](../../internal/core/orchestrator/service_image_output_test.go)
-  - 锁定 `dynamic_tool_call` 只产出文字摘要 / 图片链接摘要，不再因图片 rich result 自动生成 `UIEventImageOutput`；空输出场景保持静默、不再补缺省 notice
+  - 锁定 `dynamic_tool_call` 只产出文字摘要 / 图片链接摘要，不再因图片 rich result 自动生成 `UIEventImageOutput`；`image_generation` 的真实图片输出会立即出站并切断当前 active shared-progress segment，空输出场景保持静默、不再补缺省 notice
 - [internal/core/orchestrator/service_target_picker_test.go](../../internal/core/orchestrator/service_target_picker_test.go)
   - 锁定 target picker 的 inline refresh、页头单题文案、owner-subpage path picker 回流、`/workspace list` 切换、`/workspace new dir` / `git` / `worktree` 路径的前置阻塞校验、worktree 只列 Git workspace、recoverable-only workspace headless 路径、Git import / worktree 长链路的 processing / cancel / blocked-input / terminal 收口，以及 stale selection 不会 silent fallback
 - [internal/core/orchestrator/service_path_picker_test.go](../../internal/core/orchestrator/service_path_picker_test.go)
@@ -855,6 +857,8 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 inline `/history` 会先 replace 当前卡为 loading，同时继续异步派发查询，不把后续 result patch 链路挤坏
 - [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)
   - 锁定 `UIEvent` 现在会携带显式 `Feishu*Context` query/policy 元数据；selection/command view 的 UI owner 已切到 read model，但用户可见行为保持不变
+- [internal/core/orchestrator/service_request_reply_anchor_test.go](../../internal/core/orchestrator/service_request_reply_anchor_test.go)
+  - 锁定 request prompt 继续继承 turn reply anchor、detached branch request 不会偷走当前 selection，以及 append-only request prompt 会切断当前 active shared-progress segment，确保后续过程重新开新“工作中”卡
 - [internal/core/orchestrator/service_local_request_menu_test.go](../../internal/core/orchestrator/service_local_request_menu_test.go)
   - 锁定 `/help` 与 `/menu` 当前共用 display projection：`codex` 会把 `switch_target` 收口成 `工作会话`，`claude` 会显示 `/list` / `/use`，`vscode` 继续保留 `/list` / `/use` / `/useall`
 - [internal/core/control/feishu_command_page_catalog_test.go](../../internal/core/control/feishu_command_page_catalog_test.go)

@@ -115,3 +115,66 @@ func TestDetachedBranchRequestPromptKeepsReplyAnchorAndSelection(t *testing.T) {
 		t.Fatalf("expected detached branch request record to retain anchor and execution thread, got %#v", record)
 	}
 }
+
+func TestRemoteRequestPromptCutsSharedProgressSegment(t *testing.T) {
+	now := time.Date(2026, 5, 4, 14, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": "go test ./...",
+		},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial shared progress event, got %#v", started)
+	}
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-remote-1",
+		Metadata: map[string]any{
+			"requestType": "permissions_request_approval",
+			"title":       "需要授予权限",
+		},
+	})
+	if len(events) != 1 || events[0].RequestView == nil {
+		t.Fatalf("expected one request prompt event, got %#v", events)
+	}
+	if surface.ActiveExecProgress != nil {
+		t.Fatalf("expected request prompt to terminate active shared progress segment, got %#v", surface.ActiveExecProgress)
+	}
+
+	next := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": "go test ./internal/core/orchestrator",
+		},
+	})
+	if len(next) != 1 || next[0].ExecCommandProgress == nil {
+		t.Fatalf("expected new shared progress event after request boundary, got %#v", next)
+	}
+	progress := next[0].ExecCommandProgress
+	if activeProgressMessageID(progress) != "" {
+		t.Fatalf("expected fresh shared progress after request boundary instead of patching old card, got %#v", progress)
+	}
+	if len(progress.Entries) != 1 || progress.Entries[0].ItemID != "cmd-2" {
+		t.Fatalf("expected fresh shared progress state after request boundary, got %#v", progress)
+	}
+}

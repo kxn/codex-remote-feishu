@@ -211,7 +211,7 @@ func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.Comman
 			ThumbsUp:    true,
 		}, queueItemSourceMessageIDs(item))...)
 	}
-	return events
+	return s.insertExecCommandProgressBoundary(binding.InstanceID, binding.ThreadID, binding.TurnID, events)
 }
 
 func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.CommandAck) []eventcontract.Event {
