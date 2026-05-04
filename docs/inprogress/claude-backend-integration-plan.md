@@ -1,7 +1,7 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-05-03`
+> Updated: `2026-05-04`
 > Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还补上了 Claude `prompt.send` 与 `turn.steer` approximation 的本地图片输入支持，文件继续保持 `@path` 文本桥接；`turn.steer` 仍不宣称 native capability，但 reply auto steer 与 `/steerall` 已可把文本与本地图片补充并入当前 active turn。
 
 ## 1. 文档定位
@@ -851,7 +851,7 @@ MVP 目标值：
 2. 不包含业务层 approximation
 3. 不包含 raw passthrough
 4. `#498` 落地后的当前代码基线里，Claude 默认 capability 应真实宣称 `sessionCatalog=true` 与 `threadsRefresh=true`；这两个 bit 仍然不能在未接 host bridge 时被提前混为一谈
-5. `turn.steer` 仍然不应出现在 capability declaration 里；当前文本 steer 只是 command-profile 层的 approximation，不是 native capability
+5. `turn.steer` 仍然不应出现在 capability declaration 里；当前文本与本地图片 steer 只是 command-profile 层的 approximation，不是 native capability
 
 ### 7.3 Claude runtime 内部设计
 
@@ -988,7 +988,7 @@ Claude runtime 分三块：
 | `/new` `/list` `/use` | approximation | visible | allow | Claude MVP 的工作会话主链；继续复用现有产品壳，但底层改走 backend-aware session catalog / route contract。 |
 | `/review` `/patch` | approximation | hidden | reject | 当前不纳入 Claude MVP；在 detached review / turn patch 的 runtime contract 补齐前，不对用户暴露。 |
 | `/workspace*` `/useall` | approximation | hidden | reject | Claude MVP 不开放工作区父页或跨工作区总览。 |
-| `/steerall` | approximation | visible | allow | 仅文本补充可并入当前 active turn；图片等非文本仍显式拒绝，并恢复原 queue/staged 状态。 |
+| `/steerall` | approximation | visible | allow | 文本与本地图片补充可并入当前 active turn；远程图片与 document 输入仍显式拒绝，并恢复原 queue/staged 状态。 |
 | `/plan` `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude MVP 范围内。 |
 
 对 help/menu 的显式投影也一并固定为：
@@ -1218,7 +1218,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 3. interrupt 成功
 4. approval / user input / elicitation 回写成功
 5. `threads.refresh` 与 `thread.history.read` 成功
-6. 文本 steer approximation 成功并入当前 active turn；非文本 steer 仍显式 reject，且不污染 queue / request state
+6. 文本与本地图片 steer approximation 成功并入当前 active turn；远程图片与 document steer 仍显式 reject，且不污染 queue / request state
 
 ### 9.3 混合场景安全
 

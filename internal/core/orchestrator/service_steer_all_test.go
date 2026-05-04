@@ -129,6 +129,79 @@ func TestSteerAllCommandAcceptedMarksAllQueuedItemsSteered(t *testing.T) {
 	}
 }
 
+func TestSteerAllCommandAcceptedPreservesLocalImageInputs(t *testing.T) {
+	now := time.Date(2026, 4, 14, 10, 12, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-1"})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-active",
+		Text:             "先开始",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionImageMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-queued-image",
+		LocalPath:        "/tmp/queued.png",
+		MIMEType:         "image/png",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-queued-text",
+		Text:             "补充信息",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionSteerAll,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-steer-all-image",
+	})
+	if len(events) != 2 || events[1].Command == nil || events[1].Command.Kind != agentproto.CommandTurnSteer {
+		t.Fatalf("expected notice + single steer command, got %#v", events)
+	}
+	inputs := events[1].Command.Prompt.Inputs
+	if len(inputs) != 2 || inputs[0].Type != agentproto.InputLocalImage || inputs[0].Path != "/tmp/queued.png" || inputs[1].Type != agentproto.InputText || inputs[1].Text != "补充信息" {
+		t.Fatalf("expected local image + text steer inputs, got %#v", inputs)
+	}
+
+	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-all-image-1")
+	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{CommandID: "cmd-steer-all-image-1", Accepted: true})
+	if len(accepted) != 3 {
+		t.Fatalf("expected supplement text plus two pending-input acknowledgements, got %#v", accepted)
+	}
+	if accepted[0].TimelineText == nil || accepted[0].TimelineText.Type != control.TimelineTextSteerUserSupplement || accepted[0].TimelineText.Text != "用户补充：补充信息（追加 1 张图片）" {
+		t.Fatalf("unexpected steer-all supplement event: %#v", accepted[0])
+	}
+	for _, event := range accepted[1:] {
+		if event.PendingInput == nil || !event.PendingInput.QueueOff || !event.PendingInput.ThumbsUp || event.PendingInput.Status != string(state.QueueItemSteered) {
+			t.Fatalf("unexpected steer-all accepted projection: %#v", accepted)
+		}
+	}
+}
+
 func TestSteerAllMenuActionAcceptedPatchesSameCard(t *testing.T) {
 	now := time.Date(2026, 4, 19, 8, 15, 0, 0, time.UTC)
 	svc := newSteerAllServiceFixture(&now)

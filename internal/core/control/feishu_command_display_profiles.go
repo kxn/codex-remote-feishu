@@ -105,7 +105,7 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		commandSupportHiddenReject(FeishuCommandReview, FeishuCommandSupportApproximation, "Claude `/review` 当前不纳入 visible MVP；在 detached review contract 补齐前保持隐藏并拒绝直接执行。"),
 		commandSupportHiddenReject(FeishuCommandPatch, FeishuCommandSupportApproximation, "Claude `/bendtomywill` 当前不纳入 visible MVP；在 turn patch contract 补齐前保持隐藏并拒绝直接执行。"),
 		commandSupportHiddenAllowed(FeishuCommandUseAll),
-		commandSupportVisibleAs(FeishuCommandSteerAll, FeishuCommandSupportApproximation, "Claude 当前支持把纯文本补充并入当前轮；图片等非文本仍需等待本轮结束或改走新消息。"),
+		commandSupportVisibleAs(FeishuCommandSteerAll, FeishuCommandSupportApproximation, "Claude 当前支持把文本与本地图片补充并入当前轮；远程图片与 document 输入仍需等待本轮结束或改走新消息。"),
 		commandSupportHiddenReject(FeishuCommandPlan, FeishuCommandSupportReject, "Claude 计划确认走 request bridge；在显式 plan contract 落地前不开放 `/plan` 命令入口。"),
 		commandSupportHiddenReject(FeishuCommandAutoWhip, FeishuCommandSupportReject, claudeDefaultRejectNote),
 		commandSupportHiddenReject(FeishuCommandAutoContinue, FeishuCommandSupportReject, claudeDefaultRejectNote),
