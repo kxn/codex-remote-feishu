@@ -36,6 +36,7 @@ func TestResolveFeishuCommandSupportAppliesClaudeProfile(t *testing.T) {
 		{familyID: FeishuCommandPatch, wantKind: FeishuCommandSupportApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "隐藏"},
 		{familyID: FeishuCommandModel, wantKind: FeishuCommandSupportReject, wantVisible: false, wantDispatch: false, wantNoteContains: "Claude 配置"},
 		{familyID: FeishuCommandSteerAll, wantKind: FeishuCommandSupportApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "文本与本地图片补充"},
+		{familyID: FeishuCommandPlan, wantKind: FeishuCommandSupportNative, wantVisible: true, wantDispatch: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.familyID, func(t *testing.T) {

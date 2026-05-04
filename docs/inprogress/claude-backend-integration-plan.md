@@ -989,13 +989,14 @@ Claude runtime 分三块：
 | `/review` `/patch` | approximation | hidden | reject | 当前不纳入 Claude MVP；在 detached review / turn patch 的 runtime contract 补齐前，不对用户暴露。 |
 | `/workspace*` `/useall` | approximation | hidden | reject | Claude MVP 不开放工作区父页或跨工作区总览。 |
 | `/steerall` | approximation | visible | allow | 文本与本地图片补充可并入当前 active turn；远程图片与 document 输入仍显式拒绝，并恢复原 queue/staged 状态。 |
-| `/plan` `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude MVP 范围内。 |
+| `/plan` | native | visible | allow | 当前通过 surface-level `PlanMode` 与 Claude `set_permission_mode(plan/default)` 动态权限通道生效，可用于调试与后续 turn 的 plan mode 切换。 |
+| `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude MVP 范围内。 |
 
 对 help/menu 的显式投影也一并固定为：
 
 1. `current_work` 只保留 `/stop`、`/steerall`、`/new`、`/status`、`/detach`
 2. `switch_target` 只保留 `/list`、`/use`
-3. `send_settings` 继续保留 `/reasoning`、`/access`、`/verbose`、`/claudeprofile`
+3. `send_settings` 继续保留 `/reasoning`、`/access`、`/plan`、`/verbose`、`/claudeprofile`
 4. `common_tools` 当前保留 `/history`、`/sendfile`
 
 #### 7.6.2 `/detach` 的产品语义
@@ -1370,7 +1371,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
    - 最新研究已经明确：`SessionCatalog` 不是 `ThreadsRefresh` 的同义词，而且 capability 必须真实反映 host bridge 是否已落地，所以这一段不能原样带进后续实现
 4. `#494` 当前合同仍然成立。
    - request bridge 对 `plan_confirmation` 的 `decline -> interrupt` 合同仍与黑盒结论一致
-   - `#553` 之后，Claude command support profile 已把 `/new`、`/list`、`/use` 升成 visible + allow approximation；`/sendfile` 因为属于飞书/本地侧文件投递，不依赖 Claude backend，已作为 visible + allow native 入口开放；`/plan` 仍保持 hidden / reject；`workspace*`、`/useall` 则作为 hidden + allow 兼容入口继续复用同一工作区 / 会话壳，避免 target picker 子流程依赖隐式 UI intent 绕过
+   - `#553` 之后，Claude command support profile 已把 `/new`、`/list`、`/use` 升成 visible + allow approximation；`/sendfile` 因为属于飞书/本地侧文件投递，不依赖 Claude backend，已作为 visible + allow native 入口开放；`/plan` 现在也作为 visible + allow native 入口开放，沿用 surface-level `PlanMode` 与 Claude `set_permission_mode` 的动态权限通道；`workspace*`、`/useall` 则作为 hidden + allow 兼容入口继续复用同一工作区 / 会话壳，避免 target picker 子流程依赖隐式 UI intent 绕过
 5. `#492/#493` 的主体方向也仍成立。
    - backend-aware state partition、surface resume carrier、catalog/contextual command seam 目前没有发现被后续 Claude 研究推翻
    - 相关测试面当前仍是绿的：`go test ./internal/core/control ./internal/core/orchestrator ./internal/app/daemon`
