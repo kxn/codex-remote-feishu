@@ -279,6 +279,24 @@ func TestProjectExecCommandProgressDoesNotRetractEmptyTransientCard(t *testing.T
 	}
 }
 
+func TestProjectExecCommandProgressDeletesEmptyPlaceholderCardWhenRequested(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID:      "thread-1",
+			TurnID:        "turn-1",
+			ItemID:        "reasoning-1",
+			DeleteIfEmpty: true,
+		}, "om-progress-1", 1),
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationDeleteMessage || ops[0].MessageID != "om-progress-1" {
+		t.Fatalf("expected explicit empty-placeholder update to delete the old card, got %#v", ops)
+	}
+}
+
 func TestProjectExecCommandProgressRendersSharedWebSearchEntries(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
@@ -448,6 +466,42 @@ func TestProjectExecCommandProgressRendersFileChangeDiffInVerbose(t *testing.T) 
 	}
 	if !strings.Contains(body, markdownFencedCodeBlock("diff", "@@ -1 +1 @@\n-old title\n+new title")) {
 		t.Fatalf("expected verbose file_change to append fenced diff block, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressRendersFileChangeDiffInChatty(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
+			ThreadID:  "thread-1",
+			TurnID:    "turn-1",
+			ItemID:    "file-1",
+			Verbosity: "chatty",
+			Entries: []control.ExecCommandProgressEntry{{
+				ItemID:  "file-1::guide",
+				Kind:    "file_change",
+				Label:   "修改",
+				Summary: "docs/guide.md -> docs/guide-v2.md",
+				FileChange: &control.ExecCommandProgressFileChange{
+					Path:         "docs/guide.md",
+					MovePath:     "docs/guide-v2.md",
+					Kind:         "update",
+					Diff:         "@@ -1 +1 @@\n-old title\n+new title",
+					AddedLines:   1,
+					RemovedLines: 1,
+				},
+				LastSeq: 1,
+			}},
+		}),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	if !strings.Contains(ops[0].CardBody, markdownFencedCodeBlock("diff", "@@ -1 +1 @@\n-old title\n+new title")) {
+		t.Fatalf("expected chatty file_change to keep verbose diff details, got %#v", ops[0])
 	}
 }
 

@@ -15,9 +15,10 @@ func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandPro
 	if progress == nil {
 		return nil
 	}
-	entries := make([]control.ExecCommandProgressEntry, 0, len(progress.Entries))
-	for _, entry := range progress.Entries {
-		entries = append(entries, control.ExecCommandProgressEntry{
+	entries := visibleExecCommandProgressEntries(progress)
+	snapshotEntries := make([]control.ExecCommandProgressEntry, 0, len(entries))
+	for _, entry := range entries {
+		snapshotEntries = append(snapshotEntries, control.ExecCommandProgressEntry{
 			ItemID:     entry.ItemID,
 			Kind:       entry.Kind,
 			Label:      entry.Label,
@@ -44,7 +45,7 @@ func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandPro
 		Segments:        segments,
 		Verbosity:       string(progress.Verbosity),
 		Blocks:          Blocks(progress),
-		Entries:         entries,
+		Entries:         snapshotEntries,
 		Commands:        append([]string(nil), progress.Commands...),
 		Command:         progress.Command,
 		CWD:             progress.CWD,
@@ -52,6 +53,112 @@ func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandPro
 	}
 	snapshot.Timeline = control.BuildExecCommandProgressTimeline(*snapshot)
 	return snapshot
+}
+
+func visibleExecCommandProgressEntries(progress *state.ExecCommandProgressRecord) []state.ExecCommandProgressEntryRecord {
+	if progress == nil {
+		return nil
+	}
+	verbosity := state.NormalizeSurfaceVerbosity(progress.Verbosity)
+	maxSeq := progress.LastVisibleSeq
+	entries := make([]state.ExecCommandProgressEntryRecord, 0, len(progress.Entries)+1)
+	for _, entry := range progress.Entries {
+		if entry.LastSeq > maxSeq {
+			maxSeq = entry.LastSeq
+		}
+		if entry.Kind == "reasoning_summary" && verbosity != state.SurfaceVerbosityChatty {
+			continue
+		}
+		entries = append(entries, CloneEntryRecord(entry))
+	}
+	if verbosity == state.SurfaceVerbosityVerbose && reasoningRecordIsActive(progress.Reasoning) {
+		entries = append(entries, state.ExecCommandProgressEntryRecord{
+			ItemID:  reasoningPlaceholderItemID(progress.Reasoning),
+			Kind:    "reasoning_placeholder",
+			Summary: "思考中...",
+			Status:  "running",
+			LastSeq: maxSeq + 1,
+		})
+	}
+	return entries
+}
+
+func CloneEntryRecord(entry state.ExecCommandProgressEntryRecord) state.ExecCommandProgressEntryRecord {
+	return state.ExecCommandProgressEntryRecord{
+		ItemID:     entry.ItemID,
+		Kind:       entry.Kind,
+		Label:      entry.Label,
+		Summary:    entry.Summary,
+		Status:     entry.Status,
+		FileChange: CloneFileChangeRecord(entry.FileChange),
+		LastSeq:    entry.LastSeq,
+	}
+}
+
+func CloneEntryRecords(entries []state.ExecCommandProgressEntryRecord) []state.ExecCommandProgressEntryRecord {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]state.ExecCommandProgressEntryRecord, 0, len(entries))
+	for _, entry := range entries {
+		out = append(out, CloneEntryRecord(entry))
+	}
+	return out
+}
+
+func CloneFileChangeRecord(change *state.ExecCommandProgressFileChangeRecord) *state.ExecCommandProgressFileChangeRecord {
+	if change == nil {
+		return nil
+	}
+	cloned := *change
+	return &cloned
+}
+
+func CloneReasoningRecord(record *state.ExecCommandProgressReasoningRecord) *state.ExecCommandProgressReasoningRecord {
+	if record == nil {
+		return nil
+	}
+	cloned := *record
+	return &cloned
+}
+
+func ReplaceReasoningEntries(progress *state.ExecCommandProgressRecord, entries []state.ExecCommandProgressEntryRecord) {
+	if progress == nil {
+		return
+	}
+	filtered := make([]state.ExecCommandProgressEntryRecord, 0, len(progress.Entries)+len(entries))
+	maxSeq := progress.LastVisibleSeq
+	for _, entry := range progress.Entries {
+		if entry.Kind == "reasoning_summary" {
+			continue
+		}
+		if entry.LastSeq > maxSeq {
+			maxSeq = entry.LastSeq
+		}
+		filtered = append(filtered, entry)
+	}
+	for _, entry := range entries {
+		cloned := CloneEntryRecord(entry)
+		if cloned.LastSeq > maxSeq {
+			maxSeq = cloned.LastSeq
+		}
+		filtered = append(filtered, cloned)
+	}
+	progress.Entries = filtered
+	if maxSeq > progress.LastVisibleSeq {
+		progress.LastVisibleSeq = maxSeq
+	}
+}
+
+func reasoningRecordIsActive(record *state.ExecCommandProgressReasoningRecord) bool {
+	return record != nil && record.Active
+}
+
+func reasoningPlaceholderItemID(record *state.ExecCommandProgressReasoningRecord) string {
+	if record == nil || strings.TrimSpace(record.ItemID) == "" {
+		return "reasoning_placeholder"
+	}
+	return strings.TrimSpace(record.ItemID) + "::placeholder"
 }
 
 func mapsFromAny(value any) []map[string]any {

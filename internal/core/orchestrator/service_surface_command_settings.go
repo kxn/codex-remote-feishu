@@ -60,6 +60,8 @@ func parseSurfaceVerbosity(value string) (state.SurfaceVerbosity, bool) {
 		return state.SurfaceVerbosityNormal, true
 	case "verbose":
 		return state.SurfaceVerbosityVerbose, true
+	case "chatty":
+		return state.SurfaceVerbosityChatty, true
 	default:
 		return "", false
 	}
@@ -480,7 +482,7 @@ func (s *Service) handleVerboseCommand(surface *state.SurfaceConsoleRecord, acti
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：`/verbose` 查看当前设置；`/verbose quiet`；`/verbose normal`；`/verbose verbose`。",
+			StatusText:       "用法：`/verbose` 查看当前设置；`/verbose quiet`；`/verbose normal`；`/verbose verbose`；`/verbose chatty`。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
@@ -488,7 +490,7 @@ func (s *Service) handleVerboseCommand(surface *state.SurfaceConsoleRecord, acti
 	if !ok {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：`/verbose` 查看当前设置；`/verbose quiet`；`/verbose normal`；`/verbose verbose`。",
+			StatusText:       "用法：`/verbose` 查看当前设置；`/verbose quiet`；`/verbose normal`；`/verbose verbose`；`/verbose chatty`。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}

@@ -18,6 +18,37 @@ const (
 	surfaceVisibilityUINavigation  surfaceVisibilityClass = "ui_navigation"
 )
 
+func surfaceVerbosityRank(value state.SurfaceVerbosity) int {
+	switch state.NormalizeSurfaceVerbosity(value) {
+	case state.SurfaceVerbosityQuiet:
+		return 0
+	case state.SurfaceVerbosityNormal:
+		return 1
+	case state.SurfaceVerbosityVerbose:
+		return 2
+	case state.SurfaceVerbosityChatty:
+		return 3
+	default:
+		return 1
+	}
+}
+
+func surfaceVerbosityAtLeast(value state.SurfaceVerbosity, minimum state.SurfaceVerbosity) bool {
+	return surfaceVerbosityRank(value) >= surfaceVerbosityRank(minimum)
+}
+
+func surfaceShowsReasoningDetail(value state.SurfaceVerbosity) bool {
+	return state.NormalizeSurfaceVerbosity(value) == state.SurfaceVerbosityChatty
+}
+
+func surfaceShowsReasoningPlaceholder(value state.SurfaceVerbosity) bool {
+	return state.NormalizeSurfaceVerbosity(value) == state.SurfaceVerbosityVerbose
+}
+
+func surfaceShowsVisibleReasoning(value state.SurfaceVerbosity) bool {
+	return surfaceShowsReasoningDetail(value) || surfaceShowsReasoningPlaceholder(value)
+}
+
 func (s *Service) filterEventsForSurfaceVisibility(events []eventcontract.Event) []eventcontract.Event {
 	if len(events) == 0 {
 		return nil
@@ -53,7 +84,7 @@ func (s *Service) allowSurfaceVisibleEvent(event eventcontract.Event) bool {
 		}
 	case state.SurfaceVerbosityNormal:
 		return classifySurfaceVisibleEvent(event) != surfaceVisibilityProcessDetail
-	case state.SurfaceVerbosityVerbose:
+	case state.SurfaceVerbosityVerbose, state.SurfaceVerbosityChatty:
 		return true
 	default:
 		return true

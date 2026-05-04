@@ -814,7 +814,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_codex_upgrade_owner_card_test.go](../../internal/app/daemon/app_codex_upgrade_owner_card_test.go)
   - 锁定 `/upgrade codex` owner-card 的即时打开、重复检查、confirm-time 重校验回退、旧卡失效，以及 running / terminal 只留在 initiator surface 的语义
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 行级摘要的投影边界、首卡顶层 append / active segment patch 语义、超预算时改为新开 progress segment card、running 项在新段中的 carry-over 快照、`file_change` 在 normal/verbose 下的分层投影、单条可见行超预算时的预算裁剪、reasoning 持久 timeline 行展示，以及逐行 markdown element 投影
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 行级摘要的投影边界、首卡顶层 append / active segment patch 语义、超预算时改为新开 progress segment card、running 项在新段中的 carry-over 快照、`file_change` 在 normal/verbose/chatty 下的分层投影、单条可见行超预算时的预算裁剪，以及 reasoning 在 `chatty` 下保留明细、在 `verbose` 下收口成尾部 `思考中...` 占位并在必要时删除空占位卡的投影规则
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
   - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
@@ -826,7 +826,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_thread_selection_test.go](../../internal/core/orchestrator/service_thread_selection_test.go)
   - 锁定 VS Code direct selection 会用 `thread_selection_page` 按当前 surface 状态重建 `FeishuThreadSelectionView`，而不是引入新的 owner runtime
 - [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` / `mcp_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 的可见性分档、首卡顶层 append、active segment 复用、超预算后的 segment rollover 与 running 项接管、`file_change` / `mcp_tool_call` / `context_compaction` 在 normal 下也会进入共享过程卡、正文真正 flush 成可见块后终止、同类 tool 行级聚合、失败态行内标记，以及 reasoning 持久 timeline 行的累计、顺序、正文可见 flush 不撤回和 turn 完成封口语义
+  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` / `mcp_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 的可见性分档、首卡顶层 append、active segment 复用、超预算后的 segment rollover 与 running 项接管、`file_change` / `mcp_tool_call` / `context_compaction` 在 normal 下也会进入共享过程卡、正文真正 flush 成可见块后终止、同类 tool 行级聚合、失败态行内标记，以及 reasoning 在 `chatty` 下的明细累计/顺序、`verbose` 下的占位重挂载、正文可见 flush 不撤回和 turn 完成封口语义
 - [internal/core/orchestrator/service_plan_update_test.go](../../internal/core/orchestrator/service_plan_update_test.go)
   - 锁定 `turn.plan.updated + planSnapshot` 会投影为 append-only `当前计划` 卡、同内容快照去重、pending assistant text 在计划卡前 flush，以及非重复计划更新会切断当前 active shared-progress segment，确保后续过程重新开“工作中”卡而不是 patch 旧卡
 - [internal/app/daemon/app_ui_progress_test.go](../../internal/app/daemon/app_ui_progress_test.go)

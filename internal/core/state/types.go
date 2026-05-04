@@ -57,6 +57,7 @@ const (
 	SurfaceVerbosityQuiet   SurfaceVerbosity = "quiet"
 	SurfaceVerbosityNormal  SurfaceVerbosity = "normal"
 	SurfaceVerbosityVerbose SurfaceVerbosity = "verbose"
+	SurfaceVerbosityChatty  SurfaceVerbosity = "chatty"
 )
 
 func NormalizeSurfaceVerbosity(value SurfaceVerbosity) SurfaceVerbosity {
@@ -65,6 +66,8 @@ func NormalizeSurfaceVerbosity(value SurfaceVerbosity) SurfaceVerbosity {
 		return SurfaceVerbosityQuiet
 	case SurfaceVerbosityVerbose:
 		return SurfaceVerbosityVerbose
+	case SurfaceVerbosityChatty:
+		return SurfaceVerbosityChatty
 	default:
 		return SurfaceVerbosityNormal
 	}
@@ -278,6 +281,7 @@ type SurfaceConsoleRecord struct {
 	PendingRequests      map[string]*RequestPromptRecord
 	ActiveRequestCapture *RequestCaptureRecord
 	ActiveExecProgress   *ExecCommandProgressRecord
+	ActiveReasoning      *SurfaceReasoningProgressRecord
 	RecentFinalCards     []*FinalCardRecord
 	SurfaceMessageSeq    int
 	SurfaceMessages      map[string]*SurfaceMessageRecord
@@ -380,6 +384,7 @@ type ExecCommandProgressRecord struct {
 
 type ExecCommandProgressReasoningRecord struct {
 	ItemID              string
+	Active              bool
 	Text                string
 	VisibleSummaryIndex int
 	Buffer              string
@@ -387,6 +392,14 @@ type ExecCommandProgressReasoningRecord struct {
 	LastUpdatedAt       time.Time
 	Revision            int64
 	LastEmittedRevision int64
+}
+
+type SurfaceReasoningProgressRecord struct {
+	InstanceID string
+	ThreadID   string
+	TurnID     string
+	Entries    []ExecCommandProgressEntryRecord
+	Reasoning  *ExecCommandProgressReasoningRecord
 }
 
 type DynamicToolProgressGroupRecord struct {

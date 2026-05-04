@@ -477,10 +477,20 @@ Windows PowerShell：
 - 上下文压缩
 - MCP 调用
 
+`normal` 当前不会显示 reasoning 的 `思考中...` 占位。
+
 如果你想看更完整的共享进行中卡，可以发送：
 
 ```text
 /verbose verbose
+```
+
+这时仍会显示执行、探索、工具调用等共享过程，但 reasoning 进行中只会显示尾部占位 `思考中...`。
+
+如果你想把完整 reasoning / thinking 明细也一起打开，可以发送：
+
+```text
+/verbose chatty
 ```
 
 ### 8.6 文档预览会更方便

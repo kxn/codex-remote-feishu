@@ -287,6 +287,7 @@ func TestParseFeishuTextActionRecognizesVerboseCommand(t *testing.T) {
 		"/verbose quiet",
 		"/verbose normal",
 		"/verbose verbose",
+		"/verbose chatty",
 	}
 	for _, input := range tests {
 		action, ok := ParseFeishuTextActionWithoutCatalog(input)

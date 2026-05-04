@@ -51,7 +51,7 @@ func (s *Service) handleProcessProgressItemCompleted(instanceID string, event ag
 	case "agent_message":
 		return nil
 	case "reasoning_summary":
-		return s.flushExecCommandProgressReasoning(instanceID, event.ThreadID, event.TurnID)
+		return s.handleReasoningSummaryProgressCompleted(instanceID, event)
 	case "command_execution":
 		return s.handleCommandExecutionProgressCompleted(instanceID, event)
 	case "file_change":
@@ -263,7 +263,11 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 
 func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnID, turnStatus, finalText string) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, threadID, turnID)
-	if surface == nil || surface.ActiveExecProgress == nil {
+	if surface == nil {
+		return nil
+	}
+	defer clearSurfaceReasoningProgress(surface, instanceID, threadID, turnID)
+	if surface.ActiveExecProgress == nil {
 		return nil
 	}
 	progress := surface.ActiveExecProgress
@@ -277,6 +281,7 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 			progress.Entries[i].Status = status
 		}
 	}
+	finalizeExecCommandProgressReasoning(progress, status)
 	if progress.Exploration != nil && strings.TrimSpace(progress.Exploration.Block.Status) == "running" {
 		progress.Exploration.Block.Status = status
 	}
@@ -336,6 +341,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	if progress.Reasoning != nil {
 		progress.Reasoning.LastEmittedRevision = progress.Reasoning.Revision
 	}
+	syncSurfaceReasoningProgressFromExec(surface, progress)
 	sourceMessageID, _ := s.replyAnchorForTurn(progress.InstanceID, threadID, turnID)
 	snapshot := execprogress.Snapshot(progress)
 	if snapshot == nil {

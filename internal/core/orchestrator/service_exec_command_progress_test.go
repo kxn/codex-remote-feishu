@@ -1204,11 +1204,11 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 	}
 }
 
-func TestReasoningSummaryProgressVerboseEmitsEnglishTimelineEntry(t *testing.T) {
+func TestReasoningSummaryProgressChattyEmitsEnglishTimelineEntry(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1242,11 +1242,11 @@ func TestReasoningSummaryProgressVerboseEmitsEnglishTimelineEntry(t *testing.T) 
 	}
 }
 
-func TestReasoningSummaryProgressAccumulatesPlainTextDeltas(t *testing.T) {
+func TestReasoningSummaryProgressChattyAccumulatesPlainTextDeltas(t *testing.T) {
 	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1301,11 +1301,11 @@ func TestReasoningSummaryProgressAccumulatesPlainTextDeltas(t *testing.T) {
 	}
 }
 
-func TestReasoningSummaryProgressKeepsCheckingPhraseInEnglish(t *testing.T) {
+func TestReasoningSummaryProgressChattyKeepsCheckingPhraseInEnglish(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1328,11 +1328,11 @@ func TestReasoningSummaryProgressKeepsCheckingPhraseInEnglish(t *testing.T) {
 	}
 }
 
-func TestReasoningSummaryProgressKeepsDifferentSummaryIndexesAsTimelineRows(t *testing.T) {
+func TestReasoningSummaryProgressChattyKeepsDifferentSummaryIndexesAsTimelineRows(t *testing.T) {
 	now := time.Date(2026, 5, 1, 12, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1380,11 +1380,11 @@ func TestReasoningSummaryProgressKeepsDifferentSummaryIndexesAsTimelineRows(t *t
 	}
 }
 
-func TestReasoningSummaryProgressDoesNotAnimateWithoutNewDelta(t *testing.T) {
+func TestReasoningSummaryProgressChattyDoesNotAnimateWithoutNewDelta(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 6, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1413,11 +1413,11 @@ func TestReasoningSummaryProgressDoesNotAnimateWithoutNewDelta(t *testing.T) {
 	}
 }
 
-func TestReasoningSummaryProgressClaudeKeepsRawThinkingInsteadOfFirstBold(t *testing.T) {
+func TestReasoningSummaryProgressChattyClaudeKeepsRawThinkingInsteadOfFirstBold(t *testing.T) {
 	now := time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 	surface.Backend = agentproto.BackendClaude
 	svc.root.Instances["inst-1"].Backend = agentproto.BackendClaude
 
@@ -1440,11 +1440,11 @@ func TestReasoningSummaryProgressClaudeKeepsRawThinkingInsteadOfFirstBold(t *tes
 	}
 }
 
-func TestReasoningSummaryProgressClaudeAccumulatesWithoutSummaryIndex(t *testing.T) {
+func TestReasoningSummaryProgressChattyClaudeAccumulatesWithoutSummaryIndex(t *testing.T) {
 	now := time.Date(2026, 5, 2, 10, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 	surface.Backend = agentproto.BackendClaude
 	svc.root.Instances["inst-1"].Backend = agentproto.BackendClaude
 
@@ -1492,11 +1492,11 @@ func TestReasoningSummaryProgressClaudeAccumulatesWithoutSummaryIndex(t *testing
 	}
 }
 
-func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testing.T) {
+func TestReasoningSummaryProgressChattyPersistsBeforeOrdinaryProgressEntries(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1557,11 +1557,11 @@ func TestReasoningSummaryProgressPersistsBeforeOrdinaryProgressEntries(t *testin
 	}
 }
 
-func TestReasoningSummaryProgressPersistsBeforeExplorationRows(t *testing.T) {
+func TestReasoningSummaryProgressChattyPersistsBeforeExplorationRows(t *testing.T) {
 	now := time.Date(2026, 5, 1, 12, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1604,11 +1604,11 @@ func TestReasoningSummaryProgressPersistsBeforeExplorationRows(t *testing.T) {
 	}
 }
 
-func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t *testing.T) {
+func TestReasoningSummaryProgressChattyIsNotClearedBeforeAssistantTextStartsNewCard(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1707,11 +1707,11 @@ func TestReasoningSummaryProgressIsNotClearedBeforeAssistantTextStartsNewCard(t 
 	}
 }
 
-func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
+func TestReasoningSummaryProgressChattyPersistsOnTurnCompletion(t *testing.T) {
 	now := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
+	surface.Verbosity = state.SurfaceVerbosityChatty
 
 	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
 
@@ -1775,5 +1775,171 @@ func TestReasoningSummaryProgressPersistsOnTurnCompletion(t *testing.T) {
 	}
 	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
 		t.Fatalf("expected turn completion to clear shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+}
+
+func TestReasoningSummaryProgressVerboseShowsPlaceholder(t *testing.T) {
+	now := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "**Considering Git commands**",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected one reasoning progress event, got %#v", events)
+	}
+	progress := events[0].ExecCommandProgress
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "reasoning_placeholder" || progress.Timeline[0].Summary != "思考中..." {
+		t.Fatalf("expected verbose reasoning to project a placeholder only, got %#v", progress.Timeline)
+	}
+	active := svc.root.Surfaces["surface-1"].ActiveExecProgress
+	if active == nil || len(active.Entries) != 1 || active.Entries[0].Kind != "reasoning_summary" || active.Entries[0].Summary != "Considering Git commands" {
+		t.Fatalf("expected raw reasoning carrier to stay in shared progress state, got %#v", active)
+	}
+	if reasoning := svc.root.Surfaces["surface-1"].ActiveReasoning; reasoning == nil || reasoning.Reasoning == nil || !reasoning.Reasoning.Active {
+		t.Fatalf("expected surface reasoning state to stay active, got %#v", svc.root.Surfaces["surface-1"].ActiveReasoning)
+	}
+}
+
+func TestReasoningSummaryProgressVerboseReattachesPlaceholderOnNextProgressCard(t *testing.T) {
+	now := time.Date(2026, 5, 4, 10, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "Thinking",
+		Metadata: map[string]any{
+			"summaryIndex": 1,
+		},
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial reasoning progress event, got %#v", first)
+	}
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	_ = svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+	})
+	_ = svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+		Delta:    "先给你结论。",
+	})
+	_ = svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "msg-1",
+		ItemKind: "agent_message",
+	})
+
+	flushed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-flush",
+		ItemKind: "command_execution",
+		Status:   "completed",
+		Metadata: map[string]any{
+			"command": "npm test",
+		},
+	})
+	if len(flushed) != 1 || flushed[0].Block == nil {
+		t.Fatalf("expected assistant text flush to seal the current progress card, got %#v", flushed)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected assistant text flush to terminate shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveReasoning == nil {
+		t.Fatal("expected active reasoning to survive after the old shared progress card was sealed")
+	}
+
+	next := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{
+			"command": "go test ./...",
+		},
+	})
+	if len(next) != 1 || next[0].ExecCommandProgress == nil {
+		t.Fatalf("expected new shared progress to reopen after interruption, got %#v", next)
+	}
+	progress := next[0].ExecCommandProgress
+	if len(progress.Timeline) != 2 ||
+		progress.Timeline[0].Kind != "command_execution" ||
+		progress.Timeline[1].Kind != "reasoning_placeholder" ||
+		progress.Timeline[1].Summary != "思考中..." {
+		t.Fatalf("expected placeholder to reattach at the end of the new progress card, got %#v", progress.Timeline)
+	}
+}
+
+func TestReasoningSummaryProgressVerbosePlaceholderDisappearsOnCompletion(t *testing.T) {
+	now := time.Date(2026, 5, 4, 10, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
+
+	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Delta:    "Thinking",
+	})
+	if len(first) != 1 || first[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial reasoning placeholder event, got %#v", first)
+	}
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
+
+	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "reasoning-1",
+		ItemKind: "reasoning_summary",
+		Status:   "completed",
+	})
+	if len(completed) != 1 || completed[0].ExecCommandProgress == nil {
+		t.Fatalf("expected reasoning completion to emit one progress update, got %#v", completed)
+	}
+	progress := completed[0].ExecCommandProgress
+	if len(progress.Timeline) != 0 || !progress.DeleteIfEmpty {
+		t.Fatalf("expected verbose placeholder removal to retract an otherwise-empty progress card, got %#v", progress)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveReasoning != nil {
+		t.Fatalf("expected active reasoning state to clear on completion, got %#v", svc.root.Surfaces["surface-1"].ActiveReasoning)
 	}
 }

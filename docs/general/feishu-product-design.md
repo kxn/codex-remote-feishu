@@ -739,7 +739,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 直接发纯文本
 - 对用户在飞书发起的正常 remote turn，若某段 `agent_message` 已收到 `item.completed`，会尽早作为过程文本投影，不必强等到 `turn.completed`
 - 这条“提前投影已完成 assistant item”的策略当前不扩展到 local UI turn，也不扩展到 autowhip turn
-- 当前仍受 surface verbosity 约束：`/verbose quiet` 会抑制这类进行中过程文本；`normal` 与 `verbose` 都会显示它们；final reply 不受这条限制
+- 当前仍受 surface verbosity 约束：`/verbose quiet` 会抑制这类进行中过程文本；`normal`、`verbose` 与 `chatty` 都会显示它们；final reply 不受这条限制
 
 ### 7.2.1 图片与 dynamic tool 结果
 

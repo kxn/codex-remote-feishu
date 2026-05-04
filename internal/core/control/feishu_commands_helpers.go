@@ -15,7 +15,7 @@ func commandOption(commandText, menuKey, value, label, description string) Feish
 func normalizeVerboseMenuArgument(suffix string) (string, bool) {
 	value := strings.ToLower(strings.TrimSpace(suffix))
 	switch value {
-	case "quiet", "normal", "verbose":
+	case "quiet", "normal", "verbose", "chatty":
 		return value, true
 	default:
 		return "", false

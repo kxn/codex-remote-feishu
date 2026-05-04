@@ -168,7 +168,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    2. `claude` 的 visible MVP 继续复用同一套命令目录壳：工作会话主链显式开放 `/new`、`/list`、`/use`、`/detach`，`常用工具` 显示 `/history` 与 `/sendfile`；`/review` 与 `/bendtomywill` 当前已经退出 Claude 主展示面，回到 hidden + reject；`workspace*` 与 `/useall` 作为 hidden + allow 兼容入口继续复用同一工作区 / 会话壳。
    3. `vscode` 主链继续列在线 VS Code instance。
 7. `Verbosity` 当前也是 surface 级偏好：
-   1. `/verbose quiet|normal|verbose` 直接改当前 surface。
+   1. `/verbose quiet|normal|verbose|chatty` 直接改当前 surface。
    2. `/detach` 不会清掉它。
    3. daemon 重启后，latent surface 会从 `surface resume state` 恢复之前的 `Verbosity`。
 8. `PlanMode` 当前也是 surface 级偏好，但 headless 与 `vscode` 的下发语义不同：

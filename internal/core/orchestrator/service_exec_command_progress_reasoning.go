@@ -16,19 +16,27 @@ func (s *Service) handleAssistantMessageProgressStart(_ string, _ agentproto.Eve
 
 func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityVerbose {
+	if surface == nil {
 		return nil
 	}
-	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	if !s.upsertSurfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID, event, s.surfaceBackend(surface), s.now()) {
+		return nil
+	}
+	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	if progress != nil {
+		syncExecCommandProgressReasoning(progress, surfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID))
+	}
+	if !surfaceShowsVisibleReasoning(surface.Verbosity) {
+		return nil
+	}
 	if progress == nil {
-		return nil
+		progress = s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+		if progress == nil {
+			return nil
+		}
+		syncExecCommandProgressReasoning(progress, surfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID))
 	}
-	if strings.TrimSpace(event.ItemID) != "" {
-		progress.ItemID = strings.TrimSpace(event.ItemID)
-	}
-	if !execprogress.UpsertReasoning(progress, event, s.surfaceBackend(surface), s.now()) {
-		return nil
-	}
+	progress.ItemID = strings.TrimSpace(event.ItemID)
 	if !s.execCommandProgressReasoningFlushDue(progress, s.now()) || !execCommandProgressReasoningCanEmit(progress) {
 		return nil
 	}
@@ -37,6 +45,9 @@ func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event a
 
 func (s *Service) flushExecCommandProgressReasoning(instanceID, threadID, turnID string) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, threadID, turnID)
+	if surface == nil || !surfaceShowsVisibleReasoning(surface.Verbosity) {
+		return nil
+	}
 	progress := activeExecCommandProgress(surface, instanceID, threadID, turnID)
 	if progress == nil || !execCommandProgressReasoningDirty(progress) {
 		return nil
@@ -46,6 +57,9 @@ func (s *Service) flushExecCommandProgressReasoning(instanceID, threadID, turnID
 
 func (s *Service) tickExecCommandProgressReasoning(surface *state.SurfaceConsoleRecord, now time.Time) []eventcontract.Event {
 	if surface == nil {
+		return nil
+	}
+	if !surfaceShowsVisibleReasoning(surface.Verbosity) {
 		return nil
 	}
 	progress := surface.ActiveExecProgress
@@ -80,4 +94,32 @@ func execCommandProgressReasoningCanEmit(progress *state.ExecCommandProgressReco
 		return false
 	}
 	return progress.LastEmittedAt.IsZero() || activeExecCommandProgressSegmentMessageID(progress) != ""
+}
+
+func (s *Service) handleReasoningSummaryProgressCompleted(instanceID string, event agentproto.Event) []eventcontract.Event {
+	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
+	if surface == nil {
+		return nil
+	}
+	defer clearSurfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
+	if progress == nil {
+		return nil
+	}
+	syncExecCommandProgressReasoning(progress, surfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID))
+	if !finalizeExecCommandProgressReasoning(progress, execprogress.NormalizeStatus(event.Status, true)) && !surfaceShowsVisibleReasoning(surface.Verbosity) {
+		return nil
+	}
+	if !surfaceShowsVisibleReasoning(surface.Verbosity) {
+		return nil
+	}
+	events := s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
+	if state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityVerbose {
+		for i := range events {
+			if events[i].ExecCommandProgress != nil {
+				events[i].ExecCommandProgress.DeleteIfEmpty = true
+			}
+		}
+	}
+	return events
 }

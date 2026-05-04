@@ -21,6 +21,7 @@ func (s *Service) ensureExecCommandProgress(surface *state.SurfaceConsoleRecord,
 		TurnID:     turnID,
 	}
 	ensureExecCommandProgressActiveSegment(surface.ActiveExecProgress)
+	syncExecCommandProgressReasoning(surface.ActiveExecProgress, surfaceReasoningProgress(surface, instanceID, threadID, turnID))
 	return surface.ActiveExecProgress
 }
 
@@ -51,7 +52,7 @@ func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleReco
 	case "delegated_task":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
 	case "command_execution", "dynamic_tool_call", "web_search":
-		return state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityVerbose
+		return surfaceVerbosityAtLeast(surface.Verbosity, state.SurfaceVerbosityVerbose)
 	default:
 		return false
 	}

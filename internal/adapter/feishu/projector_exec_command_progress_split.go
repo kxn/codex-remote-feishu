@@ -25,7 +25,7 @@ type execProgressCardWindowState struct {
 
 func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []execProgressRenderedLine {
 	items := normalizedExecProgressTimeline(progress)
-	verbose := strings.EqualFold(strings.TrimSpace(progress.Verbosity), "verbose")
+	verbose := execProgressShowsDetailedDiff(progress.Verbosity)
 	fileLabels := execProgressFileChangeDisplayLabels(items)
 	lines := make([]execProgressRenderedLine, 0, len(items))
 	for _, item := range items {
@@ -43,6 +43,15 @@ func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []ex
 		})
 	}
 	return lines
+}
+
+func execProgressShowsDetailedDiff(verbosity string) bool {
+	switch strings.ToLower(strings.TrimSpace(verbosity)) {
+	case "verbose", "chatty":
+		return true
+	default:
+		return false
+	}
 }
 
 func execProgressTimelineItemCanCarryOver(item control.ExecCommandProgressTimelineItem) bool {

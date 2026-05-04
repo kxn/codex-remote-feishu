@@ -28,6 +28,7 @@ func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto
 		progress.Reasoning = record
 	}
 	record.ItemID = entryItemID
+	record.Active = true
 	if summaryIndex != record.BufferSummaryIndex {
 		record.Buffer = ""
 		record.BufferSummaryIndex = summaryIndex
