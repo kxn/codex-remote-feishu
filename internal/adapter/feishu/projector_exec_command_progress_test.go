@@ -74,10 +74,10 @@ func TestProjectExecCommandProgressCreatesDirectCard(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		SourceMessageID:  "om-source-1",
 		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
-			ThreadID:    "thread-1",
-			TurnID:      "turn-1",
-			ItemID:      "cmd-1",
-			DetourLabel: "临时会话 · 分支",
+			ThreadID:              "thread-1",
+			TurnID:                "turn-1",
+			ItemID:                "cmd-1",
+			TemporarySessionLabel: "临时会话 · 分支",
 			Timeline: []control.ExecCommandProgressTimelineItem{
 				timelineItem("cmd-1", "command_execution", "执行", `/bin/bash -lc "npm test"`, "", 1),
 				timelineItem("cmd-2", "command_execution", "执行", `bash -lc 'go test ./...'`, "", 2),

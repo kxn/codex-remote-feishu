@@ -43,7 +43,7 @@ func (p *Projector) projectExecCommandProgress(chatID string, event eventcontrac
 		op.Kind = OperationSendCard
 		op = applyReplyLaneToNewOperation(event, op)
 	}
-	return []Operation{applyDetourHeaderToOperation(op, progress.DetourLabel)}
+	return []Operation{applyTemporarySessionHeaderToOperation(op, progress.TemporarySessionLabel)}
 }
 
 func activeExecCommandProgressSegmentMessageID(progress control.ExecCommandProgress) string {

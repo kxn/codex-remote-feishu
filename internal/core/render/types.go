@@ -10,17 +10,17 @@ const (
 )
 
 type Block struct {
-	ID               string    `json:"id"`
-	SurfaceSessionID string    `json:"surfaceSessionId,omitempty"`
-	InstanceID       string    `json:"instanceId,omitempty"`
-	ThreadID         string    `json:"threadId,omitempty"`
-	ThreadTitle      string    `json:"threadTitle,omitempty"`
-	TurnID           string    `json:"turnId,omitempty"`
-	ItemID           string    `json:"itemId,omitempty"`
-	Kind             BlockKind `json:"kind"`
-	Text             string    `json:"text"`
-	Language         string    `json:"language,omitempty"`
-	ThemeKey         string    `json:"themeKey,omitempty"`
-	DetourLabel      string    `json:"detourLabel,omitempty"`
-	Final            bool      `json:"final,omitempty"`
+	ID                    string    `json:"id"`
+	SurfaceSessionID      string    `json:"surfaceSessionId,omitempty"`
+	InstanceID            string    `json:"instanceId,omitempty"`
+	ThreadID              string    `json:"threadId,omitempty"`
+	ThreadTitle           string    `json:"threadTitle,omitempty"`
+	TurnID                string    `json:"turnId,omitempty"`
+	ItemID                string    `json:"itemId,omitempty"`
+	Kind                  BlockKind `json:"kind"`
+	Text                  string    `json:"text"`
+	Language              string    `json:"language,omitempty"`
+	ThemeKey              string    `json:"themeKey,omitempty"`
+	TemporarySessionLabel string    `json:"temporarySessionLabel,omitempty"`
+	Final                 bool      `json:"final,omitempty"`
 }

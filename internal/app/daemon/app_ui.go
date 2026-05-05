@@ -163,6 +163,7 @@ func (a *App) deliverUIEventWithContext(ctx context.Context, event eventcontract
 
 func (a *App) deliverUIEventWithContextMode(ctx context.Context, event eventcontract.Event, appLocked bool) error {
 	event = event.Normalized()
+	event = a.enrichTemporarySessionEventLocked(event)
 	chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 	actorUserID := a.service.SurfaceActorUserID(event.SurfaceSessionID)
 	gatewayID := firstNonEmpty(event.GatewayID, a.service.SurfaceGatewayID(event.SurfaceSessionID))
@@ -263,6 +264,22 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event eventcont
 	}
 	a.traceAssistantBlock(event)
 	return nil
+}
+
+func (a *App) enrichTemporarySessionEventLocked(event eventcontract.Event) eventcontract.Event {
+	if a == nil || a.service == nil || event.Block == nil {
+		return event
+	}
+	if strings.TrimSpace(event.Block.TemporarySessionLabel) != "" {
+		return event
+	}
+	event.Block.TemporarySessionLabel = a.service.ResolveTemporarySessionLabel(
+		event.SurfaceSessionID,
+		event.Block.InstanceID,
+		event.Block.ThreadID,
+		event.Block.TurnID,
+	)
+	return event
 }
 
 func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feishu.Operation) {

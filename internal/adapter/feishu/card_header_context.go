@@ -2,7 +2,7 @@ package feishu
 
 import "strings"
 
-func detourHeaderSubtitle(label string) string {
+func temporarySessionHeaderSubtitle(label string) string {
 	label = strings.TrimSpace(label)
 	if label == "" {
 		return ""
@@ -10,11 +10,11 @@ func detourHeaderSubtitle(label string) string {
 	return "**" + label + "**"
 }
 
-func withDetourCardDocument(doc *cardDocument, label string) *cardDocument {
+func withTemporarySessionCardDocument(doc *cardDocument, label string) *cardDocument {
 	if doc == nil {
 		return nil
 	}
-	subtitle := detourHeaderSubtitle(label)
+	subtitle := temporarySessionHeaderSubtitle(label)
 	if subtitle == "" {
 		return doc
 	}
@@ -28,15 +28,15 @@ func withDetourCardDocument(doc *cardDocument, label string) *cardDocument {
 	)
 }
 
-func applyDetourHeaderToOperation(operation Operation, label string) Operation {
-	subtitle := detourHeaderSubtitle(label)
+func applyTemporarySessionHeaderToOperation(operation Operation, label string) Operation {
+	subtitle := temporarySessionHeaderSubtitle(label)
 	if subtitle == "" {
 		return operation
 	}
 	operation.CardSubtitle = subtitle
 	operation.CardSubtitleTag = cardTextTagLarkMarkdown
 	if operation.card != nil {
-		operation.card = withDetourCardDocument(operation.card, label)
+		operation.card = withTemporarySessionCardDocument(operation.card, label)
 	}
 	return operation
 }

@@ -77,7 +77,7 @@ func (s *Service) handleMCPToolCallItemProgress(instanceID string, event agentpr
 		return nil
 	}
 	surface := s.surfaceForInitiator(instanceID, event)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	record := mcpToolCallProgressRecordFromEvent(surface.SurfaceSessionID, instanceID, event)

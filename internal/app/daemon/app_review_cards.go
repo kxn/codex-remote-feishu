@@ -13,20 +13,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const reviewCardTitlePrefix = "审阅中 · "
-
 func (a *App) decorateReviewOperationsLocked(event eventcontract.Event, operations []feishu.Operation) []feishu.Operation {
 	if len(operations) == 0 {
 		return operations
 	}
 	if event.Kind == eventcontract.KindBlockCommitted && event.Block != nil && event.Block.Final {
-		if isReviewFinal, targetLabel, keepExitButtons := a.reviewFinalBlockDecorationContext(event.SurfaceSessionID, *event.Block); isReviewFinal {
-			for i := range operations {
-				if operations[i].Kind != feishu.OperationSendCard && operations[i].Kind != feishu.OperationUpdateCard {
-					continue
-				}
-				addReviewCardTitlePrefix(&operations[i], targetLabel)
-			}
+		if isReviewFinal, keepExitButtons := a.reviewFinalBlockDecorationContext(event.SurfaceSessionID, *event.Block); isReviewFinal {
 			if keepExitButtons {
 				if primary := firstFinalSendCard(operations); primary != nil {
 					appendFooterButtons(primary, reviewExitButtons(a.daemonLifecycleID))
@@ -59,25 +51,12 @@ func (a *App) decorateReviewOperationsLocked(event eventcontract.Event, operatio
 		}
 		return operations
 	}
-	if a.service.ReviewSession(event.SurfaceSessionID) == nil {
-		return operations
-	}
-	targetLabel := ""
-	if session := a.service.ReviewSession(event.SurfaceSessionID); session != nil {
-		targetLabel = strings.TrimSpace(session.TargetLabel)
-	}
-	for i := range operations {
-		if operations[i].Kind != feishu.OperationSendCard && operations[i].Kind != feishu.OperationUpdateCard {
-			continue
-		}
-		addReviewCardTitlePrefix(&operations[i], targetLabel)
-	}
 	return operations
 }
 
-func (a *App) reviewFinalBlockDecorationContext(surfaceID string, block render.Block) (isReviewFinal bool, targetLabel string, keepExitButtons bool) {
+func (a *App) reviewFinalBlockDecorationContext(surfaceID string, block render.Block) (isReviewFinal bool, keepExitButtons bool) {
 	if session := a.service.ReviewSession(surfaceID); session != nil && strings.TrimSpace(block.ThreadID) == strings.TrimSpace(session.ReviewThreadID) {
-		return true, strings.TrimSpace(session.TargetLabel), true
+		return true, true
 	}
 	instanceID := strings.TrimSpace(block.InstanceID)
 	if instanceID == "" {
@@ -87,39 +66,17 @@ func (a *App) reviewFinalBlockDecorationContext(surfaceID string, block render.B
 	}
 	threadID := strings.TrimSpace(block.ThreadID)
 	if instanceID == "" || threadID == "" {
-		return false, "", false
+		return false, false
 	}
 	inst := a.service.Instance(instanceID)
 	if inst == nil {
-		return false, "", false
+		return false, false
 	}
 	thread := inst.Threads[threadID]
 	if thread == nil || thread.Source == nil || !thread.Source.IsReview() {
-		return false, "", false
+		return false, false
 	}
-	return true, "", false
-}
-
-func addReviewCardTitlePrefix(operation *feishu.Operation, targetLabel string) {
-	if operation == nil {
-		return
-	}
-	title := strings.TrimSpace(operation.CardTitle)
-	if title == "" {
-		title = "审阅中"
-	}
-	prefix := reviewCardTitlePrefix
-	if targetLabel = strings.TrimSpace(targetLabel); targetLabel != "" {
-		prefix += targetLabel + " · "
-	}
-	if !strings.HasPrefix(title, prefix) {
-		if strings.HasPrefix(title, reviewCardTitlePrefix) {
-			title = strings.TrimPrefix(title, reviewCardTitlePrefix)
-		}
-		title = prefix + title
-	}
-	operation.CardTitle = title
-	feishu.InvalidateOperationCard(operation)
+	return true, false
 }
 
 func appendFooterButtons(operation *feishu.Operation, buttons []map[string]any) {

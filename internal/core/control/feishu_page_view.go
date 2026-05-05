@@ -14,7 +14,7 @@ type FeishuPageView struct {
 	CommandID                     string
 	CatalogBackend                agentproto.Backend
 	Title                         string
-	DetourLabel                   string
+	TemporarySessionLabel         string
 	MessageID                     string
 	TrackingKey                   string
 	ThemeKey                      string
@@ -80,7 +80,7 @@ func NormalizeFeishuPageView(view FeishuPageView) FeishuPageView {
 		CommandID:                     commandID,
 		CatalogBackend:                agentproto.NormalizeBackend(view.CatalogBackend),
 		Title:                         title,
-		DetourLabel:                   strings.TrimSpace(view.DetourLabel),
+		TemporarySessionLabel:         strings.TrimSpace(view.TemporarySessionLabel),
 		MessageID:                     strings.TrimSpace(view.MessageID),
 		TrackingKey:                   strings.TrimSpace(view.TrackingKey),
 		ThemeKey:                      strings.TrimSpace(view.ThemeKey),

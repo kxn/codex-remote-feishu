@@ -10,24 +10,24 @@ import (
 // FeishuRequestView is the UI-owned request payload used by the Feishu adapter
 // for approval / request_user_input / permissions / elicitation cards.
 type FeishuRequestView struct {
-	RequestID            string
-	RequestType          string
-	SemanticKind         string
-	Backend              agentproto.Backend
-	RequestRevision      int
-	Title                string
-	DetourLabel          string
-	ThreadID             string
-	ThreadTitle          string
-	Sections             []FeishuCardTextSection
-	Options              []RequestPromptOption
-	Questions            []RequestPromptQuestion
-	CurrentQuestionIndex int
-	HintText             string
-	Phase                frontstagecontract.Phase
-	ActionPolicy         frontstagecontract.ActionPolicy
-	StatusText           string
-	Sealed               bool
+	RequestID             string
+	RequestType           string
+	SemanticKind          string
+	Backend               agentproto.Backend
+	RequestRevision       int
+	Title                 string
+	TemporarySessionLabel string
+	ThreadID              string
+	ThreadTitle           string
+	Sections              []FeishuCardTextSection
+	Options               []RequestPromptOption
+	Questions             []RequestPromptQuestion
+	CurrentQuestionIndex  int
+	HintText              string
+	Phase                 frontstagecontract.Phase
+	ActionPolicy          frontstagecontract.ActionPolicy
+	StatusText            string
+	Sealed                bool
 }
 
 func NormalizeFeishuRequestView(view FeishuRequestView) FeishuRequestView {
@@ -40,7 +40,7 @@ func NormalizeFeishuRequestView(view FeishuRequestView) FeishuRequestView {
 	view.ActionPolicy = frame.ActionPolicy
 	view.Sealed = frontstagecontract.SealedForPhase(frame.Phase)
 	view.Title = strings.TrimSpace(view.Title)
-	view.DetourLabel = strings.TrimSpace(view.DetourLabel)
+	view.TemporarySessionLabel = strings.TrimSpace(view.TemporarySessionLabel)
 	view.ThreadID = strings.TrimSpace(view.ThreadID)
 	view.ThreadTitle = strings.TrimSpace(view.ThreadTitle)
 	view.Backend = agentproto.NormalizeBackend(view.Backend)

@@ -581,21 +581,21 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		threadTitle = displayThreadTitle(inst, thread, record.ThreadID)
 	}
 	view := control.FeishuRequestView{
-		RequestID:            record.RequestID,
-		RequestType:          record.RequestType,
-		SemanticKind:         requestPromptSemanticKind(record),
-		Backend:              requestPromptBackend(record),
-		RequestRevision:      record.CardRevision,
-		Title:                record.Title,
-		DetourLabel:          s.requestDetourLabel(record),
-		ThreadID:             record.ThreadID,
-		ThreadTitle:          threadTitle,
-		Sections:             requestPromptSectionsToControl(record.Sections),
-		Options:              requestPromptOptionsToControl(record.Options),
-		Questions:            requestPromptQuestionsToControl(record.Questions, record.DraftAnswers, record.SkippedQuestionIDs),
-		CurrentQuestionIndex: normalizedRequestPromptCurrentQuestionIndex(record),
-		HintText:             strings.TrimSpace(record.HintText),
-		Phase:                record.Phase,
+		RequestID:             record.RequestID,
+		RequestType:           record.RequestType,
+		SemanticKind:          requestPromptSemanticKind(record),
+		Backend:               requestPromptBackend(record),
+		RequestRevision:       record.CardRevision,
+		Title:                 record.Title,
+		TemporarySessionLabel: s.requestTemporarySessionLabel(record),
+		ThreadID:              record.ThreadID,
+		ThreadTitle:           threadTitle,
+		Sections:              requestPromptSectionsToControl(record.Sections),
+		Options:               requestPromptOptionsToControl(record.Options),
+		Questions:             requestPromptQuestionsToControl(record.Questions, record.DraftAnswers, record.SkippedQuestionIDs),
+		CurrentQuestionIndex:  normalizedRequestPromptCurrentQuestionIndex(record),
+		HintText:              strings.TrimSpace(record.HintText),
+		Phase:                 record.Phase,
 	}
 	if strings.TrimSpace(record.PendingDispatchCommandID) != "" {
 		view.Phase = frontstagecontract.PhaseWaitingDispatch

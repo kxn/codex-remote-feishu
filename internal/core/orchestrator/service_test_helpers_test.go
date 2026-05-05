@@ -122,7 +122,7 @@ func eventCommandCatalog(event eventcontract.Event) (*control.FeishuPageView, bo
 		catalog := control.NormalizeFeishuPageView(control.FeishuPageView{
 			CommandID:                     page.CommandID,
 			Title:                         page.Title,
-			DetourLabel:                   page.DetourLabel,
+			TemporarySessionLabel:         page.TemporarySessionLabel,
 			MessageID:                     page.MessageID,
 			TrackingKey:                   page.TrackingKey,
 			ThemeKey:                      page.ThemeKey,

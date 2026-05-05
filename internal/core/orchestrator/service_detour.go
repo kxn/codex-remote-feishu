@@ -143,13 +143,6 @@ func remoteBindingDetourLabel(binding *remoteTurnBinding) string {
 	return detourLabelForExecutionMode(binding.ExecutionMode)
 }
 
-func (s *Service) requestDetourLabel(record *state.RequestPromptRecord) string {
-	if record == nil {
-		return ""
-	}
-	return remoteBindingDetourLabel(s.lookupRemoteTurn(record.InstanceID, record.ThreadID, record.TurnID))
-}
-
 func (s *Service) detourReturnNoticeEvent(outcome *remoteTurnOutcome) []eventcontract.Event {
 	if outcome == nil || outcome.Binding == nil || outcome.Surface == nil || outcome.Item == nil {
 		return nil
@@ -175,9 +168,9 @@ func (s *Service) detourReturnNoticeEvent(outcome *remoteTurnOutcome) []eventcon
 	return []eventcontract.Event{surfaceEventFromPayload(
 		outcome.Surface,
 		eventcontract.NoticePayload{Notice: control.Notice{
-			Code:        "detour_returned",
-			DetourLabel: remoteBindingDetourLabel(outcome.Binding),
-			Text:        detourReturnNoticeText,
+			Code:                  "detour_returned",
+			TemporarySessionLabel: remoteBindingDetourLabel(outcome.Binding),
+			Text:                  detourReturnNoticeText,
 		}},
 		meta,
 	)}

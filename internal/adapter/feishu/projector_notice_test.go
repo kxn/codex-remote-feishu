@@ -69,9 +69,9 @@ func TestProjectNoticePromotesDetourLabelToHeaderSubtitle(t *testing.T) {
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
 		Kind: eventcontract.KindNotice,
 		Notice: &control.Notice{
-			Code:        "turn_failed",
-			DetourLabel: "临时会话 · 分支",
-			Text:        "当前 turn 失败。",
+			Code:                  "turn_failed",
+			TemporarySessionLabel: "临时会话 · 分支",
+			Text:                  "当前 turn 失败。",
 		},
 	})
 	if len(ops) != 1 || ops[0].Kind != OperationSendCard {

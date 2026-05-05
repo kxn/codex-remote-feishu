@@ -143,7 +143,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, body, theme, elements),
 		}
-		return []Operation{applyDetourHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.Notice.DetourLabel)}
+		return []Operation{applyTemporarySessionHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.Notice.TemporarySessionLabel)}
 	case eventcontract.PlanUpdatePayload:
 		title := "当前计划"
 		elements := projectorpkg.PlanUpdateElements(payload.PlanUpdate)
@@ -159,7 +159,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemePlan, elements),
 		}
-		return []Operation{applyDetourHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.PlanUpdate.DetourLabel)}
+		return []Operation{applyTemporarySessionHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.PlanUpdate.TemporarySessionLabel)}
 	case eventcontract.SelectionPayload:
 		title, elements, ok := projectorpkg.SelectionViewStructuredProjection(payload.View, payload.Context, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		if !ok {
@@ -211,7 +211,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		if operation.Kind == OperationSendCard {
 			operation = applyReplyLaneToNewOperation(event, operation)
 		}
-		return []Operation{applyDetourHeaderToOperation(operation, pageView.DetourLabel)}
+		return []Operation{applyTemporarySessionHeaderToOperation(operation, pageView.TemporarySessionLabel)}
 	case eventcontract.RequestPayload:
 		title := strings.TrimSpace(payload.View.Title)
 		if title == "" {
@@ -230,7 +230,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemeApproval, elements),
 		}
-		return []Operation{applyDetourHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.View.DetourLabel)}
+		return []Operation{applyTemporarySessionHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.View.TemporarySessionLabel)}
 	case eventcontract.TimelineTextPayload:
 		text := strings.TrimSpace(payload.TimelineText.Text)
 		if text == "" {
@@ -418,7 +418,7 @@ func (p *Projector) projectBlock(gatewayID, surfaceSessionID, chatID, sourceMess
 	}
 	elements := p.finalBlockExtraElements(summary, turnDiffPreview, finalSummary)
 	title := finalCardTitle(sourceMessagePreview)
-	return projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID, title, detourHeaderSubtitle(block.DetourLabel), body, elements)
+	return projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID, title, temporarySessionHeaderSubtitle(block.TemporarySessionLabel), body, elements)
 }
 
 func finalCardTitle(sourceMessagePreview string) string {

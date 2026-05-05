@@ -419,6 +419,9 @@ func TestReviewSessionLifecycleAndReplyAnchorFallback(t *testing.T) {
 	if requestEvents[0].SourceMessageID != "msg-review-start" {
 		t.Fatalf("expected review request to reuse session reply anchor, got %#v", requestEvents[0])
 	}
+	if requestEvents[0].RequestView == nil || requestEvents[0].RequestView.TemporarySessionLabel != reviewTemporarySessionLabel {
+		t.Fatalf("expected review request prompt to carry temporary session label, got %#v", requestEvents[0])
+	}
 	record := surface.PendingRequests["req-review-1"]
 	if record == nil || record.SourceMessageID != "msg-review-start" || record.ThreadID != "thread-review" {
 		t.Fatalf("expected pending request to stay bound to review session surface, got %#v", record)
@@ -480,6 +483,73 @@ func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership
 		command.Target.SourceThreadID != "thread-main" ||
 		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
 		t.Fatalf("unexpected review reply command target: %#v", command.Target)
+	}
+}
+
+func TestReviewSessionFinalBlockCarriesTemporarySessionLabel(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	itemEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "建议把 review 前台投影接回统一 temporary session。"},
+	})
+	if len(itemEvents) != 0 {
+		t.Fatalf("expected completed agent message to wait for final render, got %#v", itemEvents)
+	}
+
+	finalEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	var finalBlock *render.Block
+	for i := range finalEvents {
+		if finalEvents[i].Block != nil && finalEvents[i].Block.Final {
+			finalBlock = finalEvents[i].Block
+		}
+	}
+	if finalBlock == nil {
+		t.Fatalf("expected final review block, got %#v", finalEvents)
+	}
+	if finalBlock.TemporarySessionLabel != reviewTemporarySessionLabel {
+		t.Fatalf("expected review final block label, got %#v", finalBlock)
+	}
+}
+
+func TestReviewCommandExecutionProgressShowsSharedProgressInNormalVerbosity(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	surface.Verbosity = state.SurfaceVerbosityNormal
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-review",
+		TurnID:   "turn-review-1",
+		ItemID:   "cmd-review-1",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{
+			"command": "git show --stat --oneline HEAD~1..HEAD",
+			"cwd":     "/data/dl/droid",
+		},
+	})
+	if len(events) != 1 || events[0].ExecCommandProgress == nil {
+		t.Fatalf("expected review command execution progress in normal verbosity, got %#v", events)
+	}
+	progress := events[0].ExecCommandProgress
+	if progress.TemporarySessionLabel != reviewTemporarySessionLabel {
+		t.Fatalf("expected review progress label, got %#v", progress)
+	}
+	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "command_execution" {
+		t.Fatalf("expected command execution timeline item, got %#v", progress.Timeline)
 	}
 }
 

@@ -216,7 +216,7 @@ func TestDetachedBranchCompletedTurnCarriesDetourLabelAndReturnNotice(t *testing
 			returnIndex = i
 		}
 	}
-	if finalBlock == nil || finalBlock.DetourLabel != detourForkLabel {
+	if finalBlock == nil || finalBlock.TemporarySessionLabel != detourForkLabel {
 		t.Fatalf("expected final detached branch block to carry detour label, got %#v", events)
 	}
 	if returnNotice == nil || returnNotice.Text != detourReturnNoticeText {
@@ -270,7 +270,7 @@ func TestDetachedBranchTerminalTurnEmitsReturnNoticeForFailureAndInterrupt(t *te
 					foundReturn = event.Notice.Text == detourReturnNoticeText
 				case "turn_failed":
 					foundFailure = true
-					if event.Notice.DetourLabel != detourForkLabel {
+					if event.Notice.TemporarySessionLabel != detourForkLabel {
 						t.Fatalf("expected failure notice to keep detour badge, got %#v", event.Notice)
 					}
 				}

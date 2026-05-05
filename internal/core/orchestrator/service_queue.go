@@ -587,7 +587,7 @@ func (s *Service) renderTextToSurfaceWithSource(surface *state.SurfaceConsoleRec
 	}
 	events := []eventcontract.Event{}
 	events = append(events, s.maybeBindSurfaceForRemoteTurn(surface, inst, instanceKey, threadID, turnID)...)
-	detourLabel := remoteBindingDetourLabel(s.lookupRemoteTurn(instanceKey, threadID, turnID))
+	temporarySessionLabel := s.temporarySessionLabel(surface, instanceKey, threadID, turnID)
 	blocks := s.renderer.PlanAssistantBlocks(surface.SurfaceSessionID, instanceKey, threadID, turnID, itemID, text)
 	thread := (*state.ThreadRecord)(nil)
 	if inst != nil {
@@ -626,7 +626,7 @@ func (s *Service) renderTextToSurfaceWithSource(surface *state.SurfaceConsoleRec
 		block.ThreadTitle = title
 		block.ThemeKey = themeKey
 		block.Final = final
-		block.DetourLabel = detourLabel
+		block.TemporarySessionLabel = temporarySessionLabel
 		event := eventcontract.Event{
 			Kind:                 eventcontract.KindBlockCommitted,
 			SurfaceSessionID:     surface.SurfaceSessionID,
