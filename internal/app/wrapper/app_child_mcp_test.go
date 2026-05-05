@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -176,6 +177,80 @@ func TestBuildClaudeChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 	}
 	if got := server.Headers["Authorization"]; got != "Bearer ${"+feishuMCPBearerEnvName+"}" {
 		t.Fatalf("unexpected authorization header placeholder: %q", got)
+	}
+}
+
+func TestBuildClaudeChildLaunchAddsRuntimeSettingsOverlayAndStripsPrivateEnv(t *testing.T) {
+	rawSettings := `{"env":{"ANTHROPIC_AUTH_TOKEN":"profile-token","ANTHROPIC_MODEL":"claude-4.1","CLAUDE_CODE_EFFORT_LEVEL":"high","CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING":"1","CLAUDE_CODE_DISABLE_THINKING":""}}`
+	t.Setenv(config.ClaudeRuntimeSettingsJSONEnv, rawSettings)
+
+	stateDir := t.TempDir()
+	app := New(Config{
+		Source: "headless",
+		RuntimePaths: relayruntime.Paths{
+			StateDir: stateDir,
+		},
+	})
+
+	args, env := app.buildClaudeChildLaunch(nil)
+
+	index := indexOfArg(args, "--settings")
+	if index < 0 || index+1 >= len(args) {
+		t.Fatalf("expected Claude launch args to include --settings path, got %#v", args)
+	}
+	settingsPath := args[index+1]
+	if !strings.HasPrefix(settingsPath, filepath.Join(stateDir, "claude-settings")+string(os.PathSeparator)) {
+		t.Fatalf("expected runtime settings path under state dir, got %q", settingsPath)
+	}
+	if strings.Contains(strings.Join(args, "\x00"), "profile-token") {
+		t.Fatalf("Claude launch args leaked runtime settings secret: %#v", args)
+	}
+	if got := lookupEnv(env, config.ClaudeRuntimeSettingsJSONEnv); got != "" {
+		t.Fatalf("expected runtime settings contract to stay wrapper-private, got env %#v", env)
+	}
+
+	raw, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read Claude runtime settings overlay: %v", err)
+	}
+	var payload config.ClaudeRuntimeSettings
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode Claude runtime settings overlay: %v", err)
+	}
+	if got := payload.Env[config.ClaudeAuthTokenEnv]; got != "profile-token" {
+		t.Fatalf("expected auth token in runtime settings overlay, got %#v", payload)
+	}
+	if got := payload.Env[config.ClaudeModelEnv]; got != "claude-4.1" {
+		t.Fatalf("expected model in runtime settings overlay, got %#v", payload)
+	}
+	if got := payload.Env[config.ClaudeEffortLevelEnv]; got != "high" {
+		t.Fatalf("expected effort in runtime settings overlay, got %#v", payload)
+	}
+	if got := payload.Env[config.ClaudeDisableAdaptiveEnv]; got != "1" {
+		t.Fatalf("expected adaptive-thinking override in runtime settings overlay, got %#v", payload)
+	}
+	if got := payload.Env[config.ClaudeDisableThinkingEnv]; got != "" {
+		t.Fatalf("expected disable-thinking clear marker in runtime settings overlay, got %#v", payload)
+	}
+}
+
+func TestBuildClaudeChildLaunchSkipsRuntimeSettingsOverlayWhenJSONInvalid(t *testing.T) {
+	t.Setenv(config.ClaudeRuntimeSettingsJSONEnv, "{not-json")
+
+	app := New(Config{
+		Source: "headless",
+		RuntimePaths: relayruntime.Paths{
+			StateDir: t.TempDir(),
+		},
+	})
+
+	args, env := app.buildClaudeChildLaunch(nil)
+
+	if containsArg(args, "--settings") {
+		t.Fatalf("expected invalid runtime settings payload to skip --settings, got %#v", args)
+	}
+	if got := lookupEnv(env, config.ClaudeRuntimeSettingsJSONEnv); got != "" {
+		t.Fatalf("expected invalid runtime settings payload to stay wrapper-private, got env %#v", env)
 	}
 }
 

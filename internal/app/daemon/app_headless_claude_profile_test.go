@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -105,6 +106,28 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		containsEnvEntry(captured.Env, config.ClaudeModelEnv+"=old-model") {
 		t.Fatalf("expected stale claude env to be replaced, got %#v", captured.Env)
 	}
+	settings := mustReadClaudeRuntimeSettingsEnv(t, captured.Env)
+	if got := settings.Env[config.ClaudeBaseURLEnv]; got != "https://proxy.internal/v1" {
+		t.Fatalf("expected runtime settings base url override, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeAuthTokenEnv]; got != "profile-token" {
+		t.Fatalf("expected runtime settings auth token override, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeModelEnv]; got != "mimo-v2.5-pro" {
+		t.Fatalf("expected runtime settings model override, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeDefaultHaikuModelEnv]; got != "mimo-v2.5-haiku" {
+		t.Fatalf("expected runtime settings small model override, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeEffortLevelEnv]; got != "high" {
+		t.Fatalf("expected runtime settings reasoning override, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeDisableAdaptiveEnv]; got != "1" {
+		t.Fatalf("expected runtime settings to disable adaptive thinking, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeDisableThinkingEnv]; got != "" {
+		t.Fatalf("expected runtime settings to clear disable-thinking flag, got %#v", settings)
+	}
 }
 
 func TestDaemonClaudeReasoningOverrideClearsProfileBudgetThinkingFlags(t *testing.T) {
@@ -169,6 +192,19 @@ func TestDaemonClaudeReasoningOverrideClearsProfileBudgetThinkingFlags(t *testin
 	if containsEnvEntry(captured.Env, config.ClaudeDisableThinkingEnv+"=1") {
 		t.Fatalf("expected low reasoning override to remove thinking disable flag, got %#v", captured.Env)
 	}
+	settings := mustReadClaudeRuntimeSettingsEnv(t, captured.Env)
+	if got := settings.Env[config.ClaudeModelEnv]; got != "mimo-v2.5-pro" {
+		t.Fatalf("expected runtime settings to keep profile model override, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeEffortLevelEnv]; got != "low" {
+		t.Fatalf("expected runtime settings low reasoning override, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeDisableAdaptiveEnv]; got != "" {
+		t.Fatalf("expected runtime settings to preserve adaptive thinking for low effort, got %#v", settings)
+	}
+	if got := settings.Env[config.ClaudeDisableThinkingEnv]; got != "" {
+		t.Fatalf("expected runtime settings to clear disable-thinking flag, got %#v", settings)
+	}
 }
 
 func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEnv(t *testing.T) {
@@ -223,6 +259,9 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 	}
 	if captured.LaunchMode != relayruntime.HeadlessLaunchModeClaudeAppServer {
 		t.Fatalf("expected built-in default Claude launch mode, got %#v", captured)
+	}
+	if _, ok := lookupEnvEntry(captured.Env, config.ClaudeRuntimeSettingsJSONEnv); ok {
+		t.Fatalf("expected built-in default profile launch to avoid runtime settings overlay, got %#v", captured.Env)
 	}
 }
 
@@ -319,8 +358,31 @@ func TestApplyClaudeHeadlessProfileEnvReturnsMissingProfileError(t *testing.T) {
 		AdminURL:        "http://localhost:9501/admin/",
 		SetupURL:        "http://localhost:9501/setup",
 	})
-	_, err := app.applyClaudeHeadlessProfileEnv([]string{"PATH=/usr/bin"}, agentproto.BackendClaude, "missing-profile")
+	_, _, err := app.applyClaudeHeadlessProfileEnv([]string{"PATH=/usr/bin"}, agentproto.BackendClaude, "missing-profile")
 	if err == nil || !strings.Contains(err.Error(), "missing-profile") {
 		t.Fatalf("expected missing profile error, got %v", err)
 	}
+}
+
+func mustReadClaudeRuntimeSettingsEnv(t *testing.T, env []string) config.ClaudeRuntimeSettings {
+	t.Helper()
+	raw, ok := lookupEnvEntry(env, config.ClaudeRuntimeSettingsJSONEnv)
+	if !ok || strings.TrimSpace(raw) == "" {
+		t.Fatalf("expected %s in env, got %#v", config.ClaudeRuntimeSettingsJSONEnv, env)
+	}
+	var settings config.ClaudeRuntimeSettings
+	if err := json.Unmarshal([]byte(raw), &settings); err != nil {
+		t.Fatalf("decode %s: %v", config.ClaudeRuntimeSettingsJSONEnv, err)
+	}
+	return settings
+}
+
+func lookupEnvEntry(env []string, key string) (string, bool) {
+	for _, item := range env {
+		currentKey, value, ok := strings.Cut(item, "=")
+		if ok && currentKey == key {
+			return value, true
+		}
+	}
+	return "", false
 }

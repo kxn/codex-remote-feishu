@@ -1,7 +1,7 @@
 # Configuration State Storage Guidelines
 
 > Type: `general`
-> Updated: `2026-05-03`
+> Updated: `2026-05-05`
 > Summary: 新增配置项存储决策规则，区分显示配置、本地副作用配置、启动合同、backend 行为默认值和 backend 可变状态。
 
 ## 1. 适用范围
@@ -247,6 +247,6 @@
 
 - VS Code 端修改 model / reasoning / access / plan 时，wrapper 是否能完整观测并上报
 - Claude access 若未来要做成 profile 默认值，需要单独确认 settings/profile 侧的稳定配置入口，不能复用 `set_permission_mode` runtime state
-- Claude reasoning 若未来要支持运行中无损切换，需要先确认不再依赖 `CLAUDE_CODE_EFFORT_LEVEL` env pin；当前实现按重启 headless 生效
+- Claude reasoning 若未来要支持运行中无损切换，需要先确认不再依赖 Claude launch-time managed settings pin（当前仍会把 `CLAUDE_CODE_EFFORT_LEVEL` 等键冻结进启动合同并在 restart 后生效）
 
 在这些调研完成前，对应配置不得直接做成强持久 SSOT。

@@ -1,8 +1,8 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-05-04`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还补上了 Claude `prompt.send` 与 `turn.steer` approximation 的本地图片输入支持，文件继续保持 `@path` 文本桥接；`turn.steer` 仍不宣称 native capability，但 reply auto steer 与 `/steerall` 已可把文本与本地图片补充并入当前 active turn。
+> Updated: `2026-05-05`
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还把 Claude managed keys 收口成 daemon 冻结的 runtime settings contract，由 wrapper 写入临时 `--settings` overlay 覆盖 Claude 自身配置里的同名 `env`，同时继续保留共享 `CLAUDE_CONFIG_DIR`；此外还补上了 Claude `prompt.send` 与 `turn.steer` approximation 的本地图片输入支持，文件继续保持 `@path` 文本桥接；`turn.steer` 仍不宣称 native capability，但 reply auto steer 与 `/steerall` 已可把文本与本地图片补充并入当前 active turn。
 
 ## 1. 文档定位
 
@@ -431,18 +431,20 @@ Claude runtime：
    - 用户切换 profile 后，后续新启动或恢复的 Claude 子进程使用新 profile 的调用配置；已有 session id、workspace session catalog 与恢复逻辑不因为 profile 改变而分叉。
    - `/list`、`/use`、自动恢复、workspace recency 与 session history 只能按 backend/workspace/session 语义过滤，不允许重新引入按 profile 隔离 session 的路径。
 4. launch-time profile injection
-   - profile 注入发生在 daemon 启动 wrapper 时，而不是 Claude child-only flags
+   - profile 注入发生在 daemon 启动 wrapper 时，但 Claude child 最终生效路径不是“只靠进程 env”，而是 daemon 冻结显式 managed runtime settings contract，再由 wrapper 写成临时 `--settings <file>` overlay
    - 当 backend=`claude` 且选择 custom profile 时：
      - 保留继承环境中的 `CLAUDE_CONFIG_DIR`
      - 清掉继承环境中的 `ANTHROPIC_*` profile 覆盖项
-     - 再按 profile 注入 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_HAIKU_MODEL`
-     - profile 配置了默认 reasoning 时，会通过统一 helper 注入或覆盖 Claude reasoning env：始终设置 `CLAUDE_CODE_EFFORT_LEVEL`，`high / max` 额外禁用 adaptive thinking，并清掉 `CLAUDE_CODE_DISABLE_THINKING`；profile 未配置 reasoning 时不主动修改底层默认值
-   - 如果 daemon start command 携带显式 `ClaudeReasoningEffort`，它必须在 profile env 注入之后覆盖 profile 默认值。
+     - daemon 会把 profile 管理的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_HAIKU_MODEL` 冻结进 wrapper-private runtime settings contract，而不是让 wrapper 从当前环境里猜
+     - profile 配置了默认 reasoning 时，会通过同一 contract 冻结 Claude reasoning：始终设置 `CLAUDE_CODE_EFFORT_LEVEL`，`high / max` 额外禁用 adaptive thinking，并清掉 `CLAUDE_CODE_DISABLE_THINKING`；profile 未配置 reasoning 时不主动修改底层默认值
+     - wrapper 启动 Claude child 前，会把这份 contract 写到 `<stateDir>/claude-settings/*.json`，再追加 `--settings <path>`；这样即使用户自己的 Claude config 里也写了 `settings.env`，managed keys 仍以 host 冻结值为准
+   - 如果 daemon start command 携带显式 `ClaudeReasoningEffort`，它必须在 profile runtime settings 之后覆盖 profile 默认值。
    - profile 只是 endpoint/key/model/reasoning 配置，不是 session namespace
    - wrapper 本地 session catalog/history plane 与 Claude child 必须继续共享同一个 `CLAUDE_CONFIG_DIR` 视图
    - 不允许为 custom profile 创建 `<stateDir>/claude/profiles/<profileID>` 这类 profile-scoped runtime config dir
 5. built-in `default` profile 语义
    - 不主动覆盖当前进程已有的 Claude 环境
+   - 不生成额外的 managed runtime settings overlay
    - 不创建 profile-scoped runtime config dir
    - 语义保持为“尽量沿用当前本机 Claude 默认配置”
 

@@ -72,6 +72,7 @@ func (a *App) buildClaudeChildLaunch(resume *claudeLaunchResumeTarget) ([]string
 	}
 	env := config.FilterEnvWithoutProxy(append([]string{}, os.Environ()...))
 	env = append(env, a.config.ChildProxyEnv...)
+	args, env = a.applyClaudeRuntimeSettingsOverlay(args, env)
 	args, env = a.applyClaudeFeishuMCPPublication(args, env)
 	return args, env
 }
