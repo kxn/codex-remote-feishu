@@ -83,6 +83,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	}
 
 	env := append([]string{}, cfg.BaseEnv...)
+	claudeRuntimeSettings := config.ClaudeRuntimeSettings{}
 	backend := agentproto.NormalizeBackend(command.Backend)
 	if strings.TrimSpace(string(command.Backend)) == "" {
 		errInfo := agentproto.ErrorInfo{
@@ -132,7 +133,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			Retryable:        true,
 		}))
 	}
-	env, err = a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID)
+	env, claudeRuntimeSettings, err = a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID)
 	if err != nil {
 		if command.AutoRestore {
 			a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
@@ -151,6 +152,29 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	if backend == agentproto.BackendClaude {
 		if effort := state.NormalizeClaudeReasoningEffort(command.ClaudeReasoningEffort); effort != "" {
 			env = config.ApplyClaudeReasoningLaunchEnv(env, effort)
+			claudeRuntimeSettings = config.MergeClaudeRuntimeSettings(
+				claudeRuntimeSettings,
+				config.ClaudeReasoningRuntimeSettings(effort),
+			)
+		}
+		if !claudeRuntimeSettings.Empty() {
+			raw, marshalErr := config.MarshalClaudeRuntimeSettings(claudeRuntimeSettings)
+			if marshalErr != nil {
+				if command.AutoRestore {
+					a.setSurfaceResumeBackoffLocked(command.SurfaceSessionID, "headless_restore_start_failed", now)
+				}
+				return a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, agentproto.ErrorInfoFromError(marshalErr, agentproto.ErrorInfo{
+					Code:             "claude_settings_prepare_failed",
+					Layer:            "daemon",
+					Stage:            "headless_start",
+					Operation:        "start_headless",
+					Message:          "Claude 运行时配置准备失败。",
+					SurfaceSessionID: command.SurfaceSessionID,
+					ThreadID:         command.ThreadID,
+					Retryable:        true,
+				}))
+			}
+			env = config.UpsertEnvValue(env, config.ClaudeRuntimeSettingsJSONEnv, raw)
 		}
 	}
 	if strings.TrimSpace(command.ThreadCWD) == "" {
