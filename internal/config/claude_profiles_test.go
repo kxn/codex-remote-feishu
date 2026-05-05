@@ -95,6 +95,8 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 		ClaudeModelEnv + "=old-model",
 		ClaudeDefaultHaikuModelEnv + "=old-small-model",
 		ClaudeEffortLevelEnv + "=old-effort",
+		ClaudeDisableAdaptiveEnv + "=1",
+		ClaudeDisableThinkingEnv + "=1",
 	}
 	updatedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, customProfile)
 	if err != nil {
@@ -122,6 +124,12 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 	if value, ok := lookupEnvValue(updatedEnv, ClaudeEffortLevelEnv); !ok || value != "high" {
 		t.Fatalf("unexpected reasoning env: %#v", updatedEnv)
 	}
+	if value, ok := lookupEnvValue(updatedEnv, ClaudeDisableAdaptiveEnv); !ok || value != "1" {
+		t.Fatalf("expected high reasoning to force budget thinking, got %#v", updatedEnv)
+	}
+	if _, ok := lookupEnvValue(updatedEnv, ClaudeDisableThinkingEnv); ok {
+		t.Fatalf("expected configured reasoning to re-enable thinking, got %#v", updatedEnv)
+	}
 
 	noReasoningProfile := customProfile
 	noReasoningProfile.ReasoningEffort = ""
@@ -132,6 +140,12 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 	if value, ok := lookupEnvValue(noReasoningEnv, ClaudeEffortLevelEnv); !ok || value != "old-effort" {
 		t.Fatalf("expected unset profile reasoning to preserve system default effort, got %#v", noReasoningEnv)
 	}
+	if value, ok := lookupEnvValue(noReasoningEnv, ClaudeDisableAdaptiveEnv); !ok || value != "1" {
+		t.Fatalf("expected unset profile reasoning to preserve adaptive-thinking override, got %#v", noReasoningEnv)
+	}
+	if value, ok := lookupEnvValue(noReasoningEnv, ClaudeDisableThinkingEnv); !ok || value != "1" {
+		t.Fatalf("expected unset profile reasoning to preserve thinking disable flag, got %#v", noReasoningEnv)
+	}
 
 	defaultEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, defaultProfile)
 	if err != nil {
@@ -139,5 +153,47 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 	}
 	if value, ok := lookupEnvValue(defaultEnv, ClaudeConfigDirEnv); !ok || value != "/tmp/old-claude" {
 		t.Fatalf("expected built-in default profile to preserve current env, got %#v", defaultEnv)
+	}
+}
+
+func TestApplyClaudeReasoningLaunchEnv(t *testing.T) {
+	baseEnv := []string{
+		ClaudeEffortLevelEnv + "=old-effort",
+		ClaudeDisableAdaptiveEnv + "=1",
+		ClaudeDisableThinkingEnv + "=1",
+		"KEEP_ME=1",
+	}
+
+	highEnv := ApplyClaudeReasoningLaunchEnv(baseEnv, " HIGH ")
+	if value, ok := lookupEnvValue(highEnv, ClaudeEffortLevelEnv); !ok || value != "high" {
+		t.Fatalf("expected high effort env, got %#v", highEnv)
+	}
+	if value, ok := lookupEnvValue(highEnv, ClaudeDisableAdaptiveEnv); !ok || value != "1" {
+		t.Fatalf("expected high effort to disable adaptive thinking, got %#v", highEnv)
+	}
+	if _, ok := lookupEnvValue(highEnv, ClaudeDisableThinkingEnv); ok {
+		t.Fatalf("expected high effort to remove thinking disable flag, got %#v", highEnv)
+	}
+
+	mediumEnv := ApplyClaudeReasoningLaunchEnv(baseEnv, "medium")
+	if value, ok := lookupEnvValue(mediumEnv, ClaudeEffortLevelEnv); !ok || value != "medium" {
+		t.Fatalf("expected medium effort env, got %#v", mediumEnv)
+	}
+	if _, ok := lookupEnvValue(mediumEnv, ClaudeDisableAdaptiveEnv); ok {
+		t.Fatalf("expected medium effort to keep adaptive thinking enabled, got %#v", mediumEnv)
+	}
+	if _, ok := lookupEnvValue(mediumEnv, ClaudeDisableThinkingEnv); ok {
+		t.Fatalf("expected medium effort to remove thinking disable flag, got %#v", mediumEnv)
+	}
+
+	unchangedEnv := ApplyClaudeReasoningLaunchEnv(baseEnv, "")
+	if value, ok := lookupEnvValue(unchangedEnv, ClaudeEffortLevelEnv); !ok || value != "old-effort" {
+		t.Fatalf("expected empty effort to preserve existing effort env, got %#v", unchangedEnv)
+	}
+	if value, ok := lookupEnvValue(unchangedEnv, ClaudeDisableAdaptiveEnv); !ok || value != "1" {
+		t.Fatalf("expected empty effort to preserve adaptive-thinking flag, got %#v", unchangedEnv)
+	}
+	if value, ok := lookupEnvValue(unchangedEnv, ClaudeDisableThinkingEnv); !ok || value != "1" {
+		t.Fatalf("expected empty effort to preserve thinking disable flag, got %#v", unchangedEnv)
 	}
 }
