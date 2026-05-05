@@ -274,11 +274,11 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	if len(ops) != 1 {
 		t.Fatalf("expected one review final card, got %#v", ops)
 	}
-	if !strings.HasPrefix(ops[0].CardTitle, reviewCardTitlePrefix) {
-		t.Fatalf("expected review title prefix, got %#v", ops[0])
+	if ops[0].CardTitle != "✅ 最后答复" {
+		t.Fatalf("expected review final card to keep default title, got %#v", ops[0])
 	}
-	if !strings.Contains(ops[0].CardTitle, "提交 abc1234") {
-		t.Fatalf("expected review title to include commit target label, got %#v", ops[0].CardTitle)
+	if ops[0].CardSubtitle != "**临时会话 · 审阅**" {
+		t.Fatalf("expected review final card subtitle, got %#v", ops[0])
 	}
 	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewDiscard)) {
 		t.Fatalf("expected discard button, got %#v", ops[0].CardElements)
@@ -316,8 +316,11 @@ func TestDeliverUIEventKeepsReviewFinalCardSuppressedAfterSessionRuntimeClears(t
 	if len(ops) != 1 {
 		t.Fatalf("expected one review final card, got %#v", ops)
 	}
-	if !strings.HasPrefix(ops[0].CardTitle, reviewCardTitlePrefix) {
-		t.Fatalf("expected review title prefix even after session runtime clears, got %#v", ops[0].CardTitle)
+	if ops[0].CardTitle != "✅ 最后答复" {
+		t.Fatalf("expected detached review final card to keep default title, got %#v", ops[0].CardTitle)
+	}
+	if ops[0].CardSubtitle != "**临时会话 · 审阅**" {
+		t.Fatalf("expected detached review final card subtitle, got %#v", ops[0])
 	}
 	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
 		t.Fatalf("did not expect review entry button on detached review final card, got %#v", ops[0].CardElements)
@@ -438,6 +441,9 @@ func TestHandleGatewayActionStartsDetachedReviewFromFinalCard(t *testing.T) {
 	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "正在进入审阅" {
 		t.Fatalf("expected one appended entering-review notice card, got %#v", ops)
 	}
+	if ops[0].CardSubtitle != "**临时会话 · 审阅**" {
+		t.Fatalf("expected entering-review notice subtitle, got %#v", ops[0])
+	}
 	if len(sent) != 1 || sent[0].Kind != agentproto.CommandReviewStart || sent[0].Target.ThreadID != "thread-main" {
 		t.Fatalf("unexpected review start command: %#v", sent)
 	}
@@ -468,6 +474,9 @@ func TestHandleGatewayActionStartsDetachedReviewFromCurrentThreadCommand(t *test
 	ops := gateway.snapshotOperations()
 	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "正在进入审阅" {
 		t.Fatalf("expected one appended entering-review notice card, got %#v", ops)
+	}
+	if ops[0].CardSubtitle != "**临时会话 · 审阅**" {
+		t.Fatalf("expected review command start notice subtitle, got %#v", ops[0])
 	}
 	if len(sent) != 1 || sent[0].Kind != agentproto.CommandReviewStart || sent[0].Target.ThreadID != "thread-main" {
 		t.Fatalf("unexpected review start command: %#v", sent)
@@ -548,6 +557,9 @@ func TestHandleGatewayActionStartsDetachedCommitReviewFromFinalCardLocalCallback
 	ops := gateway.snapshotOperations()
 	if len(ops) != 1 || ops[0].Kind != feishu.OperationSendCard || ops[0].CardTitle != "正在进入审阅" {
 		t.Fatalf("expected one appended entering-review notice card, got %#v", ops)
+	}
+	if ops[0].CardSubtitle != "**临时会话 · 审阅**" {
+		t.Fatalf("expected commit review start notice subtitle, got %#v", ops[0])
 	}
 	if len(sent) != 1 || sent[0].Kind != agentproto.CommandReviewStart {
 		t.Fatalf("unexpected review start command: %#v", sent)

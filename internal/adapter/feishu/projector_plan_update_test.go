@@ -17,10 +17,10 @@ func TestProjectPlanUpdateCard(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		SourceMessageID:  "om_1",
 		PlanUpdate: &control.PlanUpdate{
-			ThreadID:    "thread-1",
-			TurnID:      "turn-1",
-			DetourLabel: "临时会话 · 分支",
-			Explanation: "先把协议和去重打通。",
+			ThreadID:              "thread-1",
+			TurnID:                "turn-1",
+			TemporarySessionLabel: "临时会话 · 分支",
+			Explanation:           "先把协议和去重打通。",
 			Steps: []control.PlanUpdateStep{
 				{Step: "接入结构化 plan", Status: agentproto.TurnPlanStepStatusCompleted},
 				{Step: "做 orchestrator 去重", Status: agentproto.TurnPlanStepStatusInProgress},

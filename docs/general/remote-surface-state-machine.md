@@ -1320,6 +1320,8 @@ E3 Running
       4. `Target.SurfaceBindingPolicy=keep_surface_selection`
    6. 若某个 request / item / final turn 输出来自 review thread，但当前没有普通 `pendingRemote/activeRemote` 绑定，surface 归属与 reply anchor 会回退到 `ReviewSession` runtime，而不是丢失到 thread claim 猜测；同一路径也会让 review thread 输出等价于 `keep_surface_selection`，不会触发默认 `follow_execution_thread` 改绑
    7. `entered_review_mode` / `exited_review_mode` 生命周期 item 当前不会直接投影成前台卡片；它们会把 `TargetLabel` / `LastReviewText` 写回 `ReviewSession` runtime，并在需要时把 pending / partial review session 提升成 active、补齐 `ReviewThreadID` / `ParentThreadID` / `ActiveTurnID`，供后续前台子单消费
+   8. review detached frontstage 现在与 detour 共用同一条 temporary-session contract：`正在进入审阅` notice、request / plan / `turn_failed` / shared progress / final card 都统一带 `TemporarySessionLabel="临时会话 · 审阅"`；review 不再依赖 app-layer 标题前缀去补可见语义
+   9. `normal` verbosity 下，review 共享过程现在额外放开 `command_execution`、`dynamic_tool_call` 与 `web_search`，避免 detached review 只显示“开始/结束”而中间看起来像假死
 
 ### 5.3 本地 VS Code 仲裁
 

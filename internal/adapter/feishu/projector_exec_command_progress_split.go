@@ -135,7 +135,7 @@ func execProgressCardFits(lines []execProgressRenderedLine, subtitle string) boo
 }
 
 func execProgressCardWindow(progress control.ExecCommandProgress, lines []execProgressRenderedLine) execProgressCardWindowState {
-	subtitle := detourHeaderSubtitle(progress.DetourLabel)
+	subtitle := temporarySessionHeaderSubtitle(progress.TemporarySessionLabel)
 	startSeq := normalizeExecProgressCardStartSeq(progress, lines)
 	persistent := make([]execProgressRenderedLine, 0, len(lines))
 	transient := make([]execProgressRenderedLine, 0, 1)

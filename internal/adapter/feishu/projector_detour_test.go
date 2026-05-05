@@ -15,13 +15,13 @@ func TestFinalReplyCardRendersDetourLabel(t *testing.T) {
 		SourceMessageID:      "msg-1",
 		SourceMessagePreview: "顺手问个岔题",
 		Block: &render.Block{
-			ThreadID:    "thread-detour",
-			TurnID:      "turn-detour",
-			ItemID:      "item-1",
-			Kind:        render.BlockAssistantMarkdown,
-			Text:        "已经处理完了。",
-			DetourLabel: "临时会话 · 分支",
-			Final:       true,
+			ThreadID:              "thread-detour",
+			TurnID:                "turn-detour",
+			ItemID:                "item-1",
+			Kind:                  render.BlockAssistantMarkdown,
+			Text:                  "已经处理完了。",
+			TemporarySessionLabel: "临时会话 · 分支",
+			Final:                 true,
 		},
 	})
 
@@ -44,13 +44,13 @@ func TestStreamingTextLaneIgnoresDetourLabel(t *testing.T) {
 		Kind:            eventcontract.KindBlockCommitted,
 		SourceMessageID: "msg-1",
 		Block: &render.Block{
-			ThreadID:    "thread-detour",
-			TurnID:      "turn-detour",
-			ItemID:      "item-1",
-			Kind:        render.BlockAssistantMarkdown,
-			Text:        "我先看一下目录结构。",
-			DetourLabel: "临时会话 · 分支",
-			Final:       false,
+			ThreadID:              "thread-detour",
+			TurnID:                "turn-detour",
+			ItemID:                "item-1",
+			Kind:                  render.BlockAssistantMarkdown,
+			Text:                  "我先看一下目录结构。",
+			TemporarySessionLabel: "临时会话 · 分支",
+			Final:                 false,
 		},
 	})
 

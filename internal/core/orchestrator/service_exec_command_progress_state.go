@@ -42,17 +42,19 @@ func (s *Service) flushAndSealExecCommandProgressForTurn(instanceID, threadID, t
 	return events
 }
 
-func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleRecord, itemKind string) bool {
+func (s *Service) surfaceAllowsProcessProgress(surface *state.SurfaceConsoleRecord, instanceID, threadID, turnID, itemKind string) bool {
 	if surface == nil {
 		return false
 	}
+	reviewNormal := state.NormalizeSurfaceVerbosity(surface.Verbosity) == state.SurfaceVerbosityNormal &&
+		s.temporarySessionContext(surface, instanceID, threadID, turnID).isReview()
 	switch strings.TrimSpace(itemKind) {
 	case "file_change", "mcp_tool_call", "context_compaction":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
 	case "delegated_task":
 		return state.NormalizeSurfaceVerbosity(surface.Verbosity) != state.SurfaceVerbosityQuiet
 	case "command_execution", "dynamic_tool_call", "web_search":
-		return surfaceVerbosityAtLeast(surface.Verbosity, state.SurfaceVerbosityVerbose)
+		return reviewNormal || surfaceVerbosityAtLeast(surface.Verbosity, state.SurfaceVerbosityVerbose)
 	default:
 		return false
 	}

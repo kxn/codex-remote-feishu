@@ -10,7 +10,7 @@ import (
 
 func (s *Service) handleFileChangeProgressStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
@@ -23,7 +23,7 @@ func (s *Service) handleFileChangeProgressStarted(instanceID string, event agent
 
 func (s *Service) handleFileChangeProgressCompleted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)

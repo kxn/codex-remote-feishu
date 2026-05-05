@@ -346,15 +346,15 @@ type PendingInputState struct {
 }
 
 type Notice struct {
-	Code             string
-	Title            string
-	DetourLabel      string
-	Text             string
-	ThemeKey         string
-	Sections         []FeishuCardTextSection
-	DeliveryClass    NoticeDeliveryClass
-	DeliveryFamily   NoticeDeliveryFamily
-	DeliveryDedupKey string
+	Code                  string
+	Title                 string
+	TemporarySessionLabel string
+	Text                  string
+	ThemeKey              string
+	Sections              []FeishuCardTextSection
+	DeliveryClass         NoticeDeliveryClass
+	DeliveryFamily        NoticeDeliveryFamily
+	DeliveryDedupKey      string
 }
 
 type ThreadSelectionChanged struct {
@@ -565,14 +565,14 @@ type ExecCommandProgressSegment struct {
 }
 
 type ExecCommandProgress struct {
-	ThreadID        string
-	TurnID          string
-	ItemID          string
-	DetourLabel     string
-	ActiveSegmentID string
-	Segments        []ExecCommandProgressSegment
-	Verbosity       string
-	Timeline        []ExecCommandProgressTimelineItem
+	ThreadID              string
+	TurnID                string
+	ItemID                string
+	TemporarySessionLabel string
+	ActiveSegmentID       string
+	Segments              []ExecCommandProgressSegment
+	Verbosity             string
+	Timeline              []ExecCommandProgressTimelineItem
 }
 
 type DaemonCommandKind string

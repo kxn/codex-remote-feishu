@@ -71,7 +71,7 @@ func (s *Service) handleProcessProgressItemCompleted(instanceID string, event ag
 
 func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	command, _ := execprogress.CommandMetadata(event)
@@ -103,7 +103,7 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 
 func (s *Service) handleWebSearchProgressStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	progress := s.ensureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
@@ -138,7 +138,7 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 	status := execprogress.NormalizeStatus(event.Status, true)
 	if changed, ok := execprogress.UpsertExplorationProgressForCommandExecution(progress, event, true); ok {
 		progress.ItemID = execprogress.ExplorationBlockID
-		if changed && s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+		if changed && s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 			return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 		}
 		return nil
@@ -171,7 +171,7 @@ func (s *Service) handleWebSearchProgressCompleted(instanceID string, event agen
 	entry := execprogress.WebSearchEntry(event.Metadata, true)
 	entry.ItemID = progress.ItemID
 	execprogress.UpsertEntry(progress, entry)
-	if !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
@@ -179,7 +179,7 @@ func (s *Service) handleWebSearchProgressCompleted(instanceID string, event agen
 
 func (s *Service) handleDelegatedTaskProgressUpdated(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
@@ -209,7 +209,7 @@ func (s *Service) handleDelegatedTaskProgressUpdated(instanceID string, event ag
 
 func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
@@ -231,7 +231,7 @@ func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event 
 
 func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
-	if surface == nil || !s.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if surface == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
@@ -363,7 +363,7 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	if snapshot == nil {
 		return nil
 	}
-	snapshot.DetourLabel = remoteBindingDetourLabel(s.lookupRemoteTurn(progress.InstanceID, threadID, turnID))
+	snapshot.TemporarySessionLabel = s.temporarySessionLabel(surface, progress.InstanceID, threadID, turnID)
 	outbound := eventcontract.Event{
 		Kind:                eventcontract.KindExecCommandProgress,
 		SurfaceSessionID:    surface.SurfaceSessionID,

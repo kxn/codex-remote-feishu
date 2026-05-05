@@ -224,7 +224,7 @@ func TestDetachedBranchTurnCompletedPresentsPlanProposalWithoutStealingSelection
 	if page == nil {
 		t.Fatalf("expected detached branch plan proposal card, got %#v", events)
 	}
-	if page.DetourLabel != detourForkLabel {
+	if page.TemporarySessionLabel != detourForkLabel {
 		t.Fatalf("expected detached branch plan proposal to carry detour label, got %#v", page)
 	}
 	if surface.SelectedThreadID != "thread-main" {

@@ -18,18 +18,18 @@ const (
 	planProposalActionCancel     = "cancel"
 )
 
-func newPlanProposalRecord(proposalID, instanceID, threadID, turnID, threadCWD, planText, detourLabel string, createdAt time.Time, ttl time.Duration) *activePlanProposalRecord {
+func newPlanProposalRecord(proposalID, instanceID, threadID, turnID, threadCWD, planText, temporarySessionLabel string, createdAt time.Time, ttl time.Duration) *activePlanProposalRecord {
 	createdAt = createdAt.UTC()
 	return &activePlanProposalRecord{
-		ProposalID:  strings.TrimSpace(proposalID),
-		InstanceID:  strings.TrimSpace(instanceID),
-		ThreadID:    strings.TrimSpace(threadID),
-		TurnID:      strings.TrimSpace(turnID),
-		ThreadCWD:   strings.TrimSpace(threadCWD),
-		PlanText:    strings.TrimSpace(planText),
-		DetourLabel: strings.TrimSpace(detourLabel),
-		CreatedAt:   createdAt,
-		ExpiresAt:   createdAt.Add(ttl),
+		ProposalID:            strings.TrimSpace(proposalID),
+		InstanceID:            strings.TrimSpace(instanceID),
+		ThreadID:              strings.TrimSpace(threadID),
+		TurnID:                strings.TrimSpace(turnID),
+		ThreadCWD:             strings.TrimSpace(threadCWD),
+		PlanText:              strings.TrimSpace(planText),
+		TemporarySessionLabel: strings.TrimSpace(temporarySessionLabel),
+		CreatedAt:             createdAt,
+		ExpiresAt:             createdAt.Add(ttl),
 	}
 }
 
@@ -101,7 +101,7 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 	view := control.FeishuPageView{
 		CommandID:                     control.FeishuCommandPlan,
 		Title:                         "提案计划",
-		DetourLabel:                   strings.TrimSpace(firstNonEmpty(proposalDetourLabel(proposal))),
+		TemporarySessionLabel:         strings.TrimSpace(firstNonEmpty(proposalTemporarySessionLabel(proposal))),
 		MessageID:                     planProposalMessageID(flow, inlineMessageID),
 		TrackingKey:                   planProposalTrackingKey(flow),
 		ThemeKey:                      firstNonEmpty(strings.TrimSpace(theme), "plan"),
@@ -124,11 +124,11 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 	return control.NormalizeFeishuPageView(view)
 }
 
-func proposalDetourLabel(proposal *activePlanProposalRecord) string {
+func proposalTemporarySessionLabel(proposal *activePlanProposalRecord) string {
 	if proposal == nil {
 		return ""
 	}
-	return proposal.DetourLabel
+	return proposal.TemporarySessionLabel
 }
 
 func planProposalEvent(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, proposal *activePlanProposalRecord, inlineMessageID, statusText, theme string, buttons []control.CommandCatalogButton, sealed bool, inlineReplace bool) eventcontract.Event {
@@ -298,7 +298,17 @@ func (s *Service) maybePresentCompletedPlanProposal(instanceID, threadID, turnID
 	now := s.now()
 	events := s.maybeSealPlanProposalForRouteChange(surface, "新的提案计划已生成，上一张提案计划卡片已失效。")
 	flow := newOwnerCardFlowRecord(ownerCardFlowKindPlanProposal, s.pickers.nextPlanProposalToken(), firstNonEmpty(surface.ActorUserID), now, defaultPlanProposalTTL, ownerCardFlowPhaseResolved)
-	record := newPlanProposalRecord(flow.FlowID, instanceID, threadID, turnID, threadCWD, pending.Text, remoteBindingDetourLabel(binding), now, defaultPlanProposalTTL)
+	record := newPlanProposalRecord(
+		flow.FlowID,
+		instanceID,
+		threadID,
+		turnID,
+		threadCWD,
+		pending.Text,
+		firstNonEmpty(s.temporarySessionLabel(surface, instanceID, threadID, turnID), remoteBindingDetourLabel(binding)),
+		now,
+		defaultPlanProposalTTL,
+	)
 	s.setActiveOwnerCardFlow(surface, flow)
 	s.setActivePlanProposal(surface, record)
 	buttons := []control.CommandCatalogButton{

@@ -69,7 +69,7 @@ func (r *serviceProgressRuntime) renderCompactNotice(instanceID string, event ag
 	if inst != nil && strings.TrimSpace(event.ThreadID) != "" {
 		r.service.clearThreadReplay(inst, event.ThreadID)
 	}
-	if !r.service.surfaceAllowsProcessProgress(surface, event.ItemKind) {
+	if !r.service.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 		return nil
 	}
 	progress := r.service.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)

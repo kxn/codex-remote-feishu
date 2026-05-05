@@ -123,10 +123,11 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 			Kind:             eventcontract.KindNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
-				Code:     "review_start_requested",
-				Title:    "正在进入审阅",
-				Text:     reviewStartNoticeText(start),
-				ThemeKey: "system",
+				Code:                  "review_start_requested",
+				Title:                 "正在进入审阅",
+				TemporarySessionLabel: reviewTemporarySessionLabel,
+				Text:                  reviewStartNoticeText(start),
+				ThemeKey:              "system",
 			},
 		},
 		{
