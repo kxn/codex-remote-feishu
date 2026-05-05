@@ -416,6 +416,8 @@ Claude runtime：
    - profile 可选默认 reasoning：
      - 空值表示不设置，继续使用更高优先级覆盖或系统默认
      - `low / medium / high / max -> CLAUDE_CODE_EFFORT_LEVEL`
+     - `high / max` 额外强制 `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING=1`
+     - profile/default/runtime reasoning 生效时，会清掉 `CLAUDE_CODE_DISABLE_THINKING`
 2. admin backend contract
    - `GET /api/admin/claude/profiles`
    - `POST /api/admin/claude/profiles`
@@ -434,7 +436,7 @@ Claude runtime：
      - 保留继承环境中的 `CLAUDE_CONFIG_DIR`
      - 清掉继承环境中的 `ANTHROPIC_*` profile 覆盖项
      - 再按 profile 注入 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL`、`ANTHROPIC_DEFAULT_HAIKU_MODEL`
-     - profile 配置了默认 reasoning 时，再注入或覆盖 `CLAUDE_CODE_EFFORT_LEVEL`；profile 未配置 reasoning 时不主动修改底层默认值
+     - profile 配置了默认 reasoning 时，会通过统一 helper 注入或覆盖 Claude reasoning env：始终设置 `CLAUDE_CODE_EFFORT_LEVEL`，`high / max` 额外禁用 adaptive thinking，并清掉 `CLAUDE_CODE_DISABLE_THINKING`；profile 未配置 reasoning 时不主动修改底层默认值
    - 如果 daemon start command 携带显式 `ClaudeReasoningEffort`，它必须在 profile env 注入之后覆盖 profile 默认值。
    - profile 只是 endpoint/key/model/reasoning 配置，不是 session namespace
    - wrapper 本地 session catalog/history plane 与 Claude child 必须继续共享同一个 `CLAUDE_CONFIG_DIR` 视图

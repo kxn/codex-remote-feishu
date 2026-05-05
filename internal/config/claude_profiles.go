@@ -20,6 +20,8 @@ const (
 	ClaudeModelEnv             = "ANTHROPIC_MODEL"
 	ClaudeDefaultHaikuModelEnv = "ANTHROPIC_DEFAULT_HAIKU_MODEL"
 	ClaudeEffortLevelEnv       = "CLAUDE_CODE_EFFORT_LEVEL"
+	ClaudeDisableAdaptiveEnv   = "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING"
+	ClaudeDisableThinkingEnv   = "CLAUDE_CODE_DISABLE_THINKING"
 	ClaudeRuntimeProfileIDEnv  = "CODEX_REMOTE_CLAUDE_PROFILE_ID"
 )
 
@@ -216,9 +218,23 @@ func ApplyClaudeProfileLaunchEnv(baseEnv []string, profile ClaudeProfile) ([]str
 		env = upsertEnvValue(env, ClaudeDefaultHaikuModelEnv, value)
 	}
 	if value := NormalizeClaudeReasoningEffort(profile.ReasoningEffort); value != "" {
-		env = upsertEnvValue(env, ClaudeEffortLevelEnv, value)
+		env = ApplyClaudeReasoningLaunchEnv(env, value)
 	}
 	return env, nil
+}
+
+func ApplyClaudeReasoningLaunchEnv(baseEnv []string, effort string) []string {
+	env := append([]string{}, baseEnv...)
+	effort = NormalizeClaudeReasoningEffort(effort)
+	if effort == "" {
+		return env
+	}
+	env = removeEnvKeys(env, ClaudeDisableAdaptiveEnv, ClaudeDisableThinkingEnv)
+	env = upsertEnvValue(env, ClaudeEffortLevelEnv, effort)
+	if effort == "high" || effort == "max" {
+		env = upsertEnvValue(env, ClaudeDisableAdaptiveEnv, "1")
+	}
+	return env
 }
 
 func nextClaudeProfileID(id, name string, used map[string]struct{}) string {

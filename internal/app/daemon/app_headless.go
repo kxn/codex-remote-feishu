@@ -150,7 +150,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 	}
 	if backend == agentproto.BackendClaude {
 		if effort := state.NormalizeClaudeReasoningEffort(command.ClaudeReasoningEffort); effort != "" {
-			env = config.UpsertEnvValue(env, config.ClaudeEffortLevelEnv, effort)
+			env = config.ApplyClaudeReasoningLaunchEnv(env, effort)
 		}
 	}
 	if strings.TrimSpace(command.ThreadCWD) == "" {

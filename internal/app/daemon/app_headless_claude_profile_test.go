@@ -42,6 +42,7 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 			config.ClaudeModelEnv + "=old-model",
 			config.ClaudeDefaultHaikuModelEnv + "=old-small-model",
 			config.ClaudeEffortLevelEnv + "=old-effort",
+			config.ClaudeDisableThinkingEnv + "=1",
 		},
 		Paths: relayruntime.Paths{
 			LogsDir:  t.TempDir(),
@@ -94,9 +95,79 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		!containsEnvEntry(captured.Env, config.ClaudeEffortLevelEnv+"=high") {
 		t.Fatalf("expected custom profile env overrides, got %#v", captured.Env)
 	}
+	if !containsEnvEntry(captured.Env, config.ClaudeDisableAdaptiveEnv+"=1") {
+		t.Fatalf("expected high reasoning override to disable adaptive thinking, got %#v", captured.Env)
+	}
+	if containsEnvEntry(captured.Env, config.ClaudeDisableThinkingEnv+"=1") {
+		t.Fatalf("expected explicit reasoning to re-enable thinking, got %#v", captured.Env)
+	}
 	if containsEnvEntry(captured.Env, config.ClaudeAuthTokenEnv+"=old-token") ||
 		containsEnvEntry(captured.Env, config.ClaudeModelEnv+"=old-model") {
 		t.Fatalf("expected stale claude env to be replaced, got %#v", captured.Env)
+	}
+}
+
+func TestDaemonClaudeReasoningOverrideClearsProfileBudgetThinkingFlags(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	cfg.Claude.Profiles = []config.ClaudeProfileConfig{{
+		ID:              "devseek",
+		Name:            "DevSeek",
+		Model:           "mimo-v2.5-pro",
+		ReasoningEffort: "high",
+	}}
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: configPath,
+		BaseEnv: []string{
+			"PATH=/usr/bin",
+			config.ClaudeConfigDirEnv + "=/tmp/old-claude",
+		},
+		Paths: relayruntime.Paths{
+			LogsDir:  t.TempDir(),
+			StateDir: t.TempDir(),
+		},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		ConfigPath:      configPath,
+		Services:        defaultFeishuServices(),
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://localhost:9501/admin/",
+		SetupURL:        "http://localhost:9501/setup",
+	})
+	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4322, nil
+	}
+
+	app.startManagedHeadless(control.DaemonCommand{
+		Kind:                  control.DaemonCommandStartHeadless,
+		SurfaceSessionID:      "surface-1",
+		InstanceID:            "inst-claude-profile-low",
+		ThreadID:              "thread-claude",
+		ThreadCWD:             "/data/dl/repo",
+		Backend:               agentproto.BackendClaude,
+		ClaudeProfileID:       "devseek",
+		ClaudeReasoningEffort: "low",
+	})
+
+	if !containsEnvEntry(captured.Env, config.ClaudeEffortLevelEnv+"=low") {
+		t.Fatalf("expected explicit low reasoning override, got %#v", captured.Env)
+	}
+	if containsEnvEntry(captured.Env, config.ClaudeDisableAdaptiveEnv+"=1") {
+		t.Fatalf("expected low reasoning override to keep adaptive thinking enabled, got %#v", captured.Env)
+	}
+	if containsEnvEntry(captured.Env, config.ClaudeDisableThinkingEnv+"=1") {
+		t.Fatalf("expected low reasoning override to remove thinking disable flag, got %#v", captured.Env)
 	}
 }
 
