@@ -1322,6 +1322,7 @@ E3 Running
    7. `entered_review_mode` / `exited_review_mode` 生命周期 item 当前不会直接投影成前台卡片；它们会把 `TargetLabel` / `LastReviewText` 写回 `ReviewSession` runtime，并在需要时把 pending / partial review session 提升成 active、补齐 `ReviewThreadID` / `ParentThreadID` / `ActiveTurnID`，供后续前台子单消费
    8. review detached frontstage 现在与 detour 共用同一条 temporary-session contract：`正在进入审阅` notice、request / plan / `turn_failed` / shared progress / final card 都统一带 `TemporarySessionLabel="临时会话 · 审阅"`；review 不再依赖 app-layer 标题前缀去补可见语义
    9. `normal` verbosity 下，review 共享过程现在额外放开 `command_execution`、`dynamic_tool_call` 与 `web_search`，避免 detached review 只显示“开始/结束”而中间看起来像假死
+   10. 对于没有显式 thread/turn carrier 的 review surface owner-card / page 事件，delivery fallback 也会按当前 active review session 继承 `临时会话 · 审阅`；这样 auto-continue / compact 这类 review-only surface 卡不会丢失 review 语义
 
 ### 5.3 本地 VS Code 仲裁
 

@@ -336,6 +336,83 @@ func TestDeliverUIEventKeepsReviewFinalCardSuppressedAfterSessionRuntimeClears(t
 	}
 }
 
+func TestDeliverUIEventKeepsDefaultTitleForContinuedReviewFinalCard(t *testing.T) {
+	app, gateway, _ := newReviewModeAppForTest(t)
+	app.service.Surfaces()[0].ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhaseActive,
+		ParentThreadID: "thread-main",
+		ReviewThreadID: "thread-review",
+		TargetLabel:    "未提交变更",
+	}
+
+	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
+		Kind:                 eventcontract.KindBlockCommitted,
+		SurfaceSessionID:     "surface-1",
+		SourceMessageID:      "msg-review-followup-1",
+		SourceMessagePreview: "把这里再解释具体一点",
+		Block: &render.Block{
+			Kind:       render.BlockAssistantMarkdown,
+			InstanceID: "inst-1",
+			ThreadID:   "thread-review",
+			TurnID:     "turn-review-2",
+			ItemID:     "item-review-2",
+			Text:       "建议把 review 临时会话语义继续收口到统一 substrate。",
+			Final:      true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("deliver continued review final block: %v", err)
+	}
+
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 {
+		t.Fatalf("expected one continued review final card, got %#v", ops)
+	}
+	if ops[0].CardTitle != "✅ 最后答复" {
+		t.Fatalf("expected continued review final card to keep default title, got %#v", ops[0])
+	}
+	if ops[0].CardSubtitle != "**临时会话 · 审阅**" {
+		t.Fatalf("expected continued review final card subtitle, got %#v", ops[0])
+	}
+}
+
+func TestDeliverUIEventAddsReviewSubtitleToUnlabeledPageCardDuringReviewSession(t *testing.T) {
+	app, gateway, _ := newReviewModeAppForTest(t)
+	app.service.Surfaces()[0].ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhaseActive,
+		ParentThreadID: "thread-main",
+		ReviewThreadID: "thread-review",
+	}
+
+	err := app.deliverUIEventWithContext(context.Background(), eventcontract.Event{
+		Kind:             eventcontract.KindPage,
+		SurfaceSessionID: "surface-1",
+		PageView: &control.FeishuPageView{
+			Title:       "正在压缩上下文",
+			ThemeKey:    "progress",
+			Patchable:   true,
+			Interactive: false,
+			BodySections: []control.FeishuCardTextSection{{
+				Lines: []string{"准备压缩当前审阅会话的上下文。"},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("deliver unlabeled review page card: %v", err)
+	}
+
+	ops := gateway.snapshotOperations()
+	if len(ops) != 1 {
+		t.Fatalf("expected one review page card, got %#v", ops)
+	}
+	if ops[0].CardTitle != "正在压缩上下文" {
+		t.Fatalf("expected review page title, got %#v", ops[0])
+	}
+	if ops[0].CardSubtitle != "**临时会话 · 审阅**" {
+		t.Fatalf("expected review page subtitle fallback, got %#v", ops[0])
+	}
+}
+
 func TestDeliverUIEventAddsCommitReviewButtonWhenFinalBodyMentionsRecentCommit(t *testing.T) {
 	app, gateway, repoRoot := newReviewModeAppForTest(t)
 	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
