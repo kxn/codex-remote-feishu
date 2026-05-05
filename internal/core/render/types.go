@@ -22,5 +22,6 @@ type Block struct {
 	Language              string    `json:"language,omitempty"`
 	ThemeKey              string    `json:"themeKey,omitempty"`
 	TemporarySessionLabel string    `json:"temporarySessionLabel,omitempty"`
+	KeepDefaultTitle      bool      `json:"keepDefaultTitle,omitempty"`
 	Final                 bool      `json:"final,omitempty"`
 }

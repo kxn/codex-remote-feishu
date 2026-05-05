@@ -267,18 +267,43 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event eventcont
 }
 
 func (a *App) enrichTemporarySessionEventLocked(event eventcontract.Event) eventcontract.Event {
-	if a == nil || a.service == nil || event.Block == nil {
+	if a == nil || a.service == nil {
 		return event
 	}
-	if strings.TrimSpace(event.Block.TemporarySessionLabel) != "" {
-		return event
+	surfaceLabel := a.service.ResolveTemporarySessionLabel(event.SurfaceSessionID, "", "", "")
+	if event.PageView != nil && strings.TrimSpace(event.PageView.TemporarySessionLabel) == "" {
+		event.PageView.TemporarySessionLabel = surfaceLabel
 	}
-	event.Block.TemporarySessionLabel = a.service.ResolveTemporarySessionLabel(
-		event.SurfaceSessionID,
-		event.Block.InstanceID,
-		event.Block.ThreadID,
-		event.Block.TurnID,
-	)
+	if event.RequestView != nil && strings.TrimSpace(event.RequestView.TemporarySessionLabel) == "" {
+		event.RequestView.TemporarySessionLabel = surfaceLabel
+	}
+	if event.Notice != nil && strings.TrimSpace(event.Notice.TemporarySessionLabel) == "" {
+		event.Notice.TemporarySessionLabel = surfaceLabel
+	}
+	if event.PlanUpdate != nil && strings.TrimSpace(event.PlanUpdate.TemporarySessionLabel) == "" {
+		event.PlanUpdate.TemporarySessionLabel = surfaceLabel
+	}
+	if event.ExecCommandProgress != nil && strings.TrimSpace(event.ExecCommandProgress.TemporarySessionLabel) == "" {
+		event.ExecCommandProgress.TemporarySessionLabel = surfaceLabel
+	}
+	if event.Block != nil {
+		if strings.TrimSpace(event.Block.TemporarySessionLabel) == "" {
+			event.Block.TemporarySessionLabel = a.service.ResolveTemporarySessionLabel(
+				event.SurfaceSessionID,
+				event.Block.InstanceID,
+				event.Block.ThreadID,
+				event.Block.TurnID,
+			)
+		}
+		if event.Block.Final && !event.Block.KeepDefaultTitle {
+			event.Block.KeepDefaultTitle = a.service.ShouldKeepDefaultFinalTitle(
+				event.SurfaceSessionID,
+				event.Block.InstanceID,
+				event.Block.ThreadID,
+				event.Block.TurnID,
+			)
+		}
+	}
 	return event
 }
 

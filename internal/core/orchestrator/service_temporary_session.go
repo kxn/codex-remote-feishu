@@ -46,6 +46,11 @@ func (s *Service) temporarySessionContext(surface *state.SurfaceConsoleRecord, i
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
+		if surface != nil {
+			if session := s.activeReviewSession(surface); session != nil {
+				return temporarySessionContext{Kind: temporarySessionKindReview, Label: reviewTemporarySessionLabel}
+			}
+		}
 		return temporarySessionContext{}
 	}
 	if surface == nil {
@@ -80,4 +85,12 @@ func (s *Service) ResolveTemporarySessionLabel(surfaceID, instanceID, threadID, 
 	var surface *state.SurfaceConsoleRecord
 	surface = s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	return s.temporarySessionLabel(surface, instanceID, threadID, turnID)
+}
+
+func (s *Service) ShouldKeepDefaultFinalTitle(surfaceID, instanceID, threadID, turnID string) bool {
+	if s == nil {
+		return false
+	}
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	return s.temporarySessionContext(surface, instanceID, threadID, turnID).isReview()
 }

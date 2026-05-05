@@ -560,6 +560,7 @@ MCP request 卡片当前新增的可视语义：
   - detached review 当前也复用同一条 temporary-session subtitle substrate：
     - `正在进入审阅` notice、request prompt、提案计划卡、plan update、`turn_failed` notice、共享 progress card 与主 final reply card，会把 `临时会话 · 审阅` 提升为卡片 header subtitle，并以 `lark_md` 加粗显示
     - review final card 标题保持默认 `✅ 最后答复`；review 特有语义只由副标题与 footer follow-up 承载，不再通过 `审阅中 ·` 标题前缀旁路实现
+    - review surface 上少数没有显式 thread/turn carrier 的 owner/page 卡，当前也会在 delivery fallback 中继承同一个 subtitle；这样 `自动继续`、`上下文压缩` 等 review-only owner card 不会退回成无标记普通卡
   - steer accept 成功后，orchestrator 现在会额外发一条 `UIEventTimelineText(type=steer_user_supplement)`；这条文本 reply 到当前 turn anchor，内容只镜像本次真正并入 turn 的用户补充，不复用 assistant block / notice 语义，也不重发图片或文件实体
   - `用户补充` 的图片计数当前只来自 steer 输入里的 `InputLocalImage` / `InputRemoteImage`；文件计数只来自结构化转发/引用文本中显式编码的 `file` 节点
   - daemon 当前会先在 `[]UIEvent` 批处理入口为原锚点事件打 attention annotation，不再追加独立 `UIEventTimelineText(type=attention_ping)`：

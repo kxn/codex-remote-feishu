@@ -417,12 +417,15 @@ func (p *Projector) projectBlock(gatewayID, surfaceSessionID, chatID, sourceMess
 		body = fenced(block.Language, block.Text)
 	}
 	elements := p.finalBlockExtraElements(summary, turnDiffPreview, finalSummary)
-	title := finalCardTitle(sourceMessagePreview)
+	title := finalCardTitle(sourceMessagePreview, block.KeepDefaultTitle)
 	return projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID, title, temporarySessionHeaderSubtitle(block.TemporarySessionLabel), body, elements)
 }
 
-func finalCardTitle(sourceMessagePreview string) string {
+func finalCardTitle(sourceMessagePreview string, keepDefaultTitle bool) string {
 	const baseTitle = "✅ 最后答复"
+	if keepDefaultTitle {
+		return baseTitle
+	}
 	preview := truncateFinalTitlePreview(sourceMessagePreview)
 	if preview == "" {
 		return baseTitle
