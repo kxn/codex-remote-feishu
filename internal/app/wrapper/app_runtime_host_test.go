@@ -80,8 +80,8 @@ func TestWrapperClaudeHelloAndShutdown(t *testing.T) {
 	if !hello.Capabilities.ThreadsRefresh || !hello.Capabilities.RequestRespond || !hello.Capabilities.SessionCatalog || !hello.Capabilities.ResumeByThreadID || !hello.Capabilities.RequiresCWDForResume {
 		t.Fatalf("claude backend should advertise catalog/history capabilities: %#v", hello.Capabilities)
 	}
-	if hello.Capabilities.TurnSteer || hello.Capabilities.VSCodeMode {
-		t.Fatalf("claude backend unexpectedly advertised unsupported capabilities: %#v", hello.Capabilities)
+	if !hello.Capabilities.TurnSteer || hello.Capabilities.VSCodeMode {
+		t.Fatalf("claude backend should advertise steer but not vscode mode: %#v", hello.Capabilities)
 	}
 
 	if err := server.SendCommand("inst-claude-skeleton", agentproto.Command{
