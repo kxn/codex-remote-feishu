@@ -191,17 +191,24 @@ func (r *claudeBackendRuntime) Launch(ctx context.Context, app *App, rawLogger *
 	}
 	r.mu.Lock()
 	resume := r.consumeLaunchResumeTarget()
+	resumeThreadID := ""
+	if resume != nil {
+		resumeThreadID = strings.TrimSpace(resume.ThreadID)
+	}
+	r.translator.PrepareForChildLaunch(resumeThreadID)
 	r.mu.Unlock()
 	session, err := app.launchClaudeChildSession(ctx, rawLogger, reportProblem, resume)
 	if err != nil {
 		return nil, err
 	}
+	r.mu.Lock()
 	if resume != nil {
 		copy := *resume
-		r.mu.Lock()
 		r.expectedResumeThread = &copy
-		r.mu.Unlock()
+	} else {
+		r.expectedResumeThread = nil
 	}
+	r.mu.Unlock()
 	return session, nil
 }
 
@@ -338,10 +345,24 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 		return nil, nil
 	}
 	targetThreadID := strings.TrimSpace(command.Target.ThreadID)
+	explicitMode := agentproto.NormalizePromptExecutionMode(command.Target.ExecutionMode)
+	current := r.currentResumeTarget()
+	if explicitMode == agentproto.PromptExecutionModeStartNew && targetThreadID == "" {
+		if current == nil || strings.TrimSpace(current.ThreadID) == "" {
+			return nil, nil
+		}
+		target := command.Target
+		if strings.TrimSpace(target.CWD) == "" {
+			target.CWD = strings.TrimSpace(current.CWD)
+			if target.CWD == "" {
+				target.CWD = strings.TrimSpace(r.workspaceRoot)
+			}
+		}
+		return &runtimeCommandRestart{Target: target}, nil
+	}
 	if targetThreadID == "" {
 		return nil, nil
 	}
-	current := r.currentResumeTarget()
 	if current != nil && strings.EqualFold(strings.TrimSpace(current.ThreadID), targetThreadID) {
 		return nil, nil
 	}
@@ -364,6 +385,9 @@ func (r *claudeBackendRuntime) resolveLaunchResumeTarget(target agentproto.Targe
 	threadID := strings.TrimSpace(target.ThreadID)
 	cwd := strings.TrimSpace(target.CWD)
 	if threadID == "" {
+		if agentproto.NormalizePromptExecutionMode(target.ExecutionMode) == agentproto.PromptExecutionModeStartNew {
+			return nil, nil
+		}
 		current := r.currentResumeTarget()
 		if current == nil || strings.TrimSpace(current.ThreadID) == "" {
 			return nil, nil
