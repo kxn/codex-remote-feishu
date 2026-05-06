@@ -32,6 +32,7 @@ func DefaultCapabilitiesForBackend(backend Backend) Capabilities {
 	case BackendClaude:
 		return Capabilities{
 			ThreadsRefresh:       true,
+			TurnSteer:            true,
 			RequestRespond:       true,
 			SessionCatalog:       true,
 			ResumeByThreadID:     true,
