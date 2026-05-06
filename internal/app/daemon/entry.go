@@ -101,7 +101,7 @@ func RunMain(ctx context.Context, version, branch string) error {
 		gateway,
 		identity,
 	)
-	baseEnv := config.BuildCodexChildEnv(os.Environ(), capturedProxyEnv, nil)
+	baseEnv := buildDaemonHeadlessBaseEnv(os.Environ(), capturedProxyEnv)
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
 		BinaryPath: identity.BinaryPath,
 		ConfigPath: cfg.ConfigPath,
@@ -173,6 +173,14 @@ func RunMain(ctx context.Context, version, branch string) error {
 		_ = app.shutdownForConsoleClose()
 	})
 	return runConfiguredDaemon(ctx, app, startup, cfg, env)
+}
+
+func buildDaemonHeadlessBaseEnv(currentEnv, proxyEnv []string) []string {
+	baseEnv := config.BuildCodexChildEnv(currentEnv, proxyEnv, nil)
+	if resolved, err := config.ResolveClaudeBinary(baseEnv); err == nil && strings.TrimSpace(resolved) != "" {
+		baseEnv = config.UpsertEnvValue(baseEnv, config.ClaudeBinaryEnv, resolved)
+	}
+	return baseEnv
 }
 
 func runConfiguredDaemon(ctx context.Context, app runnableDaemon, startup startupAccessPlan, services config.ServicesConfig, env map[string]string) error {

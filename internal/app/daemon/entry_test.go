@@ -122,3 +122,35 @@ func TestRunConfiguredDaemonSkipsBrowserWhenBindFails(t *testing.T) {
 		t.Fatal("did not expect run to be called after bind failure")
 	}
 }
+
+func TestBuildDaemonHeadlessBaseEnvFreezesExplicitClaudeBinary(t *testing.T) {
+	home := t.TempDir()
+	claudePath := filepath.Join(home, executableName("claude"))
+	writeExecutableFile(t, claudePath, "#!/bin/sh\nexit 0\n")
+
+	env := buildDaemonHeadlessBaseEnv([]string{
+		"HOME=" + home,
+		"PATH=" + filepath.Dir(claudePath),
+		config.ClaudeBinaryEnv + "=" + claudePath,
+	}, []string{
+		"https_proxy=https://proxy.internal",
+	})
+
+	value, ok := lookupEnvEntryForTest(env, config.ClaudeBinaryEnv)
+	if !ok || value != claudePath {
+		t.Fatalf("CLAUDE_BIN = %q ok=%v, want %q", value, ok, claudePath)
+	}
+	if value, ok := lookupEnvEntryForTest(env, "https_proxy"); !ok || !strings.Contains(value, "proxy.internal") {
+		t.Fatalf("https_proxy = %q ok=%v", value, ok)
+	}
+}
+
+func lookupEnvEntryForTest(env []string, key string) (string, bool) {
+	for _, item := range env {
+		currentKey, value, ok := strings.Cut(item, "=")
+		if ok && currentKey == key {
+			return value, true
+		}
+	}
+	return "", false
+}
