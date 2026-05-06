@@ -698,6 +698,7 @@ export function SetupRoute() {
   function renderEnvironmentStep() {
     const failingChecks =
       runtimeRequirements?.checks.filter((check) => check.status !== "pass") || [];
+    const blockingChecks = runtimeRequirements?.ready ? [] : failingChecks;
     return (
       <section className="step-section">
         <div className="step-stage-head">
@@ -709,9 +710,11 @@ export function SetupRoute() {
             环境正常
           </div>
         ) : (
-          <div className="notice-banner warn">当前服务还在检查中，请稍候。</div>
+          <div className="notice-banner warn">
+            {runtimeRequirements?.summary || "当前服务还在检查中，请稍候。"}
+          </div>
         )}
-        {failingChecks.length > 0 ? (
+        {blockingChecks.length > 0 ? (
           <div className="panel">
             <div className="section-heading">
               <div>
@@ -720,7 +723,7 @@ export function SetupRoute() {
               </div>
             </div>
             <ul className="ordered-checklist">
-              {failingChecks.map((check) => (
+              {blockingChecks.map((check) => (
                 <li key={check.id}>
                   <strong>{check.title}</strong>
                   <span>{check.summary}</span>

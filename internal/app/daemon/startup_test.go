@@ -127,6 +127,40 @@ func TestBuildStartupAccessPlanTreatsVerifiedLegacyAppAsConfiguredWithoutMachine
 	}
 }
 
+func TestBuildStartupAccessPlanTreatsClaudeOnlyRuntimeAsConfigured(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	currentBinary, _ := seedStartupPlanBinaries(t)
+	claudePath := filepath.Join(t.TempDir(), executableName("claude"))
+	if err := os.WriteFile(claudePath, []byte("claude"), 0o755); err != nil {
+		t.Fatalf("write claude binary: %v", err)
+	}
+	t.Setenv(config.ClaudeBinaryEnv, claudePath)
+
+	now := time.Now().UTC()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:         "main",
+		Name:       "Main",
+		AppID:      "cli_xxx",
+		AppSecret:  "secret_xxx",
+		VerifiedAt: &now,
+	}}
+	cfg.Admin.Onboarding.AutostartDecision = &config.OnboardingDecision{Value: onboardingDecisionDeferred, DecidedAt: &now}
+	cfg.Admin.Onboarding.VSCodeDecision = &config.OnboardingDecision{Value: onboardingDecisionVSCodeRemoteOnly, DecidedAt: &now}
+	cfg.Wrapper.CodexRealBinary = ""
+
+	services := config.ServicesConfig{
+		RelayHost:    "127.0.0.1",
+		RelayPort:    "9500",
+		RelayAPIHost: "127.0.0.1",
+		RelayAPIPort: "9501",
+	}
+	plan := buildStartupAccessPlan(config.LoadedAppConfig{Config: cfg}, services, currentBinary, map[string]string{})
+
+	if plan.SetupRequired {
+		t.Fatal("did not expect setup required when Claude runtime is available")
+	}
+}
+
 func seedStartupPlanBinaries(t *testing.T) (string, string) {
 	t.Helper()
 

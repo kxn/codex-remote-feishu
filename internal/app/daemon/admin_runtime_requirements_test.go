@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -161,6 +162,67 @@ func TestAdminRuntimeRequirementsFailWhenCodexPointsBackToCurrentBinary(t *testi
 	}
 	if got := checkStatusByID(payload.Checks, "binary_loop"); got != runtimeRequirementStatusFail {
 		t.Fatalf("binary_loop status = %q, want fail", got)
+	}
+}
+
+func TestAdminRuntimeRequirementsReadyWhenClaudeIsAvailableWithoutCodex(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
+
+	binaryPath := filepath.Join(home, executableName("codex-remote"))
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+	claudePath := filepath.Join(home, "bin", executableName("claude"))
+	writeExecutableFile(t, claudePath, "real-claude")
+	t.Setenv(config.ClaudeBinaryEnv, claudePath)
+
+	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/runtime-requirements/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var payload runtimeRequirementsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if !payload.Ready {
+		t.Fatalf("expected runtime requirements to be ready with Claude fallback, got %#v", payload)
+	}
+	if got := checkStatusByID(payload.Checks, "real_codex_binary"); got != runtimeRequirementStatusFail {
+		t.Fatalf("real_codex_binary status = %q, want fail", got)
+	}
+	if got := checkStatusByID(payload.Checks, "claude_binary"); got != runtimeRequirementStatusPass {
+		t.Fatalf("claude_binary status = %q, want pass", got)
+	}
+}
+
+func TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvailable(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
+
+	binaryPath := filepath.Join(home, executableName("codex-remote"))
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/runtime-requirements/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var payload runtimeRequirementsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if payload.Ready {
+		t.Fatalf("expected runtime requirements to fail without any backend, got %#v", payload)
+	}
+	if got := checkStatusByID(payload.Checks, "claude_binary"); got != runtimeRequirementStatusFail {
+		t.Fatalf("claude_binary status = %q, want fail", got)
+	}
+	if !strings.Contains(payload.Summary, "Claude 或 Codex") {
+		t.Fatalf("summary = %q, want Claude/Codex prerequisite hint", payload.Summary)
 	}
 }
 

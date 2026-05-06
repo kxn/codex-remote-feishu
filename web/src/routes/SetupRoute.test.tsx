@@ -326,6 +326,72 @@ describe("SetupRoute", () => {
     expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
   });
 
+  it("hides backend-specific failures when runtime is already ready", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
+      "/api/setup/feishu/onboarding/sessions": {
+        status: 201,
+        body: {
+          session: {
+            id: "session-1",
+            status: "pending",
+            qrCodeDataUrl: "data:image/png;base64,abc",
+          },
+        },
+      },
+      "/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect({
+          ready: true,
+          checks: [
+            {
+              id: "headless_launcher",
+              title: "Headless 启动器",
+              status: "pass",
+              summary: "当前服务已经有可用的 codex-remote 启动器。",
+            },
+            {
+              id: "real_codex_binary",
+              title: "真实 Codex 二进制",
+              status: "fail",
+              summary: "当前服务环境下无法解析到可执行的 codex。",
+            },
+            {
+              id: "claude_binary",
+              title: "Claude 可执行文件",
+              status: "pass",
+              summary: "当前服务环境下可以解析到 Claude executable。",
+            },
+          ],
+        }),
+      },
+      "/api/setup/feishu/apps": { body: { apps: [] } },
+      "/api/setup/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "disabled",
+          configured: false,
+          enabled: false,
+          canApply: true,
+        },
+      },
+      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /环境检查/ }));
+
+    expect(await screen.findByText("环境正常")).toBeInTheDocument();
+    expect(screen.queryByText("当前需要处理")).not.toBeInTheDocument();
+    expect(screen.queryByText("当前服务环境下无法解析到可执行的 codex。")).not.toBeInTheDocument();
+  });
+
   it("starts qr onboarding automatically, polls every 5 seconds, and advances to permissions", async () => {
     window.history.replaceState({}, "", "/setup");
     let appsConfigured = false;
