@@ -79,6 +79,12 @@ type RequirementTableRow = {
   cells: ReactNode[];
 };
 
+type EnvironmentActionItem = {
+  id: string;
+  title: string;
+  summary: string;
+};
+
 const setupSteps: Array<{ id: SetupStepID; name: string }> = [
   { id: "env", name: "环境检查" },
   { id: "connect", name: "飞书连接" },
@@ -696,9 +702,7 @@ export function SetupRoute() {
   }
 
   function renderEnvironmentStep() {
-    const failingChecks =
-      runtimeRequirements?.checks.filter((check) => check.status !== "pass") || [];
-    const blockingChecks = runtimeRequirements?.ready ? [] : failingChecks;
+    const blockingChecks = buildEnvironmentActionItems(runtimeRequirements);
     return (
       <section className="step-section">
         <div className="step-stage-head">
@@ -723,10 +727,10 @@ export function SetupRoute() {
               </div>
             </div>
             <ul className="ordered-checklist">
-              {blockingChecks.map((check) => (
-                <li key={check.id}>
-                  <strong>{check.title}</strong>
-                  <span>{check.summary}</span>
+              {blockingChecks.map((item) => (
+                <li key={item.id}>
+                  <strong>{item.title}</strong>
+                  <span>{item.summary}</span>
                 </li>
               ))}
             </ul>
@@ -1615,6 +1619,41 @@ function deriveSetupEntryStep(
     return "connect";
   }
   return "permission";
+}
+
+function buildEnvironmentActionItems(
+  runtimeRequirements: RuntimeRequirementsDetectResponse | null,
+): EnvironmentActionItem[] {
+  if (!runtimeRequirements || runtimeRequirements.ready) {
+    return [];
+  }
+
+  const hasFail = (id: string) =>
+    runtimeRequirements.checks.some(
+      (check) => check.id === id && check.status === "fail",
+    );
+  const items: EnvironmentActionItem[] = [];
+
+  if (hasFail("headless_launcher")) {
+    items.push({
+      id: "headless_launcher",
+      title: "本机服务",
+      summary: "当前服务还不能正常启动，请先修复后再重新检查。",
+    });
+  }
+
+  if (
+    hasFail("binary_loop") ||
+    (hasFail("real_codex_binary") && hasFail("claude_binary"))
+  ) {
+    items.push({
+      id: "available_backend",
+      title: "对话后端",
+      summary: "请先保证 Claude 或 Codex 至少一个可用。",
+    });
+  }
+
+  return items;
 }
 
 function hasConnectedApp(app: FeishuAppSummary | null): boolean {

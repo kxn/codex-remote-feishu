@@ -20,6 +20,9 @@ func TestRunMainHelpReturnsNil(t *testing.T) {
 	if !strings.Contains(stdout.String(), "-binary") {
 		t.Fatalf("help output missing -binary flag: %q", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "optional Codex path override") {
+		t.Fatalf("help output missing optional Codex override wording: %q", stdout.String())
+	}
 }
 
 func TestRunMainRejectsInteractiveBootstrapOnly(t *testing.T) {

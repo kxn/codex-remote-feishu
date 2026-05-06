@@ -128,14 +128,14 @@ func RunInteractiveWizard(in io.Reader, out io.Writer, defaults PlatformDefaults
 	}
 
 	fmt.Fprintln(out, "")
-	fmt.Fprintln(out, "真实 Codex 配置说明：")
-	fmt.Fprintln(out, "- 当前默认的 managed_shim 模式下，如未显式填写，会自动使用 bundle 里保留下来的 codex.real。")
-	fmt.Fprintln(out, "- 只有兼容旧配置或你明确要覆盖默认行为时，才需要手动填写真实 codex 路径。")
+	fmt.Fprintln(out, "Codex 路径覆盖（可选）：")
+	fmt.Fprintln(out, "- 只有你需要手动指定 Codex 路径时，才需要填写。")
+	fmt.Fprintln(out, "- managed_shim 下留空会继续沿用自动解析结果。")
 	defaultCodexRealBinary := opts.CodexRealBinary
 	if strings.TrimSpace(defaultCodexRealBinary) == "" && !hasIntegration(opts.Integrations, IntegrationManagedShim) {
 		defaultCodexRealBinary = "codex"
 	}
-	codexRealBinary, err := promptString(reader, out, "真实 Codex 可执行文件路径", defaultCodexRealBinary)
+	codexRealBinary, err := promptString(reader, out, "Codex 可执行文件路径（可选）", defaultCodexRealBinary)
 	if err != nil {
 		return Options{}, err
 	}

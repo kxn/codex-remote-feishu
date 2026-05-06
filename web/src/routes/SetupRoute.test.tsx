@@ -349,21 +349,21 @@ describe("SetupRoute", () => {
           checks: [
             {
               id: "headless_launcher",
-              title: "Headless 启动器",
+              title: "服务启动器",
               status: "pass",
               summary: "当前服务已经有可用的 codex-remote 启动器。",
             },
             {
               id: "real_codex_binary",
-              title: "真实 Codex 二进制",
+              title: "Codex 可执行文件",
               status: "fail",
-              summary: "当前服务环境下无法解析到可执行的 codex。",
+              summary: "当前服务环境下无法解析 Codex 可执行文件。",
             },
             {
               id: "claude_binary",
               title: "Claude 可执行文件",
               status: "pass",
-              summary: "当前服务环境下可以解析到 Claude executable。",
+              summary: "当前服务环境下可以解析 Claude 可执行文件。",
             },
           ],
         }),
@@ -389,7 +389,62 @@ describe("SetupRoute", () => {
 
     expect(await screen.findByText("环境正常")).toBeInTheDocument();
     expect(screen.queryByText("当前需要处理")).not.toBeInTheDocument();
-    expect(screen.queryByText("当前服务环境下无法解析到可执行的 codex。")).not.toBeInTheDocument();
+    expect(screen.queryByText("当前服务环境下无法解析 Codex 可执行文件。")).not.toBeInTheDocument();
+  });
+
+  it("summarizes blocking backend failures with user-facing setup actions", async () => {
+    window.history.replaceState({}, "", "/setup");
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
+      "/api/setup/feishu/apps": { body: { apps: [] } },
+      "/api/setup/runtime-requirements/detect": {
+        body: makeRuntimeRequirementsDetect({
+          ready: false,
+          summary: "当前机器还不满足基础运行条件，请先保证 Claude 或 Codex 至少一个可用。",
+          checks: [
+            {
+              id: "headless_launcher",
+              title: "服务启动器",
+              status: "pass",
+              summary: "当前服务已经有可用的 codex-remote 启动器。",
+            },
+            {
+              id: "real_codex_binary",
+              title: "Codex 可执行文件",
+              status: "fail",
+              summary: "当前服务环境下无法解析 Codex 可执行文件。",
+            },
+            {
+              id: "claude_binary",
+              title: "Claude 可执行文件",
+              status: "fail",
+              summary: "当前服务环境下无法解析 Claude 可执行文件。",
+            },
+          ],
+        }),
+      },
+      "/api/setup/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "disabled",
+          configured: false,
+          enabled: false,
+          canApply: true,
+        },
+      },
+      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByText("当前需要处理")).toBeInTheDocument();
+    expect(screen.getByText("对话后端")).toBeInTheDocument();
+    expect(screen.getByText("请先保证 Claude 或 Codex 至少一个可用。")).toBeInTheDocument();
+    expect(screen.queryByText("Codex 可执行文件")).not.toBeInTheDocument();
+    expect(screen.queryByText("当前服务环境下无法解析 Codex 可执行文件。")).not.toBeInTheDocument();
   });
 
   it("starts qr onboarding automatically, polls every 5 seconds, and advances to permissions", async () => {

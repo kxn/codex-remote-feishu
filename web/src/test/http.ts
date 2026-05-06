@@ -45,9 +45,15 @@ export function installMockFetch(routes: Record<string, MockHandler>) {
         checks: [
           {
             id: "headless_launcher",
-            title: "Headless 启动器",
+            title: "服务启动器",
             status: "pass",
             summary: "当前服务已经有可用的 codex-remote 启动器。",
+          },
+          {
+            id: "claude_binary",
+            title: "Claude 可执行文件",
+            status: "pass",
+            summary: "当前服务环境下可以解析 Claude 可执行文件。",
           },
         ],
       }), {

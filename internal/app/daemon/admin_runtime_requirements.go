@@ -89,7 +89,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 		launcherReady = false
 		checks = append(checks, runtimeRequirementCheck{
 			ID:      "headless_launcher",
-			Title:   "Headless 启动器",
+			Title:   "服务启动器",
 			Status:  runtimeRequirementStatusFail,
 			Summary: "当前服务没有可用的 codex-remote 二进制路径。",
 		})
@@ -97,7 +97,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 		launcherReady = false
 		checks = append(checks, runtimeRequirementCheck{
 			ID:      "headless_launcher",
-			Title:   "Headless 启动器",
+			Title:   "服务启动器",
 			Status:  runtimeRequirementStatusFail,
 			Summary: "当前服务记录的 codex-remote 二进制路径不可访问。",
 			Detail:  err.Error(),
@@ -105,7 +105,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 	} else {
 		checks = append(checks, runtimeRequirementCheck{
 			ID:      "headless_launcher",
-			Title:   "Headless 启动器",
+			Title:   "服务启动器",
 			Status:  runtimeRequirementStatusPass,
 			Summary: "当前服务已经有可用的 codex-remote 启动器。",
 			Detail:  currentBinary,
@@ -115,25 +115,25 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 	if strings.TrimSpace(codexRealBinary) == "" {
 		checks = append(checks, runtimeRequirementCheck{
 			ID:      "real_codex_binary",
-			Title:   "真实 Codex 二进制",
+			Title:   "Codex 可执行文件",
 			Status:  runtimeRequirementStatusFail,
-			Summary: "当前没有配置 wrapper 将要启动的真实 codex。",
+			Summary: "当前服务还没有可用的 Codex 启动路径。",
 		})
 	} else if resolveErr != nil {
 		checks = append(checks, runtimeRequirementCheck{
 			ID:      "real_codex_binary",
-			Title:   "真实 Codex 二进制",
+			Title:   "Codex 可执行文件",
 			Status:  runtimeRequirementStatusFail,
-			Summary: "当前服务环境下无法解析到可执行的 codex。",
+			Summary: "当前服务环境下无法解析 Codex 可执行文件。",
 			Detail:  resolveErr.Error(),
 		})
 	} else {
 		codexReady = true
 		checks = append(checks, runtimeRequirementCheck{
 			ID:      "real_codex_binary",
-			Title:   "真实 Codex 二进制",
+			Title:   "Codex 可执行文件",
 			Status:  runtimeRequirementStatusPass,
-			Summary: "当前服务环境下可以解析到真实 codex。",
+			Summary: "当前服务环境下可以解析 Codex 可执行文件。",
 			Detail:  resolvedRealBinary,
 		})
 	}
@@ -144,7 +144,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 			ID:      "binary_loop",
 			Title:   "Wrapper 启动目标",
 			Status:  runtimeRequirementStatusFail,
-			Summary: "wrapper 的真实 codex 指向了当前 codex-remote 自己，会形成递归启动。",
+			Summary: "当前 Codex 路径回指了 codex-remote 自己，会形成递归启动。",
 			Detail:  resolvedRealBinary,
 		})
 	} else if strings.TrimSpace(resolvedRealBinary) != "" {
@@ -160,7 +160,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 			ID:      "claude_binary",
 			Title:   "Claude 可执行文件",
 			Status:  runtimeRequirementStatusFail,
-			Summary: "当前服务环境下无法解析 Claude executable。",
+			Summary: "当前服务环境下无法解析 Claude 可执行文件。",
 			Detail:  errorDetail(claudeResolveErr),
 		})
 	} else {
@@ -169,7 +169,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 			ID:      "claude_binary",
 			Title:   "Claude 可执行文件",
 			Status:  runtimeRequirementStatusPass,
-			Summary: "当前服务环境下可以解析到 Claude executable。",
+			Summary: "当前服务环境下可以解析 Claude 可执行文件。",
 			Detail:  resolvedClaudeBinary,
 		})
 	}
@@ -224,7 +224,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 		LookupMode:              lookupMode,
 		Checks:                  checks,
 		Notes: []string{
-			"这里只检查 headless 的基础可执行条件，不检查 Codex / Claude 登录状态、账号配置或 provider 凭据。",
+			"这里只检查基础运行条件，不检查登录状态、账号配置或 provider 凭据。",
 		},
 	}, nil
 }
