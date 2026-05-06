@@ -25,6 +25,7 @@ type Translator struct {
 	model          string
 	cwd            string
 	permissionMode string
+	awaitingInit   bool
 	threadUsage    map[string]*agentproto.ThreadTokenUsage
 
 	activeTurn   *turnState
@@ -163,6 +164,20 @@ func (t *Translator) ObserveServer(line []byte) (Result, error) {
 	}
 }
 
+func (t *Translator) PrepareForChildLaunch(resumeThreadID string) {
+	t.activeTurn = nil
+	t.pendingTurns = nil
+	t.currentMessage = nil
+	t.toolStates = map[string]*toolState{}
+	t.pendingRequests = map[string]*pendingRequest{}
+	t.pendingControlReplies = map[string]pendingControlReply{}
+	t.model = ""
+	t.cwd = ""
+	t.permissionMode = ""
+	t.sessionID = strings.TrimSpace(resumeThreadID)
+	t.awaitingInit = t.sessionID == ""
+}
+
 func (t *Translator) BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error) {
 	return nil, "", false, nil
 }
@@ -213,6 +228,9 @@ func (t *Translator) canonicalThreadID(fallback string) string {
 	}
 	if strings.TrimSpace(fallback) != "" {
 		return strings.TrimSpace(fallback)
+	}
+	if t.awaitingInit {
+		return ""
 	}
 	return t.nextNativeID("thread")
 }

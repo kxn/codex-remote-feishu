@@ -15,6 +15,7 @@ func (t *Translator) observeSystemMessage(message map[string]any) Result {
 	previousPermissionMode := strings.TrimSpace(t.permissionMode)
 	switch subtype {
 	case "init":
+		t.awaitingInit = false
 		if sessionID := strings.TrimSpace(lookupStringFromAny(message["session_id"])); sessionID != "" {
 			previousSessionID := strings.TrimSpace(t.sessionID)
 			t.sessionID = sessionID

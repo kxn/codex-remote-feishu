@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -565,6 +566,63 @@ func TestWrapperClaudePromptResumesPersistedTargetSession(t *testing.T) {
 	)
 }
 
+func TestWrapperClaudePromptStartNewRestartsOutOfResumedSession(t *testing.T) {
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-start-new-resume")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	server, eventsCh, ackCh, stdout, stderr, done := startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(
+		t,
+		"hello",
+		workspaceRoot,
+		"resume-session-1",
+	)
+
+	if err := server.SendCommand("inst-claude-runtime", agentproto.Command{
+		CommandID: "cmd-prompt-claude-start-new",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
+		Target: agentproto.Target{
+			CWD:                   workspaceRoot,
+			ExecutionMode:         agentproto.PromptExecutionModeStartNew,
+			CreateThreadIfMissing: true,
+		},
+		Prompt: agentproto.Prompt{
+			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "start a fresh session"}},
+		},
+	}); err != nil {
+		t.Fatalf("send prompt: %v", err)
+	}
+
+	waitForAck(t, ackCh, 5*time.Second, func(ack agentproto.CommandAck) bool {
+		return ack.CommandID == "cmd-prompt-claude-start-new" && ack.Accepted
+	}, stdout, stderr, done)
+
+	deadline := time.After(10 * time.Second)
+	seen := make([]string, 0, 8)
+	startedFresh := false
+	completedFresh := false
+	for !startedFresh || !completedFresh {
+		select {
+		case events := <-eventsCh:
+			for _, event := range events {
+				seen = append(seen, fmt.Sprintf("%s thread=%s turn=%s status=%s item=%s", event.Kind, event.ThreadID, event.TurnID, event.Status, event.ItemKind))
+				if event.Kind == agentproto.EventTurnStarted && event.ThreadID == "mock-claude-session-1" {
+					startedFresh = true
+				}
+				if event.Kind == agentproto.EventTurnCompleted && event.Status == "completed" && event.ThreadID == "mock-claude-session-1" {
+					completedFresh = true
+				}
+			}
+		case err := <-done:
+			t.Fatalf("wrapper exited early: %v\nseen events: %v\nstdout:\n%s\nstderr:\n%s", err, seen, stdout.String(), stderr.String())
+		case <-deadline:
+			t.Fatalf("timed out waiting for fresh-session events\nseen events: %v\nstdout:\n%s\nstderr:\n%s", seen, stdout.String(), stderr.String())
+		}
+	}
+}
+
 func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
 	t.Helper()
 	repoRoot := wrapperTestRepoRoot(t)
@@ -650,6 +708,11 @@ func startWrapperClaudeRuntimeTestApp(t *testing.T, scenario string) (*relayws.S
 
 func startWrapperClaudeRuntimeTestAppForWorkspace(t *testing.T, scenario, workspaceRoot string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
 	t.Helper()
+	return startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(t, scenario, workspaceRoot, "")
+}
+
+func startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(t *testing.T, scenario, workspaceRoot, resumeThreadID string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
+	t.Helper()
 	t.Setenv("CLAUDE_BIN", installMockClaudeHelper(t, scenario))
 
 	helloCh := make(chan agentproto.Hello, 1)
@@ -694,6 +757,7 @@ func startWrapperClaudeRuntimeTestAppForWorkspace(t *testing.T, scenario, worksp
 		WorkspaceKey:     workspaceRoot,
 		ShortName:        filepath.Base(workspaceRoot),
 		Backend:          agentproto.BackendClaude,
+		ResumeThreadID:   resumeThreadID,
 		Version:          "test",
 		BuildFingerprint: "fp-test",
 		BinaryPath:       "/test/codex-remote",
