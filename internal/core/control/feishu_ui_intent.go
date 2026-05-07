@@ -5,6 +5,7 @@ import "strings"
 type FeishuUIIntentKind string
 
 const (
+	FeishuUIIntentShowAdminRoot               FeishuUIIntentKind = "show_admin_root"
 	FeishuUIIntentShowWorkspaceRoot           FeishuUIIntentKind = "show_workspace_root"
 	FeishuUIIntentShowWorkspaceList           FeishuUIIntentKind = "show_workspace_list"
 	FeishuUIIntentShowWorkspaceNew            FeishuUIIntentKind = "show_workspace_new"

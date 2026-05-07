@@ -12,6 +12,11 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 		want   *FeishuUIIntent
 	}{
 		{
+			name:   "bare admin",
+			action: Action{Kind: ActionAdminRoot, Text: "/admin"},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowAdminRoot, RawText: "/admin"},
+		},
+		{
 			name:   "menu navigation",
 			action: Action{Kind: ActionShowCommandMenu, Text: "/menu send_settings"},
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowCommandMenu, RawText: "/menu send_settings"},

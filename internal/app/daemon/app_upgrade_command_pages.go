@@ -9,22 +9,41 @@ import (
 )
 
 func buildDebugRootPageView(stateValue install.InstallState, checkInFlight bool, formDefault, statusKind, statusText string) control.FeishuPageView {
-	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandDebug)
-	return control.FeishuPageView{
-		CommandID:    control.FeishuCommandDebug,
-		StatusKind:   strings.TrimSpace(statusKind),
-		StatusText:   strings.TrimSpace(statusText),
+	return control.NormalizeFeishuPageView(control.FeishuPageView{
+		CommandID:  control.FeishuCommandDebug,
+		Title:      "调试",
+		StatusKind: strings.TrimSpace(statusKind),
+		StatusText: strings.TrimSpace(statusText),
+		SummarySections: commandCatalogSummarySections(
+			"管理页相关入口已迁移到 `/admin`。",
+			"如需临时管理页外链，请使用 `/admin web`；如需本机地址，请使用 `/admin localweb`。",
+		),
 		Interactive:  true,
 		DisplayStyle: control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{
 			{
 				Title: "调试",
-				Entries: []control.CommandCatalogEntry{{
-					Buttons: directSubcommandButtons(def, def.CanonicalSlash, "/debug admin", ""),
-				}},
+				Entries: []control.CommandCatalogEntry{
+					{
+						Title:       "系统管理",
+						Description: "返回新的系统管理入口。",
+						Buttons:     []control.CommandCatalogButton{runCommandButton("打开系统管理", "/admin", "primary", false)},
+					},
+					{
+						Title:       "管理页外链",
+						Description: "生成可从外部访问的临时管理页链接。",
+						Buttons:     []control.CommandCatalogButton{runCommandButton("生成外链", "/admin web", "", false)},
+					},
+					{
+						Title:       "本地管理页",
+						Description: "显示当前机器可直接打开的本地管理页地址。",
+						Buttons:     []control.CommandCatalogButton{runCommandButton("查看本地地址", "/admin localweb", "", false)},
+					},
+				},
 			},
 		},
-	}
+		RelatedButtons: control.FeishuCommandBackToRootButtons(control.FeishuCommandAdmin),
+	})
 }
 
 func buildUpgradeRootPageView(stateValue install.InstallState, showCodexUpgrade bool, formDefault, statusKind, statusText string) control.FeishuPageView {
@@ -42,6 +61,7 @@ func buildUpgradeRootPageView(stateValue install.InstallState, showCodexUpgrade 
 				}},
 			},
 		},
+		RelatedButtons: control.FeishuCommandBackToRootButtons(control.FeishuCommandAdmin),
 	}
 }
 

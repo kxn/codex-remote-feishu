@@ -255,6 +255,33 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	return DetectAutostart(statePath)
 }
 
+func DisableAutostart(statePath string) (AutostartStatus, error) {
+	current, err := DetectAutostart(statePath)
+	if err != nil {
+		return AutostartStatus{}, err
+	}
+	if !current.Supported || !current.Configured || !current.Enabled {
+		return current, nil
+	}
+	state, err := loadServiceState(statePath)
+	if err != nil {
+		return AutostartStatus{}, err
+	}
+	if err := ensureManagedServiceConfigured(state); err != nil {
+		return current, nil
+	}
+	switch effectiveServiceManager(state) {
+	case ServiceManagerLaunchdUser:
+		err = launchdUserDisable(context.Background(), state)
+	default:
+		err = systemdUserDisable(context.Background(), state)
+	}
+	if err != nil {
+		return AutostartStatus{}, err
+	}
+	return DetectAutostart(statePath)
+}
+
 func resolveAutostartBaseDir(statePath, preferredBaseDir string) (string, error) {
 	if baseDir := strings.TrimSpace(preferredBaseDir); baseDir != "" {
 		return baseDir, nil

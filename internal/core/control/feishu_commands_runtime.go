@@ -1,6 +1,7 @@
 package control
 
 import (
+	"runtime"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/buildinfo"
@@ -9,6 +10,8 @@ import (
 func runtimeFeishuCommandDefinition(spec feishuCommandSpec) FeishuCommandDefinition {
 	def := cloneFeishuCommandDefinition(spec.definition)
 	switch def.ID {
+	case FeishuCommandAdmin:
+		return runtimeAdminCommandDefinition(def)
 	case FeishuCommandUpgrade:
 		return runtimeUpgradeCommandDefinition(def)
 	case FeishuCommandDebug:
@@ -16,6 +19,16 @@ func runtimeFeishuCommandDefinition(spec feishuCommandSpec) FeishuCommandDefinit
 	default:
 		return def
 	}
+}
+
+func runtimeAdminCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
+	def.Description = "打开系统管理入口；可从这里访问管理页、自动启动和维护命令。"
+	def.Examples = []string{"/admin web", "/admin localweb"}
+	if feishuAdminAutostartSupportedPlatform(runtime.GOOS) {
+		def.Description += " `/admin autostart on|off` 用于配置自动启动。"
+		def.Examples = append(def.Examples, "/admin autostart on", "/admin autostart off")
+	}
+	return def
 }
 
 func runtimeUpgradeCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
@@ -58,12 +71,11 @@ func runtimeUpgradeCommandDefinition(def FeishuCommandDefinition) FeishuCommandD
 }
 
 func runtimeDebugCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
-	def.ArgumentFormNote = "例如 admin。"
-	def.Description = "查看调试状态，或生成临时管理页外链。"
-	def.Examples = []string{"/debug", "/debug admin"}
-	def.Options = []FeishuCommandOption{
-		commandOption("/debug", "debug", "admin", "管理页外链", "生成临时管理页外链。"),
-	}
+	def.ArgumentFormHint = ""
+	def.ArgumentFormNote = ""
+	def.Description = "查看调试入口；管理页相关功能已迁移到 `/admin`。"
+	def.Examples = []string{"/debug"}
+	def.Options = nil
 	return def
 }
 

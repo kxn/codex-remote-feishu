@@ -171,6 +171,8 @@ func feishuCommandMenuGroupVisibleInContext(groupID string, ctx CatalogContext) 
 
 func buildFeishuCommandMenuGroupRootPageView(commandID string) (FeishuPageView, bool) {
 	switch strings.TrimSpace(commandID) {
+	case FeishuCommandAdmin:
+		return BuildFeishuAdminRootPageView(true), true
 	case FeishuCommandWorkspace:
 		return BuildFeishuWorkspaceRootPageView(true), true
 	default:

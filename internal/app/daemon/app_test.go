@@ -435,7 +435,7 @@ func TestHandleGatewayActionReplacesBareModeCardForCardNavigation(t *testing.T) 
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/menu maintenance",
+		Text:             "/menu send_settings",
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},
@@ -463,7 +463,7 @@ func TestHandleGatewayActionReplacesBareModeCardForCardNavigation(t *testing.T) 
 		t.Fatalf("unexpected replacement card title: %#v", result.ReplaceCurrentCard)
 	}
 	if !operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_kind", string(control.ActionShowCommandMenu)) ||
-		!operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_arg", "maintenance") {
+		!operationHasActionValue(*result.ReplaceCurrentCard, "page_local_action", "action_arg", "send_settings") {
 		t.Fatalf("expected replacement mode card to include return action, got %#v", result.ReplaceCurrentCard.CardElements)
 	}
 }

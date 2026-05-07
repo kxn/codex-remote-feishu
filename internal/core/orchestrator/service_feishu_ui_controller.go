@@ -14,6 +14,8 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		return s.openConfigCommandPageForAction(surface, action)
 	}
 	switch intent.Kind {
+	case control.FeishuUIIntentShowAdminRoot:
+		return []eventcontract.Event{s.adminRootPageEvent(surface, s.adminPageTriggeredFromMenu(surface, intent.SourceMessageID))}
 	case control.FeishuUIIntentShowWorkspaceRoot:
 		if !s.surfaceIsHeadless(surface) {
 			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")

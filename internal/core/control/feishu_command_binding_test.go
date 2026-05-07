@@ -22,6 +22,12 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantLauncher: FeishuFrontstageLauncherKeep,
 		},
 		{
+			name:       "admin root inline page",
+			action:     Action{Kind: ActionAdminRoot, Text: "/admin"},
+			wantFamily: FeishuCommandAdmin,
+			wantKind:   FeishuCommandBindingInlinePage,
+		},
+		{
 			name:       "inline page",
 			action:     Action{Kind: ActionWorkspaceRoot, Text: "/workspace"},
 			wantFamily: FeishuCommandWorkspace,
@@ -49,6 +55,14 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantDirectDaemon:  DaemonCommandUpgrade,
 			wantContinuation:  DaemonCommandUpgrade,
 			wantPropagateCard: true,
+		},
+		{
+			name:             "admin subcommand daemon command",
+			action:           Action{Kind: ActionAdminCommand, Text: "/admin web"},
+			wantFamily:       FeishuCommandAdminSubcommand,
+			wantKind:         FeishuCommandBindingDaemonCommand,
+			wantDirectDaemon: DaemonCommandAdmin,
+			wantContinuation: DaemonCommandAdmin,
 		},
 		{
 			name:       "owner entry",
@@ -102,6 +116,7 @@ func TestResolveFeishuCommandBindingIntentBuilder(t *testing.T) {
 		want   FeishuUIIntentKind
 		ok     bool
 	}{
+		{name: "admin bare command", action: Action{Kind: ActionAdminRoot, Text: "/admin"}, want: FeishuUIIntentShowAdminRoot, ok: true},
 		{name: "history bare command", action: Action{Kind: ActionShowHistory, Text: "/history"}, want: FeishuUIIntentShowHistory, ok: true},
 		{name: "review bare command", action: Action{Kind: ActionReviewCommand, Text: "/review"}, want: FeishuUIIntentShowReviewRoot, ok: true},
 		{name: "review subcommand stays product owned", action: Action{Kind: ActionReviewCommand, Text: "/review commit"}, ok: false},

@@ -36,9 +36,7 @@ func (s *Service) pageEventFromCatalogView(surface *state.SurfaceConsoleRecord, 
 
 func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, sourceMessageID string) eventcontract.Event {
 	groupID := parseCommandMenuView(raw)
-	if commandID, ok := control.ResolveFeishuCommandMenuGroupRootCommandID(control.CatalogContext{
-		ProductMode: string(s.normalizeSurfaceProductMode(surface)),
-	}, groupID); ok {
+	if commandID, ok := control.ResolveFeishuCommandMenuGroupRootCommandID(s.buildCatalogContext(surface), groupID); ok {
 		switch commandID {
 		case control.FeishuCommandWorkspace:
 			return s.workspacePageEvent(surface, commandID, true, sourceMessageID)

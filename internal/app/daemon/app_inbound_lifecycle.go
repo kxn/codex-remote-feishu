@@ -187,6 +187,8 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "查看帮助", "/help"
 	case control.ActionDebugCommand:
 		return "查看调试升级状态", "/debug"
+	case control.ActionAdminCommand:
+		return "执行系统管理子命令", "/admin"
 	case control.ActionUpgradeCommand:
 		return "发起升级", "/upgrade"
 	case control.ActionTurnPatchCommand:
@@ -243,6 +245,8 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 
 func rejectedInboundIntentLabel(intent control.FeishuUIIntent) (label, command string) {
 	switch intent.Kind {
+	case control.FeishuUIIntentShowAdminRoot:
+		return "打开系统管理页", "/admin"
 	case control.FeishuUIIntentShowCommandMenu:
 		return "打开命令菜单", "/menu"
 	case control.FeishuUIIntentShowModeCatalog:

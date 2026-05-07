@@ -241,6 +241,8 @@ func firstResultCardReplaceableAction(action Action) bool {
 		return true
 	case ActionCronCommand:
 		return !cronCommandRunsImmediately(action.Text)
+	case ActionAdminCommand:
+		return true
 	case ActionUpgradeCommand:
 		return !FeishuUpgradeCommandRunsImmediately(action.Text)
 	case ActionDebugCommand:
@@ -268,18 +270,8 @@ func cronCommandRunsImmediately(text string) bool {
 }
 
 func debugCommandRunsImmediately(text string) bool {
-	fields := normalizedCommandFields(text)
-	if len(fields) == 0 || fields[0] != "/debug" {
-		return false
-	}
-	switch {
-	case len(fields) == 2 && (fields[1] == "admin" || fields[1] == "upgrade"):
-		return true
-	case len(fields) == 3 && fields[1] == "track" && isReleaseTrackToken(fields[2]):
-		return true
-	default:
-		return false
-	}
+	_ = text
+	return false
 }
 
 func normalizedCommandFields(text string) []string {

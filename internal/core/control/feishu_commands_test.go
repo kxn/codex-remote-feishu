@@ -21,16 +21,37 @@ func TestParseFeishuTextActionRecognizesDebugCommand(t *testing.T) {
 	}
 }
 
-func TestParseFeishuTextActionRecognizesDebugAdminCommand(t *testing.T) {
-	action, ok := ParseFeishuTextActionWithoutCatalog("/debug admin")
+func TestParseFeishuTextActionRecognizesAdminRootCommand(t *testing.T) {
+	action, ok := ParseFeishuTextActionWithoutCatalog("/admin")
 	if !ok {
-		t.Fatal("expected /debug admin to be parsed")
+		t.Fatal("expected /admin to be parsed")
 	}
-	if action.Kind != ActionDebugCommand {
-		t.Fatalf("action kind = %q, want %q", action.Kind, ActionDebugCommand)
+	if action.Kind != ActionAdminRoot {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionAdminRoot)
 	}
-	if action.Text != "/debug admin" {
-		t.Fatalf("action text = %q, want %q", action.Text, "/debug admin")
+	if action.Text != "/admin" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/admin")
+	}
+}
+
+func TestParseFeishuTextActionRecognizesAdminSubcommands(t *testing.T) {
+	for _, input := range []string{
+		"/admin web",
+		"/admin localweb",
+		"/admin autostart",
+		"/admin autostart on",
+		"/admin autostart off",
+	} {
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionAdminCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionAdminCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
 	}
 }
 
