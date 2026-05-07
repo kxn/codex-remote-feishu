@@ -71,6 +71,8 @@
 
 如需本地文档预览（将本地 `.md` 或 `.html` 链接替换为飞书云空间预览链接）或 `/cron` 定时任务等额外功能，在 WebSetup 中完成对应权限配置即可。不开这部分权限时，主对话功能仍可使用，但对应功能不可用。
 
+关于飞书应用的具体配置项，可参考仓库中的飞书配置模板 [`deploy/feishu/app-template.json`](./deploy/feishu/app-template.json) 和配置说明 [`deploy/feishu/README.md`](./deploy/feishu/README.md)。这些是 WebSetup 的参考资源，方便你了解机器人菜单、事件订阅和权限配置的具体内容，无需在安装前手动准备。
+
 ## 一条命令安装
 
 macOS / Linux：
