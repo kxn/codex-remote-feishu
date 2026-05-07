@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,7 +32,9 @@ func TestTryCloudflareProviderEnsurePublicBase(t *testing.T) {
 			return nil
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-			return exec.CommandContext(ctx, "bash", "-lc", "printf 'https://example.trycloudflare.com\\n'; sleep 60")
+			return mockTryCloudflareCommand(t, ctx, mockTryCloudflareProcess{
+				URL: "https://example.trycloudflare.com",
+			})
 		},
 	})
 	defer provider.Close()
@@ -61,8 +63,11 @@ func TestTryCloudflareProviderKeepsTunnelAliveAfterStartupContextEnds(t *testing
 			return nil
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-			script := fmt.Sprintf("printf 'https://example.trycloudflare.com\\n'; sleep 0.3; printf 'alive\\n' > %s; sleep 60", bashSingleQuotedPath(probeFile))
-			return exec.CommandContext(ctx, "bash", "-lc", script)
+			return mockTryCloudflareCommand(t, ctx, mockTryCloudflareProcess{
+				URL:        "https://example.trycloudflare.com",
+				AliveFile:  probeFile,
+				AliveDelay: 300 * time.Millisecond,
+			})
 		},
 	})
 	defer provider.Close()
@@ -91,7 +96,10 @@ func TestTryCloudflareProviderClearsSnapshotWhenTunnelExits(t *testing.T) {
 			return nil
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
-			return exec.CommandContext(ctx, "bash", "-lc", "printf 'https://example.trycloudflare.com\\n'; sleep 0.2")
+			return mockTryCloudflareCommand(t, ctx, mockTryCloudflareProcess{
+				URL:       "https://example.trycloudflare.com",
+				ExitDelay: 200 * time.Millisecond,
+			})
 		},
 	})
 	defer provider.Close()
@@ -184,7 +192,10 @@ func TestTryCloudflareProviderEnsurePublicBaseCoalescesConcurrentStart(t *testin
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
 			factoryCalls.Add(1)
-			return exec.CommandContext(ctx, "bash", "-lc", "sleep 0.2; printf 'https://example.trycloudflare.com\\n'; sleep 60")
+			return mockTryCloudflareCommand(t, ctx, mockTryCloudflareProcess{
+				URL:         "https://example.trycloudflare.com",
+				PreURLDelay: 200 * time.Millisecond,
+			})
 		},
 	})
 	defer provider.Close()
@@ -228,7 +239,9 @@ func TestTryCloudflareProviderRestartsWhenListenerTargetChanges(t *testing.T) {
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
 			call := factoryCalls.Add(1)
-			return exec.CommandContext(ctx, "bash", "-lc", fmt.Sprintf("printf 'https://example-%d.trycloudflare.com\\n'; sleep 60", call))
+			return mockTryCloudflareCommand(t, ctx, mockTryCloudflareProcess{
+				URL: fmt.Sprintf("https://example-%d.trycloudflare.com", call),
+			})
 		},
 	})
 	defer provider.Close()
@@ -269,7 +282,9 @@ func TestTryCloudflareProviderRestartsWhenReadyProbeFails(t *testing.T) {
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
 			call := factoryCalls.Add(1)
-			return exec.CommandContext(ctx, "bash", "-lc", fmt.Sprintf("printf 'https://example-%d.trycloudflare.com\\n'; sleep 60", call))
+			return mockTryCloudflareCommand(t, ctx, mockTryCloudflareProcess{
+				URL: fmt.Sprintf("https://example-%d.trycloudflare.com", call),
+			})
 		},
 	})
 	defer provider.Close()
@@ -304,7 +319,10 @@ func TestTryCloudflareProviderCoalescesConcurrentRestartOnTargetChange(t *testin
 		},
 		CommandFactory: func(ctx context.Context, _ string, args ...string) *exec.Cmd {
 			call := factoryCalls.Add(1)
-			return exec.CommandContext(ctx, "bash", "-lc", fmt.Sprintf("sleep 0.2; printf 'https://example-%d.trycloudflare.com\\n'; sleep 60", call))
+			return mockTryCloudflareCommand(t, ctx, mockTryCloudflareProcess{
+				URL:         fmt.Sprintf("https://example-%d.trycloudflare.com", call),
+				PreURLDelay: 200 * time.Millisecond,
+			})
 		},
 	})
 	defer provider.Close()
@@ -382,13 +400,102 @@ func waitForSnapshot(timeout time.Duration, predicate func(ProviderStatus) bool,
 	}
 }
 
-func bashSingleQuotedPath(path string) string {
-	value := filepath.ToSlash(path)
-	// On Windows with WSL, convert C:/... to /mnt/c/... for bash compatibility
-	if runtime.GOOS == "windows" && len(value) >= 3 && value[1] == ':' {
-		drive := strings.ToLower(string(value[0]))
-		value = "/mnt/" + drive + value[2:]
+type mockTryCloudflareProcess struct {
+	URL         string
+	PreURLDelay time.Duration
+	AliveFile   string
+	AliveDelay  time.Duration
+	ExitDelay   time.Duration
+}
+
+func TestHelperProcessTryCloudflare(t *testing.T) {
+	args, ok := mockTryCloudflareArgsFromCommandLine()
+	if !ok {
+		return
 	}
-	value = strings.ReplaceAll(value, `'`, `'"'"'`)
-	return "'" + value + "'"
+
+	if err := runMockTryCloudflareProcess(args); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func mockTryCloudflareCommand(t *testing.T, ctx context.Context, process mockTryCloudflareProcess) *exec.Cmd {
+	t.Helper()
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+
+	cmd := exec.CommandContext(ctx,
+		executable,
+		"-test.run", "^TestHelperProcessTryCloudflare$",
+		"--",
+		"--mock-trycloudflare",
+		process.URL,
+		strconv.FormatInt(process.PreURLDelay.Milliseconds(), 10),
+		process.AliveFile,
+		strconv.FormatInt(process.AliveDelay.Milliseconds(), 10),
+		strconv.FormatInt(process.ExitDelay.Milliseconds(), 10),
+	)
+	return cmd
+}
+
+func runMockTryCloudflareProcess(args []string) error {
+	if len(args) != 5 {
+		return fmt.Errorf("mock trycloudflare args = %q, want 5 items", args)
+	}
+
+	preURLDelay, err := durationMillisArg("pre-url-delay", args[1])
+	if err != nil {
+		return err
+	}
+	aliveDelay, err := durationMillisArg("alive-delay", args[3])
+	if err != nil {
+		return err
+	}
+	exitDelay, err := durationMillisArg("exit-delay", args[4])
+	if err != nil {
+		return err
+	}
+
+	if preURLDelay > 0 {
+		time.Sleep(preURLDelay)
+	}
+	if _, err := fmt.Fprintln(os.Stdout, args[0]); err != nil {
+		return fmt.Errorf("write mock trycloudflare url: %w", err)
+	}
+	if aliveDelay > 0 {
+		time.Sleep(aliveDelay)
+	}
+	if aliveFile := args[2]; aliveFile != "" {
+		if err := os.WriteFile(aliveFile, []byte("alive\n"), 0o644); err != nil {
+			return fmt.Errorf("write mock trycloudflare alive file: %w", err)
+		}
+	}
+	if exitDelay > 0 {
+		time.Sleep(exitDelay)
+		return nil
+	}
+
+	select {}
+}
+
+func mockTryCloudflareArgsFromCommandLine() ([]string, bool) {
+	for i := 0; i < len(os.Args); i++ {
+		if os.Args[i] != "--mock-trycloudflare" {
+			continue
+		}
+		return os.Args[i+1:], true
+	}
+	return nil, false
+}
+
+func durationMillisArg(name, value string) (time.Duration, error) {
+	millis, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s=%q: %w", name, value, err)
+	}
+	return time.Duration(millis) * time.Millisecond, nil
 }
