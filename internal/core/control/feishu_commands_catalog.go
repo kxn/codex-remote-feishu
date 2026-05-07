@@ -149,7 +149,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 	case FeishuCommandGroupCurrentWork:
 		return commandRank(commandID, FeishuCommandStop, FeishuCommandCompact, FeishuCommandSteerAll, FeishuCommandNew, FeishuCommandStatus)
 	case FeishuCommandGroupSendSettings:
-		return commandRank(commandID, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose, FeishuCommandAutoContinue)
+		return commandRank(commandID, FeishuCommandMode, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose, FeishuCommandAutoContinue)
 	case FeishuCommandGroupSwitchTarget:
 		return commandRank(
 			commandID,
@@ -169,7 +169,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 	case FeishuCommandGroupCommonTools:
 		return commandRank(commandID, FeishuCommandReview, FeishuCommandPatch, FeishuCommandAutoWhip, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
 	case FeishuCommandGroupMaintenance:
-		return commandRank(commandID, FeishuCommandMode, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandVSCodeMigrate)
+		return commandRank(commandID, FeishuCommandAdmin, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandVSCodeMigrate)
 	default:
 		return 1_000_000
 	}

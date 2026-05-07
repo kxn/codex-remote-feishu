@@ -250,8 +250,8 @@ func TestProjectCommandCatalogKeepsManualLocalCallbackFreeOfCatalogProvenance(t 
 				Buttons: []control.CommandCatalogButton{{
 					Label:         "管理页外链",
 					Kind:          control.CommandCatalogButtonCallbackAction,
-					CommandID:     control.FeishuCommandDebug,
-					CallbackValue: actionPayloadPageLocalAction(string(control.ActionDebugCommand), "admin"),
+					CommandID:     control.FeishuCommandAdminSubcommand,
+					CallbackValue: actionPayloadPageLocalAction(string(control.ActionAdminCommand), "web"),
 				}},
 			}},
 		}},
@@ -261,5 +261,5 @@ func TestProjectCommandCatalogKeepsManualLocalCallbackFreeOfCatalogProvenance(t 
 	}
 	row := cardElementButtons(t, ops[0].CardElements[0])
 	value := cardButtonPayload(t, row[0])
-	assertPageLocalActionPayloadMatchesCommand(t, value, "/debug admin")
+	assertPageLocalActionPayloadMatchesCommand(t, value, "/admin web")
 }

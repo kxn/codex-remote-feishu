@@ -84,7 +84,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(sendSettings), []string{"/reasoning", "/access", "/plan", "/verbose", "/claudeprofile"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(sendSettings), []string{"/mode", "/reasoning", "/access", "/plan", "/verbose", "/claudeprofile"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude send_settings help commands = %#v, want %#v", got, want)
 	}
 
@@ -100,7 +100,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(maintenance), []string{"/mode", "/upgrade", "/debug", "/help", "/menu"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(maintenance), []string{"/admin", "/upgrade", "/debug", "/help", "/menu"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude maintenance help commands = %#v, want %#v", got, want)
 	}
 }
@@ -210,6 +210,9 @@ func TestBuildFeishuCommandMenuHomePageUsesProfileAwareRootEntry(t *testing.T) {
 	normal := BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: "normal"})
 	if got := commandTextForMenuHomeEntry(normal, "工作区与会话"); got != "/workspace" {
 		t.Fatalf("normal switch_target home command = %q, want /workspace", got)
+	}
+	if got := commandTextForMenuHomeEntry(normal, "系统管理"); got != "/admin" {
+		t.Fatalf("normal maintenance home command = %q, want /admin", got)
 	}
 
 	vscode := BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: "vscode"})

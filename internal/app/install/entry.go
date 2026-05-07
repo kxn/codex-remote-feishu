@@ -41,7 +41,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 	currentSlot := flagSet.String("current-slot", "", "current version slot metadata")
 	serviceManagerFlag := flagSet.String("service-manager", string(ServiceManagerDetached), "service lifecycle manager: detached or systemd_user (linux only)")
 	relayURL := flagSet.String("relay-url", "", "relay websocket url; empty preserves existing or default config")
-	codexBinary := flagSet.String("codex-binary", "", "real codex binary path; empty keeps wrapper default and lets managed_shim auto-resolve codex.real")
+	codexBinary := flagSet.String("codex-binary", "", "optional Codex path override; empty keeps wrapper default and lets managed_shim auto-resolve codex.real")
 	integrationMode := flagSet.String("integration", "auto", "integration mode: auto or managed_shim; legacy editor_settings/both inputs are accepted and normalized to managed_shim")
 	feishuGatewayID := flagSet.String("feishu-gateway-id", "", "feishu gateway id")
 	feishuAppID := flagSet.String("feishu-app-id", "", "feishu app id")

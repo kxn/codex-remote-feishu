@@ -14,6 +14,7 @@ const (
 	ClaudeAuthModeInherit   = "inherit"
 	ClaudeAuthModeAuthToken = "auth_token"
 
+	ClaudeBinaryEnv              = "CLAUDE_BIN"
 	ClaudeConfigDirEnv           = "CLAUDE_CONFIG_DIR"
 	ClaudeBaseURLEnv             = "ANTHROPIC_BASE_URL"
 	ClaudeAuthTokenEnv           = "ANTHROPIC_AUTH_TOKEN"

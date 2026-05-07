@@ -68,6 +68,7 @@ func clearSurfaceRequests(surface *state.SurfaceConsoleRecord) {
 		return
 	}
 	surface.PendingRequests = map[string]*state.RequestPromptRecord{}
+	surface.PendingRequestOrder = []string{}
 	clearSurfaceRequestCapture(surface)
 }
 
@@ -78,7 +79,7 @@ func clearSurfaceRequestsForTurn(surface *state.SurfaceConsoleRecord, threadID, 
 	if len(surface.PendingRequests) != 0 {
 		for requestID, request := range surface.PendingRequests {
 			if request == nil {
-				delete(surface.PendingRequests, requestID)
+				removePendingRequest(surface, requestID)
 				continue
 			}
 			if turnID != "" && request.TurnID != "" && request.TurnID != turnID {
@@ -87,7 +88,7 @@ func clearSurfaceRequestsForTurn(surface *state.SurfaceConsoleRecord, threadID, 
 			if threadID != "" && request.ThreadID != "" && request.ThreadID != threadID {
 				continue
 			}
-			delete(surface.PendingRequests, requestID)
+			removePendingRequest(surface, requestID)
 		}
 	}
 	clearSurfaceRequestCaptureForTurn(surface, threadID, turnID)

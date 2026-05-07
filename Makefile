@@ -50,11 +50,14 @@ start:
 	./bin/codex-remote install -bootstrap-only -start-daemon
 
 stop:
-	@echo "install.sh has been removed." >&2
-	@echo "No repo-local stop helper is provided. Stop the codex-remote daemon process manually." >&2
+	@echo "No repo-local stop helper is provided." >&2
+	@echo "Stop the codex-remote daemon process directly, e.g.:" >&2
+	@echo "  curl -X POST http://127.0.0.1:9501/v1/stop" >&2
+	@echo "Or send SIGINT/SIGTERM to the daemon process manually." >&2
 	@exit 1
 
 status:
-	@echo "install.sh has been removed." >&2
-	@echo "Query the local admin/setup endpoints or inspect the daemon process directly instead." >&2
+	@echo "Query the daemon status via the admin API:" >&2
+	@echo "  curl http://127.0.0.1:9501/v1/status" >&2
+	@echo "Or inspect the daemon process directly." >&2
 	@exit 1

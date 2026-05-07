@@ -18,6 +18,13 @@ func TestResolveFeishuFrontstageActionContractInlineViewPolicy(t *testing.T) {
 	}
 
 	if contract := ResolveFeishuFrontstageActionContract(Action{
+		Kind: ActionAdminRoot,
+		Text: "/admin",
+	}); contract.CurrentCardMode != FeishuFrontstageCurrentCardInlineView {
+		t.Fatalf("expected bare /admin to follow inline_view contract, got %#v", contract)
+	}
+
+	if contract := ResolveFeishuFrontstageActionContract(Action{
 		Kind: ActionModeCommand,
 		Text: "/mode vscode",
 	}); contract.CurrentCardMode != FeishuFrontstageCurrentCardInlineView {
@@ -31,6 +38,11 @@ func TestResolveFeishuFrontstageActionContractInlineViewActionSet(t *testing.T) 
 		action Action
 		want   bool
 	}{
+		{
+			name:   "admin root page",
+			action: Action{Kind: ActionAdminRoot, Text: "/admin"},
+			want:   true,
+		},
 		{
 			name:   "menu navigation",
 			action: Action{Kind: ActionShowCommandMenu, Text: "/menu send_settings"},

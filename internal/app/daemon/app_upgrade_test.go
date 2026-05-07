@@ -417,7 +417,7 @@ func TestPrepareUpgradeHelperShimWritesEmbeddedShimAndSidecar(t *testing.T) {
 	}
 }
 
-func TestBuildDebugRootPageOnlyExposesAdminEntry(t *testing.T) {
+func TestBuildDebugRootPageLinksBackToAdminCommands(t *testing.T) {
 	catalog := buildDebugRootPageView(install.InstallState{
 		CurrentTrack:   install.ReleaseTrackBeta,
 		CurrentVersion: "v1.0.0",
@@ -429,18 +429,21 @@ func TestBuildDebugRootPageOnlyExposesAdminEntry(t *testing.T) {
 	if len(catalog.Sections) != 1 {
 		t.Fatalf("expected a single debug menu section, got %#v", catalog.Sections)
 	}
-	if got := len(catalog.Sections[0].Entries[0].Buttons); got != 1 {
-		t.Fatalf("expected debug menu to expose exactly one button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	if len(catalog.Sections[0].Entries) != 3 {
+		t.Fatalf("expected debug menu to expose admin return + 2 admin links, got %#v", catalog.Sections[0].Entries)
 	}
-	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/debug admin" {
-		t.Fatalf("expected debug catalog to expose admin link button, got %#v", catalog.Sections[0].Entries[0].Buttons)
+	if got := catalog.Sections[0].Entries[0].Buttons[0].CommandText; got != "/admin" {
+		t.Fatalf("expected debug catalog to link back to /admin, got %#v", catalog.Sections[0].Entries[0].Buttons)
 	}
-	if button := catalog.Sections[0].Entries[0].Buttons[0]; button.Kind != control.CommandCatalogButtonCallbackAction || button.CallbackValue["kind"] != "page_local_action" || button.CallbackValue["action_kind"] != string(control.ActionDebugCommand) || button.CallbackValue["action_arg"] != "admin" {
-		t.Fatalf("expected debug root button to stay on current card, got %#v", button)
+	if got := catalog.Sections[0].Entries[1].Buttons[0].CommandText; got != "/admin web" {
+		t.Fatalf("expected debug catalog to expose /admin web, got %#v", catalog.Sections[0].Entries[1].Buttons)
+	}
+	if got := catalog.Sections[0].Entries[2].Buttons[0].CommandText; got != "/admin localweb" {
+		t.Fatalf("expected debug catalog to expose /admin localweb, got %#v", catalog.Sections[0].Entries[2].Buttons)
 	}
 	summary := catalogSummaryText(&catalog)
-	if summary != "" {
-		t.Fatalf("expected debug root page to stay free of summary copy, got %#v", summary)
+	if !strings.Contains(summary, "/admin web") || !strings.Contains(summary, "/admin localweb") {
+		t.Fatalf("expected debug root page to explain admin migration, got %#v", summary)
 	}
 }
 
@@ -579,13 +582,9 @@ func TestBuildUpgradeTrackPageOnlyExposesTrackSwitching(t *testing.T) {
 	}
 }
 
-func TestParseDebugCommandTextRecognizesAdmin(t *testing.T) {
-	parsed, err := parseDebugCommandText("/debug admin")
-	if err != nil {
-		t.Fatalf("parseDebugCommandText: %v", err)
-	}
-	if parsed.Mode != debugCommandAdmin {
-		t.Fatalf("mode = %q, want %q", parsed.Mode, debugCommandAdmin)
+func TestParseDebugCommandTextRejectsDeprecatedAdminSubcommand(t *testing.T) {
+	if _, err := parseDebugCommandText("/debug admin"); err == nil || !strings.Contains(err.Error(), "/admin web") {
+		t.Fatalf("expected /debug admin to be rejected with /admin web guidance, got %v", err)
 	}
 }
 
@@ -631,7 +630,7 @@ func TestParseUpgradeCommandTextRecognizesTrackCommands(t *testing.T) {
 	}
 }
 
-func TestDebugAdminCommandIssuesExternalAccessLink(t *testing.T) {
+func TestAdminWebCommandIssuesExternalAccessLink(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, _ := newUpgradeTestApp(t, gateway)
 	defer app.Shutdown(nil)
@@ -652,18 +651,18 @@ func TestDebugAdminCommandIssuesExternalAccessLink(t *testing.T) {
 	})
 
 	app.HandleAction(context.Background(), control.Action{
-		Kind:             control.ActionDebugCommand,
+		Kind:             control.ActionAdminCommand,
 		SurfaceSessionID: "feishu:main:chat:1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/debug admin",
+		Text:             "/admin web",
 	})
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		ops := gateway.snapshotOperations()
 		for _, op := range ops {
-			if op.CardTitle != "Debug" {
+			if op.CardTitle != "系统管理" {
 				continue
 			}
 			if !strings.Contains(op.CardBody, "临时管理页外链已生成") || !strings.Contains(op.CardBody, "/g/") {
@@ -673,10 +672,10 @@ func TestDebugAdminCommandIssuesExternalAccessLink(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("timed out waiting for debug admin link notice")
+	t.Fatal("timed out waiting for admin web link notice")
 }
 
-func TestDebugAdminCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
+func TestAdminWebCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, _ := newUpgradeTestApp(t, gateway)
 	defer app.Shutdown(nil)
@@ -709,11 +708,11 @@ func TestDebugAdminCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		app.HandleAction(context.Background(), control.Action{
-			Kind:             control.ActionDebugCommand,
+			Kind:             control.ActionAdminCommand,
 			SurfaceSessionID: "feishu:main:chat:1",
 			ChatID:           "chat-1",
 			ActorUserID:      "user-1",
-			Text:             "/debug admin",
+			Text:             "/admin web",
 		})
 		close(done)
 	}()
@@ -721,7 +720,7 @@ func TestDebugAdminCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(time.Second):
-		t.Fatal("expected /debug admin handler to return after sending preparing notice")
+		t.Fatal("expected /admin web handler to return after sending preparing notice")
 	}
 
 	select {
@@ -735,7 +734,7 @@ func TestDebugAdminCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
 		t.Fatal("expected preparing notice operation")
 	}
 	last := ops[len(ops)-1]
-	if last.CardTitle != "Debug" || !strings.Contains(last.CardBody, "正在准备临时管理页外链") {
+	if last.CardTitle != "系统管理" || !strings.Contains(last.CardBody, "正在准备临时管理页外链") {
 		t.Fatalf("expected preparing notice, got %#v", last)
 	}
 	if strings.Contains(last.CardBody, "/g/") {
@@ -748,7 +747,7 @@ func TestDebugAdminCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
 	for time.Now().Before(deadline) {
 		ops = gateway.snapshotOperations()
 		for _, op := range ops {
-			if op.CardTitle != "Debug" {
+			if op.CardTitle != "系统管理" {
 				continue
 			}
 			if !strings.Contains(op.CardBody, "临时管理页外链已生成") || !strings.Contains(op.CardBody, "/g/") {
@@ -758,7 +757,7 @@ func TestDebugAdminCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("timed out waiting for debug admin link notice after preparing notice")
+	t.Fatal("timed out waiting for admin web link notice after preparing notice")
 }
 
 type blockingExternalAccessProvider struct {

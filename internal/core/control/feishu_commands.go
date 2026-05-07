@@ -8,6 +8,8 @@ const (
 	FeishuCommandWorkspaceNewGit      = "workspace_new_git"
 	FeishuCommandWorkspaceNewWorktree = "workspace_new_worktree"
 	FeishuCommandWorkspaceDetach      = "workspace_detach"
+	FeishuCommandAdmin                = "admin"
+	FeishuCommandAdminSubcommand      = "admin_subcommand"
 	FeishuCommandList                 = "list"
 	FeishuCommandStatus               = "status"
 	FeishuCommandUse                  = "use"
@@ -703,6 +705,8 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "follow", action: Action{Kind: ActionFollowLocal}},
 		},
 	},
+	adminCommandSpec(),
+	adminSubcommandSpec(),
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandStatus,
@@ -725,7 +729,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandMode,
-			GroupID:          FeishuCommandGroupMaintenance,
+			GroupID:          FeishuCommandGroupSendSettings,
 			Title:            "切换模式",
 			CanonicalSlash:   "/mode",
 			CanonicalMenuKey: "mode",
@@ -946,12 +950,9 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			Title:            "调试",
 			CanonicalSlash:   "/debug",
 			CanonicalMenuKey: "debug",
-			ArgumentKind:     FeishuCommandArgumentText,
-			ArgumentFormHint: "admin",
-			ArgumentFormNote: "例如 admin。",
-			ArgumentSubmit:   "执行",
-			Description:      "查看调试状态，或生成临时管理页外链。",
-			Examples:         []string{"/debug", "/debug admin"},
+			ArgumentKind:     FeishuCommandArgumentNone,
+			Description:      "查看调试入口；管理页相关功能已收口到 `/admin`。",
+			Examples:         []string{"/debug"},
 			ShowInHelp:       true,
 			ShowInMenu:       true,
 		},

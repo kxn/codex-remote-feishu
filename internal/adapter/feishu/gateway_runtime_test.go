@@ -77,7 +77,7 @@ func TestLiveGatewayCommandMessageAcksBeforeHandlerCompletes(t *testing.T) {
 	holdConn := make(chan struct{})
 	defer close(holdConn)
 
-	server, responseCh := newGatewayAckTestServer(t, messageEventPayload(t, "/debug admin"), holdConn)
+	server, responseCh := newGatewayAckTestServer(t, messageEventPayload(t, "/admin web"), holdConn)
 	defer server.Close()
 
 	started := make(chan struct{})

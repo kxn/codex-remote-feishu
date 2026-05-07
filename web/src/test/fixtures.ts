@@ -202,18 +202,24 @@ export function makeRuntimeRequirementsDetect(
     checks: [
       {
         id: "headless_launcher",
-        title: "Headless 启动器",
+        title: "服务启动器",
         status: "pass",
         summary: "当前服务已经有可用的 codex-remote 启动器。",
       },
       {
         id: "real_codex_binary",
-        title: "真实 Codex 二进制",
+        title: "Codex 可执行文件",
         status: "pass",
-        summary: "当前服务环境下可以解析到真实 codex。",
+        summary: "当前服务环境下可以解析 Codex 可执行文件。",
+      },
+      {
+        id: "claude_binary",
+        title: "Claude 可执行文件",
+        status: "pass",
+        summary: "当前服务环境下可以解析 Claude 可执行文件。",
       },
     ],
-    notes: ["这里只检查基础运行条件，不检查 Codex 登录状态。"],
+    notes: ["这里只检查基础运行条件，不检查登录状态或 provider 凭据。"],
     ...overrides,
   };
 }

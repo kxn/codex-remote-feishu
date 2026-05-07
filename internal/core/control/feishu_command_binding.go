@@ -105,6 +105,11 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 		Kind:          FeishuCommandBindingInlinePage,
 		intentBuilder: bareInlineIntentBuilder(FeishuUIIntentShowWorkspaceRoot, "/workspace", true),
 	}
+	bindings[FeishuCommandAdmin] = FeishuCommandBinding{
+		FamilyID:      FeishuCommandAdmin,
+		Kind:          FeishuCommandBindingInlinePage,
+		intentBuilder: bareInlineIntentBuilder(FeishuUIIntentShowAdminRoot, "/admin", true),
+	}
 	bindings[FeishuCommandWorkspaceList] = FeishuCommandBinding{
 		FamilyID:      FeishuCommandWorkspaceList,
 		Kind:          FeishuCommandBindingInlinePage,
@@ -153,6 +158,7 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 	bindings[FeishuCommandDetach] = ownerEntryBindingWithPolicy(FeishuCommandDetach)
 
 	bindings[FeishuCommandDebug] = daemonCommandBinding(FeishuCommandDebug, DaemonCommandDebug, false)
+	bindings[FeishuCommandAdminSubcommand] = daemonCommandBinding(FeishuCommandAdminSubcommand, DaemonCommandAdmin, false)
 	bindings[FeishuCommandCron] = daemonCommandBinding(FeishuCommandCron, DaemonCommandCron, false)
 	bindings[FeishuCommandUpgrade] = daemonCommandBinding(FeishuCommandUpgrade, DaemonCommandUpgrade, true)
 	bindings[FeishuCommandVSCodeMigrate] = daemonCommandBinding(FeishuCommandVSCodeMigrate, DaemonCommandVSCodeMigrateCommand, true)

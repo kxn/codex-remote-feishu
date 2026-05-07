@@ -280,6 +280,7 @@ type SurfaceConsoleRecord struct {
 	PromptOverride       ModelConfigRecord
 	PendingHeadless      *HeadlessLaunchRecord
 	PendingRequests      map[string]*RequestPromptRecord
+	PendingRequestOrder  []string
 	ActiveRequestCapture *RequestCaptureRecord
 	ActiveExecProgress   *ExecCommandProgressRecord
 	ActiveReasoning      *SurfaceReasoningProgressRecord

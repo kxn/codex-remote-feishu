@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
-	"time"
 )
 
 const defaultDevManifestTag = "dev-latest"
@@ -38,7 +37,7 @@ type DevManifestLookupOptions struct {
 func ResolveDevManifest(ctx context.Context, opts DevManifestLookupOptions) (DevManifest, DevManifestAsset, error) {
 	client := opts.Client
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = &http.Client{}
 	}
 	manifestURL := strings.TrimSpace(opts.ManifestURL)
 	if manifestURL == "" {

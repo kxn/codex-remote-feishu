@@ -31,6 +31,8 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventco
 		return a.startManagedHeadless(command)
 	case control.DaemonCommandKillHeadless:
 		return a.killManagedHeadless(command)
+	case control.DaemonCommandAdmin:
+		return a.handleAdminDaemonCommand(command)
 	case control.DaemonCommandDebug:
 		return a.handleDebugDaemonCommand(command)
 	case control.DaemonCommandCron:

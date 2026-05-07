@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -147,6 +148,83 @@ func TestApplyAutostartInstallsAndEnablesLaunchdUserService(t *testing.T) {
 	}
 	if _, err := os.Stat(loaded.ServiceUnitPath); err != nil {
 		t.Fatalf("expected launchd plist to exist: %v", err)
+	}
+}
+
+func TestDisableAutostartDisablesSystemdUserService(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePath(baseDir)
+	stubServiceUserHome(t, baseDir)
+	state := InstallState{
+		BaseDir:         baseDir,
+		StatePath:       statePath,
+		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		ServiceManager:  ServiceManagerSystemdUser,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      statePath,
+		BaseDir:        baseDir,
+		ServiceManager: state.ServiceManager,
+	})
+	if err := os.MkdirAll(filepath.Dir(state.ServiceUnitPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(unit dir): %v", err)
+	}
+	if err := os.WriteFile(state.ServiceUnitPath, []byte("[Unit]\nDescription=test\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(unit): %v", err)
+	}
+	if err := WriteState(statePath, state); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := systemctlUserRunner
+	serviceRuntimeGOOS = "linux"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		systemctlUserRunner = originalRunner
+	}()
+
+	enabled := true
+	var calls []string
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) == 0 {
+			return "", nil
+		}
+		switch args[0] {
+		case "is-enabled":
+			if enabled {
+				return "enabled", nil
+			}
+			return "disabled", nil
+		case "disable":
+			enabled = false
+			return "", nil
+		default:
+			return "", nil
+		}
+	}
+
+	status, err := DisableAutostart(statePath)
+	if err != nil {
+		t.Fatalf("DisableAutostart: %v", err)
+	}
+	if status.Enabled {
+		t.Fatalf("expected autostart to be disabled, got %#v", status)
+	}
+	if status.Status != "disabled" {
+		t.Fatalf("status = %q, want disabled", status.Status)
+	}
+	wantCalls := []string{
+		"is-enabled codex-remote.service",
+		"disable codex-remote.service",
+		"is-enabled codex-remote.service",
+	}
+	if !reflect.DeepEqual(calls, wantCalls) {
+		t.Fatalf("systemctl calls = %#v, want %#v", calls, wantCalls)
 	}
 }
 

@@ -64,23 +64,14 @@
 
 1. 确保真实 `codex` 在目标机器上可运行
 2. 如果你需要和 VS Code 联动，再安装 VS Code 的 ChatGPT / Codex 扩展
-3. 准备飞书自建应用
+3. 无需提前配置飞书应用——安装后通过内置 WebSetup 向导即可扫码完成飞书接入，飞书配置是启动后的步骤，不是安装前提
 4. 只有在源码构建或仓库联调时才需要 Go 1.24+
 
-飞书应用配置可参考：
+飞书应用配置无需提前准备，项目启动后通过内置 WebSetup 向导即可完成：扫码接入、权限配置和扫码绑定。无需手动准备 `App ID`、`App Secret` 或编辑配置文件。
 
-- [deploy/feishu/app-template.json](./deploy/feishu/app-template.json)
-- [deploy/feishu/README.md](./deploy/feishu/README.md)
+如需本地文档预览（将本地 `.md` 或 `.html` 链接替换为飞书云空间预览链接）或 `/cron` 定时任务等额外功能，在 WebSetup 中完成对应权限配置即可。不开这部分权限时，主对话功能仍可使用，但对应功能不可用。
 
-至少要准备：
-
-- `App ID`
-- `App Secret`
-- 基础交互所需的消息接收、reaction、机器人菜单相关权限和事件
-- 如果要启用 `/cron` 定时任务配置，推荐额外开通 `bitable:app`
-- 如果要启用本地文档预览，推荐额外开通 `drive:drive`
-
-本地文档预览当前实现会在发送最终回复前自动创建目录、上传文件、查询访问链接，并给当前对话用户或群补协作者权限。不开这部分权限时，主对话功能仍可使用，但本地 `.md` 或单文件 `.html` 链接不会被替换成飞书预览链接。
+关于飞书应用的具体配置项，可参考仓库中的飞书配置模板 [`deploy/feishu/app-template.json`](./deploy/feishu/app-template.json) 和配置说明 [`deploy/feishu/README.md`](./deploy/feishu/README.md)。这些是 WebSetup 的参考资源，方便你了解机器人菜单、事件订阅和权限配置的具体内容，无需在安装前手动准备。
 
 ## 一条命令安装
 

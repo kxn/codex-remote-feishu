@@ -87,6 +87,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		if surface.PendingRequests == nil {
 			surface.PendingRequests = map[string]*state.RequestPromptRecord{}
 		}
+		ensurePendingRequestOrder(surface)
 		if surface.SurfaceMessages == nil {
 			surface.SurfaceMessages = map[string]*state.SurfaceMessageRecord{}
 		}
@@ -97,22 +98,23 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 	}
 
 	surface = &state.SurfaceConsoleRecord{
-		SurfaceSessionID: action.SurfaceSessionID,
-		Platform:         "feishu",
-		GatewayID:        action.GatewayID,
-		ChatID:           action.ChatID,
-		ActorUserID:      action.ActorUserID,
-		ProductMode:      state.ProductModeNormal,
-		Backend:          agentproto.BackendCodex,
-		Verbosity:        state.SurfaceVerbosityNormal,
-		RouteMode:        state.RouteModeUnbound,
-		DispatchMode:     state.DispatchModeNormal,
-		LastInboundAt:    s.now(),
-		QueueItems:       map[string]*state.QueueItemRecord{},
-		StagedImages:     map[string]*state.StagedImageRecord{},
-		StagedFiles:      map[string]*state.StagedFileRecord{},
-		PendingRequests:  map[string]*state.RequestPromptRecord{},
-		SurfaceMessages:  map[string]*state.SurfaceMessageRecord{},
+		SurfaceSessionID:    action.SurfaceSessionID,
+		Platform:            "feishu",
+		GatewayID:           action.GatewayID,
+		ChatID:              action.ChatID,
+		ActorUserID:         action.ActorUserID,
+		ProductMode:         state.ProductModeNormal,
+		Backend:             agentproto.BackendCodex,
+		Verbosity:           state.SurfaceVerbosityNormal,
+		RouteMode:           state.RouteModeUnbound,
+		DispatchMode:        state.DispatchModeNormal,
+		LastInboundAt:       s.now(),
+		QueueItems:          map[string]*state.QueueItemRecord{},
+		StagedImages:        map[string]*state.StagedImageRecord{},
+		StagedFiles:         map[string]*state.StagedFileRecord{},
+		PendingRequests:     map[string]*state.RequestPromptRecord{},
+		PendingRequestOrder: []string{},
+		SurfaceMessages:     map[string]*state.SurfaceMessageRecord{},
 	}
 	s.root.Surfaces[action.SurfaceSessionID] = surface
 	return surface

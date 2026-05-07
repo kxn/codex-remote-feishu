@@ -20,12 +20,10 @@ type debugCommandMode string
 
 const (
 	debugCommandShowStatus debugCommandMode = "status"
-	debugCommandAdmin      debugCommandMode = "admin"
 )
 
 type parsedDebugCommand struct {
-	Mode  debugCommandMode
-	Track install.ReleaseTrack
+	Mode debugCommandMode
 }
 
 type upgradeCommandMode = control.UpgradeCommandMode
@@ -66,50 +64,8 @@ func (a *App) handleDebugDaemonCommand(command control.DaemonCommand) []eventcon
 	switch parsed.Mode {
 	case debugCommandShowStatus:
 		return commandPageEvents(command.SurfaceSessionID, buildDebugRootPageView(install.InstallState{}, false, "", "", ""))
-	case debugCommandAdmin:
-		return a.handleDebugAdminCommand(command)
 	default:
 		return debugUsageEvents(command.SurfaceSessionID, commandArgumentText(command.Text), "不支持的 /debug 子命令。")
-	}
-}
-
-func (a *App) handleDebugAdminCommand(command control.DaemonCommand) []eventcontract.Event {
-	service, localURL, err := a.ensureExternalAccessIssueTargetLocked()
-	if err != nil {
-		return []eventcontract.Event{debugNoticeEvent(command.SurfaceSessionID, "debug_admin_issue_failed", fmt.Sprintf("生成管理页外链失败：%v", err))}
-	}
-	adminURL := a.admin.adminURL
-	req := debugAdminIssueRequest(adminURL)
-	surfaceID := command.SurfaceSessionID
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-
-		issued, err := service.IssueURL(ctx, req, localURL)
-
-		a.mu.Lock()
-		defer a.mu.Unlock()
-		if a.shuttingDown {
-			return
-		}
-		if err != nil {
-			a.handleUIEventsLocked(context.Background(), []eventcontract.Event{
-				debugNoticeEvent(surfaceID, "debug_admin_issue_failed", fmt.Sprintf("生成管理页外链失败：%v", err)),
-			})
-			return
-		}
-		text := fmt.Sprintf(
-			"临时管理页外链已生成：\n[打开管理页](%s)\n\n链接：`%s`\n有效期到：`%s`",
-			issued.ExternalURL,
-			issued.ExternalURL,
-			issued.ExpiresAt.UTC().Format(time.RFC3339),
-		)
-		a.handleUIEventsLocked(context.Background(), []eventcontract.Event{
-			debugNoticeEvent(surfaceID, "debug_admin_link_ready", text),
-		})
-	}()
-	return []eventcontract.Event{
-		debugNoticeEvent(command.SurfaceSessionID, "debug_admin_prepare_started", "正在准备临时管理页外链。首次启动 tunnel 或重新拉起 external access 时，可能需要几十秒，请稍候。"),
 	}
 }
 
@@ -203,7 +159,7 @@ func (a *App) handleUpgradeLocalCommand(command control.DaemonCommand, stateValu
 }
 
 func (a *App) runUpgradeCheck(request upgradeCheckRequest) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), upgradeMetadataTimeout)
 	defer cancel()
 
 	lookup := a.upgradeRuntime.Lookup

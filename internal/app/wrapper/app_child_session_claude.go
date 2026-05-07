@@ -14,7 +14,8 @@ import (
 func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo), resume *claudeLaunchResumeTarget) (*childSession, error) {
 	childCtx, childCancel := context.WithCancel(ctx)
 	childArgs, childEnv := a.buildClaudeChildLaunch(resume)
-	cmd := execlaunch.CommandContext(childCtx, a.resolveClaudeBinary(), childArgs...)
+	claudeBinary := a.resolveClaudeBinary()
+	cmd := execlaunch.CommandContext(childCtx, claudeBinary, childArgs...)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -26,7 +27,7 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 		childCancel()
 		return nil, err
 	}
-	a.debugf("claude child started: binary=%s pid=%d cwd=%s", a.resolveClaudeBinary(), cmd.Process.Pid, a.config.WorkspaceRoot)
+	a.debugf("claude child started: binary=%s pid=%d cwd=%s", claudeBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
 
 	bootstrappedStdout, err := a.bootstrapClaude(childStdin, childStdout, rawLogger, reportProblem)
 	if err != nil {
@@ -51,7 +52,10 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 }
 
 func (a *App) resolveClaudeBinary() string {
-	if value := strings.TrimSpace(os.Getenv("CLAUDE_BIN")); value != "" {
+	if resolved, err := config.ResolveClaudeBinary(os.Environ()); err == nil && strings.TrimSpace(resolved) != "" {
+		return resolved
+	}
+	if value := strings.TrimSpace(os.Getenv(config.ClaudeBinaryEnv)); value != "" {
 		return value
 	}
 	return "claude"

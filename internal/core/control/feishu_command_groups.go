@@ -46,8 +46,9 @@ var feishuCommandGroups = []FeishuCommandGroup{
 		Description: "",
 	},
 	{
-		ID:          FeishuCommandGroupMaintenance,
-		Title:       "系统管理",
-		Description: "",
+		ID:            FeishuCommandGroupMaintenance,
+		Title:         "系统管理",
+		Description:   "",
+		RootCommandID: FeishuCommandAdmin,
 	},
 }

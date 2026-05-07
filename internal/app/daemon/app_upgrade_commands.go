@@ -24,10 +24,7 @@ func parseDebugCommandText(text string) (parsedDebugCommand, error) {
 	}
 	switch fields[1] {
 	case "admin":
-		if len(fields) != 2 {
-			return parsedDebugCommand{}, fmt.Errorf("`/debug admin` 不接受额外参数。")
-		}
-		return parsedDebugCommand{Mode: debugCommandAdmin}, nil
+		return parsedDebugCommand{}, fmt.Errorf("`/debug admin` 已废弃，请改用 `/admin web`。")
 	default:
 		return parsedDebugCommand{}, fmt.Errorf("不支持的 /debug 子命令。")
 	}

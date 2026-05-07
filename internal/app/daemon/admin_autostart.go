@@ -9,6 +9,7 @@ import (
 
 var detectAutostart = install.DetectAutostart
 var applyAutostart = install.ApplyAutostart
+var disableAutostart = install.DisableAutostart
 
 type autostartResponse = install.AutostartStatus
 

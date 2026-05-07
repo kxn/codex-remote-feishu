@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 
@@ -318,10 +319,22 @@ func TestMenuActionMaintenanceGroupShowsSystemManagementCommands(t *testing.T) {
 		Text:             "/menu maintenance",
 	})
 	catalog := commandCatalogFromEvent(t, events[0])
-	got := firstCommands(catalog.Sections[0].Entries)
-	want := []string{"/mode", "/upgrade", "/debug", "/help"}
+	if catalog.CommandID != control.FeishuCommandAdmin {
+		t.Fatalf("expected maintenance menu to open admin root page, got %#v", catalog)
+	}
+	got := firstButtonLabels(catalog.Sections[0].Entries)
+	want := []string{"管理页外链", "本地管理页"}
+	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
+		want = append(want, "自动启动")
+	}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("maintenance commands = %#v, want %#v", got, want)
+		t.Fatalf("maintenance management entries = %#v, want %#v", got, want)
+	}
+	if got := firstButtonLabels(catalog.Sections[1].Entries); !reflect.DeepEqual(got, []string{"升级系统", "调试", "命令帮助"}) {
+		t.Fatalf("maintenance utility entries = %#v, want upgrade/debug/help", got)
+	}
+	if len(catalog.RelatedButtons) != 1 || catalog.RelatedButtons[0].CommandText != "/menu" {
+		t.Fatalf("expected maintenance root page to keep menu back button, got %#v", catalog.RelatedButtons)
 	}
 }
 

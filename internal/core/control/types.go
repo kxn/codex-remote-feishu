@@ -15,6 +15,8 @@ const (
 	ActionCompact                     ActionKind = "surface.menu.compact"
 	ActionSteerAll                    ActionKind = "surface.menu.steer_all"
 	ActionNewThread                   ActionKind = "surface.menu.new_thread"
+	ActionAdminRoot                   ActionKind = "surface.command.admin"
+	ActionAdminCommand                ActionKind = "surface.command.admin.subcommand"
 	ActionWorkspaceRoot               ActionKind = "surface.command.workspace"
 	ActionWorkspaceList               ActionKind = "surface.command.workspace.list"
 	ActionWorkspaceNew                ActionKind = "surface.command.workspace.new"
@@ -580,6 +582,7 @@ type DaemonCommandKind string
 const (
 	DaemonCommandStartHeadless              DaemonCommandKind = "headless.start"
 	DaemonCommandKillHeadless               DaemonCommandKind = "headless.kill"
+	DaemonCommandAdmin                      DaemonCommandKind = "admin.command"
 	DaemonCommandDebug                      DaemonCommandKind = "debug.command"
 	DaemonCommandCron                       DaemonCommandKind = "cron.command"
 	DaemonCommandUpgrade                    DaemonCommandKind = "upgrade.command"

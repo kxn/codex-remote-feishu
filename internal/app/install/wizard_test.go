@@ -35,6 +35,12 @@ func TestRunInteractiveWizardManagedShimBlankCodexBinaryUsesAutoResolution(t *te
 	if len(opts.Integrations) != 1 || opts.Integrations[0] != IntegrationManagedShim {
 		t.Fatalf("unexpected integrations: %#v", opts.Integrations)
 	}
+	if !strings.Contains(out.String(), "Codex 路径覆盖（可选）") {
+		t.Fatalf("wizard output missing optional Codex override copy: %q", out.String())
+	}
+	if strings.Contains(out.String(), "真实 Codex 配置说明") {
+		t.Fatalf("wizard output kept stale Codex-only copy: %q", out.String())
+	}
 	if opts.CodexRealBinary != "" {
 		t.Fatalf("expected blank codex binary for managed shim auto-resolution, got %q", opts.CodexRealBinary)
 	}

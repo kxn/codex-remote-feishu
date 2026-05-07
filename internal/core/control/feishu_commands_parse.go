@@ -40,6 +40,17 @@ func parseFeishuTextAction(text string) (Action, bool) {
 	if trimmed == "" {
 		return Action{}, false
 	}
+	for _, spec := range feishuCommandSpecs {
+		for _, match := range spec.textExact {
+			if trimmed == match.alias {
+				action := match.action
+				if strings.TrimSpace(action.Text) == "" {
+					action.Text = trimmed
+				}
+				return parsedFeishuCommandAction(spec, action), true
+			}
+		}
+	}
 	fields := strings.Fields(trimmed)
 	if len(fields) > 0 {
 		first := strings.ToLower(fields[0])
@@ -51,17 +62,6 @@ func parseFeishuTextAction(text string) (Action, bool) {
 						Text: trimmed,
 					}), true
 				}
-			}
-		}
-	}
-	for _, spec := range feishuCommandSpecs {
-		for _, match := range spec.textExact {
-			if trimmed == match.alias {
-				action := match.action
-				if strings.TrimSpace(action.Text) == "" {
-					action.Text = trimmed
-				}
-				return parsedFeishuCommandAction(spec, action), true
 			}
 		}
 	}
