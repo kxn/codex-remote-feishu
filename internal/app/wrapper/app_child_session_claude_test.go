@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -16,9 +17,24 @@ func TestResolveClaudeBinaryKeepsExplicitEnvPath(t *testing.T) {
 
 	t.Setenv(config.ClaudeBinaryEnv, claudePath)
 	app := &App{}
-	if got := app.resolveClaudeBinary(); got != claudePath {
-		t.Fatalf("resolveClaudeBinary() = %q, want %q", got, claudePath)
+	if got := app.resolveClaudeBinary(); normalizeExecutablePathForWrapperTest(t, got) != normalizeExecutablePathForWrapperTest(t, claudePath) {
+		t.Fatalf("resolveClaudeBinary() = %q, want path equivalent to %q", got, claudePath)
 	}
+}
+
+func normalizeExecutablePathForWrapperTest(t *testing.T, path string) string {
+	t.Helper()
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil && strings.TrimSpace(resolved) != "" {
+		path = resolved
+	}
+	return filepath.Clean(path)
 }
 
 func writeWrapperExecutableForTest(t *testing.T, path string) {

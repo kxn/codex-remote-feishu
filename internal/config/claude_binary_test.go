@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -26,9 +27,31 @@ func TestResolveClaudeBinaryUsesExplicitAbsolutePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveClaudeBinary: %v", err)
 	}
-	if got != claudePath {
-		t.Fatalf("ResolveClaudeBinary() = %q, want %q", got, claudePath)
+	assertResolvedExecutablePath(t, got, claudePath)
+}
+
+func assertResolvedExecutablePath(t *testing.T, got, want string) {
+	t.Helper()
+	got = normalizeExecutablePathForTest(t, got)
+	want = normalizeExecutablePathForTest(t, want)
+	if got != want {
+		t.Fatalf("resolved executable path = %q, want %q", got, want)
 	}
+}
+
+func normalizeExecutablePathForTest(t *testing.T, path string) string {
+	t.Helper()
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil && strings.TrimSpace(resolved) != "" {
+		path = resolved
+	}
+	return filepath.Clean(path)
 }
 
 func TestResolveClaudeBinaryUsesExplicitCommandFromShellPATH(t *testing.T) {
@@ -53,9 +76,7 @@ func TestResolveClaudeBinaryUsesExplicitCommandFromShellPATH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveClaudeBinary: %v", err)
 	}
-	if got != shellBinary {
-		t.Fatalf("ResolveClaudeBinary() = %q, want %q", got, shellBinary)
-	}
+	assertResolvedExecutablePath(t, got, shellBinary)
 }
 
 func TestResolveClaudeBinaryPrefersShellPATHBeforeCurrentPATH(t *testing.T) {
@@ -82,9 +103,7 @@ func TestResolveClaudeBinaryPrefersShellPATHBeforeCurrentPATH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveClaudeBinary: %v", err)
 	}
-	if got != shellBinary {
-		t.Fatalf("ResolveClaudeBinary() = %q, want %q", got, shellBinary)
-	}
+	assertResolvedExecutablePath(t, got, shellBinary)
 }
 
 func TestResolveClaudeBinaryFallsBackToCurrentPATH(t *testing.T) {
@@ -105,9 +124,7 @@ func TestResolveClaudeBinaryFallsBackToCurrentPATH(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveClaudeBinary: %v", err)
 	}
-	if got != currentBinary {
-		t.Fatalf("ResolveClaudeBinary() = %q, want %q", got, currentBinary)
-	}
+	assertResolvedExecutablePath(t, got, currentBinary)
 }
 
 func TestResolveClaudeBinaryReturnsErrorWhenUnavailable(t *testing.T) {

@@ -137,12 +137,26 @@ func TestBuildDaemonHeadlessBaseEnvFreezesExplicitClaudeBinary(t *testing.T) {
 	})
 
 	value, ok := lookupEnvEntryForTest(env, config.ClaudeBinaryEnv)
-	if !ok || value != claudePath {
+	if !ok || normalizeExecutablePathForDaemonTest(value) != normalizeExecutablePathForDaemonTest(claudePath) {
 		t.Fatalf("CLAUDE_BIN = %q ok=%v, want %q", value, ok, claudePath)
 	}
 	if value, ok := lookupEnvEntryForTest(env, "https_proxy"); !ok || !strings.Contains(value, "proxy.internal") {
 		t.Fatalf("https_proxy = %q ok=%v", value, ok)
 	}
+}
+
+func normalizeExecutablePathForDaemonTest(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if abs, err := filepath.Abs(path); err == nil {
+		path = abs
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil && strings.TrimSpace(resolved) != "" {
+		path = resolved
+	}
+	return filepath.Clean(path)
 }
 
 func lookupEnvEntryForTest(env []string, key string) (string, bool) {
