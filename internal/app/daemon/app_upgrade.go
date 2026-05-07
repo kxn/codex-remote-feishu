@@ -159,7 +159,7 @@ func (a *App) handleUpgradeLocalCommand(command control.DaemonCommand, stateValu
 }
 
 func (a *App) runUpgradeCheck(request upgradeCheckRequest) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), upgradeMetadataTimeout)
 	defer cancel()
 
 	lookup := a.upgradeRuntime.Lookup

@@ -375,7 +375,7 @@ func (a *App) confirmUpgradeOwnerFlowLocked(command control.DaemonCommand) []eve
 	a.refreshUpgradeOwnerFlowLocked(flow, upgraderuntime.OwnerFlowStageRunning)
 	flow.TargetVersion = pendingTargetVersion(stateValue.PendingUpgrade)
 	a.upgradeRuntime.StartInFlight = true
-	startCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	startCtx, cancel := context.WithTimeout(context.Background(), upgradePrepareTimeout)
 	a.upgradeRuntime.StartCancel = cancel
 	a.upgradeRuntime.StartFlowID = flow.FlowID
 	go a.runPendingUpgradeStart(upgradeStartRequest{

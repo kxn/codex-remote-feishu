@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 )
 
 const defaultReleaseRepository = "kxn/codex-remote-feishu"
@@ -45,7 +44,7 @@ func ResolveLatestRelease(ctx context.Context, opts ReleaseLookupOptions) (Relea
 
 	client := opts.Client
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = &http.Client{}
 	}
 	apiURL := strings.TrimSpace(opts.ReleasesAPIURL)
 	if apiURL == "" {

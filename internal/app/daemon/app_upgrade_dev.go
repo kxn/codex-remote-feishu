@@ -59,7 +59,7 @@ func (a *App) handleUpgradeDevCommand(command control.DaemonCommand, stateValue 
 }
 
 func (a *App) runDevUpgradeCheck(request devUpgradeCheckRequest) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), upgradeMetadataTimeout)
 	defer cancel()
 
 	lookup := a.upgradeRuntime.DevManifest

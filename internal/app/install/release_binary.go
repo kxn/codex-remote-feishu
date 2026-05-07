@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
-	"time"
 )
 
 type ReleaseBinaryOptions struct {
@@ -113,7 +112,7 @@ func ensureBinaryArchive(ctx context.Context, opts binaryArchiveOptions) (string
 
 	client := opts.Client
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = &http.Client{}
 	}
 
 	tempDir, err := os.MkdirTemp("", "codex-remote-release-*")

@@ -327,7 +327,7 @@ func (a *App) startCodexUpgradeOwnerCheckLocked(command control.DaemonCommand) [
 }
 
 func (a *App) runCodexUpgradeOwnerCheck(flowID, surfaceID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), codexUpgradeCheckTimeout)
 	defer cancel()
 
 	check, err := a.checkStandaloneCodexUpgrade(ctx, surfaceID)
@@ -442,7 +442,7 @@ func (a *App) runCodexUpgradeOwnerConfirm(flowID, surfaceID string) {
 	})
 
 	if err != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), codexUpgradeCheckTimeout)
 		check, checkErr := a.checkStandaloneCodexUpgrade(ctx, surfaceID)
 		cancel()
 		a.mu.Lock()

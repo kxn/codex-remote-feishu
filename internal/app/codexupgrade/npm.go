@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
@@ -19,7 +18,7 @@ func LookupLatestVersion(ctx context.Context, opts LatestVersionOptions) (string
 	registryURL := firstNonEmpty(strings.TrimSpace(opts.RegistryURL), "https://registry.npmjs.org")
 	client := opts.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		client = &http.Client{}
 	}
 	rawURL := strings.TrimRight(registryURL, "/") + "/" + url.PathEscape(packageName)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)

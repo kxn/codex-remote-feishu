@@ -56,7 +56,7 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	if baseCtx == nil {
 		baseCtx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(baseCtx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(baseCtx, upgradePrepareTimeout)
 	defer cancel()
 
 	stateValue := request.State
