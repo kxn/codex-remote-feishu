@@ -180,7 +180,7 @@ func (s *Service) snapshotGateSummary(surface *state.SurfaceConsoleRecord) contr
 	count := 0
 	for requestID, request := range surface.PendingRequests {
 		if request == nil {
-			delete(surface.PendingRequests, requestID)
+			removePendingRequest(surface, requestID)
 			continue
 		}
 		count++

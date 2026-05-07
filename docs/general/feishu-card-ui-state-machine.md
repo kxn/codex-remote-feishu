@@ -323,6 +323,7 @@
   - 若 daemon dispatch 失败或 wrapper 显式 reject，会清掉 pending-dispatch 标记、递增 `request_revision`、刷新一张新 request 卡并附带失败 notice
   - 在 pending-dispatch 期间，同一 request 的重复点击会收到“已提交，等待处理”提示，不会重复下发命令
   - `取消` 当前会先把卡片 seal 成“已放弃答题，并向当前 turn 发送停止请求”，再派发 `turn.interrupt`
+  - 同一 surface / turn 若连续出现多条可渲染 request，当前只会激活队头；后续 request 会按到达顺序进入 pending queue，直到前一条真正 `request_resolved` 或整轮 turn 结束后，下一条才会 append 成新的 request 卡，不再出现多张可交互 request card 并列可点
 
 通用 approval request 卡片当前新增的可视语义：
 
@@ -336,6 +337,7 @@
   - `approval_file_change` 会额外展示 `grantRoot`，并给出写入范围导向的 hint
   - `approval_network` 会把 `networkApprovalContext` 投影成主机/协议/端口等“网络目标”正文，并给出联网导向的 hint
   - 最终点击任一决策后，当前卡会先切到 sealed waiting 态，不再保留“看起来还能继续点”的旧按钮
+  - 若同一 turn 后续又冒出新的 approval family request，这些新请求不会立刻 append 成并行可点击卡，而是继续排在当前 request 之后，等队头 resolved 后再顺序激活
 
 MCP request 卡片当前新增的可视语义：
 

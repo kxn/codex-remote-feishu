@@ -151,14 +151,11 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		Phase:                frontstagecontract.PhaseEditing,
 		CreatedAt:            s.now(),
 	}
-	surface.PendingRequests[event.RequestID] = record
-	if !requestPromptRenderable(requestType) {
-		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", requestType))
+	enqueuePendingRequest(surface, record)
+	if !pendingRequestIsActive(surface, record.RequestID) {
+		return nil
 	}
-	if requestType == "tool_callback" {
-		return s.autoDispatchUnsupportedToolCallback(surface, record, threadTitle)
-	}
-	return []eventcontract.Event{s.requestPromptEvent(surface, record, threadTitle)}
+	return s.activatePendingRequest(surface, record, threadTitle)
 }
 
 func (s *Service) resolveRequestPrompt(instanceID string, event agentproto.Event) []eventcontract.Event {
@@ -168,10 +165,14 @@ func (s *Service) resolveRequestPrompt(instanceID string, event agentproto.Event
 			if surface.PendingRequests == nil {
 				continue
 			}
-			request := surface.PendingRequests[event.RequestID]
+			wasActive := pendingRequestIsActive(surface, event.RequestID)
+			request := pendingRequestRecord(surface, event.RequestID)
 			events = append(events, s.handleResolvedRequestPrompt(surface, request, event)...)
-			delete(surface.PendingRequests, event.RequestID)
+			removePendingRequest(surface, event.RequestID)
 			clearSurfaceRequestCaptureByRequestID(surface, event.RequestID)
+			if wasActive {
+				events = append(events, s.activatePendingRequest(surface, activePendingRequest(surface), "")...)
+			}
 		}
 		return events
 	}
@@ -642,6 +643,9 @@ func (s *Service) autoDispatchUnsupportedToolCallback(surface *state.SurfaceCons
 	if surface == nil || request == nil {
 		return nil
 	}
+	if strings.TrimSpace(request.PendingDispatchCommandID) != "" {
+		return nil
+	}
 	request.PendingDispatchCommandID = s.nextRequestDispatchCommandID()
 	request.Phase = frontstagecontract.PhaseWaitingDispatch
 	return []eventcontract.Event{
@@ -669,6 +673,22 @@ func (s *Service) autoDispatchUnsupportedToolCallback(surface *state.SurfaceCons
 			},
 		},
 	}
+}
+
+func (s *Service) activatePendingRequest(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, threadTitleHint string) []eventcontract.Event {
+	if surface == nil || request == nil {
+		return nil
+	}
+	if !pendingRequestIsActive(surface, request.RequestID) {
+		return nil
+	}
+	if !requestPromptRenderable(request.RequestType) {
+		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", request.RequestType))
+	}
+	if normalizeRequestType(request.RequestType) == "tool_callback" {
+		return s.autoDispatchUnsupportedToolCallback(surface, request, threadTitleHint)
+	}
+	return []eventcontract.Event{s.requestPromptEvent(surface, request, threadTitleHint)}
 }
 
 func (s *Service) requestPromptEvent(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord, threadTitleHint string) eventcontract.Event {
@@ -799,7 +819,7 @@ func (s *Service) cancelRequestUserInputTurn(surface *state.SurfaceConsoleRecord
 	request.Phase = frontstagecontract.PhaseCancelled
 	events := []eventcontract.Event{s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseCancelled, "已放弃答题，并向当前 turn 发送停止请求。")}
 	if strings.TrimSpace(request.RequestID) != "" && surface.PendingRequests != nil {
-		delete(surface.PendingRequests, request.RequestID)
+		removePendingRequest(surface, request.RequestID)
 	}
 	clearSurfaceRequestCaptureByRequestID(surface, request.RequestID)
 	if request.ThreadID == "" && request.TurnID == "" {

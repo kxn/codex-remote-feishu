@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -82,18 +84,154 @@ func decisionForRequestOption(optionID string) string {
 	}
 }
 
-func activePendingRequest(surface *state.SurfaceConsoleRecord) *state.RequestPromptRecord {
-	if surface == nil || len(surface.PendingRequests) == 0 {
-		return nil
+func ensurePendingRequestOrder(surface *state.SurfaceConsoleRecord) {
+	if surface == nil {
+		return
 	}
-	for requestID, request := range surface.PendingRequests {
-		if request == nil {
-			delete(surface.PendingRequests, requestID)
+	if surface.PendingRequests == nil {
+		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
+	}
+	known := make(map[string]bool, len(surface.PendingRequests))
+	ordered := make([]string, 0, len(surface.PendingRequests))
+	for _, requestID := range surface.PendingRequestOrder {
+		requestID = strings.TrimSpace(requestID)
+		if requestID == "" || known[requestID] {
 			continue
 		}
-		return request
+		if surface.PendingRequests[requestID] == nil {
+			continue
+		}
+		known[requestID] = true
+		ordered = append(ordered, requestID)
 	}
-	return nil
+	if len(known) == len(surface.PendingRequests) {
+		surface.PendingRequestOrder = ordered
+		return
+	}
+	missing := make([]*state.RequestPromptRecord, 0, len(surface.PendingRequests)-len(known))
+	for requestID, request := range surface.PendingRequests {
+		requestID = strings.TrimSpace(requestID)
+		if request == nil || requestID == "" || known[requestID] {
+			continue
+		}
+		missing = append(missing, request)
+	}
+	sort.SliceStable(missing, func(i, j int) bool {
+		left := missing[i]
+		right := missing[j]
+		if left == nil || right == nil {
+			return right != nil
+		}
+		leftAt := left.CreatedAt
+		rightAt := right.CreatedAt
+		switch {
+		case leftAt.Equal(rightAt):
+			return strings.TrimSpace(left.RequestID) < strings.TrimSpace(right.RequestID)
+		case leftAt.IsZero():
+			return false
+		case rightAt.IsZero():
+			return true
+		default:
+			return leftAt.Before(rightAt)
+		}
+	})
+	for _, request := range missing {
+		if request == nil {
+			continue
+		}
+		requestID := strings.TrimSpace(request.RequestID)
+		if requestID == "" || known[requestID] {
+			continue
+		}
+		known[requestID] = true
+		ordered = append(ordered, requestID)
+	}
+	surface.PendingRequestOrder = ordered
+}
+
+func enqueuePendingRequest(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord) {
+	if surface == nil || request == nil {
+		return
+	}
+	if surface.PendingRequests == nil {
+		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
+	}
+	requestID := strings.TrimSpace(request.RequestID)
+	if requestID == "" {
+		return
+	}
+	surface.PendingRequests[requestID] = request
+	ensurePendingRequestOrder(surface)
+	if slices.Contains(surface.PendingRequestOrder, requestID) {
+		return
+	}
+	surface.PendingRequestOrder = append(surface.PendingRequestOrder, requestID)
+}
+
+func removePendingRequest(surface *state.SurfaceConsoleRecord, requestID string) {
+	if surface == nil {
+		return
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return
+	}
+	delete(surface.PendingRequests, requestID)
+	if len(surface.PendingRequestOrder) == 0 {
+		return
+	}
+	filtered := surface.PendingRequestOrder[:0]
+	for _, candidate := range surface.PendingRequestOrder {
+		if strings.TrimSpace(candidate) == requestID {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	surface.PendingRequestOrder = filtered
+}
+
+func pendingRequestRecord(surface *state.SurfaceConsoleRecord, requestID string) *state.RequestPromptRecord {
+	if surface == nil {
+		return nil
+	}
+	if surface.PendingRequests == nil {
+		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
+	}
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil
+	}
+	return surface.PendingRequests[requestID]
+}
+
+func activePendingRequestID(surface *state.SurfaceConsoleRecord) string {
+	if surface == nil || len(surface.PendingRequests) == 0 {
+		return ""
+	}
+	ensurePendingRequestOrder(surface)
+	for _, requestID := range surface.PendingRequestOrder {
+		requestID = strings.TrimSpace(requestID)
+		if requestID == "" {
+			continue
+		}
+		if surface.PendingRequests[requestID] == nil {
+			continue
+		}
+		return requestID
+	}
+	return ""
+}
+
+func activePendingRequest(surface *state.SurfaceConsoleRecord) *state.RequestPromptRecord {
+	return pendingRequestRecord(surface, activePendingRequestID(surface))
+}
+
+func pendingRequestIsActive(surface *state.SurfaceConsoleRecord, requestID string) bool {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return false
+	}
+	return activePendingRequestID(surface) == requestID
 }
 
 func requestCaptureExpired(now time.Time, capture *state.RequestCaptureRecord) bool {
