@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -383,6 +384,11 @@ func waitForSnapshot(timeout time.Duration, predicate func(ProviderStatus) bool,
 
 func bashSingleQuotedPath(path string) string {
 	value := filepath.ToSlash(path)
+	// On Windows with WSL, convert C:/... to /mnt/c/... for bash compatibility
+	if runtime.GOOS == "windows" && len(value) >= 3 && value[1] == ':' {
+		drive := strings.ToLower(string(value[0]))
+		value = "/mnt/" + drive + value[2:]
+	}
 	value = strings.ReplaceAll(value, `'`, `'"'"'`)
 	return "'" + value + "'"
 }
