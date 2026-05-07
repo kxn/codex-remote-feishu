@@ -11,6 +11,7 @@
    - `im.message.receive_v1`
    - `im.message.recalled_v1`
    - `im.message.reaction.created_v1`
+   - `im.message.reaction.deleted_v1`
    - `application.bot.menu_v6`
 4. 在同一个“事件与回调”页面，继续完成回调配置：
    - 点击“回调订阅方式”
@@ -78,6 +79,7 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 
 如果你的飞书控制台支持权限 JSON 导入，优先在这个入口里粘贴这段内容，再补手工确认：
 
+- `base:app:create`
 - `bitable:app`
 - `drive:drive`
 - `im:datasync.feed_card.time_sensitive:write`
@@ -105,11 +107,12 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 
 ### 2. 事件订阅
 
-当前实现依赖这 4 个事件：
+当前实现依赖这 5 个事件：
 
 - `im.message.receive_v1`
 - `im.message.recalled_v1`
 - `im.message.reaction.created_v1`
+- `im.message.reaction.deleted_v1`
 - `application.bot.menu_v6`
 
 进入事件列表前，先点击“订阅方式”，默认就是“长连接”，点击保存。
@@ -117,6 +120,7 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 其中：
 
 - `im.message.reaction.created_v1` 负责 queued 文本的 `ThumbsUp` steering
+- `im.message.reaction.deleted_v1` 负责在用户撤销 reaction 时同步撤销对应的反馈动作
 - `im.message.recalled_v1` 负责撤回尚未发送的排队输入，或取消 staged image
 - `application.bot.menu_v6` 负责静态 bot 菜单里的 `menu/stop/steerall/new/reasoning/model/access`
 

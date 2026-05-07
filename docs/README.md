@@ -110,6 +110,7 @@
 
 ### 6.1 `general`
 
+- [adding-new-ai-backend.md](./general/adding-new-ai-backend.md)
 - [architecture.md](./general/architecture.md)
 - [codex-mcp-app-server-protocol.md](./general/codex-mcp-app-server-protocol.md)
 - [config-state-storage-guidelines.md](./general/config-state-storage-guidelines.md)
@@ -148,6 +149,7 @@
 - [authenticated-external-access-foundation-design.md](./implemented/authenticated-external-access-foundation-design.md)
 - [cross-layer-event-contract-redesign.md](./implemented/cross-layer-event-contract-redesign.md)
 - [thread-description-unification-plan.md](./implemented/thread-description-unification-plan.md)
+- [turn-diff-frozen-preview-design.md](./implemented/turn-diff-frozen-preview-design.md)
 - [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
 
 ### 6.3 `inprogress`
@@ -157,7 +159,6 @@
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
-- [turn-diff-frozen-preview-design.md](./implemented/turn-diff-frozen-preview-design.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
 
 ### 6.4 `draft`
@@ -173,6 +174,9 @@
 - [current-thread-patch-v1-tech-plan.md](./draft/current-thread-patch-v1-tech-plan.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
 - [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)
+- [feishu-card-render-format-audit.md](./draft/feishu-card-render-format-audit.md)
+- [feishu-card-render-risk-map.md](./draft/feishu-card-render-risk-map.md)
+- [feishu-command-card-workflow-audit-2026-04.md](./draft/feishu-command-card-workflow-audit-2026-04.md)
 - [feishu-menu-frontstage-architecture-redesign.md](./draft/feishu-menu-frontstage-architecture-redesign.md)
 - [file-length-split-audit-2026-04.md](./draft/file-length-split-audit-2026-04.md)
 - [feishu-owner-card-bypass-prompt-audit-2026-04.md](./draft/feishu-owner-card-bypass-prompt-audit-2026-04.md)
@@ -180,6 +184,7 @@
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [feishu-system-markdown-boundary-design.md](./draft/feishu-system-markdown-boundary-design.md)
+- [feishu-text-pipeline-governance.md](./draft/feishu-text-pipeline-governance.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
 - [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)
 - [plan-mode-feishu-support-design.md](./draft/plan-mode-feishu-support-design.md)

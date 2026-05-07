@@ -72,12 +72,14 @@ testkit/
 
 仓库 helper：
 
+- `make start`
+  - 一键构建二进制到 `./bin/codex-remote` 并启动 daemon（Linux / macOS 优先）
 - `setup.ps1`
   - Windows 上的源码仓库辅助脚本
   - 默认构建本地 binary 后启动同一套 WebSetup 流程
   - 如显式传参，则直接透传给 `codex-remote install`
 - `go build -o ./bin/codex-remote ./cmd/codex-remote`
-  - Linux / macOS 上先构建本地 binary
+  - 构建本地 binary 到 `./bin/` 目录
 - `./bin/codex-remote install -bootstrap-only -start-daemon`
   - 已经构建过本地 binary 时，可直接重新 bootstrap 并确保本地 daemon 就绪
 - `./bin/codex-remote daemon`
@@ -101,6 +103,223 @@ testkit/
 - Feishu 输入输出逻辑
 - 安装流程、默认路径、部署方式
 
+## 架构概览
+
+### 单一二进制与三种角色
+
+项目编译为单个 Go 二进制文件 `codex-remote`，通过命令行参数选择三种角色（详见 [二进制与职责](#二进制与职责)）：
+
+| 角色 | 启动方式 | 职责 |
+|---|---|---|
+| **Daemon** | `codex-remote daemon` 或无参数 | WebSocket 服务端（端口 9500）、Feishu gateway、orchestrator、Admin API（端口 9501） |
+| **Wrapper** | `codex-remote wrapper app-server` / `codex-remote wrapper claude-app-server` | 位于父进程（VS Code 扩展、headless 启动器）与子 AI 进程之间的代理层；代理 stdin/stdout，同时通过 WebSocket 与 daemon 通信 |
+| **Install** | `codex-remote install` | 处理 bootstrap、配置迁移、systemd 服务安装、WebSetup / Admin UI 启动 |
+
+旧 shim（`cmd/relayd`, `cmd/relay-wrapper`, `cmd/relay-install`）在兼容期内保留，但仅作为转发到统一 launcher 的薄封装。
+
+### 适配器模式（Adapter Pattern）
+
+Wrapper 通过 `backendRuntime` 接口支持多种 AI 客户端后端：
+
+```
+backendRuntime interface {
+    Backend() agentproto.Backend
+    Capabilities() agentproto.Capabilities
+    Launch(ctx, app, logger, onError) (*childSession, error)
+    ObserveClient([]byte) (runtimeObserveResult, error)
+    ObserveServer([]byte) (runtimeObserveResult, error)
+    TranslateCommand(agentproto.Command) (runtimeCommandResult, error)
+    PrepareChildRestart(string, agentproto.Target) error
+    BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error)
+    CancelChildRestartRestore(string)
+}
+```
+
+每个后端在 `internal/adapter/<name>/` 下有独立适配器，负责将后端原生协议（Codex 的 JSON-RPC、Claude 的 stream-json 等）翻译为 canonical `agentproto.Event` / `agentproto.Command` 类型。
+
+集成新后端的完整步骤指南请参考 [新增 AI 后端集成指南](./docs/general/adding-new-ai-backend.md)。
+
+### I/O 管道
+
+```
+Parent (VS Code / headless) ──stdin──→ Wrapper ──stdin──→ Child (codex / claude)
+                             ←stdout──         ←stdout──
+                                            │
+                                            └──WebSocket──→ Daemon (relayd)
+                                                              │
+                                                              └──Feishu Gateway──→ Feishu API
+```
+
+Wrapper 中四个并发 goroutine 处理 I/O：
+
+- **stdinLoop** — 读取父进程 stdin，经 translator 提取事件后转发给子进程和 daemon
+- **stdoutLoop** — 读取子进程 stdout，经 translator 提取事件后转发给 daemon 和父进程
+- **writeLoop** — 从 daemon 接收命令，经 translator 转换为子进程原生指令
+- **streamCopy** — 将子进程 stderr 拷贝到 wrapper 日志
+
+### Canonical 协议
+
+Wrapper 与 daemon 之间使用 canonical 协议（`agentproto`）通信，包括：
+
+- **信封**（Envelope）：`hello`, `welcome`, `event_batch`, `command`, `command_ack`, `error`
+- **事件**（Event）：thread 生命周期、turn 生命周期、request/response、steer、interrupt、session catalog
+- **命令**（Command）：`promptSend`, `turnSteer`, `interrupt`, `requestRespond` 等
+
+### 配置系统
+
+配置按以下优先级（低 → 高）合并：
+
+1. 内置默认值（`DefaultAppConfig()`）
+2. `config.json`（XDG 路径，或 `$CODEX_REMOTE_CONFIG` 覆盖）
+3. 环境变量（覆盖 config.json 值）
+
+详见下方 [配置与环境变量参考](#配置与环境变量参考)。
+
+## 配置与环境变量参考
+
+### 配置文件结构
+
+默认路径（按 XDG 规范）：
+
+| 平台 | 路径 |
+|---|---|
+| Linux / macOS | `~/.config/codex-remote/config.json` |
+| Windows | `%USERPROFILE%\.config\codex-remote\config.json` |
+| 任意 | `$CODEX_REMOTE_CONFIG`（完全覆盖） |
+
+`config.json` 主要字段结构：
+
+```jsonc
+{
+  "version": 1,
+  "relay": {
+    "serverURL": "ws://127.0.0.1:9500/ws/agent",  // WebSocket relay 地址
+    "listenHost": "127.0.0.1",
+    "listenPort": 9500
+  },
+  "admin": {
+    "listenHost": "127.0.0.1",
+    "listenPort": 9501,          // Admin API / WebSetup 端口
+    "autoOpenBrowser": true,
+    "onboarding": { /* 启动向导状态机 */ }
+  },
+  "wrapper": {
+    "codexRealBinary": "codex",  // 真实 codex 二进制路径
+    "nameMode": "workspace_basename",
+    "integrationMode": "managed_shim"
+  },
+  "codex": {
+    "providers": [               // 自定义 Codex provider
+      {
+        "id": "default",
+        "name": "My Provider",
+        "baseURL": "https://api.example.com",
+        "apiKey": "sk-...",
+        "model": "gpt-4"
+      }
+    ]
+  },
+  "claude": {
+    "profiles": [                // Claude 配置 profile
+      {
+        "id": "default",
+        "name": "My Profile",
+        "authMode": "auth_token",
+        "baseURL": "https://api.anthropic.com",
+        "authToken": "...",
+        "model": "claude-sonnet-4-20250514"
+      }
+    ]
+  },
+  "feishu": {
+    "useSystemProxy": false,
+    "apps": [                    // 飞书应用配置
+      {
+        "id": "main",
+        "appId": "cli_xxxx",
+        "appSecret": "...",
+        "enabled": true
+      }
+    ]
+  },
+  "externalAccess": {
+    "listenPort": 9512,
+    "defaultLinkTTLSeconds": 600,
+    "provider": { "kind": "trycloudflare", "lazyStart": true }
+  },
+  "debug": {
+    "relayFlow": false,          // relay 调试日志
+    "relayRaw": false
+  }
+}
+```
+
+完整 schema 见 `internal/config/configfile.go`。
+
+### 关键环境变量
+
+#### 通用配置
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `CODEX_REMOTE_CONFIG` | XDG 路径 | 覆盖 config.json 路径 |
+| `RELAY_SERVER_URL` | `ws://127.0.0.1:9500/ws/agent` | WebSocket relay 地址 |
+| `RELAY_HOST` | `127.0.0.1` | relay 监听 host |
+| `RELAY_PORT` | `9500` | relay 监听端口 |
+| `RELAY_API_HOST` | `127.0.0.1` | Admin API 监听 host |
+| `RELAY_API_PORT` | `9501` | Admin API 监听端口 |
+| `FEISHU_GATEWAY_ID` | 首个启用 app | 选择飞书应用入口 |
+| `FEISHU_USE_SYSTEM_PROXY` | `false` | 飞书 API 是否使用系统代理 |
+
+#### Wrapper / 运行时配置
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `CODEX_REAL_BINARY` | `codex` | 真实 codex 二进制路径（VS Code 服务器） |
+| `CODEX_REMOTE_INSTANCE_ID` | 自动生成 | 覆盖实例 ID |
+| `CODEX_REMOTE_INSTANCE_DISPLAY_NAME` | workspace 名 | 覆盖实例显示名称 |
+| `CODEX_REMOTE_INSTANCE_BACKEND` | (空 → 默认) | 后端选择（`codex` / `claude`） |
+| `CODEX_REMOTE_RESUME_THREAD_ID` | (空) | 连接后自动恢复的 thread ID |
+
+#### AI 后端配置
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `CODEX_REMOTE_CODEX_PROVIDER_ID` | `default` | 选择 Codex provider |
+| `CODEX_REMOTE_CLAUDE_PROFILE_ID` | `default` | 选择 Claude profile |
+| `CLAUDE_BIN` | (空) | Claude Code 二进制路径 |
+| `ANTHROPIC_BASE_URL` | 默认 | Anthropic API 地址覆盖 |
+| `ANTHROPIC_AUTH_TOKEN` | (空) | Anthropic API 认证令牌 |
+| `ANTHROPIC_MODEL` | (空) | 默认模型选择 |
+| `CLAUDE_CODE_EFFORT_LEVEL` | (空) | 推理努力级别（`low` / `medium` / `high` / `max`） |
+
+#### Debug / 诊断
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `CODEX_REMOTE_DEBUG_RELAY_FLOW` | `false` | 启用 relay 流式调试日志 |
+| `CODEX_REMOTE_DEBUG_RELAY_RAW` | `false` | 启用 relay 原始数据调试日志 |
+
+### 实例配置路径
+
+按实例 ID 区分配置和数据目录：
+
+- **stable 实例：**
+  - `<baseDir>/.config/codex-remote/config.json`
+  - `<baseDir>/.local/share/codex-remote/logs/codex-remote-relayd.log`
+- **命名实例 `<instanceId>`：**
+  - `<baseDir>/.config/codex-remote-<instanceId>/codex-remote/config.json`
+  - `<baseDir>/.local/share/codex-remote-<instanceId>/codex-remote/logs/codex-remote-relayd.log`
+
+其中 `<baseDir>` 在 Linux/macOS 为 `~`，在 Windows 为 `%USERPROFILE%`。
+
+### 代理环境
+
+以下环境变量会被 wrapper 捕获并清理后传递给 daemon 子进程，再在启动 codex 子进程时恢复：
+
+- `http_proxy`, `https_proxy`, `all_proxy`（小写）
+- `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`（大写）
+
 ## 常用命令
 
 格式化：
@@ -115,21 +334,29 @@ gofmt -w $(find cmd internal testkit -name '*.go' | sort)
 go test ./...
 ```
 
-构建：
+构建（生成到 `./bin/codex-remote`）：
 
 ```bash
-go build ./cmd/codex-remote
-go build ./cmd/...
+go build -o ./bin/codex-remote ./cmd/codex-remote
 ```
 
-源码仓库启动 WebSetup：
+源码仓库一键构建并启动 daemon（推荐）：
+
+```bash
+make start
+```
+
+`make start` 等价于以下手动步骤：
 
 ```bash
 go build -o ./bin/codex-remote ./cmd/codex-remote
 ./bin/codex-remote install -bootstrap-only -start-daemon
 ```
 
-源码仓库直接跑单 binary：
+> 在 Windows 上如果 `make start` 不可用，可直接使用上面的手动步骤。
+> 在 Linux / macOS 上 `make start` 是单命令构建 + 启动方式。
+
+源码仓库直接跑单 binary（已构建过之后）：
 
 ```bash
 ./bin/codex-remote install -bootstrap-only -start-daemon
@@ -245,6 +472,7 @@ curl --noproxy '*' -sf http://127.0.0.1:9501/v1/status | jq .
 
 ## 开发约束
 
+- 完整编码规范请参考 [AGENTS.md](./AGENTS.md)，包括工作区整洁性、触发器规则、GitHub Issue 流程、提交与推送策略等
 - 协议或状态机问题先看全链路，再改局部
 - 不要在 wrapper 层吞掉上游协议信息来“修 UI”
 - 产品可见性、队列和 thread 选择应由 orchestrator 决策

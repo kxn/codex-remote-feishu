@@ -117,6 +117,7 @@ func TestIsSQLiteBusyError(t *testing.T) {
 func TestNewDefaultSQLiteThreadCatalogReturnsNilWhenStateFileMissing(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // Windows: os.UserHomeDir() reads USERPROFILE
 
 	catalog, err := NewDefaultSQLiteThreadCatalog(SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
 	if err != nil {
