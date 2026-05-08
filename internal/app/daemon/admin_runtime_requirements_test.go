@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"runtime"
@@ -11,6 +12,15 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
+
+func withRuntimeRequirementsClaudeResolver(t *testing.T, fn func(env []string) (string, error)) {
+	t.Helper()
+	original := resolveClaudeBinaryForRuntimeRequirements
+	resolveClaudeBinaryForRuntimeRequirements = fn
+	t.Cleanup(func() {
+		resolveClaudeBinaryForRuntimeRequirements = original
+	})
+}
 
 func TestAdminRuntimeRequirementsDetectWithAbsoluteCodexPath(t *testing.T) {
 	home := t.TempDir()
@@ -135,6 +145,11 @@ func TestAdminRuntimeRequirementsAcceptManagedShimBundleFallback(t *testing.T) {
 func TestAdminRuntimeRequirementsFailWhenCodexPointsBackToCurrentBinary(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv(config.ClaudeBinaryEnv, "")
+	withRuntimeRequirementsClaudeResolver(t, func(env []string) (string, error) {
+		_ = env
+		return "", fmt.Errorf("claude executable not found")
+	})
 
 	binaryPath := filepath.Join(home, executableName("codex-remote"))
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -157,11 +172,14 @@ func TestAdminRuntimeRequirementsFailWhenCodexPointsBackToCurrentBinary(t *testi
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode detect: %v", err)
 	}
-	if payload.Ready {
-		t.Fatalf("expected runtime requirements to fail, got %#v", payload)
-	}
 	if got := checkStatusByID(payload.Checks, "binary_loop"); got != runtimeRequirementStatusFail {
 		t.Fatalf("binary_loop status = %q, want fail", got)
+	}
+	if got := checkStatusByID(payload.Checks, "claude_binary"); got != runtimeRequirementStatusFail {
+		t.Fatalf("claude_binary status = %q, want fail in isolated env", got)
+	}
+	if payload.Ready {
+		t.Fatalf("expected runtime requirements to fail without usable Codex or Claude, got %#v", payload)
 	}
 }
 
@@ -201,6 +219,11 @@ func TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvailable(t *tes
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
+	t.Setenv(config.ClaudeBinaryEnv, "")
+	withRuntimeRequirementsClaudeResolver(t, func(env []string) (string, error) {
+		_ = env
+		return "", fmt.Errorf("claude executable not found")
+	})
 
 	binaryPath := filepath.Join(home, executableName("codex-remote"))
 	writeExecutableFile(t, binaryPath, "wrapper-binary")

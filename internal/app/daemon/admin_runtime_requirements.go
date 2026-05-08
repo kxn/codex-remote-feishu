@@ -18,6 +18,8 @@ const (
 	runtimeRequirementStatusFail = "fail"
 )
 
+var resolveClaudeBinaryForRuntimeRequirements = config.ResolveClaudeBinary
+
 type runtimeRequirementsResponse struct {
 	Ready                   bool                      `json:"ready"`
 	Summary                 string                    `json:"summary"`
@@ -73,7 +75,7 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 	}
 	resolvedClaudeBinary := ""
 	claudeResolveErr := error(nil)
-	if value, err := config.ResolveClaudeBinary(os.Environ()); err == nil {
+	if value, err := resolveClaudeBinaryForRuntimeRequirements(os.Environ()); err == nil {
 		resolvedClaudeBinary = value
 	} else {
 		claudeResolveErr = err
