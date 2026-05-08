@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -702,6 +704,12 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 	if request == nil {
 		return "当前有待处理请求。"
 	}
+	switch normalizeRequestVisibilityState(request.VisibilityState) {
+	case requestVisibilityPendingVisibility:
+		return "当前有待处理请求，正在尝试把确认卡片显示到前台。请稍后重试，或发送 `/status` 触发恢复。"
+	case requestVisibilityDeliveryDegraded:
+		return "当前有待处理请求，但确认卡片尚未成功送达前台。请发送 `/status` 或进行一次前台交互以触发恢复。"
+	}
 	switch requestPromptSemanticKind(request) {
 	case control.RequestSemanticRequestUserInput:
 		return "当前有待回答问题。请先在卡片上点击选项、提交当前答案，或跳过可选题。"
@@ -722,4 +730,108 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 	default:
 		return "当前有待处理请求。这个请求类型暂时不能在飞书端直接处理，请先回到本地处理或等待后续支持。"
 	}
+}
+
+type RequestDeliveryReport struct {
+	SurfaceSessionID string
+	RequestID        string
+	MessageID        string
+	DeliveredAt      time.Time
+}
+
+func (s *Service) activePendingRequestNeedingVisibility(surface *state.SurfaceConsoleRecord) *state.RequestPromptRecord {
+	request := activePendingRequest(surface)
+	if request == nil {
+		return nil
+	}
+	switch normalizeRequestVisibilityState(request.VisibilityState) {
+	case requestVisibilityPendingVisibility, requestVisibilityDeliveryDegraded:
+		return request
+	default:
+		return nil
+	}
+}
+
+func requestNeedsVisibleRefresh(request *state.RequestPromptRecord) bool {
+	if request == nil {
+		return false
+	}
+	if strings.TrimSpace(request.PendingDispatchCommandID) != "" {
+		return false
+	}
+	switch normalizeRequestVisibilityState(request.VisibilityState) {
+	case requestVisibilityPendingVisibility, requestVisibilityDeliveryDegraded:
+		return true
+	default:
+		return false
+	}
+}
+
+func requestVisibilityRefreshStatusText(request *state.RequestPromptRecord) string {
+	if request == nil {
+		return ""
+	}
+	if normalizeRequestVisibilityState(request.VisibilityState) != requestVisibilityDeliveryDegraded {
+		return ""
+	}
+	if errText := strings.TrimSpace(request.LastDeliveryError); errText != "" {
+		return fmt.Sprintf("上一轮前台投递失败：%s。系统会继续尝试恢复这张确认卡片。", errText)
+	}
+	return "上一轮前台投递失败。系统会继续尝试恢复这张确认卡片。"
+}
+
+func markRequestVisible(request *state.RequestPromptRecord, messageID string, deliveredAt time.Time) {
+	if request == nil {
+		return
+	}
+	request.VisibleMessageID = strings.TrimSpace(messageID)
+	if deliveredAt.IsZero() {
+		deliveredAt = time.Now().UTC()
+	}
+	request.VisibleAt = deliveredAt
+	request.LastDeliveryAttemptAt = deliveredAt
+	request.LastDeliveryError = ""
+	request.NeedsRedelivery = false
+	request.VisibilityState = requestVisibilityVisible
+	if request.DeliveryAttemptCount < 1 {
+		request.DeliveryAttemptCount = 1
+	}
+}
+
+func markRequestDeliveryDegraded(request *state.RequestPromptRecord, attemptedAt time.Time, errText string) {
+	if request == nil {
+		return
+	}
+	if attemptedAt.IsZero() {
+		attemptedAt = time.Now().UTC()
+	}
+	request.LastDeliveryAttemptAt = attemptedAt
+	request.LastDeliveryError = strings.TrimSpace(errText)
+	request.NeedsRedelivery = true
+	request.VisibilityState = requestVisibilityDeliveryDegraded
+	request.VisibleMessageID = ""
+}
+
+func (s *Service) ensurePendingRequestVisible(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, threadTitleHint string) []eventcontract.Event {
+	if surface == nil || request == nil {
+		return nil
+	}
+	request = normalizePendingRequestOnSurface(surface, request)
+	if !pendingRequestIsActive(surface, request.RequestID) {
+		return nil
+	}
+	if !requestPromptRenderable(request.RequestType) {
+		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", request.RequestType))
+	}
+	if normalizeRequestType(request.RequestType) == "tool_callback" {
+		return s.autoDispatchUnsupportedToolCallback(surface, request, threadTitleHint)
+	}
+	if !requestNeedsVisibleRefresh(request) {
+		return nil
+	}
+	if request.LastDeliveryAttemptAt.IsZero() || request.LastDeliveryAttemptAt.Before(s.now()) || request.DeliveryAttemptCount == 0 {
+		request.LastDeliveryAttemptAt = s.now()
+	}
+	request.DeliveryAttemptCount++
+	return []eventcontract.Event{s.requestPromptDeliveryEvent(surface, request, threadTitleHint)}
 }

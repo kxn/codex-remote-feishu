@@ -176,6 +176,7 @@ func (s *Service) selectionViewEvent(surface *state.SurfaceConsoleRecord, view c
 }
 
 func (s *Service) requestViewEvent(surface *state.SurfaceConsoleRecord, view control.FeishuRequestView) eventcontract.Event {
+	view = control.NormalizeFeishuRequestView(view)
 	return surfaceEventFromPayload(
 		surface,
 		eventcontract.RequestPayload{

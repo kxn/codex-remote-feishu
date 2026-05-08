@@ -213,16 +213,18 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		}
 		return []Operation{applyTemporarySessionHeaderToOperation(operation, pageView.TemporarySessionLabel)}
 	case eventcontract.RequestPayload:
-		title := strings.TrimSpace(payload.View.Title)
+		requestView := control.NormalizeFeishuRequestView(payload.View)
+		title := strings.TrimSpace(requestView.Title)
 		if title == "" {
 			title = "需要确认"
 		}
-		elements := projectorpkg.RequestPromptElements(payload.View, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		elements := projectorpkg.RequestPromptElements(requestView, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		operation := Operation{
 			Kind:             OperationSendCard,
 			GatewayID:        event.GatewayID,
 			SurfaceSessionID: event.SurfaceSessionID,
 			ChatID:           chatID,
+			MessageID:        strings.TrimSpace(requestView.MessageID),
 			CardTitle:        title,
 			CardBody:         "",
 			CardThemeKey:     cardThemeApproval,
@@ -230,7 +232,13 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			cardEnvelope:     cardEnvelopeV2,
 			card:             rawCardDocument(title, "", cardThemeApproval, elements),
 		}
-		return []Operation{applyTemporarySessionHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.View.TemporarySessionLabel)}
+		if operation.MessageID != "" {
+			operation.Kind = OperationUpdateCard
+		}
+		if operation.Kind == OperationSendCard {
+			operation = applyReplyLaneToNewOperation(event, operation)
+		}
+		return []Operation{applyTemporarySessionHeaderToOperation(operation, requestView.TemporarySessionLabel)}
 	case eventcontract.TimelineTextPayload:
 		text := strings.TrimSpace(payload.TimelineText.Text)
 		if text == "" {

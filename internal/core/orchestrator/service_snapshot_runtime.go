@@ -71,6 +71,14 @@ func (s *Service) SurfaceActorUserID(surfaceID string) string {
 	return surface.ActorUserID
 }
 
+func (s *Service) PendingRequest(surfaceID, requestID string) *state.RequestPromptRecord {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return nil
+	}
+	return pendingRequestRecord(surface, requestID)
+}
+
 func (s *Service) MaterializeSurface(surfaceID, gatewayID, chatID, actorUserID string) {
 	if strings.TrimSpace(surfaceID) == "" {
 		return
