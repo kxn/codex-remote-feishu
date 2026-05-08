@@ -93,6 +93,20 @@ func normalizeRequestPromptRecord(record *state.RequestPromptRecord) {
 	}
 }
 
+func joinRequestSourceContextLabels(labels ...string) string {
+	seen := make(map[string]bool, len(labels))
+	out := make([]string, 0, len(labels))
+	for _, label := range labels {
+		label = strings.TrimSpace(label)
+		if label == "" || seen[label] {
+			continue
+		}
+		seen[label] = true
+		out = append(out, label)
+	}
+	return strings.Join(out, " · ")
+}
+
 func normalizePendingRequestOnSurface(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord) *state.RequestPromptRecord {
 	if record == nil {
 		return nil

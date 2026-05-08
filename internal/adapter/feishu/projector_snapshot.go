@@ -324,6 +324,18 @@ func snapshotGateText(summary control.GateSummary) string {
 	case "request_capture":
 		return "正在等待一条文字处理意见；下一条文本不会发到当前会话"
 	case "pending_request":
+		switch strings.TrimSpace(summary.PendingRequestVisibility) {
+		case "pending_visibility":
+			if summary.PendingRequestCount > 1 {
+				return fmt.Sprintf("有 %d 个待处理请求；当前确认卡正在显示到前台，普通文本和图片会先被拦住", summary.PendingRequestCount)
+			}
+			return "有 1 个待处理请求；当前确认卡正在显示到前台，普通文本和图片会先被拦住"
+		case "delivery_degraded":
+			if summary.PendingRequestCount > 1 {
+				return fmt.Sprintf("有 %d 个待处理请求；当前确认卡尚未成功送达前台，普通文本和图片会先被拦住", summary.PendingRequestCount)
+			}
+			return "有 1 个待处理请求；当前确认卡尚未成功送达前台，普通文本和图片会先被拦住"
+		}
 		if summary.PendingRequestCount > 1 {
 			return fmt.Sprintf("有 %d 个待处理请求；普通文本和图片会先被拦住", summary.PendingRequestCount)
 		}

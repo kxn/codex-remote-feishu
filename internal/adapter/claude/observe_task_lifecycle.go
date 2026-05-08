@@ -121,3 +121,26 @@ func (t *Translator) delegatedTaskParent(tool *toolState) *toolState {
 	}
 	return parent
 }
+
+func (t *Translator) requestSourceContextLabel(toolUseID string) string {
+	toolUseID = strings.TrimSpace(toolUseID)
+	if toolUseID == "" {
+		return ""
+	}
+	visited := map[string]bool{}
+	for currentID := toolUseID; currentID != ""; {
+		if visited[currentID] {
+			return ""
+		}
+		visited[currentID] = true
+		tool := t.toolStates[currentID]
+		if tool == nil {
+			return ""
+		}
+		if strings.TrimSpace(tool.Name) == "Task" {
+			return buildClaudeDelegatedTaskSourceContextLabel(claudeToolMetadata(tool.Name, tool.Input))
+		}
+		currentID = strings.TrimSpace(tool.ParentToolUseID)
+	}
+	return ""
+}

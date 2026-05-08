@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -184,6 +185,26 @@ func TestResolvePromotesNextQueuedRequestThroughVisibilityEntry(t *testing.T) {
 	}
 	if events[0].RequestView.MessageID != "" {
 		t.Fatalf("expected promoted queued request to start without anchor, got %#v", events[0].RequestView)
+	}
+}
+
+func TestPendingRequestNoticeTextDistinguishesVisibilityState(t *testing.T) {
+	pendingText := pendingRequestNoticeText(&state.RequestPromptRecord{
+		RequestType:     "approval",
+		SemanticKind:    control.RequestSemanticApproval,
+		VisibilityState: requestVisibilityPendingVisibility,
+	})
+	if !strings.Contains(pendingText, "正在尝试把确认卡片显示到前台") {
+		t.Fatalf("expected pending visibility blocker text, got %q", pendingText)
+	}
+
+	degradedText := pendingRequestNoticeText(&state.RequestPromptRecord{
+		RequestType:     "approval",
+		SemanticKind:    control.RequestSemanticApproval,
+		VisibilityState: requestVisibilityDeliveryDegraded,
+	})
+	if !strings.Contains(degradedText, "尚未成功送达前台") {
+		t.Fatalf("expected degraded visibility blocker text, got %q", degradedText)
 	}
 }
 

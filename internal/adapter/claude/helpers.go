@@ -535,6 +535,18 @@ func buildClaudeDelegatedTaskText(metadata map[string]any) string {
 	}
 }
 
+func buildClaudeDelegatedTaskSourceContextLabel(metadata map[string]any) string {
+	subagentType := strings.TrimSpace(lookupStringFromAny(metadata["subagentType"]))
+	switch {
+	case subagentType != "":
+		return fmt.Sprintf("来自 Task (%s)", subagentType)
+	case len(metadata) != 0:
+		return "来自 Task"
+	default:
+		return ""
+	}
+}
+
 func cloneMetadata(metadata map[string]any) map[string]any {
 	if len(metadata) == 0 {
 		return nil

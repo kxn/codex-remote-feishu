@@ -122,6 +122,33 @@ func TestDetachedBranchRequestPromptKeepsReplyAnchorAndSelection(t *testing.T) {
 	}
 }
 
+func TestRemoteRequestPromptProjectsSourceContextLabelFromMetadata(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 45, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	setupAutoWhipSurface(t, svc)
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-source-1",
+		Metadata: map[string]any{
+			"requestType":        "approval",
+			"title":              "需要确认",
+			"sourceContextLabel": "来自 Task (Explore)",
+		},
+	})
+	view := singleRequestPromptEvent(t, events)
+	if view.TemporarySessionLabel != "来自 Task (Explore)" {
+		t.Fatalf("expected request view to project source context label, got %#v", view)
+	}
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-source-1"]
+	if record == nil || record.SourceContextLabel != "来自 Task (Explore)" {
+		t.Fatalf("expected request record to keep source context label, got %#v", record)
+	}
+}
+
 func TestRemoteRequestPromptCutsSharedProgressSegment(t *testing.T) {
 	now := time.Date(2026, 5, 4, 14, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

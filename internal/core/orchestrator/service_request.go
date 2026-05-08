@@ -151,7 +151,10 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		CreatedAt:            s.now(),
 	}
 	adoptRequestOwner(record, surface)
-	record.SourceContextLabel = s.requestTemporarySessionLabel(record)
+	record.SourceContextLabel = joinRequestSourceContextLabels(
+		metadataString(event.Metadata, "sourceContextLabel"),
+		s.requestTemporarySessionLabel(record),
+	)
 	normalizeRequestPromptRecord(record)
 	enqueuePendingRequest(surface, record)
 	if !pendingRequestIsActive(surface, record.RequestID) {

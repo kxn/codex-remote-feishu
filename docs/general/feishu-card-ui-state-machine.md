@@ -75,6 +75,7 @@
   - 这组 bare config-card 的 open intent、launcher keep contract、controller 分发与 config page builder 当前已通过 `FeishuConfigFlowDefinition` registry 收口，不再分别在 intent / lifecycle / controller / config catalog 多层平行枚举
   - 命令入口类型当前还额外通过 `FeishuCommandBinding` 统一建模为 `config_flow / workspace_session / inline_page / terminal_page / daemon_command / owner_entry` 六类；`FeishuUIIntentFromAction(...)`、launcher handoff 与 direct daemon dispatch 都优先读取这份 binding，而不再各自维护平行的 command/action 分类
   - 对 approval / `request_user_input` / `tool_callback` / MCP request cards，当前先产出 `FeishuRequestView`，再连同 `FeishuRequestContext` 穿过 `UIEvent` 边界
+  - request view 的 header subtitle contract 当前不再只服务 detour/review temporary-session：request runtime 若自带 `SourceContextLabel`（例如 Claude delegated task 的 `来自 Task (Explore)`），也会沿同一条 request header subtitle 车道投影
   - 对飞书文件/目录选择器，当前先产出 `FeishuPathPickerView` read model，再连同 `FeishuPathPickerContext` 穿过 `UIEvent` 边界；进入目录、返回上一级、文件选择属于 controller 内 pure navigation，confirm/cancel 则转到 picker consumer handoff
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
@@ -324,6 +325,8 @@
   - 在 pending-dispatch 期间，同一 request 的重复点击会收到“已提交，等待处理”提示，不会重复下发命令
   - `取消` 当前会先把卡片 seal 成“已放弃答题，并向当前 turn 发送停止请求”，再派发 `turn.interrupt`
   - 同一 surface / turn 若连续出现多条可渲染 request，当前只会激活队头；后续 request 会按到达顺序进入 pending queue，直到前一条真正 `request_resolved` 或整轮 turn 结束后，下一条才会 append 成新的 request 卡，不再出现多张可交互 request card 并列可点
+  - 队头 request 的前台可见性当前显式区分 `pending_visibility` / `visible` / `delivery_degraded`：前两者与 `delivery_degraded` 都继续持有 request gate，但 blocker、`/status` snapshot gate 与 request status 文案不再统一压成“有待处理请求”
+  - 已进入 `visible` 的 request 若已经拿到 `MessageID` owner anchor，后续 waiting-dispatch / refresh 会继续 patch 同一张 request card；若进入 `delivery_degraded`，当前 anchor 会失效，后续 `/status` 或前台交互会改走 resend/reply 恢复，而不是继续 patch 一张实际上没送达的旧卡
 
 通用 approval request 卡片当前新增的可视语义：
 
@@ -566,6 +569,7 @@ MCP request 卡片当前新增的可视语义：
     - `正在进入审阅` notice、request prompt、提案计划卡、plan update、`turn_failed` notice、共享 progress card 与主 final reply card，会把 `临时会话 · 审阅` 提升为卡片 header subtitle，并以 `lark_md` 加粗显示
     - review final card 标题保持默认 `✅ 最后答复`；review 特有语义只由副标题与 footer follow-up 承载，不再通过 `审阅中 ·` 标题前缀旁路实现
     - review surface 上少数没有显式 thread/turn carrier 的 owner/page 卡，当前也会在 delivery fallback 中继承同一个 subtitle；这样 `自动继续`、`上下文压缩` 等 review-only owner card 不会退回成无标记普通卡
+  - request prompt 当前还允许叠加 request 自身的来源副标题：若 request runtime 带 `SourceContextLabel`（例如 Claude delegated task 生成的 `来自 Task (Explore)`），projector 会继续沿同一条 header subtitle 车道渲染；若同时还存在 detour/review temporary-session label，则按 `source-context · temporary-session` 拼接后一起加粗显示
   - steer accept 成功后，orchestrator 现在会额外发一条 `UIEventTimelineText(type=steer_user_supplement)`；这条文本 reply 到当前 turn anchor，内容只镜像本次真正并入 turn 的用户补充，不复用 assistant block / notice 语义，也不重发图片或文件实体
   - `用户补充` 的图片计数当前只来自 steer 输入里的 `InputLocalImage` / `InputRemoteImage`；文件计数只来自结构化转发/引用文本中显式编码的 `file` 节点
   - daemon 当前会先在 `[]UIEvent` 批处理入口为原锚点事件打 attention annotation，不再追加独立 `UIEventTimelineText(type=attention_ping)`：
