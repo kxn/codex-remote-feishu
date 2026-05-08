@@ -38,6 +38,20 @@ func TestTargetPickerKnownWorkspaceAcceptsRecoverableButMismatchedVisibleWorkspa
 	record := svc.activeTargetPicker(surface)
 	record.LocalDirectoryPath = workspaceRoot
 
+	checkEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         addMode.PickerID,
+	})
+	if len(checkEvents) == 0 || checkEvents[0].TargetPickerView == nil {
+		t.Fatalf("expected owner-card checked state for recoverable workspace, got %#v", checkEvents)
+	}
+	if got := checkEvents[0].TargetPickerView; !got.LocalDirectoryChecked || got.ConfirmLabel != "接入并继续" {
+		t.Fatalf("expected recoverable workspace to require explicit second confirm, got %#v", got)
+	}
+
 	confirmEvents := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTargetPickerConfirm,
 		SurfaceSessionID: "surface-1",

@@ -493,25 +493,35 @@ func TestTargetPickerEditingCardUsesStepHeaderInsteadOfSummary(t *testing.T) {
 
 func TestTargetPickerElementsRenderLocalDirectoryOpenPathAction(t *testing.T) {
 	elements := targetPickerElements(control.FeishuTargetPickerView{
-		PickerID:     "picker-1",
-		Title:        "选择工作区与会话",
-		Page:         control.FeishuTargetPickerPageLocalDirectory,
-		ConfirmLabel: "接入并继续",
-		CanConfirm:   false,
+		PickerID:                 "picker-1",
+		Title:                    "选择工作区与会话",
+		Page:                     control.FeishuTargetPickerPageLocalDirectory,
+		ConfirmLabel:             "检查目标目录",
+		CanConfirm:               false,
+		ConfirmValidatesOnSubmit: true,
 	}, "life-4")
 
 	var sawOpenPath bool
+	var sawConfirm bool
 	for _, action := range cardActionsFromElements(elements) {
-		if cardValueMap(action)[cardActionPayloadKeyKind] != cardActionKindTargetPickerOpenPathPicker {
-			continue
+		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		case cardActionKindTargetPickerOpenPathPicker:
+			if cardValueMap(action)[cardActionPayloadKeyTargetValue] != control.FeishuTargetPickerPathFieldLocalDirectory {
+				t.Fatalf("unexpected local-directory open-path payload: %#v", cardValueMap(action))
+			}
+			sawOpenPath = true
+		case cardActionKindTargetPickerConfirm:
+			sawConfirm = true
+			if action["disabled"] == true {
+				t.Fatalf("expected local-directory check button to stay clickable for submit-time validation, got %#v", action)
+			}
 		}
-		if cardValueMap(action)[cardActionPayloadKeyTargetValue] != control.FeishuTargetPickerPathFieldLocalDirectory {
-			t.Fatalf("unexpected local-directory open-path payload: %#v", cardValueMap(action))
-		}
-		sawOpenPath = true
 	}
 	if !sawOpenPath {
 		t.Fatalf("expected local-directory branch to render open-path action, got %#v", elements)
+	}
+	if !sawConfirm {
+		t.Fatalf("expected local-directory branch to render confirm action, got %#v", elements)
 	}
 }
 

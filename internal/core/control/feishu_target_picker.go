@@ -44,12 +44,13 @@ const (
 )
 
 const (
-	FeishuTargetPickerPathFieldLocalDirectory    = "local_directory"
-	FeishuTargetPickerPathFieldGitParentDir      = "git_parent_dir"
-	FeishuTargetPickerGitRepoURLFieldName        = "target_picker_git_repo_url"
-	FeishuTargetPickerGitDirectoryNameFieldName  = "target_picker_git_directory_name"
-	FeishuTargetPickerWorktreeBranchFieldName    = "target_picker_worktree_branch_name"
-	FeishuTargetPickerWorktreeDirectoryFieldName = "target_picker_worktree_directory_name"
+	FeishuTargetPickerPathFieldLocalDirectory     = "local_directory"
+	FeishuTargetPickerPathFieldGitParentDir       = "git_parent_dir"
+	FeishuTargetPickerLocalDirectoryNameFieldName = "target_picker_local_directory_name"
+	FeishuTargetPickerGitRepoURLFieldName         = "target_picker_git_repo_url"
+	FeishuTargetPickerGitDirectoryNameFieldName   = "target_picker_git_directory_name"
+	FeishuTargetPickerWorktreeBranchFieldName     = "target_picker_worktree_branch_name"
+	FeishuTargetPickerWorktreeDirectoryFieldName  = "target_picker_worktree_directory_name"
 )
 
 type FeishuTargetPickerMessageLevel string
@@ -112,6 +113,9 @@ type FeishuTargetPickerView struct {
 	WorkspaceOptions         []FeishuTargetPickerWorkspaceOption
 	SessionOptions           []FeishuTargetPickerSessionOption
 	LocalDirectoryPath       string
+	LocalDirectoryName       string
+	LocalDirectoryFinalPath  string
+	LocalDirectoryChecked    bool
 	GitParentDir             string
 	GitRepoURL               string
 	GitDirectoryName         string

@@ -290,6 +290,9 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
 	}
 	if !view.CanConfirm {
+		if view.ConfirmValidatesOnSubmit {
+			return s.dispatchTargetPickerConfirmed(surface, flow, record, view)
+		}
 		message := "请选择工作区和会话后再确认。"
 		switch view.Page {
 		case control.FeishuTargetPickerPageLocalDirectory:
@@ -512,6 +515,8 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	}
 	selectedSessionLabel, selectedSessionMeta := targetPickerSelectedSessionSummary(sessionOptions, selectedSession)
 	localDirectoryPath := strings.TrimSpace(record.LocalDirectoryPath)
+	localDirectoryName := strings.TrimSpace(record.LocalDirectoryName)
+	localDirectoryFinalPath := strings.TrimSpace(record.LocalDirectoryFinalPath)
 	gitParentDir := strings.TrimSpace(record.GitParentDir)
 	gitRepoURL := strings.TrimSpace(record.GitRepoURL)
 	gitDirectoryName := strings.TrimSpace(record.GitDirectoryName)
@@ -557,9 +562,19 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		if strings.TrimSpace(localState.ResolvedPath) != "" {
 			localDirectoryPath = strings.TrimSpace(localState.ResolvedPath)
 		}
+		localDirectoryFinalPath = strings.TrimSpace(firstNonEmpty(record.LocalDirectoryFinalPath, localState.FinalPath))
 		sourceMessages = append(sourceMessages, localState.Messages...)
 		canConfirm = localState.CanConfirm
-		confirmLabel = "接入并继续"
+		confirmValidatesOnSubmit = true
+		if localState.Checked {
+			if strings.TrimSpace(localDirectoryName) != "" {
+				confirmLabel = "创建并继续"
+			} else {
+				confirmLabel = "接入并继续"
+			}
+		} else {
+			confirmLabel = "检查目标目录"
+		}
 	case control.FeishuTargetPickerPageGit:
 		gitState := s.buildTargetPickerGitImportState(record)
 		if strings.TrimSpace(gitState.ParentDir) != "" {
@@ -652,6 +667,9 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		WorkspaceOptions:         workspaceOptions,
 		SessionOptions:           sessionOptions,
 		LocalDirectoryPath:       localDirectoryPath,
+		LocalDirectoryName:       localDirectoryName,
+		LocalDirectoryFinalPath:  localDirectoryFinalPath,
+		LocalDirectoryChecked:    record.LocalDirectoryChecked,
 		GitParentDir:             gitParentDir,
 		GitRepoURL:               gitRepoURL,
 		GitDirectoryName:         gitDirectoryName,

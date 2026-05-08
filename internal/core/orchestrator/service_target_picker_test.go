@@ -706,6 +706,20 @@ func TestTargetPickerPendingNewThreadFailureFinishesSameCardAndClearsRuntime(t *
 		PickerID:         view.PickerID,
 	})
 	if len(events) == 0 || events[0].TargetPickerView == nil {
+		t.Fatalf("expected checked target picker card before headless start, got %#v", events)
+	}
+	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageEditing || !got.LocalDirectoryChecked || got.MessageID != "om-card-1" {
+		t.Fatalf("expected first confirm to produce checked local-directory state on same owner card, got %#v", got)
+	}
+
+	events = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         view.PickerID,
+	})
+	if len(events) == 0 || events[0].TargetPickerView == nil {
 		t.Fatalf("expected processing target picker card before headless failure, got %#v", events)
 	}
 	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageProcessing || got.MessageID != "om-card-1" {
@@ -1019,7 +1033,7 @@ func TestTargetPickerOpenAddWorkspaceLocalDirectoryPathPickerWithoutRouteMutatio
 	if updated.Page != control.FeishuTargetPickerPageLocalDirectory {
 		t.Fatalf("expected picker to open direct local-directory branch, got %#v", updated)
 	}
-	if updated.ConfirmLabel != "接入并继续" || updated.CanConfirm {
+	if updated.ConfirmLabel != "检查目标目录" || updated.CanConfirm {
 		t.Fatalf("expected add-workspace/local-directory branch to wait for path selection, got %#v", updated)
 	}
 
@@ -1170,7 +1184,7 @@ func TestTargetPickerCancelClearsActivePickerAndKeepsSurfaceRoute(t *testing.T) 
 	}
 }
 
-func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndKeepsMainConfirmEnabled(t *testing.T) {
+func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndKeepsMainConfirmBlockedUntilCheck(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 45, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	workspaceRoot := t.TempDir()
@@ -1226,15 +1240,15 @@ func TestTargetPickerAddWorkspacePathPickerConfirmBackfillsKnownWorkspaceAndKeep
 		t.Fatalf("expected path confirm to restore target card via owner-card patch, got %#v", confirmEvents)
 	}
 	got := confirmEvents[0].TargetPickerView
-	if !testutil.SamePath(got.LocalDirectoryPath, workspaceRoot) || !got.CanConfirm {
-		t.Fatalf("expected known workspace path to backfill and stay confirmable, got %#v", got)
+	if !testutil.SamePath(got.LocalDirectoryPath, workspaceRoot) {
+		t.Fatalf("expected known workspace path to backfill, got %#v", got)
 	}
-	if len(got.SourceMessages) == 0 || !strings.Contains(got.SourceMessages[0].Text, "直接切到该工作区") {
-		t.Fatalf("expected known workspace path to explain reuse behavior, got %#v", got.SourceMessages)
+	if got.CanConfirm || got.LocalDirectoryChecked || got.ConfirmLabel != "检查目标目录" {
+		t.Fatalf("expected path confirm to require explicit check before continue, got %#v", got)
 	}
 }
 
-func TestTargetPickerAddWorkspaceLocalDirectoryPathPickerHidesBusyWorkspaceDirectory(t *testing.T) {
+func TestTargetPickerAddWorkspaceLocalDirectoryPathPickerKeepsBusyWorkspaceDirectoryVisible(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 47, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	parent := t.TempDir()
@@ -1285,11 +1299,8 @@ func TestTargetPickerAddWorkspaceLocalDirectoryPathPickerHidesBusyWorkspaceDirec
 			directories = append(directories, entry.Name)
 		}
 	}
-	if slicesContain(directories, "busy") {
-		t.Fatalf("expected busy workspace directory to be hidden, got %v", directories)
-	}
-	if !slicesContain(directories, "free") {
-		t.Fatalf("expected free directory to stay visible, got %v", directories)
+	if !slicesContain(directories, "busy") || !slicesContain(directories, "free") {
+		t.Fatalf("expected parent-directory picker to keep both busy and free directories visible, got %v", directories)
 	}
 }
 
@@ -1308,6 +1319,24 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryStartsHeadlessForUnknownWo
 	surface := svc.root.Surfaces["surface-1"]
 	record := svc.activeTargetPicker(surface)
 	record.LocalDirectoryPath = workspaceRoot
+
+	checkEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         addMode.PickerID,
+	})
+	if surface.PendingHeadless != nil {
+		t.Fatalf("expected first confirm to only validate same card, got %#v", surface.PendingHeadless)
+	}
+	if len(checkEvents) != 1 || checkEvents[0].TargetPickerView == nil {
+		t.Fatalf("expected checked target picker card before headless start, got %#v", checkEvents)
+	}
+	checked := checkEvents[0].TargetPickerView
+	if !checked.LocalDirectoryChecked || checked.ConfirmLabel != "接入并继续" || !checked.CanConfirm || !testutil.SamePath(checked.LocalDirectoryFinalPath, workspaceRoot) {
+		t.Fatalf("expected first confirm to produce checked local-directory state, got %#v", checked)
+	}
 
 	confirmEvents := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTargetPickerConfirm,
@@ -1394,6 +1423,20 @@ func TestTargetPickerConfirmAddWorkspaceLocalDirectoryAcceptsSymlinkedKnownWorks
 	surface := svc.root.Surfaces["surface-1"]
 	record := svc.activeTargetPicker(surface)
 	record.LocalDirectoryPath = linkWorkspace
+
+	checkEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTargetPickerConfirm,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		PickerID:         addMode.PickerID,
+	})
+	if len(checkEvents) != 1 || checkEvents[0].TargetPickerView == nil {
+		t.Fatalf("expected same-card checked state before attach, got %#v", checkEvents)
+	}
+	if got := checkEvents[0].TargetPickerView; !got.LocalDirectoryChecked || got.ConfirmLabel != "接入并继续" {
+		t.Fatalf("expected first confirm to switch symlinked workspace into checked state, got %#v", got)
+	}
 
 	confirmEvents := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTargetPickerConfirm,
@@ -1648,9 +1691,9 @@ func TestTargetPickerGitImportKeepsConfirmEnabledAndValidatesOnSubmit(t *testing
 	if invalid.GitRepoURL != "https://github.com/kxn/codex-remote-feishu.git" || invalid.GitDirectoryName != "test1122" {
 		t.Fatalf("expected invalid submit to preserve draft answers on main card, got %#v", invalid)
 	}
-	if len(invalid.Messages) == 0 || invalid.Messages[0].Level != control.FeishuTargetPickerMessageDanger ||
-		!strings.Contains(invalid.Messages[0].Text, "落地目录") {
-		t.Fatalf("expected inline blocking error on main card, got %#v", invalid.Messages)
+	if len(invalid.SourceMessages) == 0 || invalid.SourceMessages[0].Level != control.FeishuTargetPickerMessageDanger ||
+		!strings.Contains(invalid.SourceMessages[0].Text, "落地目录") {
+		t.Fatalf("expected inline blocking error on main card source messages, got messages=%#v source=%#v", invalid.Messages, invalid.SourceMessages)
 	}
 }
 

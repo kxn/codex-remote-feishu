@@ -12,6 +12,9 @@ func targetPickerBodySections(
 	localDirectoryPath, gitRepoURL, gitParentDir, gitFinalPath, worktreeBranchName, worktreeFinalPath string,
 ) []control.FeishuCardTextSection {
 	sections := make([]control.FeishuCardTextSection, 0, 6)
+	if page == control.FeishuTargetPickerPageLocalDirectory {
+		return nil
+	}
 	if page == control.FeishuTargetPickerPageWorktree {
 		if section, ok := targetPickerSummarySection("基准工作区", workspaceLabel, workspaceMeta); ok {
 			sections = append(sections, section)

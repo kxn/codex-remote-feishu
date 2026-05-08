@@ -195,15 +195,21 @@ func cardElementButtons(element map[string]any) []map[string]any {
 	switch element["tag"] {
 	case "button":
 		return []map[string]any{element}
+	case "form":
+		elements, _ := element["elements"].([]map[string]any)
+		buttons := make([]map[string]any, 0, len(elements))
+		for _, child := range elements {
+			buttons = append(buttons, cardElementButtons(child)...)
+		}
+		return buttons
 	case "column_set":
 		columns, _ := element["columns"].([]map[string]any)
 		buttons := make([]map[string]any, 0, len(columns))
 		for _, column := range columns {
 			elements, _ := column["elements"].([]map[string]any)
-			if len(elements) == 0 {
-				continue
+			for _, child := range elements {
+				buttons = append(buttons, cardElementButtons(child)...)
 			}
-			buttons = append(buttons, elements[0])
 		}
 		return buttons
 	default:
