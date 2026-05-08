@@ -180,6 +180,7 @@
 - [feishu-menu-frontstage-architecture-redesign.md](./draft/feishu-menu-frontstage-architecture-redesign.md)
 - [file-length-split-audit-2026-04.md](./draft/file-length-split-audit-2026-04.md)
 - [feishu-owner-card-bypass-prompt-audit-2026-04.md](./draft/feishu-owner-card-bypass-prompt-audit-2026-04.md)
+- [feishu-request-delivery-reliability-design.md](./draft/feishu-request-delivery-reliability-design.md)
 - [feishu-slash-menu-owner-card-audit-2026-04.md](./draft/feishu-slash-menu-owner-card-audit-2026-04.md)
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
