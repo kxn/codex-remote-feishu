@@ -99,7 +99,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	if event.RequestID == "" {
 		return nil
 	}
-	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
+	surface := s.surfaceForInitiator(instanceID, event)
 	if surface == nil {
 		return nil
 	}
@@ -145,12 +145,14 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		Questions:            definition.Questions,
 		CurrentQuestionIndex: 0,
 		HintText:             definition.HintText,
-		DraftAnswers:         map[string]string{},
-		SkippedQuestionIDs:   map[string]bool{},
+		VisibilityState:      requestVisibilityPendingVisibility,
 		CardRevision:         1,
 		Phase:                frontstagecontract.PhaseEditing,
 		CreatedAt:            s.now(),
 	}
+	adoptRequestOwner(record, surface)
+	record.SourceContextLabel = s.requestTemporarySessionLabel(record)
+	normalizeRequestPromptRecord(record)
 	enqueuePendingRequest(surface, record)
 	if !pendingRequestIsActive(surface, record.RequestID) {
 		return nil
@@ -160,24 +162,57 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 
 func (s *Service) resolveRequestPrompt(instanceID string, event agentproto.Event) []eventcontract.Event {
 	if event.RequestID != "" {
-		var events []eventcontract.Event
-		for _, surface := range s.findAttachedSurfaces(instanceID) {
-			if surface.PendingRequests == nil {
-				continue
-			}
-			wasActive := pendingRequestIsActive(surface, event.RequestID)
-			request := pendingRequestRecord(surface, event.RequestID)
-			events = append(events, s.handleResolvedRequestPrompt(surface, request, event)...)
-			removePendingRequest(surface, event.RequestID)
-			clearSurfaceRequestCaptureByRequestID(surface, event.RequestID)
-			if wasActive {
-				events = append(events, s.activatePendingRequest(surface, activePendingRequest(surface), "")...)
-			}
-		}
-		return events
+		return s.resolvePendingRequestByID(instanceID, event)
 	}
 	s.clearRequestsForTurn(instanceID, event.ThreadID, event.TurnID)
 	return nil
+}
+
+func (s *Service) resolvePendingRequestByID(instanceID string, event agentproto.Event) []eventcontract.Event {
+	requestID := strings.TrimSpace(event.RequestID)
+	if requestID == "" {
+		return nil
+	}
+	for _, surface := range s.findAttachedSurfaces(instanceID) {
+		request := pendingRequestRecord(surface, requestID)
+		if request == nil || !requestMatchesTurn(request, event.ThreadID, event.TurnID) {
+			continue
+		}
+		if owner := requestOwnerSurface(s, request); owner != nil {
+			if resolved := s.resolvePendingRequestOnSurface(owner, pendingRequestRecord(owner, requestID), event); len(resolved) != 0 {
+				return resolved
+			}
+			break
+		}
+		if requestOwnerMatchesSurface(request, surface) {
+			return s.resolvePendingRequestOnSurface(surface, request, event)
+		}
+	}
+	var events []eventcontract.Event
+	for _, surface := range s.findAttachedSurfaces(instanceID) {
+		request := pendingRequestRecord(surface, requestID)
+		if request == nil || !requestMatchesTurn(request, event.ThreadID, event.TurnID) {
+			continue
+		}
+		events = append(events, s.resolvePendingRequestOnSurface(surface, request, event)...)
+	}
+	return events
+}
+
+func (s *Service) resolvePendingRequestOnSurface(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, event agentproto.Event) []eventcontract.Event {
+	if surface == nil || request == nil {
+		return nil
+	}
+	request = normalizePendingRequestOnSurface(surface, request)
+	wasActive := pendingRequestIsActive(surface, request.RequestID)
+	events := s.handleResolvedRequestPrompt(surface, request, event)
+	request.VisibilityState = requestVisibilityResolved
+	removePendingRequest(surface, request.RequestID)
+	clearSurfaceRequestCaptureByRequestID(surface, request.RequestID)
+	if wasActive {
+		events = append(events, s.activatePendingRequest(surface, activePendingRequest(surface), "")...)
+	}
+	return events
 }
 
 func (s *Service) handleResolvedRequestPrompt(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, event agentproto.Event) []eventcontract.Event {
@@ -588,7 +623,7 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		Backend:               requestPromptBackend(record),
 		RequestRevision:       record.CardRevision,
 		Title:                 record.Title,
-		TemporarySessionLabel: s.requestTemporarySessionLabel(record),
+		TemporarySessionLabel: firstNonEmpty(strings.TrimSpace(record.SourceContextLabel), s.requestTemporarySessionLabel(record)),
 		ThreadID:              record.ThreadID,
 		ThreadTitle:           threadTitle,
 		Sections:              requestPromptSectionsToControl(record.Sections),

@@ -11,6 +11,13 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+const (
+	requestVisibilityPendingVisibility = "pending_visibility"
+	requestVisibilityVisible           = "visible"
+	requestVisibilityDeliveryDegraded  = "delivery_degraded"
+	requestVisibilityResolved          = "resolved"
+)
+
 func normalizeRequestType(value string) string {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	switch {
@@ -40,6 +47,137 @@ func requestPromptRenderable(requestType string) bool {
 	default:
 		return false
 	}
+}
+
+func normalizeRequestVisibilityState(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case requestVisibilityVisible:
+		return requestVisibilityVisible
+	case requestVisibilityDeliveryDegraded:
+		return requestVisibilityDeliveryDegraded
+	case requestVisibilityResolved:
+		return requestVisibilityResolved
+	default:
+		return requestVisibilityPendingVisibility
+	}
+}
+
+func normalizeRequestPromptRecord(record *state.RequestPromptRecord) {
+	if record == nil {
+		return
+	}
+	record.RequestID = strings.TrimSpace(record.RequestID)
+	record.RequestType = normalizeRequestType(record.RequestType)
+	record.SemanticKind = control.NormalizeRequestSemanticKind(record.SemanticKind, record.RequestType)
+	record.InstanceID = strings.TrimSpace(record.InstanceID)
+	record.ThreadID = strings.TrimSpace(record.ThreadID)
+	record.TurnID = strings.TrimSpace(record.TurnID)
+	record.OwnerSurfaceSessionID = strings.TrimSpace(record.OwnerSurfaceSessionID)
+	record.OwnerGatewayID = strings.TrimSpace(record.OwnerGatewayID)
+	record.OwnerChatID = strings.TrimSpace(record.OwnerChatID)
+	record.VisibilityState = normalizeRequestVisibilityState(record.VisibilityState)
+	record.VisibleMessageID = strings.TrimSpace(record.VisibleMessageID)
+	record.LastDeliveryError = strings.TrimSpace(record.LastDeliveryError)
+	record.SourceContextLabel = strings.TrimSpace(record.SourceContextLabel)
+	record.SourceMessageID = strings.TrimSpace(record.SourceMessageID)
+	record.ItemID = strings.TrimSpace(record.ItemID)
+	record.Title = strings.TrimSpace(record.Title)
+	record.HintText = strings.TrimSpace(record.HintText)
+	if record.DraftAnswers == nil {
+		record.DraftAnswers = map[string]string{}
+	}
+	if record.SkippedQuestionIDs == nil {
+		record.SkippedQuestionIDs = map[string]bool{}
+	}
+}
+
+func normalizePendingRequestOnSurface(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord) *state.RequestPromptRecord {
+	if record == nil {
+		return nil
+	}
+	normalizeRequestPromptRecord(record)
+	adoptRequestOwner(record, surface)
+	return record
+}
+
+func adoptRequestOwner(record *state.RequestPromptRecord, surface *state.SurfaceConsoleRecord) {
+	if record == nil || surface == nil {
+		return
+	}
+	if record.OwnerSurfaceSessionID == "" {
+		record.OwnerSurfaceSessionID = strings.TrimSpace(surface.SurfaceSessionID)
+	}
+	if record.OwnerGatewayID == "" {
+		record.OwnerGatewayID = strings.TrimSpace(surface.GatewayID)
+	}
+	if record.OwnerChatID == "" {
+		record.OwnerChatID = strings.TrimSpace(surface.ChatID)
+	}
+}
+
+func requestOwnerSurface(s *Service, request *state.RequestPromptRecord) *state.SurfaceConsoleRecord {
+	if s == nil || request == nil {
+		return nil
+	}
+	if surfaceID := strings.TrimSpace(request.OwnerSurfaceSessionID); surfaceID != "" {
+		if surface := s.root.Surfaces[surfaceID]; surface != nil {
+			return surface
+		}
+	}
+	return nil
+}
+
+func requestOwnerMatchesSurface(request *state.RequestPromptRecord, surface *state.SurfaceConsoleRecord) bool {
+	if request == nil || surface == nil {
+		return false
+	}
+	if ownerSurfaceID := strings.TrimSpace(request.OwnerSurfaceSessionID); ownerSurfaceID != "" {
+		return ownerSurfaceID == strings.TrimSpace(surface.SurfaceSessionID)
+	}
+	return false
+}
+
+func requestMatchesTurn(request *state.RequestPromptRecord, threadID, turnID string) bool {
+	if request == nil {
+		return false
+	}
+	threadID = strings.TrimSpace(threadID)
+	turnID = strings.TrimSpace(turnID)
+	if turnID != "" && request.TurnID != "" && strings.TrimSpace(request.TurnID) != turnID {
+		return false
+	}
+	if threadID != "" && request.ThreadID != "" && strings.TrimSpace(request.ThreadID) != threadID {
+		return false
+	}
+	return true
+}
+
+func (s *Service) findPendingRequestByCommandID(commandID string) (*state.SurfaceConsoleRecord, *state.RequestPromptRecord) {
+	if s == nil {
+		return nil, nil
+	}
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return nil, nil
+	}
+	for _, surface := range s.root.Surfaces {
+		if surface == nil {
+			continue
+		}
+		for _, request := range surface.PendingRequests {
+			request = normalizePendingRequestOnSurface(surface, request)
+			if request == nil || request.PendingDispatchCommandID != commandID {
+				continue
+			}
+			if owner := requestOwnerSurface(s, request); owner != nil {
+				if owned := pendingRequestRecord(owner, request.RequestID); owned != nil && owned.PendingDispatchCommandID == commandID {
+					return owner, owned
+				}
+			}
+			return surface, request
+		}
+	}
+	return nil, nil
 }
 
 func requestOptionIDFromApproved(approved bool) string {
@@ -156,6 +294,7 @@ func enqueuePendingRequest(surface *state.SurfaceConsoleRecord, request *state.R
 	if surface.PendingRequests == nil {
 		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
 	}
+	request = normalizePendingRequestOnSurface(surface, request)
 	requestID := strings.TrimSpace(request.RequestID)
 	if requestID == "" {
 		return
@@ -201,7 +340,7 @@ func pendingRequestRecord(surface *state.SurfaceConsoleRecord, requestID string)
 	if requestID == "" {
 		return nil
 	}
-	return surface.PendingRequests[requestID]
+	return normalizePendingRequestOnSurface(surface, surface.PendingRequests[requestID])
 }
 
 func activePendingRequestID(surface *state.SurfaceConsoleRecord) string {

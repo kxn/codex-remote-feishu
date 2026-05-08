@@ -78,14 +78,12 @@ func clearSurfaceRequestsForTurn(surface *state.SurfaceConsoleRecord, threadID, 
 	}
 	if len(surface.PendingRequests) != 0 {
 		for requestID, request := range surface.PendingRequests {
+			request = normalizePendingRequestOnSurface(surface, request)
 			if request == nil {
 				removePendingRequest(surface, requestID)
 				continue
 			}
-			if turnID != "" && request.TurnID != "" && request.TurnID != turnID {
-				continue
-			}
-			if threadID != "" && request.ThreadID != "" && request.ThreadID != threadID {
+			if !requestMatchesTurn(request, threadID, turnID) {
 				continue
 			}
 			removePendingRequest(surface, requestID)

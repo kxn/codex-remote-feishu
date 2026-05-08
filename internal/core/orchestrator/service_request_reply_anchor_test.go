@@ -114,6 +114,12 @@ func TestDetachedBranchRequestPromptKeepsReplyAnchorAndSelection(t *testing.T) {
 	if record == nil || record.SourceMessageID != "msg-1" || record.ThreadID != "thread-detour" {
 		t.Fatalf("expected detached branch request record to retain anchor and execution thread, got %#v", record)
 	}
+	if record.OwnerSurfaceSessionID != surface.SurfaceSessionID || record.OwnerChatID != "chat-1" {
+		t.Fatalf("expected detached branch request record to freeze surface owner, got %#v", record)
+	}
+	if record.SourceContextLabel != detourForkLabel {
+		t.Fatalf("expected detached branch request to freeze temporary session label, got %#v", record)
+	}
 }
 
 func TestRemoteRequestPromptCutsSharedProgressSegment(t *testing.T) {

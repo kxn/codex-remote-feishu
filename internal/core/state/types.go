@@ -554,6 +554,17 @@ type RequestPromptRecord struct {
 	InstanceID               string
 	ThreadID                 string
 	TurnID                   string
+	OwnerSurfaceSessionID    string
+	OwnerGatewayID           string
+	OwnerChatID              string
+	VisibilityState          string
+	VisibleMessageID         string
+	VisibleAt                time.Time
+	LastDeliveryAttemptAt    time.Time
+	LastDeliveryError        string
+	NeedsRedelivery          bool
+	DeliveryAttemptCount     int
+	SourceContextLabel       string
 	SourceMessageID          string
 	ItemID                   string
 	Title                    string
