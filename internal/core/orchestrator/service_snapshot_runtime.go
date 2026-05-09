@@ -191,6 +191,9 @@ func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.Comman
 	}
 	if surface, request := s.findPendingRequestByCommandID(ack.CommandID); surface != nil && request != nil {
 		markRequestAwaitingBackendConsume(request)
+		if requestPromptRenderable(request.RequestType) && strings.TrimSpace(request.VisibleMessageID) != "" {
+			return []eventcontract.Event{s.requestPromptDeliveryEvent(surface, request, "")}
+		}
 		return nil
 	}
 	key, binding := s.pendingSteerForCommand(instanceID, ack.CommandID)

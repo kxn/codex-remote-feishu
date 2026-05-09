@@ -321,13 +321,15 @@
 - 顶层 `tool/requestUserInput` 与 `item/tool/requestUserInput` 当前都复用这一套卡片、草稿暂存与自动推进状态机
 - 真正发起 request 提交后，pending request 不会立刻从 orchestrator 状态里删除；当前 runtime source of truth 已收口到 `RequestPromptRecord.LifecycleState`
   - `submitting` 表示本地命令已发出、但还没收到 daemon/wrapper `accept/reject`；只有这段窗口仍保留 `PendingDispatchCommandID` 作为关联键
+  - `submitting` 阶段的 sealed `waiting_dispatch` 卡当前会明确显示“正在提交，等待本地后端接收”，不再直接跳成笼统的“等待继续”
   - `command_ack.accepted` 后会推进到 `awaiting_backend_consume`：卡面仍保持 sealed `waiting_dispatch`，但 gate 已不再依赖 `PendingDispatchCommandID`
+  - 若当前 request card 已拿到 `MessageID` owner anchor，daemon 会继续 patch 同一张 sealed card，把状态文案推进成“已提交，等待继续处理”；若 owner card 还没真正送达，则后续 redelivery/status 会带着新的 lifecycle 文案补投影
   - 成功路径仍由上游 `request_resolved` 事件最终清掉 pending request
   - 若 daemon dispatch 失败或 wrapper 显式 reject，会清掉 pending-dispatch 关联键、递增 `request_revision`、刷新一张新 request 卡并附带失败 notice
-  - 在 `submitting` 与 `awaiting_backend_consume` 期间，同一 request 的重复点击都会收到“已提交，等待处理”提示，不会重复下发命令
+  - 在 `submitting` 与 `awaiting_backend_consume` 期间，同一 request 的重复点击都会收到“正在提交”或“已提交，等待处理”一类提示，不会重复下发命令
   - `取消` 当前会先把卡片 seal 成“已放弃答题，并向当前 turn 发送停止请求”，再派发 `turn.interrupt`
   - 同一 surface / turn 若连续出现多条可渲染 request，当前只会激活队头；后续 request 会按到达顺序进入 pending queue，直到前一条真正 `request_resolved`，或 owner terminal 路径把它显式 abort/expire 后，下一条才会 append 成新的 request 卡，不再出现多张可交互 request card 并列可点
-  - 队头 request 的前台可见性当前显式区分 `pending_visibility` / `visible` / `delivery_degraded`；与此同时 `awaiting_backend_consume` 这类已提交中间态会继续持有 request gate，但 blocker、`/status` snapshot gate 与 request status 文案会明确投影成“已提交，等待继续”，不再误导成“还在等用户回答”
+  - 队头 request 的前台可见性当前显式区分 `pending_visibility` / `visible` / `delivery_degraded`；与此同时 `/status` snapshot gate 也会同时携带 `PendingRequestLifecycle + PendingRequestVisibility`：`submitting` 会投影成“正在提交”，`awaiting_backend_consume` 会投影成“已提交，等待继续”，并在必要时继续补上“卡片仍在显示到前台 / 最近一次送达失败”的交付语义，不再误导成“还在等用户回答”
   - 已进入 `visible` 的 request 若已经拿到 `MessageID` owner anchor，后续 waiting-dispatch / refresh 会继续 patch 同一张 request card；若进入 `delivery_degraded`，当前 anchor 会失效，后续 `/status` 或前台交互会改走 resend/reply 恢复，而不是继续 patch 一张实际上没送达的旧卡
 
 通用 approval request 卡片当前新增的可视语义：

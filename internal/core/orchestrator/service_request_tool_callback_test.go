@@ -78,7 +78,7 @@ func TestToolCallbackRequestAutoDispatchesUnsupportedResponseAndClearsOnResolve(
 	if len(prompt.Sections) < 2 || !containsPromptSectionLine(prompt.Sections[0], "当前工具请求客户端执行一段 dynamic tool callback。") {
 		t.Fatalf("expected tool callback intro section, got %#v", prompt.Sections)
 	}
-	if !strings.Contains(prompt.StatusText, "已自动上报 unsupported") {
+	if !strings.Contains(prompt.StatusText, "正在自动上报 unsupported") {
 		t.Fatalf("expected tool callback waiting status, got %#v", prompt)
 	}
 

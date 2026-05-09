@@ -211,6 +211,44 @@ func TestProjectSnapshotShowsDegradedPendingRequestGate(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotShowsAwaitingBackendConsumePendingRequestGate(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			Attachment: control.AttachmentSummary{
+				InstanceID:  "inst-1",
+				DisplayName: "droid",
+				RouteMode:   "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				ThreadID:                       "thread-1",
+				ThreadTitle:                    "droid · 修复登录流程",
+				CWD:                            "/data/dl/droid",
+				EffectiveModel:                 "gpt-5.4",
+				EffectiveReasoningEffort:       "high",
+				EffectiveAccessMode:            "full_access",
+				EffectiveModelSource:           "surface_default",
+				EffectiveReasoningEffortSource: "surface_default",
+				EffectiveAccessModeSource:      "surface_default",
+			},
+			Gate: control.GateSummary{
+				Kind:                     "pending_request",
+				PendingRequestCount:      1,
+				PendingRequestLifecycle:  "awaiting_backend_consume",
+				PendingRequestVisibility: "visible",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered, "输入门禁：有 1 个待处理请求；当前确认已提交，正在等待本地后端继续处理") {
+		t.Fatalf("expected snapshot rendering to show awaiting-backend-consume request gate, got %q", rendered)
+	}
+}
+
 func TestProjectFinalAssistantBlockAsThreadCard(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

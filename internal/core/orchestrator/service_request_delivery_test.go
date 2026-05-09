@@ -124,6 +124,73 @@ func TestRequestDeliveryFailureStatusTriggersStatusRedelivery(t *testing.T) {
 	}
 }
 
+func TestAcceptedRequestRefreshesVisibleCardStatusText(t *testing.T) {
+	now := time.Date(2026, 5, 8, 15, 7, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "主线程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", GatewayID: "app-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: "surface-1"},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-1",
+		Metadata: map[string]any{
+			"requestType": "approval",
+			"title":       "需要确认",
+		},
+	})
+	svc.RecordRequestPromptDelivery(RequestDeliveryReport{
+		SurfaceSessionID: "surface-1",
+		RequestID:        "req-1",
+		MessageID:        "om-request-1",
+		DeliveredAt:      now.Add(time.Second),
+	})
+
+	dispatch := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "om-request-1",
+		Request:          testRequestAction("req-1", "approval", "accept", nil, 0),
+	})
+	if len(dispatch) != 2 || dispatch[0].RequestView == nil || dispatch[1].Command == nil {
+		t.Fatalf("expected sealed request card plus dispatch command, got %#v", dispatch)
+	}
+	if !strings.Contains(dispatch[0].RequestView.StatusText, "正在提交当前确认") {
+		t.Fatalf("expected submitting status text before ack.accepted, got %#v", dispatch[0].RequestView)
+	}
+
+	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{
+		CommandID: dispatch[1].Command.CommandID,
+		Accepted:  true,
+	})
+	if len(accepted) != 1 || accepted[0].RequestView == nil {
+		t.Fatalf("expected accepted request to refresh visible card, got %#v", accepted)
+	}
+	if accepted[0].RequestView.MessageID != "om-request-1" {
+		t.Fatalf("expected accepted refresh to patch visible card, got %#v", accepted[0].RequestView)
+	}
+	if !strings.Contains(accepted[0].RequestView.StatusText, "已提交当前确认") {
+		t.Fatalf("expected awaiting_backend_consume status text after ack.accepted, got %#v", accepted[0].RequestView)
+	}
+}
+
 func TestResolvePromotesNextQueuedRequestThroughVisibilityEntry(t *testing.T) {
 	now := time.Date(2026, 5, 8, 15, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -193,6 +260,16 @@ func TestResolvePromotesNextQueuedRequestThroughVisibilityEntry(t *testing.T) {
 }
 
 func TestPendingRequestNoticeTextDistinguishesVisibilityState(t *testing.T) {
+	submittingText := pendingRequestNoticeText(&state.RequestPromptRecord{
+		RequestType:     "approval",
+		SemanticKind:    control.RequestSemanticApproval,
+		LifecycleState:  requestLifecycleSubmitting,
+		VisibilityState: requestVisibilityVisible,
+	})
+	if !strings.Contains(submittingText, "正在提交当前确认") {
+		t.Fatalf("expected submitting lifecycle blocker text, got %q", submittingText)
+	}
+
 	pendingText := pendingRequestNoticeText(&state.RequestPromptRecord{
 		RequestType:     "approval",
 		SemanticKind:    control.RequestSemanticApproval,

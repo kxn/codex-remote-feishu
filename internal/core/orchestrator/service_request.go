@@ -555,27 +555,6 @@ func requestPromptQuestionsComplete(request *state.RequestPromptRecord) bool {
 	return true
 }
 
-func requestPromptPendingDispatchStatusText(request *state.RequestPromptRecord) string {
-	waitingText := requestWaitingContinueText(requestPromptBackend(request))
-	if request == nil {
-		return "已提交当前请求，" + waitingText + "。"
-	}
-	switch requestPromptSemanticKind(request) {
-	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork, control.RequestSemanticApproval:
-		return "已提交当前确认，" + waitingText + "。"
-	case control.RequestSemanticPermissionsRequestApproval:
-		return "已提交授权决定，" + waitingText + "。"
-	case control.RequestSemanticMCPServerElicitationForm:
-		return "已提交当前表单，" + waitingText + "。"
-	case control.RequestSemanticToolCallback:
-		return "当前客户端不支持执行该工具回调，已自动上报 unsupported 结果，" + waitingText + "。"
-	case control.RequestSemanticMCPServerElicitationURL, control.RequestSemanticMCPServerElicitation:
-		return "已提交当前请求，" + waitingText + "。"
-	default:
-		return "已提交当前答案，" + waitingText + "。"
-	}
-}
-
 func requestCurrentQuestionPendingText(request *state.RequestPromptRecord) string {
 	question, _, ok := requestPromptCurrentQuestionRecord(request)
 	if !ok {
