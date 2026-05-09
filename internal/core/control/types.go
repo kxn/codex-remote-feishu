@@ -277,6 +277,7 @@ type PromptRouteSummary struct {
 type GateSummary struct {
 	Kind                     string
 	PendingRequestCount      int
+	PendingRequestLifecycle  string
 	PendingRequestVisibility string
 }
 

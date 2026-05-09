@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +91,8 @@ func TestPendingRequestsRenderSeriallyAndPromoteNextOnResolve(t *testing.T) {
 	}
 	if prompt := requestPromptFromEvent(t, dispatch[0]); prompt.RequestID != "req-1" || prompt.Phase != frontstagecontract.PhaseWaitingDispatch {
 		t.Fatalf("expected first prompt to stay active in waiting_dispatch, got %#v", prompt)
+	} else if !strings.Contains(prompt.StatusText, "正在提交当前确认") {
+		t.Fatalf("expected submitting status text, got %#v", prompt)
 	}
 	if record := surface.PendingRequests["req-1"]; record == nil || record.LifecycleState != requestLifecycleSubmitting || record.PendingDispatchCommandID != dispatch[1].Command.CommandID {
 		t.Fatalf("expected req-1 to enter submitting state, got %#v", record)
@@ -107,6 +110,8 @@ func TestPendingRequestsRenderSeriallyAndPromoteNextOnResolve(t *testing.T) {
 	}
 	if prompt := svc.requestPromptView(surface.PendingRequests["req-1"], ""); prompt.Phase != frontstagecontract.PhaseWaitingDispatch || !prompt.Sealed {
 		t.Fatalf("expected accepted request to stay sealed in waiting_dispatch projection, got %#v", prompt)
+	} else if !strings.Contains(prompt.StatusText, "已提交当前确认") {
+		t.Fatalf("expected awaiting_backend_consume status text, got %#v", prompt)
 	}
 	if active := activePendingRequest(surface); active == nil || active.RequestID != "req-1" {
 		t.Fatalf("expected req-1 to stay active until resolved, got %#v", active)
