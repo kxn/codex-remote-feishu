@@ -28,8 +28,9 @@ type Translator struct {
 	awaitingInit   bool
 	threadUsage    map[string]*agentproto.ThreadTokenUsage
 
-	activeTurn   *turnState
-	pendingTurns []*turnState
+	activeTurn    *turnState
+	completedTurn *turnState
+	pendingTurns  []*turnState
 
 	currentMessage *messageState
 
@@ -48,6 +49,27 @@ type turnState struct {
 	LastAssistantText        string
 	AgentMessageCompleted    bool
 	FallbackAgentMessageUsed bool
+}
+
+func (t *turnState) trafficClass() agentproto.TrafficClass {
+	if t == nil {
+		return ""
+	}
+	if t.Initiator.Kind == agentproto.InitiatorInternalHelper {
+		return agentproto.TrafficClassInternalHelper
+	}
+	return ""
+}
+
+func (t *turnState) annotateEvent(event *agentproto.Event) {
+	if t == nil || event == nil {
+		return
+	}
+	if t.trafficClass() != agentproto.TrafficClassInternalHelper {
+		return
+	}
+	event.TrafficClass = agentproto.TrafficClassInternalHelper
+	event.Initiator = agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
 }
 
 type messageState struct {
@@ -144,28 +166,31 @@ func (t *Translator) ObserveServer(line []byte) (Result, error) {
 	if err := json.Unmarshal(line, &message); err != nil {
 		return Result{}, err
 	}
+	var result Result
 	switch strings.TrimSpace(lookupStringFromAny(message["type"])) {
 	case "system":
-		return t.observeSystemMessage(message), nil
+		result = t.observeSystemMessage(message)
 	case "stream_event":
-		return t.observeStreamMessage(message), nil
+		result = t.observeStreamMessage(message)
 	case "assistant":
-		return t.observeAssistantMessage(message), nil
+		result = t.observeAssistantMessage(message)
 	case "user":
-		return t.observeUserMessage(message), nil
+		result = t.observeUserMessage(message)
 	case "control_request":
-		return t.observeControlRequest(message), nil
+		result = t.observeControlRequest(message)
 	case "control_response":
-		return t.observeControlResponse(message), nil
+		result = t.observeControlResponse(message)
 	case "result":
-		return t.observeResultMessage(message), nil
+		result = t.observeResultMessage(message)
 	default:
 		return Result{}, nil
 	}
+	return t.finalizeObservedResult(result), nil
 }
 
 func (t *Translator) PrepareForChildLaunch(resumeThreadID string) {
 	t.activeTurn = nil
+	t.completedTurn = nil
 	t.pendingTurns = nil
 	t.currentMessage = nil
 	t.toolStates = map[string]*toolState{}
@@ -220,6 +245,68 @@ func (t *Translator) startActiveTurnIfNeeded() []agentproto.Event {
 		CWD:       t.cwd,
 		Model:     t.model,
 	}}
+}
+
+func (t *Translator) finalizeObservedResult(result Result) Result {
+	for index := range result.Events {
+		if turn := t.turnContextForEvent(result.Events[index]); turn != nil {
+			turn.annotateEvent(&result.Events[index])
+		}
+	}
+	if t.completedTurn != nil {
+		for _, event := range result.Events {
+			if event.Kind == agentproto.EventTurnCompleted && strings.TrimSpace(event.TurnID) == strings.TrimSpace(t.completedTurn.TurnID) {
+				t.completedTurn = nil
+				break
+			}
+		}
+	}
+	return result
+}
+
+func (t *Translator) turnContextForEvent(event agentproto.Event) *turnState {
+	if turn := t.turnContextForTurnID(event.TurnID); turn != nil {
+		return turn
+	}
+	if event.Kind == agentproto.EventConfigObserved {
+		return t.pendingObservationTurnContext(event.ThreadID)
+	}
+	return nil
+}
+
+func (t *Translator) turnContextForTurnID(turnID string) *turnState {
+	turnID = strings.TrimSpace(turnID)
+	if turnID == "" {
+		return nil
+	}
+	if t.activeTurn != nil && strings.TrimSpace(t.activeTurn.TurnID) == turnID {
+		return t.activeTurn
+	}
+	if t.completedTurn != nil && strings.TrimSpace(t.completedTurn.TurnID) == turnID {
+		return t.completedTurn
+	}
+	if len(t.pendingTurns) != 0 && t.pendingTurns[0] != nil && strings.TrimSpace(t.pendingTurns[0].TurnID) == turnID {
+		return t.pendingTurns[0]
+	}
+	return nil
+}
+
+func (t *Translator) pendingObservationTurnContext(threadID string) *turnState {
+	threadID = strings.TrimSpace(threadID)
+	candidates := []*turnState{t.activeTurn, t.completedTurn}
+	if len(t.pendingTurns) != 0 {
+		candidates = append(candidates, t.pendingTurns[0])
+	}
+	for _, turn := range candidates {
+		if turn == nil || turn.trafficClass() != agentproto.TrafficClassInternalHelper {
+			continue
+		}
+		turnThreadID := strings.TrimSpace(turn.ThreadID)
+		if threadID == "" || turnThreadID == "" || turnThreadID == threadID {
+			return turn
+		}
+	}
+	return nil
 }
 
 func (t *Translator) canonicalThreadID(fallback string) string {

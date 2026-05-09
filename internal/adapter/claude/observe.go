@@ -915,7 +915,9 @@ func (t *Translator) observeResultMessage(message map[string]any) Result {
 		ErrorMessage:         errorMessage,
 		Problem:              problem,
 	})
-	turnID := t.activeTurn.TurnID
+	completedTurn := t.activeTurn
+	turnID := completedTurn.TurnID
+	t.completedTurn = completedTurn
 	t.activeTurn = nil
 	t.currentMessage = nil
 	for requestID, request := range t.pendingRequests {

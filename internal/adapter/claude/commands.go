@@ -10,6 +10,9 @@ import (
 )
 
 func commandInitiator(command agentproto.Command) agentproto.Initiator {
+	if command.Target.InternalHelper {
+		return agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
+	}
 	surfaceID := strings.TrimSpace(firstNonEmptyString(command.Origin.Surface, command.Origin.ChatID))
 	if surfaceID == "" {
 		return agentproto.Initiator{Kind: agentproto.InitiatorUnknown}
