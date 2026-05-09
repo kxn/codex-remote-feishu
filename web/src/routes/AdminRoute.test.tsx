@@ -4,12 +4,15 @@ import { describe, expect, it } from "vitest";
 import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
+  makeAutoConfigApplyResponse,
+  makeAutoConfigPlan,
+  makeAutoConfigPlanResponse,
+  makeAutoConfigPublishResponse,
   makeBootstrap,
   makeClaudeProfile,
   makeCodexProvider,
   makeImageStagingStatus,
   makeLogsStorageStatus,
-  makePermissionCheck,
   makePreviewDriveStatus,
   makeVSCodeDetect,
 } from "../test/fixtures";
@@ -36,6 +39,17 @@ function withClaudeProfiles(
   };
 }
 
+function makeAdminAutoConfigPlan(
+  appOverrides: Parameters<typeof makeApp>[0] = {},
+  planOverrides: Parameters<typeof makeAutoConfigPlan>[0] = {},
+) {
+  const app = makeApp(appOverrides);
+  return makeAutoConfigPlanResponse({
+    app,
+    plan: makeAutoConfigPlan(planOverrides),
+  });
+}
+
 describe("AdminRoute", () => {
   it("keeps local API requests dot-relative when mounted under a prefixed path", async () => {
     window.history.replaceState({}, "", "/g/demo/admin");
@@ -47,11 +61,8 @@ describe("AdminRoute", () => {
       "/g/demo/api/admin/feishu/apps": {
         body: { apps: [makeApp({ id: "bot-1", name: "Main Bot" })] },
       },
-      "/g/demo/api/admin/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1", name: "Main Bot" }),
-          ready: true,
-        }),
+      "/g/demo/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-1", name: "Main Bot" }),
       },
       "/g/demo/api/admin/autostart/detect": {
         body: {
@@ -99,7 +110,7 @@ describe("AdminRoute", () => {
     );
   });
 
-  it("marks robots with permission issues and shows the warning in detail", async () => {
+  it("marks robots with auto-config work remaining and shows the warning in detail", async () => {
     window.history.replaceState({}, "", "/admin");
 
     installMockFetch(withClaudeProfiles({
@@ -115,12 +126,23 @@ describe("AdminRoute", () => {
           ],
         },
       },
-      "/api/admin/feishu/apps/bot-team/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-team", name: "协作机器人", appId: "cli_team" }),
-          ready: false,
-          missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
-        }),
+      "/api/admin/feishu/apps/bot-team/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(
+          { id: "bot-team", name: "协作机器人", appId: "cli_team" },
+          {
+            status: "apply_required",
+            summary: "当前还需要自动补齐配置差异。",
+            blockingRequirements: [
+              {
+                kind: "scope",
+                key: "im:message",
+                scopeType: "tenant",
+                required: true,
+                present: false,
+              },
+            ],
+          },
+        ),
       },
       "/api/admin/autostart/detect": {
         body: {
@@ -146,9 +168,80 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    expect(await screen.findByText("有异常")).toBeInTheDocument();
-    expect(await screen.findByText("当前还需要补齐权限。")).toBeInTheDocument();
-    expect(screen.getByText("drive:drive")).toBeInTheDocument();
+    expect(await screen.findByText("待补齐")).toBeInTheDocument();
+    expect(await screen.findByText("当前还需要自动补齐配置")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "自动补齐配置" })).toBeInTheDocument();
+    expect(screen.getByText("权限 im:message")).toBeInTheDocument();
+  });
+
+  it("lazy-loads auto-config plan only for the selected robot", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+
+    const { calls } = installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [
+            makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+            makeApp({ id: "bot-2", name: "备用机器人", appId: "cli_backup" }),
+          ],
+        },
+      },
+      "/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+      },
+      "/api/admin/feishu/apps/bot-2/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(
+          { id: "bot-2", name: "备用机器人", appId: "cli_backup" },
+          {
+            status: "degraded",
+            summary: "基础配置已完成，但仍有部分可选能力没有开通。",
+          },
+        ),
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
+      "/api/admin/storage/preview-drive/bot-2": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-2", name: "备用机器人" }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await screen.findByRole("heading", { name: "主机器人" });
+    expect(
+      calls.some((call) => call.path === "/api/admin/feishu/apps/bot-1/auto-config/plan"),
+    ).toBe(true);
+    expect(
+      calls.some((call) => call.path === "/api/admin/feishu/apps/bot-2/auto-config/plan"),
+    ).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /备用机器人/ }));
+
+    expect(await screen.findByRole("heading", { name: "备用机器人" })).toBeInTheDocument();
+    expect(
+      calls.some((call) => call.path === "/api/admin/feishu/apps/bot-2/auto-config/plan"),
+    ).toBe(true);
+    expect(await screen.findByText("有降级")).toBeInTheDocument();
   });
 
   it("creates a new robot and switches to its status page after verify", async () => {
@@ -197,17 +290,11 @@ describe("AdminRoute", () => {
           },
         };
       },
-      "/api/admin/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1", name: "主机器人" }),
-          ready: true,
-        }),
+      "/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-1", name: "主机器人" }),
       },
-      "/api/admin/feishu/apps/bot-new/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-new", name: "运营机器人", appId: "cli_new" }),
-          ready: true,
-        }),
+      "/api/admin/feishu/apps/bot-new/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-new", name: "运营机器人", appId: "cli_new" }),
       },
       "/api/admin/feishu/apps/bot-new/verify": {
         body: {
@@ -281,11 +368,8 @@ describe("AdminRoute", () => {
           apps: removed ? [] : [makeApp({ id: "bot-delete", name: "待删除机器人", appId: "cli_delete" })],
         },
       }),
-      "/api/admin/feishu/apps/bot-delete/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-delete", name: "待删除机器人" }),
-          ready: true,
-        }),
+      "/api/admin/feishu/apps/bot-delete/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-delete", name: "待删除机器人" }),
       },
       "/api/admin/feishu/apps/bot-delete": () => {
         removed = true;
@@ -323,7 +407,7 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("机器人已删除。")).toBeInTheDocument();
   });
 
-  it("shows the bound-recipient error when event test cannot find a target", async () => {
+  it("applies auto-config and then submits publish after confirmation", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
 
@@ -334,22 +418,80 @@ describe("AdminRoute", () => {
           apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
         },
       },
-      "/api/admin/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1", name: "主机器人" }),
-          ready: true,
+      "/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(
+          { id: "bot-1", name: "主机器人", appId: "cli_main" },
+          {
+            status: "apply_required",
+            summary: "当前还需要自动补齐配置差异。",
+            blockingRequirements: [
+              {
+                kind: "callback",
+                key: "card.action.trigger",
+                purpose: "处理卡片按钮和卡片交互回调",
+                required: true,
+                present: false,
+              },
+            ],
+          },
+        ),
+      },
+      "/api/admin/feishu/apps/bot-1/auto-config/apply": {
+        body: makeAutoConfigApplyResponse({
+          app: makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+          result: {
+            status: "publish_required",
+            summary: "自动补齐已完成，还需要提交发布。",
+            blockingReason: "",
+            actions: [],
+            plan: makeAutoConfigPlan({
+              status: "publish_required",
+              summary: "自动补齐已完成，还需要提交发布。",
+              blockingRequirements: [],
+              degradableRequirements: [],
+              diff: {
+                configPatchRequired: false,
+                abilityPatchRequired: false,
+                missingScopes: [],
+                extraScopes: [],
+                missingEvents: [],
+                extraEvents: [],
+                missingCallbacks: [],
+                extraCallbacks: [],
+                eventSubscriptionTypeMismatch: false,
+                eventRequestUrlMismatch: false,
+                callbackTypeMismatch: false,
+                callbackRequestUrlMismatch: false,
+                publishRequired: true,
+              },
+              publish: {
+                needsPublish: true,
+                awaitingReview: false,
+              },
+            }),
+          },
         }),
       },
-      "/api/admin/feishu/apps/bot-1/test-events": {
-        status: 409,
-        body: {
-          error: {
-            code: "feishu_app_web_test_recipient_unavailable",
-            message: "recipient unavailable",
-            details:
-              "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
+      "/api/admin/feishu/apps/bot-1/auto-config/publish": {
+        body: makeAutoConfigPublishResponse({
+          app: makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+          result: {
+            status: "awaiting_review",
+            summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+            blockingReason: "",
+            versionId: "oav_1",
+            version: "1.8.1",
+            actions: [],
+            plan: makeAutoConfigPlan({
+              status: "awaiting_review",
+              summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+              publish: {
+                needsPublish: false,
+                awaitingReview: true,
+              },
+            }),
           },
-        },
+        }),
       },
       "/api/admin/autostart/detect": {
         body: {
@@ -375,12 +517,11 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    await user.click(await screen.findByRole("button", { name: "测试事件订阅" }));
-    expect(
-      await screen.findByText(
-        "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
-      ),
-    ).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "自动补齐配置" }));
+    await user.click(await screen.findByRole("button", { name: "提交发布" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("确认提交发布");
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    expect(await screen.findByText("待审核")).toBeInTheDocument();
   });
 
   it("cleans up logs and updates the visible count", async () => {
@@ -394,11 +535,8 @@ describe("AdminRoute", () => {
           apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
         },
       },
-      "/api/admin/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1", name: "主机器人" }),
-          ready: true,
-        }),
+      "/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-1", name: "主机器人" }),
       },
       "/api/admin/autostart/detect": {
         body: {
@@ -449,11 +587,8 @@ describe("AdminRoute", () => {
           apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
         },
       },
-      "/api/admin/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1", name: "主机器人" }),
-          ready: true,
-        }),
+      "/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-1", name: "主机器人" }),
       },
       "/api/admin/autostart/detect": {
         body: {
@@ -495,11 +630,8 @@ describe("AdminRoute", () => {
           apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
         },
       },
-      "/api/admin/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1", name: "主机器人" }),
-          ready: true,
-        }),
+      "/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-1", name: "主机器人" }),
       },
       "/api/admin/autostart/detect": {
         body: {
@@ -554,11 +686,8 @@ describe("AdminRoute", () => {
           apps: [makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" })],
         },
       },
-      "/api/admin/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1", name: "主机器人" }),
-          ready: true,
-        }),
+      "/api/admin/feishu/apps/bot-1/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({ id: "bot-1", name: "主机器人" }),
       },
       "/api/admin/autostart/detect": {
         body: {

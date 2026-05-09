@@ -3,6 +3,10 @@ import type {
   BootstrapState,
   ClaudeProfileSummary,
   CodexProviderSummary,
+  FeishuAppAutoConfigApplyResponse,
+  FeishuAppAutoConfigPlan,
+  FeishuAppAutoConfigPlanResponse,
+  FeishuAppAutoConfigPublishResponse,
   FeishuAppPermissionCheckResponse,
   FeishuAppSummary,
   GatewayStatus,
@@ -486,6 +490,104 @@ export function makePermissionCheck(
   }
 }`,
     lastCheckedAt: "2026-04-25T08:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeAutoConfigPlan(
+  overrides: Partial<FeishuAppAutoConfigPlan> = {},
+): FeishuAppAutoConfigPlan {
+  return {
+    status: "clean",
+    summary: "当前自动配置已完成。",
+    blockingReason: "",
+    blockingRequirements: [],
+    degradableRequirements: [],
+    current: {
+      configuredScopes: [],
+      grantedScopes: [],
+      configuredEvents: [],
+      configuredCallbacks: [],
+      botEnabled: true,
+      encryptionKeyConfigured: true,
+      verificationTokenConfigured: true,
+    },
+    target: {
+      scopeRequirements: [],
+      events: [],
+      callbacks: [],
+      policy: {},
+    },
+    diff: {
+      configPatchRequired: false,
+      abilityPatchRequired: false,
+      missingScopes: [],
+      extraScopes: [],
+      missingEvents: [],
+      extraEvents: [],
+      missingCallbacks: [],
+      extraCallbacks: [],
+      eventSubscriptionTypeMismatch: false,
+      eventRequestUrlMismatch: false,
+      callbackTypeMismatch: false,
+      callbackRequestUrlMismatch: false,
+      publishRequired: false,
+    },
+    publish: {
+      needsPublish: false,
+      awaitingReview: false,
+    },
+    ...overrides,
+  };
+}
+
+export function makeAutoConfigPlanResponse(
+  overrides: Partial<FeishuAppAutoConfigPlanResponse> = {},
+): FeishuAppAutoConfigPlanResponse {
+  return {
+    app: makeApp(),
+    plan: makeAutoConfigPlan(),
+    ...overrides,
+  };
+}
+
+export function makeAutoConfigApplyResponse(
+  overrides: Partial<FeishuAppAutoConfigApplyResponse> = {},
+): FeishuAppAutoConfigApplyResponse {
+  return {
+    app: makeApp(),
+    result: {
+      status: "clean",
+      summary: "当前自动配置已完成。",
+      blockingReason: "",
+      actions: [],
+      plan: makeAutoConfigPlan(),
+    },
+    ...overrides,
+  };
+}
+
+export function makeAutoConfigPublishResponse(
+  overrides: Partial<FeishuAppAutoConfigPublishResponse> = {},
+): FeishuAppAutoConfigPublishResponse {
+  return {
+    app: makeApp(),
+    result: {
+      status: "awaiting_review",
+      summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+      blockingReason: "",
+      versionId: "oav_1",
+      version: "1.8.1",
+      actions: [],
+      plan: makeAutoConfigPlan({
+        status: "awaiting_review",
+        summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+        publish: {
+          needsPublish: false,
+          awaitingReview: true,
+        },
+      }),
+    },
     ...overrides,
   };
 }

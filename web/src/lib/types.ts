@@ -191,6 +191,161 @@ export interface FeishuAppPermissionCheckResponse {
   lastCheckedAt?: string;
 }
 
+export interface FeishuAppAutoConfigScopeRef {
+  scope: string;
+  scopeType?: string;
+}
+
+export interface FeishuAppAutoConfigRequirementStatus {
+  kind: string;
+  key: string;
+  scopeType?: string;
+  feature?: string;
+  purpose?: string;
+  required: boolean;
+  degradeMessage?: string;
+  present: boolean;
+}
+
+export interface FeishuAppAutoConfigObservedState {
+  configuredScopes?: FeishuAppAutoConfigScopeRef[];
+  grantedScopes?: FeishuAppAutoConfigScopeRef[];
+  eventSubscriptionType?: string;
+  eventRequestUrl?: string;
+  configuredEvents?: string[];
+  callbackType?: string;
+  callbackRequestUrl?: string;
+  configuredCallbacks?: string[];
+  onlineVersionId?: string;
+  onlineVersion?: string;
+  onlineVersionStatus?: string;
+  unauditVersionId?: string;
+  unauditVersion?: string;
+  unauditVersionStatus?: string;
+  activeVersionId?: string;
+  activeVersion?: string;
+  activeVersionStatus?: string;
+  activeVersionEvents?: string[];
+  botEnabled?: boolean;
+  messageCardCallbackUrl?: string;
+  mobileDefaultAbility?: string;
+  pcDefaultAbility?: string;
+  encryptionKeyConfigured?: boolean;
+  verificationTokenConfigured?: boolean;
+}
+
+export interface FeishuAppAutoConfigTargetScopeRequirement {
+  scope: string;
+  scopeType?: string;
+  feature?: string;
+  required: boolean;
+  degradeMessage?: string;
+}
+
+export interface FeishuAppAutoConfigTargetEventRequirement {
+  event: string;
+  purpose?: string;
+  feature?: string;
+  required: boolean;
+  degradeMessage?: string;
+}
+
+export interface FeishuAppAutoConfigTargetCallbackRequirement {
+  callback: string;
+  purpose?: string;
+  feature?: string;
+  required: boolean;
+  degradeMessage?: string;
+}
+
+export interface FeishuAppAutoConfigTargetState {
+  scopeRequirements?: FeishuAppAutoConfigTargetScopeRequirement[];
+  events?: FeishuAppAutoConfigTargetEventRequirement[];
+  callbacks?: FeishuAppAutoConfigTargetCallbackRequirement[];
+  policy?: Record<string, unknown>;
+}
+
+export interface FeishuAppAutoConfigDiff {
+  configPatchRequired: boolean;
+  abilityPatchRequired: boolean;
+  missingScopes?: FeishuAppAutoConfigScopeRef[];
+  extraScopes?: FeishuAppAutoConfigScopeRef[];
+  missingEvents?: string[];
+  extraEvents?: string[];
+  missingCallbacks?: string[];
+  extraCallbacks?: string[];
+  eventSubscriptionTypeMismatch?: boolean;
+  eventRequestUrlMismatch?: boolean;
+  callbackTypeMismatch?: boolean;
+  callbackRequestUrlMismatch?: boolean;
+  publishRequired: boolean;
+}
+
+export interface FeishuAppAutoConfigPublishState {
+  onlineVersionId?: string;
+  onlineVersion?: string;
+  onlineVersionStatus?: string;
+  unauditVersionId?: string;
+  unauditVersion?: string;
+  unauditVersionStatus?: string;
+  activeVersionId?: string;
+  activeVersion?: string;
+  activeVersionStatus?: string;
+  needsPublish: boolean;
+  awaitingReview: boolean;
+}
+
+export interface FeishuAppAutoConfigPlan {
+  status: string;
+  summary?: string;
+  blockingReason?: string;
+  blockingRequirements?: FeishuAppAutoConfigRequirementStatus[];
+  degradableRequirements?: FeishuAppAutoConfigRequirementStatus[];
+  current: FeishuAppAutoConfigObservedState;
+  target: FeishuAppAutoConfigTargetState;
+  diff: FeishuAppAutoConfigDiff;
+  publish: FeishuAppAutoConfigPublishState;
+}
+
+export interface FeishuAppAutoConfigAction {
+  name: string;
+  outcome: string;
+  details?: string;
+}
+
+export interface FeishuAppAutoConfigPlanResponse {
+  app: FeishuAppSummary;
+  plan: FeishuAppAutoConfigPlan;
+}
+
+export interface FeishuAppAutoConfigApplyResult {
+  status: string;
+  summary?: string;
+  blockingReason?: string;
+  actions?: FeishuAppAutoConfigAction[];
+  plan: FeishuAppAutoConfigPlan;
+}
+
+export interface FeishuAppAutoConfigApplyResponse {
+  app: FeishuAppSummary;
+  result: FeishuAppAutoConfigApplyResult;
+}
+
+export interface FeishuAppAutoConfigPublishResult {
+  status: string;
+  summary?: string;
+  blockingReason?: string;
+  versionId?: string;
+  version?: string;
+  actions?: FeishuAppAutoConfigAction[];
+  plan: FeishuAppAutoConfigPlan;
+}
+
+export interface FeishuAppAutoConfigPublishResponse {
+  app: FeishuAppSummary;
+  result: FeishuAppAutoConfigPublishResult;
+}
+
 export interface FeishuAppTestStartResponse {
   gatewayId: string;
   startedAt: string;

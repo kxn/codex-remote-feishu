@@ -13,10 +13,13 @@ import type {
   ClaudeProfileSummary,
   CodexProvidersResponse,
   CodexProviderSummary,
-  FeishuAppPermissionCheckResponse,
+  FeishuAppAutoConfigApplyResponse,
+  FeishuAppAutoConfigPlan,
+  FeishuAppAutoConfigPlanResponse,
+  FeishuAppAutoConfigPublishResponse,
+  FeishuAppAutoConfigRequirementStatus,
   FeishuAppResponse,
   FeishuAppSummary,
-  FeishuAppTestStartResponse,
   FeishuAppVerifyResponse,
   FeishuAppsResponse,
   FeishuOnboardingCompleteResponse,
@@ -46,11 +49,10 @@ type DetailNotice = {
   message: string;
 };
 
-type PermissionSummaryState =
+type AutoConfigState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; data: FeishuAppPermissionCheckResponse }
-  | { status: "missing"; data: FeishuAppPermissionCheckResponse }
+  | { status: "ready"; data: FeishuAppAutoConfigPlanResponse }
   | { status: "error"; message: string };
 
 type RuntimeApplyFailureDetails = {
@@ -73,9 +75,9 @@ export function AdminRoute() {
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
-  const [permissionChecks, setPermissionChecks] = useState<
-    Record<string, PermissionSummaryState>
-  >({});
+  const [autoConfigPlans, setAutoConfigPlans] = useState<Record<string, AutoConfigState>>(
+    {},
+  );
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
   const [codexProviders, setCodexProviders] = useState<CodexProviderSummary[]>([]);
   const [codexProvidersError, setCodexProvidersError] = useState("");
@@ -109,13 +111,14 @@ export function AdminRoute() {
   const [previewError, setPreviewError] = useState("");
   const [actionBusy, setActionBusy] = useState("");
   const [deleteTargetID, setDeleteTargetID] = useState<string | null>(null);
+  const [publishTargetID, setPublishTargetID] = useState<string | null>(null);
 
   const selectedApp = useMemo(
     () => apps.find((app) => app.id === selectedRobotID) ?? null,
     [apps, selectedRobotID],
   );
-  const selectedPermission: PermissionSummaryState = selectedApp
-    ? permissionChecks[selectedApp.id] || { status: "idle" }
+  const selectedAutoConfig: AutoConfigState = selectedApp
+    ? autoConfigPlans[selectedApp.id] || { status: "idle" }
     : { status: "idle" };
   const versionTitle = buildAdminPageTitle(bootstrap);
   const previewSummary = useMemo(() => {
@@ -141,8 +144,8 @@ export function AdminRoute() {
   }, []);
 
   useEffect(() => {
-    setPermissionChecks((current) => {
-      const next: Record<string, PermissionSummaryState> = {};
+    setAutoConfigPlans((current) => {
+      const next: Record<string, AutoConfigState> = {};
       for (const app of apps) {
         next[app.id] = current[app.id] || { status: "idle" };
       }
@@ -151,16 +154,17 @@ export function AdminRoute() {
   }, [apps]);
 
   useEffect(() => {
-    for (const app of apps) {
-      const current = permissionChecks[app.id];
-      if (current && current.status !== "idle") {
-        continue;
-      }
-      void loadPermissionCheck(app.id);
+    if (!selectedApp?.id) {
+      return;
     }
-  }, [apps, permissionChecks]);
+    if (selectedAutoConfig.status !== "idle") {
+      return;
+    }
+    void loadAutoConfigPlan(selectedApp.id);
+  }, [selectedApp?.id, selectedAutoConfig.status]);
 
   useEffect(() => {
+    setPublishTargetID(null);
     if (selectedRobotID === newRobotID) {
       return;
     }
@@ -267,31 +271,46 @@ export function AdminRoute() {
     setLoading(false);
   }
 
-  async function loadPermissionCheck(appID: string) {
-    setPermissionChecks((current) => ({
+  async function loadAutoConfigPlan(appID: string) {
+    setAutoConfigPlans((current) => ({
       ...current,
       [appID]: { status: "loading" },
     }));
-    const response = await requestJSONAllowHTTPError<
-      FeishuAppPermissionCheckResponse | APIErrorShape
-    >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/permission-check`);
-    if (!response.ok) {
-      setPermissionChecks((current) => ({
+    try {
+      const response = await requestJSONAllowHTTPError<
+        FeishuAppAutoConfigPlanResponse | APIErrorShape
+      >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/plan`);
+      if (!response.ok) {
+        const payload = readAPIError(response);
+        setAutoConfigPlans((current) => ({
+          ...current,
+          [appID]: {
+            status: "error",
+            message:
+              payload?.code === "feishu_app_runtime_unavailable"
+                ? "当前机器人还在同步运行设置，请稍后再检查自动配置。"
+                : "当前还没有读取到自动配置状态，请稍后重试。",
+          },
+        }));
+        return;
+      }
+      const payload = response.data as FeishuAppAutoConfigPlanResponse;
+      setApps((current) =>
+        current.map((app) => (app.id === payload.app.id ? payload.app : app)),
+      );
+      setAutoConfigPlans((current) => ({
+        ...current,
+        [appID]: { status: "ready", data: payload },
+      }));
+    } catch {
+      setAutoConfigPlans((current) => ({
         ...current,
         [appID]: {
           status: "error",
-          message: "暂时无法读取权限状态，请稍后重试。",
+          message: "当前还没有读取到自动配置状态，请稍后重试。",
         },
       }));
-      return;
     }
-    const payload = response.data as FeishuAppPermissionCheckResponse;
-    setPermissionChecks((current) => ({
-      ...current,
-      [appID]: payload.ready
-        ? { status: "ready", data: payload }
-        : { status: "missing", data: payload },
-    }));
   }
 
   function changeConnectMode(nextMode: "qr" | "manual") {
@@ -347,7 +366,6 @@ export function AdminRoute() {
       setDetailNotice({ tone: "good", message: "已完成连接验证。" });
       setConnectError("");
       setOnboardingSession(null);
-      void loadPermissionCheck(response.data.app.id);
     } catch {
       setConnectError("扫码已经完成，但当前还不能继续，请稍后重试。");
     } finally {
@@ -378,7 +396,6 @@ export function AdminRoute() {
       );
       await loadAdminPage({ preferredRobotID: saved.app.id });
       setSelectedRobotID(saved.app.id);
-      void loadPermissionCheck(saved.app.id);
       if (!verify.ok) {
         setDetailNotice({
           tone: "danger",
@@ -417,39 +434,103 @@ export function AdminRoute() {
     return true;
   }
 
-  async function triggerRobotTest(kind: "events" | "callback") {
+  function syncAppSummary(app: FeishuAppSummary) {
+    setApps((current) => current.map((item) => (item.id === app.id ? app : item)));
+  }
+
+  function syncAutoConfigPlan(app: FeishuAppSummary, plan: FeishuAppAutoConfigPlan) {
+    syncAppSummary(app);
+    setAutoConfigPlans((current) => ({
+      ...current,
+      [app.id]: {
+        status: "ready",
+        data: {
+          app,
+          plan,
+        },
+      },
+    }));
+  }
+
+  async function applyAutoConfig() {
     if (!selectedApp?.id) {
       return;
     }
-    setActionBusy(`test-${kind}`);
-    const response = await requestJSONAllowHTTPError<
-      FeishuAppTestStartResponse | APIErrorShape
-    >(`/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/${kind === "events" ? "test-events" : "test-callback"}`, {
-      method: "POST",
-    });
-    if (!response.ok) {
-      const payload = readAPIError(response);
+    setActionBusy("auto-config-apply");
+    try {
+      const response = await requestJSONAllowHTTPError<
+        FeishuAppAutoConfigApplyResponse | APIErrorShape
+      >(`/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/apply`, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        const payload = readAPIError(response);
+        setDetailNotice({
+          tone: "danger",
+          message:
+            typeof payload?.details === "string" && payload.details.trim()
+              ? payload.details.trim()
+              : "自动补齐没有完成，请稍后重试。",
+        });
+        return;
+      }
+      const payload = response.data as FeishuAppAutoConfigApplyResponse;
+      syncAutoConfigPlan(payload.app, payload.result.plan);
+      setDetailNotice({
+        tone: autoConfigNoticeTone(payload.result.status),
+        message: payload.result.summary?.trim() || "自动配置状态已更新。",
+      });
+    } catch {
       setDetailNotice({
         tone: "danger",
-        message:
-          payload?.code === "feishu_app_web_test_recipient_unavailable"
-            ? String(
-                payload.details ||
-                  "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
-              )
-            : kind === "events"
-              ? "事件订阅测试没有发出，请稍后重试。"
-              : "回调测试没有发出，请稍后重试。",
+        message: "自动补齐没有完成，请稍后重试。",
       });
+    } finally {
       setActionBusy("");
+    }
+  }
+
+  async function publishAutoConfig() {
+    if (!selectedApp?.id) {
       return;
     }
-    const payload = response.data as FeishuAppTestStartResponse;
-    setDetailNotice({
-      tone: "good",
-      message: payload.message,
-    });
-    setActionBusy("");
+    setActionBusy("auto-config-publish");
+    try {
+      const response = await requestJSONAllowHTTPError<
+        FeishuAppAutoConfigPublishResponse | APIErrorShape
+      >(`/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/publish`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) {
+        const payload = readAPIError(response);
+        setDetailNotice({
+          tone: "danger",
+          message:
+            typeof payload?.details === "string" && payload.details.trim()
+              ? payload.details.trim()
+              : "提交发布没有成功，请稍后重试。",
+        });
+        return;
+      }
+      const payload = response.data as FeishuAppAutoConfigPublishResponse;
+      syncAutoConfigPlan(payload.app, payload.result.plan);
+      setDetailNotice({
+        tone: autoConfigNoticeTone(payload.result.status),
+        message: payload.result.summary?.trim() || "发布状态已更新。",
+      });
+      setPublishTargetID(null);
+    } catch {
+      setDetailNotice({
+        tone: "danger",
+        message: "提交发布没有成功，请稍后重试。",
+      });
+    } finally {
+      setActionBusy("");
+    }
   }
 
   async function deleteRobot() {
@@ -619,6 +700,164 @@ export function AdminRoute() {
     } finally {
       setActionBusy("");
     }
+  }
+
+  function renderRequirementSection(
+    title: string,
+    requirements: FeishuAppAutoConfigRequirementStatus[],
+  ) {
+    if (requirements.length === 0) {
+      return null;
+    }
+    return (
+      <div className="detail-stack">
+        <strong>{title}</strong>
+        <div className="detail-stack">
+          {requirements.map((item) => (
+            <p key={`${item.kind}:${item.key}`} className="support-copy">
+              <strong>{describeAutoConfigRequirementLabel(item)}</strong>
+              {describeAutoConfigRequirementDetail(item)
+                ? `：${describeAutoConfigRequirementDetail(item)}`
+                : ""}
+            </p>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function renderAutoConfigCard() {
+    if (!selectedApp) {
+      return null;
+    }
+    const disabled =
+      Boolean(selectedApp.runtimeApply?.pending) ||
+      actionBusy === "auto-config-apply" ||
+      actionBusy === "auto-config-publish";
+    const authLink = selectedApp.consoleLinks?.auth?.trim();
+    const botLink = selectedApp.consoleLinks?.bot?.trim();
+
+    if (selectedAutoConfig.status === "idle" || selectedAutoConfig.status === "loading") {
+      return (
+        <article className="soft-card-v2" style={{ marginTop: "1rem" }}>
+          <h4>飞书自动配置</h4>
+          <div className="notice-banner warn">正在检查当前配置，请稍候...</div>
+        </article>
+      );
+    }
+
+    if (selectedAutoConfig.status === "error") {
+      return (
+        <article className="soft-card-v2" style={{ marginTop: "1rem" }}>
+          <h4>飞书自动配置</h4>
+          <div className="detail-stack">
+            <div className="notice-banner warn">{selectedAutoConfig.message}</div>
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={disabled}
+                onClick={() => void loadAutoConfigPlan(selectedApp.id)}
+              >
+                重新检查
+              </button>
+            </div>
+          </div>
+        </article>
+      );
+    }
+
+    const plan = selectedAutoConfig.data.plan;
+    const blockingRequirements = (plan.blockingRequirements || []).filter(
+      (item) => !item.present,
+    );
+    const degradableRequirements = (plan.degradableRequirements || []).filter(
+      (item) => !item.present,
+    );
+
+    return (
+      <article className="soft-card-v2" style={{ marginTop: "1rem" }}>
+        <div className="detail-stack">
+          <div>
+            <h4>飞书自动配置</h4>
+            <p>{plan.summary?.trim() || describeAutoConfigSummary(plan.status)}</p>
+          </div>
+          <div className={`notice-banner ${autoConfigNoticeTone(plan.status)}`}>
+            {describeAutoConfigHeadline(plan.status)}
+          </div>
+          {plan.blockingReason ? (
+            <p className="support-copy">
+              当前原因：{describeAutoConfigBlockingReason(plan.blockingReason)}
+            </p>
+          ) : null}
+          {renderRequirementSection("还需要处理", blockingRequirements)}
+          {renderRequirementSection("可按降级继续", degradableRequirements)}
+          <div className="button-row">
+            {plan.status === "apply_required" ? (
+              <button
+                className="primary-button"
+                type="button"
+                disabled={disabled}
+                onClick={() => void applyAutoConfig()}
+              >
+                自动补齐配置
+              </button>
+            ) : null}
+            {plan.status === "publish_required" ? (
+              <button
+                className="primary-button"
+                type="button"
+                disabled={disabled}
+                onClick={() => setPublishTargetID(selectedApp.id)}
+              >
+                提交发布
+              </button>
+            ) : null}
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={disabled}
+              onClick={() => void loadAutoConfigPlan(selectedApp.id)}
+            >
+              重新检查
+            </button>
+          </div>
+          {authLink || botLink ? (
+            <p className="support-copy">
+              {authLink ? (
+                <>
+                  如需在飞书后台继续查看权限或发布状态，请前往{" "}
+                  <a
+                    className="inline-link"
+                    href={authLink}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    应用权限页面
+                  </a>
+                  。
+                </>
+              ) : null}
+              {authLink && botLink ? <br /> : null}
+              {botLink ? (
+                <>
+                  机器人菜单仍需手动确认，可继续打开{" "}
+                  <a
+                    className="inline-link"
+                    href={botLink}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    机器人后台
+                  </a>
+                  。
+                </>
+              ) : null}
+            </p>
+          ) : null}
+        </div>
+      </article>
+    );
   }
 
   function renderRobotDetail() {
@@ -796,7 +1035,7 @@ export function AdminRoute() {
       <section className="panel">
         <div className="step-stage-head">
           <h2>{selectedApp.name || "未命名机器人"}</h2>
-          <p>连接状态、权限与测试</p>
+          <p>连接状态与自动配置</p>
         </div>
         <dl className="definition-list">
           <div>
@@ -821,62 +1060,13 @@ export function AdminRoute() {
             当前机器人还在同步设置，请稍后刷新状态后再继续操作。
           </div>
         ) : null}
-        {selectedPermission.status === "missing" ? (
-          <>
-            <div className="notice-banner danger">当前还需要补齐权限。</div>
-            <div className="scope-list">
-              {(selectedPermission.data.missingScopes || []).map((scope: { scope: string; scopeType?: string }) => (
-                <span
-                  key={`${scope.scopeType || "tenant"}-${scope.scope}`}
-                  className="scope-pill"
-                >
-                  <code>{scope.scope}</code>
-                </span>
-              ))}
-            </div>
-            <p className="support-copy">
-              前往{" "}
-              <a
-                className="inline-link"
-                href={
-                  selectedPermission.data.app.consoleLinks?.auth ||
-                  selectedApp.consoleLinks?.auth ||
-                  "#"
-                }
-                rel="noreferrer"
-                target="_blank"
-              >
-                打开飞书后台处理权限
-              </a>
-              。
-            </p>
-          </>
-        ) : null}
-        {selectedPermission.status === "error" ? (
-          <div className="notice-banner warn">{selectedPermission.message}</div>
-        ) : null}
+        {renderAutoConfigCard()}
         {detailNotice ? (
           <div className={`notice-banner ${detailNotice.tone}`}>
             {detailNotice.message}
           </div>
         ) : null}
         <div className="button-row">
-          <button
-            className="primary-button"
-            type="button"
-            disabled={actionBusy === "test-events" || Boolean(selectedApp.runtimeApply?.pending)}
-            onClick={() => void triggerRobotTest("events")}
-          >
-            测试事件订阅
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={actionBusy === "test-callback" || Boolean(selectedApp.runtimeApply?.pending)}
-            onClick={() => void triggerRobotTest("callback")}
-          >
-            测试回调
-          </button>
           <button
             className="danger-button"
             type="button"
@@ -951,9 +1141,16 @@ export function AdminRoute() {
         <div className="robot-layout" style={{ marginTop: "1rem" }}>
           <div className="robot-list">
             {apps.map((app) => {
-              const permission = permissionChecks[app.id];
-              const showWarn =
-                permission?.status === "missing" || Boolean(app.runtimeApply?.pending);
+              const autoConfigState = autoConfigPlans[app.id];
+              let planStatus = "";
+              if (app.runtimeApply?.pending) {
+                planStatus = "runtime_pending";
+              } else if (autoConfigState?.status === "ready") {
+                planStatus = autoConfigState.data.plan.status;
+              } else if (autoConfigState?.status === "loading") {
+                planStatus = "loading";
+              }
+              const statusTag = describeAutoConfigTag(planStatus);
               return (
                 <button
                   key={app.id}
@@ -966,7 +1163,11 @@ export function AdminRoute() {
                 >
                   <div className="robot-list-head">
                     <strong>{app.name || "未命名机器人"}</strong>
-                    {showWarn ? <span className="robot-tag warn">有异常</span> : null}
+                    {statusTag ? (
+                      <span className={`robot-tag${statusTag.warn ? " warn" : ""}`}>
+                        {statusTag.label}
+                      </span>
+                    ) : null}
                   </div>
                   <p>{app.appId || "未填写 App ID"}</p>
                 </button>
@@ -1124,6 +1325,39 @@ export function AdminRoute() {
         </div>
       </section>
 
+      {publishTargetID ? (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="publish-app-title"
+          >
+            <h3 id="publish-app-title">确认提交发布</h3>
+            <p className="modal-copy">
+              这会把当前自动补齐后的飞书配置提交到发布流程。若飞书要求管理员审核，后续状态会显示为“等待管理员处理”。
+            </p>
+            <div className="modal-actions">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => setPublishTargetID(null)}
+              >
+                取消
+              </button>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={actionBusy === "auto-config-publish"}
+                onClick={() => void publishAutoConfig()}
+              >
+                确认提交
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {deleteTargetID ? (
         <div className="modal-backdrop" role="presentation">
           <div
@@ -1205,6 +1439,154 @@ function describeConnectionState(app: FeishuAppSummary): string {
       return "需要处理";
     default:
       return "待确认";
+  }
+}
+
+function describeAutoConfigTag(status: string): { label: string; warn: boolean } | null {
+  switch (status) {
+    case "clean":
+      return { label: "已完成", warn: false };
+    case "degraded":
+      return { label: "有降级", warn: true };
+    case "apply_required":
+      return { label: "待补齐", warn: true };
+    case "publish_required":
+      return { label: "待发布", warn: true };
+    case "awaiting_review":
+      return { label: "待审核", warn: true };
+    case "blocked":
+      return { label: "受阻", warn: true };
+    case "runtime_pending":
+      return { label: "同步中", warn: true };
+    case "loading":
+      return { label: "检查中", warn: false };
+    default:
+      return null;
+  }
+}
+
+function autoConfigNoticeTone(status: string): NoticeTone {
+  switch (status) {
+    case "clean":
+      return "good";
+    case "degraded":
+    case "publish_required":
+    case "awaiting_review":
+      return "warn";
+    default:
+      return "danger";
+  }
+}
+
+function describeAutoConfigHeadline(status: string): string {
+  switch (status) {
+    case "clean":
+      return "已自动完成";
+    case "degraded":
+      return "已完成，但存在功能降级";
+    case "apply_required":
+      return "当前还需要自动补齐配置";
+    case "publish_required":
+      return "自动补齐已完成，还需要提交发布";
+    case "awaiting_review":
+      return "已提交发布，正在等待管理员处理";
+    case "blocked":
+      return "当前还不能继续自动配置";
+    default:
+      return "自动配置状态暂不可用";
+  }
+}
+
+function describeAutoConfigSummary(status: string): string {
+  switch (status) {
+    case "clean":
+      return "当前飞书应用已经满足自动配置要求。";
+    case "degraded":
+      return "基础配置已完成，但仍有部分可选能力没有开通。";
+    case "apply_required":
+      return "当前检查到了仍需自动补齐的配置差异。";
+    case "publish_required":
+      return "自动补齐后的配置已经写入，仍需提交飞书发布。";
+    case "awaiting_review":
+      return "飞书应用变更已经进入审核流程，当前只需等待结果。";
+    case "blocked":
+      return "当前阻塞项仍未解除，自动配置暂时不能继续。";
+    default:
+      return "当前还没有读取到自动配置状态。";
+  }
+}
+
+function describeAutoConfigBlockingReason(reason: string): string {
+  switch (reason) {
+    case "application_under_review":
+      return "飞书开放平台上的应用版本仍在审核中。";
+    case "apply_required_before_publish":
+      return "还需要先完成自动补齐，之后才能提交发布。";
+    default:
+      return reason.trim() || "当前状态暂未给出更多说明。";
+  }
+}
+
+function describeAutoConfigRequirementLabel(
+  requirement: FeishuAppAutoConfigRequirementStatus,
+): string {
+  if (requirement.purpose?.trim()) {
+    return requirement.purpose.trim();
+  }
+  if (requirement.feature?.trim()) {
+    const feature = describeAutoConfigFeature(requirement.feature);
+    if (feature) {
+      return feature;
+    }
+  }
+  if (requirement.kind === "scope") {
+    return `权限 ${requirement.key}`;
+  }
+  return requirement.key;
+}
+
+function describeAutoConfigRequirementDetail(
+  requirement: FeishuAppAutoConfigRequirementStatus,
+): string {
+  if (requirement.degradeMessage?.trim()) {
+    return requirement.degradeMessage.trim();
+  }
+  if (requirement.kind === "scope") {
+    return "需要在飞书开放平台补齐对应权限后才能继续。";
+  }
+  if (requirement.kind === "event") {
+    return "需要先在飞书后台开通对应事件。";
+  }
+  if (requirement.kind === "callback") {
+    return "需要先在飞书后台开通对应卡片交互回调。";
+  }
+  return "";
+}
+
+function describeAutoConfigFeature(feature: string): string {
+  switch (feature) {
+    case "core_message_flow":
+      return "机器人基础消息能力";
+    case "interactive_cards":
+      return "卡片交互能力";
+    case "markdown_preview":
+      return "Markdown 预览";
+    case "cron_bitable":
+      return "/cron 多维表格";
+    case "time_sensitive_indicator":
+      return "等待输入提醒";
+    case "group_mentions":
+      return "群聊 @ 消息";
+    case "p2p_chat":
+      return "单聊消息";
+    case "reaction_feedback":
+      return "消息 reaction 反馈";
+    case "message_recall_sync":
+      return "撤回消息同步";
+    case "bot_menu":
+      return "机器人菜单";
+    default:
+      return "";
   }
 }
 
