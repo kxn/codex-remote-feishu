@@ -29,7 +29,7 @@ func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action con
 	if request == nil {
 		return notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
 	}
-	if request.PendingDispatchCommandID != "" {
+	if requestLifecycleBlocksInteractiveResponse(request) {
 		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待"+control.RequestLocalBackendDisplayName(requestPromptBackend(request))+" 处理。")
 	}
 	if requestAction.RequestRevision != 0 && requestAction.RequestRevision != request.CardRevision {
@@ -64,7 +64,7 @@ func (s *Service) controlRequest(surface *state.SurfaceConsoleRecord, action con
 	if request == nil {
 		return notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
 	}
-	if request.PendingDispatchCommandID != "" {
+	if requestLifecycleBlocksInteractiveResponse(request) {
 		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待"+control.RequestLocalBackendDisplayName(requestPromptBackend(request))+" 处理。")
 	}
 	if requestControl.RequestRevision != 0 && requestControl.RequestRevision != request.CardRevision {
@@ -145,6 +145,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		Questions:            definition.Questions,
 		CurrentQuestionIndex: 0,
 		HintText:             definition.HintText,
+		LifecycleState:       requestLifecycleAwaitingVisibility,
 		VisibilityState:      requestVisibilityPendingVisibility,
 		CardRevision:         1,
 		Phase:                frontstagecontract.PhaseEditing,
@@ -158,6 +159,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	normalizeRequestPromptRecord(record)
 	enqueuePendingRequest(surface, record)
 	if !pendingRequestIsActive(surface, record.RequestID) {
+		markRequestQueuedInactive(record)
 		return nil
 	}
 	return s.activatePendingRequest(surface, record, threadTitle)
@@ -209,7 +211,7 @@ func (s *Service) resolvePendingRequestOnSurface(surface *state.SurfaceConsoleRe
 	request = normalizePendingRequestOnSurface(surface, request)
 	wasActive := pendingRequestIsActive(surface, request.RequestID)
 	events := s.handleResolvedRequestPrompt(surface, request, event)
-	request.VisibilityState = requestVisibilityResolved
+	markRequestResolvedLifecycle(request)
 	removePendingRequest(surface, request.RequestID)
 	clearSurfaceRequestCaptureByRequestID(surface, request.RequestID)
 	if wasActive {
@@ -636,7 +638,7 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		HintText:              strings.TrimSpace(record.HintText),
 		Phase:                 record.Phase,
 	}
-	if strings.TrimSpace(record.PendingDispatchCommandID) != "" {
+	if requestLifecycleUsesWaitingDispatchPhase(record) {
 		view.Phase = frontstagecontract.PhaseWaitingDispatch
 		if strings.TrimSpace(view.StatusText) == "" {
 			view.StatusText = requestPromptPendingDispatchStatusText(record)
@@ -681,18 +683,18 @@ func (s *Service) autoDispatchUnsupportedToolCallback(surface *state.SurfaceCons
 	if surface == nil || request == nil {
 		return nil
 	}
-	if strings.TrimSpace(request.PendingDispatchCommandID) != "" {
+	if requestLifecycleUsesWaitingDispatchPhase(request) {
 		return nil
 	}
-	request.PendingDispatchCommandID = s.nextRequestDispatchCommandID()
-	request.Phase = frontstagecontract.PhaseWaitingDispatch
+	commandID := s.nextRequestDispatchCommandID()
+	markRequestSubmitting(request, commandID)
 	return []eventcontract.Event{
 		s.requestPromptEvent(surface, request, threadTitleHint),
 		{
 			Kind:             eventcontract.KindAgentCommand,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Command: &agentproto.Command{
-				CommandID: request.PendingDispatchCommandID,
+				CommandID: commandID,
 				Kind:      agentproto.CommandRequestRespond,
 				Origin: agentproto.Origin{
 					Surface: surface.SurfaceSessionID,
@@ -720,10 +722,13 @@ func (s *Service) activatePendingRequest(surface *state.SurfaceConsoleRecord, re
 	if !pendingRequestIsActive(surface, request.RequestID) {
 		return nil
 	}
+	if normalizeRequestLifecycleState(request.LifecycleState) == requestLifecycleQueuedInactive {
+		markRequestAwaitingVisibility(request)
+	}
 	if !requestPromptRenderable(request.RequestType) {
 		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", request.RequestType))
 	}
-	if normalizeRequestType(request.RequestType) == "tool_callback" {
+	if normalizeRequestType(request.RequestType) == "tool_callback" && !requestLifecycleUsesWaitingDispatchPhase(request) {
 		return s.autoDispatchUnsupportedToolCallback(surface, request, threadTitleHint)
 	}
 	return s.ensurePendingRequestVisible(surface, request, threadTitleHint)
@@ -854,8 +859,8 @@ func (s *Service) dispatchRequestResponse(surface *state.SurfaceConsoleRecord, r
 		return nil
 	}
 	bridge := control.ResolveRequestBridgeContract(request.SemanticKind, request.RequestType)
-	request.PendingDispatchCommandID = s.nextRequestDispatchCommandID()
-	request.Phase = frontstagecontract.PhaseWaitingDispatch
+	commandID := s.nextRequestDispatchCommandID()
+	markRequestSubmitting(request, commandID)
 	bumpRequestCardRevision(request)
 	events := make([]eventcontract.Event, 0, 2)
 	if requestPromptRenderable(request.RequestType) {
@@ -865,7 +870,7 @@ func (s *Service) dispatchRequestResponse(surface *state.SurfaceConsoleRecord, r
 		Kind:             eventcontract.KindAgentCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Command: &agentproto.Command{
-			CommandID: request.PendingDispatchCommandID,
+			CommandID: commandID,
 			Kind:      agentproto.CommandRequestRespond,
 			Origin: agentproto.Origin{
 				Surface:   surface.SurfaceSessionID,
@@ -935,7 +940,7 @@ func (s *Service) cancelRequestUserInputTurn(surface *state.SurfaceConsoleRecord
 	if surface == nil || request == nil {
 		return nil
 	}
-	request.Phase = frontstagecontract.PhaseCancelled
+	markRequestAborted(request, frontstagecontract.PhaseCancelled)
 	events := []eventcontract.Event{s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseCancelled, "已放弃答题，并向当前 turn 发送停止请求。")}
 	if strings.TrimSpace(request.RequestID) != "" && surface.PendingRequests != nil {
 		removePendingRequest(surface, request.RequestID)

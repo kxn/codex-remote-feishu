@@ -95,7 +95,7 @@ func TestToolCallbackRequestAutoDispatchesUnsupportedResponseAndClearsOnResolve(
 	}
 
 	record := svc.root.Surfaces["surface-1"].PendingRequests["req-tool-1"]
-	if record == nil || record.RequestType != "tool_callback" || record.PendingDispatchCommandID != command.CommandID {
+	if record == nil || record.RequestType != "tool_callback" || record.PendingDispatchCommandID != command.CommandID || record.LifecycleState != requestLifecycleSubmitting {
 		t.Fatalf("expected pending tool callback state to remain until resolve, got %#v", record)
 	}
 
@@ -172,7 +172,7 @@ func TestToolCallbackCommandRejectKeepsPromptSealedAndPointsUserToStop(t *testin
 		t.Fatalf("expected tool callback reject path to point user to /stop, got %#v", prompt)
 	}
 	record := svc.root.Surfaces["surface-1"].PendingRequests["req-tool-2"]
-	if record == nil || record.PendingDispatchCommandID != "" || record.Phase != frontstagecontract.PhaseWaitingDispatch {
+	if record == nil || record.PendingDispatchCommandID != "" || record.Phase != frontstagecontract.PhaseWaitingDispatch || record.LifecycleState != requestLifecycleAwaitingBackendConsume {
 		t.Fatalf("expected tool callback record to stay sealed after command reject, got %#v", record)
 	}
 }

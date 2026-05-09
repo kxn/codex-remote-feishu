@@ -557,6 +557,7 @@ type RequestPromptRecord struct {
 	OwnerSurfaceSessionID    string
 	OwnerGatewayID           string
 	OwnerChatID              string
+	LifecycleState           string
 	VisibilityState          string
 	VisibleMessageID         string
 	VisibleAt                time.Time
