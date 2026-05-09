@@ -175,3 +175,77 @@ func TestClaudePermissionControlResponseRefreshesObservedConfig(t *testing.T) {
 		t.Fatalf("unexpected control_response observed config event: %#v", event)
 	}
 }
+
+func TestClaudeAbortCommandClearsPendingTurnAndControlReply(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	observeClaude(t, tr, map[string]any{
+		"type":           "system",
+		"subtype":        "init",
+		"session_id":     "session-claude-1",
+		"cwd":            "/data/dl/droid",
+		"model":          "mimo-v2.5-pro",
+		"permissionMode": "default",
+	})
+
+	payloads, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-failed",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-1"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+		Overrides: agentproto.PromptOverrides{AccessMode: agentproto.AccessModeFullAccess, PlanMode: "off"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand: %v", err)
+	}
+	if len(payloads) != 2 {
+		t.Fatalf("expected permission frame + prompt, got %#v", payloads)
+	}
+	if len(tr.pendingTurns) != 1 || len(tr.pendingControlReplies) != 1 {
+		t.Fatalf("expected staged pending turn + control reply, turns=%#v replies=%#v", tr.pendingTurns, tr.pendingControlReplies)
+	}
+
+	failedRequestID := lookupStringFromAny(decodeFrame(t, payloads[0])["request_id"])
+	tr.AbortCommand("cmd-failed")
+
+	if len(tr.pendingTurns) != 0 || len(tr.pendingControlReplies) != 0 {
+		t.Fatalf("expected failed command state to be cleared, turns=%#v replies=%#v", tr.pendingTurns, tr.pendingControlReplies)
+	}
+	response := observeClaude(t, tr, map[string]any{
+		"type": "control_response",
+		"response": map[string]any{
+			"request_id": failedRequestID,
+		},
+	})
+	if len(response.Events) != 0 || len(response.ResolvedCommandResponses) != 0 {
+		t.Fatalf("expected late control response for aborted command to be ignored, got %#v", response)
+	}
+
+	_, err = tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-ok",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target:    agentproto.Target{ThreadID: "thread-1"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello again"}}},
+		Overrides: agentproto.PromptOverrides{AccessMode: agentproto.AccessModeConfirm, PlanMode: "off"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand second command: %v", err)
+	}
+	if len(tr.pendingTurns) != 1 || tr.pendingTurns[0] == nil || tr.pendingTurns[0].CommandID != "cmd-ok" {
+		t.Fatalf("expected only second command to remain pending, got %#v", tr.pendingTurns)
+	}
+
+	result := observeClaude(t, tr, map[string]any{
+		"type":       "result",
+		"subtype":    "success",
+		"session_id": "session-claude-1",
+		"result":     "done",
+	})
+	if len(result.Events) < 2 {
+		t.Fatalf("expected turn events for second command, got %#v", result.Events)
+	}
+	if result.Events[0].Kind != agentproto.EventTurnStarted || result.Events[0].CommandID != "cmd-ok" {
+		t.Fatalf("expected second command to own next turn.start, got %#v", result.Events[0])
+	}
+}

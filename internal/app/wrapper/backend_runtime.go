@@ -30,6 +30,7 @@ type runtimeResolvedCommandResponse struct {
 type runtimeCommandPhase struct {
 	OutboundToChild [][]byte
 	ResponseGate    *runtimeCommandResponseGate
+	Abort           func()
 }
 
 type runtimeCommandResult struct {
@@ -276,7 +277,7 @@ func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) (run
 	if err != nil {
 		return runtimeCommandResult{}, err
 	}
-	phases, err := newClaudeCommandPhases(command, outbound)
+	phases, err := r.newClaudeCommandPhases(command, outbound)
 	if err != nil {
 		return runtimeCommandResult{}, err
 	}
@@ -313,8 +314,14 @@ func mapClaudeResolvedCommandResponses(responses []claude.ResolvedCommandRespons
 	return mapped
 }
 
-func newClaudeCommandPhases(command agentproto.Command, outbound [][]byte) ([]runtimeCommandPhase, error) {
+func (r *claudeBackendRuntime) newClaudeCommandPhases(command agentproto.Command, outbound [][]byte) ([]runtimeCommandPhase, error) {
 	phases := singleRuntimeCommandPhases(outbound)
+	abort := func() {
+		r.abortTranslatedCommand(command.CommandID)
+	}
+	for index := range phases {
+		phases[index].Abort = abort
+	}
 	if command.Kind != agentproto.CommandPromptSend || len(outbound) < 2 {
 		return phases, nil
 	}
@@ -335,6 +342,12 @@ func newClaudeCommandPhases(command agentproto.Command, outbound [][]byte) ([]ru
 		})
 	}
 	return phases, nil
+}
+
+func (r *claudeBackendRuntime) abortTranslatedCommand(commandID string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.translator.AbortCommand(commandID)
 }
 
 func newClaudePermissionModeResponseGate(command agentproto.Command, frame []byte) (*runtimeCommandResponseGate, bool, error) {

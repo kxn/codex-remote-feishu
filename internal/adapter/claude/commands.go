@@ -67,7 +67,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 	t.pendingTurns = append(t.pendingTurns, turn)
 
 	outbound := make([][]byte, 0, 2)
-	if frame, ok, err := t.buildPermissionModeFrame(command.Overrides.AccessMode, command.Overrides.PlanMode); err != nil {
+	if frame, ok, err := t.buildPermissionModeFrame(command.CommandID, command.Overrides.AccessMode, command.Overrides.PlanMode); err != nil {
 		return nil, err
 	} else if ok {
 		outbound = append(outbound, frame)
@@ -129,7 +129,7 @@ func (t *Translator) translateTurnSteer(command agentproto.Command) ([][]byte, e
 	return [][]byte{frame}, nil
 }
 
-func (t *Translator) buildPermissionModeFrame(accessMode, planMode string) ([]byte, bool, error) {
+func (t *Translator) buildPermissionModeFrame(commandID, accessMode, planMode string) ([]byte, bool, error) {
 	desired := claudePermissionSelectionFromOverrides(accessMode, planMode).NativeMode
 	if strings.TrimSpace(t.permissionMode) == desired {
 		return nil, false, nil
@@ -148,6 +148,7 @@ func (t *Translator) buildPermissionModeFrame(accessMode, planMode string) ([]by
 		return nil, false, err
 	}
 	t.pendingControlReplies[requestID] = pendingControlReply{
+		CommandID:             strings.TrimSpace(commandID),
 		Kind:                  "set_permission_mode",
 		DesiredPermissionMode: desired,
 	}
@@ -176,7 +177,10 @@ func (t *Translator) translateInterrupt(command agentproto.Command) ([][]byte, e
 	if err != nil {
 		return nil, err
 	}
-	t.pendingControlReplies[requestID] = pendingControlReply{Kind: "interrupt"}
+	t.pendingControlReplies[requestID] = pendingControlReply{
+		CommandID: strings.TrimSpace(command.CommandID),
+		Kind:      "interrupt",
+	}
 	return [][]byte{frame}, nil
 }
 
