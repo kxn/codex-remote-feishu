@@ -71,7 +71,6 @@ type OnboardingDecision struct {
 }
 
 type FeishuAppOnboardingState struct {
-	PermissionDecision *OnboardingDecision `json:"permissionDecision,omitempty"`
 	AutoConfigDecision *OnboardingDecision `json:"autoConfigDecision,omitempty"`
 	MenuDecision       *OnboardingDecision `json:"menuDecision,omitempty"`
 }

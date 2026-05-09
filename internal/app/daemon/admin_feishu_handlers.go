@@ -109,8 +109,6 @@ func (a *App) handleFeishuAppCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.adminConfigMu.Unlock()
-	a.clearAllFeishuAppTests(gatewayID)
-
 	if err := a.applyRuntimeFeishuConfig(updated, gatewayID); err != nil {
 		summary, _, summaryErr := a.adminFeishuAppSummary(config.LoadedAppConfig{Path: loaded.Path, Config: updated}, gatewayID)
 		if summaryErr != nil {
@@ -244,8 +242,6 @@ func (a *App) handleFeishuAppUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	a.clearFeishuAppWebTestRecipient(gatewayID)
-
 	if err := a.applyRuntimeFeishuConfig(updated, gatewayID); err != nil {
 		summary, _, summaryErr := a.adminFeishuAppSummary(config.LoadedAppConfig{Path: loaded.Path, Config: updated}, gatewayID)
 		if summaryErr != nil {
@@ -418,15 +414,12 @@ func (a *App) handleFeishuAppVerify(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if verifyErr != nil {
-		a.clearAllFeishuAppTests(gatewayID)
 		writeJSON(w, http.StatusBadGateway, feishuAppVerifyResponse{
 			App:    summary,
 			Result: result,
 		})
 		return
 	}
-	a.clearAllFeishuAppTests(gatewayID)
-	a.maybeSendFeishuAppVerifySuccessNotices(r.Context(), gatewayID, strings.HasPrefix(r.URL.Path, "/api/setup/"))
 	writeJSON(w, http.StatusOK, feishuAppVerifyResponse{
 		App:    summary,
 		Result: result,
@@ -452,7 +445,6 @@ func (a *App) handleFeishuAppReconnect(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	a.clearAllFeishuAppTests(gatewayID)
 	if err := a.applyRuntimeFeishuConfig(loaded.Config, gatewayID); err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
 			Code:    "gateway_apply_failed",
@@ -501,7 +493,6 @@ func (a *App) handleFeishuAppRetryApply(w http.ResponseWriter, r *http.Request) 
 		a.writeFeishuRuntimeApplyError(w, gatewayID, summary, pending.Action, "failed to retry feishu runtime apply", err)
 		return
 	}
-	a.clearAllFeishuAppTests(gatewayID)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -520,7 +511,6 @@ func (a *App) handleFeishuAppRuntimeAction(w http.ResponseWriter, r *http.Reques
 		a.writeFeishuMutationError(w, gatewayID, err)
 		return
 	}
-	a.clearAllFeishuAppTests(gatewayID)
 	if err := a.applyRuntimeFeishuConfig(updated.Config, gatewayID); err != nil {
 		summary, _, summaryErr := a.adminFeishuAppSummary(updated, gatewayID)
 		if summaryErr != nil {

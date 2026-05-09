@@ -163,7 +163,6 @@ func (a *App) applyRuntimeFeishuConfig(cfg config.AppConfig, gatewayID string) e
 		return err
 	}
 	a.clearFeishuPermissionGaps(gatewayID)
-	a.clearAllFeishuAppTests(gatewayID)
 	a.clearFeishuRuntimeApplyPending(gatewayID)
 	return nil
 }

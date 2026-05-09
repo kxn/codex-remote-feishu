@@ -25,14 +25,6 @@ type feishuAppVerifyResponse struct {
 	Result feishu.VerifyResult   `json:"result"`
 }
 
-type feishuAppPermissionCheckResponse struct {
-	App           adminFeishuAppSummary          `json:"app"`
-	Ready         bool                           `json:"ready"`
-	MissingScopes []feishuAppPermissionCheckItem `json:"missingScopes,omitempty"`
-	GrantJSON     string                         `json:"grantJSON,omitempty"`
-	LastCheckedAt *time.Time                     `json:"lastCheckedAt,omitempty"`
-}
-
 type feishuAppAutoConfigPlanResponse struct {
 	App  adminFeishuAppSummary `json:"app"`
 	Plan feishu.AutoConfigPlan `json:"plan"`
@@ -52,19 +44,6 @@ type feishuAppAutoConfigPublishRequest struct {
 type feishuAppAutoConfigPublishResponse struct {
 	App    adminFeishuAppSummary          `json:"app"`
 	Result feishu.AutoConfigPublishResult `json:"result"`
-}
-
-type feishuAppPermissionCheckItem struct {
-	Scope     string `json:"scope"`
-	ScopeType string `json:"scopeType,omitempty"`
-}
-
-type feishuAppTestStartResponse struct {
-	GatewayID string    `json:"gatewayId"`
-	StartedAt time.Time `json:"startedAt"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	Phrase    string    `json:"phrase,omitempty"`
-	Message   string    `json:"message"`
 }
 
 type feishuRuntimeApplyErrorDetails struct {
@@ -117,38 +96,4 @@ type feishuAppMutationView struct {
 	Message            string `json:"message,omitempty"`
 	ReconnectRequested bool   `json:"reconnectRequested,omitempty"`
 	RequiresNewChat    bool   `json:"requiresNewChat,omitempty"`
-}
-
-type feishuAppTestKind string
-
-const (
-	feishuAppTestKindEventSubscription feishuAppTestKind = "event_subscription"
-	feishuAppTestKindCallback          feishuAppTestKind = "callback"
-
-	feishuAppTestStatusPending = "pending"
-	feishuAppTestStatusPassed  = "passed"
-	feishuAppTestStatusExpired = "expired"
-
-	defaultFeishuAppEventTestPhrase = "测试"
-	defaultFeishuAppTestTTL         = 10 * time.Minute
-	defaultFeishuAppTestSendTimeout = 10 * time.Second
-)
-
-type feishuAppTestContext struct {
-	ID        string
-	GatewayID string
-	Kind      feishuAppTestKind
-	Phrase    string
-	Recipient feishuAppWebTestRecipient
-	Status    string
-	StartedAt time.Time
-	ExpiresAt time.Time
-}
-
-type feishuAppWebTestRecipient struct {
-	GatewayID     string
-	ActorUserID   string
-	ReceiveID     string
-	ReceiveIDType string
-	BoundAt       time.Time
 }

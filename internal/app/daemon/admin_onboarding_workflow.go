@@ -30,12 +30,11 @@ const (
 	onboardingMachineStateUsableWithPendingItems = "usable_with_pending_items"
 	onboardingMachineStateCompleted              = "completed"
 
-	onboardingDecisionAutostartEnabled  = "enabled"
-	onboardingDecisionDeferred          = "deferred"
-	onboardingDecisionVSCodeManaged     = "managed_shim"
-	onboardingDecisionVSCodeRemoteOnly  = "remote_only"
-	onboardingDecisionPermissionSkipped = "skipped"
-	onboardingDecisionMenuConfirmed     = "confirmed"
+	onboardingDecisionAutostartEnabled = "enabled"
+	onboardingDecisionDeferred         = "deferred"
+	onboardingDecisionVSCodeManaged    = "managed_shim"
+	onboardingDecisionVSCodeRemoteOnly = "remote_only"
+	onboardingDecisionMenuConfirmed    = "confirmed"
 )
 
 type onboardingWorkflowResponse struct {
@@ -78,13 +77,6 @@ type onboardingWorkflowStageView struct {
 	Blocking       bool     `json:"blocking,omitempty"`
 	Optional       bool     `json:"optional,omitempty"`
 	AllowedActions []string `json:"allowedActions,omitempty"`
-}
-
-type onboardingWorkflowPermissionView struct {
-	onboardingWorkflowStageView
-	MissingScopes []feishuAppPermissionCheckItem `json:"missingScopes,omitempty"`
-	GrantJSON     string                         `json:"grantJSON,omitempty"`
-	LastCheckedAt *time.Time                     `json:"lastCheckedAt,omitempty"`
 }
 
 type onboardingWorkflowMachineStepView struct {
@@ -586,10 +578,6 @@ func onboardingDecisionViewFromConfig(decision *config.OnboardingDecision) *onbo
 		Value:     strings.TrimSpace(decision.Value),
 		DecidedAt: decision.DecidedAt,
 	}
-}
-
-func onboardingPermissionSkipped(decision *config.OnboardingDecision) bool {
-	return decision != nil && strings.TrimSpace(decision.Value) == onboardingDecisionPermissionSkipped
 }
 
 func onboardingAutoConfigDeferred(decision *config.OnboardingDecision) bool {

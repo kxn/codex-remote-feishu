@@ -407,6 +407,45 @@ func TestSetupOnboardingAutoConfigDeferResetControlsMenuGate(t *testing.T) {
 	}
 }
 
+func TestSetupLegacyFeishuInstallTestRoutesAreRemoved(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	app, token := newRemoteSetupTestApp(t, home)
+	cookie := exchangeSetupSessionCookie(t, app, token)
+
+	req := performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps", `{"id":"main","name":"Main Bot","appId":"cli_xxx","appSecret":"secret_xxx"}`, cookie)
+	rec := performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201 body=%s", rec.Code, rec.Body.String())
+	}
+
+	paths := []struct {
+		method string
+		path   string
+	}{
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/onboarding-permission/skip"},
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/onboarding-permission/reset"},
+		{method: http.MethodGet, path: "/api/setup/feishu/apps/main/permission-check"},
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/test-events"},
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/test-callback"},
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/install-tests/events/clear"},
+	}
+	for _, tc := range paths {
+		req = performSetupRequestWithCookie(tc.method, tc.path, "", cookie)
+		rec = performSetupRequestRecorder(app, req)
+		if rec.Code == http.StatusNotFound || rec.Code == http.StatusMethodNotAllowed {
+			continue
+		}
+		if tc.method == http.MethodGet &&
+			rec.Code == http.StatusOK &&
+			strings.Contains(rec.Body.String(), "<h1>Codex Remote</h1>") {
+			continue
+		}
+		t.Fatalf("%s %s unexpectedly remained available: status=%d body=%s", tc.method, tc.path, rec.Code, rec.Body.String())
+	}
+}
+
 func newRemoteSetupTestApp(t *testing.T, home string) (*App, string) {
 	t.Helper()
 

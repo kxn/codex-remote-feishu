@@ -113,3 +113,25 @@ func buildCreatedFeishuAppMutation() *feishuAppMutationView {
 		Message: "飞书机器人已创建。接下来请先测试连接，并完成首次配置。",
 	}
 }
+
+func errFeishuAppNotFound(gatewayID string) error {
+	return fmt.Errorf("feishu_app_not_found:%s", strings.TrimSpace(gatewayID))
+}
+
+func errFeishuAppRuntimeUnavailable(gatewayID string) error {
+	return fmt.Errorf("feishu_app_runtime_unavailable:%s", strings.TrimSpace(gatewayID))
+}
+
+func buildFeishuAppConsoleLinks(appID string) feishuAppConsoleLinks {
+	appID = strings.TrimSpace(appID)
+	if appID == "" {
+		return feishuAppConsoleLinks{}
+	}
+	base := "https://open.feishu.cn/app/" + appID
+	return feishuAppConsoleLinks{
+		Auth:     base + "/auth",
+		Events:   base + "/event?tab=event",
+		Callback: base + "/event?tab=callback",
+		Bot:      base + "/bot",
+	}
+}

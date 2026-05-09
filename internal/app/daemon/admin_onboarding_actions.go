@@ -34,48 +34,6 @@ func (a *App) handleOnboardingMachineDecision(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *App) handleFeishuAppPermissionSkip(w http.ResponseWriter, r *http.Request) {
-	gatewayID := canonicalGatewayID(r.PathValue("id"))
-	if err := a.writeFeishuAppPermissionDecision(gatewayID, onboardingDecisionPermissionSkipped, time.Now().UTC()); err != nil {
-		status := http.StatusBadRequest
-		code := "onboarding_permission_write_failed"
-		message := "failed to persist onboarding permission decision"
-		if strings.HasPrefix(err.Error(), "feishu_app_not_found:") {
-			status = http.StatusNotFound
-			code = "feishu_app_not_found"
-			message = "feishu app not found"
-		}
-		writeAPIError(w, status, apiError{
-			Code:    code,
-			Message: message,
-			Details: err.Error(),
-		})
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (a *App) handleFeishuAppPermissionReset(w http.ResponseWriter, r *http.Request) {
-	gatewayID := canonicalGatewayID(r.PathValue("id"))
-	if err := a.clearFeishuAppPermissionDecision(gatewayID); err != nil {
-		status := http.StatusBadRequest
-		code := "onboarding_permission_write_failed"
-		message := "failed to reset onboarding permission decision"
-		if strings.HasPrefix(err.Error(), "feishu_app_not_found:") {
-			status = http.StatusNotFound
-			code = "feishu_app_not_found"
-			message = "feishu app not found"
-		}
-		writeAPIError(w, status, apiError{
-			Code:    code,
-			Message: message,
-			Details: err.Error(),
-		})
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (a *App) handleFeishuAppAutoConfigDefer(w http.ResponseWriter, r *http.Request) {
 	gatewayID := canonicalGatewayID(r.PathValue("id"))
 	if err := a.writeFeishuAppAutoConfigDecision(gatewayID, onboardingDecisionDeferred, time.Now().UTC()); err != nil {
@@ -188,33 +146,6 @@ func (a *App) writeOnboardingMachineDecision(kind, decision string, decidedAt ti
 		case "vscode":
 			cfg.Admin.Onboarding.VSCodeDecision = record
 		}
-		return nil
-	})
-}
-
-func (a *App) writeFeishuAppPermissionDecision(gatewayID, decision string, decidedAt time.Time) error {
-	gatewayID = canonicalGatewayID(gatewayID)
-	decision = strings.TrimSpace(decision)
-	if gatewayID == "" {
-		return invalidOnboardingDecisionError("permission", decision)
-	}
-	if decision != onboardingDecisionPermissionSkipped {
-		return invalidOnboardingDecisionError("permission", decision)
-	}
-	if err := a.ensureFeishuAppExists(gatewayID); err != nil {
-		return err
-	}
-
-	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
-		if cfg.Admin.Onboarding.Apps == nil {
-			cfg.Admin.Onboarding.Apps = map[string]config.FeishuAppOnboardingState{}
-		}
-		state := cfg.Admin.Onboarding.Apps[gatewayID]
-		state.PermissionDecision = &config.OnboardingDecision{
-			Value:     onboardingDecisionPermissionSkipped,
-			DecidedAt: daemonTimePtr(decidedAt.UTC()),
-		}
-		cfg.Admin.Onboarding.Apps[gatewayID] = state
 		return nil
 	})
 }
@@ -333,36 +264,6 @@ func (a *App) clearFeishuAppMenuDecision(gatewayID string) error {
 	})
 }
 
-func (a *App) clearFeishuAppPermissionDecision(gatewayID string) error {
-	gatewayID = canonicalGatewayID(gatewayID)
-	if gatewayID == "" {
-		return invalidOnboardingDecisionError("permission", "")
-	}
-	if err := a.ensureFeishuAppExists(gatewayID); err != nil {
-		return err
-	}
-
-	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
-		if cfg.Admin.Onboarding.Apps == nil {
-			return nil
-		}
-		state, ok := cfg.Admin.Onboarding.Apps[gatewayID]
-		if !ok {
-			return nil
-		}
-		state.PermissionDecision = nil
-		if feishuAppOnboardingStateEmpty(state) {
-			delete(cfg.Admin.Onboarding.Apps, gatewayID)
-			if len(cfg.Admin.Onboarding.Apps) == 0 {
-				cfg.Admin.Onboarding.Apps = nil
-			}
-			return nil
-		}
-		cfg.Admin.Onboarding.Apps[gatewayID] = state
-		return nil
-	})
-}
-
 func (a *App) clearFeishuAppOnboardingState(gatewayID string) error {
 	gatewayID = canonicalGatewayID(gatewayID)
 	if gatewayID == "" {
@@ -413,8 +314,7 @@ func invalidOnboardingDecisionError(kind, decision string) error {
 }
 
 func feishuAppOnboardingStateEmpty(state config.FeishuAppOnboardingState) bool {
-	return state.PermissionDecision == nil &&
-		state.AutoConfigDecision == nil &&
+	return state.AutoConfigDecision == nil &&
 		state.MenuDecision == nil
 }
 

@@ -881,11 +881,7 @@ func (a *App) handleFeishuOnboardingSessionComplete(w http.ResponseWriter, r *ht
 		return
 	}
 
-	if strings.TrimSpace(sessionState.InstallerID) != "" {
-		a.bindFeishuAppWebTestRecipient(gatewayID, sessionState.InstallerID)
-	}
 	response.Session = a.markOnboardingSessionCompleted(sessionID, gatewayID, summary, mutation, result)
-	a.maybeSendFeishuAppVerifySuccessNotices(r.Context(), gatewayID, strings.HasPrefix(r.URL.Path, "/api/setup/"))
 	log.Printf("feishu onboarding completed: session=%s gateway=%s app_id=%s", sessionID, gatewayID, summary.AppID)
 	writeJSON(w, http.StatusOK, response)
 }

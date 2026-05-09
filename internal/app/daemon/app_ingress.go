@@ -243,9 +243,6 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.syncClaudeWorkspaceProfileStateLocked()
 		return nil
 	}
-	if a.maybeHandleFeishuAppTestActionLocked(ctx, action) {
-		return nil
-	}
 	if events, handled := a.interceptTurnPatchActionLocked(action); handled {
 		contract := control.ResolveFeishuFrontstageActionContract(action)
 		inlineResult, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, events)
