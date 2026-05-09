@@ -616,68 +616,19 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 		events = append(events, event)
 	}
 	tool.Completed = true
+	if resolved, ok := t.resolvePendingRequestForToolResult(message, block, tool.ToolUseID); ok {
+		events = append(events, resolved)
+	}
 	return Result{Events: events}
 }
 
 func (t *Translator) observeInternalToolResult(message, block map[string]any, tool *toolState) Result {
-	request := findRequestByToolUseID(t.pendingRequests, tool.ToolUseID)
-	if request == nil {
-		return Result{}
-	}
-	metadata := map[string]any{
-		"requestType": string(request.RequestType),
-		"tool":        request.ToolName,
-	}
-	switch rawToolResult := message["tool_use_result"].(type) {
-	case map[string]any:
-		for key, value := range rawToolResult {
-			metadata[key] = cloneJSONValue(value)
-		}
-	case string:
-		if strings.TrimSpace(rawToolResult) != "" {
-			metadata["toolUseResult"] = strings.TrimSpace(rawToolResult)
+	if resolved, ok := t.resolvePendingRequestForToolResult(message, block, tool.ToolUseID); ok {
+		return Result{
+			Events: []agentproto.Event{resolved},
 		}
 	}
-	if request.Decision != "" {
-		metadata["decision"] = request.Decision
-	}
-	if contentText := stringifyTextContent(block["content"]); strings.TrimSpace(contentText) != "" {
-		metadata["text"] = strings.TrimSpace(contentText)
-	}
-	if tool.Name == "AskUserQuestion" && len(request.Questions) != 0 {
-		metadata["questions"] = buildQuestionMetadata(buildAgentQuestions(request.Questions))
-	}
-	if tool.Name == "ExitPlanMode" {
-		if request.PlanBody != "" {
-			metadata["body"] = request.PlanBody
-		}
-		if request.PlanBodySource != "" {
-			metadata["planBodySource"] = request.PlanBodySource
-		}
-	}
-	delete(t.pendingRequests, request.RequestID)
-	return Result{
-		Events: []agentproto.Event{{
-			Kind:      agentproto.EventRequestResolved,
-			CommandID: t.activeTurn.CommandID,
-			ThreadID:  request.ThreadID,
-			TurnID:    request.TurnID,
-			RequestID: request.RequestID,
-			Metadata:  metadata,
-		}},
-	}
-}
-
-func buildAgentQuestions(questions []pendingQuestion) []agentproto.RequestQuestion {
-	out := make([]agentproto.RequestQuestion, 0, len(questions))
-	for _, question := range questions {
-		out = append(out, agentproto.RequestQuestion{
-			ID:       question.ID,
-			Header:   question.Header,
-			Question: question.Question,
-		})
-	}
-	return out
+	return Result{}
 }
 
 func (t *Translator) observeControlRequest(message map[string]any) Result {

@@ -112,11 +112,24 @@ func TestClaudeTranslatorToolApprovalMainChain(t *testing.T) {
 			"isImage":     false,
 		},
 	})
-	if len(completed.Events) != 1 {
-		t.Fatalf("expected one tool completed event, got %#v", completed.Events)
+	if len(completed.Events) != 2 {
+		t.Fatalf("expected tool completion + request.resolved, got %#v", completed.Events)
 	}
 	if completed.Events[0].Kind != agentproto.EventItemCompleted || completed.Events[0].ItemKind != "command_execution" || completed.Events[0].Status != "completed" {
 		t.Fatalf("unexpected tool completion event: %#v", completed.Events[0])
+	}
+	resolved := completed.Events[1]
+	if resolved.Kind != agentproto.EventRequestResolved || resolved.ThreadID != threadID || resolved.TurnID != turnID || resolved.RequestID != "req-tool-1" {
+		t.Fatalf("unexpected request resolved event: %#v", resolved)
+	}
+	if lookupStringFromAny(resolved.Metadata["requestType"]) != string(agentproto.RequestTypeApproval) ||
+		lookupStringFromAny(resolved.Metadata["tool"]) != "Bash" ||
+		lookupStringFromAny(resolved.Metadata["decision"]) != "accept" ||
+		lookupStringFromAny(resolved.Metadata["stdout"]) != "BLACKBOX_TOOL_OK" {
+		t.Fatalf("unexpected request resolved metadata: %#v", resolved.Metadata)
+	}
+	if len(tr.pendingRequests) != 0 {
+		t.Fatalf("expected pending requests cleared after tool result, got %#v", tr.pendingRequests)
 	}
 }
 
