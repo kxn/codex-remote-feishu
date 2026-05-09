@@ -266,6 +266,13 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 		case strings.HasPrefix(err.Error(), "feishu_app_not_found:"):
 			summary = "当前飞书应用暂时不可用，请重新连接后再继续。"
 		}
+		if onboardingAutoConfigDeferred(state.AutoConfigDecision) && onboardingAutoConfigPreserveDeferredOnReadError(err) {
+			return onboardingWorkflowAutoConfigView{
+				onboardingWorkflowStageView: stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, onboardingAutoConfigDeferredRetrySummary(summary), false, true, []string{"retry"}),
+				Decision:                    decision,
+				Error:                       err.Error(),
+			}
+		}
 		return onboardingWorkflowAutoConfigView{
 			onboardingWorkflowStageView: stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, summary, false, false, []string{"retry"}),
 			Decision:                    decision,
@@ -277,6 +284,13 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 	defer cancel()
 	plan, err := planFeishuAppAutoConfig(planCtx, runtimeCfg)
 	if err != nil {
+		if onboardingAutoConfigDeferred(state.AutoConfigDecision) {
+			return onboardingWorkflowAutoConfigView{
+				onboardingWorkflowStageView: stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, onboardingAutoConfigDeferredRetrySummary("暂时无法读取飞书自动配置状态，请稍后重试。"), false, true, []string{"retry"}),
+				Decision:                    decision,
+				Error:                       err.Error(),
+			}
+		}
 		return onboardingWorkflowAutoConfigView{
 			onboardingWorkflowStageView: stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, "暂时无法读取飞书自动配置状态，请稍后重试。", false, false, []string{"retry"}),
 			Decision:                    decision,
@@ -288,33 +302,34 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 		Decision: decision,
 		Plan:     &plan,
 	}
+	canContinueDegraded := onboardingAutoConfigCanContinueDegraded(plan)
 	switch plan.Status {
 	case feishu.AutoConfigStatusClean:
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusComplete, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前飞书应用配置已收敛。"), false, false, []string{"retry"})
 	case feishu.AutoConfigStatusDegraded:
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusComplete, firstNonEmpty(strings.TrimSpace(plan.Summary), "飞书应用已可用，但仍有可降级缺失项。"), false, false, []string{"retry"})
 	case feishu.AutoConfigStatusApplyRequired:
-		if onboardingAutoConfigCanDefer(plan) && onboardingAutoConfigDeferred(state.AutoConfigDecision) {
+		if canContinueDegraded && onboardingAutoConfigDeferred(state.AutoConfigDecision) {
 			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新补齐。", false, true, []string{"apply", "retry"})
 			break
 		}
 		actions := []string{"apply", "retry"}
-		if onboardingAutoConfigCanDefer(plan) {
+		if canContinueDegraded {
 			actions = append(actions, "defer")
 		}
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前还需要自动补齐飞书配置。"), false, onboardingAutoConfigCanDefer(plan), actions)
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前还需要自动补齐飞书配置。"), false, canContinueDegraded, actions)
 	case feishu.AutoConfigStatusPublishRequired:
-		if onboardingAutoConfigCanDefer(plan) && onboardingAutoConfigDeferred(state.AutoConfigDecision) {
+		if canContinueDegraded && onboardingAutoConfigDeferred(state.AutoConfigDecision) {
 			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新发布。", false, true, []string{"publish", "retry"})
 			break
 		}
 		actions := []string{"publish", "retry"}
-		if onboardingAutoConfigCanDefer(plan) {
+		if canContinueDegraded {
 			actions = append(actions, "defer")
 		}
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "自动补齐后的配置仍需提交飞书发布。"), false, onboardingAutoConfigCanDefer(plan), actions)
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "自动补齐后的配置仍需提交飞书发布。"), false, canContinueDegraded, actions)
 	case feishu.AutoConfigStatusAwaitingReview:
-		if len(plan.BlockingRequirements) > 0 {
+		if !canContinueDegraded {
 			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusBlocked, firstNonEmpty(strings.TrimSpace(plan.Summary), "飞书应用变更正在等待管理员处理，当前还不能继续。"), true, false, []string{"retry"})
 			break
 		}
@@ -581,8 +596,33 @@ func onboardingAutoConfigDeferred(decision *config.OnboardingDecision) bool {
 	return decision != nil && strings.TrimSpace(decision.Value) == onboardingDecisionDeferred
 }
 
-func onboardingAutoConfigCanDefer(plan feishu.AutoConfigPlan) bool {
-	return len(plan.BlockingRequirements) == 0 && (plan.Status == feishu.AutoConfigStatusApplyRequired || plan.Status == feishu.AutoConfigStatusPublishRequired || plan.Status == feishu.AutoConfigStatusAwaitingReview)
+func onboardingAutoConfigCanContinueDegraded(plan feishu.AutoConfigPlan) bool {
+	if strings.TrimSpace(plan.Status) != feishu.AutoConfigStatusApplyRequired {
+		return false
+	}
+	if len(plan.BlockingRequirements) > 0 {
+		return false
+	}
+	if plan.Diff.AbilityPatchRequired ||
+		plan.Diff.EventSubscriptionTypeMismatch ||
+		plan.Diff.EventRequestURLMismatch ||
+		plan.Diff.CallbackTypeMismatch ||
+		plan.Diff.CallbackRequestURLMismatch {
+		return false
+	}
+	return true
+}
+
+func onboardingAutoConfigPreserveDeferredOnReadError(err error) bool {
+	return err != nil && !strings.HasPrefix(err.Error(), "feishu_app_not_found:")
+}
+
+func onboardingAutoConfigDeferredRetrySummary(summary string) string {
+	base := strings.TrimSpace(summary)
+	if base == "" {
+		return "暂时无法刷新飞书自动配置状态，但会保留你已选择的降级继续。"
+	}
+	return base + " 当前会保留你已选择的降级继续。"
 }
 
 func onboardingMenuConfirmed(decision *config.OnboardingDecision) bool {
