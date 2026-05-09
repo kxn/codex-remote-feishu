@@ -6,6 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -67,6 +68,7 @@ func clearSurfaceRequests(surface *state.SurfaceConsoleRecord) {
 	if surface == nil {
 		return
 	}
+	clearSurfaceRequestsForTurn(surface, "", "")
 	surface.PendingRequests = map[string]*state.RequestPromptRecord{}
 	surface.PendingRequestOrder = []string{}
 	clearSurfaceRequestCapture(surface)
@@ -86,6 +88,7 @@ func clearSurfaceRequestsForTurn(surface *state.SurfaceConsoleRecord, threadID, 
 			if !requestMatchesTurn(request, threadID, turnID) {
 				continue
 			}
+			markRequestAborted(request, frontstagecontract.PhaseExpired)
 			removePendingRequest(surface, requestID)
 		}
 	}

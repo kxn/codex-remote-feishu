@@ -189,6 +189,10 @@ func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.Comman
 	if ack.CommandID == "" {
 		return nil
 	}
+	if surface, request := s.findPendingRequestByCommandID(ack.CommandID); surface != nil && request != nil {
+		markRequestAwaitingBackendConsume(request)
+		return nil
+	}
 	key, binding := s.pendingSteerForCommand(instanceID, ack.CommandID)
 	if binding == nil {
 		return nil
@@ -266,8 +270,7 @@ func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRec
 		return nil
 	}
 	if normalizeRequestType(request.RequestType) == "tool_callback" {
-		request.PendingDispatchCommandID = ""
-		request.Phase = frontstagecontract.PhaseWaitingDispatch
+		markRequestAwaitingBackendConsume(request)
 		bumpRequestCardRevision(request)
 		noticeText := "自动上报 unsupported 结果失败，当前 turn 可能仍在等待 callback。可使用 `/stop` 结束本轮，或等待本地 Codex 恢复后重试。"
 		return []eventcontract.Event{
@@ -283,8 +286,7 @@ func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRec
 			},
 		}
 	}
-	request.PendingDispatchCommandID = ""
-	request.Phase = frontstagecontract.PhaseEditing
+	markRequestVisibleEditing(request)
 	bumpRequestCardRevision(request)
 	noticeText := "请求提交失败，请在最新卡片上重试。"
 	if noticeCode == "command_rejected" {

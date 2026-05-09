@@ -62,7 +62,7 @@ func TestRequestDeliverySuccessMarksActiveRequestVisible(t *testing.T) {
 	if record == nil || record.VisibilityState != requestVisibilityVisible || record.VisibleMessageID != "om-request-1" {
 		t.Fatalf("expected visible request with message id, got %#v", record)
 	}
-	if !record.VisibleAt.Equal(deliveredAt) || record.NeedsRedelivery {
+	if !record.VisibleAt.Equal(deliveredAt) || record.NeedsRedelivery || record.LifecycleState != requestLifecycleEditingVisible {
 		t.Fatalf("expected visible timestamp and no redelivery, got %#v", record)
 	}
 }
@@ -164,6 +164,7 @@ func TestResolvePromotesNextQueuedRequestThroughVisibilityEntry(t *testing.T) {
 		OwnerSurfaceSessionID: "surface-1",
 		OwnerGatewayID:        "app-1",
 		OwnerChatID:           "chat-1",
+		LifecycleState:        requestLifecycleQueuedInactive,
 		VisibilityState:       requestVisibilityPendingVisibility,
 		CardRevision:          1,
 		CreatedAt:             now.Add(time.Second),
@@ -186,6 +187,9 @@ func TestResolvePromotesNextQueuedRequestThroughVisibilityEntry(t *testing.T) {
 	if events[0].RequestView.MessageID != "" {
 		t.Fatalf("expected promoted queued request to start without anchor, got %#v", events[0].RequestView)
 	}
+	if promoted := surface.PendingRequests["req-2"]; promoted == nil || promoted.LifecycleState != requestLifecycleAwaitingVisibility {
+		t.Fatalf("expected promoted request to re-enter awaiting_visibility, got %#v", promoted)
+	}
 }
 
 func TestPendingRequestNoticeTextDistinguishesVisibilityState(t *testing.T) {
@@ -205,6 +209,16 @@ func TestPendingRequestNoticeTextDistinguishesVisibilityState(t *testing.T) {
 	})
 	if !strings.Contains(degradedText, "尚未成功送达前台") {
 		t.Fatalf("expected degraded visibility blocker text, got %q", degradedText)
+	}
+
+	submittedText := pendingRequestNoticeText(&state.RequestPromptRecord{
+		RequestType:     "approval",
+		SemanticKind:    control.RequestSemanticApproval,
+		LifecycleState:  requestLifecycleAwaitingBackendConsume,
+		VisibilityState: requestVisibilityVisible,
+	})
+	if !strings.Contains(submittedText, "已提交当前确认") {
+		t.Fatalf("expected submitted lifecycle blocker text, got %q", submittedText)
 	}
 }
 

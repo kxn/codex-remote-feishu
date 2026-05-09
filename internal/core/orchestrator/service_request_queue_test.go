@@ -69,6 +69,9 @@ func TestPendingRequestsRenderSeriallyAndPromoteNextOnResolve(t *testing.T) {
 	}
 
 	surface := svc.root.Surfaces["surface-1"]
+	if queued := surface.PendingRequests["req-2"]; queued == nil || queued.LifecycleState != requestLifecycleQueuedInactive {
+		t.Fatalf("expected req-2 to stay queued_inactive before promotion, got %#v", queued)
+	}
 	if got, want := surface.PendingRequestOrder, []string{"req-1", "req-2"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("pending request order = %#v, want %#v", got, want)
 	}
@@ -87,6 +90,26 @@ func TestPendingRequestsRenderSeriallyAndPromoteNextOnResolve(t *testing.T) {
 	}
 	if prompt := requestPromptFromEvent(t, dispatch[0]); prompt.RequestID != "req-1" || prompt.Phase != frontstagecontract.PhaseWaitingDispatch {
 		t.Fatalf("expected first prompt to stay active in waiting_dispatch, got %#v", prompt)
+	}
+	if record := surface.PendingRequests["req-1"]; record == nil || record.LifecycleState != requestLifecycleSubmitting || record.PendingDispatchCommandID != dispatch[1].Command.CommandID {
+		t.Fatalf("expected req-1 to enter submitting state, got %#v", record)
+	}
+
+	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{
+		CommandID: dispatch[1].Command.CommandID,
+		Accepted:  true,
+	})
+	if len(accepted) != 0 {
+		t.Fatalf("expected request accepted transition to be runtime-only, got %#v", accepted)
+	}
+	if record := surface.PendingRequests["req-1"]; record == nil || record.LifecycleState != requestLifecycleAwaitingBackendConsume || record.PendingDispatchCommandID != "" {
+		t.Fatalf("expected req-1 to wait on backend consume after ack.accepted, got %#v", record)
+	}
+	if prompt := svc.requestPromptView(surface.PendingRequests["req-1"], ""); prompt.Phase != frontstagecontract.PhaseWaitingDispatch || !prompt.Sealed {
+		t.Fatalf("expected accepted request to stay sealed in waiting_dispatch projection, got %#v", prompt)
+	}
+	if active := activePendingRequest(surface); active == nil || active.RequestID != "req-1" {
+		t.Fatalf("expected req-1 to stay active until resolved, got %#v", active)
 	}
 
 	resolved := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -169,7 +192,7 @@ func TestQueuedToolCallbackAutoDispatchesOnlyAfterEarlierRequestResolves(t *test
 	if len(second) != 0 {
 		t.Fatalf("expected queued tool callback to stay hidden until earlier request resolves, got %#v", second)
 	}
-	if record := svc.root.Surfaces["surface-1"].PendingRequests["req-tool-1"]; record == nil || record.PendingDispatchCommandID != "" {
+	if record := svc.root.Surfaces["surface-1"].PendingRequests["req-tool-1"]; record == nil || record.PendingDispatchCommandID != "" || record.LifecycleState != requestLifecycleQueuedInactive {
 		t.Fatalf("expected queued tool callback to stay undispatched, got %#v", record)
 	}
 
@@ -190,7 +213,7 @@ func TestQueuedToolCallbackAutoDispatchesOnlyAfterEarlierRequestResolves(t *test
 		t.Fatalf("expected auto-dispatch request.respond for queued tool callback, got %#v", resolved[1].Command)
 	}
 	record := svc.root.Surfaces["surface-1"].PendingRequests["req-tool-1"]
-	if record == nil || record.PendingDispatchCommandID != resolved[1].Command.CommandID {
+	if record == nil || record.PendingDispatchCommandID != resolved[1].Command.CommandID || record.LifecycleState != requestLifecycleSubmitting {
 		t.Fatalf("expected queued tool callback to capture dispatch command after activation, got %#v", record)
 	}
 }

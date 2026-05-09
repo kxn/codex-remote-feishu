@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -182,5 +183,43 @@ func TestRestorePendingRequestDispatchFindsFrozenOwnerSurface(t *testing.T) {
 	}
 	if pending := surface2.PendingRequests["req-1"]; pending == nil || pending.PendingDispatchCommandID != "cmd-1" {
 		t.Fatalf("expected stray non-owner request to remain untouched, got %#v", pending)
+	}
+}
+
+func TestClearSurfaceRequestsForTurnMarksMatchedRequestAbortedBeforeRemoval(t *testing.T) {
+	surface := &state.SurfaceConsoleRecord{
+		SurfaceSessionID:    "surface-1",
+		PendingRequests:     map[string]*state.RequestPromptRecord{},
+		PendingRequestOrder: []string{"req-1", "req-2"},
+	}
+	expired := &state.RequestPromptRecord{
+		RequestID:       "req-1",
+		RequestType:     "approval",
+		ThreadID:        "thread-1",
+		TurnID:          "turn-1",
+		LifecycleState:  requestLifecycleEditingVisible,
+		VisibilityState: requestVisibilityVisible,
+	}
+	remaining := &state.RequestPromptRecord{
+		RequestID:       "req-2",
+		RequestType:     "approval",
+		ThreadID:        "thread-2",
+		TurnID:          "turn-2",
+		LifecycleState:  requestLifecycleQueuedInactive,
+		VisibilityState: requestVisibilityPendingVisibility,
+	}
+	surface.PendingRequests["req-1"] = expired
+	surface.PendingRequests["req-2"] = remaining
+
+	clearSurfaceRequestsForTurn(surface, "thread-1", "turn-1")
+
+	if _, ok := surface.PendingRequests["req-1"]; ok {
+		t.Fatalf("expected matched request to be removed, got %#v", surface.PendingRequests)
+	}
+	if expired.LifecycleState != requestLifecycleAborted || expired.Phase != frontstagecontract.PhaseExpired {
+		t.Fatalf("expected removed request to pass through aborted/expired seam, got %#v", expired)
+	}
+	if surface.PendingRequests["req-2"] != remaining {
+		t.Fatalf("expected unmatched request to stay intact, got %#v", surface.PendingRequests)
 	}
 }

@@ -77,6 +77,10 @@ func normalizeRequestPromptRecord(record *state.RequestPromptRecord) {
 	record.OwnerSurfaceSessionID = strings.TrimSpace(record.OwnerSurfaceSessionID)
 	record.OwnerGatewayID = strings.TrimSpace(record.OwnerGatewayID)
 	record.OwnerChatID = strings.TrimSpace(record.OwnerChatID)
+	record.LifecycleState = normalizeRequestLifecycleState(record.LifecycleState)
+	if record.LifecycleState == "" {
+		record.LifecycleState = inferRequestLifecycleState(record)
+	}
 	record.VisibilityState = normalizeRequestVisibilityState(record.VisibilityState)
 	record.VisibleMessageID = strings.TrimSpace(record.VisibleMessageID)
 	record.LastDeliveryError = strings.TrimSpace(record.LastDeliveryError)
@@ -718,6 +722,9 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 	if request == nil {
 		return "当前有待处理请求。"
 	}
+	if requestLifecycleUsesWaitingDispatchPhase(request) {
+		return requestPromptPendingDispatchStatusText(request)
+	}
 	switch normalizeRequestVisibilityState(request.VisibilityState) {
 	case requestVisibilityPendingVisibility:
 		return "当前有待处理请求，正在尝试把确认卡片显示到前台。请稍后重试，或发送 `/status` 触发恢复。"
@@ -770,7 +777,8 @@ func requestNeedsVisibleRefresh(request *state.RequestPromptRecord) bool {
 	if request == nil {
 		return false
 	}
-	if strings.TrimSpace(request.PendingDispatchCommandID) != "" {
+	switch normalizeRequestLifecycleState(request.LifecycleState) {
+	case requestLifecycleResolved, requestLifecycleAborted:
 		return false
 	}
 	switch normalizeRequestVisibilityState(request.VisibilityState) {
@@ -797,6 +805,9 @@ func requestVisibilityRefreshStatusText(request *state.RequestPromptRecord) stri
 func markRequestVisible(request *state.RequestPromptRecord, messageID string, deliveredAt time.Time) {
 	if request == nil {
 		return
+	}
+	if normalizeRequestLifecycleState(request.LifecycleState) == requestLifecycleAwaitingVisibility {
+		setRequestLifecycleState(request, requestLifecycleEditingVisible)
 	}
 	request.VisibleMessageID = strings.TrimSpace(messageID)
 	if deliveredAt.IsZero() {
@@ -837,7 +848,7 @@ func (s *Service) ensurePendingRequestVisible(surface *state.SurfaceConsoleRecor
 	if !requestPromptRenderable(request.RequestType) {
 		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", request.RequestType))
 	}
-	if normalizeRequestType(request.RequestType) == "tool_callback" {
+	if normalizeRequestType(request.RequestType) == "tool_callback" && !requestLifecycleUsesWaitingDispatchPhase(request) {
 		return s.autoDispatchUnsupportedToolCallback(surface, request, threadTitleHint)
 	}
 	if !requestNeedsVisibleRefresh(request) {
