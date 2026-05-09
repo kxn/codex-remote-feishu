@@ -38,7 +38,7 @@ func TestProjectSnapshotShowsVSCodeNoOverrideAsFollowCurrentState(t *testing.T) 
 	rendered := renderedV2CardText(t, ops[0])
 	if !containsAll(rendered,
 		"Plan mode：跟随 VS Code 当前状态",
-		"会话最近本地模式：开启",
+		"当前会话模式（最近观察）：开启",
 		"下条飞书消息：模型 不覆盖，推理 不覆盖，权限 不覆盖，Plan 不覆盖（未覆盖的项目跟随 VS Code 当前状态）",
 	) {
 		t.Fatalf("expected vscode status projection to show local no-override semantics, got %q", rendered)
@@ -74,7 +74,7 @@ func TestProjectSnapshotShowsObservedThreadAccess(t *testing.T) {
 	}
 	rendered := renderedV2CardText(t, ops[0])
 	if !containsAll(rendered,
-		"会话最近本地权限：confirm",
+		"当前会话权限（最近观察）：confirm",
 		"下条飞书消息：Plan 关闭，模型 未知，推理 未知，权限 confirm",
 	) {
 		t.Fatalf("expected snapshot to show observed thread access, got %q", rendered)

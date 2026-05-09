@@ -168,6 +168,9 @@ func TestClaudePermissionControlResponseRefreshesObservedConfig(t *testing.T) {
 	if len(response.Events) != 1 {
 		t.Fatalf("expected one config.observed event on control_response, got %#v", response.Events)
 	}
+	if len(response.ResolvedCommandResponses) != 1 || response.ResolvedCommandResponses[0].RequestID != requestID || response.ResolvedCommandResponses[0].RejectMessage != "" {
+		t.Fatalf("unexpected resolved command responses: %#v", response.ResolvedCommandResponses)
+	}
 	if event := response.Events[0]; event.Kind != agentproto.EventConfigObserved || event.AccessMode != agentproto.AccessModeFullAccess || event.PlanMode != "off" {
 		t.Fatalf("unexpected control_response observed config event: %#v", event)
 	}

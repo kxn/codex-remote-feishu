@@ -1,7 +1,7 @@
 # Configuration State Storage Guidelines
 
 > Type: `general`
-> Updated: `2026-05-05`
+> Updated: `2026-05-09`
 > Summary: 新增配置项存储决策规则，区分显示配置、本地副作用配置、启动合同、backend 行为默认值和 backend 可变状态。
 
 ## 1. 适用范围
@@ -217,7 +217,7 @@
 | Codex headless plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume 持久化 | live surface runtime + prompt frozen override | live session 内 sticky；不是 thread persisted default，surface resume 不恢复 Codex plan。 |
 | Claude profile model | Local Routing / Launch Contract / profile config | 是 | `profileID` | 不应开放飞书 `/model` 临时改 Claude model。 |
 | Claude profile reasoning 默认值 | Backend Behavior With Local SSOT | 是 | `profileID` 或 `claude + claudeProfileID + workspaceKey` | 若作为全局 profile 默认，用 `profileID`；若允许工作区覆盖，再加 `workspaceKey`。 |
-| Claude access | Backend Behavior With Shared Authority | 不作为 workspace/profile 快照持久化，也不写 workspace default | thread observed state + surface override + prompt frozen override | `set_permission_mode` 是当前 session runtime state，不等同于 profile/workspace 默认值；无显式 `/access` override 时，下条 prompt 优先跟随 thread/runtime observed access。 |
+| Claude access | Backend Behavior With Shared Authority | 作为 `workspace+profile` 快照持久化显式飞书 override；不写 workspace default | thread observed state + surface override + `workspace+profile` snapshot + prompt frozen override | `set_permission_mode` 仍是当前 session runtime state；无显式 `/access` override 时，下条 prompt 仍优先跟随 thread/runtime observed access。只有用户显式设置的飞书 override 才会写入和恢复 `workspace+profile` 快照。 |
 | Claude plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume，也不作为 workspace/profile 快照持久化 | live surface runtime + thread observed state + prompt frozen override | Claude 可通过 `ExitPlanMode` 主动退出，本地不能强行恢复旧 plan；`request.resolved(plan_confirmation + accept)` 后 surface 也应同步清掉旧 plan override。 |
 | VS Code 下 model / reasoning / access / plan | Backend Behavior With Shared Authority | 默认不作为本地 SSOT | observed state + local requested per-turn override | VS Code 端也可能修改；没有飞书显式 override 时，只展示 observed state，不把 observed/default 值重新下发给 backend。 |
 
@@ -246,7 +246,7 @@
 以下行为不能靠产品假设决定，必须通过代码或黑盒测试确认：
 
 - VS Code 端修改 model / reasoning / access / plan 时，wrapper 是否能完整观测并上报
-- Claude access 若未来要做成 profile 默认值，需要单独确认 settings/profile 侧的稳定配置入口，不能复用 `set_permission_mode` runtime state
+- Claude access 当前持久化的是“显式飞书 override 的 workspace+profile 快照”，不是 Claude profile 默认值；若未来要做成真正 profile 默认值，仍需单独确认 settings/profile 侧的稳定配置入口，不能直接复用 `set_permission_mode` runtime state
 - Claude reasoning 若未来要支持运行中无损切换，需要先确认不再依赖 Claude launch-time managed settings pin（当前仍会把 `CLAUDE_CODE_EFFORT_LEVEL` 等键冻结进启动合同并在 restart 后生效）
 
 在这些调研完成前，对应配置不得直接做成强持久 SSOT。

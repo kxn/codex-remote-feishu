@@ -28,10 +28,10 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		lines = append(lines, snapshotLine("Plan mode", planMode))
 	}
 	if observedAccessMode := snapshotObservedThreadAccessModeText(snapshot.NextPrompt); observedAccessMode != "" {
-		lines = append(lines, snapshotLine("会话最近本地权限", observedAccessMode))
+		lines = append(lines, snapshotLine("当前会话权限（最近观察）", observedAccessMode))
 	}
 	if observedPlanMode := snapshotObservedThreadPlanModeText(snapshot.NextPrompt); observedPlanMode != "" {
-		lines = append(lines, snapshotLine("会话最近本地模式", observedPlanMode))
+		lines = append(lines, snapshotLine("当前会话模式（最近观察）", observedPlanMode))
 	}
 	if daemonBinary = strings.TrimSpace(daemonBinary); daemonBinary != "" {
 		lines = append(lines, snapshotLine("当前二进制", daemonBinary))

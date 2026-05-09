@@ -415,21 +415,12 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				}
 			}
 			a.debugf(
-				"relay command translated: command=%s events=%s outbound=%d frames=%s",
+				"relay command translated: command=%s events=%s phases=%d frames=%s",
 				command.CommandID,
 				summarizeEventKinds(result.Events),
-				len(result.OutboundToChild),
-				summarizeFrames(result.OutboundToChild),
+				len(result.Phases),
+				summarizeFrames(flattenRuntimeCommandPhaseFrames(result.Phases)),
 			)
-			var waitCh <-chan *agentproto.ErrorInfo
-			responseGate := result.CommandResponseGate
-			if responseGate != nil {
-				waitCh = commandResponses.Register(
-					responseGate.RequestID,
-					responseGate.RejectProblem,
-					responseGate.SuppressFrame,
-				)
-			}
 			turnTracker.ObserveEvents(result.Events)
 			if len(result.Events) != 0 {
 				if sendErr := client.SendEvents(result.Events); sendErr != nil {
@@ -447,27 +438,10 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 					})
 				}
 			}
-			for _, line := range result.OutboundToChild {
-				select {
-				case writeCh <- line:
-					a.debugf("relay command queued for child: command=%s frame=%s", command.CommandID, summarizeFrame(line))
-				case <-ctx.Done():
-					if responseGate != nil {
-						commandResponses.Cancel(responseGate.RequestID)
-					}
-					return ctx.Err()
-				}
+			if err := executeCommandPhases(ctx, writeCh, commandResponses, command.CommandID, result.Phases, a.debugf); err != nil {
+				return err
 			}
 			turnTracker.ObserveCommand(command)
-			if responseGate != nil {
-				err := waitCommandResponse(ctx, waitCh, responseGate.Timeout, responseGate.TimeoutProblem)
-				if err != nil {
-					commandResponses.Cancel(responseGate.RequestID)
-					a.debugf("relay command response failed: command=%s request=%s err=%v", command.CommandID, responseGate.RequestID, err)
-					return err
-				}
-				a.debugf("relay command response accepted: command=%s request=%s", command.CommandID, responseGate.RequestID)
-			}
 			return nil
 		},
 	})

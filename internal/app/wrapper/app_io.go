@@ -120,9 +120,14 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 					continue
 				}
 			}
-			_, suppressCommandResponse := commandResponses.Resolve(line)
+			_, suppressCommandResponse := commandResponses.ResolveFrame(line)
 			result, parseErr := runtime.ObserveServer(line)
 			if parseErr == nil {
+				for _, resolved := range result.ResolvedCommandResponses {
+					if _, suppress := commandResponses.ResolveRequestID(resolved.RequestID, resolved.RejectMessage); suppress {
+						suppressCommandResponse = true
+					}
+				}
 				if debugf != nil {
 					debugf(
 						"stdout observe result: events=%s followups=%d frames=%s suppress=%t",

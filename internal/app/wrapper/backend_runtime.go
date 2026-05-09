@@ -2,6 +2,7 @@ package wrapper
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,17 +15,27 @@ import (
 )
 
 type runtimeObserveResult struct {
-	Events           []agentproto.Event
-	OutboundToChild  [][]byte
-	OutboundToParent [][]byte
-	Suppress         bool
+	Events                   []agentproto.Event
+	OutboundToChild          [][]byte
+	OutboundToParent         [][]byte
+	ResolvedCommandResponses []runtimeResolvedCommandResponse
+	Suppress                 bool
+}
+
+type runtimeResolvedCommandResponse struct {
+	RequestID     string
+	RejectMessage string
+}
+
+type runtimeCommandPhase struct {
+	OutboundToChild [][]byte
+	ResponseGate    *runtimeCommandResponseGate
 }
 
 type runtimeCommandResult struct {
-	Events              []agentproto.Event
-	OutboundToChild     [][]byte
-	Restart             *runtimeCommandRestart
-	CommandResponseGate *runtimeCommandResponseGate
+	Events  []agentproto.Event
+	Phases  []runtimeCommandPhase
+	Restart *runtimeCommandRestart
 }
 
 type runtimeCommandRestart struct {
@@ -130,13 +141,13 @@ func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runt
 	if err != nil {
 		return runtimeCommandResult{}, err
 	}
-	result := runtimeCommandResult{OutboundToChild: outbound}
-	if command.Kind == agentproto.CommandTurnSteer && len(outbound) > 0 {
+	result := runtimeCommandResult{Phases: singleRuntimeCommandPhases(outbound)}
+	if command.Kind == agentproto.CommandTurnSteer && len(result.Phases) > 0 {
 		gate, err := newTurnSteerResponseGate(command, outbound[0])
 		if err != nil {
 			return runtimeCommandResult{}, err
 		}
-		result.CommandResponseGate = gate
+		result.Phases[0].ResponseGate = gate
 	}
 	return result, nil
 }
@@ -239,10 +250,11 @@ func (r *claudeBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult,
 		}
 	}
 	return runtimeObserveResult{
-		Events:           result.Events,
-		OutboundToChild:  result.OutboundToClaude,
-		OutboundToParent: result.OutboundToParent,
-		Suppress:         result.Suppress,
+		Events:                   result.Events,
+		OutboundToChild:          result.OutboundToClaude,
+		OutboundToParent:         result.OutboundToParent,
+		ResolvedCommandResponses: mapClaudeResolvedCommandResponses(result.ResolvedCommandResponses),
+		Suppress:                 result.Suppress,
 	}, nil
 }
 
@@ -264,7 +276,131 @@ func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) (run
 	if err != nil {
 		return runtimeCommandResult{}, err
 	}
-	return runtimeCommandResult{OutboundToChild: outbound}, nil
+	phases, err := newClaudeCommandPhases(command, outbound)
+	if err != nil {
+		return runtimeCommandResult{}, err
+	}
+	return runtimeCommandResult{Phases: phases}, nil
+}
+
+func singleRuntimeCommandPhases(outbound [][]byte) []runtimeCommandPhase {
+	if len(outbound) == 0 {
+		return nil
+	}
+	return []runtimeCommandPhase{{
+		OutboundToChild: append([][]byte(nil), outbound...),
+	}}
+}
+
+func mapClaudeResolvedCommandResponses(responses []claude.ResolvedCommandResponse) []runtimeResolvedCommandResponse {
+	if len(responses) == 0 {
+		return nil
+	}
+	mapped := make([]runtimeResolvedCommandResponse, 0, len(responses))
+	for _, response := range responses {
+		requestID := strings.TrimSpace(response.RequestID)
+		if requestID == "" {
+			continue
+		}
+		mapped = append(mapped, runtimeResolvedCommandResponse{
+			RequestID:     requestID,
+			RejectMessage: strings.TrimSpace(response.RejectMessage),
+		})
+	}
+	if len(mapped) == 0 {
+		return nil
+	}
+	return mapped
+}
+
+func newClaudeCommandPhases(command agentproto.Command, outbound [][]byte) ([]runtimeCommandPhase, error) {
+	phases := singleRuntimeCommandPhases(outbound)
+	if command.Kind != agentproto.CommandPromptSend || len(outbound) < 2 {
+		return phases, nil
+	}
+	gate, ok, err := newClaudePermissionModeResponseGate(command, outbound[0])
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
+		return phases, nil
+	}
+	phases = []runtimeCommandPhase{{
+		OutboundToChild: [][]byte{outbound[0]},
+		ResponseGate:    gate,
+	}}
+	if len(outbound) > 1 {
+		phases = append(phases, runtimeCommandPhase{
+			OutboundToChild: append([][]byte(nil), outbound[1:]...),
+		})
+	}
+	return phases, nil
+}
+
+func newClaudePermissionModeResponseGate(command agentproto.Command, frame []byte) (*runtimeCommandResponseGate, bool, error) {
+	var message map[string]any
+	if err := json.Unmarshal(frame, &message); err != nil {
+		return nil, false, agentproto.ErrorInfo{
+			Code:             "invalid_claude_permission_frame",
+			Layer:            "wrapper",
+			Stage:            "translate_command",
+			Operation:        string(command.Kind),
+			Message:          "wrapper 无法解析 Claude 权限切换请求。",
+			Details:          err.Error(),
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		}
+	}
+	if strings.TrimSpace(lookupStringFromMap(message, "type")) != "control_request" {
+		return nil, false, nil
+	}
+	request, _ := message["request"].(map[string]any)
+	if strings.TrimSpace(lookupStringFromMap(request, "subtype")) != "set_permission_mode" {
+		return nil, false, nil
+	}
+	requestID := strings.TrimSpace(lookupStringFromMap(message, "request_id"))
+	if requestID == "" {
+		return nil, false, agentproto.ErrorInfo{
+			Code:             "missing_command_request_id",
+			Layer:            "wrapper",
+			Stage:            "translate_command",
+			Operation:        string(command.Kind),
+			Message:          "wrapper 生成 Claude 权限切换请求时缺少 request id。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		}
+	}
+	return &runtimeCommandResponseGate{
+		RequestID: requestID,
+		RejectProblem: agentproto.ErrorInfo{
+			Code:             "claude_permission_mode_rejected",
+			Layer:            "wrapper",
+			Stage:            "command_response",
+			Operation:        string(command.Kind),
+			Message:          "本地 Claude 拒绝了这次权限或 Plan 模式切换。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		},
+		Timeout: steerCommandResponseTimeout,
+		TimeoutProblem: agentproto.ErrorInfo{
+			Code:             "claude_permission_mode_response_timeout",
+			Layer:            "wrapper",
+			Stage:            "command_response",
+			Operation:        string(command.Kind),
+			Message:          "等待本地 Claude 确认权限或 Plan 模式切换时超时。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		},
+		SuppressFrame: true,
+	}, true, nil
 }
 
 func newTurnSteerResponseGate(command agentproto.Command, frame []byte) (*runtimeCommandResponseGate, error) {
