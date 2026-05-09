@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-05-03`
-> Summary: 新增配置状态存储规范索引，作为后续配置项持久化和 SSOT 判定基线。
+> Updated: `2026-05-08`
+> Summary: 新增 `从目录新建` 子目录创建检查流设计草案索引。
 
 ## 1. 适用范围
 
@@ -184,6 +184,7 @@
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [feishu-system-markdown-boundary-design.md](./draft/feishu-system-markdown-boundary-design.md)
+- [feishu-workspace-new-dir-subdirectory-design.md](./draft/feishu-workspace-new-dir-subdirectory-design.md)
 - [feishu-text-pipeline-governance.md](./draft/feishu-text-pipeline-governance.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
 - [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)

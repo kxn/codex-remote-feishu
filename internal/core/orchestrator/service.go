@@ -242,7 +242,6 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 	svc.RegisterPathPickerConsumer(targetPickerWorkspaceCreatePathPickerConsumerKind, targetPickerWorkspaceCreatePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(targetPickerAddWorkspacePathPickerConsumerKind, targetPickerAddWorkspacePathPickerConsumer{})
 	svc.RegisterPathPickerConsumer(sendFilePathPickerConsumerKind, sendFilePathPickerConsumer{})
-	svc.RegisterPathPickerEntryFilter(targetPickerBusyWorkspacePathPickerEntryFilterKind, targetPickerBusyWorkspacePathPickerEntryFilter{})
 	return svc
 }
 

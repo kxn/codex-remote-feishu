@@ -198,6 +198,67 @@ func TestParseCardActionTriggerEventBuildsTargetPickerOpenPathAction(t *testing.
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsTargetPickerLocalDirectoryActionsWithDraftName(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-target-picker-local-dir", "feishu:app-1:user:user-1")
+	userID := "user-1"
+
+	tests := []struct {
+		name     string
+		payload  map[string]any
+		wantKind control.ActionKind
+	}{
+		{
+			name: "confirm",
+			payload: map[string]any{
+				"kind":      cardActionKindTargetPickerConfirm,
+				"picker_id": "picker-1",
+			},
+			wantKind: control.ActionTargetPickerConfirm,
+		},
+		{
+			name: "open-path",
+			payload: map[string]any{
+				"kind":         cardActionKindTargetPickerOpenPathPicker,
+				"picker_id":    "picker-1",
+				"target_value": control.FeishuTargetPickerPathFieldLocalDirectory,
+			},
+			wantKind: control.ActionTargetPickerOpenPathPicker,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := &larkcallback.CardActionTriggerEvent{
+				Event: &larkcallback.CardActionTriggerRequest{
+					Operator: &larkcallback.Operator{UserID: &userID},
+					Action: &larkcallback.CallBackAction{
+						Value: tt.payload,
+						FormValue: map[string]interface{}{
+							control.FeishuTargetPickerLocalDirectoryNameFieldName: "feature-login",
+						},
+					},
+					Context: &larkcallback.Context{
+						OpenChatID:    "oc_1",
+						OpenMessageID: "om-card-target-picker-local-dir",
+					},
+				},
+			}
+
+			action, ok := gateway.parseCardActionTriggerEvent(event)
+			if !ok {
+				t.Fatal("expected target picker local-directory action to parse")
+			}
+			if action.Kind != tt.wantKind || action.PickerID != "picker-1" {
+				t.Fatalf("unexpected target picker action: %#v", action)
+			}
+			if got := action.RequestAnswers[control.FeishuTargetPickerLocalDirectoryNameFieldName]; len(got) != 1 || got[0] != "feature-login" {
+				t.Fatalf("expected local-directory draft answers to be preserved, got %#v", action.RequestAnswers)
+			}
+		})
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsTargetPickerPageAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-target-picker-page", "feishu:app-1:user:user-1")

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -13,17 +14,17 @@ import (
 )
 
 const (
-	targetPickerAddWorkspacePathPickerConsumerKind     = "target_picker_add_workspace"
-	targetPickerAddWorkspaceMetaPickerID               = "picker_id"
-	targetPickerAddWorkspaceMetaFieldKind              = "field_kind"
-	targetPickerBusyWorkspacePathPickerEntryFilterKind = "target_picker_hide_busy_workspaces"
+	targetPickerAddWorkspacePathPickerConsumerKind = "target_picker_add_workspace"
+	targetPickerAddWorkspaceMetaPickerID           = "picker_id"
+	targetPickerAddWorkspaceMetaFieldKind          = "field_kind"
 )
 
 type targetPickerAddWorkspacePathPickerConsumer struct{}
-type targetPickerBusyWorkspacePathPickerEntryFilter struct{}
 
 type targetPickerLocalDirectoryState struct {
 	ResolvedPath string
+	FinalPath    string
+	Checked      bool
 	CanConfirm   bool
 	Messages     []control.FeishuTargetPickerMessage
 }
@@ -38,6 +39,11 @@ type targetPickerGitImportState struct {
 func (s *Service) applyTargetPickerDraftAnswers(record *activeTargetPickerRecord, answers map[string][]string) {
 	if record == nil || len(answers) == 0 {
 		return
+	}
+	if value, ok := targetPickerAnswerValue(answers, control.FeishuTargetPickerLocalDirectoryNameFieldName); ok {
+		record.LocalDirectoryName = strings.TrimSpace(value)
+		record.LocalDirectoryChecked = false
+		record.LocalDirectoryFinalPath = ""
 	}
 	if value, ok := targetPickerAnswerValue(answers, control.FeishuTargetPickerGitRepoURLFieldName); ok {
 		record.GitRepoURL = strings.TrimSpace(value)
@@ -90,13 +96,11 @@ func (s *Service) openTargetPickerAddWorkspacePathPicker(surface *state.SurfaceC
 	hint := ""
 	confirmLabel := "使用这个目录"
 	cancelLabel := "返回"
-	reqEntryFilterKind := ""
 	switch strings.TrimSpace(fieldKind) {
 	case control.FeishuTargetPickerPathFieldLocalDirectory:
 		stageLabel = "目录/选择目录"
 		question = "选择要接入的目录"
 		hint = "确认后会回到上一张卡片继续确认。"
-		reqEntryFilterKind = targetPickerBusyWorkspacePathPickerEntryFilterKind
 		if current := strings.TrimSpace(record.LocalDirectoryPath); current != "" {
 			initialPath = current
 		}
@@ -126,23 +130,7 @@ func (s *Service) openTargetPickerAddWorkspacePathPicker(surface *state.SurfaceC
 			targetPickerAddWorkspaceMetaPickerID:  strings.TrimSpace(record.PickerID),
 			targetPickerAddWorkspaceMetaFieldKind: strings.TrimSpace(fieldKind),
 		},
-		EntryFilterKind: reqEntryFilterKind,
 	}, true)
-}
-
-func (targetPickerBusyWorkspacePathPickerEntryFilter) PathPickerFilterEntry(s *Service, surface *state.SurfaceConsoleRecord, _ *activePathPickerRecord, item control.FeishuPathPickerEntry, resolvedPath string) (control.FeishuPathPickerEntry, bool) {
-	if s == nil || surface == nil || item.Kind != control.PathPickerEntryDirectory {
-		return item, true
-	}
-	workspaceKey := normalizeWorkspaceClaimKey(resolvedPath)
-	if workspaceKey == "" {
-		return item, true
-	}
-	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
-		item.DisabledReason = "该目录对应的工作区当前正被其他飞书会话接管，请重新选择。"
-		return item, false
-	}
-	return item, true
 }
 
 func (targetPickerAddWorkspacePathPickerConsumer) PathPickerConfirmed(s *Service, surface *state.SurfaceConsoleRecord, result control.PathPickerResult) []eventcontract.Event {
@@ -159,10 +147,9 @@ func (targetPickerAddWorkspacePathPickerConsumer) PathPickerConfirmed(s *Service
 	}
 	switch strings.TrimSpace(result.ConsumerMeta[targetPickerAddWorkspaceMetaFieldKind]) {
 	case control.FeishuTargetPickerPathFieldLocalDirectory:
-		if owner := s.workspaceBusyOwnerForSurface(surface, normalizeWorkspaceClaimKey(selectedPath)); owner != nil {
-			return s.restoreTargetPickerAfterPathReturn(surface, record, "path_picker_invalid_busy", "该目录对应的工作区当前正被其他飞书会话接管，请重新选择。")
-		}
 		record.LocalDirectoryPath = selectedPath
+		record.LocalDirectoryChecked = false
+		record.LocalDirectoryFinalPath = ""
 	case control.FeishuTargetPickerPathFieldGitParentDir:
 		record.GitParentDir = selectedPath
 	default:
@@ -242,6 +229,25 @@ func (s *Service) buildTargetPickerLocalDirectoryState(surface *state.SurfaceCon
 		return localState
 	}
 	localState.ResolvedPath = resolvedPath
+	finalPath := normalizeWorkspaceClaimKey(resolvedPath)
+	if finalPath == "" {
+		finalPath = state.NormalizeWorkspaceKey(resolvedPath)
+	}
+	directoryName := strings.TrimSpace(record.LocalDirectoryName)
+	if directoryName != "" {
+		if err := workspaceimport.ValidateDirectoryName(directoryName); err != nil {
+			localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
+				Level: control.FeishuTargetPickerMessageDanger,
+				Text:  "本地目录名无效，请改成不含路径分隔符的普通目录名。",
+			})
+			return localState
+		}
+		finalPath = state.NormalizeWorkspaceKey(filepath.Join(resolvedPath, directoryName))
+	}
+	localState.FinalPath = finalPath
+	localState.Checked = strings.TrimSpace(record.LocalDirectoryFinalPath) != "" &&
+		normalizeWorkspaceClaimKey(record.LocalDirectoryFinalPath) == normalizeWorkspaceClaimKey(finalPath) &&
+		record.LocalDirectoryChecked
 	info, statErr := os.Stat(resolvedPath)
 	switch {
 	case statErr != nil:
@@ -257,15 +263,51 @@ func (s *Service) buildTargetPickerLocalDirectoryState(surface *state.SurfaceCon
 		})
 		return localState
 	}
-	if owner := s.workspaceBusyOwnerForSurface(surface, normalizeWorkspaceClaimKey(resolvedPath)); owner != nil {
+	if !localState.Checked {
+		return localState
+	}
+	if owner := s.workspaceBusyOwnerForSurface(surface, normalizeWorkspaceClaimKey(finalPath)); owner != nil {
+		text := "该目录对应的工作区当前正被其他飞书会话接管，暂时不能继续。"
+		if directoryName != "" {
+			text = "该目标目录对应的工作区当前正被其他飞书会话接管，暂时不能继续。"
+		}
 		localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "该目录对应的工作区当前正被其他飞书会话接管，暂时不能继续。",
+			Text:  text,
 		})
 		return localState
 	}
 	localState.CanConfirm = true
-	if s.targetPickerDirectoryIsKnownWorkspace(surface, resolvedPath) {
+	if directoryName != "" {
+		if _, err := os.Stat(finalPath); err == nil {
+			localState.CanConfirm = false
+			if s.targetPickerDirectoryIsKnownWorkspace(surface, finalPath) {
+				localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
+					Level: control.FeishuTargetPickerMessageDanger,
+					Text:  "这个目录已经是已接入工作区，不能再次新建。请直接切换到该工作区，或重新选择其他目录。",
+				})
+				return localState
+			}
+			localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
+				Level: control.FeishuTargetPickerMessageDanger,
+				Text:  "目标目录已存在，且不适合用于新建工作区。请修改目录名，或重新选择上级目录。",
+			})
+			return localState
+		} else if !os.IsNotExist(err) {
+			localState.CanConfirm = false
+			localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
+				Level: control.FeishuTargetPickerMessageDanger,
+				Text:  "目标目录当前不可访问，请稍后重试或重新选择目录。",
+			})
+			return localState
+		}
+		localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
+			Level: control.FeishuTargetPickerMessageInfo,
+			Text:  "将先创建这个目录，再以它接入工作区并进入新会话。",
+		})
+		return localState
+	}
+	if s.targetPickerDirectoryIsKnownWorkspace(surface, finalPath) {
 		localState.Messages = append(localState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageInfo,
 			Text:  "该目录已经是已有工作区；继续后会直接切到该工作区，并进入新会话待命。",
@@ -276,6 +318,20 @@ func (s *Service) buildTargetPickerLocalDirectoryState(surface *state.SurfaceCon
 		Level: control.FeishuTargetPickerMessageInfo,
 		Text:  "将以这个目录接入工作区，并进入新会话。",
 	})
+	return localState
+}
+
+func (s *Service) evaluateCheckedTargetPickerLocalDirectoryState(surface *state.SurfaceConsoleRecord, record *activeTargetPickerRecord, finalPath string) targetPickerLocalDirectoryState {
+	if record == nil {
+		return targetPickerLocalDirectoryState{}
+	}
+	previousChecked := record.LocalDirectoryChecked
+	previousFinalPath := record.LocalDirectoryFinalPath
+	record.LocalDirectoryChecked = true
+	record.LocalDirectoryFinalPath = strings.TrimSpace(finalPath)
+	localState := s.buildTargetPickerLocalDirectoryState(surface, record)
+	record.LocalDirectoryChecked = previousChecked
+	record.LocalDirectoryFinalPath = previousFinalPath
 	return localState
 }
 
@@ -401,10 +457,37 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 		return nil
 	}
 	localState := s.buildTargetPickerLocalDirectoryState(surface, record)
-	if !localState.CanConfirm || strings.TrimSpace(localState.ResolvedPath) == "" {
+	if !localState.Checked {
+		checkedState := s.evaluateCheckedTargetPickerLocalDirectoryState(surface, record, localState.FinalPath)
+		record.LocalDirectoryFinalPath = strings.TrimSpace(checkedState.FinalPath)
+		record.LocalDirectoryChecked = checkedState.CanConfirm
+		if !checkedState.CanConfirm || strings.TrimSpace(checkedState.FinalPath) == "" {
+			record.LocalDirectoryChecked = false
+			message := targetPickerFirstBlockingMessage(localState.Messages)
+			if message == "" {
+				message = targetPickerFirstBlockingMessage(checkedState.Messages)
+			}
+			if message == "" {
+				message = "请先选择目录，并补全可用的目标目录。"
+			}
+			setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
+				Level: control.FeishuTargetPickerMessageDanger,
+				Text:  message,
+			})
+		} else {
+			resetTargetPickerEditingState(record)
+		}
+		updatedView, err := s.buildTargetPickerView(surface, record)
+		if err != nil {
+			return notice(surface, "target_picker_unavailable", err.Error())
+		}
+		return []eventcontract.Event{s.targetPickerViewEvent(surface, updatedView, false)}
+	}
+	localState = s.buildTargetPickerLocalDirectoryState(surface, record)
+	if !localState.CanConfirm || strings.TrimSpace(localState.FinalPath) == "" {
 		message := targetPickerFirstBlockingMessage(localState.Messages)
 		if message == "" {
-			message = "请先选择一个可接入的本地目录。"
+			message = "请先检查目标目录，并修正阻塞项。"
 		}
 		setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
@@ -416,20 +499,34 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 		}
 		return []eventcontract.Event{s.targetPickerViewEvent(surface, updatedView, false)}
 	}
-	events := s.enterTargetPickerNewThread(surface, localState.ResolvedPath)
+	finalPath := strings.TrimSpace(localState.FinalPath)
+	if strings.TrimSpace(record.LocalDirectoryName) != "" {
+		if err := os.MkdirAll(finalPath, 0o755); err != nil {
+			setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
+				Level: control.FeishuTargetPickerMessageDanger,
+				Text:  "创建目标目录失败，请检查权限后重试。",
+			})
+			updatedView, viewErr := s.buildTargetPickerView(surface, record)
+			if viewErr != nil {
+				return notice(surface, "target_picker_unavailable", viewErr.Error())
+			}
+			return []eventcontract.Event{s.targetPickerViewEvent(surface, updatedView, false)}
+		}
+	}
+	events := s.enterTargetPickerNewThread(surface, finalPath)
 	filtered := targetPickerFilteredFollowupEvents(events)
-	if targetPickerNewThreadReady(surface, localState.ResolvedPath) {
+	if targetPickerNewThreadReady(surface, finalPath) {
 		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "工作区已经准备完成，下一条文本会直接开启新会话。", false, filtered)
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == normalizeWorkspaceClaimKey(localState.ResolvedPath) {
-		status := targetPickerLocalDirectoryProcessingStatus(localState.ResolvedPath)
+		normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == normalizeWorkspaceClaimKey(finalPath) {
+		status := targetPickerLocalDirectoryProcessingStatus(finalPath)
 		processing := s.startTargetPickerProcessingWithSections(
 			surface,
 			flow,
 			record,
 			targetPickerPendingNewThread,
-			localState.ResolvedPath,
+			finalPath,
 			"",
 			"正在接入工作区",
 			"",

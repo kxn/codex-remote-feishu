@@ -27,7 +27,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
 	if surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace != workspaceKey {
-		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+		if blocked := s.blockFreshThreadAttach(surface, options.OverlayCleanup); blocked != nil {
 			return blocked
 		}
 	}
@@ -123,7 +123,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		return notice(surface, "attach_requires_detach", "当前会话已接管其他工作区，请先 /detach。")
 	}
 	if switchingInstance {
-		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+		if blocked := s.blockFreshThreadAttach(surface, surfaceOverlayRouteCleanupOptions{}); blocked != nil {
 			return blocked
 		}
 	}
@@ -305,7 +305,9 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 				OverlayCleanup:   cleanup,
 			})
 		}
-		return s.attachWorkspace(surface, pending.ThreadCWD)
+		return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{
+			OverlayCleanup: cleanup,
+		})
 	}
 	if strings.TrimSpace(pending.ThreadID) != "" {
 		view := s.mergedThreadView(surface, pending.ThreadID)

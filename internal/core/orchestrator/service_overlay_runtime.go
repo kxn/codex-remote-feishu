@@ -51,11 +51,18 @@ func (s *Service) surfaceHasRouteMutationBlocker(surface *state.SurfaceConsoleRe
 }
 
 func (s *Service) blockRouteMutation(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	return s.blockRouteMutationWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
+}
+
+func (s *Service) blockRouteMutationWithOverlayCleanup(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
 	switch s.surfaceRouteMutationBlock(surface) {
 	case surfaceRouteMutationBlockTargetPicker:
+		if cleanup.PreserveTargetPicker {
+			return nil
+		}
 		return notice(surface, "target_picker_processing", s.targetPickerProcessingBlockedText(surface))
 	case surfaceRouteMutationBlockPathPicker:
 		return notice(surface, "path_picker_active", "当前正在进行路径选择，请先在卡片里确认或取消；如需查看状态，可继续使用 /status。")

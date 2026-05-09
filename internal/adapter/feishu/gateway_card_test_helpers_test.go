@@ -147,9 +147,29 @@ func cardActionsFromElements(elements []map[string]any) []map[string]any {
 			for _, button := range cardButtonsFromColumnSet(element) {
 				actions = append(actions, button)
 			}
+		case "form":
+			actions = append(actions, cardActionsFromElements(cardMapArray(element["elements"]))...)
 		}
 	}
 	return actions
+}
+
+func cardMapArray(raw any) []map[string]any {
+	switch typed := raw.(type) {
+	case []map[string]any:
+		return typed
+	case []any:
+		out := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			entry, ok := item.(map[string]any)
+			if ok {
+				out = append(out, entry)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }
 
 func cardButtonArray(raw any) []map[string]any {

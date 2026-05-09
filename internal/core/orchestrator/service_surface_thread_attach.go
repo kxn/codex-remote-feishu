@@ -33,12 +33,12 @@ func (s *Service) executeResolvedThreadTargetWithOverlayCleanup(surface *state.S
 	case threadAttachCurrentVisible:
 		return s.useAttachedVisibleThreadModeWithOverlayCleanup(surface, threadID, s.surfaceThreadPickRouteMode(surface), cleanup)
 	case threadAttachFreeVisible, threadAttachReuseHeadless:
-		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+		if blocked := s.blockFreshThreadAttach(surface, cleanup); blocked != nil {
 			return blocked
 		}
 		return s.attachSurfaceToKnownThreadWithOverlayCleanup(surface, target.Instance, target.View, attachSurfaceToKnownThreadDefault, cleanup)
 	case threadAttachCreateHeadless:
-		if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+		if blocked := s.blockFreshThreadAttach(surface, cleanup); blocked != nil {
 			return blocked
 		}
 		return s.startHeadlessForResolvedThreadWithOverlayCleanup(surface, target.View, cleanup)
@@ -63,7 +63,7 @@ func (s *Service) useAttachedVisibleThreadModeWithOverlayCleanup(surface *state.
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
 	if (surface.RouteMode != routeMode || surface.SelectedThreadID != threadID) && s.surfaceHasRouteMutationBlocker(surface) {
-		if blocked := s.blockRouteMutation(surface); blocked != nil {
+		if blocked := s.blockRouteMutationWithOverlayCleanup(surface, cleanup); blocked != nil {
 			return blocked
 		}
 	}
@@ -85,7 +85,7 @@ func (s *Service) useAttachedVisibleThreadModeWithOverlayCleanup(surface *state.
 		if fallback.Mode == threadAttachCurrentVisible {
 			return append(events, notice(surface, "thread_not_found", "目标会话不存在或当前不可见。")...)
 		}
-		return append(events, s.executeResolvedThreadTarget(surface, threadID, fallback)...)
+		return append(events, s.executeResolvedThreadTargetWithOverlayCleanup(surface, threadID, fallback, cleanup)...)
 	}
 	if owner := s.threadClaimSurface(threadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		switch s.threadKickStatus(inst, owner, threadID) {

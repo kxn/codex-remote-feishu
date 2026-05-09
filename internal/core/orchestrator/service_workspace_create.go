@@ -131,7 +131,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.S
 	if workspaceKey == "" {
 		return notice(surface, "workspace_create_invalid", "目录路径无效，请重新选择。")
 	}
-	if blocked := s.blockFreshThreadAttach(surface); blocked != nil {
+	if blocked := s.blockFreshThreadAttach(surface, cleanup); blocked != nil {
 		return blocked
 	}
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {

@@ -170,6 +170,65 @@ func TestCompleteTargetPickerGitImportStartsFreshWorkspacePreparationOnSameCard(
 	}
 }
 
+func TestCompleteTargetPickerGitImportAllowsInternalWorkspaceReattachWhilePickerProcessing(t *testing.T) {
+	now := time.Date(2026, 4, 16, 18, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	currentWorkspace := t.TempDir()
+	importedWorkspace := t.TempDir()
+
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-current",
+		DisplayName:   "current",
+		WorkspaceRoot: currentWorkspace,
+		WorkspaceKey:  currentWorkspace,
+		ShortName:     "current",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-imported",
+		DisplayName:   "imported",
+		WorkspaceRoot: importedWorkspace,
+		WorkspaceKey:  importedWorkspace,
+		ShortName:     "imported",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	svc.attachWorkspace(surface, currentWorkspace)
+
+	record := &activeTargetPickerRecord{
+		PickerID:    "picker-1",
+		OwnerUserID: "user-1",
+		Source:      control.TargetPickerRequestSourceGit,
+		Stage:       control.FeishuTargetPickerStageProcessing,
+		PendingKind: targetPickerPendingGitImport,
+		GitRepoURL:  "https://github.com/kxn/codex-remote-feishu.git",
+	}
+	svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
+	svc.setActiveTargetPicker(surface, record)
+
+	events := svc.CompleteTargetPickerGitImport("surface-1", "picker-1", importedWorkspace)
+
+	if surface.RouteMode != state.RouteModeNewThreadReady || !testutil.SamePath(surface.PreparedThreadCWD, importedWorkspace) {
+		t.Fatalf("expected imported workspace to enter new-thread-ready despite active picker processing, got %#v", surface)
+	}
+	if picker := svc.activeTargetPicker(surface); picker != nil {
+		t.Fatalf("expected successful git import completion to clear target picker after internal reattach, got %#v", picker)
+	}
+	if len(events) != 1 || events[0].TargetPickerView == nil {
+		t.Fatalf("expected same-card success after internal reattach, got %#v", events)
+	}
+	if got := events[0].TargetPickerView; got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
+		t.Fatalf("expected succeeded terminal card after internal reattach, got %#v", got)
+	}
+}
+
 func containsAll(text string, parts ...string) bool {
 	for _, part := range parts {
 		if part == "" {

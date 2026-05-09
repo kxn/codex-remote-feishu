@@ -67,39 +67,42 @@ type activeOwnerCardFlowRecord struct {
 }
 
 type activeTargetPickerRecord struct {
-	PickerID              string
-	OwnerUserID           string
-	Source                control.TargetPickerRequestSource
-	CatalogFamilyID       string
-	CatalogVariantID      string
-	CatalogBackend        agentproto.Backend
-	Stage                 control.FeishuTargetPickerStage
-	StatusTitle           string
-	StatusText            string
-	StatusSections        []control.FeishuCardTextSection
-	StatusFooter          string
-	Messages              []control.FeishuTargetPickerMessage
-	PendingKind           targetPickerPendingKind
-	PendingWorkspaceKey   string
-	PendingThreadID       string
-	Page                  control.FeishuTargetPickerPage
-	BackValue             map[string]any
-	LockedWorkspaceKey    string
-	AllowNewThread        bool
-	WorkspaceCursor       int
-	SessionCursor         int
-	SelectedWorkspaceKey  string
-	SelectedSessionValue  string
-	LocalDirectoryPath    string
-	GitParentDir          string
-	GitRepoURL            string
-	GitDirectoryName      string
-	GitFinalPath          string
-	WorktreeBranchName    string
-	WorktreeDirectoryName string
-	WorktreeFinalPath     string
-	CreatedAt             time.Time
-	ExpiresAt             time.Time
+	PickerID                string
+	OwnerUserID             string
+	Source                  control.TargetPickerRequestSource
+	CatalogFamilyID         string
+	CatalogVariantID        string
+	CatalogBackend          agentproto.Backend
+	Stage                   control.FeishuTargetPickerStage
+	StatusTitle             string
+	StatusText              string
+	StatusSections          []control.FeishuCardTextSection
+	StatusFooter            string
+	Messages                []control.FeishuTargetPickerMessage
+	PendingKind             targetPickerPendingKind
+	PendingWorkspaceKey     string
+	PendingThreadID         string
+	Page                    control.FeishuTargetPickerPage
+	BackValue               map[string]any
+	LockedWorkspaceKey      string
+	AllowNewThread          bool
+	WorkspaceCursor         int
+	SessionCursor           int
+	SelectedWorkspaceKey    string
+	SelectedSessionValue    string
+	LocalDirectoryPath      string
+	LocalDirectoryName      string
+	LocalDirectoryFinalPath string
+	LocalDirectoryChecked   bool
+	GitParentDir            string
+	GitRepoURL              string
+	GitDirectoryName        string
+	GitFinalPath            string
+	WorktreeBranchName      string
+	WorktreeDirectoryName   string
+	WorktreeFinalPath       string
+	CreatedAt               time.Time
+	ExpiresAt               time.Time
 }
 
 type activeThreadHistoryRecord struct {

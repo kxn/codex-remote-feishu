@@ -136,22 +136,61 @@ func targetPickerBackActionPayload(view control.FeishuTargetPickerView) map[stri
 }
 
 func targetPickerLocalDirectoryElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
+	openPathButton := cardFormActionButtonElement(
+		"选择目录",
+		"default",
+		stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldLocalDirectory), daemonLifecycleID),
+		false,
+		"",
+	)
+	if len(openPathButton) == 0 {
+		return nil
+	}
+	openPathButton["name"] = "target_picker_open_path"
 	elements := []map[string]any{
 		{
-			"tag":     "markdown",
-			"content": targetPickerFieldMarkdown("目录", strings.TrimSpace(view.LocalDirectoryPath), "未选择"),
+			"tag":                "column_set",
+			"horizontal_spacing": "small",
+			"columns": []map[string]any{
+				{
+					"tag":            "column",
+					"width":          "weighted",
+					"weight":         5,
+					"vertical_align": "center",
+					"elements": []map[string]any{{
+						"tag":     "markdown",
+						"content": targetPickerFieldMarkdown("目录", strings.TrimSpace(view.LocalDirectoryPath), "未选择"),
+					}},
+				},
+				{
+					"tag":            "column",
+					"width":          "auto",
+					"vertical_align": "center",
+					"elements":       []map[string]any{openPathButton},
+				},
+			},
 		},
-	}
-	elements = append(elements, cardButtonGroupElement([]map[string]any{
-		cardCallbackButtonElement(
-			"选择目录",
-			"default",
-			stampActionValue(actionPayloadTargetPickerValue(cardActionKindTargetPickerOpenPathPicker, view.PickerID, control.FeishuTargetPickerPathFieldLocalDirectory), daemonLifecycleID),
-			false,
-			"",
+		targetPickerInputElement(
+			control.FeishuTargetPickerLocalDirectoryNameFieldName,
+			"在此目录下创建新目录（可选）",
+			"例如 feature-login",
+			strings.TrimSpace(view.LocalDirectoryName),
 		),
-	}))
-	return elements
+	}
+	if view.LocalDirectoryChecked && strings.TrimSpace(view.LocalDirectoryFinalPath) != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": targetPickerFieldMarkdown("目标目录", strings.TrimSpace(view.LocalDirectoryFinalPath), "待生成"),
+		})
+	}
+	if footer := targetPickerInlineFormFooterElements(view, daemonLifecycleID, "检查目标目录"); len(footer) != 0 {
+		elements = append(elements, footer...)
+	}
+	return []map[string]any{{
+		"tag":      "form",
+		"name":     "target_picker_local_directory_form_" + strings.TrimSpace(view.PickerID),
+		"elements": elements,
+	}}
 }
 
 func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
@@ -360,7 +399,7 @@ func targetPickerInputElement(name, label, placeholder, value string) map[string
 }
 
 func targetPickerUsesInlineForm(view control.FeishuTargetPickerView) bool {
-	return view.Page == control.FeishuTargetPickerPageGit || view.Page == control.FeishuTargetPickerPageWorktree
+	return view.Page == control.FeishuTargetPickerPageLocalDirectory || view.Page == control.FeishuTargetPickerPageGit || view.Page == control.FeishuTargetPickerPageWorktree
 }
 
 func targetPickerConfirmDisabled(view control.FeishuTargetPickerView) bool {

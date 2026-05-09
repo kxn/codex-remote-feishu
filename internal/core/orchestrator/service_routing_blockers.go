@@ -35,11 +35,11 @@ func (s *Service) blockThreadSwitch(surface *state.SurfaceConsoleRecord) []event
 	return nil
 }
 
-func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+func (s *Service) blockFreshThreadAttach(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil || surface.AttachedInstanceID == "" {
 		return nil
 	}
-	if blocked := s.blockRouteMutation(surface); blocked != nil {
+	if blocked := s.blockRouteMutationWithOverlayCleanup(surface, cleanup); blocked != nil {
 		return blocked
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
