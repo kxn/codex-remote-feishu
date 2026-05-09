@@ -60,6 +60,14 @@ func (a *App) handleFeishuAppAutoConfigApply(w http.ResponseWriter, r *http.Requ
 		a.writeFeishuAutoConfigGatewayError(w, "failed to apply feishu auto-config", err)
 		return
 	}
+	if err := a.clearFeishuAppAutoConfigDecision(summary.ID); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiError{
+			Code:    "config_write_failed",
+			Message: "feishu auto-config applied but failed to reset onboarding decision",
+			Details: err.Error(),
+		})
+		return
+	}
 	writeJSON(w, http.StatusOK, feishuAppAutoConfigApplyResponse{
 		App:    summary,
 		Result: result,
@@ -90,6 +98,14 @@ func (a *App) handleFeishuAppAutoConfigPublish(w http.ResponseWriter, r *http.Re
 	})
 	if err != nil {
 		a.writeFeishuAutoConfigGatewayError(w, "failed to publish feishu auto-config changes", err)
+		return
+	}
+	if err := a.clearFeishuAppAutoConfigDecision(summary.ID); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiError{
+			Code:    "config_write_failed",
+			Message: "feishu auto-config publish succeeded but failed to reset onboarding decision",
+			Details: err.Error(),
+		})
 		return
 	}
 	writeJSON(w, http.StatusOK, feishuAppAutoConfigPublishResponse{

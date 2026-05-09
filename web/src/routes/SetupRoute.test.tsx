@@ -1,15 +1,13 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SetupRoute } from "./SetupRoute";
-import type { VSCodeDetectResponse } from "../lib/types";
 import {
   makeApp,
   makeBootstrap,
-  makeFeishuManifest,
-  makePermissionCheck,
+  makeOnboardingStage,
+  makeOnboardingWorkflow,
   makeRuntimeRequirementsDetect,
-  makeVSCodeDetect,
 } from "../test/fixtures";
 import { installMockFetch } from "../test/http";
 
@@ -25,10 +23,9 @@ describe("SetupRoute", () => {
       "/g/demo/api/setup/bootstrap-state": {
         body: makeBootstrap({ admin: { setupURL: "/g/demo/setup" } }),
       },
-      "/g/demo/api/setup/feishu/manifest": {
-        body: makeFeishuManifest(),
+      "/g/demo/api/setup/onboarding/workflow": {
+        body: buildConnectWorkflow([]),
       },
-      "/g/demo/api/setup/feishu/apps": { body: { apps: [] } },
       "/g/demo/api/setup/feishu/onboarding/sessions": {
         status: 201,
         body: {
@@ -39,20 +36,6 @@ describe("SetupRoute", () => {
           },
         },
       },
-      "/g/demo/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect(),
-      },
-      "/g/demo/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/g/demo/api/setup/vscode/detect": { body: makeVSCodeDetect() },
     });
 
     render(<SetupRoute />);
@@ -72,15 +55,23 @@ describe("SetupRoute", () => {
     expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
   });
 
-  it("connects manually, shows missing permissions, and rechecks into events", async () => {
+  it("connects manually, publishes auto-config changes, and can defer review before moving to menu", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
-    let permissionChecks = 0;
-    let appsConfigured = false;
+
+    let workflowState = buildConnectWorkflow([]);
+    let appCreated = false;
+    const app = makeApp({
+      id: "bot-manual",
+      name: "团队机器人",
+      appId: "cli_manual",
+      verifiedAt: "2026-04-25T08:10:00Z",
+    });
 
     installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
+      "/api/setup/onboarding/workflow": () => ({ body: workflowState }),
+      "/api/setup/onboarding/workflow?app=bot-manual": () => ({ body: workflowState }),
       "/api/setup/feishu/onboarding/sessions": {
         status: 201,
         body: {
@@ -91,95 +82,80 @@ describe("SetupRoute", () => {
           },
         },
       },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect(),
-      },
       "/api/setup/feishu/apps": (call) => {
         if (call.method === "POST") {
-          appsConfigured = true;
+          appCreated = true;
           return {
             status: 201,
-            body: {
-              app: makeApp({
-                id: "bot-manual",
-                name: "团队机器人",
-                appId: "cli_manual",
-              }),
-            },
+            body: { app },
           };
         }
+        return { body: { apps: appCreated ? [app] : [] } };
+      },
+      "/api/setup/feishu/apps/bot-manual/verify": () => {
+        workflowState = buildAutoConfigWorkflow(app, {
+          status: "apply_required",
+          summary: "存在待写入的飞书自动配置差异。",
+          stageStatus: "pending",
+          allowedActions: ["apply", "retry", "defer"],
+        });
         return {
           body: {
-            apps: appsConfigured
-              ? [
-                  makeApp({
-                    id: "bot-manual",
-                    name: "团队机器人",
-                    appId: "cli_manual",
-                    verifiedAt: "2026-04-25T08:10:00Z",
-                  }),
-                ]
-              : [],
+            app,
+            result: { connected: true, duration: 1_000_000_000 },
           },
         };
       },
-      "/api/setup/feishu/apps/bot-manual/verify": {
-        body: {
-          app: makeApp({
-            id: "bot-manual",
-            name: "团队机器人",
-            appId: "cli_manual",
-            verifiedAt: "2026-04-25T08:10:00Z",
-          }),
-          result: { connected: true, duration: 1_000_000_000 },
-        },
-      },
-      "/api/setup/feishu/apps/bot-manual/permission-check": () => {
-        permissionChecks += 1;
-        if (permissionChecks === 1) {
-          return {
-            body: makePermissionCheck({
-              app: makeApp({ id: "bot-manual", appId: "cli_manual" }),
-              ready: false,
-              missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
-              grantJSON: `{
-  "scopes": {
-    "tenant": [
-      "drive:drive"
-    ],
-    "user": []
-  }
-}`,
-            }),
-          };
-        }
+      "/api/setup/feishu/apps/bot-manual/auto-config/apply": () => {
+        workflowState = buildAutoConfigWorkflow(app, {
+          status: "publish_required",
+          summary: "配置已收敛到待发布版本，仍需提交发布。",
+          stageStatus: "pending",
+          allowedActions: ["publish", "retry", "defer"],
+        });
         return {
-          body: makePermissionCheck({
-            app: makeApp({ id: "bot-manual", appId: "cli_manual" }),
-            ready: true,
-          }),
+          body: {
+            app,
+            result: {
+              status: "publish_required",
+              summary: "配置已收敛到待发布版本，仍需提交发布。",
+              blockingReason: "",
+              actions: [],
+              plan: workflowState.app?.autoConfig.plan,
+            },
+          },
         };
       },
-      "/api/setup/feishu/apps/bot-manual/test-events": {
-        body: {
-          gatewayId: "bot-manual",
-          startedAt: "2026-04-25T08:12:00Z",
-          expiresAt: "2026-04-25T08:22:00Z",
-          phrase: "测试",
-          message: "事件订阅测试提示已发送。",
-        },
+      "/api/setup/feishu/apps/bot-manual/auto-config/publish": () => {
+        workflowState = buildAutoConfigWorkflow(app, {
+          status: "awaiting_review",
+          summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+          stageStatus: "pending",
+          allowedActions: ["defer", "retry"],
+        });
+        return {
+          body: {
+            app,
+            result: {
+              status: "awaiting_review",
+              summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+              blockingReason: "",
+              versionId: "oav_1",
+              version: "1.8.1",
+              actions: [],
+              plan: {
+                ...workflowState.app?.autoConfig.plan,
+                status: "awaiting_review",
+                summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+              },
+            },
+          },
+        };
       },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
+      "/api/setup/feishu/apps/bot-manual/onboarding-auto-config/defer": () => {
+        workflowState = buildMenuWorkflow(app);
+        return { status: 204 };
       },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
     });
 
     render(<SetupRoute />);
@@ -191,283 +167,78 @@ describe("SetupRoute", () => {
     await user.type(screen.getByLabelText("App Secret"), "secret_manual");
     await user.click(screen.getByRole("button", { name: "验证并继续" }));
 
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
-    expect(await screen.findByText("当前还不能进入下一步，请先补齐缺失权限。")).toBeInTheDocument();
-    expect(screen.getByText("drive:drive")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "飞书自动配置" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "自动补齐" }));
 
-    await user.click(screen.getByRole("button", { name: "我已处理，重新检查" }));
-    expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
-    expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "继续发布" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "继续发布" }));
+    expect(await screen.findByRole("dialog", { name: "确认提交发布" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "确认提交" }));
+    expect(await screen.findByRole("button", { name: "先按降级继续" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "先按降级继续" }));
+
+    expect(await screen.findByRole("heading", { name: "菜单确认" })).toBeInTheDocument();
+    expect(await screen.findByText("请在飞书后台确认机器人菜单配置完成，然后回到这里继续。")).toBeInTheDocument();
   });
 
-  it("allows force skipping missing permissions and continues to events", async () => {
+  it("allows deferring optional auto-config work and continues to menu", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
-    let appsConfigured = false;
+
+    const app = makeApp({
+      id: "bot-manual",
+      name: "团队机器人",
+      appId: "cli_manual",
+      verifiedAt: "2026-04-25T08:10:00Z",
+    });
+    let workflowState = buildAutoConfigWorkflow(app, {
+      status: "apply_required",
+      summary: "存在待写入的飞书自动配置差异。",
+      stageStatus: "pending",
+      allowedActions: ["apply", "retry", "defer"],
+    });
 
     const { calls } = installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-      "/api/setup/feishu/onboarding/sessions": {
-        status: 201,
-        body: {
-          session: {
-            id: "session-1",
-            status: "pending",
-            qrCodeDataUrl: "data:image/png;base64,abc",
-          },
-        },
+      "/api/setup/onboarding/workflow": { body: workflowState },
+      "/api/setup/onboarding/workflow?app=bot-manual": () => ({ body: workflowState }),
+      "/api/setup/feishu/apps/bot-manual/onboarding-auto-config/defer": () => {
+        workflowState = buildMenuWorkflow(app);
+        return { status: 204 };
       },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect(),
-      },
-      "/api/setup/feishu/apps": (call) => {
-        if (call.method === "POST") {
-          appsConfigured = true;
-          return {
-            status: 201,
-            body: {
-              app: makeApp({
-                id: "bot-manual",
-                name: "团队机器人",
-                appId: "cli_manual",
-              }),
-            },
-          };
-        }
-        return {
-          body: {
-            apps: appsConfigured
-              ? [
-                  makeApp({
-                    id: "bot-manual",
-                    name: "团队机器人",
-                    appId: "cli_manual",
-                    verifiedAt: "2026-04-25T08:10:00Z",
-                  }),
-                ]
-              : [],
-          },
-        };
-      },
-      "/api/setup/feishu/apps/bot-manual/verify": {
-        body: {
-          app: makeApp({
-            id: "bot-manual",
-            name: "团队机器人",
-            appId: "cli_manual",
-            verifiedAt: "2026-04-25T08:10:00Z",
-          }),
-          result: { connected: true, duration: 1_000_000_000 },
-        },
-      },
-      "/api/setup/feishu/apps/bot-manual/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-manual", appId: "cli_manual" }),
-          ready: false,
-          missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
-          grantJSON: `{
-  "scopes": {
-    "tenant": [
-      "drive:drive"
-    ],
-    "user": []
-  }
-}`,
-        }),
-      },
-      "/api/setup/feishu/apps/bot-manual/onboarding-permission/skip": {
-        status: 204,
-      },
-      "/api/setup/feishu/apps/bot-manual/test-events": {
-        body: {
-          gatewayId: "bot-manual",
-          startedAt: "2026-04-25T08:12:00Z",
-          expiresAt: "2026-04-25T08:22:00Z",
-          phrase: "测试",
-          message: "事件订阅测试提示已发送。",
-        },
-      },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
     });
 
     render(<SetupRoute />);
 
-    expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "手动输入" }));
-    await user.type(screen.getByLabelText("机器人名称（可选）"), "团队机器人");
-    await user.type(screen.getByLabelText("App ID"), "cli_manual");
-    await user.type(screen.getByLabelText("App Secret"), "secret_manual");
-    await user.click(screen.getByRole("button", { name: "验证并继续" }));
-
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "强制跳过这一步" }));
+    expect(await screen.findByRole("heading", { name: "飞书自动配置" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "先按降级继续" }));
 
     await waitFor(() => {
       expect(
         calls.some(
           (call) =>
-            call.path === "/api/setup/feishu/apps/bot-manual/onboarding-permission/skip" &&
+            call.path === "/api/setup/feishu/apps/bot-manual/onboarding-auto-config/defer" &&
             call.method === "POST",
         ),
       ).toBe(true);
     });
-    expect(await screen.findByRole("heading", { name: "事件订阅" })).toBeInTheDocument();
-    expect(await screen.findByText("事件订阅测试提示已发送。")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "菜单确认" })).toBeInTheDocument();
   });
 
-  it("hides backend-specific failures when runtime is already ready", async () => {
+  it("starts qr onboarding automatically, polls every 5 seconds, and advances to auto-config", async () => {
     window.history.replaceState({}, "", "/setup");
-    const user = userEvent.setup();
-
-    installMockFetch({
-      "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-      "/api/setup/feishu/onboarding/sessions": {
-        status: 201,
-        body: {
-          session: {
-            id: "session-1",
-            status: "pending",
-            qrCodeDataUrl: "data:image/png;base64,abc",
-          },
-        },
-      },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect({
-          ready: true,
-          checks: [
-            {
-              id: "headless_launcher",
-              title: "服务启动器",
-              status: "pass",
-              summary: "当前服务已经有可用的 codex-remote 启动器。",
-            },
-            {
-              id: "real_codex_binary",
-              title: "Codex 可执行文件",
-              status: "fail",
-              summary: "当前服务环境下无法解析 Codex 可执行文件。",
-            },
-            {
-              id: "claude_binary",
-              title: "Claude 可执行文件",
-              status: "pass",
-              summary: "当前服务环境下可以解析 Claude 可执行文件。",
-            },
-          ],
-        }),
-      },
-      "/api/setup/feishu/apps": { body: { apps: [] } },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
+    let workflowState = buildConnectWorkflow([]);
+    const app = makeApp({
+      id: "bot-qr",
+      name: "扫码机器人",
+      appId: "cli_qr",
+      verifiedAt: "2026-04-25T08:20:00Z",
     });
 
-    render(<SetupRoute />);
-
-    expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /环境检查/ }));
-
-    expect(await screen.findByText("环境正常")).toBeInTheDocument();
-    expect(screen.queryByText("当前需要处理")).not.toBeInTheDocument();
-    expect(screen.queryByText("当前服务环境下无法解析 Codex 可执行文件。")).not.toBeInTheDocument();
-  });
-
-  it("summarizes blocking backend failures with user-facing setup actions", async () => {
-    window.history.replaceState({}, "", "/setup");
-
     installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-      "/api/setup/feishu/apps": { body: { apps: [] } },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect({
-          ready: false,
-          summary: "当前机器还不满足基础运行条件，请先保证 Claude 或 Codex 至少一个可用。",
-          checks: [
-            {
-              id: "headless_launcher",
-              title: "服务启动器",
-              status: "pass",
-              summary: "当前服务已经有可用的 codex-remote 启动器。",
-            },
-            {
-              id: "real_codex_binary",
-              title: "Codex 可执行文件",
-              status: "fail",
-              summary: "当前服务环境下无法解析 Codex 可执行文件。",
-            },
-            {
-              id: "claude_binary",
-              title: "Claude 可执行文件",
-              status: "fail",
-              summary: "当前服务环境下无法解析 Claude 可执行文件。",
-            },
-          ],
-        }),
-      },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
-    });
-
-    render(<SetupRoute />);
-
-    expect(await screen.findByText("当前需要处理")).toBeInTheDocument();
-    expect(screen.getByText("对话后端")).toBeInTheDocument();
-    expect(screen.getByText("请先保证 Claude 或 Codex 至少一个可用。")).toBeInTheDocument();
-    expect(screen.queryByText("Codex 可执行文件")).not.toBeInTheDocument();
-    expect(screen.queryByText("当前服务环境下无法解析 Codex 可执行文件。")).not.toBeInTheDocument();
-  });
-
-  it("starts qr onboarding automatically, polls every 5 seconds, and advances to permissions", async () => {
-    window.history.replaceState({}, "", "/setup");
-    let appsConfigured = false;
-
-    installMockFetch({
-      "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-      "/api/setup/feishu/apps": () => ({
-        body: {
-          apps: appsConfigured
-            ? [
-                makeApp({
-                  id: "bot-qr",
-                  name: "扫码机器人",
-                  appId: "cli_qr",
-                  verifiedAt: "2026-04-25T08:20:00Z",
-                }),
-              ]
-            : [],
-        },
-      }),
+      "/api/setup/onboarding/workflow": () => ({ body: workflowState }),
+      "/api/setup/onboarding/workflow?app=bot-qr": () => ({ body: workflowState }),
       "/api/setup/feishu/onboarding/sessions": {
         status: 201,
         body: {
@@ -490,15 +261,15 @@ describe("SetupRoute", () => {
         },
       },
       "/api/setup/feishu/onboarding/sessions/session-qr/complete": () => {
-        appsConfigured = true;
+        workflowState = buildAutoConfigWorkflow(app, {
+          status: "apply_required",
+          summary: "存在待写入的飞书自动配置差异。",
+          stageStatus: "pending",
+          allowedActions: ["apply", "retry", "defer"],
+        });
         return {
           body: {
-            app: makeApp({
-              id: "bot-qr",
-              name: "扫码机器人",
-              appId: "cli_qr",
-              verifiedAt: "2026-04-25T08:20:00Z",
-            }),
+            app,
             result: { connected: true, duration: 1_000_000_000 },
             session: {
               id: "session-qr",
@@ -509,449 +280,523 @@ describe("SetupRoute", () => {
           },
         };
       },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect(),
-      },
-      "/api/setup/feishu/apps/bot-qr/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-qr", appId: "cli_qr" }),
-          ready: false,
-          missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
-        }),
-      },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
     });
 
     render(<SetupRoute />);
 
     expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
-
     expect(
-      await screen.findByRole("heading", { name: "权限检查" }, { timeout: 7_000 }),
+      await screen.findByRole("heading", { name: "飞书自动配置" }, { timeout: 7_000 }),
     ).toBeInTheDocument();
-    expect(await screen.findByText("当前还不能进入下一步，请先补齐缺失权限。")).toBeInTheDocument();
   }, 10_000);
 
-  it("shows the bound-recipient error when event test target is unavailable", async () => {
+  it("summarizes blocking backend failures with user-facing setup actions", async () => {
     window.history.replaceState({}, "", "/setup");
 
     installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-      "/api/setup/feishu/apps": {
-        body: {
-          apps: [
-            makeApp({
-              id: "bot-1",
-              name: "主机器人",
-              verifiedAt: "2026-04-25T08:30:00Z",
+      "/api/setup/onboarding/workflow": {
+        body: makeOnboardingWorkflow({
+          currentStage: "runtime_requirements",
+          runtimeRequirements: makeRuntimeRequirementsDetect({
+            ready: false,
+            summary: "当前机器还不满足基础运行条件，请先保证 Claude 或 Codex 至少一个可用。",
+            checks: [
+              {
+                id: "headless_launcher",
+                title: "服务启动器",
+                status: "pass",
+                summary: "当前服务已经有可用的 codex-remote 启动器。",
+              },
+              {
+                id: "real_codex_binary",
+                title: "Codex 可执行文件",
+                status: "fail",
+                summary: "当前服务环境下无法解析 Codex 可执行文件。",
+              },
+              {
+                id: "claude_binary",
+                title: "Claude 可执行文件",
+                status: "fail",
+                summary: "当前服务环境下无法解析 Claude 可执行文件。",
+              },
+            ],
+          }),
+          app: null,
+          stages: [
+            makeOnboardingStage({
+              id: "runtime_requirements",
+              title: "环境检查",
+              status: "blocked",
+              summary: "当前机器还不满足基础运行条件，请先保证 Claude 或 Codex 至少一个可用。",
+              blocking: true,
+              allowedActions: ["retry"],
+            }),
+            makeOnboardingStage({
+              id: "connect",
+              title: "飞书连接",
+              status: "blocked",
+              summary: "还没有接入可用的飞书应用。",
+              blocking: true,
             }),
           ],
-        },
-      },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect(),
-      },
-      "/api/setup/feishu/apps/bot-1/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-1" }),
-          ready: true,
         }),
       },
-      "/api/setup/feishu/apps/bot-1/test-events": {
-        status: 409,
-        body: {
-          error: {
-            code: "feishu_app_web_test_recipient_unavailable",
-            message: "recipient unavailable",
-            details:
-              "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByText("当前需要处理")).toBeInTheDocument();
+    expect(screen.getByText("对话后端")).toBeInTheDocument();
+    expect(screen.getByText("请先保证 Claude 或 Codex 至少一个可用。")).toBeInTheDocument();
+    expect(screen.queryByText("Codex 可执行文件")).not.toBeInTheDocument();
+    expect(screen.queryByText("当前服务环境下无法解析 Codex 可执行文件。")).not.toBeInTheDocument();
+  });
+
+  it("posts setup complete from the done step", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": {
+        body: makeOnboardingWorkflow({
+          currentStage: "done",
+          completion: {
+            setupRequired: false,
+            canComplete: true,
+            summary: "当前 setup 已可完成。",
           },
-        },
-      },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
-    });
-
-    render(<SetupRoute />);
-
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
-    expect(
-      await screen.findByRole("heading", { name: "事件订阅" }, { timeout: 2_000 }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByText(
-        "手动添加的机器人无法自动发送测试消息，请直接在飞书后台继续手动配置。",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("copies an event name from the requirement table", async () => {
-    window.history.replaceState({}, "", "/setup");
-    const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-
-    installMockFetch({
-      "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-      "/api/setup/feishu/apps": {
-        body: {
-          apps: [
-            makeApp({
-              id: "bot-copy",
-              name: "复制机器人",
-              verifiedAt: "2026-04-25T08:30:00Z",
+          app: {
+            app: { verifiedAt: "2026-04-25T08:10:00Z" },
+            autoConfig: {
+              ...makeOnboardingStage({
+                id: "auto_config",
+                title: "飞书自动配置",
+                status: "complete",
+                summary: "飞书应用配置已收敛。",
+              }),
+              plan: {
+                status: "clean",
+                summary: "飞书应用配置已收敛。",
+                current: {},
+                target: {
+                  scopeRequirements: [],
+                  events: [],
+                  callbacks: [],
+                  policy: {
+                    eventSubscriptionType: "long_polling",
+                    eventRequestUrl: "",
+                    callbackType: "long_polling",
+                    callbackRequestUrl: "",
+                    messageCardCallbackUrl: "",
+                    encryptionKeyRequired: false,
+                    verificationTokenRequired: false,
+                    botEnabled: true,
+                    mobileDefaultAbility: "messages",
+                    pcDefaultAbility: "messages",
+                  },
+                },
+                diff: {
+                  configPatchRequired: false,
+                  abilityPatchRequired: false,
+                  missingScopes: [],
+                  extraScopes: [],
+                  missingEvents: [],
+                  extraEvents: [],
+                  missingCallbacks: [],
+                  extraCallbacks: [],
+                  eventSubscriptionTypeMismatch: false,
+                  eventRequestUrlMismatch: false,
+                  callbackTypeMismatch: false,
+                  callbackRequestUrlMismatch: false,
+                  publishRequired: false,
+                },
+                publish: {
+                  needsPublish: false,
+                  awaitingReview: false,
+                },
+                blockingRequirements: [],
+                degradableRequirements: [],
+              },
+            },
+            menu: makeOnboardingStage({
+              id: "menu",
+              title: "菜单确认",
+              status: "complete",
+              summary: "你已确认机器人菜单配置完成。",
             }),
-          ],
-        },
-      },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect(),
-      },
-      "/api/setup/feishu/apps/bot-copy/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-copy" }),
-          ready: true,
-        }),
-      },
-      "/api/setup/feishu/apps/bot-copy/test-events": {
-        body: {
-          gatewayId: "bot-copy",
-          startedAt: "2026-04-25T08:12:00Z",
-          expiresAt: "2026-04-25T08:22:00Z",
-          phrase: "测试",
-          message: "事件订阅测试提示已发送。",
-        },
-      },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
-    });
-
-    render(<SetupRoute />);
-
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
-    expect(
-      await screen.findByRole("heading", { name: "事件订阅" }, { timeout: 2_000 }),
-    ).toBeInTheDocument();
-
-    const eventRow = screen.getByText("im.message.receive_v1").closest("tr");
-    expect(eventRow).not.toBeNull();
-
-    await user.click(
-      within(eventRow as HTMLTableRowElement).getByRole("button", {
-        name: /复制事件名 im\.message\.receive_v1/,
-      }),
-    );
-
-    expect(writeText).toHaveBeenCalledWith("im.message.receive_v1");
-    expect(await screen.findByText("已复制事件名。")).toBeInTheDocument();
-  });
-
-  it("copies a callback name from the requirement table", async () => {
-    window.history.replaceState({}, "", "/setup");
-    const user = userEvent.setup();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-
-    installMockFetch({
-      "/api/setup/bootstrap-state": { body: makeBootstrap() },
-      "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-      "/api/setup/feishu/apps": {
-        body: {
-          apps: [
-            makeApp({
-              id: "bot-copy",
-              name: "复制机器人",
-              verifiedAt: "2026-04-25T08:30:00Z",
-            }),
-          ],
-        },
-      },
-      "/api/setup/runtime-requirements/detect": {
-        body: makeRuntimeRequirementsDetect(),
-      },
-      "/api/setup/feishu/apps/bot-copy/permission-check": {
-        body: makePermissionCheck({
-          app: makeApp({ id: "bot-copy" }),
-          ready: true,
-        }),
-      },
-      "/api/setup/feishu/apps/bot-copy/test-events": {
-        body: {
-          gatewayId: "bot-copy",
-          startedAt: "2026-04-25T08:12:00Z",
-          expiresAt: "2026-04-25T08:22:00Z",
-          phrase: "测试",
-          message: "事件订阅测试提示已发送。",
-        },
-      },
-      "/api/setup/feishu/apps/bot-copy/test-callback": {
-        body: {
-          gatewayId: "bot-copy",
-          startedAt: "2026-04-25T08:13:00Z",
-          expiresAt: "2026-04-25T08:23:00Z",
-          message: "回调测试卡片已发送。",
-        },
-      },
-      "/api/setup/feishu/apps/bot-copy/install-tests/events/clear": {
-        body: {},
-      },
-      "/api/setup/autostart/detect": {
-        body: {
-          platform: "linux",
-          supported: true,
-          status: "disabled",
-          configured: false,
-          enabled: false,
-          canApply: true,
-        },
-      },
-      "/api/setup/vscode/detect": { body: makeVSCodeDetect() },
-    });
-
-    render(<SetupRoute />);
-
-    expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
-    expect(
-      await screen.findByRole("heading", { name: "事件订阅" }, { timeout: 2_000 }),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "下一步" }));
-
-    expect(await screen.findByRole("heading", { name: "回调配置" })).toBeInTheDocument();
-
-    const callbackRow = screen.getByText("card.action.trigger").closest("tr");
-    expect(callbackRow).not.toBeNull();
-
-    await user.click(
-      within(callbackRow as HTMLTableRowElement).getByRole("button", {
-        name: /复制回调名 card\.action\.trigger/,
-      }),
-    );
-
-    expect(writeText).toHaveBeenCalledWith("card.action.trigger");
-    expect(await screen.findByText("已复制回调名。")).toBeInTheDocument();
-  });
-
-  it("recovers when vscode apply times out but detect shows ready", async () => {
-    window.history.replaceState({}, "", "/setup");
-    const user = userEvent.setup();
-    const initialDetect = makeVSCodeState({
-      latestShim: {
-        exists: false,
-        installed: false,
-        matchesBinary: false,
-        realBinaryExists: false,
-      },
-    });
-    const readyDetect = makeVSCodeState();
-
-    installSetupRoutesForVSCode({
-      initialDetect,
-      recoveryDetect: readyDetect,
-      applyHandler: () => new Promise(() => {}),
-    });
-
-    render(<SetupRoute />);
-
-    await advanceSetupToVSCode(user);
-
-    await user.click(screen.getByRole("button", { name: "确认集成" }));
-
-    expect(
-      await screen.findByRole("heading", { name: "欢迎使用" }, { timeout: 12_000 }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("VS Code 集成已完成。")).toBeInTheDocument();
-  }, 15_000);
-
-  it("restores setup interactivity when vscode apply fails and detect is still not ready", async () => {
-    window.history.replaceState({}, "", "/setup");
-    const user = userEvent.setup();
-    const initialDetect = makeVSCodeState({
-      latestShim: {
-        exists: false,
-        installed: false,
-        matchesBinary: false,
-        realBinaryExists: false,
-      },
-    });
-
-    installSetupRoutesForVSCode({
-      initialDetect,
-      recoveryDetect: initialDetect,
-      applyHandler: {
-        status: 500,
-        body: {
-          error: {
-            code: "vscode_apply_failed",
-            message: "failed to apply vscode integration",
           },
+          stages: [
+            makeOnboardingStage({
+              id: "runtime_requirements",
+              title: "环境检查",
+              status: "complete",
+              summary: "当前机器已满足基础运行条件。",
+              blocking: false,
+            }),
+            makeOnboardingStage({
+              id: "connect",
+              title: "飞书连接",
+              status: "complete",
+              summary: "当前飞书应用连接验证已通过。",
+              blocking: false,
+            }),
+            makeOnboardingStage({
+              id: "auto_config",
+              title: "飞书自动配置",
+              status: "complete",
+              summary: "飞书应用配置已收敛。",
+              blocking: false,
+            }),
+            makeOnboardingStage({
+              id: "menu",
+              title: "菜单确认",
+              status: "complete",
+              summary: "你已确认机器人菜单配置完成。",
+              blocking: false,
+            }),
+            makeOnboardingStage({
+              id: "autostart",
+              title: "自动启动",
+              status: "deferred",
+              summary: "你选择稍后再处理自动启动。",
+              blocking: false,
+            }),
+            makeOnboardingStage({
+              id: "vscode",
+              title: "VS Code 集成",
+              status: "deferred",
+              summary: "你选择稍后再处理 VS Code 集成。",
+              blocking: false,
+            }),
+            makeOnboardingStage({
+              id: "done",
+              title: "完成",
+              status: "complete",
+              summary: "当前 setup 已经可以完成。",
+              blocking: false,
+            }),
+          ],
+        }),
+      },
+      "/api/setup/complete": {
+        body: {
+          setupRequired: false,
+          adminURL: "http://127.0.0.1:9501/admin/",
+          message: "ok",
         },
       },
     });
 
     render(<SetupRoute />);
 
-    await advanceSetupToVSCode(user);
+    expect(await screen.findByRole("heading", { name: "欢迎使用" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "进入管理页面" }));
 
-    const button = screen.getByRole("button", { name: "确认集成" });
-    await user.click(button);
-
-    expect(
-      await screen.findByText("当前还不能确认 VS Code 集成结果，请稍后重试。"),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "VS Code 集成" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "确认集成" })).not.toBeDisabled();
+    await waitFor(() => {
+      expect(
+        calls.some(
+          (call) => call.path === "/api/setup/complete" && call.method === "POST",
+        ),
+      ).toBe(true);
+    });
   });
 });
 
-async function advanceSetupToVSCode(user: ReturnType<typeof userEvent.setup>) {
-  expect(await screen.findByRole("heading", { name: "权限检查" })).toBeInTheDocument();
-  expect(
-    await screen.findByRole("heading", { name: "事件订阅" }, { timeout: 2_000 }),
-  ).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "下一步" }));
-  expect(await screen.findByRole("heading", { name: "回调配置" })).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "下一步" }));
-  expect(await screen.findByRole("heading", { name: "菜单确认" })).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "下一步" }));
-  expect(await screen.findByRole("heading", { name: "自动启动" })).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "下一步" }));
-  expect(await screen.findByRole("heading", { name: "VS Code 集成" })).toBeInTheDocument();
-}
-
-function installSetupRoutesForVSCode(options: {
-  initialDetect: VSCodeDetectResponse;
-  recoveryDetect?: VSCodeDetectResponse;
-  applyHandler: Parameters<typeof installMockFetch>[0][string];
-}) {
-  let detectCalls = 0;
-
-  installMockFetch({
-    "/api/setup/bootstrap-state": { body: makeBootstrap() },
-    "/api/setup/feishu/manifest": { body: makeFeishuManifest() },
-    "/api/setup/feishu/apps": {
-      body: {
-        apps: [
-          makeApp({
-            id: "bot-vscode",
-            name: "VS Code 机器人",
-            verifiedAt: "2026-04-25T09:00:00Z",
-          }),
-        ],
-      },
+function buildConnectWorkflow(apps: ReturnType<typeof makeApp>[]) {
+  return makeOnboardingWorkflow({
+    app: null,
+    apps,
+    currentStage: "connect",
+    completion: {
+      setupRequired: true,
+      canComplete: false,
+      blockingReason: "还没有接入可用的飞书应用。",
     },
-    "/api/setup/runtime-requirements/detect": {
-      body: makeRuntimeRequirementsDetect(),
-    },
-    "/api/setup/feishu/apps/bot-vscode/permission-check": {
-      body: makePermissionCheck({
-        app: makeApp({ id: "bot-vscode" }),
-        ready: true,
+    stages: [
+      makeOnboardingStage({
+        id: "runtime_requirements",
+        title: "环境检查",
+        status: "complete",
+        summary: "当前机器已满足基础运行条件，可以继续后面的可选配置。",
+        blocking: false,
+        allowedActions: ["retry"],
       }),
-    },
-    "/api/setup/feishu/apps/bot-vscode/test-events": {
-      body: {
-        gatewayId: "bot-vscode",
-        startedAt: "2026-04-25T09:01:00Z",
-        expiresAt: "2026-04-25T09:11:00Z",
-        phrase: "测试",
-        message: "事件订阅测试提示已发送。",
-      },
-    },
-    "/api/setup/feishu/apps/bot-vscode/test-callback": {
-      body: {
-        gatewayId: "bot-vscode",
-        startedAt: "2026-04-25T09:02:00Z",
-        expiresAt: "2026-04-25T09:12:00Z",
-        message: "回调测试卡片已发送。",
-      },
-    },
-    "/api/setup/feishu/apps/bot-vscode/install-tests/events/clear": {
-      body: {},
-    },
-    "/api/setup/feishu/apps/bot-vscode/install-tests/callback/clear": {
-      body: {},
-    },
-    "/api/setup/autostart/detect": {
-      body: {
-        platform: "linux",
-        supported: true,
-        status: "enabled",
-        configured: true,
-        enabled: true,
-        canApply: true,
-      },
-    },
-    "/api/setup/vscode/detect": () => {
-      detectCalls += 1;
-      return {
-        body:
-          detectCalls === 1 || !options.recoveryDetect
-            ? options.initialDetect
-            : options.recoveryDetect,
-      };
-    },
-    "/api/setup/vscode/apply": options.applyHandler,
+      makeOnboardingStage({
+        id: "connect",
+        title: "飞书连接",
+        status: "blocked",
+        summary: "还没有接入可用的飞书应用。",
+        blocking: true,
+        allowedActions: ["start_qr", "submit_manual"],
+      }),
+    ],
   });
 }
 
-function makeVSCodeState(
-  overrides: Omit<Partial<VSCodeDetectResponse>, "latestShim" | "settings"> & {
-    latestShim?: Partial<VSCodeDetectResponse["latestShim"]>;
-    settings?: Partial<VSCodeDetectResponse["settings"]>;
-  } = {},
-): VSCodeDetectResponse {
-  const base = makeVSCodeDetect();
-  return {
-    ...base,
-    ...overrides,
-    settings: {
-      ...base.settings,
-      ...(overrides.settings || {}),
+function buildAutoConfigWorkflow(
+  app: ReturnType<typeof makeApp>,
+  options: {
+    status: string;
+    summary: string;
+    stageStatus: string;
+    allowedActions: string[];
+  },
+) {
+  return makeOnboardingWorkflow({
+    currentStage: "auto_config",
+    app: {
+      app,
+      connection: {
+        status: "complete",
+        summary: "当前飞书应用连接验证已通过。",
+        allowedActions: ["verify"],
+      },
+      autoConfig: {
+        status: options.stageStatus,
+        summary: options.summary,
+        allowedActions: options.allowedActions,
+        plan: {
+          status: options.status,
+          summary: options.summary,
+          blockingReason: "",
+          blockingRequirements: [],
+          degradableRequirements: [
+            {
+              kind: "scope",
+              key: "im:message:send_as_bot",
+              feature: "core_message_flow",
+              required: false,
+              present: false,
+              degradeMessage: "机器人可能无法主动回消息。",
+            },
+          ],
+          current: {},
+          target: {
+            scopeRequirements: [],
+            events: [],
+            callbacks: [],
+            policy: {
+              eventSubscriptionType: "long_polling",
+              eventRequestUrl: "",
+              callbackType: "long_polling",
+              callbackRequestUrl: "",
+              messageCardCallbackUrl: "",
+              encryptionKeyRequired: false,
+              verificationTokenRequired: false,
+              botEnabled: true,
+              mobileDefaultAbility: "messages",
+              pcDefaultAbility: "messages",
+            },
+          },
+          diff: {
+            configPatchRequired: options.status === "apply_required",
+            abilityPatchRequired: false,
+            missingScopes: [],
+            extraScopes: [],
+            missingEvents: [],
+            extraEvents: [],
+            missingCallbacks: [],
+            extraCallbacks: [],
+            eventSubscriptionTypeMismatch: false,
+            eventRequestUrlMismatch: false,
+            callbackTypeMismatch: false,
+            callbackRequestUrlMismatch: false,
+            publishRequired: options.status === "publish_required",
+          },
+          publish: {
+            needsPublish: options.status === "publish_required",
+            awaitingReview: options.status === "awaiting_review",
+          },
+        },
+      },
+      menu: makeOnboardingStage({
+        id: "menu",
+        title: "菜单确认",
+        status: "blocked",
+        summary: "请先完成飞书自动配置。",
+        blocking: true,
+      }),
     },
-    latestShim: {
-      ...base.latestShim,
-      ...(overrides.latestShim || {}),
+    completion: {
+      setupRequired: true,
+      canComplete: false,
+      blockingReason: options.summary,
     },
-  };
+    stages: [
+      makeOnboardingStage({
+        id: "runtime_requirements",
+        title: "环境检查",
+        status: "complete",
+        summary: "当前机器已满足基础运行条件。",
+        blocking: false,
+      }),
+      makeOnboardingStage({
+        id: "connect",
+        title: "飞书连接",
+        status: "complete",
+        summary: "当前飞书应用连接验证已通过。",
+        blocking: false,
+      }),
+      makeOnboardingStage({
+        id: "auto_config",
+        title: "飞书自动配置",
+        status: options.stageStatus,
+        summary: options.summary,
+        blocking: false,
+        allowedActions: options.allowedActions,
+      }),
+      makeOnboardingStage({
+        id: "menu",
+        title: "菜单确认",
+        status: "blocked",
+        summary: "请先完成飞书自动配置。",
+        blocking: true,
+      }),
+      makeOnboardingStage({
+        id: "autostart",
+        title: "自动启动",
+        status: "pending",
+        summary: "当前还没有完成自动启动决策。",
+        blocking: false,
+      }),
+      makeOnboardingStage({
+        id: "vscode",
+        title: "VS Code 集成",
+        status: "pending",
+        summary: "当前还没有完成 VS Code 集成决策。",
+        blocking: false,
+      }),
+    ],
+  });
+}
+
+function buildMenuWorkflow(app: ReturnType<typeof makeApp>) {
+  return makeOnboardingWorkflow({
+    currentStage: "menu",
+    app: {
+      app,
+      connection: {
+        status: "complete",
+        summary: "当前飞书应用连接验证已通过。",
+      },
+      autoConfig: {
+        status: "deferred",
+        summary: "你已选择先按降级继续，后续仍可回到这里重新查看审核结果。",
+        allowedActions: ["retry"],
+        plan: {
+          status: "awaiting_review",
+          summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
+          blockingReason: "",
+          blockingRequirements: [],
+          degradableRequirements: [
+            {
+              kind: "scope",
+              key: "im:message:send_as_bot",
+              feature: "core_message_flow",
+              required: false,
+              present: false,
+              degradeMessage: "机器人可能无法主动回消息。",
+            },
+          ],
+          current: {},
+          target: {
+            scopeRequirements: [],
+            events: [],
+            callbacks: [],
+            policy: {
+              eventSubscriptionType: "long_polling",
+              eventRequestUrl: "",
+              callbackType: "long_polling",
+              callbackRequestUrl: "",
+              messageCardCallbackUrl: "",
+              encryptionKeyRequired: false,
+              verificationTokenRequired: false,
+              botEnabled: true,
+              mobileDefaultAbility: "messages",
+              pcDefaultAbility: "messages",
+            },
+          },
+          diff: {
+            configPatchRequired: false,
+            abilityPatchRequired: false,
+            missingScopes: [],
+            extraScopes: [],
+            missingEvents: [],
+            extraEvents: [],
+            missingCallbacks: [],
+            extraCallbacks: [],
+            eventSubscriptionTypeMismatch: false,
+            eventRequestUrlMismatch: false,
+            callbackTypeMismatch: false,
+            callbackRequestUrlMismatch: false,
+            publishRequired: false,
+          },
+          publish: {
+            needsPublish: false,
+            awaitingReview: true,
+          },
+        },
+      },
+      menu: makeOnboardingStage({
+        id: "menu",
+        title: "菜单确认",
+        status: "pending",
+        summary: "请在飞书后台确认机器人菜单配置完成，然后回到这里继续。",
+        blocking: false,
+        allowedActions: ["open_bot", "confirm"],
+      }),
+    },
+    completion: {
+      setupRequired: true,
+      canComplete: false,
+      blockingReason: "还没有确认机器人菜单配置。",
+    },
+    stages: [
+      makeOnboardingStage({
+        id: "runtime_requirements",
+        title: "环境检查",
+        status: "complete",
+        summary: "当前机器已满足基础运行条件。",
+        blocking: false,
+      }),
+      makeOnboardingStage({
+        id: "connect",
+        title: "飞书连接",
+        status: "complete",
+        summary: "当前飞书应用连接验证已通过。",
+        blocking: false,
+      }),
+      makeOnboardingStage({
+        id: "auto_config",
+        title: "飞书自动配置",
+        status: "deferred",
+        summary: "你已选择先按降级继续，后续仍可回到这里重新查看审核结果。",
+        blocking: false,
+      }),
+      makeOnboardingStage({
+        id: "menu",
+        title: "菜单确认",
+        status: "pending",
+        summary: "请在飞书后台确认机器人菜单配置完成，然后回到这里继续。",
+        blocking: false,
+        allowedActions: ["open_bot", "confirm"],
+      }),
+      makeOnboardingStage({
+        id: "autostart",
+        title: "自动启动",
+        status: "pending",
+        summary: "当前还没有完成自动启动决策。",
+        blocking: false,
+      }),
+      makeOnboardingStage({
+        id: "vscode",
+        title: "VS Code 集成",
+        status: "pending",
+        summary: "当前还没有完成 VS Code 集成决策。",
+        blocking: false,
+      }),
+    ],
+  });
 }

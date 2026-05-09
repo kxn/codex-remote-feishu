@@ -192,6 +192,10 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-permission/reset", a.requireSetup(a.handleFeishuAppPermissionReset))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/verify", a.requireSetup(a.handleFeishuAppVerify))
 	mux.HandleFunc("GET /api/setup/feishu/apps/{id}/permission-check", a.requireSetup(a.handleFeishuAppPermissionCheck))
+	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-auto-config/defer", a.requireSetup(a.handleFeishuAppAutoConfigDefer))
+	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-auto-config/reset", a.requireSetup(a.handleFeishuAppAutoConfigReset))
+	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-menu/confirm", a.requireSetup(a.handleFeishuAppMenuConfirm))
+	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-menu/reset", a.requireSetup(a.handleFeishuAppMenuReset))
 	mux.HandleFunc("GET /api/setup/feishu/apps/{id}/auto-config/plan", a.requireSetup(a.handleFeishuAppAutoConfigPlan))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/auto-config/apply", a.requireSetup(a.handleFeishuAppAutoConfigApply))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/auto-config/publish", a.requireSetup(a.handleFeishuAppAutoConfigPublish))
@@ -236,6 +240,10 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/onboarding-permission/reset", a.requireAdmin(a.handleFeishuAppPermissionReset))
 	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/verify", a.requireAdmin(a.handleFeishuAppVerify))
 	mux.HandleFunc("GET /api/admin/feishu/apps/{id}/permission-check", a.requireAdmin(a.handleFeishuAppPermissionCheck))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/onboarding-auto-config/defer", a.requireAdmin(a.handleFeishuAppAutoConfigDefer))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/onboarding-auto-config/reset", a.requireAdmin(a.handleFeishuAppAutoConfigReset))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/onboarding-menu/confirm", a.requireAdmin(a.handleFeishuAppMenuConfirm))
+	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/onboarding-menu/reset", a.requireAdmin(a.handleFeishuAppMenuReset))
 	mux.HandleFunc("GET /api/admin/feishu/apps/{id}/auto-config/plan", a.requireAdmin(a.handleFeishuAppAutoConfigPlan))
 	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/auto-config/apply", a.requireAdmin(a.handleFeishuAppAutoConfigApply))
 	mux.HandleFunc("POST /api/admin/feishu/apps/{id}/auto-config/publish", a.requireAdmin(a.handleFeishuAppAutoConfigPublish))
@@ -528,10 +536,6 @@ func (a *App) authAllowsAdmin(auth requestAuthState) bool {
 }
 
 func (a *App) bootstrapState(auth requestAuthState) (bootstrapStatePayload, error) {
-	workflow, err := a.buildOnboardingWorkflow("")
-	if err != nil {
-		return bootstrapStatePayload{}, err
-	}
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return bootstrapStatePayload{}, err
@@ -541,7 +545,15 @@ func (a *App) bootstrapState(auth requestAuthState) (bootstrapStatePayload, erro
 	admin := a.admin
 	a.mu.Unlock()
 
-	setupRequired := workflow.Completion.SetupRequired
+	setupRequired := requiresSetup(loaded.Config, admin.services, a.headlessRuntime.BinaryPath)
+	if auth.Scope == adminauth.ScopeSetup {
+		workflow, err := a.buildOnboardingWorkflow("")
+		if err != nil {
+			return bootstrapStatePayload{}, err
+		}
+		// An active setup session should stay inside setup until the full onboarding workflow is resolved.
+		setupRequired = workflow.Completion.SetupRequired
+	}
 	setupEnabled, setupExpiresAt := a.adminAuth.SetupStatus()
 	gateways := gatewayStatuses(a.gateway)
 	enabledCount := 0

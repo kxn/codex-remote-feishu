@@ -13,11 +13,11 @@ import type {
   ImageStagingStatusResponse,
   LogsStorageStatusResponse,
   OnboardingWorkflowApp,
+  OnboardingWorkflowAutoConfig,
   OnboardingWorkflowCompletion,
   OnboardingWorkflowDecision,
   OnboardingWorkflowGuide,
   OnboardingWorkflowMachineStep,
-  OnboardingWorkflowPermission,
   OnboardingWorkflowResponse,
   OnboardingWorkflowStage,
   PreviewDriveStatusResponse,
@@ -244,11 +244,12 @@ export function makeOnboardingStage(
 }
 
 type OnboardingWorkflowAppOverrides = Partial<
-  Omit<OnboardingWorkflowApp, "app" | "connection" | "permission">
+  Omit<OnboardingWorkflowApp, "app" | "connection" | "autoConfig" | "menu">
 > & {
   app?: Partial<FeishuAppSummary>;
   connection?: Partial<OnboardingWorkflowStage>;
-  permission?: Partial<OnboardingWorkflowPermission>;
+  autoConfig?: Partial<OnboardingWorkflowAutoConfig>;
+  menu?: Partial<OnboardingWorkflowStage>;
 };
 
 type OnboardingWorkflowMachineStepOverrides = Partial<
@@ -294,32 +295,51 @@ export function makeOnboardingWorkflow(
     allowedActions: ["verify"],
     ...(workflowOverrides.app?.connection || {}),
   });
-  const permission: OnboardingWorkflowPermission = {
+  const autoConfig: OnboardingWorkflowAutoConfig = {
     ...makeOnboardingStage({
-      id: "permission",
-      title: "权限检查",
+      id: "auto_config",
+      title: "飞书自动配置",
       status: "pending",
-      summary: "当前还缺少建议补齐的权限。你可以补齐后继续，或者先跳过这一步。",
-      optional: true,
+      summary: "当前还需要自动补齐飞书配置。",
+      optional: false,
       blocking: false,
-      allowedActions: ["open_auth", "recheck", "force_skip"],
+      allowedActions: ["apply", "retry", "defer"],
     }),
-    missingScopes: [{ scope: "drive:drive", scopeType: "tenant" }],
-    grantJSON: `{
-  "scopes": {
-    "tenant": ["drive:drive"],
-    "user": []
-  }
-}`,
-    ...(workflowOverrides.app?.permission || {}),
+    plan: makeAutoConfigPlan({
+      status: "apply_required",
+      summary: "存在待写入的飞书自动配置差异。",
+      blockingRequirements: [],
+      degradableRequirements: [
+        {
+          kind: "scope",
+          key: "im:message:send_as_bot",
+          feature: "core_message_flow",
+          required: false,
+          present: false,
+          degradeMessage: "机器人可能无法主动回消息。",
+        },
+      ],
+    }),
+    ...(workflowOverrides.app?.autoConfig || {}),
   };
+  const menu = makeOnboardingStage({
+    id: "menu",
+    title: "菜单确认",
+    status: "blocked",
+    summary: "请先完成飞书自动配置。",
+    blocking: true,
+    optional: false,
+    allowedActions: [],
+    ...(workflowOverrides.app?.menu || {}),
+  });
   const app =
     workflowOverrides.app === null
       ? undefined
       : {
           app: currentApp,
           connection,
-          permission,
+          autoConfig,
+          menu,
         };
   const {
     decision: autostartDecisionOverrides,
@@ -385,7 +405,7 @@ export function makeOnboardingWorkflow(
   return {
     apps: workflowOverrides.apps ?? (app ? [currentApp] : []),
     selectedAppId: workflowOverrides.selectedAppId ?? app?.app.id,
-    currentStage: workflowOverrides.currentStage ?? "permission",
+    currentStage: workflowOverrides.currentStage ?? "auto_config",
     machineState: workflowOverrides.machineState ?? "usable_with_pending_items",
     completion: {
       setupRequired: workflowOverrides.completion?.setupRequired ?? true,
@@ -394,7 +414,7 @@ export function makeOnboardingWorkflow(
         workflowOverrides.completion?.summary ??
         "当前 setup 还不能完成，请先处理阻塞项。",
       blockingReason:
-        workflowOverrides.completion?.blockingReason ?? "还没有完成自动启动决策。",
+        workflowOverrides.completion?.blockingReason ?? "当前还需要完成飞书自动配置。",
     },
     runtimeRequirements: makeRuntimeRequirementsDetect(
       workflowOverrides.runtimeRequirements || {},
@@ -405,16 +425,17 @@ export function makeOnboardingWorkflow(
     guide: {
       autoConfiguredSummary:
         workflowOverrides.guide?.autoConfiguredSummary ??
-        "当前基础接入已经完成，下面请继续处理这台机器上的可选设置。",
+        "当前飞书应用已经接入，下面请先完成飞书自动配置。",
       remainingManualActions:
         workflowOverrides.guide?.remainingManualActions ?? [
-          "补齐基础权限并重新检查。",
+          "完成飞书自动配置，确认缺失项与后果。",
+          "在飞书后台确认机器人菜单配置。",
           "决定是否在这台机器上启用自动启动。",
           "决定如何处理这台机器上的 VS Code 集成。",
         ],
       recommendedNextStep:
         workflowOverrides.guide?.recommendedNextStep ??
-        (workflowOverrides.currentStage || "permission"),
+        (workflowOverrides.currentStage || "auto_config"),
     },
     stages:
       workflowOverrides.stages ?? [
@@ -427,7 +448,8 @@ export function makeOnboardingWorkflow(
           allowedActions: ["retry"],
         }),
         connection,
-        permission,
+        autoConfig,
+        menu,
         autostart,
         vscode,
       ],

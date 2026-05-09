@@ -76,6 +76,90 @@ func (a *App) handleFeishuAppPermissionReset(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *App) handleFeishuAppAutoConfigDefer(w http.ResponseWriter, r *http.Request) {
+	gatewayID := canonicalGatewayID(r.PathValue("id"))
+	if err := a.writeFeishuAppAutoConfigDecision(gatewayID, onboardingDecisionDeferred, time.Now().UTC()); err != nil {
+		status := http.StatusBadRequest
+		code := "onboarding_auto_config_write_failed"
+		message := "failed to persist onboarding auto-config decision"
+		if strings.HasPrefix(err.Error(), "feishu_app_not_found:") {
+			status = http.StatusNotFound
+			code = "feishu_app_not_found"
+			message = "feishu app not found"
+		}
+		writeAPIError(w, status, apiError{
+			Code:    code,
+			Message: message,
+			Details: err.Error(),
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *App) handleFeishuAppAutoConfigReset(w http.ResponseWriter, r *http.Request) {
+	gatewayID := canonicalGatewayID(r.PathValue("id"))
+	if err := a.clearFeishuAppAutoConfigDecision(gatewayID); err != nil {
+		status := http.StatusBadRequest
+		code := "onboarding_auto_config_write_failed"
+		message := "failed to reset onboarding auto-config decision"
+		if strings.HasPrefix(err.Error(), "feishu_app_not_found:") {
+			status = http.StatusNotFound
+			code = "feishu_app_not_found"
+			message = "feishu app not found"
+		}
+		writeAPIError(w, status, apiError{
+			Code:    code,
+			Message: message,
+			Details: err.Error(),
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *App) handleFeishuAppMenuConfirm(w http.ResponseWriter, r *http.Request) {
+	gatewayID := canonicalGatewayID(r.PathValue("id"))
+	if err := a.writeFeishuAppMenuDecision(gatewayID, onboardingDecisionMenuConfirmed, time.Now().UTC()); err != nil {
+		status := http.StatusBadRequest
+		code := "onboarding_menu_write_failed"
+		message := "failed to persist onboarding menu decision"
+		if strings.HasPrefix(err.Error(), "feishu_app_not_found:") {
+			status = http.StatusNotFound
+			code = "feishu_app_not_found"
+			message = "feishu app not found"
+		}
+		writeAPIError(w, status, apiError{
+			Code:    code,
+			Message: message,
+			Details: err.Error(),
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *App) handleFeishuAppMenuReset(w http.ResponseWriter, r *http.Request) {
+	gatewayID := canonicalGatewayID(r.PathValue("id"))
+	if err := a.clearFeishuAppMenuDecision(gatewayID); err != nil {
+		status := http.StatusBadRequest
+		code := "onboarding_menu_write_failed"
+		message := "failed to reset onboarding menu decision"
+		if strings.HasPrefix(err.Error(), "feishu_app_not_found:") {
+			status = http.StatusNotFound
+			code = "feishu_app_not_found"
+			message = "feishu app not found"
+		}
+		writeAPIError(w, status, apiError{
+			Code:    code,
+			Message: message,
+			Details: err.Error(),
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (a *App) writeOnboardingMachineDecision(kind, decision string, decidedAt time.Time) error {
 	kind = strings.TrimSpace(kind)
 	decision = strings.TrimSpace(decision)
@@ -129,6 +213,120 @@ func (a *App) writeFeishuAppPermissionDecision(gatewayID, decision string, decid
 		state.PermissionDecision = &config.OnboardingDecision{
 			Value:     onboardingDecisionPermissionSkipped,
 			DecidedAt: daemonTimePtr(decidedAt.UTC()),
+		}
+		cfg.Admin.Onboarding.Apps[gatewayID] = state
+		return nil
+	})
+}
+
+func (a *App) writeFeishuAppAutoConfigDecision(gatewayID, decision string, decidedAt time.Time) error {
+	gatewayID = canonicalGatewayID(gatewayID)
+	decision = strings.TrimSpace(decision)
+	if gatewayID == "" {
+		return invalidOnboardingDecisionError("auto_config", decision)
+	}
+	if decision != onboardingDecisionDeferred {
+		return invalidOnboardingDecisionError("auto_config", decision)
+	}
+	if err := a.ensureFeishuAppExists(gatewayID); err != nil {
+		return err
+	}
+
+	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
+		if cfg.Admin.Onboarding.Apps == nil {
+			cfg.Admin.Onboarding.Apps = map[string]config.FeishuAppOnboardingState{}
+		}
+		state := cfg.Admin.Onboarding.Apps[gatewayID]
+		state.AutoConfigDecision = &config.OnboardingDecision{
+			Value:     onboardingDecisionDeferred,
+			DecidedAt: daemonTimePtr(decidedAt.UTC()),
+		}
+		cfg.Admin.Onboarding.Apps[gatewayID] = state
+		return nil
+	})
+}
+
+func (a *App) clearFeishuAppAutoConfigDecision(gatewayID string) error {
+	gatewayID = canonicalGatewayID(gatewayID)
+	if gatewayID == "" {
+		return invalidOnboardingDecisionError("auto_config", "")
+	}
+	if err := a.ensureFeishuAppExists(gatewayID); err != nil {
+		return err
+	}
+
+	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
+		if cfg.Admin.Onboarding.Apps == nil {
+			return nil
+		}
+		state, ok := cfg.Admin.Onboarding.Apps[gatewayID]
+		if !ok {
+			return nil
+		}
+		state.AutoConfigDecision = nil
+		if feishuAppOnboardingStateEmpty(state) {
+			delete(cfg.Admin.Onboarding.Apps, gatewayID)
+			if len(cfg.Admin.Onboarding.Apps) == 0 {
+				cfg.Admin.Onboarding.Apps = nil
+			}
+			return nil
+		}
+		cfg.Admin.Onboarding.Apps[gatewayID] = state
+		return nil
+	})
+}
+
+func (a *App) writeFeishuAppMenuDecision(gatewayID, decision string, decidedAt time.Time) error {
+	gatewayID = canonicalGatewayID(gatewayID)
+	decision = strings.TrimSpace(decision)
+	if gatewayID == "" {
+		return invalidOnboardingDecisionError("menu", decision)
+	}
+	if decision != onboardingDecisionMenuConfirmed {
+		return invalidOnboardingDecisionError("menu", decision)
+	}
+	if err := a.ensureFeishuAppExists(gatewayID); err != nil {
+		return err
+	}
+
+	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
+		if cfg.Admin.Onboarding.Apps == nil {
+			cfg.Admin.Onboarding.Apps = map[string]config.FeishuAppOnboardingState{}
+		}
+		state := cfg.Admin.Onboarding.Apps[gatewayID]
+		state.MenuDecision = &config.OnboardingDecision{
+			Value:     onboardingDecisionMenuConfirmed,
+			DecidedAt: daemonTimePtr(decidedAt.UTC()),
+		}
+		cfg.Admin.Onboarding.Apps[gatewayID] = state
+		return nil
+	})
+}
+
+func (a *App) clearFeishuAppMenuDecision(gatewayID string) error {
+	gatewayID = canonicalGatewayID(gatewayID)
+	if gatewayID == "" {
+		return invalidOnboardingDecisionError("menu", "")
+	}
+	if err := a.ensureFeishuAppExists(gatewayID); err != nil {
+		return err
+	}
+
+	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
+		if cfg.Admin.Onboarding.Apps == nil {
+			return nil
+		}
+		state, ok := cfg.Admin.Onboarding.Apps[gatewayID]
+		if !ok {
+			return nil
+		}
+		state.MenuDecision = nil
+		if feishuAppOnboardingStateEmpty(state) {
+			delete(cfg.Admin.Onboarding.Apps, gatewayID)
+			if len(cfg.Admin.Onboarding.Apps) == 0 {
+				cfg.Admin.Onboarding.Apps = nil
+			}
+			return nil
 		}
 		cfg.Admin.Onboarding.Apps[gatewayID] = state
 		return nil
@@ -215,7 +413,9 @@ func invalidOnboardingDecisionError(kind, decision string) error {
 }
 
 func feishuAppOnboardingStateEmpty(state config.FeishuAppOnboardingState) bool {
-	return state.PermissionDecision == nil
+	return state.PermissionDecision == nil &&
+		state.AutoConfigDecision == nil &&
+		state.MenuDecision == nil
 }
 
 func daemonTimePtr(value time.Time) *time.Time {

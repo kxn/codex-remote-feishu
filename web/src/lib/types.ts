@@ -497,10 +497,17 @@ export interface OnboardingWorkflowMachineStep extends OnboardingWorkflowStage {
   error?: string;
 }
 
+export interface OnboardingWorkflowAutoConfig extends OnboardingWorkflowStage {
+  decision?: OnboardingWorkflowDecision;
+  plan?: FeishuAppAutoConfigPlan;
+  error?: string;
+}
+
 export interface OnboardingWorkflowApp {
   app: FeishuAppSummary;
   connection: OnboardingWorkflowStage;
-  permission: OnboardingWorkflowPermission;
+  autoConfig: OnboardingWorkflowAutoConfig;
+  menu: OnboardingWorkflowStage;
 }
 
 export interface OnboardingWorkflowGuide {

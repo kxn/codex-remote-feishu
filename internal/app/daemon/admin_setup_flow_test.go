@@ -20,6 +20,17 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
+func stubSetupAutoConfigPlan(t *testing.T, plan feishu.AutoConfigPlan) {
+	t.Helper()
+	oldPlan := planFeishuAppAutoConfig
+	planFeishuAppAutoConfig = func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
+		return plan, nil
+	}
+	t.Cleanup(func() {
+		planFeishuAppAutoConfig = oldPlan
+	})
+}
+
 func TestSetupSessionCanUseFeishuAndVSCodeSetupAPIsAfterCredentialsSaved(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -78,6 +89,10 @@ func TestSetupSessionCanUseFeishuAndVSCodeSetupAPIsAfterCredentialsSaved(t *test
 func TestSetupCompleteRevokesRemoteSetupSession(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	stubSetupAutoConfigPlan(t, feishu.AutoConfigPlan{
+		Status:  feishu.AutoConfigStatusClean,
+		Summary: "飞书应用配置已收敛。",
+	})
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)
@@ -130,6 +145,15 @@ func TestSetupCompleteRevokesRemoteSetupSession(t *testing.T) {
 		t.Fatalf("vscode decision status = %d, want 204 body=%s", rec.Code, rec.Body.String())
 	}
 
+	req = httptest.NewRequest(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-menu/confirm", nil)
+	req.RemoteAddr = "198.51.100.20:23456"
+	req.AddCookie(cookie)
+	rec = httptest.NewRecorder()
+	app.apiServer.Handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("menu confirm status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+	}
+
 	req = httptest.NewRequest(http.MethodPost, "/api/setup/complete", nil)
 	req.RemoteAddr = "198.51.100.20:23456"
 	req.AddCookie(cookie)
@@ -180,6 +204,10 @@ func TestSetupCompleteRevokesRemoteSetupSession(t *testing.T) {
 func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersistence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	stubSetupAutoConfigPlan(t, feishu.AutoConfigPlan{
+		Status:  feishu.AutoConfigStatusClean,
+		Summary: "飞书应用配置已收敛。",
+	})
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)
@@ -208,6 +236,12 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 		t.Fatalf("vscode decision status = %d, want 204 body=%s", rec.Code, rec.Body.String())
 	}
 
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-menu/confirm", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("menu confirm status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+	}
+
 	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
 	rec = performSetupRequestRecorder(app, req)
 	if rec.Code != http.StatusOK {
@@ -233,20 +267,19 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 	if payload.App == nil {
 		t.Fatalf("expected selected app view, got %#v", payload)
 	}
-	if payload.CurrentStage != onboardingStagePermission {
-		t.Fatalf("current stage = %q, want %q", payload.CurrentStage, onboardingStagePermission)
+	if payload.App.AutoConfig.Status != onboardingStageStatusComplete {
+		t.Fatalf("auto-config status = %q, want %q", payload.App.AutoConfig.Status, onboardingStageStatusComplete)
+	}
+	if payload.App.Menu.Status != onboardingStageStatusComplete {
+		t.Fatalf("menu status = %q, want %q", payload.App.Menu.Status, onboardingStageStatusComplete)
+	}
+	if payload.CurrentStage != onboardingStageDone {
+		t.Fatalf("current stage = %q, want %q", payload.CurrentStage, onboardingStageDone)
 	}
 }
 
-func TestSetupOnboardingPermissionStepSupportsForceSkipAndReset(t *testing.T) {
-	oldListScopes := listFeishuAppScopes
+func TestSetupOnboardingAutoConfigDeferResetControlsMenuGate(t *testing.T) {
 	oldDetectAutostart := detectAutostart
-	listFeishuAppScopes = func(context.Context, feishu.LiveGatewayConfig) ([]feishu.AppScopeStatus, error) {
-		return []feishu.AppScopeStatus{
-			{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1},
-			{ScopeName: "im:message:send_as_bot", ScopeType: "tenant", GrantStatus: 1},
-		}, nil
-	}
 	detectAutostart = func(statePath string) (install.AutostartStatus, error) {
 		return install.AutostartStatus{
 			Platform:         "linux",
@@ -259,8 +292,11 @@ func TestSetupOnboardingPermissionStepSupportsForceSkipAndReset(t *testing.T) {
 		}, nil
 	}
 	t.Cleanup(func() {
-		listFeishuAppScopes = oldListScopes
 		detectAutostart = oldDetectAutostart
+	})
+	stubSetupAutoConfigPlan(t, feishu.AutoConfigPlan{
+		Status:  feishu.AutoConfigStatusApplyRequired,
+		Summary: "当前还需要自动补齐飞书配置。",
 	})
 
 	home := t.TempDir()
@@ -289,40 +325,67 @@ func TestSetupOnboardingPermissionStepSupportsForceSkipAndReset(t *testing.T) {
 
 	var payload onboardingWorkflowResponse
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode workflow before skip: %v", err)
+		t.Fatalf("decode workflow before defer: %v", err)
 	}
-	if payload.App == nil || payload.App.Permission.Status != onboardingStageStatusPending {
-		t.Fatalf("permission before skip = %#v, want pending", payload.App)
+	if payload.App == nil || payload.App.AutoConfig.Status != onboardingStageStatusPending {
+		t.Fatalf("auto-config before defer = %#v, want pending", payload.App)
 	}
-	if payload.CurrentStage != onboardingStagePermission {
-		t.Fatalf("current stage before skip = %q, want permission", payload.CurrentStage)
+	if payload.App.Menu.Status != onboardingStageStatusBlocked {
+		t.Fatalf("menu before defer = %#v, want blocked", payload.App.Menu)
+	}
+	if payload.CurrentStage != onboardingStageAutoConfig {
+		t.Fatalf("current stage before defer = %q, want auto_config", payload.CurrentStage)
 	}
 
-	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-permission/skip", "", cookie)
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-auto-config/defer", "", cookie)
 	rec = performSetupRequestRecorder(app, req)
 	if rec.Code != http.StatusNoContent {
-		t.Fatalf("permission skip status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("auto-config defer status = %d, want 204 body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
 	rec = performSetupRequestRecorder(app, req)
 	if rec.Code != http.StatusOK {
-		t.Fatalf("workflow after skip status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("workflow after defer status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode workflow after skip: %v", err)
+		t.Fatalf("decode workflow after defer: %v", err)
 	}
-	if payload.App == nil || payload.App.Permission.Status != onboardingStageStatusDeferred {
-		t.Fatalf("permission after skip = %#v, want deferred", payload.App)
+	if payload.App == nil || payload.App.AutoConfig.Status != onboardingStageStatusDeferred {
+		t.Fatalf("auto-config after defer = %#v, want deferred", payload.App)
 	}
-	if payload.CurrentStage != onboardingStageAutostart {
-		t.Fatalf("current stage after skip = %q, want autostart", payload.CurrentStage)
+	if payload.App.Menu.Status != onboardingStageStatusPending {
+		t.Fatalf("menu after defer = %#v, want pending", payload.App.Menu)
+	}
+	if payload.CurrentStage != onboardingStageMenu {
+		t.Fatalf("current stage after defer = %q, want menu", payload.CurrentStage)
 	}
 
-	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-permission/reset", "", cookie)
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-menu/confirm", "", cookie)
 	rec = performSetupRequestRecorder(app, req)
 	if rec.Code != http.StatusNoContent {
-		t.Fatalf("permission reset status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+		t.Fatalf("menu confirm status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow after menu confirm status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode workflow after menu confirm: %v", err)
+	}
+	if payload.App == nil || payload.App.Menu.Status != onboardingStageStatusComplete {
+		t.Fatalf("menu after confirm = %#v, want complete", payload.App)
+	}
+	if payload.CurrentStage != onboardingStageAutostart {
+		t.Fatalf("current stage after menu confirm = %q, want autostart", payload.CurrentStage)
+	}
+
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-auto-config/reset", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("auto-config reset status = %d, want 204 body=%s", rec.Code, rec.Body.String())
 	}
 
 	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
@@ -333,11 +396,14 @@ func TestSetupOnboardingPermissionStepSupportsForceSkipAndReset(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode workflow after reset: %v", err)
 	}
-	if payload.App == nil || payload.App.Permission.Status != onboardingStageStatusPending {
-		t.Fatalf("permission after reset = %#v, want pending", payload.App)
+	if payload.App == nil || payload.App.AutoConfig.Status != onboardingStageStatusPending {
+		t.Fatalf("auto-config after reset = %#v, want pending", payload.App)
 	}
-	if payload.CurrentStage != onboardingStagePermission {
-		t.Fatalf("current stage after reset = %q, want permission", payload.CurrentStage)
+	if payload.App.Menu.Status != onboardingStageStatusBlocked {
+		t.Fatalf("menu after reset = %#v, want blocked", payload.App.Menu)
+	}
+	if payload.CurrentStage != onboardingStageAutoConfig {
+		t.Fatalf("current stage after reset = %q, want auto_config", payload.CurrentStage)
 	}
 }
 
