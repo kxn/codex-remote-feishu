@@ -33,6 +33,27 @@ type feishuAppPermissionCheckResponse struct {
 	LastCheckedAt *time.Time                     `json:"lastCheckedAt,omitempty"`
 }
 
+type feishuAppAutoConfigPlanResponse struct {
+	App  adminFeishuAppSummary `json:"app"`
+	Plan feishu.AutoConfigPlan `json:"plan"`
+}
+
+type feishuAppAutoConfigApplyResponse struct {
+	App    adminFeishuAppSummary        `json:"app"`
+	Result feishu.AutoConfigApplyResult `json:"result"`
+}
+
+type feishuAppAutoConfigPublishRequest struct {
+	Remark    string `json:"remark,omitempty"`
+	Changelog string `json:"changelog,omitempty"`
+	Version   string `json:"version,omitempty"`
+}
+
+type feishuAppAutoConfigPublishResponse struct {
+	App    adminFeishuAppSummary          `json:"app"`
+	Result feishu.AutoConfigPublishResult `json:"result"`
+}
+
 type feishuAppPermissionCheckItem struct {
 	Scope     string `json:"scope"`
 	ScopeType string `json:"scopeType,omitempty"`

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -102,5 +103,63 @@ func TestDeployTemplateStaysInSyncWithManifest(t *testing.T) {
 		if item.Key != want.Key || item.Name != want.Name || item.Description != want.Description {
 			t.Fatalf("template menu[%d] = %#v, want %#v", index, item, want)
 		}
+	}
+}
+
+func TestDefaultManifestRequirementsMetadata(t *testing.T) {
+	manifest := DefaultManifest()
+	if len(manifest.ScopeRequirements) != len(manifest.Scopes.Scopes.Tenant)+len(manifest.Scopes.Scopes.User) {
+		t.Fatalf("scope requirements count = %d, want %d", len(manifest.ScopeRequirements), len(manifest.Scopes.Scopes.Tenant)+len(manifest.Scopes.Scopes.User))
+	}
+
+	requiredEvents := 0
+	for _, item := range manifest.Events {
+		if strings.TrimSpace(item.Feature) == "" {
+			t.Fatalf("event %q missing feature metadata", item.Event)
+		}
+		if !item.Required && strings.TrimSpace(item.DegradeMessage) == "" {
+			t.Fatalf("optional event %q missing degradeMessage", item.Event)
+		}
+		if item.Required {
+			requiredEvents++
+		}
+	}
+	if requiredEvents == 0 {
+		t.Fatal("expected at least one required event")
+	}
+
+	requiredCallbacks := 0
+	for _, item := range manifest.Callbacks {
+		if strings.TrimSpace(item.Feature) == "" {
+			t.Fatalf("callback %q missing feature metadata", item.Callback)
+		}
+		if !item.Required && strings.TrimSpace(item.DegradeMessage) == "" {
+			t.Fatalf("optional callback %q missing degradeMessage", item.Callback)
+		}
+		if item.Required {
+			requiredCallbacks++
+		}
+	}
+	if requiredCallbacks == 0 {
+		t.Fatal("expected at least one required callback")
+	}
+}
+
+func TestDefaultFixedPolicy(t *testing.T) {
+	policy := DefaultFixedPolicy()
+	if policy.EventSubscriptionType != FeishuEventSubscriptionTypeWebsocket {
+		t.Fatalf("event subscription type = %q, want %q", policy.EventSubscriptionType, FeishuEventSubscriptionTypeWebsocket)
+	}
+	if policy.CallbackType != FeishuCallbackTypeWebsocket {
+		t.Fatalf("callback type = %q, want %q", policy.CallbackType, FeishuCallbackTypeWebsocket)
+	}
+	if !policy.BotEnabled {
+		t.Fatal("expected bot to be enabled in fixed policy")
+	}
+	if policy.MobileDefaultAbility != FeishuDefaultAbilityBot || policy.PcDefaultAbility != FeishuDefaultAbilityBot {
+		t.Fatalf("unexpected default abilities: %#v", policy)
+	}
+	if !policy.PreserveExistingEncryptKV {
+		t.Fatal("expected preserve-existing encryption strategy in stage 1")
 	}
 }

@@ -3,11 +3,12 @@ package feishuapp
 import "github.com/kxn/codex-remote-feishu/internal/core/control"
 
 type Manifest struct {
-	Scopes    ScopesImport          `json:"scopesImport"`
-	Events    []EventRequirement    `json:"events"`
-	Callbacks []CallbackRequirement `json:"callbacks"`
-	Menus     []MenuRequirement     `json:"menus"`
-	Checklist []ChecklistSection    `json:"checklist"`
+	Scopes            ScopesImport          `json:"scopesImport"`
+	ScopeRequirements []ScopeRequirement    `json:"scopeRequirements,omitempty"`
+	Events            []EventRequirement    `json:"events"`
+	Callbacks         []CallbackRequirement `json:"callbacks"`
+	Menus             []MenuRequirement     `json:"menus"`
+	Checklist         []ChecklistSection    `json:"checklist"`
 }
 
 type ScopesImport struct {
@@ -19,14 +20,28 @@ type PermissionScopes struct {
 	User   []string `json:"user"`
 }
 
+type ScopeRequirement struct {
+	Scope          string `json:"scope"`
+	ScopeType      string `json:"scopeType,omitempty"`
+	Feature        string `json:"feature,omitempty"`
+	Required       bool   `json:"required"`
+	DegradeMessage string `json:"degradeMessage,omitempty"`
+}
+
 type EventRequirement struct {
-	Event   string `json:"event"`
-	Purpose string `json:"purpose,omitempty"`
+	Event          string `json:"event"`
+	Purpose        string `json:"purpose,omitempty"`
+	Feature        string `json:"feature,omitempty"`
+	Required       bool   `json:"required"`
+	DegradeMessage string `json:"degradeMessage,omitempty"`
 }
 
 type CallbackRequirement struct {
-	Callback string `json:"callback"`
-	Purpose  string `json:"purpose,omitempty"`
+	Callback       string `json:"callback"`
+	Purpose        string `json:"purpose,omitempty"`
+	Feature        string `json:"feature,omitempty"`
+	Required       bool   `json:"required"`
+	DegradeMessage string `json:"degradeMessage,omitempty"`
 }
 
 type MenuRequirement struct {
@@ -69,15 +84,125 @@ func DefaultManifest() Manifest {
 				User: []string{},
 			},
 		},
+		ScopeRequirements: []ScopeRequirement{
+			{
+				Scope:          "drive:drive",
+				ScopeType:      "tenant",
+				Feature:        "markdown_preview",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，本地 Markdown 文件不会自动转成飞书预览链接。",
+			},
+			{
+				Scope:          "base:app:create",
+				ScopeType:      "tenant",
+				Feature:        "cron_bitable",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，无法自动创建 /cron 所需的多维表格应用。",
+			},
+			{
+				Scope:          "bitable:app",
+				ScopeType:      "tenant",
+				Feature:        "cron_bitable",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，无法在飞书里直接管理 /cron 对应的多维表格。",
+			},
+			{
+				Scope:          "im:datasync.feed_card.time_sensitive:write",
+				ScopeType:      "tenant",
+				Feature:        "time_sensitive_indicator",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，飞书客户端里的“等待你输入”提醒不会显示。",
+			},
+			{
+				Scope:     "im:message",
+				ScopeType: "tenant",
+				Feature:   "core_message_flow",
+				Required:  true,
+			},
+			{
+				Scope:          "im:message.group_at_msg:readonly",
+				ScopeType:      "tenant",
+				Feature:        "group_mentions",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，机器人无法稳定处理群聊 @ 消息。",
+			},
+			{
+				Scope:          "im:message.p2p_msg:readonly",
+				ScopeType:      "tenant",
+				Feature:        "p2p_chat",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，机器人无法在单聊中接收消息。",
+			},
+			{
+				Scope:          "im:message.reactions:read",
+				ScopeType:      "tenant",
+				Feature:        "reaction_feedback",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，机器人无法读取用户的消息 reaction 反馈。",
+			},
+			{
+				Scope:          "im:message.reactions:write_only",
+				ScopeType:      "tenant",
+				Feature:        "reaction_feedback",
+				Required:       false,
+				DegradeMessage: "缺少该权限时，机器人无法写入消息 reaction 反馈。",
+			},
+			{
+				Scope:     "im:message:send_as_bot",
+				ScopeType: "tenant",
+				Feature:   "core_message_flow",
+				Required:  true,
+			},
+			{
+				Scope:     "im:resource",
+				ScopeType: "tenant",
+				Feature:   "core_message_flow",
+				Required:  true,
+			},
+		},
 		Events: []EventRequirement{
-			{Event: "im.message.receive_v1", Purpose: "接收用户发给机器人的文本和图片消息"},
-			{Event: "im.message.recalled_v1", Purpose: "处理用户撤回消息"},
-			{Event: "im.message.reaction.created_v1", Purpose: "处理用户对消息的反馈动作"},
-			{Event: "im.message.reaction.deleted_v1", Purpose: "处理用户对消息的反馈动作"},
-			{Event: "application.bot.menu_v6", Purpose: "处理机器人菜单点击"},
+			{
+				Event:    "im.message.receive_v1",
+				Purpose:  "接收用户发给机器人的文本和图片消息",
+				Feature:  "core_message_flow",
+				Required: true,
+			},
+			{
+				Event:          "im.message.recalled_v1",
+				Purpose:        "处理用户撤回消息",
+				Feature:        "message_recall_sync",
+				Required:       false,
+				DegradeMessage: "缺少该事件时，用户撤回消息不会同步取消已排队输入。",
+			},
+			{
+				Event:          "im.message.reaction.created_v1",
+				Purpose:        "处理用户对消息的反馈动作",
+				Feature:        "reaction_feedback",
+				Required:       false,
+				DegradeMessage: "缺少该事件时，机器人无法响应用户新增的消息 reaction 反馈。",
+			},
+			{
+				Event:          "im.message.reaction.deleted_v1",
+				Purpose:        "处理用户对消息的反馈动作",
+				Feature:        "reaction_feedback",
+				Required:       false,
+				DegradeMessage: "缺少该事件时，机器人无法响应用户撤销的消息 reaction 反馈。",
+			},
+			{
+				Event:          "application.bot.menu_v6",
+				Purpose:        "处理机器人菜单点击",
+				Feature:        "bot_menu",
+				Required:       false,
+				DegradeMessage: "缺少该事件时，飞书里的机器人菜单快捷入口不可用。",
+			},
 		},
 		Callbacks: []CallbackRequirement{
-			{Callback: "card.action.trigger", Purpose: "处理卡片按钮和卡片交互回调"},
+			{
+				Callback: "card.action.trigger",
+				Purpose:  "处理卡片按钮和卡片交互回调",
+				Feature:  "interactive_cards",
+				Required: true,
+			},
 		},
 		Menus: manifestMenus,
 		Checklist: []ChecklistSection{

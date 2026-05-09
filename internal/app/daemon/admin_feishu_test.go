@@ -198,6 +198,130 @@ func TestAdminFeishuPermissionCheckReturnsMissingScopesAndGrantJSON(t *testing.T
 	}
 }
 
+func TestAdminFeishuAutoConfigPlanRoute(t *testing.T) {
+	oldPlan := planFeishuAppAutoConfig
+	var gotCfg feishu.LiveGatewayConfig
+	planFeishuAppAutoConfig = func(_ context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
+		gotCfg = cfg
+		return feishu.AutoConfigPlan{
+			Status:  feishu.AutoConfigStatusApplyRequired,
+			Summary: "plan ready",
+		}, nil
+	}
+	t.Cleanup(func() {
+		planFeishuAppAutoConfig = oldPlan
+	})
+
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/feishu/apps/main/auto-config/plan", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("auto-config plan status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var resp feishuAppAutoConfigPlanResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode auto-config plan: %v", err)
+	}
+	if resp.Plan.Status != feishu.AutoConfigStatusApplyRequired || resp.Plan.Summary != "plan ready" {
+		t.Fatalf("unexpected plan payload: %#v", resp.Plan)
+	}
+	if gotCfg.AppID != "cli_xxx" || gotCfg.AppSecret != "secret_xxx" || gotCfg.GatewayID != "main" {
+		t.Fatalf("unexpected runtime cfg: %#v", gotCfg)
+	}
+}
+
+func TestSetupFeishuAutoConfigApplyRoute(t *testing.T) {
+	oldApply := applyFeishuAppAutoConfig
+	var gotCfg feishu.LiveGatewayConfig
+	applyFeishuAppAutoConfig = func(_ context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error) {
+		gotCfg = cfg
+		return feishu.AutoConfigApplyResult{
+			Status:  feishu.AutoConfigStatusPublishRequired,
+			Summary: "apply finished",
+		}, nil
+	}
+	t.Cleanup(func() {
+		applyFeishuAppAutoConfig = oldApply
+	})
+
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/apps/main/auto-config/apply", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("auto-config apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var resp feishuAppAutoConfigApplyResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode auto-config apply: %v", err)
+	}
+	if resp.Result.Status != feishu.AutoConfigStatusPublishRequired || resp.Result.Summary != "apply finished" {
+		t.Fatalf("unexpected apply payload: %#v", resp.Result)
+	}
+	if gotCfg.AppID != "cli_xxx" || gotCfg.GatewayID != "main" {
+		t.Fatalf("unexpected runtime cfg: %#v", gotCfg)
+	}
+}
+
+func TestAdminFeishuAutoConfigPublishRoute(t *testing.T) {
+	oldPublish := publishFeishuAppAutoConfig
+	var gotCfg feishu.LiveGatewayConfig
+	var gotReq feishu.AutoConfigPublishRequest
+	publishFeishuAppAutoConfig = func(_ context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error) {
+		gotCfg = cfg
+		gotReq = req
+		return feishu.AutoConfigPublishResult{
+			Status:    feishu.AutoConfigStatusAwaitingReview,
+			Summary:   "publish submitted",
+			VersionID: "oav_1",
+			Version:   "1.8.1",
+		}, nil
+	}
+	t.Cleanup(func() {
+		publishFeishuAppAutoConfig = oldPublish
+	})
+
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/apps/main/auto-config/publish", `{"remark":"sync","changelog":"updated","version":"1.8.1"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("auto-config publish status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var resp feishuAppAutoConfigPublishResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode auto-config publish: %v", err)
+	}
+	if resp.Result.Status != feishu.AutoConfigStatusAwaitingReview || resp.Result.VersionID != "oav_1" || resp.Result.Version != "1.8.1" {
+		t.Fatalf("unexpected publish payload: %#v", resp.Result)
+	}
+	if gotCfg.AppID != "cli_xxx" || gotCfg.GatewayID != "main" {
+		t.Fatalf("unexpected runtime cfg: %#v", gotCfg)
+	}
+	if gotReq.Remark != "sync" || gotReq.Changelog != "updated" || gotReq.Version != "1.8.1" {
+		t.Fatalf("unexpected publish request: %#v", gotReq)
+	}
+}
+
 func TestAdminFeishuEventSubscriptionTestStartAndPass(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
