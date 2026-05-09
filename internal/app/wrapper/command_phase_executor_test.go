@@ -80,6 +80,7 @@ func TestExecuteCommandPhasesStopsAfterRejectedGate(t *testing.T) {
 
 	writeCh := make(chan []byte, 2)
 	tracker := newCommandResponseTracker()
+	aborted := 0
 	phases := []runtimeCommandPhase{
 		{
 			OutboundToChild: [][]byte{[]byte("phase-1\n")},
@@ -89,9 +90,15 @@ func TestExecuteCommandPhasesStopsAfterRejectedGate(t *testing.T) {
 				Timeout:        time.Second,
 				TimeoutProblem: agentproto.ErrorInfo{Code: "gate_timeout", Message: "gate timeout"},
 			},
+			Abort: func() {
+				aborted++
+			},
 		},
 		{
 			OutboundToChild: [][]byte{[]byte("phase-2\n")},
+			Abort: func() {
+				aborted++
+			},
 		},
 	}
 
@@ -125,5 +132,63 @@ func TestExecuteCommandPhasesStopsAfterRejectedGate(t *testing.T) {
 	case line := <-writeCh:
 		t.Fatalf("second phase should not queue after rejection, got %q", line)
 	case <-time.After(100 * time.Millisecond):
+	}
+	if aborted != 1 {
+		t.Fatalf("expected exactly one phase abort callback, got %d", aborted)
+	}
+}
+
+func TestExecuteCommandPhasesAbortsSecondPhaseWhenContextCancelsBeforeQueue(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	writeCh := make(chan []byte)
+	tracker := newCommandResponseTracker()
+	secondPhaseAborted := false
+	phases := []runtimeCommandPhase{
+		{
+			OutboundToChild: [][]byte{[]byte("phase-1\n")},
+			ResponseGate: &runtimeCommandResponseGate{
+				RequestID:      "req-1",
+				RejectProblem:  agentproto.ErrorInfo{Code: "gate_rejected", Message: "gate rejected"},
+				Timeout:        time.Second,
+				TimeoutProblem: agentproto.ErrorInfo{Code: "gate_timeout", Message: "gate timeout"},
+			},
+		},
+		{
+			OutboundToChild: [][]byte{[]byte("phase-2\n")},
+			Abort: func() {
+				secondPhaseAborted = true
+			},
+		},
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- executeCommandPhases(ctx, writeCh, tracker, "cmd-1", phases, nil)
+	}()
+
+	select {
+	case line := <-writeCh:
+		if string(line) != "phase-1\n" {
+			t.Fatalf("first queued frame = %q, want phase-1", line)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first phase frame")
+	}
+
+	tracker.ResolveRequestID("req-1", "")
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != context.Canceled {
+			t.Fatalf("expected context cancellation, got %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for phased execution to stop on cancellation")
+	}
+	if !secondPhaseAborted {
+		t.Fatal("expected second phase abort callback to run on cancellation")
 	}
 }

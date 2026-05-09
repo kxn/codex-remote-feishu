@@ -117,6 +117,7 @@ type pendingRequest struct {
 }
 
 type pendingControlReply struct {
+	CommandID             string
 	Kind                  string
 	DesiredPermissionMode string
 }
@@ -189,6 +190,28 @@ func (t *Translator) BuildChildRestartRestoreFrame(string) ([]byte, string, bool
 }
 
 func (t *Translator) CancelChildRestartRestore(string) {}
+
+func (t *Translator) AbortCommand(commandID string) {
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return
+	}
+	if len(t.pendingTurns) != 0 {
+		filtered := t.pendingTurns[:0]
+		for _, turn := range t.pendingTurns {
+			if turn == nil || strings.TrimSpace(turn.CommandID) == commandID {
+				continue
+			}
+			filtered = append(filtered, turn)
+		}
+		t.pendingTurns = filtered
+	}
+	for requestID, pending := range t.pendingControlReplies {
+		if strings.TrimSpace(pending.CommandID) == commandID {
+			delete(t.pendingControlReplies, requestID)
+		}
+	}
+}
 
 func (t *Translator) nextNativeID(prefix string) string {
 	t.nextID++

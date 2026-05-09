@@ -49,6 +49,7 @@ func executeCommandPhases(
 				if phase.ResponseGate != nil {
 					commandResponses.Cancel(phase.ResponseGate.RequestID)
 				}
+				abortRuntimeCommandPhase(phase)
 				return ctx.Err()
 			}
 		}
@@ -58,6 +59,7 @@ func executeCommandPhases(
 		err := waitCommandResponse(ctx, waitCh, phase.ResponseGate.Timeout, phase.ResponseGate.TimeoutProblem)
 		if err != nil {
 			commandResponses.Cancel(phase.ResponseGate.RequestID)
+			abortRuntimeCommandPhase(phase)
 			if debugf != nil {
 				debugf(
 					"relay command response failed: command=%s phase=%d request=%s err=%v",
@@ -79,4 +81,10 @@ func executeCommandPhases(
 		}
 	}
 	return nil
+}
+
+func abortRuntimeCommandPhase(phase runtimeCommandPhase) {
+	if phase.Abort != nil {
+		phase.Abort()
+	}
 }
