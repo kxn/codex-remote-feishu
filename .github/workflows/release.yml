@@ -181,6 +181,7 @@ jobs:
                 true
             )"
             create_release=true
+            upload_assets=true
             run_packaging=true
           fi
 
@@ -244,7 +245,7 @@ jobs:
           LATEST_TAG="${{ steps.version.outputs.latest_tag }}" \
           bash scripts/release/release-notes.sh > release-notes.md
 
-      - name: Create GitHub release
+      - name: Create GitHub release Metadata
         if: ${{ steps.version.outputs.create_release == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
@@ -256,15 +257,34 @@ jobs:
           if [[ "${{ steps.version.outputs.prerelease }}" == "true" ]]; then
             flags+=(--prerelease)
           fi
-          gh release create "${{ steps.version.outputs.version }}" dist/* \
+          gh release create "${{ steps.version.outputs.version }}" \
             --title "${{ steps.version.outputs.version }}" \
             --notes-file release-notes.md \
             --target "${{ steps.source_ref.outputs.ref }}" \
             "${flags[@]}"
 
-      - name: Upload Assets To Published Release
+      - name: Upload Release Assets
         if: ${{ steps.version.outputs.upload_assets == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "${{ steps.version.outputs.version }}" dist/* --clobber
+
+      - name: Verify Release Assets
+        if: ${{ steps.version.outputs.upload_assets == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -t expected_assets < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
+          mapfile -t release_assets < <(
+            gh release view "${{ steps.version.outputs.version }}" --json assets \
+              --jq '.assets[].name' |
+              sort
+          )
+
+          for expected in "${expected_assets[@]}"; do
+            if ! printf '%s\n' "${release_assets[@]}" | grep -Fx "${expected}" >/dev/null; then
+              echo "missing release asset: ${expected}" >&2
+              exit 1
+            fi
+          done
