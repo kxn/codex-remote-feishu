@@ -15,6 +15,7 @@ type FeishuRequestView struct {
 	SemanticKind          string
 	Backend               agentproto.Backend
 	RequestRevision       int
+	MessageID             string
 	Title                 string
 	TemporarySessionLabel string
 	ThreadID              string
@@ -39,6 +40,7 @@ func NormalizeFeishuRequestView(view FeishuRequestView) FeishuRequestView {
 	view.Phase = frame.Phase
 	view.ActionPolicy = frame.ActionPolicy
 	view.Sealed = frontstagecontract.SealedForPhase(frame.Phase)
+	view.MessageID = strings.TrimSpace(view.MessageID)
 	view.Title = strings.TrimSpace(view.Title)
 	view.TemporarySessionLabel = strings.TrimSpace(view.TemporarySessionLabel)
 	view.ThreadID = strings.TrimSpace(view.ThreadID)

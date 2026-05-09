@@ -71,6 +71,14 @@ func (s *Service) SurfaceActorUserID(surfaceID string) string {
 	return surface.ActorUserID
 }
 
+func (s *Service) PendingRequest(surfaceID, requestID string) *state.RequestPromptRecord {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return nil
+	}
+	return pendingRequestRecord(surface, requestID)
+}
+
 func (s *Service) MaterializeSurface(surfaceID, gatewayID, chatID, actorUserID string) {
 	if strings.TrimSpace(surfaceID) == "" {
 		return
@@ -253,40 +261,39 @@ func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRec
 	if surface == nil || strings.TrimSpace(commandID) == "" {
 		return nil
 	}
-	for _, request := range surface.PendingRequests {
-		if request == nil || request.PendingDispatchCommandID != commandID {
-			continue
-		}
-		request.PendingDispatchCommandID = ""
-		if normalizeRequestType(request.RequestType) == "tool_callback" {
-			request.Phase = frontstagecontract.PhaseWaitingDispatch
-			bumpRequestCardRevision(request)
-			noticeText := "自动上报 unsupported 结果失败，当前 turn 可能仍在等待 callback。可使用 `/stop` 结束本轮，或等待本地 Codex 恢复后重试。"
-			return []eventcontract.Event{
-				s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseWaitingDispatch, noticeText),
-				{
-					Kind:             eventcontract.KindNotice,
-					SurfaceSessionID: surface.SurfaceSessionID,
-					SourceMessageID:  strings.TrimSpace(request.SourceMessageID),
-					Notice: &control.Notice{
-						Code: noticeCode,
-						Text: noticeText,
-					},
-				},
-			}
-		}
-		request.Phase = frontstagecontract.PhaseEditing
-		bumpRequestCardRevision(request)
-		noticeText := "请求提交失败，请在最新卡片上重试。"
-		if noticeCode == "command_rejected" {
-			noticeText = "本地 Codex 拒绝了这次请求提交，请在最新卡片上重试。"
-		}
-		if !requestPromptRenderable(request.RequestType) {
-			return notice(surface, noticeCode, noticeText)
-		}
-		return s.requestPromptRefreshWithNotice(surface, request, noticeCode, noticeText)
+	surface, request := s.findPendingRequestByCommandID(commandID)
+	if request == nil || surface == nil {
+		return nil
 	}
-	return nil
+	if normalizeRequestType(request.RequestType) == "tool_callback" {
+		request.PendingDispatchCommandID = ""
+		request.Phase = frontstagecontract.PhaseWaitingDispatch
+		bumpRequestCardRevision(request)
+		noticeText := "自动上报 unsupported 结果失败，当前 turn 可能仍在等待 callback。可使用 `/stop` 结束本轮，或等待本地 Codex 恢复后重试。"
+		return []eventcontract.Event{
+			s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseWaitingDispatch, noticeText),
+			{
+				Kind:             eventcontract.KindNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				SourceMessageID:  strings.TrimSpace(request.SourceMessageID),
+				Notice: &control.Notice{
+					Code: noticeCode,
+					Text: noticeText,
+				},
+			},
+		}
+	}
+	request.PendingDispatchCommandID = ""
+	request.Phase = frontstagecontract.PhaseEditing
+	bumpRequestCardRevision(request)
+	noticeText := "请求提交失败，请在最新卡片上重试。"
+	if noticeCode == "command_rejected" {
+		noticeText = "本地 Codex 拒绝了这次请求提交，请在最新卡片上重试。"
+	}
+	if !requestPromptRenderable(request.RequestType) {
+		return notice(surface, noticeCode, noticeText)
+	}
+	return s.requestPromptRefreshWithNotice(surface, request, noticeCode, noticeText)
 }
 
 func (s *Service) pendingSteerForCommand(instanceID, commandID string) (string, *pendingSteerBinding) {

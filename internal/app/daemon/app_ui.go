@@ -308,6 +308,24 @@ func (a *App) enrichTemporarySessionEventLocked(event eventcontract.Event) event
 }
 
 func (a *App) recordUIEventDelivery(event eventcontract.Event, operations []feishu.Operation) {
+	if payload, ok := requestPayloadFromEvent(event); ok {
+		for _, operation := range operations {
+			switch operation.Kind {
+			case feishu.OperationSendCard, feishu.OperationUpdateCard:
+				messageID := strings.TrimSpace(operation.MessageID)
+				if messageID == "" {
+					continue
+				}
+				a.service.RecordRequestPromptDelivery(orchestrator.RequestDeliveryReport{
+					SurfaceSessionID: event.SurfaceSessionID,
+					RequestID:        strings.TrimSpace(payload.View.RequestID),
+					MessageID:        messageID,
+					DeliveredAt:      time.Now(),
+				})
+				break
+			}
+		}
+	}
 	for _, operation := range operations {
 		if kind, ok := outboundSurfaceMessageKind(operation.Kind); ok && strings.TrimSpace(operation.MessageID) != "" {
 			a.service.RecordSurfaceOutboundMessage(
@@ -474,6 +492,13 @@ func (a *App) newTimeoutContext(parent context.Context, timeout time.Duration) (
 func (a *App) queueGatewayFailureNotice(event eventcontract.Event, err error) {
 	if strings.TrimSpace(event.SurfaceSessionID) == "" {
 		return
+	}
+	if payload, ok := requestPayloadFromEvent(event); ok {
+		a.service.RecordRequestPromptDeliveryFailure(
+			event.SurfaceSessionID,
+			strings.TrimSpace(payload.View.RequestID),
+			err,
+		)
 	}
 	if event.Notice != nil && event.Notice.Code == "gateway_apply_failed" {
 		return

@@ -326,6 +326,11 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if blocked := s.commandSupportBlocked(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
+	if replay := s.replayActivePendingRequestVisibility(surface, ""); len(replay) != 0 && action.Kind == control.ActionStatus {
+		events := []eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}}
+		events = append(events, replay...)
+		return s.filterEventsForSurfaceVisibility(events)
+	}
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return s.filterEventsForSurfaceVisibility(s.applyFeishuUIIntent(surface, action, *intent))
 	}

@@ -114,6 +114,39 @@ func TestDetachedBranchRequestPromptKeepsReplyAnchorAndSelection(t *testing.T) {
 	if record == nil || record.SourceMessageID != "msg-1" || record.ThreadID != "thread-detour" {
 		t.Fatalf("expected detached branch request record to retain anchor and execution thread, got %#v", record)
 	}
+	if record.OwnerSurfaceSessionID != surface.SurfaceSessionID || record.OwnerChatID != "chat-1" {
+		t.Fatalf("expected detached branch request record to freeze surface owner, got %#v", record)
+	}
+	if record.SourceContextLabel != detourForkLabel {
+		t.Fatalf("expected detached branch request to freeze temporary session label, got %#v", record)
+	}
+}
+
+func TestRemoteRequestPromptProjectsSourceContextLabelFromMetadata(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 45, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	setupAutoWhipSurface(t, svc)
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-source-1",
+		Metadata: map[string]any{
+			"requestType":        "approval",
+			"title":              "需要确认",
+			"sourceContextLabel": "来自 Task (Explore)",
+		},
+	})
+	view := singleRequestPromptEvent(t, events)
+	if view.TemporarySessionLabel != "来自 Task (Explore)" {
+		t.Fatalf("expected request view to project source context label, got %#v", view)
+	}
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-source-1"]
+	if record == nil || record.SourceContextLabel != "来自 Task (Explore)" {
+		t.Fatalf("expected request record to keep source context label, got %#v", record)
+	}
 }
 
 func TestRemoteRequestPromptCutsSharedProgressSegment(t *testing.T) {

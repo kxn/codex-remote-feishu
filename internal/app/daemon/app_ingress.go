@@ -253,6 +253,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		if !inlineNavigationReplace || len(appendEvents) != 0 {
 			a.handleUIEventsLocked(ctx, appendEvents)
 		}
+		a.maybeReplayPendingRequestVisibilityAfterActionLocked(ctx, action)
 		a.syncSurfaceResumeStateLocked(nil)
 		a.syncClaudeWorkspaceProfileStateLocked()
 		a.syncWorkspaceSurfaceContextFilesLocked()
@@ -265,6 +266,7 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 	if !inlineNavigationReplace || len(appendEvents) != 0 {
 		a.handleUIEventsLocked(ctx, appendEvents)
 	}
+	a.maybeReplayPendingRequestVisibilityAfterActionLocked(ctx, action)
 	var clearTargets map[string]bool
 	if a.shouldClearSurfaceResumeTargetLocked(action, before) {
 		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
@@ -304,6 +306,24 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		}
 	}
 	return inlineResult
+}
+
+func (a *App) maybeReplayPendingRequestVisibilityAfterActionLocked(ctx context.Context, action control.Action) {
+	if a == nil || a.service == nil {
+		return
+	}
+	if action.Kind == control.ActionStatus {
+		return
+	}
+	surfaceID := strings.TrimSpace(action.SurfaceSessionID)
+	if surfaceID == "" {
+		return
+	}
+	events := a.service.ReplayActivePendingRequestVisibility(surfaceID)
+	if len(events) == 0 {
+		return
+	}
+	a.handleUIEventsLocked(ctx, events)
 }
 
 func (a *App) synchronousCurrentCardActionResultLocked(action control.Action, contract control.FeishuFrontstageActionContract, events []eventcontract.Event) (*feishu.ActionResult, []eventcontract.Event) {

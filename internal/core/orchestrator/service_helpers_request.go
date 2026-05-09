@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -8,7 +9,15 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+)
+
+const (
+	requestVisibilityPendingVisibility = "pending_visibility"
+	requestVisibilityVisible           = "visible"
+	requestVisibilityDeliveryDegraded  = "delivery_degraded"
+	requestVisibilityResolved          = "resolved"
 )
 
 func normalizeRequestType(value string) string {
@@ -40,6 +49,151 @@ func requestPromptRenderable(requestType string) bool {
 	default:
 		return false
 	}
+}
+
+func normalizeRequestVisibilityState(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case requestVisibilityVisible:
+		return requestVisibilityVisible
+	case requestVisibilityDeliveryDegraded:
+		return requestVisibilityDeliveryDegraded
+	case requestVisibilityResolved:
+		return requestVisibilityResolved
+	default:
+		return requestVisibilityPendingVisibility
+	}
+}
+
+func normalizeRequestPromptRecord(record *state.RequestPromptRecord) {
+	if record == nil {
+		return
+	}
+	record.RequestID = strings.TrimSpace(record.RequestID)
+	record.RequestType = normalizeRequestType(record.RequestType)
+	record.SemanticKind = control.NormalizeRequestSemanticKind(record.SemanticKind, record.RequestType)
+	record.InstanceID = strings.TrimSpace(record.InstanceID)
+	record.ThreadID = strings.TrimSpace(record.ThreadID)
+	record.TurnID = strings.TrimSpace(record.TurnID)
+	record.OwnerSurfaceSessionID = strings.TrimSpace(record.OwnerSurfaceSessionID)
+	record.OwnerGatewayID = strings.TrimSpace(record.OwnerGatewayID)
+	record.OwnerChatID = strings.TrimSpace(record.OwnerChatID)
+	record.VisibilityState = normalizeRequestVisibilityState(record.VisibilityState)
+	record.VisibleMessageID = strings.TrimSpace(record.VisibleMessageID)
+	record.LastDeliveryError = strings.TrimSpace(record.LastDeliveryError)
+	record.SourceContextLabel = strings.TrimSpace(record.SourceContextLabel)
+	record.SourceMessageID = strings.TrimSpace(record.SourceMessageID)
+	record.ItemID = strings.TrimSpace(record.ItemID)
+	record.Title = strings.TrimSpace(record.Title)
+	record.HintText = strings.TrimSpace(record.HintText)
+	if record.DraftAnswers == nil {
+		record.DraftAnswers = map[string]string{}
+	}
+	if record.SkippedQuestionIDs == nil {
+		record.SkippedQuestionIDs = map[string]bool{}
+	}
+}
+
+func joinRequestSourceContextLabels(labels ...string) string {
+	seen := make(map[string]bool, len(labels))
+	out := make([]string, 0, len(labels))
+	for _, label := range labels {
+		label = strings.TrimSpace(label)
+		if label == "" || seen[label] {
+			continue
+		}
+		seen[label] = true
+		out = append(out, label)
+	}
+	return strings.Join(out, " · ")
+}
+
+func normalizePendingRequestOnSurface(surface *state.SurfaceConsoleRecord, record *state.RequestPromptRecord) *state.RequestPromptRecord {
+	if record == nil {
+		return nil
+	}
+	normalizeRequestPromptRecord(record)
+	adoptRequestOwner(record, surface)
+	return record
+}
+
+func adoptRequestOwner(record *state.RequestPromptRecord, surface *state.SurfaceConsoleRecord) {
+	if record == nil || surface == nil {
+		return
+	}
+	if record.OwnerSurfaceSessionID == "" {
+		record.OwnerSurfaceSessionID = strings.TrimSpace(surface.SurfaceSessionID)
+	}
+	if record.OwnerGatewayID == "" {
+		record.OwnerGatewayID = strings.TrimSpace(surface.GatewayID)
+	}
+	if record.OwnerChatID == "" {
+		record.OwnerChatID = strings.TrimSpace(surface.ChatID)
+	}
+}
+
+func requestOwnerSurface(s *Service, request *state.RequestPromptRecord) *state.SurfaceConsoleRecord {
+	if s == nil || request == nil {
+		return nil
+	}
+	if surfaceID := strings.TrimSpace(request.OwnerSurfaceSessionID); surfaceID != "" {
+		if surface := s.root.Surfaces[surfaceID]; surface != nil {
+			return surface
+		}
+	}
+	return nil
+}
+
+func requestOwnerMatchesSurface(request *state.RequestPromptRecord, surface *state.SurfaceConsoleRecord) bool {
+	if request == nil || surface == nil {
+		return false
+	}
+	if ownerSurfaceID := strings.TrimSpace(request.OwnerSurfaceSessionID); ownerSurfaceID != "" {
+		return ownerSurfaceID == strings.TrimSpace(surface.SurfaceSessionID)
+	}
+	return false
+}
+
+func requestMatchesTurn(request *state.RequestPromptRecord, threadID, turnID string) bool {
+	if request == nil {
+		return false
+	}
+	threadID = strings.TrimSpace(threadID)
+	turnID = strings.TrimSpace(turnID)
+	if turnID != "" && request.TurnID != "" && strings.TrimSpace(request.TurnID) != turnID {
+		return false
+	}
+	if threadID != "" && request.ThreadID != "" && strings.TrimSpace(request.ThreadID) != threadID {
+		return false
+	}
+	return true
+}
+
+func (s *Service) findPendingRequestByCommandID(commandID string) (*state.SurfaceConsoleRecord, *state.RequestPromptRecord) {
+	if s == nil {
+		return nil, nil
+	}
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return nil, nil
+	}
+	for _, surface := range s.root.Surfaces {
+		if surface == nil {
+			continue
+		}
+		for _, request := range surface.PendingRequests {
+			request = normalizePendingRequestOnSurface(surface, request)
+			if request == nil || request.PendingDispatchCommandID != commandID {
+				continue
+			}
+			if owner := requestOwnerSurface(s, request); owner != nil {
+				if owned := pendingRequestRecord(owner, request.RequestID); owned != nil && owned.PendingDispatchCommandID == commandID {
+					return owner, owned
+				}
+			}
+			return surface, request
+		}
+	}
+	return nil, nil
 }
 
 func requestOptionIDFromApproved(approved bool) string {
@@ -156,6 +310,7 @@ func enqueuePendingRequest(surface *state.SurfaceConsoleRecord, request *state.R
 	if surface.PendingRequests == nil {
 		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
 	}
+	request = normalizePendingRequestOnSurface(surface, request)
 	requestID := strings.TrimSpace(request.RequestID)
 	if requestID == "" {
 		return
@@ -201,7 +356,7 @@ func pendingRequestRecord(surface *state.SurfaceConsoleRecord, requestID string)
 	if requestID == "" {
 		return nil
 	}
-	return surface.PendingRequests[requestID]
+	return normalizePendingRequestOnSurface(surface, surface.PendingRequests[requestID])
 }
 
 func activePendingRequestID(surface *state.SurfaceConsoleRecord) string {
@@ -563,6 +718,12 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 	if request == nil {
 		return "当前有待处理请求。"
 	}
+	switch normalizeRequestVisibilityState(request.VisibilityState) {
+	case requestVisibilityPendingVisibility:
+		return "当前有待处理请求，正在尝试把确认卡片显示到前台。请稍后重试，或发送 `/status` 触发恢复。"
+	case requestVisibilityDeliveryDegraded:
+		return "当前有待处理请求，但确认卡片尚未成功送达前台。请发送 `/status` 或进行一次前台交互以触发恢复。"
+	}
 	switch requestPromptSemanticKind(request) {
 	case control.RequestSemanticRequestUserInput:
 		return "当前有待回答问题。请先在卡片上点击选项、提交当前答案，或跳过可选题。"
@@ -583,4 +744,108 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 	default:
 		return "当前有待处理请求。这个请求类型暂时不能在飞书端直接处理，请先回到本地处理或等待后续支持。"
 	}
+}
+
+type RequestDeliveryReport struct {
+	SurfaceSessionID string
+	RequestID        string
+	MessageID        string
+	DeliveredAt      time.Time
+}
+
+func (s *Service) activePendingRequestNeedingVisibility(surface *state.SurfaceConsoleRecord) *state.RequestPromptRecord {
+	request := activePendingRequest(surface)
+	if request == nil {
+		return nil
+	}
+	switch normalizeRequestVisibilityState(request.VisibilityState) {
+	case requestVisibilityPendingVisibility, requestVisibilityDeliveryDegraded:
+		return request
+	default:
+		return nil
+	}
+}
+
+func requestNeedsVisibleRefresh(request *state.RequestPromptRecord) bool {
+	if request == nil {
+		return false
+	}
+	if strings.TrimSpace(request.PendingDispatchCommandID) != "" {
+		return false
+	}
+	switch normalizeRequestVisibilityState(request.VisibilityState) {
+	case requestVisibilityPendingVisibility, requestVisibilityDeliveryDegraded:
+		return true
+	default:
+		return false
+	}
+}
+
+func requestVisibilityRefreshStatusText(request *state.RequestPromptRecord) string {
+	if request == nil {
+		return ""
+	}
+	if normalizeRequestVisibilityState(request.VisibilityState) != requestVisibilityDeliveryDegraded {
+		return ""
+	}
+	if errText := strings.TrimSpace(request.LastDeliveryError); errText != "" {
+		return fmt.Sprintf("上一轮前台投递失败：%s。系统会继续尝试恢复这张确认卡片。", errText)
+	}
+	return "上一轮前台投递失败。系统会继续尝试恢复这张确认卡片。"
+}
+
+func markRequestVisible(request *state.RequestPromptRecord, messageID string, deliveredAt time.Time) {
+	if request == nil {
+		return
+	}
+	request.VisibleMessageID = strings.TrimSpace(messageID)
+	if deliveredAt.IsZero() {
+		deliveredAt = time.Now().UTC()
+	}
+	request.VisibleAt = deliveredAt
+	request.LastDeliveryAttemptAt = deliveredAt
+	request.LastDeliveryError = ""
+	request.NeedsRedelivery = false
+	request.VisibilityState = requestVisibilityVisible
+	if request.DeliveryAttemptCount < 1 {
+		request.DeliveryAttemptCount = 1
+	}
+}
+
+func markRequestDeliveryDegraded(request *state.RequestPromptRecord, attemptedAt time.Time, errText string) {
+	if request == nil {
+		return
+	}
+	if attemptedAt.IsZero() {
+		attemptedAt = time.Now().UTC()
+	}
+	request.LastDeliveryAttemptAt = attemptedAt
+	request.LastDeliveryError = strings.TrimSpace(errText)
+	request.NeedsRedelivery = true
+	request.VisibilityState = requestVisibilityDeliveryDegraded
+	request.VisibleMessageID = ""
+}
+
+func (s *Service) ensurePendingRequestVisible(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, threadTitleHint string) []eventcontract.Event {
+	if surface == nil || request == nil {
+		return nil
+	}
+	request = normalizePendingRequestOnSurface(surface, request)
+	if !pendingRequestIsActive(surface, request.RequestID) {
+		return nil
+	}
+	if !requestPromptRenderable(request.RequestType) {
+		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", request.RequestType))
+	}
+	if normalizeRequestType(request.RequestType) == "tool_callback" {
+		return s.autoDispatchUnsupportedToolCallback(surface, request, threadTitleHint)
+	}
+	if !requestNeedsVisibleRefresh(request) {
+		return nil
+	}
+	if request.LastDeliveryAttemptAt.IsZero() || request.LastDeliveryAttemptAt.Before(s.now()) || request.DeliveryAttemptCount == 0 {
+		request.LastDeliveryAttemptAt = s.now()
+	}
+	request.DeliveryAttemptCount++
+	return []eventcontract.Event{s.requestPromptDeliveryEvent(surface, request, threadTitleHint)}
 }

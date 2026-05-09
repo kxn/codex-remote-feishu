@@ -753,6 +753,9 @@ func (t *Translator) observeAskUserQuestionRequest(requestID, toolName, toolUseI
 	if itemID != "" {
 		metadata["itemId"] = itemID
 	}
+	if sourceContextLabel := t.requestSourceContextLabel(toolUseID); sourceContextLabel != "" {
+		metadata["sourceContextLabel"] = sourceContextLabel
+	}
 	request := &pendingRequest{
 		RequestID:    requestID,
 		ThreadID:     t.activeTurn.ThreadID,
@@ -806,6 +809,9 @@ func (t *Translator) observePlanConfirmationRequest(requestID, toolName, toolUse
 	if planBodySource != "" {
 		metadata["planBodySource"] = planBodySource
 	}
+	if sourceContextLabel := t.requestSourceContextLabel(toolUseID); sourceContextLabel != "" {
+		metadata["sourceContextLabel"] = sourceContextLabel
+	}
 	request := &pendingRequest{
 		RequestID:          requestID,
 		ThreadID:           t.activeTurn.ThreadID,
@@ -855,6 +861,9 @@ func (t *Translator) observeToolApprovalRequest(requestID, toolName, toolUseID, 
 	}
 	if blockedPath := strings.TrimSpace(lookupStringFromAny(rawRequest["blocked_path"])); blockedPath != "" {
 		metadata["blockedPath"] = blockedPath
+	}
+	if sourceContextLabel := t.requestSourceContextLabel(toolUseID); sourceContextLabel != "" {
+		metadata["sourceContextLabel"] = sourceContextLabel
 	}
 	request := &pendingRequest{
 		RequestID:    requestID,
