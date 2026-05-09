@@ -52,13 +52,25 @@ func (t *commandResponseTracker) Cancel(requestID string) {
 	t.mu.Unlock()
 }
 
-func (t *commandResponseTracker) Resolve(line []byte) (bool, bool) {
+func (t *commandResponseTracker) ResolveFrame(line []byte) (bool, bool) {
 	var message map[string]any
 	if err := json.Unmarshal(line, &message); err != nil {
 		return false, false
 	}
 	requestID := lookupStringFromMap(message, "id")
 	if strings.TrimSpace(requestID) == "" {
+		return false, false
+	}
+	return t.resolve(requestID, extractJSONRPCErrorMessage(message))
+}
+
+func (t *commandResponseTracker) ResolveRequestID(requestID, rejectMessage string) (bool, bool) {
+	return t.resolve(requestID, rejectMessage)
+}
+
+func (t *commandResponseTracker) resolve(requestID, rejectMessage string) (bool, bool) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
 		return false, false
 	}
 	t.mu.Lock()
@@ -72,7 +84,7 @@ func (t *commandResponseTracker) Resolve(line []byte) (bool, bool) {
 	}
 
 	var problem *agentproto.ErrorInfo
-	if errMsg := strings.TrimSpace(extractJSONRPCErrorMessage(message)); errMsg != "" {
+	if errMsg := strings.TrimSpace(rejectMessage); errMsg != "" {
 		value := pending.problem
 		value.Details = firstNonEmpty(errMsg, value.Details)
 		problem = &value

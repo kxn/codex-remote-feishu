@@ -22,6 +22,7 @@ func TestStoreRoundTrip(t *testing.T) {
 	key := state.ClaudeWorkspaceProfileSnapshotStorageKey("/data/dl/repo", agentproto.BackendClaude, "devseek")
 	if err := store.Put(key, state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: " HIGH ",
+		AccessMode:      " full ",
 	}); err != nil {
 		t.Fatalf("Put: %v", err)
 	}
@@ -36,12 +37,13 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if got != (state.ClaudeWorkspaceProfileSnapshotRecord{
 		ReasoningEffort: "high",
+		AccessMode:      agentproto.AccessModeFullAccess,
 	}) {
 		t.Fatalf("unexpected stored snapshot: %#v", got)
 	}
 }
 
-func TestStoreDropsLegacyAccessAndPlanFieldsOnLoad(t *testing.T) {
+func TestStoreDropsLegacyPlanFieldsOnLoadButKeepsAccess(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -69,14 +71,17 @@ func TestStoreDropsLegacyAccessAndPlanFieldsOnLoad(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 	if !store.Dirty() {
-		t.Fatal("expected legacy access/plan fields to mark store dirty")
+		t.Fatal("expected legacy plan field to mark store dirty")
 	}
 	got, ok := store.Get(key)
 	if !ok {
 		t.Fatal("expected stored claude workspace profile snapshot")
 	}
-	if got != (state.ClaudeWorkspaceProfileSnapshotRecord{ReasoningEffort: "max"}) {
-		t.Fatalf("expected only reasoning to survive legacy load, got %#v", got)
+	if got != (state.ClaudeWorkspaceProfileSnapshotRecord{
+		ReasoningEffort: "max",
+		AccessMode:      agentproto.AccessModeConfirm,
+	}) {
+		t.Fatalf("expected reasoning and access to survive legacy load, got %#v", got)
 	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -86,7 +91,7 @@ func TestStoreDropsLegacyAccessAndPlanFieldsOnLoad(t *testing.T) {
 		t.Fatalf("read sanitized state: %v", err)
 	}
 	text := string(sanitized)
-	if strings.Contains(text, "AccessMode") || strings.Contains(text, "PlanMode") {
-		t.Fatalf("expected legacy fields to be removed after save, got %s", text)
+	if !strings.Contains(text, "AccessMode") || strings.Contains(text, "PlanMode") {
+		t.Fatalf("expected access to be preserved and legacy plan field removed after save, got %s", text)
 	}
 }

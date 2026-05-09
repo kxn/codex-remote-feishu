@@ -70,7 +70,7 @@ func LoadStore(path string) (*Store, error) {
 	}
 	for key, rawEntry := range persisted.Entries {
 		key = strings.TrimSpace(key)
-		if legacyClaudeSnapshotHasDroppedFields(rawEntry) {
+		if legacyClaudeSnapshotHasUnsupportedFields(rawEntry) {
 			store.dirty = true
 		}
 		var entry state.ClaudeWorkspaceProfileSnapshotRecord
@@ -87,14 +87,14 @@ func LoadStore(path string) (*Store, error) {
 	return store, nil
 }
 
-func legacyClaudeSnapshotHasDroppedFields(rawEntry json.RawMessage) bool {
+func legacyClaudeSnapshotHasUnsupportedFields(rawEntry json.RawMessage) bool {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(rawEntry, &fields); err != nil {
 		return false
 	}
 	for key := range fields {
 		switch strings.ToLower(strings.TrimSpace(key)) {
-		case "accessmode", "access_mode", "planmode", "plan_mode":
+		case "planmode", "plan_mode":
 			return true
 		}
 	}

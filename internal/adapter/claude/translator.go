@@ -9,10 +9,16 @@ import (
 )
 
 type Result struct {
-	Events           []agentproto.Event
-	OutboundToClaude [][]byte
-	OutboundToParent [][]byte
-	Suppress         bool
+	Events                   []agentproto.Event
+	OutboundToClaude         [][]byte
+	OutboundToParent         [][]byte
+	ResolvedCommandResponses []ResolvedCommandResponse
+	Suppress                 bool
+}
+
+type ResolvedCommandResponse struct {
+	RequestID     string
+	RejectMessage string
 }
 
 type Translator struct {

@@ -175,6 +175,7 @@ type ModelConfigRecord struct {
 
 type ClaudeWorkspaceProfileSnapshotRecord struct {
 	ReasoningEffort string
+	AccessMode      string
 }
 
 type InstanceRecord struct {

@@ -66,7 +66,7 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	case FeishuCommandClaudeProfile:
 		return []FeishuCardTextSection{
 			singleValueCardSection("当前配置", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, state.DefaultClaudeProfileName))),
-			singleValueCardSection("切换方式", "切换后会重启当前工作区，并恢复该配置最近一次的推理临时覆盖。"),
+			singleValueCardSection("切换方式", "切换后会重启当前工作区，并恢复该配置最近一次的推理与权限临时覆盖。"),
 		}
 	case FeishuCommandAutoWhip:
 		return []FeishuCardTextSection{singleValueCardSection("当前", autoWhipDisplayValue(view.CurrentValue))}
@@ -80,13 +80,13 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	case FeishuCommandAccess:
 		sections := promptValueCardSections(view)
 		if observed := strings.TrimSpace(view.CurrentValue); observed != "" {
-			sections = append(sections, singleValueCardSection("会话最近本地权限", agentproto.DisplayAccessModeShort(observed)))
+			sections = append(sections, singleValueCardSection("当前会话权限（最近观察）", agentproto.DisplayAccessModeShort(observed)))
 		}
 		return sections
 	case FeishuCommandPlan:
 		sections := planValueCardSections(view)
 		if observed := strings.TrimSpace(view.EffectiveValue); observed != "" {
-			sections = append(sections, singleValueCardSection("会话最近本地模式", planModeDisplayValue(observed)))
+			sections = append(sections, singleValueCardSection("当前会话模式（最近观察）", planModeDisplayValue(observed)))
 		}
 		return sections
 	case FeishuCommandModel:

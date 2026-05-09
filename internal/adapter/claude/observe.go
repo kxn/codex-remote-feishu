@@ -852,13 +852,30 @@ func (t *Translator) observeControlResponse(message map[string]any) Result {
 		return Result{}
 	}
 	delete(t.pendingControlReplies, requestID)
+	resolved := ResolvedCommandResponse{RequestID: requestID}
+	if subtype := strings.ToLower(strings.TrimSpace(lookupStringFromAny(response["subtype"]))); subtype != "" && subtype != "success" {
+		resolved.RejectMessage = firstNonEmptyString(
+			lookupStringFromAny(response["error"]),
+			lookupStringFromAny(response["message"]),
+			lookupStringFromAny(lookupMap(response, "response")["message"]),
+			"Claude control request failed.",
+		)
+		return Result{
+			ResolvedCommandResponses: []ResolvedCommandResponse{resolved},
+			Suppress:                 true,
+		}
+	}
 	var events []agentproto.Event
 	if pending.Kind == "set_permission_mode" && strings.TrimSpace(pending.DesiredPermissionMode) != "" {
 		previousPermissionMode := strings.TrimSpace(t.permissionMode)
 		t.permissionMode = strings.TrimSpace(pending.DesiredPermissionMode)
 		events = t.observedPermissionConfigEvents(strings.TrimSpace(t.model), strings.TrimSpace(t.cwd), previousPermissionMode)
 	}
-	return Result{Events: events, Suppress: true}
+	return Result{
+		Events:                   events,
+		ResolvedCommandResponses: []ResolvedCommandResponse{resolved},
+		Suppress:                 true,
+	}
 }
 
 func (t *Translator) observeResultMessage(message map[string]any) Result {

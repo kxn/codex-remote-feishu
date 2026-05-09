@@ -7,7 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
-func TestClaudeProfileConfigCopyDoesNotClaimAccessPlanMemory(t *testing.T) {
+func TestClaudeProfileConfigCopyClaimsAccessButNotPlanMemory(t *testing.T) {
 	page := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
 		CommandID:      FeishuCommandClaudeProfile,
 		CurrentValue:   "devseek",
@@ -15,11 +15,11 @@ func TestClaudeProfileConfigCopyDoesNotClaimAccessPlanMemory(t *testing.T) {
 		CatalogBackend: agentproto.BackendClaude,
 	})
 	text := configPageSummaryText(page)
-	if !strings.Contains(text, "推理临时覆盖") {
-		t.Fatalf("expected claude profile copy to mention reasoning override, got %q", text)
+	if !strings.Contains(text, "推理与权限临时覆盖") {
+		t.Fatalf("expected claude profile copy to mention reasoning/access override, got %q", text)
 	}
-	if strings.Contains(text, "权限") || strings.Contains(text, "Plan 记忆") {
-		t.Fatalf("claude profile copy must not claim access/plan memory, got %q", text)
+	if strings.Contains(text, "Plan 记忆") {
+		t.Fatalf("claude profile copy must not claim plan memory, got %q", text)
 	}
 }
 
@@ -36,7 +36,7 @@ func TestPlanConfigPageShowsVSCodeNoOverrideState(t *testing.T) {
 	if !strings.Contains(text, "飞书覆盖\n无（跟随 VS Code 当前状态）") {
 		t.Fatalf("expected plan page to show no local override, got %q", text)
 	}
-	if !strings.Contains(text, "会话最近本地模式\n开启") {
+	if !strings.Contains(text, "当前会话模式（最近观察）\n开启") {
 		t.Fatalf("expected plan page to keep observed backend state, got %q", text)
 	}
 }
@@ -50,7 +50,7 @@ func TestAccessConfigPageShowsObservedThreadAccess(t *testing.T) {
 		EffectiveValueSource: "thread",
 	})
 	text := configPageSummaryText(page)
-	if !strings.Contains(text, "会话最近本地权限\nconfirm") {
+	if !strings.Contains(text, "当前会话权限（最近观察）\nconfirm") {
 		t.Fatalf("expected access page to show observed thread access, got %q", text)
 	}
 }
