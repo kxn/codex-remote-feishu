@@ -1,65 +1,55 @@
 package wrapper
 
 import (
-	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
+	"sync"
 	"testing"
-
-	"github.com/kxn/codex-remote-feishu/testkit/mockclaude"
 )
 
-func TestHelperProcessMockClaude(t *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "mockclaude" {
-		return
-	}
-	if err := mockclaude.RunIO(mockclaude.NewFromEnvAndArgs(os.Args[3:]), os.Stdin, os.Stdout); err != nil {
-		var exitErr mockclaude.ExitCodeError
-		if errors.As(err, &exitErr) {
-			os.Exit(exitErr.Code)
-		}
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	os.Exit(0)
-}
+var (
+	mockClaudeBinaryOnce sync.Once
+	mockClaudeBinaryPath string
+	mockClaudeBinaryErr  error
+)
 
 func installMockClaudeHelper(t *testing.T, scenario string) string {
 	t.Helper()
-	executable, err := os.Executable()
+	t.Setenv("MOCKCLAUDE_SCENARIO", scenario)
+
+	repoRoot := wrapperTestRepoRoot(t)
+	path, err := buildMockClaudeBinary(repoRoot)
 	if err != nil {
-		t.Fatalf("os.Executable: %v", err)
+		t.Fatalf("build mockclaude helper: %v", err)
 	}
-	helperPath := filepath.Join(t.TempDir(), "mockclaude-helper")
-	content := strings.Join([]string{
-		"#!/usr/bin/env bash",
-		"set -euo pipefail",
-		"export GO_WANT_HELPER_PROCESS=mockclaude",
-		"export MOCKCLAUDE_SCENARIO=" + shellSingleQuote(scenario),
-		"exec " + shellSingleQuote(executable) + " -test.run TestHelperProcessMockClaude -- \"$@\"",
-		"",
-	}, "\n")
-	if runtime.GOOS == "windows" {
-		helperPath += ".cmd"
-		content = strings.Join([]string{
-			"@echo off",
-			"set GO_WANT_HELPER_PROCESS=mockclaude",
-			"set MOCKCLAUDE_SCENARIO=" + scenario,
-			"\"" + executable + "\" -test.run TestHelperProcessMockClaude -- %*",
-			"",
-		}, "\r\n")
-	} else {
-		helperPath += ".sh"
-	}
-	if err := os.WriteFile(helperPath, []byte(content), 0o755); err != nil {
-		t.Fatalf("WriteFile(%s): %v", helperPath, err)
-	}
-	return helperPath
+	return path
 }
 
-func shellSingleQuote(value string) string {
-	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+func buildMockClaudeBinary(repoRoot string) (string, error) {
+	mockClaudeBinaryOnce.Do(func() {
+		outputDir, err := os.MkdirTemp("", "mockclaude-bin-*")
+		if err != nil {
+			mockClaudeBinaryErr = err
+			return
+		}
+
+		binaryName := "mockclaude"
+		if runtime.GOOS == "windows" {
+			binaryName += ".exe"
+		}
+		outputPath := filepath.Join(outputDir, binaryName)
+
+		cmd := exec.Command("go", "build", "-o", outputPath, "./testkit/mockclaude/cmd/mockclaude")
+		cmd.Dir = repoRoot
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			mockClaudeBinaryErr = fmt.Errorf("go build ./testkit/mockclaude/cmd/mockclaude: %w\n%s", err, string(output))
+			return
+		}
+		mockClaudeBinaryPath = outputPath
+	})
+	return mockClaudeBinaryPath, mockClaudeBinaryErr
 }

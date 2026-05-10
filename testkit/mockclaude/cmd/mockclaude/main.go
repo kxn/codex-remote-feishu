@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	if err := mockclaude.RunIO(mockclaude.NewFromEnv(), os.Stdin, os.Stdout); err != nil {
+	if err := mockclaude.RunIO(mockclaude.NewFromEnvAndArgs(os.Args[1:]), os.Stdin, os.Stdout); err != nil {
 		log.Fatal(err)
 	}
 }
