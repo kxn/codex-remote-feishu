@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { AdminRoute } from "./AdminRoute";
@@ -228,9 +228,11 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await screen.findByRole("heading", { name: "主机器人" });
-    expect(
-      calls.some((call) => call.path === "/api/admin/feishu/apps/bot-1/auto-config/plan"),
-    ).toBe(true);
+    await waitFor(() => {
+      expect(
+        calls.some((call) => call.path === "/api/admin/feishu/apps/bot-1/auto-config/plan"),
+      ).toBe(true);
+    });
     expect(
       calls.some((call) => call.path === "/api/admin/feishu/apps/bot-2/auto-config/plan"),
     ).toBe(false);
