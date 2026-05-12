@@ -130,6 +130,9 @@ func TestBuildClaudeChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 
 	args, env := app.buildClaudeChildLaunch(nil)
 
+	if !containsArg(args, "--allow-dangerously-skip-permissions") {
+		t.Fatalf("expected Claude launch args to allow later bypassPermissions switch, got %#v", args)
+	}
 	if containsArg(args, "--strict-mcp-config") {
 		t.Fatalf("did not expect --strict-mcp-config in Claude launch args: %#v", args)
 	}
