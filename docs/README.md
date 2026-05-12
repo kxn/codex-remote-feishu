@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-05-12`
-> Summary: 归档过时的 Web 安装前置改造草稿，并同步更新文档索引。
+> Summary: 新增工作区级 `Autopilot` 自动化设计草案索引。
 
 ## 1. 适用范围
 
@@ -166,6 +166,7 @@
 - [acp-claude-integration-design.md](./draft/acp-claude-integration-design.md)
 - [backend-aware-command-catalog-design.md](./draft/backend-aware-command-catalog-design.md)
 - [app-server-third-batch-product-directions.md](./draft/app-server-third-batch-product-directions.md)
+- [autopilot-workspace-automation-design.md](./draft/autopilot-workspace-automation-design.md)
 - [claude-cli-blackbox-findings-2026-04-28.md](./draft/claude-cli-blackbox-findings-2026-04-28.md)
 - [codex-session-patcher-research-2026-04.md](./draft/codex-session-patcher-research-2026-04.md)
 - [web-codex-provider-management-design.md](./draft/web-codex-provider-management-design.md)
