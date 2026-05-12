@@ -185,20 +185,7 @@ func (a *App) markFeishuAppVerified(path, gatewayID string, verifiedAt time.Time
 }
 
 func (a *App) markFeishuAppOnboardingCompleted(path, gatewayID string, verifiedAt time.Time) error {
-	a.adminConfigMu.Lock()
-	defer a.adminConfigMu.Unlock()
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		return err
-	}
-	index := indexOfConfigFeishuApp(loaded.Config.Feishu.Apps, gatewayID)
-	if index < 0 {
-		return nil
-	}
-	updated := loaded.Config
-	value := verifiedAt.UTC()
-	updated.Feishu.Apps[index].VerifiedAt = &value
-	return config.WriteAppConfig(path, updated)
+	return a.markFeishuAppVerified(path, gatewayID, verifiedAt)
 }
 
 func (a *App) setFeishuAppEnabled(gatewayID string, enabled *bool) (config.LoadedAppConfig, config.LoadedAppConfig, error) {

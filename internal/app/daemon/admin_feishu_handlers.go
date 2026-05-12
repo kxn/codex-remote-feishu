@@ -1,10 +1,8 @@
 package daemon
 
 import (
-	"context"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
@@ -109,23 +107,13 @@ func (a *App) handleFeishuAppCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.adminConfigMu.Unlock()
-	if err := a.applyRuntimeFeishuConfig(updated, gatewayID); err != nil {
-		summary, _, summaryErr := a.adminFeishuAppSummary(config.LoadedAppConfig{Path: loaded.Path, Config: updated}, gatewayID)
-		if summaryErr != nil {
-			summary = adminFeishuAppSummary{
-				ID:        gatewayID,
-				Name:      firstNonEmpty(strings.TrimSpace(app.Name), gatewayID),
-				AppID:     strings.TrimSpace(app.AppID),
-				HasSecret: strings.TrimSpace(app.AppSecret) != "",
-				Enabled:   app.Enabled == nil || *app.Enabled,
-				Persisted: true,
-			}
-		}
+	persisted := config.LoadedAppConfig{Path: loaded.Path, Config: updated}
+	if summary, err := a.applyPersistedFeishuRuntime(persisted, gatewayID, app); err != nil {
 		a.writeFeishuRuntimeApplyError(w, gatewayID, summary, feishuRuntimeApplyActionUpsert, "feishu config saved but runtime apply failed", err)
 		return
 	}
 
-	summary, ok, err := a.adminFeishuAppSummary(config.LoadedAppConfig{Path: loaded.Path, Config: updated}, gatewayID)
+	summary, ok, err := a.adminFeishuAppSummary(persisted, gatewayID)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
 			Code:    "feishu_app_unavailable",
@@ -242,23 +230,13 @@ func (a *App) handleFeishuAppUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := a.applyRuntimeFeishuConfig(updated, gatewayID); err != nil {
-		summary, _, summaryErr := a.adminFeishuAppSummary(config.LoadedAppConfig{Path: loaded.Path, Config: updated}, gatewayID)
-		if summaryErr != nil {
-			summary = adminFeishuAppSummary{
-				ID:        gatewayID,
-				Name:      firstNonEmpty(strings.TrimSpace(current.Name), gatewayID),
-				AppID:     strings.TrimSpace(current.AppID),
-				HasSecret: strings.TrimSpace(current.AppSecret) != "",
-				Enabled:   current.Enabled == nil || *current.Enabled,
-				Persisted: true,
-			}
-		}
+	persisted := config.LoadedAppConfig{Path: loaded.Path, Config: updated}
+	if summary, err := a.applyPersistedFeishuRuntime(persisted, gatewayID, current); err != nil {
 		a.writeFeishuRuntimeApplyError(w, gatewayID, summary, feishuRuntimeApplyActionUpsert, "feishu config saved but runtime apply failed", err)
 		return
 	}
 
-	summary, _, err := a.adminFeishuAppSummary(config.LoadedAppConfig{Path: loaded.Path, Config: updated}, gatewayID)
+	summary, _, err := a.adminFeishuAppSummary(persisted, gatewayID)
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
 			Code:    "feishu_app_unavailable",
@@ -360,8 +338,8 @@ func (a *App) handleFeishuAppVerify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runtimeCfg, ok := a.runtimeGatewayConfigFor(loaded.Config, gatewayID)
-	if !ok {
+	result, verifyErr, runtimeAvailable, err := a.verifyFeishuRuntimeConfig(r.Context(), loaded, gatewayID)
+	if !runtimeAvailable {
 		writeAPIError(w, http.StatusNotFound, apiError{
 			Code:    "feishu_app_not_found",
 			Message: "feishu app not found",
@@ -369,7 +347,6 @@ func (a *App) handleFeishuAppVerify(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	controller, err := a.gatewayController()
 	if err != nil {
 		writeAPIError(w, http.StatusNotImplemented, apiError{
 			Code:    "gateway_controller_unavailable",
@@ -378,32 +355,12 @@ func (a *App) handleFeishuAppVerify(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	verifyCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-	defer cancel()
-	result, verifyErr := controller.Verify(verifyCtx, runtimeCfg)
-
-	admin := a.snapshotAdminRuntime()
-	if readOnly, _ := feishuAppReadOnly(admin, gatewayID); verifyErr == nil && !readOnly && !isRuntimeOnlyFeishuApp(admin, loaded.Config, gatewayID) {
-		if err := a.markFeishuAppVerified(loaded.Path, gatewayID, time.Now().UTC()); err != nil {
-			writeAPIError(w, http.StatusInternalServerError, apiError{
-				Code:    "config_write_failed",
-				Message: "feishu app verified but failed to persist verification time",
-				Details: err.Error(),
-			})
-			return
-		}
-		loaded, err = a.loadAdminConfig()
-		if err != nil {
-			writeAPIError(w, http.StatusInternalServerError, apiError{
-				Code:    "config_unavailable",
-				Message: "failed to reload config after verification",
-				Details: err.Error(),
-			})
-			return
-		}
-	}
-
-	summary, ok, err := a.adminFeishuAppSummary(loaded, gatewayID)
+	loaded, summary, ok, err := a.finalizePersistedFeishuVerification(
+		loaded,
+		gatewayID,
+		verifyErr,
+		feishuVerificationPersistIfMutable,
+	)
 	if err != nil || !ok {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
 			Code:    "feishu_app_unavailable",
