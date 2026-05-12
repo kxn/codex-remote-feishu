@@ -56,7 +56,7 @@ func (s *Service) buildCurrentHeadlessResumeAttempt(surface *state.SurfaceConsol
 	attempt.ResumeHeadless = true
 
 	if view := s.mergedThreadViewForBackend(surface, selectedThreadID, backend, true); view != nil {
-		attempt.ThreadTitle = displayThreadTitle(view.Inst, view.Thread, selectedThreadID)
+		attempt.ThreadTitle = displayThreadTitle(view.Inst, view.Thread)
 		attempt.ThreadCWD = threadCWD(view)
 	}
 	if attempt.ThreadTitle == "" && surface.LastSelection != nil &&
@@ -70,7 +70,7 @@ func (s *Service) buildCurrentHeadlessResumeAttempt(surface *state.SurfaceConsol
 			if thread != nil {
 				attempt.ThreadCWD = strings.TrimSpace(thread.CWD)
 				if attempt.ThreadTitle == "" {
-					attempt.ThreadTitle = displayThreadTitle(inst, thread, selectedThreadID)
+					attempt.ThreadTitle = displayThreadTitle(inst, thread)
 				}
 			}
 		}

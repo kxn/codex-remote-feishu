@@ -73,3 +73,23 @@ func TestRequestPermissionLinesSkipsUnparseableRecords(t *testing.T) {
 		t.Fatalf("expected unparseable permission records to be hidden, got %#v", got)
 	}
 }
+
+func TestBuildRequestPromptBodySectionsUsesFallbackWhenBodyEmpty(t *testing.T) {
+	got := buildRequestPromptBodySections("", "第一行\n第二行")
+	want := []state.RequestPromptTextSectionRecord{{
+		Lines: []string{"第一行", "第二行"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sections = %#v, want %#v", got, want)
+	}
+}
+
+func TestBuildRequestPromptBodySectionsPrefersBodyOverFallback(t *testing.T) {
+	got := buildRequestPromptBodySections("正文", "fallback")
+	want := []state.RequestPromptTextSectionRecord{{
+		Lines: []string{"正文"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("sections = %#v, want %#v", got, want)
+	}
+}

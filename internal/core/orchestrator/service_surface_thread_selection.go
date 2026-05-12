@@ -370,18 +370,14 @@ func (s *Service) threadSelectionSummary(surface *state.SurfaceConsoleRecord, vi
 	if s.surfaceIsVSCode(surface) && strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		return vscodeThreadSelectionDropdownLabel(view)
 	}
-	return threadSelectionButtonLabel(view.Thread, view.ThreadID)
+	return threadSelectionButtonLabel(view.Thread)
 }
 
 func vscodeThreadSelectionDropdownLabel(view *mergedThreadView) string {
 	if view == nil {
 		return ""
 	}
-	return displayThreadTitle(view.Inst, view.Thread, view.ThreadID)
-}
-
-func vscodeThreadSelectionButtonLabel(thread *state.ThreadRecord, fallback string) string {
-	return threadTitle(nil, thread, fallback)
+	return displayThreadTitle(view.Inst, view.Thread)
 }
 
 func (s *Service) vscodeInstanceSurfaceStatus(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {

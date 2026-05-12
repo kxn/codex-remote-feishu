@@ -1789,7 +1789,7 @@ func TestTickExpiresRequestCapture(t *testing.T) {
 }
 
 func TestThreadTitleUsesUnnamedPlaceholderWhenNameAndUserMessagesMissing(t *testing.T) {
-	title := threadTitle(&state.InstanceRecord{
+	title := displayThreadTitle(&state.InstanceRecord{
 		DisplayName:   "dl",
 		WorkspaceKey:  "/data/dl",
 		ShortName:     "dl",
@@ -1798,7 +1798,7 @@ func TestThreadTitleUsesUnnamedPlaceholderWhenNameAndUserMessagesMissing(t *test
 		ThreadID: "019d5679-370c-7b03-b86f-15a33a017c83",
 		Preview:  "当前目录 `/data/dl` 下的内容如下：",
 		CWD:      "/data/dl",
-	}, "019d5679-370c-7b03-b86f-15a33a017c83")
+	})
 
 	if title != "dl · 未命名会话" {
 		t.Fatalf("expected unnamed placeholder fallback, got %q", title)
@@ -1806,7 +1806,7 @@ func TestThreadTitleUsesUnnamedPlaceholderWhenNameAndUserMessagesMissing(t *test
 }
 
 func TestThreadTitleUsesThreadWorkspaceSuffixOverInstanceShortName(t *testing.T) {
-	title := threadTitle(&state.InstanceRecord{
+	title := displayThreadTitle(&state.InstanceRecord{
 		DisplayName:   "dl",
 		WorkspaceKey:  "/data/dl",
 		ShortName:     "dl",
@@ -1815,7 +1815,7 @@ func TestThreadTitleUsesThreadWorkspaceSuffixOverInstanceShortName(t *testing.T)
 		ThreadID: "thread-1",
 		Name:     "修复 relay 队列背压",
 		CWD:      "/data/dl/atlas-admin",
-	}, "thread-1")
+	})
 
 	if title != "atlas-admin · 修复 relay 队列背压" {
 		t.Fatalf("expected thread cwd basename to drive title prefix, got %q", title)
@@ -1823,7 +1823,7 @@ func TestThreadTitleUsesThreadWorkspaceSuffixOverInstanceShortName(t *testing.T)
 }
 
 func TestThreadTitleSkipsPlaceholderNameWithoutUsingPreview(t *testing.T) {
-	title := threadTitle(&state.InstanceRecord{
+	title := displayThreadTitle(&state.InstanceRecord{
 		DisplayName:   "atlas-admin",
 		WorkspaceKey:  "/data/dl/atlas-admin",
 		ShortName:     "atlas-admin",
@@ -1833,7 +1833,7 @@ func TestThreadTitleSkipsPlaceholderNameWithoutUsingPreview(t *testing.T) {
 		Name:     "新会话",
 		Preview:  "0123456789012345678901234567890123456789XYZ",
 		CWD:      "/data/dl/atlas-admin",
-	}, "thread-1")
+	})
 
 	if title != "atlas-admin · 未命名会话" {
 		t.Fatalf("expected placeholder name to fall back to unnamed session, got %q", title)
@@ -1846,7 +1846,7 @@ func TestThreadSelectionButtonLabelUsesUnnamedPlaceholderWithoutPreviewFallback(
 		Name:     "新会话",
 		Preview:  "01234567890123456789XYZ",
 		CWD:      "/data/dl/atlas-admin",
-	}, "thread-1")
+	})
 
 	if label != "atlas-admin · 未命名会话" {
 		t.Fatalf("expected selection label to use unnamed placeholder, got %q", label)

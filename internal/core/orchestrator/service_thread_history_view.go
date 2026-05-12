@@ -356,7 +356,7 @@ func (s *Service) threadHistoryThreadLabel(inst *state.InstanceRecord, threadID 
 	if inst == nil || threadID == "" {
 		return threadID
 	}
-	return displayThreadTitle(inst, inst.Threads[threadID], threadID)
+	return displayThreadTitle(inst, inst.Threads[threadID])
 }
 
 func (s *Service) threadHistoryResolvedLabel(inst *state.InstanceRecord, history *agentproto.ThreadHistoryRecord) string {
@@ -374,7 +374,7 @@ func (s *Service) threadHistoryResolvedLabel(inst *state.InstanceRecord, history
 		Name:     strings.TrimSpace(history.Thread.Name),
 		CWD:      strings.TrimSpace(history.Thread.CWD),
 	}
-	return displayThreadTitle(syntheticPersistedThreadInstance(thread, agentproto.BackendCodex), thread, history.Thread.ThreadID)
+	return displayThreadTitle(syntheticPersistedThreadInstance(thread, agentproto.BackendCodex), thread)
 }
 
 func buildThreadHistoryTurnSummaries(history agentproto.ThreadHistoryRecord, currentTurnID string) []threadHistoryTurnSummary {

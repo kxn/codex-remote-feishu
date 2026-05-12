@@ -117,7 +117,7 @@ func (s *Service) followLocal(surface *state.SurfaceConsoleRecord) []eventcontra
 			surface,
 			surface.SelectedThreadID,
 			string(state.RouteModeFollowLocal),
-			displayThreadTitle(inst, thread, surface.SelectedThreadID),
+			displayThreadTitle(inst, thread),
 		)...)
 	}
 	if len(events) != 0 {
@@ -217,7 +217,7 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 
 func (s *Service) presentKickThreadPrompt(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string, owner *state.SurfaceConsoleRecord) []eventcontract.Event {
 	thread := inst.Threads[threadID]
-	title := displayThreadTitle(inst, thread, threadID)
+	title := displayThreadTitle(inst, thread)
 	return []eventcontract.Event{s.selectionViewEvent(surface, control.FeishuSelectionView{
 		PromptKind: control.SelectionPromptKickThread,
 		KickThread: &control.FeishuKickThreadSelectionView{

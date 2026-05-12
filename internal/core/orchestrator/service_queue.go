@@ -571,7 +571,7 @@ func (s *Service) renderTextToSurfaceWithSource(surface *state.SurfaceConsoleRec
 	if inst != nil {
 		thread = s.ensureThread(inst, threadID)
 	}
-	title := displayThreadTitle(inst, thread, threadID)
+	title := displayThreadTitle(inst, thread)
 	themeKey := threadID
 	if themeKey == "" {
 		themeKey = title

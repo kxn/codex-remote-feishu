@@ -104,7 +104,7 @@ func (r *serviceProgressRuntime) takeTurnFileChangeSummary(instanceID, threadID,
 
 	return &control.FileChangeSummary{
 		ThreadID:     threadID,
-		ThreadTitle:  displayThreadTitle(inst, thread, threadID),
+		ThreadTitle:  displayThreadTitle(inst, thread),
 		FileCount:    len(files),
 		AddedLines:   totalAdded,
 		RemovedLines: totalRemoved,

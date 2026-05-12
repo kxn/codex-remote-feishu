@@ -52,12 +52,12 @@ func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticPlanConfirmation:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认计划", "需要处理请求", "需要确认")
-		definition.Sections = buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), "当前计划需要你确认后才能继续。")
+		definition.Sections = buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), "当前计划需要你确认后才能继续。")
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticRequestUserInput:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要补充输入", "需要处理请求")
-		definition.Sections = buildRequestUserInputSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你补充参数或说明。")
+		definition.Sections = buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你补充参数或说明。")
 		definition.Questions = metadataRequestQuestions(metadata)
 		if len(definition.Questions) == 0 {
 			return definition, "收到缺少问题定义的 request_user_input 请求，当前无法在飞书端处理。"
@@ -82,7 +82,7 @@ func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt
 		definition.Sections = buildToolCallbackRequestSections(prompt, metadata)
 	default:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认", "需要处理请求")
-		definition.Sections = buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你的确认。")
+		definition.Sections = buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你的确认。")
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	}
@@ -173,7 +173,7 @@ func normalizeRequestSemanticToken(value string) string {
 }
 
 func buildApprovalCommandRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认执行命令。")
+	sections := buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认执行命令。")
 	if cwd := strings.TrimSpace(metadataString(metadata, "cwd")); cwd != "" {
 		sections = appendRequestPromptSection(sections, "工作目录", cwd)
 	}
@@ -184,7 +184,7 @@ func buildApprovalCommandRequestSections(backend agentproto.Backend, prompt *age
 }
 
 func buildApprovalFileChangeRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认文件修改。")
+	sections := buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认文件修改。")
 	if grantRoot := strings.TrimSpace(metadataString(metadata, "grantRoot")); grantRoot != "" {
 		sections = appendRequestPromptSection(sections, "写入范围", grantRoot)
 	}
@@ -192,7 +192,7 @@ func buildApprovalFileChangeRequestSections(backend agentproto.Backend, prompt *
 }
 
 func buildApprovalNetworkRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	sections := buildApprovalRequestSections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认网络访问。")
+	sections := buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认网络访问。")
 	network := requestMetadataMap(metadata["networkApprovalContext"])
 	lines := make([]string, 0, 3)
 	if host := strings.TrimSpace(firstNonEmpty(lookupStringFromAny(network["host"]), lookupStringFromAny(network["hostname"]))); host != "" {

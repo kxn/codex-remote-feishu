@@ -118,7 +118,7 @@ func (s *Service) useAttachedVisibleThreadModeWithOverlayCleanup(surface *state.
 	title := threadID
 	thread = s.ensureThread(inst, threadID)
 	s.touchThread(thread)
-	title = displayThreadTitle(inst, thread, threadID)
+	title = displayThreadTitle(inst, thread)
 	events = append(events, s.threadSelectionEvents(surface, threadID, string(surface.RouteMode), title)...)
 	events = append(events, s.replayThreadUpdate(surface, inst, threadID)...)
 	if len(events) != 0 {
@@ -219,7 +219,7 @@ func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.Su
 		return append(events, attachSurfaceToKnownThreadThreadBusyNotice(surface, mode)...)
 	}
 
-	title := displayThreadTitle(inst, thread, view.ThreadID)
+	title := displayThreadTitle(inst, thread)
 	preview := threadPreview(thread)
 	if mode == attachSurfaceToKnownThreadHeadlessRestore {
 		surface.LastSelection = &state.SelectionAnnouncementRecord{
@@ -368,7 +368,7 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
-	threadTitle := displayThreadTitle(view.Inst, view.Thread, view.ThreadID)
+	threadTitle := displayThreadTitle(view.Inst, view.Thread)
 	threadPreview := ""
 	threadName := ""
 	sourceInstanceID := ""

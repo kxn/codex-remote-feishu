@@ -285,13 +285,8 @@ func isDigits(value string) bool {
 	return err == nil
 }
 
-func threadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord, fallback string) string {
-	_ = fallback
+func displayThreadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord) string {
 	return threadtitle.DisplayTitle(inst, thread, threadtitle.DefaultDisplayLimit)
-}
-
-func displayThreadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord, fallback string) string {
-	return threadTitle(inst, thread, fallback)
 }
 
 func duplicateThreadTitle(inst *state.InstanceRecord, title string) bool {
@@ -299,11 +294,11 @@ func duplicateThreadTitle(inst *state.InstanceRecord, title string) bool {
 		return false
 	}
 	count := 0
-	for threadID, thread := range inst.Threads {
+	for _, thread := range inst.Threads {
 		if !threadVisible(thread) {
 			continue
 		}
-		if threadTitle(inst, thread, threadID) != title {
+		if displayThreadTitle(inst, thread) != title {
 			continue
 		}
 		count++
@@ -327,8 +322,7 @@ func threadPreview(thread *state.ThreadRecord) string {
 	return previewSnippet(thread.Preview)
 }
 
-func threadSelectionButtonLabel(thread *state.ThreadRecord, fallback string) string {
-	_ = fallback
+func threadSelectionButtonLabel(thread *state.ThreadRecord) string {
 	return threadtitle.DisplayTitle(nil, thread, threadtitle.DefaultDisplayLimit)
 }
 

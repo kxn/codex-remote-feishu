@@ -9,24 +9,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func buildApprovalRequestSections(body, fallback string) []state.RequestPromptTextSectionRecord {
-	return appendRequestPromptBodySection(nil, "", body, fallback)
-}
-
-func buildRequestUserInputSections(body, fallback string) []state.RequestPromptTextSectionRecord {
-	return appendRequestPromptBodySection(nil, "", body, fallback)
-}
-
-func buildGenericRequestSections(body, fallback string) []state.RequestPromptTextSectionRecord {
-	return appendRequestPromptBodySection(nil, "", body, fallback)
-}
-
-func appendRequestPromptBodySection(sections []state.RequestPromptTextSectionRecord, label, body, fallback string) []state.RequestPromptTextSectionRecord {
+func buildRequestPromptBodySections(body, fallback string) []state.RequestPromptTextSectionRecord {
 	lines := requestPromptBodyLines(body, fallback)
 	if len(lines) == 0 {
-		return sections
+		return nil
 	}
-	return appendRequestPromptSection(sections, label, lines...)
+	return appendRequestPromptSection(nil, "", lines...)
 }
 
 func requestPromptBodyLines(body, fallback string) []string {

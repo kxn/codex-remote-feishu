@@ -178,7 +178,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	lastTitle := ""
 	lastPreview := ""
 	if surface.SelectedThreadID != "" {
-		lastTitle = displayThreadTitle(inst, inst.Threads[surface.SelectedThreadID], surface.SelectedThreadID)
+		lastTitle = displayThreadTitle(inst, inst.Threads[surface.SelectedThreadID])
 		lastPreview = threadPreview(inst.Threads[surface.SelectedThreadID])
 	}
 	surface.LastSelection = &state.SelectionAnnouncementRecord{
@@ -191,7 +191,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	title := "未选择会话"
 	text := s.attachedLeadText(surface, inst)
 	if surface.SelectedThreadID != "" {
-		title = displayThreadTitle(inst, inst.Threads[surface.SelectedThreadID], surface.SelectedThreadID)
+		title = displayThreadTitle(inst, inst.Threads[surface.SelectedThreadID])
 		text = fmt.Sprintf("%s 当前输入目标：%s", text, title)
 	} else if initialThreadID != "" {
 		text = fmt.Sprintf("%s 默认会话当前已被其他飞书会话占用，请先通过 /use 选择可用会话。", text)
@@ -249,7 +249,7 @@ func (s *Service) attachVSCodeInstance(surface *state.SurfaceConsoleRecord, inst
 	}
 	if surface.SelectedThreadID != "" {
 		thread := s.ensureThread(inst, surface.SelectedThreadID)
-		text = fmt.Sprintf("%s 当前跟随会话：%s", text, displayThreadTitle(inst, thread, surface.SelectedThreadID))
+		text = fmt.Sprintf("%s 当前跟随会话：%s", text, displayThreadTitle(inst, thread))
 	} else if len(visibleThreads(inst)) != 0 {
 		if mode == attachInstanceModeSurfaceResume {
 			text = fmt.Sprintf("%s 当前还没有新的 VS Code 焦点；请先在 VS Code 里再说一句话，或发送 /use 选择当前实例已知会话。", text)

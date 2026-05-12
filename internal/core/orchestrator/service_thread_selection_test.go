@@ -73,8 +73,8 @@ func TestDisplayThreadTitleDoesNotExposeShortIDForDuplicateTitles(t *testing.T) 
 		},
 	}
 
-	first := displayThreadTitle(inst, inst.Threads["019d56f0-de5e-7943-bc9a-18c42ef11acb"], "019d56f0-de5e-7943-bc9a-18c42ef11acb")
-	second := displayThreadTitle(inst, inst.Threads["019d56f0-e48d-7e51-be84-04a5658e4c96"], "019d56f0-e48d-7e51-be84-04a5658e4c96")
+	first := displayThreadTitle(inst, inst.Threads["019d56f0-de5e-7943-bc9a-18c42ef11acb"])
+	second := displayThreadTitle(inst, inst.Threads["019d56f0-e48d-7e51-be84-04a5658e4c96"])
 	if first != "dl · 未命名会话" || second != "dl · 未命名会话" {
 		t.Fatalf("expected duplicate unnamed sessions to keep workspace title without short ids, got %q and %q", first, second)
 	}
@@ -84,7 +84,7 @@ func TestDisplayThreadTitleDoesNotExposeShortIDForDuplicateTitles(t *testing.T) 
 }
 
 func TestThreadTitleUsesUnnamedPlaceholderWhenOnlyPreviewExists(t *testing.T) {
-	title := threadTitle(&state.InstanceRecord{
+	title := displayThreadTitle(&state.InstanceRecord{
 		DisplayName:  "droid",
 		WorkspaceKey: "/data/dl/droid",
 		ShortName:    "droid",
@@ -92,7 +92,7 @@ func TestThreadTitleUsesUnnamedPlaceholderWhenOnlyPreviewExists(t *testing.T) {
 		ThreadID: "thread-1",
 		Preview:  "我先按 atlas 这个工程统计了入口文件和模块边界。",
 		CWD:      "/data/dl/droid",
-	}, "thread-1")
+	})
 
 	if title != "droid · 未命名会话" {
 		t.Fatalf("expected preview-only thread to use unnamed placeholder, got %q", title)

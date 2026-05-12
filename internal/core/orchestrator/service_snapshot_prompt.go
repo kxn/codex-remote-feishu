@@ -29,7 +29,7 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 	observedThreadPlanMode := ""
 	if threadID != "" {
 		thread := inst.Threads[threadID]
-		threadTitle = displayThreadTitle(inst, thread, threadID)
+		threadTitle = displayThreadTitle(inst, thread)
 		if thread != nil && agentproto.NormalizeAccessMode(thread.ObservedAccessMode) != "" {
 			observedThreadAccessMode = agentproto.NormalizeAccessMode(thread.ObservedAccessMode)
 		}
