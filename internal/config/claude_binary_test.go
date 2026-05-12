@@ -48,10 +48,38 @@ func normalizeExecutablePathForTest(t *testing.T, path string) string {
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	if resolved, err := filepath.EvalSymlinks(path); err == nil && strings.TrimSpace(resolved) != "" {
-		path = resolved
-	}
 	return filepath.Clean(path)
+}
+
+func TestResolveClaudeBinaryKeepsSymlinkPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink semantics differ on windows")
+	}
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		return "", fmt.Errorf("shell unavailable")
+	}
+
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "claude-target")
+	linkPath := filepath.Join(dir, "claude-link")
+	writeExecutableFileForTest(t, targetPath)
+	if err := os.Symlink(targetPath, linkPath); err != nil {
+		t.Fatalf("Symlink(%s -> %s): %v", linkPath, targetPath, err)
+	}
+
+	got, err := ResolveClaudeBinary([]string{
+		"HOME=" + t.TempDir(),
+		ClaudeBinaryEnv + "=" + linkPath,
+		"PATH=/usr/bin",
+	})
+	if err != nil {
+		t.Fatalf("ResolveClaudeBinary: %v", err)
+	}
+	if normalizeExecutablePathForTest(t, got) != normalizeExecutablePathForTest(t, linkPath) {
+		t.Fatalf("resolved executable path = %q, want preserved symlink path %q", got, linkPath)
+	}
 }
 
 func TestResolveClaudeBinaryUsesExplicitCommandFromShellPATH(t *testing.T) {

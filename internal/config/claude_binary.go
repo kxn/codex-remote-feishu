@@ -169,8 +169,5 @@ func usableExecutablePath(path string) (string, bool) {
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
-	if resolved, err := filepath.EvalSymlinks(path); err == nil && strings.TrimSpace(resolved) != "" {
-		path = resolved
-	}
 	return filepath.Clean(path), true
 }
