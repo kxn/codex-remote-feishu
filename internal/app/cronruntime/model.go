@@ -33,7 +33,6 @@ type StateFile struct {
 	SchemaVersion       int           `json:"schema_version"`
 	InstanceScopeKey    string        `json:"instance_scope_key,omitempty"`
 	InstanceLabel       string        `json:"instance_label,omitempty"`
-	GatewayID           string        `json:"gateway_id,omitempty"`
 	OwnerGatewayID      string        `json:"owner_gateway_id,omitempty"`
 	OwnerAppID          string        `json:"owner_app_id,omitempty"`
 	OwnerBoundAt        time.Time     `json:"owner_bound_at,omitempty"`

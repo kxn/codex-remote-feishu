@@ -132,7 +132,6 @@ Windows PowerShell:
 
 - `-interactive`
 - `-integration managed_shim`
-- 兼容旧脚本时，`-integration editor_settings|both|all` 仍可被接受，但当前都会归一化到 `managed_shim`
 
 这些能力主要用于源码仓库或定向调试，不再作为发布包默认路径。
 
@@ -237,12 +236,6 @@ named instance <instanceId>:
 - `logPath`
 - `serviceName`
 - `serviceUnitPath`
-
-兼容旧路径时，仍会同步保留一份仅含实例 id 的：
-
-```text
-<repoRoot>/.codex-remote/install-instance
-```
 
 ### 4.3 已安装二进制目录
 
@@ -422,7 +415,7 @@ detect/apply/reinstall 的当前规则也同步收紧：
 - `./bin/codex-remote install -bootstrap-only -start-daemon`
 - `codex-remote install -interactive`
 
-仍然可以直接在 CLI 里触发接管，但 legacy `editor_settings` 形态只保留兼容解析，不再作为推荐输出。
+仍然可以直接在 CLI 里触发接管，但当前只保留 `managed_shim` 这一条接入路径。
 
 ## 6. release 打包与发布
 

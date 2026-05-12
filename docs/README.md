@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-05-08`
-> Summary: 新增 `从目录新建` 子目录创建检查流设计草案索引。
+> Updated: `2026-05-12`
+> Summary: 归档过时的 Web 安装前置改造草稿，并同步更新文档索引。
 
 ## 1. 适用范围
 
@@ -196,7 +196,6 @@
 - [upstream-retryable-turn-autocontinue-design.md](./draft/upstream-retryable-turn-autocontinue-design.md)
 - [web-admin-user-mock.html](./draft/web-admin-user-mock.html)
 - [web-preview-snapshot-design.md](./draft/web-preview-snapshot-design.md)
-- [web-install-admin-prerequisites-design.md](./draft/web-install-admin-prerequisites-design.md)
 - [web-preview-renderer-architecture-redesign.md](./draft/web-preview-renderer-architecture-redesign.md)
 - [web-onboarding-admin-workflow-prd.md](./draft/web-onboarding-admin-workflow-prd.md)
 - [web-onboarding-admin-user-view.md](./draft/web-onboarding-admin-user-view.md)
@@ -212,4 +211,5 @@
 - [claude-normal-mode-poc-design.md](./obsoleted/claude-normal-mode-poc-design.md)
 - [claude-provider-protocol-mapping.md](./obsoleted/claude-provider-protocol-mapping.md)
 - [feishu-headless-instance-design.md](./obsoleted/feishu-headless-instance-design.md)
+- [web-install-admin-prerequisites-design.md](./obsoleted/web-install-admin-prerequisites-design.md)
 - [web-install-admin-ui-design.md](./obsoleted/web-install-admin-ui-design.md)

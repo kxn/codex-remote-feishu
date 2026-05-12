@@ -16,16 +16,18 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func TestLoadCronStateLockedHardMigratesLegacyGatewayOwner(t *testing.T) {
+func TestLoadCronStateLockedKeepsOwnerBinding(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
-	setCronGatewayLookup(app, "gateway-1", "app-1")
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
+	boundAt := time.Now().UTC().Add(-time.Minute)
 
 	rawState := cronrt.StateFile{
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     boundAt,
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 		},
@@ -45,10 +47,10 @@ func TestLoadCronStateLockedHardMigratesLegacyGatewayOwner(t *testing.T) {
 		t.Fatalf("loadCronStateLocked: %v", err)
 	}
 	if stateValue.OwnerGatewayID != "gateway-1" || stateValue.OwnerAppID != "app-1" {
-		t.Fatalf("owner state = %#v, want migrated gateway-1/app-1", stateValue)
+		t.Fatalf("owner state = %#v, want preserved gateway-1/app-1", stateValue)
 	}
-	if stateValue.OwnerBoundAt.IsZero() {
-		t.Fatalf("owner bound time not migrated: %#v", stateValue)
+	if !stateValue.OwnerBoundAt.Equal(boundAt) {
+		t.Fatalf("owner bound time = %#v, want %v", stateValue.OwnerBoundAt, boundAt)
 	}
 
 	persistedRaw, err := os.ReadFile(filepath.Join(app.headlessRuntime.Paths.StateDir, "cron-state.json"))
@@ -59,12 +61,12 @@ func TestLoadCronStateLockedHardMigratesLegacyGatewayOwner(t *testing.T) {
 	if err := json.Unmarshal(persistedRaw, &persisted); err != nil {
 		t.Fatalf("unmarshal persisted state: %v", err)
 	}
-	if persisted.OwnerGatewayID != "gateway-1" || persisted.OwnerAppID != "app-1" || persisted.OwnerBoundAt.IsZero() {
-		t.Fatalf("persisted owner state = %#v, want migrated owner binding", persisted)
+	if persisted.OwnerGatewayID != "gateway-1" || persisted.OwnerAppID != "app-1" || !persisted.OwnerBoundAt.Equal(boundAt) {
+		t.Fatalf("persisted owner state = %#v, want preserved owner binding", persisted)
 	}
 }
 
-func TestInspectCronOwnerViewTreatsLegacyGatewayStateAsHealthy(t *testing.T) {
+func TestInspectCronOwnerViewTreatsHealthyOwnerStateAsHealthy(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
 	setCronGatewayLookup(app, "gateway-1", "app-1")
 
@@ -72,7 +74,9 @@ func TestInspectCronOwnerViewTreatsLegacyGatewayStateAsHealthy(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Minute),
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 		},
@@ -88,7 +92,7 @@ func TestInspectCronOwnerViewTreatsLegacyGatewayStateAsHealthy(t *testing.T) {
 	}
 }
 
-func TestReloadCronJobsNowHardMigratesLegacyGatewayWithoutLegacyNotice(t *testing.T) {
+func TestReloadCronJobsNowKeepsOwnerBindingWithoutLegacyNotice(t *testing.T) {
 	api := &fakeCronBitableAPI{
 		recordsByTable: map[string][]*larkbitable.AppTableRecord{
 			"tbl-workspaces": {},
@@ -103,7 +107,9 @@ func TestReloadCronJobsNowHardMigratesLegacyGatewayWithoutLegacyNotice(t *testin
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
+		OwnerAppID:       "app-1",
+		OwnerBoundAt:     time.Now().UTC().Add(-time.Minute),
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 			Tables: cronrt.TableIDs{
@@ -127,6 +133,6 @@ func TestReloadCronJobsNowHardMigratesLegacyGatewayWithoutLegacyNotice(t *testin
 		t.Fatalf("summary = %q, want no legacy backfill wording", summary)
 	}
 	if app.cronRuntime.state.OwnerGatewayID != "gateway-1" || app.cronRuntime.state.OwnerAppID != "app-1" {
-		t.Fatalf("owner state = %#v, want hard-migrated owner binding", app.cronRuntime.state)
+		t.Fatalf("owner state = %#v, want preserved owner binding", app.cronRuntime.state)
 	}
 }

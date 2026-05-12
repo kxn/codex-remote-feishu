@@ -3,7 +3,7 @@
 > Type: `obsoleted`
 > Updated: `2026-04-07`
 > Summary: 原“安装与管理界面总设计稿”已拆分为 setup 向导重设计、管理页重设计和前置改造文档，本文不再作为当前设计依据。
-> Superseded By: `docs/draft/web-setup-wizard-redesign.md`, `docs/draft/web-admin-ui-redesign.md`, `docs/draft/web-install-admin-prerequisites-design.md`
+> Superseded By: `docs/draft/web-setup-wizard-redesign.md`, `docs/draft/web-admin-ui-redesign.md`, `docs/obsoleted/web-install-admin-prerequisites-design.md`
 
 ## 1. 说明
 
@@ -25,7 +25,7 @@
 
 - setup 交互：请看 [../draft/web-setup-wizard-redesign.md](../draft/web-setup-wizard-redesign.md)
 - admin 管理页：请看 [../draft/web-admin-ui-redesign.md](../draft/web-admin-ui-redesign.md)
-- 实现前置改造：请看 [../draft/web-install-admin-prerequisites-design.md](../draft/web-install-admin-prerequisites-design.md)
+- 实现前置改造的历史背景：请看 [../obsoleted/web-install-admin-prerequisites-design.md](../obsoleted/web-install-admin-prerequisites-design.md)
 
 ## 3. 保留原因
 

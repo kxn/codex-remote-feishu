@@ -91,14 +91,7 @@ func (a *App) normalizeLoadedCronStateLocked() error {
 		return nil
 	}
 	a.cronRuntime.state = cronrt.NormalizeState(*a.cronRuntime.state)
-	changed, err := a.migrateCronLegacyOwnerStateLocked(a.cronRuntime.state)
-	if err != nil {
-		return nil
-	}
-	if !changed {
-		return nil
-	}
-	return a.writeCronStateLocked()
+	return nil
 }
 
 func (a *App) newCronStateLocked() (*cronrt.StateFile, error) {

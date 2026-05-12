@@ -273,4 +273,7 @@ func TestResolveInstallInstanceSelectionExplicitStableWithBaseDirWritesBinding(t
 	if binding.LogPath == "" {
 		t.Fatalf("expected derived log path in binding, got %#v", binding)
 	}
+	if _, err := os.Stat(repoInstallInstancePath(repoRoot)); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy repo-local binding file to stay removed, stat err = %v", err)
+	}
 }

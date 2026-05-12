@@ -24,7 +24,6 @@ func TestCronRepairTakesOverBindingWhenOwnerUnavailable(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),

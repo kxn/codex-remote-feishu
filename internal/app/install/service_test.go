@@ -1,7 +1,6 @@
 package install
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,7 @@ func stubInstancePortAvailability(t *testing.T, fn func(int) bool) {
 	})
 }
 
-func TestBootstrapWritesConfigsAndState(t *testing.T) {
+func TestBootstrapWritesConfigsAndStateWithoutLegacySettingsPatch(t *testing.T) {
 	baseDir := t.TempDir()
 	settingsPath := filepath.Join(baseDir, "Code", "User", "settings.json")
 	sourceDir := filepath.Join(baseDir, "source-bin")
@@ -35,7 +34,7 @@ func TestBootstrapWritesConfigsAndState(t *testing.T) {
 		CurrentVersion:     "dev",
 		RelayServerURL:     "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary:    "/usr/local/bin/codex",
-		Integrations:       []WrapperIntegrationMode{IntegrationEditorSettings},
+		Integrations:       []WrapperIntegrationMode{IntegrationManagedShim},
 		VSCodeSettingsPath: settingsPath,
 		FeishuGatewayID:    "main",
 		FeishuAppID:        "cli_xxx",
@@ -61,17 +60,11 @@ func TestBootstrapWritesConfigsAndState(t *testing.T) {
 	if app.ID != "main" || app.AppID != "cli_xxx" || app.AppSecret != "secret" {
 		t.Fatalf("unexpected feishu app: %#v", app)
 	}
-
-	settingsRaw, err := os.ReadFile(settingsPath)
-	if err != nil {
-		t.Fatalf("read settings: %v", err)
+	if cfg.Wrapper.IntegrationMode != "managed_shim" {
+		t.Fatalf("unexpected wrapper integration mode: %s", cfg.Wrapper.IntegrationMode)
 	}
-	var settings map[string]string
-	if err := json.Unmarshal(settingsRaw, &settings); err != nil {
-		t.Fatalf("unmarshal settings: %v raw=%s", err, settingsRaw)
-	}
-	if settings["chatgpt.cliExecutable"] != state.InstalledWrapperBinary {
-		t.Fatalf("expected settings to contain wrapper path, got %#v", settings)
+	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
+		t.Fatalf("expected legacy settings patch to stay disabled, stat err=%v", err)
 	}
 	wantBinary := filepath.Join(installBinDir, filepath.Base(binaryPath))
 	if state.InstalledBinary != wantBinary {
@@ -371,7 +364,7 @@ func TestBootstrapPreservesExistingFeishuSecretsWhenFlagsAreEmpty(t *testing.T) 
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationEditorSettings},
+		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -407,7 +400,7 @@ func TestBootstrapPreservesExistingDebugRelayFlowFlag(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationEditorSettings},
+		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -439,7 +432,7 @@ func TestBootstrapPreservesExistingDebugRelayRawFlag(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationEditorSettings},
+		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -475,7 +468,7 @@ func TestBootstrapPreservesExistingPprofConfig(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationEditorSettings},
+		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -549,7 +542,7 @@ func TestBootstrapRejectsLegacySplitConfigFiles(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationEditorSettings},
+		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err == nil || !strings.Contains(err.Error(), "legacy env config files are no longer supported") {
 		t.Fatalf("expected legacy split config rejection, got state=%#v err=%v", state, err)
@@ -594,7 +587,7 @@ func TestBootstrapPreservesReleaseInstallMetadata(t *testing.T) {
 		CurrentSlot:     "v1.2.3-beta.4",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationEditorSettings},
+		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap release metadata: %v", err)

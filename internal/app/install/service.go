@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -93,8 +94,12 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	}
 
 	integrations := opts.Integrations
-	if !opts.BootstrapOnly && len(integrations) == 0 && opts.IntegrationMode != "" {
-		integrations = []WrapperIntegrationMode{opts.IntegrationMode}
+	if !opts.BootstrapOnly && len(integrations) == 0 {
+		if opts.IntegrationMode != "" {
+			integrations = []WrapperIntegrationMode{opts.IntegrationMode}
+		} else {
+			integrations = DefaultIntegrations(runtime.GOOS)
+		}
 	}
 	integrations = normalizeIntegrations(integrations)
 
@@ -115,7 +120,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		installedBinary = sourceBinary
 	}
 
-	emptyIntegrationMode := string(IntegrationEditorSettings)
+	emptyIntegrationMode := string(IntegrationManagedShim)
 	if opts.BootstrapOnly {
 		emptyIntegrationMode = "none"
 	}
@@ -137,12 +142,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		return InstallState{}, err
 	}
 
-	if hasIntegration(integrations, IntegrationEditorSettings) && opts.VSCodeSettingsPath != "" {
-		if err := editor.PatchVSCodeSettings(opts.VSCodeSettingsPath, installedBinary); err != nil {
-			return InstallState{}, err
-		}
-	}
-	if hasIntegration(integrations, IntegrationManagedShim) {
+	if hasIntegration(integrations, IntegrationManagedShim) && strings.TrimSpace(opts.BundleEntrypoint) != "" {
 		if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
 			EntrypointPath:   opts.BundleEntrypoint,
 			InstallStatePath: statePath,

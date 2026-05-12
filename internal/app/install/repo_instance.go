@@ -283,14 +283,6 @@ func readRepoInstallBindingWithSource(repoRoot string) (repoInstallBinding, repo
 	return binding, repoInstallBindingSourceFile, true, nil
 }
 
-func readRepoInstallInstance(repoRoot string) (string, bool, error) {
-	binding, ok, err := readRepoInstallBinding(repoRoot)
-	if err != nil || !ok {
-		return "", ok, err
-	}
-	return binding.InstanceID, true, nil
-}
-
 func readLegacyRepoInstallInstance(repoRoot string) (string, bool, error) {
 	raw, err := os.ReadFile(repoInstallInstancePath(repoRoot))
 	if err != nil {
@@ -327,7 +319,7 @@ func writeRepoInstallBinding(repoRoot string, binding repoInstallBinding) error 
 	if err := os.WriteFile(jsonPath, raw, 0o600); err != nil {
 		return err
 	}
-	if err := os.WriteFile(repoInstallInstancePath(repoRoot), []byte(instanceID+"\n"), 0o600); err != nil {
+	if err := os.Remove(repoInstallInstancePath(repoRoot)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 	return ensureRepoLocalGitExclude(repoRoot)

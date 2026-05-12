@@ -36,37 +36,6 @@ func (a *App) cronGatewayIdentity(gatewayID string) (cronrt.GatewayIdentity, boo
 	return lookup(strings.TrimSpace(gatewayID))
 }
 
-func (a *App) migrateCronLegacyOwnerStateLocked(stateValue *cronrt.StateFile) (bool, error) {
-	if stateValue == nil {
-		return false, nil
-	}
-	if currentOwner := cronrt.OwnerBindingFromState(stateValue); currentOwner != nil {
-		identity, ok, err := a.cronGatewayIdentity(currentOwner.GatewayID)
-		if err != nil || !ok {
-			return false, err
-		}
-		if nextOwner, changed := cronrt.OwnerBindingBackfill(currentOwner, identity); changed {
-			cronrt.ApplyOwnerBinding(stateValue, nextOwner)
-			return true, nil
-		}
-		return false, nil
-	}
-	legacyGateway := strings.TrimSpace(stateValue.GatewayID)
-	if legacyGateway == "" {
-		return false, nil
-	}
-	identity, ok, err := a.cronGatewayIdentity(legacyGateway)
-	if err != nil || !ok {
-		return false, err
-	}
-	cronrt.ApplyOwnerBinding(stateValue, &cronrt.OwnerBinding{
-		GatewayID: identity.GatewayID,
-		AppID:     identity.AppID,
-		BoundAt:   time.Now().UTC(),
-	})
-	return true, nil
-}
-
 func (a *App) resolveCronOwner(command control.DaemonCommand, opts cronrt.OwnerResolveOptions) (cronrt.OwnerResolution, error) {
 	a.mu.Lock()
 	stateValue, err := a.loadCronStateLocked(opts.CreateStateIfEmpty)
@@ -120,23 +89,6 @@ func (a *App) resolveCronOwnerFromState(stateValue *cronrt.StateFile, command co
 		}
 		result.Status = cronrt.OwnerStatusHealthy
 		result.Message = fmt.Sprintf("Cron owner 为 `%s`。", identity.GatewayID)
-		return result, nil
-	}
-	legacyGateway := strings.TrimSpace(stateValue.GatewayID)
-	if legacyGateway != "" {
-		identity, ok, err := a.cronGatewayIdentity(legacyGateway)
-		if err != nil {
-			return cronrt.OwnerResolution{}, err
-		}
-		if ok {
-			result.Status = cronrt.OwnerStatusHealthy
-			result.Gateway = identity
-			result.PersistOwner = &cronrt.OwnerBinding{GatewayID: identity.GatewayID, AppID: identity.AppID, BoundAt: time.Now().UTC()}
-			result.Message = fmt.Sprintf("Cron owner 为 `%s`。", identity.GatewayID)
-			return result, nil
-		}
-		result.Status = cronrt.OwnerStatusUnresolved
-		result.Message = fmt.Sprintf("历史 gateway `%s` 当前无法安全迁到正式 Cron owner。", legacyGateway)
 		return result, nil
 	}
 	if opts.AllowCreate {

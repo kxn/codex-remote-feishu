@@ -25,7 +25,7 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
 		Bitable:          &cronrt.BitableState{},
 		Jobs:             []cronrt.JobState{},
 	}
@@ -119,7 +119,7 @@ func TestEnsureCronBitableRepairsExistingDateFieldFormatter(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 			Tables: cronrt.TableIDs{
@@ -198,7 +198,7 @@ func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 			Tables: cronrt.TableIDs{

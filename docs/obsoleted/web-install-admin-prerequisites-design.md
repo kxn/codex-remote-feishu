@@ -1,10 +1,19 @@
-# Web 安装与管理界面前置改造设计
+# Web 安装与管理界面前置改造设计（已废弃）
 
-> Type: `draft`
-> Updated: `2026-04-07`
-> Summary: 同步引用新的管理页产品文档，并保留前置改造范围与当前落地边界。
+> Type: `obsoleted`
+> Updated: `2026-05-12`
+> Summary: 这份“Web 安装与管理界面前置改造”草稿形成于早期方案阶段，文中大量前提已经失效，保留仅用于历史背景，不再作为当前实现依据。
+> Superseded By: `docs/general/install-deploy-design.md`, `docs/draft/web-setup-wizard-redesign.md`, `docs/draft/web-admin-ui-redesign.md`
 
 ## 1. 文档定位
+
+这份文档里的很多前提已经过时，例如：
+
+- 把 `config.env` 当成当前配置体系
+- 把 legacy env 文件当成继续迁移/兼容的主路径
+- 把早期 setup/admin 前置阻塞当成当前实现事实
+
+继续按本文落实现有页面或安装流程，会直接把旧思路重新带回代码里。
 
 这份文档只讨论“开始做 Web 安装/管理界面之前，必须先完成哪些基础改造”。
 

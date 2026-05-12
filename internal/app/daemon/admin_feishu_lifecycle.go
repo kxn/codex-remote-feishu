@@ -129,7 +129,7 @@ func (a *App) persistFeishuVerificationSuccess(
 ) error {
 	switch mode {
 	case feishuVerificationPersistOnboardingComplete:
-		return a.markFeishuAppOnboardingCompleted(path, gatewayID, verifiedAt)
+		return a.markFeishuAppVerified(path, gatewayID, verifiedAt)
 	case feishuVerificationPersistIfMutable:
 		return a.markFeishuAppVerified(path, gatewayID, verifiedAt)
 	default:

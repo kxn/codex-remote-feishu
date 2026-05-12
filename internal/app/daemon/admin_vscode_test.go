@@ -256,7 +256,7 @@ func TestVSCodeDetectRecommendsManagedShimOutsideSSH(t *testing.T) {
 	}
 }
 
-func TestVSCodeApplyAllAliasesBoth(t *testing.T) {
+func TestVSCodeApplyAllAliasRejected(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
@@ -266,19 +266,11 @@ func TestVSCodeApplyAllAliasesBoth(t *testing.T) {
 	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
 	writeExecutableFile(t, entrypoint, "orig")
 
-	app, configPath, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
+	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
 
 	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"all"}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("apply all status = %d, want 200 body=%s", rec.Code, rec.Body.String())
-	}
-
-	loaded, err := config.LoadAppConfigAtPath(configPath)
-	if err != nil {
-		t.Fatalf("LoadAppConfigAtPath: %v", err)
-	}
-	if loaded.Config.Wrapper.IntegrationMode != "managed_shim" {
-		t.Fatalf("wrapper integration mode = %q, want managed_shim", loaded.Config.Wrapper.IntegrationMode)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("apply all status = %d, want 400 body=%s", rec.Code, rec.Body.String())
 	}
 }
 

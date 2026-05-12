@@ -222,7 +222,7 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 	if err != nil {
 		return err
 	}
-	mode, err := resolveVSCodeMode(strings.TrimSpace(req.Mode), a.snapshotAdminRuntime().sshSession)
+	mode, err := resolveVSCodeMode(strings.TrimSpace(req.Mode))
 	if err != nil {
 		return err
 	}
@@ -438,26 +438,21 @@ func loadInstallStateIfPresent(path string) (*install.InstallState, error) {
 	return &state, nil
 }
 
-func resolveVSCodeMode(raw string, sshSession bool) (string, error) {
+func resolveVSCodeMode(raw string) (string, error) {
 	raw = strings.TrimSpace(strings.ToLower(raw))
 	if raw == "" {
 		return string(install.IntegrationManagedShim), nil
 	}
 	switch raw {
-	case string(install.IntegrationManagedShim), "both", "all":
+	case string(install.IntegrationManagedShim):
 		return string(install.IntegrationManagedShim), nil
-	case string(install.IntegrationEditorSettings):
-		return "", errors.New("editor_settings integration is no longer supported; migrate to managed_shim instead")
 	default:
 		return "", errors.New("unsupported vscode integration mode")
 	}
 }
 
 func displayVSCodeMode(mode string) string {
-	if strings.TrimSpace(mode) == "both" {
-		return string(install.IntegrationManagedShim)
-	}
-	return mode
+	return strings.TrimSpace(mode)
 }
 
 func integrationModesFor(mode string) []install.WrapperIntegrationMode {
@@ -465,12 +460,7 @@ func integrationModesFor(mode string) []install.WrapperIntegrationMode {
 }
 
 func modeIncludes(mode string, target install.WrapperIntegrationMode) bool {
-	switch mode {
-	case "both":
-		return true
-	default:
-		return mode == string(target)
-	}
+	return mode == string(target)
 }
 
 func samePlatformPath(left, right string) bool {

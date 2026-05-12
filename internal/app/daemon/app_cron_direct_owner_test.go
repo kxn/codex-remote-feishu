@@ -15,7 +15,6 @@ func TestCronRuntimeDirectOwnerSurfaceContracts(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     now.Add(-time.Hour),

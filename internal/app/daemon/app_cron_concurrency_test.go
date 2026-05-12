@@ -18,7 +18,7 @@ func TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID: "gateway-1",
+		OwnerGatewayID: "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
 			Tables: cronrt.TableIDs{

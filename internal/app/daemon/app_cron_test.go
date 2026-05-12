@@ -304,7 +304,7 @@ func TestCronSchedulerLaunchesFreshHiddenRun(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID: "gateway-1",
+		OwnerGatewayID: "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
 			Tables: cronrt.TableIDs{
@@ -379,7 +379,7 @@ func TestCronHelloAndCompletionStayHiddenAndWriteBackFinalMessage(t *testing.T) 
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID: "gateway-1",
+		OwnerGatewayID: "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
 			Tables: cronrt.TableIDs{
@@ -472,7 +472,7 @@ func TestCronSchedulerSkipsWhenPreviousRunIsStillActive(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID: "gateway-1",
+		OwnerGatewayID: "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
 			Tables: cronrt.TableIDs{
@@ -529,7 +529,7 @@ func TestCronSchedulerTimesOutRunAndRequestsExit(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID: "gateway-1",
+		OwnerGatewayID: "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
 			Tables: cronrt.TableIDs{
@@ -588,7 +588,6 @@ func TestCronShowReturnsCatalogWithoutEnteringMutatingGate(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
@@ -609,7 +608,7 @@ func TestCronShowReturnsCatalogWithoutEnteringMutatingGate(t *testing.T) {
 	if !app.cronRuntime.syncInFlight {
 		t.Fatalf("view-only /cron should not clear or claim the mutating sync gate")
 	}
-	if app.cronRuntime.state.OwnerGatewayID != "gateway-1" || app.cronRuntime.state.GatewayID != "gateway-1" {
+	if app.cronRuntime.state.OwnerGatewayID != "gateway-1" {
 		t.Fatalf("view-only /cron must not rewrite owner state: %#v", app.cronRuntime.state)
 	}
 	catalog := catalogFromUIEvent(t, events[0])
@@ -652,7 +651,6 @@ func TestCronReloadUsesResolvedOwnerGateway(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
@@ -711,7 +709,6 @@ func TestCronReloadParsesGitRepoSourceInput(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
@@ -762,7 +759,6 @@ func TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel(t *testing.T
 	})
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-1",
@@ -925,7 +921,6 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
@@ -1047,7 +1042,6 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
 		OwnerGatewayID:   "gateway-1",
 		OwnerAppID:       "app-1",
 		OwnerBoundAt:     time.Now().UTC().Add(-time.Hour),
@@ -1109,7 +1103,6 @@ func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
 		OwnerAppID:     "app-1",
 		Bitable: &cronrt.BitableState{
@@ -1156,7 +1149,6 @@ func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
 	}
 	app.cronRuntime.state.OwnerGatewayID = "gateway-2"
 	app.cronRuntime.state.OwnerAppID = "app-2"
-	app.cronRuntime.state.GatewayID = "gateway-2"
 	app.cronRuntime.state.Bitable = &cronrt.BitableState{
 		AppToken: "app-2",
 		Tables: cronrt.TableIDs{
@@ -1634,7 +1626,7 @@ func TestEnsureCronBitablePersistsProgressAndReusesRemoteObjectsAfterTimeout(t *
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
 		Bitable:          &cronrt.BitableState{},
 		Jobs:             []cronrt.JobState{},
 	}
@@ -1697,7 +1689,7 @@ func TestEnsureCronBitableRecoversLegacyPartialStateWithFreshTasksTable(t *testi
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
 		Bitable: &cronrt.BitableState{
 			AppToken: "app-cron",
 		},
@@ -1737,7 +1729,7 @@ func TestEnsureCronBitableDoesNotLeakDefaultTemplateColumnsIntoTasksTable(t *tes
 		SchemaVersion:    cronrt.StateSchemaVersion,
 		InstanceScopeKey: "stable",
 		InstanceLabel:    "stable",
-		GatewayID:        "gateway-1",
+		OwnerGatewayID:   "gateway-1",
 		Bitable:          &cronrt.BitableState{},
 		Jobs:             []cronrt.JobState{},
 	}

@@ -184,10 +184,6 @@ func (a *App) markFeishuAppVerified(path, gatewayID string, verifiedAt time.Time
 	return config.WriteAppConfig(path, updated)
 }
 
-func (a *App) markFeishuAppOnboardingCompleted(path, gatewayID string, verifiedAt time.Time) error {
-	return a.markFeishuAppVerified(path, gatewayID, verifiedAt)
-}
-
 func (a *App) setFeishuAppEnabled(gatewayID string, enabled *bool) (config.LoadedAppConfig, config.LoadedAppConfig, error) {
 	a.adminConfigMu.Lock()
 	defer a.adminConfigMu.Unlock()

@@ -291,9 +291,6 @@ func (a *App) snapshotCronWritebackLocked() cronrt.WritebackTarget {
 	if !cronrt.StateHasBinding(a.cronRuntime.state) || a.cronRuntime.state == nil || a.cronRuntime.state.Bitable == nil {
 		return cronrt.WritebackTarget{}
 	}
-	if strings.TrimSpace(a.cronRuntime.state.OwnerGatewayID) == "" {
-		_, _ = a.migrateCronLegacyOwnerStateLocked(a.cronRuntime.state)
-	}
 	gatewayID := strings.TrimSpace(a.cronRuntime.state.OwnerGatewayID)
 	target := cronrt.WritebackTarget{
 		GatewayID: gatewayID,

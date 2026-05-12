@@ -36,18 +36,6 @@ func TestParseIntegrations(t *testing.T) {
 			want: []WrapperIntegrationMode{IntegrationManagedShim},
 		},
 		{
-			name: "both alias",
-			raw:  "both",
-			goos: "darwin",
-			want: []WrapperIntegrationMode{IntegrationManagedShim},
-		},
-		{
-			name: "comma list normalizes to managed_shim",
-			raw:  "managed_shim,editor_settings,managed_shim",
-			goos: "linux",
-			want: []WrapperIntegrationMode{IntegrationManagedShim},
-		},
-		{
 			name:  "unsupported",
 			raw:   "unknown",
 			goos:  "linux",
@@ -85,9 +73,7 @@ func TestIntegrationsConfigValue(t *testing.T) {
 		want   string
 	}{
 		{nil, "managed_shim"},
-		{[]WrapperIntegrationMode{IntegrationEditorSettings}, "editor_settings"},
 		{[]WrapperIntegrationMode{IntegrationManagedShim}, "managed_shim"},
-		{[]WrapperIntegrationMode{IntegrationEditorSettings, IntegrationManagedShim}, "both"},
 	}
 	for _, tt := range tests {
 		if got := integrationsConfigValue(tt.values); got != tt.want {

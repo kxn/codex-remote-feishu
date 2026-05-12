@@ -19,7 +19,6 @@ func TestTriggerCronJobLaunchesImmediatelyWithoutChangingNextRun(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
 		OwnerAppID:     "app-1",
 		Bitable: &cronrt.BitableState{
@@ -78,7 +77,6 @@ func TestTriggerCronJobRespectsConcurrencyLimit(t *testing.T) {
 	app.headlessRuntime.Paths.StateDir = t.TempDir()
 	app.cronRuntime.loaded = true
 	app.cronRuntime.state = &cronrt.StateFile{
-		GatewayID:      "gateway-1",
 		OwnerGatewayID: "gateway-1",
 		OwnerAppID:     "app-1",
 		Bitable: &cronrt.BitableState{

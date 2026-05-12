@@ -391,7 +391,6 @@ make release-artifacts VERSION=v0.1.0
 - 仓库联调统一走本地构建 binary 的 `install -bootstrap-only -start-daemon`
 - 多 workspace 联调当前走“workspace 绑定全局实例”模型：
   - repo-local 绑定文件为 `.codex-remote/install-target.json`
-  - 兼容旧工具时仍会同步写 `.codex-remote/install-instance`
   - `install` / `service` / `local-upgrade` / `upgrade-local.sh` 默认先读这个 binding
   - 若无 binding，则默认退回 `stable`，并优先向上查找 repo 祖先目录里已存在的 stable install
 - 仓库里不再保留单独的 `install.sh` 生命周期脚本
