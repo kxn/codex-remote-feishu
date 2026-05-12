@@ -519,7 +519,7 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "工作区已经准备完成，下一条文本会直接开启新会话。", false, filtered)
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == normalizeWorkspaceClaimKey(finalPath) {
+		normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == normalizeWorkspaceClaimKey(finalPath) {
 		status := targetPickerLocalDirectoryProcessingStatus(finalPath)
 		processing := s.startTargetPickerProcessingWithSections(
 			surface,

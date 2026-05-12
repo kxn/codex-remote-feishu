@@ -76,8 +76,8 @@ func resolveResumeSession(workspaceRoot, sessionID string) (string, *claudeSessi
 	if err != nil || meta == nil {
 		return filePath, meta, err
 	}
-	if !sameWorkspaceCWD(meta.CWD, workspaceRoot) {
-		return "", meta, fmt.Errorf("claude session %q belongs to %q, not %q", sessionID, meta.CWD, workspaceRoot)
+	if !sameWorkspaceCWD(meta.WorkspaceKey, workspaceRoot) {
+		return "", meta, fmt.Errorf("claude session %q belongs to %q, not %q", sessionID, meta.WorkspaceKey, workspaceRoot)
 	}
 	return filePath, meta, nil
 }

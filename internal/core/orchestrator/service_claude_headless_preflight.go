@@ -54,6 +54,7 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 		InstanceID:            instanceID,
 		ThreadID:              strings.TrimSpace(attempt.ThreadID),
 		ThreadTitle:           strings.TrimSpace(attempt.ThreadTitle),
+		WorkspaceKey:          workspaceKey,
 		ThreadCWD:             threadCWD,
 		Backend:               launchContract.Backend,
 		CodexProviderID:       launchContract.CodexProviderID,
@@ -91,6 +92,7 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 				InstanceID:       inst.InstanceID,
 				ThreadID:         strings.TrimSpace(attempt.ThreadID),
 				ThreadTitle:      strings.TrimSpace(attempt.ThreadTitle),
+				WorkspaceKey:     workspaceKey,
 				ThreadCWD:        threadCWD,
 			},
 		},
@@ -104,6 +106,7 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 					InstanceID:       instanceID,
 					ThreadID:         strings.TrimSpace(attempt.ThreadID),
 					ThreadTitle:      strings.TrimSpace(attempt.ThreadTitle),
+					WorkspaceKey:     workspaceKey,
 					ThreadCWD:        threadCWD,
 				}
 				s.applyHeadlessLaunchContract(command, launchContract)

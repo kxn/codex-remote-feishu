@@ -29,6 +29,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			InstanceID:            pending.InstanceID,
 			ThreadID:              pending.ThreadID,
 			ThreadTitle:           pending.ThreadTitle,
+			WorkspaceKey:          pending.WorkspaceKey,
 			ThreadCWD:             pending.ThreadCWD,
 			Backend:               pending.Backend,
 			CodexProviderID:       pending.CodexProviderID,

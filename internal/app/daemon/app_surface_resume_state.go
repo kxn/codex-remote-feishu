@@ -302,6 +302,7 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 				if current := inst.Threads[target.ResumeThreadID]; current != nil {
 					thread = current
 					target.ResumeThreadCWD = state.ResolveWorkspaceKey(thread.CWD)
+					target.ResumeWorkspaceKey = state.ResolveWorkspaceKey(target.ResumeWorkspaceKey, thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 				}
 			}
 			target.ResumeThreadTitle = threadtitle.StoredTitle(target.ResumeThreadTitle, threadtitle.Context{
@@ -318,7 +319,7 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 			if pending.PrepareNewThread {
 				routeMode = state.RouteModeNewThreadReady
 			}
-			if resumeWorkspaceKey := state.ResolveWorkspaceKey(workspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
+			if resumeWorkspaceKey := state.ResolveWorkspaceKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
 				return surfaceResumeTarget{
 					ResumeWorkspaceKey: resumeWorkspaceKey,
 					ResumeRouteMode:    string(routeMode),
@@ -330,7 +331,7 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 			ResumeThreadID:     strings.TrimSpace(pending.ThreadID),
 			ResumeThreadTitle:  strings.TrimSpace(pending.ThreadTitle),
 			ResumeThreadCWD:    state.ResolveWorkspaceKey(pending.ThreadCWD),
-			ResumeWorkspaceKey: state.ResolveWorkspaceKey(workspaceKey, pending.ThreadCWD),
+			ResumeWorkspaceKey: state.ResolveWorkspaceKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD),
 			ResumeRouteMode:    string(state.RouteModePinned),
 			ResumeHeadless:     true,
 		}, true
@@ -446,16 +447,12 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.
 		if recovery.Entry.ResumeHeadless && a.shouldDeferHeadlessResumeUntilInitialRefreshLocked(recovery.Entry, allowMissingTargetFailure) {
 			continue
 		}
-		workspaceKey := recovery.Entry.ResumeWorkspaceKey
-		if recovery.Entry.ResumeHeadless {
-			workspaceKey = ""
-		}
 		restoreEvents, result := a.service.TryAutoResumeHeadlessSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
 			InstanceID:       recovery.Entry.ResumeInstanceID,
 			ThreadID:         recovery.Entry.ResumeThreadID,
 			ThreadTitle:      recovery.Entry.ResumeThreadTitle,
 			ThreadCWD:        recovery.Entry.ResumeThreadCWD,
-			WorkspaceKey:     workspaceKey,
+			WorkspaceKey:     recovery.Entry.ResumeWorkspaceKey,
 			Backend:          agentproto.Backend(recovery.Entry.Backend),
 			PrepareNewThread: strings.TrimSpace(recovery.Entry.ResumeRouteMode) == string(state.RouteModeNewThreadReady),
 			ResumeHeadless:   recovery.Entry.ResumeHeadless,

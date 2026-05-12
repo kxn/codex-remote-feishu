@@ -35,6 +35,7 @@ type claudeSessionMeta struct {
 	ID                   string
 	Title                string
 	Preview              string
+	WorkspaceKey         string
 	CWD                  string
 	Model                string
 	AccessMode           string
@@ -191,7 +192,7 @@ func scanSessionEntries(dirs []string, workspaceRoot string, strictWorkspaceFilt
 			if err != nil || strings.TrimSpace(meta.ID) == "" {
 				continue
 			}
-			if strictWorkspaceFilter && !sameWorkspaceCWD(meta.CWD, workspaceRoot) {
+			if strictWorkspaceFilter && !sameWorkspaceCWD(meta.WorkspaceKey, workspaceRoot) {
 				continue
 			}
 			record := claudeSessionEntry{
@@ -239,6 +240,7 @@ func buildSessionThreadSnapshot(meta claudeSessionMeta, runtime RuntimeStateSnap
 		ThreadID:      threadID,
 		Name:          strings.TrimSpace(meta.Title),
 		Preview:       strings.TrimSpace(meta.Preview),
+		WorkspaceKey:  strings.TrimSpace(meta.WorkspaceKey),
 		CWD:           strings.TrimSpace(meta.CWD),
 		Model:         model,
 		AccessMode:    accessMode,
@@ -350,13 +352,14 @@ func readSessionListMeta(filePath string) (claudeSessionMeta, error) {
 		UpdatedAt: stat.ModTime(),
 	}
 	parseSessionChunkReverse(tail, func(entry map[string]any) bool {
-		populateSessionMeta(&meta, entry)
-		return sessionMetaComplete(meta)
+		populateSessionTailMeta(&meta, entry)
+		return sessionTailMetaComplete(meta)
 	})
 	parseSessionChunkForward(head, func(entry map[string]any) bool {
-		populateSessionMeta(&meta, entry)
-		return sessionMetaComplete(meta)
+		populateSessionHeadMeta(&meta, entry)
+		return sessionHeadMetaComplete(meta)
 	})
+	meta.WorkspaceKey = firstNonEmptyString(meta.WorkspaceKey, meta.CWD)
 	selection := claudePermissionSelectionFromNative(meta.NativePermissionMode)
 	meta.AccessMode = selection.AccessMode
 	meta.PlanMode = selection.PlanMode
@@ -368,7 +371,7 @@ func readSessionListMeta(filePath string) (claudeSessionMeta, error) {
 	return meta, nil
 }
 
-func populateSessionMeta(meta *claudeSessionMeta, entry map[string]any) {
+func populateSessionTailMeta(meta *claudeSessionMeta, entry map[string]any) {
 	if meta == nil {
 		return
 	}
@@ -389,8 +392,33 @@ func populateSessionMeta(meta *claudeSessionMeta, entry map[string]any) {
 	}
 }
 
-func sessionMetaComplete(meta claudeSessionMeta) bool {
+func populateSessionHeadMeta(meta *claudeSessionMeta, entry map[string]any) {
+	if meta == nil {
+		return
+	}
+	if meta.WorkspaceKey == "" {
+		meta.WorkspaceKey = strings.TrimSpace(lookupStringFromAny(entry["cwd"]))
+	}
+	if meta.Title == "" {
+		meta.Title = sessionEntryTitle(entry)
+	}
+	if meta.Preview == "" {
+		meta.Preview = sessionEntryPreview(entry)
+	}
+	if meta.Model == "" {
+		meta.Model = strings.TrimSpace(lookupStringFromAny(entry["model"]))
+	}
+	if meta.NativePermissionMode == "" {
+		meta.NativePermissionMode = strings.TrimSpace(lookupStringFromAny(entry["permissionMode"]))
+	}
+}
+
+func sessionTailMetaComplete(meta claudeSessionMeta) bool {
 	return meta.CWD != "" && meta.Title != "" && meta.Preview != ""
+}
+
+func sessionHeadMetaComplete(meta claudeSessionMeta) bool {
+	return meta.WorkspaceKey != "" && meta.Title != "" && meta.Preview != ""
 }
 
 func readSessionHeadTail(filePath string, size int64) (string, string, error) {

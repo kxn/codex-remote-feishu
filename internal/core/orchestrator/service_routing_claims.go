@@ -110,7 +110,7 @@ func mergedThreadWorkspaceClaimKey(view *mergedThreadView) string {
 	if view == nil {
 		return ""
 	}
-	if key := normalizeWorkspaceClaimKey(threadCWD(view)); key != "" {
+	if key := threadWorkspaceKey(view); key != "" {
 		return key
 	}
 	return instanceWorkspaceClaimKey(view.Inst)
@@ -137,7 +137,7 @@ func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord
 		return key
 	}
 	if pending := surface.PendingHeadless; pending != nil {
-		if key := normalizeWorkspaceClaimKey(pending.ThreadCWD); key != "" {
+		if key := normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)); key != "" {
 			surface.ClaimedWorkspaceKey = key
 			return key
 		}
@@ -165,7 +165,7 @@ func (s *Service) surfaceAttachmentDisplayName(surface *state.SurfaceConsoleReco
 		}
 		if inst != nil {
 			for _, thread := range visibleThreads(inst) {
-				if key := state.ResolveWorkspaceKey(thread.CWD); key != "" {
+				if key := threadWorkspaceKeyFromRecord(thread); key != "" {
 					return key
 				}
 			}

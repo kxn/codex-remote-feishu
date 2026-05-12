@@ -127,6 +127,7 @@ type ThreadSnapshotRecord struct {
 	Source          *ThreadSourceRecord  `json:"source,omitempty"`
 	Name            string               `json:"name,omitempty"`
 	Preview         string               `json:"preview,omitempty"`
+	WorkspaceKey    string               `json:"workspaceKey,omitempty"`
 	CWD             string               `json:"cwd,omitempty"`
 	Model           string               `json:"model,omitempty"`
 	ReasoningEffort string               `json:"reasoningEffort,omitempty"`

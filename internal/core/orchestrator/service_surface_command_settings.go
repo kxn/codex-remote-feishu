@@ -201,6 +201,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 				InstanceID:       pending.InstanceID,
 				ThreadID:         pending.ThreadID,
 				ThreadTitle:      pending.ThreadTitle,
+				WorkspaceKey:     pending.WorkspaceKey,
 				ThreadCWD:        pending.ThreadCWD,
 			},
 		})

@@ -149,6 +149,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.S
 	launchContract := s.headlessLaunchContract(surface)
 	s.adoptSurfacePendingHeadlessLaunch(surface, &state.HeadlessLaunchRecord{
 		InstanceID:            instanceID,
+		WorkspaceKey:          workspaceKey,
 		ThreadCWD:             workspaceKey,
 		Backend:               launchContract.Backend,
 		CodexProviderID:       launchContract.CodexProviderID,
@@ -183,6 +184,7 @@ func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.S
 					Kind:             control.DaemonCommandStartHeadless,
 					SurfaceSessionID: surface.SurfaceSessionID,
 					InstanceID:       instanceID,
+					WorkspaceKey:     workspaceKey,
 					ThreadCWD:        workspaceKey,
 				}
 				s.applyHeadlessLaunchContract(command, launchContract)

@@ -379,7 +379,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		return append(processing, filtered...)
 	}
 	if kind == control.FeishuTargetPickerSessionNewThread && surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == workspaceKey {
+		normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
 		filtered := targetPickerFilteredFollowupEvents(events)
 		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, "新会话")
 		processing := s.startTargetPickerProcessingWithSections(
@@ -427,7 +427,7 @@ func targetPickerNewThreadSucceeded(surface *state.SurfaceConsoleRecord, workspa
 		return false
 	}
 	return (surface.RouteMode == state.RouteModeNewThreadReady && normalizeWorkspaceClaimKey(surface.PreparedThreadCWD) == workspaceKey) ||
-		(surface.PendingHeadless != nil && normalizeWorkspaceClaimKey(surface.PendingHeadless.ThreadCWD) == workspaceKey && surface.PendingHeadless.PrepareNewThread)
+		(surface.PendingHeadless != nil && normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey && surface.PendingHeadless.PrepareNewThread)
 }
 
 func (s *Service) requireActiveTargetPicker(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) (*activeTargetPickerRecord, []eventcontract.Event) {

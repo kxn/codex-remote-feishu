@@ -22,7 +22,7 @@ func workspaceRecencyFromThreads(threads []state.ThreadRecord) map[string]time.T
 	workspaces := map[string]time.Time{}
 	for i := range threads {
 		thread := threads[i]
-		workspaceKey := normalizeWorkspaceClaimKey(thread.CWD)
+		workspaceKey := threadWorkspaceKeyFromRecord(&thread)
 		if workspaceKey == "" || workspaceSelectionInternalProbeWorkspace(workspaceKey) {
 			continue
 		}

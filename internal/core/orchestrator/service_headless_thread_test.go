@@ -67,7 +67,7 @@ func TestDetachedUseFreezesHeadlessLaunchContractIntoPendingAndCommand(t *testin
 		Backend:       agentproto.BackendClaude,
 		Online:        false,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/repo", Loaded: true},
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", WorkspaceKey: "/data/dl/repo", CWD: "/data/dl/repo/web", Loaded: true},
 		},
 	})
 
@@ -89,8 +89,13 @@ func TestDetachedUseFreezesHeadlessLaunchContractIntoPendingAndCommand(t *testin
 	if pending.Backend != agentproto.BackendClaude || pending.CodexProviderID != "" || pending.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected pending launch to freeze claude launch contract, got %#v", pending)
 	}
+	if pending.WorkspaceKey != "/data/dl/repo" || pending.ThreadCWD != "/data/dl/repo/web" {
+		t.Fatalf("expected pending launch to separate workspace root from last active cwd, got %#v", pending)
+	}
 	if got := events[1].DaemonCommand; got.Backend != agentproto.BackendClaude || got.CodexProviderID != "" || got.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected daemon command to match frozen launch contract, got %#v", got)
+	} else if got.WorkspaceKey != "/data/dl/repo" || got.ThreadCWD != "/data/dl/repo/web" {
+		t.Fatalf("expected daemon command to launch from stable workspace root while preserving last active cwd, got %#v", got)
 	}
 }
 

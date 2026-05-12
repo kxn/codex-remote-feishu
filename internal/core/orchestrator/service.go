@@ -514,6 +514,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		inst.ObservedFocusedThreadID = event.ThreadID
 		thread := s.ensureThread(inst, event.ThreadID)
+		thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 		thread.Loaded = true
 		if event.CWD != "" {
 			thread.CWD = event.CWD
@@ -526,6 +527,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)
+		thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 		if forkedFromID := strings.TrimSpace(metadataString(event.Metadata, "forkedFromId")); forkedFromID != "" {
 			thread.ForkedFromID = forkedFromID
 		}
@@ -600,6 +602,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			if current == nil {
 				current = &state.ThreadRecord{ThreadID: thread.ThreadID}
 			}
+			current.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, current.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 			current.TrafficClass = agentproto.TrafficClassPrimary
 			if thread.Name != "" {
 				current.Name = thread.Name
@@ -649,6 +652,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		if event.ThreadID != "" {
 			inst.ObservedFocusedThreadID = event.ThreadID
 			thread := s.ensureThread(inst, event.ThreadID)
+			thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 			if event.CWD != "" {
 				thread.CWD = event.CWD
 			}
@@ -695,6 +699,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			if event.ThreadID != "" {
 				inst.ObservedFocusedThreadID = event.ThreadID
 				thread := s.ensureThread(inst, event.ThreadID)
+				thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 				thread.Loaded = true
 				if event.CWD != "" {
 					thread.CWD = event.CWD

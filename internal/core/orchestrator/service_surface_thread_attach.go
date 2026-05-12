@@ -177,6 +177,9 @@ func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.Su
 
 	thread := s.ensureThread(inst, view.ThreadID)
 	if view.Thread != nil {
+		if strings.TrimSpace(view.Thread.WorkspaceKey) != "" {
+			thread.WorkspaceKey = strings.TrimSpace(view.Thread.WorkspaceKey)
+		}
 		if strings.TrimSpace(view.Thread.Name) != "" {
 			thread.Name = strings.TrimSpace(view.Thread.Name)
 		}
@@ -202,6 +205,7 @@ func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.Su
 		thread.LastUsedAt = view.Thread.LastUsedAt
 		thread.ListOrder = view.Thread.ListOrder
 	}
+	thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 	if mode == attachSurfaceToKnownThreadHeadlessRestore || mode == attachSurfaceToKnownThreadSurfaceResume {
 		s.clearThreadReplay(inst, view.ThreadID)
 	} else {
@@ -344,8 +348,8 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 	if surface == nil || view == nil {
 		return nil
 	}
-	cwd := strings.TrimSpace(threadCWD(view))
-	if cwd == "" {
+	workspaceKey := mergedThreadWorkspaceClaimKey(view)
+	if workspaceKey == "" {
 		if mode == startHeadlessModeHeadlessRestore {
 			return []eventcontract.Event{{
 				Kind:             eventcontract.KindNotice,
@@ -355,7 +359,8 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 		}
 		return notice(surface, "thread_cwd_missing", "目标会话缺少可恢复的工作目录，当前无法在后台恢复该会话。")
 	}
-	if owner := s.workspaceBusyOwnerForSurface(surface, cwd); owner != nil {
+	threadCWD := strings.TrimSpace(threadCWD(view))
+	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		if mode == startHeadlessModeHeadlessRestore {
 			return []eventcontract.Event{{
 				Kind:             eventcontract.KindNotice,
@@ -381,7 +386,7 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 	}
 
 	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, cleanup)
-	if !s.claimWorkspace(surface, cwd) {
+	if !s.claimWorkspace(surface, workspaceKey) {
 		if s.surfaceUsesWorkspaceClaims(surface) {
 			if mode == startHeadlessModeHeadlessRestore {
 				return append(events, eventcontract.Event{
@@ -423,7 +428,8 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 		ThreadTitle:           threadTitle,
 		ThreadName:            threadName,
 		ThreadPreview:         threadPreview,
-		ThreadCWD:             cwd,
+		WorkspaceKey:          workspaceKey,
+		ThreadCWD:             threadCWD,
 		Backend:               launchContract.Backend,
 		CodexProviderID:       launchContract.CodexProviderID,
 		ClaudeProfileID:       launchContract.ClaudeProfileID,
@@ -456,7 +462,8 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 				InstanceID:       instanceID,
 				ThreadID:         view.ThreadID,
 				ThreadTitle:      threadTitle,
-				ThreadCWD:        cwd,
+				WorkspaceKey:     workspaceKey,
+				ThreadCWD:        threadCWD,
 				AutoRestore:      mode == startHeadlessModeHeadlessRestore,
 			}
 			s.applyHeadlessLaunchContract(command, launchContract)

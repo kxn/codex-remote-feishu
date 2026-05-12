@@ -469,7 +469,28 @@ func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *tes
 
 	stateDir := t.TempDir()
 	app := newRestoreHintTestApp(stateDir)
-	seedHeadlessInstance(app, "inst-headless-1", "thread-1")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-headless-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Backend:                 agentproto.BackendCodex,
+		Source:                  "headless",
+		Managed:                 true,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID:      "thread-1",
+				Name:          "修复登录流程",
+				WorkspaceKey:  "/data/dl/droid",
+				CWD:           "/data/dl/droid/web",
+				Loaded:        true,
+				RuntimeStatus: &agentproto.ThreadRuntimeStatus{Type: agentproto.ThreadRuntimeStatusTypeIdle},
+			},
+		},
+	})
 
 	app.HandleAction(context.Background(), control.Action{
 		Kind:             control.ActionAttachInstance,
@@ -487,8 +508,11 @@ func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *tes
 	if entry.ResumeInstanceID != "inst-headless-1" || entry.ResumeThreadID != "thread-1" {
 		t.Fatalf("unexpected persisted headless resume target: %#v", entry)
 	}
-	if entry.ResumeThreadTitle != "修复登录流程" || entry.ResumeThreadCWD != "/data/dl/droid" {
+	if entry.ResumeThreadTitle != "修复登录流程" || entry.ResumeThreadCWD != "/data/dl/droid/web" {
 		t.Fatalf("expected persisted headless thread metadata, got %#v", entry)
+	}
+	if entry.ResumeWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected persisted headless resume entry to keep stable workspace root separate from active cwd, got %#v", entry)
 	}
 	if !entry.ResumeHeadless {
 		t.Fatalf("expected persisted resume entry to mark headless recovery, got %#v", entry)
@@ -1331,6 +1355,61 @@ func TestDaemonNormalResumeHeadlessTargetSkipsWorkspaceFallback(t *testing.T) {
 		if strings.Contains(operation.CardBody, "已先回到工作区") {
 			t.Fatalf("expected ResumeHeadless target to skip workspace fallback notice, got %#v", gateway.operations)
 		}
+	}
+}
+
+func TestDaemonHeadlessResumePassesStableWorkspaceRootToLaunch(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		Backend:            "claude",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    "/data/dl/repo/web",
+		ResumeWorkspaceKey: "/data/dl/repo",
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+
+	app := newRestoreHintTestApp(stateDir)
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4321, nil
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-headless-pool",
+			DisplayName:   "headless",
+			WorkspaceRoot: filepath.Join("/data/dl/.local/state", "codex-remote"),
+			WorkspaceKey:  filepath.Join("/data/dl/.local/state", "codex-remote"),
+			ShortName:     "headless",
+			Source:        "headless",
+			Managed:       true,
+			PID:           4321,
+		},
+	})
+	app.onEvents(context.Background(), "inst-headless-pool", []agentproto.Event{{
+		Kind:    agentproto.EventThreadsSnapshot,
+		Threads: nil,
+	}})
+
+	if captured.WorkDir != "/data/dl/repo" {
+		t.Fatalf("expected headless launch to start from stable workspace root, got %#v", captured)
+	}
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.PendingHeadless.InstanceID == "" {
+		t.Fatalf("expected pending headless launch after daemon resume, got %#v", snapshot)
+	}
+	if snapshot.PendingHeadless.WorkspaceKey != "/data/dl/repo" || snapshot.PendingHeadless.ThreadCWD != "/data/dl/repo/web" {
+		t.Fatalf("expected pending headless resume to keep stable workspace root separate from last active cwd, got %#v", snapshot.PendingHeadless)
 	}
 }
 

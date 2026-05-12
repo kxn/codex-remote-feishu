@@ -949,55 +949,6 @@ func TestListWorkspacesShowsCurrentSummaryAndSortsAttachableFirst(t *testing.T) 
 	}
 }
 
-func TestListWorkspacesUsesVisibleThreadCWDsForBroadHeadlessPool(t *testing.T) {
-	now := time.Date(2026, 4, 9, 19, 30, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	for i := 1; i <= 2; i++ {
-		svc.UpsertInstance(&state.InstanceRecord{
-			InstanceID:    fmt.Sprintf("inst-headless-%d", i),
-			DisplayName:   fmt.Sprintf("headless-%d", i),
-			WorkspaceRoot: "/data/dl",
-			WorkspaceKey:  "/data/dl",
-			ShortName:     "dl",
-			Source:        "headless",
-			Managed:       true,
-			Online:        true,
-			Threads: map[string]*state.ThreadRecord{
-				fmt.Sprintf("thread-fs-%d", i): {ThreadID: fmt.Sprintf("thread-fs-%d", i), Name: "atlas", CWD: "/data/dl/atlas", Loaded: true},
-				fmt.Sprintf("thread-sf-%d", i): {ThreadID: fmt.Sprintf("thread-sf-%d", i), Name: "harbor", CWD: "/data/dl/harbor", Loaded: true},
-			},
-		})
-	}
-
-	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionListInstances,
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-	})
-
-	if len(events) != 1 {
-		t.Fatalf("expected one target picker event, got %#v", events)
-	}
-	view := targetPickerFromEvent(t, events[0])
-	if view.Source != control.TargetPickerRequestSourceList || view.Title != "切换工作区与会话" {
-		t.Fatalf("unexpected target picker view: %#v", view)
-	}
-	if len(view.WorkspaceOptions) != 2 {
-		t.Fatalf("expected two real workspaces instead of broad instance root, got %#v", view.WorkspaceOptions)
-	}
-	got := map[string]bool{}
-	for _, option := range view.WorkspaceOptions {
-		if option.Synthetic {
-			continue
-		}
-		got[option.Value] = true
-	}
-	if !got[testutil.WorkspacePath("data", "dl", "atlas")] || !got[testutil.WorkspacePath("data", "dl", "harbor")] || got[testutil.WorkspacePath("data", "dl")] {
-		t.Fatalf("expected thread cwd workspaces only, got %#v", view.WorkspaceOptions)
-	}
-}
-
 func TestListWorkspacesShowsPersistedOnlyWorkspaceAsRecoverable(t *testing.T) {
 	now := time.Date(2026, 4, 10, 14, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

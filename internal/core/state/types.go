@@ -210,6 +210,7 @@ type ThreadRecord struct {
 	FirstUserMessage        string
 	LastUserMessage         string
 	LastAssistantMessage    string
+	WorkspaceKey            string
 	CWD                     string
 	State                   string
 	RuntimeStatus           *agentproto.ThreadRuntimeStatus
@@ -478,6 +479,7 @@ type HeadlessLaunchRecord struct {
 	InstanceID            string
 	ThreadID              string
 	ThreadTitle           string
+	WorkspaceKey          string
 	ThreadCWD             string
 	Backend               agentproto.Backend
 	CodexProviderID       string

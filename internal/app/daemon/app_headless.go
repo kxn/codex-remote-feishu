@@ -183,7 +183,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
 	}
 
-	workDir := strings.TrimSpace(command.ThreadCWD)
+	workDir := strings.TrimSpace(firstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
 	if workDir == "" {
 		workDir = strings.TrimSpace(cfg.Paths.StateDir)
 	}
@@ -204,7 +204,7 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			command.SurfaceSessionID,
 			command.InstanceID,
 			command.ThreadID,
-			command.ThreadCWD,
+			firstNonEmpty(command.WorkspaceKey, command.ThreadCWD),
 			err,
 		)
 		if command.AutoRestore {
