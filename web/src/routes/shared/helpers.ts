@@ -1,4 +1,4 @@
-import { formatError, requestJSON } from "../../lib/api";
+import { type APIErrorShape, formatError, requestJSON } from "../../lib/api";
 import type { AutostartDetectResponse, VSCodeDetectResponse } from "../../lib/types";
 
 export type VSCodeUsageScenario = "current_machine" | "remote_only";
@@ -6,6 +6,14 @@ export type VSCodeUsageScenario = "current_machine" | "remote_only";
 export function blankToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+export function readAPIError(response: { ok: boolean; data: unknown }) {
+  if (response.ok) {
+    return null;
+  }
+  const payload = response.data as APIErrorShape;
+  return payload.error || null;
 }
 
 export async function loadVSCodeState(

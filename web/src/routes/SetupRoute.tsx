@@ -1,10 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   APIRequestError,
-  type APIErrorShape,
-  type JSONResult,
   requestJSON,
-  requestJSONAllowHTTPError,
   requestVoid,
   sendJSON,
 } from "../lib/api";
@@ -16,17 +13,12 @@ import type {
   FeishuAppAutoConfigPublishResponse,
   FeishuAppAutoConfigRequirementStatus,
   FeishuAppResponse,
-  FeishuAppSummary,
-  FeishuAppVerifyResponse,
-  FeishuOnboardingCompleteResponse,
-  FeishuOnboardingSession,
-  FeishuOnboardingSessionResponse,
   OnboardingWorkflowResponse,
   RuntimeRequirementsDetectResponse,
   SetupCompleteResponse,
   VSCodeDetectResponse,
 } from "../lib/types";
-import { vscodeApplyModeForScenario, vscodeIsReady } from "./shared/helpers";
+import { blankToUndefined, vscodeApplyModeForScenario, vscodeIsReady } from "./shared/helpers";
 import {
   autoConfigNoticeTone,
   describeAutoConfigBlockingReason,
@@ -35,6 +27,12 @@ import {
   describeAutoConfigRequirementLabel,
   describeAutoConfigSummary,
 } from "./shared/feishuAutoConfig";
+import {
+  resolveRuntimeApplyFailureTarget,
+  runAutoConfigMutation,
+  saveAndVerifyFeishuApp,
+  useQRCodeOnboardingFlow,
+} from "./shared/feishuFlow";
 
 type SetupStepID =
   | "runtime_requirements"
@@ -58,11 +56,6 @@ type ManualConnectForm = {
   appSecret: string;
 };
 
-type RuntimeApplyFailureDetails = {
-  gatewayId?: string;
-  app?: FeishuAppSummary;
-};
-
 const setupSteps: Array<{ id: SetupStepID; name: string }> = [
   { id: "runtime_requirements", name: "环境检查" },
   { id: "connect", name: "飞书连接" },
@@ -73,7 +66,6 @@ const setupSteps: Array<{ id: SetupStepID; name: string }> = [
   { id: "done", name: "完成" },
 ];
 
-const defaultQRCodePollIntervalSeconds = 5;
 const vscodeApplyTimeoutMs = 10_000;
 export function SetupRoute() {
   const [loading, setLoading] = useState(true);
@@ -84,16 +76,12 @@ export function SetupRoute() {
   const [currentStep, setCurrentStep] =
     useState<SetupStepID>("runtime_requirements");
   const [notice, setNotice] = useState<Notice | null>(null);
-  const [connectMode, setConnectMode] = useState<"qr" | "manual">("qr");
   const [manualForm, setManualForm] = useState<ManualConnectForm>({
     name: "",
     appId: "",
     appSecret: "",
   });
   const [actionBusy, setActionBusy] = useState("");
-  const [onboardingSession, setOnboardingSession] =
-    useState<FeishuOnboardingSession | null>(null);
-  const [connectError, setConnectError] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [finishingSetup, setFinishingSetup] = useState(false);
 
@@ -133,6 +121,24 @@ export function SetupRoute() {
     vscode: isResolvedStageStatus(stageMap.get("vscode") || ""),
     done: currentStep === "done" || normalizeSetupStepID(workflow?.currentStage) === "done",
   };
+  const {
+    connectMode,
+    connectError,
+    onboardingSession,
+    changeConnectMode,
+    clearConnectError,
+    completeQRCodeSession,
+    resetConnectFlow,
+  } = useQRCodeOnboardingFlow({
+    enabled: currentStep === "connect",
+    actionBusy,
+    setActionBusy,
+    sessionsPath: "/api/setup/feishu/onboarding/sessions",
+    onCompleteSuccess: async (appID) => {
+      await loadSetupPage({ preferredAppID: appID });
+      setNotice({ tone: "good", message: "连接验证成功。" });
+    },
+  });
 
   useEffect(() => {
     document.title = title;
@@ -168,36 +174,6 @@ export function SetupRoute() {
       window.scrollTo({ top: 0, behavior: "auto" });
     }
   }, [currentStep]);
-
-  useEffect(() => {
-    if (currentStep !== "connect" || connectMode !== "qr") {
-      return;
-    }
-    if (actionBusy === "qr-start" || actionBusy === "qr-complete") {
-      return;
-    }
-    if (!onboardingSession) {
-      if (!connectError) {
-        void startQRCodeSession();
-      }
-      return;
-    }
-    if (onboardingSession.status === "ready" && !connectError) {
-      void completeQRCodeSession(onboardingSession.id);
-      return;
-    }
-    if (onboardingSession.status !== "pending") {
-      return;
-    }
-    const pollDelaySeconds = Math.max(
-      onboardingSession.pollIntervalSeconds || defaultQRCodePollIntervalSeconds,
-      defaultQRCodePollIntervalSeconds,
-    );
-    const timer = window.setTimeout(() => {
-      void refreshQRCodeSession(onboardingSession.id);
-    }, pollDelaySeconds * 1_000);
-    return () => window.clearTimeout(timer);
-  }, [actionBusy, connectError, connectMode, currentStep, onboardingSession]);
 
   useEffect(() => {
     setPublishConfirmOpen(false);
@@ -249,64 +225,6 @@ export function SetupRoute() {
     });
   }
 
-  function changeConnectMode(nextMode: "qr" | "manual") {
-    setConnectMode(nextMode);
-    setConnectError("");
-    setOnboardingSession(null);
-  }
-
-  async function startQRCodeSession() {
-    setActionBusy("qr-start");
-    setConnectError("");
-    try {
-      const response = await sendJSON<FeishuOnboardingSessionResponse>(
-        "/api/setup/feishu/onboarding/sessions",
-        "POST",
-      );
-      setOnboardingSession(response.session);
-    } catch {
-      setConnectError("暂时无法开始扫码，请稍后重试。");
-    } finally {
-      setActionBusy("");
-    }
-  }
-
-  async function refreshQRCodeSession(sessionID: string) {
-    try {
-      const response = await requestJSON<FeishuOnboardingSessionResponse>(
-        `/api/setup/feishu/onboarding/sessions/${encodeURIComponent(sessionID)}`,
-      );
-      setOnboardingSession(response.session);
-      if (response.session.status === "pending") {
-        setConnectError("");
-      }
-    } catch {
-      setConnectError("扫码状态暂时没有刷新成功，请稍后重试。");
-    }
-  }
-
-  async function completeQRCodeSession(sessionID: string) {
-    setActionBusy("qr-complete");
-    try {
-      const response = await requestJSONAllowHTTPError<FeishuOnboardingCompleteResponse>(
-        `/api/setup/feishu/onboarding/sessions/${encodeURIComponent(sessionID)}/complete`,
-        { method: "POST" },
-      );
-      setOnboardingSession(response.data.session);
-      if (!response.ok) {
-        setConnectError("扫码已经完成，但连接验证没有通过，请重新验证。");
-        return;
-      }
-      await loadSetupPage({ preferredAppID: response.data.app.id });
-      setNotice({ tone: "good", message: "连接验证成功。" });
-      setConnectError("");
-    } catch {
-      setConnectError("扫码已经完成，但当前还不能继续，请稍后重试。");
-    } finally {
-      setActionBusy("");
-    }
-  }
-
   async function submitManualConnect() {
     if (!activeApp && !manualForm.appId.trim()) {
       setNotice({ tone: "danger", message: "请填写完整的 App ID 和 App Secret。" });
@@ -320,29 +238,34 @@ export function SetupRoute() {
     setActionBusy("manual-connect");
     setNotice(null);
     try {
-      let appID = activeApp?.id || "";
-      if (!isReadOnlyApp) {
-        const payload = {
-          name: blankToUndefined(manualForm.name),
-          appId: blankToUndefined(manualForm.appId),
-          appSecret: blankToUndefined(manualForm.appSecret),
-          enabled: true,
-        };
-        const saved = activeApp?.id
-          ? await sendJSON<FeishuAppResponse>(
-              `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}`,
-              "PUT",
-              payload,
-            )
-          : await sendJSON<FeishuAppResponse>("/api/setup/feishu/apps", "POST", payload);
-        appID = saved.app.id;
-      }
-      const verify = await requestJSONAllowHTTPError<FeishuAppVerifyResponse>(
-        `/api/setup/feishu/apps/${encodeURIComponent(appID)}/verify`,
-        { method: "POST" },
-      );
-      await loadSetupPage({ preferredAppID: appID });
-      if (!verify.ok) {
+      const result = await saveAndVerifyFeishuApp({
+        save: async () => {
+          if (isReadOnlyApp) {
+            if (!activeApp?.id) {
+              throw new Error("missing active app");
+            }
+            return activeApp.id;
+          }
+          const payload = {
+            name: blankToUndefined(manualForm.name),
+            appId: blankToUndefined(manualForm.appId),
+            appSecret: blankToUndefined(manualForm.appSecret),
+            enabled: true,
+          };
+          const saved = activeApp?.id
+            ? await sendJSON<FeishuAppResponse>(
+                `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}`,
+                "PUT",
+                payload,
+              )
+            : await sendJSON<FeishuAppResponse>("/api/setup/feishu/apps", "POST", payload);
+          return saved.app.id;
+        },
+        verifyPath: (appID) =>
+          `/api/setup/feishu/apps/${encodeURIComponent(appID)}/verify`,
+        reload: (appID) => loadSetupPage({ preferredAppID: appID }),
+      });
+      if (!result.verified) {
         setNotice({
           tone: "danger",
           message: "连接验证没有通过，请检查 App ID 和 App Secret 后重试。",
@@ -364,12 +287,12 @@ export function SetupRoute() {
     error: unknown,
     fallbackAppID?: string,
   ): Promise<boolean> {
-    if (!(error instanceof APIRequestError) || error.code !== "gateway_apply_failed") {
+    const appID = resolveRuntimeApplyFailureTarget(error, fallbackAppID);
+    if (!appID) {
       return false;
     }
-    const details = error.details as RuntimeApplyFailureDetails | undefined;
     await loadSetupPage({
-      preferredAppID: details?.app?.id || details?.gatewayId || fallbackAppID,
+      preferredAppID: appID,
     });
     setNotice({
       tone: "warn",
@@ -386,28 +309,21 @@ export function SetupRoute() {
     setActionBusy("auto-config-apply");
     setNotice(null);
     try {
-      const response = await requestJSONAllowHTTPError<
-        FeishuAppAutoConfigApplyResponse | APIErrorShape
-      >(`/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/apply`, {
-        method: "POST",
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigApplyResponse>({
+        path: `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/apply`,
+        init: { method: "POST" },
+        fallbackErrorMessage: "自动补齐没有完成，请稍后重试。",
+        fallbackSuccessMessage: "自动配置状态已更新。",
       });
-      if (!response.ok) {
-        const payload = readAPIError(response);
+      if (!result.ok) {
         setNotice({
           tone: "danger",
-          message:
-            typeof payload?.details === "string" && payload.details.trim()
-              ? payload.details.trim()
-              : "自动补齐没有完成，请稍后重试。",
+          message: result.message,
         });
         return;
       }
-      const payload = response.data as FeishuAppAutoConfigApplyResponse;
-      await loadSetupPage({ preferredAppID: payload.app.id });
-      setNotice({
-        tone: autoConfigNoticeTone(payload.result.status),
-        message: payload.result.summary?.trim() || "自动配置状态已更新。",
-      });
+      await loadSetupPage({ preferredAppID: result.payload.app.id });
+      setNotice(result.notice);
     } catch {
       setNotice({
         tone: "danger",
@@ -425,32 +341,27 @@ export function SetupRoute() {
     setActionBusy("auto-config-publish");
     setNotice(null);
     try {
-      const response = await requestJSONAllowHTTPError<
-        FeishuAppAutoConfigPublishResponse | APIErrorShape
-      >(`/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/publish`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigPublishResponse>({
+        path: `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/publish`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
         },
-        body: JSON.stringify({}),
+        fallbackErrorMessage: "提交发布没有成功，请稍后重试。",
+        fallbackSuccessMessage: "发布状态已更新。",
       });
-      if (!response.ok) {
-        const payload = readAPIError(response);
+      if (!result.ok) {
         setNotice({
           tone: "danger",
-          message:
-            typeof payload?.details === "string" && payload.details.trim()
-              ? payload.details.trim()
-              : "提交发布没有成功，请稍后重试。",
+          message: result.message,
         });
         return;
       }
-      const payload = response.data as FeishuAppAutoConfigPublishResponse;
-      await loadSetupPage({ preferredAppID: payload.app.id });
-      setNotice({
-        tone: autoConfigNoticeTone(payload.result.status),
-        message: payload.result.summary?.trim() || "发布状态已更新。",
-      });
+      await loadSetupPage({ preferredAppID: result.payload.app.id });
+      setNotice(result.notice);
       setPublishConfirmOpen(false);
     } catch {
       setNotice({
@@ -808,10 +719,7 @@ export function SetupRoute() {
                   className="secondary-button"
                   type="button"
                   disabled={actionBusy === "qr-start"}
-                  onClick={() => {
-                    setOnboardingSession(null);
-                    setConnectError("");
-                  }}
+                  onClick={() => resetConnectFlow()}
                 >
                   重新扫码
                 </button>
@@ -823,7 +731,7 @@ export function SetupRoute() {
                   disabled={actionBusy === "qr-complete"}
                   onClick={() => {
                     if (onboardingSession?.id) {
-                      setConnectError("");
+                      clearConnectError();
                       void completeQRCodeSession(onboardingSession.id);
                     }
                   }}
@@ -1543,17 +1451,4 @@ function buildSetupPageTitle(bootstrap: BootstrapState | null): string {
   const name = bootstrap?.product.name?.trim() || "Codex Remote Feishu";
   const version = bootstrap?.product.version?.trim();
   return version ? `${name} ${version} 安装程序` : `${name} 安装程序`;
-}
-
-function blankToUndefined(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function readAPIError(result: JSONResult<unknown>) {
-  if (result.ok) {
-    return null;
-  }
-  const payload = result.data as APIErrorShape;
-  return payload.error || null;
 }

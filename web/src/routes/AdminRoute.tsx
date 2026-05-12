@@ -20,11 +20,7 @@ import type {
   FeishuAppAutoConfigRequirementStatus,
   FeishuAppResponse,
   FeishuAppSummary,
-  FeishuAppVerifyResponse,
   FeishuAppsResponse,
-  FeishuOnboardingCompleteResponse,
-  FeishuOnboardingSession,
-  FeishuOnboardingSessionResponse,
   ImageStagingCleanupResponse,
   ImageStagingStatusResponse,
   LogsStorageCleanupResponse,
@@ -34,8 +30,10 @@ import type {
   VSCodeDetectResponse,
 } from "../lib/types";
 import {
+  blankToUndefined,
   loadAutostartState,
   loadVSCodeState,
+  readAPIError,
   vscodeApplyModeForScenario,
   vscodeIsReady,
 } from "./shared/helpers";
@@ -48,6 +46,12 @@ import {
   describeAutoConfigSummary,
   describeAutoConfigTag,
 } from "./shared/feishuAutoConfig";
+import {
+  resolveRuntimeApplyFailureTarget,
+  runAutoConfigMutation,
+  saveAndVerifyFeishuApp,
+  useQRCodeOnboardingFlow,
+} from "./shared/feishuFlow";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
 import { CodexProviderSection } from "./admin/CodexProviderSection";
 
@@ -64,11 +68,6 @@ type AutoConfigState =
   | { status: "ready"; data: FeishuAppAutoConfigPlanResponse }
   | { status: "error"; message: string };
 
-type RuntimeApplyFailureDetails = {
-  gatewayId?: string;
-  app?: FeishuAppSummary;
-};
-
 type NewRobotForm = {
   name: string;
   appId: string;
@@ -76,8 +75,6 @@ type NewRobotForm = {
 };
 
 const newRobotID = "new";
-const defaultQRCodePollIntervalSeconds = 5;
-
 export function AdminRoute() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -97,10 +94,6 @@ export function AdminRoute() {
     appId: "",
     appSecret: "",
   });
-  const [connectMode, setConnectMode] = useState<"qr" | "manual">("qr");
-  const [onboardingSession, setOnboardingSession] =
-    useState<FeishuOnboardingSession | null>(null);
-  const [connectError, setConnectError] = useState("");
   const [autostart, setAutostart] = useState<AutostartDetectResponse | null>(
     null,
   );
@@ -140,6 +133,26 @@ export function AdminRoute() {
       { fileCount: 0, bytes: 0 },
     );
   }, [previewMap]);
+  const {
+    connectMode,
+    connectError,
+    onboardingSession,
+    changeConnectMode,
+    clearConnectError,
+    completeQRCodeSession,
+    resetConnectFlow,
+  } = useQRCodeOnboardingFlow({
+    enabled: selectedRobotID === newRobotID,
+    actionBusy,
+    setActionBusy,
+    sessionsPath: "/api/admin/feishu/onboarding/sessions",
+    onCompleteSuccess: async (appID) => {
+      await loadAdminPage({ preferredRobotID: appID });
+      setSelectedRobotID(appID);
+      setDetailNotice({ tone: "good", message: "已完成连接验证。" });
+    },
+    resetSessionOnSuccess: true,
+  });
 
   useEffect(() => {
     document.title = versionTitle;
@@ -177,39 +190,8 @@ export function AdminRoute() {
     if (selectedRobotID === newRobotID) {
       return;
     }
-    setConnectError("");
-    setOnboardingSession(null);
+    resetConnectFlow();
   }, [selectedRobotID]);
-
-  useEffect(() => {
-    if (selectedRobotID !== newRobotID || connectMode !== "qr") {
-      return;
-    }
-    if (actionBusy === "qr-start" || actionBusy === "qr-complete") {
-      return;
-    }
-    if (!onboardingSession) {
-      if (!connectError) {
-        void startQRCodeSession();
-      }
-      return;
-    }
-    if (onboardingSession.status === "ready" && !connectError) {
-      void completeQRCodeSession(onboardingSession.id);
-      return;
-    }
-    if (onboardingSession.status !== "pending") {
-      return;
-    }
-    const pollDelaySeconds = Math.max(
-      onboardingSession.pollIntervalSeconds || defaultQRCodePollIntervalSeconds,
-      defaultQRCodePollIntervalSeconds,
-    );
-    const timer = window.setTimeout(() => {
-      void refreshQRCodeSession(onboardingSession.id);
-    }, pollDelaySeconds * 1_000);
-    return () => window.clearTimeout(timer);
-  }, [actionBusy, connectError, connectMode, onboardingSession, selectedRobotID]);
 
   async function loadAdminPage(options?: { preferredRobotID?: string }) {
     setLoading(true);
@@ -322,66 +304,6 @@ export function AdminRoute() {
     }
   }
 
-  function changeConnectMode(nextMode: "qr" | "manual") {
-    setConnectMode(nextMode);
-    setConnectError("");
-    setOnboardingSession(null);
-  }
-
-  async function startQRCodeSession() {
-    setActionBusy("qr-start");
-    setConnectError("");
-    try {
-      const response = await sendJSON<FeishuOnboardingSessionResponse>(
-        "/api/admin/feishu/onboarding/sessions",
-        "POST",
-      );
-      setOnboardingSession(response.session);
-    } catch {
-      setConnectError("暂时无法开始扫码，请稍后重试。");
-    } finally {
-      setActionBusy("");
-    }
-  }
-
-  async function refreshQRCodeSession(sessionID: string) {
-    try {
-      const response = await requestJSON<FeishuOnboardingSessionResponse>(
-        `/api/admin/feishu/onboarding/sessions/${encodeURIComponent(sessionID)}`,
-      );
-      setOnboardingSession(response.session);
-      if (response.session.status === "pending") {
-        setConnectError("");
-      }
-    } catch {
-      setConnectError("扫码状态暂时没有刷新成功，请稍后重试。");
-    }
-  }
-
-  async function completeQRCodeSession(sessionID: string) {
-    setActionBusy("qr-complete");
-    try {
-      const response = await requestJSONAllowHTTPError<FeishuOnboardingCompleteResponse>(
-        `/api/admin/feishu/onboarding/sessions/${encodeURIComponent(sessionID)}/complete`,
-        { method: "POST" },
-      );
-      setOnboardingSession(response.data.session);
-      if (!response.ok) {
-        setConnectError("扫码已经完成，但连接验证没有通过，请重新验证。");
-        return;
-      }
-      await loadAdminPage({ preferredRobotID: response.data.app.id });
-      setSelectedRobotID(response.data.app.id);
-      setDetailNotice({ tone: "good", message: "已完成连接验证。" });
-      setConnectError("");
-      setOnboardingSession(null);
-    } catch {
-      setConnectError("扫码已经完成，但当前还不能继续，请稍后重试。");
-    } finally {
-      setActionBusy("");
-    }
-  }
-
   async function createRobot() {
     if (!newRobotForm.appId.trim() || !newRobotForm.appSecret.trim()) {
       setDetailNotice({
@@ -393,19 +315,22 @@ export function AdminRoute() {
 
     setActionBusy("create-robot");
     try {
-      const saved = await sendJSON<FeishuAppResponse>("/api/admin/feishu/apps", "POST", {
-        name: blankToUndefined(newRobotForm.name),
-        appId: blankToUndefined(newRobotForm.appId),
-        appSecret: blankToUndefined(newRobotForm.appSecret),
-        enabled: true,
+      const result = await saveAndVerifyFeishuApp({
+        save: async () => {
+          const saved = await sendJSON<FeishuAppResponse>("/api/admin/feishu/apps", "POST", {
+            name: blankToUndefined(newRobotForm.name),
+            appId: blankToUndefined(newRobotForm.appId),
+            appSecret: blankToUndefined(newRobotForm.appSecret),
+            enabled: true,
+          });
+          return saved.app.id;
+        },
+        verifyPath: (appID) =>
+          `/api/admin/feishu/apps/${encodeURIComponent(appID)}/verify`,
+        reload: (appID) => loadAdminPage({ preferredRobotID: appID }),
       });
-      const verify = await requestJSONAllowHTTPError<FeishuAppVerifyResponse>(
-        `/api/admin/feishu/apps/${encodeURIComponent(saved.app.id)}/verify`,
-        { method: "POST" },
-      );
-      await loadAdminPage({ preferredRobotID: saved.app.id });
-      setSelectedRobotID(saved.app.id);
-      if (!verify.ok) {
+      setSelectedRobotID(result.appID);
+      if (!result.verified) {
         setDetailNotice({
           tone: "danger",
           message: "连接验证没有通过，请检查 App ID 和 App Secret 后重试。",
@@ -425,16 +350,14 @@ export function AdminRoute() {
   }
 
   async function maybeRecoverRuntimeApplyFailure(error: unknown): Promise<boolean> {
-    if (!(error instanceof APIRequestError) || error.code !== "gateway_apply_failed") {
+    const appID = resolveRuntimeApplyFailureTarget(error);
+    if (!appID) {
       return false;
     }
-    const details = error.details as RuntimeApplyFailureDetails | undefined;
     await loadAdminPage({
-      preferredRobotID: details?.app?.id || details?.gatewayId,
+      preferredRobotID: appID,
     });
-    if (details?.app?.id || details?.gatewayId) {
-      setSelectedRobotID(details?.app?.id || details?.gatewayId || newRobotID);
-    }
+    setSelectedRobotID(appID);
     setDetailNotice({
       tone: "warn",
       message:
@@ -467,28 +390,21 @@ export function AdminRoute() {
     }
     setActionBusy("auto-config-apply");
     try {
-      const response = await requestJSONAllowHTTPError<
-        FeishuAppAutoConfigApplyResponse | APIErrorShape
-      >(`/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/apply`, {
-        method: "POST",
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigApplyResponse>({
+        path: `/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/apply`,
+        init: { method: "POST" },
+        fallbackErrorMessage: "自动补齐没有完成，请稍后重试。",
+        fallbackSuccessMessage: "自动配置状态已更新。",
       });
-      if (!response.ok) {
-        const payload = readAPIError(response);
+      if (!result.ok) {
         setDetailNotice({
           tone: "danger",
-          message:
-            typeof payload?.details === "string" && payload.details.trim()
-              ? payload.details.trim()
-              : "自动补齐没有完成，请稍后重试。",
+          message: result.message,
         });
         return;
       }
-      const payload = response.data as FeishuAppAutoConfigApplyResponse;
-      syncAutoConfigPlan(payload.app, payload.result.plan);
-      setDetailNotice({
-        tone: autoConfigNoticeTone(payload.result.status),
-        message: payload.result.summary?.trim() || "自动配置状态已更新。",
-      });
+      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
+      setDetailNotice(result.notice);
     } catch {
       setDetailNotice({
         tone: "danger",
@@ -505,32 +421,27 @@ export function AdminRoute() {
     }
     setActionBusy("auto-config-publish");
     try {
-      const response = await requestJSONAllowHTTPError<
-        FeishuAppAutoConfigPublishResponse | APIErrorShape
-      >(`/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/publish`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigPublishResponse>({
+        path: `/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/publish`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
         },
-        body: JSON.stringify({}),
+        fallbackErrorMessage: "提交发布没有成功，请稍后重试。",
+        fallbackSuccessMessage: "发布状态已更新。",
       });
-      if (!response.ok) {
-        const payload = readAPIError(response);
+      if (!result.ok) {
         setDetailNotice({
           tone: "danger",
-          message:
-            typeof payload?.details === "string" && payload.details.trim()
-              ? payload.details.trim()
-              : "提交发布没有成功，请稍后重试。",
+          message: result.message,
         });
         return;
       }
-      const payload = response.data as FeishuAppAutoConfigPublishResponse;
-      syncAutoConfigPlan(payload.app, payload.result.plan);
-      setDetailNotice({
-        tone: autoConfigNoticeTone(payload.result.status),
-        message: payload.result.summary?.trim() || "发布状态已更新。",
-      });
+      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
+      setDetailNotice(result.notice);
       setPublishTargetID(null);
     } catch {
       setDetailNotice({
@@ -935,10 +846,7 @@ export function AdminRoute() {
                         className="secondary-button"
                         type="button"
                         disabled={actionBusy === "qr-start"}
-                        onClick={() => {
-                          setOnboardingSession(null);
-                          setConnectError("");
-                        }}
+                        onClick={() => resetConnectFlow()}
                       >
                         重新扫码
                       </button>
@@ -950,7 +858,7 @@ export function AdminRoute() {
                         disabled={actionBusy === "qr-complete"}
                         onClick={() => {
                           if (onboardingSession?.id) {
-                            setConnectError("");
+                            clearConnectError();
                             void completeQRCodeSession(onboardingSession.id);
                           }
                         }}
@@ -1417,19 +1325,6 @@ async function safeRequest<T>(path: string) {
       error: "暂时没有读取成功，请稍后重试。",
     };
   }
-}
-
-function blankToUndefined(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function readAPIError(response: { ok: boolean; data: unknown }) {
-  if (response.ok) {
-    return null;
-  }
-  const payload = response.data as APIErrorShape;
-  return payload.error || null;
 }
 
 function buildAdminPageTitle(bootstrap: BootstrapState | null): string {
