@@ -370,9 +370,6 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if merged.Source == nil && secondary.Source != nil {
 		merged.Source = agentproto.CloneThreadSourceRecord(secondary.Source)
 	}
-	if strings.TrimSpace(merged.State) == "" && merged.RuntimeStatus == nil {
-		merged.State = threadLegacyState(secondary)
-	}
 	if strings.TrimSpace(merged.ExplicitModel) == "" {
 		merged.ExplicitModel = strings.TrimSpace(secondary.ExplicitModel)
 	}

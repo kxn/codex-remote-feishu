@@ -19,16 +19,6 @@ func WorkspaceDefaultsStorageKey(workspaceKey string, contract InstanceBackendCo
 	return string(contract.Backend) + workspaceDefaultsKeySeparator + identity + workspaceDefaultsKeySeparator + workspaceKey
 }
 
-// LegacyWorkspaceDefaultsStorageKey returns the pre-provider/profile key used
-// before workspace defaults were scoped by backend identity.
-func LegacyWorkspaceDefaultsStorageKey(workspaceKey string, backend agentproto.Backend) string {
-	workspaceKey = ResolveWorkspaceKey(workspaceKey)
-	if workspaceKey == "" {
-		return ""
-	}
-	return string(NormalizeHeadlessBackend(backend)) + workspaceDefaultsKeySeparator + workspaceKey
-}
-
 func WorkspaceDefaultsIdentity(contract InstanceBackendContract) string {
 	contract = NormalizeObservedInstanceBackendContract(contract)
 	switch contract.Backend {

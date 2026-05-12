@@ -141,7 +141,7 @@ func TestDetachCancelsPendingHeadlessLaunch(t *testing.T) {
 	}
 }
 
-func TestApplyInstanceConnectedCancelsLegacyPendingHeadlessWithoutPreselectedThread(t *testing.T) {
+func TestApplyInstanceConnectedClearsPendingHeadlessWithoutThreadTarget(t *testing.T) {
 	now := time.Date(2026, 4, 8, 10, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionStatus, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1"})
@@ -169,17 +169,13 @@ func TestApplyInstanceConnectedCancelsLegacyPendingHeadlessWithoutPreselectedThr
 		t.Fatalf("expected legacy pending headless to be cancelled, got %#v", snapshot)
 	}
 	var killed bool
-	var migrated bool
 	for _, event := range events {
 		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandKillHeadless && event.DaemonCommand.InstanceID == "inst-headless-1" {
 			killed = true
 		}
-		if event.Notice != nil && event.Notice.Code == "legacy_headless_restore_cancelled" && strings.Contains(event.Notice.Text, "/use") {
-			migrated = true
-		}
 	}
-	if !killed || !migrated {
-		t.Fatalf("expected legacy pending headless cleanup, got %#v", events)
+	if !killed {
+		t.Fatalf("expected pending headless cleanup to kill stale instance, got %#v", events)
 	}
 }
 

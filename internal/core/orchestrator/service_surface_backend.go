@@ -132,7 +132,3 @@ func (s *Service) surfaceWorkspaceDefaultsContract(surface *state.SurfaceConsole
 func (s *Service) workspaceDefaultsStorageKey(workspaceKey string, contract state.InstanceBackendContract) string {
 	return state.WorkspaceDefaultsStorageKey(workspaceKey, contract)
 }
-
-func (s *Service) legacyWorkspaceDefaultsStorageKey(workspaceKey string, backend agentproto.Backend) string {
-	return state.LegacyWorkspaceDefaultsStorageKey(workspaceKey, backend)
-}

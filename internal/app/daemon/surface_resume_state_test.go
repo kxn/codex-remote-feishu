@@ -438,32 +438,6 @@ func TestSurfaceResumeStoreKeepsExplicitBackendEvenWhenInactiveProfileStorageExi
 	}
 }
 
-func TestSurfaceResumeStoreMigratesLegacyPendingFreshWorkspaceHeadlessEntry(t *testing.T) {
-	t.Parallel()
-
-	stateDir := t.TempDir()
-	path := surfaceresume.StatePath(stateDir)
-	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\",\n      \"backend\": \"claude\",\n      \"resumeWorkspaceKey\": \"/data/dl/repo\",\n      \"resumeRouteMode\": \"pinned\",\n      \"resumeHeadless\": true\n    }\n  }\n}\n")
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatalf("write legacy pending workspace state: %v", err)
-	}
-
-	store, err := surfaceresume.LoadStore(path)
-	if err != nil {
-		t.Fatalf("load migrated store: %v", err)
-	}
-	entry, ok := store.Get("surface-1")
-	if !ok {
-		t.Fatal("expected migrated entry after reload")
-	}
-	if entry.ResumeHeadless {
-		t.Fatalf("expected legacy pending workspace headless flag to clear, got %#v", entry)
-	}
-	if entry.ResumeRouteMode != "new_thread_ready" || entry.ResumeWorkspaceKey != "/data/dl/repo" {
-		t.Fatalf("expected legacy pending workspace entry to migrate into prepared workspace route, got %#v", entry)
-	}
-}
-
 func TestDaemonHeadlessAttachPersistsResumeMetadataIntoSurfaceResumeState(t *testing.T) {
 	t.Parallel()
 

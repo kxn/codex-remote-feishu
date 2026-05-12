@@ -133,7 +133,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 2. `ProductMode` / `Backend` 当前已经进入 daemon 级 `surface resume state`：
    1. 进程内已有 surface 会保留它。
    2. daemon 重启后，startup 会先从 `surface resume state` materialize latent surface，并恢复之前的 `ProductMode` / `Backend`。
-   3. `surface resume state` 当前不仅记录 `ProductMode` / `Backend` / `ClaudeProfileID` / `Verbosity` / instance / thread / workspace / route，还会记录 headless thread restore 所需的 thread title / thread cwd / `ResumeHeadless` 标记；它已经是唯一持久化恢复源，但不再持久化或恢复 `PlanMode`。这里的 `ResumeHeadless` 现在只代表“恢复一个 concrete headless thread”，不再复用来表示 `fresh workspace prepare`。旧 entry 缺失 `Backend` 时会 lazy 默认成 `codex`；若 backend 是 `claude` 且 entry 缺失 profile，则会 lazy 默认成内置 `default`；若旧 entry 带着非空 `ClaudeProfileID`，load/save canonicalization 会反向把 headless backend 纠正回 `claude`，避免把 Claude exact-thread 恢复目标误投到 Codex 路由；若旧 entry 误把 `pending fresh workspace` 写成 `ResumeHeadless=true + ResumeRouteMode=pinned + ResumeThreadID=\"\"`，load 时会自动迁回 workspace-owned `new_thread_ready` 语义。
+   3. `surface resume state` 当前不仅记录 `ProductMode` / `Backend` / `ClaudeProfileID` / `Verbosity` / instance / thread / workspace / route，还会记录 headless thread restore 所需的 thread title / thread cwd / `ResumeHeadless` 标记；它已经是唯一持久化恢复源，但不再持久化或恢复 `PlanMode`。这里的 `ResumeHeadless` 现在只代表“恢复一个 concrete headless thread”，不再复用来表示 `fresh workspace prepare`。旧 entry 缺失 `Backend` 时会 lazy 默认成 `codex`；若 backend 是 `claude` 且 entry 缺失 profile，则会 lazy 默认成内置 `default`；若旧 entry 带着非空 `ClaudeProfileID`，load/save canonicalization 会反向把 headless backend 纠正回 `claude`，避免把 Claude exact-thread 恢复目标误投到 Codex 路由。旧版把 `pending fresh workspace` 误编码成 `ResumeHeadless=true + ResumeRouteMode=pinned + ResumeThreadID=\"\"` 的残留 entry 现在不再被静默迁移；它们会按当前恢复规则直接失败并要求用户重新建立目标。
    4. headless surface（当前 persisted token 仍是 `ProductMode=normal`）随后会按 persisted resume target 继续尝试恢复：
       1. 优先 exact visible thread 恢复。
       2. 只允许消费同 backend 的 visible instance / workspace；不会再把 `codex` 的 headless resume target 恢复到 `claude`，反之亦然。managed headless 的复用候选也会先按 backend 过滤，attach / resume 路径若发现 thread view 与目标实例 backend 不一致，会直接拒绝这次恢复绑定，而不是把错配状态继续写回 surface resume。
@@ -188,10 +188,11 @@ surface 不是单一枚举，而是五层正交状态叠加。
    9. 点击提案计划卡的 `直接执行` / `清空上下文并执行`，会先把当前 surface 的 `PlanMode` 切回显式 `off`，再继续派发 follow-up turn；`取消` 只 seal 卡片，不改 route。
 9. `PromptOverride` 当前承载飞书侧显式 model / reasoning / access requested override：
    1. headless 主链为了保持现有执行合同，queue item 仍会冻结最终 effective model / reasoning / access。
-   2. Claude headless 的 runtime `permissionMode` 现在会通过标准 `config.observed(thread)` 回填 thread observed access/plan；`/status`、`/access`、`/plan` 和 headless prompt freeze 都读这条 observed state，而不是把它误持久成 workspace default。
-   3. Claude headless 在没有飞书显式 `/access` override 时，下一条 prompt 的 base access 会优先跟随当前 thread observed access；旧的 Claude workspace default access 不再参与这条解析。
-   4. `vscode` 主链只冻结飞书显式 requested override；observed cwd/thread config 仍可用于 `/status` / 参数卡展示，但不会在没有本地显式覆盖时被重新下发给 backend。
-   5. Codex translator 收到 empty access override 时不会改写 `approvalPolicy` / `sandboxPolicy`；只有显式 `full` / `confirm` 才会下发对应权限策略。
+   2. headless 主链的 base config 当前只读取 thread explicit config、backend/profile-scoped workspace defaults 与 surface override；旧 `InstanceRecord.CWDDefaults` 和旧 workspace-defaults storage key 都不再参与 headless fallback。`CWDDefaults` 仅保留给 `vscode` 的 observed-config 展示与 freeze 语义。
+   3. Claude headless 的 runtime `permissionMode` 现在会通过标准 `config.observed(thread)` 回填 thread observed access/plan；`/status`、`/access`、`/plan` 和 headless prompt freeze 都读这条 observed state，而不是把它误持久成 workspace default。
+   4. Claude headless 在没有飞书显式 `/access` override 时，下一条 prompt 的 base access 会优先跟随当前 thread observed access；旧的 Claude workspace default access 不再参与这条解析。
+   5. `vscode` 主链只冻结飞书显式 requested override；observed cwd/thread config 仍可用于 `/status` / 参数卡展示，但不会在没有本地显式覆盖时被重新下发给 backend。
+   6. Codex translator 收到 empty access override 时不会改写 `approvalPolicy` / `sandboxPolicy`；只有显式 `full` / `confirm` 才会下发对应权限策略。
 10. headless workspace-first 主链当前已经完成这一轮产品收窄：
    1. bare `/workspace` 是工作会话父页，固定展示 `切换`、`从目录新建`、`从 GIT URL 新建`、`解除接管` 四个入口；bare `/workspace new` 是只含三条新建路径的子页。
    2. `/workspace list` 与 alias `/list` / `/use` / `/useall` / `show_workspace_threads` 都收敛到同一张 `切换工作会话` 卡。
@@ -287,7 +288,7 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
 补充说明：
 
 1. 这层 overlay 当前承载在 `ThreadRecord.RuntimeStatus`，并投影到 `control.ThreadSummary.RuntimeStatus`、`WaitingOnApproval`、`WaitingOnUserInput`。
-2. 兼容旧展示链路时，thread summary 的 `State` 仍保留 legacy 字面值：
+2. 兼容旧展示链路时，thread summary 的 `State` 只在 `RuntimeStatus` 存在时按权威运行态投影 legacy 字面值；它不再回退到旧 `thread.State` 存储：
    1. `active -> running`
    2. `notLoaded -> not_loaded`
    3. `systemError -> system_error`
@@ -1742,8 +1743,8 @@ retained-offline overlay 额外规则：
 20. **`PendingHeadless` 只能靠隐藏的 `/killinstance` 逃生**：已修复。当前 `/detach` 可以直接取消恢复流程并回到 `R0 Detached`；旧 `/killinstance` 也已不再解析。
 21. **显式切 mode 会保留旧 attachment / request gate / draft 残留，导致进入半切换状态**：已修复。当前 idle/detached 时 `/mode` 会先做 detach-like 清理；busy path 则明确拒绝并提示 `/stop` 或 `/detach`。
 22. **headless 主链仍然只按 instance/thread 仲裁，导致同 workspace 多 surface 并存**：已修复。当前 headless 主链的 attach/use/headless 恢复都会先经过 workspace claim；只有显式切到 `vscode` 才绕过这层仲裁。
-23. **headless 主链还能长期停留在 follow 路径，导致 workspace-first 叙事失真**：已修复。当前新 `/follow` 会直接回迁移提示；历史 headless follow route 也会在读取 surface 时落回 pinned/unbound。
-24. **旧版本残留的 `vscode + new_thread_ready` 会在升级后继续活着，等价绕回被设计移除的 `/new` 路径**：已修复。现在 surface 读取时会自动归一化回 `follow_local`，并尽量复用当前 observed focus。
+23. **headless 主链还能长期停留在 follow 路径，导致 workspace-first 叙事失真**：已收口。当前新 `/follow` 会直接回迁移提示，steady-state 逻辑也不再接受“读 surface 时顺手把旧 headless follow route 自动改写回 pinned/unbound”的 compat 壳；极老 surface 若仍残留这类 route，需要用户重新 `/use`、`/new` 或 `/detach` 回到当前主链。
+24. **旧版本残留的 `vscode + new_thread_ready` 会在升级后继续活着，等价绕回被设计移除的 `/new` 路径**：compat 已删除。当前实现不再在 hot path 里把这类旧 route 自动归一化回 `follow_local`；当前代码也不会再新写出该组合，但若极老 surface 仍残留它，用户需要重新进入当前的 `follow_local` / `/use` 路径，而不是依赖静默修复。
 25. **headless `/list` 仍按 instance root 聚合，broad headless pool 会把多个 thread `cwd` workspace 压成一个选项**：已修复。当前 workspace 列表先看可见 thread `CWD`，只有无可见 thread 时才回退到实例级 workspace metadata。
 26. **headless detached / attach / disconnect 等路径仍向用户暴露“实例”措辞，导致 workspace-first 叙事不一致**：已修复。当前 headless 主链的 detached、attach、offline、degraded、stop-offline 等提示都统一回到工作区语义。
 27. **切到 `vscode` 后仍可能保留 headless restore 入口，最终进入“`vscode` surface 底层实际 attach/pending 的是 headless”半死状态**：已修复。当前 `/mode` 会清掉 pending headless 与 `surface resume state` 里的 headless 恢复目标，且 `vscode` surface 会在 auto-restore 入口被硬拒绝。

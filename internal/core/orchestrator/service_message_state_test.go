@@ -107,7 +107,7 @@ func TestTextMessageUsesProvidedInputsAlongsideStagedImages(t *testing.T) {
 	}
 }
 
-func TestStatusReflectsObservedDefaultConfigAndSurfaceOverride(t *testing.T) {
+func TestStatusIgnoresHeadlessObservedCWDDefaultsAndAppliesSurfaceOverride(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -141,11 +141,11 @@ func TestStatusReflectsObservedDefaultConfigAndSurfaceOverride(t *testing.T) {
 	if snapshot.NextPrompt.CreateThread || snapshot.NextPrompt.CWD != "/data/dl/droid" {
 		t.Fatalf("expected unbound surface to stay blocked in workspace root, got %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.BaseModel != "gpt-5.3-codex" || snapshot.NextPrompt.BaseReasoningEffort != "medium" {
-		t.Fatalf("expected base config from workspace default, got %#v", snapshot.NextPrompt)
+	if snapshot.NextPrompt.BaseModel != "" || snapshot.NextPrompt.BaseReasoningEffort != "" {
+		t.Fatalf("expected headless cwd defaults to stay ignored, got %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.BaseModelSource != "workspace_default" || snapshot.NextPrompt.BaseReasoningEffortSource != "workspace_default" {
-		t.Fatalf("expected workspace default sources, got %#v", snapshot.NextPrompt)
+	if snapshot.NextPrompt.BaseModelSource != "unknown" || snapshot.NextPrompt.BaseReasoningEffortSource != "unknown" {
+		t.Fatalf("expected headless cwd default sources to stay unknown, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectiveModel != "gpt-5.4" || snapshot.NextPrompt.EffectiveReasoningEffort != "high" {
 		t.Fatalf("expected effective config to use surface override, got %#v", snapshot.NextPrompt)

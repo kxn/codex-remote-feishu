@@ -1,7 +1,6 @@
 package orchestrator
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -234,7 +233,6 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 	}
 	backend := s.promptConfigBackend(inst, surface)
 	claudeHeadless := agentproto.NormalizeBackend(backend) == agentproto.BackendClaude
-	s.backfillLegacyWorkspaceDefaults(inst)
 	if thread := inst.Threads[threadID]; thread != nil {
 		if cwd == "" {
 			cwd = thread.CWD
@@ -263,7 +261,7 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 		}
 	}
 	cwd = state.NormalizeWorkspaceKey(cwd)
-	if cwd != "" {
+	if cwd != "" && s.surfaceUsesLocalRequestedPromptOverrides(surface) {
 		if defaults, ok := inst.CWDDefaults[cwd]; ok {
 			if model.Value == "" && defaults.Model != "" {
 				model = configValue{Value: defaults.Model, Source: "cwd_default"}
@@ -300,16 +298,7 @@ func (s *Service) resolveWorkspaceDefaults(inst *state.InstanceRecord, surface *
 	if ok && !modelConfigRecordEmpty(defaults) {
 		return defaults, true
 	}
-	legacyKey := s.legacyWorkspaceDefaultsStorageKey(workspaceKey, contract.Backend)
-	if legacyKey == "" || legacyKey == defaultsKey {
-		return state.ModelConfigRecord{}, false
-	}
-	defaults, ok = s.root.WorkspaceDefaults[legacyKey]
-	defaults = compactModelConfig(defaults)
-	if !ok || modelConfigRecordEmpty(defaults) {
-		return state.ModelConfigRecord{}, false
-	}
-	return defaults, true
+	return state.ModelConfigRecord{}, false
 }
 
 func (s *Service) updateWorkspaceDefaults(workspaceKey string, contract state.InstanceBackendContract, apply func(*state.ModelConfigRecord)) {
@@ -323,12 +312,6 @@ func (s *Service) updateWorkspaceDefaults(workspaceKey string, contract state.In
 		s.root.WorkspaceDefaults = map[string]state.ModelConfigRecord{}
 	}
 	current := compactModelConfig(s.root.WorkspaceDefaults[defaultsKey])
-	if modelConfigRecordEmpty(current) {
-		legacyKey := s.legacyWorkspaceDefaultsStorageKey(workspaceKey, contract.Backend)
-		if legacyKey != "" && legacyKey != defaultsKey {
-			current = compactModelConfig(s.root.WorkspaceDefaults[legacyKey])
-		}
-	}
 	apply(&current)
 	current = compactModelConfig(current)
 	if modelConfigRecordEmpty(current) {
@@ -336,72 +319,4 @@ func (s *Service) updateWorkspaceDefaults(workspaceKey string, contract state.In
 		return
 	}
 	s.root.WorkspaceDefaults[defaultsKey] = current
-}
-
-func (s *Service) backfillLegacyWorkspaceDefaults(inst *state.InstanceRecord) {
-	if inst == nil || len(inst.CWDDefaults) == 0 {
-		return
-	}
-	workspaceKey := state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot)
-	if workspaceKey == "" {
-		return
-	}
-	candidates := legacyWorkspaceDefaultCandidates(workspaceKey, inst.CWDDefaults)
-	if len(candidates) == 0 {
-		return
-	}
-	s.updateWorkspaceDefaults(workspaceKey, state.ObservedInstanceBackendContract(inst), func(current *state.ModelConfigRecord) {
-		for _, candidate := range candidates {
-			if current.Model == "" && candidate.Model != "" {
-				current.Model = candidate.Model
-			}
-			if current.ReasoningEffort == "" && candidate.ReasoningEffort != "" {
-				current.ReasoningEffort = candidate.ReasoningEffort
-			}
-			if current.AccessMode == "" && candidate.AccessMode != "" {
-				current.AccessMode = candidate.AccessMode
-			}
-		}
-	})
-}
-
-func legacyWorkspaceDefaultCandidates(workspaceKey string, legacy map[string]state.ModelConfigRecord) []state.ModelConfigRecord {
-	type candidate struct {
-		key    string
-		config state.ModelConfigRecord
-		exact  bool
-	}
-
-	var candidates []candidate
-	for key, config := range legacy {
-		normalizedKey := state.ResolveWorkspaceKey(key)
-		config = compactModelConfig(config)
-		if normalizedKey == "" || modelConfigRecordEmpty(config) {
-			continue
-		}
-		if normalizedKey != workspaceKey &&
-			!strings.HasPrefix(normalizedKey, workspaceKey+"/") &&
-			!strings.HasPrefix(workspaceKey, normalizedKey+"/") {
-			continue
-		}
-		candidates = append(candidates, candidate{
-			key:    normalizedKey,
-			config: config,
-			exact:  normalizedKey == workspaceKey,
-		})
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].exact != candidates[j].exact {
-			return candidates[i].exact
-		}
-		if len(candidates[i].key) != len(candidates[j].key) {
-			return len(candidates[i].key) < len(candidates[j].key)
-		}
-		return candidates[i].key < candidates[j].key
-	})
-	merged := make([]state.ModelConfigRecord, 0, len(candidates))
-	for _, candidate := range candidates {
-		merged = append(merged, candidate.config)
-	}
-	return merged
 }

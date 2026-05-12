@@ -8,7 +8,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func TestObserveConfigVSCodeDoesNotPersistWorkspaceDefaults(t *testing.T) {
@@ -134,7 +133,7 @@ func TestStatusUsesSurfaceDefaultsWhenObservedConfigUnknown(t *testing.T) {
 	}
 }
 
-func TestTextMessageFreezesObservedPromptConfigWhenNoSurfaceOverride(t *testing.T) {
+func TestHeadlessTextMessageIgnoresLegacyCWDDefaultsWhenNoSurfaceOverride(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -169,54 +168,11 @@ func TestTextMessageFreezesObservedPromptConfigWhenNoSurfaceOverride(t *testing.
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "high" {
-		t.Fatalf("expected queued item to freeze observed config, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "xhigh" {
+		t.Fatalf("expected queued item to ignore legacy cwd defaults and freeze surface defaults, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
 		t.Fatalf("expected queued item to freeze full access, got %#v", item.FrozenOverride)
-	}
-}
-
-func TestUpsertInstanceBackfillsLegacyCWDDefaultsIntoWorkspaceDefaults(t *testing.T) {
-	now := time.Date(2026, 4, 9, 14, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	workspaceKey := testutil.WorkspacePath("data", "dl", "droid")
-	subdirKey := testutil.WorkspacePath("data", "dl", "droid", "subdir")
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:              "inst-1",
-		DisplayName:             "droid",
-		WorkspaceRoot:           workspaceKey,
-		WorkspaceKey:            workspaceKey,
-		ShortName:               "droid",
-		Online:                  true,
-		ObservedFocusedThreadID: "thread-1",
-		CWDDefaults: map[string]state.ModelConfigRecord{
-			workspaceKey + "/.": {Model: "gpt-5.4", ReasoningEffort: "high"},
-			subdirKey:           {AccessMode: agentproto.AccessModeConfirm},
-		},
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: workspaceKey},
-		},
-	})
-
-	defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.DefaultCodexProviderID,
-	})]
-	if defaults.Model != "gpt-5.4" || defaults.ReasoningEffort != "high" || defaults.AccessMode != agentproto.AccessModeConfirm {
-		t.Fatalf("expected legacy defaults backfilled into workspace defaults, got %#v", defaults)
-	}
-
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-	snapshot := svc.SurfaceSnapshot("surface-1")
-	if snapshot == nil {
-		t.Fatal("expected surface snapshot")
-	}
-	if snapshot.NextPrompt.BaseModelSource != "workspace_default" || snapshot.NextPrompt.BaseReasoningEffortSource != "workspace_default" {
-		t.Fatalf("expected legacy defaults to resolve through workspace defaults, got %#v", snapshot.NextPrompt)
-	}
-	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeConfirm || snapshot.NextPrompt.EffectiveAccessModeSource != "workspace_default" {
-		t.Fatalf("expected migrated workspace access default in snapshot, got %#v", snapshot.NextPrompt)
 	}
 }
 
@@ -1606,94 +1562,6 @@ func TestFollowLocalNormalModeShowsMigrationNotice(t *testing.T) {
 	surface := svc.root.Surfaces["surface-1"]
 	if surface.RouteMode != state.RouteModeUnbound || surface.SelectedThreadID != "" {
 		t.Fatalf("expected normal-mode /follow rejection to keep workspace-unbound state, got %#v", surface)
-	}
-}
-
-func TestLegacyNormalFollowRouteNormalizesToPinned(t *testing.T) {
-	now := time.Date(2026, 4, 7, 19, 8, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:    "inst-1",
-		DisplayName:   "droid",
-		WorkspaceRoot: "/data/dl/droid",
-		WorkspaceKey:  "/data/dl/droid",
-		ShortName:     "droid",
-		Online:        true,
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
-		},
-	})
-	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
-		SurfaceSessionID:    "surface-1",
-		ProductMode:         state.ProductModeNormal,
-		ClaimedWorkspaceKey: "/data/dl/droid",
-		AttachedInstanceID:  "inst-1",
-		SelectedThreadID:    "thread-1",
-		RouteMode:           state.RouteModeFollowLocal,
-		QueueItems:          map[string]*state.QueueItemRecord{},
-		StagedImages:        map[string]*state.StagedImageRecord{},
-		PendingRequests:     map[string]*state.RequestPromptRecord{},
-	}
-	svc.threadClaims["thread-1"] = &threadClaimRecord{
-		ThreadID:         "thread-1",
-		InstanceID:       "inst-1",
-		SurfaceSessionID: "surface-1",
-	}
-
-	snapshot := svc.SurfaceSnapshot("surface-1")
-	if snapshot == nil {
-		t.Fatal("expected snapshot")
-	}
-	if snapshot.Attachment.RouteMode != string(state.RouteModePinned) || snapshot.Attachment.SelectedThreadID != "thread-1" {
-		t.Fatalf("expected legacy normal follow route to normalize to pinned, got %#v", snapshot)
-	}
-	surface := svc.root.Surfaces["surface-1"]
-	if surface.RouteMode != state.RouteModePinned || surface.SelectedThreadID != "thread-1" {
-		t.Fatalf("expected surface route to normalize to pinned, got %#v", surface)
-	}
-}
-
-func TestLegacyVSCodePreparedNewThreadRouteNormalizesToFollowLocal(t *testing.T) {
-	now := time.Date(2026, 4, 9, 15, 20, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:              "inst-1",
-		DisplayName:             "droid",
-		WorkspaceRoot:           "/data/dl/droid",
-		WorkspaceKey:            "/data/dl/droid",
-		ShortName:               "droid",
-		Source:                  "vscode",
-		Online:                  true,
-		ObservedFocusedThreadID: "thread-1",
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
-		},
-	})
-	svc.root.Surfaces["surface-1"] = &state.SurfaceConsoleRecord{
-		SurfaceSessionID:     "surface-1",
-		ProductMode:          state.ProductModeVSCode,
-		AttachedInstanceID:   "inst-1",
-		RouteMode:            state.RouteModeNewThreadReady,
-		PreparedThreadCWD:    "/data/dl/droid",
-		PreparedFromThreadID: "thread-legacy",
-		QueueItems:           map[string]*state.QueueItemRecord{},
-		StagedImages:         map[string]*state.StagedImageRecord{},
-		PendingRequests:      map[string]*state.RequestPromptRecord{},
-	}
-
-	snapshot := svc.SurfaceSnapshot("surface-1")
-	if snapshot == nil {
-		t.Fatal("expected snapshot")
-	}
-	if snapshot.Attachment.RouteMode != string(state.RouteModeFollowLocal) || snapshot.Attachment.SelectedThreadID != "thread-1" {
-		t.Fatalf("expected legacy vscode new-thread route to normalize to follow_local, got %#v", snapshot)
-	}
-	surface := svc.root.Surfaces["surface-1"]
-	if surface.RouteMode != state.RouteModeFollowLocal || surface.SelectedThreadID != "thread-1" {
-		t.Fatalf("expected surface route to normalize to follow_local, got %#v", surface)
-	}
-	if surface.PreparedThreadCWD != "" || surface.PreparedFromThreadID != "" {
-		t.Fatalf("expected legacy prepared-new-thread state to clear, got %#v", surface)
 	}
 }
 

@@ -349,15 +349,6 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 				InstanceID:       pending.InstanceID,
 			},
 		},
-		eventcontract.Event{
-			Kind:             eventcontract.KindNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice: &control.Notice{
-				Code:  "legacy_headless_restore_cancelled",
-				Title: "旧恢复流程已结束",
-				Text:  "检测到旧版后台恢复残留，已自动结束。请改用 `/use` 或 `/useall` 选择要恢复的会话。",
-			},
-		},
 	)
 	return events
 }

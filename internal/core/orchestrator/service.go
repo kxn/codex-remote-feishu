@@ -233,8 +233,6 @@ func (s *Service) normalizeSurfaceProductMode(surface *state.SurfaceConsoleRecor
 	s.setSurfaceDesiredContract(surface, s.surfaceDesiredContract(surface))
 	surface.Verbosity = state.NormalizeSurfaceVerbosity(surface.Verbosity)
 	surface.PlanMode = state.NormalizePlanModeSetting(surface.PlanMode)
-	s.normalizeLegacyNormalFollowRoute(surface)
-	s.normalizeLegacyVSCodePreparedNewThread(surface)
 	return surface.ProductMode
 }
 
@@ -253,7 +251,6 @@ func (s *Service) UpsertInstance(inst *state.InstanceRecord) {
 	if inst.DisplayName == "" {
 		inst.DisplayName = inst.ShortName
 	}
-	s.backfillLegacyWorkspaceDefaults(inst)
 	s.root.Instances[inst.InstanceID] = inst
 }
 
