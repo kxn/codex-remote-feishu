@@ -1,6 +1,4 @@
 import {
-  useEffect,
-  useState,
   type Dispatch,
   type FormEvent,
   type SetStateAction,
@@ -11,15 +9,14 @@ import type {
   ClaudeProfileSummary,
   ClaudeProfileWriteRequest,
 } from "../../lib/types";
-
-type NoticeTone = "good" | "warn" | "danger";
-
-type DetailNotice = {
-  tone: NoticeTone;
-  message: string;
-};
-
-type EditorMode = "built-in" | "edit" | "create";
+import {
+  ConfigBuiltInDetailCard,
+  ConfigDeleteConfirmModal,
+  ConfigFormDetailCard,
+  ConfigSectionShell,
+  type ConfigEditorSectionState,
+  useConfigEditorSection,
+} from "./ConfigEditorShared";
 
 type ClaudeProfileDraft = {
   name: string;
@@ -42,45 +39,30 @@ const claudeReasoningOptions = ["low", "medium", "high", "max"] as const;
 
 export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
   const { profiles, loadError, setProfiles, onReload } = props;
-  const [activeProfileID, setActiveProfileID] = useState("");
-  const [editorMode, setEditorMode] = useState<EditorMode>("create");
-  const [draft, setDraft] = useState<ClaudeProfileDraft>(createEmptyDraft());
-  const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
-  const [actionBusy, setActionBusy] = useState("");
-  const [deleteTargetID, setDeleteTargetID] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (profiles.length === 0) {
-      if (editorMode !== "create") {
-        setActiveProfileID(newClaudeProfileID);
-        setEditorMode("create");
-        setDraft(createEmptyDraft());
-      }
-      return;
-    }
-    if (activeProfileID === newClaudeProfileID && editorMode === "create") {
-      return;
-    }
-    const fallbackProfile = profiles[0];
-    const activeProfile =
-      profiles.find((profile) => profile.id === activeProfileID) ?? fallbackProfile;
-    if (!activeProfile) {
-      return;
-    }
-    if (activeProfile.id !== activeProfileID) {
-      setActiveProfileID(activeProfile.id);
-    }
-    if (activeProfile.builtIn) {
-      setEditorMode("built-in");
-      setDraft(createEmptyDraft());
-      return;
-    }
-    setEditorMode("edit");
-    setDraft(createDraftFromProfile(activeProfile));
-  }, [activeProfileID, editorMode, profiles]);
-
-  const activeProfile =
-    profiles.find((profile) => profile.id === activeProfileID) ?? null;
+  const editor = useConfigEditorSection<ClaudeProfileSummary, ClaudeProfileDraft>({
+    items: profiles,
+    newItemID: newClaudeProfileID,
+    createEmptyDraft,
+    createDraftFromItem: createDraftFromProfile,
+  });
+  const {
+    activeItem: activeProfile,
+    activeItemID,
+    actionBusy,
+    applyNextItems,
+    cancelCreate,
+    deleteTargetID,
+    detailNotice,
+    draft,
+    editorMode,
+    handleItemSelect,
+    selectPersistedItem,
+    setActionBusy,
+    setDeleteTargetID,
+    setDetailNotice,
+    setDraft,
+    startCreateBlank,
+  } = editor;
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -100,7 +82,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
           buildCreatePayload(draft),
         );
         setProfiles((current) => appendOrReplaceProfile(current, response.profile));
-        selectPersistedProfile(response.profile);
+        selectPersistedItem(response.profile);
         setDetailNotice({ tone: "good", message: "Claude 配置已创建。" });
         return;
       }
@@ -116,12 +98,12 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
       const response = await sendJSON<ClaudeProfileResponse>(
         `/api/admin/claude/profiles/${encodeURIComponent(activeProfile.id)}`,
         "PUT",
-        buildUpdatePayload(draft, activeProfile),
+        buildUpdatePayload(draft),
       );
       setProfiles((current) =>
         appendOrReplaceProfile(current, response.profile, activeProfile.id),
       );
-      selectPersistedProfile(response.profile);
+      selectPersistedItem(response.profile);
       setDetailNotice({ tone: "good", message: "Claude 配置已保存。" });
     } catch (error) {
       setDetailNotice({
@@ -160,18 +142,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
       const nextProfiles = removeProfile(profiles, deleteTargetID);
       setProfiles(nextProfiles);
       setDeleteTargetID(null);
-      const nextSelected = nextProfiles[0] ?? null;
-      if (nextSelected) {
-        if (nextSelected.builtIn) {
-          setActiveProfileID(nextSelected.id);
-          setEditorMode("built-in");
-          setDraft(createEmptyDraft());
-        } else {
-          selectPersistedProfile(nextSelected);
-        }
-      } else {
-        startCreateBlank();
-      }
+      applyNextItems(nextProfiles);
       setDetailNotice({ tone: "good", message: "Claude 配置已删除。" });
     } catch (error) {
       setDetailNotice({
@@ -183,185 +154,54 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
     }
   }
 
-  function selectPersistedProfile(profile: ClaudeProfileSummary) {
-    setActiveProfileID(profile.id);
-    setEditorMode(profile.builtIn ? "built-in" : "edit");
-    setDraft(profile.builtIn ? createEmptyDraft() : createDraftFromProfile(profile));
-  }
-
-  function startCreateBlank() {
-    setActiveProfileID(newClaudeProfileID);
-    setEditorMode("create");
-    setDraft(createEmptyDraft());
-    setDetailNotice(null);
-  }
-
-  function cancelCreate() {
-    const fallbackProfile = profiles[0] ?? null;
-    if (!fallbackProfile) {
-      startCreateBlank();
-      return;
-    }
-    if (fallbackProfile.builtIn) {
-      setActiveProfileID(fallbackProfile.id);
-      setEditorMode("built-in");
-      setDraft(createEmptyDraft());
-      setDetailNotice(null);
-      return;
-    }
-    selectPersistedProfile(fallbackProfile);
-    setDetailNotice(null);
-  }
-
-  function handleProfileSelect(profile: ClaudeProfileSummary) {
-    setDetailNotice(null);
-    if (profile.builtIn) {
-      setActiveProfileID(profile.id);
-      setEditorMode("built-in");
-      setDraft(createEmptyDraft());
-      return;
-    }
-    selectPersistedProfile(profile);
-  }
-
-  if (loadError && profiles.length === 0) {
-    return (
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>Claude 配置</h2>
-          <p>Claude 连接配置</p>
-        </div>
-        <div className="empty-state error">
-          <strong>当前还不能读取 Claude 配置</strong>
-          <p>{loadError}</p>
-          <div className="button-row">
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => void onReload()}
-            >
-              重新读取
-            </button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <>
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>Claude 配置</h2>
-          <p>Claude 连接配置</p>
-        </div>
-        {loadError ? (
-          <div className="notice-banner warn">
-            <div className="inline-status-row">
-              <span>{loadError}</span>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => void onReload()}
-              >
-                重新读取
-              </button>
-            </div>
-          </div>
-        ) : null}
-        <div className="profile-layout" style={{ marginTop: "1rem" }}>
-          <div className="profile-list">
-            {profiles.map((profile) => (
-              <button
-                key={profile.id}
-                className={`profile-list-button${activeProfileID === profile.id ? " active" : ""}`}
-                type="button"
-                onClick={() => handleProfileSelect(profile)}
-              >
-                <div className="profile-list-head">
-                  <strong>{profileTitle(profile)}</strong>
-                  <span className="robot-tag">
-                    {profile.builtIn ? "默认" : "自定义"}
-                  </span>
-                </div>
-                <p>{profileCardSummary(profile)}</p>
-              </button>
-            ))}
-            <button
-              className={`profile-list-button${activeProfileID === newClaudeProfileID ? " active" : ""}`}
-              type="button"
-              onClick={() => startCreateBlank()}
-            >
-              <div className="profile-list-head">
-                <strong>新增配置</strong>
-                <span className="robot-tag">新增</span>
-              </div>
-              <p>新建配置</p>
-            </button>
-          </div>
-          {renderDetailCard({
-            actionBusy,
-            activeProfile,
-            deleteTargetID,
-            detailNotice,
-            draft,
-            editorMode,
-            onCancelCreate: cancelCreate,
-            onDeleteTargetChange: setDeleteTargetID,
-            onDraftChange: setDraft,
-            onSave: (event) => void handleSave(event),
-            onStartCreate: startCreateBlank,
-          })}
-        </div>
-      </section>
+      <ConfigSectionShell
+        sectionTitle="Claude 配置"
+        sectionDescription="Claude 连接配置"
+        emptyLoadErrorTitle="当前还不能读取 Claude 配置"
+        loadError={loadError}
+        onReload={onReload}
+        items={profiles}
+        activeItemID={activeItemID}
+        newItemID={newClaudeProfileID}
+        onItemSelect={handleItemSelect}
+        onStartCreate={startCreateBlank}
+        getItemTitle={profileTitle}
+        getItemSummary={profileCardSummary}
+        detailCard={renderClaudeProfileDetailCard({
+          actionBusy,
+          activeProfile,
+          deleteTargetID,
+          detailNotice,
+          draft,
+          editorMode,
+          onCancelCreate: cancelCreate,
+          onDeleteTargetChange: setDeleteTargetID,
+          onDraftChange: setDraft,
+          onSave: (event) => void handleSave(event),
+          onStartCreate: startCreateBlank,
+        })}
+      />
 
-      {deleteTargetID ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-claude-profile-title"
-          >
-            <h3 id="delete-claude-profile-title">确认删除 Claude 配置</h3>
-            <p className="modal-copy">
-              删除后将移除“
-              {profileTitle(
-                profiles.find((profile) => profile.id === deleteTargetID) ?? null,
-              )}
-              ”，此操作不可恢复。
-            </p>
-            <div className="modal-actions">
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => setDeleteTargetID(null)}
-              >
-                取消
-              </button>
-              <button
-                className="danger-button"
-                type="button"
-                disabled={actionBusy === "delete-claude-profile"}
-                onClick={() => void handleDelete()}
-              >
-                确认删除
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfigDeleteConfirmModal
+        targetID={deleteTargetID}
+        items={profiles}
+        dialogTitle="确认删除 Claude 配置"
+        confirmDisabled={actionBusy === "delete-claude-profile"}
+        getItemTitle={profileTitle}
+        onCancel={() => setDeleteTargetID(null)}
+        onConfirm={() => void handleDelete()}
+      />
     </>
   );
 }
 
-type DetailCardProps = {
-  actionBusy: string;
+type ClaudeDetailCardProps = Pick<
+  ConfigEditorSectionState<ClaudeProfileSummary, ClaudeProfileDraft>,
+  "actionBusy" | "deleteTargetID" | "detailNotice" | "draft" | "editorMode"
+> & {
   activeProfile: ClaudeProfileSummary | null;
-  deleteTargetID: string | null;
-  detailNotice: DetailNotice | null;
-  draft: ClaudeProfileDraft;
-  editorMode: EditorMode;
   onCancelCreate: () => void;
   onDeleteTargetChange: (value: string | null) => void;
   onDraftChange: Dispatch<SetStateAction<ClaudeProfileDraft>>;
@@ -369,7 +209,7 @@ type DetailCardProps = {
   onStartCreate: () => void;
 };
 
-function renderDetailCard(props: DetailCardProps) {
+function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
   const {
     actionBusy,
     activeProfile,
@@ -386,30 +226,15 @@ function renderDetailCard(props: DetailCardProps) {
 
   if (editorMode === "built-in") {
     return (
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>{profileTitle(activeProfile)}</h2>
-          <p>系统默认的 Claude 连接</p>
-        </div>
-        {detailNotice ? (
-          <div className={`notice-banner ${detailNotice.tone}`}>
-            {detailNotice.message}
-          </div>
-        ) : null}
-        <div className="completed-card profile-hero-card">
-          <h3>系统默认配置</h3>
-          <p>如需使用其他端点或模型，请新增配置。</p>
-        </div>
-        <div className="button-row">
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => onStartCreate()}
-          >
-            新增自定义配置
-          </button>
-        </div>
-      </section>
+      <ConfigBuiltInDetailCard
+        title={profileTitle(activeProfile)}
+        description="系统默认的 Claude 连接"
+        notice={detailNotice}
+        heroTitle="系统默认配置"
+        heroDescription="如需使用其他端点或模型，请新增配置。"
+        startCreateLabel="新增自定义配置"
+        onStartCreate={onStartCreate}
+      />
     );
   }
 
@@ -419,150 +244,132 @@ function renderDetailCard(props: DetailCardProps) {
         ? `新增配置：${draft.name.trim()}`
         : "新增 Claude 配置"
       : profileTitle(activeProfile);
-  const description =
-    editorMode === "create"
-      ? "填写连接信息"
-      : "";
 
   return (
-    <section className="panel">
-      <div className="step-stage-head">
-        <h2>{title}</h2>
-        <p>{description}</p>
-      </div>
-      {detailNotice ? (
-        <div className={`notice-banner ${detailNotice.tone}`}>
-          {detailNotice.message}
-        </div>
-      ) : null}
-      <form noValidate onSubmit={onSave}>
-        <div className="form-grid" style={{ marginTop: "1rem" }}>
-          <label className="field form-grid-span-2">
-            <span>
-              名称 <em className="field-required">*</em>
-            </span>
-            <input
-              required
-              value={draft.name}
-              placeholder="例如：研发代理"
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="field">
-            <span>端点地址</span>
-            <input
-              value={draft.baseURL}
-              placeholder="例如：https://proxy.internal/v1"
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  baseURL: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="field">
-            <span>认证 Token</span>
-            <input
-              autoComplete="new-password"
-              placeholder="输入认证 Token"
-              type="password"
-              value={draft.authToken}
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  authToken: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="field">
-            <span>主模型</span>
-            <input
-              value={draft.model}
-              placeholder="留空时跟随 Claude 默认"
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  model: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label className="field">
-            <span>轻量模型</span>
-            <input
-              value={draft.smallModel}
-              placeholder="留空时跟随 Claude 默认"
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  smallModel: event.target.value,
-                }))
-              }
-            />
-          </label>
-          <label className="field">
-            <span>推理强度</span>
-            <select
-              value={draft.reasoningEffort}
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  reasoningEffort: event.target.value,
-                }))
-              }
-            >
-              <option value="">不设置</option>
-              {claudeReasoningOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="button-row">
+    <ConfigFormDetailCard
+      title={title}
+      description={editorMode === "create" ? "填写连接信息" : ""}
+      notice={detailNotice}
+      onSave={onSave}
+      submitLabel={editorMode === "create" ? "保存配置" : "保存修改"}
+      submitDisabled={actionBusy === "save-claude-profile"}
+      secondaryAction={
+        editorMode === "create" ? (
           <button
-            className="primary-button"
+            className="ghost-button"
             disabled={actionBusy === "save-claude-profile"}
-            type="submit"
+            type="button"
+            onClick={() => onCancelCreate()}
           >
-            {editorMode === "create" ? "保存配置" : "保存修改"}
+            取消
           </button>
-          {editorMode === "create" ? (
-            <button
-              className="ghost-button"
-              disabled={actionBusy === "save-claude-profile"}
-              type="button"
-              onClick={() => onCancelCreate()}
-            >
-              取消
-            </button>
-          ) : (
-            <>
-              <button
-                className="danger-button"
-                disabled={Boolean(deleteTargetID) || actionBusy === "delete-claude-profile"}
-                type="button"
-                onClick={() => onDeleteTargetChange(activeProfile?.id ?? null)}
-              >
-                删除配置
-              </button>
-            </>
-          )}
-        </div>
-      </form>
-    </section>
+        ) : (
+          <button
+            className="danger-button"
+            disabled={Boolean(deleteTargetID) || actionBusy === "delete-claude-profile"}
+            type="button"
+            onClick={() => onDeleteTargetChange(activeProfile?.id ?? null)}
+          >
+            删除配置
+          </button>
+        )
+      }
+    >
+      <div className="form-grid" style={{ marginTop: "1rem" }}>
+        <label className="field form-grid-span-2">
+          <span>
+            名称 <em className="field-required">*</em>
+          </span>
+          <input
+            required
+            value={draft.name}
+            placeholder="例如：研发代理"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                name: event.target.value,
+              }))
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>端点地址</span>
+          <input
+            value={draft.baseURL}
+            placeholder="例如：https://proxy.internal/v1"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                baseURL: event.target.value,
+              }))
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>认证 Token</span>
+          <input
+            autoComplete="new-password"
+            placeholder="输入认证 Token"
+            type="password"
+            value={draft.authToken}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                authToken: event.target.value,
+              }))
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>主模型</span>
+          <input
+            value={draft.model}
+            placeholder="留空时跟随 Claude 默认"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                model: event.target.value,
+              }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>轻量模型</span>
+          <input
+            value={draft.smallModel}
+            placeholder="留空时跟随 Claude 默认"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                smallModel: event.target.value,
+              }))
+            }
+          />
+        </label>
+        <label className="field">
+          <span>推理强度</span>
+          <select
+            value={draft.reasoningEffort}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                reasoningEffort: event.target.value,
+              }))
+            }
+          >
+            <option value="">不设置</option>
+            {claudeReasoningOptions.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </ConfigFormDetailCard>
   );
 }
 
@@ -606,10 +413,7 @@ function buildCreatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
   };
 }
 
-function buildUpdatePayload(
-  draft: ClaudeProfileDraft,
-  profile: ClaudeProfileSummary,
-): ClaudeProfileWriteRequest {
+function buildUpdatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteRequest {
   const payload: ClaudeProfileWriteRequest = {
     name: draft.name.trim(),
     baseURL: draft.baseURL.trim(),
@@ -621,7 +425,6 @@ function buildUpdatePayload(
   if (authToken) {
     payload.authToken = authToken;
   }
-  void profile;
   return payload;
 }
 

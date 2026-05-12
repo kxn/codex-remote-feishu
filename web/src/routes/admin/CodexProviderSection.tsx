@@ -1,6 +1,4 @@
 import {
-  useEffect,
-  useState,
   type Dispatch,
   type FormEvent,
   type SetStateAction,
@@ -16,15 +14,14 @@ import type {
   CodexProviderSummary,
   CodexProviderWriteRequest,
 } from "../../lib/types";
-
-type NoticeTone = "good" | "warn" | "danger";
-
-type DetailNotice = {
-  tone: NoticeTone;
-  message: string;
-};
-
-type EditorMode = "built-in" | "edit" | "create";
+import {
+  ConfigBuiltInDetailCard,
+  ConfigDeleteConfirmModal,
+  ConfigFormDetailCard,
+  ConfigSectionShell,
+  type ConfigEditorSectionState,
+  useConfigEditorSection,
+} from "./ConfigEditorShared";
 
 type CodexProviderDraft = {
   name: string;
@@ -46,45 +43,30 @@ const codexReasoningOptions = ["low", "medium", "high", "xhigh"] as const;
 
 export function CodexProviderSection(props: CodexProviderSectionProps) {
   const { providers, loadError, setProviders, onReload } = props;
-  const [activeProviderID, setActiveProviderID] = useState("");
-  const [editorMode, setEditorMode] = useState<EditorMode>("create");
-  const [draft, setDraft] = useState<CodexProviderDraft>(createEmptyDraft());
-  const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
-  const [actionBusy, setActionBusy] = useState("");
-  const [deleteTargetID, setDeleteTargetID] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (providers.length === 0) {
-      if (editorMode !== "create") {
-        setActiveProviderID(newCodexProviderID);
-        setEditorMode("create");
-        setDraft(createEmptyDraft());
-      }
-      return;
-    }
-    if (activeProviderID === newCodexProviderID && editorMode === "create") {
-      return;
-    }
-    const fallbackProvider = providers[0];
-    const activeProvider =
-      providers.find((provider) => provider.id === activeProviderID) ?? fallbackProvider;
-    if (!activeProvider) {
-      return;
-    }
-    if (activeProvider.id !== activeProviderID) {
-      setActiveProviderID(activeProvider.id);
-    }
-    if (activeProvider.builtIn) {
-      setEditorMode("built-in");
-      setDraft(createEmptyDraft());
-      return;
-    }
-    setEditorMode("edit");
-    setDraft(createDraftFromProvider(activeProvider));
-  }, [activeProviderID, editorMode, providers]);
-
-  const activeProvider =
-    providers.find((provider) => provider.id === activeProviderID) ?? null;
+  const editor = useConfigEditorSection<CodexProviderSummary, CodexProviderDraft>({
+    items: providers,
+    newItemID: newCodexProviderID,
+    createEmptyDraft,
+    createDraftFromItem: createDraftFromProvider,
+  });
+  const {
+    activeItem: activeProvider,
+    activeItemID,
+    actionBusy,
+    applyNextItems,
+    cancelCreate,
+    deleteTargetID,
+    detailNotice,
+    draft,
+    editorMode,
+    handleItemSelect,
+    selectPersistedItem,
+    setActionBusy,
+    setDeleteTargetID,
+    setDetailNotice,
+    setDraft,
+    startCreateBlank,
+  } = editor;
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -104,7 +86,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
           buildCreatePayload(draft),
         );
         setProviders((current) => appendOrReplaceProvider(current, response.provider));
-        selectPersistedProvider(response.provider);
+        selectPersistedItem(response.provider);
         setDetailNotice({ tone: "good", message: "Codex Provider 已创建。" });
         return;
       }
@@ -125,7 +107,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
       setProviders((current) =>
         appendOrReplaceProvider(current, response.provider, activeProvider.id),
       );
-      selectPersistedProvider(response.provider);
+      selectPersistedItem(response.provider);
       setDetailNotice({ tone: "good", message: "Codex Provider 已保存。" });
     } catch (error) {
       setDetailNotice({
@@ -164,18 +146,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
       const nextProviders = removeProvider(providers, deleteTargetID);
       setProviders(nextProviders);
       setDeleteTargetID(null);
-      const nextSelected = nextProviders[0] ?? null;
-      if (nextSelected) {
-        if (nextSelected.builtIn) {
-          setActiveProviderID(nextSelected.id);
-          setEditorMode("built-in");
-          setDraft(createEmptyDraft());
-        } else {
-          selectPersistedProvider(nextSelected);
-        }
-      } else {
-        startCreateBlank();
-      }
+      applyNextItems(nextProviders);
       setDetailNotice({ tone: "good", message: "Codex Provider 已删除。" });
     } catch (error) {
       setDetailNotice({
@@ -187,185 +158,54 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
     }
   }
 
-  function selectPersistedProvider(provider: CodexProviderSummary) {
-    setActiveProviderID(provider.id);
-    setEditorMode(provider.builtIn ? "built-in" : "edit");
-    setDraft(provider.builtIn ? createEmptyDraft() : createDraftFromProvider(provider));
-  }
-
-  function startCreateBlank() {
-    setActiveProviderID(newCodexProviderID);
-    setEditorMode("create");
-    setDraft(createEmptyDraft());
-    setDetailNotice(null);
-  }
-
-  function cancelCreate() {
-    const fallbackProvider = providers[0] ?? null;
-    if (!fallbackProvider) {
-      startCreateBlank();
-      return;
-    }
-    if (fallbackProvider.builtIn) {
-      setActiveProviderID(fallbackProvider.id);
-      setEditorMode("built-in");
-      setDraft(createEmptyDraft());
-      setDetailNotice(null);
-      return;
-    }
-    selectPersistedProvider(fallbackProvider);
-    setDetailNotice(null);
-  }
-
-  function handleProviderSelect(provider: CodexProviderSummary) {
-    setDetailNotice(null);
-    if (provider.builtIn) {
-      setActiveProviderID(provider.id);
-      setEditorMode("built-in");
-      setDraft(createEmptyDraft());
-      return;
-    }
-    selectPersistedProvider(provider);
-  }
-
-  if (loadError && providers.length === 0) {
-    return (
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>Codex Provider</h2>
-          <p>Codex 连接配置</p>
-        </div>
-        <div className="empty-state error">
-          <strong>当前还不能读取 Codex Provider</strong>
-          <p>{loadError}</p>
-          <div className="button-row">
-            <button
-              className="secondary-button"
-              type="button"
-              onClick={() => void onReload()}
-            >
-              重新读取
-            </button>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <>
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>Codex Provider</h2>
-          <p>Codex 连接配置</p>
-        </div>
-        {loadError ? (
-          <div className="notice-banner warn">
-            <div className="inline-status-row">
-              <span>{loadError}</span>
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => void onReload()}
-              >
-                重新读取
-              </button>
-            </div>
-          </div>
-        ) : null}
-        <div className="profile-layout" style={{ marginTop: "1rem" }}>
-          <div className="profile-list">
-            {providers.map((provider) => (
-              <button
-                key={provider.id}
-                className={`profile-list-button${activeProviderID === provider.id ? " active" : ""}`}
-                type="button"
-                onClick={() => handleProviderSelect(provider)}
-              >
-                <div className="profile-list-head">
-                  <strong>{providerTitle(provider)}</strong>
-                  <span className="robot-tag">
-                    {provider.builtIn ? "默认" : "自定义"}
-                  </span>
-                </div>
-                <p>{providerCardSummary(provider)}</p>
-              </button>
-            ))}
-            <button
-              className={`profile-list-button${activeProviderID === newCodexProviderID ? " active" : ""}`}
-              type="button"
-              onClick={() => startCreateBlank()}
-            >
-              <div className="profile-list-head">
-                <strong>新增配置</strong>
-                <span className="robot-tag">新增</span>
-              </div>
-              <p>新建配置</p>
-            </button>
-          </div>
-          {renderDetailCard({
-            actionBusy,
-            activeProvider,
-            deleteTargetID,
-            detailNotice,
-            draft,
-            editorMode,
-            onCancelCreate: cancelCreate,
-            onDeleteTargetChange: setDeleteTargetID,
-            onDraftChange: setDraft,
-            onSave: (event) => void handleSave(event),
-            onStartCreate: startCreateBlank,
-          })}
-        </div>
-      </section>
+      <ConfigSectionShell
+        sectionTitle="Codex Provider"
+        sectionDescription="Codex 连接配置"
+        emptyLoadErrorTitle="当前还不能读取 Codex Provider"
+        loadError={loadError}
+        onReload={onReload}
+        items={providers}
+        activeItemID={activeItemID}
+        newItemID={newCodexProviderID}
+        onItemSelect={handleItemSelect}
+        onStartCreate={startCreateBlank}
+        getItemTitle={providerTitle}
+        getItemSummary={providerCardSummary}
+        detailCard={renderCodexProviderDetailCard({
+          actionBusy,
+          activeProvider,
+          deleteTargetID,
+          detailNotice,
+          draft,
+          editorMode,
+          onCancelCreate: cancelCreate,
+          onDeleteTargetChange: setDeleteTargetID,
+          onDraftChange: setDraft,
+          onSave: (event) => void handleSave(event),
+          onStartCreate: startCreateBlank,
+        })}
+      />
 
-      {deleteTargetID ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-codex-provider-title"
-          >
-            <h3 id="delete-codex-provider-title">确认删除 Codex Provider</h3>
-            <p className="modal-copy">
-              删除后将移除“
-              {providerTitle(
-                providers.find((provider) => provider.id === deleteTargetID) ?? null,
-              )}
-              ”，此操作不可恢复。
-            </p>
-            <div className="modal-actions">
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => setDeleteTargetID(null)}
-              >
-                取消
-              </button>
-              <button
-                className="danger-button"
-                type="button"
-                disabled={actionBusy === "delete-codex-provider"}
-                onClick={() => void handleDelete()}
-              >
-                确认删除
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      <ConfigDeleteConfirmModal
+        targetID={deleteTargetID}
+        items={providers}
+        dialogTitle="确认删除 Codex Provider"
+        confirmDisabled={actionBusy === "delete-codex-provider"}
+        getItemTitle={providerTitle}
+        onCancel={() => setDeleteTargetID(null)}
+        onConfirm={() => void handleDelete()}
+      />
     </>
   );
 }
 
-type DetailCardProps = {
-  actionBusy: string;
+type CodexDetailCardProps = Pick<
+  ConfigEditorSectionState<CodexProviderSummary, CodexProviderDraft>,
+  "actionBusy" | "deleteTargetID" | "detailNotice" | "draft" | "editorMode"
+> & {
   activeProvider: CodexProviderSummary | null;
-  deleteTargetID: string | null;
-  detailNotice: DetailNotice | null;
-  draft: CodexProviderDraft;
-  editorMode: EditorMode;
   onCancelCreate: () => void;
   onDeleteTargetChange: (value: string | null) => void;
   onDraftChange: Dispatch<SetStateAction<CodexProviderDraft>>;
@@ -373,7 +213,7 @@ type DetailCardProps = {
   onStartCreate: () => void;
 };
 
-function renderDetailCard(props: DetailCardProps) {
+function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
   const {
     actionBusy,
     activeProvider,
@@ -390,30 +230,15 @@ function renderDetailCard(props: DetailCardProps) {
 
   if (editorMode === "built-in") {
     return (
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>{providerTitle(activeProvider)}</h2>
-          <p>系统默认的 Codex 连接</p>
-        </div>
-        {detailNotice ? (
-          <div className={`notice-banner ${detailNotice.tone}`}>
-            {detailNotice.message}
-          </div>
-        ) : null}
-        <div className="completed-card profile-hero-card">
-          <h3>系统默认配置</h3>
-          <p>如需使用其他端点，请新增配置。</p>
-        </div>
-        <div className="button-row">
-          <button
-            className="primary-button"
-            type="button"
-            onClick={() => onStartCreate()}
-          >
-            新增自定义配置
-          </button>
-        </div>
-      </section>
+      <ConfigBuiltInDetailCard
+        title={providerTitle(activeProvider)}
+        description="系统默认的 Codex 连接"
+        notice={detailNotice}
+        heroTitle="系统默认配置"
+        heroDescription="如需使用其他端点，请新增配置。"
+        startCreateLabel="新增自定义配置"
+        onStartCreate={onStartCreate}
+      />
     );
   }
 
@@ -423,141 +248,125 @@ function renderDetailCard(props: DetailCardProps) {
         ? `新增配置：${draft.name.trim()}`
         : "新增 Codex Provider"
       : providerTitle(activeProvider);
-  const description =
-    editorMode === "create"
-      ? "填写连接信息"
-      : "";
 
   return (
-    <section className="panel">
-      <div className="step-stage-head">
-        <h2>{title}</h2>
-        <p>{description}</p>
-      </div>
-      {detailNotice ? (
-        <div className={`notice-banner ${detailNotice.tone}`}>
-          {detailNotice.message}
-        </div>
-      ) : null}
-      <form noValidate onSubmit={onSave}>
-        <div className="form-grid" style={{ marginTop: "1rem" }}>
-          <label className="field form-grid-span-2">
-            <span>
-              名称 <em className="field-required">*</em>
-            </span>
-            <input
-              required
-              value={draft.name}
-              placeholder="例如：研发代理"
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="field">
-            <span>
-              端点地址 <em className="field-required">*</em>
-            </span>
-            <input
-              required
-              value={draft.baseURL}
-              placeholder="例如：https://proxy.internal/v1"
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  baseURL: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="field">
-            <span>
-              API Key <em className="field-required">*</em>
-            </span>
-            <input
-              autoComplete="new-password"
-              placeholder="输入 API Key"
-              type="password"
-              value={draft.apiKey}
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  apiKey: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="field">
-            <span>默认模型</span>
-            <input
-              value={draft.model}
-              placeholder="例如：gpt-5.4"
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  model: event.target.value,
-                }))
-              }
-            />
-          </label>
-
-          <label className="field">
-            <span>默认推理强度</span>
-            <select
-              value={draft.reasoningEffort}
-              onChange={(event) =>
-                onDraftChange((current) => ({
-                  ...current,
-                  reasoningEffort: event.target.value,
-                }))
-              }
-            >
-              <option value="">不设置</option>
-              {codexReasoningOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="button-row">
+    <ConfigFormDetailCard
+      title={title}
+      description={editorMode === "create" ? "填写连接信息" : ""}
+      notice={detailNotice}
+      onSave={onSave}
+      submitLabel={editorMode === "create" ? "保存配置" : "保存修改"}
+      submitDisabled={actionBusy === "save-codex-provider"}
+      secondaryAction={
+        editorMode === "create" ? (
           <button
-            className="primary-button"
+            className="ghost-button"
             disabled={actionBusy === "save-codex-provider"}
-            type="submit"
+            type="button"
+            onClick={() => onCancelCreate()}
           >
-            {editorMode === "create" ? "保存配置" : "保存修改"}
+            取消
           </button>
-          {editorMode === "create" ? (
-            <button
-              className="ghost-button"
-              disabled={actionBusy === "save-codex-provider"}
-              type="button"
-              onClick={() => onCancelCreate()}
-            >
-              取消
-            </button>
-          ) : (
-            <button
-              className="danger-button"
-              disabled={Boolean(deleteTargetID) || actionBusy === "delete-codex-provider"}
-              type="button"
-              onClick={() => onDeleteTargetChange(activeProvider?.id ?? null)}
-            >
-              删除配置
-            </button>
-          )}
-        </div>
-      </form>
-    </section>
+        ) : (
+          <button
+            className="danger-button"
+            disabled={Boolean(deleteTargetID) || actionBusy === "delete-codex-provider"}
+            type="button"
+            onClick={() => onDeleteTargetChange(activeProvider?.id ?? null)}
+          >
+            删除配置
+          </button>
+        )
+      }
+    >
+      <div className="form-grid" style={{ marginTop: "1rem" }}>
+        <label className="field form-grid-span-2">
+          <span>
+            名称 <em className="field-required">*</em>
+          </span>
+          <input
+            required
+            value={draft.name}
+            placeholder="例如：研发代理"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                name: event.target.value,
+              }))
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>
+            端点地址 <em className="field-required">*</em>
+          </span>
+          <input
+            required
+            value={draft.baseURL}
+            placeholder="例如：https://proxy.internal/v1"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                baseURL: event.target.value,
+              }))
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>
+            API Key <em className="field-required">*</em>
+          </span>
+          <input
+            autoComplete="new-password"
+            placeholder="输入 API Key"
+            type="password"
+            value={draft.apiKey}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                apiKey: event.target.value,
+              }))
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>默认模型</span>
+          <input
+            value={draft.model}
+            placeholder="例如：gpt-5.4"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                model: event.target.value,
+              }))
+            }
+          />
+        </label>
+
+        <label className="field">
+          <span>默认推理强度</span>
+          <select
+            value={draft.reasoningEffort}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                reasoningEffort: event.target.value,
+              }))
+            }
+          >
+            <option value="">不设置</option>
+            {codexReasoningOptions.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </ConfigFormDetailCard>
   );
 }
 
