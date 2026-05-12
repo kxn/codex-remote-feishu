@@ -642,6 +642,19 @@ V1 应明确分成两条规则。
 
 这类事件天然附着在某个刚结束的 turn 上。
 
+但这里的 `turn_terminal` 不是指“任何 turn 的终态”。
+
+V1 只接受：
+
+1. 当前 surface 正在服务的前台主线 turn
+
+V1 明确排除：
+
+1. subagent 造成的 turn
+2. `fork_ephemeral` / `start_ephemeral` 这类 detour / fork / 临时会话 turn
+3. internal helper turn
+4. 其他不属于当前前台主线的后台或旁路 turn
+
 因此它应使用：
 
 1. 该 turn 所属实例的 backend
@@ -652,7 +665,14 @@ V1 应明确分成两条规则。
 
 1. 直接复用当前服务这个窗口的实例配置
 2. 在可能时走更轻量的 helper 路径
-3. 但无论怎样，都不应改写当前用户可见 thread
+3. 如果该 turn 对应的 workspace / surface 在事件真正处理时已经 `detach`，则这次 `turn_terminal` Autopilot 直接跳过，不再后台执行
+4. 但无论怎样，都不应改写当前用户可见 thread
+
+也就是说：
+
+1. `turn_terminal` 是附着在当前交互上下文上的自动化
+2. 它只对当前前台主线 turn 生效
+3. 它不是“用户都已经 detach 了还继续在后台补跑”的工作区级守护逻辑
 
 #### 11.4.2 `schedule_tick`
 
