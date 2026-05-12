@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -480,7 +481,7 @@ func TestTargetPickerEditingCardUsesStepHeaderInsteadOfSummary(t *testing.T) {
 			{Value: "thread:thread-2", Kind: control.FeishuTargetPickerSessionThread, Label: "整理样式", MetaText: "刚刚"},
 		},
 	}, "life-step")
-	if !containsMarkdownExact(elements, formatNeutralTextTag("模式/目标")) {
+	if !containsMarkdownExact(elements, texttags.FormatNeutralTextTag("模式/目标")) {
 		t.Fatalf("expected step header stage tag, got %#v", elements)
 	}
 	if !containsMarkdownExact(elements, "**切到哪个工作区 / 会话？**") {

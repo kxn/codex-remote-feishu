@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -37,11 +38,11 @@ func projectNoticeBody(notice control.Notice) string {
 		return ""
 	}
 	if strings.HasPrefix(strings.TrimSpace(notice.Title), "链路错误") {
-		return renderSystemInlineTags(notice.Text)
+		return texttags.RenderSystemInlineTags(notice.Text)
 	}
 	switch notice.Code {
 	case "debug_error", "surface_override_usage", "surface_access_usage", "message_recall_too_late":
-		return renderSystemInlineTags(notice.Text)
+		return texttags.RenderSystemInlineTags(notice.Text)
 	default:
 		return notice.Text
 	}

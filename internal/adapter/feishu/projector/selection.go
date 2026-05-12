@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -43,7 +44,7 @@ func selectionPromptElements(prompt selectionRenderModel, daemonLifecycleID stri
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if footer := selectionPromptPaginationFooter(prompt, daemonLifecycleID); len(footer) != 0 {
@@ -121,7 +122,7 @@ func buildAttachSelectionPromptElements(
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if len(elements) == 0 {

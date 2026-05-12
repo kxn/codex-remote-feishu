@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -54,7 +55,7 @@ func useThreadSelectionPromptElements(prompt selectionRenderModel, daemonLifecyc
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {
@@ -184,7 +185,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {
@@ -356,7 +357,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {
@@ -454,7 +455,7 @@ func useThreadWorkspaceIndexElements(prompt selectionRenderModel, daemonLifecycl
 	if hint := strings.TrimSpace(prompt.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if footer := useThreadPromptFooter(prompt, daemonLifecycleID); len(footer) != 0 {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
@@ -417,7 +418,7 @@ func targetPickerFieldMarkdown(label, value, placeholder string) string {
 	if strings.TrimSpace(value) == "" {
 		value = strings.TrimSpace(firstNonEmpty(placeholder, "未填写"))
 	}
-	return fmt.Sprintf("**%s**\n%s", strings.TrimSpace(label), formatNeutralTextTag(value))
+	return fmt.Sprintf("**%s**\n%s", strings.TrimSpace(label), texttags.FormatNeutralTextTag(value))
 }
 
 func TargetPickerMessageElements(messages []control.FeishuTargetPickerMessage) []map[string]any {

@@ -1,19 +1,23 @@
 package projector
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
+)
 
 func targetPickerHeaderElements(stageLabel, question string) []map[string]any {
 	elements := make([]map[string]any, 0, 2)
 	if stageLabel = strings.TrimSpace(stageLabel); stageLabel != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": formatNeutralTextTag(stageLabel),
+			"content": texttags.FormatNeutralTextTag(stageLabel),
 		})
 	}
 	if question = strings.TrimSpace(question); question != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": "**" + renderSystemInlineTags(question) + "**",
+			"content": "**" + texttags.RenderSystemInlineTags(question) + "**",
 		})
 	}
 	return elements
@@ -26,6 +30,6 @@ func targetPickerMinorLabelElement(label string) map[string]any {
 	}
 	return map[string]any{
 		"tag":     "markdown",
-		"content": formatNeutralTextTag(label),
+		"content": texttags.FormatNeutralTextTag(label),
 	}
 }

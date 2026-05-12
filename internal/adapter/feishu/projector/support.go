@@ -1,7 +1,6 @@
 package projector
 
 import (
-	"html"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -209,111 +208,4 @@ func cloneCardAny(value any) any {
 func cardStringValue(raw any) string {
 	value, _ := raw.(string)
 	return value
-}
-
-func formatNeutralTextTag(text string) string {
-	return "<text_tag color='neutral'>" + html.EscapeString(strings.TrimSpace(text)) + "</text_tag>"
-}
-
-func formatCommandTextTag(text string) string {
-	text = html.EscapeString(strings.TrimSpace(text))
-	text = strings.ReplaceAll(text, "&lt;", "<")
-	text = strings.ReplaceAll(text, "&gt;", ">")
-	text = restoreLiteralAmpersands(text)
-	return "<text_tag color='neutral'>" + text + "</text_tag>"
-}
-
-func formatInlineCodeTextTag(text string) string {
-	trimmed := strings.TrimSpace(text)
-	escaped := html.EscapeString(trimmed)
-	escaped = strings.ReplaceAll(escaped, "&lt;", "<")
-	escaped = strings.ReplaceAll(escaped, "&gt;", ">")
-	escaped = restoreLiteralAmpersands(escaped)
-	escaped = strings.ReplaceAll(escaped, "&#34;", "\"")
-	escaped = strings.ReplaceAll(escaped, "&#39;", "'")
-	return "<text_tag color='neutral'>" + escaped + "</text_tag>"
-}
-
-func restoreLiteralAmpersands(text string) string {
-	if !strings.Contains(text, "&amp;") {
-		return text
-	}
-	var out strings.Builder
-	out.Grow(len(text))
-	for len(text) > 0 {
-		if strings.HasPrefix(text, "&amp;") {
-			suffix := text[len("&amp;"):]
-			if startsHTMLLikeEntity(suffix) {
-				out.WriteString("&amp;")
-			} else {
-				out.WriteByte('&')
-			}
-			text = suffix
-			continue
-		}
-		out.WriteByte(text[0])
-		text = text[1:]
-	}
-	return out.String()
-}
-
-func startsHTMLLikeEntity(text string) bool {
-	if text == "" {
-		return false
-	}
-	switch text[0] {
-	case '#':
-		return true
-	case 'a', 'b', 'c', 'd', 'g', 'l', 'm', 'n', 'q', 'r', 't':
-		return true
-	default:
-		return false
-	}
-}
-
-func renderSystemInlineTags(text string) string {
-	if !strings.Contains(text, "`") {
-		return text
-	}
-	lines := strings.Split(text, "\n")
-	inFence := false
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "```") {
-			inFence = !inFence
-			continue
-		}
-		if inFence || !strings.Contains(line, "`") {
-			continue
-		}
-		lines[i] = renderInlineTagsInLine(line)
-	}
-	return strings.Join(lines, "\n")
-}
-
-func renderInlineTagsInLine(line string) string {
-	var out strings.Builder
-	for len(line) > 0 {
-		start := strings.IndexByte(line, '`')
-		if start < 0 {
-			out.WriteString(line)
-			break
-		}
-		out.WriteString(line[:start])
-		line = line[start+1:]
-		end := strings.IndexByte(line, '`')
-		if end < 0 {
-			out.WriteByte('`')
-			out.WriteString(line)
-			break
-		}
-		token := strings.TrimSpace(line[:end])
-		if token == "" {
-			out.WriteString("``")
-		} else {
-			out.WriteString(formatInlineCodeTextTag(token))
-		}
-		line = line[end+1:]
-	}
-	return out.String()
 }

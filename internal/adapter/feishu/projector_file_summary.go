@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/displaypath"
 )
@@ -13,13 +14,13 @@ func formatFileChangePath(file control.FileChangeSummaryEntry, labels map[string
 	movePath := strings.TrimSpace(file.MovePath)
 	switch {
 	case path != "" && movePath != "":
-		return fmt.Sprintf("%s → %s", formatNeutralTextTag(fileChangeDisplayLabel(path, labels)), formatNeutralTextTag(fileChangeDisplayLabel(movePath, labels)))
+		return fmt.Sprintf("%s → %s", texttags.FormatNeutralTextTag(fileChangeDisplayLabel(path, labels)), texttags.FormatNeutralTextTag(fileChangeDisplayLabel(movePath, labels)))
 	case path != "":
-		return formatNeutralTextTag(fileChangeDisplayLabel(path, labels))
+		return texttags.FormatNeutralTextTag(fileChangeDisplayLabel(path, labels))
 	case movePath != "":
-		return formatNeutralTextTag(fileChangeDisplayLabel(movePath, labels))
+		return texttags.FormatNeutralTextTag(fileChangeDisplayLabel(movePath, labels))
 	default:
-		return formatNeutralTextTag("(unknown)")
+		return texttags.FormatNeutralTextTag("(unknown)")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -166,14 +167,14 @@ func pathPickerFileModeElementsWithPages(
 ) []map[string]any {
 	elements := make([]map[string]any, 0, 12)
 	summaryLines := []string{
-		"**当前目录**\n" + formatNeutralTextTag(view.CurrentPath),
-		"**允许范围**\n" + formatNeutralTextTag(view.RootPath),
+		"**当前目录**\n" + texttags.FormatNeutralTextTag(view.CurrentPath),
+		"**允许范围**\n" + texttags.FormatNeutralTextTag(view.RootPath),
 	}
 	selectedPath := strings.TrimSpace(view.SelectedPath)
 	if selectedPath != "" {
-		summaryLines = append(summaryLines, "**待发送文件**\n"+formatNeutralTextTag(selectedPath))
+		summaryLines = append(summaryLines, "**待发送文件**\n"+texttags.FormatNeutralTextTag(selectedPath))
 	} else {
-		summaryLines = append(summaryLines, "**待发送文件**\n"+formatNeutralTextTag("未选择"))
+		summaryLines = append(summaryLines, "**待发送文件**\n"+texttags.FormatNeutralTextTag("未选择"))
 	}
 	elements = append(elements, map[string]any{
 		"tag":     "markdown",
@@ -204,7 +205,7 @@ func pathPickerFileModeElementsWithPages(
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
@@ -221,12 +222,12 @@ func pathPickerDirectoryModeElementsWithPage(
 ) []map[string]any {
 	elements := make([]map[string]any, 0, 10)
 	summaryLines := []string{
-		"**允许范围**\n" + formatNeutralTextTag(view.RootPath),
-		"**当前目录**\n" + formatNeutralTextTag(view.CurrentPath),
+		"**允许范围**\n" + texttags.FormatNeutralTextTag(view.RootPath),
+		"**当前目录**\n" + texttags.FormatNeutralTextTag(view.CurrentPath),
 	}
 	selectedPath := strings.TrimSpace(firstNonEmpty(view.SelectedPath, view.CurrentPath))
 	if selectedPath != "" {
-		summaryLines = append(summaryLines, "**当前选择**\n"+formatNeutralTextTag(selectedPath))
+		summaryLines = append(summaryLines, "**当前选择**\n"+texttags.FormatNeutralTextTag(selectedPath))
 	}
 	elements = append(elements, map[string]any{
 		"tag":     "markdown",
@@ -246,7 +247,7 @@ func pathPickerDirectoryModeElementsWithPage(
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
@@ -266,7 +267,7 @@ func pathPickerOwnerSubpageDirectoryModeElementsWithPage(
 	if strings.TrimSpace(view.RootPath) != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": "范围：" + formatNeutralTextTag(view.RootPath),
+			"content": "范围：" + texttags.FormatNeutralTextTag(view.RootPath),
 		})
 	}
 	if current := strings.TrimSpace(view.CurrentPath); current != "" {

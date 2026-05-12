@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -67,7 +68,7 @@ func ThreadHistoryListElements(view control.FeishuThreadHistoryView, daemonLifec
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": renderSystemInlineTags(hint),
+			"content": texttags.RenderSystemInlineTags(hint),
 		})
 	}
 	buttons := make([]map[string]any, 0, 2)
@@ -90,13 +91,13 @@ func ThreadHistoryDetailElements(view control.FeishuThreadHistoryView, daemonLif
 	}
 	lines := []string{
 		fmt.Sprintf("**第 %d 轮**", detail.Ordinal),
-		"**状态**\n" + formatNeutralTextTag(firstNonEmpty(strings.TrimSpace(detail.Status), "-")),
+		"**状态**\n" + texttags.FormatNeutralTextTag(firstNonEmpty(strings.TrimSpace(detail.Status), "-")),
 	}
 	if turnID := strings.TrimSpace(detail.TurnID); turnID != "" {
-		lines = append(lines, "**turn_id**\n"+formatInlineCodeTextTag(turnID))
+		lines = append(lines, "**turn_id**\n"+texttags.FormatInlineCodeTextTag(turnID))
 	}
 	if updated := strings.TrimSpace(detail.UpdatedText); updated != "" {
-		lines = append(lines, "**更新时间**\n"+formatNeutralTextTag(updated))
+		lines = append(lines, "**更新时间**\n"+texttags.FormatNeutralTextTag(updated))
 	}
 	elements := []map[string]any{{
 		"tag":     "markdown",
@@ -122,16 +123,16 @@ func ThreadHistoryDetailElements(view control.FeishuThreadHistoryView, daemonLif
 func threadHistorySummaryMarkdown(view control.FeishuThreadHistoryView) string {
 	lines := make([]string, 0, 4)
 	if label := strings.TrimSpace(view.ThreadLabel); label != "" {
-		lines = append(lines, "**当前会话**\n"+formatNeutralTextTag(label))
+		lines = append(lines, "**当前会话**\n"+texttags.FormatNeutralTextTag(label))
 	}
 	if view.TurnCount > 0 {
-		lines = append(lines, fmt.Sprintf("**总轮数**\n%s", formatNeutralTextTag(fmt.Sprintf("%d", view.TurnCount))))
+		lines = append(lines, fmt.Sprintf("**总轮数**\n%s", texttags.FormatNeutralTextTag(fmt.Sprintf("%d", view.TurnCount))))
 	}
 	if view.Detail == nil && view.TotalPages > 0 && view.PageEnd > 0 {
-		lines = append(lines, fmt.Sprintf("**当前页**\n%s", formatNeutralTextTag(fmt.Sprintf("%d-%d / %d", view.PageStart+1, view.PageEnd, view.TurnCount))))
+		lines = append(lines, fmt.Sprintf("**当前页**\n%s", texttags.FormatNeutralTextTag(fmt.Sprintf("%d-%d / %d", view.PageStart+1, view.PageEnd, view.TurnCount))))
 	}
 	if label := strings.TrimSpace(view.CurrentTurnLabel); label != "" {
-		lines = append(lines, "**当前进行**\n"+formatNeutralTextTag(label))
+		lines = append(lines, "**当前进行**\n"+texttags.FormatNeutralTextTag(label))
 	}
 	return strings.Join(lines, "\n")
 }

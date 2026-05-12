@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -464,7 +465,7 @@ func TestOwnerSubpageDirectoryPathPickerUsesStepHeaderLayout(t *testing.T) {
 			{Name: "demo", Label: "demo", Kind: control.PathPickerEntryDirectory, ActionKind: control.PathPickerEntryActionEnter},
 		},
 	}, "life-owner-subpage")
-	if !containsMarkdownExact(elements, formatNeutralTextTag("目录/选择目录")) {
+	if !containsMarkdownExact(elements, texttags.FormatNeutralTextTag("目录/选择目录")) {
 		t.Fatalf("expected owner-subpage stage tag, got %#v", elements)
 	}
 	if !containsMarkdownExact(elements, "**选择要接入的目录**") {
