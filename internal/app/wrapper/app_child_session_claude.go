@@ -69,6 +69,7 @@ func (a *App) buildClaudeChildLaunch(resume *claudeLaunchResumeTarget) ([]string
 		"--include-partial-messages",
 		"--replay-user-messages",
 		"--verbose",
+		"--allow-dangerously-skip-permissions",
 		"--permission-prompt-tool", "stdio",
 	}
 	if resume != nil && strings.TrimSpace(resume.ThreadID) != "" {
