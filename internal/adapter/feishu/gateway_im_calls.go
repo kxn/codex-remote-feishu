@@ -8,6 +8,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -367,26 +368,7 @@ func ignoredMissingMessageDeleteError(_ int, msg string) bool {
 	return false
 }
 
-func cardTemplate(themeKey, fallback string) string {
-	key := strings.ToLower(strings.TrimSpace(themeKey))
-	if key == "" {
-		key = strings.ToLower(strings.TrimSpace(fallback))
-	}
-	switch {
-	case key == cardThemeProgress:
-		return "wathet"
-	case key == cardThemePlan:
-		return "blue"
-	case key == cardThemeFinal:
-		return "blue"
-	case key == cardThemeSuccess, key == cardThemeApproval:
-		return "green"
-	case key == cardThemeError || strings.Contains(key, "error") || strings.Contains(key, "fail") || strings.Contains(key, "reject"):
-		return "red"
-	default:
-		return "grey"
-	}
-}
+func cardTemplate(themeKey, fallback string) string { return cardtheme.Template(themeKey, fallback) }
 
 func (g *LiveGateway) recordSurfaceMessage(messageID, surfaceSessionID string) {
 	if messageID == "" || surfaceSessionID == "" {

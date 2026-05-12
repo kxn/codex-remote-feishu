@@ -1,6 +1,10 @@
 package feishu
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
+)
 
 type cardEnvelopeVersion string
 
@@ -131,7 +135,7 @@ func renderCardDocument(doc *cardDocument, version cardEnvelopeVersion, updateMu
 		elements = append(elements, rendered)
 	}
 	header := map[string]any{
-		"template": cardTemplate(doc.ThemeKey, doc.Title),
+		"template": cardtheme.Template(doc.ThemeKey, doc.Title),
 		"title": map[string]any{
 			"tag":     normalizeCardTextTag(doc.TitleTag, cardTextTagPlainText),
 			"content": doc.Title,

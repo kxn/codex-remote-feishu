@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
@@ -104,7 +105,7 @@ func RenderInteractiveCardPayload(title, body, themeKey string, elements []map[s
 		"schema": "2.0",
 		"config": config,
 		"header": map[string]any{
-			"template": cardTemplate(themeKey, title),
+			"template": cardtheme.Template(themeKey, title),
 			"title": map[string]any{
 				"tag":     "plain_text",
 				"content": title,
@@ -113,27 +114,6 @@ func RenderInteractiveCardPayload(title, body, themeKey string, elements []map[s
 		"body": map[string]any{
 			"elements": renderedElements,
 		},
-	}
-}
-
-func cardTemplate(themeKey, fallback string) string {
-	key := strings.ToLower(strings.TrimSpace(themeKey))
-	if key == "" {
-		key = strings.ToLower(strings.TrimSpace(fallback))
-	}
-	switch {
-	case key == "progress":
-		return "wathet"
-	case key == "plan":
-		return "blue"
-	case key == "final":
-		return "blue"
-	case key == "success", key == "approval":
-		return "green"
-	case key == "error" || strings.Contains(key, "error") || strings.Contains(key, "fail") || strings.Contains(key, "reject"):
-		return "red"
-	default:
-		return "grey"
 	}
 }
 

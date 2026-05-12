@@ -577,25 +577,6 @@ func TestPlanInboundMessageEventTreatsMentionedSlashCommandAsCommand(t *testing.
 	}
 }
 
-func TestCardTemplateUsesSemanticColors(t *testing.T) {
-	tests := map[string]string{
-		cardThemeInfo:     "grey",
-		cardThemeProgress: "wathet",
-		cardThemePlan:     "blue",
-		cardThemeSuccess:  "green",
-		cardThemeApproval: "green",
-		cardThemeFinal:    "blue",
-		cardThemeError:    "red",
-		"relay-error":     "red",
-		"thread-1":        "grey",
-	}
-	for input, want := range tests {
-		if got := cardTemplate(input, ""); got != want {
-			t.Fatalf("cardTemplate(%q) = %q, want %q", input, got, want)
-		}
-	}
-}
-
 func TestParseCardActionTriggerEventIgnoresRemovedLegacyKinds(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-1", "feishu:app-1:user:user-1")
