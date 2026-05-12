@@ -7,7 +7,6 @@ import type {
   FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigPlanResponse,
   FeishuAppAutoConfigPublishResponse,
-  FeishuAppPermissionCheckResponse,
   FeishuAppSummary,
   GatewayStatus,
   ImageStagingStatusResponse,
@@ -22,7 +21,6 @@ import type {
   OnboardingWorkflowStage,
   PreviewDriveStatusResponse,
   RuntimeRequirementsDetectResponse,
-  RuntimeStatus,
   VSCodeDetectResponse,
 } from "../lib/types";
 
@@ -456,19 +454,6 @@ export function makeOnboardingWorkflow(
   };
 }
 
-export function makeRuntimeStatus(
-  overrides: Partial<RuntimeStatus> = {},
-): RuntimeStatus {
-  return {
-    instances: [],
-    surfaces: [],
-    gateways: [],
-    pendingRemoteTurns: [],
-    activeRemoteTurns: [],
-    ...overrides,
-  };
-}
-
 export function makeImageStagingStatus(
   overrides: Partial<ImageStagingStatusResponse> = {},
 ): ImageStagingStatusResponse {
@@ -494,24 +479,6 @@ export function makePreviewDriveStatus(
       estimatedBytes: 0,
       unknownSizeFileCount: 0,
     },
-    ...overrides,
-  };
-}
-
-export function makePermissionCheck(
-  overrides: Partial<FeishuAppPermissionCheckResponse> = {},
-): FeishuAppPermissionCheckResponse {
-  return {
-    app: makeApp(),
-    ready: true,
-    missingScopes: [],
-    grantJSON: `{
-  "scopes": {
-    "tenant": [],
-  "user": []
-  }
-}`,
-    lastCheckedAt: "2026-04-25T08:00:00Z",
     ...overrides,
   };
 }
@@ -611,37 +578,6 @@ export function makeAutoConfigPublishResponse(
       }),
     },
     ...overrides,
-  };
-}
-
-export function makeFeishuManifest() {
-  return {
-    manifest: {
-      events: [
-        {
-          event: "im.message.receive_v1",
-          purpose: "接收用户发给机器人的文本和图片消息",
-        },
-        {
-          event: "im.message.recalled_v1",
-          purpose: "处理用户撤回消息",
-        },
-        {
-          event: "im.message.reaction.created_v1",
-          purpose: "处理用户对消息的反馈动作",
-        },
-        {
-          event: "application.bot.menu_v6",
-          purpose: "处理机器人菜单点击",
-        },
-      ],
-      callbacks: [
-        {
-          callback: "card.action.trigger",
-          purpose: "处理卡片按钮和卡片交互回调",
-        },
-      ],
-    },
   };
 }
 

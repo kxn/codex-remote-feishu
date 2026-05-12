@@ -1,9 +1,7 @@
 import { formatError, requestJSON } from "../../lib/api";
-import type { AutostartDetectResponse, FeishuAppMutation, FeishuAppSummary, VSCodeDetectResponse } from "../../lib/types";
+import type { AutostartDetectResponse, VSCodeDetectResponse } from "../../lib/types";
 
 export type VSCodeUsageScenario = "current_machine" | "remote_only";
-
-export type VSCodeSetupOutcome = "managed_shim" | "remote_only_skip" | "deferred";
 
 export function blankToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
@@ -41,38 +39,11 @@ export async function loadAutostartState(path: string): Promise<{ data: Autostar
   }
 }
 
-export function vscodeHasDetectedBundle(vscode: VSCodeDetectResponse | null): boolean {
-  if (!vscode) {
-    return false;
-  }
-  return Boolean(vscode.latestBundleEntrypoint || vscode.recordedBundleEntrypoint || vscode.candidateBundleEntrypoints?.length);
-}
-
 export function vscodeIsReady(vscode: VSCodeDetectResponse | null): boolean {
   if (!vscode) {
     return false;
   }
   return vscode.latestShim.matchesBinary && !vscode.needsShimReinstall && !vscode.settings.matchesBinary;
-}
-
-export function vscodePrimaryActionLabel(vscode: VSCodeDetectResponse | null, scenario: VSCodeUsageScenario | null): string {
-  if (vscode?.sshSession) {
-    return "在这台远程机器上启用 VS Code";
-  }
-  if (scenario === "remote_only") {
-    return "我会去目标 SSH 机器上处理";
-  }
-  return "在这台机器上启用 VS Code";
-}
-
-export function vscodeRequiresBundle(vscode: VSCodeDetectResponse | null, scenario: VSCodeUsageScenario | null): boolean {
-  if (!vscode) {
-    return false;
-  }
-  if (vscode.sshSession) {
-    return true;
-  }
-  return scenario === "current_machine";
 }
 
 export function vscodeApplyModeForScenario(vscode: VSCodeDetectResponse | null, scenario: VSCodeUsageScenario | null): string | null {
@@ -107,44 +78,4 @@ export function currentVSCodeSummary(vscode: VSCodeDetectResponse | null): strin
     return "已在这台机器上接入（扩展入口）";
   }
   return "暂未处理";
-}
-
-export function vscodeOutcomeSummary(vscode: VSCodeDetectResponse | null, outcome: VSCodeSetupOutcome | null): string {
-  switch (outcome) {
-    case "managed_shim":
-      if (vscode?.sshSession) {
-        return "已在这台远程机器上接入（扩展入口）";
-      }
-      return "已在这台机器上接入（扩展入口）";
-    case "remote_only_skip":
-      return "当前机器未接入；你选择稍后在目标 SSH 机器上处理";
-    case "deferred":
-      return "已留到管理页稍后处理";
-    default:
-      return currentVSCodeSummary(vscode);
-  }
-}
-
-export function buildAdminFeishuVerifySuccessMessage(app: FeishuAppSummary, duration: number): string {
-  const parts = [`连接测试成功，用时 ${(duration / 1_000_000_000).toFixed(1)}s。`];
-  if (app.status?.state !== "connected") {
-    parts.push("实际连接以运行状态为准。");
-  }
-  parts.push("切换到新应用后请在新机器人侧重新开始会话。");
-  return parts.join("");
-}
-
-export function buildSetupFeishuVerifySuccessMessage(app: FeishuAppSummary, mutation?: FeishuAppMutation): string {
-  const parts: string[] = [];
-  if (mutation?.message) {
-    parts.push(mutation.message);
-  }
-  parts.push("飞书应用连接成功，已进入下一步。");
-  if (app.status?.state !== "connected") {
-    parts.push("实际连接以运行状态为准。");
-  }
-  if (mutation?.requiresNewChat) {
-    parts.push("请到新机器人侧重新开始会话，再继续后面的联调。");
-  }
-  return parts.join("");
 }

@@ -200,13 +200,6 @@ func (s *Service) findPendingRequestByCommandID(commandID string) (*state.Surfac
 	return nil, nil
 }
 
-func requestOptionIDFromApproved(approved bool) string {
-	if approved {
-		return "accept"
-	}
-	return "decline"
-}
-
 func requestHasOption(request *state.RequestPromptRecord, optionID string) bool {
 	if request == nil {
 		return false
@@ -516,11 +509,11 @@ func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string
 	}
 	if len(upstreamOptions) == 0 {
 		add("accept", firstNonEmpty(metadataString(metadata, "acceptLabel"), "允许一次"), "primary")
-		if approvalRequestSupportsSession(semanticKind) {
+		if approvalRequestSupportsExtendedDecisions(semanticKind) {
 			add("acceptForSession", "本会话允许", "default")
 		}
 		add("decline", firstNonEmpty(metadataString(metadata, "declineLabel"), "拒绝"), "default")
-		if approvalRequestSupportsCancel(semanticKind) {
+		if approvalRequestSupportsExtendedDecisions(semanticKind) {
 			add("cancel", "取消", "default")
 		}
 	}
@@ -642,16 +635,7 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 	return questions
 }
 
-func approvalRequestSupportsSession(semanticKind string) bool {
-	switch control.NormalizeRequestSemanticKind(semanticKind, "approval") {
-	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork:
-		return true
-	default:
-		return false
-	}
-}
-
-func approvalRequestSupportsCancel(semanticKind string) bool {
+func approvalRequestSupportsExtendedDecisions(semanticKind string) bool {
 	switch control.NormalizeRequestSemanticKind(semanticKind, "approval") {
 	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork:
 		return true
