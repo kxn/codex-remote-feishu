@@ -13,6 +13,7 @@ func newRemoteTurnBindingForQueueItem(surface *state.SurfaceConsoleRecord, inst 
 	if surface == nil || inst == nil || item == nil {
 		return nil
 	}
+	dispatchPlan := queuedItemPromptDispatchPlan(item)
 	return &remoteTurnBinding{
 		InstanceID:            inst.InstanceID,
 		SurfaceSessionID:      surface.SurfaceSessionID,
@@ -21,11 +22,11 @@ func newRemoteTurnBindingForQueueItem(surface *state.SurfaceConsoleRecord, inst 
 		SourceMessagePreview:  item.SourceMessagePreview,
 		ReplyToMessageID:      firstNonEmpty(item.ReplyToMessageID, item.SourceMessageID),
 		ReplyToMessagePreview: firstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview),
-		ExecutionMode:         item.FrozenExecutionMode,
+		ExecutionMode:         dispatchPlan.ExecutionMode,
 		BootstrapNewThread:    item.RouteModeAtEnqueue == state.RouteModeNewThreadReady,
-		ThreadID:              strings.TrimSpace(item.FrozenThreadID),
-		SourceThreadID:        queuedItemSourceThreadID(item),
-		SurfaceBindingPolicy:  queuedItemSurfaceBindingPolicy(item),
+		ThreadID:              dispatchPlan.ExecutionThreadID,
+		SourceThreadID:        dispatchPlan.EffectiveSourceThreadID(),
+		SurfaceBindingPolicy:  dispatchPlan.SurfaceBindingPolicy,
 		ThreadCWD:             item.FrozenCWD,
 		Status:                string(item.Status),
 	}

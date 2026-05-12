@@ -494,14 +494,14 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 	if command.Kind != agentproto.CommandPromptSend {
 		return nil, nil
 	}
-	targetThreadID := strings.TrimSpace(command.Target.ThreadID)
-	explicitMode := agentproto.NormalizePromptExecutionMode(command.Target.ExecutionMode)
+	dispatchPlan := agentproto.PromptDispatchPlanFromTarget(command.Target)
+	targetThreadID := strings.TrimSpace(dispatchPlan.ExecutionThreadID)
 	current := r.currentResumeTarget()
-	if explicitMode == agentproto.PromptExecutionModeStartNew && targetThreadID == "" {
+	if dispatchPlan.ExecutionMode == agentproto.PromptExecutionModeStartNew && targetThreadID == "" {
 		if current == nil || strings.TrimSpace(current.ThreadID) == "" {
 			return nil, nil
 		}
-		target := command.Target
+		target := dispatchPlan.LegacyTarget()
 		if strings.TrimSpace(target.CWD) == "" {
 			target.CWD = strings.TrimSpace(current.CWD)
 			if target.CWD == "" {
@@ -523,7 +523,7 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 	if !found || resume == nil {
 		return nil, nil
 	}
-	target := command.Target
+	target := dispatchPlan.LegacyTarget()
 	target.ThreadID = resume.ThreadID
 	if strings.TrimSpace(target.CWD) == "" {
 		target.CWD = resume.CWD
@@ -532,10 +532,11 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 }
 
 func (r *claudeBackendRuntime) resolveLaunchResumeTarget(target agentproto.Target) (*claudeLaunchResumeTarget, error) {
-	threadID := strings.TrimSpace(target.ThreadID)
-	cwd := strings.TrimSpace(target.CWD)
+	dispatchPlan := agentproto.PromptDispatchPlanFromTarget(target)
+	threadID := strings.TrimSpace(dispatchPlan.ExecutionThreadID)
+	cwd := strings.TrimSpace(dispatchPlan.CWD)
 	if threadID == "" {
-		if agentproto.NormalizePromptExecutionMode(target.ExecutionMode) == agentproto.PromptExecutionModeStartNew {
+		if dispatchPlan.ExecutionMode == agentproto.PromptExecutionModeStartNew {
 			return nil, nil
 		}
 		current := r.currentResumeTarget()
@@ -545,7 +546,7 @@ func (r *claudeBackendRuntime) resolveLaunchResumeTarget(target agentproto.Targe
 		copy := *current
 		return &copy, nil
 	}
-	resume, found, err := r.lookupStoredResumeTarget(target)
+	resume, found, err := r.lookupStoredResumeTarget(dispatchPlan.LegacyTarget())
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +570,7 @@ func (r *claudeBackendRuntime) resolveLaunchResumeTarget(target agentproto.Targe
 }
 
 func (r *claudeBackendRuntime) lookupStoredResumeTarget(target agentproto.Target) (*claudeLaunchResumeTarget, bool, error) {
-	threadID := strings.TrimSpace(target.ThreadID)
+	threadID := strings.TrimSpace(agentproto.PromptDispatchPlanFromTarget(target).ExecutionThreadID)
 	if threadID == "" {
 		return nil, false, nil
 	}

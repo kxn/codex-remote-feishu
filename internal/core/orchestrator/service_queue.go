@@ -13,17 +13,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func defaultPromptExecutionModeForThread(threadID string) agentproto.PromptExecutionMode {
-	if strings.TrimSpace(threadID) == "" {
-		return agentproto.PromptExecutionModeStartNew
-	}
-	return agentproto.PromptExecutionModeResumeExisting
-}
-
-func defaultSurfaceBindingPolicy() agentproto.SurfaceBindingPolicy {
-	return agentproto.SurfaceBindingPolicyFollowExecutionThread
-}
-
 func (s *Service) maybeBindSurfaceForRemoteTurn(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, instanceID, threadID, turnID string) []eventcontract.Event {
 	if surface == nil || inst == nil || surface.ActiveTurnOrigin == agentproto.InitiatorLocalUI {
 		return nil
@@ -89,6 +78,15 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 
 func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, front bool) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(threadID)
+	if mode := agentproto.NormalizePromptExecutionMode(executionMode); mode != "" {
+		dispatchPlan.ExecutionMode = mode
+	}
+	dispatchPlan.SourceThreadID = strings.TrimSpace(sourceThreadID)
+	if policy := agentproto.NormalizeSurfaceBindingPolicy(bindingPolicy); policy != "" {
+		dispatchPlan.SurfaceBindingPolicy = policy
+	}
+	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	item := &state.QueueItemRecord{
 		SurfaceSessionID:           surface.SurfaceSessionID,
 		ActorUserID:                surface.ActorUserID,
@@ -99,24 +97,15 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		ReplyToMessageID:           sourceMessageID,
 		ReplyToMessagePreview:      normalizeSourceMessagePreview(sourceMessagePreview),
 		Inputs:                     inputs,
-		FrozenThreadID:             threadID,
+		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
 		FrozenCWD:                  cwd,
-		FrozenExecutionMode:        defaultPromptExecutionModeForThread(threadID),
-		FrozenSourceThreadID:       "",
-		FrozenSurfaceBindingPolicy: defaultSurfaceBindingPolicy(),
+		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
+		FrozenSourceThreadID:       dispatchPlan.SourceThreadID,
+		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
 		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
 		FrozenPlanMode:             s.freezePlanModeForPrompt(surface),
 		RouteModeAtEnqueue:         routeMode,
 		Status:                     state.QueueItemQueued,
-	}
-	if mode := agentproto.NormalizePromptExecutionMode(executionMode); mode != "" {
-		item.FrozenExecutionMode = mode
-	}
-	if sourceThreadID = strings.TrimSpace(sourceThreadID); sourceThreadID != "" {
-		item.FrozenSourceThreadID = sourceThreadID
-	}
-	if policy := agentproto.NormalizeSurfaceBindingPolicy(bindingPolicy); policy != "" {
-		item.FrozenSurfaceBindingPolicy = policy
 	}
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
@@ -126,6 +115,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 
 func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(threadID)
 	item := &state.QueueItemRecord{
 		SurfaceSessionID:           surface.SurfaceSessionID,
 		ActorUserID:                surface.ActorUserID,
@@ -133,11 +123,11 @@ func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, 
 		ReplyToMessageID:           strings.TrimSpace(replyToMessageID),
 		ReplyToMessagePreview:      normalizeSourceMessagePreview(replyToMessagePreview),
 		Inputs:                     inputs,
-		FrozenThreadID:             threadID,
+		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
 		FrozenCWD:                  cwd,
-		FrozenExecutionMode:        defaultPromptExecutionModeForThread(threadID),
-		FrozenSourceThreadID:       "",
-		FrozenSurfaceBindingPolicy: defaultSurfaceBindingPolicy(),
+		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
+		FrozenSourceThreadID:       dispatchPlan.SourceThreadID,
+		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
 		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
 		FrozenPlanMode:             s.freezePlanModeForPrompt(surface),
 		RouteModeAtEnqueue:         routeMode,
@@ -309,6 +299,8 @@ func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRe
 	if surface == nil || item == nil {
 		return nil
 	}
+	dispatchPlan := queuedItemPromptDispatchPlan(item)
+	dispatchPlan.CWD = strings.TrimSpace(item.FrozenCWD)
 	return &agentproto.Command{
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
@@ -317,15 +309,7 @@ func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRe
 			ChatID:    surface.ChatID,
 			MessageID: strings.TrimSpace(originMessageID),
 		},
-		Target: agentproto.Target{
-			ExecutionMode:        item.FrozenExecutionMode,
-			SourceThreadID:       item.FrozenSourceThreadID,
-			SurfaceBindingPolicy: item.FrozenSurfaceBindingPolicy,
-			ThreadID:             item.FrozenThreadID,
-			CWD:                  item.FrozenCWD,
-			CreateThreadIfMissing: item.FrozenExecutionMode == agentproto.PromptExecutionModeStartNew ||
-				(item.FrozenExecutionMode == "" && item.FrozenThreadID == ""),
-		},
+		Target: dispatchPlan.LegacyTarget(),
 		Prompt: agentproto.Prompt{
 			Inputs: item.Inputs,
 		},

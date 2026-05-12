@@ -261,29 +261,31 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 	}
 	s.nextQueueItemID++
 	itemID := fmt.Sprintf("queue-%d", s.nextQueueItemID)
+	dispatchPlan := agentproto.NormalizePromptDispatchPlan(agentproto.PromptDispatchPlan{
+		ExecutionMode:        episode.FrozenExecutionMode,
+		ExecutionThreadID:    episode.ThreadID,
+		SourceThreadID:       episode.FrozenSourceThreadID,
+		SurfaceBindingPolicy: episode.FrozenSurfaceBindingPolicy,
+		CWD:                  episode.FrozenCWD,
+	})
 	item := &state.QueueItemRecord{
-		ID:                    itemID,
-		SurfaceSessionID:      surface.SurfaceSessionID,
-		ActorUserID:           surface.ActorUserID,
-		SourceKind:            state.QueueItemSourceAutoContinue,
-		AutoContinueEpisodeID: episode.EpisodeID,
-		ReplyToMessageID:      episode.RootReplyToMessageID,
-		ReplyToMessagePreview: episode.RootReplyToMessagePreview,
-		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: autoContinuePromptText}},
-		FrozenThreadID:        episode.ThreadID,
-		FrozenCWD:             episode.FrozenCWD,
-		FrozenExecutionMode:   episode.FrozenExecutionMode,
-		FrozenSourceThreadID:  episode.FrozenSourceThreadID,
-		FrozenSurfaceBindingPolicy: agentproto.EffectiveSurfaceBindingPolicy(
-			episode.FrozenSurfaceBindingPolicy,
-		),
-		FrozenOverride:     episode.FrozenOverride,
-		FrozenPlanMode:     episode.FrozenPlanMode,
-		RouteModeAtEnqueue: episode.FrozenRouteMode,
-		Status:             state.QueueItemDispatching,
-	}
-	if item.FrozenExecutionMode == "" {
-		item.FrozenExecutionMode = defaultPromptExecutionModeForThread(item.FrozenThreadID)
+		ID:                         itemID,
+		SurfaceSessionID:           surface.SurfaceSessionID,
+		ActorUserID:                surface.ActorUserID,
+		SourceKind:                 state.QueueItemSourceAutoContinue,
+		AutoContinueEpisodeID:      episode.EpisodeID,
+		ReplyToMessageID:           episode.RootReplyToMessageID,
+		ReplyToMessagePreview:      episode.RootReplyToMessagePreview,
+		Inputs:                     []agentproto.Input{{Type: agentproto.InputText, Text: autoContinuePromptText}},
+		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
+		FrozenCWD:                  dispatchPlan.CWD,
+		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
+		FrozenSourceThreadID:       dispatchPlan.SourceThreadID,
+		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
+		FrozenOverride:             episode.FrozenOverride,
+		FrozenPlanMode:             episode.FrozenPlanMode,
+		RouteModeAtEnqueue:         episode.FrozenRouteMode,
+		Status:                     state.QueueItemDispatching,
 	}
 	surface.QueueItems[item.ID] = item
 	binding := newRemoteTurnBindingForQueueItem(surface, inst, item)

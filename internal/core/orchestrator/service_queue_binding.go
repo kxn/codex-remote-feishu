@@ -39,38 +39,23 @@ func queuedItemMatchesTurn(item *state.QueueItemRecord, threadID string) bool {
 }
 
 func queuedItemSourceThreadID(item *state.QueueItemRecord) string {
-	if item == nil {
-		return ""
-	}
-	return strings.TrimSpace(firstNonEmpty(item.FrozenSourceThreadID, item.FrozenThreadID))
+	return queuedItemPromptDispatchPlan(item).EffectiveSourceThreadID()
 }
 
 func queuedItemSurfaceBindingPolicy(item *state.QueueItemRecord) agentproto.SurfaceBindingPolicy {
-	if item == nil {
-		return agentproto.SurfaceBindingPolicyFollowExecutionThread
-	}
-	return agentproto.EffectiveSurfaceBindingPolicy(item.FrozenSurfaceBindingPolicy)
+	return queuedItemPromptDispatchPlan(item).SurfaceBindingPolicy
 }
 
 func remoteBindingExecutionThreadID(binding *remoteTurnBinding) string {
-	if binding == nil {
-		return ""
-	}
-	return strings.TrimSpace(firstNonEmpty(binding.ThreadID, binding.SourceThreadID))
+	return remoteBindingPromptDispatchPlan(binding).EffectiveExecutionThreadID()
 }
 
 func remoteBindingSourceThreadID(binding *remoteTurnBinding) string {
-	if binding == nil {
-		return ""
-	}
-	return strings.TrimSpace(firstNonEmpty(binding.SourceThreadID, binding.ThreadID))
+	return remoteBindingPromptDispatchPlan(binding).EffectiveSourceThreadID()
 }
 
 func remoteBindingSurfaceBindingPolicy(binding *remoteTurnBinding) agentproto.SurfaceBindingPolicy {
-	if binding == nil {
-		return agentproto.SurfaceBindingPolicyFollowExecutionThread
-	}
-	return agentproto.EffectiveSurfaceBindingPolicy(binding.SurfaceBindingPolicy)
+	return remoteBindingPromptDispatchPlan(binding).SurfaceBindingPolicy
 }
 
 func remoteBindingKeepsSurfaceSelection(binding *remoteTurnBinding) bool {
@@ -78,10 +63,33 @@ func remoteBindingKeepsSurfaceSelection(binding *remoteTurnBinding) bool {
 }
 
 func remoteBindingSurfaceThreadID(binding *remoteTurnBinding) string {
-	if remoteBindingKeepsSurfaceSelection(binding) {
-		return remoteBindingSourceThreadID(binding)
+	return remoteBindingPromptDispatchPlan(binding).EffectiveSurfaceThreadID()
+}
+
+func queuedItemPromptDispatchPlan(item *state.QueueItemRecord) agentproto.PromptDispatchPlan {
+	if item == nil {
+		return agentproto.DefaultPromptDispatchPlanForExecutionThread("")
 	}
-	return remoteBindingExecutionThreadID(binding)
+	return agentproto.NormalizePromptDispatchPlan(agentproto.PromptDispatchPlan{
+		ExecutionMode:        item.FrozenExecutionMode,
+		ExecutionThreadID:    item.FrozenThreadID,
+		SourceThreadID:       item.FrozenSourceThreadID,
+		SurfaceBindingPolicy: item.FrozenSurfaceBindingPolicy,
+		CWD:                  item.FrozenCWD,
+	})
+}
+
+func remoteBindingPromptDispatchPlan(binding *remoteTurnBinding) agentproto.PromptDispatchPlan {
+	if binding == nil {
+		return agentproto.DefaultPromptDispatchPlanForExecutionThread("")
+	}
+	return agentproto.NormalizePromptDispatchPlan(agentproto.PromptDispatchPlan{
+		ExecutionMode:        binding.ExecutionMode,
+		ExecutionThreadID:    binding.ThreadID,
+		SourceThreadID:       binding.SourceThreadID,
+		SurfaceBindingPolicy: binding.SurfaceBindingPolicy,
+		CWD:                  binding.ThreadCWD,
+	})
 }
 
 func shouldRestorePreparedNewThread(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, binding *remoteTurnBinding) bool {

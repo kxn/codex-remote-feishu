@@ -216,9 +216,11 @@ type Origin struct {
 }
 
 type Target struct {
-	// Detached branch foundation:
-	// - ExecutionMode/SourceThreadID are consumed by translator (#429).
-	// - SurfaceBindingPolicy is carried through queue/runtime for #430 and #428.
+	// Legacy prompt-dispatch carrier:
+	// - canonical semantics now live in PromptDispatchPlan and the
+	//   PromptDispatchPlanFromTarget/LegacyTarget boundary translator.
+	// - these fields remain on Target for queue/runtime compatibility until the
+	//   later carrier migration lands.
 	ExecutionMode          PromptExecutionMode  `json:"executionMode,omitempty"`
 	SourceThreadID         string               `json:"sourceThreadId,omitempty"`
 	SurfaceBindingPolicy   SurfaceBindingPolicy `json:"surfaceBindingPolicy,omitempty"`

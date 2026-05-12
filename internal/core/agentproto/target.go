@@ -27,22 +27,7 @@ func NormalizePromptExecutionMode(value PromptExecutionMode) PromptExecutionMode
 }
 
 func (target Target) EffectivePromptExecutionMode() PromptExecutionMode {
-	if mode := NormalizePromptExecutionMode(target.ExecutionMode); mode != "" {
-		return mode
-	}
-	if strings.TrimSpace(target.SourceThreadID) != "" {
-		return PromptExecutionModeForkEphemeral
-	}
-	if strings.TrimSpace(target.ThreadID) != "" {
-		return PromptExecutionModeResumeExisting
-	}
-	if target.InternalHelper {
-		return PromptExecutionModeStartEphemeral
-	}
-	if target.CreateThreadIfMissing {
-		return PromptExecutionModeStartNew
-	}
-	return PromptExecutionModeStartNew
+	return PromptDispatchPlanFromTarget(target).ExecutionMode
 }
 
 type SurfaceBindingPolicy string

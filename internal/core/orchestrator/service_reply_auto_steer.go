@@ -47,6 +47,7 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 	queueIndex := len(surface.QueuedQueueItemIDs)
 	thread := inst.Threads[activeThreadID]
 	cwd := strings.TrimSpace(firstNonEmpty(threadCWDFromRecord(thread), inst.WorkspaceRoot))
+	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(activeThreadID)
 	item := &state.QueueItemRecord{
 		ID:                         queueItemID,
 		SurfaceSessionID:           surface.SurfaceSessionID,
@@ -60,11 +61,11 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 		Inputs:                     fullInputs,
 		SteerInputs:                append([]agentproto.Input(nil), action.SteerInputs...),
 		RestoreAsStagedImage:       action.Kind == control.ActionImageMessage,
-		FrozenThreadID:             activeThreadID,
+		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
 		FrozenCWD:                  cwd,
-		FrozenExecutionMode:        defaultPromptExecutionModeForThread(activeThreadID),
+		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
 		FrozenSourceThreadID:       "",
-		FrozenSurfaceBindingPolicy: defaultSurfaceBindingPolicy(),
+		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
 		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, activeThreadID, cwd, surface.PromptOverride),
 		RouteModeAtEnqueue:         surface.RouteMode,
 		Status:                     state.QueueItemSteering,
