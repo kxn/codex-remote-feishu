@@ -69,25 +69,39 @@ func (s *Service) openTargetPickerWithOptions(surface *state.SurfaceConsoleRecor
 	if !s.surfaceIsHeadless(surface) {
 		return nil
 	}
-	s.clearThreadHistoryRuntime(surface)
-	s.clearTargetPickerRuntime(surface)
-	s.clearWorkspacePageRuntime(surface)
-	record, err := s.newTargetPickerRecord(surface, source, opts)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	flow := newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, firstNonEmpty(surface.ActorUserID), s.now(), defaultTargetPickerTTL, ownerCardFlowPhaseEditing)
-	if opts.Inline {
-		flow.MessageID = strings.TrimSpace(opts.SourceMessageID)
-	}
-	s.setActiveOwnerCardFlow(surface, flow)
-	s.setActiveTargetPicker(surface, record)
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		s.clearTargetPickerRuntime(surface)
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, opts.Inline)}
+	var record *activeTargetPickerRecord
+	return s.openPickerRuntime(
+		surface,
+		func() error {
+			s.clearThreadHistoryRuntime(surface)
+			s.clearTargetPickerRuntime(surface)
+			s.clearWorkspacePageRuntime(surface)
+			next, err := s.newTargetPickerRecord(surface, source, opts)
+			if err != nil {
+				return err
+			}
+			flow := newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, next.PickerID, firstNonEmpty(surface.ActorUserID), s.now(), defaultTargetPickerTTL, ownerCardFlowPhaseEditing)
+			if opts.Inline {
+				flow.MessageID = strings.TrimSpace(opts.SourceMessageID)
+			}
+			s.setActiveOwnerCardFlow(surface, flow)
+			s.setActiveTargetPicker(surface, next)
+			record = next
+			return nil
+		},
+		func() {
+			s.clearTargetPickerRuntime(surface)
+		},
+		func(err error) []eventcontract.Event {
+			return notice(surface, "target_picker_unavailable", err.Error())
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildTargetPickerEvent(surface, record, opts.Inline)
+		},
+		func(err error) []eventcontract.Event {
+			return notice(surface, "target_picker_unavailable", err.Error())
+		},
+	)
 }
 
 func (s *Service) openLockedWorkspaceTargetPicker(surface *state.SurfaceConsoleRecord, workspaceKey string, allowNewThread bool) []eventcontract.Event {
@@ -100,6 +114,14 @@ func (s *Service) openLockedWorkspaceTargetPicker(surface *state.SurfaceConsoleR
 		LockedWorkspaceKey:    workspaceKey,
 		AllowNewThread:        allowNewThread,
 	})
+}
+
+func (s *Service) buildTargetPickerEvent(surface *state.SurfaceConsoleRecord, record *activeTargetPickerRecord, inline bool) (eventcontract.Event, error) {
+	view, err := s.buildTargetPickerView(surface, record)
+	if err != nil {
+		return eventcontract.Event{}, err
+	}
+	return s.targetPickerViewEvent(surface, view, inline), nil
 }
 
 func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, opts targetPickerOpenOptions) (*activeTargetPickerRecord, error) {
@@ -155,20 +177,29 @@ func (s *Service) handleTargetPickerSelectWorkspace(surface *state.SurfaceConsol
 				Text:  "当前工作区已锁定，不能在这里切换到其他工作区。",
 			})
 		}
-		view, err := s.buildTargetPickerView(surface, record)
-		if err != nil {
+		return mutatePickerAndRebuild(
+			nil,
+			func() (eventcontract.Event, error) {
+				return s.buildTargetPickerEvent(surface, record, true)
+			},
+			func(err error) []eventcontract.Event {
+				return notice(surface, "target_picker_unavailable", err.Error())
+			},
+		)
+	}
+	return mutatePickerAndRebuild(
+		func() {
+			record.SelectedWorkspaceKey = normalizeTargetPickerWorkspaceSelection(workspaceKey)
+			record.SessionCursor = 0
+			record.SelectedSessionValue = ""
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildTargetPickerEvent(surface, record, true)
+		},
+		func(err error) []eventcontract.Event {
 			return notice(surface, "target_picker_unavailable", err.Error())
-		}
-		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
-	}
-	record.SelectedWorkspaceKey = normalizeTargetPickerWorkspaceSelection(workspaceKey)
-	record.SessionCursor = 0
-	record.SelectedSessionValue = ""
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
+		},
+	)
 }
 
 func (s *Service) handleTargetPickerSelectSession(surface *state.SurfaceConsoleRecord, pickerID, value, actorUserID string, answers map[string][]string) []eventcontract.Event {
@@ -178,12 +209,17 @@ func (s *Service) handleTargetPickerSelectSession(surface *state.SurfaceConsoleR
 	}
 	resetTargetPickerEditingState(record)
 	s.applyTargetPickerDraftAnswers(record, answers)
-	record.SelectedSessionValue = strings.TrimSpace(value)
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
+	return mutatePickerAndRebuild(
+		func() {
+			record.SelectedSessionValue = strings.TrimSpace(value)
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildTargetPickerEvent(surface, record, true)
+		},
+		func(err error) []eventcontract.Event {
+			return notice(surface, "target_picker_unavailable", err.Error())
+		},
+	)
 }
 
 func (s *Service) handleTargetPickerPage(surface *state.SurfaceConsoleRecord, pickerID, fieldName string, cursor int, actorUserID string, answers map[string][]string) []eventcontract.Event {
@@ -214,11 +250,15 @@ func (s *Service) handleTargetPickerPage(surface *state.SurfaceConsoleRecord, pi
 	default:
 		return notice(surface, "target_picker_invalid_page_action", "当前翻页动作无效，请重新打开目标选择器。")
 	}
-	view, err := s.buildTargetPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "target_picker_unavailable", err.Error())
-	}
-	return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
+	return mutatePickerAndRebuild(
+		nil,
+		func() (eventcontract.Event, error) {
+			return s.buildTargetPickerEvent(surface, record, true)
+		},
+		func(err error) []eventcontract.Event {
+			return notice(surface, "target_picker_unavailable", err.Error())
+		},
+	)
 }
 
 func (s *Service) handleTargetPickerCancel(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []eventcontract.Event {

@@ -44,17 +44,31 @@ func (s *Service) openPathPickerWithInline(surface *state.SurfaceConsoleRecord, 
 	if surface == nil {
 		return nil
 	}
-	record, err := s.newPathPickerRecord(surface, ownerUserID, req)
-	if err != nil {
-		return notice(surface, "path_picker_invalid", err.Error())
-	}
-	s.setActivePathPicker(surface, record)
-	view, err := s.buildPathPickerView(surface, record)
-	if err != nil {
-		s.clearSurfacePathPicker(surface)
-		return notice(surface, "path_picker_invalid", err.Error())
-	}
-	return []eventcontract.Event{s.pathPickerViewEvent(surface, view, inline)}
+	var record *activePathPickerRecord
+	return s.openPickerRuntime(
+		surface,
+		func() error {
+			next, err := s.newPathPickerRecord(surface, ownerUserID, req)
+			if err != nil {
+				return err
+			}
+			s.setActivePathPicker(surface, next)
+			record = next
+			return nil
+		},
+		func() {
+			s.clearSurfacePathPicker(surface)
+		},
+		func(err error) []eventcontract.Event {
+			return notice(surface, "path_picker_invalid", err.Error())
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildPathPickerEvent(surface, record, inline)
+		},
+		func(err error) []eventcontract.Event {
+			return notice(surface, "path_picker_invalid", err.Error())
+		},
+	)
 }
 
 func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, ownerUserID string, req control.PathPickerRequest) (*activePathPickerRecord, error) {
@@ -100,6 +114,14 @@ func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, owner
 	}, nil
 }
 
+func (s *Service) buildPathPickerEvent(surface *state.SurfaceConsoleRecord, record *activePathPickerRecord, inline bool) (eventcontract.Event, error) {
+	view, err := s.buildPathPickerView(surface, record)
+	if err != nil {
+		return eventcontract.Event{}, err
+	}
+	return s.pathPickerViewEvent(surface, view, inline), nil
+}
+
 func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pickerID, entryName, actorUserID string) []eventcontract.Event {
 	record, blocked := s.requireActivePathPicker(surface, pickerID, actorUserID)
 	if blocked != nil {
@@ -117,25 +139,35 @@ func (s *Service) handlePathPickerEnter(surface *state.SurfaceConsoleRecord, pic
 		return s.pathPickerInlineNotice(surface, record, "path_picker_not_directory", "只能进入目录", "只能进入目录。")
 	}
 	if samePath(record.CurrentPath, resolved.path) {
-		record.DirectoryCursor = -1
-		record.FileCursor = -1
-		clearPathPickerStatus(record)
-		view, err := s.buildPathPickerView(surface, record)
-		if err != nil {
+		return mutatePickerAndRebuild(
+			func() {
+				record.DirectoryCursor = -1
+				record.FileCursor = -1
+				clearPathPickerStatus(record)
+			},
+			func() (eventcontract.Event, error) {
+				return s.buildPathPickerEvent(surface, record, true)
+			},
+			func(err error) []eventcontract.Event {
+				return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
+			},
+		)
+	}
+	return mutatePickerAndRebuild(
+		func() {
+			record.CurrentPath = resolved.path
+			record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
+			record.DirectoryCursor = -1
+			record.FileCursor = -1
+			clearPathPickerStatus(record)
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildPathPickerEvent(surface, record, true)
+		},
+		func(err error) []eventcontract.Event {
 			return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
-		}
-		return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
-	}
-	record.CurrentPath = resolved.path
-	record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
-	record.DirectoryCursor = -1
-	record.FileCursor = -1
-	clearPathPickerStatus(record)
-	view, err := s.buildPathPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
-	}
-	return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
+		},
+	)
 }
 
 func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []eventcontract.Event {
@@ -144,12 +176,17 @@ func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, picker
 		return blocked
 	}
 	if samePath(record.CurrentPath, record.RootPath) {
-		clearPathPickerStatus(record)
-		view, err := s.buildPathPickerView(surface, record)
-		if err != nil {
-			return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
-		}
-		return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
+		return mutatePickerAndRebuild(
+			func() {
+				clearPathPickerStatus(record)
+			},
+			func() (eventcontract.Event, error) {
+				return s.buildPathPickerEvent(surface, record, true)
+			},
+			func(err error) []eventcontract.Event {
+				return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
+			},
+		)
 	}
 	parent := filepath.Dir(record.CurrentPath)
 	resolved, err := resolvePathPickerExistingTarget(record.RootPath, parent)
@@ -159,16 +196,21 @@ func (s *Service) handlePathPickerUp(surface *state.SurfaceConsoleRecord, picker
 	if resolved.kind != pathPickerModeDirectory {
 		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "上一级目录无效", "上一级目录无效。")
 	}
-	record.CurrentPath = resolved.path
-	record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
-	record.DirectoryCursor = -1
-	record.FileCursor = -1
-	clearPathPickerStatus(record)
-	view, err := s.buildPathPickerView(surface, record)
-	if err != nil {
-		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
-	}
-	return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
+	return mutatePickerAndRebuild(
+		func() {
+			record.CurrentPath = resolved.path
+			record.SelectedPath = defaultSelectedPathForMode(record.Mode, record.CurrentPath, "")
+			record.DirectoryCursor = -1
+			record.FileCursor = -1
+			clearPathPickerStatus(record)
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildPathPickerEvent(surface, record, true)
+		},
+		func(err error) []eventcontract.Event {
+			return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
+		},
+	)
 }
 
 func (s *Service) handlePathPickerSelect(surface *state.SurfaceConsoleRecord, pickerID, entryName, actorUserID string) []eventcontract.Event {
@@ -194,13 +236,18 @@ func (s *Service) handlePathPickerSelect(surface *state.SurfaceConsoleRecord, pi
 			return s.pathPickerInlineNotice(surface, record, "path_picker_not_directory", "当前只可选择目录", "当前只可选择目录。")
 		}
 	}
-	record.SelectedPath = resolved.path
-	clearPathPickerStatus(record)
-	view, err := s.buildPathPickerView(surface, record)
-	if err != nil {
-		return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
-	}
-	return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
+	return mutatePickerAndRebuild(
+		func() {
+			record.SelectedPath = resolved.path
+			clearPathPickerStatus(record)
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildPathPickerEvent(surface, record, true)
+		},
+		func(err error) []eventcontract.Event {
+			return s.pathPickerInlineNotice(surface, record, "path_picker_invalid_entry", "目录刷新失败", fmt.Sprintf("目录刷新失败：%v", err))
+		},
+	)
 }
 
 func (s *Service) handlePathPickerPage(surface *state.SurfaceConsoleRecord, pickerID, fieldName string, cursor int, actorUserID string) []eventcontract.Event {
@@ -224,12 +271,17 @@ func (s *Service) handlePathPickerPage(surface *state.SurfaceConsoleRecord, pick
 	default:
 		return notice(surface, "path_picker_invalid_page_action", "当前翻页动作无效，请重新打开路径选择器。")
 	}
-	clearPathPickerStatus(record)
-	view, err := s.buildPathPickerView(surface, record)
-	if err != nil {
-		return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
-	}
-	return []eventcontract.Event{s.pathPickerViewEvent(surface, view, true)}
+	return mutatePickerAndRebuild(
+		func() {
+			clearPathPickerStatus(record)
+		},
+		func() (eventcontract.Event, error) {
+			return s.buildPathPickerEvent(surface, record, true)
+		},
+		func(err error) []eventcontract.Event {
+			return notice(surface, "path_picker_invalid_entry", fmt.Sprintf("目录刷新失败：%v", err))
+		},
+	)
 }
 
 func (s *Service) handlePathPickerConfirm(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) []eventcontract.Event {
