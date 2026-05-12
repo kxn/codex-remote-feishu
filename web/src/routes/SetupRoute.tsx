@@ -8,6 +8,7 @@ import {
   requestVoid,
   sendJSON,
 } from "../lib/api";
+import { navigateToLocalPath } from "../lib/navigation";
 import { relativeLocalPath } from "../lib/paths";
 import type {
   BootstrapState,
@@ -1460,28 +1461,6 @@ function autoConfigBannerTone(status: string): NoticeTone {
       return "danger";
     default:
       return "warn";
-  }
-}
-
-function navigateToLocalPath(target: string) {
-  if (typeof navigator !== "undefined" && /\bjsdom\b/i.test(navigator.userAgent)) {
-    try {
-      window.history.replaceState({}, "", target);
-    } catch {
-      // Ignore fallback failures and keep the current page usable.
-    }
-    return;
-  }
-  try {
-    window.location.assign(target);
-    return;
-  } catch {
-    // Fallback for restricted/test environments where assign is not writable or implemented.
-  }
-  try {
-    window.history.replaceState({}, "", target);
-  } catch {
-    // Ignore fallback failures and keep the current page usable.
   }
 }
 

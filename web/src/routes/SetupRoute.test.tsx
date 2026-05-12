@@ -1,6 +1,14 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+const { navigateToLocalPathMock } = vi.hoisted(() => ({
+  navigateToLocalPathMock: vi.fn(),
+}));
+
+vi.mock("../lib/navigation", () => ({
+  navigateToLocalPath: navigateToLocalPathMock,
+}));
+
 import { SetupRoute } from "./SetupRoute";
 import {
   makeApp,
@@ -14,6 +22,7 @@ import { installMockFetch } from "../test/http";
 describe("SetupRoute", () => {
   afterEach(() => {
     vi.useRealTimers();
+    navigateToLocalPathMock.mockReset();
   });
 
   it("keeps local API requests dot-relative when mounted under a prefixed path", async () => {
@@ -497,6 +506,7 @@ describe("SetupRoute", () => {
         ),
       ).toBe(true);
     });
+    expect(navigateToLocalPathMock).toHaveBeenCalledWith("./admin/");
   });
 });
 
