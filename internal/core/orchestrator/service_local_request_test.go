@@ -1755,7 +1755,7 @@ func TestCaptureFeedbackQueuesFollowupAndDeclinesRequest(t *testing.T) {
 		t.Fatalf("expected one queued follow-up item, got %#v", surface.QueuedQueueItemIDs)
 	}
 	item := surface.QueueItems[surface.QueuedQueueItemIDs[0]]
-	if item == nil || item.FrozenThreadID != "thread-1" {
+	if item == nil || queuedItemExecutionThreadID(item) != "thread-1" {
 		t.Fatalf("expected queued follow-up to stay on original thread, got %#v", item)
 	}
 	if item.SourceMessageID != "om-msg-2" || len(item.Inputs) != 1 || item.Inputs[0].Text == "" {

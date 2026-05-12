@@ -502,7 +502,7 @@ func (s *Service) steerCandidates(surface *state.SurfaceConsoleRecord, activeThr
 		if item == nil || item.Status != state.QueueItemQueued {
 			continue
 		}
-		if item.FrozenThreadID == "" || item.FrozenThreadID != activeThreadID {
+		if queuedItemExecutionThreadID(item) == "" || queuedItemExecutionThreadID(item) != activeThreadID {
 			continue
 		}
 		candidates = append(candidates, steerCandidate{

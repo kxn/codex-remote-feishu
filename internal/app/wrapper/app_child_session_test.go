@@ -143,7 +143,7 @@ func (r *restartOrderFakeRuntime) TranslateCommand(agentproto.Command) (runtimeC
 	return runtimeCommandResult{}, nil
 }
 
-func (r *restartOrderFakeRuntime) PrepareChildRestart(string, agentproto.Target) error {
+func (r *restartOrderFakeRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan) error {
 	return nil
 }
 

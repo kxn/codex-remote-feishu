@@ -190,9 +190,9 @@ func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
 	}
 	item := surface.QueueItems[surface.ActiveQueueItemID]
 	if item == nil ||
-		item.FrozenThreadID != "thread-review" ||
-		item.FrozenSourceThreadID != "thread-main" ||
-		item.FrozenSurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		queuedItemExecutionThreadID(item) != "thread-review" ||
+		queuedItemPromptDispatchPlan(item).SourceThreadID != "thread-main" ||
+		queuedItemPromptDispatchPlan(item).SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
 		t.Fatalf("unexpected queued review session item: %#v", item)
 	}
 	if surface.SelectedThreadID != "thread-main" {
@@ -339,8 +339,8 @@ func TestNewThreadExitsIdleReviewSessionBeforeFirstText(t *testing.T) {
 	}
 	item := surface.QueueItems[surface.ActiveQueueItemID]
 	if item == nil ||
-		item.FrozenThreadID != "" ||
-		item.FrozenExecutionMode != agentproto.PromptExecutionModeStartNew ||
+		queuedItemExecutionThreadID(item) != "" ||
+		queuedItemPromptDispatchPlan(item).ExecutionMode != agentproto.PromptExecutionModeStartNew ||
 		item.RouteModeAtEnqueue != state.RouteModeNewThreadReady {
 		t.Fatalf("expected queued item to freeze new-thread creation, got %#v", item)
 	}

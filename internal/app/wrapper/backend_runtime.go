@@ -41,7 +41,7 @@ type runtimeCommandResult struct {
 }
 
 type runtimeCommandRestart struct {
-	Target agentproto.Target
+	DispatchPlan agentproto.PromptDispatchPlan
 }
 
 type runtimeCommandResponseGate struct {
@@ -59,7 +59,7 @@ type backendRuntime interface {
 	ObserveClient([]byte) (runtimeObserveResult, error)
 	ObserveServer([]byte) (runtimeObserveResult, error)
 	TranslateCommand(agentproto.Command) (runtimeCommandResult, error)
-	PrepareChildRestart(string, agentproto.Target) error
+	PrepareChildRestart(string, agentproto.PromptDispatchPlan) error
 	BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error)
 	CancelChildRestartRestore(string)
 }
@@ -154,7 +154,7 @@ func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runt
 	return result, nil
 }
 
-func (r *codexBackendRuntime) PrepareChildRestart(string, agentproto.Target) error {
+func (r *codexBackendRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan) error {
 	return nil
 }
 
@@ -461,10 +461,10 @@ func newTurnSteerResponseGate(command agentproto.Command, frame []byte) (*runtim
 	}, nil
 }
 
-func (r *claudeBackendRuntime) PrepareChildRestart(_ string, target agentproto.Target) error {
+func (r *claudeBackendRuntime) PrepareChildRestart(_ string, dispatchPlan agentproto.PromptDispatchPlan) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	resume, err := r.resolveLaunchResumeTarget(target)
+	resume, err := r.resolveLaunchResumeTarget(dispatchPlan)
 	if err != nil {
 		return err
 	}
@@ -501,14 +501,13 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 		if current == nil || strings.TrimSpace(current.ThreadID) == "" {
 			return nil, nil
 		}
-		target := dispatchPlan.LegacyTarget()
-		if strings.TrimSpace(target.CWD) == "" {
-			target.CWD = strings.TrimSpace(current.CWD)
-			if target.CWD == "" {
-				target.CWD = strings.TrimSpace(r.workspaceRoot)
+		if strings.TrimSpace(dispatchPlan.CWD) == "" {
+			dispatchPlan.CWD = strings.TrimSpace(current.CWD)
+			if dispatchPlan.CWD == "" {
+				dispatchPlan.CWD = strings.TrimSpace(r.workspaceRoot)
 			}
 		}
-		return &runtimeCommandRestart{Target: target}, nil
+		return &runtimeCommandRestart{DispatchPlan: dispatchPlan}, nil
 	}
 	if targetThreadID == "" {
 		return nil, nil
@@ -516,23 +515,22 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 	if current != nil && strings.EqualFold(strings.TrimSpace(current.ThreadID), targetThreadID) {
 		return nil, nil
 	}
-	resume, found, err := r.lookupStoredResumeTarget(command.Target)
+	resume, found, err := r.lookupStoredResumeTarget(dispatchPlan)
 	if err != nil {
 		return nil, err
 	}
 	if !found || resume == nil {
 		return nil, nil
 	}
-	target := dispatchPlan.LegacyTarget()
-	target.ThreadID = resume.ThreadID
-	if strings.TrimSpace(target.CWD) == "" {
-		target.CWD = resume.CWD
+	dispatchPlan.ExecutionThreadID = resume.ThreadID
+	if strings.TrimSpace(dispatchPlan.CWD) == "" {
+		dispatchPlan.CWD = resume.CWD
 	}
-	return &runtimeCommandRestart{Target: target}, nil
+	return &runtimeCommandRestart{DispatchPlan: dispatchPlan}, nil
 }
 
-func (r *claudeBackendRuntime) resolveLaunchResumeTarget(target agentproto.Target) (*claudeLaunchResumeTarget, error) {
-	dispatchPlan := agentproto.PromptDispatchPlanFromTarget(target)
+func (r *claudeBackendRuntime) resolveLaunchResumeTarget(dispatchPlan agentproto.PromptDispatchPlan) (*claudeLaunchResumeTarget, error) {
+	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	threadID := strings.TrimSpace(dispatchPlan.ExecutionThreadID)
 	cwd := strings.TrimSpace(dispatchPlan.CWD)
 	if threadID == "" {
@@ -546,7 +544,7 @@ func (r *claudeBackendRuntime) resolveLaunchResumeTarget(target agentproto.Targe
 		copy := *current
 		return &copy, nil
 	}
-	resume, found, err := r.lookupStoredResumeTarget(dispatchPlan.LegacyTarget())
+	resume, found, err := r.lookupStoredResumeTarget(dispatchPlan)
 	if err != nil {
 		return nil, err
 	}
@@ -569,12 +567,13 @@ func (r *claudeBackendRuntime) resolveLaunchResumeTarget(target agentproto.Targe
 	}, nil
 }
 
-func (r *claudeBackendRuntime) lookupStoredResumeTarget(target agentproto.Target) (*claudeLaunchResumeTarget, bool, error) {
-	threadID := strings.TrimSpace(agentproto.PromptDispatchPlanFromTarget(target).ExecutionThreadID)
+func (r *claudeBackendRuntime) lookupStoredResumeTarget(dispatchPlan agentproto.PromptDispatchPlan) (*claudeLaunchResumeTarget, bool, error) {
+	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
+	threadID := strings.TrimSpace(dispatchPlan.ExecutionThreadID)
 	if threadID == "" {
 		return nil, false, nil
 	}
-	cwd := strings.TrimSpace(target.CWD)
+	cwd := strings.TrimSpace(dispatchPlan.CWD)
 	if meta, err := claudesessionstore.ResolveResumeSession(r.workspaceRoot, threadID); err != nil {
 		return nil, false, agentproto.ErrorInfo{
 			Code:      "claude_resume_workspace_mismatch",

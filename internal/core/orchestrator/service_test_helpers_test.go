@@ -44,6 +44,16 @@ func firstButtonLabels(entries []control.CommandCatalogEntry) []string {
 	return labels
 }
 
+func testPromptDispatchPlan(mode agentproto.PromptExecutionMode, executionThreadID, cwd, sourceThreadID string, policy agentproto.SurfaceBindingPolicy) agentproto.PromptDispatchPlan {
+	return agentproto.NormalizePromptDispatchPlan(agentproto.PromptDispatchPlan{
+		ExecutionMode:        mode,
+		ExecutionThreadID:    executionThreadID,
+		SourceThreadID:       sourceThreadID,
+		SurfaceBindingPolicy: policy,
+		CWD:                  cwd,
+	})
+}
+
 func targetPickerFromEvent(t *testing.T, event eventcontract.Event) *control.FeishuTargetPickerView {
 	t.Helper()
 	if event.TargetPickerView == nil {
@@ -395,22 +405,19 @@ func startDetachedBranchRemoteTurnForTest(t *testing.T, svc *Service, surface *s
 		cwd = strings.TrimSpace(thread.CWD)
 	}
 	item := &state.QueueItemRecord{
-		SurfaceSessionID:           surface.SurfaceSessionID,
-		SourceKind:                 state.QueueItemSourceUser,
-		SourceMessageID:            messageID,
-		SourceMessagePreview:       normalizeSourceMessagePreview(text),
-		SourceMessageIDs:           []string{messageID},
-		ReplyToMessageID:           messageID,
-		ReplyToMessagePreview:      normalizeSourceMessagePreview(text),
-		Inputs:                     []agentproto.Input{{Type: agentproto.InputText, Text: text}},
-		FrozenCWD:                  cwd,
-		FrozenExecutionMode:        agentproto.PromptExecutionModeForkEphemeral,
-		FrozenSourceThreadID:       sourceThreadID,
-		FrozenSurfaceBindingPolicy: agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
-		FrozenOverride:             state.ModelConfigRecord{},
-		FrozenPlanMode:             state.NormalizePlanModeSetting(surface.PlanMode),
-		RouteModeAtEnqueue:         surface.RouteMode,
-		Status:                     state.QueueItemQueued,
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       messageID,
+		SourceMessagePreview:  normalizeSourceMessagePreview(text),
+		SourceMessageIDs:      []string{messageID},
+		ReplyToMessageID:      messageID,
+		ReplyToMessagePreview: normalizeSourceMessagePreview(text),
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: text}},
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeForkEphemeral, "", cwd, sourceThreadID, agentproto.SurfaceBindingPolicyKeepSurfaceSelection),
+		FrozenOverride:        state.ModelConfigRecord{},
+		FrozenPlanMode:        state.NormalizePlanModeSetting(surface.PlanMode),
+		RouteModeAtEnqueue:    surface.RouteMode,
+		Status:                state.QueueItemQueued,
 	}
 	events := svc.enqueuePreparedQueueItem(surface, item, false)
 	if surface.ActiveQueueItemID == "" {

@@ -72,9 +72,7 @@ func TestDispatchNextRestartsClaudeHeadlessForQueuedReasoningMismatch(t *testing
 		ReplyToMessageID:      "msg-1",
 		ReplyToMessagePreview: "继续处理",
 		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
-		FrozenThreadID:        "thread-1",
-		FrozenCWD:             "/data/dl/repo",
-		FrozenExecutionMode:   agentproto.PromptExecutionModeResumeExisting,
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
 		FrozenOverride: state.ModelConfigRecord{
 			ReasoningEffort: "low",
 			AccessMode:      agentproto.AccessModeFullAccess,
@@ -135,9 +133,7 @@ func TestDispatchNextRestartsClaudeHeadlessBackToProfileReasoning(t *testing.T) 
 		ReplyToMessageID:      "msg-1",
 		ReplyToMessagePreview: "继续处理",
 		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
-		FrozenThreadID:        "thread-1",
-		FrozenCWD:             "/data/dl/repo",
-		FrozenExecutionMode:   agentproto.PromptExecutionModeResumeExisting,
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
 		FrozenOverride: state.ModelConfigRecord{
 			AccessMode: agentproto.AccessModeFullAccess,
 		},
@@ -169,9 +165,7 @@ func TestApplyInstanceConnectedAfterClaudePromptRestartDispatchesQueuedItem(t *t
 		ReplyToMessageID:      "msg-1",
 		ReplyToMessagePreview: "继续处理",
 		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
-		FrozenThreadID:        "thread-1",
-		FrozenCWD:             "/data/dl/repo",
-		FrozenExecutionMode:   agentproto.PromptExecutionModeResumeExisting,
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
 		FrozenOverride: state.ModelConfigRecord{
 			ReasoningEffort: "low",
 			AccessMode:      agentproto.AccessModeFullAccess,
@@ -234,12 +228,9 @@ func TestAutoContinueRestartsClaudeHeadlessForReasoningMismatch(t *testing.T) {
 	svc, surface, inst := newClaudeHeadlessPreflightService(t)
 	surface.AutoContinue.Enabled = true
 	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
-		EpisodeID:                  "autocontinue-1",
-		InstanceID:                 inst.InstanceID,
-		ThreadID:                   "thread-1",
-		FrozenCWD:                  "/data/dl/repo",
-		FrozenExecutionMode:        agentproto.PromptExecutionModeResumeExisting,
-		FrozenSurfaceBindingPolicy: agentproto.SurfaceBindingPolicyFollowExecutionThread,
+		EpisodeID:          "autocontinue-1",
+		InstanceID:         inst.InstanceID,
+		FrozenDispatchPlan: testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
 		FrozenOverride: state.ModelConfigRecord{
 			ReasoningEffort: "low",
 			AccessMode:      agentproto.AccessModeFullAccess,

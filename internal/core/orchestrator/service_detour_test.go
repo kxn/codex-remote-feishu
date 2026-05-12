@@ -74,7 +74,7 @@ func TestTextDetourForkEnqueuesForkEphemeralAndStripsTriggerText(t *testing.T) {
 		t.Fatalf("expected stripped detour prompt, got %#v", command.Prompt.Inputs)
 	}
 	item := surface.QueueItems[surface.ActiveQueueItemID]
-	if item == nil || item.FrozenExecutionMode != agentproto.PromptExecutionModeForkEphemeral || item.FrozenSourceThreadID != "thread-main" {
+	if item == nil || queuedItemPromptDispatchPlan(item).ExecutionMode != agentproto.PromptExecutionModeForkEphemeral || queuedItemPromptDispatchPlan(item).SourceThreadID != "thread-main" {
 		t.Fatalf("expected active detached queue item, got %#v", item)
 	}
 	if item.SourceMessagePreview != normalizeSourceMessagePreview("顺手问个岔题") {
@@ -161,7 +161,7 @@ func TestDetourTextSkipsReplyAutoSteer(t *testing.T) {
 		t.Fatalf("expected one queued detour item, got %#v", surface.QueuedQueueItemIDs)
 	}
 	item := surface.QueueItems[surface.QueuedQueueItemIDs[0]]
-	if item == nil || item.FrozenExecutionMode != agentproto.PromptExecutionModeForkEphemeral || item.FrozenSourceThreadID != "thread-1" {
+	if item == nil || queuedItemPromptDispatchPlan(item).ExecutionMode != agentproto.PromptExecutionModeForkEphemeral || queuedItemPromptDispatchPlan(item).SourceThreadID != "thread-1" {
 		t.Fatalf("expected queued fork detour item, got %#v", item)
 	}
 	if len(item.Inputs) != 2 || item.Inputs[1].Text != "请重点看最后一段" {

@@ -89,14 +89,14 @@ func bindingThreadCWD(binding *remoteTurnBinding) string {
 	if binding == nil {
 		return ""
 	}
-	return strings.TrimSpace(binding.ThreadCWD)
+	return strings.TrimSpace(remoteBindingPromptDispatchPlan(binding).CWD)
 }
 
 func queueItemFrozenCWD(item *state.QueueItemRecord) string {
 	if item == nil {
 		return ""
 	}
-	return strings.TrimSpace(item.FrozenCWD)
+	return strings.TrimSpace(queuedItemPromptDispatchPlan(item).CWD)
 }
 
 func (s *Service) pendingInputEvents(surface *state.SurfaceConsoleRecord, pending control.PendingInputState, sourceMessageIDs []string) []eventcontract.Event {

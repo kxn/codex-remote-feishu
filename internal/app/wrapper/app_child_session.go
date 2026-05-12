@@ -155,7 +155,7 @@ func waitForSessionStdoutStopped(session *childSession, timeout time.Duration) b
 }
 
 func (a *App) restartChildSession(ctx context.Context, request restartRequest, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
-	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartTarget(request.Target)); err != nil {
+	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartDispatchPlan(request.DispatchPlan)); err != nil {
 		return nil, err
 	}
 	// Restart must fence old child IO before the new child is launched. The
@@ -197,11 +197,11 @@ func (a *App) restartChildSession(ctx context.Context, request restartRequest, c
 	return next, nil
 }
 
-func derefRestartTarget(target *agentproto.Target) agentproto.Target {
-	if target == nil {
-		return agentproto.Target{}
+func derefRestartDispatchPlan(dispatchPlan *agentproto.PromptDispatchPlan) agentproto.PromptDispatchPlan {
+	if dispatchPlan == nil {
+		return agentproto.PromptDispatchPlan{}
 	}
-	return *target
+	return *dispatchPlan
 }
 
 func (a *App) restoreChildSessionContext(ctx context.Context, commandID string, writeCh chan []byte, client *relayws.Client, reportProblem func(agentproto.ErrorInfo)) error {

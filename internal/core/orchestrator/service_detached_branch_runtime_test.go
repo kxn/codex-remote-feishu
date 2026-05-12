@@ -29,12 +29,13 @@ func TestDetachedBranchTurnKeepsSurfaceSelectionAndDefaultAttachThread(t *testin
 	surface := svc.root.Surfaces["surface-1"]
 
 	started := startDetachedBranchRemoteTurnForTest(t, svc, surface, "thread-main", "thread-detour", "msg-1", "顺手问个岔题", "turn-detour")
+	bindingPlan := remoteBindingPromptDispatchPlan(svc.turns.activeRemote["inst-1"])
 	if binding := svc.turns.activeRemote["inst-1"]; binding == nil ||
 		binding.SurfaceSessionID != "surface-1" ||
 		binding.TurnID != "turn-detour" ||
 		binding.ThreadID != "thread-detour" ||
-		binding.SourceThreadID != "thread-main" ||
-		binding.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		bindingPlan.SourceThreadID != "thread-main" ||
+		bindingPlan.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
 		t.Fatalf("expected detached branch binding with source/execution split, got %#v", binding)
 	}
 	for _, event := range started {

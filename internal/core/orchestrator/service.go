@@ -72,7 +72,7 @@ type remoteTurnBinding struct {
 	QueueItemID           string
 	AutoContinueEpisodeID string
 	AttemptTriggerKind    string
-	ExecutionMode         agentproto.PromptExecutionMode
+	DispatchPlan          agentproto.PromptDispatchPlan
 	BootstrapNewThread    bool
 	ThreadCommitted       bool
 	SourceMessageID       string
@@ -80,27 +80,19 @@ type remoteTurnBinding struct {
 	ReplyToMessageID      string
 	ReplyToMessagePreview string
 	CommandID             string
-	// #430 runtime carrier:
-	// - ThreadID tracks the actual execution thread used by the running turn.
-	// - SourceThreadID keeps the surface's main/source thread when detached branch
-	//   execution intentionally should not steal the current selection (#428 entry
-	//   will consume this later; do not delete as dead code).
-	ThreadID             string
-	DurableThreadReady   bool
-	SourceThreadID       string
-	SurfaceBindingPolicy agentproto.SurfaceBindingPolicy
-	ThreadCWD            string
-	TurnID               string
-	Status               string
-	StartedAt            time.Time
-	InterruptRequested   bool
-	InterruptRequestedAt time.Time
-	AnyOutputSeen        bool
-	StartTotalUsage      agentproto.TokenUsageBreakdown
-	HasStartTotalUsage   bool
-	LastUsage            agentproto.TokenUsageBreakdown
-	HasLastUsage         bool
-	ModelReroute         *agentproto.TurnModelReroute
+	ThreadID              string
+	DurableThreadReady    bool
+	TurnID                string
+	Status                string
+	StartedAt             time.Time
+	InterruptRequested    bool
+	InterruptRequestedAt  time.Time
+	AnyOutputSeen         bool
+	StartTotalUsage       agentproto.TokenUsageBreakdown
+	HasStartTotalUsage    bool
+	LastUsage             agentproto.TokenUsageBreakdown
+	HasLastUsage          bool
+	ModelReroute          *agentproto.TurnModelReroute
 }
 
 type compactTurnStatus string

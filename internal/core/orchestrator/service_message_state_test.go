@@ -45,7 +45,7 @@ func TestTextMessageFreezesThreadAndConsumesStagedImages(t *testing.T) {
 	for _, current := range surface.QueueItems {
 		item = current
 	}
-	if item.FrozenThreadID != "thread-1" || item.FrozenCWD != "/data/dl/droid" {
+	if queuedItemExecutionThreadID(item) != "thread-1" || queueItemFrozenCWD(item) != "/data/dl/droid" {
 		t.Fatalf("unexpected frozen route: %#v", item)
 	}
 	if len(item.Inputs) != 2 || item.Inputs[0].Type != agentproto.InputLocalImage || item.Inputs[1].Type != agentproto.InputText {

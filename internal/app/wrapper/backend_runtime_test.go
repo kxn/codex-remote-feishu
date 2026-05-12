@@ -42,11 +42,11 @@ func TestClaudeBackendRuntimeRestartPlanUsesPersistedResumeTarget(t *testing.T) 
 	if plan == nil {
 		t.Fatal("expected persisted resume target to require restart plan")
 	}
-	if plan.Target.ThreadID != "resume-session-1" {
-		t.Fatalf("restart target thread = %q, want resume-session-1", plan.Target.ThreadID)
+	if plan.DispatchPlan.ExecutionThreadID != "resume-session-1" {
+		t.Fatalf("restart target thread = %q, want resume-session-1", plan.DispatchPlan.ExecutionThreadID)
 	}
-	if plan.Target.CWD != workspaceRoot {
-		t.Fatalf("restart target cwd = %q, want %q", plan.Target.CWD, workspaceRoot)
+	if plan.DispatchPlan.CWD != workspaceRoot {
+		t.Fatalf("restart target cwd = %q, want %q", plan.DispatchPlan.CWD, workspaceRoot)
 	}
 }
 
@@ -66,9 +66,9 @@ func TestClaudeBackendRuntimePrepareChildRestartStoresResolvedResumeTarget(t *te
 	runtime := &claudeBackendRuntime{
 		workspaceRoot: workspaceRoot,
 	}
-	if err := runtime.PrepareChildRestart("cmd-prompt-claude-resume", agentproto.Target{
-		ThreadID: "resume-session-1",
-		CWD:      workspaceRoot,
+	if err := runtime.PrepareChildRestart("cmd-prompt-claude-resume", agentproto.PromptDispatchPlan{
+		ExecutionThreadID: "resume-session-1",
+		CWD:               workspaceRoot,
 	}); err != nil {
 		t.Fatalf("PrepareChildRestart: %v", err)
 	}
@@ -114,11 +114,11 @@ func TestClaudeBackendRuntimeRestartPlanExplicitStartNewDropsCurrentSession(t *t
 	if plan == nil {
 		t.Fatal("expected explicit start_new to require a child restart away from the current session")
 	}
-	if plan.Target.ThreadID != "" {
-		t.Fatalf("restart target thread = %q, want empty fresh launch target", plan.Target.ThreadID)
+	if plan.DispatchPlan.ExecutionThreadID != "" {
+		t.Fatalf("restart target thread = %q, want empty fresh launch target", plan.DispatchPlan.ExecutionThreadID)
 	}
-	if plan.Target.ExecutionMode != agentproto.PromptExecutionModeStartNew {
-		t.Fatalf("restart target mode = %q, want %q", plan.Target.ExecutionMode, agentproto.PromptExecutionModeStartNew)
+	if plan.DispatchPlan.ExecutionMode != agentproto.PromptExecutionModeStartNew {
+		t.Fatalf("restart target mode = %q, want %q", plan.DispatchPlan.ExecutionMode, agentproto.PromptExecutionModeStartNew)
 	}
 }
 
@@ -135,10 +135,9 @@ func TestClaudeBackendRuntimePrepareChildRestartExplicitStartNewClearsResumeTarg
 			CWD:      workspaceRoot,
 		},
 	}
-	if err := runtime.PrepareChildRestart("cmd-prompt-claude-start-new", agentproto.Target{
-		CWD:                   workspaceRoot,
-		ExecutionMode:         agentproto.PromptExecutionModeStartNew,
-		CreateThreadIfMissing: true,
+	if err := runtime.PrepareChildRestart("cmd-prompt-claude-start-new", agentproto.PromptDispatchPlan{
+		CWD:           workspaceRoot,
+		ExecutionMode: agentproto.PromptExecutionModeStartNew,
 	}); err != nil {
 		t.Fatalf("PrepareChildRestart: %v", err)
 	}

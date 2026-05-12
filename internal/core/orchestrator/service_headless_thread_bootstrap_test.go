@@ -99,7 +99,7 @@ func TestNewThreadTurnStartedPromotesPendingRemoteByCommandWhenInitiatorBlank(t 
 		t.Fatalf("expected active remote binding to capture command/thread/turn, got %#v", binding)
 	}
 	item := surface.QueueItems[surface.ActiveQueueItemID]
-	if item == nil || item.Status != state.QueueItemRunning || item.FrozenThreadID != "thread-created" {
+	if item == nil || item.Status != state.QueueItemRunning || queuedItemExecutionThreadID(item) != "thread-created" {
 		t.Fatalf("expected active queue item to promote into running created thread, got %#v", item)
 	}
 	var sawPinnedSelection bool

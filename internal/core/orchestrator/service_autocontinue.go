@@ -60,10 +60,11 @@ func autoContinueEpisodeSelectedThreadID(episode *state.PendingAutoContinueEpiso
 	if episode == nil {
 		return ""
 	}
-	if agentproto.EffectiveSurfaceBindingPolicy(episode.FrozenSurfaceBindingPolicy) == agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
-		return strings.TrimSpace(firstNonEmpty(episode.FrozenSourceThreadID, episode.ThreadID))
+	dispatchPlan := autoContinueEpisodePromptDispatchPlan(episode)
+	if dispatchPlan.SurfaceBindingPolicy == agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+		return strings.TrimSpace(dispatchPlan.EffectiveSourceThreadID())
 	}
-	return strings.TrimSpace(episode.ThreadID)
+	return strings.TrimSpace(dispatchPlan.EffectiveExecutionThreadID())
 }
 
 func (s *Service) autoContinueStatusCardEvent(surface *state.SurfaceConsoleRecord, episode *state.PendingAutoContinueEpisodeRecord) eventcontract.Event {
@@ -157,31 +158,38 @@ func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutco
 		continuing = true
 	}
 	if !continuing || episode == nil {
+		dispatchPlan := queuedItemPromptDispatchPlan(outcome.Item)
+		if binding := outcome.Binding; binding != nil {
+			dispatchPlan = remoteBindingPromptDispatchPlan(binding)
+		}
 		episode = &state.PendingAutoContinueEpisodeRecord{
-			EpisodeID:                  s.nextAutoContinueEpisodeToken(),
-			InstanceID:                 outcome.InstanceID,
-			ThreadID:                   strings.TrimSpace(firstNonEmpty(outcome.ThreadID, outcome.Item.FrozenThreadID)),
-			FrozenCWD:                  strings.TrimSpace(firstNonEmpty(outcome.Binding.ThreadCWD, outcome.Item.FrozenCWD)),
-			FrozenExecutionMode:        outcome.Item.FrozenExecutionMode,
-			FrozenSourceThreadID:       strings.TrimSpace(firstNonEmpty(outcome.Binding.SourceThreadID, outcome.Item.FrozenSourceThreadID)),
-			FrozenSurfaceBindingPolicy: outcome.Item.FrozenSurfaceBindingPolicy,
-			FrozenRouteMode:            outcome.Item.RouteModeAtEnqueue,
-			FrozenOverride:             outcome.Item.FrozenOverride,
-			FrozenPlanMode:             outcome.Item.FrozenPlanMode,
-			RootReplyToMessageID:       strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
-			RootReplyToMessagePreview:  strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
-			TriggerKind:                state.AutoContinueTriggerKindEligibleFailure,
+			EpisodeID:                 s.nextAutoContinueEpisodeToken(),
+			InstanceID:                outcome.InstanceID,
+			FrozenDispatchPlan:        dispatchPlan,
+			FrozenRouteMode:           outcome.Item.RouteModeAtEnqueue,
+			FrozenOverride:            outcome.Item.FrozenOverride,
+			FrozenPlanMode:            outcome.Item.FrozenPlanMode,
+			RootReplyToMessageID:      strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
+			RootReplyToMessagePreview: strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
+			TriggerKind:               state.AutoContinueTriggerKindEligibleFailure,
 		}
 		surface.AutoContinue.Episode = episode
 	}
 	episode.LastTurnID = strings.TrimSpace(outcome.TurnID)
 	episode.LastProblem = cloneProblem(outcome.Problem)
-	episode.ThreadID = strings.TrimSpace(firstNonEmpty(outcome.ThreadID, episode.ThreadID))
-	if sourceThreadID := strings.TrimSpace(outcome.Binding.SourceThreadID); sourceThreadID != "" {
-		episode.FrozenSourceThreadID = sourceThreadID
+	if threadID := strings.TrimSpace(outcome.ThreadID); threadID != "" {
+		setAutoContinueEpisodeExecutionThreadID(episode, threadID)
 	}
-	if strings.TrimSpace(outcome.Binding.ThreadCWD) != "" {
-		episode.FrozenCWD = strings.TrimSpace(outcome.Binding.ThreadCWD)
+	dispatchPlan := autoContinueEpisodePromptDispatchPlan(episode)
+	if binding := outcome.Binding; binding != nil {
+		bindingPlan := remoteBindingPromptDispatchPlan(binding)
+		if strings.TrimSpace(bindingPlan.SourceThreadID) != "" {
+			dispatchPlan.SourceThreadID = strings.TrimSpace(bindingPlan.SourceThreadID)
+		}
+		if strings.TrimSpace(bindingPlan.CWD) != "" {
+			dispatchPlan.CWD = strings.TrimSpace(bindingPlan.CWD)
+		}
+		setAutoContinueEpisodePromptDispatchPlan(episode, dispatchPlan)
 	}
 	if strings.TrimSpace(outcome.Binding.ReplyToMessageID) != "" {
 		episode.RootReplyToMessageID = strings.TrimSpace(outcome.Binding.ReplyToMessageID)
@@ -229,7 +237,7 @@ func (s *Service) maybeDispatchPendingAutoContinue(surface *state.SurfaceConsole
 	}
 	switch episode.FrozenRouteMode {
 	case state.RouteModeNewThreadReady:
-		if surface.RouteMode != state.RouteModeNewThreadReady || strings.TrimSpace(surface.PreparedThreadCWD) != strings.TrimSpace(episode.FrozenCWD) {
+		if surface.RouteMode != state.RouteModeNewThreadReady || strings.TrimSpace(surface.PreparedThreadCWD) != strings.TrimSpace(autoContinueEpisodePromptDispatchPlan(episode).CWD) {
 			clearAutoContinueRuntime(surface)
 			return nil
 		}
@@ -256,36 +264,26 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 	if surface == nil || inst == nil || episode == nil {
 		return nil
 	}
-	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, episode.FrozenOverride, episode.FrozenCWD); restarting {
+	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, episode.FrozenOverride, autoContinueEpisodePromptDispatchPlan(episode).CWD); restarting {
 		return events
 	}
 	s.nextQueueItemID++
 	itemID := fmt.Sprintf("queue-%d", s.nextQueueItemID)
-	dispatchPlan := agentproto.NormalizePromptDispatchPlan(agentproto.PromptDispatchPlan{
-		ExecutionMode:        episode.FrozenExecutionMode,
-		ExecutionThreadID:    episode.ThreadID,
-		SourceThreadID:       episode.FrozenSourceThreadID,
-		SurfaceBindingPolicy: episode.FrozenSurfaceBindingPolicy,
-		CWD:                  episode.FrozenCWD,
-	})
+	dispatchPlan := autoContinueEpisodePromptDispatchPlan(episode)
 	item := &state.QueueItemRecord{
-		ID:                         itemID,
-		SurfaceSessionID:           surface.SurfaceSessionID,
-		ActorUserID:                surface.ActorUserID,
-		SourceKind:                 state.QueueItemSourceAutoContinue,
-		AutoContinueEpisodeID:      episode.EpisodeID,
-		ReplyToMessageID:           episode.RootReplyToMessageID,
-		ReplyToMessagePreview:      episode.RootReplyToMessagePreview,
-		Inputs:                     []agentproto.Input{{Type: agentproto.InputText, Text: autoContinuePromptText}},
-		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
-		FrozenCWD:                  dispatchPlan.CWD,
-		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
-		FrozenSourceThreadID:       dispatchPlan.SourceThreadID,
-		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
-		FrozenOverride:             episode.FrozenOverride,
-		FrozenPlanMode:             episode.FrozenPlanMode,
-		RouteModeAtEnqueue:         episode.FrozenRouteMode,
-		Status:                     state.QueueItemDispatching,
+		ID:                    itemID,
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceAutoContinue,
+		AutoContinueEpisodeID: episode.EpisodeID,
+		ReplyToMessageID:      episode.RootReplyToMessageID,
+		ReplyToMessagePreview: episode.RootReplyToMessagePreview,
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: autoContinuePromptText}},
+		FrozenDispatchPlan:    dispatchPlan,
+		FrozenOverride:        episode.FrozenOverride,
+		FrozenPlanMode:        episode.FrozenPlanMode,
+		RouteModeAtEnqueue:    episode.FrozenRouteMode,
+		Status:                state.QueueItemDispatching,
 	}
 	surface.QueueItems[item.ID] = item
 	binding := newRemoteTurnBindingForQueueItem(surface, inst, item)

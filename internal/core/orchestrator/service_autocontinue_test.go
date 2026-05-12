@@ -234,7 +234,8 @@ func TestDetachedBranchAutoContinueKeepsSurfaceSelectionButRetriesExecutionThrea
 	if episode.State != state.AutoContinueEpisodeRunning {
 		t.Fatalf("expected detached branch autocontinue to dispatch immediately, got %#v", episode)
 	}
-	if episode.ThreadID != "thread-detour" || episode.FrozenSourceThreadID != "thread-main" {
+	episodePlan := autoContinueEpisodePromptDispatchPlan(episode)
+	if episodePlan.ExecutionThreadID != "thread-detour" || episodePlan.SourceThreadID != "thread-main" {
 		t.Fatalf("expected detached branch autocontinue to keep execution+source split, got %#v", episode)
 	}
 	if surface.SelectedThreadID != "thread-main" {
@@ -244,7 +245,8 @@ func TestDetachedBranchAutoContinueKeepsSurfaceSelectionButRetriesExecutionThrea
 	if active == nil {
 		t.Fatalf("expected detached branch autocontinue to create active queue item, got %#v", surface.QueueItems)
 	}
-	if active.FrozenThreadID != "thread-detour" || active.FrozenSourceThreadID != "thread-main" || active.FrozenSurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
+	activePlan := queuedItemPromptDispatchPlan(active)
+	if activePlan.ExecutionThreadID != "thread-detour" || activePlan.SourceThreadID != "thread-main" || activePlan.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
 		t.Fatalf("expected detached branch autocontinue queue item to keep routing split, got %#v", active)
 	}
 	var sawPrompt bool
@@ -268,13 +270,12 @@ func TestDetachClearsPendingAutoContinueEpisode(t *testing.T) {
 	surface.AutoWhip.Enabled = false
 	surface.AutoContinue.Enabled = true
 	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
-		EpisodeID:       "autocontinue-1",
-		InstanceID:      "inst-1",
-		ThreadID:        "thread-1",
-		FrozenCWD:       "/data/dl/droid",
-		FrozenRouteMode: state.RouteModePinned,
-		State:           state.AutoContinueEpisodeScheduled,
-		PendingDueAt:    now.Add(5 * time.Second),
+		EpisodeID:          "autocontinue-1",
+		InstanceID:         "inst-1",
+		FrozenDispatchPlan: agentproto.PromptDispatchPlan{ExecutionThreadID: "thread-1", CWD: "/data/dl/droid"},
+		FrozenRouteMode:    state.RouteModePinned,
+		State:              state.AutoContinueEpisodeScheduled,
+		PendingDueAt:       now.Add(5 * time.Second),
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -298,13 +299,12 @@ func TestNewThreadReadyClearsPendingAutoContinueEpisode(t *testing.T) {
 	surface.AutoWhip.Enabled = false
 	surface.AutoContinue.Enabled = true
 	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
-		EpisodeID:       "autocontinue-1",
-		InstanceID:      "inst-1",
-		ThreadID:        "thread-1",
-		FrozenCWD:       "/data/dl/droid",
-		FrozenRouteMode: state.RouteModePinned,
-		State:           state.AutoContinueEpisodeScheduled,
-		PendingDueAt:    now.Add(5 * time.Second),
+		EpisodeID:          "autocontinue-1",
+		InstanceID:         "inst-1",
+		FrozenDispatchPlan: agentproto.PromptDispatchPlan{ExecutionThreadID: "thread-1", CWD: "/data/dl/droid"},
+		FrozenRouteMode:    state.RouteModePinned,
+		State:              state.AutoContinueEpisodeScheduled,
+		PendingDueAt:       now.Add(5 * time.Second),
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{

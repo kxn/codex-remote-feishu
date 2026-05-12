@@ -1244,8 +1244,8 @@ func TestReactionCreatedIgnoresImageSourceAndThreadMismatch(t *testing.T) {
 			{Type: agentproto.InputLocalImage, Path: "/tmp/queued.png", MIMEType: "image/png"},
 			{Type: agentproto.InputText, Text: "补充信息"},
 		},
-		FrozenThreadID: "thread-1",
-		Status:         state.QueueItemQueued,
+		FrozenDispatchPlan: agentproto.PromptDispatchPlan{ExecutionThreadID: "thread-1"},
+		Status:             state.QueueItemQueued,
 	}
 
 	if events := svc.ApplySurfaceAction(control.Action{

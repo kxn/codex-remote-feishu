@@ -86,26 +86,23 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	if policy := agentproto.NormalizeSurfaceBindingPolicy(bindingPolicy); policy != "" {
 		dispatchPlan.SurfaceBindingPolicy = policy
 	}
+	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	item := &state.QueueItemRecord{
-		SurfaceSessionID:           surface.SurfaceSessionID,
-		ActorUserID:                surface.ActorUserID,
-		SourceKind:                 state.QueueItemSourceUser,
-		SourceMessageID:            sourceMessageID,
-		SourceMessagePreview:       normalizeSourceMessagePreview(sourceMessagePreview),
-		SourceMessageIDs:           uniqueStrings(append([]string{sourceMessageID}, relatedMessageIDs...)),
-		ReplyToMessageID:           sourceMessageID,
-		ReplyToMessagePreview:      normalizeSourceMessagePreview(sourceMessagePreview),
-		Inputs:                     inputs,
-		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
-		FrozenCWD:                  cwd,
-		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
-		FrozenSourceThreadID:       dispatchPlan.SourceThreadID,
-		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
-		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
-		FrozenPlanMode:             s.freezePlanModeForPrompt(surface),
-		RouteModeAtEnqueue:         routeMode,
-		Status:                     state.QueueItemQueued,
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       sourceMessageID,
+		SourceMessagePreview:  normalizeSourceMessagePreview(sourceMessagePreview),
+		SourceMessageIDs:      uniqueStrings(append([]string{sourceMessageID}, relatedMessageIDs...)),
+		ReplyToMessageID:      sourceMessageID,
+		ReplyToMessagePreview: normalizeSourceMessagePreview(sourceMessagePreview),
+		Inputs:                inputs,
+		FrozenDispatchPlan:    dispatchPlan,
+		FrozenOverride:        s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
+		FrozenPlanMode:        s.freezePlanModeForPrompt(surface),
+		RouteModeAtEnqueue:    routeMode,
+		Status:                state.QueueItemQueued,
 	}
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
@@ -116,22 +113,20 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(threadID)
+	dispatchPlan.CWD = strings.TrimSpace(cwd)
+	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	item := &state.QueueItemRecord{
-		SurfaceSessionID:           surface.SurfaceSessionID,
-		ActorUserID:                surface.ActorUserID,
-		SourceKind:                 state.QueueItemSourceAutoWhip,
-		ReplyToMessageID:           strings.TrimSpace(replyToMessageID),
-		ReplyToMessagePreview:      normalizeSourceMessagePreview(replyToMessagePreview),
-		Inputs:                     inputs,
-		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
-		FrozenCWD:                  cwd,
-		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
-		FrozenSourceThreadID:       dispatchPlan.SourceThreadID,
-		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
-		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
-		FrozenPlanMode:             s.freezePlanModeForPrompt(surface),
-		RouteModeAtEnqueue:         routeMode,
-		Status:                     state.QueueItemQueued,
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceAutoWhip,
+		ReplyToMessageID:      strings.TrimSpace(replyToMessageID),
+		ReplyToMessagePreview: normalizeSourceMessagePreview(replyToMessagePreview),
+		Inputs:                inputs,
+		FrozenDispatchPlan:    dispatchPlan,
+		FrozenOverride:        s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
+		FrozenPlanMode:        s.freezePlanModeForPrompt(surface),
+		RouteModeAtEnqueue:    routeMode,
+		Status:                state.QueueItemQueued,
 	}
 	return s.enqueuePreparedQueueItem(surface, item, front)
 }
@@ -275,7 +270,7 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 		return nil
 	}
-	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, item.FrozenOverride, item.FrozenCWD); restarting {
+	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
 		return events
 	}
 	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
@@ -300,7 +295,6 @@ func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRe
 		return nil
 	}
 	dispatchPlan := queuedItemPromptDispatchPlan(item)
-	dispatchPlan.CWD = strings.TrimSpace(item.FrozenCWD)
 	return &agentproto.Command{
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
@@ -356,16 +350,16 @@ func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Even
 		s.clearRemoteTurn(instanceID, turnID)
 		return nil
 	}
-	if item.FrozenThreadID == "" {
-		item.FrozenThreadID = threadID
+	if queuedItemExecutionThreadID(item) == "" {
+		setQueuedItemExecutionThreadID(item, threadID)
 	}
 	inst := s.root.Instances[instanceID]
 	if inst != nil {
-		targetThreadID := strings.TrimSpace(firstNonEmpty(item.FrozenThreadID, threadID))
+		targetThreadID := strings.TrimSpace(firstNonEmpty(queuedItemExecutionThreadID(item), threadID))
 		s.materializeRemoteTurnThread(inst, targetThreadID, event.CWD, binding, item)
 		s.recordThreadUserMessage(inst, targetThreadID, item.SourceMessagePreview)
 	}
-	s.progress.captureRemoteTurnStartTotalUsage(instanceID, binding, item.FrozenThreadID)
+	s.progress.captureRemoteTurnStartTotalUsage(instanceID, binding, queuedItemExecutionThreadID(item))
 	if binding.StartedAt.IsZero() {
 		binding.StartedAt = s.now().UTC()
 	}
@@ -381,15 +375,15 @@ func (s *Service) maybeCommitBootstrapSurfaceBinding(surface *state.SurfaceConso
 	if surface == nil || inst == nil || item == nil || binding == nil || remoteBindingKeepsSurfaceSelection(binding) {
 		return nil
 	}
-	targetThreadID := strings.TrimSpace(firstNonEmpty(threadID, binding.ThreadID, item.FrozenThreadID))
+	targetThreadID := strings.TrimSpace(firstNonEmpty(threadID, binding.ThreadID, queuedItemExecutionThreadID(item)))
 	if targetThreadID == "" {
 		return nil
 	}
 	s.materializeRemoteTurnThread(inst, targetThreadID, "", binding, item)
-	binding.ThreadID = targetThreadID
+	setRemoteBindingExecutionThreadID(binding, targetThreadID)
 	binding.DurableThreadReady = true
-	if item.FrozenThreadID == "" {
-		item.FrozenThreadID = targetThreadID
+	if queuedItemExecutionThreadID(item) == "" {
+		setQueuedItemExecutionThreadID(item, targetThreadID)
 	}
 	if !binding.BootstrapNewThread {
 		return nil
@@ -452,7 +446,7 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	}
 
 	if !remoteBindingKeepsSurfaceSelection(binding) && !binding.ThreadCommitted {
-		targetThreadID := strings.TrimSpace(firstNonEmpty(binding.ThreadID, outcome.ThreadID, item.FrozenThreadID))
+		targetThreadID := strings.TrimSpace(firstNonEmpty(binding.ThreadID, outcome.ThreadID, queuedItemExecutionThreadID(item)))
 		if targetThreadID != "" && (outcome.Cause == terminalCauseCompleted || binding.DurableThreadReady) {
 			events = append(events, s.maybeCommitBootstrapSurfaceBinding(surface, inst, item, binding, targetThreadID)...)
 		}

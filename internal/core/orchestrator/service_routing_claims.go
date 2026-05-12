@@ -523,8 +523,8 @@ func (s *Service) queueItemTargetsThread(surface *state.SurfaceConsoleRecord, it
 	if surface == nil || item == nil || strings.TrimSpace(threadID) == "" {
 		return false
 	}
-	if item.FrozenThreadID != "" {
-		return item.FrozenThreadID == threadID
+	if executionThreadID := queuedItemExecutionThreadID(item); executionThreadID != "" {
+		return executionThreadID == threadID
 	}
 	return surface.SelectedThreadID == threadID
 }

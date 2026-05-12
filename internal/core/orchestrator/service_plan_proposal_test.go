@@ -309,7 +309,7 @@ func TestPlanProposalExecuteEnqueuesContinuationAndDisablesPlanMode(t *testing.T
 		t.Fatalf("expected execute action to dispatch continuation immediately, active=%q queued=%#v", surface.ActiveQueueItemID, surface.QueuedQueueItemIDs)
 	}
 	item := surface.QueueItems[surface.ActiveQueueItemID]
-	if item == nil || item.FrozenThreadID != "thread-1" || item.FrozenCWD != "/data/dl/droid" {
+	if item == nil || queuedItemExecutionThreadID(item) != "thread-1" || queueItemFrozenCWD(item) != "/data/dl/droid" {
 		t.Fatalf("unexpected queued continuation item: %#v", item)
 	}
 	if item.Status != state.QueueItemDispatching {

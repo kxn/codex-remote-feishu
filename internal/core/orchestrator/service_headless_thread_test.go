@@ -328,7 +328,7 @@ func TestNewThreadReadyFirstTextQueuesCreateAndBlocksSecondInput(t *testing.T) {
 	if item == nil {
 		t.Fatal("expected active queue item record")
 	}
-	if item.FrozenThreadID != "" || item.FrozenCWD != "/data/dl/droid" || item.RouteModeAtEnqueue != state.RouteModeNewThreadReady {
+	if queuedItemExecutionThreadID(item) != "" || queueItemFrozenCWD(item) != "/data/dl/droid" || item.RouteModeAtEnqueue != state.RouteModeNewThreadReady {
 		t.Fatalf("expected create-thread queue item, got %#v", item)
 	}
 	var sawCreateThread bool
@@ -599,7 +599,7 @@ func TestTextMessageNormalWorkspaceUnboundImplicitlyCreatesNewThread(t *testing.
 		t.Fatalf("expected implicit first input to be active, got %#v", surface)
 	}
 	item := surface.QueueItems[surface.ActiveQueueItemID]
-	if item == nil || item.RouteModeAtEnqueue != state.RouteModeNewThreadReady || item.FrozenThreadID != "" || strings.TrimSpace(item.FrozenCWD) != "/data/dl/droid" {
+	if item == nil || item.RouteModeAtEnqueue != state.RouteModeNewThreadReady || queuedItemExecutionThreadID(item) != "" || strings.TrimSpace(queueItemFrozenCWD(item)) != "/data/dl/droid" {
 		t.Fatalf("expected queued first input to freeze new_thread_ready semantics, got %#v", item)
 	}
 

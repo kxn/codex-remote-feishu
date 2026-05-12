@@ -35,10 +35,10 @@ type shutdownRequest struct {
 }
 
 type restartRequest struct {
-	CommandID string
-	Target    *agentproto.Target
-	EmitEvent bool
-	ResultCh  chan error
+	CommandID    string
+	DispatchPlan *agentproto.PromptDispatchPlan
+	EmitEvent    bool
+	ResultCh     chan error
 }
 
 type Config struct {
@@ -364,10 +364,10 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 					}
 				}
 				request := restartRequest{
-					CommandID: command.CommandID,
-					Target:    &result.Restart.Target,
-					EmitEvent: false,
-					ResultCh:  make(chan error, 1),
+					CommandID:    command.CommandID,
+					DispatchPlan: &result.Restart.DispatchPlan,
+					EmitEvent:    false,
+					ResultCh:     make(chan error, 1),
 				}
 				select {
 				case restartCh <- request:

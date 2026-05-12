@@ -66,7 +66,7 @@ func finalTurnSummaryForBinding(now time.Time, binding *remoteTurnBinding, threa
 	}
 	summary := &control.FinalTurnSummary{
 		Elapsed:   elapsed,
-		ThreadCWD: strings.TrimSpace(binding.ThreadCWD),
+		ThreadCWD: strings.TrimSpace(bindingThreadCWD(binding)),
 	}
 	if thread != nil && thread.TokenUsage != nil {
 		summary.ThreadUsage = finalTurnUsageFromBreakdown(thread.TokenUsage.Total)

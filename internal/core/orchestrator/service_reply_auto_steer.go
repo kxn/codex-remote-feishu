@@ -48,27 +48,25 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 	thread := inst.Threads[activeThreadID]
 	cwd := strings.TrimSpace(firstNonEmpty(threadCWDFromRecord(thread), inst.WorkspaceRoot))
 	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(activeThreadID)
+	dispatchPlan.CWD = cwd
+	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	item := &state.QueueItemRecord{
-		ID:                         queueItemID,
-		SurfaceSessionID:           surface.SurfaceSessionID,
-		ActorUserID:                action.ActorUserID,
-		SourceKind:                 state.QueueItemSourceUser,
-		SourceMessageID:            sourceMessageID,
-		SourceMessagePreview:       normalizeSourceMessagePreview(action.Text),
-		SourceMessageIDs:           uniqueStrings([]string{sourceMessageID}),
-		ReplyToMessageID:           sourceMessageID,
-		ReplyToMessagePreview:      normalizeSourceMessagePreview(action.Text),
-		Inputs:                     fullInputs,
-		SteerInputs:                append([]agentproto.Input(nil), action.SteerInputs...),
-		RestoreAsStagedImage:       action.Kind == control.ActionImageMessage,
-		FrozenThreadID:             dispatchPlan.ExecutionThreadID,
-		FrozenCWD:                  cwd,
-		FrozenExecutionMode:        dispatchPlan.ExecutionMode,
-		FrozenSourceThreadID:       "",
-		FrozenSurfaceBindingPolicy: dispatchPlan.SurfaceBindingPolicy,
-		FrozenOverride:             s.resolveFrozenPromptOverride(inst, surface, activeThreadID, cwd, surface.PromptOverride),
-		RouteModeAtEnqueue:         surface.RouteMode,
-		Status:                     state.QueueItemSteering,
+		ID:                    queueItemID,
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           action.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       sourceMessageID,
+		SourceMessagePreview:  normalizeSourceMessagePreview(action.Text),
+		SourceMessageIDs:      uniqueStrings([]string{sourceMessageID}),
+		ReplyToMessageID:      sourceMessageID,
+		ReplyToMessagePreview: normalizeSourceMessagePreview(action.Text),
+		Inputs:                fullInputs,
+		SteerInputs:           append([]agentproto.Input(nil), action.SteerInputs...),
+		RestoreAsStagedImage:  action.Kind == control.ActionImageMessage,
+		FrozenDispatchPlan:    dispatchPlan,
+		FrozenOverride:        s.resolveFrozenPromptOverride(inst, surface, activeThreadID, cwd, surface.PromptOverride),
+		RouteModeAtEnqueue:    surface.RouteMode,
+		Status:                state.QueueItemSteering,
 	}
 	surface.QueueItems[item.ID] = item
 	if activeThreadID != "" {

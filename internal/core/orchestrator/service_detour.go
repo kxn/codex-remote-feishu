@@ -133,14 +133,14 @@ func queuedItemDetourLabel(item *state.QueueItemRecord) string {
 	if item == nil {
 		return ""
 	}
-	return detourLabelForExecutionMode(item.FrozenExecutionMode)
+	return detourLabelForExecutionMode(queuedItemPromptDispatchPlan(item).ExecutionMode)
 }
 
 func remoteBindingDetourLabel(binding *remoteTurnBinding) string {
 	if binding == nil {
 		return ""
 	}
-	return detourLabelForExecutionMode(binding.ExecutionMode)
+	return detourLabelForExecutionMode(remoteBindingPromptDispatchPlan(binding).ExecutionMode)
 }
 
 func (s *Service) detourReturnNoticeEvent(outcome *remoteTurnOutcome) []eventcontract.Event {
