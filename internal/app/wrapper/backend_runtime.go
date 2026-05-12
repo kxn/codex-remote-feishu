@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
+	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 )
@@ -262,7 +263,7 @@ func (r *claudeBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult,
 func (r *claudeBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if events, handled, err := claude.HandleLocalCommand(command, r.workspaceRoot, r.translator.RuntimeStateSnapshot()); handled {
+	if events, handled, err := claudesessionstore.HandleLocalCommand(command, r.workspaceRoot, r.translator.RuntimeStateSnapshot()); handled {
 		if err != nil {
 			return runtimeCommandResult{}, err
 		}
@@ -573,7 +574,7 @@ func (r *claudeBackendRuntime) lookupStoredResumeTarget(target agentproto.Target
 		return nil, false, nil
 	}
 	cwd := strings.TrimSpace(target.CWD)
-	if meta, err := claude.ResolveResumeSession(r.workspaceRoot, threadID); err != nil {
+	if meta, err := claudesessionstore.ResolveResumeSession(r.workspaceRoot, threadID); err != nil {
 		return nil, false, agentproto.ErrorInfo{
 			Code:      "claude_resume_workspace_mismatch",
 			Layer:     "wrapper",

@@ -1,4 +1,4 @@
-package claude
+package claudesessionstore
 
 import (
 	"encoding/json"
@@ -60,6 +60,37 @@ func TestListSessionThreadsFiltersWorkspaceAndIncludeAll(t *testing.T) {
 	}
 	if includeAll[1].ThreadID != "session-a1" || includeAll[2].ThreadID != "session-b1" {
 		t.Fatalf("unexpected includeAll ordering: %#v", includeAll)
+	}
+}
+
+func TestListSessionThreadsProjectsPermissionModes(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-mode")
+	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-full", time.Date(2026, 4, 28, 10, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "cwd": workspaceRoot, "session_id": "session-full", "model": "mimo-v2.5-pro", "permissionMode": "bypassPermissions"},
+		{"type": "session-title", "title": "Full session"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "Workspace full prompt"}},
+	})
+	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-plan", time.Date(2026, 4, 28, 11, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "cwd": workspaceRoot, "session_id": "session-plan", "permissionMode": "plan"},
+		{"type": "session-title", "title": "Plan session"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "Workspace plan prompt"}},
+	})
+
+	threads, err := listSessionThreads(workspaceRoot, false, RuntimeStateSnapshot{})
+	if err != nil {
+		t.Fatalf("listSessionThreads: %v", err)
+	}
+	if len(threads) != 2 {
+		t.Fatalf("expected 2 threads, got %#v", threads)
+	}
+	if threads[0].ThreadID != "session-plan" || threads[0].PlanMode != "on" {
+		t.Fatalf("expected session-plan to project plan mode, got %#v", threads[0])
+	}
+	if threads[1].ThreadID != "session-full" || threads[1].PlanMode != "off" {
+		t.Fatalf("expected session-full to project non-plan mode, got %#v", threads[1])
 	}
 }
 

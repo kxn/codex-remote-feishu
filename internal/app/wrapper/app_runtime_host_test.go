@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	claudeadapter "github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
+	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
@@ -777,7 +777,7 @@ func startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(t *testing.T, scenari
 
 func writeWrapperClaudeSessionFile(t *testing.T, configDir, workspaceRoot, sessionID string, entries []map[string]any) string {
 	t.Helper()
-	projectDir := filepath.Join(configDir, "projects", claudeadapter.SanitizeProjectDirName(workspaceRoot))
+	projectDir := filepath.Join(configDir, "projects", claudesessionstore.SanitizeProjectDirName(workspaceRoot))
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		t.Fatalf("mkdir project dir: %v", err)
 	}

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
+	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -25,7 +25,7 @@ func (c *SessionCatalog) RecentThreads(limit int) ([]state.ThreadRecord, error) 
 	if limit <= 0 {
 		limit = 50
 	}
-	metas, err := claude.ListSessionMeta("", true)
+	metas, err := claudesessionstore.ListSessionMeta("", true)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +45,7 @@ func (c *SessionCatalog) RecentWorkspaces(limit int) (map[string]time.Time, erro
 	if limit <= 0 {
 		limit = 200
 	}
-	metas, err := claude.ListSessionMeta("", true)
+	metas, err := claudesessionstore.ListSessionMeta("", true)
 	if err != nil {
 		return nil, err
 	}
@@ -69,14 +69,14 @@ func (c *SessionCatalog) RecentWorkspaces(limit int) (map[string]time.Time, erro
 }
 
 func (c *SessionCatalog) ThreadByID(threadID string) (*state.ThreadRecord, error) {
-	meta, err := claude.FindSessionMeta(strings.TrimSpace(threadID))
+	meta, err := claudesessionstore.FindSessionMeta(strings.TrimSpace(threadID))
 	if err != nil || meta == nil {
 		return nil, err
 	}
 	return sessionMetaToThreadRecord(*meta), nil
 }
 
-func sessionMetaToThreadRecord(meta claude.SessionMeta) *state.ThreadRecord {
+func sessionMetaToThreadRecord(meta claudesessionstore.SessionMeta) *state.ThreadRecord {
 	threadID := strings.TrimSpace(meta.ID)
 	cwd := state.ResolveWorkspaceKey(meta.CWD)
 	if threadID == "" || cwd == "" {

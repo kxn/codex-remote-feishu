@@ -1,4 +1,4 @@
-package claude
+package claudesessionstore
 
 import (
 	"bufio"

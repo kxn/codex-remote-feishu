@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 )
 
 type servicePickerRuntime struct {
@@ -146,7 +147,7 @@ func (r *servicePickerRuntime) surfaceThreadHistory(surfaceID string) *agentprot
 
 type serviceCatalogRuntime struct {
 	service              *Service
-	persistedThreads     PersistedThreadCatalog
+	persistedThreads     threadcatalogcontract.PersistedThreadCatalog
 	persistedThreadsLast map[agentproto.Backend][]state.ThreadRecord
 	persistedWorkspaces  map[agentproto.Backend]map[string]time.Time
 }
@@ -155,7 +156,7 @@ func newServiceCatalogRuntime(service *Service) *serviceCatalogRuntime {
 	return &serviceCatalogRuntime{service: service}
 }
 
-func (r *serviceCatalogRuntime) setPersistedThreadCatalog(catalog PersistedThreadCatalog) {
+func (r *serviceCatalogRuntime) setPersistedThreadCatalog(catalog threadcatalogcontract.PersistedThreadCatalog) {
 	if r == nil {
 		return
 	}
@@ -216,7 +217,7 @@ func (r *serviceCatalogRuntime) persistedThreadByIDForBackend(backend agentproto
 		return nil, nil
 	}
 	backend = agentproto.NormalizeBackend(backend)
-	if backendCatalog, ok := r.persistedThreads.(BackendAwarePersistedThreadCatalog); ok {
+	if backendCatalog, ok := r.persistedThreads.(threadcatalogcontract.BackendAwarePersistedThreadCatalog); ok {
 		return backendCatalog.ThreadByIDForBackend(backend, threadID)
 	}
 	if backend != agentproto.BackendCodex {
@@ -226,7 +227,7 @@ func (r *serviceCatalogRuntime) persistedThreadByIDForBackend(backend agentproto
 }
 
 func (r *serviceCatalogRuntime) loadPersistedThreadsForBackend(backend agentproto.Backend, limit int) ([]state.ThreadRecord, error) {
-	if backendCatalog, ok := r.persistedThreads.(BackendAwarePersistedThreadCatalog); ok {
+	if backendCatalog, ok := r.persistedThreads.(threadcatalogcontract.BackendAwarePersistedThreadCatalog); ok {
 		return backendCatalog.RecentThreadsForBackend(backend, limit)
 	}
 	if backend != agentproto.BackendCodex {
@@ -236,7 +237,7 @@ func (r *serviceCatalogRuntime) loadPersistedThreadsForBackend(backend agentprot
 }
 
 func (r *serviceCatalogRuntime) loadPersistedWorkspacesForBackend(backend agentproto.Backend, limit int) (map[string]time.Time, error) {
-	if backendCatalog, ok := r.persistedThreads.(BackendAwarePersistedThreadCatalog); ok {
+	if backendCatalog, ok := r.persistedThreads.(threadcatalogcontract.BackendAwarePersistedThreadCatalog); ok {
 		return backendCatalog.RecentWorkspacesForBackend(backend, limit)
 	}
 	if backend != agentproto.BackendCodex {

@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 )
 
 type Config struct {
@@ -170,18 +171,6 @@ type threadClaimRecord struct {
 	SurfaceSessionID string
 }
 
-type PersistedThreadCatalog interface {
-	RecentThreads(limit int) ([]state.ThreadRecord, error)
-	RecentWorkspaces(limit int) (map[string]time.Time, error)
-	ThreadByID(threadID string) (*state.ThreadRecord, error)
-}
-
-type BackendAwarePersistedThreadCatalog interface {
-	RecentThreadsForBackend(backend agentproto.Backend, limit int) ([]state.ThreadRecord, error)
-	RecentWorkspacesForBackend(backend agentproto.Backend, limit int) (map[string]time.Time, error)
-	ThreadByIDForBackend(backend agentproto.Backend, threadID string) (*state.ThreadRecord, error)
-}
-
 type PathPickerConsumer interface {
 	PathPickerConfirmed(*Service, *state.SurfaceConsoleRecord, control.PathPickerResult) []eventcontract.Event
 	PathPickerCancelled(*Service, *state.SurfaceConsoleRecord, control.PathPickerResult) []eventcontract.Event
@@ -276,7 +265,7 @@ func (s *Service) UpsertInstance(inst *state.InstanceRecord) {
 	s.root.Instances[inst.InstanceID] = inst
 }
 
-func (s *Service) SetPersistedThreadCatalog(catalog PersistedThreadCatalog) {
+func (s *Service) SetPersistedThreadCatalog(catalog threadcatalogcontract.PersistedThreadCatalog) {
 	if s == nil || s.catalog == nil {
 		return
 	}

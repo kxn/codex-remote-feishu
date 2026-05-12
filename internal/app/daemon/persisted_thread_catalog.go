@@ -7,18 +7,15 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 )
-
-type backendAwarePersistedThreadCatalog interface {
-	RecentThreadsForBackend(agentproto.Backend, int) ([]state.ThreadRecord, error)
-	RecentWorkspacesForBackend(agentproto.Backend, int) (map[string]time.Time, error)
-	ThreadByIDForBackend(agentproto.Backend, string) (*state.ThreadRecord, error)
-}
 
 type daemonPersistedThreadCatalog struct {
 	codex  *codexstate.SQLiteThreadCatalog
 	claude *claudestate.SessionCatalog
 }
+
+var _ threadcatalogcontract.BackendAwarePersistedThreadCatalog = (*daemonPersistedThreadCatalog)(nil)
 
 func newDaemonPersistedThreadCatalog(logf func(string, ...any)) (*daemonPersistedThreadCatalog, error) {
 	codexCatalog, err := codexstate.NewDefaultSQLiteThreadCatalog(codexstate.SQLiteThreadCatalogOptions{Logf: logf})

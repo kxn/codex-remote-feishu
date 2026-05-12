@@ -1,4 +1,4 @@
-package claude
+package claudesessionstore
 
 import (
 	"encoding/json"
@@ -48,36 +48,6 @@ type SessionMeta = claudeSessionMeta
 type claudeSessionEntry struct {
 	Meta   claudeSessionMeta
 	Thread agentproto.ThreadSnapshotRecord
-}
-
-func (t *Translator) RuntimeStateSnapshot() RuntimeStateSnapshot {
-	if t == nil {
-		return RuntimeStateSnapshot{}
-	}
-	snapshot := RuntimeStateSnapshot{
-		SessionID:            strings.TrimSpace(t.sessionID),
-		CWD:                  strings.TrimSpace(t.cwd),
-		Model:                strings.TrimSpace(t.model),
-		NativePermissionMode: strings.TrimSpace(t.permissionMode),
-	}
-	selection := claudePermissionSelectionFromNative(snapshot.NativePermissionMode)
-	snapshot.AccessMode = selection.AccessMode
-	snapshot.PlanMode = selection.PlanMode
-	if t.activeTurn != nil {
-		snapshot.ActiveTurnID = strings.TrimSpace(t.activeTurn.TurnID)
-	}
-	for _, request := range t.pendingRequests {
-		if request == nil {
-			continue
-		}
-		switch request.RequestType {
-		case agentproto.RequestTypeApproval:
-			snapshot.WaitingOnApproval = true
-		case agentproto.RequestTypeRequestUserInput:
-			snapshot.WaitingOnUserInput = true
-		}
-	}
-	return snapshot
 }
 
 func (s RuntimeStateSnapshot) currentRuntimeStatus() *agentproto.ThreadRuntimeStatus {
@@ -140,21 +110,6 @@ func ListSessionMeta(workspaceRoot string, includeAll bool) ([]SessionMeta, erro
 		metas = append(metas, entry.Meta)
 	}
 	return metas, nil
-}
-
-func localSessionPlaneError(command agentproto.Command, code, message string, err error) agentproto.ErrorInfo {
-	return agentproto.ErrorInfo{
-		Code:             code,
-		Layer:            "wrapper",
-		Stage:            "local_session_plane",
-		Operation:        string(command.Kind),
-		Message:          message,
-		Details:          strings.TrimSpace(err.Error()),
-		SurfaceSessionID: command.Origin.Surface,
-		CommandID:        command.CommandID,
-		ThreadID:         command.Target.ThreadID,
-		TurnID:           command.Target.TurnID,
-	}
 }
 
 func listSessionThreads(workspaceRoot string, includeAll bool, runtime RuntimeStateSnapshot) ([]agentproto.ThreadSnapshotRecord, error) {
