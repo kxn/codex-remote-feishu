@@ -1,5 +1,10 @@
 import type { FeishuAppAutoConfigRequirementStatus } from "../../lib/types";
 
+export type AutoConfigRequirementDisplay = {
+  label: string;
+  detail: string;
+};
+
 export function describeAutoConfigTag(
   status: string,
 ): { label: string; warn: boolean } | null {
@@ -110,6 +115,15 @@ export function describeAutoConfigRequirementDetail(
   return "";
 }
 
+export function describeAutoConfigRequirementDisplay(
+  requirement: FeishuAppAutoConfigRequirementStatus,
+): AutoConfigRequirementDisplay {
+  return {
+    label: describeAutoConfigRequirementLabel(requirement),
+    detail: describeAutoConfigRequirementDetail(requirement),
+  };
+}
+
 export function autoConfigNoticeTone(status: string): "good" | "warn" | "danger" {
   switch (status) {
     case "clean":
@@ -120,6 +134,21 @@ export function autoConfigNoticeTone(status: string): "good" | "warn" | "danger"
       return "warn";
     default:
       return "danger";
+  }
+}
+
+export function onboardingAutoConfigNoticeTone(
+  status: string,
+): "good" | "warn" | "danger" {
+  switch (status) {
+    case "complete":
+      return "good";
+    case "deferred":
+      return "warn";
+    case "blocked":
+      return "danger";
+    default:
+      return "warn";
   }
 }
 

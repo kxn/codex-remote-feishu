@@ -20,12 +20,11 @@ import type {
 } from "../lib/types";
 import { blankToUndefined, vscodeApplyModeForScenario, vscodeIsReady } from "./shared/helpers";
 import {
-  autoConfigNoticeTone,
   describeAutoConfigBlockingReason,
   describeAutoConfigHeadline,
-  describeAutoConfigRequirementDetail,
-  describeAutoConfigRequirementLabel,
+  describeAutoConfigRequirementDisplay,
   describeAutoConfigSummary,
+  onboardingAutoConfigNoticeTone,
 } from "./shared/feishuAutoConfig";
 import {
   resolveRuntimeApplyFailureTarget,
@@ -855,7 +854,7 @@ export function SetupRoute() {
           </p>
         </div>
 
-        <div className={`notice-banner ${autoConfigBannerTone(autoConfigStage.status)}`}>
+        <div className={`notice-banner ${onboardingAutoConfigNoticeTone(autoConfigStage.status)}`}>
           {autoConfigStage.summary?.trim() ||
             (plan ? describeAutoConfigSummary(plan.status) : "当前还没有读取到自动配置状态。")}
         </div>
@@ -1359,19 +1358,6 @@ function isResolvedStageStatus(status: string): boolean {
   return status === "complete" || status === "deferred" || status === "not_applicable";
 }
 
-function autoConfigBannerTone(status: string): NoticeTone {
-  switch (status) {
-    case "complete":
-      return "good";
-    case "deferred":
-      return "warn";
-    case "blocked":
-      return "danger";
-    default:
-      return "warn";
-  }
-}
-
 function renderAutoConfigRequirementList(
   title: string,
   requirements: FeishuAppAutoConfigRequirementStatus[],
@@ -1393,14 +1379,15 @@ function renderAutoConfigRequirementList(
         </div>
       </div>
       <ul className="ordered-checklist">
-        {requirements.map((item) => (
-          <li key={`${item.kind}-${item.key}`}>
-            <strong>{describeAutoConfigRequirementLabel(item)}</strong>
-            {describeAutoConfigRequirementDetail(item)
-              ? `：${describeAutoConfigRequirementDetail(item)}`
-              : ""}
-          </li>
-        ))}
+        {requirements.map((item) => {
+          const display = describeAutoConfigRequirementDisplay(item);
+          return (
+            <li key={`${item.kind}-${item.key}`}>
+              <strong>{display.label}</strong>
+              {display.detail ? `：${display.detail}` : ""}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

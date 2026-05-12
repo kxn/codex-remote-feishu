@@ -41,8 +41,7 @@ import {
   autoConfigNoticeTone,
   describeAutoConfigBlockingReason,
   describeAutoConfigHeadline,
-  describeAutoConfigRequirementDetail,
-  describeAutoConfigRequirementLabel,
+  describeAutoConfigRequirementDisplay,
   describeAutoConfigSummary,
   describeAutoConfigTag,
 } from "./shared/feishuAutoConfig";
@@ -52,6 +51,7 @@ import {
   saveAndVerifyFeishuApp,
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
+import { runAdminStorageCleanup } from "./shared/adminStorage";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
 import { CodexProviderSection } from "./admin/CodexProviderSection";
 
@@ -538,88 +538,97 @@ export function AdminRoute() {
   }
 
   async function cleanupImageStaging() {
-    setActionBusy("cleanup-image");
-    try {
-      const response = await sendJSON<ImageStagingCleanupResponse>(
-        "/api/admin/storage/image-staging/cleanup",
-        "POST",
-      );
-      setImageStaging((current) =>
-        current
-          ? {
-              ...current,
-              fileCount: response.remainingFileCount,
-              totalBytes: response.remainingBytes,
-            }
-          : current,
-      );
-      setImageStagingError("");
-    } catch {
-      setImageStagingError("图片暂存清理没有完成，请稍后重试。");
-    } finally {
-      setActionBusy("");
-    }
+    await runAdminStorageCleanup({
+      busyKey: "cleanup-image",
+      setActionBusy,
+      request: () =>
+        sendJSON<ImageStagingCleanupResponse>(
+          "/api/admin/storage/image-staging/cleanup",
+          "POST",
+        ),
+      onSuccess: (response) => {
+        setImageStaging((current) =>
+          current
+            ? {
+                ...current,
+                fileCount: response.remainingFileCount,
+                totalBytes: response.remainingBytes,
+              }
+            : current,
+        );
+        setImageStagingError("");
+      },
+      onError: () => {
+        setImageStagingError("图片暂存清理没有完成，请稍后重试。");
+      },
+    });
   }
 
   async function cleanupLogsStorage() {
-    setActionBusy("cleanup-logs");
-    try {
-      const response = await sendJSON<LogsStorageCleanupResponse>(
-        "/api/admin/storage/logs/cleanup",
-        "POST",
-        { olderThanHours: 24 },
-      );
-      setLogsStorage((current) =>
-        current
-          ? {
-              ...current,
-              fileCount: response.remainingFileCount,
-              totalBytes: response.remainingBytes,
-            }
-          : current,
-      );
-      setLogsStorageError("");
-    } catch {
-      setLogsStorageError("日志清理没有完成，请稍后重试。");
-    } finally {
-      setActionBusy("");
-    }
+    await runAdminStorageCleanup({
+      busyKey: "cleanup-logs",
+      setActionBusy,
+      request: () =>
+        sendJSON<LogsStorageCleanupResponse>(
+          "/api/admin/storage/logs/cleanup",
+          "POST",
+          { olderThanHours: 24 },
+        ),
+      onSuccess: (response) => {
+        setLogsStorage((current) =>
+          current
+            ? {
+                ...current,
+                fileCount: response.remainingFileCount,
+                totalBytes: response.remainingBytes,
+              }
+            : current,
+        );
+        setLogsStorageError("");
+      },
+      onError: () => {
+        setLogsStorageError("日志清理没有完成，请稍后重试。");
+      },
+    });
   }
 
   async function cleanupPreviewDrive() {
     if (apps.length === 0) {
       return;
     }
-    setActionBusy("cleanup-preview");
-    try {
-      const results = await Promise.allSettled(
-        apps.map((app) =>
-          sendJSON<PreviewDriveCleanupResponse>(
-            `/api/admin/storage/preview-drive/${encodeURIComponent(app.id)}/cleanup`,
-            "POST",
+    await runAdminStorageCleanup({
+      busyKey: "cleanup-preview",
+      setActionBusy,
+      request: () =>
+        Promise.allSettled(
+          apps.map((app) =>
+            sendJSON<PreviewDriveCleanupResponse>(
+              `/api/admin/storage/preview-drive/${encodeURIComponent(app.id)}/cleanup`,
+              "POST",
+            ),
           ),
         ),
-      );
-      const nextMap: Record<string, PreviewDriveStatusResponse> = { ...previewMap };
-      let failed = false;
-      results.forEach((result) => {
-        if (result.status !== "fulfilled") {
-          failed = true;
-          return;
-        }
-        nextMap[result.value.gatewayId] = {
-          gatewayId: result.value.gatewayId,
-          name: result.value.name,
-          summary: result.value.result.summary,
-        };
-      });
-      setPreviewMap(nextMap);
-      setPreviewError(failed ? "部分预览文件暂时没有清理成功。" : "");
-    } catch {
-      setPreviewError("预览文件清理没有完成，请稍后重试。");
-    } finally {
-      setActionBusy("");
-    }
+      onSuccess: (results) => {
+        const nextMap: Record<string, PreviewDriveStatusResponse> = { ...previewMap };
+        let failed = false;
+        results.forEach((result) => {
+          if (result.status !== "fulfilled") {
+            failed = true;
+            return;
+          }
+          nextMap[result.value.gatewayId] = {
+            gatewayId: result.value.gatewayId,
+            name: result.value.name,
+            summary: result.value.result.summary,
+          };
+        });
+        setPreviewMap(nextMap);
+        setPreviewError(failed ? "部分预览文件暂时没有清理成功。" : "");
+      },
+      onError: () => {
+        setPreviewError("预览文件清理没有完成，请稍后重试。");
+      },
+    });
   }
 
   function renderRequirementSection(
@@ -633,14 +642,15 @@ export function AdminRoute() {
       <div className="detail-stack">
         <strong>{title}</strong>
         <div className="detail-stack">
-          {requirements.map((item) => (
-            <p key={`${item.kind}:${item.key}`} className="support-copy">
-              <strong>{describeAutoConfigRequirementLabel(item)}</strong>
-              {describeAutoConfigRequirementDetail(item)
-                ? `：${describeAutoConfigRequirementDetail(item)}`
-                : ""}
-            </p>
-          ))}
+          {requirements.map((item) => {
+            const display = describeAutoConfigRequirementDisplay(item);
+            return (
+              <p key={`${item.kind}:${item.key}`} className="support-copy">
+                <strong>{display.label}</strong>
+                {display.detail ? `：${display.detail}` : ""}
+              </p>
+            );
+          })}
         </div>
       </div>
     );
