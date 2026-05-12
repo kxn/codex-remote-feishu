@@ -57,7 +57,7 @@ func TestPreselectedHeadlessLaunchBlocksNormalInput(t *testing.T) {
 func TestDetachedUseFreezesHeadlessLaunchContractIntoPendingAndCommand(t *testing.T) {
 	now := time.Date(2026, 5, 1, 13, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "team-proxy", "devseek", "", "")
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessClaudeSurfaceBackendContract("devseek"), "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-offline",
 		DisplayName:   "repo",

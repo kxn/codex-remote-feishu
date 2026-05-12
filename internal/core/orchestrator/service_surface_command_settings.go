@@ -205,12 +205,14 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 			},
 		})
 	}
-	s.setSurfaceDesiredContract(surface, state.SurfaceBackendContract{
-		ProductMode:     target.ProductMode,
-		Backend:         target.Backend,
-		CodexProviderID: surface.CodexProviderID,
-		ClaudeProfileID: surface.ClaudeProfileID,
-	})
+	switch {
+	case state.IsVSCodeProductMode(target.ProductMode):
+		s.setSurfaceDesiredContract(surface, state.VSCodeSurfaceBackendContract())
+	case target.Backend == agentproto.BackendClaude:
+		s.setSurfaceDesiredContract(surface, state.HeadlessClaudeSurfaceBackendContract(surface.ClaudeProfileID))
+	default:
+		s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(surface.CodexProviderID))
+	}
 	if currentWorkspaceKey != "" && state.IsHeadlessProductMode(target.ProductMode) {
 		s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
 	}

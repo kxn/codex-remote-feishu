@@ -53,7 +53,7 @@ func TestWorkspaceSessionCatalogProvenanceDrivesTargetPickerOpen(t *testing.T) {
 func TestTargetPickerUseFiltersSessionsByClaudeBackendButNotProfile(t *testing.T) {
 	now := time.Date(2026, 4, 29, 3, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "profile-a", "", "")
+	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessClaudeSurfaceBackendContract("profile-a"), "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-claude",
 		DisplayName:     "repo",
@@ -107,7 +107,7 @@ func TestTargetPickerUseFiltersSessionsByClaudeBackendButNotProfile(t *testing.T
 func TestTargetPickerUseShowsCodexSessionDespiteProviderMismatch(t *testing.T) {
 	now := time.Date(2026, 5, 1, 2, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
+	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("team-proxy"), "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-codex",
 		DisplayName:     "repo",

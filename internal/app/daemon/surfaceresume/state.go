@@ -206,19 +206,12 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
 	entry.CodexProviderID = strings.TrimSpace(entry.CodexProviderID)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
-	backend := agentproto.Backend(strings.TrimSpace(entry.Backend))
-	if state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)) &&
-		entry.ClaudeProfileID != "" &&
-		(strings.TrimSpace(entry.Backend) == "" ||
-			(agentproto.NormalizeBackend(backend) == agentproto.BackendCodex && strings.TrimSpace(entry.CodexProviderID) == "")) {
-		backend = agentproto.BackendClaude
-	}
-	rawContract := state.NormalizeSurfaceBackendContract(state.SurfaceBackendContract{
-		ProductMode:     state.ProductMode(entry.ProductMode),
-		Backend:         backend,
-		CodexProviderID: entry.CodexProviderID,
-		ClaudeProfileID: entry.ClaudeProfileID,
-	})
+	rawContract := state.PersistedSurfaceBackendContract(
+		state.ProductMode(entry.ProductMode),
+		agentproto.Backend(strings.TrimSpace(entry.Backend)),
+		entry.CodexProviderID,
+		entry.ClaudeProfileID,
+	)
 	entry.Backend = string(rawContract.Backend)
 	entry.CodexProviderID = state.EffectiveSurfaceCodexProviderID(rawContract)
 	entry.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(rawContract)

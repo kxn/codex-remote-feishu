@@ -35,7 +35,7 @@ func TestSurfaceModeAlias(t *testing.T) {
 	}
 }
 
-func TestSurfaceDesiredBackendContractPreservesCrossBackendStoredIDs(t *testing.T) {
+func TestSurfaceDesiredBackendContractProjectsOnlyActiveBackendBinding(t *testing.T) {
 	surface := &SurfaceConsoleRecord{
 		ProductMode:     ProductModeNormal,
 		Backend:         agentproto.BackendClaude,
@@ -46,8 +46,8 @@ func TestSurfaceDesiredBackendContractPreservesCrossBackendStoredIDs(t *testing.
 	if contract.Backend != agentproto.BackendClaude {
 		t.Fatalf("unexpected backend: %#v", contract)
 	}
-	if contract.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected codex provider storage to stay intact, got %#v", contract)
+	if contract.CodexProviderID != "" {
+		t.Fatalf("expected inactive codex provider to stay hidden in active contract, got %#v", contract)
 	}
 	if contract.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected claude profile storage to stay intact, got %#v", contract)
@@ -57,6 +57,22 @@ func TestSurfaceDesiredBackendContractPreservesCrossBackendStoredIDs(t *testing.
 	}
 	if got := EffectiveSurfaceClaudeProfileID(contract); got != "devseek" {
 		t.Fatalf("expected active claude profile projection, got %q", got)
+	}
+	if surface.CodexProviderID != "team-proxy" || surface.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected source surface storage to remain intact, got %#v", surface)
+	}
+}
+
+func TestPersistedSurfaceBackendContractCanonicalizesLegacyClaudeProfileProjection(t *testing.T) {
+	contract := PersistedSurfaceBackendContract(ProductModeNormal, agentproto.BackendCodex, "", "devseek")
+	if contract.Backend != agentproto.BackendClaude {
+		t.Fatalf("expected legacy persisted claude profile to canonicalize back to claude, got %#v", contract)
+	}
+	if contract.ClaudeProfileID != "devseek" {
+		t.Fatalf("expected claude profile to survive canonicalization, got %#v", contract)
+	}
+	if contract.CodexProviderID != "" {
+		t.Fatalf("expected inactive codex provider projection to stay hidden, got %#v", contract)
 	}
 }
 

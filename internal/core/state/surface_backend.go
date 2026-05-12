@@ -26,6 +26,77 @@ type HeadlessLaunchContract struct {
 	ClaudeReasoningEffort string
 }
 
+func VSCodeSurfaceBackendContract() SurfaceBackendContract {
+	return SurfaceBackendContract{
+		ProductMode: ProductModeVSCode,
+		Backend:     agentproto.BackendCodex,
+	}
+}
+
+func HeadlessCodexSurfaceBackendContract(providerID string) SurfaceBackendContract {
+	return SurfaceBackendContract{
+		ProductMode:     ProductModeNormal,
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: NormalizeDesiredCodexProviderID(providerID),
+	}
+}
+
+func HeadlessClaudeSurfaceBackendContract(profileID string) SurfaceBackendContract {
+	return SurfaceBackendContract{
+		ProductMode:     ProductModeNormal,
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: NormalizeDesiredClaudeProfileID(profileID),
+	}
+}
+
+func PersistedSurfaceBackendContract(mode ProductMode, backend agentproto.Backend, codexProviderID, claudeProfileID string) SurfaceBackendContract {
+	mode = NormalizeProductMode(mode)
+	codexProviderID = strings.TrimSpace(codexProviderID)
+	claudeProfileID = strings.TrimSpace(claudeProfileID)
+	normalizedBackend := agentproto.NormalizeBackend(backend)
+	if IsHeadlessProductMode(mode) &&
+		claudeProfileID != "" &&
+		(strings.TrimSpace(string(backend)) == "" ||
+			(normalizedBackend == agentproto.BackendCodex && codexProviderID == "")) {
+		return HeadlessClaudeSurfaceBackendContract(claudeProfileID)
+	}
+	return NormalizeSurfaceBackendContract(SurfaceBackendContract{
+		ProductMode:     mode,
+		Backend:         backend,
+		CodexProviderID: codexProviderID,
+		ClaudeProfileID: claudeProfileID,
+	})
+}
+
+func CodexInstanceBackendContract(providerID string) InstanceBackendContract {
+	return InstanceBackendContract{
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: NormalizeCodexProviderID(providerID),
+	}
+}
+
+func ClaudeInstanceBackendContract(profileID string) InstanceBackendContract {
+	return InstanceBackendContract{
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: NormalizeClaudeProfileID(profileID),
+	}
+}
+
+func HeadlessCodexLaunchContract(providerID string) HeadlessLaunchContract {
+	return HeadlessLaunchContract{
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: NormalizeCodexProviderID(providerID),
+	}
+}
+
+func HeadlessClaudeLaunchContract(profileID, reasoningEffort string) HeadlessLaunchContract {
+	return HeadlessLaunchContract{
+		Backend:               agentproto.BackendClaude,
+		ClaudeProfileID:       NormalizeClaudeProfileID(profileID),
+		ClaudeReasoningEffort: NormalizeClaudeReasoningEffort(reasoningEffort),
+	}
+}
+
 func NormalizeHeadlessBackend(backend agentproto.Backend) agentproto.Backend {
 	return agentproto.NormalizeBackend(backend)
 }
@@ -39,15 +110,20 @@ func NormalizeSurfaceBackend(mode ProductMode, backend agentproto.Backend) agent
 
 func NormalizeSurfaceBackendContract(contract SurfaceBackendContract) SurfaceBackendContract {
 	contract.ProductMode = NormalizeProductMode(contract.ProductMode)
-	contract.Backend = NormalizeSurfaceBackend(contract.ProductMode, contract.Backend)
-	contract.CodexProviderID = NormalizeDesiredCodexProviderID(contract.CodexProviderID)
-	contract.ClaudeProfileID = NormalizeDesiredClaudeProfileID(contract.ClaudeProfileID)
-	return contract
+	if !IsHeadlessProductMode(contract.ProductMode) {
+		return VSCodeSurfaceBackendContract()
+	}
+	switch NormalizeHeadlessBackend(contract.Backend) {
+	case agentproto.BackendClaude:
+		return HeadlessClaudeSurfaceBackendContract(contract.ClaudeProfileID)
+	default:
+		return HeadlessCodexSurfaceBackendContract(contract.CodexProviderID)
+	}
 }
 
 func SurfaceDesiredBackendContract(surface *SurfaceConsoleRecord) SurfaceBackendContract {
 	if surface == nil {
-		return NormalizeSurfaceBackendContract(SurfaceBackendContract{})
+		return HeadlessCodexSurfaceBackendContract("")
 	}
 	return NormalizeSurfaceBackendContract(SurfaceBackendContract{
 		ProductMode:     surface.ProductMode,
@@ -59,17 +135,12 @@ func SurfaceDesiredBackendContract(surface *SurfaceConsoleRecord) SurfaceBackend
 
 func NormalizeObservedInstanceBackendContract(contract InstanceBackendContract) InstanceBackendContract {
 	contract.Backend = NormalizeHeadlessBackend(contract.Backend)
-	if contract.Backend == agentproto.BackendCodex {
-		contract.CodexProviderID = NormalizeCodexProviderID(contract.CodexProviderID)
-	} else {
-		contract.CodexProviderID = ""
+	switch contract.Backend {
+	case agentproto.BackendClaude:
+		return ClaudeInstanceBackendContract(contract.ClaudeProfileID)
+	default:
+		return CodexInstanceBackendContract(contract.CodexProviderID)
 	}
-	if contract.Backend == agentproto.BackendClaude {
-		contract.ClaudeProfileID = NormalizeClaudeProfileID(contract.ClaudeProfileID)
-	} else {
-		contract.ClaudeProfileID = ""
-	}
-	return contract
 }
 
 func ObservedInstanceBackendContract(inst *InstanceRecord) InstanceBackendContract {
@@ -85,19 +156,12 @@ func ObservedInstanceBackendContract(inst *InstanceRecord) InstanceBackendContra
 
 func NormalizeHeadlessLaunchContract(contract HeadlessLaunchContract) HeadlessLaunchContract {
 	contract.Backend = NormalizeHeadlessBackend(contract.Backend)
-	if contract.Backend == agentproto.BackendCodex {
-		contract.CodexProviderID = NormalizeCodexProviderID(contract.CodexProviderID)
-	} else {
-		contract.CodexProviderID = ""
+	switch contract.Backend {
+	case agentproto.BackendClaude:
+		return HeadlessClaudeLaunchContract(contract.ClaudeProfileID, contract.ClaudeReasoningEffort)
+	default:
+		return HeadlessCodexLaunchContract(contract.CodexProviderID)
 	}
-	if contract.Backend == agentproto.BackendClaude {
-		contract.ClaudeProfileID = NormalizeClaudeProfileID(contract.ClaudeProfileID)
-		contract.ClaudeReasoningEffort = NormalizeClaudeReasoningEffort(contract.ClaudeReasoningEffort)
-	} else {
-		contract.ClaudeProfileID = ""
-		contract.ClaudeReasoningEffort = ""
-	}
-	return contract
 }
 
 func HeadlessLaunchContractFromSurface(surface *SurfaceConsoleRecord) HeadlessLaunchContract {
@@ -106,12 +170,10 @@ func HeadlessLaunchContractFromSurface(surface *SurfaceConsoleRecord) HeadlessLa
 	if surface != nil {
 		reasoning = surface.PromptOverride.ReasoningEffort
 	}
-	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
-		Backend:               desired.Backend,
-		CodexProviderID:       EffectiveSurfaceCodexProviderID(desired),
-		ClaudeProfileID:       EffectiveSurfaceClaudeProfileID(desired),
-		ClaudeReasoningEffort: reasoning,
-	})
+	if desired.Backend == agentproto.BackendClaude {
+		return HeadlessClaudeLaunchContract(EffectiveSurfaceClaudeProfileID(desired), reasoning)
+	}
+	return HeadlessCodexLaunchContract(EffectiveSurfaceCodexProviderID(desired))
 }
 
 func HeadlessLaunchContractFromPending(pending *HeadlessLaunchRecord) HeadlessLaunchContract {

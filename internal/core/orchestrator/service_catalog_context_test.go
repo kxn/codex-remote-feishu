@@ -62,8 +62,17 @@ func TestBuildCatalogContextUsesDetachedSurfaceBackend(t *testing.T) {
 func TestBuildCatalogContextDoesNotMutateStoredCrossBackendIDs(t *testing.T) {
 	now := time.Date(2026, 5, 1, 13, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "team-proxy", "devseek", "", "")
+	svc.MaterializeSurfaceResumeContract(
+		"surface-1",
+		"app-1",
+		"chat-1",
+		"user-1",
+		state.HeadlessClaudeSurfaceBackendContract("devseek"),
+		"",
+		"",
+	)
 	surface := svc.root.Surfaces["surface-1"]
+	surface.CodexProviderID = "team-proxy"
 
 	ctx := svc.buildCatalogContext(surface)
 

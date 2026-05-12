@@ -93,10 +93,28 @@ func (s *Service) MaterializeSurface(surfaceID, gatewayID, chatID, actorUserID s
 }
 
 func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, backend agentproto.Backend, claudeProfileID string, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
-	s.MaterializeSurfaceResumeWithCodexProvider(surfaceID, gatewayID, chatID, actorUserID, mode, backend, "", claudeProfileID, verbosity, planMode)
+	var contract state.SurfaceBackendContract
+	if state.IsVSCodeProductMode(mode) {
+		contract = state.VSCodeSurfaceBackendContract()
+	} else if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		contract = state.HeadlessClaudeSurfaceBackendContract(claudeProfileID)
+	} else {
+		contract = state.HeadlessCodexSurfaceBackendContract("")
+	}
+	s.MaterializeSurfaceResumeContract(surfaceID, gatewayID, chatID, actorUserID, contract, verbosity, planMode)
 }
 
 func (s *Service) MaterializeSurfaceResumeWithCodexProvider(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, backend agentproto.Backend, codexProviderID, claudeProfileID string, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
+	contract := state.NormalizeSurfaceBackendContract(state.SurfaceBackendContract{
+		ProductMode:     mode,
+		Backend:         backend,
+		CodexProviderID: codexProviderID,
+		ClaudeProfileID: claudeProfileID,
+	})
+	s.MaterializeSurfaceResumeContract(surfaceID, gatewayID, chatID, actorUserID, contract, verbosity, planMode)
+}
+
+func (s *Service) MaterializeSurfaceResumeContract(surfaceID, gatewayID, chatID, actorUserID string, contract state.SurfaceBackendContract, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
 	if strings.TrimSpace(surfaceID) == "" {
 		return
 	}
@@ -110,12 +128,7 @@ func (s *Service) MaterializeSurfaceResumeWithCodexProvider(surfaceID, gatewayID
 	if surface == nil {
 		return
 	}
-	s.setSurfaceDesiredContract(surface, state.SurfaceBackendContract{
-		ProductMode:     mode,
-		Backend:         backend,
-		CodexProviderID: codexProviderID,
-		ClaudeProfileID: claudeProfileID,
-	})
+	s.setSurfaceDesiredContract(surface, contract)
 	surface.Verbosity = state.NormalizeSurfaceVerbosity(verbosity)
 	surface.PlanMode = state.NormalizePlanModeSetting(planMode)
 }

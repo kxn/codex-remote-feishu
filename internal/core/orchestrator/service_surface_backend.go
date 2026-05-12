@@ -27,8 +27,15 @@ func (s *Service) setSurfaceDesiredContract(surface *state.SurfaceConsoleRecord,
 	contract = state.NormalizeSurfaceBackendContract(contract)
 	surface.ProductMode = contract.ProductMode
 	surface.Backend = contract.Backend
-	surface.CodexProviderID = contract.CodexProviderID
-	surface.ClaudeProfileID = contract.ClaudeProfileID
+	switch {
+	case !state.IsHeadlessProductMode(contract.ProductMode):
+		// VS Code does not activate a headless provider/profile binding. Keep any
+		// remembered headless selections untouched so mode switches can reuse them.
+	case contract.Backend == agentproto.BackendClaude:
+		surface.ClaudeProfileID = contract.ClaudeProfileID
+	default:
+		surface.CodexProviderID = contract.CodexProviderID
+	}
 }
 
 func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) state.HeadlessLaunchContract {
@@ -100,24 +107,24 @@ func (s *Service) surfaceWorkspaceDefaultsContract(surface *state.SurfaceConsole
 	observed := state.ObservedInstanceBackendContract(inst)
 	if surface != nil {
 		desired := s.surfaceDesiredContract(surface)
-		contract := state.InstanceBackendContract{Backend: backend}
 		switch backend {
 		case agentproto.BackendClaude:
-			if desired.Backend == agentproto.BackendClaude {
-				contract.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(desired)
+			if desired.Backend == agentproto.BackendClaude && state.EffectiveSurfaceClaudeProfileID(desired) != "" {
+				return state.ClaudeInstanceBackendContract(state.EffectiveSurfaceClaudeProfileID(desired))
 			}
-			if contract.ClaudeProfileID == "" && observed.Backend == agentproto.BackendClaude {
-				contract.ClaudeProfileID = observed.ClaudeProfileID
+			if observed.Backend == agentproto.BackendClaude {
+				return observed
 			}
+			return state.ClaudeInstanceBackendContract("")
 		default:
-			if desired.Backend == agentproto.BackendCodex {
-				contract.CodexProviderID = state.EffectiveSurfaceCodexProviderID(desired)
+			if desired.Backend == agentproto.BackendCodex && state.EffectiveSurfaceCodexProviderID(desired) != "" {
+				return state.CodexInstanceBackendContract(state.EffectiveSurfaceCodexProviderID(desired))
 			}
-			if contract.CodexProviderID == "" && observed.Backend == agentproto.BackendCodex {
-				contract.CodexProviderID = observed.CodexProviderID
+			if observed.Backend == agentproto.BackendCodex {
+				return observed
 			}
+			return state.CodexInstanceBackendContract("")
 		}
-		return state.NormalizeObservedInstanceBackendContract(contract)
 	}
 	return observed
 }
