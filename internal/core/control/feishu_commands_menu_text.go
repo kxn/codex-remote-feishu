@@ -1,6 +1,10 @@
 package control
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/upgradecontract"
+)
 
 func normalizeModelMenuArgument(value string) (string, bool) {
 	model := strings.TrimSpace(value)
@@ -61,19 +65,5 @@ func normalizeAutoContinueMenuArgument(value string) (string, bool) {
 }
 
 func normalizeUpgradeMenuArgument(value string) (string, bool) {
-	mode := strings.ToLower(strings.TrimSpace(value))
-	switch mode {
-	case "latest", "local":
-		return mode, true
-	case "track":
-		return "track", true
-	case "track_alpha", "track-alpha":
-		return "track alpha", true
-	case "track_beta", "track-beta":
-		return "track beta", true
-	case "track_production", "track-production":
-		return "track production", true
-	default:
-		return "", false
-	}
+	return upgradecontract.NormalizeMenuArgument(strings.TrimSpace(value))
 }

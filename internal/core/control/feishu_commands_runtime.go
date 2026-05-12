@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/buildinfo"
+	"github.com/kxn/codex-remote-feishu/internal/core/upgradecontract"
 )
 
 func runtimeFeishuCommandDefinition(spec feishuCommandSpec) FeishuCommandDefinition {
@@ -32,41 +33,21 @@ func runtimeAdminCommandDefinition(def FeishuCommandDefinition) FeishuCommandDef
 }
 
 func runtimeUpgradeCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
-	policy := buildinfo.CurrentCapabilityPolicy()
-	formHints := []string{"track", "latest"}
-	examples := []string{"/upgrade", "/upgrade latest"}
-	options := []FeishuCommandOption{
-		commandOption("/upgrade", "upgrade", "track", "查看 Track", "查看当前 track。"),
-		commandOption("/upgrade", "upgrade", "latest", "检查/继续升级", "检查或继续升级到当前 track 的最新 release。"),
+	metadata := upgradecontract.BuildDefinition(upgradeCapabilityPolicyFromBuildInfo())
+	def.ArgumentFormHint = metadata.ArgumentFormHint
+	def.ArgumentFormNote = metadata.ArgumentFormNote
+	def.Description = metadata.Description
+	def.Examples = append([]string(nil), metadata.Examples...)
+	def.Options = make([]FeishuCommandOption, 0, len(metadata.Options))
+	for _, option := range metadata.Options {
+		def.Options = append(def.Options, FeishuCommandOption{
+			Value:       option.Value,
+			Label:       option.Label,
+			Description: option.Description,
+			CommandText: option.CommandText,
+			MenuKey:     option.MenuKey,
+		})
 	}
-	if trackExample := preferredUpgradeTrackExample(policy.AllowedReleaseTracks); trackExample != "" {
-		examples = append(examples, "/upgrade track "+trackExample)
-	}
-	for _, track := range policy.AllowedReleaseTracks {
-		track = strings.TrimSpace(track)
-		if track == "" {
-			continue
-		}
-		options = append(options, commandOption("/upgrade track", "upgrade_track", track, track, "切换到 "+track+" track。"))
-	}
-	description := "查看升级状态、查看或切换当前 release track；`/upgrade latest` 检查或继续 release 升级。"
-	if policy.AllowDevUpgrade {
-		formHints = append(formHints, "dev")
-		examples = append(examples, "/upgrade dev")
-		options = append(options, commandOption("/upgrade", "upgrade", "dev", "开发构建", "检查或继续升级到最新的 dev 构建。"))
-		description += " `/upgrade dev` 检查或继续 dev 构建升级。"
-	}
-	if policy.AllowLocalUpgrade {
-		formHints = append(formHints, "local")
-		examples = append(examples, "/upgrade local")
-		options = append(options, commandOption("/upgrade", "upgrade", "local", "本地升级", "使用固定本地 artifact 发起升级。"))
-		description += " `/upgrade local` 使用固定本地 artifact 发起升级。"
-	}
-	def.ArgumentFormHint = "track"
-	def.ArgumentFormNote = "例如 " + strings.Join(formHints, "、") + "。"
-	def.Description = description
-	def.Examples = examples
-	def.Options = options
 	return def
 }
 
@@ -79,15 +60,13 @@ func runtimeDebugCommandDefinition(def FeishuCommandDefinition) FeishuCommandDef
 	return def
 }
 
-func preferredUpgradeTrackExample(allowed []string) string {
-	for _, candidate := range []string{"beta", "production", "alpha"} {
-		for _, track := range allowed {
-			if strings.EqualFold(strings.TrimSpace(track), candidate) {
-				return candidate
-			}
-		}
+func upgradeCapabilityPolicyFromBuildInfo() upgradecontract.CapabilityPolicy {
+	policy := buildinfo.CurrentCapabilityPolicy()
+	return upgradecontract.CapabilityPolicy{
+		AllowedReleaseTracks: upgradecontract.NormalizeReleaseTracks(policy.AllowedReleaseTracks),
+		AllowDevUpgrade:      policy.AllowDevUpgrade,
+		AllowLocalUpgrade:    policy.AllowLocalUpgrade,
 	}
-	return ""
 }
 
 func FeishuCommandForm(commandID string) (*CommandCatalogForm, bool) {

@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/upgradecontract"
 )
 
 func parseDebugCommandText(text string) (parsedDebugCommand, error) {
@@ -31,17 +32,20 @@ func parseDebugCommandText(text string) (parsedDebugCommand, error) {
 }
 
 func parseUpgradeCommandText(text string) (parsedUpgradeCommand, error) {
-	parsed, err := control.ParseFeishuUpgradeCommandText(text)
+	parsed, err := upgradecontract.ParseCommandText(text)
 	if err == nil {
-		return parsed, nil
+		return parsedUpgradeCommand{
+			Mode:  parsed.Mode,
+			Track: install.ParseReleaseTrack(string(parsed.Track)),
+		}, nil
 	}
-	if strings.Contains(err.Error(), "track 只支持") {
+	if upgradecontract.IsInvalidTrackError(err) {
 		return parsedUpgradeCommand{}, err
 	}
 	if argument := strings.TrimSpace(control.FeishuActionArgumentText(text)); argument != "" {
-		return parsedUpgradeCommand{}, fmt.Errorf("%s", upgradeCommandUsageSyntax())
+		return parsedUpgradeCommand{}, fmt.Errorf("%s", upgradecontract.UsageSyntax(currentUpgradeCapabilityPolicy()))
 	}
-	return parsedUpgradeCommand{}, fmt.Errorf("%s", upgradeSubcommandUsageSummary())
+	return parsedUpgradeCommand{}, fmt.Errorf("%s", upgradecontract.UsageSummary(currentUpgradeCapabilityPolicy()))
 }
 
 func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuPageView {
@@ -285,28 +289,22 @@ func unsupportedTrackMessage(track install.ReleaseTrack) string {
 }
 
 func upgradeSubcommandUsageSummary() string {
-	parts := []string{"`track`", "`latest`"}
-	if install.CurrentBuildAllowsDevUpgrade() {
-		parts = append(parts, "`dev`")
-	}
-	if install.CurrentBuildAllowsLocalUpgrade() {
-		parts = append(parts, "`local`")
-	}
-	return fmt.Sprintf("`/upgrade` 只支持 %s。", strings.Join(parts, "、"))
+	return upgradecontract.UsageSummary(currentUpgradeCapabilityPolicy())
 }
 
 func upgradeCommandUsageSyntax() string {
-	segments := []string{"/upgrade"}
-	allowed := currentBuildTrackNames()
-	if len(allowed) > 0 {
-		segments = append(segments, fmt.Sprintf("`/upgrade track [%s]`", strings.Join(allowed, "|")))
+	return upgradecontract.UsageSyntax(currentUpgradeCapabilityPolicy())
+}
+
+func currentUpgradeCapabilityPolicy() upgradecontract.CapabilityPolicy {
+	values := install.CurrentBuildAllowedReleaseTracks()
+	tracks := make([]string, 0, len(values))
+	for _, track := range values {
+		tracks = append(tracks, string(track))
 	}
-	segments = append(segments, "`/upgrade latest`")
-	if install.CurrentBuildAllowsDevUpgrade() {
-		segments = append(segments, "`/upgrade dev`")
+	return upgradecontract.CapabilityPolicy{
+		AllowedReleaseTracks: upgradecontract.NormalizeReleaseTracks(tracks),
+		AllowDevUpgrade:      install.CurrentBuildAllowsDevUpgrade(),
+		AllowLocalUpgrade:    install.CurrentBuildAllowsLocalUpgrade(),
 	}
-	if install.CurrentBuildAllowsLocalUpgrade() {
-		segments = append(segments, "`/upgrade local`")
-	}
-	return fmt.Sprintf("`/upgrade` 只支持 %s。", strings.Join(segments, "、"))
 }

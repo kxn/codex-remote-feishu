@@ -280,6 +280,7 @@ func TestParseFeishuMenuActionBuildsCanonicalTextFromDynamicRoutes(t *testing.T)
 		{eventKey: "model_gpt-5.4", wantKind: ActionModelCommand, wantText: "/model gpt-5.4", wantFamily: FeishuCommandModel},
 		{eventKey: "access_confirm", wantKind: ActionAccessCommand, wantText: "/access confirm", wantFamily: FeishuCommandAccess},
 		{eventKey: "plan-on", wantKind: ActionPlanCommand, wantText: "/plan on", wantFamily: FeishuCommandPlan},
+		{eventKey: "upgrade_dev", wantKind: ActionUpgradeCommand, wantText: "/upgrade dev", wantFamily: FeishuCommandUpgrade},
 		{eventKey: "upgrade_track_beta", wantKind: ActionUpgradeCommand, wantText: "/upgrade track beta", wantFamily: FeishuCommandUpgrade},
 	}
 

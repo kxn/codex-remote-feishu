@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/upgradecontract"
 )
 
 type debugCommandMode string
@@ -26,17 +27,21 @@ type parsedDebugCommand struct {
 	Mode debugCommandMode
 }
 
-type upgradeCommandMode = control.UpgradeCommandMode
-type parsedUpgradeCommand = control.ParsedUpgradeCommand
+type upgradeCommandMode = upgradecontract.CommandMode
+
+type parsedUpgradeCommand struct {
+	Mode  upgradeCommandMode
+	Track install.ReleaseTrack
+}
 
 const (
-	upgradeCommandShowStatus = control.UpgradeCommandShowStatus
-	upgradeCommandShowTrack  = control.UpgradeCommandShowTrack
-	upgradeCommandSetTrack   = control.UpgradeCommandSetTrack
-	upgradeCommandLatest     = control.UpgradeCommandLatest
-	upgradeCommandCodex      = control.UpgradeCommandCodex
-	upgradeCommandDev        = control.UpgradeCommandDev
-	upgradeCommandLocal      = control.UpgradeCommandLocal
+	upgradeCommandShowStatus = upgradecontract.CommandShowStatus
+	upgradeCommandShowTrack  = upgradecontract.CommandShowTrack
+	upgradeCommandSetTrack   = upgradecontract.CommandSetTrack
+	upgradeCommandLatest     = upgradecontract.CommandLatest
+	upgradeCommandCodex      = upgradecontract.CommandCodex
+	upgradeCommandDev        = upgradecontract.CommandDev
+	upgradeCommandLocal      = upgradecontract.CommandLocal
 )
 
 type upgradeCheckRequest struct {
