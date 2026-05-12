@@ -22,18 +22,9 @@ func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action con
 	if blocked := s.unboundInputBlocked(surface); blocked != nil {
 		return blocked
 	}
-	if surface.PendingRequests == nil {
-		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
-	}
-	request := surface.PendingRequests[requestAction.RequestID]
-	if request == nil {
-		return notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
-	}
-	if requestLifecycleBlocksInteractiveResponse(request) {
-		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待"+control.RequestLocalBackendDisplayName(requestPromptBackend(request))+" 处理。")
-	}
-	if requestAction.RequestRevision != 0 && requestAction.RequestRevision != request.CardRevision {
-		return notice(surface, "request_card_expired", "这张请求卡片已经过期，请使用最新卡片继续操作。")
+	request, followup := resolveSurfacePendingRequest(surface, requestAction.RequestID, requestAction.RequestRevision)
+	if followup != nil {
+		return followup
 	}
 	if strings.TrimSpace(request.LocalKind) != "" {
 		return s.respondLocalRequest(surface, request, action)
@@ -57,18 +48,9 @@ func (s *Service) controlRequest(surface *state.SurfaceConsoleRecord, action con
 	if surface == nil || requestControl == nil || strings.TrimSpace(requestControl.RequestID) == "" {
 		return nil
 	}
-	if surface.PendingRequests == nil {
-		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
-	}
-	request := surface.PendingRequests[requestControl.RequestID]
-	if request == nil {
-		return notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
-	}
-	if requestLifecycleBlocksInteractiveResponse(request) {
-		return notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待"+control.RequestLocalBackendDisplayName(requestPromptBackend(request))+" 处理。")
-	}
-	if requestControl.RequestRevision != 0 && requestControl.RequestRevision != request.CardRevision {
-		return notice(surface, "request_card_expired", "这张请求卡片已经过期，请使用最新卡片继续操作。")
+	request, followup := resolveSurfacePendingRequest(surface, requestControl.RequestID, requestControl.RequestRevision)
+	if followup != nil {
+		return followup
 	}
 	switch normalizedRequestControl(requestControl.Control) {
 	case normalizedRequestControl(frontstagecontract.RequestControlSkipOptional):
@@ -93,6 +75,26 @@ func (s *Service) controlRequest(surface *state.SurfaceConsoleRecord, action con
 	default:
 		return notice(surface, "request_invalid", "这个请求控制动作当前不支持。")
 	}
+}
+
+func resolveSurfacePendingRequest(surface *state.SurfaceConsoleRecord, requestID string, requestRevision int) (*state.RequestPromptRecord, []eventcontract.Event) {
+	if surface == nil || strings.TrimSpace(requestID) == "" {
+		return nil, nil
+	}
+	if surface.PendingRequests == nil {
+		surface.PendingRequests = map[string]*state.RequestPromptRecord{}
+	}
+	request := pendingRequestRecord(surface, requestID)
+	if request == nil {
+		return nil, notice(surface, "request_expired", "这个确认请求已经结束或过期了。")
+	}
+	if requestLifecycleBlocksInteractiveResponse(request) {
+		return nil, notice(surface, "request_pending_dispatch", "这条请求已经提交，正在等待"+control.RequestLocalBackendDisplayName(requestPromptBackend(request))+" 处理。")
+	}
+	if requestRevision != 0 && requestRevision != request.CardRevision {
+		return nil, notice(surface, "request_card_expired", "这张请求卡片已经过期，请使用最新卡片继续操作。")
+	}
+	return request, nil
 }
 
 func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event) []eventcontract.Event {

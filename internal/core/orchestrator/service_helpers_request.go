@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -314,10 +313,6 @@ func enqueuePendingRequest(surface *state.SurfaceConsoleRecord, request *state.R
 	}
 	surface.PendingRequests[requestID] = request
 	ensurePendingRequestOrder(surface)
-	if slices.Contains(surface.PendingRequestOrder, requestID) {
-		return
-	}
-	surface.PendingRequestOrder = append(surface.PendingRequestOrder, requestID)
 }
 
 func removePendingRequest(surface *state.SurfaceConsoleRecord, requestID string) {

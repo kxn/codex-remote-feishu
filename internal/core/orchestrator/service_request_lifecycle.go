@@ -55,18 +55,14 @@ func inferRequestLifecycleState(record *state.RequestPromptRecord) string {
 }
 
 func requestLifecycleUsesWaitingDispatchPhase(request *state.RequestPromptRecord) bool {
-	if request == nil {
-		return false
-	}
-	switch normalizeRequestLifecycleState(request.LifecycleState) {
-	case requestLifecycleSubmitting, requestLifecycleAwaitingBackendConsume:
-		return true
-	default:
-		return false
-	}
+	return requestLifecycleDispatchBlocked(request)
 }
 
 func requestLifecycleBlocksInteractiveResponse(request *state.RequestPromptRecord) bool {
+	return requestLifecycleDispatchBlocked(request)
+}
+
+func requestLifecycleDispatchBlocked(request *state.RequestPromptRecord) bool {
 	if request == nil {
 		return false
 	}
