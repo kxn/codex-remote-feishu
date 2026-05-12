@@ -101,68 +101,6 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuP
 	})
 }
 
-func buildTrackSummary(stateValue install.InstallState) string {
-	lines := []string{
-		fmt.Sprintf("当前 track：%s", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
-		fmt.Sprintf("安装来源：%s", displayInstallSource(stateValue.InstallSource)),
-		fmt.Sprintf("当前构建允许的 track：%s", strings.Join(currentBuildTrackNames(), "、")),
-	}
-	if latest := strings.TrimSpace(stateValue.LastKnownLatestVersion); latest != "" {
-		lines = append(lines, fmt.Sprintf("最近看到的最新版本：%s", latest))
-	}
-	line := "切换 track 不会自动触发升级；需要立即检查时请发送 /upgrade latest。"
-	if install.CurrentBuildAllowsDevUpgrade() {
-		line += " 滚动开发构建请使用 /upgrade dev。"
-	}
-	lines = append(lines, line)
-	return strings.Join(lines, "\n")
-}
-
-func describePendingUpgrade(pending *install.PendingUpgrade) string {
-	if pending == nil {
-		return ""
-	}
-	version := strings.TrimSpace(pending.TargetVersion)
-	if version == "" {
-		version = "unknown"
-	}
-	phase := strings.TrimSpace(pending.Phase)
-	if phase == "" {
-		phase = "unknown"
-	}
-	source := strings.TrimSpace(string(pending.Source))
-	target := firstNonEmpty(strings.TrimSpace(pending.TargetSlot), version)
-	if source == "" {
-		return fmt.Sprintf("%s (%s)", target, phase)
-	}
-	return fmt.Sprintf("%s/%s (%s)", source, target, phase)
-}
-
-func displayInstallSource(source install.InstallSource) string {
-	switch source {
-	case install.InstallSourceRelease:
-		return "release"
-	case install.InstallSourceRepo:
-		return "repo"
-	default:
-		return "unknown"
-	}
-}
-
-func formatOptionalTime(value *time.Time) string {
-	if value == nil || value.IsZero() {
-		return "从未检查"
-	}
-	return value.UTC().Format(time.RFC3339)
-}
-
-func upgradeCheckSummaryLine(checkInFlight bool) string {
-	if checkInFlight {
-		return "升级检查：进行中"
-	}
-	return "升级检查：仅手动触发"
-}
-
 func pendingUpgradeBusy(pending *install.PendingUpgrade) bool {
 	if pending == nil {
 		return false

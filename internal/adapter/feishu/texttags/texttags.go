@@ -9,14 +9,6 @@ func FormatNeutralTextTag(text string) string {
 	return "<text_tag color='neutral'>" + html.EscapeString(strings.TrimSpace(text)) + "</text_tag>"
 }
 
-func FormatCommandTextTag(text string) string {
-	text = html.EscapeString(strings.TrimSpace(text))
-	text = strings.ReplaceAll(text, "&lt;", "<")
-	text = strings.ReplaceAll(text, "&gt;", ">")
-	text = restoreLiteralAmpersands(text)
-	return "<text_tag color='neutral'>" + text + "</text_tag>"
-}
-
 func FormatInlineCodeTextTag(text string) string {
 	trimmed := strings.TrimSpace(text)
 	escaped := html.EscapeString(trimmed)

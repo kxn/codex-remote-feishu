@@ -22,14 +22,3 @@ func targetPickerHeaderElements(stageLabel, question string) []map[string]any {
 	}
 	return elements
 }
-
-func targetPickerMinorLabelElement(label string) map[string]any {
-	label = strings.TrimSpace(label)
-	if label == "" {
-		return nil
-	}
-	return map[string]any{
-		"tag":     "markdown",
-		"content": texttags.FormatNeutralTextTag(label),
-	}
-}

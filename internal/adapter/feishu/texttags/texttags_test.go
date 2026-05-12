@@ -10,14 +10,6 @@ func TestFormatNeutralTextTagEscapesMarkup(t *testing.T) {
 	}
 }
 
-func TestFormatCommandTextTagPreservesCommandOperators(t *testing.T) {
-	got := FormatCommandTextTag(" cd web && npm test -- --run src/lib/api.test.ts ")
-	want := "<text_tag color='neutral'>cd web && npm test -- --run src/lib/api.test.ts</text_tag>"
-	if got != want {
-		t.Fatalf("unexpected command tag: got %q want %q", got, want)
-	}
-}
-
 func TestFormatInlineCodeTextTagPreservesAngleBracketsAndQuotes(t *testing.T) {
 	got := FormatInlineCodeTextTag(` /model <模型> "high" 'safe' `)
 	want := `<text_tag color='neutral'>/model <模型> "high" 'safe'</text_tag>`

@@ -29,11 +29,6 @@ func (s *Service) pageEvent(surface *state.SurfaceConsoleRecord, view control.Fe
 	)
 }
 
-func (s *Service) pageEventFromCatalogView(surface *state.SurfaceConsoleRecord, view control.FeishuCatalogView) eventcontract.Event {
-	page := s.commandPageFromView(surface, view)
-	return s.pageEvent(surface, control.NormalizeFeishuPageView(page))
-}
-
 func (s *Service) menuPageEvent(surface *state.SurfaceConsoleRecord, raw, sourceMessageID string) eventcontract.Event {
 	groupID := parseCommandMenuView(raw)
 	if commandID, ok := control.ResolveFeishuCommandMenuGroupRootCommandID(s.buildCatalogContext(surface), groupID); ok {
@@ -210,22 +205,4 @@ func (s *Service) activeCommandLauncherMessageID(surface *state.SurfaceConsoleRe
 		return ""
 	}
 	return strings.TrimSpace(flow.MessageID)
-}
-
-func (s *Service) refreshCommandLauncherMessage(surface *state.SurfaceConsoleRecord, messageID string) {
-	flow := s.activeCommandLauncherFlow(surface)
-	if flow == nil || flow.Role != frontstageFlowRoleLauncher {
-		return
-	}
-	messageID = strings.TrimSpace(messageID)
-	if messageID == "" {
-		return
-	}
-	if flow.MessageID == messageID {
-		return
-	}
-	flow.MessageID = messageID
-	flow.CreatedAt = s.now()
-	flow.ExpiresAt = flow.CreatedAt.Add(defaultTargetPickerTTL)
-	bumpOwnerCardFlowRevision(flow)
 }
