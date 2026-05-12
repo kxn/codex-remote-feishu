@@ -744,6 +744,7 @@ func (s *Service) cancelPendingHeadlessLaunch(surface *state.SurfaceConsoleRecor
 			InstanceID:       pending.InstanceID,
 			ThreadID:         pending.ThreadID,
 			ThreadTitle:      pending.ThreadTitle,
+			WorkspaceKey:     pending.WorkspaceKey,
 			ThreadCWD:        pending.ThreadCWD,
 		},
 	})

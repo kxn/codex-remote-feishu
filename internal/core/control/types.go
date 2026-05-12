@@ -236,6 +236,7 @@ type PendingHeadlessSummary struct {
 	InstanceID            string
 	ThreadID              string
 	ThreadTitle           string
+	WorkspaceKey          string
 	ThreadCWD             string
 	Backend               agentproto.Backend
 	CodexProviderID       string

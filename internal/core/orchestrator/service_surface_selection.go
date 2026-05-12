@@ -389,7 +389,7 @@ func instanceWorkspaceSelectionKeys(inst *state.InstanceRecord) []string {
 		if !threadBelongsToInstanceWorkspace(inst, thread) {
 			continue
 		}
-		key := normalizeWorkspaceClaimKey(thread.CWD)
+		key := threadWorkspaceKeyFromRecord(thread)
 		if key == "" {
 			continue
 		}
@@ -434,7 +434,7 @@ func workspaceVisibleThreads(inst *state.InstanceRecord, workspaceKey string) []
 		if !threadBelongsToInstanceWorkspace(inst, thread) {
 			continue
 		}
-		if normalizeWorkspaceClaimKey(thread.CWD) != workspaceKey {
+		if threadWorkspaceKeyFromRecord(thread) != workspaceKey {
 			continue
 		}
 		threads = append(threads, thread)
@@ -446,7 +446,7 @@ func threadBelongsToInstanceWorkspace(inst *state.InstanceRecord, thread *state.
 	if inst == nil || thread == nil {
 		return false
 	}
-	return cwdBelongsToInstanceWorkspace(inst, thread.CWD)
+	return cwdBelongsToInstanceWorkspace(inst, firstNonEmpty(threadWorkspaceKeyFromRecord(thread), thread.CWD))
 }
 
 func cwdBelongsToInstanceWorkspace(inst *state.InstanceRecord, cwd string) bool {
@@ -645,7 +645,7 @@ func workspaceSelectionThreadKeyAndUsedAt(thread *state.ThreadRecord) (string, t
 	if !ordinaryThreadVisible(thread) {
 		return "", time.Time{}
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(thread.CWD)
+	workspaceKey := threadWorkspaceKeyFromRecord(thread)
 	if workspaceKey == "" || workspaceSelectionInternalProbeWorkspace(workspaceKey) {
 		return "", time.Time{}
 	}

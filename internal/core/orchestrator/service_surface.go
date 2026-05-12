@@ -166,6 +166,7 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 			InstanceID:       pending.InstanceID,
 			ThreadID:         pending.ThreadID,
 			ThreadTitle:      pending.ThreadTitle,
+			WorkspaceKey:     pending.WorkspaceKey,
 			ThreadCWD:        pending.ThreadCWD,
 		},
 	})

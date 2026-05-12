@@ -549,13 +549,14 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	if threadID == "" {
 		return nil
 	}
+	attemptWorkspaceKey := normalizeHeadlessResumeWorkspaceKey(attempt.WorkspaceKey, attempt.ThreadCWD)
 	backend := agentproto.NormalizeBackend(attempt.Backend)
 	if strings.TrimSpace(string(backend)) == "" && surface != nil {
 		backend = s.surfaceBackend(surface)
 	}
 	view := s.mergedThreadViewForBackend(surface, threadID, backend, true)
 	if view == nil {
-		return s.syntheticHeadlessRestoreView(threadID, attempt.ThreadTitle, attempt.ThreadCWD, backend)
+		return s.syntheticHeadlessRestoreView(threadID, attempt.ThreadTitle, attemptWorkspaceKey, attempt.ThreadCWD, backend)
 	}
 	cloned := *view
 	thread := &state.ThreadRecord{ThreadID: threadID}
@@ -566,29 +567,49 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	if strings.TrimSpace(thread.Name) == "" {
 		thread.Name = strings.TrimSpace(attempt.ThreadTitle)
 	}
+	if strings.TrimSpace(thread.WorkspaceKey) == "" {
+		thread.WorkspaceKey = attemptWorkspaceKey
+	}
 	if strings.TrimSpace(thread.CWD) == "" {
-		thread.CWD = strings.TrimSpace(attempt.ThreadCWD)
+		thread.CWD = strings.TrimSpace(firstNonEmpty(attempt.ThreadCWD, attemptWorkspaceKey))
 	}
 	cloned.Thread = thread
 	return &cloned
 }
 
-func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, threadCWD string, backend agentproto.Backend) *mergedThreadView {
+func normalizeHeadlessResumeWorkspaceKey(workspaceKey, threadCWD string) string {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	threadCWD = normalizeWorkspaceClaimKey(threadCWD)
+	if workspaceKey == "" {
+		return threadCWD
+	}
+	if threadCWD == "" || threadCWD == workspaceKey {
+		return workspaceKey
+	}
+	if strings.HasPrefix(threadCWD, workspaceKey+"/") {
+		return workspaceKey
+	}
+	return threadCWD
+}
+
+func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, workspaceKey, threadCWD string, backend agentproto.Backend) *mergedThreadView {
 	threadID = strings.TrimSpace(threadID)
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	threadCWD = strings.TrimSpace(threadCWD)
 	threadTitle = strings.TrimSpace(threadTitle)
 	backend = agentproto.NormalizeBackend(backend)
-	if threadID == "" || threadCWD == "" {
+	if threadID == "" || (workspaceKey == "" && threadCWD == "") {
 		return nil
 	}
 	view := &mergedThreadView{
 		ThreadID: threadID,
 		Backend:  backend,
 		Thread: &state.ThreadRecord{
-			ThreadID: threadID,
-			Name:     threadTitle,
-			CWD:      threadCWD,
-			Loaded:   true,
+			ThreadID:     threadID,
+			Name:         threadTitle,
+			WorkspaceKey: firstNonEmpty(workspaceKey, threadCWD),
+			CWD:          firstNonEmpty(threadCWD, workspaceKey),
+			Loaded:       true,
 		},
 	}
 	if owner := s.threadClaimSurface(threadID); owner != nil {

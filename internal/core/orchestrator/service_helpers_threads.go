@@ -67,6 +67,7 @@ func (s *Service) materializeRemoteTurnThread(inst *state.InstanceRecord, thread
 		return nil
 	}
 	thread := s.ensureThread(inst, threadID)
+	thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 	if strings.TrimSpace(thread.CWD) == "" {
 		thread.CWD = firstNonEmpty(
 			strings.TrimSpace(eventCWD),

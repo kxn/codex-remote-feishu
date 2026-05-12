@@ -298,13 +298,14 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		} else {
 			s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
 		}
+		workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
 		if pending.PrepareNewThread {
-			return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{
+			return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{
 				PrepareNewThread: true,
 				OverlayCleanup:   cleanup,
 			})
 		}
-		return s.attachWorkspaceWithOptions(surface, pending.ThreadCWD, attachWorkspaceOptions{
+		return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{
 			OverlayCleanup: cleanup,
 		})
 	}
@@ -317,6 +318,9 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 			}
 			if strings.TrimSpace(thread.Preview) == "" {
 				thread.Preview = strings.TrimSpace(pending.ThreadPreview)
+			}
+			if strings.TrimSpace(thread.WorkspaceKey) == "" {
+				thread.WorkspaceKey = normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
 			}
 			if strings.TrimSpace(thread.CWD) == "" {
 				thread.CWD = strings.TrimSpace(pending.ThreadCWD)
@@ -357,7 +361,7 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 	if surface == nil || inst == nil || pending == nil {
 		return nil
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(pending.ThreadCWD, inst.WorkspaceKey, inst.WorkspaceRoot))
+	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD, inst.WorkspaceKey, inst.WorkspaceRoot))
 	if workspaceKey != "" && !s.claimWorkspace(surface, workspaceKey) {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}

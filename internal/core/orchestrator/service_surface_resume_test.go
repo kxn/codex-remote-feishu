@@ -229,3 +229,38 @@ func TestTryAutoResumeHeadlessSurfaceDoesNotReuseCodexHeadlessForClaudeThread(t 
 		t.Fatalf("expected surface backend to remain claude, got %#v", surface)
 	}
 }
+
+func TestTryAutoResumeHeadlessSurfaceKeepsStableWorkspaceRootForSyntheticThreadRestore(t *testing.T) {
+	now := time.Date(2026, 5, 12, 15, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "devseek", "", "")
+
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
+		ThreadID:       "thread-claude",
+		ThreadTitle:    "Claude 恢复会话",
+		WorkspaceKey:   "/data/dl/repo",
+		ThreadCWD:      "/data/dl/repo/web",
+		Backend:        agentproto.BackendClaude,
+		ResumeHeadless: true,
+	}, true)
+
+	if result.Status != SurfaceResumeStatusStarting {
+		t.Fatalf("expected synthetic claude restore to start a managed headless, got result=%#v events=%#v", result, events)
+	}
+	if len(events) != 1 || events[0].DaemonCommand == nil || events[0].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected only start headless command, got %#v", events)
+	}
+	if got := events[0].DaemonCommand; got.WorkspaceKey != "/data/dl/repo" || got.ThreadCWD != "/data/dl/repo/web" {
+		t.Fatalf("expected start headless command to keep stable workspace root separate from last active cwd, got %#v", got)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.PendingHeadless == nil {
+		t.Fatalf("expected pending headless launch after synthetic restore, got %#v", surface)
+	}
+	if surface.PendingHeadless.WorkspaceKey != "/data/dl/repo" || surface.PendingHeadless.ThreadCWD != "/data/dl/repo/web" {
+		t.Fatalf("expected pending launch to keep stable workspace root separate from last active cwd, got %#v", surface.PendingHeadless)
+	}
+	if !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
+		t.Fatalf("expected synthetic restore to claim the stable workspace root, got %#v", surface)
+	}
+}

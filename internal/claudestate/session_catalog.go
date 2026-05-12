@@ -51,7 +51,7 @@ func (c *SessionCatalog) RecentWorkspaces(limit int) (map[string]time.Time, erro
 	}
 	workspaces := map[string]time.Time{}
 	for _, meta := range metas {
-		workspaceKey := state.ResolveWorkspaceKey(meta.CWD)
+		workspaceKey := state.ResolveWorkspaceKey(meta.WorkspaceKey, meta.CWD)
 		if workspaceKey == "" {
 			continue
 		}
@@ -78,14 +78,16 @@ func (c *SessionCatalog) ThreadByID(threadID string) (*state.ThreadRecord, error
 
 func sessionMetaToThreadRecord(meta claudesessionstore.SessionMeta) *state.ThreadRecord {
 	threadID := strings.TrimSpace(meta.ID)
-	cwd := state.ResolveWorkspaceKey(meta.CWD)
-	if threadID == "" || cwd == "" {
+	workspaceKey := state.ResolveWorkspaceKey(meta.WorkspaceKey, meta.CWD)
+	cwd := state.ResolveWorkspaceKey(meta.CWD, workspaceKey)
+	if threadID == "" || workspaceKey == "" {
 		return nil
 	}
 	return &state.ThreadRecord{
 		ThreadID:      threadID,
 		Name:          strings.TrimSpace(meta.Title),
 		Preview:       strings.TrimSpace(meta.Preview),
+		WorkspaceKey:  workspaceKey,
 		CWD:           cwd,
 		State:         string(agentproto.ThreadRuntimeStatusTypeNotLoaded),
 		RuntimeStatus: &agentproto.ThreadRuntimeStatus{Type: agentproto.ThreadRuntimeStatusTypeNotLoaded},

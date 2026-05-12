@@ -364,6 +364,9 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if strings.TrimSpace(merged.CWD) == "" {
 		merged.CWD = strings.TrimSpace(secondary.CWD)
 	}
+	if strings.TrimSpace(merged.WorkspaceKey) == "" {
+		merged.WorkspaceKey = strings.TrimSpace(secondary.WorkspaceKey)
+	}
 	if strings.TrimSpace(merged.ForkedFromID) == "" {
 		merged.ForkedFromID = strings.TrimSpace(secondary.ForkedFromID)
 	}
@@ -425,14 +428,14 @@ func syntheticPersistedThreadInstance(thread *state.ThreadRecord, backend agentp
 	if thread == nil {
 		return nil
 	}
-	cwd := state.NormalizeWorkspaceKey(thread.CWD)
-	if cwd == "" {
+	workspaceKey := threadWorkspaceKeyFromRecord(thread)
+	if workspaceKey == "" {
 		return nil
 	}
 	return &state.InstanceRecord{
-		WorkspaceRoot: cwd,
-		WorkspaceKey:  state.ResolveWorkspaceKey(cwd),
-		ShortName:     state.WorkspaceShortName(cwd),
+		WorkspaceRoot: workspaceKey,
+		WorkspaceKey:  state.ResolveWorkspaceKey(workspaceKey),
+		ShortName:     state.WorkspaceShortName(workspaceKey),
 		Backend:       agentproto.NormalizeBackend(backend),
 	}
 }
@@ -756,11 +759,28 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 	return nil, "thread_not_found"
 }
 
+func threadWorkspaceKeyFromRecord(thread *state.ThreadRecord) string {
+	if thread == nil {
+		return ""
+	}
+	return normalizeWorkspaceClaimKey(firstNonEmpty(strings.TrimSpace(thread.WorkspaceKey), strings.TrimSpace(thread.CWD)))
+}
+
+func threadWorkspaceKey(view *mergedThreadView) string {
+	if view == nil {
+		return ""
+	}
+	if key := threadWorkspaceKeyFromRecord(view.Thread); key != "" {
+		return key
+	}
+	return instanceWorkspaceClaimKey(view.Inst)
+}
+
 func threadCWD(view *mergedThreadView) string {
 	if view == nil || view.Thread == nil {
 		return ""
 	}
-	return strings.TrimSpace(view.Thread.CWD)
+	return strings.TrimSpace(firstNonEmpty(view.Thread.CWD, threadWorkspaceKey(view)))
 }
 
 func (s *Service) currentVisibleThreadEligible(surface *state.SurfaceConsoleRecord, threadID string) bool {
