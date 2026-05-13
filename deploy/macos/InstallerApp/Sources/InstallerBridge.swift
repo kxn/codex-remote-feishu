@@ -151,8 +151,10 @@ final class InstallerBridge {
         guard uname(&uts) == 0 else {
             throw InstallerRuntimeError.unsupportedArchitecture("unknown")
         }
-        return withUnsafePointer(to: &uts.machine) { pointer in
-            pointer.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: uts.machine)) { rebound in
+        var machine = uts.machine
+        let machineSize = MemoryLayout.size(ofValue: machine)
+        return withUnsafePointer(to: &machine) { pointer in
+            pointer.withMemoryRebound(to: CChar.self, capacity: machineSize) { rebound in
                 String(cString: rebound)
             }
         }
