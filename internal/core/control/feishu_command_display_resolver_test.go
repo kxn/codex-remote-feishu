@@ -68,7 +68,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		ProductMode: "normal",
 		MenuStage:   string(FeishuCommandMenuStageNormalWorking),
 	})
-	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/steerall", "/new", "/status", "/detach"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/steerall", "/new", "/status"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude current_work menu commands = %#v, want %#v", got, want)
 	}
 
@@ -76,7 +76,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(switchTarget), []string{"/list", "/use"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(switchTarget), []string{"/workspace new dir", "/workspace detach", "/list", "/use"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude switch_target help commands = %#v, want %#v", got, want)
 	}
 
@@ -195,8 +195,14 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesClaudeVisibleProfile(t 
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if !profile.IncludesFamily(FeishuCommandList) || !profile.IncludesFamily(FeishuCommandUse) || !profile.IncludesFamily(FeishuCommandDetach) {
-		t.Fatalf("expected claude visible profile to include list/use/detach, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget))
+	if !profile.IncludesFamily(FeishuCommandWorkspaceNewDir) ||
+		!profile.IncludesFamily(FeishuCommandWorkspaceDetach) ||
+		!profile.IncludesFamily(FeishuCommandList) ||
+		!profile.IncludesFamily(FeishuCommandUse) {
+		t.Fatalf("expected claude visible profile to include workspace_new_dir/workspace_detach/list/use, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget))
+	}
+	if profile.IncludesFamily(FeishuCommandDetach) {
+		t.Fatalf("expected claude visible profile to hide detach, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSwitchTarget))
 	}
 	if profile.IncludesFamily(FeishuCommandModel) {
 		t.Fatalf("expected claude visible profile to hide model, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSendSettings))

@@ -986,26 +986,27 @@ Claude runtime 分三块：
 | `/stop` `/status` `/history` `/reasoning` `/access` `/claudeprofile` `/verbose` `/mode` `/help` `/menu` `/debug` `/upgrade` | native | visible | allow | 仍属于 Claude MVP 已批准的 native 或纯本地产品入口。 |
 | `/model` | reject | hidden | reject | Claude 模型只在 Claude profile 内配置，飞书会话不开放临时模型覆盖。 |
 | `/sendfile` | native | visible | allow | 飞书/本地侧文件投递能力，不依赖 Claude runtime/backend；可按既有 sendfile picker 与后台发送流程开放。 |
-| `/detach` | native | visible | allow | Claude MVP 正式开放；它不再只是隐藏逃生口，而是统一的脱困 / 解除接管入口。 |
-| `/workspace detach` | native | hidden | allow | 仅保留兼容 alias；Claude 的主展示入口是 `/detach`。 |
+| `/workspace detach` | native | visible | allow | Claude 的菜单主展示入口；进入 `工作区与会话` 分组后，解除接管从这里进入。 |
+| `/detach` | native | hidden | allow | 保留 slash 兼容 alias；语义继续汇合到同一条解除接管主链。 |
 | `/compact` | passthrough | hidden | reject for now | 仍只保留成后续 runtime host 的 passthrough 候选。 |
 | `/new` `/list` `/use` | approximation | visible | allow | Claude MVP 的工作会话主链；继续复用现有产品壳，但底层改走 backend-aware session catalog / route contract。 |
 | `/review` `/patch` | approximation | hidden | reject | 当前不纳入 Claude MVP；在 detached review / turn patch 的 runtime contract 补齐前，不对用户暴露。 |
-| `/workspace*` `/useall` | approximation | hidden | reject | Claude MVP 不开放工作区父页或跨工作区总览。 |
+| `/workspace new dir` | native | visible | allow | Claude 菜单直接开放“从目录新建工作区”；不要求先回到 `/workspace` 父页。 |
+| `/workspace` `/workspace list` `/workspace new` `/workspace new git` `/workspace new worktree` `/useall` | native / approximation | hidden | allow | 保留兼容入口，不作为 Claude 当前主展示面；其中 `/useall` 与隐藏 `workspace*` 仍复用同一套工作区/会话壳。 |
 | `/steerall` | approximation | visible | allow | 文本与本地图片补充可并入当前 active turn；远程图片与 document 输入仍显式拒绝，并恢复原 queue/staged 状态。 |
 | `/plan` | native | visible | allow | 当前通过 surface-level `PlanMode` 与 Claude `set_permission_mode(plan/default)` 动态权限通道生效，可用于调试与后续 turn 的 plan mode 切换。 |
 | `/follow` `/cron` `/vscode migrate` `/autowhip` `/autocontinue` | reject | hidden | reject | 不在当前 Claude MVP 范围内。 |
 
 对 help/menu 的显式投影也一并固定为：
 
-1. `current_work` 只保留 `/stop`、`/steerall`、`/new`、`/status`、`/detach`
-2. `switch_target` 只保留 `/list`、`/use`
+1. `current_work` 只保留 `/stop`、`/steerall`、`/new`、`/status`
+2. `switch_target` 保留 `/workspace new dir`、`/workspace detach`、`/list`、`/use`
 3. `send_settings` 继续保留 `/reasoning`、`/access`、`/plan`、`/verbose`、`/claudeprofile`
 4. `common_tools` 当前保留 `/history`、`/sendfile`
 
-#### 7.6.2 `/detach` 的产品语义
+#### 7.6.2 解除接管的产品语义
 
-Claude MVP 下，`/detach` 是状态机的统一逃生原语，而不是“调试时才知道的隐藏命令”。
+Claude MVP 下，解除接管仍是状态机的统一逃生原语，但菜单主展示入口改为 `/workspace detach`；裸 `/detach` 继续只是兼容 alias。
 
 固定语义：
 
@@ -1177,7 +1178,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 1. `/mode claude` 已作为 dev 环境可见入口落地。
 2. 普通文本、`/stop`、request/respond 主链、`/new`、`/list`、`/use` 已进入 Claude visible MVP。
 3. `turn.steer` 已正式宣称 relay/canonical capability；reply auto steer 与 `/steerall` 继续走同一条 approximation，可把文本与本地图片补充并入当前 active turn。
-4. 上述结果只证明 dev-visible Claude 主链已经可接通；不等于 2026-04-29 重新拍板后的最终 MVP 暴露面。按最新产品决议，`/detach` 应升级为 visible + allow，而 `/review` / `/bendtomywill` 应回退为 hidden + reject，直到 runtime contract 补齐。
+4. 上述结果只证明 dev-visible Claude 主链已经可接通；不等于最终 help/menu 暴露面已经收口。后续产品决议进一步把菜单主展示改成 `/workspace new dir` 与 `/workspace detach`，同时让裸 `/detach` 回到 hidden + allow 兼容 alias，而 `/review` / `/bendtomywill` 继续保持 hidden + reject。
 
 ### 阶段 E：补齐 command catalog / help / menu / workspace config（已完成）
 
@@ -1196,9 +1197,8 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 
 1. backend-aware help/menu/filter 已落地。
 2. Claude `/list` `/use` `/new` 的可见性、派发策略与 backend-aware target picker 已落地。
-3. `workspace*` 与 `/useall` 继续 hidden + reject，维持当前 MVP 边界。
+3. Claude 菜单投影已进一步收口：`switch_target` 现在显式开放 `/workspace new dir` 与 `/workspace detach`；裸 `/detach` 改回 hidden + allow 兼容 alias。
 4. 下一轮实现还需要按 2026-04-29 的产品决议进一步收口：
-   - `/detach` 进入 Claude visible MVP
    - `/review` / `/bendtomywill` 退出 Claude visible MVP
    - `target picker` 与 `/list` `/use` 不再按 profile 过滤
    - headless 下的 `Claude <-> Codex` 切换/恢复按工作区目录保连续性
@@ -1322,7 +1322,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
    - `threads.refresh` / `thread.history.read` 已桥接到本地 transcript/meta scan
    - Claude 默认 capability 已真实提升到 `SessionCatalog=true` + `ThreadsRefresh=true`
 11. `#496` 的 MVP 产品边界已完成这一轮拍板，并固定为：
-   - `/detach` 进入 Claude visible MVP
+   - Claude 菜单主展示开放 `/workspace new dir` 与 `/workspace detach`，裸 `/detach` 保留兼容 alias
    - `/review` / `/bendtomywill` 暂不纳入
    - `/list` `/use` / target picker 只按 backend 过滤
    - headless 下的 `Claude <-> Codex` 按工作区目录保连续性切 backend
@@ -1341,7 +1341,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 
 1. 完成 `#498` 的 verifier、parent roll-up 与关单收尾
 2. 以本文第 7.6 节为基线，先同步产品文档，再进入 `#496` 的实现收口
-3. Claude MVP 的后续实现以 `/detach`、backend-only target filtering、workspace-preserving backend switch/resume 为主线推进
+3. Claude MVP 的后续实现以 workspace-session visible surface、backend-only target filtering、workspace-preserving backend switch/resume 为主线推进
 
 恢复步骤：
 
@@ -1375,7 +1375,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
    - 最新研究已经明确：`SessionCatalog` 不是 `ThreadsRefresh` 的同义词，而且 capability 必须真实反映 host bridge 是否已落地，所以这一段不能原样带进后续实现
 4. `#494` 当前合同仍然成立。
    - request bridge 对 `plan_confirmation` 的 `decline -> interrupt` 合同仍与黑盒结论一致
-   - `#553` 之后，Claude command support profile 已把 `/new`、`/list`、`/use` 升成 visible + allow approximation；`/sendfile` 因为属于飞书/本地侧文件投递，不依赖 Claude backend，已作为 visible + allow native 入口开放；`/plan` 现在也作为 visible + allow native 入口开放，沿用 surface-level `PlanMode` 与 Claude `set_permission_mode` 的动态权限通道；`workspace*`、`/useall` 则作为 hidden + allow 兼容入口继续复用同一工作区 / 会话壳，避免 target picker 子流程依赖隐式 UI intent 绕过
+   - `#553` 之后，Claude command support profile 已把 `/new`、`/list`、`/use` 升成 visible + allow approximation；`/sendfile` 因为属于飞书/本地侧文件投递，不依赖 Claude backend，已作为 visible + allow native 入口开放；`/plan` 现在也作为 visible + allow native 入口开放，沿用 surface-level `PlanMode` 与 Claude `set_permission_mode` 的动态权限通道；后续菜单投影又把 `/workspace new dir` 与 `/workspace detach` 提升为 Claude 的正式 visible 入口，而 bare `/detach`、其余 `workspace*` 与 `/useall` 则保留 hidden + allow 兼容语义，继续复用同一工作区 / 会话壳
 5. `#492/#493` 的主体方向也仍成立。
    - backend-aware state partition、surface resume carrier、catalog/contextual command seam 目前没有发现被后续 Claude 研究推翻
    - 相关测试面当前仍是绿的：`go test ./internal/core/control ./internal/core/orchestrator ./internal/app/daemon`
@@ -1502,7 +1502,7 @@ backend 互切时，`reasoning / access / plan / profile` 不要求强保留 liv
 1. `#492` 已完成，state partition 不再是待办。
 2. `#493/#494` 已完成，不再作为后续执行顺序里的待办。
 3. `#495 -> #497 -> #498` 这条 pre-MVP 技术基座顺序现已全部落地完成。
-4. `#496` 这一轮 MVP 决策门已在 2026-04-29 收口：`/detach` 进入 visible MVP，`/review` / `/bendtomywill` 退出，`/list` `/use` / target picker 只按 backend 过滤，headless 下的 `Claude <-> Codex` 按工作区目录保连续性切换。
+4. `#496` 这一轮 MVP 决策门已在 2026-04-29 收口：Claude 菜单主展示开放 `/workspace new dir` 与 `/workspace detach`，裸 `/detach` 保留兼容 alias，`/review` / `/bendtomywill` 退出，`/list` `/use` / target picker 只按 backend 过滤，headless 下的 `Claude <-> Codex` 按工作区目录保连续性切换。
 5. 下一步不再继续拍板同一轮范围，而是按这版边界推进实现与验证。
 
 补充解释：

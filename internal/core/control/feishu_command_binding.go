@@ -84,7 +84,6 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 	}
 
 	for _, familyID := range []string{
-		FeishuCommandWorkspaceDetach,
 		FeishuCommandCompact,
 		FeishuCommandSteerAll,
 		FeishuCommandReview,
@@ -155,6 +154,7 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 	bindings[FeishuCommandHelp] = terminalPageBinding(FeishuCommandHelp)
 	bindings[FeishuCommandStatus] = terminalPageBinding(FeishuCommandStatus)
 	bindings[FeishuCommandStop] = ownerEntryBindingWithPolicy(FeishuCommandStop)
+	bindings[FeishuCommandWorkspaceDetach] = ownerEntryBindingWithPolicy(FeishuCommandWorkspaceDetach)
 	bindings[FeishuCommandDetach] = ownerEntryBindingWithPolicy(FeishuCommandDetach)
 
 	bindings[FeishuCommandDebug] = daemonCommandBinding(FeishuCommandDebug, DaemonCommandDebug, false)
@@ -197,7 +197,7 @@ func ownerEntryBindingWithPolicy(familyID string) FeishuCommandBinding {
 
 func followupPolicyForFamilyID(familyID string) (FeishuFollowupPolicy, bool) {
 	switch strings.TrimSpace(familyID) {
-	case FeishuCommandHelp, FeishuCommandStatus, FeishuCommandStop, FeishuCommandNew, FeishuCommandFollow, FeishuCommandDetach:
+	case FeishuCommandHelp, FeishuCommandStatus, FeishuCommandStop, FeishuCommandNew, FeishuCommandFollow, FeishuCommandWorkspaceDetach, FeishuCommandDetach:
 		return FeishuFollowupPolicy{
 			DropClasses: []FeishuFollowupHandoffClass{
 				FeishuFollowupHandoffClassNotice,

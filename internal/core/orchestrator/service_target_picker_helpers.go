@@ -189,6 +189,17 @@ func targetPickerAllowsNewThread(source control.TargetPickerRequestSource, allow
 	return targetPickerUsesSessionSelection(source)
 }
 
+func targetPickerSourceDefaultsToAllowNewThread(source control.TargetPickerRequestSource) bool {
+	switch source {
+	case control.TargetPickerRequestSourceUse,
+		control.TargetPickerRequestSourceUseAll,
+		control.TargetPickerRequestSourceWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
 func targetPickerSessionOptionIndex(options []control.FeishuTargetPickerSessionOption, value string) int {
 	for i, option := range options {
 		if option.Value == value {

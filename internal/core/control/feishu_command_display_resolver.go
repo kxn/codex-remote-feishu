@@ -39,35 +39,8 @@ func FeishuCommandDisplayFamiliesForGroup(groupID string) []FeishuCommandDisplay
 }
 
 func feishuCommandDisplayFamiliesForGroupContext(groupID string, ctx CatalogContext) []FeishuCommandDisplayFamily {
-	ctx = NormalizeCatalogContext(ctx)
 	families := FeishuCommandDisplayFamiliesForGroup(groupID)
-	if VisibleModeForCatalogContext(ctx) != "claude" {
-		return families
-	}
-	switch groupID {
-	case FeishuCommandGroupCurrentWork:
-		def, ok := FeishuCommandDefinitionByID(FeishuCommandDetach)
-		if !ok {
-			return families
-		}
-		for _, family := range families {
-			if family.FamilyID == FeishuCommandDetach {
-				return families
-			}
-		}
-		return append(families, newFeishuCommandDisplayFamily(def))
-	case FeishuCommandGroupSwitchTarget:
-		filtered := make([]FeishuCommandDisplayFamily, 0, len(families))
-		for _, family := range families {
-			if family.FamilyID == FeishuCommandDetach {
-				continue
-			}
-			filtered = append(filtered, family)
-		}
-		return filtered
-	default:
-		return families
-	}
+	return families
 }
 
 func ResolveFeishuCommandDisplayFamily(familyID string, interactive bool, ctx CatalogContext) (FeishuCommandDisplayResolution, bool) {

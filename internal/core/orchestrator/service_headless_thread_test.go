@@ -980,11 +980,14 @@ func TestShowThreadsAttachedNormalFiltersToCurrentWorkspace(t *testing.T) {
 	if view.SelectedWorkspaceKey != "/data/dl/droid" {
 		t.Fatalf("expected current workspace to remain selected, got %#v", view)
 	}
-	if len(view.SessionOptions) != 2 {
+	if len(view.SessionOptions) != 3 {
 		t.Fatalf("expected current workspace threads only, got %#v", view.SessionOptions)
 	}
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-3")); ok {
 		t.Fatalf("expected other-workspace thread to be filtered out, got %#v", view.SessionOptions)
+	}
+	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected attached /use to include new-thread fallback, got %#v", view.SessionOptions)
 	}
 }
 

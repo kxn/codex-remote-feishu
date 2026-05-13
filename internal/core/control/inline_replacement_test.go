@@ -356,6 +356,14 @@ func TestAllowsCommandCardResultReplacement(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "workspace detach can replace stamped command card",
+			action: Action{
+				Kind:    ActionWorkspaceDetach,
+				Inbound: &ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
+			},
+			want: true,
+		},
+		{
 			name: "review start stays append-only to preserve source final card",
 			action: Action{
 				Kind:    ActionReviewStart,

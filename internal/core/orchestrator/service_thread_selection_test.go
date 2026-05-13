@@ -123,12 +123,15 @@ func TestPresentThreadSelectionIncludesStableShortIDInSubtitle(t *testing.T) {
 		t.Fatalf("expected one target picker event, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if len(view.SessionOptions) != 1 {
-		t.Fatalf("expected one thread option, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 2 {
+		t.Fatalf("expected one thread option plus new-thread fallback, got %#v", view.SessionOptions)
 	}
 	option, ok := targetPickerSessionOption(view, targetPickerThreadValue("019d56f0-de5e-7943-bc9a-18c42ef11acb"))
 	if !ok || option.Label != "dl · 未命名会话" || strings.Contains(option.Label, "…") {
 		t.Fatalf("expected unnamed duplicate session to avoid short id leakage, got %#v", option)
+	}
+	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected /use picker to include new-thread fallback, got %#v", view.SessionOptions)
 	}
 }
 
@@ -166,11 +169,14 @@ func TestPresentThreadSelectionShowsPagedMostRecentThreads(t *testing.T) {
 		t.Fatalf("expected target picker, got %#v", events)
 	}
 	view := targetPickerFromEvent(t, events[0])
-	if len(view.SessionOptions) != 6 {
+	if len(view.SessionOptions) != 7 {
 		t.Fatalf("expected all recent threads, got %#v", view.SessionOptions)
 	}
 	if view.SelectedSessionValue != "" {
 		t.Fatalf("expected unbound /use to keep session empty until explicit selection, got %#v", view)
+	}
+	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected /use picker to include new-thread fallback, got %#v", view.SessionOptions)
 	}
 }
 
@@ -214,8 +220,11 @@ func TestPresentScopedThreadSelectionShowsAllSessionsInCurrentWorkspace(t *testi
 	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected scoped /use to start on direct target page, got %#v", view)
 	}
-	if len(view.SessionOptions) != 6 || view.SelectedSessionValue != "" {
+	if len(view.SessionOptions) != 7 || view.SelectedSessionValue != "" {
 		t.Fatalf("expected current-workspace sessions in recency order with empty default session, got %#v", view)
+	}
+	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected scoped /use picker to include new-thread fallback, got %#v", view.SessionOptions)
 	}
 }
 
@@ -252,8 +261,11 @@ func TestPresentAllThreadSelectionShowsAllSessionsByRecency(t *testing.T) {
 	if view.Page != control.FeishuTargetPickerPageTarget || view.CanConfirm || view.ConfirmLabel != "切换" {
 		t.Fatalf("expected attached /useall to start on direct target page, got %#v", view)
 	}
-	if len(view.WorkspaceOptions) != 1 || len(view.SessionOptions) != 2 {
+	if len(view.WorkspaceOptions) != 1 || len(view.SessionOptions) != 3 {
 		t.Fatalf("expected current workspace threads, got %#v", view)
+	}
+	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected /useall picker to include new-thread fallback, got %#v", view.SessionOptions)
 	}
 	for _, option := range view.SessionOptions {
 		if option.Value == targetPickerThreadValue("thread-review") {
@@ -653,11 +665,14 @@ func TestShowWorkspaceThreadsDisplaysSingleWorkspaceAllSessions(t *testing.T) {
 	if !view.WorkspaceSelectionLocked || view.ShowWorkspaceSelect {
 		t.Fatalf("expected workspace-scoped picker to lock current workspace, got %#v", view)
 	}
-	if len(view.SessionOptions) != 3 {
+	if len(view.SessionOptions) != 4 {
 		t.Fatalf("expected workspace sessions only, got %#v", view.SessionOptions)
 	}
 	if view.SelectedSessionValue != "" {
 		t.Fatalf("expected workspace target picker to keep session empty before user choice, got %#v", view)
+	}
+	if option, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected workspace-scoped picker to include new-thread fallback, got %#v", view.SessionOptions)
 	}
 }
 

@@ -159,6 +159,7 @@ func AllowsCommandCardResultReplacement(action Action) bool {
 		ActionStop,
 		ActionNewThread,
 		ActionFollowLocal,
+		ActionWorkspaceDetach,
 		ActionDetach,
 		ActionVSCodeMigrate:
 		return true
@@ -236,6 +237,7 @@ func firstResultCardReplaceableAction(action Action) bool {
 		ActionStop,
 		ActionNewThread,
 		ActionFollowLocal,
+		ActionWorkspaceDetach,
 		ActionDetach,
 		ActionVSCodeMigrate:
 		return true

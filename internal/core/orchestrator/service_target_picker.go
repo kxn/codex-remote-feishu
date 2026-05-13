@@ -133,6 +133,10 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 	if source == control.TargetPickerRequestSourceWorkspace && lockedWorkspaceKey == "" {
 		lockedWorkspaceKey = preferredWorkspaceKey
 	}
+	allowNewThread := opts.AllowNewThread
+	if !allowNewThread {
+		allowNewThread = targetPickerSourceDefaultsToAllowNewThread(source)
+	}
 	selectedWorkspaceKey := preferredWorkspaceKey
 	if lockedWorkspaceKey != "" {
 		selectedWorkspaceKey = lockedWorkspaceKey
@@ -149,7 +153,7 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 		Page:                 targetPickerDefaultPage(source),
 		BackValue:            cloneTargetPickerActionPayload(opts.BackValue),
 		LockedWorkspaceKey:   lockedWorkspaceKey,
-		AllowNewThread:       opts.AllowNewThread,
+		AllowNewThread:       allowNewThread,
 		WorkspaceCursor:      -1,
 		SessionCursor:        -1,
 		SelectedWorkspaceKey: selectedWorkspaceKey,

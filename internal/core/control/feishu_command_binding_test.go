@@ -76,6 +76,13 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantFamily: FeishuCommandReview,
 			wantKind:   FeishuCommandBindingOwnerEntry,
 		},
+		{
+			name:            "workspace detach owner entry",
+			action:          Action{Kind: ActionWorkspaceDetach, Text: "/workspace detach"},
+			wantFamily:      FeishuCommandWorkspaceDetach,
+			wantKind:        FeishuCommandBindingOwnerEntry,
+			wantHasFollowup: true,
+		},
 	}
 
 	for _, tt := range tests {

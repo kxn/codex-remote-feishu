@@ -767,30 +767,49 @@ func TestHandleGatewayActionSealsMenuCardForDetachHandoff(t *testing.T) {
 		InstanceID:       "inst-1",
 	})
 
-	result := handleGatewayActionForTest(context.Background(), app, control.Action{
-		Kind:             control.ActionDetach,
-		GatewayID:        "app-1",
-		SurfaceSessionID: "surface-1",
-		ChatID:           "chat-1",
-		ActorUserID:      "user-1",
-		MessageID:        "om-menu-detach-1",
-		Inbound: &control.ActionInboundMeta{
-			CardDaemonLifecycleID: app.daemonLifecycleID,
-		},
-	})
+	for _, tt := range []struct {
+		name      string
+		kind      control.ActionKind
+		messageID string
+	}{
+		{name: "detach", kind: control.ActionDetach, messageID: "om-menu-detach-1"},
+		{name: "workspace_detach", kind: control.ActionWorkspaceDetach, messageID: "om-menu-workspace-detach-1"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handleGatewayActionForTest(context.Background(), app, control.Action{
+				Kind:             tt.kind,
+				GatewayID:        "app-1",
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				MessageID:        tt.messageID,
+				Inbound: &control.ActionInboundMeta{
+					CardDaemonLifecycleID: app.daemonLifecycleID,
+				},
+			})
 
-	if result == nil || result.ReplaceCurrentCard == nil {
-		t.Fatalf("expected detach handoff to seal current card, got %#v", result)
-	}
-	if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已解除对当前工作区的接管") {
-		t.Fatalf("expected detach replacement card text, got %#v", result.ReplaceCurrentCard.CardElements)
-	}
-	if len(gateway.operations) != 0 {
-		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
-	}
-	snapshot := app.service.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
-		t.Fatalf("expected detach to clear current attachment, got %#v", snapshot)
+			if result == nil || result.ReplaceCurrentCard == nil {
+				t.Fatalf("expected %s handoff to seal current card, got %#v", tt.name, result)
+			}
+			if !strings.Contains(operationCardText(*result.ReplaceCurrentCard), "已解除对当前工作区的接管") {
+				t.Fatalf("expected %s replacement card text, got %#v", tt.name, result.ReplaceCurrentCard.CardElements)
+			}
+			if len(gateway.operations) != 0 {
+				t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+			}
+			snapshot := app.service.SurfaceSnapshot("surface-1")
+			if snapshot == nil || snapshot.Attachment.InstanceID != "" {
+				t.Fatalf("expected %s to clear current attachment, got %#v", tt.name, snapshot)
+			}
+
+			app.service.ApplySurfaceAction(control.Action{
+				Kind:             control.ActionAttachInstance,
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				InstanceID:       "inst-1",
+			})
+		})
 	}
 }
 
