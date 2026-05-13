@@ -186,7 +186,10 @@ payload_dir="${resources_dir}/payload"
 mkdir -p "${macos_dir}" "${payload_dir}"
 
 sdk_path="$(xcrun --sdk macosx --show-sdk-path)"
-mapfile -t swift_sources < <(find "${source_dir}" -type f -name '*.swift' | sort)
+swift_sources=()
+while IFS= read -r source_path; do
+  swift_sources+=("${source_path}")
+done < <(find "${source_dir}" -type f -name '*.swift' | sort)
 if [[ "${#swift_sources[@]}" -eq 0 ]]; then
   echo "no Swift sources found under ${source_dir}" >&2
   exit 1
@@ -221,9 +224,19 @@ printf '%s\n' "${version}" > "${resources_dir}/installer-version.txt"
 printf '%s\n' "${track}" > "${resources_dir}/installer-track.txt"
 
 bundle_version_output="$(bundle_versions_for_app "${version}")"
-mapfile -t bundle_versions <<< "${bundle_version_output}"
-app_short_version="${bundle_versions[0]}"
-app_bundle_version="${bundle_versions[1]}"
+app_short_version=""
+app_bundle_version=""
+while IFS= read -r version_line; do
+  if [[ -z "${app_short_version}" ]]; then
+    app_short_version="${version_line}"
+  elif [[ -z "${app_bundle_version}" ]]; then
+    app_bundle_version="${version_line}"
+  fi
+done <<< "${bundle_version_output}"
+if [[ -z "${app_short_version}" || -z "${app_bundle_version}" ]]; then
+  echo "failed to derive macOS bundle versions from ${version}" >&2
+  exit 1
+fi
 
 python3 - <<'PY' "${plist_template}" "${contents_dir}/Info.plist" "${app_short_version}" "${app_bundle_version}" "${app_exec_name}"
 import pathlib

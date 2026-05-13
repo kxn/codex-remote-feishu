@@ -66,17 +66,33 @@ work_dir="$(mktemp -d)"
 server_pid=""
 daemon_pid=""
 cleanup() {
+  local status=$?
   if [[ -z "${daemon_pid}" && -n "${home_dir:-}" ]]; then
     daemon_pid="$(ps -eo pid=,args= | awk -v target="$(install_bin_dir "${home_dir}")/codex-remote daemon" '$0 ~ target && !f {f=1; print $1}')"
   fi
   if [[ -n "${daemon_pid}" ]]; then
     kill "${daemon_pid}" 2>/dev/null || true
+    for _ in $(seq 1 20); do
+      if ! ps -p "${daemon_pid}" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.1
+    done
   fi
   if [[ -n "${server_pid}" ]]; then
     kill "${server_pid}" 2>/dev/null || true
     wait "${server_pid}" 2>/dev/null || true
   fi
-  rm -rf "${work_dir}"
+  if [[ -n "${work_dir}" && -d "${work_dir}" ]]; then
+    for _ in $(seq 1 20); do
+      if rm -rf "${work_dir}" 2>/dev/null; then
+        break
+      fi
+      sleep 0.1
+    done
+    rm -rf "${work_dir}" 2>/dev/null || true
+  fi
+  return "${status}"
 }
 trap cleanup EXIT
 
