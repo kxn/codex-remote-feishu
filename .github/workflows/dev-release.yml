@@ -32,8 +32,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish:
+  build-dev-assets:
     runs-on: ubuntu-latest
+    outputs:
+      source_ref: ${{ steps.source.outputs.ref }}
+      commit: ${{ steps.meta.outputs.commit }}
+      short_commit: ${{ steps.meta.outputs.short_commit }}
+      built_at: ${{ steps.meta.outputs.built_at }}
+      version: ${{ steps.meta.outputs.version }}
 
     steps:
       - name: Resolve source ref
@@ -65,6 +71,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Setup Go
+        if: ${{ inputs.artifact_name == '' }}
         uses: actions/setup-go@v6
         with:
           go-version: ${{ steps.go_version.outputs.version }}
@@ -105,24 +112,105 @@ jobs:
           CODEX_REMOTE_PACKAGE_VERSION_LABEL: dev
         run: bash scripts/release/build-artifacts.sh "${{ steps.meta.outputs.version }}" dist --jobs 5 --skip-admin-ui-build
 
+      - name: Install NSIS
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+
+      - name: Build Windows NSIS installer
+        run: |
+          bash scripts/release/build-windows-nsis.sh \
+            --version "${{ steps.meta.outputs.version }}" \
+            --track alpha \
+            --package-version-label dev \
+            --dist-dir dist
+
+      - name: Upload base dev dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-release-base-dist
+          path: dist
+          if-no-files-found: error
+          compression-level: 0
+
+  build-dev-macos-packaged-installer:
+    needs: build-dev-assets
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.build-dev-assets.outputs.source_ref }}
+
+      - name: Download base dev dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-release-base-dist
+          path: dist
+
+      - name: Build macOS packaged installer
+        run: |
+          bash scripts/release/build-macos-packaged-installer.sh \
+            --version "${{ needs.build-dev-assets.outputs.version }}" \
+            --track alpha \
+            --package-version-label dev \
+            --dist-dir dist
+
+      - name: Upload macOS packaged installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-release-macos-packaged-installer
+          path: dist/codex-remote-feishu_dev_darwin_universal_installer.dmg
+          if-no-files-found: error
+          compression-level: 0
+
+  publish:
+    needs:
+      - build-dev-assets
+      - build-dev-macos-packaged-installer
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build-dev-assets.outputs.source_ref }}
+
+      - name: Download base dev dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-release-base-dist
+          path: dist
+
+      - name: Download macOS packaged installer
+        uses: actions/download-artifact@v4
+        with:
+          name: dev-release-macos-packaged-installer
+          path: dist
+
+      - name: Refresh checksums after macOS packaged installer
+        run: bash scripts/release/write-checksums.sh dist
+
       - name: Build dev manifest
         env:
-          CODEX_REMOTE_DEV_VERSION: ${{ steps.meta.outputs.version }}
-          CODEX_REMOTE_DEV_COMMIT: ${{ steps.meta.outputs.commit }}
-          CODEX_REMOTE_DEV_SHORT_COMMIT: ${{ steps.meta.outputs.short_commit }}
-          CODEX_REMOTE_DEV_BUILT_AT: ${{ steps.meta.outputs.built_at }}
+          CODEX_REMOTE_DEV_VERSION: ${{ needs.build-dev-assets.outputs.version }}
+          CODEX_REMOTE_DEV_COMMIT: ${{ needs.build-dev-assets.outputs.commit }}
+          CODEX_REMOTE_DEV_SHORT_COMMIT: ${{ needs.build-dev-assets.outputs.short_commit }}
+          CODEX_REMOTE_DEV_BUILT_AT: ${{ needs.build-dev-assets.outputs.built_at }}
         run: bash scripts/release/build-dev-manifest.sh dist dist/dev-latest.json
 
       - name: Generate release notes
         env:
-          VERSION: ${{ steps.meta.outputs.version }}
-          COMMIT: ${{ steps.meta.outputs.commit }}
-          BUILT_AT: ${{ steps.meta.outputs.built_at }}
+          VERSION: ${{ needs.build-dev-assets.outputs.version }}
+          COMMIT: ${{ needs.build-dev-assets.outputs.commit }}
+          BUILT_AT: ${{ needs.build-dev-assets.outputs.built_at }}
         run: bash scripts/release/dev-release-notes.sh > release-notes.md
 
       - name: Update dev-latest tag
         run: |
-          git tag -f dev-latest "${{ steps.meta.outputs.commit }}"
+          git tag -f dev-latest "${{ needs.build-dev-assets.outputs.commit }}"
           git push origin refs/tags/dev-latest --force
 
       - name: Create or update dev-latest release
@@ -137,7 +225,25 @@ jobs:
             gh release create dev-latest \
               --title dev-latest \
               --notes-file release-notes.md \
-              --target "${{ steps.meta.outputs.commit }}" \
+              --target "${{ needs.build-dev-assets.outputs.commit }}" \
               --prerelease
           fi
           gh release upload dev-latest dist/* --clobber
+
+      - name: Verify dev-latest assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mapfile -t expected_assets < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
+          mapfile -t release_assets < <(
+            gh release view dev-latest --json assets \
+              --jq '.assets[].name' |
+              sort
+          )
+
+          for expected in "${expected_assets[@]}"; do
+            if ! printf '%s\n' "${release_assets[@]}" | grep -Fx "${expected}" >/dev/null; then
+              echo "missing dev-latest asset: ${expected}" >&2
+              exit 1
+            fi
+          done

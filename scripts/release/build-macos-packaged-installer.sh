@@ -10,10 +10,21 @@ usage: scripts/release/build-macos-packaged-installer.sh --version <version> --d
 
 options:
   --track <track>         release track: production, beta, or alpha
+  --package-version-label <label>
+                          darwin archive / dmg version label; defaults to semver without leading v
   --output <path>         output dmg path; defaults under <dir>
   --output-app <path>     optional output .app path; defaults to a temporary path
   -h, --help              show this help
 EOF
+}
+
+normalize_version_arg() {
+  local raw="$1"
+  if [[ "${raw}" =~ ^[0-9] ]]; then
+    printf 'v%s\n' "${raw}"
+    return
+  fi
+  printf '%s\n' "${raw}"
 }
 
 infer_track() {
@@ -38,9 +49,28 @@ validate_track() {
   esac
 }
 
+resolve_package_version_label() {
+  local version="$1"
+  local explicit="$2"
+  if [[ -n "${explicit}" ]]; then
+    printf '%s\n' "${explicit}"
+    return
+  fi
+  if [[ -n "${CODEX_REMOTE_PACKAGE_VERSION_LABEL:-}" ]]; then
+    printf '%s\n' "${CODEX_REMOTE_PACKAGE_VERSION_LABEL}"
+    return
+  fi
+  if [[ "${version}" =~ ^v[0-9] ]]; then
+    printf '%s\n' "${version#v}"
+    return
+  fi
+  printf '%s\n' "${version}"
+}
+
 version=""
 dist_dir=""
 track=""
+package_version_label=""
 output_path=""
 output_app=""
 
@@ -56,6 +86,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --track)
       track="${2:-}"
+      shift 2
+      ;;
+    --package-version-label)
+      package_version_label="${2:-}"
       shift 2
       ;;
     --output)
@@ -83,13 +117,12 @@ if [[ -z "${version}" || -z "${dist_dir}" ]]; then
   exit 1
 fi
 
-if [[ ! "${version}" =~ ^v[0-9] ]]; then
-  version="v${version}"
-fi
+version="$(normalize_version_arg "${version}")"
 if [[ -z "${track}" ]]; then
   track="$(infer_track "${version}")"
 fi
 validate_track "${track}"
+package_version_label="$(resolve_package_version_label "${version}" "${package_version_label}")"
 
 if [[ ! -d "${dist_dir}" ]]; then
   echo "dist directory not found: ${dist_dir}" >&2
@@ -98,7 +131,7 @@ fi
 
 dist_dir="$(cd "${dist_dir}" && pwd)"
 if [[ -z "${output_path}" ]]; then
-  output_path="${dist_dir}/codex-remote-feishu_${version#v}_darwin_universal_installer.dmg"
+  output_path="${dist_dir}/codex-remote-feishu_${package_version_label}_darwin_universal_installer.dmg"
 fi
 
 temp_root=""
@@ -117,6 +150,7 @@ fi
 bash "${ROOT_DIR}/scripts/release/build-macos-installer-app.sh" \
   --version "${version}" \
   --track "${track}" \
+  --package-version-label "${package_version_label}" \
   --dist-dir "${dist_dir}" \
   --output-app "${output_app}"
 

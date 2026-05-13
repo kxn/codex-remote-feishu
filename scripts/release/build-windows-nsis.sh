@@ -10,10 +10,21 @@ usage: scripts/release/build-windows-nsis.sh --version <version> --dist-dir <dir
 
 options:
   --track <track>         release track: production, beta, or alpha
+  --package-version-label <label>
+                          archive / asset version label; defaults to semver without leading v
   --output <path>         output installer path; defaults under <dir>
   --makensis <path>       makensis binary to use; defaults to PATH lookup
   -h, --help              show this help
 EOF
+}
+
+normalize_version_arg() {
+  local raw="$1"
+  if [[ "${raw}" =~ ^[0-9] ]]; then
+    printf 'v%s\n' "${raw}"
+    return
+  fi
+  printf '%s\n' "${raw}"
 }
 
 infer_track() {
@@ -38,6 +49,24 @@ validate_track() {
   esac
 }
 
+resolve_package_version_label() {
+  local version="$1"
+  local explicit="$2"
+  if [[ -n "${explicit}" ]]; then
+    printf '%s\n' "${explicit}"
+    return
+  fi
+  if [[ -n "${CODEX_REMOTE_PACKAGE_VERSION_LABEL:-}" ]]; then
+    printf '%s\n' "${CODEX_REMOTE_PACKAGE_VERSION_LABEL}"
+    return
+  fi
+  if [[ "${version}" =~ ^v[0-9] ]]; then
+    printf '%s\n' "${version#v}"
+    return
+  fi
+  printf '%s\n' "${version}"
+}
+
 detect_python() {
   if command -v python3 >/dev/null 2>&1; then
     printf '%s\n' "python3"
@@ -54,6 +83,7 @@ detect_python() {
 version=""
 dist_dir=""
 track=""
+package_version_label=""
 output_path=""
 makensis_bin="${MAKENSIS:-}"
 
@@ -69,6 +99,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --track)
       track="${2:-}"
+      shift 2
+      ;;
+    --package-version-label)
+      package_version_label="${2:-}"
       shift 2
       ;;
     --output)
@@ -96,17 +130,16 @@ if [[ -z "${version}" || -z "${dist_dir}" ]]; then
   exit 1
 fi
 
-if [[ ! "${version}" =~ ^v[0-9] ]]; then
-  version="v${version}"
-fi
+version="$(normalize_version_arg "${version}")"
 if [[ -z "${track}" ]]; then
   track="$(infer_track "${version}")"
 fi
 validate_track "${track}"
+package_version_label="$(resolve_package_version_label "${version}" "${package_version_label}")"
 
 dist_dir="$(cd "${dist_dir}" && pwd)"
 if [[ -z "${output_path}" ]]; then
-  output_path="${dist_dir}/codex-remote-feishu_${version#v}_windows_amd64_installer.exe"
+  output_path="${dist_dir}/codex-remote-feishu_${package_version_label}_windows_amd64_installer.exe"
 fi
 
 if [[ -z "${makensis_bin}" ]]; then
@@ -116,8 +149,8 @@ if [[ -z "${makensis_bin}" ]]; then
   fi
 fi
 
-archive_path="${dist_dir}/codex-remote-feishu_${version#v}_windows_amd64.zip"
-package_dir="codex-remote-feishu_${version#v}_windows_amd64"
+archive_path="${dist_dir}/codex-remote-feishu_${package_version_label}_windows_amd64.zip"
+package_dir="codex-remote-feishu_${package_version_label}_windows_amd64"
 script_path="${ROOT_DIR}/deploy/windows/codex-remote-installer.nsi"
 python_bin="$(detect_python)"
 

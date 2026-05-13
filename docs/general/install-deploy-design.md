@@ -526,12 +526,14 @@ detect/apply/reinstall 的当前规则也同步收紧：
 - `codex-remote-feishu-install.sh`
 - `codex-remote-feishu-install.ps1`
 - `codex-remote-feishu_<version>_windows_amd64_installer.exe`
+- `codex-remote-feishu_<version>_darwin_universal_installer.dmg`
 - `checksums.txt`
 
-当前仓库还额外具备一套尚未接入正式发布流水线的 macOS packaged installer 构建入口：
+macOS packaged installer 由本地脚本 contract 统一构建：
 
 - `scripts/release/build-macos-installer-app.sh`
 - `scripts/release/build-macos-dmg.sh`
+- `scripts/release/build-macos-packaged-installer.sh`
 
 它们要求在 mac runner 上执行，并复用已经构建好的：
 
@@ -550,7 +552,7 @@ release 包内不再附带：
 
 - `Release` workflow 在 GitHub 端构建 admin UI 与多平台二进制
 - `Release` workflow 在现有 Windows zip 归档构建完成后，额外安装 `NSIS` 并生成 `codex-remote-feishu_<version>_windows_amd64_installer.exe`
-- macOS packaged installer 目前还未接入正式 release workflow；接入时应直接复用本地脚本 contract，而不是另起第二套打包逻辑
+- `Release` workflow 额外在 mac runner 上复用 `scripts/release/build-macos-packaged-installer.sh`，生成 `codex-remote-feishu_<version>_darwin_universal_installer.dmg`
 - workflow 显式区分 `production / beta / alpha` 三条 track
 - `beta / alpha` 由 track 自动映射到 GitHub `prerelease=true`
 - workflow 会先算出本次发布版本，再构建正式 release 产物
@@ -568,6 +570,10 @@ release 包内不再附带：
   - `dev-latest.json`
   - `checksums.txt`
   - `codex-remote-feishu_dev_<goos>_<goarch>.tar.gz|zip`
+- 同时额外暴露供实验下载的 packaged installer 资产：
+  - `codex-remote-feishu_dev_windows_amd64_installer.exe`
+  - `codex-remote-feishu_dev_darwin_universal_installer.dmg`
+- `dev-latest.json` 继续只描述 archive 资产，不把 packaged installer 拉进 `/upgrade dev` 的 manifest 选择合同
 
 本地 `make release-artifacts VERSION=...` 仅用于打包预演，不是正式发布路径。
 

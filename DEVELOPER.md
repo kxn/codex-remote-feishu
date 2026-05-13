@@ -70,6 +70,9 @@ testkit/
 - `codex-remote-feishu_<version>_windows_amd64_installer.exe`
   - Windows 的 native packaged installer 入口
   - 内部调用 `codex-remote packaged-install`
+- `codex-remote-feishu_<version>_darwin_universal_installer.dmg`
+  - macOS 的 native packaged installer 入口
+  - `dmg` 内提供 `Install Codex Remote.app`，内部调用 `packaged-install-probe` / `packaged-install`
 - release archive 内的 `codex-remote`
   - 手动安装时执行 `./codex-remote install -bootstrap-only -start-daemon`
 

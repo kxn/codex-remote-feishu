@@ -10,10 +10,21 @@ usage: scripts/release/build-macos-installer-app.sh --version <version> --dist-d
 
 options:
   --track <track>         release track: production, beta, or alpha
+  --package-version-label <label>
+                          darwin archive version label; defaults to semver without leading v
   --output-app <path>     output .app path; defaults under <dir>
   --min-macos <version>   deployment target for the installer app (default: 13.0)
   -h, --help              show this help
 EOF
+}
+
+normalize_version_arg() {
+  local raw="$1"
+  if [[ "${raw}" =~ ^[0-9] ]]; then
+    printf 'v%s\n' "${raw}"
+    return
+  fi
+  printf '%s\n' "${raw}"
 }
 
 infer_track() {
@@ -38,6 +49,24 @@ validate_track() {
   esac
 }
 
+resolve_package_version_label() {
+  local version="$1"
+  local explicit="$2"
+  if [[ -n "${explicit}" ]]; then
+    printf '%s\n' "${explicit}"
+    return
+  fi
+  if [[ -n "${CODEX_REMOTE_PACKAGE_VERSION_LABEL:-}" ]]; then
+    printf '%s\n' "${CODEX_REMOTE_PACKAGE_VERSION_LABEL}"
+    return
+  fi
+  if [[ "${version}" =~ ^v[0-9] ]]; then
+    printf '%s\n' "${version#v}"
+    return
+  fi
+  printf '%s\n' "${version}"
+}
+
 bundle_versions_for_app() {
   local version="$1"
   local base=""
@@ -47,22 +76,27 @@ bundle_versions_for_app() {
     base="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${BASH_REMATCH[3]}"
     pre_kind="${BASH_REMATCH[5]:-}"
     pre_num="${BASH_REMATCH[6]:-}"
-  else
-    echo "unsupported app version format for macOS bundle metadata: ${version}" >&2
-    exit 1
+    local bundle_version="${base}"
+    case "${pre_kind}" in
+      alpha)
+        bundle_version="${base}a${pre_num}"
+        ;;
+      beta)
+        bundle_version="${base}b${pre_num}"
+        ;;
+    esac
+
+    printf '%s\n%s\n' "${base}" "${bundle_version}"
+    return
   fi
 
-  local bundle_version="${base}"
-  case "${pre_kind}" in
-    alpha)
-      bundle_version="${base}a${pre_num}"
-      ;;
-    beta)
-      bundle_version="${base}b${pre_num}"
-      ;;
-  esac
+  if [[ "${version}" =~ ^dev-[A-Za-z0-9._-]+$ ]]; then
+    printf '0.0.0\n0.0.0\n'
+    return
+  fi
 
-  printf '%s\n%s\n' "${base}" "${bundle_version}"
+  echo "unsupported app version format for macOS bundle metadata: ${version}" >&2
+  exit 1
 }
 
 require_mac_toolchain() {
@@ -79,6 +113,7 @@ require_mac_toolchain() {
 version=""
 dist_dir=""
 track=""
+package_version_label=""
 output_app=""
 min_macos="13.0"
 
@@ -94,6 +129,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --track)
       track="${2:-}"
+      shift 2
+      ;;
+    --package-version-label)
+      package_version_label="${2:-}"
       shift 2
       ;;
     --output-app)
@@ -121,13 +160,12 @@ if [[ -z "${version}" || -z "${dist_dir}" ]]; then
   exit 1
 fi
 
-if [[ ! "${version}" =~ ^v[0-9] ]]; then
-  version="v${version}"
-fi
+version="$(normalize_version_arg "${version}")"
 if [[ -z "${track}" ]]; then
   track="$(infer_track "${version}")"
 fi
 validate_track "${track}"
+package_version_label="$(resolve_package_version_label "${version}" "${package_version_label}")"
 require_mac_toolchain
 
 if [[ ! -d "${dist_dir}" ]]; then
@@ -140,8 +178,8 @@ if [[ -z "${output_app}" ]]; then
   output_app="${dist_dir}/Install Codex Remote.app"
 fi
 
-archive_amd64="${dist_dir}/codex-remote-feishu_${version#v}_darwin_amd64.tar.gz"
-archive_arm64="${dist_dir}/codex-remote-feishu_${version#v}_darwin_arm64.tar.gz"
+archive_amd64="${dist_dir}/codex-remote-feishu_${package_version_label}_darwin_amd64.tar.gz"
+archive_arm64="${dist_dir}/codex-remote-feishu_${package_version_label}_darwin_arm64.tar.gz"
 source_dir="${ROOT_DIR}/deploy/macos/InstallerApp/Sources"
 plist_template="${ROOT_DIR}/deploy/macos/InstallerApp/Info.plist.template"
 app_exec_name="Install Codex Remote"
@@ -169,8 +207,8 @@ extract_archive() {
 extract_archive "${archive_amd64}" "${build_root}/amd64"
 extract_archive "${archive_arm64}" "${build_root}/arm64"
 
-payload_amd64="${build_root}/amd64/codex-remote-feishu_${version#v}_darwin_amd64/codex-remote"
-payload_arm64="${build_root}/arm64/codex-remote-feishu_${version#v}_darwin_arm64/codex-remote"
+payload_amd64="${build_root}/amd64/codex-remote-feishu_${package_version_label}_darwin_amd64/codex-remote"
+payload_arm64="${build_root}/arm64/codex-remote-feishu_${package_version_label}_darwin_arm64/codex-remote"
 for payload in "${payload_amd64}" "${payload_arm64}"; do
   if [[ ! -f "${payload}" ]]; then
     echo "payload binary not found: ${payload}" >&2

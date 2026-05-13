@@ -70,8 +70,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
+  build-release-assets:
     runs-on: ubuntu-latest
+    outputs:
+      source_ref: ${{ steps.source_ref.outputs.ref }}
+      track: ${{ steps.version.outputs.track }}
+      version: ${{ steps.version.outputs.version }}
+      latest_tag: ${{ steps.version.outputs.latest_tag }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      create_release: ${{ steps.version.outputs.create_release }}
+      upload_assets: ${{ steps.version.outputs.upload_assets }}
+      run_packaging: ${{ steps.version.outputs.run_packaging }}
 
     steps:
       - name: Resolve source ref
@@ -256,16 +265,90 @@ jobs:
             --version "${{ steps.version.outputs.version }}" \
             --prod-dist-dir dist
 
-      - name: Generate release notes
-        if: ${{ steps.version.outputs.create_release == 'true' }}
+      - name: Upload base release dist
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-base-dist
+          path: dist
+          if-no-files-found: error
+          compression-level: 0
+
+  build-macos-packaged-installer:
+    needs: build-release-assets
+    if: ${{ needs.build-release-assets.outputs.run_packaging == 'true' }}
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.build-release-assets.outputs.source_ref }}
+
+      - name: Download base release dist
+        uses: actions/download-artifact@v4
+        with:
+          name: release-base-dist
+          path: dist
+
+      - name: Build macOS packaged installer
         run: |
-          RELEASE_TRACK="${{ steps.version.outputs.track }}" \
-          VERSION="${{ steps.version.outputs.version }}" \
-          LATEST_TAG="${{ steps.version.outputs.latest_tag }}" \
+          bash scripts/release/build-macos-packaged-installer.sh \
+            --version "${{ needs.build-release-assets.outputs.version }}" \
+            --track "${{ needs.build-release-assets.outputs.track }}" \
+            --dist-dir dist
+
+      - name: Upload macOS packaged installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos-packaged-installer
+          path: dist/codex-remote-feishu_*_darwin_universal_installer.dmg
+          if-no-files-found: error
+          compression-level: 0
+
+  publish-release-assets:
+    needs:
+      - build-release-assets
+      - build-macos-packaged-installer
+    if: ${{ needs.build-release-assets.outputs.upload_assets == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build-release-assets.outputs.source_ref }}
+
+      - name: Fetch tags
+        if: ${{ needs.build-release-assets.outputs.create_release == 'true' }}
+        run: git fetch --force --tags origin
+
+      - name: Download base release dist
+        uses: actions/download-artifact@v4
+        with:
+          name: release-base-dist
+          path: dist
+
+      - name: Download macOS packaged installer
+        uses: actions/download-artifact@v4
+        with:
+          name: release-macos-packaged-installer
+          path: dist
+
+      - name: Refresh checksums after macOS packaged installer
+        run: bash scripts/release/write-checksums.sh dist
+
+      - name: Generate release notes
+        if: ${{ needs.build-release-assets.outputs.create_release == 'true' }}
+        run: |
+          RELEASE_TRACK="${{ needs.build-release-assets.outputs.track }}" \
+          VERSION="${{ needs.build-release-assets.outputs.version }}" \
+          LATEST_TAG="${{ needs.build-release-assets.outputs.latest_tag }}" \
           bash scripts/release/release-notes.sh > release-notes.md
 
       - name: Create GitHub release Metadata
-        if: ${{ steps.version.outputs.create_release == 'true' }}
+        if: ${{ needs.build-release-assets.outputs.create_release == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -273,30 +356,28 @@ jobs:
           if [[ "${{ inputs.draft }}" == "true" ]]; then
             flags+=(--draft)
           fi
-          if [[ "${{ steps.version.outputs.prerelease }}" == "true" ]]; then
+          if [[ "${{ needs.build-release-assets.outputs.prerelease }}" == "true" ]]; then
             flags+=(--prerelease)
           fi
-          gh release create "${{ steps.version.outputs.version }}" \
-            --title "${{ steps.version.outputs.version }}" \
+          gh release create "${{ needs.build-release-assets.outputs.version }}" \
+            --title "${{ needs.build-release-assets.outputs.version }}" \
             --notes-file release-notes.md \
-            --target "${{ steps.source_ref.outputs.ref }}" \
+            --target "${{ needs.build-release-assets.outputs.source_ref }}" \
             "${flags[@]}"
 
       - name: Upload Release Assets
-        if: ${{ steps.version.outputs.upload_assets == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "${{ steps.version.outputs.version }}" dist/* --clobber
+          gh release upload "${{ needs.build-release-assets.outputs.version }}" dist/* --clobber
 
       - name: Verify Release Assets
-        if: ${{ steps.version.outputs.upload_assets == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           mapfile -t expected_assets < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
           mapfile -t release_assets < <(
-            gh release view "${{ steps.version.outputs.version }}" --json assets \
+            gh release view "${{ needs.build-release-assets.outputs.version }}" --json assets \
               --jq '.assets[].name' |
               sort
           )
