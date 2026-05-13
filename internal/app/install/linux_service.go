@@ -70,10 +70,7 @@ func normalizedServiceState(state InstallState) InstallState {
 	return updated
 }
 
-func systemdUserServiceState(state InstallState) (InstallState, error) {
-	if err := ensureLinuxSystemdUserSupport(); err != nil {
-		return InstallState{}, err
-	}
+func managedServiceState(state InstallState, manager ServiceManager, unitPath func(string, string) string, unitDescription string) (InstallState, error) {
 	updated := normalizedServiceState(state)
 	if strings.TrimSpace(updated.BaseDir) == "" {
 		homeDir, err := serviceUserHomeDir()
@@ -82,14 +79,21 @@ func systemdUserServiceState(state InstallState) (InstallState, error) {
 		}
 		updated.BaseDir = homeDir
 	}
-	updated.ServiceManager = ServiceManagerSystemdUser
+	updated.ServiceManager = manager
 	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		updated.ServiceUnitPath = systemdUserUnitPathForInstance(updated.BaseDir, updated.InstanceID)
+		updated.ServiceUnitPath = unitPath(updated.BaseDir, updated.InstanceID)
 	}
 	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		return InstallState{}, fmt.Errorf("unable to resolve systemd user unit path")
+		return InstallState{}, fmt.Errorf("unable to resolve %s", unitDescription)
 	}
 	return updated, nil
+}
+
+func systemdUserServiceState(state InstallState) (InstallState, error) {
+	if err := ensureLinuxSystemdUserSupport(); err != nil {
+		return InstallState{}, err
+	}
+	return managedServiceState(state, ServiceManagerSystemdUser, systemdUserUnitPathForInstance, "systemd user unit path")
 }
 
 func renderSystemdUserUnit(state InstallState) (string, error) {

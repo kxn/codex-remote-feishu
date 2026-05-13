@@ -230,6 +230,48 @@ describe("SetupRoute", () => {
     expect(await screen.findByRole("heading", { name: "菜单确认" })).toBeInTheDocument();
   });
 
+  it("shows autostart warning and hides enable action when apply is unavailable", async () => {
+    window.history.replaceState({}, "", "/setup");
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": {
+        body: makeOnboardingWorkflow({
+          currentStage: "autostart",
+          app: {
+            autoConfig: {
+              status: "complete",
+              summary: "飞书应用配置已收敛。",
+              allowedActions: [],
+            },
+            menu: {
+              status: "complete",
+              summary: "你已确认机器人菜单配置完成。",
+              blocking: false,
+              allowedActions: [],
+            },
+          },
+          autostart: {
+            allowedActions: ["defer"],
+            autostart: {
+              canApply: false,
+              warning: "自动启动状态暂时不可写。",
+              lingerHint: "稍后可以在管理页重试。",
+            },
+          },
+        }),
+      },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("heading", { name: "自动启动" })).toBeInTheDocument();
+    expect(screen.getByText("自动启动状态暂时不可写。")).toBeInTheDocument();
+    expect(screen.getByText("稍后可以在管理页重试。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "启用自动启动" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "稍后处理" })).toBeInTheDocument();
+  });
+
   it("starts qr onboarding automatically, polls every 5 seconds, and advances to auto-config", async () => {
     window.history.replaceState({}, "", "/setup");
     let workflowState = buildConnectWorkflow([]);

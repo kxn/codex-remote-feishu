@@ -47,75 +47,35 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 		DaemonUseSystemProxy: loaded.Config.Feishu.UseSystemProxy,
 		CapturedProxyEnv:     config.CaptureProxyEnv(),
 	})
-	if effectiveServiceManager(state) == ServiceManagerSystemdUser {
+	if driver, ok := managedServiceDriverForManager(effectiveServiceManager(state)); ok {
 		manager = relayruntime.NewManager(relayruntime.ManagerConfig{
 			RelayServerURL: strings.TrimSpace(loaded.Config.Relay.ServerURL),
 			Identity:       identity,
 			ConfigPath:     state.ConfigPath,
 			Paths:          paths,
 			StartFunc: func(ctx context.Context) (int, error) {
-				if _, err := installSystemdUserUnit(ctx, state); err != nil {
+				updated, err := driver.Install(ctx, state)
+				if err != nil {
 					return 0, err
 				}
-				if err := systemdUserEnable(ctx, state); err != nil {
-					return 0, err
+				if driver.EnableBeforeEnsureReady {
+					if err := driver.Enable(ctx, updated); err != nil {
+						return 0, err
+					}
 				}
-				return 0, systemdUserStart(ctx, state)
+				return 0, driver.Start(ctx, updated)
 			},
 			RestartFunc: func(ctx context.Context) error {
-				if _, err := installSystemdUserUnit(ctx, state); err != nil {
+				updated, err := driver.Install(ctx, state)
+				if err != nil {
 					return err
 				}
-				if err := systemdUserEnable(ctx, state); err != nil {
-					return err
+				if driver.EnableBeforeEnsureReady {
+					if err := driver.Enable(ctx, updated); err != nil {
+						return err
+					}
 				}
-				return systemdUserRestart(ctx, state)
-			},
-		})
-	}
-	if effectiveServiceManager(state) == ServiceManagerLaunchdUser {
-		manager = relayruntime.NewManager(relayruntime.ManagerConfig{
-			RelayServerURL: strings.TrimSpace(loaded.Config.Relay.ServerURL),
-			Identity:       identity,
-			ConfigPath:     state.ConfigPath,
-			Paths:          paths,
-			StartFunc: func(ctx context.Context) (int, error) {
-				if _, err := installLaunchdUserPlist(ctx, state); err != nil {
-					return 0, err
-				}
-				return 0, launchdUserStart(ctx, state)
-			},
-			RestartFunc: func(ctx context.Context) error {
-				if _, err := installLaunchdUserPlist(ctx, state); err != nil {
-					return err
-				}
-				return launchdUserRestart(ctx, state)
-			},
-		})
-	}
-	if effectiveServiceManager(state) == ServiceManagerTaskSchedulerLogon {
-		manager = relayruntime.NewManager(relayruntime.ManagerConfig{
-			RelayServerURL: strings.TrimSpace(loaded.Config.Relay.ServerURL),
-			Identity:       identity,
-			ConfigPath:     state.ConfigPath,
-			Paths:          paths,
-			StartFunc: func(ctx context.Context) (int, error) {
-				if _, err := installTaskSchedulerLogonTask(ctx, state); err != nil {
-					return 0, err
-				}
-				if err := taskSchedulerLogonEnable(ctx, state); err != nil {
-					return 0, err
-				}
-				return 0, taskSchedulerLogonStart(ctx, state)
-			},
-			RestartFunc: func(ctx context.Context) error {
-				if _, err := installTaskSchedulerLogonTask(ctx, state); err != nil {
-					return err
-				}
-				if err := taskSchedulerLogonEnable(ctx, state); err != nil {
-					return err
-				}
-				return taskSchedulerLogonRestart(ctx, state)
+				return driver.Restart(ctx, updated)
 			},
 		})
 	}

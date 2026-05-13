@@ -1022,6 +1022,8 @@ export function SetupRoute() {
         </section>
       );
     }
+    const autostartWarning = autostartStage.autostart?.warning?.trim() || "";
+    const autostartLingerHint = autostartStage.autostart?.lingerHint?.trim() || "";
 
     return (
       <section className="step-section">
@@ -1032,6 +1034,12 @@ export function SetupRoute() {
         <div className={`notice-banner ${autostartStage.status === "complete" ? "good" : "warn"}`}>
           {autostartStage.summary}
         </div>
+        {autostartWarning ? (
+          <div className="notice-banner warn">{autostartWarning}</div>
+        ) : null}
+        {autostartLingerHint ? (
+          <div className="notice-banner">{autostartLingerHint}</div>
+        ) : null}
         <div className="button-row">
           {autostartStage.allowedActions?.includes("apply") ? (
             <button

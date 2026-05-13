@@ -119,23 +119,12 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	if state.ServiceManager == "" {
 		state.ServiceManager = ServiceManagerDetached
 	}
-	switch effectiveServiceManager(*state) {
-	case ServiceManagerSystemdUser:
-		state.ServiceUnitPath = systemdUserUnitPathForInstance(
+	if driver, ok := managedServiceDriverForManager(effectiveServiceManager(*state)); ok {
+		state.ServiceUnitPath = driver.ServiceUnitPath(
 			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
 			state.InstanceID,
 		)
-	case ServiceManagerLaunchdUser:
-		state.ServiceUnitPath = launchdUserPlistPathForInstance(
-			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
-			state.InstanceID,
-		)
-	case ServiceManagerTaskSchedulerLogon:
-		state.ServiceUnitPath = taskSchedulerXMLPathForInstance(
-			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
-			state.InstanceID,
-		)
-	default:
+	} else {
 		state.ServiceUnitPath = ""
 	}
 

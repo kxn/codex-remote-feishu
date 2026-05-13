@@ -55,22 +55,7 @@ func taskSchedulerLogonServiceState(state InstallState) (InstallState, error) {
 	if err := ensureWindowsTaskSchedulerSupport(); err != nil {
 		return InstallState{}, err
 	}
-	updated := normalizedServiceState(state)
-	if strings.TrimSpace(updated.BaseDir) == "" {
-		homeDir, err := serviceUserHomeDir()
-		if err != nil {
-			return InstallState{}, err
-		}
-		updated.BaseDir = homeDir
-	}
-	updated.ServiceManager = ServiceManagerTaskSchedulerLogon
-	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		updated.ServiceUnitPath = taskSchedulerXMLPathForInstance(updated.BaseDir, updated.InstanceID)
-	}
-	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		return InstallState{}, fmt.Errorf("unable to resolve task scheduler XML path")
-	}
-	return updated, nil
+	return managedServiceState(state, ServiceManagerTaskSchedulerLogon, taskSchedulerXMLPathForInstance, "task scheduler XML path")
 }
 
 func renderTaskSchedulerLogonXML(state InstallState) (string, error) {

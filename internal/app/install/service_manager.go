@@ -148,28 +148,20 @@ func launchdUserPlistPathForInstance(baseDir, instanceID string) string {
 }
 
 func isManagedServiceManager(state InstallState) bool {
-	m := effectiveServiceManager(state)
-	return m == ServiceManagerSystemdUser || m == ServiceManagerLaunchdUser || m == ServiceManagerTaskSchedulerLogon
+	_, ok := managedServiceDriverForManager(effectiveServiceManager(state))
+	return ok
 }
 
 func serviceNameForInstallInstance(goos, instanceID string) string {
-	switch goos {
-	case "darwin":
-		return launchdLabelForInstance(instanceID)
-	case "windows":
-		return taskSchedulerTaskNameForInstance(instanceID)
-	default:
-		return systemdUserServiceNameForInstance(instanceID)
+	if driver, ok := managedServiceDriverForGOOS(goos); ok {
+		return driver.ServiceName(instanceID)
 	}
+	return systemdUserServiceNameForInstance(instanceID)
 }
 
 func serviceUnitPathForInstallInstance(goos, baseDir, instanceID string) string {
-	switch goos {
-	case "darwin":
-		return launchdUserPlistPathForInstance(baseDir, instanceID)
-	case "windows":
-		return taskSchedulerXMLPathForInstance(baseDir, instanceID)
-	default:
-		return systemdUserUnitPathForInstance(baseDir, instanceID)
+	if driver, ok := managedServiceDriverForGOOS(goos); ok {
+		return driver.ServiceUnitPath(baseDir, instanceID)
 	}
+	return systemdUserUnitPathForInstance(baseDir, instanceID)
 }

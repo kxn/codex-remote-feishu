@@ -259,6 +259,48 @@ func TestSetupOnboardingWorkflowKeepsDeferredAutoConfigOnPlanError(t *testing.T)
 	}
 }
 
+func TestSetupOnboardingAutostartDoesNotOfferApplyWhenCannotApply(t *testing.T) {
+	oldDetectAutostart := detectAutostart
+	detectAutostart = func(statePath string) (install.AutostartStatus, error) {
+		return install.AutostartStatus{
+			Platform:         "darwin",
+			Supported:        true,
+			Manager:          install.ServiceManagerLaunchdUser,
+			CurrentManager:   install.ServiceManagerDetached,
+			Status:           "disabled",
+			InstallStatePath: statePath,
+			CanApply:         false,
+			Warning:          "自动启动状态暂时不可写。",
+			LingerHint:       "请稍后在管理页重试。",
+		}, nil
+	}
+	t.Cleanup(func() {
+		detectAutostart = oldDetectAutostart
+	})
+
+	app := newVerifiedSetupWorkflowApp(t)
+	if err := app.writeFeishuAppAutoConfigDecision("main", onboardingDecisionDeferred, time.Now().UTC()); err != nil {
+		t.Fatalf("writeFeishuAppAutoConfigDecision: %v", err)
+	}
+	if err := app.writeFeishuAppMenuDecision("main", onboardingDecisionMenuConfirmed, time.Now().UTC()); err != nil {
+		t.Fatalf("writeFeishuAppMenuDecision: %v", err)
+	}
+
+	workflow, err := app.buildOnboardingWorkflow("main")
+	if err != nil {
+		t.Fatalf("buildOnboardingWorkflow: %v", err)
+	}
+	if containsString(workflow.Autostart.AllowedActions, "apply") {
+		t.Fatalf("autostart allowed actions = %#v, apply should not be exposed when canApply=false", workflow.Autostart.AllowedActions)
+	}
+	if !containsString(workflow.Autostart.AllowedActions, "defer") {
+		t.Fatalf("autostart allowed actions = %#v, want defer fallback", workflow.Autostart.AllowedActions)
+	}
+	if workflow.Autostart.Autostart == nil || workflow.Autostart.Autostart.Warning == "" || workflow.Autostart.Autostart.LingerHint == "" {
+		t.Fatalf("autostart payload did not preserve warning/hint: %#v", workflow.Autostart.Autostart)
+	}
+}
+
 func TestSetupOnboardingWorkflowKeepsDeferredAutoConfigOnLoadError(t *testing.T) {
 	stubSetupAutostartStatus(t)
 	app := newVerifiedSetupWorkflowApp(t)

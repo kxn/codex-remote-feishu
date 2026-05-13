@@ -86,120 +86,75 @@ func ensureManagedServiceConfigured(state InstallState) error {
 }
 
 func managedServiceManagerForCurrentPlatform() (ServiceManager, error) {
-	switch serviceRuntimeGOOS {
-	case "linux":
-		return ServiceManagerSystemdUser, nil
-	case "darwin":
-		return ServiceManagerLaunchdUser, nil
-	case "windows":
-		return ServiceManagerTaskSchedulerLogon, nil
-	default:
+	manager, ok := managedServiceManagerForGOOS(serviceRuntimeGOOS)
+	if !ok {
 		return "", fmt.Errorf("managed user service is not supported on %s", serviceRuntimeGOOS)
 	}
+	return manager, nil
 }
 
 func installManagedService(ctx context.Context, state InstallState) (InstallState, error) {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return installSystemdUserUnit(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return installLaunchdUserPlist(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return installTaskSchedulerLogonTask(ctx, state)
-	default:
-		return InstallState{}, fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
+	driver, err := managedServiceDriverForState(state)
+	if err != nil {
+		return InstallState{}, err
 	}
+	return driver.Install(ctx, state)
 }
 
 func uninstallManagedService(ctx context.Context, state InstallState) error {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return uninstallSystemdUserUnit(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return uninstallLaunchdUserPlist(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return uninstallTaskSchedulerLogonTask(ctx, state)
-	default:
+	driver, ok := managedServiceDriverForManager(effectiveServiceManager(state))
+	if !ok {
 		return nil
 	}
+	return driver.Uninstall(ctx, state)
 }
 
 func enableManagedService(ctx context.Context, state InstallState) error {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return systemdUserEnable(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return launchdUserEnable(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return taskSchedulerLogonEnable(ctx, state)
-	default:
-		return fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
+	driver, err := managedServiceDriverForState(state)
+	if err != nil {
+		return err
 	}
+	return driver.Enable(ctx, state)
 }
 
 func disableManagedService(ctx context.Context, state InstallState) error {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return systemdUserDisable(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return launchdUserDisable(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return taskSchedulerLogonDisable(ctx, state)
-	default:
-		return fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
+	driver, err := managedServiceDriverForState(state)
+	if err != nil {
+		return err
 	}
+	return driver.Disable(ctx, state)
 }
 
 func startManagedService(ctx context.Context, state InstallState) error {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return systemdUserStart(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return launchdUserStart(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return taskSchedulerLogonStart(ctx, state)
-	default:
-		return fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
+	driver, err := managedServiceDriverForState(state)
+	if err != nil {
+		return err
 	}
+	return driver.Start(ctx, state)
 }
 
 func stopManagedService(ctx context.Context, state InstallState) error {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return systemdUserStop(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return launchdUserStop(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return taskSchedulerLogonStop(ctx, state)
-	default:
-		return fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
+	driver, err := managedServiceDriverForState(state)
+	if err != nil {
+		return err
 	}
+	return driver.Stop(ctx, state)
 }
 
 func restartManagedService(ctx context.Context, state InstallState) error {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return systemdUserRestart(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return launchdUserRestart(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return taskSchedulerLogonRestart(ctx, state)
-	default:
-		return fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
+	driver, err := managedServiceDriverForState(state)
+	if err != nil {
+		return err
 	}
+	return driver.Restart(ctx, state)
 }
 
 func managedServiceStatus(ctx context.Context, state InstallState) (string, error) {
-	switch effectiveServiceManager(state) {
-	case ServiceManagerSystemdUser:
-		return systemdUserStatus(ctx, state)
-	case ServiceManagerLaunchdUser:
-		return launchdUserStatus(ctx, state)
-	case ServiceManagerTaskSchedulerLogon:
-		return taskSchedulerLogonStatus(ctx, state)
-	default:
-		return "", fmt.Errorf("service manager is %q; run `codex-remote service install-user` first", effectiveServiceManager(state))
+	driver, err := managedServiceDriverForState(state)
+	if err != nil {
+		return "", err
 	}
+	return driver.Status(ctx, state)
 }
 
 func runServiceInstallUser(ctx context.Context, statePath string, stdout io.Writer) error {

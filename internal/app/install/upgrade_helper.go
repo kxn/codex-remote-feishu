@@ -244,16 +244,11 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relayruntime.Paths) error {
 	upgradeHelperSleepFunc(upgradeHelperStopDelay)
 	if isManagedServiceManager(stateValue) {
-		switch effectiveServiceManager(stateValue) {
-		case ServiceManagerLaunchdUser:
-			return launchdUserStopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
-		case ServiceManagerTaskSchedulerLogon:
-			return taskSchedulerLogonStopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
-		case ServiceManagerSystemdUser:
-			return systemdUserStopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
-		default:
+		driver, ok := managedServiceDriverForManager(effectiveServiceManager(stateValue))
+		if !ok {
 			return fmt.Errorf("unsupported managed service manager %q", effectiveServiceManager(stateValue))
 		}
+		return driver.StopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
 	}
 
 	pid, err := upgradeHelperReadPIDFunc(paths.PIDFile)
@@ -276,22 +271,18 @@ func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relay
 
 func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateValue InstallState, paths relayruntime.Paths) (int, error) {
 	if isManagedServiceManager(stateValue) {
-		switch effectiveServiceManager(stateValue) {
-		case ServiceManagerLaunchdUser:
-			if _, err := installLaunchdUserPlist(ctx, stateValue); err != nil {
-				return 0, err
-			}
-			return 0, launchdUserStart(ctx, stateValue)
-		case ServiceManagerTaskSchedulerLogon:
-			if _, err := installTaskSchedulerLogonTask(ctx, stateValue); err != nil {
-				return 0, err
-			}
-			return 0, taskSchedulerLogonStart(ctx, stateValue)
-		case ServiceManagerSystemdUser:
-			return 0, systemdUserStart(ctx, stateValue)
-		default:
+		driver, ok := managedServiceDriverForManager(effectiveServiceManager(stateValue))
+		if !ok {
 			return 0, fmt.Errorf("unsupported managed service manager %q", effectiveServiceManager(stateValue))
 		}
+		if driver.InstallBeforeUpgradeRun {
+			updated, err := driver.Install(ctx, stateValue)
+			if err != nil {
+				return 0, err
+			}
+			stateValue = updated
+		}
+		return 0, driver.Start(ctx, stateValue)
 	}
 	env := config.FilterEnvWithoutProxy(os.Environ())
 	if cfg.Config.Feishu.UseSystemProxy {

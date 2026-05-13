@@ -41,19 +41,14 @@ func DetectAutostart(statePath string) (AutostartStatus, error) {
 		Status:           "unsupported",
 		InstallStatePath: trimmedStatePath,
 	}
-	switch platform {
-	case "linux":
-		return detectSystemdAutostart(status, trimmedStatePath)
-	case "darwin":
-		return detectLaunchdAutostart(status, trimmedStatePath)
-	case "windows":
-		return detectTaskSchedulerAutostart(status, trimmedStatePath)
-	default:
+	driver, ok := managedServiceDriverForGOOS(platform)
+	if !ok {
 		return status, nil
 	}
+	return detectManagedAutostart(status, trimmedStatePath, driver)
 }
 
-func detectSystemdAutostart(status AutostartStatus, trimmedStatePath string) (AutostartStatus, error) {
+func detectManagedAutostart(status AutostartStatus, trimmedStatePath string, driver managedServiceDriver) (AutostartStatus, error) {
 	baseDir, err := resolveAutostartBaseDir(trimmedStatePath, "")
 	if err != nil {
 		return AutostartStatus{}, err
@@ -61,12 +56,14 @@ func detectSystemdAutostart(status AutostartStatus, trimmedStatePath string) (Au
 	instanceID := inferInstanceID("", trimmedStatePath)
 
 	status.Supported = true
-	status.Manager = ServiceManagerSystemdUser
+	status.Manager = driver.Manager
 	status.CurrentManager = ServiceManagerDetached
 	status.Status = "disabled"
 	status.CanApply = true
-	status.ServiceUnitPath = systemdUserUnitPathForInstance(baseDir, instanceID)
-	status.LingerHint = `如希望机器重启后在用户未登录前也恢复，需要额外手工执行 loginctl enable-linger "$USER"。`
+	status.ServiceUnitPath = driver.ServiceUnitPath(baseDir, instanceID)
+	if driver.Manager == ServiceManagerSystemdUser {
+		status.LingerHint = `如希望机器重启后在用户未登录前也恢复，需要额外手工执行 loginctl enable-linger "$USER"。`
+	}
 
 	state, err := loadAutostartStateIfPresent(trimmedStatePath)
 	if err != nil {
@@ -80,156 +77,32 @@ func detectSystemdAutostart(status AutostartStatus, trimmedStatePath string) (Au
 			ServiceManager: state.ServiceManager,
 		})
 		status.CurrentManager = effectiveServiceManager(*state)
-		if strings.TrimSpace(state.ServiceUnitPath) != "" {
-			status.ServiceUnitPath = state.ServiceUnitPath
-		}
-		if effectiveServiceManager(*state) == ServiceManagerSystemdUser {
-			status.Configured = true
-			status.CurrentManager = ServiceManagerSystemdUser
-		}
-	}
-
-	if strings.TrimSpace(status.ServiceUnitPath) != "" {
-		info, statErr := os.Stat(status.ServiceUnitPath)
-		switch {
-		case statErr == nil && !info.IsDir():
-			status.Configured = true
-			status.CurrentManager = ServiceManagerSystemdUser
-		case statErr != nil && !os.IsNotExist(statErr):
-			status.Warning = statErr.Error()
-		}
-	}
-
-	if status.Configured {
-		enabled, warning, detectErr := detectSystemdUserEnabled(context.Background(), instanceID)
-		if detectErr != nil {
-			return AutostartStatus{}, detectErr
-		}
-		status.Enabled = enabled
-		if strings.TrimSpace(warning) != "" {
-			status.Warning = warning
-		}
-		if enabled {
-			status.Status = "enabled"
-		}
-	}
-	return status, nil
-}
-
-func detectLaunchdAutostart(status AutostartStatus, trimmedStatePath string) (AutostartStatus, error) {
-	baseDir, err := resolveAutostartBaseDir(trimmedStatePath, "")
-	if err != nil {
-		return AutostartStatus{}, err
-	}
-	instanceID := inferInstanceID("", trimmedStatePath)
-
-	status.Supported = true
-	status.Manager = ServiceManagerLaunchdUser
-	status.CurrentManager = ServiceManagerDetached
-	status.Status = "disabled"
-	status.CanApply = true
-	status.ServiceUnitPath = launchdUserPlistPathForInstance(baseDir, instanceID)
-
-	state, err := loadAutostartStateIfPresent(trimmedStatePath)
-	if err != nil {
-		return AutostartStatus{}, err
-	}
-	if state != nil {
-		ApplyStateMetadata(state, StateMetadataOptions{
-			InstanceID:     state.InstanceID,
-			StatePath:      trimmedStatePath,
-			BaseDir:        baseDir,
-			ServiceManager: state.ServiceManager,
-		})
-		status.CurrentManager = effectiveServiceManager(*state)
-		if strings.TrimSpace(state.ServiceUnitPath) != "" && effectiveServiceManager(*state) == ServiceManagerLaunchdUser {
-			status.ServiceUnitPath = state.ServiceUnitPath
-			status.Configured = true
-			status.CurrentManager = ServiceManagerLaunchdUser
-		}
-	}
-
-	if strings.TrimSpace(status.ServiceUnitPath) != "" {
-		info, statErr := os.Stat(status.ServiceUnitPath)
-		switch {
-		case statErr == nil && !info.IsDir():
-			status.Configured = true
-			status.CurrentManager = ServiceManagerLaunchdUser
-		case statErr != nil && !os.IsNotExist(statErr):
-			status.Warning = statErr.Error()
-		}
-	}
-
-	if status.Configured {
-		running, sErr := launchdUserIsRunning(context.Background(), InstallState{
-			InstanceID:      instanceID,
-			BaseDir:         baseDir,
-			ServiceUnitPath: status.ServiceUnitPath,
-			ServiceManager:  ServiceManagerLaunchdUser,
-		})
-		if sErr != nil {
-			if strings.TrimSpace(status.Warning) == "" {
-				status.Warning = sErr.Error()
-			}
-		}
-		status.Enabled = running
-		if running {
-			status.Status = "enabled"
-		}
-	}
-	return status, nil
-}
-
-func detectTaskSchedulerAutostart(status AutostartStatus, trimmedStatePath string) (AutostartStatus, error) {
-	baseDir, err := resolveAutostartBaseDir(trimmedStatePath, "")
-	if err != nil {
-		return AutostartStatus{}, err
-	}
-	instanceID := inferInstanceID("", trimmedStatePath)
-
-	status.Supported = true
-	status.Manager = ServiceManagerTaskSchedulerLogon
-	status.CurrentManager = ServiceManagerDetached
-	status.Status = "disabled"
-	status.CanApply = true
-	status.ServiceUnitPath = taskSchedulerXMLPathForInstance(baseDir, instanceID)
-
-	state, err := loadAutostartStateIfPresent(trimmedStatePath)
-	if err != nil {
-		return AutostartStatus{}, err
-	}
-	if state != nil {
-		ApplyStateMetadata(state, StateMetadataOptions{
-			InstanceID:     state.InstanceID,
-			StatePath:      trimmedStatePath,
-			BaseDir:        baseDir,
-			ServiceManager: state.ServiceManager,
-		})
-		status.CurrentManager = effectiveServiceManager(*state)
-		if strings.TrimSpace(state.ServiceUnitPath) != "" && effectiveServiceManager(*state) == ServiceManagerTaskSchedulerLogon {
+		if effectiveServiceManager(*state) == driver.Manager && strings.TrimSpace(state.ServiceUnitPath) != "" {
 			status.ServiceUnitPath = state.ServiceUnitPath
 		}
 	}
 
-	output, queryErr := taskSchedulerRunner(context.Background(), "/Query", "/TN", taskSchedulerTaskNameForInstance(instanceID), "/XML")
-	switch {
-	case queryErr == nil:
-		status.Configured = true
-		status.CurrentManager = ServiceManagerTaskSchedulerLogon
-		enabled, ok := parseTaskSchedulerEnabled(output)
-		if !ok {
-			status.Warning = "无法解析自动启动任务状态。"
-			break
-		}
-		status.Enabled = enabled
-		if enabled {
-			status.Status = "enabled"
-		}
-	case isTaskSchedulerMissingErr(queryErr):
-	default:
-		return AutostartStatus{}, fmt.Errorf("query task scheduler task %s: %w", taskSchedulerTaskNameForInstance(instanceID), queryErr)
+	probeState := InstallState{
+		InstanceID:      instanceID,
+		BaseDir:         baseDir,
+		ServiceUnitPath: status.ServiceUnitPath,
+		ServiceManager:  driver.Manager,
 	}
-
+	configured, enabled, warning, probeErr := driver.AutostartProbe(context.Background(), probeState)
+	if probeErr != nil {
+		return AutostartStatus{}, probeErr
+	}
+	status.Configured = configured
+	status.Enabled = enabled
+	if configured {
+		status.CurrentManager = driver.Manager
+	}
+	if strings.TrimSpace(warning) != "" {
+		status.Warning = warning
+	}
+	if enabled {
+		status.Status = "enabled"
+	}
 	return status, nil
 }
 
@@ -256,15 +129,8 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	}
 
 	platform := strings.TrimSpace(serviceRuntimeGOOS)
-	var targetManager ServiceManager
-	switch platform {
-	case "linux":
-		targetManager = ServiceManagerSystemdUser
-	case "darwin":
-		targetManager = ServiceManagerLaunchdUser
-	case "windows":
-		targetManager = ServiceManagerTaskSchedulerLogon
-	default:
+	targetManager, ok := managedServiceManagerForGOOS(platform)
+	if !ok {
 		return AutostartStatus{}, fmt.Errorf("autostart is not supported on %s", platform)
 	}
 
@@ -343,6 +209,63 @@ func loadAutostartStateIfPresent(path string) (*InstallState, error) {
 		return nil, err
 	}
 	return &state, nil
+}
+
+func probeSystemdAutostart(ctx context.Context, state InstallState) (bool, bool, string, error) {
+	configured, warning, err := probeFileServiceDefinition(state.ServiceUnitPath)
+	if err != nil || !configured {
+		return configured, false, warning, err
+	}
+	enabled, enabledWarning, err := detectSystemdUserEnabled(ctx, state.InstanceID)
+	if strings.TrimSpace(enabledWarning) != "" {
+		warning = enabledWarning
+	}
+	return configured, enabled, warning, err
+}
+
+func probeLaunchdAutostart(ctx context.Context, state InstallState) (bool, bool, string, error) {
+	configured, warning, err := probeFileServiceDefinition(state.ServiceUnitPath)
+	if err != nil || !configured {
+		return configured, false, warning, err
+	}
+	enabled, enabledWarning, err := detectLaunchdUserEnabled(ctx, state)
+	if strings.TrimSpace(enabledWarning) != "" {
+		warning = enabledWarning
+	}
+	return configured, enabled, warning, err
+}
+
+func probeTaskSchedulerAutostart(ctx context.Context, state InstallState) (bool, bool, string, error) {
+	output, queryErr := taskSchedulerRunner(ctx, "/Query", "/TN", taskSchedulerTaskNameForInstance(state.InstanceID), "/XML")
+	switch {
+	case queryErr == nil:
+		enabled, ok := parseTaskSchedulerEnabled(output)
+		if !ok {
+			return true, false, "无法解析自动启动任务状态。", nil
+		}
+		return true, enabled, "", nil
+	case isTaskSchedulerMissingErr(queryErr):
+		return false, false, "", nil
+	default:
+		return false, false, "", fmt.Errorf("query task scheduler task %s: %w", taskSchedulerTaskNameForInstance(state.InstanceID), queryErr)
+	}
+}
+
+func probeFileServiceDefinition(path string) (bool, string, error) {
+	if strings.TrimSpace(path) == "" {
+		return false, "", nil
+	}
+	info, statErr := os.Stat(path)
+	switch {
+	case statErr == nil && !info.IsDir():
+		return true, "", nil
+	case statErr == nil && info.IsDir():
+		return false, "", nil
+	case os.IsNotExist(statErr):
+		return false, "", nil
+	default:
+		return false, statErr.Error(), nil
+	}
 }
 
 func detectSystemdUserEnabled(ctx context.Context, instanceID string) (bool, string, error) {

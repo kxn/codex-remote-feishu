@@ -634,10 +634,112 @@ func TestDetectAutostartDarwinShowsEnabledWhenPlistConfigured(t *testing.T) {
 		t.Fatal("expected Configured=true")
 	}
 	if !status.Enabled {
-		t.Fatal("expected Enabled=true when plist exists and service is running")
+		t.Fatal("expected Enabled=true when plist exists and launchd disabled override is false")
 	}
 	if status.Status != "enabled" {
 		t.Fatalf("Status = %q, want enabled", status.Status)
+	}
+}
+
+func TestDetectAutostartDarwinShowsConfiguredDisabledWhenLaunchdDisabled(t *testing.T) {
+	defer withDarwinGOOS(t)()
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+
+	statePath := defaultInstallStatePath(baseDir)
+	state := InstallState{
+		InstanceID:     "stable",
+		BaseDir:        baseDir,
+		StatePath:      statePath,
+		ConfigPath:     filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		ServiceManager: ServiceManagerLaunchdUser,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: ServiceManagerLaunchdUser,
+	})
+	if err := os.MkdirAll(filepath.Dir(state.ServiceUnitPath), 0o755); err != nil {
+		t.Fatalf("mkdir plist dir: %v", err)
+	}
+	if err := os.WriteFile(state.ServiceUnitPath, []byte("<plist/>"), 0o644); err != nil {
+		t.Fatalf("write plist: %v", err)
+	}
+	if err := WriteState(statePath, state); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	defer withMockLaunchctl(t, func(_ context.Context, args ...string) (string, error) {
+		return `disabled services = {
+	"com.codex-remote.service" => true
+}`, nil
+	})()
+
+	status, err := DetectAutostart(statePath)
+	if err != nil {
+		t.Fatalf("DetectAutostart: %v", err)
+	}
+	if !status.Configured {
+		t.Fatal("expected Configured=true")
+	}
+	if status.Enabled {
+		t.Fatalf("Enabled = true, want false: %#v", status)
+	}
+	if status.Status != "disabled" {
+		t.Fatalf("Status = %q, want disabled", status.Status)
+	}
+}
+
+func TestParseLaunchdPrintDisabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		output  string
+		label   string
+		enabled bool
+		ok      bool
+	}{
+		{
+			name: "explicit disabled",
+			output: `disabled services = {
+	"com.codex-remote.service" => true
+}`,
+			label:   "com.codex-remote.service",
+			enabled: false,
+			ok:      true,
+		},
+		{
+			name: "explicit enabled",
+			output: `disabled services = {
+	"com.codex-remote.service" => false
+}`,
+			label:   "com.codex-remote.service",
+			enabled: true,
+			ok:      true,
+		},
+		{
+			name: "absent means enabled",
+			output: `disabled services = {
+}`,
+			label:   "com.codex-remote.service",
+			enabled: true,
+			ok:      true,
+		},
+		{
+			name:    "empty label",
+			output:  `disabled services = {}`,
+			label:   "",
+			enabled: false,
+			ok:      false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			enabled, ok := parseLaunchdPrintDisabled(tt.output, tt.label)
+			if enabled != tt.enabled || ok != tt.ok {
+				t.Fatalf("parseLaunchdPrintDisabled() = %v/%v, want %v/%v", enabled, ok, tt.enabled, tt.ok)
+			}
+		})
 	}
 }
 

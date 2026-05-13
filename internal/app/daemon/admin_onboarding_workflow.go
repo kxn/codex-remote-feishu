@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
@@ -380,15 +381,29 @@ func (a *App) buildOnboardingAutostartStage(cfg config.AppConfig) onboardingWork
 	case !status.Supported:
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusNotApplicable, "当前系统不支持自动启动。", false, true, nil)
 	case decision != nil && decision.Value == onboardingDecisionDeferred:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusDeferred, "你选择稍后再处理自动启动。", false, true, []string{"apply", "record_enabled"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusDeferred, "你选择稍后再处理自动启动。", false, true, autostartStageActions(status, true))
 	case decision != nil && decision.Value == onboardingDecisionAutostartEnabled && status.Enabled:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusComplete, "自动启动已经启用，并且当前决策已记录。", false, true, []string{"apply", "defer"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusComplete, "自动启动已经启用，并且当前决策已记录。", false, true, []string{"defer"})
 	case status.Enabled:
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前已经启用自动启动，但还没有记录这项机器决策。", false, true, []string{"record_enabled", "defer"})
 	default:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前还没有完成自动启动决策。", false, true, []string{"apply", "defer"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前还没有完成自动启动决策。", false, true, autostartStageActions(status, true))
 	}
 	return view
+}
+
+func autostartStageActions(status install.AutostartStatus, includeDefer bool) []string {
+	actions := []string{}
+	if status.CanApply && !status.Enabled {
+		actions = append(actions, "apply")
+	}
+	if status.Enabled {
+		actions = append(actions, "record_enabled")
+	}
+	if includeDefer {
+		actions = append(actions, "defer")
+	}
+	return actions
 }
 
 func (a *App) buildOnboardingVSCodeStage(cfg config.AppConfig) onboardingWorkflowMachineStepView {

@@ -123,8 +123,10 @@ func TestApplyAutostartInstallsAndEnablesLaunchdUserService(t *testing.T) {
 	launchctlUserRunner = func(_ context.Context, args ...string) (string, error) {
 		calls = append(calls, strings.Join(args, " "))
 		switch {
-		case len(args) > 0 && args[0] == "print":
-			return "state = running\npid = 12345\n", nil
+		case len(args) > 0 && args[0] == "print-disabled":
+			return `disabled services = {
+	"com.codex-remote.service" => false
+}`, nil
 		default:
 			return "", nil
 		}
@@ -147,7 +149,7 @@ func TestApplyAutostartInstallsAndEnablesLaunchdUserService(t *testing.T) {
 	if len(calls) != 3 ||
 		calls[0] != "enable "+wantTarget ||
 		calls[1] != "bootstrap gui/"+strconv.Itoa(os.Getuid())+" "+wantPlist ||
-		calls[2] != "print "+wantTarget {
+		calls[2] != "print-disabled gui/"+strconv.Itoa(os.Getuid()) {
 		t.Fatalf("launchctl calls = %#v", calls)
 	}
 

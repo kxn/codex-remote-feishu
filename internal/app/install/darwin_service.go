@@ -64,22 +64,7 @@ func launchdUserServiceState(state InstallState) (InstallState, error) {
 	if err := ensureDarwinLaunchdUserSupport(); err != nil {
 		return InstallState{}, err
 	}
-	updated := normalizedServiceState(state)
-	if strings.TrimSpace(updated.BaseDir) == "" {
-		homeDir, err := serviceUserHomeDir()
-		if err != nil {
-			return InstallState{}, err
-		}
-		updated.BaseDir = homeDir
-	}
-	updated.ServiceManager = ServiceManagerLaunchdUser
-	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		updated.ServiceUnitPath = launchdUserPlistPathForInstance(updated.BaseDir, updated.InstanceID)
-	}
-	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		return InstallState{}, fmt.Errorf("unable to resolve launchd user plist path")
-	}
-	return updated, nil
+	return managedServiceState(state, ServiceManagerLaunchdUser, launchdUserPlistPathForInstance, "launchd user plist path")
 }
 
 func xmlEscape(value string) string {
@@ -233,6 +218,49 @@ func launchdUserDisable(ctx context.Context, state InstallState) error {
 		return err
 	}
 	return launchdUserBootout(ctx, state)
+}
+
+func detectLaunchdUserEnabled(ctx context.Context, state InstallState) (bool, string, error) {
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return false, "", err
+	}
+	output, err := launchctlUserRunner(ctx, "print-disabled", launchdUserGUITarget())
+	if err != nil {
+		return false, output, err
+	}
+	enabled, ok := parseLaunchdPrintDisabled(output, launchdLabelForInstance(state.InstanceID))
+	if !ok {
+		return false, "无法解析自动启动状态。", nil
+	}
+	return enabled, "", nil
+}
+
+func parseLaunchdPrintDisabled(output, label string) (bool, bool) {
+	label = strings.TrimSpace(label)
+	if label == "" {
+		return false, false
+	}
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, label) {
+			continue
+		}
+		left, right, ok := strings.Cut(line, "=>")
+		if !ok || !strings.Contains(left, label) {
+			continue
+		}
+		switch strings.Trim(strings.TrimSpace(strings.ToLower(right)), ";") {
+		case "true":
+			return false, true
+		case "false":
+			return true, true
+		default:
+			return false, false
+		}
+	}
+	// launchd services are enabled unless a disabled override says otherwise.
+	return true, true
 }
 
 func launchdUserStart(ctx context.Context, state InstallState) error {
