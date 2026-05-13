@@ -1,8 +1,8 @@
 package daemon
 
 import (
+	"context"
 	"log"
-	"os"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/desktopsession"
@@ -41,7 +41,7 @@ func (a *App) ConfigureDesktopSession(opts DesktopSessionRuntimeOptions) {
 		requestSelfShutdown: opts.RequestSelfShutdown,
 	}
 	if a.desktopSession.requestSelfShutdown == nil {
-		a.desktopSession.requestSelfShutdown = requestSelfShutdown
+		a.desktopSession.requestSelfShutdown = a.defaultDesktopSessionShutdownTrigger()
 	}
 }
 
@@ -82,12 +82,15 @@ func (a *App) requestDesktopSessionQuit() error {
 	if trigger == nil {
 		return nil
 	}
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		if err := trigger(); err != nil {
-			log.Printf("desktop session quit trigger failed: %v", err)
+	if err := trigger(); err != nil {
+		a.mu.Lock()
+		a.shuttingDown = false
+		a.mu.Unlock()
+		if publishErr := a.publishDesktopSessionState(desktopsession.StateBackendOnly); publishErr != nil {
+			log.Printf("desktop session quit rollback failed: %v", publishErr)
 		}
-	}()
+		return err
+	}
 	return nil
 }
 
@@ -125,12 +128,16 @@ func (a *App) desktopSessionRequestSelfShutdown() func() error {
 	return a.desktopSession.requestSelfShutdown
 }
 
-func requestSelfShutdown() error {
-	process, err := os.FindProcess(os.Getpid())
-	if err != nil {
-		return err
+func (a *App) defaultDesktopSessionShutdownTrigger() func() error {
+	return func() error {
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			if err := a.Shutdown(context.Background()); err != nil {
+				log.Printf("desktop session quit trigger failed: %v", err)
+			}
+		}()
+		return nil
 	}
-	return process.Signal(os.Interrupt)
 }
 
 func (a *App) currentDesktopSessionSetupRequired() (bool, bool) {

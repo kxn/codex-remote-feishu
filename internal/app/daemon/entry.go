@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -155,14 +154,6 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		EnvOverrideActive:    envOverrideActive,
 		EnvOverrideGatewayID: cfg.FeishuGatewayID,
 	})
-	app.ConfigureDesktopSession(DesktopSessionRuntimeOptions{
-		StatePath:     desktopsession.StateFilePath(paths),
-		InstanceID:    resolveDesktopSessionInstanceID(),
-		BackendPID:    identity.PID,
-		AdminURL:      startup.AdminURL,
-		SetupURL:      startup.SetupURL,
-		SetupRequired: startup.SetupRequired,
-	})
 	app.ConfigurePprof(pprofBindAddrForDebugSettings(loadedConfig.Config.Debug))
 	if cfg.DebugRelayRaw {
 		rawLogger, err := debuglog.OpenRaw(paths.DaemonRawLogFile, "daemon", "", os.Getpid())
@@ -186,6 +177,14 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		startup.SetupToken = token
 		startup.SetupTokenExpiry = expiresAt
 	}
+	app.ConfigureDesktopSession(DesktopSessionRuntimeOptions{
+		StatePath:     desktopsession.StateFilePath(paths),
+		InstanceID:    resolveDesktopSessionInstanceID(),
+		BackendPID:    identity.PID,
+		AdminURL:      startup.AdminURL,
+		SetupURL:      effectiveSetupURL(startup),
+		SetupRequired: startup.SetupRequired,
+	})
 	_ = shutdownctx.SetConsoleCloseHandler(ctx, func() {
 		_ = app.shutdownForConsoleClose()
 	})
@@ -383,12 +382,8 @@ func logStartupState(startup startupAccessPlan, services config.ServicesConfig, 
 		log.Printf("pprof (local only): %s", pprofURL)
 	}
 	if startup.SetupRequired {
-		setupURL := startup.SetupURL
-		if startup.SSHSession && strings.TrimSpace(startup.SetupToken) != "" {
-			setupURL += "?token=" + url.QueryEscape(startup.SetupToken)
-		}
 		log.Printf("startup state: setup required; configured_feishu_apps=%d ssh=%t", startup.ConfiguredAppCount, startup.SSHSession)
-		log.Printf("web setup: %s", setupURL)
+		log.Printf("web setup: %s", effectiveSetupURL(startup))
 		if !startup.SetupTokenExpiry.IsZero() {
 			log.Printf("setup token expires at: %s", startup.SetupTokenExpiry.Format(time.RFC3339))
 		}

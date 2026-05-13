@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -128,5 +129,35 @@ func TestDesktopSessionStatusEndpointUsesCurrentSetupState(t *testing.T) {
 	}
 	if !payload.SetupRequired {
 		t.Fatalf("setupRequired = false, want true payload=%#v", payload)
+	}
+}
+
+func TestDesktopSessionQuitEndpointReturnsErrorWhenTriggerFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "desktop-session.json")
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureDesktopSession(DesktopSessionRuntimeOptions{
+		StatePath:  path,
+		InstanceID: "stable",
+		BackendPID: 4321,
+		AdminURL:   "http://localhost:9501/admin/",
+		RequestSelfShutdown: func() error {
+			return errors.New("synthetic desktop session failure")
+		},
+	})
+
+	rec := performAdminRequest(t, app, "POST", "/api/admin/desktop-session/quit", "")
+	if rec.Code != 500 {
+		t.Fatalf("quit code = %d, want 500 body=%s", rec.Code, rec.Body.String())
+	}
+
+	stored, ok, err := desktopsession.ReadStatusFile(path)
+	if err != nil {
+		t.Fatalf("ReadStatusFile: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected desktop session state file to be written")
+	}
+	if stored.State != desktopsession.StateBackendOnly {
+		t.Fatalf("stored state = %q, want %q", stored.State, desktopsession.StateBackendOnly)
 	}
 }

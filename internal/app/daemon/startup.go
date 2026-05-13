@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
 	"strings"
 	"time"
 
@@ -55,6 +56,21 @@ func buildStartupAccessPlan(loaded config.LoadedAppConfig, services config.Servi
 		SetupURL:           setupURL,
 		ConfiguredAppCount: configuredRuntimeAppCount(loaded.Config, services),
 	}
+}
+
+func effectiveSetupURL(plan startupAccessPlan) string {
+	setupURL := strings.TrimSpace(plan.SetupURL)
+	if setupURL == "" || !plan.SSHSession || strings.TrimSpace(plan.SetupToken) == "" {
+		return setupURL
+	}
+	parsed, err := url.Parse(setupURL)
+	if err != nil {
+		return setupURL
+	}
+	query := parsed.Query()
+	query.Set("token", strings.TrimSpace(plan.SetupToken))
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func requiresSetup(appConfig config.AppConfig, services config.ServicesConfig, currentBinary string) bool {

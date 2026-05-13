@@ -3,6 +3,7 @@ package install
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -143,6 +144,46 @@ func ResolveRepoInstallTargetInfo(opts RepoInstallTargetOptions) (RepoInstallTar
 		return RepoInstallTargetInfo{}, err
 	}
 	info.ConfigPath = state.ConfigPath
+	info.ConfigExists = configExists
+	applyRepoInstallTargetConfig(&info, cfg)
+	return info, nil
+}
+
+func ResolveRepoInstallTargetInfoFromStatePath(statePath string) (RepoInstallTargetInfo, error) {
+	state, err := loadServiceState(statePath)
+	if err != nil {
+		return RepoInstallTargetInfo{}, err
+	}
+	installBinDir := ""
+	if installedBinary := strings.TrimSpace(state.InstalledBinary); installedBinary != "" {
+		installBinDir = filepath.Dir(installedBinary)
+	}
+	paths := RuntimePathsForState(state)
+	info := RepoInstallTargetInfo{
+		BindingSource:            "explicit_state_path",
+		InstanceID:               state.InstanceID,
+		BaseDir:                  state.BaseDir,
+		InstallBinDir:            installBinDir,
+		ConfigPath:               state.ConfigPath,
+		StatePath:                state.StatePath,
+		ConfigExists:             strings.TrimSpace(state.ConfigPath) != "",
+		StateExists:              true,
+		ServiceName:              serviceNameForInstallInstance(serviceRuntimeGOOS, state.InstanceID),
+		ServiceUnitPath:          state.ServiceUnitPath,
+		LogPath:                  paths.DaemonLogFile,
+		RawLogPath:               paths.DaemonRawLogFile,
+		PIDPath:                  paths.PIDFile,
+		LocalUpgradeArtifactPath: LocalUpgradeArtifactPath(state),
+		CurrentVersion:           strings.TrimSpace(state.CurrentVersion),
+		CurrentBinaryPath:        firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(state.InstalledBinary)),
+	}
+	if state.PendingUpgrade != nil {
+		info.PendingUpgradePhase = strings.TrimSpace(state.PendingUpgrade.Phase)
+	}
+	cfg, configExists, err := loadRepoInstallTargetConfig(state.ConfigPath, state.InstanceID)
+	if err != nil {
+		return RepoInstallTargetInfo{}, err
+	}
 	info.ConfigExists = configExists
 	applyRepoInstallTargetConfig(&info, cfg)
 	return info, nil

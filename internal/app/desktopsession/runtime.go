@@ -148,20 +148,7 @@ func QuitSession(ctx context.Context, opts ResolveOptions) error {
 }
 
 func resolveExplicitStatePathTarget(statePath string) (Target, error) {
-	state, err := install.LoadState(statePath)
-	if err != nil {
-		return Target{}, err
-	}
-	defaults, err := install.DetectPlatformDefaults()
-	if err != nil {
-		return Target{}, err
-	}
-	info, err := install.ResolveRepoInstallTargetInfo(install.RepoInstallTargetOptions{
-		InstanceID:      strings.TrimSpace(state.InstanceID),
-		BaseDir:         strings.TrimSpace(state.BaseDir),
-		FallbackBaseDir: defaults.BaseDir,
-		GOOS:            defaults.GOOS,
-	})
+	info, err := install.ResolveRepoInstallTargetInfoFromStatePath(statePath)
 	if err != nil {
 		return Target{}, err
 	}

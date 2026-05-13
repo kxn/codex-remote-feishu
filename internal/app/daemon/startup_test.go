@@ -224,3 +224,14 @@ func TestMaybeOpenSetupBrowserHonorsModeAndFlag(t *testing.T) {
 		t.Fatalf("maybeOpenSetupBrowser(ssh): %v", err)
 	}
 }
+
+func TestEffectiveSetupURLAddsSSHSetupToken(t *testing.T) {
+	plan := startupAccessPlan{
+		SSHSession: true,
+		SetupURL:   "http://10.0.0.8:9501/setup",
+		SetupToken: "abc 123",
+	}
+	if got := effectiveSetupURL(plan); got != "http://10.0.0.8:9501/setup?token=abc+123" {
+		t.Fatalf("effectiveSetupURL() = %q", got)
+	}
+}

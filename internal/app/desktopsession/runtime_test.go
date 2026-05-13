@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
 func TestQueryStatusPreservesHealthyCarrierState(t *testing.T) {
@@ -107,5 +108,47 @@ func TestEnsureBackendRefreshesLiveStatus(t *testing.T) {
 	}
 	if status.InstanceID != "stable" {
 		t.Fatalf("instanceID = %q, want stable", status.InstanceID)
+	}
+}
+
+func TestResolveTargetPreservesExplicitStatePath(t *testing.T) {
+	root := t.TempDir()
+	baseDir := filepath.Join(root, "base")
+	configPath := filepath.Join(root, "config", "config.json")
+	statePath := filepath.Join(root, "custom", "install-state-copy.json")
+
+	cfg := config.DefaultAppConfig()
+	cfg.Admin.ListenHost = "127.0.0.1"
+	cfg.Admin.ListenPort = 9601
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	state := install.InstallState{
+		InstanceID: "stable",
+		BaseDir:    baseDir,
+		ConfigPath: configPath,
+		StatePath:  statePath,
+	}
+	install.ApplyStateMetadata(&state, install.StateMetadataOptions{
+		InstanceID: state.InstanceID,
+		BaseDir:    state.BaseDir,
+		StatePath:  state.StatePath,
+	})
+	if err := install.WriteState(statePath, state); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	target, err := ResolveTarget(ResolveOptions{StatePath: statePath})
+	if err != nil {
+		t.Fatalf("ResolveTarget: %v", err)
+	}
+	if target.StatePath != statePath {
+		t.Fatalf("StatePath = %q, want %q", target.StatePath, statePath)
+	}
+	if target.ResolverSource != "explicit_state_path" {
+		t.Fatalf("ResolverSource = %q, want explicit_state_path", target.ResolverSource)
+	}
+	if target.AdminURL != "http://127.0.0.1:9601" {
+		t.Fatalf("AdminURL = %q, want http://127.0.0.1:9601", target.AdminURL)
 	}
 }
