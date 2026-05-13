@@ -62,19 +62,44 @@ if [[ ! -d "${app_path}" ]]; then
   exit 1
 fi
 
-staging_root="$(mktemp -d "${TMPDIR:-/tmp}/codex-remote-dmg-XXXXXX")"
+app_path="$(cd "${app_path}" && pwd)"
+app_name="$(basename "${app_path}")"
+app_parent="$(cd "$(dirname "${app_path}")" && pwd)"
+src_root=""
+staging_root=""
+
+can_use_parent_directly() {
+  local parent_dir="$1"
+  local expected_entry="$2"
+  local entries=()
+  while IFS= read -r -d '' entry_path; do
+    entries+=("$(basename "${entry_path}")")
+  done < <(find "${parent_dir}" -mindepth 1 -maxdepth 1 -print0)
+
+  [[ "${#entries[@]}" -eq 1 && "${entries[0]}" == "${expected_entry}" ]]
+}
+
 cleanup() {
-  rm -rf "${staging_root}"
+  if [[ -n "${staging_root}" ]]; then
+    rm -rf "${staging_root}"
+  fi
 }
 trap cleanup EXIT
 
-cp -R "${app_path}" "${staging_root}/"
+if can_use_parent_directly "${app_parent}" "${app_name}"; then
+  src_root="${app_parent}"
+else
+  staging_root="$(mktemp -d "${TMPDIR:-/tmp}/codex-remote-dmg-XXXXXX")"
+  cp -R "${app_path}" "${staging_root}/"
+  src_root="${staging_root}"
+fi
+
 mkdir -p "$(dirname "${output_path}")"
 rm -f "${output_path}"
 
 hdiutil create \
   -volname "${volume_name}" \
-  -srcfolder "${staging_root}" \
+  -srcfolder "${src_root}" \
   -ov \
   -format UDZO \
   "${output_path}"

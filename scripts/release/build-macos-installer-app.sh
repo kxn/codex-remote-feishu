@@ -216,7 +216,10 @@ for payload in "${payload_amd64}" "${payload_arm64}"; do
   fi
 done
 
-app_root="${build_root}/Install Codex Remote.app"
+rm -rf "${output_app}"
+mkdir -p "$(dirname "${output_app}")"
+
+app_root="${output_app}"
 contents_dir="${app_root}/Contents"
 macos_dir="${contents_dir}/MacOS"
 resources_dir="${contents_dir}/Resources"
@@ -289,7 +292,4 @@ output = (
 pathlib.Path(sys.argv[2]).write_text(output)
 PY
 
-rm -rf "${output_app}"
-mkdir -p "$(dirname "${output_app}")"
-cp -R "${app_root}" "${output_app}"
 printf 'built macOS installer app: %s\n' "${output_app}"
