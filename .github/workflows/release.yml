@@ -93,10 +93,15 @@ jobs:
           fetch-depth: 0
           ref: ${{ steps.source_ref.outputs.ref }}
 
+      - name: Resolve Go version spec
+        id: go_version
+        shell: bash
+        run: echo "version=$(bash scripts/ci/go-version-spec.sh)" >> "${GITHUB_OUTPUT}"
+
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: ${{ steps.go_version.outputs.version }}
 
       - name: Fetch tags
         run: git fetch --force --tags origin

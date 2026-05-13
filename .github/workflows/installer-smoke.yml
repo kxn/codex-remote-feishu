@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - ".github/workflows/installer-smoke.yml"
+      - "scripts/ci/go-version-spec.sh"
       - "install-release.sh"
       - "install-release.ps1"
       - "scripts/check/smoke-install-release.sh"
@@ -18,6 +19,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/installer-smoke.yml"
+      - "scripts/ci/go-version-spec.sh"
       - "install-release.sh"
       - "install-release.ps1"
       - "scripts/check/smoke-install-release.sh"
@@ -46,6 +48,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Resolve Go version spec
+        id: go_version
+        shell: bash
+        run: echo "version=$(bash scripts/ci/go-version-spec.sh)" >> "${GITHUB_OUTPUT}"
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
@@ -56,7 +63,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: ${{ steps.go_version.outputs.version }}
 
       - name: Install web dependencies
         working-directory: web

@@ -51,6 +51,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ steps.source.outputs.ref }}
 
+      - name: Resolve Go version spec
+        id: go_version
+        shell: bash
+        run: echo "version=$(bash scripts/ci/go-version-spec.sh)" >> "${GITHUB_OUTPUT}"
+
       - name: Setup Node.js
         if: ${{ inputs.artifact_name == '' }}
         uses: actions/setup-node@v6
@@ -62,7 +67,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version: ${{ steps.go_version.outputs.version }}
 
       - name: Resolve build metadata
         id: meta
