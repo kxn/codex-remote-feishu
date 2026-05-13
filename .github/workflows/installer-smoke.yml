@@ -96,11 +96,29 @@ jobs:
           path: dist-production
           if-no-files-found: error
 
+      - name: Upload production macOS packaging fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-prod-macos-input
+          path: |
+            dist-production/codex-remote-feishu_*_darwin_amd64.tar.gz
+            dist-production/codex-remote-feishu_*_darwin_arm64.tar.gz
+          if-no-files-found: error
+
       - name: Upload beta fixture
         uses: actions/upload-artifact@v4
         with:
           name: installer-smoke-beta
           path: dist-beta
+          if-no-files-found: error
+
+      - name: Upload beta macOS packaging fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-beta-macos-input
+          path: |
+            dist-beta/codex-remote-feishu_*_darwin_amd64.tar.gz
+            dist-beta/codex-remote-feishu_*_darwin_arm64.tar.gz
           if-no-files-found: error
 
   smoke-unix:
@@ -177,13 +195,13 @@ jobs:
       - name: Download production fixture
         uses: actions/download-artifact@v4
         with:
-          name: installer-smoke-prod
+          name: installer-smoke-prod-macos-input
           path: ${{ runner.temp }}/installer-smoke/prod
 
       - name: Download beta fixture
         uses: actions/download-artifact@v4
         with:
-          name: installer-smoke-beta
+          name: installer-smoke-beta-macos-input
           path: ${{ runner.temp }}/installer-smoke/beta
 
       - name: Build production macOS packaged installer

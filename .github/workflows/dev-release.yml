@@ -133,6 +133,16 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+      - name: Upload macOS packaging input
+        uses: actions/upload-artifact@v4
+        with:
+          name: dev-release-macos-input-dist
+          path: |
+            dist/codex-remote-feishu_*_darwin_amd64.tar.gz
+            dist/codex-remote-feishu_*_darwin_arm64.tar.gz
+          if-no-files-found: error
+          compression-level: 0
+
   build-dev-macos-packaged-installer:
     needs: build-dev-assets
     runs-on: macos-latest
@@ -143,10 +153,10 @@ jobs:
         with:
           ref: ${{ needs.build-dev-assets.outputs.source_ref }}
 
-      - name: Download base dev dist
+      - name: Download macOS packaging input
         uses: actions/download-artifact@v4
         with:
-          name: dev-release-base-dist
+          name: dev-release-macos-input-dist
           path: dist
 
       - name: Build macOS packaged installer
