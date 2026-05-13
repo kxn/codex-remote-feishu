@@ -1,20 +1,17 @@
 package daemon
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
-	"os/exec"
-	"runtime"
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/browseropen"
 	"github.com/kxn/codex-remote-feishu/internal/config"
-	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
-var errBrowserUnavailable = errors.New("browser opener unavailable")
+var errBrowserUnavailable = browseropen.ErrUnavailable
 
 var browserOpener = defaultBrowserOpener
 
@@ -273,29 +270,7 @@ func maybeOpenSetupBrowser(plan startupAccessPlan, env map[string]string) error 
 }
 
 func defaultBrowserOpener(url string, env map[string]string) error {
-	command := browserCommand(env)
-	if len(command) == 0 {
-		return errBrowserUnavailable
-	}
-	cmd := execlaunch.Command(command[0], append(command[1:], url)...)
-	return cmd.Start()
-}
-
-func browserCommand(env map[string]string) []string {
-	switch runtime.GOOS {
-	case "darwin":
-		return []string{"open"}
-	case "windows":
-		return []string{"rundll32", "url.dll,FileProtocolHandler"}
-	default:
-		if strings.TrimSpace(env["DISPLAY"]) == "" && strings.TrimSpace(env["WAYLAND_DISPLAY"]) == "" {
-			return nil
-		}
-		if path, err := exec.LookPath("xdg-open"); err == nil {
-			return []string{path}
-		}
-		return nil
-	}
+	return browseropen.Open(url, env)
 }
 
 func envMap(values []string) map[string]string {

@@ -17,6 +17,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	toolruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
+	"github.com/kxn/codex-remote-feishu/internal/app/desktopsession"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -154,6 +155,14 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		EnvOverrideActive:    envOverrideActive,
 		EnvOverrideGatewayID: cfg.FeishuGatewayID,
 	})
+	app.ConfigureDesktopSession(DesktopSessionRuntimeOptions{
+		StatePath:     desktopsession.StateFilePath(paths),
+		InstanceID:    resolveDesktopSessionInstanceID(),
+		BackendPID:    identity.PID,
+		AdminURL:      startup.AdminURL,
+		SetupURL:      startup.SetupURL,
+		SetupRequired: startup.SetupRequired,
+	})
 	app.ConfigurePprof(pprofBindAddrForDebugSettings(loadedConfig.Config.Debug))
 	if cfg.DebugRelayRaw {
 		rawLogger, err := debuglog.OpenRaw(paths.DaemonRawLogFile, "daemon", "", os.Getpid())
@@ -234,6 +243,20 @@ func runConfiguredDaemon(ctx context.Context, app runnableDaemon, startup startu
 	if err := app.Bind(); err != nil {
 		return fmt.Errorf("bind service listeners: %w", err)
 	}
+	if stateful, ok := app.(interface {
+		publishDesktopSessionState(desktopsession.State) error
+	}); ok {
+		if err := stateful.publishDesktopSessionState(desktopsession.StateBackendOnly); err != nil {
+			return fmt.Errorf("write desktop session state: %w", err)
+		}
+	}
+	if stateful, ok := app.(interface{ clearDesktopSessionState() error }); ok {
+		defer func() {
+			if err := stateful.clearDesktopSessionState(); err != nil {
+				log.Printf("desktop session state cleanup failed: %v", err)
+			}
+		}()
+	}
 	logStartupState(startup, services, app.PprofURL())
 	if err := maybeOpenSetupBrowser(startup, env); err != nil {
 		switch {
@@ -267,6 +290,17 @@ func repairInstallStateOnStartup(paths relayruntime.Paths, identity agentproto.S
 	if err := install.WriteState(statePath, *state); err != nil {
 		log.Printf("startup install-state repair skipped: %v", err)
 	}
+}
+
+func resolveDesktopSessionInstanceID() string {
+	if value := strings.TrimSpace(os.Getenv("CODEX_REMOTE_INSTANCE_ID")); value != "" {
+		return value
+	}
+	info, err := install.ResolveCurrentDaemonTargetInfo()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(info.InstanceID)
 }
 
 func runtimeGatewayApps(appConfig config.AppConfig, services config.ServicesConfig, paths relayruntime.Paths) []feishu.GatewayAppConfig {

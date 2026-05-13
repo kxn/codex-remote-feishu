@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/desktopsession"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -35,6 +36,12 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 	a.shutdownStarted = true
 	a.shutdownMu.Unlock()
+	_ = a.publishDesktopSessionState(desktopsession.StateQuitting)
+	defer func() {
+		if err := a.clearDesktopSessionState(); err != nil {
+			log.Printf("desktop session state cleanup failed: %v", err)
+		}
+	}()
 
 	if shutdownMode(ctx) == shutdownctx.ModeConsoleClose {
 		return a.shutdownForConsoleClose()

@@ -209,6 +209,8 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/bootstrap-state", a.requireAdmin(a.handleBootstrapState))
 	mux.HandleFunc("GET /api/admin/onboarding/workflow", a.requireAdmin(a.handleOnboardingWorkflow))
 	mux.HandleFunc("POST /api/admin/onboarding/machine-decisions/{kind}", a.requireAdmin(a.handleOnboardingMachineDecision))
+	mux.HandleFunc("GET /api/admin/desktop-session/status", a.requireAdmin(a.handleDesktopSessionStatus))
+	mux.HandleFunc("POST /api/admin/desktop-session/quit", a.requireAdmin(a.handleDesktopSessionQuit))
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
 	mux.HandleFunc("PUT /api/admin/config", a.requireAdmin(a.handleNotImplemented("PUT /api/admin/config")))

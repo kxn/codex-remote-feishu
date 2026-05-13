@@ -12,22 +12,30 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
-type daemonStatus struct {
+type DaemonReadyStatus struct {
 	AdminURL      string
 	SetupURL      string
 	SetupRequired bool
 	LogPath       string
 }
 
-func ensureDaemonReady(ctx context.Context, state InstallState, version string) (daemonStatus, error) {
+func EnsureDaemonReadyFromStatePath(ctx context.Context, statePath, version string) (DaemonReadyStatus, error) {
+	state, err := loadServiceState(statePath)
+	if err != nil {
+		return DaemonReadyStatus{}, err
+	}
+	return ensureDaemonReady(ctx, state, version)
+}
+
+func ensureDaemonReady(ctx context.Context, state InstallState, version string) (DaemonReadyStatus, error) {
 	paths := RuntimePathsForState(state)
 	loaded, err := config.LoadAppConfigAtPath(state.ConfigPath)
 	if err != nil {
-		return daemonStatus{}, err
+		return DaemonReadyStatus{}, err
 	}
 	identity, err := relayruntime.BinaryIdentityForPath(state.InstalledBinary, version)
 	if err != nil {
-		return daemonStatus{}, err
+		return DaemonReadyStatus{}, err
 	}
 
 	manager := relayruntime.NewManager(relayruntime.ManagerConfig{
@@ -115,7 +123,7 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 		if isManagedServiceManager(state) {
 			return fallbackDaemonStatus(loaded.Config), err
 		}
-		return daemonStatus{LogPath: paths.DaemonLogFile}, err
+		return DaemonReadyStatus{LogPath: paths.DaemonLogFile}, err
 	}
 	if isManagedServiceManager(state) {
 		return fallbackDaemonStatus(loaded.Config), nil
@@ -123,16 +131,16 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 	return discoverDaemonStatus(paths, loaded.Config), nil
 }
 
-func fallbackDaemonStatus(cfg config.AppConfig) daemonStatus {
-	return daemonStatus{
+func fallbackDaemonStatus(cfg config.AppConfig) DaemonReadyStatus {
+	return DaemonReadyStatus{
 		AdminURL:      fallbackAdminURL(cfg),
 		SetupURL:      fallbackSetupURL(cfg),
 		SetupRequired: configuredRuntimeAppCount(cfg) == 0,
 	}
 }
 
-func discoverDaemonStatus(paths relayruntime.Paths, cfg config.AppConfig) daemonStatus {
-	status := daemonStatus{
+func discoverDaemonStatus(paths relayruntime.Paths, cfg config.AppConfig) DaemonReadyStatus {
+	status := DaemonReadyStatus{
 		AdminURL:      fallbackAdminURL(cfg),
 		SetupURL:      fallbackSetupURL(cfg),
 		SetupRequired: configuredRuntimeAppCount(cfg) == 0,

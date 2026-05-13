@@ -139,6 +139,7 @@ type App struct {
 	externalAccess             *externalaccess.Service
 	externalAccessRuntime      ExternalAccessRuntimeConfig
 	externalAccessShutdownWait chan struct{}
+	desktopSession             desktopSessionRuntimeState
 	webPreviewGrants           map[string]*previewGrantRecord
 	surfaceResumeRuntime       surfaceResumeRuntimeState
 	codexUpgradeRuntime        codexupgraderuntime.State

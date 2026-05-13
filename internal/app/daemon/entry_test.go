@@ -182,6 +182,13 @@ func TestApplyDaemonStartupArgsRejectsUnknownFlag(t *testing.T) {
 	}
 }
 
+func TestResolveDesktopSessionInstanceIDUsesRuntimeEnv(t *testing.T) {
+	t.Setenv("CODEX_REMOTE_INSTANCE_ID", "beta")
+	if got := resolveDesktopSessionInstanceID(); got != "beta" {
+		t.Fatalf("resolveDesktopSessionInstanceID() = %q, want beta", got)
+	}
+}
+
 func normalizeExecutablePathForDaemonTest(path string) string {
 	path = strings.TrimSpace(path)
 	if path == "" {
