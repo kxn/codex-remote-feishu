@@ -157,7 +157,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: dev-release-macos-input-dist
-          path: dist
+          path: ${{ runner.temp }}/dev-release-macos-dist
 
       - name: Build macOS packaged installer
         run: |
@@ -165,13 +165,13 @@ jobs:
             --version "${{ needs.build-dev-assets.outputs.version }}" \
             --track alpha \
             --package-version-label dev \
-            --dist-dir dist
+            --dist-dir "${RUNNER_TEMP}/dev-release-macos-dist"
 
       - name: Upload macOS packaged installer
         uses: actions/upload-artifact@v4
         with:
           name: dev-release-macos-packaged-installer
-          path: dist/codex-remote-feishu_dev_darwin_universal_installer.dmg
+          path: ${{ runner.temp }}/dev-release-macos-dist/codex-remote-feishu_dev_darwin_universal_installer.dmg
           if-no-files-found: error
           compression-level: 0
 
