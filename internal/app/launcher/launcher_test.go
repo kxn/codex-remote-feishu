@@ -63,6 +63,11 @@ func TestDetect(t *testing.T) {
 			want: Decision{Role: RolePackagedInstall, Args: []string{"-format", "json"}},
 		},
 		{
+			name: "packaged install probe role",
+			args: []string{"packaged-install-probe", "-format", "json"},
+			want: Decision{Role: RolePackagedInstallProbe, Args: []string{"-format", "json"}},
+		},
+		{
 			name: "local upgrade role",
 			args: []string{"local-upgrade", "-slot", "local-test"},
 			want: Decision{Role: RoleLocalUpgrade, Args: []string{"-slot", "local-test"}},
@@ -236,6 +241,39 @@ func TestMainRunsInstall(t *testing.T) {
 	}
 	if strings.Join(gotArgs, "\x00") != strings.Join([]string{"-interactive"}, "\x00") {
 		t.Fatalf("install args = %#v", gotArgs)
+	}
+}
+
+func TestMainRunsPackagedInstallProbe(t *testing.T) {
+	var gotArgs []string
+	exitCode := Main(Options{
+		Args:   []string{"packaged-install-probe", "-format", "json"},
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Runners: RunnerSet{
+			RunDaemon: func(context.Context, []string, string, string) error {
+				t.Fatal("unexpected daemon run")
+				return nil
+			},
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
+				t.Fatal("unexpected install run")
+				return nil
+			},
+			RunPackagedInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
+				t.Fatal("unexpected packaged install run")
+				return nil
+			},
+			RunPackagedInstallProbe: func(args []string, _ io.Reader, _, _ io.Writer, _ string) error {
+				gotArgs = append([]string(nil), args...)
+				return nil
+			},
+		},
+	})
+	if exitCode != 0 {
+		t.Fatalf("Main exitCode = %d, want 0", exitCode)
+	}
+	if strings.Join(gotArgs, "\x00") != strings.Join([]string{"-format", "json"}, "\x00") {
+		t.Fatalf("probe args = %#v", gotArgs)
 	}
 }
 

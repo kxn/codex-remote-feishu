@@ -23,13 +23,14 @@ type Options struct {
 }
 
 type RunnerSet struct {
-	RunDaemon          func(context.Context, []string, string, string) error
-	RunInstall         func([]string, io.Reader, io.Writer, io.Writer, string) error
-	RunPackagedInstall func([]string, io.Reader, io.Writer, io.Writer, string) error
-	RunLocalUpgrade    func([]string, io.Reader, io.Writer, io.Writer, string) error
-	RunService         func([]string, io.Reader, io.Writer, io.Writer, string) error
-	RunUpgradeHelper   func([]string, io.Reader, io.Writer, io.Writer, string) error
-	RunWrapper         func(context.Context, []string, io.Reader, io.Writer, io.Writer, string, string) (int, error)
+	RunDaemon               func(context.Context, []string, string, string) error
+	RunInstall              func([]string, io.Reader, io.Writer, io.Writer, string) error
+	RunPackagedInstall      func([]string, io.Reader, io.Writer, io.Writer, string) error
+	RunPackagedInstallProbe func([]string, io.Reader, io.Writer, io.Writer, string) error
+	RunLocalUpgrade         func([]string, io.Reader, io.Writer, io.Writer, string) error
+	RunService              func([]string, io.Reader, io.Writer, io.Writer, string) error
+	RunUpgradeHelper        func([]string, io.Reader, io.Writer, io.Writer, string) error
+	RunWrapper              func(context.Context, []string, io.Reader, io.Writer, io.Writer, string, string) (int, error)
 }
 
 func Main(opts Options) int {
@@ -73,6 +74,12 @@ func Main(opts Options) int {
 	case RolePackagedInstall:
 		if err := opts.Runners.RunPackagedInstall(decision.Args, opts.Stdin, opts.Stdout, opts.Stderr, opts.Version); err != nil {
 			_, _ = fmt.Fprintf(opts.Stderr, "packaged install error: %v\n", err)
+			return 1
+		}
+		return 0
+	case RolePackagedInstallProbe:
+		if err := opts.Runners.RunPackagedInstallProbe(decision.Args, opts.Stdin, opts.Stdout, opts.Stderr, opts.Version); err != nil {
+			_, _ = fmt.Fprintf(opts.Stderr, "packaged install probe error: %v\n", err)
 			return 1
 		}
 		return 0
@@ -135,6 +142,9 @@ func withDefaults(opts Options) Options {
 	if opts.Runners.RunPackagedInstall == nil {
 		opts.Runners.RunPackagedInstall = install.RunPackagedInstall
 	}
+	if opts.Runners.RunPackagedInstallProbe == nil {
+		opts.Runners.RunPackagedInstallProbe = install.RunPackagedInstallProbe
+	}
 	if opts.Runners.RunLocalUpgrade == nil {
 		opts.Runners.RunLocalUpgrade = install.RunLocalUpgrade
 	}
@@ -156,6 +166,7 @@ func usageText() string {
   codex-remote daemon [flags]
   codex-remote install [flags]
   codex-remote packaged-install [flags]
+  codex-remote packaged-install-probe [flags]
   codex-remote local-upgrade [flags]
   codex-remote service <subcommand> [flags]
   codex-remote app-server [codex app-server args...]
