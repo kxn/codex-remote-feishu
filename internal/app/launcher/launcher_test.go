@@ -46,10 +46,10 @@ func TestDetect(t *testing.T) {
 		},
 		{
 			name: "daemon role preserves install-owned flags",
-			args: []string{"daemon", "-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-config-home", "C:\\Users\\demo\\.config"},
+			args: []string{"daemon", "-config", "D:\\codex-remote-test\\codex remote\\config.json", "-xdg-config-home", "D:\\codex-remote-test\\.config"},
 			want: Decision{
 				Role: RoleDaemon,
-				Args: []string{"-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-config-home", "C:\\Users\\demo\\.config"},
+				Args: []string{"-config", "D:\\codex-remote-test\\codex remote\\config.json", "-xdg-config-home", "D:\\codex-remote-test\\.config"},
 			},
 		},
 		{
@@ -366,7 +366,7 @@ func TestMainPassesDaemonFlags(t *testing.T) {
 	var gotVersion string
 	var gotBranch string
 	exitCode := Main(Options{
-		Args:    []string{"daemon", "-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-data-home", "C:\\Users\\demo\\.local\\share"},
+		Args:    []string{"daemon", "-config", "D:\\codex-remote-test\\codex remote\\config.json", "-xdg-data-home", "D:\\codex-remote-test\\.local\\share"},
 		Version: "vtest",
 		Branch:  "release/1.8",
 		Stdout:  &bytes.Buffer{},
@@ -391,7 +391,7 @@ func TestMainPassesDaemonFlags(t *testing.T) {
 	if exitCode != 0 {
 		t.Fatalf("Main exitCode = %d, want 0", exitCode)
 	}
-	wantArgs := []string{"-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-data-home", "C:\\Users\\demo\\.local\\share"}
+	wantArgs := []string{"-config", "D:\\codex-remote-test\\codex remote\\config.json", "-xdg-data-home", "D:\\codex-remote-test\\.local\\share"}
 	if strings.Join(gotArgs, "\x00") != strings.Join(wantArgs, "\x00") {
 		t.Fatalf("daemon args = %#v, want %#v", gotArgs, wantArgs)
 	}
