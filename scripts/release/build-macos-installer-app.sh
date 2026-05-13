@@ -197,25 +197,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-extract_archive() {
-  local archive_path="$1"
-  local target_root="$2"
-  mkdir -p "${target_root}"
-  tar -C "${target_root}" -xzf "${archive_path}"
-}
-
-extract_archive "${archive_amd64}" "${build_root}/amd64"
-extract_archive "${archive_arm64}" "${build_root}/arm64"
-
-payload_amd64="${build_root}/amd64/codex-remote-feishu_${package_version_label}_darwin_amd64/codex-remote"
-payload_arm64="${build_root}/arm64/codex-remote-feishu_${package_version_label}_darwin_arm64/codex-remote"
-for payload in "${payload_amd64}" "${payload_arm64}"; do
-  if [[ ! -f "${payload}" ]]; then
-    echo "payload binary not found: ${payload}" >&2
-    exit 1
-  fi
-done
-
 rm -rf "${output_app}"
 mkdir -p "$(dirname "${output_app}")"
 
@@ -258,9 +239,8 @@ lipo -create \
   -output "${macos_dir}/${app_exec_name}"
 
 chmod +x "${macos_dir}/${app_exec_name}"
-cp "${payload_amd64}" "${payload_dir}/codex-remote-darwin-amd64"
-cp "${payload_arm64}" "${payload_dir}/codex-remote-darwin-arm64"
-chmod +x "${payload_dir}/codex-remote-darwin-amd64" "${payload_dir}/codex-remote-darwin-arm64"
+cp "${archive_amd64}" "${payload_dir}/codex-remote-darwin-amd64.tar.gz"
+cp "${archive_arm64}" "${payload_dir}/codex-remote-darwin-arm64.tar.gz"
 printf '%s\n' "${version}" > "${resources_dir}/installer-version.txt"
 printf '%s\n' "${track}" > "${resources_dir}/installer-track.txt"
 

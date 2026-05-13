@@ -2,6 +2,7 @@ import Cocoa
 
 final class InstallerBridge {
     private let fileManager = FileManager.default
+    private var extractedPayloadURLs: [String: URL] = [:]
 
     func loadMetadata() throws -> InstallerMetadata {
         let version = try readResourceText(named: "installer-version", extension: "txt")
@@ -137,13 +138,25 @@ final class InstallerBridge {
         default:
             throw InstallerRuntimeError.unsupportedArchitecture(machine)
         }
-        guard let url = Bundle.main.resourceURL?.appendingPathComponent("payload/\(resourceName)") else {
+
+        if let directURL = Bundle.main.resourceURL?.appendingPathComponent("payload/\(resourceName)"),
+           fileManager.isExecutableFile(atPath: directURL.path) {
+            return directURL
+        }
+
+        if let cachedURL = extractedPayloadURLs[resourceName],
+           fileManager.isExecutableFile(atPath: cachedURL.path) {
+            return cachedURL
+        }
+
+        guard let archiveURL = Bundle.main.resourceURL?.appendingPathComponent("payload/\(resourceName).tar.gz"),
+              fileManager.fileExists(atPath: archiveURL.path) else {
             throw InstallerRuntimeError.missingResource(resourceName)
         }
-        guard fileManager.isExecutableFile(atPath: url.path) else {
-            throw InstallerRuntimeError.missingResource(url.path)
-        }
-        return url
+
+        let extractedURL = try extractPayloadBinary(from: archiveURL, resourceName: resourceName)
+        extractedPayloadURLs[resourceName] = extractedURL
+        return extractedURL
     }
 
     private func machineArchitecture() throws -> String {
@@ -180,6 +193,47 @@ final class InstallerBridge {
             throw InstallerRuntimeError.launchFailure(detail.trimmingCharacters(in: .whitespacesAndNewlines))
         }
         return stdout
+    }
+
+    private func extractPayloadBinary(from archiveURL: URL, resourceName: String) throws -> URL {
+        let extractionRoot = fileManager.temporaryDirectory
+            .appendingPathComponent("codex-remote-installer-\(resourceName)-\(UUID().uuidString)", isDirectory: true)
+        try fileManager.createDirectory(at: extractionRoot, withIntermediateDirectories: true)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        process.arguments = ["-xzf", archiveURL.path, "-C", extractionRoot.path]
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        try process.run()
+        process.waitUntilExit()
+
+        let stdout = String(data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stderr = String(data: stderrPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        if process.terminationStatus != 0 {
+            let detail = stderr.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? stdout : stderr
+            throw InstallerRuntimeError.launchFailure(detail.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+
+        guard let enumerator = fileManager.enumerator(
+            at: extractionRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            throw InstallerRuntimeError.missingResource(resourceName)
+        }
+
+        for case let candidateURL as URL in enumerator {
+            guard candidateURL.lastPathComponent == "codex-remote" else {
+                continue
+            }
+            try fileManager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: candidateURL.path)
+            return candidateURL
+        }
+
+        throw InstallerRuntimeError.missingResource(resourceName)
     }
 
     private func parseResultFile(at url: URL) throws -> PackagedInstallResultValue {
