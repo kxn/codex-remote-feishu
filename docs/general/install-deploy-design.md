@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-05-13`
-> Summary: 补充全局 stable/beta/master 实例与 repo install target 绑定模型，并同步 build flavor（shipping/alpha/dev）能力边界、`/upgrade track` 与 `/upgrade dev` 的语义边界、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型，以及 native packaged installer 未来要调用的 `codex-remote packaged-install` shared contract。
+> Summary: 同步 macOS native packaged installer 的当前 contract、GUI shell / dmg 脚本入口，以及其与 shared packaged-install contract、release workflow 的现阶段边界。
 
 ## 1. 范围
 
@@ -182,7 +182,47 @@ codex-remote packaged-install [flags]
   - wrapper 应携带 release payload `codex-remote.exe`，并调用 `codex-remote packaged-install`
   - wrapper 不应直接解析长 stdout；应通过 `-result-file` 一类 machine-readable 结果文件读取 `setupURL/adminURL/logPath/error`
 - macOS
-  - 仍待 native packaged installer 形态收口
+  - 首期形态已收口为 `dmg + Install Codex Remote.app`
+  - installer app 自身是 universal，可同时在 Intel / Apple Silicon 上原生运行
+  - app bundle 的 `Contents/Resources/payload/` 内同时携带：
+    - `codex-remote-darwin-amd64`
+    - `codex-remote-darwin-arm64`
+  - app 运行时根据目标机架构自动选择 payload，并调用：
+    - `codex-remote packaged-install-probe`
+    - `codex-remote packaged-install`
+  - GUI 不得自行猜测 first-install / repair / same-version repair，必须先使用 `packaged-install-probe` 拿到稳定状态
+  - first-install 允许选择安装目录；repair / upgrade 必须锁定当前 live binary 目录
+  - 与 Windows 一样，同版本重复运行 installer 也必须允许，语义视为 repair
+  - GUI 当前最小流程固定为：
+    1. Welcome / 环境探测
+    2. Install Location
+    3. Installing（展示 stdout 过程日志）
+    4. Finished / Error
+  - 成功页优先展示：
+    - 已安装版本
+    - 日志路径
+    - `setupURL` / `adminURL`
+  - 失败页优先展示：
+    - 结果文件中的 `error`
+    - 结果日志路径
+    - 过程 stdout/stderr
+
+当前 macOS 平台包装层的工程入口已经固定为：
+
+- `deploy/macos/InstallerApp/`
+  - plain Swift AppKit GUI shell
+- `scripts/release/build-macos-installer-app.sh`
+  - 从 release tarball 中提取双架构 payload
+  - 编译两份 GUI binary 并 `lipo` 成 universal app executable
+  - 组装 `Install Codex Remote.app`
+- `scripts/release/build-macos-dmg.sh`
+  - 基于生成好的 `.app` 产出最终分发 `dmg`
+
+现阶段边界：
+
+- macOS installer 的 GUI shell 与本地打包脚本已经存在
+- 这套产物 contract 还没有并入正式 GitHub Release workflow；后续由 `#652` 收口
+- 当前非 macOS runner 只能做静态检查，不能在 Linux runner 上直接编译 AppKit GUI
 
 ### 3.4 build flavor 与能力边界
 
@@ -485,6 +525,16 @@ detect/apply/reinstall 的当前规则也同步收紧：
 - `codex-remote-feishu_<version>_windows_amd64_installer.exe`
 - `checksums.txt`
 
+当前仓库还额外具备一套尚未接入正式发布流水线的 macOS packaged installer 构建入口：
+
+- `scripts/release/build-macos-installer-app.sh`
+- `scripts/release/build-macos-dmg.sh`
+
+它们要求在 mac runner 上执行，并复用已经构建好的：
+
+- `codex-remote-feishu_<version>_darwin_amd64.tar.gz`
+- `codex-remote-feishu_<version>_darwin_arm64.tar.gz`
+
 release 包内不再附带：
 
 - `setup.sh`
@@ -497,6 +547,7 @@ release 包内不再附带：
 
 - `Release` workflow 在 GitHub 端构建 admin UI 与多平台二进制
 - `Release` workflow 在现有 Windows zip 归档构建完成后，额外安装 `NSIS` 并生成 `codex-remote-feishu_<version>_windows_amd64_installer.exe`
+- macOS packaged installer 目前还未接入正式 release workflow；接入时应直接复用本地脚本 contract，而不是另起第二套打包逻辑
 - workflow 显式区分 `production / beta / alpha` 三条 track
 - `beta / alpha` 由 track 自动映射到 GitHub `prerelease=true`
 - workflow 会先算出本次发布版本，再构建正式 release 产物
@@ -535,6 +586,21 @@ release / installer smoke test 必须覆盖真实产品路径：
 
 - 正式 release 归档只构建一次，不在 smoke 里重复全量打包
 - 若 smoke 还要验证 `--track beta|alpha` 的 release API 解析，只补一份“当前 runner 平台”的轻量 fixture，而不是再做一轮全平台构建
+
+macOS packaged installer 的额外验证要求：
+
+1. 在 mac runner 上先构建双架构 release tarball。
+2. 调用 `scripts/release/build-macos-installer-app.sh` 产出 `Install Codex Remote.app`。
+3. 调用 `scripts/release/build-macos-dmg.sh` 产出最终 `dmg`。
+4. 至少验证三条用户路径：
+   - first install
+   - 已安装版本升级
+   - 同版本重复运行触发 repair
+5. 验证 GUI 行为与 shared contract 一致：
+   - first-install 可选安装目录
+   - repair / upgrade 不可改 live binary 目录
+   - 失败页能看到 `error` 和日志路径
+   - `setupRequired=true` 时会给出 WebSetup 打开入口
 
 ## 7. 飞书配置模板
 
