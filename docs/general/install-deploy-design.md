@@ -175,6 +175,15 @@ codex-remote packaged-install [flags]
 - 不自己直接拼平台 stop/start/ready 逻辑
 - 统一把这些语义收在 `internal/app/install/**`
 
+当前已确认的首期平台形态：
+
+- Windows
+  - 首期要求交付 `NSIS installer`
+  - wrapper 应携带 release payload `codex-remote.exe`，并调用 `codex-remote packaged-install`
+  - wrapper 不应直接解析长 stdout；应通过 `-result-file` 一类 machine-readable 结果文件读取 `setupURL/adminURL/logPath/error`
+- macOS
+  - 仍待 native packaged installer 形态收口
+
 ### 3.4 build flavor 与能力边界
 
 当前构建元数据额外引入了 `build flavor`，用于和 release track 解耦：

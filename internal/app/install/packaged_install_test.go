@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -14,6 +15,7 @@ func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
 	sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", executableName(runtime.GOOS)), "package-binary")
+	resultFile := filepath.Join(baseDir, "result", "packaged-install.ini")
 
 	originalValidator := sourceBinaryValidator
 	sourceBinaryValidator = func(string) error { return nil }
@@ -36,6 +38,7 @@ func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
 		"-binary", sourceBinary,
 		"-current-version", "v1.2.3",
 		"-format", "json",
+		"-result-file", resultFile,
 	}, bytes.NewBuffer(nil), &stdout, &bytes.Buffer{}, "vtest"); err != nil {
 		t.Fatalf("RunPackagedInstall first install: %v", err)
 	}
@@ -56,6 +59,13 @@ func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
 	if result.SetupURL != "http://localhost:9501/setup" {
 		t.Fatalf("result.SetupURL = %q, want setup url", result.SetupURL)
 	}
+	assertPackagedInstallResultFileContains(t, resultFile,
+		"ok=true",
+		"mode=first_install",
+		"currentVersion=v1.2.3",
+		"setupRequired=true",
+		"setupURL=http://localhost:9501/setup",
+	)
 
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
 	state, err := LoadState(statePath)
@@ -77,6 +87,7 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	resultFile := filepath.Join(baseDir, "result", "packaged-install.ini")
 	liveBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "old-binary")
 	sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", executableName(runtime.GOOS)), "new-binary")
 	versionsRoot := filepath.Join(baseDir, "releases")
@@ -121,6 +132,7 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 		"-binary", sourceBinary,
 		"-current-version", "v1.2.0-beta.1",
 		"-format", "json",
+		"-result-file", resultFile,
 	}, bytes.NewBuffer(nil), &stdout, &bytes.Buffer{}, "vtest"); err != nil {
 		t.Fatalf("RunPackagedInstall repair: %v", err)
 	}
@@ -141,6 +153,12 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 	if result.CurrentTrack != string(ReleaseTrackBeta) {
 		t.Fatalf("result.CurrentTrack = %q, want beta", result.CurrentTrack)
 	}
+	assertPackagedInstallResultFileContains(t, resultFile,
+		"ok=true",
+		"mode=repair",
+		"currentTrack=beta",
+		"currentVersion=v1.2.0-beta.1",
+	)
 
 	updated, err := LoadState(statePath)
 	if err != nil {
@@ -168,5 +186,69 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 	}
 	if _, err := os.Stat(filepath.Join(versionsRoot, "v1.2.0-beta.1", executableName(runtime.GOOS))); err != nil {
 		t.Fatalf("expected staged binary: %v", err)
+	}
+}
+
+func TestRunPackagedInstallWritesResultFileOnRepairFailure(t *testing.T) {
+	t.Setenv(repoRootEnvVar, t.TempDir())
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	resultFile := filepath.Join(baseDir, "result", "packaged-install.ini")
+	liveBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "old-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", executableName(runtime.GOOS)), "new-binary")
+
+	if err := WriteState(statePath, InstallState{
+		InstanceID:        defaultInstanceID,
+		BaseDir:           baseDir,
+		ConfigPath:        defaultConfigPathForInstance(baseDir, defaultInstanceID),
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerDetached,
+		InstallSource:     InstallSourceRelease,
+		CurrentTrack:      ReleaseTrackProduction,
+		CurrentVersion:    "v1.0.0",
+		CurrentBinaryPath: liveBinary,
+		InstalledBinary:   liveBinary,
+		VersionsRoot:      filepath.Join(baseDir, "releases"),
+		CurrentSlot:       "v1.0.0",
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	originalValidator := sourceBinaryValidator
+	sourceBinaryValidator = func(string) error { return nil }
+	defer func() { sourceBinaryValidator = originalValidator }()
+
+	var stdout bytes.Buffer
+	err := RunPackagedInstall([]string{
+		"-state-path", statePath,
+		"-binary", sourceBinary,
+		"-install-bin-dir", filepath.Join(baseDir, "ignored"),
+		"-result-file", resultFile,
+	}, bytes.NewBuffer(nil), &stdout, &bytes.Buffer{}, "vtest")
+	if err == nil {
+		t.Fatal("RunPackagedInstall error = nil, want failure")
+	}
+	if !strings.Contains(err.Error(), "-install-bin-dir cannot be used for existing installs") {
+		t.Fatalf("RunPackagedInstall error = %v, want existing-install install-bin-dir rejection", err)
+	}
+	assertPackagedInstallResultFileContains(t, resultFile,
+		"ok=false",
+		"mode=repair",
+		"serviceManager=detached",
+		"error=-install-bin-dir cannot be used for existing installs",
+	)
+}
+
+func assertPackagedInstallResultFileContains(t *testing.T, path string, wantFragments ...string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", path, err)
+	}
+	got := string(raw)
+	for _, fragment := range wantFragments {
+		if !strings.Contains(got, fragment) {
+			t.Fatalf("result file %q missing %q in:\n%s", path, fragment, got)
+		}
 	}
 }

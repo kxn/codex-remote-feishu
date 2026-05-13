@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -56,6 +57,7 @@ type packagedInstallOptions struct {
 	VersionsRoot   string
 	CurrentSlot    string
 	OutputFormat   string
+	ResultFilePath string
 }
 
 func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version string) error {
@@ -81,6 +83,7 @@ func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version
 	serviceManagerFlag := flagSet.String("service-manager", string(ServiceManagerDetached), "service lifecycle manager for first install: detached, systemd_user, launchd_user, or task_scheduler_logon")
 	format := flagSet.String("format", "text", "output format: text or json")
 	jsonOutput := flagSet.Bool("json", false, "deprecated alias for -format json")
+	resultFile := flagSet.String("result-file", "", "optional machine-readable result file path for installer wrappers")
 
 	if err := flagSet.Parse(args); err != nil {
 		if err == flag.ErrHelp {
@@ -140,12 +143,19 @@ func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version
 		VersionsRoot:   strings.TrimSpace(*versionsRoot),
 		CurrentSlot:    requestedSlot,
 		OutputFormat:   outputFormat,
+		ResultFilePath: strings.TrimSpace(*resultFile),
 	}
 	if opts.InstallSource == "" {
 		opts.InstallSource = InstallSourceRelease
 	}
 
 	result, runErr := runPackagedInstall(context.Background(), flagSet, opts)
+	if resultFileErr := writePackagedInstallResultFile(opts.ResultFilePath, result); resultFileErr != nil {
+		if runErr != nil {
+			return errors.Join(runErr, resultFileErr)
+		}
+		return resultFileErr
+	}
 	if outputErr := writePackagedInstallResult(stdout, outputFormat, result); outputErr != nil {
 		return outputErr
 	}
