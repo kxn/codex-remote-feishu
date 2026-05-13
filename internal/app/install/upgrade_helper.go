@@ -242,31 +242,16 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 }
 
 func stopCurrentDaemon(ctx context.Context, stateValue InstallState, paths relayruntime.Paths) error {
-	upgradeHelperSleepFunc(upgradeHelperStopDelay)
-	if isManagedServiceManager(stateValue) {
-		driver, ok := managedServiceDriverForManager(effectiveServiceManager(stateValue))
-		if !ok {
-			return fmt.Errorf("unsupported managed service manager %q", effectiveServiceManager(stateValue))
-		}
-		return driver.StopAndWait(ctx, stateValue, upgradeHelperStopGrace, upgradeHelperPollInterval)
-	}
-
-	pid, err := upgradeHelperReadPIDFunc(paths.PIDFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	if pid <= 0 {
-		return nil
-	}
-	if err := upgradeHelperTerminateProcessFunc(pid, upgradeHelperStopGrace); err != nil {
-		return err
-	}
-	_ = upgradeHelperRemoveFileFunc(paths.PIDFile)
-	_ = upgradeHelperRemoveFileFunc(paths.IdentityFile)
-	return nil
+	return stopInstallStateProcess(ctx, stateValue, paths, stopInstallStateOptions{
+		StopDelay:    upgradeHelperStopDelay,
+		StopGrace:    upgradeHelperStopGrace,
+		PollInterval: upgradeHelperPollInterval,
+	}, runtimeControlHooks{
+		Sleep:            upgradeHelperSleepFunc,
+		ReadPID:          upgradeHelperReadPIDFunc,
+		TerminateProcess: upgradeHelperTerminateProcessFunc,
+		RemoveFile:       upgradeHelperRemoveFileFunc,
+	})
 }
 
 func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateValue InstallState, paths relayruntime.Paths) (int, error) {

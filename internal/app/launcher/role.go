@@ -5,14 +5,15 @@ import "fmt"
 type Role string
 
 const (
-	RoleHelp          Role = "help"
-	RoleVersion       Role = "version"
-	RoleDaemon        Role = "daemon"
-	RoleInstall       Role = "install"
-	RoleLocalUpgrade  Role = "local_upgrade"
-	RoleService       Role = "service"
-	RoleUpgradeHelper Role = "upgrade_helper"
-	RoleWrapper       Role = "wrapper"
+	RoleHelp            Role = "help"
+	RoleVersion         Role = "version"
+	RoleDaemon          Role = "daemon"
+	RoleInstall         Role = "install"
+	RolePackagedInstall Role = "packaged_install"
+	RoleLocalUpgrade    Role = "local_upgrade"
+	RoleService         Role = "service"
+	RoleUpgradeHelper   Role = "upgrade_helper"
+	RoleWrapper         Role = "wrapper"
 )
 
 type Decision struct {
@@ -43,6 +44,8 @@ func Detect(args []string) (Decision, error) {
 		return Decision{Role: RoleDaemon, Args: args[1:]}, nil
 	case "install":
 		return Decision{Role: RoleInstall, Args: args[1:]}, nil
+	case "packaged-install":
+		return Decision{Role: RolePackagedInstall, Args: args[1:]}, nil
 	case "local-upgrade":
 		return Decision{Role: RoleLocalUpgrade, Args: args[1:]}, nil
 	case "service":

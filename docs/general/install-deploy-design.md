@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-04-27`
-> Summary: 补充全局 stable/beta/master 实例与 repo install target 绑定模型，并同步 build flavor（shipping/alpha/dev）能力边界、`/upgrade track` 与 `/upgrade dev` 的语义边界、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型与按当前平台筛选 VS Code 入口的规则。
+> Updated: `2026-05-13`
+> Summary: 补充全局 stable/beta/master 实例与 repo install target 绑定模型，并同步 build flavor（shipping/alpha/dev）能力边界、`/upgrade track` 与 `/upgrade dev` 的语义边界、Windows 在线安装脚本、`managed_shim` tiny shim + sidecar 绑定模型，以及 native packaged installer 未来要调用的 `codex-remote packaged-install` shared contract。
 
 ## 1. 范围
 
@@ -11,6 +11,7 @@
 - GitHub Release 产物形态
 - 在线安装脚本与手动解压安装
 - `codex-remote install` 的 bootstrap 语义
+- `codex-remote packaged-install` 的 shared contract
 - WebSetup / Admin UI 的职责边界
 - 仓库 helper 与产品入口的区分
 
@@ -135,7 +136,46 @@ Windows PowerShell:
 
 这些能力主要用于源码仓库或定向调试，不再作为发布包默认路径。
 
-### 3.3 build flavor 与能力边界
+### 3.3 `codex-remote packaged-install` shared contract
+
+当前仓库已经新增内部 shared contract：
+
+```bash
+codex-remote packaged-install [flags]
+```
+
+它不是当前对最终用户直接暴露的主入口，而是后续 macOS / Windows native packaged installer 统一要调用的 install 内核接口。
+
+当前语义：
+
+- first install
+  - 先把 packaged payload 导入 `versionsRoot/currentSlot`
+  - 再复用现有 bootstrap 主链
+  - 启动 daemon
+  - 返回 WebSetup / Admin URL 与日志定位信息
+- existing install
+  - 先把新 payload staging 到 `versionsRoot/currentSlot`
+  - 再按现有 `install-state` 定位 live install
+  - 停掉旧 daemon / service
+  - 覆盖当前 live binary
+  - 启动新 daemon / service
+  - 返回明确成功/失败结果与日志定位信息
+
+这个路径的产品定位是：
+
+- 它是显式的“手动重装 / repair”路径
+- 它不等同于后台事务升级
+- 它不承诺复用 `upgrade-helper` 的事务回滚语义
+- 当 `/upgrade` 一类后台升级失败时，用户下载最新 packaged installer 重装一次，应当成为最后一条可理解的兜底修复路径
+
+因此后续 native packaged installer 的平台包装层应尽量保持很薄：
+
+- 不自己猜 first install / existing install
+- 不自己散写版本目录布局
+- 不自己直接拼平台 stop/start/ready 逻辑
+- 统一把这些语义收在 `internal/app/install/**`
+
+### 3.4 build flavor 与能力边界
 
 当前构建元数据额外引入了 `build flavor`，用于和 release track 解耦：
 
