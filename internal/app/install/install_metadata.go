@@ -130,6 +130,11 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
 			state.InstanceID,
 		)
+	case ServiceManagerTaskSchedulerLogon:
+		state.ServiceUnitPath = taskSchedulerXMLPathForInstance(
+			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
+			state.InstanceID,
+		)
 	default:
 		state.ServiceUnitPath = ""
 	}

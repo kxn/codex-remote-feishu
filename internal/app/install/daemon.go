@@ -85,6 +85,32 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 			},
 		})
 	}
+	if effectiveServiceManager(state) == ServiceManagerTaskSchedulerLogon {
+		manager = relayruntime.NewManager(relayruntime.ManagerConfig{
+			RelayServerURL: strings.TrimSpace(loaded.Config.Relay.ServerURL),
+			Identity:       identity,
+			ConfigPath:     state.ConfigPath,
+			Paths:          paths,
+			StartFunc: func(ctx context.Context) (int, error) {
+				if _, err := installTaskSchedulerLogonTask(ctx, state); err != nil {
+					return 0, err
+				}
+				if err := taskSchedulerLogonEnable(ctx, state); err != nil {
+					return 0, err
+				}
+				return 0, taskSchedulerLogonStart(ctx, state)
+			},
+			RestartFunc: func(ctx context.Context) error {
+				if _, err := installTaskSchedulerLogonTask(ctx, state); err != nil {
+					return err
+				}
+				if err := taskSchedulerLogonEnable(ctx, state); err != nil {
+					return err
+				}
+				return taskSchedulerLogonRestart(ctx, state)
+			},
+		})
+	}
 	if err := manager.EnsureReady(ctx); err != nil {
 		if isManagedServiceManager(state) {
 			return fallbackDaemonStatus(loaded.Config), err

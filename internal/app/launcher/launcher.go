@@ -23,7 +23,7 @@ type Options struct {
 }
 
 type RunnerSet struct {
-	RunDaemon        func(context.Context, string, string) error
+	RunDaemon        func(context.Context, []string, string, string) error
 	RunInstall       func([]string, io.Reader, io.Writer, io.Writer, string) error
 	RunLocalUpgrade  func([]string, io.Reader, io.Writer, io.Writer, string) error
 	RunService       func([]string, io.Reader, io.Writer, io.Writer, string) error
@@ -58,7 +58,7 @@ func Main(opts Options) int {
 
 	switch decision.Role {
 	case RoleDaemon:
-		if err := opts.Runners.RunDaemon(ctx, opts.Version, opts.Branch); err != nil && err != context.Canceled {
+		if err := opts.Runners.RunDaemon(ctx, decision.Args, opts.Version, opts.Branch); err != nil && err != context.Canceled {
 			_, _ = fmt.Fprintf(opts.Stderr, "service error: %v\n", err)
 			return 1
 		}
@@ -120,7 +120,7 @@ func withDefaults(opts Options) Options {
 		opts.Branch = "dev"
 	}
 	if opts.Runners.RunDaemon == nil {
-		opts.Runners.RunDaemon = daemon.RunMain
+		opts.Runners.RunDaemon = daemon.RunMainWithArgs
 	}
 	if opts.Runners.RunInstall == nil {
 		opts.Runners.RunInstall = install.RunMain
@@ -143,7 +143,7 @@ func withDefaults(opts Options) Options {
 func usageText() string {
 	return `Usage:
   codex-remote
-  codex-remote daemon
+  codex-remote daemon [flags]
   codex-remote install [flags]
   codex-remote local-upgrade [flags]
   codex-remote service <subcommand> [flags]

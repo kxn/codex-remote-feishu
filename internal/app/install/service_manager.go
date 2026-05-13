@@ -9,9 +9,10 @@ import (
 type ServiceManager string
 
 const (
-	ServiceManagerDetached    ServiceManager = "detached"
-	ServiceManagerSystemdUser ServiceManager = "systemd_user"
-	ServiceManagerLaunchdUser ServiceManager = "launchd_user"
+	ServiceManagerDetached           ServiceManager = "detached"
+	ServiceManagerSystemdUser        ServiceManager = "systemd_user"
+	ServiceManagerLaunchdUser        ServiceManager = "launchd_user"
+	ServiceManagerTaskSchedulerLogon ServiceManager = "task_scheduler_logon"
 )
 
 type installLayout struct {
@@ -37,8 +38,13 @@ func ParseServiceManager(value, goos string) (ServiceManager, error) {
 			return "", fmt.Errorf("service manager %q is only supported on darwin", ServiceManagerLaunchdUser)
 		}
 		return ServiceManagerLaunchdUser, nil
+	case ServiceManagerTaskSchedulerLogon:
+		if goos != "windows" {
+			return "", fmt.Errorf("service manager %q is only supported on windows", ServiceManagerTaskSchedulerLogon)
+		}
+		return ServiceManagerTaskSchedulerLogon, nil
 	default:
-		return "", fmt.Errorf("unsupported service manager %q (want detached or systemd_user)", strings.TrimSpace(value))
+		return "", fmt.Errorf("unsupported service manager %q (want detached, systemd_user, launchd_user, or task_scheduler_logon)", strings.TrimSpace(value))
 	}
 }
 
@@ -50,6 +56,8 @@ func normalizeServiceManager(value ServiceManager) ServiceManager {
 		return ServiceManagerSystemdUser
 	case string(ServiceManagerLaunchdUser):
 		return ServiceManagerLaunchdUser
+	case string(ServiceManagerTaskSchedulerLogon):
+		return ServiceManagerTaskSchedulerLogon
 	default:
 		return ""
 	}
@@ -141,13 +149,15 @@ func launchdUserPlistPathForInstance(baseDir, instanceID string) string {
 
 func isManagedServiceManager(state InstallState) bool {
 	m := effectiveServiceManager(state)
-	return m == ServiceManagerSystemdUser || m == ServiceManagerLaunchdUser
+	return m == ServiceManagerSystemdUser || m == ServiceManagerLaunchdUser || m == ServiceManagerTaskSchedulerLogon
 }
 
 func serviceNameForInstallInstance(goos, instanceID string) string {
 	switch goos {
 	case "darwin":
 		return launchdLabelForInstance(instanceID)
+	case "windows":
+		return taskSchedulerTaskNameForInstance(instanceID)
 	default:
 		return systemdUserServiceNameForInstance(instanceID)
 	}
@@ -157,6 +167,8 @@ func serviceUnitPathForInstallInstance(goos, baseDir, instanceID string) string 
 	switch goos {
 	case "darwin":
 		return launchdUserPlistPathForInstance(baseDir, instanceID)
+	case "windows":
+		return taskSchedulerXMLPathForInstance(baseDir, instanceID)
 	default:
 		return systemdUserUnitPathForInstance(baseDir, instanceID)
 	}

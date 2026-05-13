@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -142,6 +143,42 @@ func TestBuildDaemonHeadlessBaseEnvFreezesExplicitClaudeBinary(t *testing.T) {
 	}
 	if value, ok := lookupEnvEntryForTest(env, "https_proxy"); !ok || !strings.Contains(value, "proxy.internal") {
 		t.Fatalf("https_proxy = %q ok=%v", value, ok)
+	}
+}
+
+func TestApplyDaemonStartupArgsSetsInstallOwnedRuntimeEnv(t *testing.T) {
+	t.Setenv(config.UnifiedConfigEnvPath, "")
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
+
+	args := []string{
+		"-config", filepath.Join("C:", "Users", "demo", "codex remote", "config.json"),
+		"-xdg-config-home", filepath.Join("C:", "Users", "demo", ".config"),
+		"-xdg-data-home", filepath.Join("C:", "Users", "demo", ".local", "share"),
+		"-xdg-state-home", filepath.Join("C:", "Users", "demo", ".local", "state"),
+	}
+	if err := applyDaemonStartupArgs(args); err != nil {
+		t.Fatalf("applyDaemonStartupArgs: %v", err)
+	}
+	if got := strings.TrimSpace(config.DefaultConfigPath()); got != args[1] {
+		t.Fatalf("DefaultConfigPath = %q, want %q", got, args[1])
+	}
+	if got := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); got != args[3] {
+		t.Fatalf("XDG_CONFIG_HOME = %q, want %q", got, args[3])
+	}
+	if got := strings.TrimSpace(os.Getenv("XDG_DATA_HOME")); got != args[5] {
+		t.Fatalf("XDG_DATA_HOME = %q, want %q", got, args[5])
+	}
+	if got := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); got != args[7] {
+		t.Fatalf("XDG_STATE_HOME = %q, want %q", got, args[7])
+	}
+}
+
+func TestApplyDaemonStartupArgsRejectsUnknownFlag(t *testing.T) {
+	err := applyDaemonStartupArgs([]string{"-not-a-daemon-flag"})
+	if err == nil || !strings.Contains(err.Error(), "flag provided but not defined") {
+		t.Fatalf("applyDaemonStartupArgs error = %v, want unknown flag", err)
 	}
 }
 

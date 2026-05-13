@@ -23,6 +23,27 @@ func TestParseServiceManagerRejectsSystemdUserOutsideLinux(t *testing.T) {
 	}
 }
 
+func TestParseServiceManagerAcceptsTaskSchedulerLogonOnWindows(t *testing.T) {
+	mgr, err := ParseServiceManager("task_scheduler_logon", "windows")
+	if err != nil {
+		t.Fatalf("ParseServiceManager: %v", err)
+	}
+	if mgr != ServiceManagerTaskSchedulerLogon {
+		t.Fatalf("got %q, want %q", mgr, ServiceManagerTaskSchedulerLogon)
+	}
+}
+
+func TestParseServiceManagerRejectsTaskSchedulerLogonOutsideWindows(t *testing.T) {
+	for _, goos := range []string{"linux", "darwin"} {
+		t.Run(goos, func(t *testing.T) {
+			_, err := ParseServiceManager("task_scheduler_logon", goos)
+			if err == nil || !strings.Contains(err.Error(), "only supported on windows") {
+				t.Fatalf("ParseServiceManager error = %v, want windows-only", err)
+			}
+		})
+	}
+}
+
 func TestApplyStateMetadataInfersLinuxServicePaths(t *testing.T) {
 	baseDir := filepath.Join(string(filepath.Separator), "tmp", "codex-remote-home")
 	stubServiceUserHome(t, baseDir)
@@ -69,6 +90,31 @@ func TestApplyStateMetadataInfersDebugInstancePaths(t *testing.T) {
 	}
 	if state.ServiceUnitPath != filepath.Join(baseDir, ".config", "systemd", "user", "codex-remote-debug.service") {
 		t.Fatalf("ServiceUnitPath = %q", state.ServiceUnitPath)
+	}
+}
+
+func TestApplyStateMetadataInfersWindowsTaskSchedulerPaths(t *testing.T) {
+	originalGOOS := serviceRuntimeGOOS
+	serviceRuntimeGOOS = "windows"
+	defer func() { serviceRuntimeGOOS = originalGOOS }()
+
+	baseDir := filepath.Join(t.TempDir(), "Codex Remote")
+	state := InstallState{
+		InstanceID:     "debug",
+		BaseDir:        baseDir,
+		StatePath:      defaultInstallStatePathForInstance(baseDir, "debug"),
+		ServiceManager: ServiceManagerTaskSchedulerLogon,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: ServiceManagerTaskSchedulerLogon,
+	})
+
+	want := filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "task-scheduler-logon.xml")
+	if state.ServiceUnitPath != want {
+		t.Fatalf("ServiceUnitPath = %q, want %q", state.ServiceUnitPath, want)
 	}
 }
 

@@ -10,12 +10,24 @@ import (
 	"testing"
 )
 
-func TestDetectAutostartReportsUnsupportedOnWindows(t *testing.T) {
+func TestDetectAutostartReportsSupportedDisabledOnWindows(t *testing.T) {
+	baseDir := t.TempDir()
 	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := taskSchedulerRunner
 	serviceRuntimeGOOS = "windows"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
 	defer func() {
 		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		taskSchedulerRunner = originalRunner
 	}()
+	taskSchedulerRunner = func(_ context.Context, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "/Query" {
+			return "", os.ErrNotExist
+		}
+		return "", nil
+	}
 
 	status, err := DetectAutostart("")
 	if err != nil {
@@ -24,11 +36,14 @@ func TestDetectAutostartReportsUnsupportedOnWindows(t *testing.T) {
 	if status.Platform != "windows" {
 		t.Fatalf("Platform = %q, want windows", status.Platform)
 	}
-	if status.Supported {
-		t.Fatalf("expected unsupported status, got %#v", status)
+	if !status.Supported {
+		t.Fatalf("expected supported status, got %#v", status)
 	}
-	if status.Status != "unsupported" {
-		t.Fatalf("Status = %q, want unsupported", status.Status)
+	if status.Manager != ServiceManagerTaskSchedulerLogon {
+		t.Fatalf("Manager = %q, want %q", status.Manager, ServiceManagerTaskSchedulerLogon)
+	}
+	if status.Status != "disabled" || status.Enabled || status.Configured {
+		t.Fatalf("unexpected status: %#v", status)
 	}
 }
 
@@ -148,6 +163,63 @@ func TestApplyAutostartInstallsAndEnablesLaunchdUserService(t *testing.T) {
 	}
 	if _, err := os.Stat(loaded.ServiceUnitPath); err != nil {
 		t.Fatalf("expected launchd plist to exist: %v", err)
+	}
+}
+
+func TestApplyAutostartInstallsAndEnablesTaskSchedulerLogonService(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePath(baseDir)
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary")
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := taskSchedulerRunner
+	serviceRuntimeGOOS = "windows"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		taskSchedulerRunner = originalRunner
+	}()
+
+	var calls []string
+	taskSchedulerRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "/Query" {
+			return `<Task><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers></Task>`, nil
+		}
+		return "", nil
+	}
+
+	status, err := ApplyAutostart(AutostartApplyOptions{
+		StatePath:       statePath,
+		BaseDir:         baseDir,
+		InstalledBinary: binaryPath,
+		CurrentVersion:  "dev",
+	})
+	if err != nil {
+		t.Fatalf("ApplyAutostart: %v", err)
+	}
+	if status.Status != "enabled" || !status.Enabled {
+		t.Fatalf("unexpected autostart status: %#v", status)
+	}
+	taskName := taskSchedulerTaskNameForInstance("stable")
+	if len(calls) != 3 ||
+		!strings.HasPrefix(calls[0], "/Create /TN "+taskName+" /XML ") ||
+		calls[1] != "/Change /TN "+taskName+" /ENABLE" ||
+		calls[2] != "/Query /TN "+taskName+" /XML" {
+		t.Fatalf("task scheduler calls = %#v", calls)
+	}
+
+	loaded, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if loaded.ServiceManager != ServiceManagerTaskSchedulerLogon {
+		t.Fatalf("ServiceManager = %q, want %q", loaded.ServiceManager, ServiceManagerTaskSchedulerLogon)
+	}
+	if _, err := os.Stat(loaded.ServiceUnitPath); err != nil {
+		t.Fatalf("expected task XML file to exist: %v", err)
 	}
 }
 

@@ -46,6 +46,8 @@ func DetectAutostart(statePath string) (AutostartStatus, error) {
 		return detectSystemdAutostart(status, trimmedStatePath)
 	case "darwin":
 		return detectLaunchdAutostart(status, trimmedStatePath)
+	case "windows":
+		return detectTaskSchedulerAutostart(status, trimmedStatePath)
 	default:
 		return status, nil
 	}
@@ -178,6 +180,59 @@ func detectLaunchdAutostart(status AutostartStatus, trimmedStatePath string) (Au
 	return status, nil
 }
 
+func detectTaskSchedulerAutostart(status AutostartStatus, trimmedStatePath string) (AutostartStatus, error) {
+	baseDir, err := resolveAutostartBaseDir(trimmedStatePath, "")
+	if err != nil {
+		return AutostartStatus{}, err
+	}
+	instanceID := inferInstanceID("", trimmedStatePath)
+
+	status.Supported = true
+	status.Manager = ServiceManagerTaskSchedulerLogon
+	status.CurrentManager = ServiceManagerDetached
+	status.Status = "disabled"
+	status.CanApply = true
+	status.ServiceUnitPath = taskSchedulerXMLPathForInstance(baseDir, instanceID)
+
+	state, err := loadAutostartStateIfPresent(trimmedStatePath)
+	if err != nil {
+		return AutostartStatus{}, err
+	}
+	if state != nil {
+		ApplyStateMetadata(state, StateMetadataOptions{
+			InstanceID:     state.InstanceID,
+			StatePath:      trimmedStatePath,
+			BaseDir:        baseDir,
+			ServiceManager: state.ServiceManager,
+		})
+		status.CurrentManager = effectiveServiceManager(*state)
+		if strings.TrimSpace(state.ServiceUnitPath) != "" && effectiveServiceManager(*state) == ServiceManagerTaskSchedulerLogon {
+			status.ServiceUnitPath = state.ServiceUnitPath
+		}
+	}
+
+	output, queryErr := taskSchedulerRunner(context.Background(), "/Query", "/TN", taskSchedulerTaskNameForInstance(instanceID), "/XML")
+	switch {
+	case queryErr == nil:
+		status.Configured = true
+		status.CurrentManager = ServiceManagerTaskSchedulerLogon
+		enabled, ok := parseTaskSchedulerEnabled(output)
+		if !ok {
+			status.Warning = "无法解析自动启动任务状态。"
+			break
+		}
+		status.Enabled = enabled
+		if enabled {
+			status.Status = "enabled"
+		}
+	case isTaskSchedulerMissingErr(queryErr):
+	default:
+		return AutostartStatus{}, fmt.Errorf("query task scheduler task %s: %w", taskSchedulerTaskNameForInstance(instanceID), queryErr)
+	}
+
+	return status, nil
+}
+
 func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	statePath := strings.TrimSpace(opts.StatePath)
 	instanceID, err := parseInstanceID(opts.InstanceID)
@@ -203,10 +258,14 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	platform := strings.TrimSpace(serviceRuntimeGOOS)
 	var targetManager ServiceManager
 	switch platform {
+	case "linux":
+		targetManager = ServiceManagerSystemdUser
 	case "darwin":
 		targetManager = ServiceManagerLaunchdUser
+	case "windows":
+		targetManager = ServiceManagerTaskSchedulerLogon
 	default:
-		targetManager = ServiceManagerSystemdUser
+		return AutostartStatus{}, fmt.Errorf("autostart is not supported on %s", platform)
 	}
 
 	ApplyStateMetadata(state, StateMetadataOptions{
@@ -228,29 +287,15 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	}
 
 	var updated InstallState
-	switch targetManager {
-	case ServiceManagerLaunchdUser:
-		updated, err = installLaunchdUserPlist(context.Background(), *state)
-		if err != nil {
-			return AutostartStatus{}, err
-		}
-		if err := WriteState(statePath, updated); err != nil {
-			return AutostartStatus{}, err
-		}
-		if err := launchdUserEnable(context.Background(), updated); err != nil {
-			return AutostartStatus{}, err
-		}
-	default:
-		updated, err = installSystemdUserUnit(context.Background(), *state)
-		if err != nil {
-			return AutostartStatus{}, err
-		}
-		if err := WriteState(statePath, updated); err != nil {
-			return AutostartStatus{}, err
-		}
-		if err := systemdUserEnable(context.Background(), updated); err != nil {
-			return AutostartStatus{}, err
-		}
+	updated, err = installManagedService(context.Background(), *state)
+	if err != nil {
+		return AutostartStatus{}, err
+	}
+	if err := WriteState(statePath, updated); err != nil {
+		return AutostartStatus{}, err
+	}
+	if err := enableManagedService(context.Background(), updated); err != nil {
+		return AutostartStatus{}, err
 	}
 	return DetectAutostart(statePath)
 }
@@ -270,13 +315,7 @@ func DisableAutostart(statePath string) (AutostartStatus, error) {
 	if err := ensureManagedServiceConfigured(state); err != nil {
 		return current, nil
 	}
-	switch effectiveServiceManager(state) {
-	case ServiceManagerLaunchdUser:
-		err = launchdUserDisable(context.Background(), state)
-	default:
-		err = systemdUserDisable(context.Background(), state)
-	}
-	if err != nil {
+	if err := disableManagedService(context.Background(), state); err != nil {
 		return AutostartStatus{}, err
 	}
 	return DetectAutostart(statePath)

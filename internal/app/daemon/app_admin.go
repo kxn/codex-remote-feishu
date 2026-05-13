@@ -180,7 +180,7 @@ func adminAutostartSummaryLines(status install.AutostartStatus) []string {
 		lines = append(lines, fmt.Sprintf("管理方式：%s", firstNonEmpty(string(status.Manager), string(status.CurrentManager), "unknown")))
 	}
 	if path := strings.TrimSpace(status.ServiceUnitPath); path != "" {
-		lines = append(lines, fmt.Sprintf("服务文件：%s", path))
+		lines = append(lines, fmt.Sprintf("服务定义：%s", path))
 	}
 	return lines
 }

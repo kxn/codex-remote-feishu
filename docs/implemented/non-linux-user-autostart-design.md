@@ -1,14 +1,18 @@
-# Non-Linux User Autostart Research
+# Non-Linux User Autostart Design
 
-> Type: `draft`
-> Updated: `2026-04-09`
-> Summary: 调研 macOS / Windows 当前用户自动启动机制，并给出适合 codex-remote 的推荐方向。
+> Type: `implemented`
+> Updated: `2026-05-13`
+> Summary: 记录 Linux systemd、macOS launchd 与 Windows Task Scheduler 当前用户登录自动启动的已实现边界。
 
 ## 1. 背景
 
-当前仓库已经支持 Linux 下的 `systemd --user` 守护进程管理，但 macOS 和 Windows 仍只有 `detached` 模式。
+当前仓库已经支持三种当前用户级自动启动方式：
 
-本次调研只回答一个更窄的问题：
+- Linux: `systemd_user`
+- macOS: `launchd_user`
+- Windows: `task_scheduler_logon`
+
+本文记录这套已实现能力的产品边界和平台选择：
 
 - 对于“以当前用户身份启动 `codex-remote daemon`”这件事，macOS / Windows 各自有哪些平台原生机制？
 - 哪个机制最接近当前 Linux `systemd_user` 的使用目标？
@@ -16,15 +20,15 @@
 
 ## 2. 结论摘要
 
-推荐把非 Linux 平台的一期目标收敛为：`登录后自动启动`，而不是“开机但未登录前就以当前用户身份运行”。
+已实现目标收敛为：`登录后自动启动`，而不是“开机但未登录前就以当前用户身份运行”。
 
 - macOS:
-  - 推荐使用 `LaunchAgent`
+  - 已使用 `LaunchAgent`
   - 安装位置为 `~/Library/LaunchAgents`
   - 语义是“当前用户登录后自动启动”
 - Windows:
-  - 推荐使用 `Task Scheduler` 的 `LogonTrigger`
-  - 语义是“指定用户登录后自动启动”
+  - 已使用 `Task Scheduler` 的 `LogonTrigger`
+  - 语义是“当前用户登录后自动启动”
 - 不推荐作为主方案的路径:
   - macOS `Login Items`
   - Windows `Run` / `RunOnce` registry key
@@ -81,34 +85,38 @@ Windows 原生可选项里，真正接近“可管理的后台任务”的是 `T
 
 ## 4. 对当前仓库结构的影响
 
-现有安装层已经有 `ServiceManager` 抽象，但实现和持久化仍明显偏 Linux：
+安装层已经用 `ServiceManager` 表达当前平台的用户级自动启动管理器：
 
 - `internal/app/install/service_manager.go`
 - `internal/app/install/service_entry.go`
 - `internal/app/install/linux_service.go`
+- `internal/app/install/darwin_service.go`
+- `internal/app/install/windows_service.go`
 - `internal/app/install/install_metadata.go`
 
-目前的结构问题不是“不能做”，而是“需要先泛化”：
+当前实现的管理器：
 
-- `ServiceManager` 目前只有 `detached` 和 `systemd_user`
-- `InstallState.ServiceUnitPath` 明显是 systemd 专属字段
-- `service status/start/stop/restart` 当前只实现了 systemd 分支
+- `detached`
+- `systemd_user`
+- `launchd_user`
+- `task_scheduler_logon`
 
-如果继续往下做，建议先把服务元数据改成平台无关的表达，例如：
+兼容性取舍：
 
-- `ServiceDefinitionPath`
-- `ServiceID`
-- 或者一层 `ServiceMetadata` 结构，按 manager 存特定字段
+- `InstallState.ServiceUnitPath` 继续作为跨平台“服务定义路径”复用。
+- Linux 存 systemd unit path。
+- macOS 存 launchd plist path。
+- Windows 存 Task Scheduler XML definition path。
 
-不要继续把 macOS / Windows 信息硬塞进 `ServiceUnitPath` 这种 Linux 专名里。
+用户可见文案应使用“服务定义”，不要把该字段解释成只属于 systemd 的“服务文件”。
 
 ## 5. 平台建议
 
-### 5.1 macOS 一期建议
+### 5.1 macOS 当前实现
 
-推荐新增 `launchd_user` 类似的 service manager，语义为“当前用户登录后自动启动 daemon”。
+`launchd_user` 的语义为“当前用户登录后自动启动 daemon”。
 
-建议能力范围：
+能力范围：
 
 - `service install-user`
   - 写入 `~/Library/LaunchAgents/<label>.plist`
@@ -123,20 +131,20 @@ Windows 原生可选项里，真正接近“可管理的后台任务”的是 `T
 - `service status`
   - 通过 `launchctl print` 或等价查询获取状态
 
-不建议一期支持：
+不支持：
 
 - system-wide `LaunchDaemon`
 - “未登录前以当前用户身份运行”
 - GUI `Login Items`
 
-### 5.2 Windows 一期建议
+### 5.2 Windows 当前实现
 
-推荐新增 `task_scheduler_logon` 类似的 service manager，语义为“当前用户登录后自动启动 daemon”。
+`task_scheduler_logon` 的语义为“当前 Windows 用户登录后自动启动 daemon”。
 
-建议能力范围：
+能力范围：
 
 - `service install-user`
-  - 注册当前用户的计划任务
+  - 生成 Task Scheduler XML 并注册当前用户的计划任务
 - `service enable`
   - 启用任务
 - `service disable`
@@ -144,28 +152,30 @@ Windows 原生可选项里，真正接近“可管理的后台任务”的是 `T
 - `service start`
   - 立即触发任务运行
 - `service stop`
-  - 结束当前 daemon 进程，而不是依赖 Task Scheduler 自己的抽象停止
+  - 结束当前任务
 - `service status`
   - 查询任务是否已注册、启用以及最近运行结果
 
-推荐关键约束：
+关键约束：
 
 - 使用 `LogonTrigger`
 - 使用当前用户身份
 - 选择交互式登录 token 语义，而不是密码持久化语义
+- Task Scheduler action 通过 install-owned daemon 参数传递 config/runtime home，避免非默认实例落到默认配置。
 
-不建议一期支持：
+不支持：
 
 - `Run` / `RunOnce` 作为正式 service manager
 - `BootTrigger`
 - 需要保存用户密码的任务注册路径
 
-## 6. 建议的 issue 拆分
+## 6. 实现状态
 
-本调研完成后，后续实现建议拆成两个独立 issue：
+历史拆分已经收口：
 
-1. macOS `LaunchAgent` service manager
-2. Windows `Task Scheduler` logon service manager
+- macOS `launchd_user` 已落地。
+- Windows `task_scheduler_logon` 已落地。
+- setup/admin/飞书 admin 均通过共享 autostart API 消费平台能力。
 
 如果未来产品真的要求“用户未登录前也要自动启动”，建议另开单独 issue 讨论安全模型，而不是和上述两项混做。
 

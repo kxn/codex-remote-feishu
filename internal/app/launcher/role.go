@@ -40,10 +40,7 @@ func Detect(args []string) (Decision, error) {
 	case "version", "--version":
 		return Decision{Role: RoleVersion}, nil
 	case "daemon":
-		if len(args) != 1 {
-			return Decision{}, usageError("daemon does not accept extra arguments")
-		}
-		return Decision{Role: RoleDaemon}, nil
+		return Decision{Role: RoleDaemon, Args: args[1:]}, nil
 	case "install":
 		return Decision{Role: RoleInstall, Args: args[1:]}, nil
 	case "local-upgrade":

@@ -39,7 +39,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 	currentVersion := flagSet.String("current-version", version, "current binary version metadata")
 	versionsRoot := flagSet.String("versions-root", "", "version cache root metadata")
 	currentSlot := flagSet.String("current-slot", "", "current version slot metadata")
-	serviceManagerFlag := flagSet.String("service-manager", string(ServiceManagerDetached), "service lifecycle manager: detached or systemd_user (linux only)")
+	serviceManagerFlag := flagSet.String("service-manager", string(ServiceManagerDetached), "service lifecycle manager: detached, systemd_user, launchd_user, or task_scheduler_logon")
 	relayURL := flagSet.String("relay-url", "", "relay websocket url; empty preserves existing or default config")
 	codexBinary := flagSet.String("codex-binary", "", "optional Codex path override; empty keeps wrapper default and lets managed_shim auto-resolve codex.real")
 	integrationMode := flagSet.String("integration", "auto", "integration mode: auto or managed_shim")

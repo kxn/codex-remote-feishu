@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-05-12`
-> Summary: 新增工作区级 `Autopilot` 自动化设计草案索引。
+> Updated: `2026-05-13`
+> Summary: 更新非 Linux 当前用户自动启动实现文档索引。
 
 ## 1. 适用范围
 
@@ -144,6 +144,7 @@
 - [feishu-request-approval-design.md](./implemented/feishu-request-approval-design.md)
 - [managed-headless-pool-design.md](./implemented/managed-headless-pool-design.md)
 - [new-thread-command-design.md](./implemented/new-thread-command-design.md)
+- [non-linux-user-autostart-design.md](./implemented/non-linux-user-autostart-design.md)
 - [relay-backpressure-hardening-design.md](./implemented/relay-backpressure-hardening-design.md)
 - [shared-exploration-progress-card-design.md](./implemented/shared-exploration-progress-card-design.md)
 - [authenticated-external-access-foundation-design.md](./implemented/authenticated-external-access-foundation-design.md)
@@ -190,7 +191,6 @@
 - [feishu-workspace-new-dir-subdirectory-design.md](./draft/feishu-workspace-new-dir-subdirectory-design.md)
 - [feishu-text-pipeline-governance.md](./draft/feishu-text-pipeline-governance.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
-- [non-linux-user-autostart-research.md](./draft/non-linux-user-autostart-research.md)
 - [plan-mode-feishu-support-design.md](./draft/plan-mode-feishu-support-design.md)
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
 - [turn-diff-frozen-preview-mock.html](./draft/turn-diff-frozen-preview-mock.html)

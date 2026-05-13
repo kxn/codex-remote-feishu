@@ -242,6 +242,91 @@ func TestRunUpgradeHelperWithStatePathLaunchdUserRebootstrapsBeforeStart(t *test
 	}
 }
 
+func TestRunUpgradeHelperWithStatePathTaskSchedulerLogonStopsInstallsAndStartsTask(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "install-state.json")
+	configPath := filepath.Join(dir, ".config", "codex-remote", "config.json")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", "codex-remote.exe"), "old-binary")
+	targetBinary := seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", "codex-remote.exe"), "new-binary")
+
+	cfg := config.DefaultAppConfig()
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	originalGOOS := serviceRuntimeGOOS
+	originalRunner := taskSchedulerRunner
+	originalObserve := upgradeHelperObserveFunc
+	originalSleep := upgradeHelperSleepFunc
+	serviceRuntimeGOOS = "windows"
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		taskSchedulerRunner = originalRunner
+		upgradeHelperObserveFunc = originalObserve
+		upgradeHelperSleepFunc = originalSleep
+	}()
+
+	stateValue := InstallState{
+		BaseDir:           dir,
+		ConfigPath:        configPath,
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerTaskSchedulerLogon,
+		CurrentVersion:    "v1.0.0",
+		CurrentBinaryPath: currentBinary,
+		InstalledBinary:   currentBinary,
+		VersionsRoot:      filepath.Join(dir, "releases"),
+		PendingUpgrade: &PendingUpgrade{
+			Phase:            PendingUpgradePhasePrepared,
+			TargetVersion:    "v1.1.0",
+			TargetBinaryPath: targetBinary,
+		},
+	}
+	ApplyStateMetadata(&stateValue, StateMetadataOptions{
+		StatePath:      statePath,
+		BaseDir:        dir,
+		ServiceManager: ServiceManagerTaskSchedulerLogon,
+	})
+	rollbackCandidate, err := PrepareRollbackCandidate(stateValue, "v1.1.0")
+	if err != nil {
+		t.Fatalf("PrepareRollbackCandidate: %v", err)
+	}
+	stateValue.RollbackCandidate = rollbackCandidate
+	if err := WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	var calls []string
+	taskSchedulerRunner = func(_ context.Context, args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "/Query" {
+			return "Status: Ready\r\n", nil
+		}
+		return "", nil
+	}
+	upgradeHelperObserveFunc = func(context.Context, config.LoadedAppConfig) error { return nil }
+	upgradeHelperSleepFunc = func(time.Duration) {}
+
+	if err := RunUpgradeHelperWithStatePath(context.Background(), statePath); err != nil {
+		t.Fatalf("RunUpgradeHelperWithStatePath: %v", err)
+	}
+	taskName := taskSchedulerTaskNameForInstance("stable")
+	if got, want := calls, []string{
+		"/End /TN " + taskName,
+		"/Query /TN " + taskName + " /FO LIST /V",
+		"/Create /TN " + taskName + " /XML " + stateValue.ServiceUnitPath + " /F",
+		"/Run /TN " + taskName,
+	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("task scheduler calls = %#v, want %#v", got, want)
+	}
+	currentRaw, err := os.ReadFile(currentBinary)
+	if err != nil {
+		t.Fatalf("ReadFile current: %v", err)
+	}
+	if string(currentRaw) != "new-binary" {
+		t.Fatalf("current binary content = %q, want new-binary", string(currentRaw))
+	}
+}
+
 func TestRunUpgradeHelperWithStatePathDebugInstanceUsesDebugSystemdUnit(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, ".local", "share", "codex-remote-debug", "codex-remote", "install-state.json")

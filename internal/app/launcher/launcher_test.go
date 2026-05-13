@@ -45,6 +45,14 @@ func TestDetect(t *testing.T) {
 			want: Decision{Role: RoleDaemon},
 		},
 		{
+			name: "daemon role preserves install-owned flags",
+			args: []string{"daemon", "-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-config-home", "C:\\Users\\demo\\.config"},
+			want: Decision{
+				Role: RoleDaemon,
+				Args: []string{"-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-config-home", "C:\\Users\\demo\\.config"},
+			},
+		},
+		{
 			name: "install role",
 			args: []string{"install", "-interactive"},
 			want: Decision{Role: RoleInstall, Args: []string{"-interactive"}},
@@ -78,11 +86,6 @@ func TestDetect(t *testing.T) {
 			name:    "wrapper resume rejected",
 			args:    []string{"wrapper", "resume", "--thread", "abc"},
 			wantErr: "wrapper only supports app-server or claude-app-server mode",
-		},
-		{
-			name:    "daemon extra arg rejected",
-			args:    []string{"daemon", "extra"},
-			wantErr: "daemon does not accept extra arguments",
 		},
 	}
 
@@ -120,7 +123,10 @@ func TestMainRoutesToWrapper(t *testing.T) {
 		Stdout:  &bytes.Buffer{},
 		Stderr:  &bytes.Buffer{},
 		Runners: RunnerSet{
-			RunDaemon: func(context.Context, string, string) error { t.Fatal("unexpected daemon run"); return nil },
+			RunDaemon: func(context.Context, []string, string, string) error {
+				t.Fatal("unexpected daemon run")
+				return nil
+			},
 			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
@@ -155,7 +161,10 @@ func TestMainRoutesClaudeAppServerToWrapper(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 		Runners: RunnerSet{
-			RunDaemon: func(context.Context, string, string) error { t.Fatal("unexpected daemon run"); return nil },
+			RunDaemon: func(context.Context, []string, string, string) error {
+				t.Fatal("unexpected daemon run")
+				return nil
+			},
 			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
@@ -200,7 +209,10 @@ func TestMainRunsInstall(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 		Runners: RunnerSet{
-			RunDaemon: func(context.Context, string, string) error { t.Fatal("unexpected daemon run"); return nil },
+			RunDaemon: func(context.Context, []string, string, string) error {
+				t.Fatal("unexpected daemon run")
+				return nil
+			},
 			RunInstall: func(args []string, _ io.Reader, _, _ io.Writer, version string) error {
 				gotArgs = append([]string(nil), args...)
 				if version != "dev" {
@@ -229,7 +241,10 @@ func TestMainRunsLocalUpgrade(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 		Runners: RunnerSet{
-			RunDaemon: func(context.Context, string, string) error { t.Fatal("unexpected daemon run"); return nil },
+			RunDaemon: func(context.Context, []string, string, string) error {
+				t.Fatal("unexpected daemon run")
+				return nil
+			},
 			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
@@ -262,7 +277,10 @@ func TestMainRunsService(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 		Runners: RunnerSet{
-			RunDaemon: func(context.Context, string, string) error { t.Fatal("unexpected daemon run"); return nil },
+			RunDaemon: func(context.Context, []string, string, string) error {
+				t.Fatal("unexpected daemon run")
+				return nil
+			},
 			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
@@ -295,7 +313,7 @@ func TestMainReportsDaemonError(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &stderr,
 		Runners: RunnerSet{
-			RunDaemon: func(context.Context, string, string) error { return errors.New("boom") },
+			RunDaemon: func(context.Context, []string, string, string) error { return errors.New("boom") },
 			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
 				t.Fatal("unexpected install run")
 				return nil
@@ -321,7 +339,7 @@ func TestMainRunsDaemonForEmptyArgs(t *testing.T) {
 		Stdout: &bytes.Buffer{},
 		Stderr: &bytes.Buffer{},
 		Runners: RunnerSet{
-			RunDaemon: func(context.Context, string, string) error {
+			RunDaemon: func(context.Context, []string, string, string) error {
 				ran = true
 				return nil
 			},
@@ -340,6 +358,45 @@ func TestMainRunsDaemonForEmptyArgs(t *testing.T) {
 	}
 	if !ran {
 		t.Fatal("expected daemon runner to be called")
+	}
+}
+
+func TestMainPassesDaemonFlags(t *testing.T) {
+	var gotArgs []string
+	var gotVersion string
+	var gotBranch string
+	exitCode := Main(Options{
+		Args:    []string{"daemon", "-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-data-home", "C:\\Users\\demo\\.local\\share"},
+		Version: "vtest",
+		Branch:  "release/1.8",
+		Stdout:  &bytes.Buffer{},
+		Stderr:  &bytes.Buffer{},
+		Runners: RunnerSet{
+			RunDaemon: func(_ context.Context, args []string, version, branch string) error {
+				gotArgs = append([]string(nil), args...)
+				gotVersion = version
+				gotBranch = branch
+				return nil
+			},
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
+				t.Fatal("unexpected install run")
+				return nil
+			},
+			RunWrapper: func(context.Context, []string, io.Reader, io.Writer, io.Writer, string, string) (int, error) {
+				t.Fatal("unexpected wrapper run")
+				return 0, nil
+			},
+		},
+	})
+	if exitCode != 0 {
+		t.Fatalf("Main exitCode = %d, want 0", exitCode)
+	}
+	wantArgs := []string{"-config", "C:\\Users\\demo\\codex remote\\config.json", "-xdg-data-home", "C:\\Users\\demo\\.local\\share"}
+	if strings.Join(gotArgs, "\x00") != strings.Join(wantArgs, "\x00") {
+		t.Fatalf("daemon args = %#v, want %#v", gotArgs, wantArgs)
+	}
+	if gotVersion != "vtest" || gotBranch != "release/1.8" {
+		t.Fatalf("daemon version/branch = %q/%q", gotVersion, gotBranch)
 	}
 }
 

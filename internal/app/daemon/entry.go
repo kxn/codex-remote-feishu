@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -33,6 +34,13 @@ type runnableDaemon interface {
 }
 
 func RunMain(ctx context.Context, version, branch string) error {
+	return RunMainWithArgs(ctx, nil, version, branch)
+}
+
+func RunMainWithArgs(ctx context.Context, args []string, version, branch string) error {
+	if err := applyDaemonStartupArgs(args); err != nil {
+		return err
+	}
 	loadedConfig, err := config.LoadAppConfig()
 	if err != nil {
 		return err
@@ -173,6 +181,45 @@ func RunMain(ctx context.Context, version, branch string) error {
 		_ = app.shutdownForConsoleClose()
 	})
 	return runConfiguredDaemon(ctx, app, startup, cfg, env)
+}
+
+func applyDaemonStartupArgs(args []string) error {
+	flagSet := flag.NewFlagSet("daemon", flag.ContinueOnError)
+	flagSet.SetOutput(io.Discard)
+	configPath := flagSet.String("config", "", "config path")
+	xdgConfigHome := flagSet.String("xdg-config-home", "", "XDG config home")
+	xdgDataHome := flagSet.String("xdg-data-home", "", "XDG data home")
+	xdgStateHome := flagSet.String("xdg-state-home", "", "XDG state home")
+	if err := flagSet.Parse(args); err != nil {
+		if err == flag.ErrHelp {
+			return nil
+		}
+		return err
+	}
+	if flagSet.NArg() > 0 {
+		return fmt.Errorf("unsupported daemon arguments: %s", strings.Join(flagSet.Args(), " "))
+	}
+	if value := strings.TrimSpace(*configPath); value != "" {
+		if err := os.Setenv(config.UnifiedConfigEnvPath, value); err != nil {
+			return err
+		}
+	}
+	if value := strings.TrimSpace(*xdgConfigHome); value != "" {
+		if err := os.Setenv("XDG_CONFIG_HOME", value); err != nil {
+			return err
+		}
+	}
+	if value := strings.TrimSpace(*xdgDataHome); value != "" {
+		if err := os.Setenv("XDG_DATA_HOME", value); err != nil {
+			return err
+		}
+	}
+	if value := strings.TrimSpace(*xdgStateHome); value != "" {
+		if err := os.Setenv("XDG_STATE_HOME", value); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func buildDaemonHeadlessBaseEnv(currentEnv, proxyEnv []string) []string {
