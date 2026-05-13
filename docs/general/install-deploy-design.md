@@ -211,6 +211,9 @@ codex-remote packaged-install [flags]
 
 - `deploy/macos/InstallerApp/`
   - plain Swift AppKit GUI shell
+- `scripts/release/build-macos-packaged-installer.sh`
+  - 面向 workflow / CI 的顶层入口
+  - 统一调用 `.app` 组装与 `dmg` 生成，并在落到 dist 根目录时刷新 `checksums.txt`
 - `scripts/release/build-macos-installer-app.sh`
   - 从 release tarball 中提取双架构 payload
   - 编译两份 GUI binary 并 `lipo` 成 universal app executable
@@ -590,8 +593,10 @@ release / installer smoke test 必须覆盖真实产品路径：
 macOS packaged installer 的额外验证要求：
 
 1. 在 mac runner 上先构建双架构 release tarball。
-2. 调用 `scripts/release/build-macos-installer-app.sh` 产出 `Install Codex Remote.app`。
-3. 调用 `scripts/release/build-macos-dmg.sh` 产出最终 `dmg`。
+2. 优先通过 `scripts/release/build-macos-packaged-installer.sh` 统一产出最终 `dmg`。
+3. 如需排查 bundle 组装细节，再单独调用：
+   - `scripts/release/build-macos-installer-app.sh`
+   - `scripts/release/build-macos-dmg.sh`
 4. 至少验证三条用户路径：
    - first install
    - 已安装版本升级
@@ -601,6 +606,13 @@ macOS packaged installer 的额外验证要求：
    - repair / upgrade 不可改 live binary 目录
    - 失败页能看到 `error` 和日志路径
    - `setupRequired=true` 时会给出 WebSetup 打开入口
+
+当前 `installer-smoke` workflow 已额外在 `macos-latest` runner 上做两件事：
+
+1. 从生产 / beta fixture 真实构建 `codex-remote-feishu_*_darwin_universal_installer.dmg`
+2. 校验生成的 `dmg` 已进入对应 `checksums.txt`
+
+这条链的职责是验证“GitHub mac runner 能真实把包打出来”；它不替代后续的 GUI 运行态交互 smoke。
 
 ## 7. 飞书配置模板
 

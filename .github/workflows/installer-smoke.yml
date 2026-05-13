@@ -10,7 +10,12 @@ on:
       - "scripts/check/smoke-install-release.sh"
       - "scripts/check/smoke-install-release.ps1"
       - "scripts/release/build-artifacts.sh"
+      - "scripts/release/build-macos-installer-app.sh"
+      - "scripts/release/build-macos-dmg.sh"
+      - "scripts/release/build-macos-packaged-installer.sh"
+      - "scripts/release/write-checksums.sh"
       - "scripts/web/build-admin-ui.sh"
+      - "deploy/macos/**"
       - "internal/app/install/**"
       - "internal/app/launcher/**"
       - "internal/config/**"
@@ -25,7 +30,12 @@ on:
       - "scripts/check/smoke-install-release.sh"
       - "scripts/check/smoke-install-release.ps1"
       - "scripts/release/build-artifacts.sh"
+      - "scripts/release/build-macos-installer-app.sh"
+      - "scripts/release/build-macos-dmg.sh"
+      - "scripts/release/build-macos-packaged-installer.sh"
+      - "scripts/release/write-checksums.sh"
       - "scripts/web/build-admin-ui.sh"
+      - "deploy/macos/**"
       - "internal/app/install/**"
       - "internal/app/launcher/**"
       - "internal/config/**"
@@ -155,3 +165,62 @@ jobs:
             -BetaVersion v0.1.0-beta.1 `
             -ProdDistDir "$env:RUNNER_TEMP\installer-smoke\prod" `
             -BetaDistDir "$env:RUNNER_TEMP\installer-smoke\beta"
+
+  build-macos-packaged-installer:
+    needs: build-fixtures
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download production fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-smoke-prod
+          path: ${{ runner.temp }}/installer-smoke/prod
+
+      - name: Download beta fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-smoke-beta
+          path: ${{ runner.temp }}/installer-smoke/beta
+
+      - name: Build production macOS packaged installer
+        run: |
+          bash scripts/release/build-macos-packaged-installer.sh \
+            --version v0.0.0 \
+            --track production \
+            --dist-dir "${RUNNER_TEMP}/installer-smoke/prod"
+
+      - name: Build beta macOS packaged installer
+        run: |
+          bash scripts/release/build-macos-packaged-installer.sh \
+            --version v0.1.0-beta.1 \
+            --track beta \
+            --dist-dir "${RUNNER_TEMP}/installer-smoke/beta"
+
+      - name: Verify packaged installer outputs
+        run: |
+          prod_dmg="${RUNNER_TEMP}/installer-smoke/prod/codex-remote-feishu_0.0.0_darwin_universal_installer.dmg"
+          beta_dmg="${RUNNER_TEMP}/installer-smoke/beta/codex-remote-feishu_0.1.0-beta.1_darwin_universal_installer.dmg"
+          [[ -f "${prod_dmg}" ]]
+          [[ -f "${beta_dmg}" ]]
+          grep -F "$(basename "${prod_dmg}")" "${RUNNER_TEMP}/installer-smoke/prod/checksums.txt"
+          grep -F "$(basename "${beta_dmg}")" "${RUNNER_TEMP}/installer-smoke/beta/checksums.txt"
+
+      - name: Upload production macOS packaged installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-macos-prod-dmg
+          path: ${{ runner.temp }}/installer-smoke/prod/codex-remote-feishu_0.0.0_darwin_universal_installer.dmg
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload beta macOS packaged installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke-macos-beta-dmg
+          path: ${{ runner.temp }}/installer-smoke/beta/codex-remote-feishu_0.1.0-beta.1_darwin_universal_installer.dmg
+          if-no-files-found: error
+          compression-level: 0
