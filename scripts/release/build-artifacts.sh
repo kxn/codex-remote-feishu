@@ -292,22 +292,6 @@ fi
 cp install-release.sh "${output_dir}/codex-remote-feishu-install.sh"
 cp install-release.ps1 "${output_dir}/codex-remote-feishu-install.ps1"
 
-checksum_cmd="sha256sum"
-if ! command -v "${checksum_cmd}" >/dev/null 2>&1; then
-  checksum_cmd="shasum -a 256"
-fi
-
-(
-  cd "${output_dir}"
-  checksum_files=()
-  while IFS= read -r file; do
-    checksum_files+=("${file}")
-  done < <(find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name '*.sh' -o -name '*.ps1' \) | sort)
-  if [[ "${#checksum_files[@]}" -eq 0 ]]; then
-    echo "no release artifacts found in ${output_dir}" >&2
-    exit 1
-  fi
-  ${checksum_cmd} "${checksum_files[@]}" > checksums.txt
-)
+bash "${ROOT_DIR}/scripts/release/write-checksums.sh" "${output_dir}"
 
 rm -rf "${work_root}" "${log_root}"

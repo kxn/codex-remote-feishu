@@ -162,4 +162,9 @@ mkdir -p "$(dirname "${output_path}")"
   "-DOUTPUT_FILE=${output_path}" \
   "${script_path}"
 
+output_dir="$(cd "$(dirname "${output_path}")" && pwd)"
+if [[ "${output_dir}" == "${dist_dir}" ]]; then
+  bash "${ROOT_DIR}/scripts/release/write-checksums.sh" "${dist_dir}"
+fi
+
 printf 'built Windows NSIS installer: %s\n' "${output_path}"

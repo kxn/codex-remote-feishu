@@ -67,6 +67,9 @@ testkit/
   - 默认下载最新 `production` release 包
   - 支持按 `--track production|beta|alpha` 拉取对应 track 的最新 release
   - 执行 `codex-remote install -bootstrap-only -start-daemon`
+- `codex-remote-feishu_<version>_windows_amd64_installer.exe`
+  - Windows 的 native packaged installer 入口
+  - 内部调用 `codex-remote packaged-install`
 - release archive 内的 `codex-remote`
   - 手动安装时执行 `./codex-remote install -bootstrap-only -start-daemon`
 

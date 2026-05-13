@@ -35,6 +35,7 @@
   - `CHANGELOG.md`
   - `deploy/`
 - 在线安装脚本 `install-release.sh` / `install-release.ps1` 单独作为 release 资产和仓库入口提供
+- Windows release 额外提供 `codex-remote-feishu_<version>_windows_amd64_installer.exe`，作为 native packaged installer
 - GitHub Releases 现在区分 `production / beta / alpha` 三条 track
   - 默认在线安装入口始终指向最新 `production`
   - 需要时可显式安装最新 `beta` / `alpha`

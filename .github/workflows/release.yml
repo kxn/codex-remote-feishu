@@ -198,6 +198,12 @@ jobs:
           echo "upload_assets=${upload_assets}" >> "${GITHUB_OUTPUT}"
           echo "run_packaging=${run_packaging}" >> "${GITHUB_OUTPUT}"
 
+      - name: Install NSIS
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nsis
+
       - name: Skip Published Release With Existing Assets
         if: ${{ steps.version.outputs.run_packaging != 'true' }}
         run: |
@@ -234,6 +240,14 @@ jobs:
         env:
           CODEX_REMOTE_BUILD_FLAVOR: ${{ steps.version.outputs.track == 'alpha' && 'alpha' || 'shipping' }}
         run: bash scripts/release/build-artifacts.sh "${{ steps.version.outputs.version }}" dist --jobs 5
+
+      - name: Build Windows NSIS installer
+        if: ${{ steps.version.outputs.run_packaging == 'true' }}
+        run: |
+          bash scripts/release/build-windows-nsis.sh \
+            --version "${{ steps.version.outputs.version }}" \
+            --track "${{ steps.version.outputs.track }}" \
+            --dist-dir dist
 
       - name: Smoke test WebSetup release installer
         if: ${{ steps.version.outputs.run_packaging == 'true' }}

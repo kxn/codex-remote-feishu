@@ -482,6 +482,7 @@ detect/apply/reinstall 的当前规则也同步收紧：
 
 - `codex-remote-feishu-install.sh`
 - `codex-remote-feishu-install.ps1`
+- `codex-remote-feishu_<version>_windows_amd64_installer.exe`
 - `checksums.txt`
 
 release 包内不再附带：
@@ -495,10 +496,11 @@ release 包内不再附带：
 正式 release 只走 GitHub Actions：
 
 - `Release` workflow 在 GitHub 端构建 admin UI 与多平台二进制
+- `Release` workflow 在现有 Windows zip 归档构建完成后，额外安装 `NSIS` 并生成 `codex-remote-feishu_<version>_windows_amd64_installer.exe`
 - workflow 显式区分 `production / beta / alpha` 三条 track
 - `beta / alpha` 由 track 自动映射到 GitHub `prerelease=true`
 - workflow 会先算出本次发布版本，再构建正式 release 产物
-- GitHub 端生成 release notes 和 checksums
+- GitHub 端生成 release notes，并在追加 packaged installer 后刷新 `checksums.txt`
 - release notes 优先引用 `CHANGELOG.md` 中当前版本的人类整理摘要，再附带按提交分组的明细
 - GitHub 端创建并发布 GitHub Release
 
