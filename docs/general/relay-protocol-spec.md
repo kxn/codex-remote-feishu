@@ -1,7 +1,7 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-05-02`
+> Updated: `2026-05-26`
 > Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
@@ -341,6 +341,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 需要注意：
 
 - `captureFeedback` 是 Feishu 产品层 option，不是 native approval decision
+- 当前只对仍显式暴露该入口的 approval request 渲染；`plan_confirmation` 不再注入这条入口
 - 它会在 server 层翻译成：
   - 对当前 request 发送 `decision=decline`
   - 再把用户下一条文字作为 follow-up prompt 入队
@@ -601,6 +602,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 
 - 若 upstream 未显式给出 option，但请求种类可确认支持 session 级放行，则补出 `acceptForSession`
 - `captureFeedback` 只存在于 Feishu `request.prompt` 渲染层，不回写到 canonical event
+  - 当前 `plan_confirmation` 已显式排除这条入口，只保留 accept / decline 安全子集
 
 ### 5.7 Helper/Internal traffic 规则
 
@@ -690,6 +692,8 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - upstream 原生透传的 approval option
 - server 合成的 `acceptForSession`
 - Feishu 专用的 `captureFeedback`
+
+其中当前 `plan_confirmation` 已收窄到只渲染 accept / decline，不再追加 `captureFeedback`。
 
 `pending.input.state` 当前除 queue/typing/discard 外，还会投影：
 

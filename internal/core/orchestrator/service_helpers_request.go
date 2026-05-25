@@ -466,6 +466,9 @@ func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string
 		default:
 			return
 		}
+		if optionID == "captureFeedback" && !approvalRequestSupportsFeedbackCapture(semanticKind) {
+			return
+		}
 		if label == "" {
 			switch optionID {
 			case "accept":
@@ -512,7 +515,9 @@ func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string
 			add("cancel", "取消", "default")
 		}
 	}
-	add("captureFeedback", requestFeedbackActionLabel(backend), "default")
+	if approvalRequestSupportsFeedbackCapture(semanticKind) {
+		add("captureFeedback", requestFeedbackActionLabel(backend), "default")
+	}
 	return options
 }
 
@@ -636,6 +641,15 @@ func approvalRequestSupportsExtendedDecisions(semanticKind string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func approvalRequestSupportsFeedbackCapture(semanticKind string) bool {
+	switch control.NormalizeRequestSemanticKind(semanticKind, "approval") {
+	case control.RequestSemanticPlanConfirmation:
+		return false
+	default:
+		return true
 	}
 }
 

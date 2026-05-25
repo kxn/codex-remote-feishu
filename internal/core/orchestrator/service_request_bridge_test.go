@@ -120,8 +120,14 @@ func TestPlanConfirmationDeclineRequestsInterruptOnDecline(t *testing.T) {
 	if prompt.SemanticKind != control.RequestSemanticPlanConfirmation {
 		t.Fatalf("semantic kind = %q, want %q", prompt.SemanticKind, control.RequestSemanticPlanConfirmation)
 	}
+	if len(prompt.Options) != 2 || prompt.Options[0].OptionID != "accept" || prompt.Options[1].OptionID != "decline" {
+		t.Fatalf("expected plan confirmation prompt to expose only accept/decline, got %#v", prompt.Options)
+	}
 	if !strings.Contains(prompt.HintText, "停止当前 turn") {
 		t.Fatalf("hint text = %q, want interrupt guidance", prompt.HintText)
+	}
+	if strings.Contains(prompt.HintText, "点击") || strings.Contains(prompt.HintText, "怎么改") {
+		t.Fatalf("hint text = %q, want no revise guidance", prompt.HintText)
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -136,6 +142,59 @@ func TestPlanConfirmationDeclineRequestsInterruptOnDecline(t *testing.T) {
 	req := events[1].Command.Request
 	if req.BridgeKind != string(control.RequestBridgePlanConfirmation) || !req.InterruptOnDecline {
 		t.Fatalf("unexpected plan bridge contract: %#v", req)
+	}
+}
+
+func TestPlanConfirmationCaptureFeedbackIsRejected(t *testing.T) {
+	now := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-plan-1",
+		Metadata: map[string]any{
+			"requestType":   "approval",
+			"requestMethod": "tool/ExitPlanMode",
+			"body":          "Claude 计划如下，请确认是否继续。",
+			"options": []map[string]any{
+				{"id": "accept", "label": "批准"},
+				{"id": "decline", "label": "拒绝"},
+			},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "om-card-2",
+		Request:          testRequestAction("req-plan-1", "approval", "captureFeedback", nil, 0),
+	})
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "request_invalid" {
+		t.Fatalf("expected request_invalid notice, got %#v", events)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveRequestCapture != nil {
+		t.Fatalf("expected plan confirmation to reject capture mode, got %#v", svc.root.Surfaces["surface-1"].ActiveRequestCapture)
 	}
 }
 
