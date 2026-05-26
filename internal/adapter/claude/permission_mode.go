@@ -9,6 +9,7 @@ import (
 
 const (
 	claudePermissionModeDefault           = "default"
+	claudePermissionModeAcceptEdits       = "acceptEdits"
 	claudePermissionModePlan              = "plan"
 	claudePermissionModeBypassPermissions = "bypassPermissions"
 )
@@ -28,6 +29,12 @@ func claudePermissionSelectionFromOverrides(accessMode, planMode string) claudeP
 		}
 	}
 	switch agentproto.NormalizeAccessMode(accessMode) {
+	case agentproto.AccessModeAcceptEdits:
+		return claudePermissionSelection{
+			NativeMode: claudePermissionModeAcceptEdits,
+			AccessMode: agentproto.AccessModeAcceptEdits,
+			PlanMode:   string(state.PlanModeSettingOff),
+		}
 	case agentproto.AccessModeFullAccess:
 		return claudePermissionSelection{
 			NativeMode: claudePermissionModeBypassPermissions,
@@ -45,6 +52,12 @@ func claudePermissionSelectionFromOverrides(accessMode, planMode string) claudeP
 
 func claudePermissionSelectionFromNative(mode string) claudePermissionSelection {
 	switch strings.TrimSpace(mode) {
+	case claudePermissionModeAcceptEdits:
+		return claudePermissionSelection{
+			NativeMode: claudePermissionModeAcceptEdits,
+			AccessMode: agentproto.AccessModeAcceptEdits,
+			PlanMode:   string(state.PlanModeSettingOff),
+		}
 	case claudePermissionModePlan:
 		return claudePermissionSelection{
 			NativeMode: claudePermissionModePlan,

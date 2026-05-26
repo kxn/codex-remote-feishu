@@ -714,6 +714,11 @@ wrapper 收到 `command` 后总是回传 accept/reject：
   - `directories`
   - `rule_classes`
 - panel 提交后，server 会先把当前 request seal 成摘要态，再派发 `{decision=accept, permissionSelection={scope=session, grant_level, directories[], rule_classes[]}}`
+- Claude translator 当前会把这块 `permissionSelection` 单点编译成 native `updatedPermissions[]`：
+  - 所有 native updates 都固定 `destination=session`
+  - 默认优先编译成 additive `addRules` / `addDirectories`
+  - 只有在 `grant_level=session_file_edits_and_fs_ops` 且目录范围等于整个当前工作区、规则范围覆盖 edit/create/rename/delete/common fs ops 全套时，才允许收口成极窄 `setMode(acceptEdits)`
+  - 若用户选了子目录范围下无法安全等价的 aggressive fs-op 规则类，translator 会 fail-closed 为更窄的 path-scoped file rules，并把其余 fs ops 保留为后续按需 prompt
 - `revise` 会进入 request-capture，再把下一条文本作为 same-request deny-with-guidance 回写给 Claude，而不是复用 `captureFeedback` 的“拒绝 + follow-up 入队”语义。
 
 `pending.input.state` 当前除 queue/typing/discard 外，还会投影：

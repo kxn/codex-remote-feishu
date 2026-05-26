@@ -9,6 +9,7 @@ import (
 
 const (
 	claudePermissionModeDefault           = "default"
+	claudePermissionModeAcceptEdits       = "acceptEdits"
 	claudePermissionModePlan              = "plan"
 	claudePermissionModeBypassPermissions = "bypassPermissions"
 )
@@ -21,6 +22,12 @@ type claudePermissionSelection struct {
 
 func claudePermissionSelectionFromNative(mode string) claudePermissionSelection {
 	switch strings.TrimSpace(mode) {
+	case claudePermissionModeAcceptEdits:
+		return claudePermissionSelection{
+			NativeMode: claudePermissionModeAcceptEdits,
+			AccessMode: agentproto.AccessModeAcceptEdits,
+			PlanMode:   string(state.PlanModeSettingOff),
+		}
 	case claudePermissionModePlan:
 		return claudePermissionSelection{
 			NativeMode: claudePermissionModePlan,

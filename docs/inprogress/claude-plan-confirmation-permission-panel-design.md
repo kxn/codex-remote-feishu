@@ -63,6 +63,7 @@
    - permission mode
    - allow / ask / deny rules
    - additional directories
+   - destination（`session` / `localSettings` / `projectSettings` / `userSettings`）
 3. 文档已公开的 mode 至少包括：
    - `default`
    - `plan`
@@ -452,19 +453,24 @@ translator 负责编译本地 `permissionSelection -> updatedPermissions[]`。
 
 保守建议：
 
-- 优先仍走 `default + addRules`
-- 只有在目录范围明确等于“整个当前工作区”，且产品明确接受粗粒度语义时，才允许编译成 `setMode(acceptEdits)`
+- 当前实现仍走 `default + addRules`
+- `v1` 不把这档直接编译成 `setMode(acceptEdits)`
 
 原因：
 
 - `acceptEdits` 本身不是目录级约束
+- `acceptEdits` 还会顺带放开常见文件系统 Bash 命令，这会超过“只自动允许文件修改”的用户心智
 - 如果用户只选了两个子目录，却翻成全 cwd 的 `acceptEdits`，语义就变了
 
 #### 7.2.3 `session_file_edits_and_fs_ops`
 
 保守建议：
 
-- `v1` 仍然编译成 curated `addRules`
+- 只有在这三个条件同时成立时，才允许编译成 `setMode(acceptEdits)`：
+  - 目录范围等于整个当前工作区
+  - 规则范围已经覆盖 edit/create/rename/delete/common fs ops 全套
+  - translator 不需要再用 `acceptEdits` 去补未知宽度的额外语义
+- 其余组合仍然编译成 curated `addRules`
 - 不直接暴露 `bypassPermissions`
 
 允许的规则族必须是显式白名单，例如：
@@ -475,7 +481,7 @@ translator 负责编译本地 `permissionSelection -> updatedPermissions[]`。
 但需要明确：
 
 - Bash prefix rule 很难像 Edit/Write 一样自然带目录边界
-- 这块是 `v1` 最大技术风险之一
+- 对“只选了子目录”的 aggressive 组合，当前实现必须 fail-closed 为更窄的 path-scoped edit/create 自动授权，并让其余 fs ops 继续按需弹 prompt
 
 ### 7.3 `v1` 不做 remove/replace
 

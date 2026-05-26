@@ -53,6 +53,7 @@ func TestClaudePermissionSelectionFromNative(t *testing.T) {
 		planMode   string
 	}{
 		{name: "default", nativeMode: "default", accessMode: agentproto.AccessModeConfirm, planMode: "off"},
+		{name: "accept edits", nativeMode: "acceptEdits", accessMode: agentproto.AccessModeAcceptEdits, planMode: "off"},
 		{name: "bypass", nativeMode: "bypassPermissions", accessMode: agentproto.AccessModeFullAccess, planMode: "off"},
 		{name: "plan", nativeMode: "plan", accessMode: "", planMode: "on"},
 		{name: "unknown defaults to confirm", nativeMode: "dontAsk", accessMode: agentproto.AccessModeConfirm, planMode: "off"},

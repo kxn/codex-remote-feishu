@@ -231,7 +231,16 @@ func (t *Translator) buildRequestResponsePayload(request *pendingRequest, respon
 	body := map[string]any{}
 	if allow {
 		body["behavior"] = "allow"
-		body["updatedPermissions"] = []any{}
+		updatedPermissions := []any{}
+		planFeedbackSuffix := ""
+		if request.RequestType == agentproto.RequestTypeApproval && request.SemanticKind == control.RequestSemanticPlanConfirmation {
+			var err error
+			updatedPermissions, planFeedbackSuffix, err = t.planConfirmationUpdatedPermissions(request, response.Response)
+			if err != nil {
+				return nil, err
+			}
+		}
+		body["updatedPermissions"] = updatedPermissions
 		switch request.RequestType {
 		case agentproto.RequestTypeRequestUserInput:
 			updatedInput := cloneMap(request.Input)
@@ -244,6 +253,9 @@ func (t *Translator) buildRequestResponsePayload(request *pendingRequest, respon
 					lookupStringFromAny(response.Response["feedback"]),
 					"Approved. Execute the plan.",
 				)
+				if strings.TrimSpace(planFeedbackSuffix) != "" {
+					updatedInput["feedback"] = strings.TrimSpace(lookupStringFromAny(updatedInput["feedback"]) + " " + strings.TrimSpace(planFeedbackSuffix))
+				}
 			}
 			body["updatedInput"] = updatedInput
 		default:
