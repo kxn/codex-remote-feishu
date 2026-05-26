@@ -394,6 +394,34 @@ type RequestPromptQuestion struct {
 	DirectResponse bool
 }
 
+type RequestPromptFormFieldKind string
+
+const (
+	RequestPromptFormFieldText              RequestPromptFormFieldKind = "text"
+	RequestPromptFormFieldSelectStatic      RequestPromptFormFieldKind = "select_static"
+	RequestPromptFormFieldMultiSelectStatic RequestPromptFormFieldKind = "multi_select_static"
+)
+
+type RequestPromptFormFieldOption struct {
+	Label string
+	Value string
+}
+
+type RequestPromptFormField struct {
+	Name          string
+	Kind          RequestPromptFormFieldKind
+	Label         string
+	Placeholder   string
+	DefaultValue  string
+	DefaultValues []string
+	Options       []RequestPromptFormFieldOption
+}
+
+type RequestPromptStructuredForm struct {
+	SubmitLabel string
+	Fields      []RequestPromptFormField
+}
+
 type CommandCatalogButtonKind string
 
 const (

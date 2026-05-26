@@ -350,6 +350,12 @@ wrapper 收到 `command` 后总是回传 accept/reject：
   - server 会把它翻译成同一次 request 内的 deny-with-guidance
   - 不会额外触发 interrupt
   - 也不会把用户文本再排成普通 follow-up queue item
+- `plan_confirmation` 当前还会把 quick-decision 显式收口成四个产品动作：
+  - `accept`
+  - `acceptForSession`
+  - `decline`
+  - `revise`
+  - 其中 `acceptForSession` 不再直接代表“立刻持续授权”，而是进入同一条 pending request 内的复杂权限面板
 
 ### 4.6 `threads.refresh`
 
@@ -700,7 +706,15 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - server 合成的 `revise`
 - Feishu 专用的 `captureFeedback`
 
-其中当前 `plan_confirmation` 会渲染 accept / decline / revise；`revise` 会进入 request-capture，再把下一条文本作为 same-request deny-with-guidance 回写给 Claude，而不是复用 `captureFeedback` 的“拒绝 + follow-up 入队”语义。
+其中当前 `plan_confirmation` 会渲染 accept / acceptForSession / decline / revise：
+
+- `acceptForSession` 不会直接派发 canonical request response，而是先把同一张 pending request 卡 inline replace 成 request-local structured permission panel
+- 该 panel 当前至少收口三块结构化字段：
+  - `grant_level`
+  - `directories`
+  - `rule_classes`
+- panel 提交后，server 会先把当前 request seal 成摘要态，再派发 `{decision=accept, permissionSelection={scope=session, grant_level, directories[], rule_classes[]}}`
+- `revise` 会进入 request-capture，再把下一条文本作为 same-request deny-with-guidance 回写给 Claude，而不是复用 `captureFeedback` 的“拒绝 + follow-up 入队”语义。
 
 `pending.input.state` 当前除 queue/typing/discard 外，还会投影：
 

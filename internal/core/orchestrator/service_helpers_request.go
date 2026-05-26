@@ -91,6 +91,9 @@ func normalizeRequestPromptRecord(record *state.RequestPromptRecord) {
 	if record.DraftAnswers == nil {
 		record.DraftAnswers = map[string]string{}
 	}
+	if record.StructuredDraftAnswers == nil {
+		record.StructuredDraftAnswers = map[string][]string{}
+	}
 	if record.SkippedQuestionIDs == nil {
 		record.SkippedQuestionIDs = map[string]bool{}
 	}
@@ -454,6 +457,71 @@ func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionReco
 	return out
 }
 
+func requestPromptStructuredFormToControl(form *state.RequestPromptStructuredFormRecord, draftAnswers map[string][]string) *control.RequestPromptStructuredForm {
+	if form == nil {
+		return nil
+	}
+	fields := make([]control.RequestPromptFormField, 0, len(form.Fields))
+	for _, field := range form.Fields {
+		name := strings.TrimSpace(field.Name)
+		if name == "" {
+			continue
+		}
+		out := control.RequestPromptFormField{
+			Name:        name,
+			Kind:        control.RequestPromptFormFieldKind(strings.TrimSpace(string(field.Kind))),
+			Label:       strings.TrimSpace(field.Label),
+			Placeholder: strings.TrimSpace(field.Placeholder),
+		}
+		for _, option := range field.Options {
+			label := strings.TrimSpace(option.Label)
+			value := strings.TrimSpace(option.Value)
+			if label == "" || value == "" {
+				continue
+			}
+			out.Options = append(out.Options, control.RequestPromptFormFieldOption{
+				Label: label,
+				Value: value,
+			})
+		}
+		if len(draftAnswers[name]) != 0 {
+			out.DefaultValues = append(out.DefaultValues, normalizedStructuredDraftValues(draftAnswers[name])...)
+		} else if len(field.DefaultValues) != 0 {
+			out.DefaultValues = append(out.DefaultValues, normalizedStructuredDraftValues(field.DefaultValues)...)
+		} else if value := strings.TrimSpace(field.DefaultValue); value != "" {
+			out.DefaultValues = []string{value}
+		}
+		if len(out.DefaultValues) != 0 {
+			out.DefaultValue = out.DefaultValues[0]
+		}
+		fields = append(fields, out)
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return &control.RequestPromptStructuredForm{
+		SubmitLabel: strings.TrimSpace(form.SubmitLabel),
+		Fields:      fields,
+	}
+}
+
+func normalizedStructuredDraftValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
+}
+
 func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string, metadata map[string]any) []state.RequestPromptOptionRecord {
 	var options []state.RequestPromptOptionRecord
 	seen := map[string]bool{}
@@ -527,6 +595,9 @@ func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string
 	}
 	if approvalRequestSupportsSameRequestRevise(semanticKind) {
 		add("revise", requestFeedbackActionLabel(backend), "default")
+	}
+	if semanticKind == control.RequestSemanticPlanConfirmation {
+		return planConfirmationQuickDecisionOptions(backend)
 	}
 	return options
 }

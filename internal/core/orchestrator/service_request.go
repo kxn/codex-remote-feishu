@@ -248,6 +248,9 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 	switch requestType {
 	case "approval":
 		optionID := control.NormalizeRequestOptionID(requestAction.RequestOptionID)
+		if response, complete, followup, handled := s.maybeHandlePlanConfirmationRequestAction(surface, request, action, optionID, requestAnswers); handled {
+			return response, complete, followup
+		}
 		if optionID == "" {
 			return nil, false, notice(surface, "request_invalid", "这个确认按钮缺少有效的处理选项。")
 		}
@@ -564,10 +567,12 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		Sections:              requestPromptSectionsToControl(record.Sections),
 		Options:               requestPromptOptionsToControl(record.Options),
 		Questions:             requestPromptQuestionsToControl(record.Questions, record.DraftAnswers, record.SkippedQuestionIDs),
+		StructuredForm:        requestPromptStructuredFormToControl(record.StructuredForm, record.StructuredDraftAnswers),
 		CurrentQuestionIndex:  normalizedRequestPromptCurrentQuestionIndex(record),
 		HintText:              strings.TrimSpace(record.HintText),
 		Phase:                 record.Phase,
 	}
+	view = planConfirmationRequestViewOverrides(record, view)
 	if requestLifecycleUsesWaitingDispatchPhase(record) {
 		view.Phase = frontstagecontract.PhaseWaitingDispatch
 		if strings.TrimSpace(view.StatusText) == "" {

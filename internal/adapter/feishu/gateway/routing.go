@@ -572,25 +572,7 @@ func requestAnswersFromValue(values map[string]interface{}) map[string][]string 
 }
 
 func requestAnswersFromFormValue(values map[string]interface{}) map[string][]string {
-	if len(values) == 0 {
-		return nil
-	}
-	answers := map[string][]string{}
-	for key := range values {
-		name := strings.TrimSpace(key)
-		if name == "" {
-			continue
-		}
-		text := strings.TrimSpace(formStringValue(values, key))
-		if text == "" {
-			continue
-		}
-		answers[name] = []string{text}
-	}
-	if len(answers) == 0 {
-		return nil
-	}
-	return answers
+	return requestAnswersFromMap(values)
 }
 
 func targetPickerDraftAnswersFromFormValue(values map[string]interface{}) map[string][]string {

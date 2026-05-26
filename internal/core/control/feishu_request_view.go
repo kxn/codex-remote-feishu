@@ -23,6 +23,7 @@ type FeishuRequestView struct {
 	Sections              []FeishuCardTextSection
 	Options               []RequestPromptOption
 	Questions             []RequestPromptQuestion
+	StructuredForm        *RequestPromptStructuredForm
 	CurrentQuestionIndex  int
 	HintText              string
 	Phase                 frontstagecontract.Phase

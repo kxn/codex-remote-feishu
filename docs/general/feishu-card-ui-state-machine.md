@@ -239,7 +239,7 @@
 | `path_picker_cancel` | `picker_id` | 结束当前 active picker，并把取消结果交给 consumer 或默认 notice；target picker 子步骤当前会直接恢复原 owner card，而不是额外发一张取消卡 |
 | `request_respond` | `request_id`、`request_type`、`request_option_id`、`request_answers`、`request_revision` | 响应 approval、`approval_command`、`approval_file_change`、`approval_network`、`request_user_input`、`permissions_request_approval`、`mcp_server_elicitation`。approval family 的按钮集合仍跟随上游 `availableDecisions` 归一化结果，包括 `cancel`；但卡面标题、正文、hint 与 MCP form/url、permissions grant 等 subtype 语义，当前都由 orchestrator 先写入 `FeishuRequestView.SemanticKind/HintText` 后再渲染。顶层 `tool/requestUserInput` 与 `item/tool/requestUserInput` 继续共用 `request_user_input` 提交流程；`permissions_request_approval` 通过按钮直接携带 scope 语义；`request_user_input` 与 form 模式 `mcp_server_elicitation` 会用这条 payload 承载纵向 direct-response 按钮与恢复态 `重新提交`；url 模式 `mcp_server_elicitation` 仍直接承载 continue/decline/cancel。对于真正的 pending request，服务端当前都会先把当前卡 inline replace 成 sealed `waiting_dispatch` 只读态，再下发真正的 request response 命令；当前 `/bendtomywill` 编辑卡也复用这条 payload family，但它不是 core `PendingRequest`：服务端会先按 `request_revision` 保存 patch 草稿、必要时 inline 刷到下一题；全部题目完成后不会下发 request response 命令，而是切到 daemon-side patch transaction progress page。`tool_callback` 当前不通过任何用户可点击的 `request_respond` 回调；卡片落地后会由服务端自动派发结构化 unsupported 响应 |
 | `request_control` | `request_id`、`request_type`、`request_control`、`question_id(可选)`、`request_revision` | 承载 request 的非回答型动作。当前 live 路径主要使用 `skip_optional`、`cancel_turn`、`cancel_request`：`skip_optional` 会把当前 optional 题标记为已跳过，并在必要时直接触发最终 dispatch；真实 pending request 上的 `cancel_turn` 会把 `request_user_input` 当前卡 seal 为终态后发 `turn.interrupt`；`cancel_request` 则用于 form 模式 `mcp_server_elicitation` 的请求级取消。当前 `/bendtomywill` 编辑卡同样复用这条 payload，但其 `cancel_turn/cancel_request` 只会把 patch 卡封成 `已取消`，不会向当前 thread 发送 interrupt |
-| `submit_request_form` | `request_id`、`request_type`、`request_revision`、`field_name(可选)` | 从表单里提取 `request_answers` 后回到 request 响应路径；当前用于顶层/`item` 两种 `request_user_input` 以及 form 模式 `mcp_server_elicitation`。表单只负责提交当前题，服务端会决定是“保存后自动跳到下一题”还是“当前题答完后直接 seal + dispatch” |
+| `submit_request_form` | `request_id`、`request_type`、`request_revision`、`field_name(可选)` | 从表单里提取 `request_answers` 后回到 request 响应路径；当前用于顶层/`item` 两种 `request_user_input`、form 模式 `mcp_server_elicitation`，以及 `plan_confirmation` 的 request-local structured permission panel。`multi_select_static` 当前会保留完整 `answers[]`，不再在 gateway helper 里压成首个值。表单只负责提交当前题或当前 panel，服务端会决定是“保存后自动跳到下一题”还是“当前题/当前 panel 答完后直接 seal + dispatch” |
 
 ### 4.3 当前表单提交规则
 
@@ -271,12 +271,14 @@
 - `submit_request_form`
   - 优先把 `form_value` 整体转成 `request_answers`
   - `request_user_input` 与 form 模式 `mcp_server_elicitation` 当前都只会为“需要手填”的字段渲染 form input（纯选项题不再渲染自由输入框）
+  - `plan_confirmation` 的 request-local structured panel 当前会直接把整个 `form_value` 回传；`multi_select_static` 的选中值会按 `answers[]` 全量保留
   - 当前不再额外携带 `request_option_id`
   - 对需要手填的 request / MCP 表单，`提交` 按钮当前也默认保持可点；缺字段、格式错误或 dispatch 前校验失败时，服务端会刷新同卡状态，而不是要求前端做实时禁用
   - 表单按钮文案当前统一为 `提交`
   - 这一步只提交当前题：
     - 若仍有未完成题，orchestrator 会保存草稿、递增 `request_revision`、把当前卡 inline replace 到下一题
     - 若当前题提交后已经凑齐完整答案，orchestrator 会先把当前卡 seal 成等待态，再派发最终 request response
+    - 对 `plan_confirmation`，若当前 panel 配置已经完整，orchestrator 会先把当前卡 seal 成“授权摘要 + waiting_dispatch”，再派发最终 request response
   - `request_user_input` 与 form 模式 `mcp_server_elicitation` 的 optional 字段当前都必须显式回答或显式 `skip_optional`；仅仅留空不会被视为已完成
   - 旧的“显式最终提交 / 留空确认提交 / 取消确认提交”按钮流当前已不再是 live UI 合同；服务端只保留旧 `request_respond(step_*)` 的兼容处理，不再由 projector 生成这些按钮
   - request 卡的按钮与表单提交都会携带 `request_revision`
@@ -346,10 +348,21 @@
   - 最终点击任一决策后，当前卡会先切到 sealed waiting 态，不再保留“看起来还能继续点”的旧按钮
   - 若同一 turn 后续又冒出新的 approval family request，这些新请求不会立刻 append 成并行可点击卡，而是继续排在当前 request 之后，等队头 resolved 后再顺序激活
 - `plan_confirmation`
-  - 当前渲染 accept / decline / revise 三个选项
+  - 当前先渲染 quick-decision 四个选项：
+    - `允许一次并执行`
+    - `配置本会话授权`
+    - `拒绝`
+    - `告诉 Claude 怎么改`
+  - `配置本会话授权` 不会立刻 dispatch；它会把当前 request inline replace 成同一条 pending request 内的复杂权限面板
+  - 复杂权限面板当前是 request-local structured form：
+    - `grant_level` 走 `select_static`
+    - `directories` 与 `rule_classes` 走 `multi_select_static`
+    - 底部动作收口成 `按以上授权继续 / 返回 / 拒绝`
+  - panel submit 后，orchestrator 会先把当前 request 卡 seal 成摘要态，再派发 `{decision=accept, permissionSelection={scope=session, grant_level, directories[], rule_classes[]}}`
+  - `返回` 不会新开 owner page，只会 inline replace 回 quick-decision
   - `revise` 不复用 approval family 的 `captureFeedback`；它会进入 plan-specific request-capture，下一条文本会作为 same-request guidance 回写给 Claude
   - `revise` 提交后卡片会先切到 sealed waiting-dispatch 态，不会再额外生成普通 follow-up queue item
-  - hint 当前明确区分三条语义：批准继续执行当前计划；拒绝停止当前 turn；点击“告诉 Claude 怎么改”后可提交当前计划的修改意见
+  - hint 当前明确区分四条语义：允许一次并执行继续当前计划；配置本会话授权先打开细粒度授权面板；拒绝停止当前 turn；点击“告诉 Claude 怎么改”后可提交当前计划的修改意见
   - `decline` 仍保持 `interruptOnDecline=true` 的既有合同
 
 MCP request 卡片当前新增的可视语义：

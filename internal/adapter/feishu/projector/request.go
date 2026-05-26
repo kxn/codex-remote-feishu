@@ -44,6 +44,9 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 		}
 		return elements
 	}
+	if prompt.StructuredForm != nil {
+		return append(elements, requestStructuredFormPromptElements(prompt, daemonLifecycleID)...)
+	}
 	options := prompt.Options
 	if len(options) == 0 {
 		options = []control.RequestPromptOption{
@@ -66,6 +69,39 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 		elements = append(elements, group)
 	}
 	if hint := requestPromptHintMarkdown(prompt, defaultApprovalRequestHint(prompt, options)); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": hint,
+		})
+	}
+	if status := requestPromptStatusMarkdown(prompt); status != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": status,
+		})
+	}
+	return elements
+}
+
+func requestStructuredFormPromptElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
+	elements := make([]map[string]any, 0, 12)
+	if form := requestPromptStructuredFormElement(prompt, daemonLifecycleID); len(form) != 0 {
+		elements = append(elements, form)
+	}
+	actions := make([]map[string]any, 0, len(prompt.Options))
+	if frontstagecontract.AllowsPrimaryInput(prompt.ActionPolicy) {
+		for _, option := range prompt.Options {
+			button := requestPromptButton(prompt, option, daemonLifecycleID)
+			if len(button) == 0 {
+				continue
+			}
+			actions = append(actions, button)
+		}
+	}
+	if len(actions) != 0 {
+		elements = appendCardFooterButtonGroup(elements, actions)
+	}
+	if hint := requestPromptHintMarkdown(prompt, ""); hint != "" {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
 			"content": hint,
@@ -333,6 +369,123 @@ func requestPromptFormElement(prompt control.FeishuRequestView, daemonLifecycleI
 			},
 		}},
 	}
+}
+
+func requestPromptStructuredFormElement(prompt control.FeishuRequestView, daemonLifecycleID string) map[string]any {
+	if prompt.StructuredForm == nil || prompt.Sealed || !frontstagecontract.AllowsPrimaryInput(prompt.ActionPolicy) {
+		return nil
+	}
+	elements := make([]map[string]any, 0, len(prompt.StructuredForm.Fields)+1)
+	for _, field := range prompt.StructuredForm.Fields {
+		if element := requestStructuredFormFieldElement(field); len(element) != 0 {
+			elements = append(elements, element)
+		}
+	}
+	submit := cardFormActionButtonElement(firstNonEmpty(strings.TrimSpace(prompt.StructuredForm.SubmitLabel), "提交"), "primary", stampActionValue(map[string]any{
+		cardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
+		cardActionPayloadKeyRequestID:       prompt.RequestID,
+		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
+		cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
+	}, daemonLifecycleID), false, "fill")
+	if len(submit) != 0 {
+		submit["name"] = "submit_request_structured"
+		elements = append(elements, submit)
+	}
+	if len(elements) == 0 {
+		return nil
+	}
+	return map[string]any{
+		"tag":      "form",
+		"name":     "request_form_" + strings.TrimSpace(prompt.RequestID) + "_structured",
+		"elements": elements,
+	}
+}
+
+func requestStructuredFormFieldElement(field control.RequestPromptFormField) map[string]any {
+	name := strings.TrimSpace(field.Name)
+	if name == "" {
+		return nil
+	}
+	switch field.Kind {
+	case control.RequestPromptFormFieldSelectStatic:
+		element := map[string]any{
+			"tag":         "select_static",
+			"name":        name,
+			"placeholder": cardPlainText(firstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
+		}
+		if options := requestStructuredFormOptions(field.Options); len(options) != 0 {
+			element["options"] = options
+		}
+		if value := strings.TrimSpace(field.DefaultValue); value != "" {
+			element["initial_option"] = value
+		}
+		return element
+	case control.RequestPromptFormFieldMultiSelectStatic:
+		element := map[string]any{
+			"tag":         "multi_select_static",
+			"name":        name,
+			"placeholder": cardPlainText(firstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
+		}
+		if options := requestStructuredFormOptions(field.Options); len(options) != 0 {
+			element["options"] = options
+		}
+		if values := normalizedStructuredFormValues(field.DefaultValues); len(values) != 0 {
+			element["selected_values"] = values
+		}
+		return element
+	default:
+		element := map[string]any{
+			"tag":  "input",
+			"name": name,
+		}
+		if label := strings.TrimSpace(field.Label); label != "" {
+			element["label"] = cardPlainText(label)
+			element["label_position"] = "left"
+		}
+		if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
+			element["placeholder"] = cardPlainText(placeholder)
+		}
+		if value := strings.TrimSpace(field.DefaultValue); value != "" {
+			element["default_value"] = value
+		}
+		return element
+	}
+}
+
+func requestStructuredFormOptions(options []control.RequestPromptFormFieldOption) []map[string]any {
+	if len(options) == 0 {
+		return nil
+	}
+	out := make([]map[string]any, 0, len(options))
+	for _, option := range options {
+		label := strings.TrimSpace(option.Label)
+		value := strings.TrimSpace(option.Value)
+		if label == "" || value == "" {
+			continue
+		}
+		out = append(out, map[string]any{
+			"text":  cardPlainText(label),
+			"value": value,
+		})
+	}
+	return out
+}
+
+func normalizedStructuredFormValues(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	return out
 }
 
 func requestPromptRetryActionElement(prompt control.FeishuRequestView, daemonLifecycleID string) map[string]any {

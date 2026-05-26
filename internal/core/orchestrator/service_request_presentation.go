@@ -303,9 +303,9 @@ func approvalRequestHintText(backend agentproto.Backend, semanticKind string, op
 		return "允许后会继续当前工具调用；拒绝只会拒绝这次工具调用。"
 	case control.RequestSemanticPlanConfirmation:
 		if sameRequestRevise {
-			return "批准会继续执行当前计划；拒绝会停止当前 turn；如需修改计划，请点击“" + requestFeedbackActionLabel(backend) + "”后再发送下一条文字。"
+			return "允许一次并执行会继续当前计划；配置本会话授权会先打开细粒度授权面板；拒绝会停止当前 turn；如需修改计划，请点击“" + requestFeedbackActionLabel(backend) + "”后再发送下一条文字。"
 		}
-		return "批准会继续执行当前计划；拒绝会停止当前 turn。"
+		return "允许一次并执行会继续当前计划；配置本会话授权会先打开细粒度授权面板；拒绝会停止当前 turn。"
 	default:
 		if captureFeedback {
 			return "如果想拒绝并补充处理意见，请点击“" + requestFeedbackActionLabel(backend) + "”后再发送下一条文字。"

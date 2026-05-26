@@ -124,11 +124,17 @@ func TestPlanConfirmationDeclineRequestsInterruptOnDecline(t *testing.T) {
 	if prompt.SemanticKind != control.RequestSemanticPlanConfirmation {
 		t.Fatalf("semantic kind = %q, want %q", prompt.SemanticKind, control.RequestSemanticPlanConfirmation)
 	}
-	if len(prompt.Options) != 3 || prompt.Options[0].OptionID != "accept" || prompt.Options[1].OptionID != "decline" || prompt.Options[2].OptionID != "revise" {
-		t.Fatalf("expected plan confirmation prompt to expose only accept/decline, got %#v", prompt.Options)
+	if len(prompt.Options) != 4 || prompt.Options[0].OptionID != "accept" || prompt.Options[1].OptionID != "acceptForSession" || prompt.Options[2].OptionID != "decline" || prompt.Options[3].OptionID != "revise" {
+		t.Fatalf("expected plan confirmation prompt to expose quick decision actions, got %#v", prompt.Options)
+	}
+	if prompt.Options[1].Label != "配置本会话授权" {
+		t.Fatalf("expected session option to open permission panel, got %#v", prompt.Options)
 	}
 	if !strings.Contains(prompt.HintText, "停止当前 turn") {
 		t.Fatalf("hint text = %q, want interrupt guidance", prompt.HintText)
+	}
+	if !strings.Contains(prompt.HintText, "配置本会话授权") {
+		t.Fatalf("hint text = %q, want session-grant guidance", prompt.HintText)
 	}
 	if !strings.Contains(prompt.HintText, "告诉 Claude 怎么改") {
 		t.Fatalf("hint text = %q, want revise guidance", prompt.HintText)
