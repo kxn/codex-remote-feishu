@@ -348,9 +348,13 @@
   - 最终点击任一决策后，当前卡会先切到 sealed waiting 态，不再保留“看起来还能继续点”的旧按钮
   - 若同一 turn 后续又冒出新的 approval family request，这些新请求不会立刻 append 成并行可点击卡，而是继续排在当前 request 之后，等队头 resolved 后再顺序激活
 - `approval_can_use_tool`
-  - 当前显式暴露 `允许一次`、`拒绝`、`告诉 Claude 怎么改`
+  - 当前默认显式暴露 `允许一次`、`拒绝`、`告诉 Claude 怎么改`
+  - 若当前 request metadata 里保留了非空 `permissionSuggestions`，还会额外暴露 `本会话允许`
   - 正文会在通用命令确认信息之外补充 `工具`、`受限路径`、`建议权限` 等工具调用上下文
+  - `本会话允许` 会直接派发 same-request `acceptForSession`；Claude translator 会把当前 request 上观测到的 `permissionSuggestions` 原样回写成 native `updatedPermissions[]`
+  - 若当前 request 没有 `permissionSuggestions`，前台不应暴露 `本会话允许`；即便误收到这条决策，translator 也会 fail-closed，而不是退化成一次性 allow
   - `captureFeedback` 会进入 request-specific capture；下一条文本会作为同一次 request 的 `{decision=decline, message=<feedback>}` 回写给 Claude，不会再额外生成普通 follow-up queue item
+  - hint 当前会显式区分“允许一次”与“本会话允许”的作用范围
   - `decline` 与 `captureFeedback` 都只拒绝当前工具调用，不触发 `interruptOnDecline`
 - `plan_confirmation`
   - 当前先渲染 quick-decision 四个选项：

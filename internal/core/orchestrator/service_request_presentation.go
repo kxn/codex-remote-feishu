@@ -271,9 +271,12 @@ func requestPromptTitle(current, fallback string, genericTitles ...string) strin
 
 func approvalRequestHintText(backend agentproto.Backend, semanticKind string, options []state.RequestPromptOptionRecord) string {
 	captureFeedback := false
+	sessionGrant := false
 	sameRequestRevise := false
 	for _, option := range options {
 		switch control.NormalizeRequestOptionID(option.OptionID) {
+		case "acceptForSession":
+			sessionGrant = true
 		case "captureFeedback":
 			captureFeedback = true
 		case "revise":
@@ -298,7 +301,13 @@ func approvalRequestHintText(backend agentproto.Backend, semanticKind string, op
 		return "请确认这次网络访问是否可以继续。"
 	case control.RequestSemanticApprovalCanUseTool:
 		if captureFeedback {
+			if sessionGrant {
+				return "允许一次只会放行这次工具调用；本会话允许会按 Claude 给出的权限建议继续；如果工具调用范围或权限建议不符合预期，请点击“" + requestFeedbackActionLabel(backend) + "”；如果不允许本次工具调用，直接拒绝即可。"
+			}
 			return "如果工具调用范围或权限建议不符合预期，请点击“" + requestFeedbackActionLabel(backend) + "”；如果不允许本次工具调用，直接拒绝即可。"
+		}
+		if sessionGrant {
+			return "允许一次只会放行这次工具调用；本会话允许会按 Claude 给出的权限建议继续；拒绝只会拒绝这次工具调用。"
 		}
 		return "允许后会继续当前工具调用；拒绝只会拒绝这次工具调用。"
 	case control.RequestSemanticPlanConfirmation:

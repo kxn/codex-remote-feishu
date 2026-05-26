@@ -77,6 +77,121 @@ func TestClaudeCanUseToolRequestUsesDedicatedBridgeContract(t *testing.T) {
 	}
 }
 
+func TestClaudeCanUseToolRequestAddsSessionGrantOnlyWhenNativeSuggestionsExist(t *testing.T) {
+	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Backend:       agentproto.BackendClaude,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", Text: "/mode claude"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-tool-1",
+		Metadata: map[string]any{
+			"requestType":   "approval",
+			"requestMethod": "control_request/can_use_tool",
+			"toolName":      "Bash",
+			"blockedPath":   "/data/dl/droid",
+			"permissionSuggestions": []map[string]any{
+				{
+					"type":        "addDirectories",
+					"destination": "session",
+					"directories": []any{"/data/dl/droid"},
+				},
+			},
+		},
+	})
+	if len(started) != 1 {
+		t.Fatalf("expected one request prompt event, got %#v", started)
+	}
+	prompt := requestPromptFromEvent(t, started[0])
+	if len(prompt.Options) != 4 {
+		t.Fatalf("expected accept/session/decline/feedback options, got %#v", prompt.Options)
+	}
+	if prompt.Options[0].OptionID != "accept" || prompt.Options[1].OptionID != "acceptForSession" || prompt.Options[2].OptionID != "decline" || prompt.Options[3].OptionID != "captureFeedback" {
+		t.Fatalf("unexpected can_use_tool options with native suggestions: %#v", prompt.Options)
+	}
+	for _, option := range prompt.Options {
+		if option.OptionID == "cancel" {
+			t.Fatalf("did not expect can_use_tool session grant to synthesize cancel: %#v", prompt.Options)
+		}
+	}
+	if !strings.Contains(prompt.HintText, "权限建议") {
+		t.Fatalf("hint text = %q, want session-grant guidance", prompt.HintText)
+	}
+}
+
+func TestClaudeCanUseToolRequestDoesNotAddSessionGrantWithoutNativeSuggestions(t *testing.T) {
+	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Backend:       agentproto.BackendClaude,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", Text: "/mode claude"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-tool-2",
+		Metadata: map[string]any{
+			"requestType":   "approval",
+			"requestMethod": "control_request/can_use_tool",
+			"toolName":      "Bash",
+			"blockedPath":   "/data/dl/droid",
+		},
+	})
+	if len(started) != 1 {
+		t.Fatalf("expected one request prompt event, got %#v", started)
+	}
+	prompt := requestPromptFromEvent(t, started[0])
+	if len(prompt.Options) != 3 {
+		t.Fatalf("expected accept/decline/feedback only, got %#v", prompt.Options)
+	}
+	for _, option := range prompt.Options {
+		if option.OptionID == "acceptForSession" {
+			t.Fatalf("did not expect session-grant option without native suggestions: %#v", prompt.Options)
+		}
+	}
+}
+
 func TestClaudeCanUseToolCaptureFeedbackUsesSameRequestDenyMessage(t *testing.T) {
 	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

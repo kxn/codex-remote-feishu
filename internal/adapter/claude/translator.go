@@ -121,21 +121,22 @@ type pendingQuestion struct {
 }
 
 type pendingRequest struct {
-	RequestID          string
-	ThreadID           string
-	TurnID             string
-	RequestType        agentproto.RequestType
-	SemanticKind       string
-	ToolName           string
-	ToolUseID          string
-	Input              map[string]any
-	ItemID             string
-	PlanBody           string
-	PlanBodySource     string
-	Questions          []pendingQuestion
-	InterruptOnDecline bool
-	Decision           string
-	Response           map[string]any
+	RequestID             string
+	ThreadID              string
+	TurnID                string
+	RequestType           agentproto.RequestType
+	SemanticKind          string
+	ToolName              string
+	ToolUseID             string
+	Input                 map[string]any
+	PermissionSuggestions []map[string]any
+	ItemID                string
+	PlanBody              string
+	PlanBodySource        string
+	Questions             []pendingQuestion
+	InterruptOnDecline    bool
+	Decision              string
+	Response              map[string]any
 }
 
 type pendingControlReply struct {

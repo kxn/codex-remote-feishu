@@ -233,11 +233,20 @@ func (t *Translator) buildRequestResponsePayload(request *pendingRequest, respon
 		body["behavior"] = "allow"
 		updatedPermissions := []any{}
 		planFeedbackSuffix := ""
-		if request.RequestType == agentproto.RequestTypeApproval && request.SemanticKind == control.RequestSemanticPlanConfirmation {
-			var err error
-			updatedPermissions, planFeedbackSuffix, err = t.planConfirmationUpdatedPermissions(request, response.Response)
-			if err != nil {
-				return nil, err
+		if request.RequestType == agentproto.RequestTypeApproval {
+			switch request.SemanticKind {
+			case control.RequestSemanticPlanConfirmation:
+				var err error
+				updatedPermissions, planFeedbackSuffix, err = t.planConfirmationUpdatedPermissions(request, response.Response)
+				if err != nil {
+					return nil, err
+				}
+			case control.RequestSemanticApprovalCanUseTool:
+				var err error
+				updatedPermissions, err = toolApprovalUpdatedPermissions(request, decision)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 		body["updatedPermissions"] = updatedPermissions
@@ -278,6 +287,25 @@ func (t *Translator) buildRequestResponsePayload(request *pendingRequest, respon
 		"response":   body,
 	}
 	return reply, nil
+}
+
+func toolApprovalUpdatedPermissions(request *pendingRequest, decision string) ([]any, error) {
+	if request == nil || strings.TrimSpace(decision) != "acceptForSession" {
+		return []any{}, nil
+	}
+	if len(request.PermissionSuggestions) == 0 {
+		return nil, agentproto.ErrorInfo{
+			Code:      "claude_can_use_tool_session_grant_unavailable",
+			Layer:     "wrapper",
+			Stage:     "translate_command",
+			Operation: string(agentproto.CommandRequestRespond),
+			Message:   "当前 Claude request 没有提供可复用的 permission_suggestions，无法翻译本会话授权。",
+			RequestID: request.RequestID,
+			ThreadID:  request.ThreadID,
+			TurnID:    request.TurnID,
+		}
+	}
+	return encodeMetadataMapList(request.PermissionSuggestions), nil
 }
 
 func requestResponseAnswers(request *pendingRequest, response map[string]any) map[string]any {

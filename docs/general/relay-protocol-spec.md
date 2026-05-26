@@ -343,6 +343,13 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 
 - `captureFeedback` 是 Feishu 产品层 option，不是 native approval decision
 - 当前只对仍显式暴露该入口的 approval request 渲染；`plan_confirmation` 不再注入这条入口
+- `acceptForSession` 当前按 semantic kind 分成两条 server-side 翻译：
+  - `approval_can_use_tool`
+    - 直接派发 same-request allow
+    - Claude translator 会把观测到的 `permissionSuggestions` 原样回写成 native `updatedPermissions[]`
+    - 若当前 request 没有 `permissionSuggestions`，前台不应暴露这条入口；即便误收到 `acceptForSession`，translator 也会 fail-closed，而不是退化成一次性 allow
+  - `plan_confirmation`
+    - 不直接派发 allow，而是进入 request-local structured permission panel
 - 当前 `captureFeedback` 会按 semantic kind 分成两条 server-side 翻译：
   - generic approval：对当前 request 发送 `decision=decline`，再把用户下一条文字作为 follow-up prompt 入队
   - `approval_can_use_tool`：进入 request-capture 后，把用户下一条文字直接回写成同一次 request 的 `{decision=decline, message=<feedback>}`，不会额外生成 follow-up queue item，也不会触发 interrupt
@@ -642,6 +649,8 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 当前 server 只在产品层对 approval request 做额外补全：
 
 - 若 upstream 未显式给出 option，但请求种类可确认支持 session 级放行，则补出 `acceptForSession`
+  - `approval_command` / `approval_file_change` / `approval_network` 当前可直接补出
+  - `approval_can_use_tool` 只有在 request metadata 里保留了非空 `permissionSuggestions` 时才补出
 - `plan_confirmation` 额外补出 `revise`
 - `captureFeedback` 只存在于 Feishu `request.prompt` 渲染层，不回写到 canonical event
   - 当前 `plan_confirmation` 已显式排除这条入口，改为显式暴露 `revise`
@@ -736,8 +745,10 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - server 合成的 `revise`
 - Feishu 专用的 `captureFeedback`
 
-其中当前 `approval_can_use_tool` 会渲染 accept / decline / captureFeedback：
+其中当前 `approval_can_use_tool` 默认会渲染 accept / decline / captureFeedback；若当前 request metadata 里保留了原始 `permissionSuggestions`，还会额外渲染 `acceptForSession`：
 
+- `acceptForSession` 会直接派发 canonical request response；Claude translator 会把同一条 request 上观测到的 `permissionSuggestions` 原样回写成 native `updatedPermissions[]`
+- 若当前 request 没有 `permissionSuggestions`，前台不会暴露 `acceptForSession`；即便误收到这条决策，translator 也会 fail-closed，而不是退化成一次性 allow
 - `captureFeedback` 会进入 request-capture，并在下一条文本到达时回写 `{decision=decline, message=<feedback>}` 到当前 request
 - 这条 same-request feedback 不会再额外排成普通 follow-up queue item，也不会设置 `interrupt=true`
 

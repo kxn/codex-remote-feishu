@@ -582,11 +582,11 @@ func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string
 	}
 	if len(upstreamOptions) == 0 {
 		add("accept", firstNonEmpty(metadataString(metadata, "acceptLabel"), "允许一次"), "primary")
-		if approvalRequestSupportsExtendedDecisions(semanticKind) {
+		if approvalRequestSupportsSessionGrant(semanticKind, metadata) {
 			add("acceptForSession", "本会话允许", "default")
 		}
 		add("decline", firstNonEmpty(metadataString(metadata, "declineLabel"), "拒绝"), "default")
-		if approvalRequestSupportsExtendedDecisions(semanticKind) {
+		if approvalRequestSupportsCancel(semanticKind) {
 			add("cancel", "取消", "default")
 		}
 	}
@@ -716,7 +716,18 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 	return questions
 }
 
-func approvalRequestSupportsExtendedDecisions(semanticKind string) bool {
+func approvalRequestSupportsSessionGrant(semanticKind string, metadata map[string]any) bool {
+	switch control.NormalizeRequestSemanticKind(semanticKind, "approval") {
+	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork:
+		return true
+	case control.RequestSemanticApprovalCanUseTool:
+		return len(metadataRequestMapList(metadata["permissionSuggestions"])) != 0
+	default:
+		return false
+	}
+}
+
+func approvalRequestSupportsCancel(semanticKind string) bool {
 	switch control.NormalizeRequestSemanticKind(semanticKind, "approval") {
 	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork:
 		return true

@@ -820,15 +820,16 @@ func (t *Translator) observeToolApprovalRequest(requestID, toolName, toolUseID, 
 		metadata["sourceContextLabel"] = sourceContextLabel
 	}
 	request := &pendingRequest{
-		RequestID:    requestID,
-		ThreadID:     t.activeTurn.ThreadID,
-		TurnID:       t.activeTurn.TurnID,
-		RequestType:  agentproto.RequestTypeApproval,
-		SemanticKind: control.RequestSemanticApprovalCanUseTool,
-		ToolName:     toolName,
-		ToolUseID:    toolUseID,
-		Input:        input,
-		ItemID:       itemID,
+		RequestID:             requestID,
+		ThreadID:              t.activeTurn.ThreadID,
+		TurnID:                t.activeTurn.TurnID,
+		RequestType:           agentproto.RequestTypeApproval,
+		SemanticKind:          control.RequestSemanticApprovalCanUseTool,
+		ToolName:              toolName,
+		ToolUseID:             toolUseID,
+		Input:                 input,
+		PermissionSuggestions: mapsFromAny(rawRequest["permission_suggestions"]),
+		ItemID:                itemID,
 	}
 	t.pendingRequests[requestID] = request
 	return Result{
