@@ -94,6 +94,29 @@ func TestListSessionThreadsProjectsPermissionModes(t *testing.T) {
 	}
 }
 
+func TestListSessionThreadsLeavesUnmappedPermissionModeWithoutFakeProjection(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-unmapped")
+	writeClaudeSessionFile(t, configDir, workspaceRoot, "session-dontask", time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC), []map[string]any{
+		{"type": "system", "cwd": workspaceRoot, "session_id": "session-dontask", "permissionMode": "dontAsk"},
+		{"type": "session-title", "title": "DontAsk session"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "Workspace dontAsk prompt"}},
+	})
+
+	threads, err := listSessionThreads(workspaceRoot, false, RuntimeStateSnapshot{})
+	if err != nil {
+		t.Fatalf("listSessionThreads: %v", err)
+	}
+	if len(threads) != 1 {
+		t.Fatalf("expected 1 thread, got %#v", threads)
+	}
+	if threads[0].AccessMode != "" || threads[0].PlanMode != "" {
+		t.Fatalf("expected unmapped permission mode to avoid fake coarse projection, got %#v", threads[0])
+	}
+}
+
 func writeClaudeSessionFile(t *testing.T, configDir, workspaceRoot, sessionID string, modTime time.Time, entries []map[string]any) string {
 	t.Helper()
 	projectDir := filepath.Join(configDir, "projects", SanitizeProjectDirName(workspaceRoot))

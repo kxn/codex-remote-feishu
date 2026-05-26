@@ -25,6 +25,7 @@ type RuntimeStateSnapshot struct {
 	Model                string
 	AccessMode           string
 	PlanMode             string
+	ObservedPermission   *agentproto.ObservedPermissionState
 	NativePermissionMode string
 	ActiveTurnID         string
 	WaitingOnApproval    bool
@@ -40,6 +41,7 @@ type claudeSessionMeta struct {
 	Model                string
 	AccessMode           string
 	PlanMode             string
+	ObservedPermission   *agentproto.ObservedPermissionState
 	NativePermissionMode string
 	UpdatedAt            time.Time
 }
@@ -181,6 +183,7 @@ func buildSessionThreadSnapshot(meta claudeSessionMeta, runtime RuntimeStateSnap
 	model := strings.TrimSpace(meta.Model)
 	accessMode := strings.TrimSpace(meta.AccessMode)
 	planMode := strings.TrimSpace(meta.PlanMode)
+	observedPermission := agentproto.CloneObservedPermissionState(meta.ObservedPermission)
 	if threadID != "" && threadID == strings.TrimSpace(runtime.SessionID) {
 		if current := runtime.currentRuntimeStatus(); current != nil {
 			runtimeStatus = current
@@ -188,22 +191,29 @@ func buildSessionThreadSnapshot(meta claudeSessionMeta, runtime RuntimeStateSnap
 			state = string(current.LegacyState())
 		}
 		model = firstNonEmptyString(strings.TrimSpace(runtime.Model), model)
-		accessMode = firstNonEmptyString(strings.TrimSpace(runtime.AccessMode), accessMode)
-		planMode = firstNonEmptyString(strings.TrimSpace(runtime.PlanMode), planMode)
+		if current := agentproto.CloneObservedPermissionState(runtime.ObservedPermission); current != nil {
+			observedPermission = current
+		}
+		accessMode = firstNonEmptyString(
+			agentproto.NormalizeAccessMode(firstNonEmptyString(observedPermissionProjectedAccessMode(observedPermission), strings.TrimSpace(runtime.AccessMode))),
+			accessMode,
+		)
+		planMode = firstNonEmptyString(strings.TrimSpace(observedPermissionProjectedPlanMode(observedPermission)), strings.TrimSpace(runtime.PlanMode), planMode)
 	}
 	return agentproto.ThreadSnapshotRecord{
-		ThreadID:      threadID,
-		Name:          strings.TrimSpace(meta.Title),
-		Preview:       strings.TrimSpace(meta.Preview),
-		WorkspaceKey:  strings.TrimSpace(meta.WorkspaceKey),
-		CWD:           strings.TrimSpace(meta.CWD),
-		Model:         model,
-		AccessMode:    accessMode,
-		PlanMode:      planMode,
-		Loaded:        loaded,
-		Archived:      false,
-		State:         state,
-		RuntimeStatus: agentproto.CloneThreadRuntimeStatus(runtimeStatus),
+		ThreadID:           threadID,
+		Name:               strings.TrimSpace(meta.Title),
+		Preview:            strings.TrimSpace(meta.Preview),
+		WorkspaceKey:       strings.TrimSpace(meta.WorkspaceKey),
+		CWD:                strings.TrimSpace(meta.CWD),
+		Model:              model,
+		AccessMode:         accessMode,
+		PlanMode:           planMode,
+		ObservedPermission: agentproto.CloneObservedPermissionState(observedPermission),
+		Loaded:             loaded,
+		Archived:           false,
+		State:              state,
+		RuntimeStatus:      agentproto.CloneThreadRuntimeStatus(runtimeStatus),
 	}
 }
 
@@ -315,7 +325,8 @@ func readSessionListMeta(filePath string) (claudeSessionMeta, error) {
 		return sessionHeadMetaComplete(meta)
 	})
 	meta.WorkspaceKey = firstNonEmptyString(meta.WorkspaceKey, meta.CWD)
-	selection := claudePermissionSelectionFromNative(meta.NativePermissionMode)
+	meta.ObservedPermission = CompileObservedPermissionStateFromClaudeNative(meta.NativePermissionMode)
+	selection := claudePermissionSelectionFromObservedPermission(meta.ObservedPermission)
 	meta.AccessMode = selection.AccessMode
 	meta.PlanMode = selection.PlanMode
 	meta.Title = normalizeSessionSnippet(firstNonEmptyString(meta.Title, meta.Preview, meta.ID), claudeSessionTitleLimit)
@@ -324,6 +335,20 @@ func readSessionListMeta(filePath string) (claudeSessionMeta, error) {
 		meta.Preview = ""
 	}
 	return meta, nil
+}
+
+func observedPermissionProjectedAccessMode(value *agentproto.ObservedPermissionState) string {
+	if value == nil {
+		return ""
+	}
+	return agentproto.NormalizeAccessMode(value.ProjectedAccessMode)
+}
+
+func observedPermissionProjectedPlanMode(value *agentproto.ObservedPermissionState) string {
+	if value == nil {
+		return ""
+	}
+	return strings.TrimSpace(value.ProjectedPlanMode)
 }
 
 func populateSessionTailMeta(meta *claudeSessionMeta, entry map[string]any) {

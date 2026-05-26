@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -51,6 +52,7 @@ func (t *Translator) observedPermissionConfigEvents(previousModel, previousCWD, 
 	model := strings.TrimSpace(t.model)
 	cwd := strings.TrimSpace(t.cwd)
 	nativeMode := strings.TrimSpace(t.permissionMode)
+	observedPermission := claudesessionstore.CompileObservedPermissionStateFromClaudeNative(nativeMode)
 	selection := claudePermissionSelectionFromNative(nativeMode)
 	changed := model != strings.TrimSpace(previousModel) ||
 		cwd != strings.TrimSpace(previousCWD) ||
@@ -59,13 +61,14 @@ func (t *Translator) observedPermissionConfigEvents(previousModel, previousCWD, 
 		return nil
 	}
 	return []agentproto.Event{{
-		Kind:        agentproto.EventConfigObserved,
-		ThreadID:    threadID,
-		CWD:         cwd,
-		Model:       model,
-		AccessMode:  selection.AccessMode,
-		PlanMode:    selection.PlanMode,
-		ConfigScope: "thread",
+		Kind:               agentproto.EventConfigObserved,
+		ThreadID:           threadID,
+		CWD:                cwd,
+		Model:              model,
+		AccessMode:         selection.AccessMode,
+		PlanMode:           selection.PlanMode,
+		ObservedPermission: agentproto.CloneObservedPermissionState(observedPermission),
+		ConfigScope:        "thread",
 	}}
 }
 

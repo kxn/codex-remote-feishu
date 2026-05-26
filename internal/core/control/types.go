@@ -265,6 +265,7 @@ type PromptRouteSummary struct {
 	PlanModeOverrideSet            bool
 	UsesLocalRequestedOverrides    bool
 	EffectivePlanMode              string
+	ObservedThreadPermission       *agentproto.ObservedPermissionState
 	ObservedThreadAccessMode       string
 	ObservedThreadPlanMode         string
 	EffectiveModel                 string

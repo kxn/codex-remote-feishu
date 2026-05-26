@@ -301,10 +301,7 @@ func snapshotObservedThreadPlanModeText(summary control.PromptRouteSummary) stri
 }
 
 func snapshotObservedThreadAccessModeText(summary control.PromptRouteSummary) string {
-	if agentproto.NormalizeAccessMode(summary.ObservedThreadAccessMode) == "" {
-		return ""
-	}
-	return displaySnapshotAccessMode(summary.ObservedThreadAccessMode)
+	return control.ObservedThreadAccessDisplay(summary)
 }
 
 func snapshotShouldShowPromptCWD(workspaceKey, cwd string) bool {

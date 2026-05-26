@@ -104,6 +104,9 @@
 - `acceptEdits` 没有本地 carrier
 - `dontAsk` 没有本地 carrier
 - rules / directories 完全没有本地 carrier
+- 但从 `#667` 开始，runtime observed path 已新增结构化 `observedPermission` carrier：
+  - 它只负责忠实记录 raw native mode truth
+  - 它不是新的前台控制入口，也不自动变成新的 `/access` 选择项
 
 #### 3.2.2 `plan_confirmation` allow path 仍硬编码空权限更新
 
@@ -225,6 +228,9 @@
 
 - 第一项优先走 rules/directories
 - 后两项才允许落到更粗的 native mode / bundle
+- 如果 runtime 实际观察到未被本地控制面开放的 native mode（例如 `dontAsk` / `auto`）：
+  - 前台摘要应如实显示 raw mode
+  - 但复杂权限面板本身仍只展示用户可理解、可主动选择的本地授权语义
 
 #### 4.2.2 目录范围
 

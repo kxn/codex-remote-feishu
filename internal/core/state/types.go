@@ -216,6 +216,7 @@ type ThreadRecord struct {
 	RuntimeStatus           *agentproto.ThreadRuntimeStatus
 	ExplicitModel           string
 	ExplicitReasoningEffort string
+	ObservedPermission      *agentproto.ObservedPermissionState
 	ObservedAccessMode      string
 	ObservedPlanMode        PlanModeSetting
 	LastModelReroute        *agentproto.TurnModelReroute

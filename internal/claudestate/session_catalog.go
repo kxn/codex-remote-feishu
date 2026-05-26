@@ -83,23 +83,26 @@ func sessionMetaToThreadRecord(meta claudesessionstore.SessionMeta) *state.Threa
 	if threadID == "" || workspaceKey == "" {
 		return nil
 	}
+	observedPlanMode := state.PlanModeSetting("")
+	if planMode := strings.TrimSpace(meta.PlanMode); planMode != "" {
+		observedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(planMode))
+	}
 	return &state.ThreadRecord{
-		ThreadID:      threadID,
-		Name:          strings.TrimSpace(meta.Title),
-		Preview:       strings.TrimSpace(meta.Preview),
-		WorkspaceKey:  workspaceKey,
-		CWD:           cwd,
-		State:         string(agentproto.ThreadRuntimeStatusTypeNotLoaded),
-		RuntimeStatus: &agentproto.ThreadRuntimeStatus{Type: agentproto.ThreadRuntimeStatusTypeNotLoaded},
-		ExplicitModel: strings.TrimSpace(meta.Model),
+		ThreadID:           threadID,
+		Name:               strings.TrimSpace(meta.Title),
+		Preview:            strings.TrimSpace(meta.Preview),
+		WorkspaceKey:       workspaceKey,
+		CWD:                cwd,
+		State:              string(agentproto.ThreadRuntimeStatusTypeNotLoaded),
+		RuntimeStatus:      &agentproto.ThreadRuntimeStatus{Type: agentproto.ThreadRuntimeStatusTypeNotLoaded},
+		ExplicitModel:      strings.TrimSpace(meta.Model),
+		ObservedPermission: agentproto.CloneObservedPermissionState(meta.ObservedPermission),
 		ObservedAccessMode: agentproto.NormalizeAccessMode(
 			strings.TrimSpace(meta.AccessMode),
 		),
-		ObservedPlanMode: state.NormalizePlanModeSetting(
-			state.PlanModeSetting(strings.TrimSpace(meta.PlanMode)),
-		),
-		Loaded:     false,
-		Archived:   false,
-		LastUsedAt: meta.UpdatedAt.UTC(),
+		ObservedPlanMode: observedPlanMode,
+		Loaded:           false,
+		Archived:         false,
+		LastUsedAt:       meta.UpdatedAt.UTC(),
 	}
 }

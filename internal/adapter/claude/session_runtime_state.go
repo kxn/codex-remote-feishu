@@ -17,6 +17,7 @@ func (t *Translator) RuntimeStateSnapshot() claudesessionstore.RuntimeStateSnaps
 		Model:                strings.TrimSpace(t.model),
 		NativePermissionMode: strings.TrimSpace(t.permissionMode),
 	}
+	snapshot.ObservedPermission = claudesessionstore.CompileObservedPermissionStateFromClaudeNative(snapshot.NativePermissionMode)
 	selection := claudePermissionSelectionFromNative(snapshot.NativePermissionMode)
 	snapshot.AccessMode = selection.AccessMode
 	snapshot.PlanMode = selection.PlanMode

@@ -27,13 +27,23 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 	threadTitle := ""
 	observedThreadAccessMode := ""
 	observedThreadPlanMode := ""
+	var observedThreadPermission *agentproto.ObservedPermissionState
 	if threadID != "" {
 		thread := inst.Threads[threadID]
 		threadTitle = displayThreadTitle(inst, thread)
-		if thread != nil && agentproto.NormalizeAccessMode(thread.ObservedAccessMode) != "" {
+		if thread != nil && thread.ObservedPermission != nil {
+			observedThreadPermission = agentproto.CloneObservedPermissionState(thread.ObservedPermission)
+			if observed := agentproto.NormalizeAccessMode(observedThreadPermission.ProjectedAccessMode); observed != "" {
+				observedThreadAccessMode = observed
+			}
+			if plan := strings.TrimSpace(observedThreadPermission.ProjectedPlanMode); plan != "" {
+				observedThreadPlanMode = plan
+			}
+		}
+		if thread != nil && observedThreadAccessMode == "" && agentproto.NormalizeAccessMode(thread.ObservedAccessMode) != "" {
 			observedThreadAccessMode = agentproto.NormalizeAccessMode(thread.ObservedAccessMode)
 		}
-		if thread != nil && strings.TrimSpace(string(thread.ObservedPlanMode)) != "" {
+		if thread != nil && observedThreadPlanMode == "" && strings.TrimSpace(string(thread.ObservedPlanMode)) != "" {
 			observedThreadPlanMode = string(state.NormalizePlanModeSetting(thread.ObservedPlanMode))
 		}
 	}
@@ -62,6 +72,7 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 		PlanModeOverrideSet:            planModeOverrideSet,
 		UsesLocalRequestedOverrides:    usesLocalRequestedOverrides,
 		EffectivePlanMode:              effectivePlanMode,
+		ObservedThreadPermission:       observedThreadPermission,
 		ObservedThreadAccessMode:       observedThreadAccessMode,
 		ObservedThreadPlanMode:         observedThreadPlanMode,
 		EffectiveModel:                 resolution.EffectiveModel.Value,

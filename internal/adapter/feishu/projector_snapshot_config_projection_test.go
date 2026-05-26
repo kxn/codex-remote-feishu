@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -78,5 +79,41 @@ func TestProjectSnapshotShowsObservedThreadAccess(t *testing.T) {
 		"下条飞书消息：Plan 关闭，模型 未知，推理 未知，权限 confirm",
 	) {
 		t.Fatalf("expected snapshot to show observed thread access, got %q", rendered)
+	}
+}
+
+func TestProjectSnapshotShowsUnmappedObservedThreadAccessAsRawNativeMode(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode: "normal",
+			Backend:     "claude",
+			Attachment: control.AttachmentSummary{
+				InstanceID:  "inst-1",
+				DisplayName: "droid",
+				Source:      "headless",
+				RouteMode:   "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				CWD:                 "/data/dl/droid",
+				EffectiveAccessMode: "confirm",
+				EffectivePlanMode:   "off",
+				ObservedThreadPermission: &agentproto.ObservedPermissionState{
+					NativeMode:     "dontAsk",
+					ProjectionKind: agentproto.ObservedPermissionProjectionKindUnmapped,
+				},
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"当前会话权限（最近观察）：dontAsk（当前无本地精确映射）",
+		"下条飞书消息：Plan 关闭，模型 未知，推理 未知，权限 confirm",
+	) {
+		t.Fatalf("expected snapshot to show raw native permission mode, got %q", rendered)
 	}
 }

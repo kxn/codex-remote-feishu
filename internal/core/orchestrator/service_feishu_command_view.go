@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -81,7 +80,7 @@ func resolveConfigFlowValueSource(summary control.PromptRouteSummary, key contro
 	case control.FeishuConfigFlowValuePromptEffectiveReasoning:
 		return strings.TrimSpace(summary.EffectiveReasoningEffortSource)
 	case control.FeishuConfigFlowValuePromptObservedThreadAccess:
-		if agentproto.NormalizeAccessMode(summary.ObservedThreadAccessMode) != "" {
+		if control.HasObservedThreadAccess(summary) {
 			return "thread"
 		}
 		return ""
@@ -172,7 +171,7 @@ func (s *Service) resolveConfigFlowValue(
 	case control.FeishuConfigFlowValuePromptOverrideReasoning:
 		return strings.TrimSpace(summary.OverrideReasoningEffort)
 	case control.FeishuConfigFlowValuePromptObservedThreadAccess:
-		return agentproto.NormalizeAccessMode(summary.ObservedThreadAccessMode)
+		return control.ObservedThreadAccessDisplay(summary)
 	case control.FeishuConfigFlowValuePromptEffectiveAccess:
 		return strings.TrimSpace(summary.EffectiveAccessMode)
 	case control.FeishuConfigFlowValuePromptOverrideAccess:

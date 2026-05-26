@@ -379,6 +379,15 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if strings.TrimSpace(merged.ExplicitReasoningEffort) == "" {
 		merged.ExplicitReasoningEffort = strings.TrimSpace(secondary.ExplicitReasoningEffort)
 	}
+	if merged.ObservedPermission == nil && secondary.ObservedPermission != nil {
+		merged.ObservedPermission = agentproto.CloneObservedPermissionState(secondary.ObservedPermission)
+	}
+	if strings.TrimSpace(merged.ObservedAccessMode) == "" {
+		merged.ObservedAccessMode = agentproto.NormalizeAccessMode(secondary.ObservedAccessMode)
+	}
+	if strings.TrimSpace(string(merged.ObservedPlanMode)) == "" {
+		merged.ObservedPlanMode = secondary.ObservedPlanMode
+	}
 	if merged.LastModelReroute == nil && secondary.LastModelReroute != nil {
 		merged.LastModelReroute = agentproto.CloneTurnModelReroute(secondary.LastModelReroute)
 	}
@@ -417,6 +426,7 @@ func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
 	threadCopy.TokenUsage = agentproto.CloneThreadTokenUsage(thread.TokenUsage)
 	threadCopy.LastModelReroute = agentproto.CloneTurnModelReroute(thread.LastModelReroute)
 	threadCopy.Source = agentproto.CloneThreadSourceRecord(thread.Source)
+	threadCopy.ObservedPermission = agentproto.CloneObservedPermissionState(thread.ObservedPermission)
 	if thread.UndeliveredReplay != nil {
 		replayCopy := *thread.UndeliveredReplay
 		threadCopy.UndeliveredReplay = &replayCopy

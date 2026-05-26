@@ -501,7 +501,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		s.touchThread(thread)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...))
 	case agentproto.EventConfigObserved:
-		s.observeConfig(inst, event.ThreadID, event.CWD, event.ConfigScope, event.Model, event.ReasoningEffort, event.AccessMode, event.PlanMode)
+		s.observeConfig(inst, event.ThreadID, event.CWD, event.ConfigScope, event.Model, event.ReasoningEffort, event.AccessMode, event.PlanMode, event.ObservedPermission)
 		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
@@ -539,6 +539,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		}
 		if event.PlanMode != "" {
 			thread.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(event.PlanMode))
+		}
+		if event.ObservedPermission != nil {
+			thread.ObservedPermission = agentproto.CloneObservedPermissionState(event.ObservedPermission)
 		}
 		if event.RuntimeStatus != nil {
 			applyThreadRuntimeStatus(thread, event.RuntimeStatus)
@@ -612,6 +615,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			}
 			if thread.PlanMode != "" {
 				current.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(thread.PlanMode))
+			}
+			if thread.ObservedPermission != nil {
+				current.ObservedPermission = agentproto.CloneObservedPermissionState(thread.ObservedPermission)
 			}
 			current.Loaded = thread.Loaded
 			current.Archived = thread.Archived

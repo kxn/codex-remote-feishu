@@ -55,6 +55,20 @@ func TestAccessConfigPageShowsObservedThreadAccess(t *testing.T) {
 	}
 }
 
+func TestAccessConfigPageShowsUnmappedObservedThreadAccess(t *testing.T) {
+	page := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:            FeishuCommandAccess,
+		CatalogBackend:       agentproto.BackendClaude,
+		CurrentValue:         "dontAsk（当前无本地精确映射）",
+		EffectiveValue:       agentproto.AccessModeConfirm,
+		EffectiveValueSource: "thread",
+	})
+	text := configPageSummaryText(page)
+	if !strings.Contains(text, "当前会话权限（最近观察）\ndontAsk（当前无本地精确映射）") {
+		t.Fatalf("expected access page to show raw native mode for unmapped projection, got %q", text)
+	}
+}
+
 func configPageSummaryText(page FeishuPageView) string {
 	var parts []string
 	for _, section := range page.SummarySections {

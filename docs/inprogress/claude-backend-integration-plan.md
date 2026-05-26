@@ -1,8 +1,8 @@
 # Claude Backend Integration Plan
 
 > Type: `inprogress`
-> Updated: `2026-05-09`
-> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还把 Claude managed keys 收口成 daemon 冻结的 runtime settings contract，由 wrapper 写入临时 `--settings` overlay 覆盖 Claude 自身配置里的同名 `env`，同时继续保留共享 `CLAUDE_CONFIG_DIR`；显式飞书 `/access` override 现在也会按 `workspace+profile` 快照持久化恢复，但实际下发仍走动态 `set_permission_mode` 通道。除此之外还补上了 Claude `prompt.send` 与 `turn.steer` approximation 的本地图片输入支持，文件继续保持 `@path` 文本桥接；`turn.steer` 现在已正式宣称 relay/canonical capability，reply auto steer 与 `/steerall` 也会沿用同一条 active-turn steer 语义，把文本与本地图片补充并入当前 active turn。
+> Updated: `2026-05-26`
+> Summary: 同步 Claude profile、session 平面与运行时 MCP 注入基线：profile 覆盖端点、认证、模型与默认 reasoning 环境，不拥有独立 `CLAUDE_CONFIG_DIR`，不同 profile 共享同一 Claude session/history/catalog；Claude child launch 追加运行时 MCP 时必须保留用户既有 MCP。当前实现还已把 Claude headless `/reasoning` 接进 dispatch 前 runtime preflight：新 turn 会冻结各自 reasoning，必要时在发送前自动 restart 到匹配实例；Claude 模型只来自 profile，不再开放飞书侧 `/model` 热改。最新基线还把 Claude managed keys 收口成 daemon 冻结的 runtime settings contract，由 wrapper 写入临时 `--settings` overlay 覆盖 Claude 自身配置里的同名 `env`，同时继续保留共享 `CLAUDE_CONFIG_DIR`；显式飞书 `/access` override 现在也会按 `workspace+profile` 快照持久化恢复，但实际下发仍走动态 `set_permission_mode` 通道，并通过新的 `observedPermission` carrier 忠实保留 Claude runtime raw native permission mode truth。除此之外还补上了 Claude `prompt.send` 与 `turn.steer` approximation 的本地图片输入支持，文件继续保持 `@path` 文本桥接；`turn.steer` 现在已正式宣称 relay/canonical capability，reply auto steer 与 `/steerall` 也会沿用同一条 active-turn steer 语义，把文本与本地图片补充并入当前 active turn。
 
 ## 1. 文档定位
 
@@ -907,7 +907,7 @@ Claude runtime 分三块：
 
 | Claude native carrier | 本地语义 | canonical 承接位 | 当前结论 |
 | --- | --- | --- | --- |
-| `system:init` / `system:status` | 会话 ready、`session_id`、模型、cwd、permission mode | runtime host 内部 session bind + `config.observed(thread)` | 当前通过标准 `EventConfigObserved` 回填 Claude thread observed access/plan，不再只停留在 wrapper-local `permissionMode` 字段 |
+| `system:init` / `system:status` | 会话 ready、`session_id`、模型、cwd、permission mode | runtime host 内部 session bind + `config.observed(thread)` | 当前通过标准 `EventConfigObserved` 回填 Claude thread observed permission-state：`observedPermission` 持有 raw native mode truth，`accessMode / planMode` 只保留 exact coarse projection，不再把 `dontAsk/auto` 压回 `confirm` |
 | `stream_event.message_start` | 新一轮 assistant turn 真正进入 running | `turn.started` | 作为 Claude live turn 的主起点 |
 | `assistant.text` | assistant 正文输出 | `item.started / item.delta / item.completed` with `itemKind=agent_message` | 现有文本 item 语义可直接复用 |
 | `assistant.thinking` | provider-native reasoning / hidden chain-of-thought side channel | `item.delta` with `itemKind=reasoning_summary`；前台保留过滤后的 raw thinking，adapter 仅窄清洗已知系统 info block | pre-MVP 不需要新增公开 reasoning carrier，但需要流式 side-channel 可见边界抑制 |

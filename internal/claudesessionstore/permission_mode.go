@@ -20,30 +20,55 @@ type claudePermissionSelection struct {
 	PlanMode   string
 }
 
-func claudePermissionSelectionFromNative(mode string) claudePermissionSelection {
-	switch strings.TrimSpace(mode) {
+func CompileObservedPermissionStateFromClaudeNative(mode string) *agentproto.ObservedPermissionState {
+	nativeMode := firstNonEmptyString(strings.TrimSpace(mode), claudePermissionModeDefault)
+	switch nativeMode {
+	case claudePermissionModeDefault:
+		return &agentproto.ObservedPermissionState{
+			NativeMode:          nativeMode,
+			ProjectedAccessMode: agentproto.AccessModeConfirm,
+			ProjectedPlanMode:   string(state.PlanModeSettingOff),
+			ProjectionKind:      agentproto.ObservedPermissionProjectionKindExact,
+		}
 	case claudePermissionModeAcceptEdits:
-		return claudePermissionSelection{
-			NativeMode: claudePermissionModeAcceptEdits,
-			AccessMode: agentproto.AccessModeAcceptEdits,
-			PlanMode:   string(state.PlanModeSettingOff),
+		return &agentproto.ObservedPermissionState{
+			NativeMode:          nativeMode,
+			ProjectedAccessMode: agentproto.AccessModeAcceptEdits,
+			ProjectedPlanMode:   string(state.PlanModeSettingOff),
+			ProjectionKind:      agentproto.ObservedPermissionProjectionKindExact,
 		}
 	case claudePermissionModePlan:
-		return claudePermissionSelection{
-			NativeMode: claudePermissionModePlan,
-			PlanMode:   string(state.PlanModeSettingOn),
+		return &agentproto.ObservedPermissionState{
+			NativeMode:        nativeMode,
+			ProjectedPlanMode: string(state.PlanModeSettingOn),
+			ProjectionKind:    agentproto.ObservedPermissionProjectionKindExact,
 		}
 	case claudePermissionModeBypassPermissions:
-		return claudePermissionSelection{
-			NativeMode: claudePermissionModeBypassPermissions,
-			AccessMode: agentproto.AccessModeFullAccess,
-			PlanMode:   string(state.PlanModeSettingOff),
+		return &agentproto.ObservedPermissionState{
+			NativeMode:          nativeMode,
+			ProjectedAccessMode: agentproto.AccessModeFullAccess,
+			ProjectedPlanMode:   string(state.PlanModeSettingOff),
+			ProjectionKind:      agentproto.ObservedPermissionProjectionKindExact,
 		}
 	default:
-		return claudePermissionSelection{
-			NativeMode: firstNonEmptyString(strings.TrimSpace(mode), claudePermissionModeDefault),
-			AccessMode: agentproto.AccessModeConfirm,
-			PlanMode:   string(state.PlanModeSettingOff),
+		return &agentproto.ObservedPermissionState{
+			NativeMode:     nativeMode,
+			ProjectionKind: agentproto.ObservedPermissionProjectionKindUnmapped,
 		}
 	}
+}
+
+func claudePermissionSelectionFromObservedPermission(observed *agentproto.ObservedPermissionState) claudePermissionSelection {
+	if observed == nil {
+		return claudePermissionSelection{}
+	}
+	return claudePermissionSelection{
+		NativeMode: strings.TrimSpace(observed.NativeMode),
+		AccessMode: agentproto.NormalizeAccessMode(observed.ProjectedAccessMode),
+		PlanMode:   strings.TrimSpace(observed.ProjectedPlanMode),
+	}
+}
+
+func claudePermissionSelectionFromNative(mode string) claudePermissionSelection {
+	return claudePermissionSelectionFromObservedPermission(CompileObservedPermissionStateFromClaudeNative(mode))
 }

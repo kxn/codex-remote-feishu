@@ -3,7 +3,6 @@ package control
 import (
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -80,7 +79,7 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 	case FeishuCommandAccess:
 		sections := promptValueCardSections(view)
 		if observed := strings.TrimSpace(view.CurrentValue); observed != "" {
-			sections = append(sections, singleValueCardSection("当前会话权限（最近观察）", agentproto.DisplayAccessModeShort(observed)))
+			sections = append(sections, singleValueCardSection("当前会话权限（最近观察）", observed))
 		}
 		return sections
 	case FeishuCommandPlan:
