@@ -20,6 +20,8 @@ func requestPromptSubmittingStatusText(request *state.RequestPromptRecord) strin
 	switch requestPromptSemanticKind(request) {
 	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork, control.RequestSemanticApproval:
 		return "正在提交当前确认，等待" + backendName + " 接收。"
+	case control.RequestSemanticApprovalCanUseTool:
+		return "正在提交当前工具调用确认，等待" + backendName + " 接收。"
 	case control.RequestSemanticPermissionsRequestApproval:
 		return "正在提交授权决定，等待" + backendName + " 接收。"
 	case control.RequestSemanticMCPServerElicitationForm:
@@ -38,6 +40,8 @@ func requestPromptAwaitingBackendConsumeStatusText(request *state.RequestPromptR
 	switch requestPromptSemanticKind(request) {
 	case control.RequestSemanticApprovalCommand, control.RequestSemanticApprovalFileChange, control.RequestSemanticApprovalNetwork, control.RequestSemanticApproval:
 		return "已提交当前确认，" + waitingText + "。"
+	case control.RequestSemanticApprovalCanUseTool:
+		return "已提交当前工具调用确认，" + waitingText + "。"
 	case control.RequestSemanticPermissionsRequestApproval:
 		return "已提交授权决定，" + waitingText + "。"
 	case control.RequestSemanticMCPServerElicitationForm:

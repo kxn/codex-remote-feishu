@@ -77,6 +77,91 @@ func TestClaudeCanUseToolRequestUsesDedicatedBridgeContract(t *testing.T) {
 	}
 }
 
+func TestClaudeCanUseToolCaptureFeedbackUsesSameRequestDenyMessage(t *testing.T) {
+	now := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Backend:       agentproto.BackendClaude,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", Text: "/mode claude"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-tool-2",
+		Metadata: map[string]any{
+			"requestType":   "approval",
+			"requestMethod": "control_request/can_use_tool",
+			"toolName":      "Bash",
+			"blockedPath":   "/data/dl/droid",
+			"options": []map[string]any{
+				{"id": "accept", "label": "允许一次"},
+				{"id": "decline", "label": "拒绝"},
+			},
+		},
+	})
+
+	startCapture := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "om-card-2",
+		Request:          testRequestAction("req-tool-2", "approval", "captureFeedback", nil, 0),
+	})
+	if len(startCapture) != 1 || startCapture[0].Notice == nil || startCapture[0].Notice.Code != "request_capture_started" {
+		t.Fatalf("expected request_capture_started notice, got %#v", startCapture)
+	}
+	if svc.root.Surfaces["surface-1"].ActiveRequestCapture == nil {
+		t.Fatalf("expected can_use_tool feedback to enter capture mode")
+	}
+
+	feedback := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-msg-3",
+		Text:             "不要直接执行，先列一下当前未提交文件。",
+	})
+	if len(feedback) != 2 || feedback[1].Command == nil {
+		t.Fatalf("expected inline replacement plus request response command, got %#v", feedback)
+	}
+	req := feedback[1].Command.Request
+	if req.Response["decision"] != "decline" {
+		t.Fatalf("expected decline decision, got %#v", req)
+	}
+	if req.Response["message"] != "不要直接执行，先列一下当前未提交文件。" {
+		t.Fatalf("expected feedback to stay on request response, got %#v", req.Response)
+	}
+	if req.InterruptOnDecline {
+		t.Fatalf("expected can_use_tool decline-with-feedback to avoid interrupt, got %#v", req)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.ActiveRequestCapture != nil {
+		t.Fatalf("expected capture to be cleared, got %#v", surface.ActiveRequestCapture)
+	}
+	if len(surface.QueuedQueueItemIDs) != 0 {
+		t.Fatalf("expected no queued follow-up item for same-request feedback, got %#v", surface.QueuedQueueItemIDs)
+	}
+}
+
 func TestPlanConfirmationDeclineRequestsInterruptOnDecline(t *testing.T) {
 	now := time.Date(2026, 4, 28, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

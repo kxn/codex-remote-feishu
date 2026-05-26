@@ -258,17 +258,23 @@ func (s *Service) buildRequestResponse(surface *state.SurfaceConsoleRecord, requ
 			return nil, false, notice(surface, "request_invalid", "这个确认按钮对应的选项无效或当前不可用。")
 		}
 		if optionID == "captureFeedback" {
+			mode := requestCaptureModeDeclineWithFeedback
+			noticeText := "已进入反馈模式。接下来一条普通文本会作为对当前确认请求的处理意见，不会进入普通消息队列。"
+			if requestPromptSemanticKind(request) == control.RequestSemanticApprovalCanUseTool {
+				mode = requestCaptureModeSameRequestDecline
+				noticeText = "已进入反馈模式。接下来一条普通文本会作为对当前工具调用的处理意见，并直接回写给 Claude。"
+			}
 			surface.ActiveRequestCapture = &state.RequestCaptureRecord{
 				RequestID:   request.RequestID,
 				RequestType: request.RequestType,
 				InstanceID:  request.InstanceID,
 				ThreadID:    request.ThreadID,
 				TurnID:      request.TurnID,
-				Mode:        requestCaptureModeDeclineWithFeedback,
+				Mode:        mode,
 				CreatedAt:   s.now(),
 				ExpiresAt:   s.now().Add(10 * time.Minute),
 			}
-			return nil, false, notice(surface, "request_capture_started", "已进入反馈模式。接下来一条普通文本会作为对当前确认请求的处理意见，不会进入普通消息队列。")
+			return nil, false, notice(surface, "request_capture_started", noticeText)
 		}
 		if optionID == "revise" {
 			surface.ActiveRequestCapture = &state.RequestCaptureRecord{

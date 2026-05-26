@@ -823,6 +823,8 @@ func pendingRequestNoticeText(request *state.RequestPromptRecord) string {
 		return "当前有待确认文件修改请求。请先处理这张确认卡片后再继续。"
 	case control.RequestSemanticApprovalNetwork:
 		return "当前有待确认网络访问请求。请先处理这张确认卡片后再继续。"
+	case control.RequestSemanticApprovalCanUseTool:
+		return "当前有待确认工具调用请求。请先处理这张确认卡片后再继续。"
 	case control.RequestSemanticApproval:
 		return "当前有待确认请求。请先点击卡片上的处理按钮后再继续。"
 	case control.RequestSemanticPermissionsRequestApproval:

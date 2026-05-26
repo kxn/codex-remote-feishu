@@ -131,7 +131,7 @@
 | bare `/review` / `/review commit` / `/review uncommitted` / 普通 final card review footer / review final card `放弃审阅` / `按审阅意见继续修改` | `mixed` | bare `/review` 当前会先进入一张 review root page，而不是直接打开 commit picker：该页显式提供 `Review 待提交内容` 与 `Review 指定提交` 两个按钮，并都走 `page_local_action + daemon_lifecycle_id` 的当前卡 freshness 链路，不再继续依赖 catalog provenance。`Review 待提交内容` 会在当前 root card 上同位收口成 detached review owner 的 `正在进入审阅` 首卡；`Review 指定提交` 才会继续在当前 root card 上同位进入 commit picker。bare `/review commit` 仍可直接打开 commit picker；picker 继续记录当前 `instance_id + parent_thread_id + thread_cwd + recent_commits`，并要求后续 submit/cancel 命中同一 `message_id` 才继续；若中途切换到其他实例，picker submit 会直接拒绝并要求重新发送 `/review commit`。picker submit / cancel 现在也改成 page-local substrate：submit 通过 `page_local_submit(surface.command.review + action_arg_prefix=commit)` 组装 canonical `/review commit <full-sha>` 并进入 detached review owner，cancel 通过 `page_local_action(surface.command.review + action_arg=cancel)` 收口当前 picker runtime；bare `/review uncommitted` 继续直接汇合到同一 detached review owner，但不再反向定义 `/review` 本身的语义。普通 final card 的 `Review 待提交内容` 与 `评审 <short-sha>` footer 仍保持 append-only：projector 只会在原 final chunk 底部追加按钮，不 patch 掉源 final card。review session final card 上的 `放弃审阅` / `按审阅意见继续修改` 仍复用 stamped first-result replacement，在当前审阅结果卡上同位收口。真正的 detached review session 启动、review runtime 清理，以及把审阅结果带回 parent thread 继续修改，仍由 orchestrator 承接。普通 final card 只有在对应 thread cwd 落在 Git repo/worktree 内且存在未提交内容时才会追加 `Review 待提交内容`；commit footer 则只依赖最近 commit 命中，不依赖 dirty 状态；review session 内的 final card 只保留 `放弃审阅` / `按审阅意见继续修改` 两个显式出口 |
 | bare `/cron` / `/upgrade` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuPageView` 根页，不再顺手展示独立状态卡；根页现在只保留实际菜单入口，不再混入“快捷操作 / 手动输入 / 说明文案”，其中 `/debug` 根页当前只保留迁移到系统管理后的入口按钮：`打开系统管理`、`生成外链`、`查看本地地址`；`/upgrade track` 子页当前仅保留 track 切换按钮；`/upgrade` 根页会在当前 Codex 是 standalone-upgradeable 安装时额外显示 `Codex 升级` 按钮，bundle-backed 或其他不可升级安装则静默隐藏；`/upgrade dev` 与 `开发构建` 按钮当前会在允许 dev feed 的 flavor（源码 `dev` 与 release `alpha`）下暴露，`/upgrade local` 与 `本地升级` 只会在源码 `dev` flavor 下暴露。若来自带 `daemon_lifecycle_id` 的当前 page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade codex`、允许 dev feed 的 flavor 下的 `/upgrade dev`、源码 `dev` flavor 下的 `/upgrade local`）仍进入各自原有执行流。`/debug admin` 当前不再执行旧流，而是直接拒绝并提示改用 `/admin web`。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 page 上显示错误并保留表单默认值 |
 | stamped `/vscode-migrate` / `vscode_migrate_owner_flow` | `mixed` | `/vscode-migrate` 当前先打开 `FeishuPageView` root page；若入口来自带 `daemon_lifecycle_id` 的当前卡 callback，daemon 会走 page-result replacement，把 root page / 校验失败页 / `仅 VS Code 模式可用` 页同位替回当前卡。真正执行迁移的按钮当前发 `vscode_migrate_owner_flow` callback，迁移结果与后续 `/list` / open VS Code / 恢复提示都会继续 patch 在同一张 guidance card 上，不再经由旧文本重解析回调或 bare continuation |
-| `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `request_user_input` / `tool_callback` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` / `revise` | `mixed` | 卡片按钮、表单字段、`request_control` payload、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、request family 统一的 `editing -> waiting_dispatch -> resolved/restore` 生命周期，以及由 orchestrator 单点 request presentation owner 基于 `requestType/rawType/metadata` 归一化出的 `SemanticKind + Title/Sections/Options/Questions/HintText` contract，属于产品状态机。`tool_callback` 当前也走同一 owner，但落成只读 fail-closed auto-dispatch；projector 当前只消费 `FeishuRequestView`，不再自己回猜 approval / permissions / MCP subtype |
+| `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `approval_can_use_tool` / `request_user_input` / `tool_callback` / `permissions_request_approval` / `mcp_server_elicitation` / `captureFeedback` / `revise` | `mixed` | 卡片按钮、表单字段、`request_control` payload、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、request family 统一的 `editing -> waiting_dispatch -> resolved/restore` 生命周期，以及由 orchestrator 单点 request presentation owner 基于 `requestType/rawType/metadata` 归一化出的 `SemanticKind + Title/Sections/Options/Questions/HintText` contract，属于产品状态机。`tool_callback` 当前也走同一 owner，但落成只读 fail-closed auto-dispatch；projector 当前只消费 `FeishuRequestView`，不再自己回猜 approval / permissions / MCP subtype |
 | `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、headless/vscode 主分叉差异都属于 core 状态机 |
 | `/new` | `product-owned` | 是否进入 `new_thread_ready`、何时消耗第一条消息、request gate 是否阻断都属于 core 状态机 |
@@ -338,7 +338,7 @@
 
 - request family 当前仍共用一套 pending request substrate，但卡面语义已收口到 orchestrator 的单点 presentation owner
   - `FeishuRequestView` 会显式携带 `SemanticKind`
-  - 当前 live approval subtype 至少包括 `approval_command`、`approval_file_change`、`approval_network`、`plan_confirmation`
+  - 当前 live approval subtype 至少包括 `approval_command`、`approval_file_change`、`approval_network`、`approval_can_use_tool`、`plan_confirmation`
 - `approval_command` / `approval_file_change` / `approval_network`
   - 不再只是“同一张 approval 卡换几段文案”；orchestrator 会先按 subtype 生成标题、正文 sections、按钮集合和 hint
   - 选项直接跟随上游 `availableDecisions` 归一化结果，当前至少覆盖 `accept`、`acceptForSession`、`decline`、`cancel`
@@ -347,6 +347,11 @@
   - `approval_network` 会把 `networkApprovalContext` 投影成主机/协议/端口等“网络目标”正文，并给出联网导向的 hint
   - 最终点击任一决策后，当前卡会先切到 sealed waiting 态，不再保留“看起来还能继续点”的旧按钮
   - 若同一 turn 后续又冒出新的 approval family request，这些新请求不会立刻 append 成并行可点击卡，而是继续排在当前 request 之后，等队头 resolved 后再顺序激活
+- `approval_can_use_tool`
+  - 当前显式暴露 `允许一次`、`拒绝`、`告诉 Claude 怎么改`
+  - 正文会在通用命令确认信息之外补充 `工具`、`受限路径`、`建议权限` 等工具调用上下文
+  - `captureFeedback` 会进入 request-specific capture；下一条文本会作为同一次 request 的 `{decision=decline, message=<feedback>}` 回写给 Claude，不会再额外生成普通 follow-up queue item
+  - `decline` 与 `captureFeedback` 都只拒绝当前工具调用，不触发 `interruptOnDecline`
 - `plan_confirmation`
   - 当前先渲染 quick-decision 四个选项：
     - `允许一次并执行`

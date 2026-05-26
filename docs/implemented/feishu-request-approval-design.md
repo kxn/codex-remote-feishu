@@ -1,7 +1,7 @@
 # Feishu 确认请求增强设计
 
 > Type: `implemented`
-> Updated: `2026-04-06`
+> Updated: `2026-05-26`
 > Summary: 标记为已实现文档并迁移到 `docs/implemented`，同步修正对 canonical 文档的引用。
 
 ## 1. 文档定位
@@ -14,6 +14,13 @@
 - [relay-protocol-spec.md](../general/relay-protocol-spec.md)
 
 为准。
+
+补充说明：
+
+- 本文里多数早期 `captureFeedback -> decline + follow-up` 的描述，当前只对 generic approval 仍然成立。
+- Claude `approval_can_use_tool` 已改成同一次 request 内的 `{decision=decline, message=<feedback>}` 回写，不再额外生成 follow-up queue item。
+- `plan_confirmation` 也不再复用 generic `captureFeedback`，而是走 `revise` 的 same-request guidance 路径。
+- 若本文与 canonical 文档冲突，以 canonical 文档为准。
 
 ## 2. 背景
 

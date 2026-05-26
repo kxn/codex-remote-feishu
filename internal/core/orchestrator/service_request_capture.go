@@ -37,6 +37,14 @@ func (s *Service) consumeCapturedRequestFeedback(surface *state.SurfaceConsoleRe
 			"message":  strings.TrimSpace(text),
 		}, "已提交修改意见，等待 Claude 调整当前计划。")
 	}
+	if capture.Mode == requestCaptureModeSameRequestDecline {
+		clearSurfaceRequestCapture(surface)
+		return s.dispatchRequestResponse(surface, request, action, map[string]any{
+			"type":     "approval",
+			"decision": "decline",
+			"message":  strings.TrimSpace(text),
+		}, "已提交处理意见，等待 Claude 调整当前工具调用。")
+	}
 	if capture.Mode != requestCaptureModeDeclineWithFeedback {
 		clearSurfaceRequestCapture(surface)
 		return notice(surface, "request_capture_expired", "当前反馈模式已失效，请重新处理确认卡片。")
