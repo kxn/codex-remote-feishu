@@ -34,6 +34,32 @@ func TestRecoverCallbackValueUsesSelectedOptionBeforeFormValue(t *testing.T) {
 	}
 }
 
+func TestTargetPickerWorkspaceFlowPrefersFormValueOverSelectedOption(t *testing.T) {
+	action := &larkcallback.CallBackAction{
+		Option: "workspace-from-option",
+		FormValue: map[string]interface{}{
+			"target_picker_workspace": []interface{}{"workspace-from-form"},
+		},
+	}
+	got := TargetPickerWorkspaceFlow.RecoverSelectedValue(nil, action)
+	if got != "workspace-from-form" {
+		t.Fatalf("TargetPickerWorkspaceFlow.RecoverSelectedValue() = %q, want form value", got)
+	}
+}
+
+func TestTargetPickerSessionFlowPrefersFormValueOverSelectedOption(t *testing.T) {
+	action := &larkcallback.CallBackAction{
+		Option: "thread:from-option",
+		FormValue: map[string]interface{}{
+			"target_picker_session": []interface{}{"thread:from-form"},
+		},
+	}
+	got := TargetPickerSessionFlow.RecoverSelectedValue(nil, action)
+	if got != "thread:from-form" {
+		t.Fatalf("TargetPickerSessionFlow.RecoverSelectedValue() = %q, want form value", got)
+	}
+}
+
 func TestPaginatedSelectFlowDefinitionUsesPayloadFieldOverride(t *testing.T) {
 	def := PaginatedSelectFlowDefinition{FieldName: "selection_thread"}
 	action := &larkcallback.CallBackAction{

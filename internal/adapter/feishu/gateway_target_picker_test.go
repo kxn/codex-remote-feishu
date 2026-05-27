@@ -158,6 +158,45 @@ func TestParseCardActionTriggerEventBuildsTargetPickerSelectWorkspaceActionWithW
 	}
 }
 
+func TestParseCardActionTriggerEventTargetPickerWorkspacePrefersFormValueOverOption(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-target-picker-select-conflict", "feishu:app-1:chat:oc_group")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":      cardActionKindTargetPickerSelectWorkspace,
+					"picker_id": "picker-1",
+				},
+				Option: "workspace-from-option",
+				FormValue: map[string]interface{}{
+					cardTargetPickerWorkspaceFieldName: []interface{}{"workspace-from-form"},
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_group",
+				OpenMessageID: "om-card-target-picker-select-conflict",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected conflicting target picker workspace action to parse")
+	}
+	if action.Kind != control.ActionTargetPickerSelectWorkspace || action.PickerID != "picker-1" {
+		t.Fatalf("unexpected target picker workspace action: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:app-1:chat:oc_group" {
+		t.Fatalf("expected group-card callback to keep chat surface, got %#v", action)
+	}
+	if action.WorkspaceKey != "workspace-from-form" {
+		t.Fatalf("workspace key = %q, want %q", action.WorkspaceKey, "workspace-from-form")
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsTargetPickerOpenPathAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-target-picker-open-path", "feishu:app-1:user:user-1")
