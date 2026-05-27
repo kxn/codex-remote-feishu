@@ -146,7 +146,7 @@ func TestInspectWorkspaceDetachedHeadFallback(t *testing.T) {
 }
 
 func TestInspectWorkspaceOutsideGitRepo(t *testing.T) {
-	info, err := InspectWorkspace(t.TempDir(), InspectOptions{})
+	info, err := InspectWorkspace(createNonRepoDirForTest(t), InspectOptions{})
 	if err != nil {
 		t.Fatalf("InspectWorkspace(non-git) error = %v", err)
 	}
@@ -260,6 +260,34 @@ func createUnbornGitRepoForTest(t *testing.T) string {
 	runGitTestCommand(t, repoRoot, "init", "-q")
 	disableGitAutoMaintenanceForTest(t, repoRoot)
 	return repoRoot
+}
+
+func createNonRepoDirForTest(t *testing.T) string {
+	t.Helper()
+	if dir := t.TempDir(); dir != "" {
+		info, err := LocateWorkspace(dir)
+		if err == nil && !info.InRepo() {
+			return dir
+		}
+	}
+	for _, base := range []string{"/var/tmp", "/dev/shm"} {
+		base = strings.TrimSpace(base)
+		if base == "" {
+			continue
+		}
+		dir, err := os.MkdirTemp(base, "gitmeta-nonrepo-")
+		if err != nil {
+			continue
+		}
+		info, locateErr := LocateWorkspace(dir)
+		if locateErr == nil && !info.InRepo() {
+			t.Cleanup(func() { _ = os.RemoveAll(dir) })
+			return dir
+		}
+		_ = os.RemoveAll(dir)
+	}
+	t.Skip("could not allocate temp dir outside any git repo")
+	return ""
 }
 
 func disableGitAutoMaintenanceForTest(t *testing.T, repoRoot string) {
