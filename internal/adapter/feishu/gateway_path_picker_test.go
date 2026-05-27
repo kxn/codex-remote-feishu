@@ -198,3 +198,76 @@ func TestParseCardActionTriggerEventBuildsPathPickerPageAction(t *testing.T) {
 		t.Fatalf("unexpected path picker page payload: %#v", action)
 	}
 }
+
+func TestParseCardActionTriggerEventPathPickerPrefersFormValueOverOptionInGroupChat(t *testing.T) {
+	tests := []struct {
+		name      string
+		payload   map[string]any
+		formValue map[string]interface{}
+		wantKind  control.ActionKind
+		wantEntry string
+	}{
+		{
+			name: "directory enter",
+			payload: map[string]any{
+				"kind":       cardActionKindPathPickerEnter,
+				"picker_id":  "picker-1",
+				"field_name": cardPathPickerDirectorySelectFieldName,
+			},
+			formValue: map[string]interface{}{
+				cardPathPickerDirectorySelectFieldName: []interface{}{"dir-from-form"},
+			},
+			wantKind:  control.ActionPathPickerEnter,
+			wantEntry: "dir-from-form",
+		},
+		{
+			name: "file select",
+			payload: map[string]any{
+				"kind":       cardActionKindPathPickerSelect,
+				"picker_id":  "picker-1",
+				"field_name": cardPathPickerFileSelectFieldName,
+			},
+			formValue: map[string]interface{}{
+				cardPathPickerFileSelectFieldName: []interface{}{"file-from-form.txt"},
+			},
+			wantKind:  control.ActionPathPickerSelect,
+			wantEntry: "file-from-form.txt",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+			gateway.recordSurfaceMessage("om-card-picker-conflict", "feishu:app-1:chat:oc_group")
+			userID := "user-1"
+			event := &larkcallback.CardActionTriggerEvent{
+				Event: &larkcallback.CardActionTriggerRequest{
+					Operator: &larkcallback.Operator{UserID: &userID},
+					Action: &larkcallback.CallBackAction{
+						Value:     tt.payload,
+						Option:    "value-from-option",
+						FormValue: tt.formValue,
+					},
+					Context: &larkcallback.Context{
+						OpenChatID:    "oc_group",
+						OpenMessageID: "om-card-picker-conflict",
+					},
+				},
+			}
+
+			action, ok := gateway.parseCardActionTriggerEvent(event)
+			if !ok {
+				t.Fatal("expected conflicting path picker action to parse")
+			}
+			if action.Kind != tt.wantKind || action.PickerID != "picker-1" {
+				t.Fatalf("unexpected path picker action: %#v", action)
+			}
+			if action.SurfaceSessionID != "feishu:app-1:chat:oc_group" {
+				t.Fatalf("expected group-card callback to keep chat surface, got %#v", action)
+			}
+			if action.PickerEntry != tt.wantEntry {
+				t.Fatalf("picker entry = %q, want %q", action.PickerEntry, tt.wantEntry)
+			}
+		})
+	}
+}

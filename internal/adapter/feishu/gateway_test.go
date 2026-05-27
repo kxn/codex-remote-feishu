@@ -766,6 +766,46 @@ func TestParseCardActionTriggerEventBuildsUseThreadActionFromSelectStatic(t *tes
 	}
 }
 
+func TestParseCardActionTriggerEventUseThreadPrefersFormValueOverOptionInGroupChat(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-3d", "feishu:app-1:chat:oc_group")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]interface{}{
+					"kind":                  "use_thread",
+					"field_name":            "selection_thread",
+					"allow_cross_workspace": true,
+				},
+				Option: "thread-from-option",
+				FormValue: map[string]interface{}{
+					"selection_thread": []interface{}{"thread-from-form"},
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_group",
+				OpenMessageID: "om-card-3d",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected conflicting select_static use_thread callback to be parsed")
+	}
+	if action.Kind != control.ActionUseThread || !action.AllowCrossWorkspace {
+		t.Fatalf("unexpected dropdown use_thread action: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:app-1:chat:oc_group" {
+		t.Fatalf("expected group-card callback to keep chat surface, got %#v", action)
+	}
+	if action.ThreadID != "thread-from-form" {
+		t.Fatalf("thread id = %q, want %q", action.ThreadID, "thread-from-form")
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsThreadSelectionPageAction(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-3c", "feishu:app-1:user:user-1")

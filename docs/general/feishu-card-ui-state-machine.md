@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-05-27`
-> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；dropdown callback 取值规则统一落在 `internal/adapter/feishu/selectflow`，其中 path picker 与 thread selection 继续按 `payload value -> option/options -> form_value[field_name]` 恢复，target picker 的 workspace/session lane 则按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊 `select_static` 回调把旧 option 误当成新选择。
+> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；显式表单提交家族仍保持各自既有 submit 语义。
 
 ## 1. 文档定位
 
@@ -53,7 +53,7 @@
   - 负责把 Feishu callback 解析成 `control.Action`
   - 负责决定 callback 是同步等待 replace，还是立即 ack 后异步处理
   - 对无 callback 的共享更新卡，负责执行首次发送与后续 `message.patch`
-  - path / target / thread dropdown 的选中值恢复当前统一经 `internal/adapter/feishu/selectflow` 收口：gateway 不再按 picker 类型分别维护 `selected-entry` / `form-value` fallback，但 recover 顺序会随 flow 定义区分。path picker 与 thread selection 继续按 `payload value -> option/options -> form_value[field_name]` 恢复；target picker 的 workspace/session lane 则显式按 `payload value -> form_value[field_name] -> option/options` 恢复，避免 `select_static` 回调把上一轮 option 误判成新选择
+  - path / target / thread / history 这类 immediate `select_static` callback 的选中值恢复当前统一经 `internal/adapter/feishu/selectflow` 收口：gateway 不再按 picker 类型分别维护 `selected-entry` / `form-value` fallback，而是统一按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊 `select_static` 回调把上一轮 option 误判成新选择
 - `daemon`
   - 负责 old-card / old-message 生命周期判定
   - 负责在 ingress 层统一把动作交给主 `ApplySurfaceAction()` 入口；`FeishuUIIntent` 分流发生在 service 内，避免绕开 request/path-picker 等产品门禁
@@ -224,16 +224,16 @@
 | `target_picker_cancel` | `picker_id`、`request_answers` | 四张独立工作会话卡共用的退出按钮；gateway 只需命中当前 active picker，并把必要草稿带回；服务端随后会把当前卡封成对应 terminal 态：普通编辑态为 `已取消`，Git import processing 态为 `已取消导入`，worktree processing 态为 `已取消创建`，随后清掉 active picker / owner-card flow |
 | `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session`、`request_answers` | 四张独立工作会话卡共用的确认按钮：`/workspace list` 把当前表单值送到产品层执行 attach / switch；`/workspace new dir` 当前第一次确认只做服务端 `检查目标目录`，并把 `目标目录`、busy、known workspace、目标目录已存在、非法目录名等结果回写到同一张 owner card；只有最近一次检查结果仍然有效时，第二次确认才会真的执行 `接入并继续` 或 `创建并继续`。`/workspace new git` 与 `/workspace new worktree` 继续在同一张 owner card 上做 submit-time validation 并进入 processing / terminal；Git 路径要求 repo / 落地父目录预览有效，worktree 路径则从 `request_answers` 里恢复 `target_picker_worktree_branch_name` / `target_picker_worktree_directory_name` 草稿，并要求基准工作区、分支名和目标路径预览有效；Git 长链路会先 patch 成 `正在导入 Git 工作区`，随后在 clone 成功后继续 patch 到“接入工作区 / 准备会话”，并允许同卡 `取消导入`；worktree 长链路会先 patch 成 `正在创建 Worktree 工作区`，随后在创建成功后继续 patch 到“正在接入工作区”，并允许同卡 `取消创建` |
 | `history_page` | `picker_id`、`page` | `/history` 列表页翻页；命中当前 history owner-card flow 时同步替换当前卡为 loading，然后异步重查当前 thread history |
-| `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；命中当前 history owner-card flow 时同样先切 loading；gateway 继续兼容 `form_value[field_name]` / `option` / `options` 取值 |
+| `history_detail` | `picker_id`、`turn_id` 或 `field_name + selected option` | `/history` 进入某一轮详情，或在详情页前后切换；命中当前 history owner-card flow 时同样先切 loading；gateway 按 `payload value -> form_value[field_name] -> option -> options` 恢复 turn id |
 | `upgrade_owner_flow` | `picker_id`、`option_id` | `/upgrade latest` 与 `/upgrade codex` 共用的 daemon owner-card 显式动作；gateway 只解析 `picker_id` / `option_id`，daemon 再按 flow id 前缀路由到 release 或 Codex flow。release flow 当前使用 `check` / `confirm` / `cancel`，Codex flow 当前使用 `check` / `confirm`；两者都要求命中当前 active flow id，旧卡或他人卡片不会继续改写升级状态。首卡若没有现成 `message_id`，会先以 page `TrackingKey` append，待 gateway 分配 `message_id` 后再回写到对应 owner flow，后续 checking / confirm-ready / running / terminal 一律 patch 同一张卡 |
 | `plan_proposal` | `picker_id`、`option_id` | 提案计划卡的 owner-flow callback；`option_id` 当前只用 `execute` / `execute_new` / `cancel`。gateway 只负责按当前 active proposal id 解析回 `ActionPlanProposalDecision`；真正的 `PlanMode=off`、继续派发 follow-up turn，以及 seal 当前卡，仍由 orchestrator 决定 |
 | `page_local_action` | `action_kind`、`action_arg(可选)` | 当前卡上的本地按钮动作；gateway 解析后直接写回 `Action.Kind` 并生成 canonical `Action.Text`，同时把 `Action.LocalPageAction=true`。这条 payload 用于 keep/back/root/menu 与其他 page-owner 本地导航，也用于 `/debug` `/upgrade` `/cron` 这类 direct page 的 current-card 按钮、`/bendtomywill` success card 的 rollback，以及 review final-card footer 的 `Review 待提交内容` / `评审 <short-sha>` / `放弃审阅` / `按审阅意见继续修改`。它不带 catalog provenance，也不会先触发 `command_entry_expired`。若动作后续仍路由到 daemon command，runtime 会继续把“这次确实来自当前卡 callback”的事实传给下游 daemon command |
 | `page_local_submit` | `action_kind`、`field_name`、`action_arg_prefix(可选)` | page 卡内的本地表单提交；gateway 继续按 `form_value[field_name]`/`option` 取参数并组装 canonical `Action.Text`，同时把 `Action.LocalPageAction=true`。这条 payload 用于仍留在当前 page/session 语义内的本地提交，不带 catalog provenance |
 | `page_action` | `action_kind`、`action_arg(可选)`、`catalog_family_id`、`catalog_variant_id`、`catalog_backend` | page 卡按钮的结构化动作；gateway 解析后直接写回 `Action.Kind`，并用 `BuildFeishuActionText` 生成 canonical `Action.Text`；命令类 live 按钮当前要求 payload 自带完整 catalog provenance，缺失字段、legacy default variant 或当前 surface 上下文变化时，runtime 会拒绝为 `command_entry_expired`。当前继续保留这条 payload 的主要是那些必须继续走 catalog freshness 的 live 命令按钮，而不再包括 review final-card footer follow-up |
 | `page_submit` | `action_kind`、`field_name`、`action_arg_prefix(可选)`、`catalog_family_id`、`catalog_variant_id`、`catalog_backend` | page 卡表单提交；gateway 从 `form_value[field_name]`/`option` 取参数，按 `action_arg_prefix + 参数` 组装后写回 `Action.Text`；命令类 live 表单当前同样要求 payload 自带完整 catalog provenance，缺失字段、legacy default variant 或当前 surface 上下文变化时，runtime 会拒绝为 `command_entry_expired`。当前仍保留这条路径的是那些确实需要继续走 catalog provenance 的 live 命令表单，而不再包括菜单内的 review commit picker |
-| `path_picker_enter` | `picker_id`、`entry_name` 或 `field_name + selected option` | 进入当前 active picker 里的一个子目录；`/sendfile` 文件模式下通常来自目录下拉 |
+| `path_picker_enter` | `picker_id`、`entry_name` 或 `field_name + selected option` | 进入当前 active picker 里的一个子目录；`/sendfile` 文件模式下通常来自目录下拉；gateway 按 `payload value -> form_value[field_name] -> option -> options` 恢复目录项 |
 | `path_picker_up` | `picker_id` | 回到当前 active picker 的上一级目录 |
-| `path_picker_select` | `picker_id`、`entry_name` 或 `field_name + selected option` | 在当前 active picker 里选择一个文件或目录；`/sendfile` 文件模式下通常来自文件下拉，当前只更新待发送文件，不直接触发发送 |
+| `path_picker_select` | `picker_id`、`entry_name` 或 `field_name + selected option` | 在当前 active picker 里选择一个文件或目录；`/sendfile` 文件模式下通常来自文件下拉，当前只更新待发送文件，不直接触发发送；gateway 按 `payload value -> form_value[field_name] -> option -> options` 恢复文件项 |
 | `path_picker_page` | `picker_id`、`field_name`、`cursor` | path picker dropdown 的 byte-budget 翻页回调；`field_name` 区分目录 / 文件 lane，`cursor` 是候选项 start-index，不包含固定 `.` / `..`。目录翻页只更新可见候选页；文件翻页会保留当前目录，但显式清空文件选择并禁用 confirm，避免 invisible confirm |
 | `path_picker_confirm` | `picker_id` | 用当前 active picker 的已校验结果触发 consumer handoff；若 picker 带有 `owner_flow_id` 且命中 target picker owner card，consumer 可直接回填并 patch 原 owner card；独立 `/sendfile` picker 则会在 confirm 后保留自身 lifecycle，启动前失败继续 patch 当前卡，启动成功把当前卡封成 terminal |
 | `path_picker_cancel` | `picker_id` | 结束当前 active picker，并把取消结果交给 consumer 或默认 notice；target picker 子步骤当前会直接恢复原 owner card，而不是额外发一张取消卡 |
@@ -292,12 +292,12 @@
 - `path_picker_enter` / `path_picker_select`
   - 旧按钮路径继续直接读取 `entry_name`
   - `select_static` 路径允许 payload 只带 `field_name`
-  - gateway 当前按 `action.option -> action.options[0] -> form_value[field_name]` 的顺序提取被选中的目录/文件条目
+  - gateway 当前按 `payload value -> form_value[field_name] -> action.option -> action.options[0]` 的顺序提取被选中的目录/文件条目
   - 这样 projector 可以把复用 path picker 统一收敛成紧凑下拉，而不必继续为每个条目单独渲染按钮；当前目录模式使用单目录下拉，文件模式使用目录/文件双下拉
   - 目录下拉当前会在 `CanGoUp=true` 时额外插入一个值为 `..` 的首项；这条值仍然走 `path_picker_enter`，最终由 orchestrator 复用现有 root-boundary 校验解析到父目录
   - 当前路径选择器卡片已不再额外渲染 `path_picker_up` 按钮；目录下拉里的 `..` 是默认“返回上一级”入口，因此卡面统一保持“目录浏览走目录下拉、文件选择走文件下拉（若有）、确认/取消走底部按钮”的结构
 - `target_picker_select_workspace` / `target_picker_select_session`
-  - 这两条 workspace/session lane 当前也复用 `internal/adapter/feishu/selectflow`，但与 path / thread 不同，显式选择 `PreferFormValue` contract
+  - 这两条 workspace/session lane 当前也复用 `internal/adapter/feishu/selectflow`，并与 path / thread / history 一起统一到 immediate callback recover contract
   - gateway 当前按 `payload value -> form_value[field_name] -> action.option -> action.options[0]` 的顺序提取选中的 workspace / session
   - 这样 `select_static` 在群聊里即使带回旧 option，也会以前端最新 `form_value` 为准，原卡才能稳定推进到下一步，而不会停在 silent no-op
 - `path_picker_page`

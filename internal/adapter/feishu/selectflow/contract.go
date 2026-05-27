@@ -15,7 +15,6 @@ type PaginatedSelectFlowDefinition struct {
 	FieldName       string
 	PayloadValueKey string
 	PaginationHint  string
-	PreferFormValue bool
 }
 
 var (
@@ -30,18 +29,21 @@ var (
 		PaginationHint:  DefaultPaginationHint,
 	}
 	TargetPickerWorkspaceFlow = PaginatedSelectFlowDefinition{
-		FieldName:       frontstagecontract.CardTargetPickerWorkspaceFieldName,
-		PaginationHint:  DefaultPaginationHint,
-		PreferFormValue: true,
+		FieldName:      frontstagecontract.CardTargetPickerWorkspaceFieldName,
+		PaginationHint: DefaultPaginationHint,
 	}
 	TargetPickerSessionFlow = PaginatedSelectFlowDefinition{
-		FieldName:       frontstagecontract.CardTargetPickerSessionFieldName,
-		PaginationHint:  DefaultPaginationHint,
-		PreferFormValue: true,
+		FieldName:      frontstagecontract.CardTargetPickerSessionFieldName,
+		PaginationHint: DefaultPaginationHint,
 	}
 	ThreadSelectionFlow = PaginatedSelectFlowDefinition{
 		FieldName:       frontstagecontract.CardSelectionThreadFieldName,
 		PayloadValueKey: frontstagecontract.CardActionPayloadKeyThreadID,
+		PaginationHint:  DefaultPaginationHint,
+	}
+	HistoryTurnFlow = PaginatedSelectFlowDefinition{
+		FieldName:       frontstagecontract.CardThreadHistoryTurnFieldName,
+		PayloadValueKey: frontstagecontract.CardActionPayloadKeyTurnID,
 		PaginationHint:  DefaultPaginationHint,
 	}
 )
@@ -54,18 +56,6 @@ func (d PaginatedSelectFlowDefinition) ResolvedFieldName(payload map[string]any)
 }
 
 func (d PaginatedSelectFlowDefinition) RecoverSelectedValue(payload map[string]any, action *larkcallback.CallBackAction) string {
-	if value := payloadStringValue(payload, d.PayloadValueKey); value != "" {
-		return value
-	}
-	if d.PreferFormValue {
-		fieldName := strings.TrimSpace(d.FieldName)
-		if payloadFieldName := payloadStringValue(payload, frontstagecontract.CardActionPayloadKeyFieldName); payloadFieldName != "" {
-			fieldName = payloadFieldName
-		}
-		if value := FormValue(action.FormValue, fieldName); value != "" {
-			return value
-		}
-	}
 	return RecoverCallbackValue(payload, action, d.FieldName, d.PayloadValueKey)
 }
 
@@ -73,17 +63,19 @@ func RecoverCallbackValue(payload map[string]any, action *larkcallback.CallBackA
 	if value := payloadStringValue(payload, payloadValueKey); value != "" {
 		return value
 	}
-	if value := SelectedOptionValue(action); value != "" {
-		return value
-	}
 	fieldName := strings.TrimSpace(defaultFieldName)
 	if payloadFieldName := payloadStringValue(payload, frontstagecontract.CardActionPayloadKeyFieldName); payloadFieldName != "" {
 		fieldName = payloadFieldName
 	}
-	if fieldName == "" || action == nil {
-		return ""
+	if fieldName != "" && action != nil {
+		if value := FormValue(action.FormValue, fieldName); value != "" {
+			return value
+		}
 	}
-	return FormValue(action.FormValue, fieldName)
+	if value := SelectedOptionValue(action); value != "" {
+		return value
+	}
+	return ""
 }
 
 func SelectedOptionValue(action *larkcallback.CallBackAction) string {

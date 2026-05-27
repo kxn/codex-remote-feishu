@@ -88,3 +88,43 @@ func TestParseCardActionTriggerEventBuildsHistoryActions(t *testing.T) {
 		})
 	}
 }
+
+func TestParseCardActionTriggerEventHistoryDetailPrefersFormValueOverOptionInGroupChat(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-history-conflict", "feishu:app-1:chat:oc_group")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]any{
+					"kind":       cardActionKindHistoryDetail,
+					"picker_id":  "history-1",
+					"field_name": cardThreadHistoryTurnFieldName,
+				},
+				Option: "turn-from-option",
+				FormValue: map[string]interface{}{
+					cardThreadHistoryTurnFieldName: []interface{}{"turn-from-form"},
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_group",
+				OpenMessageID: "om-card-history-conflict",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected conflicting history detail action to parse")
+	}
+	if action.Kind != control.ActionHistoryDetail || action.PickerID != "history-1" {
+		t.Fatalf("unexpected history action: %#v", action)
+	}
+	if action.SurfaceSessionID != "feishu:app-1:chat:oc_group" {
+		t.Fatalf("expected group-card callback to keep chat surface, got %#v", action)
+	}
+	if action.TurnID != "turn-from-form" {
+		t.Fatalf("turn id = %q, want %q", action.TurnID, "turn-from-form")
+	}
+}
