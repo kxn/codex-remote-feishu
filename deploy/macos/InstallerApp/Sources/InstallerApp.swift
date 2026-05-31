@@ -86,17 +86,8 @@ final class InstallerViewController: NSViewController {
         switch screenState {
         case .ready:
             beginInstall()
-        case .success(let result):
-            if result.setupRequired, !result.setupURL.isEmpty {
-                bridge.openURL(result.setupURL)
-            } else if !result.adminURL.isEmpty {
-                bridge.openURL(result.adminURL)
-            } else {
-                NSApp.terminate(nil)
-            }
-        case .failure:
-            clearLog()
-            startProbe()
+        case .result(let model):
+            performPrimaryResultAction(model.primaryAction)
         case .loading, .installing:
             break
         }
@@ -140,9 +131,10 @@ final class InstallerViewController: NSViewController {
             } catch {
                 DispatchQueue.main.async {
                     self.plan = nil
-                    self.screenState = .failure(InstallerFailureState(
+                    self.screenState = .result(InstallerResultPageModel.fromFailure(
                         message: error.localizedDescription,
-                        detail: "安装器暂时无法完成当前环境探测。请确认嵌入 payload 可执行、版本资源存在，并查看下方过程日志。"
+                        detail: "安装器暂时无法完成当前环境探测。请确认嵌入 payload 可执行、版本资源存在，并查看下方过程日志。",
+                        logPath: ""
                     ))
                     self.render()
                 }
@@ -172,18 +164,19 @@ final class InstallerViewController: NSViewController {
                 switch result {
                 case .success(let summary):
                     if summary.result.ok {
-                        if summary.result.setupRequired, !summary.result.setupURL.isEmpty {
-                            self.bridge.openURL(summary.result.setupURL)
-                        }
-                        self.screenState = .success(summary.result)
+                        self.screenState = .result(InstallerResultPageModel.fromSuccess(
+                            probe: plan.probe,
+                            result: summary.result
+                        ))
                     } else {
-                        self.screenState = .failure(self.failureState(from: summary))
+                        self.screenState = .result(self.failureResultModel(from: summary))
                     }
                     self.render()
                 case .failure(let error):
-                    self.screenState = .failure(InstallerFailureState(
+                    self.screenState = .result(InstallerResultPageModel.fromFailure(
                         message: error.localizedDescription,
-                        detail: "安装器没有拿到有效结果文件。请检查嵌入 payload 的启动错误，或查看下方过程日志。"
+                        detail: "安装器没有拿到有效结果文件。请检查嵌入 payload 的启动错误，或查看下方过程日志。",
+                        logPath: ""
                     ))
                     self.render()
                 }
@@ -321,11 +314,11 @@ final class InstallerViewController: NSViewController {
             primaryButton.title = "安装中..."
             secondaryButton.title = "安装中..."
             secondaryButton.isEnabled = false
-        case .success(let result):
-            stepLabel.stringValue = "Finished"
-            titleLabel.stringValue = "安装完成"
-            summaryLabel.stringValue = successSummary(for: result)
-            detailLabel.stringValue = successDetail(for: result)
+        case .result(let model):
+            stepLabel.stringValue = model.stepText
+            titleLabel.stringValue = model.title
+            summaryLabel.stringValue = model.summary
+            detailLabel.stringValue = resultDetailText(for: model)
             locationTitleLabel.isHidden = true
             locationField.isHidden = true
             browseButton.isHidden = true
@@ -333,22 +326,7 @@ final class InstallerViewController: NSViewController {
             progressIndicator.stopAnimation(nil)
             logScrollView.isHidden = false
             primaryButton.isEnabled = true
-            primaryButton.title = successPrimaryAction(for: result)
-            secondaryButton.title = "关闭"
-            secondaryButton.isEnabled = true
-        case .failure(let failure):
-            stepLabel.stringValue = "Error"
-            titleLabel.stringValue = "安装失败"
-            summaryLabel.stringValue = failure.message
-            detailLabel.stringValue = failure.detail
-            locationTitleLabel.isHidden = true
-            locationField.isHidden = true
-            browseButton.isHidden = true
-            locationHintLabel.isHidden = true
-            progressIndicator.stopAnimation(nil)
-            logScrollView.isHidden = false
-            primaryButton.isEnabled = true
-            primaryButton.title = "重新检查"
+            primaryButton.title = model.primaryAction.title
             secondaryButton.title = "关闭"
             secondaryButton.isEnabled = true
         }
@@ -360,7 +338,7 @@ final class InstallerViewController: NSViewController {
             lines.append("当前已安装版本：\(currentVersion)")
         }
         lines.append("安装器版本：\(plan.installerVersion)")
-        let startupMode = friendlyStartupModeLabel(plan.probe.startupMode, serviceManager: plan.probe.serviceManager)
+        let startupMode = installerFriendlyStartupModeLabel(plan.probe.startupMode, serviceManager: plan.probe.serviceManager)
         if !startupMode.isEmpty {
             let prefix = plan.probe.mode == "repair" ? "当前启动方式" : "安装后启动方式"
             lines.append("\(prefix)：\(startupMode)")
@@ -368,80 +346,35 @@ final class InstallerViewController: NSViewController {
         return lines.joined(separator: "\n")
     }
 
-    private func successSummary(for result: PackagedInstallResultValue) -> String {
-        if result.setupRequired, !result.setupURL.isEmpty {
-            return "后台服务已经启动，WebSetup 会自动打开。若浏览器没有弹出，可以点击下方按钮重新打开。"
-        }
-        if !result.adminURL.isEmpty {
-            return "后台服务已经启动。你可以直接打开管理页继续使用。"
-        }
-        return "安装流程已经完成。"
-    }
-
-    private func successDetail(for result: PackagedInstallResultValue) -> String {
+    private func resultDetailText(for model: InstallerResultPageModel) -> String {
         var lines: [String] = []
-        if !result.currentVersion.isEmpty {
-            lines.append("已安装版本：\(result.currentVersion)")
+        if !model.detail.isEmpty {
+            lines.append(model.detail)
         }
-        let startupMode = friendlyStartupModeLabel(result.startupMode, serviceManager: result.serviceManager)
-        if !startupMode.isEmpty {
-            lines.append("当前启动方式：\(startupMode)")
-        }
-        if !result.logPath.isEmpty {
-            lines.append("日志路径：\(result.logPath)")
-        }
-        if !result.adminURL.isEmpty {
-            lines.append("管理页：\(result.adminURL)")
-        }
-        if !result.setupURL.isEmpty {
-            lines.append("WebSetup：\(result.setupURL)")
-        }
+        lines.append(contentsOf: model.infoItems.map { "\($0.label)：\($0.value)" })
         return lines.joined(separator: "\n")
     }
 
-    private func friendlyStartupModeLabel(_ startupMode: String?, serviceManager: String?) -> String {
-        let normalizedMode = (startupMode ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalizedMode {
-        case "manual":
-            return "手动/按需启动"
-        case "login_autostart":
-            return "登录后自动启动"
-        default:
-            break
-        }
-
-        let normalizedManager = (serviceManager ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        switch normalizedManager {
-        case "detached":
-            return "手动/按需启动"
-        case "launchd_user", "task_scheduler_logon", "systemd_user":
-            return "登录后自动启动"
-        default:
-            return ""
-        }
-    }
-
-    private func successPrimaryAction(for result: PackagedInstallResultValue) -> String {
-        if result.setupRequired, !result.setupURL.isEmpty {
-            return "打开 WebSetup"
-        }
-        if !result.adminURL.isEmpty {
-            return "打开管理页"
-        }
-        return "完成"
-    }
-
-    private func failureState(from summary: InstallerExecutionSummary) -> InstallerFailureState {
-        var detailParts: [String] = [
-            "你可以查看下方日志后重试。若问题持续存在，优先关注 result-file 返回的错误和 daemon 日志路径。"
-        ]
-        if !summary.result.logPath.isEmpty {
-            detailParts.append("日志路径：\(summary.result.logPath)")
-        }
-        return InstallerFailureState(
+    private func failureResultModel(from summary: InstallerExecutionSummary) -> InstallerResultPageModel {
+        InstallerResultPageModel.fromFailure(
             message: summary.result.error.isEmpty ? "安装失败" : summary.result.error,
-            detail: detailParts.joined(separator: "\n")
+            detail: "你可以查看下方日志后重试。若问题持续存在，优先关注 result-file 返回的错误和 daemon 日志路径。",
+            logPath: summary.result.logPath
         )
+    }
+
+    private func performPrimaryResultAction(_ action: InstallerResultPageAction) {
+        switch action.kind {
+        case .continueWebSetup, .openAdminUI:
+            guard let target = action.target else {
+                NSApp.terminate(nil)
+                return
+            }
+            bridge.openURL(target)
+            NSApp.terminate(nil)
+        case .openLogs, .finish:
+            NSApp.terminate(nil)
+        }
     }
 
     private func appendLog(_ text: String) {

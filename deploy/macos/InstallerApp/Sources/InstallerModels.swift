@@ -84,15 +84,9 @@ struct InstallerExecutionRequest {
     let installBinDir: String
 }
 
-struct InstallerFailureState {
-    let message: String
-    let detail: String
-}
-
 enum ScreenState {
     case loading
     case ready
     case installing
-    case success(PackagedInstallResultValue)
-    case failure(InstallerFailureState)
+    case result(InstallerResultPageModel)
 }
