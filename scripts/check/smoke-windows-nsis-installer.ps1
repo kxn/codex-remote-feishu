@@ -144,7 +144,7 @@ function Test-EnglishFreshInstallSetup([string]$InstallerPath) {
     }
 
   $capture = $result.Capture
-  Assert-Equal "fresh-setup exit code" $result.ExitCode "0"
+  Assert-Equal "fresh-setup failure flag" $capture["resultFailure"] "false"
   Assert-Equal "fresh-setup action" $capture["primaryActionKind"] "continue_websetup"
   Assert-Equal "fresh-setup button" $capture["primaryButtonText"] "Continue WebSetup"
   Assert-Equal "fresh-setup title" $capture["titleText"] "Base installation completed"
@@ -176,7 +176,7 @@ function Test-ChineseFreshInstallComplete([string]$InstallerPath) {
     }
 
   $capture = $result.Capture
-  Assert-Equal "zh fresh-complete exit code" $result.ExitCode "0"
+  Assert-Equal "zh fresh-complete failure flag" $capture["resultFailure"] "false"
   Assert-Equal "zh fresh-complete action" $capture["primaryActionKind"] "finish"
   Assert-Equal "zh fresh-complete button" $capture["primaryButtonText"] "完成"
   Assert-Equal "zh fresh-complete title" $capture["titleText"] "安装完成"
@@ -210,7 +210,7 @@ function Test-EnglishRepair([string]$InstallerPath) {
     }
 
   $capture = $result.Capture
-  Assert-Equal "repair exit code" $result.ExitCode "0"
+  Assert-Equal "repair failure flag" $capture["resultFailure"] "false"
   Assert-Equal "repair action" $capture["primaryActionKind"] "finish"
   Assert-Equal "repair title" $capture["titleText"] "Reinstallation completed"
   Assert-Contains "repair body" $capture["bodyText"] "reinstalled successfully"
@@ -238,7 +238,7 @@ function Test-EnglishFailure([string]$InstallerPath) {
     }
 
   $capture = $result.Capture
-  Assert-Equal "failure exit code" $result.ExitCode "1"
+  Assert-Equal "failure flag" $capture["resultFailure"] "true"
   Assert-Equal "failure action" $capture["primaryActionKind"] "finish"
   Assert-Equal "failure title" $capture["titleText"] "Installation failed"
   Assert-Contains "failure body" $capture["bodyText"] "simulated install failure"
@@ -268,7 +268,7 @@ function Test-BetaBuildLaunches([string]$InstallerPath) {
     }
 
   $capture = $result.Capture
-  Assert-Equal "beta build exit code" $result.ExitCode "0"
+  Assert-Equal "beta build failure flag" $capture["resultFailure"] "false"
   Assert-Equal "beta build title" $capture["titleText"] "Installation completed"
 }
 
