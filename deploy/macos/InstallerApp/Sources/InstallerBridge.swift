@@ -55,7 +55,6 @@ final class InstallerBridge {
                 "-binary", binaryURL.path,
                 "-current-version", metadata.version,
                 "-current-track", metadata.track,
-                "-service-manager", "launchd_user",
                 "-format", "text",
                 "-result-file", resultFileURL.path,
             ]
@@ -266,6 +265,8 @@ final class InstallerBridge {
                 result.installedBinary = value
             case "serviceManager":
                 result.serviceManager = value
+            case "startupMode":
+                result.startupMode = value
             case "currentVersion":
                 result.currentVersion = value
             case "currentTrack":

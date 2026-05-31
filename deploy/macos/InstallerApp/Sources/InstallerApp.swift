@@ -360,8 +360,10 @@ final class InstallerViewController: NSViewController {
             lines.append("当前已安装版本：\(currentVersion)")
         }
         lines.append("安装器版本：\(plan.installerVersion)")
-        if let serviceManager = plan.probe.serviceManager, !serviceManager.isEmpty {
-            lines.append("服务管理：\(serviceManager)")
+        let startupMode = friendlyStartupModeLabel(plan.probe.startupMode, serviceManager: plan.probe.serviceManager)
+        if !startupMode.isEmpty {
+            let prefix = plan.probe.mode == "repair" ? "当前启动方式" : "安装后启动方式"
+            lines.append("\(prefix)：\(startupMode)")
         }
         return lines.joined(separator: "\n")
     }
@@ -381,6 +383,10 @@ final class InstallerViewController: NSViewController {
         if !result.currentVersion.isEmpty {
             lines.append("已安装版本：\(result.currentVersion)")
         }
+        let startupMode = friendlyStartupModeLabel(result.startupMode, serviceManager: result.serviceManager)
+        if !startupMode.isEmpty {
+            lines.append("当前启动方式：\(startupMode)")
+        }
         if !result.logPath.isEmpty {
             lines.append("日志路径：\(result.logPath)")
         }
@@ -391,6 +397,28 @@ final class InstallerViewController: NSViewController {
             lines.append("WebSetup：\(result.setupURL)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private func friendlyStartupModeLabel(_ startupMode: String?, serviceManager: String?) -> String {
+        let normalizedMode = (startupMode ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalizedMode {
+        case "manual":
+            return "手动/按需启动"
+        case "login_autostart":
+            return "登录后自动启动"
+        default:
+            break
+        }
+
+        let normalizedManager = (serviceManager ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalizedManager {
+        case "detached":
+            return "手动/按需启动"
+        case "launchd_user", "task_scheduler_logon", "systemd_user":
+            return "登录后自动启动"
+        default:
+            return ""
+        }
     }
 
     private func successPrimaryAction(for result: PackagedInstallResultValue) -> String {

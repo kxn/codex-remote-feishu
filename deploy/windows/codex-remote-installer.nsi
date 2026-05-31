@@ -44,7 +44,7 @@ Section "Install"
   StrCpy $ResultFile "$PLUGINSDIR\packaged-install-result.ini"
 
   DetailPrint "Running packaged installer bridge..."
-  nsExec::ExecToLog '"$PLUGINSDIR\payload\codex-remote.exe" packaged-install -binary "$PLUGINSDIR\payload\codex-remote.exe" -install-source release -current-version "${APP_VERSION}" -current-track "${RELEASE_TRACK}" -service-manager task_scheduler_logon -format text -result-file "$ResultFile"'
+  nsExec::ExecToLog '"$PLUGINSDIR\payload\codex-remote.exe" packaged-install -binary "$PLUGINSDIR\payload\codex-remote.exe" -install-source release -current-version "${APP_VERSION}" -current-track "${RELEASE_TRACK}" -format text -result-file "$ResultFile"'
   Pop $ExitCode
 
   ReadINIStr $OKValue "$ResultFile" "result" "ok"

@@ -29,6 +29,7 @@ func writePackagedInstallResultFile(path string, result PackagedInstallResult) e
 	writePackagedInstallResultLine(&builder, "configPath", result.ConfigPath)
 	writePackagedInstallResultLine(&builder, "installedBinary", result.InstalledBinary)
 	writePackagedInstallResultLine(&builder, "serviceManager", result.ServiceManager)
+	writePackagedInstallResultLine(&builder, "startupMode", result.StartupMode)
 	writePackagedInstallResultLine(&builder, "currentVersion", result.CurrentVersion)
 	writePackagedInstallResultLine(&builder, "currentTrack", result.CurrentTrack)
 	writePackagedInstallResultLine(&builder, "currentSlot", result.CurrentSlot)

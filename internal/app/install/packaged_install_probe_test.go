@@ -49,6 +49,9 @@ func TestRunPackagedInstallProbeFirstInstallReturnsEditableDefaultDir(t *testing
 			t.Fatalf("ServiceManager = %q, want %q", result.ServiceManager, manager)
 		}
 	}
+	if result.StartupMode != string(PackagedInstallStartupModeLoginAutostart) {
+		t.Fatalf("StartupMode = %q, want login_autostart", result.StartupMode)
+	}
 }
 
 func TestRunPackagedInstallProbeRepairReturnsLockedDirAndSameVersion(t *testing.T) {
@@ -113,5 +116,8 @@ func TestRunPackagedInstallProbeRepairReturnsLockedDirAndSameVersion(t *testing.
 	}
 	if result.ServiceManager != string(ServiceManagerDetached) {
 		t.Fatalf("ServiceManager = %q, want detached", result.ServiceManager)
+	}
+	if result.StartupMode != string(PackagedInstallStartupModeManual) {
+		t.Fatalf("StartupMode = %q, want manual", result.StartupMode)
 	}
 }

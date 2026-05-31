@@ -1,8 +1,8 @@
 # Non-Linux User Autostart Design
 
 > Type: `implemented`
-> Updated: `2026-05-13`
-> Summary: 记录 Linux systemd、macOS launchd 与 Windows Task Scheduler 当前用户登录自动启动的已实现边界。
+> Updated: `2026-05-31`
+> Summary: 记录 Linux systemd、macOS launchd 与 Windows Task Scheduler 当前用户登录自动启动的已实现边界，并补记 packaged installer 当前采用“first-install 默认平台登录后自动启动、repair 保持现有启动方式”的语义。
 
 ## 1. 背景
 
@@ -176,6 +176,9 @@ Windows 原生可选项里，真正接近“可管理的后台任务”的是 `T
 - macOS `launchd_user` 已落地。
 - Windows `task_scheduler_logon` 已落地。
 - setup/admin/飞书 admin 均通过共享 autostart API 消费平台能力。
+- packaged installer 当前也已收敛到同一平台语义：
+  - first-install 默认落到平台登录后自动启动
+  - existing install 的 repair 保持当前启动方式，不把 legacy `detached` 自动迁移成平台默认 autostart
 
 如果未来产品真的要求“用户未登录前也要自动启动”，建议另开单独 issue 讨论安全模型，而不是和上述两项混做。
 

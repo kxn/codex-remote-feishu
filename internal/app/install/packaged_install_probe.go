@@ -23,6 +23,7 @@ type PackagedInstallProbeResult struct {
 	SuggestedInstallBinDir  string `json:"suggestedInstallBinDir,omitempty"`
 	InstallLocationEditable bool   `json:"installLocationEditable,omitempty"`
 	ServiceManager          string `json:"serviceManager,omitempty"`
+	StartupMode             string `json:"startupMode,omitempty"`
 	Error                   string `json:"error,omitempty"`
 }
 
@@ -108,6 +109,7 @@ func runPackagedInstallProbe(opts packagedInstallProbeOptions) (PackagedInstallP
 	if manager, ok := managedServiceManagerForGOOS(opts.GOOS); ok {
 		result.ServiceManager = string(manager)
 	}
+	result.StartupMode = string(packagedInstallStartupModeForManager(packagedInstallFirstInstallServiceManager(opts.GOOS)))
 	if strings.TrimSpace(opts.StatePath) == "" {
 		err := fmt.Errorf("state path is required")
 		result.Error = err.Error()
@@ -153,6 +155,7 @@ func packagedInstallProbeResultForState(state InstallState, opts packagedInstall
 		SuggestedInstallBinDir:  currentInstallBinDir,
 		InstallLocationEditable: false,
 		ServiceManager:          string(effectiveServiceManager(state)),
+		StartupMode:             string(packagedInstallStartupModeForManager(effectiveServiceManager(state))),
 	}
 }
 
@@ -199,6 +202,11 @@ func writePackagedInstallProbeResult(stdout io.Writer, format string, result Pac
 		}
 		if result.ServiceManager != "" {
 			if _, err := fmt.Fprintf(stdout, "service manager: %s\n", result.ServiceManager); err != nil {
+				return err
+			}
+		}
+		if result.StartupMode != "" {
+			if _, err := fmt.Fprintf(stdout, "startup mode: %s\n", result.StartupMode); err != nil {
 				return err
 			}
 		}

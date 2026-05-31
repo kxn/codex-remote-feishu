@@ -35,6 +35,7 @@ type PackagedInstallResult struct {
 	ConfigPath      string `json:"configPath,omitempty"`
 	InstalledBinary string `json:"installedBinary,omitempty"`
 	ServiceManager  string `json:"serviceManager,omitempty"`
+	StartupMode     string `json:"startupMode,omitempty"`
 	CurrentVersion  string `json:"currentVersion,omitempty"`
 	CurrentTrack    string `json:"currentTrack,omitempty"`
 	CurrentSlot     string `json:"currentSlot,omitempty"`
@@ -50,7 +51,6 @@ type packagedInstallOptions struct {
 	StatePath      string
 	InstallBinDir  string
 	SourceBinary   string
-	ServiceManager ServiceManager
 	CurrentVersion string
 	InstallSource  InstallSource
 	CurrentTrack   ReleaseTrack
@@ -58,6 +58,7 @@ type packagedInstallOptions struct {
 	CurrentSlot    string
 	OutputFormat   string
 	ResultFilePath string
+	GOOS           string
 }
 
 func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version string) error {
@@ -80,7 +81,6 @@ func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version
 	currentVersion := flagSet.String("current-version", version, "current binary version metadata")
 	versionsRoot := flagSet.String("versions-root", "", "version cache root metadata")
 	currentSlot := flagSet.String("current-slot", "", "current version slot metadata; defaults to -current-version when set")
-	serviceManagerFlag := flagSet.String("service-manager", string(ServiceManagerDetached), "service lifecycle manager for first install: detached, systemd_user, launchd_user, or task_scheduler_logon")
 	format := flagSet.String("format", "text", "output format: text or json")
 	jsonOutput := flagSet.Bool("json", false, "deprecated alias for -format json")
 	resultFile := flagSet.String("result-file", "", "optional machine-readable result file path for installer wrappers")
@@ -126,17 +126,11 @@ func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version
 	if err != nil {
 		return err
 	}
-	serviceManager, err := ParseServiceManager(*serviceManagerFlag, defaults.GOOS)
-	if err != nil {
-		return err
-	}
-
 	opts := packagedInstallOptions{
 		Selection:      selection,
 		StatePath:      resolvedStatePath,
 		InstallBinDir:  strings.TrimSpace(*installBinDir),
 		SourceBinary:   sourceBinary,
-		ServiceManager: serviceManager,
 		CurrentVersion: strings.TrimSpace(*currentVersion),
 		InstallSource:  normalizeInstallSource(InstallSource(*installSource)),
 		CurrentTrack:   ParseReleaseTrack(*currentTrack),
@@ -144,6 +138,7 @@ func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version
 		CurrentSlot:    requestedSlot,
 		OutputFormat:   outputFormat,
 		ResultFilePath: strings.TrimSpace(*resultFile),
+		GOOS:           defaults.GOOS,
 	}
 	if opts.InstallSource == "" {
 		opts.InstallSource = InstallSourceRelease
@@ -196,13 +191,14 @@ func runPackagedFirstInstall(ctx context.Context, opts packagedInstallOptions) (
 		}, err
 	}
 	stagedBinary := filepath.Join(versionsRoot, targetSlot, executableName(runtime.GOOS))
+	serviceManager := packagedInstallFirstInstallServiceManager(opts.GOOS)
 	service := NewService()
 	state, err := service.Bootstrap(Options{
 		InstanceID:     opts.Selection.InstanceID,
 		BaseDir:        opts.Selection.BaseDir,
 		InstallBinDir:  resolvedInstallBinDir,
 		BinaryPath:     stagedBinary,
-		ServiceManager: opts.ServiceManager,
+		ServiceManager: serviceManager,
 		CurrentVersion: opts.CurrentVersion,
 		InstallSource:  opts.InstallSource,
 		CurrentTrack:   opts.CurrentTrack,
@@ -241,11 +237,6 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 	if flagSet != nil {
 		if flagWasProvided(flagSet, "install-bin-dir") {
 			err := fmt.Errorf("-install-bin-dir cannot be used for existing installs; packaged repair keeps the current live binary path")
-			result.Error = err.Error()
-			return result, err
-		}
-		if flagWasProvided(flagSet, "service-manager") && effectiveServiceManager(state) != opts.ServiceManager {
-			err := fmt.Errorf("-service-manager cannot change an existing install from %q to %q during packaged repair", effectiveServiceManager(state), opts.ServiceManager)
 			result.Error = err.Error()
 			return result, err
 		}
@@ -358,6 +349,11 @@ func writePackagedInstallResult(stdout io.Writer, format string, result Packaged
 		if _, err := fmt.Fprintf(stdout, "mode: %s\nstate: %s\nbinary: %s\nservice manager: %s\n", result.Mode, result.StatePath, result.InstalledBinary, result.ServiceManager); err != nil {
 			return err
 		}
+		if result.StartupMode != "" {
+			if _, err := fmt.Fprintf(stdout, "startup mode: %s\n", result.StartupMode); err != nil {
+				return err
+			}
+		}
 		if result.CurrentVersion != "" {
 			if _, err := fmt.Fprintf(stdout, "version: %s\n", result.CurrentVersion); err != nil {
 				return err
@@ -402,11 +398,33 @@ func packagedInstallResultForState(mode packagedInstallMode, state InstallState)
 		ConfigPath:      state.ConfigPath,
 		InstalledBinary: firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(state.CurrentBinaryPath)),
 		ServiceManager:  string(effectiveServiceManager(state)),
+		StartupMode:     string(packagedInstallStartupModeForManager(effectiveServiceManager(state))),
 		CurrentVersion:  state.CurrentVersion,
 		CurrentTrack:    string(state.CurrentTrack),
 		CurrentSlot:     state.CurrentSlot,
 		LogPath:         logPath,
 	}
+}
+
+type PackagedInstallStartupMode string
+
+const (
+	PackagedInstallStartupModeManual         PackagedInstallStartupMode = "manual"
+	PackagedInstallStartupModeLoginAutostart PackagedInstallStartupMode = "login_autostart"
+)
+
+func packagedInstallStartupModeForManager(manager ServiceManager) PackagedInstallStartupMode {
+	if normalizeServiceManager(manager) == ServiceManagerDetached {
+		return PackagedInstallStartupModeManual
+	}
+	return PackagedInstallStartupModeLoginAutostart
+}
+
+func packagedInstallFirstInstallServiceManager(goos string) ServiceManager {
+	if manager, ok := managedServiceManagerForGOOS(strings.TrimSpace(goos)); ok {
+		return manager
+	}
+	return ServiceManagerDetached
 }
 
 func (r *PackagedInstallResult) applyDaemonReadyStatus(status DaemonReadyStatus) {

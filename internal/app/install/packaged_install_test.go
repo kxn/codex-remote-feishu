@@ -56,12 +56,21 @@ func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
 	if result.CurrentSlot != "v1.2.3" {
 		t.Fatalf("result.CurrentSlot = %q, want v1.2.3", result.CurrentSlot)
 	}
+	wantManager := packagedInstallFirstInstallServiceManager(runtime.GOOS)
+	if result.ServiceManager != string(wantManager) {
+		t.Fatalf("result.ServiceManager = %q, want %q", result.ServiceManager, wantManager)
+	}
+	if result.StartupMode != string(PackagedInstallStartupModeLoginAutostart) {
+		t.Fatalf("result.StartupMode = %q, want login_autostart", result.StartupMode)
+	}
 	if result.SetupURL != "http://localhost:9501/setup" {
 		t.Fatalf("result.SetupURL = %q, want setup url", result.SetupURL)
 	}
 	assertPackagedInstallResultFileContains(t, resultFile,
 		"ok=true",
 		"mode=first_install",
+		"serviceManager="+string(wantManager),
+		"startupMode=login_autostart",
 		"currentVersion=v1.2.3",
 		"setupRequired=true",
 		"setupURL=http://localhost:9501/setup",
@@ -80,6 +89,9 @@ func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
 	}
 	if state.InstallSource != InstallSourceRelease {
 		t.Fatalf("InstallSource = %q, want release", state.InstallSource)
+	}
+	if state.ServiceManager != wantManager {
+		t.Fatalf("ServiceManager = %q, want %q", state.ServiceManager, wantManager)
 	}
 }
 
@@ -153,9 +165,17 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 	if result.CurrentTrack != string(ReleaseTrackBeta) {
 		t.Fatalf("result.CurrentTrack = %q, want beta", result.CurrentTrack)
 	}
+	if result.ServiceManager != string(ServiceManagerDetached) {
+		t.Fatalf("result.ServiceManager = %q, want detached", result.ServiceManager)
+	}
+	if result.StartupMode != string(PackagedInstallStartupModeManual) {
+		t.Fatalf("result.StartupMode = %q, want manual", result.StartupMode)
+	}
 	assertPackagedInstallResultFileContains(t, resultFile,
 		"ok=true",
 		"mode=repair",
+		"serviceManager=detached",
+		"startupMode=manual",
 		"currentTrack=beta",
 		"currentVersion=v1.2.0-beta.1",
 	)
@@ -235,6 +255,7 @@ func TestRunPackagedInstallWritesResultFileOnRepairFailure(t *testing.T) {
 		"ok=false",
 		"mode=repair",
 		"serviceManager=detached",
+		"startupMode=manual",
 		"error=-install-bin-dir cannot be used for existing installs",
 	)
 }

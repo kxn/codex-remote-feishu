@@ -13,6 +13,7 @@ struct InstallerProbeResult: Codable {
     let suggestedInstallBinDir: String?
     let installLocationEditable: Bool?
     let serviceManager: String?
+    let startupMode: String?
     let error: String?
 }
 
@@ -23,6 +24,7 @@ struct PackagedInstallResultValue {
     var configPath: String = ""
     var installedBinary: String = ""
     var serviceManager: String = ""
+    var startupMode: String = ""
     var currentVersion: String = ""
     var currentTrack: String = ""
     var currentSlot: String = ""

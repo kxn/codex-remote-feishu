@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-05-13`
-> Summary: 同步 macOS native packaged installer 的当前 contract、GUI shell / dmg 脚本入口，以及其与 shared packaged-install contract、release workflow 的现阶段边界。
+> Updated: `2026-05-31`
+> Summary: 同步当前安装、配置与部署模型，并补记 shared packaged-install contract 的跨平台启动语义：packaged installer 不再直接决定底层 `service-manager`；first-install 走平台默认登录后自动启动，repair 保持现有启动方式。
 
 ## 1. 范围
 
@@ -151,15 +151,30 @@ codex-remote packaged-install [flags]
 - first install
   - 先把 packaged payload 导入 `versionsRoot/currentSlot`
   - 再复用现有 bootstrap 主链
+  - 默认落到当前平台的 managed user autostart 语义
+    - macOS: `launchd_user`
+    - Windows: `task_scheduler_logon`
   - 启动 daemon
   - 返回 WebSetup / Admin URL 与日志定位信息
 - existing install
   - 先把新 payload staging 到 `versionsRoot/currentSlot`
   - 再按现有 `install-state` 定位 live install
+  - 保持当前 install-state 里的启动方式
+    - `detached` 保持 `detached`
+    - managed service 保持原 manager
   - 停掉旧 daemon / service
   - 覆盖当前 live binary
   - 启动新 daemon / service
   - 返回明确成功/失败结果与日志定位信息
+
+重要收敛：
+
+- packaged installer 包装层不再直接向 `packaged-install` 传平台特定 `service-manager`
+- `service-manager` 继续是 install/runtime 内核概念，保留给：
+  - `codex-remote install`
+  - `codex-remote service ...`
+  - `InstallState`
+- existing `detached` -> 平台默认 autostart 的迁移，不属于 packaged repair 的默认副作用；若未来需要，应作为显式迁移动作单独设计
 
 这个路径的产品定位是：
 
@@ -174,6 +189,7 @@ codex-remote packaged-install [flags]
 - 不自己散写版本目录布局
 - 不自己直接拼平台 stop/start/ready 逻辑
 - 统一把这些语义收在 `internal/app/install/**`
+- 不直接决定底层 `service-manager`
 
 当前已确认的首期平台形态：
 
@@ -181,6 +197,7 @@ codex-remote packaged-install [flags]
   - 首期要求交付 `NSIS installer`
   - wrapper 应携带 release payload `codex-remote.exe`，并调用 `codex-remote packaged-install`
   - wrapper 不应直接解析长 stdout；应通过 `-result-file` 一类 machine-readable 结果文件读取 `setupURL/adminURL/logPath/error`
+  - wrapper 当前不必先 probe 才能保证 first-install / repair 语义正确；shared `packaged-install` 本身已拥有这部分启动语义
 - macOS
   - 首期形态已收口为 `dmg + Install Codex Remote.app`
   - installer app 自身是 universal，可同时在 Intel / Apple Silicon 上原生运行
@@ -190,7 +207,7 @@ codex-remote packaged-install [flags]
   - app 运行时根据目标机架构自动选择 payload，并调用：
     - `codex-remote packaged-install-probe`
     - `codex-remote packaged-install`
-  - GUI 不得自行猜测 first-install / repair / same-version repair，必须先使用 `packaged-install-probe` 拿到稳定状态
+  - `packaged-install-probe` 继续用于 richer UX（版本、安装目录、当前启动方式展示），但 shared `packaged-install` 语义正确性不依赖 wrapper 先 probe
   - first-install 允许选择安装目录；repair / upgrade 必须锁定当前 live binary 目录
   - 与 Windows 一样，同版本重复运行 installer 也必须允许，语义视为 repair
   - GUI 当前最小流程固定为：
