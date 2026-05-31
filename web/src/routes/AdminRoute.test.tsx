@@ -174,6 +174,68 @@ describe("AdminRoute", () => {
     expect(screen.getByText("权限 im:message")).toBeInTheDocument();
   });
 
+  it("shows manual-maintenance state when auto-config is unsupported", async () => {
+    window.history.replaceState({}, "", "/admin");
+
+    installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [
+            makeApp({
+              id: "bot-legacy",
+              name: "老机器人",
+              appId: "cli_legacy",
+            }),
+          ],
+        },
+      },
+      "/api/admin/feishu/apps/bot-legacy/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(
+          { id: "bot-legacy", name: "老机器人", appId: "cli_legacy" },
+          {
+            status: "unsupported",
+            summary: "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。",
+            blockingReason: "unsupported_application",
+          },
+        ),
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-legacy": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-legacy", name: "老机器人" }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    expect(await screen.findByText("手动维护")).toBeInTheDocument();
+    expect(await screen.findByText("当前应用需要手动维护")).toBeInTheDocument();
+    expect(
+      screen.getByText("当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("当前原因：当前飞书应用不支持自动配置，请在飞书后台手动维护。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("unsupported_application")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐配置" })).not.toBeInTheDocument();
+  });
+
   it("lazy-loads auto-config plan only for the selected robot", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();

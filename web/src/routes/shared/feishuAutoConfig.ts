@@ -13,6 +13,8 @@ export function describeAutoConfigTag(
       return { label: "已完成", warn: false };
     case "degraded":
       return { label: "有降级", warn: true };
+    case "unsupported":
+      return { label: "手动维护", warn: true };
     case "apply_required":
       return { label: "待补齐", warn: true };
     case "publish_required":
@@ -36,6 +38,8 @@ export function describeAutoConfigHeadline(status: string): string {
       return "已自动完成";
     case "degraded":
       return "已完成，但存在功能降级";
+    case "unsupported":
+      return "当前应用需要手动维护";
     case "apply_required":
       return "当前还需要自动补齐配置";
     case "publish_required":
@@ -55,6 +59,8 @@ export function describeAutoConfigSummary(status: string): string {
       return "当前飞书应用已经满足自动配置要求。";
     case "degraded":
       return "基础配置已完成，但仍有部分可选能力没有开通。";
+    case "unsupported":
+      return "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。";
     case "apply_required":
       return "当前检查到了仍需自动补齐的配置差异。";
     case "publish_required":
@@ -70,6 +76,8 @@ export function describeAutoConfigSummary(status: string): string {
 
 export function describeAutoConfigBlockingReason(reason: string): string {
   switch (reason) {
+    case "unsupported_application":
+      return "当前飞书应用不支持自动配置，请在飞书后台手动维护。";
     case "application_under_review":
       return "飞书开放平台上的应用版本仍在审核中。";
     case "apply_required_before_publish":
@@ -129,6 +137,7 @@ export function autoConfigNoticeTone(status: string): "good" | "warn" | "danger"
     case "clean":
       return "good";
     case "degraded":
+    case "unsupported":
     case "publish_required":
     case "awaiting_review":
       return "warn";

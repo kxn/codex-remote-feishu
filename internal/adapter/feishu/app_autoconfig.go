@@ -78,6 +78,9 @@ func newAutoConfigService(cfg LiveGatewayConfig, manifest feishuapp.Manifest, po
 func (s *autoConfigService) Plan(ctx context.Context) (AutoConfigPlan, error) {
 	snapshot, err := s.readSnapshot(ctx)
 	if err != nil {
+		if plan, ok := s.planFromReadError(err); ok {
+			return plan, nil
+		}
 		return AutoConfigPlan{}, err
 	}
 	return s.buildPlan(snapshot), nil
@@ -334,6 +337,24 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 	return plan
 }
 
+func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) {
+	plan := AutoConfigPlan{
+		Target: AutoConfigTargetState{
+			ScopeRequirements: normalizeScopeRequirements(s.manifest),
+			Events:            append([]feishuapp.EventRequirement(nil), s.manifest.Events...),
+			Callbacks:         append([]feishuapp.CallbackRequirement(nil), s.manifest.Callbacks...),
+			Policy:            s.policy,
+		},
+	}
+	plan = overridePlanFromAPIError(plan, err)
+	switch plan.Status {
+	case AutoConfigStatusUnsupported, AutoConfigStatusAwaitingReview:
+		return plan, true
+	default:
+		return AutoConfigPlan{}, false
+	}
+}
+
 func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRequirement, configuredEvents []string, configuredCallbacks []string, grantedScopes []AutoConfigScopeRef) ([]AutoConfigRequirementStatus, []AutoConfigRequirementStatus) {
 	grantedKeys := scopeRefMap(grantedScopes)
 	eventKeys := stringSet(configuredEvents)
@@ -433,7 +454,7 @@ func buildPublishState(snapshot autoConfigSnapshot, diff AutoConfigDiff) AutoCon
 func derivePlanState(plan AutoConfigPlan) (string, string) {
 	switch strings.TrimSpace(plan.BlockingReason) {
 	case autoConfigBlockingUnsupported:
-		return AutoConfigStatusUnsupported, "当前飞书应用不是开发者后台创建的自建应用，无法通过自动配置 API 修改。"
+		return AutoConfigStatusUnsupported, "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。"
 	case autoConfigBlockingUnderReview:
 		return AutoConfigStatusAwaitingReview, "当前飞书应用正在审核中，暂时无法继续修改配置。"
 	}
@@ -508,7 +529,7 @@ func overridePlanFromAPIError(plan AutoConfigPlan, err error) AutoConfigPlan {
 		updated.BlockingReason = autoConfigBlockingUnderReview
 	case 210043, 210035, 210021, 210015, 210001, 210034, 210014:
 		updated.Status = AutoConfigStatusUnsupported
-		updated.Summary = "当前飞书应用不是开发者后台创建的自建应用，无法通过自动配置 API 修改。"
+		updated.Summary = "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。"
 		updated.BlockingReason = autoConfigBlockingUnsupported
 	case 210303, 210304:
 		updated.Status = AutoConfigStatusBlocked

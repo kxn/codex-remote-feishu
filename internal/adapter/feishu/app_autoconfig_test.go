@@ -162,6 +162,36 @@ func TestPublishAppAutoConfigBlocksUntilApplyCompletes(t *testing.T) {
 	}
 }
 
+func TestPlanAppAutoConfigReturnsUnsupportedPlanInsteadOfError(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		return nil, &APIError{
+			API:  "application.v6.application.get",
+			Code: 210015,
+			Msg:  "unsupported application",
+		}
+	}
+	autoConfigListScopes = func(context.Context, LiveGatewayConfig) ([]AppScopeStatus, error) {
+		return nil, nil
+	}
+
+	plan, err := PlanAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: "cli_legacy"},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+	)
+	if err != nil {
+		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
+	}
+	if plan.Status != AutoConfigStatusUnsupported {
+		t.Fatalf("plan status = %q, want %q", plan.Status, AutoConfigStatusUnsupported)
+	}
+	if plan.BlockingReason != autoConfigBlockingUnsupported {
+		t.Fatalf("blocking reason = %q, want %q", plan.BlockingReason, autoConfigBlockingUnsupported)
+	}
+}
+
 func restoreAutoConfigHooks(t *testing.T) {
 	t.Helper()
 	oldListScopes := autoConfigListScopes
