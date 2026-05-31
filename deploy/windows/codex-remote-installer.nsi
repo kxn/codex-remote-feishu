@@ -439,7 +439,7 @@ Function AppendCaptureOpenedTarget
   Exch $0
   ${If} $TestCaptureFile != ""
     FileOpen $1 "$TestCaptureFile" a
-    FileWrite $1 "openedTarget=$0$\r$\n"
+    FileWriteUTF16LE $1 "openedTarget=$0$\r$\n"
     FileClose $1
   ${EndIf}
   Pop $0
@@ -452,20 +452,20 @@ Function WriteTestCapture
 
   Delete "$TestCaptureFile"
   FileOpen $0 "$TestCaptureFile" w
-  FileWrite $0 "probeMode=$ProbeMode$\r$\n"
-  FileWrite $0 "probeSameVersion=$ProbeSameVersion$\r$\n"
-  FileWrite $0 "resultFailure=$ResultFailure$\r$\n"
-  FileWrite $0 "primaryActionKind=$PrimaryActionKind$\r$\n"
-  FileWrite $0 "primaryActionTarget=$PrimaryActionTarget$\r$\n"
-  FileWrite $0 "primaryButtonText=$PrimaryButtonText$\r$\n"
-  FileWrite $0 "titleText=$ResultTitleText$\r$\n"
-  FileWrite $0 "bodyText=$ResultBodyText$\r$\n"
-  FileWrite $0 "showAdminLink=$ShowAdminLink$\r$\n"
-  FileWrite $0 "showLogsLink=$ShowLogsLink$\r$\n"
-  FileWrite $0 "adminLinkText=$(STR_LINK_OPEN_ADMIN)$\r$\n"
-  FileWrite $0 "logsLinkText=$(STR_LINK_OPEN_LOGS)$\r$\n"
-  FileWrite $0 "adminURL=$AdminURL$\r$\n"
-  FileWrite $0 "setupURL=$SetupURL$\r$\n"
-  FileWrite $0 "logPath=$LogPath$\r$\n"
+  FileWriteUTF16LE /BOM $0 "probeMode=$ProbeMode$\r$\n"
+  FileWriteUTF16LE $0 "probeSameVersion=$ProbeSameVersion$\r$\n"
+  FileWriteUTF16LE $0 "resultFailure=$ResultFailure$\r$\n"
+  FileWriteUTF16LE $0 "primaryActionKind=$PrimaryActionKind$\r$\n"
+  FileWriteUTF16LE $0 "primaryActionTarget=$PrimaryActionTarget$\r$\n"
+  FileWriteUTF16LE $0 "primaryButtonText=$PrimaryButtonText$\r$\n"
+  FileWriteUTF16LE $0 "titleText=$ResultTitleText$\r$\n"
+  FileWriteUTF16LE $0 "bodyText=$ResultBodyText$\r$\n"
+  FileWriteUTF16LE $0 "showAdminLink=$ShowAdminLink$\r$\n"
+  FileWriteUTF16LE $0 "showLogsLink=$ShowLogsLink$\r$\n"
+  FileWriteUTF16LE $0 "adminLinkText=$(STR_LINK_OPEN_ADMIN)$\r$\n"
+  FileWriteUTF16LE $0 "logsLinkText=$(STR_LINK_OPEN_LOGS)$\r$\n"
+  FileWriteUTF16LE $0 "adminURL=$AdminURL$\r$\n"
+  FileWriteUTF16LE $0 "setupURL=$SetupURL$\r$\n"
+  FileWriteUTF16LE $0 "logPath=$LogPath$\r$\n"
   FileClose $0
 FunctionEnd

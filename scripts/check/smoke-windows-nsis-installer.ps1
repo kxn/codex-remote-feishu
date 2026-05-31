@@ -44,7 +44,7 @@ function Write-IniFile([string]$PathValue, [hashtable]$Values) {
 
 function Read-CaptureFile([string]$PathValue) {
   $result = @{}
-  foreach ($rawLine in Get-Content -LiteralPath $PathValue -Encoding UTF8) {
+  foreach ($rawLine in Get-Content -LiteralPath $PathValue -Encoding Unicode) {
     if ([string]::IsNullOrWhiteSpace($rawLine)) {
       continue
     }
