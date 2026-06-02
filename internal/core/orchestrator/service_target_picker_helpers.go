@@ -191,7 +191,8 @@ func targetPickerAllowsNewThread(source control.TargetPickerRequestSource, allow
 
 func targetPickerSourceDefaultsToAllowNewThread(source control.TargetPickerRequestSource) bool {
 	switch source {
-	case control.TargetPickerRequestSourceUse,
+	case control.TargetPickerRequestSourceList,
+		control.TargetPickerRequestSourceUse,
 		control.TargetPickerRequestSourceUseAll,
 		control.TargetPickerRequestSourceWorkspace:
 		return true

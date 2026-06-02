@@ -186,11 +186,14 @@ func TestTargetPickerSelectWorkspaceRefreshesSessionsInline(t *testing.T) {
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-web")); ok {
 		t.Fatalf("expected other workspace session to disappear after refresh, got %#v", view.SessionOptions)
 	}
-	if view.SelectedSessionValue != "" {
-		t.Fatalf("expected session selection to clear after workspace switch, got %#v", view)
+	if len(view.SessionOptions) < 2 {
+		t.Fatalf("expected workspace switch to keep new-thread and existing sessions, got %#v", view.SessionOptions)
 	}
-	if view.CanConfirm {
-		t.Fatalf("expected confirm to stay disabled until a new session is chosen, got %#v", view)
+	if first := view.SessionOptions[0]; first.Value != targetPickerNewThreadValue || first.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected workspace switch to put new-thread first, got %#v", view.SessionOptions)
+	}
+	if view.SelectedSessionValue != targetPickerNewThreadValue || view.ConfirmLabel != "新建会话" || !view.CanConfirm {
+		t.Fatalf("expected workspace switch to default to new-thread, got %#v", view)
 	}
 }
 
@@ -309,8 +312,11 @@ func TestTargetPickerPageWorkspaceSwitchRecomputesSessions(t *testing.T) {
 	if !testutil.SamePath(got.SelectedWorkspaceKey, "/data/dl/droid") || got.WorkspaceCursor != 1 {
 		t.Fatalf("expected workspace page action to switch visible workspace, got %#v", got)
 	}
-	if got.SessionCursor != 0 || got.SelectedSessionValue != "" || got.CanConfirm {
-		t.Fatalf("expected workspace page action to reset session selection state, got %#v", got)
+	if got.SessionCursor != 0 || got.SelectedSessionValue != targetPickerNewThreadValue || got.ConfirmLabel != "新建会话" || !got.CanConfirm {
+		t.Fatalf("expected workspace page action to default to new-thread state, got %#v", got)
+	}
+	if len(got.SessionOptions) == 0 || got.SessionOptions[0].Value != targetPickerNewThreadValue {
+		t.Fatalf("expected workspace page action to put new-thread first, got %#v", got.SessionOptions)
 	}
 	if _, ok := targetPickerSessionOption(got, targetPickerThreadValue("thread-droid")); !ok {
 		t.Fatalf("expected workspace page action to recompute session list, got %#v", got.SessionOptions)
@@ -594,7 +600,7 @@ func TestReconcileSelectedThreadLostOpensLockedWorkspaceTargetPicker(t *testing.
 	}
 }
 
-func TestTargetPickerConfirmValidationUsesCardPatchUpdate(t *testing.T) {
+func TestTargetPickerConfirmNewThreadUsesCardPatchUpdate(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 6, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -630,11 +636,12 @@ func TestTargetPickerConfirmValidationUsesCardPatchUpdate(t *testing.T) {
 		t.Fatalf("expected validation refresh to use message-id patch flow, got %#v", events[0])
 	}
 	got := events[0].TargetPickerView
-	if got.Page != control.FeishuTargetPickerPageTarget || got.CanConfirm {
-		t.Fatalf("expected target page to stay blocked, got %#v", got)
+	if got.Stage != control.FeishuTargetPickerStageSucceeded || got.StatusTitle != "已进入新会话待命" {
+		t.Fatalf("expected /list confirm to complete via new-thread success state, got %#v", got)
 	}
-	if len(got.Messages) == 0 {
-		t.Fatalf("expected validation feedback on target picker card, got %#v", got)
+	surface := svc.root.Surfaces["surface-1"]
+	if !targetPickerNewThreadSucceeded(surface, "/data/dl/web") {
+		t.Fatalf("expected /list confirm to prepare new-thread target, got %#v", surface)
 	}
 }
 
@@ -806,7 +813,7 @@ func TestTargetPickerConfirmRejectsStaleSessionFallback(t *testing.T) {
 	}
 }
 
-func TestTargetPickerListPrefersRealWorkspaceWhileExposeAddModeSwitch(t *testing.T) {
+func TestTargetPickerListPrefersRealWorkspaceAndDefaultsToNewThread(t *testing.T) {
 	now := time.Date(2026, 4, 14, 15, 25, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -830,17 +837,26 @@ func TestTargetPickerListPrefersRealWorkspaceWhileExposeAddModeSwitch(t *testing
 	if len(view.WorkspaceOptions) != 1 {
 		t.Fatalf("expected one real workspace in existing-workspace mode, got %#v", view.WorkspaceOptions)
 	}
-	if view.Page != control.FeishuTargetPickerPageTarget || view.ConfirmLabel != "切换" || view.CanConfirm {
-		t.Fatalf("expected /list picker to start directly at target page with empty session, got %#v", view)
+	if view.Page != control.FeishuTargetPickerPageTarget || view.ConfirmLabel != "新建会话" || !view.CanConfirm {
+		t.Fatalf("expected /list picker to default to new-thread action, got %#v", view)
 	}
 	if view.SelectedWorkspaceKey != "/data/dl/web" {
 		t.Fatalf("expected initial selection to stay on real workspace, got %#v", view)
 	}
-	if view.SelectedSessionValue != "" {
-		t.Fatalf("expected detached target picker to keep session empty until explicit selection, got %#v", view)
+	if len(view.SessionOptions) < 2 {
+		t.Fatalf("expected /list picker to expose new-thread plus existing session, got %#v", view.SessionOptions)
 	}
-	if _, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); ok {
-		t.Fatalf("expected /list target picker not to expose new-thread option, got %#v", view.SessionOptions)
+	if first := view.SessionOptions[0]; first.Value != targetPickerNewThreadValue || first.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected /list picker to put new-thread first, got %#v", view.SessionOptions)
+	}
+	if view.SelectedSessionValue != targetPickerNewThreadValue {
+		t.Fatalf("expected /list picker to default selected session to new-thread, got %#v", view)
+	}
+	if _, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok {
+		t.Fatalf("expected /list target picker to expose new-thread option, got %#v", view.SessionOptions)
+	}
+	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-web")); !ok {
+		t.Fatalf("expected /list picker to keep existing session selectable, got %#v", view.SessionOptions)
 	}
 }
 

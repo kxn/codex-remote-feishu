@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-05-31`
-> Summary: 当前实现同步了 workspace-aware headless 主链与 vscode 主链，并把当前 live 的 backend-aware 可见命令面收口到新的投影：`codex` 继续以 `workspace` 命令族作为主展示壳，`claude` 当前 live 实现把 `current_work` 收口到 `/new` 等当前工作动作，把 `switch_target` 收口到 `/workspace new dir`、`/workspace detach`、`/list`、`/use`，并把 `常用工具` 收口到 `/history` 与 `/sendfile`；裸 `/detach` 则退回 hidden + allow 兼容 alias。`send_settings` 则改成 backend 互斥入口：`codex headless` 可见 `/codexprovider`，`claude headless` 可见 `/claudeprofile`，`vscode` 两者都隐藏，且手动输入错误 backend 的命令也会显式拒绝。`/list` `/use` / target picker / workspace recency 全部只按当前 backend 过滤，且不再因为 surface/instance `ClaudeProfileID` 不同而隐藏 Claude workspace/session 候选；同时工作区一旦确定，`/use`、`/useall` 与锁定工作区的恢复 picker 现在都会带 `新建会话` fallback，而 `/list` 继续只做既有会话切换。2026-05-31 的补充是：headless auto-resume 现在把“恢复 episode 的稳定失败根因”与“后续 retry 观测到的派生 busy/not_found 状态”分开记账；provider/profile/runtime 这类启动前失败会保留为本轮恢复的 canonical cause，并且只有在真正恢复成功或 target 改变后才会清空，因此后续 retry 不会再把用户提示改写成误导性的 workspace/thread busy，也不会对同一根因重复刷失败卡。2026-05-01 的新变化是：headless attach/reuse/restart/create/reject 已进一步收口成单一路径，visible 与 compatibility 继续拆层，但所有 consumer 现在都共享同一个 `desired surface contract vs observed instance contract` 解析核。结果是：
+> Updated: `2026-06-02`
+> Summary: 当前实现同步了 workspace-aware headless 主链与 vscode 主链，并把当前 live 的 backend-aware 可见命令面收口到新的投影：`codex` 继续以 `workspace` 命令族作为主展示壳，`claude` 当前 live 实现把 `current_work` 收口到 `/new` 等当前工作动作，把 `switch_target` 收口到 `/workspace new dir`、`/workspace detach`、`/list`、`/use`，并把 `常用工具` 收口到 `/history` 与 `/sendfile`；裸 `/detach` 则退回 hidden + allow 兼容 alias。`send_settings` 则改成 backend 互斥入口：`codex headless` 可见 `/codexprovider`，`claude headless` 可见 `/claudeprofile`，`vscode` 两者都隐藏，且手动输入错误 backend 的命令也会显式拒绝。`/list` `/use` / target picker / workspace recency 全部只按当前 backend 过滤，且不再因为 surface/instance `ClaudeProfileID` 不同而隐藏 Claude workspace/session 候选；同时工作区一旦确定，`/workspace list` 与 alias `/list` 现在会把 `新建会话` 置顶并默认选中，`/use`、`/useall` 与锁定工作区的恢复 picker 则继续保留 `新建会话` fallback。2026-05-31 的补充是：headless auto-resume 现在把“恢复 episode 的稳定失败根因”与“后续 retry 观测到的派生 busy/not_found 状态”分开记账；provider/profile/runtime 这类启动前失败会保留为本轮恢复的 canonical cause，并且只有在真正恢复成功或 target 改变后才会清空，因此后续 retry 不会再把用户提示改写成误导性的 workspace/thread busy，也不会对同一根因重复刷失败卡。2026-05-01 的新变化是：headless attach/reuse/restart/create/reject 已进一步收口成单一路径，visible 与 compatibility 继续拆层，但所有 consumer 现在都共享同一个 `desired surface contract vs observed instance contract` 解析核。结果是：
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprovider` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -204,8 +204,8 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. 这张切换卡直接落在“工作区 + 会话”同页：
       1. 工作区候选只出现真实 workspace，不再混入动作型来源项。
       2. 工作区 label 足够时只显示 label；只有 basename 冲突时，才额外补路径 meta 做消歧。
-      3. 会话候选始终基于当前选中的 workspace 重新生成：`/workspace list` 与 alias `/list` 只列既有会话；`/use`、`/useall`、`show_workspace_threads` 与锁定当前工作区的恢复 picker 则会额外追加 `新建会话` fallback，避免坏会话把用户卡死。
-      4. session 只会在 surface 已经绑定到同一 thread 时保守预填；detached / unbound 即使只剩一个候选也不会自动代填。
+      3. 会话候选始终基于当前选中的 workspace 重新生成：`/workspace list` 与 alias `/list` 会把 `新建会话` 放在第一项，并继续保留已有会话列表；`/use`、`/useall`、`show_workspace_threads` 与锁定当前工作区的恢复 picker 则继续追加 `新建会话` fallback，避免坏会话把用户卡死。
+      4. session 默认值按 source 收口：`/workspace list` 与 alias `/list` 只要当前工作区允许 `new_thread` 就会默认选中新建会话；`/use` / `/useall` 仍只会在 surface 已经绑定到同一 thread 时保守预填该 thread，detached / unbound 即使只剩一个候选也不会自动代填。
       5. confirm 既有会话时，会复用现有 `/use` / cross-workspace attach 语义；必要时会先统一经过 `resolveWorkspaceContract(...)` 与对应的 workspace continuation owner，再落到 attach / restart-managed / fresh-start 的单一路径。
    4. `/workspace new dir`、`/workspace new git` 与 `/workspace new worktree` 是三张独立业务卡：
       1. `从目录新建` 主卡会显示路径字段、`选择目录` 按钮与 `接入并继续` 主按钮；`target_picker_open_path_picker` 会把主卡 inline replace 成目录模式 path picker，confirm/cancel 后再返回主卡。

@@ -863,8 +863,17 @@ func TestListWorkspacesMarksBusyClaimedWorkspaceDisabled(t *testing.T) {
 	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("thread-2")); !ok {
 		t.Fatalf("expected free workspace session to stay selectable, got %#v", view.SessionOptions)
 	}
-	if _, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); ok {
-		t.Fatalf("expected list picker not to expose new-thread option, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) < 2 {
+		t.Fatalf("expected list picker to expose new-thread plus existing session, got %#v", view.SessionOptions)
+	}
+	if first := view.SessionOptions[0]; first.Value != targetPickerNewThreadValue || first.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected list picker to put new-thread first, got %#v", view.SessionOptions)
+	}
+	if _, ok := targetPickerSessionOption(view, targetPickerNewThreadValue); !ok {
+		t.Fatalf("expected list picker to expose new-thread option, got %#v", view.SessionOptions)
+	}
+	if view.SelectedSessionValue != targetPickerNewThreadValue || view.ConfirmLabel != "新建会话" || !view.CanConfirm {
+		t.Fatalf("expected list picker to default to new-thread, got %#v", view)
 	}
 }
 
@@ -1931,7 +1940,13 @@ func TestNormalModeListIncludesHeadlessWorkspace(t *testing.T) {
 	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/runtime/headless"); !ok {
 		t.Fatalf("expected only headless workspace in target picker, got %#v", view.WorkspaceOptions)
 	}
-	if len(view.SessionOptions) != 0 {
-		t.Fatalf("expected headless-only workspace without sessions to stay empty, got %#v", view.SessionOptions)
+	if len(view.SessionOptions) != 1 {
+		t.Fatalf("expected headless-only workspace without sessions to offer new-thread only, got %#v", view.SessionOptions)
+	}
+	if option := view.SessionOptions[0]; option.Value != targetPickerNewThreadValue || option.Kind != control.FeishuTargetPickerSessionNewThread {
+		t.Fatalf("expected headless-only workspace to offer new-thread fallback, got %#v", view.SessionOptions)
+	}
+	if view.SelectedSessionValue != targetPickerNewThreadValue || view.ConfirmLabel != "新建会话" || !view.CanConfirm {
+		t.Fatalf("expected headless-only workspace to default to new-thread, got %#v", view)
 	}
 }

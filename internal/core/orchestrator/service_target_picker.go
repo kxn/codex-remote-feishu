@@ -195,7 +195,11 @@ func (s *Service) handleTargetPickerSelectWorkspace(surface *state.SurfaceConsol
 		func() {
 			record.SelectedWorkspaceKey = normalizeTargetPickerWorkspaceSelection(workspaceKey)
 			record.SessionCursor = 0
-			record.SelectedSessionValue = ""
+			if record.Source == control.TargetPickerRequestSourceList {
+				record.SelectedSessionValue = targetPickerAutoSession
+			} else {
+				record.SelectedSessionValue = ""
+			}
 		},
 		func() (eventcontract.Event, error) {
 			return s.buildTargetPickerEvent(surface, record, true)
@@ -521,7 +525,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	if targetPickerUsesSessionSelection(record.Source) {
 		switch {
 		case selectedSession == targetPickerAutoSession:
-			selectedSession = s.defaultTargetPickerSessionValue(surface, selectedWorkspace, sessionOptions)
+			selectedSession = s.defaultTargetPickerSessionValue(surface, record.Source, selectedWorkspace, sessionOptions)
 		case selectedSession == "":
 			if targetPickerShouldAutoSelectNewThread(sessionOptions, record.AllowNewThread) {
 				selectedSession = targetPickerNewThreadValue
@@ -839,6 +843,14 @@ func (s *Service) targetPickerSessionOptions(surface *state.SurfaceConsoleRecord
 	}
 	views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
 	options := make([]control.FeishuTargetPickerSessionOption, 0, len(views)+1)
+	if targetPickerAllowsNewThread(source, allowNewThread) && source == control.TargetPickerRequestSourceList {
+		options = append(options, control.FeishuTargetPickerSessionOption{
+			Value:    targetPickerNewThreadValue,
+			Kind:     control.FeishuTargetPickerSessionNewThread,
+			Label:    "新建会话",
+			MetaText: "在这个工作区里开始一个新的会话",
+		})
+	}
 	for _, view := range views {
 		if mergedThreadWorkspaceClaimKey(view) != workspaceKey {
 			continue
@@ -869,7 +881,7 @@ func (s *Service) targetPickerSessionOptions(surface *state.SurfaceConsoleRecord
 			MetaText: meta,
 		})
 	}
-	if targetPickerAllowsNewThread(source, allowNewThread) {
+	if targetPickerAllowsNewThread(source, allowNewThread) && source != control.TargetPickerRequestSourceList {
 		options = append(options, control.FeishuTargetPickerSessionOption{
 			Value:    targetPickerNewThreadValue,
 			Kind:     control.FeishuTargetPickerSessionNewThread,
@@ -880,10 +892,13 @@ func (s *Service) targetPickerSessionOptions(surface *state.SurfaceConsoleRecord
 	return options
 }
 
-func (s *Service) defaultTargetPickerSessionValue(surface *state.SurfaceConsoleRecord, workspaceKey string, options []control.FeishuTargetPickerSessionOption) string {
+func (s *Service) defaultTargetPickerSessionValue(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, workspaceKey string, options []control.FeishuTargetPickerSessionOption) string {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
 		return ""
+	}
+	if source == control.TargetPickerRequestSourceList && targetPickerHasSessionOption(options, targetPickerNewThreadValue) {
+		return targetPickerNewThreadValue
 	}
 	if s.surfaceCurrentWorkspaceKey(surface) != workspaceKey {
 		return ""

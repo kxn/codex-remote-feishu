@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-05-27`
-> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；显式表单提交家族仍保持各自既有 submit 语义。
+> Updated: `2026-06-02`
+> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；显式表单提交家族仍保持各自既有 submit 语义。
 
 ## 1. 文档定位
 
@@ -113,7 +113,7 @@
 | `target_picker_page` | `feishu-ui-owned` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页动作；payload 携带 `picker_id + field_name + cursor(start-index)`。命中当前 active picker 时继续 inline replace 当前卡，不直接改 route。target page 的 workspace lane 翻页会把 cursor 指向的新 workspace 设为当前工作区并重算 session 候选；session lane 翻页会保留 workspace cursor / 选中工作区，但若原 session 掉出可见页则清空选中并禁用 confirm。worktree 页的 workspace lane 翻页则只更新基准工作区选择，并保留同卡 branch / directory 草稿 |
 | `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡 |
 | `target_picker_cancel` | `feishu-ui-owned` | target picker 的显式退出动作；命中当前 active picker owner flow 时，会把当前卡同步 replace 成 sealed terminal card；普通编辑态是 `已取消`，Git import processing 态是 `已取消导入`，worktree processing 态是 `已取消创建`，并会分别 best-effort 停掉 clone / prepare 或 `git worktree add`；随后清掉 active target picker / owner-card flow |
-| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch、按已检查最终目录执行接入/创建、按主卡 Git 表单 + 已选父目录执行导入，或按 worktree 主卡里的基准工作区 + 分支名 + 可选目录名执行创建，产品语义仍由 orchestrator 决定。当前 `/workspace list` 只做“已有工作区 + 已有会话”切换，不暴露 `新建会话`；但 `/use`、`/useall`、`show_workspace_threads` 与锁定工作区的恢复 picker 在工作区已确定后会额外追加 `新建会话` fallback。`/workspace new dir` 现在是显式两阶段：第一次确认只做同卡 `检查目标目录`，检查通过后才允许第二次确认继续，且目录或目录名草稿一旦变化就会使旧检查结果失效；`/workspace new git` 与 `/workspace new worktree` 则继续保持 submit-time validation。三条新建路径都会把同一张 owner card 推进到 processing / succeeded / failed，并在同卡 notice 区收口状态反馈；其中 Git/worktree 这两条依赖 Feishu 文本输入的 inline form 不再靠禁用按钮做前置校验，而是允许提交后由服务端原卡回写阻塞原因。Git import / worktree 长链路 processing 期间仍显式阻断普通输入，只保留 `/status` 与同卡取消 |
+| `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch、准备 `new_thread_ready`、按已检查最终目录执行接入/创建、按主卡 Git 表单 + 已选父目录执行导入，或按 worktree 主卡里的基准工作区 + 分支名 + 可选目录名执行创建，产品语义仍由 orchestrator 决定。当前 `/workspace list` 与 alias `/list` 在工作区已确定后也会暴露 `新建会话`，并把它放在会话候选第一项、默认选中；已有会话仍继续保留在同一列表后面。`/use`、`/useall`、`show_workspace_threads` 与锁定工作区的恢复 picker 继续保留各自既有 `新建会话` fallback。`/workspace new dir` 现在是显式两阶段：第一次确认只做同卡 `检查目标目录`，检查通过后才允许第二次确认继续，且目录或目录名草稿一旦变化就会使旧检查结果失效；`/workspace new git` 与 `/workspace new worktree` 则继续保持 submit-time validation。三条新建路径都会把同一张 owner card 推进到 processing / succeeded / failed，并在同卡 notice 区收口状态反馈；其中 Git/worktree 这两条依赖 Feishu 文本输入的 inline form 不再靠禁用按钮做前置校验，而是允许提交后由服务端原卡回写阻塞原因。Git import / worktree 长链路 processing 期间仍显式阻断普通输入，只保留 `/status` 与同卡取消 |
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` / `path_picker_page` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回、文件选择与下拉翻页；命中当前 active picker 时直接原地替换当前卡。复用路径选择器 projector 当前统一渲染成紧凑 `select_static`：目录模式提供“进入目录”下拉，文件模式提供“进入目录 + 选择文件”双下拉，target-picker owner-subpage 也复用同一目录 lane；当下拉候选过长时，projector 会按 Feishu transport byte budget 动态分页，并保证底部 footer 仍可见。目录 lane 的 `.` / `..` 属于固定项，不消耗 `cursor`；真实目录项里普通目录排在前，`.` 开头目录排在后。目录翻页保留当前目录；文件翻页会清空不可见文件选择并禁用 confirm，避免 invisible confirm |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；当前默认不再把“确认/取消成功”外发成新的主结果卡，而是优先在当前 picker 卡内 sealed 收口。若 consumer 返回新的可投影主卡，则交由 follow-up event 承接；target picker owner-flow 子步骤会把当前 path picker 卡换回主 owner card，独立 `/sendfile` picker 则会把 cancel、启动前失败与启动成功终态继续 patch 在当前 picker 卡上。只有旧卡 / 过期 / 非本人点击这类 freshness/ownership 拒绝仍保留为显式独立提示，不直接改写当前活跃 picker 卡 |
 | bare `/history` / `history_page` / `history_detail` | `mixed` | 当前由 Feishu UI controller 先把 owner-card runtime v1 中的当前 history flow 同步切到 loading，再异步发起 `thread.history.read`；列表/详情结果与失败态默认继续 patch 回同一张 history owner card，loading/error 不再整块覆盖主区，而是保留摘要/业务区并把反馈放进 notice 区 |
@@ -218,8 +218,8 @@
 | `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `page` | headless 主链下重新打开 `/workspace list` 切换卡；旧分页字段继续保留 transport 兼容 |
 | `show_workspace_threads` | `workspace_key`、`page`、`return_page` | headless 主链下以指定 workspace 重新打开 `/workspace list` 切换卡，并预填当前 workspace；legacy selection path 下仍可表示进入某个 workspace 的会话详情 |
 | `target_picker_select_workspace` | `picker_id`、`field_name` | `/workspace list` 切换卡与 `/workspace new worktree` 基准工作区下拉的回调；gateway 按 `payload value -> form_value[field_name] -> option -> options` 恢复工作区键，避免群聊 `select_static` 回调把旧 option 误当成新选择 |
-| `target_picker_select_session` | `picker_id`、`field_name` | `/workspace list` 切换卡的会话下拉回调；gateway 按 `payload value -> form_value[field_name] -> option -> options` 恢复 thread；当前 headless 卡不再发出 `new_thread` |
-| `target_picker_page` | `picker_id`、`field_name`、`cursor` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页回调；`field_name` 区分 workspace / session lane，`cursor` 是动态 byte-budget 分页使用的 start-index。target page 的 workspace 翻页会把对应 cursor 处的 workspace 设为当前选择并重算 session 列表；session 翻页会保留 workspace 状态，但显式清空当前 session 选择，避免 invisible confirm。worktree workspace 翻页会保留 branch / directory 草稿，只重算基准工作区与目标路径预览 |
+| `target_picker_select_session` | `picker_id`、`field_name` | `/workspace list` 切换卡的会话下拉回调；gateway 按 `payload value -> form_value[field_name] -> option -> options` 恢复 session target value，当前既可能是 `thread:<id>`，也可能是 `new_thread` |
+| `target_picker_page` | `picker_id`、`field_name`、`cursor` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页回调；`field_name` 区分 workspace / session lane，`cursor` 是动态 byte-budget 分页使用的 start-index。target page 的 workspace 翻页会把对应 cursor 处的 workspace 设为当前选择并重算 session 列表；`/workspace list` 与 alias `/list` 命中这条路径时，若当前工作区允许 `new_thread`，服务端还会把 `新建会话` 自动恢复成默认选中。session 翻页会保留 workspace 状态，但若原 session 不在新可见页内，会显式清空选中并禁用 confirm，避免 invisible confirm。worktree workspace 翻页会保留 branch / directory 草稿，只重算基准工作区与目标路径预览 |
 | `target_picker_open_path_picker` | `picker_id`、`target_value`、`request_answers` | `/workspace new dir` / `/workspace new git` 主卡的子步骤导航；当前 `target_value` 表示 `local_directory` 或 `git_parent_dir`，`request_answers` 用来把 Git 主卡里的 `repo_url` / `directory_name` 草稿一起带回服务端 |
 | `target_picker_cancel` | `picker_id`、`request_answers` | 四张独立工作会话卡共用的退出按钮；gateway 只需命中当前 active picker，并把必要草稿带回；服务端随后会把当前卡封成对应 terminal 态：普通编辑态为 `已取消`，Git import processing 态为 `已取消导入`，worktree processing 态为 `已取消创建`，随后清掉 active picker / owner-card flow |
 | `target_picker_confirm` | `picker_id`、`target_picker_workspace`、`target_picker_session`、`request_answers` | 四张独立工作会话卡共用的确认按钮：`/workspace list` 把当前表单值送到产品层执行 attach / switch；`/workspace new dir` 当前第一次确认只做服务端 `检查目标目录`，并把 `目标目录`、busy、known workspace、目标目录已存在、非法目录名等结果回写到同一张 owner card；只有最近一次检查结果仍然有效时，第二次确认才会真的执行 `接入并继续` 或 `创建并继续`。`/workspace new git` 与 `/workspace new worktree` 继续在同一张 owner card 上做 submit-time validation 并进入 processing / terminal；Git 路径要求 repo / 落地父目录预览有效，worktree 路径则从 `request_answers` 里恢复 `target_picker_worktree_branch_name` / `target_picker_worktree_directory_name` 草稿，并要求基准工作区、分支名和目标路径预览有效；Git 长链路会先 patch 成 `正在导入 Git 工作区`，随后在 clone 成功后继续 patch 到“接入工作区 / 准备会话”，并允许同卡 `取消导入`；worktree 长链路会先 patch 成 `正在创建 Worktree 工作区`，随后在创建成功后继续 patch 到“正在接入工作区”，并允许同卡 `取消创建` |
@@ -524,20 +524,20 @@ MCP request 卡片当前新增的可视语义：
   - VS Code / legacy selection path 里的上一页 / 下一页 / 返回分组
   都属于 pure navigation，继续原地替换当前卡，而不是 append 新卡。
 - workspace target picker 当前额外有一条明确的 UI 语义：
-  - `/workspace list` 与 `codex` 下的 alias `/list` / `/use` / `/useall`，以及 `claude` 下当前可见的 `/list` / `/use`，首次打开都直接落在 `目标` 页；其中 attached `/use` 会预填当前 workspace，但 detached / unbound 不会替用户猜一个会话
+  - `/workspace list` 与 `codex` 下的 alias `/list` / `/use` / `/useall`，以及 `claude` 下当前可见的 `/list` / `/use`，首次打开都直接落在 `目标` 页；其中 attached `/use` 会预填当前 workspace，而 `/workspace list` 与 alias `/list` 在工作区已确定且允许 `new_thread` 时会默认选中新建会话
   - `claude` 的这组 target-picker 候选会按 `catalog_backend=claude` 过滤 workspace / session，不再把 Codex recent workspace、Codex thread 或 Codex persisted recency 投进同一张卡
   - `/workspace new dir`、`/workspace new git` 与 `/workspace new worktree` 首次打开则分别直接落在 `目录` / `Git` / `Worktree` 页；bare `/workspace` 与 `/workspace new` 自身只做 page-owner 父页导航
   - editing / processing / terminal 页面当前统一先显示 step tag，再显示单一主问题；不再把旧的“当前工作区 / 当前会话 / 路径摘要”作为编辑页首屏
   - `目标` 页继续把 `工作区 + 会话` 保留在同一页；工作区 label 足够时只显示 label，只有 basename 冲突时才额外补路径 meta 做消歧
-  - `目标` 页的会话候选会按 source 收口：`/workspace list` 与 alias `/list` 只列既有会话；`/use`、`/useall` 与锁定工作区的恢复 picker 在工作区已确定后会额外追加 `新建会话` fallback
+  - `目标` 页的会话候选会按 source 收口：`/workspace list` 与 alias `/list` 在工作区已确定后会把 `新建会话` 置顶，并继续保留已有会话列表；`/use`、`/useall` 与锁定工作区的恢复 picker 继续在工作区已确定后追加 `新建会话` fallback
   - `目标` 页当前不再把全部 `workspace/session` 选项直接灌进两个 `select_static`；projector 会按 Feishu transport byte budget 做动态分页，并确保底部 footer 仍可见
   - 双下拉预算目标当前固定为 `workspace 1/3 : session 2/3`，并支持空余预算回借；工作区锁定场景则只分页 session lane
   - dropdown 翻页当前统一走 `target_picker_page(picker_id + field_name + cursor)`；`cursor` 是 start-index，不是固定页码
-  - workspace lane 翻页属于主上下文切换：服务端会把 cursor 处 workspace 设为当前选择、重算 session options，并把旧 session 选择清空到不可确认态
+  - workspace lane 翻页属于主上下文切换：服务端会把 cursor 处 workspace 设为当前选择并重算 session options；若当前 source 是 `/workspace list` 或 alias `/list` 且允许 `new_thread`，会自动恢复成“新建会话已选中”的可确认态，否则才把旧 session 选择清空到不可确认态
   - session lane 翻页属于同 workspace 内浏览更多：服务端会保留 workspace cursor / 选中 workspace，但若原 session 不在新可见页内，会主动清空选中并禁用 confirm，避免 invisible confirm
   - `已有工作区` 路径下，不再为了“帮用户猜一个候选”去回退到其他 recoverable thread
-  - 或者 surface 当前已经绑定到同 workspace 的某个 thread，且该 thread 仍在候选里，才默认选中该 thread
-  - 如果只是当前 workspace 已选中，但 surface 处于 detached / unbound，session 会保持空值，等待用户显式选择
+  - `/workspace list` 与 alias `/list` 现在只要当前工作区允许 `new_thread`，就会优先默认选中新建会话；否则才会退回到“surface 当前已经绑定到同 workspace 的某个 thread，且该 thread 仍在候选里时保守预填该 thread”
+  - detached / unbound 的 `/use` / `/useall` 若当前工作区没有命中上述保守预填条件，session 仍保持空值，等待用户显式选择
   - 但工作区一旦变化，session 下拉不会再 silently fallback 到新的真实 workspace 默认会话
   - 若切到真实 workspace，session 会被主动清空，confirm 按钮随之禁用，直到用户重新选定会话
   - `从目录新建` 主卡当前展示目录字段、`在此目录下创建新目录（可选）` 输入，以及 submit-time `检查目标目录` 主按钮；首次提交只做服务端检查，并把最终 `目标目录` 与阻塞结果原卡回写，不做假实时预览
