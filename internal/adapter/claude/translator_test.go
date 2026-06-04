@@ -193,7 +193,6 @@ func TestClaudeTranslatorAskUserQuestionRoundTrip(t *testing.T) {
 		Request: agentproto.Request{
 			RequestID: "req-ask-1",
 			Response: map[string]any{
-				"decision": "accept",
 				"answers": map[string]any{
 					"approach": map[string]any{
 						"answers": []any{"Fast"},
@@ -206,6 +205,9 @@ func TestClaudeTranslatorAskUserQuestionRoundTrip(t *testing.T) {
 		t.Fatalf("translate ask response: %v", err)
 	}
 	body := testMapValue(testMapValue(decodeFrame(t, payloads[0])["response"])["response"])
+	if lookupStringFromAny(body["behavior"]) != "allow" {
+		t.Fatalf("unexpected ask response body: %#v", body)
+	}
 	updatedInput := testMapValue(body["updatedInput"])
 	answers := testMapValue(updatedInput["answers"])
 	if lookupStringFromAny(answers["Which approach should I take?"]) != "Fast" {

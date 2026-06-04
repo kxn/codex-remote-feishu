@@ -213,7 +213,7 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) ([][]by
 		return nil, err
 	}
 	request.Response = cloneMap(command.Request.Response)
-	request.Decision = resolveRequestDecision(command.Request.Response)
+	request.Decision = t.resolveStoredRequestDecision(request, command.Request.Response)
 	if command.Request.InterruptOnDecline && request.Decision == "decline" && t.activeTurn != nil {
 		t.activeTurn.InterruptRequested = true
 		request.InterruptOnDecline = true
@@ -223,7 +223,10 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) ([][]by
 
 func (t *Translator) buildRequestResponsePayload(request *pendingRequest, response agentproto.Request) (map[string]any, error) {
 	decision := resolveRequestDecision(response.Response)
-	allow := decision == "accept" || decision == "acceptForSession"
+	allow, err := t.requestResponseAllowsContinuation(request, response.Response)
+	if err != nil {
+		return nil, err
+	}
 	interrupt := response.InterruptOnDecline && decision == "decline"
 	reply := map[string]any{
 		"type": "control_response",
@@ -287,6 +290,58 @@ func (t *Translator) buildRequestResponsePayload(request *pendingRequest, respon
 		"response":   body,
 	}
 	return reply, nil
+}
+
+func (t *Translator) requestResponseAllowsContinuation(request *pendingRequest, response map[string]any) (bool, error) {
+	if request == nil {
+		return false, agentproto.ErrorInfo{
+			Code:      "claude_request_context_missing",
+			Layer:     "wrapper",
+			Stage:     "translate_command",
+			Operation: string(agentproto.CommandRequestRespond),
+			Message:   "Claude runtime 缺少 request 上下文，无法翻译响应。",
+		}
+	}
+	switch request.RequestType {
+	case agentproto.RequestTypeRequestUserInput:
+		return len(requestResponseAnswers(request, response)) != 0, nil
+	case agentproto.RequestTypeApproval:
+		decision := resolveRequestDecision(response)
+		switch decision {
+		case "accept", "acceptForSession":
+			return true, nil
+		case "decline", "cancel", "revise":
+			return false, nil
+		default:
+			return false, agentproto.ErrorInfo{
+				Code:      "claude_request_decision_missing",
+				Layer:     "wrapper",
+				Stage:     "translate_command",
+				Operation: string(agentproto.CommandRequestRespond),
+				Message:   "Claude approval request 缺少有效 decision，无法翻译响应。",
+				RequestID: request.RequestID,
+				ThreadID:  request.ThreadID,
+				TurnID:    request.TurnID,
+			}
+		}
+	default:
+		decision := resolveRequestDecision(response)
+		return decision == "accept" || decision == "acceptForSession", nil
+	}
+}
+
+func (t *Translator) resolveStoredRequestDecision(request *pendingRequest, response map[string]any) string {
+	decision := resolveRequestDecision(response)
+	if decision != "" {
+		return decision
+	}
+	if request == nil {
+		return ""
+	}
+	if request.RequestType == agentproto.RequestTypeRequestUserInput && len(requestResponseAnswers(request, response)) != 0 {
+		return "accept"
+	}
+	return ""
 }
 
 func toolApprovalUpdatedPermissions(request *pendingRequest, decision string) ([]any, error) {
