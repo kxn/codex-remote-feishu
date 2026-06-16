@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -18,10 +19,32 @@ const (
 )
 
 func (a *App) applyIngressActionLocked(action control.Action) []eventcontract.Event {
-	if action.Kind != control.ActionFileMessage {
+	switch action.Kind {
+	case control.ActionFileMessage:
+		return a.applyIngressFileActionLocked(action)
+	case control.ActionTextMessage:
+		prepared, err := a.prepareInboundTextFilesActionLocked(action)
+		if err != nil {
+			a.ensureSurfaceRouteForNotice(action)
+			return []eventcontract.Event{{
+				Kind:             eventcontract.KindNotice,
+				GatewayID:        action.GatewayID,
+				SurfaceSessionID: action.SurfaceSessionID,
+				Notice: &control.Notice{
+					Code:     "inbound_file_prepare_failed",
+					Title:    "文件暂存失败",
+					Text:     "文件已经收到，但暂存到当前工作区时失败了，请稍后重试。",
+					ThemeKey: "error",
+				},
+			}}
+		}
+		return a.service.ApplySurfaceAction(prepared)
+	default:
 		return a.service.ApplySurfaceAction(action)
 	}
+}
 
+func (a *App) applyIngressFileActionLocked(action control.Action) []eventcontract.Event {
 	prepared, err := a.prepareInboundFileActionLocked(action)
 	if err != nil {
 		a.ensureSurfaceRouteForNotice(action)
@@ -46,7 +69,6 @@ func (a *App) applyIngressActionLocked(action control.Action) []eventcontract.Ev
 	}
 	return events
 }
-
 func (a *App) prepareInboundFileActionLocked(action control.Action) (control.Action, error) {
 	path := strings.TrimSpace(action.LocalPath)
 	if action.Kind != control.ActionFileMessage || path == "" {
@@ -78,6 +100,72 @@ func (a *App) prepareInboundFileActionLocked(action control.Action) (control.Act
 		action.FileName = filepath.Base(finalPath)
 	}
 	return action, nil
+}
+
+func (a *App) prepareInboundTextFilesActionLocked(action control.Action) (control.Action, error) {
+	if action.Kind != control.ActionTextMessage || len(action.Files) == 0 {
+		return action, nil
+	}
+	preparedFiles := make([]control.ActionFileAttachment, 0, len(action.Files))
+	for _, file := range action.Files {
+		path := strings.TrimSpace(file.LocalPath)
+		if path == "" {
+			continue
+		}
+		sourceMessageID := strings.TrimSpace(file.SourceMessageID)
+		if sourceMessageID == "" {
+			sourceMessageID = action.MessageID
+		}
+		prepared, err := a.prepareInboundFileActionLocked(control.Action{
+			Kind:             control.ActionFileMessage,
+			GatewayID:        action.GatewayID,
+			SurfaceSessionID: action.SurfaceSessionID,
+			ChatID:           action.ChatID,
+			ActorUserID:      action.ActorUserID,
+			MessageID:        sourceMessageID,
+			LocalPath:        path,
+			FileName:         file.FileName,
+			Inbound:          action.Inbound,
+		})
+		if err != nil {
+			return action, err
+		}
+		if strings.TrimSpace(prepared.LocalPath) == "" {
+			continue
+		}
+		preparedFiles = append(preparedFiles, control.ActionFileAttachment{
+			SourceMessageID: sourceMessageID,
+			LocalPath:       prepared.LocalPath,
+			FileName:        prepared.FileName,
+		})
+	}
+	if prompt := inboundFileAttachmentPrompt(preparedFiles); prompt != "" {
+		fileInput := agentproto.Input{Type: agentproto.InputText, Text: prompt}
+		action.Inputs = append([]agentproto.Input{fileInput}, action.Inputs...)
+	}
+	return action, nil
+}
+
+func inboundFileAttachmentPrompt(files []control.ActionFileAttachment) string {
+	if len(files) == 0 {
+		return ""
+	}
+	lines := []string{"附带参考文件（内容未直接注入上下文，可按需读取以下本地路径）："}
+	for _, file := range files {
+		path := strings.TrimSpace(file.LocalPath)
+		if path == "" {
+			continue
+		}
+		name := strings.TrimSpace(file.FileName)
+		if name == "" {
+			name = filepath.Base(path)
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s", name, path))
+	}
+	if len(lines) == 1 {
+		return ""
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (a *App) inboundFileRetainedLocked(surfaceID, sourceMessageID, path string) bool {

@@ -403,6 +403,57 @@ func TestParseMessageEventEnrichesReplyWithQuotedPost(t *testing.T) {
 	}
 }
 
+func TestParseMessageEventEnrichesReplyWithQuotedFile(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.fetchMessageFn = func(_ context.Context, messageID string) (*gatewayMessage, error) {
+		if messageID != "om-parent-file-1" {
+			t.Fatalf("unexpected parent file lookup: %s", messageID)
+		}
+		return &gatewayMessage{
+			MessageID:   messageID,
+			MessageType: "file",
+			Content:     `{"file_key":"file-quoted-1","file_name":"需求说明.pdf"}`,
+		}, nil
+	}
+	gateway.downloadFileFn = func(_ context.Context, messageID, fileKey, fileName string) (string, error) {
+		if messageID != "om-parent-file-1" || fileKey != "file-quoted-1" || fileName != "需求说明.pdf" {
+			t.Fatalf("unexpected quoted file download request: message=%s file=%s name=%s", messageID, fileKey, fileName)
+		}
+		return "/tmp/quoted-requirements.pdf", nil
+	}
+	event := &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Sender: &larkim.EventSender{
+				SenderId: &larkim.UserId{OpenId: stringRef("ou_user")},
+			},
+			Message: &larkim.EventMessage{
+				MessageId:   stringRef("om-reply-file-1"),
+				ChatId:      stringRef("oc_chat"),
+				ChatType:    stringRef("group"),
+				MessageType: stringRef("text"),
+				ParentId:    stringRef("om-parent-file-1"),
+				Content:     stringRef(`{"text":"请读取我回复的文件"}`),
+			},
+		},
+	}
+
+	action, ok, err := gateway.parseMessageEvent(t.Context(), event)
+	if err != nil {
+		t.Fatalf("parseMessageEvent returned error: %v", err)
+	}
+	if !ok || action.Kind != control.ActionTextMessage {
+		t.Fatalf("expected reply text to be handled, got ok=%v action=%#v", ok, action)
+	}
+	if len(action.Files) != 1 {
+		t.Fatalf("expected one quoted file attachment, got %#v", action.Files)
+	}
+	if action.Files[0].SourceMessageID != "om-parent-file-1" || action.Files[0].LocalPath != "/tmp/quoted-requirements.pdf" || action.Files[0].FileName != "需求说明.pdf" {
+		t.Fatalf("unexpected quoted file attachment: %#v", action.Files[0])
+	}
+	if len(action.Inputs) != 1 || action.Inputs[0].Type != agentproto.InputText || action.Inputs[0].Text != "请读取我回复的文件" {
+		t.Fatalf("unexpected current text input: %#v", action.Inputs)
+	}
+}
 func TestParseMessageEventIgnoresQuoteFetchFailure(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.fetchMessageFn = func(_ context.Context, _ string) (*gatewayMessage, error) {

@@ -15,47 +15,51 @@ import (
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func (g *LiveGateway) quotedInputs(ctx context.Context, message *larkim.EventMessage) []agentproto.Input {
+	return g.quotedMessageInputs(ctx, message).Inputs
+}
+
+func (g *LiveGateway) quotedMessageInputs(ctx context.Context, message *larkim.EventMessage) gatewaypkg.QuotedMessageInputs {
 	if message == nil || g.fetchMessageFn == nil {
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	}
 	ctx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
 	defer cancel()
 
 	targetMessageID := referencedMessageID(message)
 	if targetMessageID == "" {
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	}
 	referenced, err := g.fetchMessageFn(ctx, targetMessageID)
 	if err != nil {
 		log.Printf("feishu quote fetch ignored: message=%s err=%v", targetMessageID, err)
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	}
 	return g.inputsFromReferencedMessage(ctx, referenced)
 }
-
-func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, referenced *gatewayMessage) []agentproto.Input {
+func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, referenced *gatewayMessage) gatewaypkg.QuotedMessageInputs {
 	if referenced == nil || referenced.Deleted {
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	}
 	switch strings.ToLower(strings.TrimSpace(referenced.MessageType)) {
 	case "text":
 		text, err := gatewaypkg.ParseTextContent(referenced.Content)
 		if err != nil {
 			log.Printf("feishu quote text parse ignored: message=%s err=%v", referenced.MessageID, err)
-			return nil
+			return gatewaypkg.QuotedMessageInputs{}
 		}
 		if wrapped := quotedTextInput(text); wrapped.Text != "" {
-			return []agentproto.Input{wrapped}
+			return gatewaypkg.QuotedMessageInputs{Inputs: []agentproto.Input{wrapped}}
 		}
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	case "post":
 		inputs, text, err := g.parsePostInputs(ctx, referenced.MessageID, referenced.Content)
 		if err != nil {
 			log.Printf("feishu quote post parse ignored: message=%s err=%v", referenced.MessageID, err)
-			return nil
+			return gatewaypkg.QuotedMessageInputs{}
 		}
 		quoted := make([]agentproto.Input, 0, len(inputs)+1)
 		if wrapped := quotedTextInput(text); wrapped.Text != "" {
@@ -66,41 +70,57 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 				quoted = append(quoted, input)
 			}
 		}
-		return quoted
+		return gatewaypkg.QuotedMessageInputs{Inputs: quoted}
 	case "image":
 		imageKey, err := gatewaypkg.ParseImageKey(referenced.Content)
 		if err != nil {
 			log.Printf("feishu quote image parse ignored: message=%s err=%v", referenced.MessageID, err)
-			return nil
+			return gatewaypkg.QuotedMessageInputs{}
 		}
 		path, mimeType, err := g.downloadImageFn(ctx, referenced.MessageID, imageKey)
 		if err != nil {
 			log.Printf("feishu quote image download ignored: message=%s err=%v", referenced.MessageID, err)
-			return nil
+			return gatewaypkg.QuotedMessageInputs{}
 		}
-		return []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}
+		return gatewaypkg.QuotedMessageInputs{Inputs: []agentproto.Input{{Type: agentproto.InputLocalImage, Path: path, MIMEType: mimeType}}}
+	case "file":
+		fileKey, fileName, err := gatewaypkg.ParseFileContent(referenced.Content)
+		if err != nil {
+			log.Printf("feishu quote file parse ignored: message=%s err=%v", referenced.MessageID, err)
+			return gatewaypkg.QuotedMessageInputs{}
+		}
+		path, err := g.downloadFileFn(ctx, referenced.MessageID, fileKey, fileName)
+		if err != nil {
+			log.Printf("feishu quote file download ignored: message=%s err=%v", referenced.MessageID, err)
+			return gatewaypkg.QuotedMessageInputs{}
+		}
+		return gatewaypkg.QuotedMessageInputs{Files: []control.ActionFileAttachment{{
+			SourceMessageID: referenced.MessageID,
+			LocalPath:       path,
+			FileName:        fileName,
+		}}}
 	case "merge_forward":
 		payload, err := g.buildMergeForwardStructuredPayloadFromGatewayMessage(ctx, referenced, true)
 		if err != nil {
 			log.Printf("feishu quote merge_forward parse ignored: message=%s err=%v", referenced.MessageID, err)
-			return nil
+			return gatewaypkg.QuotedMessageInputs{}
 		}
 		if len(payload.Inputs) > 0 {
-			return payload.Inputs
+			return gatewaypkg.QuotedMessageInputs{Inputs: payload.Inputs}
 		}
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	case "interactive":
 		text, err := quotedInteractiveCardText(referenced.Content)
 		if err != nil {
 			log.Printf("feishu quote interactive parse ignored: message=%s err=%v", referenced.MessageID, err)
-			return nil
+			return gatewaypkg.QuotedMessageInputs{}
 		}
 		if wrapped := quotedTextInput(text); wrapped.Text != "" {
-			return []agentproto.Input{wrapped}
+			return gatewaypkg.QuotedMessageInputs{Inputs: []agentproto.Input{wrapped}}
 		}
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	default:
-		return nil
+		return gatewaypkg.QuotedMessageInputs{}
 	}
 }
 

@@ -277,9 +277,11 @@ func (w *QueuedMessageWork) parseAction(ctx context.Context, env InboundEnv) (co
 	switch strings.ToLower(strings.TrimSpace(w.messageType)) {
 	case "text":
 		currentInputs := []agentproto.Input{{Type: agentproto.InputText, Text: w.text}}
+		quoted := quotedMessageInputs(ctx, env, message)
 		action.Kind = control.ActionTextMessage
 		action.Text = w.text
-		action.Inputs = append(env.QuotedInputs(ctx, message), currentInputs...)
+		action.Inputs = append(quoted.Inputs, currentInputs...)
+		action.Files = append(action.Files, quoted.Files...)
 		action.SteerInputs = currentInputs
 		return action, true, nil
 	case "post":
@@ -290,9 +292,11 @@ func (w *QueuedMessageWork) parseAction(ctx context.Context, env InboundEnv) (co
 		if len(inputs) == 0 {
 			return control.Action{}, false, nil
 		}
+		quoted := quotedMessageInputs(ctx, env, message)
 		action.Kind = control.ActionTextMessage
 		action.Text = text
-		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
+		action.Inputs = append(quoted.Inputs, inputs...)
+		action.Files = append(action.Files, quoted.Files...)
 		action.SteerInputs = append([]agentproto.Input(nil), inputs...)
 		return action, true, nil
 	case "image":
@@ -322,9 +326,11 @@ func (w *QueuedMessageWork) parseAction(ctx context.Context, env InboundEnv) (co
 		if len(inputs) == 0 {
 			return control.Action{}, false, nil
 		}
+		quoted := quotedMessageInputs(ctx, env, message)
 		action.Kind = control.ActionTextMessage
 		action.Text = summary
-		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
+		action.Inputs = append(quoted.Inputs, inputs...)
+		action.Files = append(action.Files, quoted.Files...)
 		return action, true, nil
 	default:
 		return control.Action{}, false, nil

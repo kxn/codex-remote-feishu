@@ -14,11 +14,17 @@ type RoutingEnv struct {
 	SurfaceForCardAction func(messageID, chatID, operatorID string) string
 }
 
+type QuotedMessageInputs struct {
+	Inputs []agentproto.Input
+	Files  []control.ActionFileAttachment
+}
+
 type InboundEnv struct {
 	GatewayID                        string
 	LookupSurfaceMessage             func(messageID string) string
 	ParseTextActionWithoutCatalog    func(text string) (control.Action, bool)
 	QuotedInputs                     func(context.Context, *larkim.EventMessage) []agentproto.Input
+	QuotedMessageInputs              func(context.Context, *larkim.EventMessage) QuotedMessageInputs
 	ParsePostInputs                  func(context.Context, string, string) ([]agentproto.Input, string, error)
 	BuildMergeForwardStructuredInput func(context.Context, *larkim.EventMessage) (string, []agentproto.Input, error)
 	RecordSurfaceMessage             func(messageID, surfaceSessionID string)

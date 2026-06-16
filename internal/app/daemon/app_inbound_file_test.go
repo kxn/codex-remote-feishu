@@ -76,6 +76,74 @@ func TestHandleFileActionMaterializesIntoWorkspaceAndUpdatesGitExclude(t *testin
 	}
 }
 
+func TestHandleTextActionWithQuotedFileMaterializesIntoWorkspaceInput(t *testing.T) {
+	workspaceRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workspaceRoot, ".git", "info"), 0o755); err != nil {
+		t.Fatalf("MkdirAll(.git/info): %v", err)
+	}
+	incomingDir := t.TempDir()
+	incomingPath := filepath.Join(incomingDir, "requirements.pdf")
+	if err := os.WriteFile(incomingPath, []byte("hello quoted file"), 0o600); err != nil {
+		t.Fatalf("WriteFile(incoming): %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, serverIdentityForTest())
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "repo",
+		WorkspaceRoot: workspaceRoot,
+		WorkspaceKey:  workspaceRoot,
+		ShortName:     "repo",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	app.service.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+
+	app.handleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-text-1",
+		Text:             "请读取我回复的文件",
+		Inputs:           []agentproto.Input{{Type: agentproto.InputText, Text: "请读取我回复的文件"}},
+		Files: []control.ActionFileAttachment{{
+			SourceMessageID: "msg-file-quoted-1",
+			LocalPath:       incomingPath,
+			FileName:        "requirements.pdf",
+		}},
+	})
+
+	surface := app.service.Surface("surface-1")
+	if surface == nil || len(surface.QueueItems) != 1 {
+		t.Fatalf("expected one queued item, got %#v", surface)
+	}
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected queued item")
+	}
+	wantPath := filepath.Join(workspaceRoot, ".codex-remote", "inbox", "feishu-files", "msg-file-quoted-1", "requirements.pdf")
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Fatalf("expected quoted file to be materialized: %v", err)
+	}
+	if _, err := os.Stat(incomingPath); !os.IsNotExist(err) {
+		t.Fatalf("expected original temp file to be moved away, got err=%v", err)
+	}
+	if len(item.Inputs) != 2 {
+		t.Fatalf("expected file reference prompt + user text, got %#v", item.Inputs)
+	}
+	if item.Inputs[0].Type != agentproto.InputText || !strings.Contains(item.Inputs[0].Text, "requirements.pdf") || !strings.Contains(item.Inputs[0].Text, wantPath) {
+		t.Fatalf("unexpected quoted file prompt: %#v", item.Inputs[0])
+	}
+	if item.Inputs[1].Type != agentproto.InputText || item.Inputs[1].Text != "请读取我回复的文件" {
+		t.Fatalf("unexpected user text input: %#v", item.Inputs[1])
+	}
+}
+
 func TestHandleFileActionWithoutAttachmentCleansTempFile(t *testing.T) {
 	incomingDir := t.TempDir()
 	incomingPath := filepath.Join(incomingDir, "spec.pdf")

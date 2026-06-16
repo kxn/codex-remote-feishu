@@ -115,6 +115,12 @@ type ActionInboundMeta struct {
 	LifecycleReason       string
 }
 
+type ActionFileAttachment struct {
+	SourceMessageID string
+	LocalPath       string
+	FileName        string
+}
+
 type Action struct {
 	Kind                ActionKind
 	GatewayID           string
@@ -125,6 +131,7 @@ type Action struct {
 	Text                string
 	Inputs              []agentproto.Input
 	SteerInputs         []agentproto.Input
+	Files               []ActionFileAttachment
 	RequestAnswers      map[string][]string
 	OptionID            string
 	Request             *ActionRequestResponse

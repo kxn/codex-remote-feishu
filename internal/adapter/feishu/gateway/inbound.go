@@ -14,6 +14,16 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
+func quotedMessageInputs(ctx context.Context, env InboundEnv, message *larkim.EventMessage) QuotedMessageInputs {
+	if env.QuotedMessageInputs != nil {
+		return env.QuotedMessageInputs(ctx, message)
+	}
+	if env.QuotedInputs != nil {
+		return QuotedMessageInputs{Inputs: env.QuotedInputs(ctx, message)}
+	}
+	return QuotedMessageInputs{}
+}
+
 func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1) (control.Action, bool, error) {
 	if event == nil || event.Event == nil || event.Event.Message == nil {
 		return control.Action{}, false, nil
@@ -55,10 +65,12 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 			return commandAction, true, nil
 		}
 		currentInputs := []agentproto.Input{{Type: agentproto.InputText, Text: text}}
-		inputs := append(env.QuotedInputs(ctx, message), currentInputs...)
+		quoted := quotedMessageInputs(ctx, env, message)
+		inputs := append(quoted.Inputs, currentInputs...)
 		action.Kind = control.ActionTextMessage
 		action.Text = text
 		action.Inputs = inputs
+		action.Files = append(action.Files, quoted.Files...)
 		action.SteerInputs = currentInputs
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
@@ -72,9 +84,11 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "empty_post_inputs")
 			return control.Action{}, false, nil
 		}
+		quoted := quotedMessageInputs(ctx, env, message)
 		action.Kind = control.ActionTextMessage
 		action.Text = text
-		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
+		action.Inputs = append(quoted.Inputs, inputs...)
+		action.Files = append(action.Files, quoted.Files...)
 		action.SteerInputs = append([]agentproto.Input(nil), inputs...)
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
@@ -121,9 +135,11 @@ func ParseMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2Mess
 			logInboundMessageIgnored(gatewayID, surfaceSessionID, action.Inbound, message, "empty_merge_forward_content")
 			return control.Action{}, false, nil
 		}
+		quoted := quotedMessageInputs(ctx, env, message)
 		action.Kind = control.ActionTextMessage
 		action.Text = summary
-		action.Inputs = append(env.QuotedInputs(ctx, message), inputs...)
+		action.Inputs = append(quoted.Inputs, inputs...)
+		action.Files = append(action.Files, quoted.Files...)
 		env.RecordSurfaceMessage(action.MessageID, surfaceSessionID)
 		return action, true, nil
 	default:
