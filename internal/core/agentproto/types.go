@@ -52,6 +52,8 @@ const (
 	EventItemStarted                EventKind = "item.started"
 	EventItemDelta                  EventKind = "item.delta"
 	EventItemCompleted              EventKind = "item.completed"
+	EventMCPOAuthLoginURLReady      EventKind = "mcp.oauth_login.authorization_url"
+	EventMCPOAuthLoginCompleted     EventKind = "mcp.oauth_login.completed"
 	EventRequestStarted             EventKind = "request.started"
 	EventRequestResolved            EventKind = "request.resolved"
 	EventSystemError                EventKind = "system.error"
@@ -110,6 +112,7 @@ type Event struct {
 	Initiator            Initiator                `json:"initiator,omitempty"`
 	Problem              *ErrorInfo               `json:"problem,omitempty"`
 	RequestPrompt        *RequestPrompt           `json:"requestPrompt,omitempty"`
+	MCPOAuthLogin        *MCPOAuthLoginEvent      `json:"mcpOAuthLogin,omitempty"`
 	MCPToolProgress      *MCPToolCallProgress     `json:"mcpToolProgress,omitempty"`
 	ApprovalReview       *AutoApprovalReview      `json:"approvalReview,omitempty"`
 	TokenUsage           *ThreadTokenUsage        `json:"tokenUsage,omitempty"`
@@ -177,6 +180,7 @@ const (
 	CommandTurnSteer           CommandKind = "turn.steer"
 	CommandTurnInterrupt       CommandKind = "turn.interrupt"
 	CommandRequestRespond      CommandKind = "request.respond"
+	CommandMCPOAuthLogin       CommandKind = "mcp.oauth_login.start"
 	CommandThreadsRefresh      CommandKind = "threads.refresh"
 	CommandThreadHistoryRead   CommandKind = "thread.history.read"
 	CommandProcessChildRestart CommandKind = "process.child.restart"
@@ -208,6 +212,7 @@ type Command struct {
 	Prompt    Prompt          `json:"prompt,omitempty"`
 	Overrides PromptOverrides `json:"overrides,omitempty"`
 	Request   Request         `json:"request,omitempty"`
+	MCP       MCPCommand      `json:"mcp,omitempty"`
 	Review    ReviewRequest   `json:"review,omitempty"`
 }
 
@@ -252,6 +257,27 @@ type Request struct {
 	BridgeKind         string         `json:"bridgeKind,omitempty"`
 	SemanticKind       string         `json:"semanticKind,omitempty"`
 	InterruptOnDecline bool           `json:"interruptOnDecline,omitempty"`
+}
+
+type MCPCommand struct {
+	OAuthLogin *MCPOAuthLoginCommand `json:"oauthLogin,omitempty"`
+}
+
+type MCPOAuthLoginCommand struct {
+	ServerName  string   `json:"serverName,omitempty"`
+	ThreadID    string   `json:"threadId,omitempty"`
+	Scopes      []string `json:"scopes,omitempty"`
+	TimeoutSecs int      `json:"timeoutSecs,omitempty"`
+}
+
+type MCPOAuthLoginEvent struct {
+	ServerName       string   `json:"serverName,omitempty"`
+	ThreadID         string   `json:"threadId,omitempty"`
+	Scopes           []string `json:"scopes,omitempty"`
+	TimeoutSecs      int      `json:"timeoutSecs,omitempty"`
+	AuthorizationURL string   `json:"authorizationUrl,omitempty"`
+	Success          bool     `json:"success,omitempty"`
+	Error            string   `json:"error,omitempty"`
 }
 
 type RequestType string

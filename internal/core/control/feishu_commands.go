@@ -37,6 +37,7 @@ const (
 	FeishuCommandMenu                 = "menu"
 	FeishuCommandDebug                = "debug"
 	FeishuCommandCron                 = "cron"
+	FeishuCommandMCPOAuth             = "mcp_oauth"
 	FeishuCommandUpgrade              = "upgrade"
 	FeishuCommandPatch                = "patch"
 	FeishuCommandVSCodeMigrate        = "vscode_migrate"
@@ -884,6 +885,30 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		},
 		menuExact: []feishuCommandMatch{
 			{alias: "cron", action: Action{Kind: ActionCronCommand, Text: "/cron"}},
+		},
+	},
+	{
+		definition: FeishuCommandDefinition{
+			ID:               FeishuCommandMCPOAuth,
+			GroupID:          FeishuCommandGroupCommonTools,
+			Title:            "MCP 服务认证",
+			CanonicalSlash:   "/mcpoauth",
+			CanonicalMenuKey: "mcpoauth",
+			ArgumentKind:     FeishuCommandArgumentText,
+			ArgumentFormHint: "github",
+			ArgumentFormNote: "输入需要认证的 MCP 服务名。",
+			ArgumentSubmit:   "生成授权链接",
+			Description:      "对当前接管实例发起某个 MCP 服务的 OAuth 认证。",
+			Examples:         []string{"/mcpoauth github"},
+			ShowInHelp:       true,
+			ShowInMenu:       false,
+		},
+		textPrefixes: []feishuCommandPrefixMatch{
+			{alias: "/mcpoauth", kind: ActionMCPOAuthCommand},
+			{alias: "/mcp-oauth", kind: ActionMCPOAuthCommand},
+		},
+		menuExact: []feishuCommandMatch{
+			{alias: "mcpoauth", action: Action{Kind: ActionMCPOAuthCommand, Text: "/mcpoauth"}},
 		},
 	},
 	{

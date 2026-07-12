@@ -35,6 +35,8 @@ type Translator struct {
 	pendingThreadHistoryReads map[string]pendingThreadHistoryRead
 	pendingSuppressedResponse map[string]suppressedResponseContext
 	pendingRequestTypes       map[string]agentproto.RequestType
+	pendingMCPOAuthLogins     map[string]pendingMCPOAuthLogin
+	pendingMCPOAuthLoginKeys  map[string]string
 }
 
 type pendingThreadCreate struct {
@@ -71,6 +73,16 @@ type pendingChildRestartRestore struct {
 type pendingThreadHistoryRead struct {
 	CommandID string
 	ThreadID  string
+}
+
+type pendingMCPOAuthLogin struct {
+	CommandID        string
+	Initiator        agentproto.Initiator
+	ServerName       string
+	ThreadID         string
+	Scopes           []string
+	TimeoutSecs      int
+	AuthorizationURL string
 }
 
 type suppressedResponseContext struct {
@@ -110,6 +122,8 @@ func NewTranslator(instanceID string) *Translator {
 		pendingThreadHistoryReads:  map[string]pendingThreadHistoryRead{},
 		pendingSuppressedResponse:  map[string]suppressedResponseContext{},
 		pendingRequestTypes:        map[string]agentproto.RequestType{},
+		pendingMCPOAuthLogins:      map[string]pendingMCPOAuthLogin{},
+		pendingMCPOAuthLoginKeys:   map[string]string{},
 	}
 }
 

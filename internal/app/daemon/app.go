@@ -71,6 +71,13 @@ type pendingThreadHistoryRead struct {
 	ThreadID         string
 }
 
+type pendingMCPOAuthLogin struct {
+	SurfaceSessionID string
+	InstanceID       string
+	ThreadID         string
+	ServerName       string
+}
+
 type vscodeCompatibilityCacheState struct {
 	Checked         bool
 	Issue           *vscodeCompatibilityIssue
@@ -117,6 +124,7 @@ type App struct {
 	vscodeCompatibility         vscodeCompatibilityCacheState
 	managedHeadlessRuntime      headlessruntime.State
 	pendingThreadHistoryReads   map[string]pendingThreadHistoryRead
+	pendingMCPOAuthLogins       map[string]pendingMCPOAuthLogin
 	childRestartWaiters         map[string]*childRestartWaiter
 	gitWorkspaceImports         map[string]*gitWorkspaceImportRuntime
 	gitWorkspaceWorktrees       map[string]*gitWorkspaceWorktreeRuntime
@@ -194,6 +202,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		cronRuntime:                 newCronRuntimeState(),
 		feishuRuntime:               newFeishuRuntimeState(),
 		pendingThreadHistoryReads:   map[string]pendingThreadHistoryRead{},
+		pendingMCPOAuthLogins:       map[string]pendingMCPOAuthLogin{},
 		gitWorkspaceImports:         map[string]*gitWorkspaceImportRuntime{},
 		gitWorkspaceWorktrees:       map[string]*gitWorkspaceWorktreeRuntime{},
 		startHeadless:               relayruntime.StartDetachedWrapper,

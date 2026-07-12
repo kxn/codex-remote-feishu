@@ -16,6 +16,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 
 	if id, ok := message["id"]; ok {
 		requestID := fmt.Sprint(id)
+		if result, handled := t.observeMCPOAuthLoginResponse(requestID, message); handled {
+			return result, nil
+		}
 		if pending, ok := t.pendingSuppressedResponse[requestID]; ok {
 			delete(t.pendingSuppressedResponse, requestID)
 			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
@@ -395,6 +398,11 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 
 	method, _ := message["method"].(string)
 	switch method {
+	case "mcpServer/oauthLogin/completed":
+		if result, handled := t.observeMCPOAuthLoginCompleted(message); handled {
+			return result, nil
+		}
+		return Result{}, nil
 	case "error":
 		problem := parseCodexProblemEvent(message)
 		if problem == nil {

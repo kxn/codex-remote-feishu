@@ -151,9 +151,84 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		return [][]byte{append(bytes, '\n')}, nil
 	case agentproto.CommandRequestRespond:
 		return t.translateRequestRespond(command)
+	case agentproto.CommandMCPOAuthLogin:
+		return t.translateMCPOAuthLogin(command)
 	default:
 		return nil, nil
 	}
+}
+
+func (t *Translator) translateMCPOAuthLogin(command agentproto.Command) ([][]byte, error) {
+	if command.MCP.OAuthLogin == nil {
+		return nil, fmt.Errorf("mcp.oauth_login.start requires oauth login payload")
+	}
+	login := command.MCP.OAuthLogin
+	serverName := strings.TrimSpace(login.ServerName)
+	if serverName == "" {
+		return nil, fmt.Errorf("mcp.oauth_login.start requires server name")
+	}
+	threadID := strings.TrimSpace(choose(login.ThreadID, command.Target.ThreadID))
+	flowKey := mcpOAuthLoginFlowKey(serverName, threadID)
+	if requestID, exists := t.pendingMCPOAuthLoginKeys[flowKey]; exists {
+		pending := t.pendingMCPOAuthLogins[requestID]
+		return nil, fmt.Errorf("mcp oauth login already pending for server %q thread %q command %s", serverName, threadID, pending.CommandID)
+	}
+	requestID := t.nextRequest("mcp-oauth-login")
+	params := map[string]any{
+		"name": serverName,
+	}
+	if threadID != "" {
+		params["threadId"] = threadID
+	}
+	if len(login.Scopes) != 0 {
+		scopes := make([]string, 0, len(login.Scopes))
+		for _, scope := range login.Scopes {
+			scope = strings.TrimSpace(scope)
+			if scope != "" {
+				scopes = append(scopes, scope)
+			}
+		}
+		if len(scopes) != 0 {
+			params["scopes"] = scopes
+		}
+	}
+	if login.TimeoutSecs > 0 {
+		params["timeoutSecs"] = login.TimeoutSecs
+	}
+	initiator := agentproto.Initiator{
+		Kind:             agentproto.InitiatorRemoteSurface,
+		SurfaceSessionID: strings.TrimSpace(choose(command.Origin.Surface, command.Origin.ChatID)),
+	}
+	if initiator.SurfaceSessionID == "" {
+		initiator.Kind = agentproto.InitiatorUnknown
+	}
+	t.pendingMCPOAuthLogins[requestID] = pendingMCPOAuthLogin{
+		CommandID:   command.CommandID,
+		Initiator:   initiator,
+		ServerName:  serverName,
+		ThreadID:    threadID,
+		Scopes:      append([]string(nil), login.Scopes...),
+		TimeoutSecs: login.TimeoutSecs,
+	}
+	t.pendingMCPOAuthLoginKeys[flowKey] = requestID
+	t.debugf(
+		"translate mcp oauth login: command=%s request=%s server=%s thread=%s surface=%s",
+		command.CommandID,
+		requestID,
+		serverName,
+		threadID,
+		initiator.SurfaceSessionID,
+	)
+	payload := map[string]any{
+		"id":     requestID,
+		"method": "mcpServer/oauth/login",
+		"params": params,
+	}
+	bytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return [][]byte{append(bytes, '\n')}, nil
 }
 
 func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, error) {

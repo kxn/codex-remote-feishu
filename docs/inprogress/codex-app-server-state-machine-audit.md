@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-07-12`
-> Summary: 对照 OpenAI 官方 Codex App Server 页面与 `openai/codex` 最新源码/schema（本轮复核到 HEAD `9e552e9d15ba52bed7077d5357f3e18e330f8f38`），按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮补记 approval-carrying `mcpServer/elicitation/request` 的 `_meta.codex_approval_kind / persist` contract，并同步记录本仓库只产品化 once/session、`always` 仅提示不支持的边界。
+> Summary: 对照 OpenAI 官方 Codex App Server 页面与 `openai/codex` 最新源码/schema（本轮复核到 HEAD `9e552e9d15ba52bed7077d5357f3e18e330f8f38`），按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮补记 approval-carrying `mcpServer/elicitation/request` 的 `_meta.codex_approval_kind / persist` contract，并同步记录本仓库只产品化 once/session、`always` 仅提示不支持的边界，以及 `mcpServer/oauth/login -> oauthLogin/completed` 的最小 `/mcpoauth` 支持。
 
 ## 1. 审计范围与判定口径
 
@@ -450,16 +450,29 @@
 - `config/mcpServer/reload`
 - `skills/changed`
 
-当前实现结论：`未遵循/未实现`
+当前实现结论：`部分遵循`
 
 其中最需要注意的是几条真正带状态推进或 invalidation 语义的：
 
 - `app/list -> app/list/updated`
-- `mcpServer/oauth/login -> mcpServer/oauthLogin/completed`
 - `mcpServer/startupStatus/updated`
 - `skills/changed`
 
-这些在当前 relay/headless 侧都没有承接。
+当前已补齐：
+
+- `mcpServer/oauth/login -> mcpServer/oauthLogin/completed`
+  - relay/headless 可通过 `CommandMCPOAuthLogin` 主动发起。
+  - Feishu 最小入口是 `/mcpoauth <server>`，help-visible、menu-hidden。
+  - translator 发送 upstream `mcpServer/oauth/login`，response `{ authorization_url }` 转成 URL-ready event，JSON-RPC error 转成 `system.error` 并清 pending。
+  - completion notification 按 pending flow 的 `name + threadId` 相关；找不到 pending flow 时只记录/忽略，不广播到无关 chat。
+  - Feishu 只发送完整授权链接 notice 和最终成功/失败 notice，不做打字机/流式 patch。
+
+仍未承接：
+
+- `app/list -> app/list/updated`
+- `mcpServer/startupStatus/updated`
+- `skills/changed`
+- `mcpServerStatus/list`、`mcpServer/resource/read`、`config/mcpServer/reload` 等管理面
 
 ### 3.16 Realtime / watch / Windows / fuzzy search 状态机
 
@@ -538,7 +551,7 @@
 | `command/exec*` | 未遵循/未实现 | 仅解析 turn 内 command item 的 output delta |
 | `account/*` auth state machine | 未遵循/未实现 | 完全未建模 |
 | `app/list -> app/list/updated` | 未遵循/未实现 | 完全未建模 |
-| `mcpServer/oauth/login -> ...completed` | 未遵循/未实现 | 完全未建模 |
+| `mcpServer/oauth/login -> ...completed` | 遵循但有适配压缩 | 已通过 `CommandMCPOAuthLogin` 与 `/mcpoauth <server>` 支持最小发起、URL-ready、completed 成功/失败收敛；无 server picker / account UI；completion 只按 pending `name + threadId` 相关，未关联则不广播 |
 | `mcpServer/startupStatus/updated` | 未遵循/未实现 | 当前无 startup status 事件建模 |
 | `skills/changed` | 未遵循/未实现 | 当前无 skills invalidation 事件建模 |
 | `thread/realtime/*` | 未遵循/未实现 | 当前无 realtime command/event 面；而且最新 upstream 已改成 transcript `delta/done` 两段通知 |
@@ -573,7 +586,7 @@
 - `thread/status/changed`
 - `account/*`
 - `app/list/updated`
-- `mcpServer/oauth/login`
+- `mcpServer/oauth/login` 已有最小 `/mcpoauth` 主动链路，但管理 UI 仍未做
 
 ### 5.3 现在最容易误判的点是“透传不等于实现”
 
@@ -682,7 +695,8 @@
 - `windowsSandbox/*`
 - `fuzzyFileSearch/*`
 - `account/*`
-- `app/list` / `mcpServer/oauth/login`
+- `app/list`
+- `mcpServer/oauth/login` 的 server picker / account UI
 
 这类不是“永远不做”，而是**不应该先和主聊天 turn 正确性绑在一起做**。
 
@@ -697,7 +711,7 @@
 | request surfaces：command/file approval、`item/permissions/requestApproval`、`mcpServer/elicitation/request`、`item/tool/requestUserInput` | `允许做产品语义适配，但要守住协议不变量` | 透传真实 `requestId` / params | 统一 request abstraction 可以，但要保留 method / requestType / availableDecisions / scope / nullable `turnId`；approval-carrying elicitation 还要保留 `_meta.codex_approval_kind / persist` | 卡片可产品化，但 resolve 前后 gate 必须准确；`mcp_server_elicitation_approval` 当前只开放 once/session，`always` 只提示不支持 | 必须能回写响应 | `requestId` 关联、pending/resolved、granted subset / action / unanswered 语义；MCP elicitation response 使用 top-level `_meta` |
 | dynamic tool call：`dynamicToolCall -> item/tool/call` | `允许做产品语义适配，但仅在决定支持时` | 透传 | 当前已建模 request / resolve，并在 relay 路径自动回写 unsupported；若 claim full support，仍必须补齐真正 callback executor | 当前 UI 只做只读 fail-closed 提示，不暴露交互表单 | headless 当前同样自动回写 unsupported | `callId`、item lifecycle、success/result 不能丢 |
 | review / realtime / fs watch / windows / fuzzy search | `当前无需纳入产品面，后续按需求再决定` | 只要不破坏 native path | 不 claim 支持时可不建模 | 默认不产品化 | 暂不主动驱动 | 一旦 claim 支持，就要遵守 detached vs inline、`sessionId` / `watchId`、close/completed 终态 |
-| account / app / MCP OAuth / skills / plugin/marketplace 邻接面 | `只要求 wrapper / VS Code 透传不破坏` | 透传 | 可先不建模 | 默认不放进 chat 主交互 | 暂不主动驱动 | login completed、OAuth completed、list invalidation 等通知不能被误改语义 |
+| account / app / MCP OAuth / skills / plugin/marketplace 邻接面 | `按需纳入 relay/headless；未产品化部分只要求透传不破坏` | 透传 | OAuth login 已建模最小 command/event；app/list、skills、account 仍可先不建模 | OAuth 当前只放显式 `/mcpoauth <server>`，不进主菜单；其它默认不放进 chat 主交互 | OAuth 可主动发起；其它暂不主动驱动 | login completed、OAuth completed、list invalidation 等通知不能被误改语义；OAuth completion 必须按 pending `name + threadId` 相关，不得按 timing/current thread 猜 |
 | simple RPC：`thread/memoryMode/set`、`memory/reset`、`thread/inject_items`、`marketplace/add`、`mcpServer/tool/call` | `不属于本轮主状态机优先级` | 透传 | 后续如实现，单独设计 command 语义 | 不要硬塞进现有 turn/approval UI | 暂不支持 | 不和状态机 backlog 混淆 |
 
 ## 9. 推荐后续顺序
@@ -714,7 +728,7 @@
 3. 然后再看“明显偏 native/browser 客户端，但后续也许值得做”的：
    - `mcpServer/startupStatus/updated`
    - `app/list/updated`
-   - `mcpServer/oauth/login -> ...completed`
+   - `mcpServer/oauth/login -> ...completed` 的 server picker / account UI 后续再看；最小 `/mcpoauth` 链路已完成
    - `skills/changed`
 4. 明确放到后面、不要和 turn 主链 correctness 混做的：
    - `thread/realtime/*`

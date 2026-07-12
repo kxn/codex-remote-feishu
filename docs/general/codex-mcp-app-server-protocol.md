@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-07-12`
-> Summary: 基于 upstream `openai/codex` HEAD `9e552e9d15ba52bed7077d5357f3e18e330f8f38` 梳理 MCP tool call、授权确认与 elicitation 的 app-server 时序，并同步当前仓库已落地的 MCP request typing、Feishu 可响应链路、approval-carrying elicitation 的 `_meta.persist` contract 与剩余偏差。
+> Summary: 基于 upstream `openai/codex` HEAD `9e552e9d15ba52bed7077d5357f3e18e330f8f38` 梳理 MCP tool call、授权确认、elicitation 与 OAuth login 的 app-server 时序，并同步当前仓库已落地的 MCP request typing、Feishu 可响应链路、approval-carrying elicitation 的 `_meta.persist` contract、OAuth 最小发起/收敛链路与剩余偏差。
 
 ## 1. 文档定位
 
@@ -25,7 +25,7 @@
 
 ## 2. 上游协议面总览
 
-截至当前 upstream，和 MCP call 直接相关的 app-server surface 不是单一路径，而是至少包含下面六类：
+截至当前 upstream，和 MCP call / MCP server continuation 直接相关的 app-server surface 不是单一路径，而是至少包含下面七类：
 
 | 类别 | upstream surface | 作用 | client 是否需要回写 |
 | --- | --- | --- | --- |
@@ -35,6 +35,7 @@
 | permissions approval | `item/permissions/requestApproval` | 请求附加权限授权 | 是 |
 | guardian review 可见性 | `item/autoApprovalReview/started` / `item/autoApprovalReview/completed` | 暴露 guardian 对高风险动作的审查生命周期，`action.type` 可为 `mcpToolCall` | 否 |
 | MCP tool 执行审批 fallback | `item/tool/requestUserInput` | 在某些模式下，MCP tool 执行审批并不走 `mcpServer/elicitation/request`，而是退回为 `request_user_input` | 是 |
+| MCP OAuth login lifecycle | `mcpServer/oauth/login` + `mcpServer/oauthLogin/completed` | client 主动请求某个 MCP server 的 OAuth 授权链接，并等待 async completion notification | 主动发起 request；completion 不回写 |
 
 这意味着“把 MCP 授权确认做好”至少要同时覆盖三条确认线：
 
@@ -45,6 +46,8 @@
 并且还要补一条可见性线：
 
 - guardian 对 MCP tool call 的审查通知
+
+OAuth login 则是相邻但独立的 client-initiated RPC lifecycle，不属于 `mcpServer/elicitation/request` pending request substrate。
 
 ## 3. 核心类型与通知
 
@@ -180,6 +183,32 @@ guardian 可见性当前通过两条单独通知暴露：
 
 这条线当前是 **审查可见性**，不是 client 主动回写的 request surface。
 
+### 3.6 `mcpServer/oauth/login -> mcpServer/oauthLogin/completed`
+
+当前 upstream 把 MCP server OAuth 登录建模为主动 RPC + 异步通知：
+
+- request method：`mcpServer/oauth/login`
+- request params：
+  - `name`
+  - optional `threadId`
+  - optional `scopes`
+  - optional `timeoutSecs`
+- response：
+  - `authorization_url`
+- completion notification：`mcpServer/oauthLogin/completed`
+- completion params：
+  - `name`
+  - `threadId`
+  - `success`
+  - optional `error`
+
+这条 lifecycle 的关键点是：
+
+- 它不是 server request，不会经过 `serverRequest/started` / `serverRequest/resolved`。
+- completion notification 没有 request id，只能用 pending command state 与协议字段 `name + threadId` 做相关。
+- 如果 Codex 拒绝发起 request，错误会出现在 JSON-RPC response error 上；常见错误包括非 streamable HTTP MCP server 不支持 OAuth login。
+- Feishu/headless 侧不应该把 authorization URL 做流式/打字机展示；只需要展示完整 URL 与最终完成/失败结果。
+
 ## 4. Canonical 时序
 
 ### 4.1 MCP tool call 正常执行
@@ -285,6 +314,25 @@ form/url 两种 elicitation 的时序与 permissions approval 同一类：
 
 所以本仓库不能再用“只要是 MCP 确认就一定是某一种 request”这种假设。
 
+### 4.5 MCP OAuth login
+
+OAuth login 的 canonical 时序和 request family 不同：
+
+1. client 主动发送 `mcpServer/oauth/login`。
+2. app-server 同步返回 `{ authorization_url }`，或返回 JSON-RPC error。
+3. 用户在外部浏览器完成授权。
+4. app-server 发出 `mcpServer/oauthLogin/completed` notification。
+5. client 只消费 completion，不需要再回写 response。
+
+当前本仓库的本地 contract：
+
+- `agentproto.CommandMCPOAuthLogin` 发起登录。
+- translator 将其映射到 upstream `mcpServer/oauth/login`，字段使用 upstream casing：`name`、`threadId`、`scopes`、`timeoutSecs`。
+- response 成功转成本地 `EventMCPOAuthLoginURLReady`；response error 转成本地 `system.error` 并清理 pending flow。
+- completion notification 转成本地 `EventMCPOAuthLoginCompleted`。
+- daemon 通过 `/mcpoauth <server>` 发起；有 selected thread 时传 `threadId`，否则省略 `threadId` 做 app-scoped login。
+- Feishu 侧只发送一次授权链接 notice 和一次完成/失败 notice，不进入 request card，不做流式 patch。
+
 ## 5. Surface 行为差异
 
 ### 5.1 TUI
@@ -319,65 +367,58 @@ TUI 路线说明：
 
 ### 6.1 translator 层
 
-当前 `internal/adapter/codex/translator_observe_server.go` / `translator_helpers.go` 存在这些偏差：
+当前 translator 已经显式承接：
 
-- 只把 `serverRequest/started` / `request/started` 统一抽成泛化 request
-- `extractRequestType()` 仍会把多种 request 压到 `approval`
-- 没有为：
-  - `mcpServer/elicitation/request`
-  - `item/permissions/requestApproval`
-  - guardian review notification
-  - `item/mcpToolCall/progress`
-  建立专门解析逻辑
-- 虽然识别了 `mcp_tool_call` item kind，但 `extractItemMetadata()` 没有专门抽取：
-  - `server`
-  - `tool`
-  - `arguments`
-  - `result`
-  - `error`
-  - `durationMs`
+- `mcpServer/elicitation/request`
+- `item/permissions/requestApproval`
+- `item/tool/requestUserInput`
+- `item/mcpToolCall/progress`
+- `mcpServer/oauth/login -> mcpServer/oauthLogin/completed`
+
+当前仍存在这些偏差：
+
+- guardian review notification 仍未产品化。
+- MCP tool call 最终 result / structuredContent 仍未做富展示，只保留当前过程与摘要能力。
+- OAuth completion notification 只能按 `name + threadId` 相关 pending flow；如果没有本地 pending flow，daemon 会保守忽略，不广播。
 
 ### 6.2 agentproto / control / state 模型层
 
-当前本仓库内部模型还不足以完整表达 upstream MCP surface：
+当前本仓库内部模型已经把 MCP request family 与 OAuth RPC lifecycle 拆开：
 
-- `internal/core/agentproto/types.go` 里的 request response 仍是 `map[string]any`
-- `internal/core/control/feishu_request_view.go` 的 `FeishuRequestView` 只支持：
-  - `options`
-  - `questions`
-- 它没有直接表达：
-  - MCP elicitation 的 url 模式
-  - elicitation `_meta`
-  - permissions approval 的结构化 permission grant
-  - guardian review 可见性
-- `internal/core/state/types.go` 的 `RequestPromptRecord` 也没有保存上述专门字段
+- request family 继续通过 `RequestPrompt` / `FeishuRequestView` 表达，并由 orchestrator 归一化具体语义。
+- OAuth login 使用 `MCPCommand.OAuthLogin` 与 `MCPOAuthLoginEvent`，不复用 request response DTO。
 
-这意味着如果要正确支持 upstream 协议，当前结构本身就需要扩展，不能再强行塞回旧的 approval/request_user_input 二分法。
+当前仍不足的是：
+
+- guardian review 可见性还没有独立 agentproto event。
+- MCP tool result 的结构化富展示还没有稳定 read model。
+- OAuth 第一阶段只支持显式服务名发起，不提供 MCP server 列表、账号管理 UI 或持久 OAuth 状态页。
 
 ### 6.3 orchestrator 层
 
-当前 `internal/core/orchestrator/service_request.go` 只产品化了：
+当前 orchestrator / daemon 已产品化：
 
-- `approval`
+- command/file/network approval
 - `request_user_input`
+- `permissions_request_approval`
+- `mcp_server_elicitation` form/url/approval
+- OAuth login 的 `/mcpoauth <server>` 最小入口、授权 URL notice 与完成/失败 notice
 
-其他 request 类型当前都会落到 unsupported。
+当前仍未产品化：
 
-此外：
-
-- `service_queue.go` / `service_helpers.go` 只对 `dynamic_tool_call` 和 `image_generation` 有专门结果路径
-- `mcp_tool_call` 当前既没有过程状态路径，也没有富结果路径，也没有 progress 路径
-- guardian review 当前在 orchestrator 侧完全没有消费路径
+- guardian review 可见性
+- MCP tool call 最终结果富展示
+- MCP OAuth server 列表、账号状态与配置管理
 
 ### 6.4 Feishu / remote surface 层
 
 以当前产品模型，飞书端剩余缺口主要是：
 
 - guardian review 的轻量可见性
-- MCP tool call 运行中 progress 展示
 - MCP tool call 最终结果的更完整产品化回显
+- MCP OAuth 的 server 选择器、账号状态页与错误恢复引导
 
-因此，如果不先做协议分层，后续任何“支持 MCP request”都只会继续停留在旧的近似兼容。
+OAuth 当前只落最小可用链路：显式 slash 发起、一次 URL notice、一次完成/失败 notice。它不进入 request card，也不使用频繁 patch。
 
 ## 7. 建议的后续拆分
 
@@ -398,10 +439,12 @@ TUI 路线说明：
 - translator command 侧补齐：
   - MCP elicitation `{action, content, _meta}`
   - permissions approval `{permissions, scope}`
+  - MCP OAuth login `mcpServer/oauth/login`
 - orchestrator / surface 层已把这些 request 接入飞书端直答：
   - `permissions_request_approval`
   - `mcp_server_elicitation`
   - 其中 form 模式 elicitation 会先做 schema 派生字段或 JSON fallback，再走显式提交
+- daemon / Feishu 已为 OAuth 提供显式 `/mcpoauth <server>`，并把 `authorization_url` 与 `oauthLogin/completed` 收敛为 append-only notice
 - 明确 guardian review 在飞书端是只展示，还是未来允许人工干预
 
 ### 7.3 Stage 3：展示与产品化
@@ -410,6 +453,7 @@ TUI 路线说明：
 - MCP tool call progress
 - MCP tool call 结果回显
 - form/url elicitation 的飞书侧 UX
+- MCP OAuth server 选择、账号状态和配置管理 UI
 
 ## 8. 对本仓库的直接结论
 
@@ -422,11 +466,16 @@ TUI 路线说明：
 2. 当前飞书端已经具备这两条结构化回写能力：
    - permissions approval `{permissions, scope}`
    - MCP elicitation `{action, content, _meta}`
-3. 当前剩余主要偏差集中在“过程可见性与结果展示”，而不是 request typing 本身：
+3. 当前已经具备 OAuth login 的最小可用链路：
+   - `/mcpoauth <server>`
+   - `authorization_url` 展示
+   - `oauthLogin/completed` 成功/失败收敛
+4. 当前剩余主要偏差集中在“过程可见性、结果展示与管理 UI”，而不是 request typing 本身：
    - guardian review notification 仍未产品化
    - `item/mcpToolCall/progress` 仍未做完整 UI 表达
    - MCP tool call 最终结果仍缺更富的产品回显
-4. 对远端/飞书端来说，更合适的参考面仍然是 upstream TUI，而不是 exec 的自动取消/拒绝策略。
+   - MCP OAuth 没有 server picker / account page，只提供显式 slash 最小入口
+5. 对远端/飞书端来说，更合适的参考面仍然是 upstream TUI，而不是 exec 的自动取消/拒绝策略。
 
 ## 9. 参考
 
@@ -437,6 +486,7 @@ TUI 路线说明：
   - `codex-rs/app-server/src/bespoke_event_handling.rs`
   - `codex-rs/app-server/tests/suite/v2/mcp_server_elicitation.rs`
   - `codex-rs/app-server/tests/suite/v2/request_permissions.rs`
+  - `codex-rs/app-server/src/request_processors/mcp_processor.rs`
   - `codex-rs/protocol/src/approvals.rs`
   - `codex-rs/core/src/mcp_tool_call.rs`
   - `codex-rs/codex-mcp/src/mcp_connection_manager.rs`
@@ -446,6 +496,8 @@ TUI 路线说明：
   - `internal/adapter/codex/translator_helpers.go`
   - `internal/adapter/codex/translator_observe_server.go`
   - `internal/adapter/codex/translator_commands.go`
+  - `internal/adapter/codex/translator_mcp_oauth.go`
+  - `internal/app/daemon/app_mcp_oauth.go`
   - `internal/core/agentproto/types.go`
   - `internal/core/control/types.go`
   - `internal/core/state/types.go`

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-07-12`
-> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许。
+> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许；`/mcpoauth <server>` 当前只发起 MCP OAuth RPC lifecycle，并用 append-only notice 展示授权链接与完成/失败结果，不进入 request card 或菜单 owner-flow。
 
 ## 1. 文档定位
 
@@ -117,6 +117,7 @@
 | `path_picker_enter` / `path_picker_up` / `path_picker_select` / `path_picker_page` | `feishu-ui-owned` | 当前由 Feishu UI controller 处理同一张路径选择器卡片内的浏览、返回、文件选择与下拉翻页；命中当前 active picker 时直接原地替换当前卡。复用路径选择器 projector 当前统一渲染成紧凑 `select_static`：目录模式提供“进入目录”下拉，文件模式提供“进入目录 + 选择文件”双下拉，target-picker owner-subpage 也复用同一目录 lane；当下拉候选过长时，projector 会按 Feishu transport byte budget 动态分页，并保证底部 footer 仍可见。目录 lane 的 `.` / `..` 属于固定项，不消耗 `cursor`；真实目录项里普通目录排在前，`.` 开头目录排在后。目录翻页保留当前目录；文件翻页会清空不可见文件选择并禁用 confirm，避免 invisible confirm |
 | `path_picker_confirm` / `path_picker_cancel` | `mixed` | callback 协议与 owner/freshness 校验仍属 Feishu UI；这两类动作当前不在 inline-replace allow-list，回调会立即 ack 并异步处理；当前默认不再把“确认/取消成功”外发成新的主结果卡，而是优先在当前 picker 卡内 sealed 收口。若 consumer 返回新的可投影主卡，则交由 follow-up event 承接；target picker owner-flow 子步骤会把当前 path picker 卡换回主 owner card，独立 `/sendfile` picker 则会把 cancel、启动前失败与启动成功终态继续 patch 在当前 picker 卡上。只有旧卡 / 过期 / 非本人点击这类 freshness/ownership 拒绝仍保留为显式独立提示，不直接改写当前活跃 picker 卡 |
 | bare `/history` / `history_page` / `history_detail` | `mixed` | 当前由 Feishu UI controller 先把 owner-card runtime v1 中的当前 history flow 同步切到 loading，再异步发起 `thread.history.read`；列表/详情结果与失败态默认继续 patch 回同一张 history owner card，loading/error 不再整块覆盖主区，而是保留摘要/业务区并把反馈放进 notice 区 |
+| `/mcpoauth <server>` / `/mcp-oauth <server>` | `daemon-command + append-only notice` | 文本命令解析成 `ActionMCPOAuthCommand`，再通过 `DaemonCommandMCPOAuthLogin` 发起 `mcpServer/oauth/login`。这条链路没有 Feishu card callback payload、没有 current-card replace、没有 request revision，也不占用 `G2 PendingRequest`；daemon 只把 command id 记为 pending OAuth flow，URL-ready 与 completed/error 都向发起 surface append 普通 notice。授权链接一次性展示完整 URL，完成/失败再发一条终态 notice；不会为了打字机效果频繁 patch 卡片 |
 | bare `/compact` | `mixed` | 文本入口当前会先由 orchestrator 建立 compact owner-card flow，并 append 一张 patchable direct-command card；若入口来自 stamped `/menu current_work` 卡，则当前菜单卡会直接被绑定成 compact owner card。dispatching / running / completed / failed 都继续 patch 同一张卡。被动 compact completion 不复用这条前台 owner card；quiet 静默，normal/verbose 则继续并入共享过程卡 |
 | bare `/bendtomywill` / stamped `/menu common_tools -> /bendtomywill` | `mixed` | 文本或菜单入口当前都先走 daemon-side patch flow runtime：打开时会读取当前 attached thread 的 latest completed assistant turn 预览，并命中 refusal / placeholder 候选后生成一张 `request_user_input` 风格的多题 patch 卡。逐题回答时同一张卡会按 `request_revision` inline replace；全部题目完成后当前卡会切到 patchable progress page，随后 success / failure / rollback 结果继续 patch 同一张卡。若首卡还没有 `message_id`，runtime 会先用 `TrackingKey=flow_id` append，再在 gateway 分配 `message_id` 后回写；最近一次回滚按钮则通过 `page_action(ActionTurnPatchRollback, patch_id)` 继续收口到同一张卡。旧卡、他人点击、busy / VS Code / detached 拒绝，以及候选点不存在等路径，若入口来自 stamped 当前卡，会优先走 page-result replacement 收口，否则继续 append-only notice |
 | stamped `/menu maintenance -> /help` / `/status` | `launcher -> terminal` | 点击后 daemon 会把 handler 的首个结果卡（帮助目录或 snapshot 状态卡）直接 `ReplaceCurrentCard`，同时把 `command_menu` launcher flow 标记为 terminal/已退出。纯文本 `/help` / `/status` 仍保持 append-only |
@@ -828,6 +829,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_turn_patch_tx.go](../../internal/app/daemon/app_turn_patch_tx.go)
 - [internal/app/daemon/app_turn_patch_view.go](../../internal/app/daemon/app_turn_patch_view.go)
 - [internal/app/daemon/app_thread_history.go](../../internal/app/daemon/app_thread_history.go)
+- [internal/app/daemon/app_mcp_oauth.go](../../internal/app/daemon/app_mcp_oauth.go)
 - [internal/app/daemon/app_inbound_lifecycle.go](../../internal/app/daemon/app_inbound_lifecycle.go)
 - [internal/adapter/feishu/projector_thread_history.go](../../internal/adapter/feishu/projector_thread_history.go)
 - [internal/adapter/feishu/projector/thread_history.go](../../internal/adapter/feishu/projector/thread_history.go)
@@ -910,6 +912,8 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 detach / route-change cleanup 会主动 seal context-bound overlay、清掉 idle review session，并在 running review turn 下暴露 `review_running` route blocker
 - [internal/app/daemon/app_thread_history_test.go](../../internal/app/daemon/app_thread_history_test.go)
   - 锁定 history daemon command 的分发、pending 跟踪、reject/loaded/failure 的收口行为
+- [internal/app/daemon/app_mcp_oauth_test.go](../../internal/app/daemon/app_mcp_oauth_test.go)
+  - 锁定 `/mcpoauth` daemon command 的分发、pending 跟踪、ack reject、response error、URL-ready、completion success/failure 只回到发起 surface，未相关 completion 不广播
 - [internal/app/daemon/app_history_card_test.go](../../internal/app/daemon/app_history_card_test.go)
   - 锁定 inline `/history` 会先 replace 当前卡为 loading，同时继续异步派发查询，不把后续 result patch 链路挤坏
 - [internal/core/orchestrator/service_local_request_test.go](../../internal/core/orchestrator/service_local_request_test.go)

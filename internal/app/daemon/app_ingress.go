@@ -596,6 +596,10 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 			a.handleUIEventsLocked(ctx, historyEvents)
 			continue
 		}
+		if oauthEvents, handled := a.handleMCPOAuthLoginEventLocked(instanceID, event); handled {
+			a.handleUIEventsLocked(ctx, oauthEvents)
+			continue
+		}
 		if event.Kind == agentproto.EventProcessChildRestartUpdated {
 			a.noteChildRestartOutcomeEventLocked(instanceID, event)
 		}
@@ -732,6 +736,10 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 	a.noteChildRestartCommandAckLocked(ctx, instanceID, ack)
 	if historyEvents, handled := a.handleThreadHistoryCommandAckLocked(instanceID, ack); handled {
 		a.handleUIEventsLocked(ctx, historyEvents)
+		return
+	}
+	if oauthEvents, handled := a.handleMCPOAuthLoginCommandAckLocked(instanceID, ack); handled {
+		a.handleUIEventsLocked(ctx, oauthEvents)
 		return
 	}
 	if ack.Accepted {

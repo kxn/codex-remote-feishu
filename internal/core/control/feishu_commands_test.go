@@ -521,6 +521,27 @@ func TestFeishuCommandRegistryActionRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseMCPOAuthSlashCommand(t *testing.T) {
+	action, ok := ParseFeishuTextActionWithoutCatalog("/mcpoauth docs")
+	if !ok {
+		t.Fatalf("expected /mcpoauth to parse")
+	}
+	if action.Kind != ActionMCPOAuthCommand || action.CommandID != FeishuCommandMCPOAuth || action.Text != "/mcpoauth docs" {
+		t.Fatalf("unexpected action: %#v", action)
+	}
+	alias, ok := ParseFeishuTextActionWithoutCatalog("/mcp-oauth docs")
+	if !ok || alias.Kind != ActionMCPOAuthCommand || alias.CommandID != FeishuCommandMCPOAuth {
+		t.Fatalf("expected /mcp-oauth alias to parse, got %#v ok=%t", alias, ok)
+	}
+	def, ok := FeishuCommandDefinitionByID(FeishuCommandMCPOAuth)
+	if !ok {
+		t.Fatalf("missing mcp oauth command definition")
+	}
+	if !def.ShowInHelp || def.ShowInMenu {
+		t.Fatalf("mcp oauth should be help-visible and menu-hidden, got %#v", def)
+	}
+}
+
 func TestEveryFeishuCommandHasSinglePrimaryActionKind(t *testing.T) {
 	for _, spec := range feishuCommandSpecs {
 		kind, ok := feishuCommandPrimaryActionKind(spec)
