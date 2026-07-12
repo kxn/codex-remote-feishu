@@ -77,6 +77,11 @@ func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt
 		definition.Sections = buildMCPElicitationSections(backend, prompt, metadata)
 		definition.Options = buildMCPElicitationOptions(prompt, metadata, nil)
 		definition.HintText = "如果需要先完成外部页面操作，请完成后再点击“继续”；如果不打算继续，可直接拒绝或取消。"
+	case control.RequestSemanticMCPServerElicitationApproval:
+		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认 MCP 工具调用", "需要处理 MCP 请求", "需要处理请求")
+		definition.Sections = buildMCPElicitationApprovalSections(backend, prompt, metadata)
+		definition.Options = buildMCPElicitationApprovalOptions(prompt, metadata)
+		definition.HintText = mcpElicitationApprovalHintText(prompt, metadata)
 	case control.RequestSemanticToolCallback:
 		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "工具回调暂不支持", "收到工具回调", "需要处理请求")
 		definition.Sections = buildToolCallbackRequestSections(prompt, metadata)
@@ -145,6 +150,9 @@ func deriveRequestPromptSemanticKind(requestType string, prompt *agentproto.Requ
 	case "permissions_request_approval":
 		return control.RequestSemanticPermissionsRequestApproval
 	case "mcp_server_elicitation":
+		if isMCPToolApprovalElicitation(prompt, metadata) {
+			return control.RequestSemanticMCPServerElicitationApproval
+		}
 		switch strings.ToLower(strings.TrimSpace(firstNonEmpty(promptMCPElicitationMode(prompt), metadataString(metadata, "elicitationMode")))) {
 		case "form":
 			return control.RequestSemanticMCPServerElicitationForm

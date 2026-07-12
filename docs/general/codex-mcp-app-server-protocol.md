@@ -1,19 +1,19 @@
 # Codex MCP App-Server 协议基线
 
 > Type: `general`
-> Updated: `2026-04-14`
-> Summary: 基于 upstream `openai/codex` HEAD `7999b0f60f048ca8398ec988f3aabd09d278e058` 梳理 MCP tool call、授权确认与 elicitation 的 app-server 时序，并同步当前仓库已落地的 MCP request typing、Feishu 可响应链路与剩余偏差。
+> Updated: `2026-07-12`
+> Summary: 基于 upstream `openai/codex` HEAD `9e552e9d15ba52bed7077d5357f3e18e330f8f38` 梳理 MCP tool call、授权确认与 elicitation 的 app-server 时序，并同步当前仓库已落地的 MCP request typing、Feishu 可响应链路、approval-carrying elicitation 的 `_meta.persist` contract 与剩余偏差。
 
 ## 1. 文档定位
 
-这份文档记录的是截至 `2026-04-11` 已确认的 **Codex app-server 中与 MCP call 相关的协议基线**，用于指导本仓库后续的 translator、orchestrator、Feishu remote surface 设计。
+这份文档记录的是截至 `2026-07-12` 已确认的 **Codex app-server 中与 MCP call 相关的协议基线**，用于指导本仓库后续的 translator、orchestrator、Feishu remote surface 设计。
 
 本次核对的 upstream 基线为：
 
 - 仓库：`openai/codex`
-- HEAD：`7999b0f60f048ca8398ec988f3aabd09d278e058`
-- 时间：`2026-04-10T16:05:21-07:00`
-- subject：`Support clear SessionStart source (#17073)`
+- HEAD：`9e552e9d15ba52bed7077d5357f3e18e330f8f38`
+- 时间：`2026-07-12` 复核
+- subject：当前 `main`
 
 本文关注的是：
 
@@ -114,6 +114,17 @@ upstream 在 `codex-rs/app-server-protocol/src/protocol/v2.rs` 中把 MCP tool c
 - `action = accept | decline | cancel`
 - `content`
 - `_meta`
+
+当 form elicitation 承载 **MCP tool approval** 时，当前 upstream 会在 request `_meta` 中携带额外语义：
+
+- `codex_approval_kind = "mcp_tool_call"`
+- `persist = "session" | "always" | ["session", "always"]`
+
+这条链路的关键点是：
+
+- wire family 仍然是 `mcpServer/elicitation/request`，不是 `item/permissions/requestApproval`，也不是旧 approval family。
+- response 仍然是 top-level `{action, content, _meta}`；选择“本次允许”时不能把 request `_meta.persist` 广告原样带回，选择“本会话允许”时才应回写 `action="accept"`，并在 response `_meta.persist` 中写入 `session`。
+- `persist=always` 是 upstream 广告的持久授权能力；本仓库第一阶段只识别并提示“飞书端暂不支持跨会话持久允许”，不发出 `_meta.persist=always`。
 
 当前 upstream 还有一个重要限制：
 
@@ -242,6 +253,7 @@ form/url 两种 elicitation 的时序与 permissions approval 同一类：
 
 - core 会把 MCP tool approval 包装成 `mcpServer/elicitation/request`
 - client 回写的线仍然是 `{action, content, _meta}`
+- approval-carrying request 通过 `_meta.codex_approval_kind="mcp_tool_call"` 与普通 form/url elicitation 区分
 - 但 core 会进一步把 `content` / `_meta` 解析成：
   - `accept`
   - `accept for session`
@@ -253,6 +265,7 @@ form/url 两种 elicitation 的时序与 permissions approval 同一类：
 
 - wire response 仍是 MCP elicitation response
 - 业务语义却是 MCP tool approval
+- 本仓库当前只把 `persist=session` 产品化成本会话允许；`persist=always` 只做不支持提示，不伪造跨会话持久授权
 
 #### 路径 D：fallback 到 `item/tool/requestUserInput`
 

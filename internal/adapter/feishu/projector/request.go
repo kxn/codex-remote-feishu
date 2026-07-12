@@ -33,7 +33,7 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 		}
 	case control.RequestSemanticPermissionsRequestApproval:
 		return append(elements, permissionsRequestPromptElements(prompt, daemonLifecycleID)...)
-	case control.RequestSemanticMCPServerElicitationForm, control.RequestSemanticMCPServerElicitationURL, control.RequestSemanticMCPServerElicitation:
+	case control.RequestSemanticMCPServerElicitationForm, control.RequestSemanticMCPServerElicitationURL, control.RequestSemanticMCPServerElicitationApproval, control.RequestSemanticMCPServerElicitation:
 		return append(elements, mcpElicitationPromptElements(prompt, daemonLifecycleID)...)
 	case control.RequestSemanticToolCallback:
 		if status := requestPromptStatusMarkdown(prompt); status != "" {

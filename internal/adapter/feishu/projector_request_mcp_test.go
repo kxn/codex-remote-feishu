@@ -205,6 +205,65 @@ func TestProjectMCPElicitationFormPromptRendersCurrentFormFieldAsSingleStepForm(
 	}
 }
 
+func TestProjectMCPElicitationApprovalPromptAsCard(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", requestPromptEvent(control.FeishuRequestView{
+		RequestID:       "req-mcp-approval-1",
+		RequestType:     "mcp_server_elicitation",
+		SemanticKind:    control.RequestSemanticMCPServerElicitationApproval,
+		RequestRevision: 7,
+		Title:           "需要确认 MCP 工具调用",
+		Sections: []control.FeishuCardTextSection{
+			{Lines: []string{"允许 GitHub MCP 查询 issue？", "MCP 服务：apps", "工具：Search GitHub"}},
+			{Label: "参数", Lines: []string{"query：repo:kxn/codex-remote-feishu #669"}},
+			{Label: "当前限制", Lines: []string{"上游支持持久授权，但飞书端当前暂不开放跨会话持久允许。"}},
+		},
+		Options: []control.RequestPromptOption{
+			{OptionID: "accept", Label: "允许本次", Style: "primary"},
+			{OptionID: "acceptForSession", Label: "本会话允许", Style: "default"},
+			{OptionID: "decline", Label: "拒绝", Style: "default"},
+			{OptionID: "cancel", Label: "取消", Style: "default"},
+		},
+		HintText: "你可以允许本次或本会话；持久允许暂未开放。",
+	}))
+
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].CardBody != "" {
+		t.Fatalf("expected mcp approval prompt body to stay empty, got %#v", ops[0])
+	}
+	if got := plainTextContent(ops[0].CardElements[0]); !containsAll(got, "允许 GitHub MCP 查询 issue？", "MCP 服务：apps", "工具：Search GitHub") {
+		t.Fatalf("expected mcp approval intro section to stay plain_text, got %#v", ops[0].CardElements[0])
+	}
+	if got := markdownContent(ops[0].CardElements[1]); !strings.Contains(got, "参数") {
+		t.Fatalf("expected fixed params label markdown, got %#v", ops[0].CardElements[1])
+	}
+	if got := plainTextContent(ops[0].CardElements[2]); !containsAll(got, "query：repo:kxn/codex-remote-feishu #669") {
+		t.Fatalf("expected mcp approval dynamic params to stay plain_text, got %#v", ops[0].CardElements[2])
+	}
+	if got := markdownContent(ops[0].CardElements[3]); !strings.Contains(got, "当前限制") {
+		t.Fatalf("expected fixed persistent limitation label markdown, got %#v", ops[0].CardElements[3])
+	}
+	if got := plainTextContent(ops[0].CardElements[4]); !containsAll(got, "暂不开放跨会话持久允许") {
+		t.Fatalf("expected mcp approval persistent limitation body to stay plain_text, got %#v", ops[0].CardElements[4])
+	}
+	actions := cardActionsFromElements(ops[0].CardElements)
+	if len(actions) != 4 {
+		t.Fatalf("expected four approval actions, got %#v", ops[0].CardElements)
+	}
+	acceptValue := cardValueMap(actions[0])
+	sessionValue := cardValueMap(actions[1])
+	declineValue := cardValueMap(actions[2])
+	cancelValue := cardValueMap(actions[3])
+	if acceptValue["request_option_id"] != "accept" || sessionValue["request_option_id"] != "acceptForSession" || declineValue["request_option_id"] != "decline" || cancelValue["request_option_id"] != "cancel" {
+		t.Fatalf("unexpected mcp approval action payloads: %#v", actions)
+	}
+	if got := markdownContent(ops[0].CardElements[len(ops[0].CardElements)-1]); !strings.Contains(got, "持久允许暂未开放") {
+		t.Fatalf("expected mcp approval hint, got %#v", ops[0].CardElements)
+	}
+}
+
 func TestProjectPermissionsRequestPromptSealedStateDropsActions(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", requestPromptEvent(control.FeishuRequestView{

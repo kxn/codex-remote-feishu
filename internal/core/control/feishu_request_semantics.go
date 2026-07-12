@@ -3,18 +3,19 @@ package control
 import "strings"
 
 const (
-	RequestSemanticApproval                   = "approval"
-	RequestSemanticApprovalCommand            = "approval_command"
-	RequestSemanticApprovalFileChange         = "approval_file_change"
-	RequestSemanticApprovalNetwork            = "approval_network"
-	RequestSemanticApprovalCanUseTool         = "approval_can_use_tool"
-	RequestSemanticPlanConfirmation           = "plan_confirmation"
-	RequestSemanticRequestUserInput           = "request_user_input"
-	RequestSemanticPermissionsRequestApproval = "permissions_request_approval"
-	RequestSemanticMCPServerElicitation       = "mcp_server_elicitation"
-	RequestSemanticMCPServerElicitationURL    = "mcp_server_elicitation_url"
-	RequestSemanticMCPServerElicitationForm   = "mcp_server_elicitation_form"
-	RequestSemanticToolCallback               = "tool_callback"
+	RequestSemanticApproval                     = "approval"
+	RequestSemanticApprovalCommand              = "approval_command"
+	RequestSemanticApprovalFileChange           = "approval_file_change"
+	RequestSemanticApprovalNetwork              = "approval_network"
+	RequestSemanticApprovalCanUseTool           = "approval_can_use_tool"
+	RequestSemanticPlanConfirmation             = "plan_confirmation"
+	RequestSemanticRequestUserInput             = "request_user_input"
+	RequestSemanticPermissionsRequestApproval   = "permissions_request_approval"
+	RequestSemanticMCPServerElicitation         = "mcp_server_elicitation"
+	RequestSemanticMCPServerElicitationURL      = "mcp_server_elicitation_url"
+	RequestSemanticMCPServerElicitationForm     = "mcp_server_elicitation_form"
+	RequestSemanticMCPServerElicitationApproval = "mcp_server_elicitation_approval"
+	RequestSemanticToolCallback                 = "tool_callback"
 )
 
 func NormalizeRequestSemanticKind(value, requestType string) string {
@@ -41,6 +42,8 @@ func NormalizeRequestSemanticKind(value, requestType string) string {
 		return RequestSemanticMCPServerElicitationURL
 	case RequestSemanticMCPServerElicitationForm, "mcpserverelicitationform":
 		return RequestSemanticMCPServerElicitationForm
+	case RequestSemanticMCPServerElicitationApproval, "mcpserverelicitationapproval":
+		return RequestSemanticMCPServerElicitationApproval
 	case RequestSemanticToolCallback, "toolcallback":
 		return RequestSemanticToolCallback
 	}

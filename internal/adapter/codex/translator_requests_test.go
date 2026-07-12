@@ -428,6 +428,34 @@ func TestObserveServerMCPElicitationProducesDedicatedRequestType(t *testing.T) {
 	}
 }
 
+func TestObserveServerMCPElicitationPreservesMCPToolApprovalMeta(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	result, err := tr.ObserveServer([]byte(`{"id":"req-mcp-approval-1","method":"mcpServer/elicitation/request","params":{"threadId":"thread-1","turnId":"turn-1","serverName":"apps","request":{"mode":"form","message":"Allow GitHub issue lookup?","requestedSchema":{"type":"object","properties":{}},"_meta":{"codex_approval_kind":"mcp_tool_call","persist":["session","always"],"tool_name":"github.search","tool_title":"Search GitHub","tool_params_display":[{"name":"query","value":"repo:kxn/codex-remote-feishu"}]}}}}`))
+	if err != nil {
+		t.Fatalf("observe mcp approval elicitation request: %v", err)
+	}
+	if len(result.Events) != 1 {
+		t.Fatalf("expected one request started event, got %#v", result.Events)
+	}
+	event := result.Events[0]
+	if event.RequestPrompt == nil || event.RequestPrompt.MCPElicitation == nil {
+		t.Fatalf("expected typed mcp elicitation prompt, got %#v", event.RequestPrompt)
+	}
+	meta := event.RequestPrompt.MCPElicitation.Meta
+	if meta["codex_approval_kind"] != "mcp_tool_call" || meta["tool_title"] != "Search GitHub" {
+		t.Fatalf("unexpected mcp approval meta: %#v", meta)
+	}
+	persist, _ := meta["persist"].([]any)
+	if len(persist) != 2 || persist[0] != "session" || persist[1] != "always" {
+		t.Fatalf("expected persist array to be preserved, got %#v", meta["persist"])
+	}
+	metadataMeta, _ := event.Metadata["meta"].(map[string]any)
+	if metadataMeta["codex_approval_kind"] != "mcp_tool_call" {
+		t.Fatalf("expected event metadata to carry mcp approval meta, got %#v", event.Metadata)
+	}
+}
+
 func TestObserveServerMCPToolCallProgressProducesDeltaEvent(t *testing.T) {
 	tr := NewTranslator("inst-1")
 

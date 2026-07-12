@@ -34,7 +34,8 @@ func ResolveRequestBridgeContract(semanticKind, requestType string) RequestBridg
 		return RequestBridgeContract{Kind: RequestBridgePermissions}
 	case RequestSemanticMCPServerElicitation,
 		RequestSemanticMCPServerElicitationForm,
-		RequestSemanticMCPServerElicitationURL:
+		RequestSemanticMCPServerElicitationURL,
+		RequestSemanticMCPServerElicitationApproval:
 		return RequestBridgeContract{Kind: RequestBridgeElicitation}
 	case RequestSemanticToolCallback:
 		return RequestBridgeContract{Kind: RequestBridgeToolCallback}

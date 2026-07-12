@@ -13,6 +13,7 @@ func TestResolveRequestBridgeContract(t *testing.T) {
 		{name: "default approval", semanticKind: RequestSemanticApprovalCommand, requestType: "approval", wantKind: RequestBridgeApproval},
 		{name: "claude can use tool", semanticKind: RequestSemanticApprovalCanUseTool, requestType: "approval", wantKind: RequestBridgeCanUseTool},
 		{name: "elicitation", semanticKind: RequestSemanticMCPServerElicitationForm, requestType: "mcp_server_elicitation", wantKind: RequestBridgeElicitation},
+		{name: "mcp approval elicitation", semanticKind: RequestSemanticMCPServerElicitationApproval, requestType: "mcp_server_elicitation", wantKind: RequestBridgeElicitation},
 		{name: "plan confirmation", semanticKind: RequestSemanticPlanConfirmation, requestType: "approval", wantKind: RequestBridgePlanConfirmation, wantInterrupt: true},
 	}
 	for _, tt := range tests {

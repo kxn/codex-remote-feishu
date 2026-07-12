@@ -15,6 +15,14 @@ import (
 
 const mcpElicitationJSONFieldID = "__mcp_elicitation_json"
 
+const (
+	mcpToolApprovalKindKey         = "codex_approval_kind"
+	mcpToolApprovalKindMCPToolCall = "mcp_tool_call"
+	mcpToolApprovalPersistKey      = "persist"
+	mcpToolApprovalPersistSession  = "session"
+	mcpToolApprovalPersistAlways   = "always"
+)
+
 func buildPermissionsRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	body := strings.TrimSpace(firstNonEmpty(
 		promptBody(prompt),
@@ -68,6 +76,66 @@ func buildPermissionsRequestResponse(request *state.RequestPromptRecord, action 
 	}
 }
 
+func buildMCPElicitationApprovalSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
+	sections := []state.RequestPromptTextSectionRecord(nil)
+	lines := []string{}
+	if body := strings.TrimSpace(firstNonEmpty(promptBody(prompt), metadataString(metadata, "body"), promptMCPElicitationMessage(prompt), metadataString(metadata, "elicitationMessage"))); body != "" {
+		lines = append(lines, body)
+	}
+	meta := promptMCPElicitationMeta(prompt, metadata)
+	if serverName := strings.TrimSpace(firstNonEmpty(promptMCPElicitationServerName(prompt), metadataString(metadata, "serverName"))); serverName != "" {
+		lines = append(lines, "MCP 服务："+serverName)
+	}
+	if toolTitle := strings.TrimSpace(mcpElicitationApprovalMetaString(meta, "tool_title", "toolTitle")); toolTitle != "" {
+		lines = append(lines, "工具："+toolTitle)
+	} else if toolName := strings.TrimSpace(mcpElicitationApprovalMetaString(meta, "tool_name", "toolName")); toolName != "" {
+		lines = append(lines, "工具："+toolName)
+	}
+	if source := strings.TrimSpace(mcpElicitationApprovalMetaString(meta, "source")); source != "" {
+		lines = append(lines, "来源："+source)
+	}
+	if len(lines) == 0 {
+		lines = append(lines, requestLocalBackendDisplayName(backend)+" 正在等待你确认 MCP 工具调用。")
+	}
+	sections = appendRequestPromptSection(sections, "", lines...)
+	if params := mcpElicitationApprovalDisplayParamLines(meta); len(params) != 0 {
+		sections = appendRequestPromptSection(sections, "参数", params...)
+	}
+	if mcpElicitationAdvertisesPersist(meta, mcpToolApprovalPersistAlways) {
+		sections = appendRequestPromptSection(sections, "当前限制", "上游支持持久授权，但飞书端当前暂不开放跨会话持久允许。")
+	}
+	return sections
+}
+
+func buildMCPElicitationApprovalOptions(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptOptionRecord {
+	meta := promptMCPElicitationMeta(prompt, metadata)
+	options := []state.RequestPromptOptionRecord{
+		{OptionID: "accept", Label: "允许本次", Style: "primary"},
+	}
+	if mcpElicitationAdvertisesPersist(meta, mcpToolApprovalPersistSession) {
+		options = append(options, state.RequestPromptOptionRecord{OptionID: "acceptForSession", Label: "本会话允许", Style: "default"})
+	}
+	options = append(options,
+		state.RequestPromptOptionRecord{OptionID: "decline", Label: "拒绝", Style: "default"},
+		state.RequestPromptOptionRecord{OptionID: "cancel", Label: "取消", Style: "default"},
+	)
+	return options
+}
+
+func mcpElicitationApprovalHintText(prompt *agentproto.RequestPrompt, metadata map[string]any) string {
+	meta := promptMCPElicitationMeta(prompt, metadata)
+	switch {
+	case mcpElicitationAdvertisesPersist(meta, mcpToolApprovalPersistSession) && mcpElicitationAdvertisesPersist(meta, mcpToolApprovalPersistAlways):
+		return "你可以允许本次或本会话；持久允许暂未开放。"
+	case mcpElicitationAdvertisesPersist(meta, mcpToolApprovalPersistSession):
+		return "你可以允许本次，或在当前会话内持续允许。"
+	case mcpElicitationAdvertisesPersist(meta, mcpToolApprovalPersistAlways):
+		return "你可以允许本次；持久允许暂未开放。"
+	default:
+		return "这个确认只影响当前这一次 MCP 工具调用。"
+	}
+}
+
 func buildMCPElicitationSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	mode := mcpElicitationMode(prompt, metadata)
 	sections := []state.RequestPromptTextSectionRecord(nil)
@@ -96,6 +164,9 @@ func buildMCPElicitationSections(backend agentproto.Backend, prompt *agentproto.
 }
 
 func buildMCPElicitationQuestions(prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptQuestionRecord {
+	if isMCPToolApprovalElicitation(prompt, metadata) {
+		return nil
+	}
 	if mcpElicitationMode(prompt, metadata) != "form" {
 		return nil
 	}
@@ -122,6 +193,9 @@ func buildMCPElicitationQuestions(prompt *agentproto.RequestPrompt, metadata map
 }
 
 func buildMCPElicitationOptions(prompt *agentproto.RequestPrompt, metadata map[string]any, questions []state.RequestPromptQuestionRecord) []state.RequestPromptOptionRecord {
+	if isMCPToolApprovalElicitation(prompt, metadata) {
+		return buildMCPElicitationApprovalOptions(prompt, metadata)
+	}
 	if mcpElicitationMode(prompt, metadata) == "form" || len(questions) != 0 {
 		return []state.RequestPromptOptionRecord{
 			{OptionID: "cancel", Label: "取消", Style: "default"},
@@ -154,6 +228,19 @@ func (s *Service) buildMCPElicitationResponse(surface *state.SurfaceConsoleRecor
 		moveRequestPromptCurrentQuestion(request, 1)
 		bumpRequestCardRevision(request)
 		return nil, false, []eventcontract.Event{s.requestPromptInlineEvent(surface, request, "")}
+	}
+	if requestPromptSemanticKind(request) == control.RequestSemanticMCPServerElicitationApproval {
+		switch optionID {
+		case "accept":
+			return buildMCPElicitationPayload("accept", nil, mcpElicitationApprovalResponseMeta(promptMCPElicitationMeta(request.Prompt, nil), "")), true, nil
+		case "acceptForSession":
+			meta := mcpElicitationApprovalResponseMeta(promptMCPElicitationMeta(request.Prompt, nil), mcpToolApprovalPersistSession)
+			return buildMCPElicitationPayload("accept", nil, meta), true, nil
+		case "decline", "cancel":
+			return buildMCPElicitationPayload(optionID, nil, mcpElicitationApprovalResponseMeta(promptMCPElicitationMeta(request.Prompt, nil), "")), true, nil
+		default:
+			return nil, false, notice(surface, "request_invalid", "这个 MCP 工具授权按钮无效或当前不支持。")
+		}
 	}
 	switch optionID {
 	case "decline", "cancel":
@@ -193,6 +280,128 @@ func buildMCPElicitationPayload(action string, content any, meta map[string]any)
 		payload["_meta"] = map[string]any{}
 	}
 	return payload
+}
+
+func isMCPToolApprovalElicitation(prompt *agentproto.RequestPrompt, metadata map[string]any) bool {
+	meta := promptMCPElicitationMeta(prompt, metadata)
+	return strings.EqualFold(strings.TrimSpace(mcpElicitationApprovalMetaString(meta, mcpToolApprovalKindKey)), mcpToolApprovalKindMCPToolCall)
+}
+
+func mcpElicitationApprovalMetaString(meta map[string]any, keys ...string) string {
+	if len(meta) == 0 {
+		return ""
+	}
+	for _, key := range keys {
+		if value := strings.TrimSpace(lookupStringFromAny(meta[key])); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func mcpElicitationPersistValues(meta map[string]any) []string {
+	if len(meta) == 0 {
+		return nil
+	}
+	raw, ok := meta[mcpToolApprovalPersistKey]
+	if !ok {
+		return nil
+	}
+	values := []string{}
+	add := func(value string) {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value != "" {
+			values = append(values, value)
+		}
+	}
+	switch typed := raw.(type) {
+	case string:
+		add(typed)
+	case []string:
+		for _, item := range typed {
+			add(item)
+		}
+	case []any:
+		for _, item := range typed {
+			add(lookupStringFromAny(item))
+		}
+	default:
+		add(lookupStringFromAny(raw))
+	}
+	return values
+}
+
+func mcpElicitationAdvertisesPersist(meta map[string]any, target string) bool {
+	target = strings.ToLower(strings.TrimSpace(target))
+	if target == "" {
+		return false
+	}
+	for _, value := range mcpElicitationPersistValues(meta) {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func mcpElicitationApprovalResponseMeta(meta map[string]any, persist string) map[string]any {
+	cloned := map[string]any{}
+	if len(meta) != 0 {
+		if value, ok := cloneJSONValue(meta).(map[string]any); ok && value != nil {
+			cloned = value
+		}
+	}
+	delete(cloned, mcpToolApprovalPersistKey)
+	persist = strings.ToLower(strings.TrimSpace(persist))
+	if persist != "" {
+		cloned[mcpToolApprovalPersistKey] = persist
+	}
+	return cloned
+}
+
+func mcpElicitationApprovalDisplayParamLines(meta map[string]any) []string {
+	raw := meta["tool_params_display"]
+	if raw == nil {
+		raw = meta["toolParamsDisplay"]
+	}
+	var values []any
+	switch typed := raw.(type) {
+	case []any:
+		values = typed
+	case []map[string]any:
+		values = make([]any, 0, len(typed))
+		for _, item := range typed {
+			values = append(values, item)
+		}
+	default:
+		return nil
+	}
+	lines := make([]string, 0, len(values))
+	for _, rawValue := range values {
+		record, _ := rawValue.(map[string]any)
+		if len(record) == 0 {
+			continue
+		}
+		name := strings.TrimSpace(firstNonEmpty(
+			lookupStringFromAny(record["name"]),
+			lookupStringFromAny(record["label"]),
+			lookupStringFromAny(record["key"]),
+		))
+		value := strings.TrimSpace(firstNonEmpty(
+			lookupStringFromAny(record["value"]),
+			lookupStringFromAny(record["displayValue"]),
+			lookupStringFromAny(record["display_value"]),
+		))
+		switch {
+		case name != "" && value != "":
+			lines = append(lines, name+"："+value)
+		case name != "":
+			lines = append(lines, name)
+		case value != "":
+			lines = append(lines, value)
+		}
+	}
+	return lines
 }
 
 func buildMCPElicitationContent(request *state.RequestPromptRecord, rawAnswers map[string][]string) (any, bool, []string, string) {
@@ -520,6 +729,13 @@ func promptMCPElicitationMode(prompt *agentproto.RequestPrompt) string {
 		return ""
 	}
 	return strings.TrimSpace(prompt.MCPElicitation.Mode)
+}
+
+func promptMCPElicitationMessage(prompt *agentproto.RequestPrompt) string {
+	if prompt == nil || prompt.MCPElicitation == nil {
+		return ""
+	}
+	return strings.TrimSpace(prompt.MCPElicitation.Message)
 }
 
 func promptMCPElicitationURL(prompt *agentproto.RequestPrompt) string {

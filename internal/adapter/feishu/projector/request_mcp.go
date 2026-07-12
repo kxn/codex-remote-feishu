@@ -51,6 +51,8 @@ func mcpElicitationPromptElements(prompt control.FeishuRequestView, daemonLifecy
 	switch requestPromptSemanticKind(prompt) {
 	case control.RequestSemanticMCPServerElicitationURL:
 		return mcpElicitationChoiceElements(prompt, daemonLifecycleID)
+	case control.RequestSemanticMCPServerElicitationApproval:
+		return mcpElicitationApprovalElements(prompt, daemonLifecycleID)
 	case control.RequestSemanticMCPServerElicitation:
 		if len(prompt.Questions) == 0 {
 			return mcpElicitationChoiceElements(prompt, daemonLifecycleID)
@@ -86,6 +88,45 @@ func mcpElicitationPromptElements(prompt control.FeishuRequestView, daemonLifecy
 	}
 	if footer := mcpElicitationCancelFooterElements(prompt, daemonLifecycleID); len(footer) != 0 {
 		elements = append(elements, footer...)
+	}
+	return elements
+}
+
+func mcpElicitationApprovalElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
+	prompt = control.NormalizeFeishuRequestView(prompt)
+	options := prompt.Options
+	if len(options) == 0 {
+		options = []control.RequestPromptOption{
+			{OptionID: "accept", Label: "允许本次", Style: "primary"},
+			{OptionID: "decline", Label: "拒绝", Style: "default"},
+			{OptionID: "cancel", Label: "取消", Style: "default"},
+		}
+	}
+	actions := make([]map[string]any, 0, len(options))
+	if frontstagecontract.AllowsPrimaryInput(prompt.ActionPolicy) {
+		for _, option := range options {
+			button := requestPromptButton(prompt, option, daemonLifecycleID)
+			if len(button) == 0 {
+				continue
+			}
+			actions = append(actions, button)
+		}
+	}
+	elements := make([]map[string]any, 0, 3)
+	if row := cardButtonGroupElement(actions); len(row) != 0 {
+		elements = append(elements, row)
+	}
+	if hint := requestPromptHintMarkdown(prompt, "这个确认只影响当前这一次 MCP 工具调用。"); hint != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": hint,
+		})
+	}
+	if status := requestPromptStatusMarkdown(prompt); status != "" {
+		elements = append(elements, map[string]any{
+			"tag":     "markdown",
+			"content": status,
+		})
 	}
 	return elements
 }

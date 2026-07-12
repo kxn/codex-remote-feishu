@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -252,6 +253,155 @@ func TestRespondMCPElicitationURLAcceptBuildsContinuePayload(t *testing.T) {
 	}
 	if _, ok := response["content"]; !ok {
 		t.Fatalf("expected url elicitation response to include content field, got %#v", response)
+	}
+}
+
+func TestMCPElicitationToolApprovalUsesDedicatedSemanticKindAndSessionMeta(t *testing.T) {
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	attachMCPRequestTestSurface(svc)
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:          agentproto.EventRequestStarted,
+		ThreadID:      "thread-1",
+		TurnID:        "turn-1",
+		RequestID:     "req-mcp-approval-1",
+		RequestPrompt: mcpApprovalRequestPrompt([]any{"session", "always"}),
+		Metadata:      map[string]any{"requestType": "mcp_server_elicitation"},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	request := pendingRequestRecord(surface, "req-mcp-approval-1")
+	if request == nil {
+		t.Fatalf("expected pending mcp approval request")
+	}
+	if request.SemanticKind != control.RequestSemanticMCPServerElicitationApproval {
+		t.Fatalf("semantic kind = %q, want %q", request.SemanticKind, control.RequestSemanticMCPServerElicitationApproval)
+	}
+	if len(request.Questions) != 0 {
+		t.Fatalf("expected mcp approval elicitation to avoid generic form questions, got %#v", request.Questions)
+	}
+	if len(request.Options) != 4 || request.Options[0].OptionID != "accept" || request.Options[1].OptionID != "acceptForSession" || request.Options[2].OptionID != "decline" || request.Options[3].OptionID != "cancel" {
+		t.Fatalf("unexpected mcp approval options: %#v", request.Options)
+	}
+	if !strings.Contains(request.HintText, "持久允许暂未开放") {
+		t.Fatalf("expected hint to mention unsupported persistent approval, got %q", request.HintText)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "om-card-4",
+		Request:          testRequestAction("req-mcp-approval-1", "mcp_server_elicitation", "acceptForSession", nil, request.CardRevision),
+	})
+	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
+		t.Fatalf("expected sealed inline replacement plus one mcp approval respond command, got %#v", events)
+	}
+	response := events[1].Command.Request.Response
+	if response["action"] != "accept" {
+		t.Fatalf("expected accept action, got %#v", response)
+	}
+	meta, _ := response["_meta"].(map[string]any)
+	if meta["codex_approval_kind"] != "mcp_tool_call" || meta["persist"] != "session" {
+		t.Fatalf("expected session persist in mcp approval response meta, got %#v", response)
+	}
+	if response["content"] != nil {
+		t.Fatalf("expected mcp approval response content to stay nil, got %#v", response)
+	}
+}
+
+func TestMCPElicitationToolApprovalAcceptOnceDropsPersistAdvertisement(t *testing.T) {
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	attachMCPRequestTestSurface(svc)
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:          agentproto.EventRequestStarted,
+		ThreadID:      "thread-1",
+		TurnID:        "turn-1",
+		RequestID:     "req-mcp-approval-once",
+		RequestPrompt: mcpApprovalRequestPrompt([]any{"session", "always"}),
+		Metadata:      map[string]any{"requestType": "mcp_server_elicitation"},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	request := pendingRequestRecord(surface, "req-mcp-approval-once")
+	if request == nil {
+		t.Fatalf("expected pending mcp approval request")
+	}
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "om-card-4",
+		Request:          testRequestAction("req-mcp-approval-once", "mcp_server_elicitation", "accept", nil, request.CardRevision),
+	})
+	if len(events) != 2 || events[1].Command == nil {
+		t.Fatalf("expected one mcp approval respond command, got %#v", events)
+	}
+	response := events[1].Command.Request.Response
+	if response["action"] != "accept" {
+		t.Fatalf("expected accept action, got %#v", response)
+	}
+	meta, _ := response["_meta"].(map[string]any)
+	if meta["codex_approval_kind"] != "mcp_tool_call" {
+		t.Fatalf("expected approval kind to stay in response meta, got %#v", response)
+	}
+	if _, ok := meta["persist"]; ok {
+		t.Fatalf("expected accept-once response to remove persist advertisement, got %#v", response)
+	}
+}
+
+func TestMCPElicitationToolApprovalAlwaysOnlyDoesNotExposeSessionButton(t *testing.T) {
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	attachMCPRequestTestSurface(svc)
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:          agentproto.EventRequestStarted,
+		ThreadID:      "thread-1",
+		TurnID:        "turn-1",
+		RequestID:     "req-mcp-approval-always",
+		RequestPrompt: mcpApprovalRequestPrompt("always"),
+		Metadata:      map[string]any{"requestType": "mcp_server_elicitation"},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	request := pendingRequestRecord(surface, "req-mcp-approval-always")
+	if request == nil {
+		t.Fatalf("expected pending mcp approval request")
+	}
+	if request.SemanticKind != control.RequestSemanticMCPServerElicitationApproval {
+		t.Fatalf("semantic kind = %q, want %q", request.SemanticKind, control.RequestSemanticMCPServerElicitationApproval)
+	}
+	for _, option := range request.Options {
+		if option.OptionID == "acceptForSession" {
+			t.Fatalf("expected always-only advertisement not to expose session option, got %#v", request.Options)
+		}
+	}
+	if !strings.Contains(request.HintText, "持久允许暂未开放") {
+		t.Fatalf("expected always-only hint to mention unsupported persistent approval, got %q", request.HintText)
+	}
+}
+
+func mcpApprovalRequestPrompt(persist any) *agentproto.RequestPrompt {
+	return &agentproto.RequestPrompt{
+		Type:  agentproto.RequestTypeMCPServerElicitation,
+		Title: "需要确认 MCP 工具调用",
+		Body:  "允许 GitHub MCP 查询 issue？",
+		MCPElicitation: &agentproto.MCPElicitationPrompt{
+			ServerName: "apps",
+			Mode:       "form",
+			Message:    "允许 GitHub MCP 查询 issue？",
+			RequestedSchema: map[string]any{
+				"type":       "object",
+				"properties": map[string]any{},
+			},
+			Meta: map[string]any{
+				"codex_approval_kind": "mcp_tool_call",
+				"persist":             persist,
+				"tool_title":          "Search GitHub",
+				"tool_params_display": []any{
+					map[string]any{"name": "query", "value": "repo:kxn/codex-remote-feishu #669"},
+				},
+			},
+		},
 	}
 }
 
