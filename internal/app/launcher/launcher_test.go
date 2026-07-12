@@ -25,9 +25,34 @@ func TestDetect(t *testing.T) {
 			want: Decision{Role: RoleWrapper, Args: []string{"app-server", "--analytics-default-enabled"}},
 		},
 		{
+			name: "codex root config before app server enters wrapper",
+			args: []string{"-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"},
+			want: Decision{Role: RoleWrapper, Args: []string{"-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"}},
+		},
+		{
+			name: "codex root config equals before app server enters wrapper",
+			args: []string{"--config=features.code_mode_host=true", "app-server", "--analytics-default-enabled"},
+			want: Decision{Role: RoleWrapper, Args: []string{"--config=features.code_mode_host=true", "app-server", "--analytics-default-enabled"}},
+		},
+		{
+			name: "codex root cd before app server enters wrapper",
+			args: []string{"-C", "/tmp/work", "app-server", "--analytics-default-enabled"},
+			want: Decision{Role: RoleWrapper, Args: []string{"-C", "/tmp/work", "app-server", "--analytics-default-enabled"}},
+		},
+		{
+			name: "codex root cd equals before app server enters wrapper",
+			args: []string{"--cd=/tmp/work", "app-server", "--analytics-default-enabled"},
+			want: Decision{Role: RoleWrapper, Args: []string{"--cd=/tmp/work", "app-server", "--analytics-default-enabled"}},
+		},
+		{
 			name: "explicit wrapper app server enters wrapper",
 			args: []string{"wrapper", "app-server", "--analytics-default-enabled"},
 			want: Decision{Role: RoleWrapper, Args: []string{"app-server", "--analytics-default-enabled"}},
+		},
+		{
+			name: "explicit wrapper preserves codex root config before app server",
+			args: []string{"wrapper", "-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"},
+			want: Decision{Role: RoleWrapper, Args: []string{"-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"}},
 		},
 		{
 			name: "claude app server enters wrapper",
@@ -93,8 +118,28 @@ func TestDetect(t *testing.T) {
 			wantErr: "unsupported command",
 		},
 		{
+			name:    "codex root config before daemon is rejected",
+			args:    []string{"-c", "features.code_mode_host=true", "daemon"},
+			wantErr: "unsupported command",
+		},
+		{
+			name:    "unknown root option before app server is rejected",
+			args:    []string{"--unknown", "app-server"},
+			wantErr: "unsupported command",
+		},
+		{
+			name:    "codex root config missing value is rejected",
+			args:    []string{"-c", "app-server"},
+			wantErr: "unsupported command",
+		},
+		{
 			name:    "wrapper resume rejected",
 			args:    []string{"wrapper", "resume", "--thread", "abc"},
+			wantErr: "wrapper only supports app-server or claude-app-server mode",
+		},
+		{
+			name:    "explicit wrapper rejects codex root config before daemon",
+			args:    []string{"wrapper", "-c", "features.code_mode_host=true", "daemon"},
 			wantErr: "wrapper only supports app-server or claude-app-server mode",
 		},
 	}
@@ -160,6 +205,37 @@ func TestMainRoutesToWrapper(t *testing.T) {
 	}
 	if gotBranch != "release/1.5" {
 		t.Fatalf("wrapper branch = %q, want release/1.5", gotBranch)
+	}
+}
+
+func TestMainRoutesCodexRootOptionsToWrapper(t *testing.T) {
+	var gotArgs []string
+	exitCode := Main(Options{
+		Args:   []string{"-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"},
+		Stdin:  strings.NewReader(""),
+		Stdout: &bytes.Buffer{},
+		Stderr: &bytes.Buffer{},
+		Runners: RunnerSet{
+			RunDaemon: func(context.Context, []string, string, string) error {
+				t.Fatal("unexpected daemon run")
+				return nil
+			},
+			RunInstall: func([]string, io.Reader, io.Writer, io.Writer, string) error {
+				t.Fatal("unexpected install run")
+				return nil
+			},
+			RunWrapper: func(_ context.Context, args []string, _ io.Reader, _, _ io.Writer, _, _ string) (int, error) {
+				gotArgs = append([]string(nil), args...)
+				return 11, nil
+			},
+		},
+	})
+	if exitCode != 11 {
+		t.Fatalf("Main exitCode = %d, want 11", exitCode)
+	}
+	wantArgs := []string{"-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"}
+	if strings.Join(gotArgs, "\x00") != strings.Join(wantArgs, "\x00") {
+		t.Fatalf("wrapper args = %#v, want %#v", gotArgs, wantArgs)
 	}
 }
 

@@ -48,6 +48,18 @@ func TestBuildCodexChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 	}
 }
 
+func TestBuildCodexChildLaunchPreservesRootOptionsBeforeAppServer(t *testing.T) {
+	clearFeishuMCPBearerEnv(t)
+	app := New(Config{Source: "vscode"})
+
+	baseArgs := []string{"-c", "features.code_mode_host=true", "app-server", "--analytics-default-enabled"}
+	args, _ := app.buildCodexChildLaunch(baseArgs)
+
+	if strings.Join(args, "\x00") != strings.Join(baseArgs, "\x00") {
+		t.Fatalf("expected child args to preserve original order, got %#v want %#v", args, baseArgs)
+	}
+}
+
 func TestBuildCodexChildLaunchSkipsFeishuMCPForVSCodeSource(t *testing.T) {
 	clearFeishuMCPBearerEnv(t)
 	statePath := writeToolServiceState(t, `{

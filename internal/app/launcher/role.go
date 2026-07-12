@@ -1,6 +1,10 @@
 package launcher
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/kxn/codex-remote-feishu/internal/app/appserverargs"
+)
 
 type Role string
 
@@ -20,15 +24,6 @@ const (
 type Decision struct {
 	Role Role
 	Args []string
-}
-
-func isWrapperMode(mode string) bool {
-	switch mode {
-	case "app-server", "claude-app-server":
-		return true
-	default:
-		return false
-	}
 }
 
 func Detect(args []string) (Decision, error) {
@@ -59,13 +54,16 @@ func Detect(args []string) (Decision, error) {
 		if len(args) < 2 {
 			return Decision{}, usageError("wrapper requires app-server or claude-app-server arguments")
 		}
-		if !isWrapperMode(args[1]) {
+		if _, ok := appserverargs.Find(args[1:]); !ok {
 			return Decision{}, usageError("wrapper only supports app-server or claude-app-server mode")
 		}
 		return Decision{Role: RoleWrapper, Args: args[1:]}, nil
 	case "app-server", "claude-app-server":
 		return Decision{Role: RoleWrapper, Args: args}, nil
 	default:
+		if _, ok := appserverargs.Find(args); ok {
+			return Decision{Role: RoleWrapper, Args: args}, nil
+		}
 		return Decision{}, usageError(fmt.Sprintf("unsupported command: %s", args[0]))
 	}
 }
