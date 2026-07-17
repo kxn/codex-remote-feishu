@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -60,7 +61,7 @@ func TestProjectThreadHistoryUpdatesExistingCard(t *testing.T) {
 }
 
 func TestThreadHistoryListElementsUseHistoryCallbacks(t *testing.T) {
-	elements := threadHistoryListElements(control.FeishuThreadHistoryView{
+	elements := projectorpkg.ThreadHistoryListElements(control.FeishuThreadHistoryView{
 		PickerID:       "history-1",
 		Page:           1,
 		TotalPages:     3,
@@ -94,7 +95,7 @@ func TestThreadHistoryListElementsUseHistoryCallbacks(t *testing.T) {
 }
 
 func TestThreadHistoryDetailElementsKeepDynamicContentOutOfMarkdown(t *testing.T) {
-	elements := threadHistoryDetailElements(control.FeishuThreadHistoryView{
+	elements := projectorpkg.ThreadHistoryDetailElements(control.FeishuThreadHistoryView{
 		PickerID: "history-unsafe",
 		Detail: &control.FeishuThreadHistoryTurnDetail{
 			Ordinal:     3,
@@ -133,7 +134,7 @@ func TestThreadHistoryDetailElementsKeepDynamicContentOutOfMarkdown(t *testing.T
 
 func TestThreadHistoryDetailElementsKeepFooterButtonsVisibleWithLargeContent(t *testing.T) {
 	longLine := strings.Repeat("输出片段 ", 80)
-	elements := threadHistoryDetailElements(control.FeishuThreadHistoryView{
+	elements := projectorpkg.ThreadHistoryDetailElements(control.FeishuThreadHistoryView{
 		PickerID: "history-large",
 		Detail: &control.FeishuThreadHistoryTurnDetail{
 			Ordinal:     7,
@@ -183,7 +184,7 @@ func TestThreadHistoryDetailElementsKeepFooterButtonsVisibleWithLargeContent(t *
 }
 
 func TestThreadHistoryElementsKeepSummaryVisibleWhileLoading(t *testing.T) {
-	elements := threadHistoryElements(control.FeishuThreadHistoryView{
+	elements := projectorpkg.ThreadHistoryElements(control.FeishuThreadHistoryView{
 		PickerID:    "history-loading",
 		ThreadID:    "thread-1",
 		ThreadLabel: "修复登录流程",
@@ -203,7 +204,7 @@ func TestThreadHistoryElementsKeepSummaryVisibleWhileLoading(t *testing.T) {
 }
 
 func TestThreadHistoryElementsKeepSummaryVisibleOnError(t *testing.T) {
-	elements := threadHistoryElements(control.FeishuThreadHistoryView{
+	elements := projectorpkg.ThreadHistoryElements(control.FeishuThreadHistoryView{
 		PickerID:    "history-error",
 		ThreadID:    "thread-1",
 		ThreadLabel: "修复登录流程",

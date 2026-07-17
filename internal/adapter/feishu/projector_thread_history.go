@@ -13,7 +13,8 @@ func (p *Projector) projectThreadHistory(chatID string, event eventcontract.Even
 	if title == "" {
 		title = "历史记录"
 	}
-	elements := threadHistoryElements(view, event.Meta.DaemonLifecycleID)
+	elements := projectorpkg.ThreadHistoryElements(view, event.Meta.DaemonLifecycleID)
+	theme := projectorpkg.ThreadHistoryTheme(view)
 	operation := Operation{
 		Kind:             OperationSendCard,
 		GatewayID:        event.GatewayID,
@@ -21,11 +22,11 @@ func (p *Projector) projectThreadHistory(chatID string, event eventcontract.Even
 		ChatID:           chatID,
 		CardTitle:        title,
 		CardBody:         "",
-		CardThemeKey:     threadHistoryTheme(view),
+		CardThemeKey:     theme,
 		CardUpdateMulti:  true,
 		CardElements:     elements,
 		cardEnvelope:     cardEnvelopeV2,
-		card:             rawCardDocument(title, "", threadHistoryTheme(view), elements),
+		card:             rawCardDocument(title, "", theme, elements),
 	}
 	if messageID := strings.TrimSpace(view.MessageID); messageID != "" {
 		operation.Kind = OperationUpdateCard
@@ -36,20 +37,4 @@ func (p *Projector) projectThreadHistory(chatID string, event eventcontract.Even
 		operation = applyReplyLaneToNewOperation(event, operation)
 	}
 	return []Operation{operation}
-}
-
-func threadHistoryTheme(view control.FeishuThreadHistoryView) string {
-	return projectorpkg.ThreadHistoryTheme(view)
-}
-
-func threadHistoryElements(view control.FeishuThreadHistoryView, daemonLifecycleID string) []map[string]any {
-	return projectorpkg.ThreadHistoryElements(view, daemonLifecycleID)
-}
-
-func threadHistoryListElements(view control.FeishuThreadHistoryView, daemonLifecycleID string) []map[string]any {
-	return projectorpkg.ThreadHistoryListElements(view, daemonLifecycleID)
-}
-
-func threadHistoryDetailElements(view control.FeishuThreadHistoryView, daemonLifecycleID string) []map[string]any {
-	return projectorpkg.ThreadHistoryDetailElements(view, daemonLifecycleID)
 }
