@@ -147,12 +147,7 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 			compact.CommandID = commandID
 			return
 		}
-		binding := s.turns.pendingRemote[surface.AttachedInstanceID]
-		if binding != nil && binding.SurfaceSessionID == surfaceID {
-			if surface.ActiveQueueItemID != "" && binding.QueueItemID != surface.ActiveQueueItemID {
-				return
-			}
-			binding.CommandID = commandID
+		if s.bindPendingRemoteCommand(surface, commandID) {
 			return
 		}
 	}
@@ -255,8 +250,8 @@ func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.Comman
 		notice.Text = appendSteerRestoreHint(notice.Text)
 		return s.restorePendingSteer(key, &notice)
 	}
-	binding := s.turns.pendingRemote[instanceID]
-	if binding == nil || binding.CommandID != ack.CommandID {
+	binding := s.pendingRemoteBindingByCommandForInstance(instanceID, ack.CommandID)
+	if binding == nil {
 		if surface := s.findAttachedSurface(instanceID); surface != nil {
 			return s.restorePendingRequestDispatch(surface, ack.CommandID, "command_rejected")
 		}

@@ -257,7 +257,7 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		return autoContinue
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.turns.pendingRemote[inst.InstanceID] != nil {
+	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) {
 		return nil
 	}
 	if s.progress.instanceHasCompact(inst.InstanceID) {

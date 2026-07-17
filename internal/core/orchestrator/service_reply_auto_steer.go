@@ -126,8 +126,8 @@ func (s *Service) activeReplySteerTarget(surface *state.SurfaceConsoleRecord, re
 	if inst == nil || !inst.Online {
 		return nil, "", "", false
 	}
-	binding := s.turns.activeRemote[surface.AttachedInstanceID]
-	if binding == nil || binding.SurfaceSessionID != surface.SurfaceSessionID {
+	binding := s.activeRemoteBindingForSurface(surface)
+	if binding == nil || strings.TrimSpace(binding.TurnID) == "" {
 		return nil, "", "", false
 	}
 	activeThreadID := strings.TrimSpace(binding.ThreadID)

@@ -254,7 +254,7 @@ func (s *Service) maybeDispatchPendingAutoContinue(surface *state.SurfaceConsole
 		return nil
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.turns.pendingRemote[inst.InstanceID] != nil || surface.ActiveQueueItemID != "" {
+	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) || surface.ActiveQueueItemID != "" {
 		return nil
 	}
 	return s.dispatchAutoContinueEpisode(surface, inst, episode)

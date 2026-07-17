@@ -264,6 +264,86 @@ func newServiceTurnRuntime(service *Service) *serviceTurnRuntime {
 	}
 }
 
+func (r *serviceTurnRuntime) pendingRemoteBinding(instanceID string) *remoteTurnBinding {
+	if r == nil {
+		return nil
+	}
+	return r.pendingRemote[strings.TrimSpace(instanceID)]
+}
+
+func (r *serviceTurnRuntime) bindPendingRemote(instanceID string, binding *remoteTurnBinding) {
+	if r == nil {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" || binding == nil {
+		return
+	}
+	r.pendingRemote[instanceID] = binding
+}
+
+func (r *serviceTurnRuntime) clearPendingRemote(instanceID string) {
+	if r == nil {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return
+	}
+	delete(r.pendingRemote, instanceID)
+}
+
+func (r *serviceTurnRuntime) forEachPendingRemote(fn func(*remoteTurnBinding)) {
+	if r == nil || fn == nil {
+		return
+	}
+	for _, binding := range r.pendingRemote {
+		if binding != nil {
+			fn(binding)
+		}
+	}
+}
+
+func (r *serviceTurnRuntime) activeRemoteBinding(instanceID string) *remoteTurnBinding {
+	if r == nil {
+		return nil
+	}
+	return r.activeRemote[strings.TrimSpace(instanceID)]
+}
+
+func (r *serviceTurnRuntime) bindActiveRemote(instanceID string, binding *remoteTurnBinding) {
+	if r == nil {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" || binding == nil {
+		return
+	}
+	r.activeRemote[instanceID] = binding
+}
+
+func (r *serviceTurnRuntime) clearActiveRemote(instanceID string) {
+	if r == nil {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return
+	}
+	delete(r.activeRemote, instanceID)
+}
+
+func (r *serviceTurnRuntime) forEachActiveRemote(fn func(*remoteTurnBinding)) {
+	if r == nil || fn == nil {
+		return
+	}
+	for _, binding := range r.activeRemote {
+		if binding != nil {
+			fn(binding)
+		}
+	}
+}
+
 func (r *serviceTurnRuntime) instanceHasCompact(instanceID string) bool {
 	if r == nil || strings.TrimSpace(instanceID) == "" {
 		return false

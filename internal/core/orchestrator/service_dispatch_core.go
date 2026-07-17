@@ -30,35 +30,31 @@ func newRemoteTurnBindingForQueueItem(surface *state.SurfaceConsoleRecord, inst 
 }
 
 func (s *Service) bindPendingRemoteTurn(instanceID string, binding *remoteTurnBinding) {
-	instanceID = strings.TrimSpace(instanceID)
-	if instanceID == "" || binding == nil {
+	if s == nil || s.turns == nil {
 		return
 	}
-	s.turns.pendingRemote[instanceID] = binding
+	s.turns.bindPendingRemote(instanceID, binding)
 }
 
 func (s *Service) bindActiveRemoteTurn(instanceID string, binding *remoteTurnBinding) {
-	instanceID = strings.TrimSpace(instanceID)
-	if instanceID == "" || binding == nil {
+	if s == nil || s.turns == nil {
 		return
 	}
-	s.turns.activeRemote[instanceID] = binding
+	s.turns.bindActiveRemote(instanceID, binding)
 }
 
 func (s *Service) clearPendingRemoteTurn(instanceID string) {
-	instanceID = strings.TrimSpace(instanceID)
-	if instanceID == "" {
+	if s == nil || s.turns == nil {
 		return
 	}
-	delete(s.turns.pendingRemote, instanceID)
+	s.turns.clearPendingRemote(instanceID)
 }
 
 func (s *Service) clearActiveRemoteTurn(instanceID string) {
-	instanceID = strings.TrimSpace(instanceID)
-	if instanceID == "" {
+	if s == nil || s.turns == nil {
 		return
 	}
-	delete(s.turns.activeRemote, instanceID)
+	s.turns.clearActiveRemote(instanceID)
 }
 
 func (s *Service) clearInstanceRemoteTurnOwnership(instanceID string) {

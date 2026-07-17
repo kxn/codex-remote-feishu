@@ -181,7 +181,10 @@ func matchesRemoteBindingThread(binding *remoteTurnBinding, threadID string) boo
 }
 
 func (s *Service) pendingRemoteBindingRecord(instanceID string) (*remoteTurnBinding, *state.SurfaceConsoleRecord, *state.QueueItemRecord) {
-	binding := s.turns.pendingRemote[instanceID]
+	if s == nil || s.turns == nil {
+		return nil, nil, nil
+	}
+	binding := s.turns.pendingRemoteBinding(instanceID)
 	if binding == nil {
 		return nil, nil, nil
 	}
@@ -196,6 +199,43 @@ func (s *Service) pendingRemoteBindingRecord(instanceID string) (*remoteTurnBind
 		return nil, nil, nil
 	}
 	return binding, surface, item
+}
+
+func (s *Service) hasPendingRemoteTurn(instanceID string) bool {
+	if s == nil || s.turns == nil {
+		return false
+	}
+	return s.turns.pendingRemoteBinding(instanceID) != nil
+}
+
+func (s *Service) bindPendingRemoteCommand(surface *state.SurfaceConsoleRecord, commandID string) bool {
+	if s == nil || s.turns == nil || surface == nil {
+		return false
+	}
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" || strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return false
+	}
+	binding := s.turns.pendingRemoteBinding(surface.AttachedInstanceID)
+	if binding == nil || binding.SurfaceSessionID != surface.SurfaceSessionID {
+		return false
+	}
+	if surface.ActiveQueueItemID != "" && binding.QueueItemID != surface.ActiveQueueItemID {
+		return true
+	}
+	binding.CommandID = commandID
+	return true
+}
+
+func (s *Service) pendingRemoteBindingByCommandForInstance(instanceID, commandID string) *remoteTurnBinding {
+	if s == nil || s.turns == nil {
+		return nil
+	}
+	binding := s.turns.pendingRemoteBinding(instanceID)
+	if binding == nil || strings.TrimSpace(binding.CommandID) != strings.TrimSpace(commandID) {
+		return nil
+	}
+	return binding
 }
 
 func (s *Service) pendingRemoteBinding(instanceID, threadID string) *remoteTurnBinding {
@@ -263,7 +303,10 @@ func (s *Service) promotePendingRemote(instanceID string, event agentproto.Event
 }
 
 func (s *Service) activeRemoteBinding(instanceID, turnID string) *remoteTurnBinding {
-	binding := s.turns.activeRemote[instanceID]
+	if s == nil || s.turns == nil {
+		return nil
+	}
+	binding := s.turns.activeRemoteBinding(instanceID)
 	if binding == nil {
 		return nil
 	}
@@ -325,7 +368,7 @@ func (s *Service) clearRemoteTurn(instanceID, turnID string) {
 	if binding := s.activeRemoteBinding(instanceID, turnID); binding != nil {
 		s.clearActiveRemoteTurn(instanceID)
 	}
-	if binding := s.turns.pendingRemote[instanceID]; binding != nil && (turnID == "" || binding.TurnID == turnID) {
+	if binding := s.turns.pendingRemoteBinding(instanceID); binding != nil && (turnID == "" || binding.TurnID == turnID) {
 		s.clearPendingRemoteTurn(instanceID)
 	}
 }
@@ -345,10 +388,10 @@ func (s *Service) clearRemoteOwnership(surface *state.SurfaceConsoleRecord) {
 	if surface == nil || surface.AttachedInstanceID == "" {
 		return
 	}
-	if binding := s.turns.pendingRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
+	if binding := s.turns.pendingRemoteBinding(surface.AttachedInstanceID); binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
 		s.clearPendingRemoteTurn(surface.AttachedInstanceID)
 	}
-	if binding := s.turns.activeRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
+	if binding := s.turns.activeRemoteBinding(surface.AttachedInstanceID); binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
 		s.clearActiveRemoteTurn(surface.AttachedInstanceID)
 	}
 }
@@ -357,13 +400,24 @@ func (s *Service) remoteBindingForSurface(surface *state.SurfaceConsoleRecord) *
 	if surface == nil || surface.AttachedInstanceID == "" {
 		return nil
 	}
-	if binding := s.turns.activeRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
+	if binding := s.activeRemoteBindingForSurface(surface); binding != nil {
 		return binding
 	}
-	if binding := s.turns.pendingRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
+	if binding := s.turns.pendingRemoteBinding(surface.AttachedInstanceID); binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
 		return binding
 	}
 	return nil
+}
+
+func (s *Service) activeRemoteBindingForSurface(surface *state.SurfaceConsoleRecord) *remoteTurnBinding {
+	if s == nil || s.turns == nil || surface == nil || surface.AttachedInstanceID == "" {
+		return nil
+	}
+	binding := s.turns.activeRemoteBinding(surface.AttachedInstanceID)
+	if binding == nil || binding.SurfaceSessionID != surface.SurfaceSessionID {
+		return nil
+	}
+	return binding
 }
 
 func (s *Service) interruptibleSurfaceTurn(surface *state.SurfaceConsoleRecord) (threadID, turnID string, ok bool) {
@@ -371,7 +425,7 @@ func (s *Service) interruptibleSurfaceTurn(surface *state.SurfaceConsoleRecord) 
 		return "", "", false
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
-	if binding := s.turns.activeRemote[surface.AttachedInstanceID]; binding != nil && binding.SurfaceSessionID == surface.SurfaceSessionID {
+	if binding := s.activeRemoteBindingForSurface(surface); binding != nil {
 		turnID = strings.TrimSpace(binding.TurnID)
 		if turnID != "" {
 			activeThreadID := ""
@@ -408,4 +462,31 @@ func (s *Service) surfaceHasPendingSteer(surface *state.SurfaceConsoleRecord) bo
 		}
 	}
 	return false
+}
+
+func (s *Service) remoteBindingSurfaceByCommand(commandID string) *state.SurfaceConsoleRecord {
+	if s == nil || s.turns == nil {
+		return nil
+	}
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return nil
+	}
+	var surface *state.SurfaceConsoleRecord
+	s.turns.forEachPendingRemote(func(binding *remoteTurnBinding) {
+		if surface != nil || strings.TrimSpace(binding.CommandID) != commandID {
+			return
+		}
+		surface = s.root.Surfaces[binding.SurfaceSessionID]
+	})
+	if surface != nil {
+		return surface
+	}
+	s.turns.forEachActiveRemote(func(binding *remoteTurnBinding) {
+		if surface != nil || strings.TrimSpace(binding.CommandID) != commandID {
+			return
+		}
+		surface = s.root.Surfaces[binding.SurfaceSessionID]
+	})
+	return surface
 }

@@ -30,7 +30,7 @@ func (s *Service) handleCompactCommand(surface *state.SurfaceConsoleRecord, acti
 		}
 		return notice(surface, "compact_busy", "当前实例正在处理其他工作，暂时不能压缩上下文。")
 	}
-	if binding := s.turns.pendingRemote[inst.InstanceID]; binding != nil {
+	if s.hasPendingRemoteTurn(inst.InstanceID) {
 		return notice(surface, "compact_busy", "当前实例正在处理其他工作，暂时不能压缩上下文。")
 	}
 	if inst.ActiveTurnID != "" {

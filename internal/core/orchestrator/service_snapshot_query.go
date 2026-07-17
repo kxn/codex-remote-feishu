@@ -55,11 +55,8 @@ type RemoteTurnStatus struct {
 }
 
 func (s *Service) PendingRemoteTurns() []RemoteTurnStatus {
-	values := make([]RemoteTurnStatus, 0, len(s.turns.pendingRemote))
-	for _, binding := range s.turns.pendingRemote {
-		if binding == nil {
-			continue
-		}
+	values := []RemoteTurnStatus{}
+	s.turns.forEachPendingRemote(func(binding *remoteTurnBinding) {
 		values = append(values, RemoteTurnStatus{
 			InstanceID:       binding.InstanceID,
 			SurfaceSessionID: binding.SurfaceSessionID,
@@ -70,7 +67,7 @@ func (s *Service) PendingRemoteTurns() []RemoteTurnStatus {
 			TurnID:           binding.TurnID,
 			Status:           binding.Status,
 		})
-	}
+	})
 	sort.Slice(values, func(i, j int) bool {
 		if values[i].InstanceID == values[j].InstanceID {
 			return values[i].QueueItemID < values[j].QueueItemID
@@ -81,11 +78,8 @@ func (s *Service) PendingRemoteTurns() []RemoteTurnStatus {
 }
 
 func (s *Service) ActiveRemoteTurns() []RemoteTurnStatus {
-	values := make([]RemoteTurnStatus, 0, len(s.turns.activeRemote))
-	for _, binding := range s.turns.activeRemote {
-		if binding == nil {
-			continue
-		}
+	values := []RemoteTurnStatus{}
+	s.turns.forEachActiveRemote(func(binding *remoteTurnBinding) {
 		values = append(values, RemoteTurnStatus{
 			InstanceID:       binding.InstanceID,
 			SurfaceSessionID: binding.SurfaceSessionID,
@@ -96,7 +90,7 @@ func (s *Service) ActiveRemoteTurns() []RemoteTurnStatus {
 			TurnID:           binding.TurnID,
 			Status:           binding.Status,
 		})
-	}
+	})
 	sort.Slice(values, func(i, j int) bool {
 		if values[i].InstanceID == values[j].InstanceID {
 			return values[i].TurnID < values[j].TurnID

@@ -255,7 +255,7 @@ func (s *Service) maybeDispatchPendingAutoWhip(surface *state.SurfaceConsoleReco
 		return nil
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.turns.pendingRemote[inst.InstanceID] != nil {
+	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) {
 		return nil
 	}
 	threadID, cwd, routeMode, createThread := freezeRoute(inst, surface)

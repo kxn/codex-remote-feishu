@@ -114,21 +114,8 @@ func (s *Service) problemTargets(instanceID string, problem agentproto.ErrorInfo
 	if surface := s.root.Surfaces[problem.SurfaceSessionID]; surface != nil {
 		return []*state.SurfaceConsoleRecord{surface}
 	}
-	if problem.CommandID != "" {
-		for _, binding := range s.turns.pendingRemote {
-			if binding != nil && binding.CommandID == problem.CommandID {
-				if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
-					return []*state.SurfaceConsoleRecord{surface}
-				}
-			}
-		}
-		for _, binding := range s.turns.activeRemote {
-			if binding != nil && binding.CommandID == problem.CommandID {
-				if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
-					return []*state.SurfaceConsoleRecord{surface}
-				}
-			}
-		}
+	if surface := s.remoteBindingSurfaceByCommand(problem.CommandID); surface != nil {
+		return []*state.SurfaceConsoleRecord{surface}
 	}
 	if surface := s.turnSurface(instanceID, problem.ThreadID, problem.TurnID); surface != nil {
 		return []*state.SurfaceConsoleRecord{surface}
