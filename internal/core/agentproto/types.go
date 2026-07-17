@@ -59,6 +59,7 @@ const (
 	EventMCPOAuthLoginCompleted        EventKind = "mcp.oauth_login.completed"
 	EventRequestStarted                EventKind = "request.started"
 	EventRequestResolved               EventKind = "request.resolved"
+	EventProtocolNotice                EventKind = "protocol.notice"
 	EventModelCatalogUpdated           EventKind = "models.catalog.updated"
 	EventSystemError                   EventKind = "system.error"
 )
@@ -122,6 +123,7 @@ type Event struct {
 	TokenUsage           *ThreadTokenUsage        `json:"tokenUsage,omitempty"`
 	ModelReroute         *TurnModelReroute        `json:"modelReroute,omitempty"`
 	ModelCatalog         *ModelCatalogSnapshot    `json:"modelCatalog,omitempty"`
+	ProtocolNotice       *ProtocolNotice          `json:"protocolNotice,omitempty"`
 	PlanSnapshot         *TurnPlanSnapshot        `json:"planSnapshot,omitempty"`
 	ThreadHistory        *ThreadHistoryRecord     `json:"threadHistory,omitempty"`
 	RuntimeStatus        *ThreadRuntimeStatus     `json:"runtimeStatus,omitempty"`

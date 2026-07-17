@@ -801,6 +801,8 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventRequestResolved:
 		return s.filterEventsForSurfaceVisibility(append(preface, s.resolveRequestPrompt(instanceID, event)...))
+	case agentproto.EventProtocolNotice:
+		return s.filterEventsForSurfaceVisibility(append(preface, s.recordProtocolNotice(instanceID, event)...))
 	case agentproto.EventSystemError:
 		problem := problemFromEvent(event)
 		events := append(preface, s.handleCompactProblem(instanceID, problem)...)

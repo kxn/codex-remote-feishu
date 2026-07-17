@@ -198,6 +198,7 @@ type InstanceRecord struct {
 	ActiveThreadID          string
 	ActiveTurnID            string
 	ModelCatalog            *agentproto.ModelCatalogSnapshot
+	ProtocolNotices         []agentproto.ProtocolNotice
 	CWDDefaults             map[string]ModelConfigRecord
 	Threads                 map[string]*ThreadRecord
 }
@@ -225,6 +226,7 @@ type ThreadRecord struct {
 	Archived                bool
 	TrafficClass            agentproto.TrafficClass
 	TokenUsage              *agentproto.ThreadTokenUsage
+	ProtocolNotices         []agentproto.ProtocolNotice
 	UndeliveredReplay       *ThreadReplayRecord
 	LastUsedAt              time.Time
 	ListOrder               int

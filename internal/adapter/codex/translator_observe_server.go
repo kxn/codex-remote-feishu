@@ -532,6 +532,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			TrafficClass: t.trafficClassForTurn(reroute.ThreadID, reroute.TurnID),
 			Initiator:    t.initiatorForTurn(reroute.ThreadID, reroute.TurnID),
 		}}}, nil
+	case "warning", "guardianWarning", "deprecationNotice", "configWarning":
+		return t.observeProtocolNotice(method, message), nil
 	case "turn/started":
 		return t.observeTurnStarted(message), nil
 	case "turn/completed":

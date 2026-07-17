@@ -66,6 +66,9 @@
 - `turn/plan/updated`、`thread/tokenUsage/updated`
   - 已有结构化解析，并进入 relay 标准事件。
   - 证据：`internal/adapter/codex/translator_observe_server.go`
+- passive notices：`warning`、`guardianWarning`、`deprecationNotice`、`configWarning`
+  - 已进入 `protocol.notice` 受控 carrier，并在 orchestrator 只做 instance/thread state-only 记录，不默认投影到飞书消息。
+  - 证据：`internal/adapter/codex/translator_protocol_notice.go`、`internal/core/orchestrator/service_protocol_notice.go`
 - `thread/compact/start -> contextCompaction item lifecycle`
   - 已有主动命令与终态处理，方向与官方一致。
   - 证据：`internal/adapter/codex/translator_commands.go`、`internal/adapter/codex/translator_compact_test.go`
@@ -464,6 +467,17 @@ Headless / cron synthetic initialize 当前 opt-out：
 - `applyPatchApproval` / `execCommandApproval`：作为 legacy approval 兼容，仍归一到 `approval`，同时保留 raw method / raw kind 便于审计。
 
 这只是 request policy hardening，不代表账号登录、attestation、rate limit 或本地时间 API 已产品化。
+
+### 3.14.2 Passive notice carrier
+
+`#691` 已补齐 notice family 的底层 carrier：
+
+- `warning`：抽取 `threadId?` / `message`，进入 `protocol.notice(kind=warning)`。
+- `guardianWarning`：抽取 `threadId` / `message`，进入 `protocol.notice(kind=guardian)`。
+- `deprecationNotice`：抽取 `summary` / `details?`，进入 `protocol.notice(kind=deprecation)`。
+- `configWarning`：抽取 `summary` / `details?` / `path?` / `range?`，进入 `protocol.notice(kind=config)`。
+
+当前 orchestrator 只保留 instance/thread 最近 notice state，不生成 Feishu card、notice 或聊天消息。`windows/worldWritableWarning` 仍保持 planned follow-up，等待确认 upstream payload 后再纳入。
 
 ### 3.15 Apps / MCP / Skills / 其他连接器状态机
 

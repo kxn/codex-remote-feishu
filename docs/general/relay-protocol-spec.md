@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-05-26`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -48,6 +48,10 @@
 - `turn/diff/updated`
 - `turn/plan/updated`
 - `model/rerouted`
+- `warning`
+- `guardianWarning`
+- `deprecationNotice`
+- `configWarning`
 - `turn/completed`
 - `item/started`
 - `item/completed`
@@ -414,6 +418,7 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - `thread.token_usage.updated`
 - `turn.diff.updated`
 - `turn.model_rerouted`
+- `protocol.notice`
 - `config.observed`
 - `local.interaction.observed`
 - `turn.started`
@@ -515,6 +520,41 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - orchestrator 对同一 `(threadId, turnId)` 采用 latest-wins 语义保存最近一次 reroute
 - thread 级当前有效模型会同步切到 `toModel`，这样现有 snapshot / prompt / status 展示不会继续误报 reroute 前模型
 - 当前仍不额外生成 Feishu 强提示；用户可见层先保持安静，后续是否展示、展示到哪里再单独讨论
+
+### 5.4.1 `protocol.notice`
+
+这是 wrapper 对 Codex app-server passive notice notifications 的受控 canonical carrier。
+
+当前覆盖的 native methods：
+
+- `warning`
+- `guardianWarning`
+- `deprecationNotice`
+- `configWarning`
+
+关键字段：
+
+- `threadId?`
+- `turnId?`
+- `protocolNotice`
+  - `method`
+  - `kind`
+    - `warning`
+    - `guardian`
+    - `deprecation`
+    - `config`
+  - `severity`
+  - `summary`
+  - `details?`
+  - `path?`
+  - `range?`
+
+当前语义：
+
+- translator 只抽取白名单字段，不把 native raw payload 常驻到 relay event。
+- orchestrator 只把 notice 记录到 instance / thread 的最近 notice state，默认不生成 Feishu card、notice 或消息。
+- 这条 carrier 是 P1 底层承接，不代表 Feishu notice center 或安全告警产品展示已经完成。
+- `windows/worldWritableWarning` 当前仍是 planned follow-up；在确认上游 payload 前不并入本 carrier。
 
 ### 5.5 `config.observed`
 
