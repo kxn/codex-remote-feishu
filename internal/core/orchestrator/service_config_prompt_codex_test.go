@@ -77,8 +77,8 @@ func TestCodexHeadlessObservedCWDDefaultsDoNotPersistWorkspaceDefaults(t *testin
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "xhigh" {
-		t.Fatalf("expected queue item to freeze fallback model/effort, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "" {
+		t.Fatalf("expected queue item to freeze fallback model without implicit reasoning override, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
 		t.Fatalf("expected queue item to freeze fallback access, got %#v", item.FrozenOverride)
@@ -154,8 +154,8 @@ func TestCodexHeadlessThreadObservedModelReasoningFeedPromptFreeze(t *testing.T)
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.3-codex" || item.FrozenOverride.ReasoningEffort != "medium" {
-		t.Fatalf("expected queue item to freeze thread model/effort, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "gpt-5.3-codex" || item.FrozenOverride.ReasoningEffort != "" {
+		t.Fatalf("expected queue item to freeze thread model without observed reasoning override, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
 		t.Fatalf("expected queue item to keep default access, got %#v", item.FrozenOverride)

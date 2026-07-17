@@ -168,7 +168,7 @@ func TestHeadlessTextMessageIgnoresLegacyCWDDefaultsWhenNoSurfaceOverride(t *tes
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "xhigh" {
+	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "" {
 		t.Fatalf("expected queued item to ignore legacy cwd defaults and freeze surface defaults, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
@@ -262,8 +262,8 @@ func TestTextMessageFreezesFallbackReasoningWhenConfigUnknown(t *testing.T) {
 	if item.FrozenOverride.Model != "gpt-5.4" {
 		t.Fatalf("expected queued item to freeze default model, got %#v", item.FrozenOverride)
 	}
-	if item.FrozenOverride.ReasoningEffort != "xhigh" || item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
-		t.Fatalf("expected queued item to freeze fallback config, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
+		t.Fatalf("expected queued item to freeze fallback config without implicit reasoning, got %#v", item.FrozenOverride)
 	}
 }
 

@@ -18,6 +18,7 @@ const (
 	NoticeDeliveryFamilyTransportDegraded   NoticeDeliveryFamily = "transport_degraded"
 	NoticeDeliveryFamilyDaemonShutdown      NoticeDeliveryFamily = "daemon_shutdown"
 	NoticeDeliveryFamilyGatewayApplyFailure NoticeDeliveryFamily = "gateway_apply_failure"
+	NoticeDeliveryFamilyPromptOverrideGuard NoticeDeliveryFamily = "prompt_override_guard"
 )
 
 func (n Notice) IsGlobalRuntime() bool {

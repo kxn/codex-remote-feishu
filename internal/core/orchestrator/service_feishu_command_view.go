@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -79,6 +80,15 @@ func (s *Service) buildConfigCommandViewState(
 		if kind, text := s.maybeModelCatalogStatusText(inst, truncated); text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
 			view.Config.StatusKind = kind
 			view.Config.StatusText = text
+		}
+	case control.FeishuCommandReasoning:
+		if view.Config.CatalogBackend != agentproto.BackendClaude {
+			options, kind, text := s.modelReasoningCommandOptions(inst, summary.EffectiveModel)
+			view.Config.FormOptions = options
+			if text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
+				view.Config.StatusKind = kind
+				view.Config.StatusText = text
+			}
 		}
 	}
 	return view

@@ -295,14 +295,15 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 	episode.State = state.AutoContinueEpisodeRunning
 	episode.PendingDueAt = time.Time{}
 	episode.CurrentAttemptOutputSeen = false
-	return []eventcontract.Event{
-		s.autoContinueStatusCardEvent(surface, episode),
-		{
-			Kind:             eventcontract.KindAgentCommand,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Command:          s.promptSendCommandFromQueueItem(surface, item, surface.ActorUserID, episode.RootReplyToMessageID),
-		},
-	}
+	command, guardEvents := s.promptSendCommandAndGuardEventsFromQueueItem(surface, item, surface.ActorUserID, episode.RootReplyToMessageID)
+	events := []eventcontract.Event{s.autoContinueStatusCardEvent(surface, episode)}
+	events = append(events, guardEvents...)
+	events = append(events, eventcontract.Event{
+		Kind:             eventcontract.KindAgentCommand,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Command:          command,
+	})
+	return events
 }
 
 func (s *Service) finishAutoContinueEpisode(outcome *remoteTurnOutcome) {

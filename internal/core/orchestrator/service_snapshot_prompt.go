@@ -128,10 +128,14 @@ func (s *Service) resolveFrozenPromptOverride(inst *state.InstanceRecord, surfac
 		}
 		return compactPromptOverride(override)
 	}
+	requestedOverride := compactPromptOverride(override)
+	if promptOverrideIsEmpty(requestedOverride) && surface != nil {
+		requestedOverride = compactPromptOverride(surface.PromptOverride)
+	}
 	resolution := s.resolvePromptConfig(inst, surface, threadID, cwd, override)
 	return state.ModelConfigRecord{
 		Model:           resolution.EffectiveModel.Value,
-		ReasoningEffort: resolution.EffectiveReasoningEffort.Value,
+		ReasoningEffort: requestedOverride.ReasoningEffort,
 		AccessMode:      resolution.EffectiveAccessMode,
 	}
 }

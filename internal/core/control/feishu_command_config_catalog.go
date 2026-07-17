@@ -140,14 +140,43 @@ func reasoningPageViewFromCommandConfigView(view FeishuCatalogConfigView) Feishu
 	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
 		Title: "立即应用",
 		Entries: []CommandCatalogEntry{{
-			Buttons: choiceButtonsFromOptions(reasoningOptionsForConfigView(view), strings.TrimSpace(view.OverrideValue), ""),
+			Buttons: choiceButtonsFromOptions(reasoningOptionsForConfigView(view), strings.TrimSpace(view.OverrideValue), "clear"),
 		}},
 	}})
 }
 
 func reasoningOptionsForConfigView(view FeishuCatalogConfigView) []FeishuCommandOption {
+	if len(view.FormOptions) != 0 {
+		return reasoningOptionsFromFormOptions(view.FormOptions)
+	}
 	backend := agentproto.NormalizeBackend(view.CatalogBackend)
 	return ReasoningOptionsForBackend(backend)
+}
+
+func reasoningOptionsFromFormOptions(options []CommandCatalogFormFieldOption) []FeishuCommandOption {
+	out := make([]FeishuCommandOption, 0, len(options))
+	for _, option := range options {
+		value := strings.ToLower(strings.TrimSpace(option.Value))
+		if value == "" {
+			continue
+		}
+		label := strings.TrimSpace(option.Label)
+		if label == "" {
+			label = value
+		}
+		description := "把后续飞书消息切到 " + value + " 推理，直到 clear 或接管清理。"
+		if value == "clear" {
+			description = "清除飞书临时推理强度覆盖，后续使用当前模型默认。"
+		}
+		out = append(out, FeishuCommandOption{
+			Value:       value,
+			Label:       label,
+			Description: description,
+			CommandText: "/reasoning " + value,
+			MenuKey:     "reasoning_" + value,
+		})
+	}
+	return out
 }
 
 func accessPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {

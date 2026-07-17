@@ -282,20 +282,28 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		Status:      string(item.Status),
 		QueueOff:    true,
 	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, true)
+	command, guardEvents := s.promptSendCommandAndGuardEventsFromQueueItem(surface, item, queuedItemActorUserID(item, surface), originMessageID)
+	events = append(events, guardEvents...)
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindAgentCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,
-		Command:          s.promptSendCommandFromQueueItem(surface, item, queuedItemActorUserID(item, surface), originMessageID),
+		Command:          command,
 	})
 	return events
 }
 
 func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, actorUserID, originMessageID string) *agentproto.Command {
+	command, _ := s.promptSendCommandAndGuardEventsFromQueueItem(surface, item, actorUserID, originMessageID)
+	return command
+}
+
+func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, actorUserID, originMessageID string) (*agentproto.Command, []eventcontract.Event) {
 	if surface == nil || item == nil {
-		return nil
+		return nil, nil
 	}
 	dispatchPlan := queuedItemPromptDispatchPlan(item)
-	return &agentproto.Command{
+	overrides, guard := s.sanitizePromptOverridesForDispatch(surface, item.FrozenOverride)
+	command := &agentproto.Command{
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
 			Surface:   surface.SurfaceSessionID,
@@ -308,12 +316,71 @@ func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRe
 			Inputs: item.Inputs,
 		},
 		Overrides: agentproto.PromptOverrides{
-			Model:           item.FrozenOverride.Model,
-			ReasoningEffort: item.FrozenOverride.ReasoningEffort,
-			AccessMode:      item.FrozenOverride.AccessMode,
+			Model:           overrides.Model,
+			ReasoningEffort: overrides.ReasoningEffort,
+			AccessMode:      overrides.AccessMode,
 			PlanMode:        frozenPlanModeOverrideValue(item.FrozenPlanMode),
 		},
 	}
+	if !guard.DroppedReasoning {
+		return command, nil
+	}
+	return command, []eventcontract.Event{modelReasoningGuardNoticeEvent(surface, guard)}
+}
+
+type promptOverrideGuardResult struct {
+	DroppedReasoning bool
+	Model            string
+	ReasoningEffort  string
+	SupportedEfforts []string
+}
+
+func (s *Service) sanitizePromptOverridesForDispatch(surface *state.SurfaceConsoleRecord, override state.ModelConfigRecord) (state.ModelConfigRecord, promptOverrideGuardResult) {
+	override = compactPromptOverride(override)
+	if surface == nil || strings.TrimSpace(override.ReasoningEffort) == "" {
+		return override, promptOverrideGuardResult{}
+	}
+	inst := s.root.Instances[surface.AttachedInstanceID]
+	backend := s.promptConfigBackend(inst, surface)
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		return override, promptOverrideGuardResult{}
+	}
+	validation := s.checkModelReasoningSupport(inst, override.Model, override.ReasoningEffort)
+	if validation.Support == modelReasoningUnsupported {
+		guard := promptOverrideGuardResult{
+			DroppedReasoning: true,
+			Model:            strings.TrimSpace(override.Model),
+			ReasoningEffort:  strings.TrimSpace(override.ReasoningEffort),
+			SupportedEfforts: append([]string(nil), validation.SupportedEfforts...),
+		}
+		override.ReasoningEffort = ""
+		return compactPromptOverride(override), guard
+	}
+	return compactPromptOverride(override), promptOverrideGuardResult{}
+}
+
+func modelReasoningGuardNoticeEvent(surface *state.SurfaceConsoleRecord, guard promptOverrideGuardResult) eventcontract.Event {
+	model := strings.TrimSpace(guard.Model)
+	effort := strings.TrimSpace(guard.ReasoningEffort)
+	text := "当前模型不支持已保存的推理强度覆盖，已改用模型默认思考强度。"
+	if model != "" && effort != "" {
+		text = "当前模型 " + model + " 不支持已保存的推理强度 " + effort + "，已改用模型默认思考强度。"
+	}
+	if len(guard.SupportedEfforts) != 0 {
+		text += " 当前模型支持：" + strings.Join(guard.SupportedEfforts, "、") + "。"
+	}
+	dedupKey := "prompt_override_guard:" + model + ":" + effort
+	return surfaceEventFromPayload(
+		surface,
+		eventcontract.NoticePayload{Notice: control.Notice{
+			Code:             "prompt_override_reasoning_dropped",
+			Text:             text,
+			DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
+			DeliveryFamily:   control.NoticeDeliveryFamilyPromptOverrideGuard,
+			DeliveryDedupKey: dedupKey,
+		}},
+		eventcontract.EventMeta{},
+	)
 }
 
 func frozenPlanModeOverrideValue(value state.PlanModeSetting) string {

@@ -416,11 +416,60 @@ func TestBareReasoningCommandBuildsParameterCard(t *testing.T) {
 		t.Fatalf("unexpected breadcrumbs: %#v", catalog.Breadcrumbs)
 	}
 	buttons := catalog.Sections[0].Entries[0].Buttons
-	if len(buttons) != 5 || buttons[0].CommandText != "/reasoning low" || buttons[4].CommandText != "/reasoning clear" {
+	if len(buttons) != 1 || buttons[0].CommandText != "/reasoning clear" {
 		t.Fatalf("unexpected reasoning buttons: %#v", buttons)
 	}
 	if len(catalog.Sections) != 1 || catalog.Sections[0].Entries[0].Form != nil {
 		t.Fatalf("expected reasoning card to keep fixed choices only, got %#v", catalog.Sections)
+	}
+}
+
+func TestBareReasoningCommandFiltersOptionsByCurrentModelCatalog(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	surface.PromptOverride.Model = "gpt-5.6"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Online:        true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			Entries: []agentproto.ModelCatalogEntry{{
+				Model:                  "gpt-5.6",
+				DefaultReasoningEffort: "medium",
+				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
+					{ReasoningEffort: "medium"},
+					{ReasoningEffort: "high"},
+				},
+			}},
+		},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReasoningCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/reasoning",
+	})
+	if len(events) != 1 {
+		t.Fatalf("expected reasoning command catalog, got %#v", events)
+	}
+	catalog := commandCatalogFromEvent(t, events[0])
+	buttons := catalog.Sections[0].Entries[0].Buttons
+	if len(buttons) != 3 {
+		t.Fatalf("expected automatic + model-scoped reasoning buttons, got %#v", buttons)
+	}
+	want := []string{"/reasoning clear", "/reasoning medium", "/reasoning high"}
+	for i, command := range want {
+		if buttons[i].CommandText != command {
+			t.Fatalf("button %d command = %q, want %q: %#v", i, buttons[i].CommandText, command, buttons)
+		}
+	}
+	if commandCatalogSummaryText(catalog) == "" {
+		t.Fatalf("expected structured summary sections, got %#v", catalog)
 	}
 }
 

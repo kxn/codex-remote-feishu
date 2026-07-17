@@ -390,7 +390,18 @@ func TestApplySurfaceActionModelInvalidReasoningReturnsCommandView(t *testing.T)
 	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
-	svc.root.Instances["inst-1"] = &state.InstanceRecord{InstanceID: "inst-1"}
+	svc.root.Instances["inst-1"] = &state.InstanceRecord{
+		InstanceID: "inst-1",
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			Entries: []agentproto.ModelCatalogEntry{{
+				Model: "gpt-5.4",
+				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
+					{ReasoningEffort: "medium"},
+					{ReasoningEffort: "high"},
+				},
+			}},
+		},
+	}
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModelCommand,
@@ -406,7 +417,7 @@ func TestApplySurfaceActionModelInvalidReasoningReturnsCommandView(t *testing.T)
 	if catalog.Title != "使用模型" {
 		t.Fatalf("unexpected model error catalog: %#v", catalog)
 	}
-	if summary := commandCatalogSummaryText(catalog); !strings.Contains(summary, "推理强度建议使用") {
+	if summary := commandCatalogSummaryText(catalog); !strings.Contains(summary, "当前模型不支持这个推理强度") || !strings.Contains(summary, "medium、high") {
 		t.Fatalf("expected model usage error summary, got %q", summary)
 	}
 }

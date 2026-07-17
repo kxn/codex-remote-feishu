@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -62,8 +63,17 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/data/dl/droid",
 		WorkspaceKey:  "/data/dl/droid",
-		Online:        true,
-		Threads:       map[string]*state.ThreadRecord{},
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			Entries: []agentproto.ModelCatalogEntry{{
+				Model: "gpt-5.4",
+				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
+					{ReasoningEffort: "medium"},
+					{ReasoningEffort: "high"},
+				},
+			}},
+		},
+		Online:  true,
+		Threads: map[string]*state.ThreadRecord{},
 	})
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -89,7 +99,7 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 		t.Fatalf("expected invalid input to preserve body + notice split, got %#v", catalog)
 	}
 	summaryText := commandCatalogSummaryText(catalog)
-	if !strings.Contains(summaryText, "推理强度建议使用") {
+	if !strings.Contains(summaryText, "当前模型不支持这个推理强度") || !strings.Contains(summaryText, "medium、high") {
 		t.Fatalf("expected invalid input summary, got %q", summaryText)
 	}
 	form := findCommandCatalogForm(catalog, control.FeishuCommandModel, "command_args")

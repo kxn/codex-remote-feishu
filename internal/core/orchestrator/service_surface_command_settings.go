@@ -611,28 +611,59 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 		})
 	}
 	effort := ""
+	modelReasoningWarning := ""
 	if len(parts) == 3 {
 		backend := s.surfaceBackend(surface)
-		normalizedEffort, ok := control.NormalizeReasoningEffortForBackend(backend, parts[2])
-		if !ok {
+		validation := s.validateReasoningEffortForPromptModel(inst, backend, parts[1], parts[2])
+		if validation.Support == modelReasoningUnsupported {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind:       "error",
-				StatusText:       "推理强度建议使用 " + control.ReasoningEffortHintForBackend(backend) + "。",
+				StatusText:       modelReasoningValidationErrorText(validation),
 				FormDefaultValue: actionCommandArgumentText(action),
 			})
 		}
-		effort = normalizedEffort
+		effort = validation.Effort
+		if validation.Support == modelReasoningUnknown && strings.TrimSpace(validation.Detail) != "" {
+			modelReasoningWarning = validation.Detail
+		}
 	}
+	modelReasoningCleanup := ""
 	return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
 		override.Model = parts[1]
 		if len(parts) == 3 {
 			override.ReasoningEffort = effort
+			return
+		}
+		if _, found := modelCatalogEntryForModel(inst, parts[1]); !found {
+			modelReasoningWarning = modelReasoningLookupStatusText(inst, parts[1])
+		}
+		currentEffort := strings.TrimSpace(override.ReasoningEffort)
+		if currentEffort == "" {
+			return
+		}
+		validation := s.checkModelReasoningSupport(inst, parts[1], currentEffort)
+		switch validation.Support {
+		case modelReasoningUnsupported:
+			override.ReasoningEffort = ""
+			modelReasoningCleanup = "当前模型不支持原来的推理强度 " + currentEffort + "，已回到模型默认思考强度。"
+		case modelReasoningUnknown:
+			modelReasoningCleanup = "当前模型无法本地校验原来的推理强度 " + currentEffort + "；已保留该覆盖。"
 		}
 	}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
+		cardText := "已更新飞书临时模型覆盖。"
+		noticeText := formatOverrideNotice(summary, cardText)
+		if modelReasoningCleanup != "" {
+			cardText += " " + modelReasoningCleanup
+			noticeText += "\n" + modelReasoningCleanup
+		}
+		if modelReasoningWarning != "" {
+			cardText += " " + modelReasoningWarning
+			noticeText += "\n" + modelReasoningWarning
+		}
 		return surfaceSettingFeedback{
 			NoticeCode:     "surface_override_updated",
-			NoticeText:     formatOverrideNotice(summary, "已更新飞书临时模型覆盖。"),
-			CardStatusText: "已更新飞书临时模型覆盖。",
+			NoticeText:     noticeText,
+			CardStatusText: cardText,
 		}
 	})
 }
@@ -658,26 +689,62 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 		})
 	}
 	backend := s.surfaceBackend(surface)
-	effort, ok := "", false
+	effort := ""
+	reasoningWarning := ""
 	if len(parts) == 2 {
-		effort, ok = control.NormalizeReasoningEffortForBackend(backend, parts[1])
+		currentModel := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{}).EffectiveModel
+		validation := s.validateReasoningEffortForPromptModel(inst, backend, currentModel, parts[1])
+		if validation.Support == modelReasoningUnsupported {
+			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+				StatusKind:       "error",
+				StatusText:       "用法：`/reasoning` 查看当前配置；`/reasoning <推理强度>`；`/reasoning clear`。" + modelReasoningValidationErrorText(validation),
+				FormDefaultValue: actionCommandArgumentText(action),
+			})
+		}
+		effort = validation.Effort
+		if validation.Support == modelReasoningUnknown && strings.TrimSpace(validation.Detail) != "" {
+			reasoningWarning = validation.Detail
+		}
 	}
-	if len(parts) != 2 || !ok {
+	if len(parts) != 2 || effort == "" {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：`/reasoning` 查看当前配置；`/reasoning <推理强度>`；`/reasoning clear`。推理强度建议使用 " + control.ReasoningEffortHintForBackend(backend) + "。",
+			StatusText:       "用法：`/reasoning` 查看当前配置；`/reasoning <推理强度>`；`/reasoning clear`。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
 	return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
 		override.ReasoningEffort = effort
 	}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
+		cardText := "已更新飞书临时推理强度覆盖。"
+		noticeText := formatOverrideNotice(summary, cardText)
+		if reasoningWarning != "" {
+			cardText += " " + reasoningWarning
+			noticeText += "\n" + reasoningWarning
+		}
 		return surfaceSettingFeedback{
 			NoticeCode:     "surface_override_updated",
-			NoticeText:     formatOverrideNotice(summary, "已更新飞书临时推理强度覆盖。"),
-			CardStatusText: "已更新飞书临时推理强度覆盖。",
+			NoticeText:     noticeText,
+			CardStatusText: cardText,
 		}
 	})
+}
+
+func modelReasoningValidationErrorText(validation modelReasoningValidation) string {
+	if validation.Support != modelReasoningUnsupported {
+		return ""
+	}
+	detail := strings.TrimSpace(validation.Detail)
+	if detail == "" {
+		detail = "当前模型不支持这个推理强度。"
+	}
+	if len(validation.SupportedEfforts) != 0 {
+		detail += " 当前模型支持：" + strings.Join(validation.SupportedEfforts, "、") + "。"
+	}
+	if strings.TrimSpace(validation.Model) != "" {
+		detail += " 模型：" + strings.TrimSpace(validation.Model) + "。"
+	}
+	return detail
 }
 
 func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
