@@ -557,7 +557,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	surfaces := s.findAttachedSurfaces(instanceID)
 	events = append(events, s.restorePendingSteersForInstance(instanceID)...)
 	if len(surfaces) == 0 {
-		delete(s.instanceClaims, instanceID)
+		s.clearInstanceClaim(instanceID)
 		s.clearInstanceRemoteTurnOwnership(instanceID)
 		return events
 	}
@@ -589,7 +589,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 			},
 		})
 	}
-	delete(s.instanceClaims, instanceID)
+	s.clearInstanceClaim(instanceID)
 	s.clearInstanceRemoteTurnOwnership(instanceID)
 	return events
 }
@@ -710,7 +710,7 @@ func (s *Service) RemoveInstance(instanceID string) {
 		_ = s.finalizeDetachedSurface(surface)
 	}
 	delete(s.root.Instances, instanceID)
-	delete(s.instanceClaims, instanceID)
+	s.clearInstanceClaim(instanceID)
 	s.clearInstanceRemoteTurnOwnership(instanceID)
 	delete(s.threadRefreshes, instanceID)
 	s.clearItemBuffers(instanceID, "", "")

@@ -283,6 +283,34 @@ func (s *Service) stopOfflineNotice(surface *state.SurfaceConsoleRecord) control
 	}
 }
 
+func (s *Service) workspaceClaimSurfaceRaw(workspaceKey string) *state.SurfaceConsoleRecord {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return nil
+	}
+	if claim := s.workspaceClaims[workspaceKey]; claim != nil {
+		surface := s.root.Surfaces[claim.SurfaceSessionID]
+		if surface != nil && surfaceUsesWorkspaceClaimsRaw(surface) && s.surfaceCurrentWorkspaceKeyRaw(surface) == workspaceKey {
+			return surface
+		}
+	}
+	var owner *state.SurfaceConsoleRecord
+	for _, surface := range s.root.Surfaces {
+		if surface == nil || !surfaceUsesWorkspaceClaimsRaw(surface) {
+			continue
+		}
+		if s.surfaceCurrentWorkspaceKeyRaw(surface) != workspaceKey {
+			continue
+		}
+		if owner == nil ||
+			surface.LastInboundAt.After(owner.LastInboundAt) ||
+			(surface.LastInboundAt.Equal(owner.LastInboundAt) && surface.SurfaceSessionID < owner.SurfaceSessionID) {
+			owner = surface
+		}
+	}
+	return owner
+}
+
 func (s *Service) workspaceClaimSurface(workspaceKey string) *state.SurfaceConsoleRecord {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
@@ -333,11 +361,22 @@ func (s *Service) claimWorkspace(surface *state.SurfaceConsoleRecord, workspaceK
 		s.releaseSurfaceWorkspaceClaim(surface)
 	}
 	surface.ClaimedWorkspaceKey = workspaceKey
+	s.bindWorkspaceClaim(surface, workspaceKey)
+	return true
+}
+
+func (s *Service) bindWorkspaceClaim(surface *state.SurfaceConsoleRecord, workspaceKey string) {
+	if s == nil || surface == nil {
+		return
+	}
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return
+	}
 	s.workspaceClaims[workspaceKey] = &workspaceClaimRecord{
 		WorkspaceKey:     workspaceKey,
 		SurfaceSessionID: surface.SurfaceSessionID,
 	}
-	return true
 }
 
 func (s *Service) releaseSurfaceWorkspaceClaim(surface *state.SurfaceConsoleRecord) {
@@ -395,11 +434,33 @@ func (s *Service) claimInstance(surface *state.SurfaceConsoleRecord, instanceID 
 	if owner := s.instanceClaimSurface(instanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return false
 	}
+	s.bindInstanceClaim(surface, instanceID)
+	return true
+}
+
+func (s *Service) bindInstanceClaim(surface *state.SurfaceConsoleRecord, instanceID string) {
+	if s == nil || surface == nil {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return
+	}
 	s.instanceClaims[instanceID] = &instanceClaimRecord{
 		InstanceID:       instanceID,
 		SurfaceSessionID: surface.SurfaceSessionID,
 	}
-	return true
+}
+
+func (s *Service) clearInstanceClaim(instanceID string) {
+	if s == nil {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return
+	}
+	delete(s.instanceClaims, instanceID)
 }
 
 func (s *Service) releaseSurfaceInstanceClaim(surface *state.SurfaceConsoleRecord) {
@@ -453,11 +514,7 @@ func (s *Service) claimThread(surface *state.SurfaceConsoleRecord, inst *state.I
 	if owner := s.threadClaimSurface(threadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return false
 	}
-	s.threadClaims[threadID] = &threadClaimRecord{
-		ThreadID:         threadID,
-		InstanceID:       inst.InstanceID,
-		SurfaceSessionID: surface.SurfaceSessionID,
-	}
+	s.bindThreadClaim(surface, inst.InstanceID, threadID)
 	return true
 }
 
@@ -468,12 +525,24 @@ func (s *Service) claimKnownThread(surface *state.SurfaceConsoleRecord, inst *st
 	if owner := s.threadClaimSurface(threadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return false
 	}
+	s.bindThreadClaim(surface, inst.InstanceID, threadID)
+	return true
+}
+
+func (s *Service) bindThreadClaim(surface *state.SurfaceConsoleRecord, instanceID, threadID string) {
+	if s == nil || surface == nil {
+		return
+	}
+	threadID = strings.TrimSpace(threadID)
+	instanceID = strings.TrimSpace(instanceID)
+	if threadID == "" {
+		return
+	}
 	s.threadClaims[threadID] = &threadClaimRecord{
 		ThreadID:         threadID,
-		InstanceID:       inst.InstanceID,
+		InstanceID:       instanceID,
 		SurfaceSessionID: surface.SurfaceSessionID,
 	}
-	return true
 }
 
 func (s *Service) releaseSurfaceThreadClaim(surface *state.SurfaceConsoleRecord) {

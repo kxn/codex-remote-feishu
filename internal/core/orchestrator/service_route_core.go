@@ -50,34 +50,6 @@ func (s *Service) surfaceCurrentWorkspaceKeyRaw(surface *state.SurfaceConsoleRec
 	return ""
 }
 
-func (s *Service) workspaceClaimSurfaceRaw(workspaceKey string) *state.SurfaceConsoleRecord {
-	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
-	if workspaceKey == "" {
-		return nil
-	}
-	if claim := s.workspaceClaims[workspaceKey]; claim != nil {
-		surface := s.root.Surfaces[claim.SurfaceSessionID]
-		if surface != nil && surfaceUsesWorkspaceClaimsRaw(surface) && s.surfaceCurrentWorkspaceKeyRaw(surface) == workspaceKey {
-			return surface
-		}
-	}
-	var owner *state.SurfaceConsoleRecord
-	for _, surface := range s.root.Surfaces {
-		if surface == nil || !surfaceUsesWorkspaceClaimsRaw(surface) {
-			continue
-		}
-		if s.surfaceCurrentWorkspaceKeyRaw(surface) != workspaceKey {
-			continue
-		}
-		if owner == nil ||
-			surface.LastInboundAt.After(owner.LastInboundAt) ||
-			(surface.LastInboundAt.Equal(owner.LastInboundAt) && surface.SurfaceSessionID < owner.SurfaceSessionID) {
-			owner = surface
-		}
-	}
-	return owner
-}
-
 func (s *Service) transitionSurfaceRouteCore(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, next surfaceRouteCoreState) bool {
 	next, inst, ok := s.normalizeSurfaceRouteCoreState(surface, inst, next)
 	if !ok || !s.canTransitionSurfaceRouteCore(surface, inst, next) {
@@ -110,10 +82,7 @@ func (s *Service) transitionSurfaceRouteCore(surface *state.SurfaceConsoleRecord
 	case next.AttachedInstanceID != "" && surfaceUsesWorkspaceClaimsRaw(surface):
 		surface.ClaimedWorkspaceKey = next.WorkspaceKey
 		if !sameWorkspaceClaim {
-			s.workspaceClaims[next.WorkspaceKey] = &workspaceClaimRecord{
-				WorkspaceKey:     next.WorkspaceKey,
-				SurfaceSessionID: surface.SurfaceSessionID,
-			}
+			s.bindWorkspaceClaim(surface, next.WorkspaceKey)
 		}
 	case next.WorkspaceKey != "":
 		surface.ClaimedWorkspaceKey = next.WorkspaceKey
@@ -122,17 +91,10 @@ func (s *Service) transitionSurfaceRouteCore(surface *state.SurfaceConsoleRecord
 	}
 
 	if next.AttachedInstanceID != "" && !sameAttachment {
-		s.instanceClaims[next.AttachedInstanceID] = &instanceClaimRecord{
-			InstanceID:       next.AttachedInstanceID,
-			SurfaceSessionID: surface.SurfaceSessionID,
-		}
+		s.bindInstanceClaim(surface, next.AttachedInstanceID)
 	}
 	if next.SelectedThreadID != "" {
-		s.threadClaims[next.SelectedThreadID] = &threadClaimRecord{
-			ThreadID:         next.SelectedThreadID,
-			InstanceID:       next.AttachedInstanceID,
-			SurfaceSessionID: surface.SurfaceSessionID,
-		}
+		s.bindThreadClaim(surface, next.AttachedInstanceID, next.SelectedThreadID)
 	}
 	return true
 }
