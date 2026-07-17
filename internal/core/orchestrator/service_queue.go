@@ -798,16 +798,14 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []even
 }
 
 func (s *Service) storePendingTurnText(instanceID, threadID, turnID, itemID, itemKind, text string) []eventcontract.Event {
-	key := turnRenderKey(instanceID, threadID, turnID)
-	previous := s.progress.pendingTurnText[key]
-	s.progress.pendingTurnText[key] = &completedTextItem{
+	previous := s.progress.storePendingTurnText(&completedTextItem{
 		InstanceID: instanceID,
 		ThreadID:   threadID,
 		TurnID:     turnID,
 		ItemID:     itemID,
 		ItemKind:   itemKind,
 		Text:       text,
-	}
+	})
 	if previous == nil {
 		return nil
 	}
@@ -819,15 +817,13 @@ func (s *Service) flushPendingTurnText(instanceID, threadID, turnID string, fina
 }
 
 func (s *Service) flushPendingTurnTextWithSummary(instanceID, threadID, turnID string, final bool, summary *control.FileChangeSummary, turnDiff *control.TurnDiffSnapshot, finalSummary *control.FinalTurnSummary) []eventcontract.Event {
-	key := turnRenderKey(instanceID, threadID, turnID)
-	pending := s.progress.pendingTurnText[key]
+	pending := s.progress.takePendingTurnText(instanceID, threadID, turnID)
 	if pending == nil {
 		if final && (summary != nil || turnDiff != nil || finalSummary != nil) {
 			return s.renderTextItemWithSummary(instanceID, threadID, turnID, "file-change-summary", "", true, summary, turnDiff, finalSummary)
 		}
 		return nil
 	}
-	delete(s.progress.pendingTurnText, key)
 	return s.renderTextItemWithSummary(pending.InstanceID, pending.ThreadID, pending.TurnID, pending.ItemID, pending.Text, final, summary, turnDiff, finalSummary)
 }
 
@@ -838,8 +834,7 @@ func (s *Service) flushPendingTurnTextIfTurnContinues(instanceID string, event a
 	if event.Kind == agentproto.EventTurnCompleted {
 		return nil
 	}
-	key := turnRenderKey(instanceID, event.ThreadID, event.TurnID)
-	pending := s.progress.pendingTurnText[key]
+	pending := s.pendingTurnTextItem(instanceID, event.ThreadID, event.TurnID)
 	if pending == nil {
 		return nil
 	}

@@ -741,7 +741,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		deleteMatchingItemBuffers(s.itemBuffers, instanceID, event.ThreadID, event.TurnID)
 		summary := s.progress.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
 		turnDiff := s.progress.takeTurnDiffSnapshot(instanceID, event.ThreadID, event.TurnID)
-		finalText := pendingTurnTextValue(s.progress.pendingTurnText, instanceID, event.ThreadID, event.TurnID)
+		finalText := s.pendingTurnTextValue(instanceID, event.ThreadID, event.TurnID)
 		finalizeTurnOutput := shouldMaterializeFinalTurnOutput(event, finalText)
 		finalRenderSummary := (*control.FileChangeSummary)(nil)
 		finalRenderTurnDiff := (*control.TurnDiffSnapshot)(nil)

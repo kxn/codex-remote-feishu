@@ -227,23 +227,19 @@ func (s *Service) maybeSealPlanProposalForTurnStart(instanceID, threadID, turnID
 }
 
 func (s *Service) storePendingPlanProposal(instanceID, threadID, turnID, itemID, itemKind, text string) []eventcontract.Event {
-	key := turnRenderKey(instanceID, threadID, turnID)
-	s.progress.pendingPlanProposal[key] = &completedTextItem{
+	s.progress.storePendingPlanProposal(&completedTextItem{
 		InstanceID: instanceID,
 		ThreadID:   threadID,
 		TurnID:     turnID,
 		ItemID:     itemID,
 		ItemKind:   itemKind,
 		Text:       strings.TrimSpace(text),
-	}
+	})
 	return nil
 }
 
 func (s *Service) takePendingPlanProposal(instanceID, threadID, turnID string) *completedTextItem {
-	key := turnRenderKey(instanceID, threadID, turnID)
-	pending := s.progress.pendingPlanProposal[key]
-	delete(s.progress.pendingPlanProposal, key)
-	return pending
+	return s.progress.takePendingPlanProposal(instanceID, threadID, turnID)
 }
 
 func planProposalSelectedThreadID(binding *remoteTurnBinding, threadID string) string {

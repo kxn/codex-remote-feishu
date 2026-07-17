@@ -715,16 +715,5 @@ func (s *Service) RemoveInstance(instanceID string) {
 	delete(s.threadRefreshes, instanceID)
 	deleteMatchingItemBuffers(s.itemBuffers, instanceID, "", "")
 	deleteMatchingMCPToolCallProgress(s.progress.mcpToolCallProgress, instanceID, "", "")
-	for key, item := range s.progress.pendingTurnText {
-		if item == nil || item.InstanceID != instanceID {
-			continue
-		}
-		delete(s.progress.pendingTurnText, key)
-	}
-	for key, item := range s.progress.pendingPlanProposal {
-		if item == nil || item.InstanceID != instanceID {
-			continue
-		}
-		delete(s.progress.pendingPlanProposal, key)
-	}
+	s.clearPendingProgressTextForInstance(instanceID)
 }

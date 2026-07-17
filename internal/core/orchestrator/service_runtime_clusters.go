@@ -432,6 +432,86 @@ func newServiceProgressRuntime(service *Service) *serviceProgressRuntime {
 	}
 }
 
+func (r *serviceProgressRuntime) pendingTurnTextItem(instanceID, threadID, turnID string) *completedTextItem {
+	if r == nil {
+		return nil
+	}
+	return r.pendingTurnText[turnRenderKey(instanceID, threadID, turnID)]
+}
+
+func (r *serviceProgressRuntime) storePendingTurnText(item *completedTextItem) *completedTextItem {
+	if r == nil || item == nil {
+		return nil
+	}
+	key := turnRenderKey(item.InstanceID, item.ThreadID, item.TurnID)
+	previous := r.pendingTurnText[key]
+	r.pendingTurnText[key] = item
+	return previous
+}
+
+func (r *serviceProgressRuntime) takePendingTurnText(instanceID, threadID, turnID string) *completedTextItem {
+	if r == nil {
+		return nil
+	}
+	key := turnRenderKey(instanceID, threadID, turnID)
+	pending := r.pendingTurnText[key]
+	delete(r.pendingTurnText, key)
+	return pending
+}
+
+func (r *serviceProgressRuntime) storePendingPlanProposal(item *completedTextItem) {
+	if r == nil || item == nil {
+		return
+	}
+	r.pendingPlanProposal[turnRenderKey(item.InstanceID, item.ThreadID, item.TurnID)] = item
+}
+
+func (r *serviceProgressRuntime) pendingPlanProposalItem(instanceID, threadID, turnID string) *completedTextItem {
+	if r == nil {
+		return nil
+	}
+	return r.pendingPlanProposal[turnRenderKey(instanceID, threadID, turnID)]
+}
+
+func (r *serviceProgressRuntime) takePendingPlanProposal(instanceID, threadID, turnID string) *completedTextItem {
+	if r == nil {
+		return nil
+	}
+	key := turnRenderKey(instanceID, threadID, turnID)
+	pending := r.pendingPlanProposal[key]
+	delete(r.pendingPlanProposal, key)
+	return pending
+}
+
+func (r *serviceProgressRuntime) clearPendingTextForTurn(instanceID, threadID, turnID string) {
+	if r == nil || strings.TrimSpace(turnID) == "" {
+		return
+	}
+	key := turnRenderKey(instanceID, threadID, turnID)
+	delete(r.pendingTurnText, key)
+	delete(r.pendingPlanProposal, key)
+}
+
+func (r *serviceProgressRuntime) clearPendingTextForInstance(instanceID string) {
+	if r == nil {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return
+	}
+	for key, item := range r.pendingTurnText {
+		if item != nil && item.InstanceID == instanceID {
+			delete(r.pendingTurnText, key)
+		}
+	}
+	for key, item := range r.pendingPlanProposal {
+		if item != nil && item.InstanceID == instanceID {
+			delete(r.pendingPlanProposal, key)
+		}
+	}
+}
+
 func (r *serviceProgressRuntime) instanceHasCompact(instanceID string) bool {
 	if r == nil || r.service == nil {
 		return false

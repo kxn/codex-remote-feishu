@@ -130,14 +130,6 @@ func (s *Service) clearAutoWhipPending(surface *state.SurfaceConsoleRecord) {
 	surface.AutoWhip.PendingReplyToMessagePreview = ""
 }
 
-func pendingTurnTextValue(pending map[string]*completedTextItem, instanceID, threadID, turnID string) string {
-	item := pending[turnRenderKey(instanceID, threadID, turnID)]
-	if item == nil {
-		return ""
-	}
-	return strings.TrimSpace(item.Text)
-}
-
 func normalizeAutoWhipText(text string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(text)), "")
 }

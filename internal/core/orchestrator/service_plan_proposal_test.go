@@ -71,7 +71,7 @@ func TestCompletePlanItemStoresMaterializedBufferedTextForProposal(t *testing.T)
 	if len(events) != 0 {
 		t.Fatalf("expected completed plan item to stay buffered until turn completion, got %#v", events)
 	}
-	pending := svc.progress.pendingPlanProposal[turnRenderKey("inst-1", "thread-1", "turn-1")]
+	pending := svc.pendingPlanProposalItem("inst-1", "thread-1", "turn-1")
 	if pending == nil || pending.Text != "hello world" {
 		t.Fatalf("expected completed plan item to store full materialized text, got %#v", pending)
 	}
