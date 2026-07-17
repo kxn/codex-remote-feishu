@@ -142,9 +142,7 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 		return
 	}
 	if surface.AttachedInstanceID != "" {
-		compact := s.turns.compactTurns[surface.AttachedInstanceID]
-		if compact != nil && compact.SurfaceSessionID == surfaceID && compact.CommandID == "" {
-			compact.CommandID = commandID
+		if s.bindPendingCompactCommand(surface, commandID) {
 			return
 		}
 		if s.bindPendingRemoteCommand(surface, commandID) {

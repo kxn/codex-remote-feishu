@@ -87,6 +87,41 @@ func (s *Service) handleCompactCommand(surface *state.SurfaceConsoleRecord, acti
 	return events
 }
 
+func (s *Service) bindPendingCompactCommand(surface *state.SurfaceConsoleRecord, commandID string) bool {
+	if s == nil || s.turns == nil || surface == nil {
+		return false
+	}
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" || strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return false
+	}
+	compact := s.turns.compactTurns[surface.AttachedInstanceID]
+	if compact == nil || compact.SurfaceSessionID != surface.SurfaceSessionID || compact.CommandID != "" {
+		return false
+	}
+	compact.CommandID = commandID
+	return true
+}
+
+func (s *Service) compactBindingMatchesTurn(instanceID, turnID string) bool {
+	return s.compactBindingForTurn(instanceID, "", turnID) != nil
+}
+
+func (s *Service) compactBindingForTurn(instanceID, threadID, turnID string) *compactTurnBinding {
+	if s == nil || s.turns == nil {
+		return nil
+	}
+	binding := s.turns.compactTurns[strings.TrimSpace(instanceID)]
+	if binding == nil || strings.TrimSpace(binding.TurnID) == "" || binding.TurnID != strings.TrimSpace(turnID) {
+		return nil
+	}
+	threadID = strings.TrimSpace(threadID)
+	if binding.ThreadID != "" && threadID != "" && binding.ThreadID != threadID {
+		return nil
+	}
+	return binding
+}
+
 func (s *Service) promoteCompactTurn(instanceID string, event agentproto.Event) []eventcontract.Event {
 	if strings.TrimSpace(instanceID) == "" {
 		return nil
