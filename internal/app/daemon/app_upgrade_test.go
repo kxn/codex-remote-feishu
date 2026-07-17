@@ -67,6 +67,24 @@ func TestUpgradeLatestManualCheckPromptsIdleSurface(t *testing.T) {
 	}
 }
 
+func TestSurfaceByIDLockedTrimsSurfaceID(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, _ := newUpgradeTestApp(t, gateway)
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionStatus,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	if surface := app.surfaceByIDLocked(" feishu:main:chat:1 \n"); surface == nil {
+		t.Fatal("expected surface lookup to trim ids")
+	}
+}
+
 func TestUpgradeTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)

@@ -121,23 +121,13 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 			continue
 		}
 		desired[entry.SurfaceSessionID] = entry
-		if current, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok && surfaceresume.SameEntryContent(current, entry) {
-			continue
-		}
-		entry.UpdatedAt = now
-		if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
-			log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
-		}
-		a.markVSCodeDetachedPromptScanDueLocked()
+		a.putSurfaceResumeEntryLocked(entry, now)
 	}
 	for surfaceID := range existing {
 		if _, ok := desired[surfaceID]; ok {
 			continue
 		}
-		if err := a.surfaceResumeRuntime.store.Delete(surfaceID); err != nil {
-			log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
-		}
-		a.markVSCodeDetachedPromptScanDueLocked()
+		a.deleteSurfaceResumeEntryLocked(surfaceID)
 	}
 	a.syncVSCodeResumeNoticeStateLocked(desired)
 	a.syncSurfaceResumeRecoveryStateLocked()
@@ -164,20 +154,10 @@ func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTa
 		}
 		entry, ok := a.currentSurfaceResumeEntryLocked(surface, clearResumeTarget)
 		if !ok {
-			if err := a.surfaceResumeRuntime.store.Delete(strings.TrimSpace(surface.SurfaceSessionID)); err != nil {
-				log.Printf("clear surface resume state failed: surface=%s err=%v", surface.SurfaceSessionID, err)
-			}
-			a.markVSCodeDetachedPromptScanDueLocked()
+			a.deleteSurfaceResumeEntryLocked(strings.TrimSpace(surface.SurfaceSessionID))
 			continue
 		}
-		if current, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok && surfaceresume.SameEntryContent(current, entry) {
-			continue
-		}
-		entry.UpdatedAt = now
-		if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
-			log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
-		}
-		a.markVSCodeDetachedPromptScanDueLocked()
+		a.putSurfaceResumeEntryLocked(entry, now)
 	}
 	if !touched {
 		return
@@ -206,10 +186,7 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 		}
 		surface := surfacesByID[surfaceID]
 		if surface == nil {
-			if err := a.surfaceResumeRuntime.store.Delete(surfaceID); err != nil {
-				log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
-			}
-			a.markVSCodeDetachedPromptScanDueLocked()
+			a.deleteSurfaceResumeEntryLocked(surfaceID)
 			touched = true
 			continue
 		}
@@ -219,28 +196,49 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 		}
 		entry, ok := a.currentSurfaceResumeEntryLocked(surface, clearResumeTarget)
 		if !ok {
-			if err := a.surfaceResumeRuntime.store.Delete(surfaceID); err != nil {
-				log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
-			}
-			a.markVSCodeDetachedPromptScanDueLocked()
+			a.deleteSurfaceResumeEntryLocked(surfaceID)
 			touched = true
 			continue
 		}
-		if current, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok && surfaceresume.SameEntryContent(current, entry) {
-			continue
+		if a.putSurfaceResumeEntryLocked(entry, now) {
+			touched = true
 		}
-		entry.UpdatedAt = now
-		if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
-			log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
-		}
-		a.markVSCodeDetachedPromptScanDueLocked()
-		touched = true
 	}
 	if !touched {
 		return
 	}
 	a.syncVSCodeResumeNoticeStateLocked(nil)
 	a.syncSurfaceResumeRecoveryStateLocked()
+}
+
+func (a *App) putSurfaceResumeEntryLocked(entry surfaceresume.Entry, now time.Time) bool {
+	if a.surfaceResumeRuntime.store == nil {
+		return false
+	}
+	if current, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok && surfaceresume.SameEntryContent(current, entry) {
+		return false
+	}
+	entry.UpdatedAt = now
+	if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
+		log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
+	}
+	a.markVSCodeDetachedPromptScanDueLocked()
+	return true
+}
+
+func (a *App) deleteSurfaceResumeEntryLocked(surfaceID string) bool {
+	if a.surfaceResumeRuntime.store == nil {
+		return false
+	}
+	surfaceID = strings.TrimSpace(surfaceID)
+	if surfaceID == "" {
+		return false
+	}
+	if err := a.surfaceResumeRuntime.store.Delete(surfaceID); err != nil {
+		log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
+	}
+	a.markVSCodeDetachedPromptScanDueLocked()
+	return true
 }
 
 func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecord, clearResumeTarget bool) (surfaceresume.Entry, bool) {
@@ -358,20 +356,6 @@ func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleReco
 	return surfaceResumeTarget{}, false
 }
 
-func (a *App) surfaceRecordLocked(surfaceID string) *state.SurfaceConsoleRecord {
-	surfaceID = strings.TrimSpace(surfaceID)
-	if surfaceID == "" {
-		return nil
-	}
-	for _, surface := range a.service.Surfaces() {
-		if surface == nil || strings.TrimSpace(surface.SurfaceSessionID) != surfaceID {
-			continue
-		}
-		return surface
-	}
-	return nil
-}
-
 func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before *control.Snapshot) bool {
 	switch action.Kind {
 	case control.ActionDetach:
@@ -385,7 +369,7 @@ func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before
 			agentproto.NormalizeBackend(before.Backend) == agentproto.NormalizeBackend(after.Backend) {
 			return false
 		}
-		if afterSurface := a.surfaceRecordLocked(action.SurfaceSessionID); afterSurface != nil {
+		if afterSurface := a.surfaceByIDLocked(action.SurfaceSessionID); afterSurface != nil {
 			if _, ok := a.currentSurfaceResumeTargetLocked(afterSurface); ok {
 				return false
 			}

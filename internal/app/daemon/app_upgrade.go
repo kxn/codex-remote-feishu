@@ -486,8 +486,12 @@ func (a *App) selectIdleSurfaceLocked(preferredSurfaceID string) *state.SurfaceC
 }
 
 func (a *App) surfaceByIDLocked(surfaceID string) *state.SurfaceConsoleRecord {
+	surfaceID = strings.TrimSpace(surfaceID)
+	if surfaceID == "" {
+		return nil
+	}
 	for _, surface := range a.service.Surfaces() {
-		if surface != nil && surface.SurfaceSessionID == surfaceID {
+		if surface != nil && strings.TrimSpace(surface.SurfaceSessionID) == surfaceID {
 			return surface
 		}
 	}

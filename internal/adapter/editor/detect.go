@@ -4,12 +4,11 @@ import (
 	"crypto/sha256"
 	"io"
 	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/managedshim"
 	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 )
 
 const (
@@ -131,17 +130,7 @@ func matchesEmbeddedManagedShim(path string) bool {
 }
 
 func sameCleanPath(left, right string) bool {
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-	if left == "" || right == "" {
-		return false
-	}
-	left = filepath.Clean(left)
-	right = filepath.Clean(right)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(left, right)
-	}
-	return left == right
+	return pathcompare.SameCleanPlatformPath(left, right)
 }
 
 func sameFileContents(leftPath, rightPath string) (bool, error) {
