@@ -189,9 +189,10 @@ func (a *App) runStandaloneCodexUpgrade(tx *codexupgraderuntime.Transaction, onC
 	a.mu.Lock()
 	events := a.finishStandaloneCodexUpgradeLocked(tx)
 	if len(events) != 0 {
-		a.handleUIEventsLocked(context.Background(), events)
+		a.queueDaemonAsyncUIEventsLocked(events)
 	}
 	a.mu.Unlock()
+	a.runQueuedDaemonAsyncResults()
 
 	if onComplete != nil {
 		onComplete(runErr)

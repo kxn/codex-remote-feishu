@@ -77,7 +77,7 @@ func (a *App) runDevUpgradeCheck(request devUpgradeCheckRequest) {
 
 	events := a.applyDevUpgradeCheckResultLocked(request, manifest, asset, err, completedAt)
 	if len(events) > 0 {
-		a.handleUIEventsLocked(context.Background(), events)
+		a.queueDaemonAsyncUIEventsLocked(events)
 	}
 }
 

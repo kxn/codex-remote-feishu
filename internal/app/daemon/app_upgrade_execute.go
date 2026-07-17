@@ -62,9 +62,9 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	stateValue := request.State
 	targetVersion := strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion)
 	if request.FlowID != "" {
-		a.mu.Lock()
-		a.handleUIEventsLocked(context.Background(), a.updateUpgradeOwnerFlowRunningLocked(request.SurfaceSessionID, request.FlowID, upgraderuntime.OwnerFlowStageRunning, "正在下载目标版本", "正在下载升级所需的目标版本。", true))
-		a.mu.Unlock()
+		a.enqueueDaemonAsyncResult(daemonAsyncResult{Apply: func(ctx context.Context, app *App) {
+			app.handleUIEventsLocked(ctx, app.updateUpgradeOwnerFlowRunningLocked(request.SurfaceSessionID, request.FlowID, upgraderuntime.OwnerFlowStageRunning, "正在下载目标版本", "正在下载升级所需的目标版本。", true))
+		}})
 	}
 	var targetBinary string
 	var err error
@@ -108,9 +108,9 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	}
 
 	if request.FlowID != "" {
-		a.mu.Lock()
-		a.handleUIEventsLocked(context.Background(), a.updateUpgradeOwnerFlowRunningLocked(request.SurfaceSessionID, request.FlowID, upgraderuntime.OwnerFlowStageRunning, "正在准备回滚方案", "目标版本已下载，正在准备回滚信息和切换事务。", true))
-		a.mu.Unlock()
+		a.enqueueDaemonAsyncResult(daemonAsyncResult{Apply: func(ctx context.Context, app *App) {
+			app.handleUIEventsLocked(ctx, app.updateUpgradeOwnerFlowRunningLocked(request.SurfaceSessionID, request.FlowID, upgraderuntime.OwnerFlowStageRunning, "正在准备回滚方案", "目标版本已下载，正在准备回滚信息和切换事务。", true))
+		}})
 	}
 	rollbackCandidate, err := install.PrepareRollbackCandidate(stateValue, targetVersion)
 	if err != nil {
@@ -152,7 +152,8 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 		return
 	}
 	if request.FlowID != "" {
-		a.handleUIEventsLocked(context.Background(), a.sealUpgradeOwnerFlowRestartingLocked(request.SurfaceSessionID, request.FlowID))
+		events := a.sealUpgradeOwnerFlowRestartingLocked(request.SurfaceSessionID, request.FlowID)
+		a.queueDaemonAsyncUIEventsLocked(events)
 	}
 	a.mu.Unlock()
 
@@ -191,11 +192,12 @@ func (a *App) finishUpgradeStartFailure(request upgradeStartRequest, err error) 
 		_ = a.writeUpgradeStateLocked(stateValue)
 	}
 	if request.FlowID != "" {
-		a.handleUIEventsLocked(context.Background(), a.finishUpgradeOwnerStartErrorLocked(request, err))
+		events := a.finishUpgradeOwnerStartErrorLocked(request, err)
+		a.queueDaemonAsyncUIEventsLocked(events)
 		return
 	}
 	if request.SurfaceSessionID != "" {
-		a.handleUIEventsLocked(context.Background(), []eventcontract.Event{
+		a.queueDaemonAsyncUIEventsLocked([]eventcontract.Event{
 			upgradeNoticeEvent(request.SurfaceSessionID, "upgrade_prepare_failed", err.Error()),
 		})
 	}

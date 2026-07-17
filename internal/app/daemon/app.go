@@ -140,6 +140,7 @@ type App struct {
 	gatewayRunDone              chan struct{}
 	relayConnections            map[string]*relayConnectionState
 	feishuRuntime               feishuRuntimeState
+	daemonAsyncRuntime          daemonAsyncRuntimeState
 	cronRuntime                 cronRuntimeState
 	claudeWorkspaceProfileState claudeWorkspaceProfileRuntimeState
 

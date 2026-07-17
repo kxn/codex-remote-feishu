@@ -182,7 +182,7 @@ func (a *App) runUpgradeCheck(request upgradeCheckRequest) {
 
 	events := a.applyUpgradeCheckResultLocked(request, release, err, completedAt)
 	if len(events) > 0 {
-		a.handleUIEventsLocked(context.Background(), events)
+		a.queueDaemonAsyncUIEventsLocked(events)
 	}
 }
 

@@ -820,6 +820,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	if a.shuttingDown {
 		return
 	}
+	a.drainDaemonAsyncResultsLocked(ctx)
 	uiEvents := a.service.Tick(now)
 	uiEvents = append(uiEvents, a.maybeFlushUpgradeResultLocked(now)...)
 	a.recordManagedHeadlessResumeOutcomeEventsLocked(uiEvents, now)

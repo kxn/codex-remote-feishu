@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,12 +17,12 @@ import (
 func TestCodexUpgradeOwnerFlowOpensWithoutAutoCheck(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, _ := newUpgradeTestApp(t, gateway)
-	lookupCalls := 0
+	var lookupCalls atomic.Int32
 	app.codexUpgradeRuntime.Inspect = func(context.Context, codexupgrade.InspectOptions) (codexupgrade.Installation, error) {
 		return stubStandaloneCodexInstallation("0.123.0"), nil
 	}
 	app.codexUpgradeRuntime.LatestLookup = func(context.Context) (string, error) {
-		lookupCalls++
+		lookupCalls.Add(1)
 		return "0.124.0", nil
 	}
 
@@ -36,8 +37,8 @@ func TestCodexUpgradeOwnerFlowOpensWithoutAutoCheck(t *testing.T) {
 	openOp := waitForCodexUpgradeOperation(t, gateway, func(op feishu.Operation) bool {
 		return op.CardTitle == "Codex 升级"
 	})
-	if lookupCalls != 0 {
-		t.Fatalf("expected opening owner card not to auto-check latest version, got %d lookups", lookupCalls)
+	if got := lookupCalls.Load(); got != 0 {
+		t.Fatalf("expected opening owner card not to auto-check latest version, got %d lookups", got)
 	}
 	if !operationHasActionValue(openOp, upgradeOwnerPayloadKind, upgradeOwnerPayloadOptionKey, upgradeOwnerActionCheck) {
 		t.Fatalf("expected initial Codex upgrade card to expose check action, got %#v", openOp.CardElements)
@@ -47,12 +48,12 @@ func TestCodexUpgradeOwnerFlowOpensWithoutAutoCheck(t *testing.T) {
 func TestCodexUpgradeOwnerFlowCheckIsRepeatable(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, _ := newUpgradeTestApp(t, gateway)
-	lookupCalls := 0
+	var lookupCalls atomic.Int32
 	app.codexUpgradeRuntime.Inspect = func(context.Context, codexupgrade.InspectOptions) (codexupgrade.Installation, error) {
 		return stubStandaloneCodexInstallation("0.123.0"), nil
 	}
 	app.codexUpgradeRuntime.LatestLookup = func(context.Context) (string, error) {
-		lookupCalls++
+		lookupCalls.Add(1)
 		return "0.124.0", nil
 	}
 
@@ -82,8 +83,8 @@ func TestCodexUpgradeOwnerFlowCheckIsRepeatable(t *testing.T) {
 	firstReady := waitForCodexUpgradeOperation(t, gateway, func(op feishu.Operation) bool {
 		return op.Kind == feishu.OperationUpdateCard && op.MessageID == openOp.MessageID && op.CardTitle == "发现可升级版本"
 	})
-	if lookupCalls != 1 {
-		t.Fatalf("expected first check to perform exactly one lookup, got %d", lookupCalls)
+	if got := lookupCalls.Load(); got != 1 {
+		t.Fatalf("expected first check to perform exactly one lookup, got %d", got)
 	}
 	if !operationHasActionValue(firstReady, upgradeOwnerPayloadKind, upgradeOwnerPayloadOptionKey, upgradeOwnerActionConfirm) {
 		t.Fatalf("expected ready card to expose confirm button, got %#v", firstReady.CardElements)
@@ -105,10 +106,10 @@ func TestCodexUpgradeOwnerFlowCheckIsRepeatable(t *testing.T) {
 		},
 	})
 	secondReady := waitForRepeatedCodexReadyCard(t, gateway, openOp.MessageID, before, func() bool {
-		return lookupCalls >= 2
+		return lookupCalls.Load() >= 2
 	})
-	if lookupCalls != 2 {
-		t.Fatalf("expected repeat check to perform a second lookup, got %d", lookupCalls)
+	if got := lookupCalls.Load(); got != 2 {
+		t.Fatalf("expected repeat check to perform a second lookup, got %d", got)
 	}
 	if !operationHasActionValue(secondReady, upgradeOwnerPayloadKind, upgradeOwnerPayloadOptionKey, upgradeOwnerActionCheck) {
 		t.Fatalf("expected repeated check to return to the same stable card, got %#v", secondReady.CardElements)

@@ -56,7 +56,7 @@ func (a *App) handleAdminWebCommand(command control.DaemonCommand) []eventcontra
 			return
 		}
 		if err != nil {
-			a.handleUIEventsLocked(context.Background(), []eventcontract.Event{
+			a.queueDaemonAsyncUIEventsLocked([]eventcontract.Event{
 				adminNoticeEvent(surfaceID, "admin_web_issue_failed", fmt.Sprintf("生成管理页外链失败：%v\n如只需要本机地址，可改用 `/admin localweb`。", err)),
 			})
 			return
@@ -67,7 +67,7 @@ func (a *App) handleAdminWebCommand(command control.DaemonCommand) []eventcontra
 			issued.ExternalURL,
 			issued.ExpiresAt.UTC().Format(time.RFC3339),
 		)
-		a.handleUIEventsLocked(context.Background(), []eventcontract.Event{
+		a.queueDaemonAsyncUIEventsLocked([]eventcontract.Event{
 			adminNoticeEvent(surfaceID, "admin_web_link_ready", text),
 		})
 	}()

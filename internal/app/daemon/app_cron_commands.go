@@ -136,13 +136,13 @@ func (a *App) finishCronAsyncCommandLocked(surfaceID string, event *eventcontrac
 		return
 	}
 	if err != nil {
-		a.handleUIEventsLocked(context.Background(), []eventcontract.Event{
+		a.queueDaemonAsyncUIEventsLocked([]eventcontract.Event{
 			cronrt.NoticeEvent(surfaceID, "cron_command_failed", fmt.Sprintf("Cron 操作失败：%v", err)),
 		})
 		return
 	}
 	if event != nil {
-		a.handleUIEventsLocked(context.Background(), []eventcontract.Event{*event})
+		a.queueDaemonAsyncUIEventsLocked([]eventcontract.Event{*event})
 	}
 }
 

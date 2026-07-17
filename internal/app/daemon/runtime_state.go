@@ -48,6 +48,11 @@ type claudeWorkspaceProfileRuntimeState struct {
 	store *claudeworkspaceprofile.Store
 }
 
+type daemonAsyncRuntimeState struct {
+	pending     []daemonAsyncResult
+	drainQueued bool
+}
+
 type cronRuntimeState struct {
 	stateIOMu             sync.Mutex
 	loaded                bool
