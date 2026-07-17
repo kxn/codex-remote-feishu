@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
+	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -86,7 +88,7 @@ func TestProjectTargetPickerUsesUpdateCardWhenMessageIDPresent(t *testing.T) {
 }
 
 func TestTargetPickerProcessingStageRendersCancelOnlyForGitImport(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:              "picker-1",
 		Stage:                 control.FeishuTargetPickerStageProcessing,
 		StatusTitle:           "正在导入 Git 工作区",
@@ -115,7 +117,7 @@ func TestTargetPickerProcessingStageRendersCancelOnlyForGitImport(t *testing.T) 
 }
 
 func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:             "picker-1",
 		Title:                "选择工作区与会话",
 		WorkspacePlaceholder: "选择工作区",
@@ -164,7 +166,7 @@ func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
 }
 
 func TestTargetPickerElementsRenderLockedWorkspaceAsReadOnlyContext(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:                 "picker-1",
 		WorkspaceSelectionLocked: true,
 		SelectedWorkspaceKey:     "/data/dl/web",
@@ -254,8 +256,8 @@ func TestTargetPickerElementsPaginateLargeDualSelectAndKeepFooter(t *testing.T) 
 		SessionOptions:       sessionOptions,
 	}
 
-	elements := targetPickerElements(view, "life-large")
-	size, err := cardtransport.InteractiveMessageCardSize(view.Title, "", targetPickerTheme(view), elements, true)
+	elements := projectorpkg.TargetPickerElements(view, "life-large")
+	size, err := cardtransport.InteractiveMessageCardSize(view.Title, "", projectorpkg.TargetPickerTheme(view), elements, true)
 	if err != nil {
 		t.Fatalf("measure target picker card: %v", err)
 	}
@@ -284,7 +286,7 @@ func TestTargetPickerElementsPaginateLargeDualSelectAndKeepFooter(t *testing.T) 
 	if !sawConfirm || !containsRenderedTag(elements, "hr") {
 		t.Fatalf("expected large target picker to keep footer actions visible, got %#v", elements)
 	}
-	if !containsCardTextExact(elements, targetPickerPaginationHint) {
+	if !containsCardTextExact(elements, selectflow.DefaultPaginationHint) {
 		t.Fatalf("expected large target picker to render pagination hint, got %#v", elements)
 	}
 }
@@ -316,8 +318,8 @@ func TestTargetPickerElementsPaginateLockedWorkspaceSessionAndKeepFooter(t *test
 		SessionOptions:           sessionOptions,
 	}
 
-	elements := targetPickerElements(view, "life-locked-large")
-	size, err := cardtransport.InteractiveMessageCardSize(view.Title, "", targetPickerTheme(view), elements, true)
+	elements := projectorpkg.TargetPickerElements(view, "life-locked-large")
+	size, err := cardtransport.InteractiveMessageCardSize(view.Title, "", projectorpkg.TargetPickerTheme(view), elements, true)
 	if err != nil {
 		t.Fatalf("measure locked target picker card: %v", err)
 	}
@@ -341,13 +343,13 @@ func TestTargetPickerElementsPaginateLockedWorkspaceSessionAndKeepFooter(t *test
 	if !sawSessionPage || sawWorkspacePage {
 		t.Fatalf("expected locked target picker to paginate only the session lane, got %#v", elements)
 	}
-	if !containsCardTextExact(elements, targetPickerPaginationHint) {
+	if !containsCardTextExact(elements, selectflow.DefaultPaginationHint) {
 		t.Fatalf("expected locked target picker to render pagination hint, got %#v", elements)
 	}
 }
 
 func TestTargetPickerTerminalStageSealsCardWithoutInteractiveControls(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:               "picker-1",
 		Stage:                  control.FeishuTargetPickerStageSucceeded,
 		StatusTitle:            "已切换会话",
@@ -375,7 +377,7 @@ func leftPad3(value int) string {
 
 func TestTargetPickerTerminalSectionsKeepDynamicValuesOutOfMarkdown(t *testing.T) {
 	dynamic := "https://example.com/repo`name`.git"
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:    "picker-1",
 		Stage:       control.FeishuTargetPickerStageProcessing,
 		StatusTitle: "正在导入 Git 工作区",
@@ -407,7 +409,7 @@ func TestTargetPickerTerminalSectionsKeepDynamicValuesOutOfMarkdown(t *testing.T
 
 func TestTargetPickerMessageDynamicTextUsesPlainText(t *testing.T) {
 	dynamic := "目标目录已存在：/tmp/*/`demo`。"
-	elements := targetPickerMessageElements([]control.FeishuTargetPickerMessage{{
+	elements := projectorpkg.TargetPickerMessageElements([]control.FeishuTargetPickerMessage{{
 		Level: control.FeishuTargetPickerMessageDanger,
 		Text:  dynamic,
 	}})
@@ -425,7 +427,7 @@ func TestTargetPickerMessageDynamicTextUsesPlainText(t *testing.T) {
 }
 
 func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:             "picker-1",
 		Title:                "选择工作区与会话",
 		WorkspacePlaceholder: "选择工作区",
@@ -466,7 +468,7 @@ func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testi
 }
 
 func TestTargetPickerEditingCardUsesStepHeaderInsteadOfSummary(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:               "picker-1",
 		StageLabel:             "模式/目标",
 		Question:               "切到哪个工作区 / 会话？",
@@ -493,7 +495,7 @@ func TestTargetPickerEditingCardUsesStepHeaderInsteadOfSummary(t *testing.T) {
 }
 
 func TestTargetPickerElementsRenderLocalDirectoryOpenPathAction(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:                 "picker-1",
 		Title:                    "选择工作区与会话",
 		Page:                     control.FeishuTargetPickerPageLocalDirectory,
@@ -527,7 +529,7 @@ func TestTargetPickerElementsRenderLocalDirectoryOpenPathAction(t *testing.T) {
 }
 
 func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:                 "picker-1",
 		Title:                    "选择工作区与会话",
 		Page:                     control.FeishuTargetPickerPageGit,
@@ -625,7 +627,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 }
 
 func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *testing.T) {
-	elements := targetPickerElements(control.FeishuTargetPickerView{
+	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
 		PickerID:                 "picker-1",
 		Title:                    "从 Worktree 新建工作区",
 		Page:                     control.FeishuTargetPickerPageWorktree,

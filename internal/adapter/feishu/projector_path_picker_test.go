@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
+	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -79,7 +81,7 @@ func TestProjectPathPickerUsesUpdateCardWhenMessageIDPresent(t *testing.T) {
 }
 
 func TestPathPickerTerminalElementsHideSelectorsAndButtons(t *testing.T) {
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:    "picker-1",
 		MessageID:   "om-card-1",
 		Mode:        control.PathPickerModeFile,
@@ -115,7 +117,7 @@ func TestPathPickerTerminalElementsHideSelectorsAndButtons(t *testing.T) {
 
 func TestPathPickerTerminalSectionsKeepDynamicValuesOutOfMarkdown(t *testing.T) {
 	dynamic := "report `*.md`"
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:    "picker-1",
 		Mode:        control.PathPickerModeFile,
 		Title:       "发送文件",
@@ -137,7 +139,7 @@ func TestPathPickerTerminalSectionsKeepDynamicValuesOutOfMarkdown(t *testing.T) 
 }
 
 func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
 		Mode:         control.PathPickerModeFile,
 		Title:        "选择文件",
@@ -189,7 +191,7 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 }
 
 func TestDirectoryModePathPickerUsesCompactDirectorySelect(t *testing.T) {
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
 		Mode:         control.PathPickerModeDirectory,
 		Title:        "选择目录",
@@ -256,7 +258,7 @@ func TestDirectoryModePathPickerUsesCompactDirectorySelect(t *testing.T) {
 }
 
 func TestDirectoryModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
 		Mode:         control.PathPickerModeDirectory,
 		Title:        "选择目录",
@@ -309,7 +311,7 @@ func TestPathPickerFileModePaginatesOversizedLanesAndKeepsFooter(t *testing.T) {
 		})
 	}
 
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:        "picker-1",
 		Mode:            control.PathPickerModeFile,
 		Title:           "选择文件",
@@ -353,7 +355,7 @@ func TestPathPickerFileModePaginatesOversizedLanesAndKeepsFooter(t *testing.T) {
 	if !sawConfirm || !containsRenderedTag(elements, "hr") {
 		t.Fatalf("expected large file picker to keep footer actions visible, got %#v", elements)
 	}
-	if !containsCardTextExact(elements, pathPickerPaginationHint) {
+	if !containsCardTextExact(elements, selectflow.DefaultPaginationHint) {
 		t.Fatalf("expected large file picker to render pagination hint, got %#v", elements)
 	}
 }
@@ -370,7 +372,7 @@ func TestPathPickerDirectoryModePaginatesOversizedLaneAndKeepsFixedOptions(t *te
 		})
 	}
 
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:        "picker-1",
 		Mode:            control.PathPickerModeDirectory,
 		Title:           "选择目录",
@@ -397,7 +399,7 @@ func TestPathPickerDirectoryModePaginatesOversizedLaneAndKeepsFixedOptions(t *te
 	if len(options) < 2 || options[0] != "." || options[1] != ".." {
 		t.Fatalf("expected paginated directory picker to keep fixed current/parent options, got %v", options)
 	}
-	if !containsCardTextExact(elements, pathPickerPaginationHint) {
+	if !containsCardTextExact(elements, selectflow.DefaultPaginationHint) {
 		t.Fatalf("expected directory path picker to render pagination hint, got %#v", elements)
 	}
 	if !containsRenderedTag(elements, "hr") {
@@ -417,7 +419,7 @@ func TestPathPickerOwnerSubpageDirectoryPaginatesOversizedLaneAndKeepsFooter(t *
 		})
 	}
 
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:        "picker-1",
 		Mode:            control.PathPickerModeDirectory,
 		Title:           "选择目录",
@@ -440,7 +442,7 @@ func TestPathPickerOwnerSubpageDirectoryPaginatesOversizedLaneAndKeepsFooter(t *
 	if size > cardtransport.InteractiveCardTransportLimitBytes {
 		t.Fatalf("expected owner-subpage path picker to fit transport budget, got %d bytes", size)
 	}
-	if !containsCardTextExact(elements, pathPickerPaginationHint) {
+	if !containsCardTextExact(elements, selectflow.DefaultPaginationHint) {
 		t.Fatalf("expected owner-subpage path picker to render pagination hint, got %#v", elements)
 	}
 	if !containsRenderedTag(elements, "hr") {
@@ -449,7 +451,7 @@ func TestPathPickerOwnerSubpageDirectoryPaginatesOversizedLaneAndKeepsFooter(t *
 }
 
 func TestOwnerSubpageDirectoryPathPickerUsesStepHeaderLayout(t *testing.T) {
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
 		Mode:         control.PathPickerModeDirectory,
 		Title:        "选择工作区与会话",
@@ -480,7 +482,7 @@ func TestOwnerSubpageDirectoryPathPickerUsesStepHeaderLayout(t *testing.T) {
 }
 
 func TestFileModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
 		Mode:         control.PathPickerModeFile,
 		Title:        "选择文件",
@@ -512,7 +514,7 @@ func TestFileModePathPickerPrependsParentOptionWhenCanGoUp(t *testing.T) {
 }
 
 func TestFileModePathPickerOmitsParentOptionAtRoot(t *testing.T) {
-	elements := pathPickerElements(control.FeishuPathPickerView{
+	elements := projectorpkg.PathPickerElements(control.FeishuPathPickerView{
 		PickerID:     "picker-1",
 		Mode:         control.PathPickerModeFile,
 		Title:        "选择文件",

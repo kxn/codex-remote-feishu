@@ -3,12 +3,13 @@ package feishu
 import (
 	"testing"
 
+	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func TestRequestPromptStructuredFormRendersMultiSelectStatic(t *testing.T) {
-	elements := requestPromptElements(control.FeishuRequestView{
+	elements := projectorpkg.RequestPromptElements(control.FeishuRequestView{
 		RequestID:       "req-1",
 		RequestType:     "approval",
 		SemanticKind:    control.RequestSemanticPlanConfirmation,
