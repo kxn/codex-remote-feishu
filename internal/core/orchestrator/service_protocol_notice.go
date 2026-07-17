@@ -22,7 +22,7 @@ func (s *Service) recordProtocolNotice(instanceID string, event agentproto.Event
 	}
 	thread := s.ensureThread(inst, notice.ThreadID)
 	thread.ProtocolNotices = appendBoundedProtocolNotice(thread.ProtocolNotices, *notice)
-	return nil
+	return s.projectProtocolNotice(instanceID, *notice)
 }
 
 func appendBoundedProtocolNotice(notices []agentproto.ProtocolNotice, notice agentproto.ProtocolNotice) []agentproto.ProtocolNotice {

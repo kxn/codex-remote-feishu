@@ -46,6 +46,7 @@ type Service struct {
 	pickers                   *servicePickerRuntime
 	catalog                   *serviceCatalogRuntime
 	progress                  *serviceProgressRuntime
+	activeNoticeCooldowns     map[string]time.Time
 }
 
 type itemBuffer struct {
@@ -204,19 +205,20 @@ func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Se
 		planner = renderer.NewPlanner()
 	}
 	svc := &Service{
-		now:              now,
-		config:           cfg,
-		root:             state.NewRoot(),
-		renderer:         planner,
-		handoffUntil:     map[string]time.Time{},
-		pausedUntil:      map[string]time.Time{},
-		abandoningUntil:  map[string]time.Time{},
-		itemBuffers:      map[string]*itemBuffer{},
-		threadRefreshes:  map[string]bool{},
-		instanceClaims:   map[string]*instanceClaimRecord{},
-		workspaceClaims:  map[string]*workspaceClaimRecord{},
-		threadClaims:     map[string]*threadClaimRecord{},
-		surfaceUIRuntime: map[string]*surfaceUIRuntimeRecord{},
+		now:                   now,
+		config:                cfg,
+		root:                  state.NewRoot(),
+		renderer:              planner,
+		handoffUntil:          map[string]time.Time{},
+		pausedUntil:           map[string]time.Time{},
+		abandoningUntil:       map[string]time.Time{},
+		itemBuffers:           map[string]*itemBuffer{},
+		threadRefreshes:       map[string]bool{},
+		instanceClaims:        map[string]*instanceClaimRecord{},
+		workspaceClaims:       map[string]*workspaceClaimRecord{},
+		threadClaims:          map[string]*threadClaimRecord{},
+		surfaceUIRuntime:      map[string]*surfaceUIRuntimeRecord{},
+		activeNoticeCooldowns: map[string]time.Time{},
 	}
 	svc.turns = newServiceTurnRuntime(svc)
 	svc.pickers = newServicePickerRuntime(svc)

@@ -24,5 +24,5 @@ func (s *Service) applyCapabilityStateUpdate(instanceID string, event agentproto
 		thread := s.ensureThread(inst, update.ThreadID)
 		thread.LastCapabilityState = agentproto.CloneCapabilityStateUpdate(update)
 	}
-	return nil
+	return s.projectCapabilityStateUpdate(instanceID, *update)
 }
