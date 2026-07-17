@@ -782,6 +782,11 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemDelta(instanceID, event)...))
+	case agentproto.EventItemTerminalInteraction, agentproto.EventItemReasoningSummaryPartAdded:
+		return s.filterEventsForSurfaceVisibility(preface)
+	case agentproto.EventItemFileChangePatchUpdated:
+		s.progress.recordTurnFileChangeSnapshot(instanceID, event)
+		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventItemCompleted:
 		if s.maybeApplyReviewLifecycleItem(instanceID, event) {
 			return s.filterEventsForSurfaceVisibility(preface)

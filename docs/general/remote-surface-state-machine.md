@@ -189,7 +189,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
       3. 若目标 `workspace+profile` 没有快照，则会恢复成空 override + `PlanMode=off`，不会沿用别的 workspace/profile 残留值。
       4. `Model` 与 `PlanMode` 明确不在这套快照里；Claude workspace/profile 恢复时会主动清掉这些临时运行态，不把它们当作可持久化热改能力。
    7. Claude `ExitPlanMode` 被批准后，本地 surface 不会在“用户点了批准”时立刻清掉 `PlanMode`；只有等到对应 `request.resolved(plan_confirmation + accept)` 真正到达，才会同步清理显式 plan override。`decline` / `revise` / cancel / 过期都不会误清。
-   8. 若某轮 turn 结束时缓存了 `item/plan/delta` 最终正文，surface 会在 final 落完后追加一张“提案计划”手动 handoff 卡；这张卡不是 request gate，不阻塞后续输入，但命中新的输入、route 变化、turn 变化或用户显式点击动作后都会 seal。
+   8. 若某轮 turn 结束时存在 completed plan item text（或仅作为兼容兜底的 `item/plan/delta` 草稿），surface 会在 final 落完后追加一张“提案计划”手动 handoff 卡；completed item text 优先于 delta 草稿。这张卡不是 request gate，不阻塞后续输入，但命中新的输入、route 变化、turn 变化或用户显式点击动作后都会 seal。
       对 `keep_surface_selection` 的 detached-branch turn，这张卡仍回原 surface，并按 source/main thread 判断是否 suppress，不会因为 execution thread 不同而被误吞。
    9. 点击提案计划卡的 `直接执行` / `清空上下文并执行`，会先把当前 surface 的 `PlanMode` 切回显式 `off`，再继续派发 follow-up turn；`取消` 只 seal 卡片，不改 route。
 9. `PromptOverride` 当前承载飞书侧显式 model / reasoning / access requested override：

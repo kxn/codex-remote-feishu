@@ -155,14 +155,13 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 		{
 			Direction:               ProtocolDirectionServerNotification,
 			TargetLayer:             ProtocolTargetCanonicalized,
-			Status:                  ProtocolStatusPartial,
+			Status:                  ProtocolStatusSupported,
 			Owner:                   "codex-translator",
 			Cadence:                 ProtocolCadenceStreamDelta,
 			AuthoritativeFinal:      "item/completed",
 			FeishuProjectionPolicy:  FeishuProjectionFinalOnly,
 			HeadlessOptOutCandidate: true,
-			OptOutBlockedBy:         "#693 must prove completed item is authoritative for current product use.",
-			Notes:                   "Known follow-up: plan deltas are not authoritative proposal text.",
+			Notes:                   "Delta carriers are parsed but Feishu projection is final-only or coalesced; completed item text is authoritative for plan proposals.",
 			Methods: []string{
 				"item/plan/delta",
 				"item/reasoning/textDelta",
@@ -174,12 +173,12 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 		{
 			Direction:              ProtocolDirectionServerNotification,
 			TargetLayer:            ProtocolTargetStateOnly,
-			Status:                 ProtocolStatusPlanned,
-			Owner:                  "#693",
+			Status:                 ProtocolStatusSupported,
+			Owner:                  "codex-translator",
 			Cadence:                ProtocolCadenceSnapshot,
 			AuthoritativeFinal:     "item/completed or latest snapshot",
 			FeishuProjectionPolicy: FeishuProjectionLatestOnly,
-			Notes:                  "Final-state and structural notifications planned for delta suppression audit.",
+			Notes:                  "Structural notifications are carried as state-only/no-op inputs; patchUpdated uses latest-only file-change snapshot state.",
 			Methods: []string{
 				"item/commandExecution/terminalInteraction",
 				"item/fileChange/patchUpdated",

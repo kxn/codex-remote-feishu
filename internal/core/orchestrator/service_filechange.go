@@ -58,6 +58,37 @@ func (r *serviceProgressRuntime) recordTurnFileChanges(instanceID string, event 
 	}
 }
 
+func (r *serviceProgressRuntime) recordTurnFileChangeSnapshot(instanceID string, event agentproto.Event) {
+	if event.ItemKind != "file_change" || len(event.FileChanges) == 0 {
+		return
+	}
+	key := turnRenderKey(instanceID, event.ThreadID, event.TurnID)
+	summary := &turnFileChangeSummary{Files: map[string]*turnFileChangeEntry{}}
+	for _, change := range event.FileChanges {
+		path := strings.TrimSpace(change.Path)
+		movePath := strings.TrimSpace(change.MovePath)
+		entryKey := path
+		if entryKey == "" {
+			entryKey = movePath
+		}
+		if entryKey == "" {
+			continue
+		}
+		added, removed := fileChangeLineCounts(change)
+		summary.Files[entryKey] = &turnFileChangeEntry{
+			Path:         path,
+			MovePath:     movePath,
+			AddedLines:   added,
+			RemovedLines: removed,
+		}
+	}
+	if len(summary.Files) == 0 {
+		delete(r.turnFileChanges, key)
+		return
+	}
+	r.turnFileChanges[key] = summary
+}
+
 func (r *serviceProgressRuntime) takeTurnFileChangeSummary(instanceID, threadID, turnID string) *control.FileChangeSummary {
 	key := turnRenderKey(instanceID, threadID, turnID)
 	summary := r.turnFileChanges[key]

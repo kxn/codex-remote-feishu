@@ -821,6 +821,27 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
 		}}}, nil
+	case "item/commandExecution/terminalInteraction":
+		params := lookupMap(message, "params")
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
+		metadata := map[string]any{}
+		if processID := lookupStringFromAny(params["processId"]); processID != "" {
+			metadata["processId"] = processID
+		}
+		if stdin := lookupStringFromAny(params["stdin"]); stdin != "" {
+			metadata["stdin"] = stdin
+		}
+		return Result{Events: []agentproto.Event{{
+			Kind:         agentproto.EventItemTerminalInteraction,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "command_execution",
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+			Metadata:     metadata,
+		}}}, nil
 	case "item/fileChange/outputDelta":
 		threadID := lookupString(message, "params", "threadId")
 		turnID := lookupString(message, "params", "turnId")
@@ -833,6 +854,33 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			Delta:        lookupString(message, "params", "delta"),
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
+		}}}, nil
+	case "item/fileChange/patchUpdated":
+		params := lookupMap(message, "params")
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
+		return Result{Events: []agentproto.Event{{
+			Kind:         agentproto.EventItemFileChangePatchUpdated,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "file_change",
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+			FileChanges:  extractFileChangeRecords("file_change", params),
+		}}}, nil
+	case "item/reasoning/summaryPartAdded":
+		threadID := lookupString(message, "params", "threadId")
+		turnID := lookupString(message, "params", "turnId")
+		return Result{Events: []agentproto.Event{{
+			Kind:         agentproto.EventItemReasoningSummaryPartAdded,
+			ThreadID:     threadID,
+			TurnID:       turnID,
+			ItemID:       lookupString(message, "params", "itemId"),
+			ItemKind:     "reasoning_summary",
+			TrafficClass: t.trafficClassForTurn(threadID, turnID),
+			Initiator:    t.initiatorForTurn(threadID, turnID),
+			Metadata:     map[string]any{"summaryIndex": lookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
 		}}}, nil
 	default:
 		return Result{}, nil

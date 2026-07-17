@@ -1157,6 +1157,54 @@ func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 	}
 }
 
+func TestCommandExecutionOutputDeltaDoesNotEmitLivePatch(t *testing.T) {
+	now := time.Date(2026, 7, 17, 14, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "处理一下", "turn-1")
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Status:   "in_progress",
+		Metadata: map[string]any{
+			"command": "npm test",
+		},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected command start progress event, got %#v", started)
+	}
+
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution_output",
+		Delta:    "line 1\n",
+	}); len(events) != 0 {
+		t.Fatalf("expected command output delta not to emit live Feishu patch, got %#v", events)
+	}
+	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution_output",
+		Delta:    "line 2\n",
+	}); len(events) != 0 {
+		t.Fatalf("expected repeated command output delta not to emit live Feishu patch, got %#v", events)
+	}
+	if progress := svc.root.Surfaces["surface-1"].ActiveExecProgress; progress == nil || len(progress.Entries) != 1 || progress.Entries[0].Kind != "command_execution" {
+		t.Fatalf("expected output deltas to leave command progress state unchanged, got %#v", progress)
+	}
+}
+
 func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

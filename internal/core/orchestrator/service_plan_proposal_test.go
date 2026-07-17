@@ -160,6 +160,71 @@ func TestTurnCompletedPresentsPlanProposalCard(t *testing.T) {
 	}
 }
 
+func TestPlanProposalUsesCompletedTextOverPlanDelta(t *testing.T) {
+	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := &state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	}
+	svc.UpsertInstance(inst)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	surface.PlanMode = state.PlanModeSettingOn
+	svc.bindSurfaceToThreadMode(surface, inst, "thread-1", state.RouteModePinned)
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemDelta,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-plan",
+		ItemKind: "plan",
+		Delta:    "draft plan",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "item-plan",
+		ItemKind: "plan",
+		Metadata: map[string]any{"text": "final plan"},
+	})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventTurnCompleted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		Status:   "completed",
+	})
+
+	var page *control.FeishuPageView
+	for _, event := range events {
+		catalog, ok := eventCommandCatalog(event)
+		if !ok {
+			continue
+		}
+		page = catalog
+		break
+	}
+	if page == nil {
+		t.Fatalf("expected plan proposal command page, got %#v", events)
+	}
+	if len(page.BodySections) != 1 || len(page.BodySections[0].Lines) != 1 {
+		t.Fatalf("expected one proposal body line, got %#v", page.BodySections)
+	}
+	if got := page.BodySections[0].Lines[0]; got != "final plan" {
+		t.Fatalf("expected completed plan text to override delta buffer, got %q", got)
+	}
+}
+
 func TestDetachedBranchTurnCompletedPresentsPlanProposalWithoutStealingSelection(t *testing.T) {
 	now := time.Date(2026, 4, 26, 12, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

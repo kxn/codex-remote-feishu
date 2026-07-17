@@ -877,6 +877,47 @@ func TestObserveServerFileChangeLifecyclePreservesStructuredChanges(t *testing.T
 	}
 }
 
+func TestObserveServerStructuralItemNotifications(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	terminal, err := tr.ObserveServer([]byte(`{"method":"item/commandExecution/terminalInteraction","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"cmd-1","processId":"proc-1","stdin":"y\n"}}`))
+	if err != nil {
+		t.Fatalf("observe terminal interaction: %v", err)
+	}
+	if len(terminal.Events) != 1 {
+		t.Fatalf("expected one terminal interaction event, got %#v", terminal.Events)
+	}
+	if event := terminal.Events[0]; event.Kind != agentproto.EventItemTerminalInteraction || event.ItemKind != "command_execution" || event.Metadata["processId"] != "proc-1" || event.Metadata["stdin"] != "y\n" {
+		t.Fatalf("unexpected terminal interaction event: %#v", event)
+	}
+
+	summary, err := tr.ObserveServer([]byte(`{"method":"item/reasoning/summaryPartAdded","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"reason-1","summaryIndex":2}}`))
+	if err != nil {
+		t.Fatalf("observe reasoning summary part added: %v", err)
+	}
+	if len(summary.Events) != 1 {
+		t.Fatalf("expected one summary part event, got %#v", summary.Events)
+	}
+	if event := summary.Events[0]; event.Kind != agentproto.EventItemReasoningSummaryPartAdded || event.ItemKind != "reasoning_summary" || event.Metadata["summaryIndex"] != 2 {
+		t.Fatalf("unexpected summary part event: %#v", event)
+	}
+
+	patch, err := tr.ObserveServer([]byte(`{"method":"item/fileChange/patchUpdated","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"file-1","changes":[{"path":"main.go","kind":{"type":"update"},"diff":"@@ -1 +1 @@\n-old\n+new"}]}}`))
+	if err != nil {
+		t.Fatalf("observe file change patch updated: %v", err)
+	}
+	if len(patch.Events) != 1 {
+		t.Fatalf("expected one patch updated event, got %#v", patch.Events)
+	}
+	event := patch.Events[0]
+	if event.Kind != agentproto.EventItemFileChangePatchUpdated || event.ItemKind != "file_change" {
+		t.Fatalf("unexpected patch updated event: %#v", event)
+	}
+	if len(event.FileChanges) != 1 || event.FileChanges[0].Path != "main.go" || event.FileChanges[0].Kind != agentproto.FileChangeUpdate {
+		t.Fatalf("expected latest patch changes, got %#v", event.FileChanges)
+	}
+}
+
 func TestTranslateThreadsRefreshUsesThreadListAndBuildsSnapshot(t *testing.T) {
 	tr := NewTranslator("inst-1")
 

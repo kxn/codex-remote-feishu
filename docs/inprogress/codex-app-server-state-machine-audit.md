@@ -61,7 +61,7 @@
   - 已按官方语义处理。
   - 证据：`internal/adapter/codex/translator_commands.go`、`internal/adapter/codex/translator_observe_server.go`
 - 通用 item 生命周期与主要 delta 流
-  - 已承接 `item/started`、`item/completed`、`item/agentMessage/delta`、`item/plan/delta`、`item/reasoning/textDelta`、`item/reasoning/summaryTextDelta`、`item/commandExecution/outputDelta`、`item/fileChange/outputDelta`。
+  - 已承接 `item/started`、`item/completed`、`item/agentMessage/delta`、`item/plan/delta`、`item/reasoning/textDelta`、`item/reasoning/summaryTextDelta`、`item/commandExecution/outputDelta`、`item/fileChange/outputDelta`、`item/commandExecution/terminalInteraction`、`item/reasoning/summaryPartAdded`、`item/fileChange/patchUpdated`。
   - 证据：`internal/adapter/codex/translator_observe_server.go`
 - `turn/plan/updated`、`thread/tokenUsage/updated`
   - 已有结构化解析，并进入 relay 标准事件。
@@ -291,12 +291,13 @@
 - `item/reasoning/summaryTextDelta`
 - `item/commandExecution/outputDelta`
 - `item/fileChange/outputDelta`
+- `item/commandExecution/terminalInteraction`
+- `item/reasoning/summaryPartAdded`
+- `item/fileChange/patchUpdated`
 - `item/mcpToolCall/progress`
 
 部分缺口：
 
-- `item/reasoning/summaryPartAdded`
-  - 官方文档有，当前没有处理。
 - `enteredReviewMode` / `exitedReviewMode`
   - 虽然 generic `item/started/completed` 能把它们作为原始 item type 吞进来，但没有专门语义，也没有产品化路径。
 - `collabToolCall`
@@ -541,7 +542,7 @@
 | `model/rerouted` | 遵循但有适配压缩 | 已保留 `fromModel` / `toModel` / `reason` 并更新 thread 当前有效模型，但尚未单独做用户提示 |
 | 通用 `item/started` / `item/completed` | 部分遵循 | 主流 item 已接；review/imageView 等剩余 item 仍有缺口，collab 已统一收口到 `delegated_task` |
 | `item/mcpToolCall/progress` | 遵循但有适配压缩 | translator 已标准化 typed progress event，但产品 UI 仍未深度表达 |
-| `item/reasoning/summaryPartAdded` | 未遵循/未实现 | 缺失 |
+| `item/reasoning/summaryPartAdded` | 遵循但仅 state-only | 已有结构边界 carrier，不单独刷飞书卡 |
 | command/file approval 多步状态机 | 部分遵循 | relay/Feishu/headless 已承接 `item/commandExecution/requestApproval` 与 `item/fileChange/requestApproval`，并把 command/file/network approval 归一化成可渲染 request；更细的专用决策 UI 仍未补齐 |
 | `item/permissions/requestApproval` | 部分遵循 | 请求面已补齐，权限子集与 scope 可回写；当前仍走通用 request 卡 |
 | `mcpServer/elicitation/request` | 部分遵循 | form/url request 已接入；approval-carrying elicitation 会识别 `_meta.codex_approval_kind=mcp_tool_call` 并支持 once/session 响应，`persist=always` 仅提示不支持；整体仍是产品适配 UI，不是 source-native surface 逐帧复刻 |

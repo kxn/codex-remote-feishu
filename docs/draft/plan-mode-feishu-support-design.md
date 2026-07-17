@@ -1,8 +1,8 @@
 # Plan Mode 飞书支持设计草案
 
 > Type: `draft`
-> Updated: `2026-04-22`
-> Summary: 为 `#214` 收敛最终实现口径：飞书侧以 `Plan mode on/off` 暴露真实 upstream Plan mode，补齐状态、队列冻结、协议落点、提案计划卡与执行 handoff。
+> Updated: `2026-07-17`
+> Summary: 为 `#214` 收敛最终实现口径：飞书侧以 `Plan mode on/off` 暴露真实 upstream Plan mode，补齐状态、队列冻结、协议落点、提案计划卡与执行 handoff；当前口径明确 completed plan item text 是提案计划正文权威来源，`item/plan/delta` 只作为兼容草稿。
 
 ## 1. 文档目标
 
@@ -34,8 +34,8 @@ upstream 协议字段仍然叫 `collaborationMode`，但这是协议细节，不
    - 当前 turn 的 `/steer`
    - reply processing 触发的 auto-steer
 5. `request_user_input` 和 `mcp_server_elicitation` 继续复用现有同卡分步交互，不再造 Plan 专用问答卡。
-6. `turn/plan/updated` 继续表示过程型 checklist 更新；`item/plan/delta` 明确表示最终提案计划正文，两者不混用。
-7. `item/plan/delta` 不在 turn 中途单独落卡；一轮里只缓存最后一版，等 final message 落完且 turn 真正结束后，再追加提案计划卡。
+6. `turn/plan/updated` 继续表示过程型 checklist 更新；提案计划正文以 `item/completed` 的 plan item `text` 为权威，`item/plan/delta` 只作为运行中缓存/兼容输入。
+7. `item/plan/delta` 不在 turn 中途单独落卡；一轮里只缓存兼容草稿，等 final message 落完且 turn 真正结束后，优先用 completed plan item text 追加提案计划卡。
 8. 提案计划卡固定三个动作：
    - `直接执行`
    - `清空上下文并执行`
@@ -130,25 +130,27 @@ upstream 协议字段仍然叫 `collaborationMode`，但这是协议细节，不
 
 ### 5.1 触发时机
 
-当一轮 turn 在过程中产生了 `item/plan/delta`：
+当一轮 turn 产生 plan item：
 
-1. turn 运行中只缓存“本轮最后一版计划正文”
+1. turn 运行中可以缓存 `item/plan/delta` 作为兼容草稿
 2. 不在中途落卡
-3. 等 final message 已落完且 turn `completed`
-4. 若这轮确实存在计划正文，再 append 一张独立提案计划卡
+3. `item/completed` 到达时，如果 plan item 带 `text`，必须用 completed `text` 覆盖 delta 草稿
+4. 等 final message 已落完且 turn `completed`
+5. 若这轮确实存在 completed plan text 或兼容草稿，再 append 一张独立提案计划卡
 
 这样可以避免：
 
 - 中途落卡被 final message 顶掉
 - 同一轮多版计划同时暴露
 - 旧计划在后续 steer 后仍可误点
+- 把 upstream 明确不保证等价的 plan delta 拼接结果误当最终正文
 
 ### 5.2 与 `turn/plan/updated` 的分工
 
 1. `turn/plan/updated`
    - 过程型 checklist 快照
-2. `item/plan/delta` 对应的提案计划卡
-   - 最终提案正文
+2. plan item completed text 对应的提案计划卡
+   - 最终提案正文；`item/plan/delta` 只提供低置信兼容草稿
    - 带本地 handoff CTA
 
 两者必须保持分工，不用 `turn/plan/updated` 去猜最终提案计划。
@@ -192,7 +194,7 @@ upstream 协议字段仍然叫 `collaborationMode`，但这是协议细节，不
 2. 用户点击 `清空上下文并执行`
 3. 用户点击 `取消`
 4. 用户在同一 thread 上继续发了新的输入
-5. 同一 thread 上又出现了新的 `item/plan/delta`
+5. 同一 thread 上又出现了新的 plan item delta / completed 更新
 6. 用户切线程、`/new`、`/use`、`/detach` 或发生等价上下文切换
 7. daemon lifecycle 已变化，旧卡不再安全可写
 
@@ -299,7 +301,7 @@ surface resume 状态新增 `PlanMode`，与现有：
 1. 命令面、状态、snapshot、surface resume
 2. queue freeze 与 outbound `turn/start` 落参
 3. observed plan mode 回填与状态提示
-4. `item/plan/delta` 的提案计划卡和三按钮动作
+4. completed plan item text 优先的提案计划卡和三按钮动作
 5. 边界测试、状态机文档同步与 close-out
 
 ## 9. 验证建议
@@ -315,5 +317,5 @@ surface resume 状态新增 `PlanMode`，与现有：
 7. daemon 重启后恢复 `PlanMode`
 8. `request_user_input` / `mcp_server_elicitation` 在 `Plan mode=on` 时继续按现有分步卡工作
 9. `turn/plan/updated` 的现有 checklist 卡不回归
-10. `item/plan/delta` 在一轮中多次更新时，只在 turn 完成后落最后一版提案计划卡
+10. `item/plan/delta` 在一轮中多次更新但 completed plan item text 不一致时，只在 turn 完成后按 completed text 落提案计划卡；缺 completed text 时才用最后一版 delta 草稿兜底
 11. 提案计划卡的三按钮动作、seal 规则和后续继续输入行为符合设计
