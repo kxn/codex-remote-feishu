@@ -112,18 +112,11 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 	switch payload := event.CanonicalPayload().(type) {
 	case eventcontract.SnapshotPayload:
 		elements := p.projectSnapshotElements(payload.Snapshot)
-		return []Operation{{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			CardTitle:        "当前状态",
-			CardBody:         "",
-			CardElements:     elements,
-			CardThemeKey:     cardThemeInfo,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument("当前状态", "", cardThemeInfo, elements),
-		}}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:    "当前状态",
+			ThemeKey: cardThemeInfo,
+			Elements: elements,
+		})}
 	case eventcontract.NoticePayload:
 		title := strings.TrimSpace(payload.Notice.Title)
 		if title == "" {
@@ -131,53 +124,35 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		}
 		body, elements := projectorpkg.ProjectNoticeContent(payload.Notice)
 		theme := noticeThemeKey(payload.Notice)
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			CardTitle:        title,
-			CardBody:         body,
-			CardThemeKey:     theme,
-			CardElements:     elements,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, body, theme, elements),
-		}
-		return []Operation{applyTemporarySessionHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.Notice.TemporarySessionLabel)}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:                 title,
+			Body:                  body,
+			ThemeKey:              theme,
+			Elements:              elements,
+			TemporarySessionLabel: payload.Notice.TemporarySessionLabel,
+			ApplyReplyLane:        true,
+		})}
 	case eventcontract.PlanUpdatePayload:
 		title := "当前计划"
 		elements := projectorpkg.PlanUpdateElements(payload.PlanUpdate)
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			CardTitle:        title,
-			CardBody:         "",
-			CardThemeKey:     cardThemePlan,
-			CardElements:     elements,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, "", cardThemePlan, elements),
-		}
-		return []Operation{applyTemporarySessionHeaderToOperation(applyReplyLaneToNewOperation(event, operation), payload.PlanUpdate.TemporarySessionLabel)}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:                 title,
+			ThemeKey:              cardThemePlan,
+			Elements:              elements,
+			TemporarySessionLabel: payload.PlanUpdate.TemporarySessionLabel,
+			ApplyReplyLane:        true,
+		})}
 	case eventcontract.SelectionPayload:
 		title, elements, ok := projectorpkg.SelectionViewStructuredProjection(payload.View, payload.Context, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		if !ok {
 			return nil
 		}
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			CardTitle:        title,
-			CardBody:         "",
-			CardThemeKey:     cardThemeInfo,
-			CardElements:     elements,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, "", cardThemeInfo, elements),
-		}
-		return []Operation{applyReplyLaneToNewOperation(event, operation)}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:          title,
+			ThemeKey:       cardThemeInfo,
+			Elements:       elements,
+			ApplyReplyLane: true,
+		})}
 	case eventcontract.PagePayload:
 		pageView := control.NormalizeFeishuPageView(payload.View)
 		title := strings.TrimSpace(pageView.Title)
@@ -191,27 +166,16 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			projectorpkg.PageRenderOptions{MenuHomeVersion: p.menuHomeVersion},
 		)
 		theme := firstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			MessageID:        strings.TrimSpace(pageView.MessageID),
-			CardTitle:        title,
-			CardBody:         body,
-			CardThemeKey:     theme,
-			CardElements:     elements,
-			CardUpdateMulti:  pageView.Patchable,
-		}
-		if operation.MessageID != "" {
-			operation.Kind = OperationUpdateCard
-		}
-		operation.cardEnvelope = cardEnvelopeV2
-		operation.card = rawCardDocument(title, body, theme, elements)
-		if operation.Kind == OperationSendCard {
-			operation = applyReplyLaneToNewOperation(event, operation)
-		}
-		return []Operation{applyTemporarySessionHeaderToOperation(operation, pageView.TemporarySessionLabel)}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:                 title,
+			Body:                  body,
+			ThemeKey:              theme,
+			Elements:              elements,
+			MessageID:             pageView.MessageID,
+			UpdateMulti:           pageView.Patchable,
+			TemporarySessionLabel: pageView.TemporarySessionLabel,
+			ApplyReplyLane:        true,
+		})}
 	case eventcontract.RequestPayload:
 		requestView := control.NormalizeFeishuRequestView(payload.View)
 		title := strings.TrimSpace(requestView.Title)
@@ -219,26 +183,14 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			title = "需要确认"
 		}
 		elements := projectorpkg.RequestPromptElements(requestView, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			MessageID:        strings.TrimSpace(requestView.MessageID),
-			CardTitle:        title,
-			CardBody:         "",
-			CardThemeKey:     cardThemeApproval,
-			CardElements:     elements,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, "", cardThemeApproval, elements),
-		}
-		if operation.MessageID != "" {
-			operation.Kind = OperationUpdateCard
-		}
-		if operation.Kind == OperationSendCard {
-			operation = applyReplyLaneToNewOperation(event, operation)
-		}
-		return []Operation{applyTemporarySessionHeaderToOperation(operation, requestView.TemporarySessionLabel)}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:                 title,
+			ThemeKey:              cardThemeApproval,
+			Elements:              elements,
+			MessageID:             requestView.MessageID,
+			TemporarySessionLabel: requestView.TemporarySessionLabel,
+			ApplyReplyLane:        true,
+		})}
 	case eventcontract.TimelineTextPayload:
 		text := strings.TrimSpace(payload.TimelineText.Text)
 		if text == "" {
@@ -260,28 +212,14 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			title = "选择路径"
 		}
 		elements := projectorpkg.PathPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			CardTitle:        title,
-			CardBody:         "",
-			CardThemeKey:     cardThemeInfo,
-			CardUpdateMulti:  true,
-			CardElements:     elements,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, "", cardThemeInfo, elements),
-		}
-		if messageID := strings.TrimSpace(view.MessageID); messageID != "" {
-			operation.Kind = OperationUpdateCard
-			operation.MessageID = messageID
-			operation.ReplyToMessageID = ""
-		}
-		if operation.Kind == OperationSendCard {
-			operation = applyReplyLaneToNewOperation(event, operation)
-		}
-		return []Operation{operation}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:          title,
+			ThemeKey:       cardThemeInfo,
+			Elements:       elements,
+			MessageID:      view.MessageID,
+			UpdateMulti:    true,
+			ApplyReplyLane: true,
+		})}
 	case eventcontract.TargetPickerPayload:
 		view := payload.View
 		title := strings.TrimSpace(view.Title)
@@ -290,28 +228,14 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		}
 		elements := projectorpkg.TargetPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		theme := projectorpkg.TargetPickerTheme(view)
-		operation := Operation{
-			Kind:             OperationSendCard,
-			GatewayID:        event.GatewayID,
-			SurfaceSessionID: event.SurfaceSessionID,
-			ChatID:           chatID,
-			CardTitle:        title,
-			CardBody:         "",
-			CardThemeKey:     theme,
-			CardUpdateMulti:  true,
-			CardElements:     elements,
-			cardEnvelope:     cardEnvelopeV2,
-			card:             rawCardDocument(title, "", theme, elements),
-		}
-		if messageID := strings.TrimSpace(view.MessageID); messageID != "" {
-			operation.Kind = OperationUpdateCard
-			operation.MessageID = messageID
-			operation.ReplyToMessageID = ""
-		}
-		if operation.Kind == OperationSendCard {
-			operation = applyReplyLaneToNewOperation(event, operation)
-		}
-		return []Operation{operation}
+		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
+			Title:          title,
+			ThemeKey:       theme,
+			Elements:       elements,
+			MessageID:      view.MessageID,
+			UpdateMulti:    true,
+			ApplyReplyLane: true,
+		})}
 	case eventcontract.ThreadHistoryPayload:
 		return p.projectThreadHistory(chatID, event, payload.View)
 	case eventcontract.PendingInputPayload:

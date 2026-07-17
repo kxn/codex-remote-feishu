@@ -70,6 +70,27 @@ func TestProjectSnapshotShowsFollowWaitingAndAbandoning(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotIgnoresExplicitReplyLane(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:            eventcontract.KindSnapshot,
+		SourceMessageID: "om-source-1",
+		Snapshot:        &control.Snapshot{},
+		Meta: eventcontract.EventMeta{
+			MessageDelivery: eventcontract.MessageDelivery{
+				FirstSendLane: eventcontract.MessageLaneReplyThread,
+				Mutation:      eventcontract.MessageMutationAppendOnly,
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].ReplyToMessageID != "" {
+		t.Fatalf("snapshot status cards should stay top-level even when reply lane is set, got %#v", ops[0])
+	}
+}
+
 func TestProjectSnapshotShowsNewThreadReadyTarget(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

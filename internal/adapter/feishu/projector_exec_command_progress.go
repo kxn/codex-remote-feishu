@@ -22,28 +22,22 @@ func (p *Projector) projectExecCommandProgress(chatID string, event eventcontrac
 	}
 	lines := execProgressRenderedContent(window.Lines)
 	elements := execCommandProgressElements(lines)
-	op := Operation{
-		GatewayID:            event.GatewayID,
-		SurfaceSessionID:     event.SurfaceSessionID,
-		ChatID:               chatID,
-		CardTitle:            "工作中",
-		CardBody:             strings.Join(lines, "\n"),
-		CardThemeKey:         cardThemeProgress,
-		CardElements:         elements,
-		CardUpdateMulti:      true,
+	spec := eventCardOperationSpec{
+		Title:                "工作中",
+		Body:                 strings.Join(lines, "\n"),
+		UseDocumentBody:      true,
+		ThemeKey:             cardThemeProgress,
+		Elements:             elements,
+		UpdateMulti:          true,
 		ProgressCardStartSeq: window.StartSeq,
 		ProgressCardEndSeq:   window.EndSeq,
-		cardEnvelope:         cardEnvelopeV2,
-		card:                 rawCardDocument("工作中", "", cardThemeProgress, elements),
+		ApplyReplyLane:       true,
 	}
 	if messageID := strings.TrimSpace(activeExecCommandProgressSegmentMessageID(progress)); messageID != "" && !window.NewCard {
-		op.Kind = OperationUpdateCard
-		op.MessageID = messageID
-	} else {
-		op.Kind = OperationSendCard
-		op = applyReplyLaneToNewOperation(event, op)
+		spec.MessageID = messageID
 	}
-	return []Operation{applyTemporarySessionHeaderToOperation(op, progress.TemporarySessionLabel)}
+	spec.TemporarySessionLabel = progress.TemporarySessionLabel
+	return []Operation{newEventCardOperation(chatID, event, spec)}
 }
 
 func activeExecCommandProgressSegmentMessageID(progress control.ExecCommandProgress) string {
