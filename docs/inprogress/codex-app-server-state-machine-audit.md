@@ -259,13 +259,14 @@
 - `internal/adapter/codex/translator_commands.go`
 - `internal/adapter/codex/translator_observe_server.go`
 
-### 3.8 Turn 衍生通知：`turn/plan/updated`、`turn/diff/updated`、`model/rerouted`
+### 3.8 Turn 衍生通知：`turn/plan/updated`、`turn/diff/updated`、`model/rerouted`、model adjunct
 
 当前实现结论：
 
 - `turn/plan/updated`：`严格遵循`
 - `turn/diff/updated`：`严格遵循`
 - `model/rerouted`：`遵循但有适配压缩`
+- `model/verification` / `model/safetyBuffering/updated`：`遵循但仅 state-only`
 
 现状：
 
@@ -273,12 +274,15 @@
 - `turn/diff/updated` 已经被接成 canonical `turn.diff.updated`，orchestrator 会按 `(threadId, turnId)` 覆盖保存 authoritative aggregated diff snapshot，并在 turn 结束时挂到最终 block summary 上。
 - `model/rerouted` 现在也已经被接成 canonical `turn.model_rerouted`，会保留 `fromModel` / `toModel` / `reason`，并把 thread 当前有效模型同步到 `toModel`，避免后续产品面继续把 requested model 当成 actual model。
 - 这条 reroute 链路当前仍属于“协议保真优先”的接法：daemon/state/snapshot 已保留 latest state，但还没有单独做强提示或历史链路 UI。
+- `model/verification` 与 `model/safetyBuffering/updated` 已经接成独立 typed model adjunct carrier，orchestrator 只保存 thread/turn latest state，不更新有效模型，也不刷 Feishu 主链消息。
 
 证据：
 
 - `internal/adapter/codex/translator_observe_server.go`
 - `internal/core/agentproto/types.go`
+- `internal/core/agentproto/model_adjunct.go`
 - `internal/core/orchestrator/service_model_reroute.go`
+- `internal/core/orchestrator/service_model_adjunct.go`
 
 ### 3.9 通用 item 生命周期与 item delta
 
@@ -580,6 +584,7 @@ Headless / cron synthetic initialize 当前 opt-out：
 | `turn/plan/updated` | 严格遵循 | 有结构化 plan snapshot |
 | `turn/diff/updated` | 严格遵循 | authoritative turn 聚合 diff 已进入 canonical event 并可进入 final summary |
 | `model/rerouted` | 遵循但有适配压缩 | 已保留 `fromModel` / `toModel` / `reason` 并更新 thread 当前有效模型，但尚未单独做用户提示 |
+| `model/verification` / `model/safetyBuffering/updated` | 遵循但仅 state-only | 已有 typed carrier 与 orchestrator latest state，不改变有效模型，不默认投影到 Feishu |
 | 通用 `item/started` / `item/completed` | 部分遵循 | 主流 item 已接；review/imageView 等剩余 item 仍有缺口，collab 已统一收口到 `delegated_task` |
 | `item/mcpToolCall/progress` | 遵循但有适配压缩 | translator 已标准化 typed progress event，但产品 UI 仍未深度表达 |
 | `item/reasoning/summaryPartAdded` | 遵循但仅 state-only | 已有结构边界 carrier，不单独刷飞书卡 |

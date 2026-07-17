@@ -1,8 +1,8 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-05-26`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Updated: `2026-07-17`
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -48,6 +48,8 @@
 - `turn/diff/updated`
 - `turn/plan/updated`
 - `model/rerouted`
+- `model/verification`
+- `model/safetyBuffering/updated`
 - `warning`
 - `guardianWarning`
 - `deprecationNotice`
@@ -521,7 +523,33 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - thread 级当前有效模型会同步切到 `toModel`，这样现有 snapshot / prompt / status 展示不会继续误报 reroute 前模型
 - 当前仍不额外生成 Feishu 强提示；用户可见层先保持安静，后续是否展示、展示到哪里再单独讨论
 
-### 5.4.1 `protocol.notice`
+### 5.4.1 Model adjunct state
+
+这是 wrapper 对 native `model/verification` 与 `model/safetyBuffering/updated` 的 state-only turn 级承接。
+
+当前覆盖的 native methods：
+
+- `model/verification`
+- `model/safetyBuffering/updated`
+
+关键字段：
+
+- `threadId`
+- `turnId`
+- `modelVerification.verifications[]`
+- `modelSafetyBuffering.model`
+- `modelSafetyBuffering.useCases[]`
+- `modelSafetyBuffering.reasons[]`
+- `modelSafetyBuffering.showBufferingUi`
+- `modelSafetyBuffering.fasterModel`
+
+当前语义：
+
+- 这两类通知不是 `model/rerouted`，不会更新 thread 当前有效模型
+- orchestrator 按 thread/turn 保存 latest state，供后续状态页、诊断或解释文案消费
+- 当前默认不生成 Feishu 聊天消息或卡片更新，避免把 transient buffering / verification hint 误当作最终结果或错误
+
+### 5.4.2 `protocol.notice`
 
 这是 wrapper 对 Codex app-server passive notice notifications 的受控 canonical carrier。
 

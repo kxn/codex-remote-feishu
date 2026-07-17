@@ -215,14 +215,25 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 		{
 			Direction:              ProtocolDirectionServerNotification,
 			TargetLayer:            ProtocolTargetStateOnly,
-			Status:                 ProtocolStatusPlanned,
+			Status:                 ProtocolStatusSupported,
 			Owner:                  "#692",
 			Cadence:                ProtocolCadenceEvent,
 			FeishuProjectionPolicy: FeishuProjectionStateOnly,
-			Notes:                  "Model adjunct notifications are not model/rerouted and should not default to chat messages.",
+			Notes:                  "Model adjunct notifications are stored as turn-scoped state-only carriers and are not model/rerouted.",
 			Methods: []string{
 				"model/verification",
 				"model/safetyBuffering/updated",
+			},
+		},
+		{
+			Direction:              ProtocolDirectionServerNotification,
+			TargetLayer:            ProtocolTargetStateOnly,
+			Status:                 ProtocolStatusPlanned,
+			Owner:                  "#689-follow-up",
+			Cadence:                ProtocolCadenceEvent,
+			FeishuProjectionPolicy: FeishuProjectionStateOnly,
+			Notes:                  "Moderation metadata remains planned until the product-safe state shape is confirmed.",
+			Methods: []string{
 				"turn/moderationMetadata",
 			},
 		},

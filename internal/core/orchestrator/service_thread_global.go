@@ -391,6 +391,12 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if merged.LastModelReroute == nil && secondary.LastModelReroute != nil {
 		merged.LastModelReroute = agentproto.CloneTurnModelReroute(secondary.LastModelReroute)
 	}
+	if merged.LastModelVerification == nil && secondary.LastModelVerification != nil {
+		merged.LastModelVerification = agentproto.CloneTurnModelVerification(secondary.LastModelVerification)
+	}
+	if merged.LastModelSafetyBuffering == nil && secondary.LastModelSafetyBuffering != nil {
+		merged.LastModelSafetyBuffering = agentproto.CloneTurnModelSafetyBuffering(secondary.LastModelSafetyBuffering)
+	}
 	if !merged.Loaded {
 		merged.Loaded = secondary.Loaded
 	}
@@ -425,6 +431,8 @@ func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
 	threadCopy.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(thread.RuntimeStatus)
 	threadCopy.TokenUsage = agentproto.CloneThreadTokenUsage(thread.TokenUsage)
 	threadCopy.LastModelReroute = agentproto.CloneTurnModelReroute(thread.LastModelReroute)
+	threadCopy.LastModelVerification = agentproto.CloneTurnModelVerification(thread.LastModelVerification)
+	threadCopy.LastModelSafetyBuffering = agentproto.CloneTurnModelSafetyBuffering(thread.LastModelSafetyBuffering)
 	threadCopy.Source = agentproto.CloneThreadSourceRecord(thread.Source)
 	threadCopy.ObservedPermission = agentproto.CloneObservedPermissionState(thread.ObservedPermission)
 	if thread.UndeliveredReplay != nil {

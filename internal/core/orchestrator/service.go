@@ -654,6 +654,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventTurnModelRerouted:
 		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnModelReroute(instanceID, event)...))
+	case agentproto.EventTurnModelVerification:
+		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnModelVerification(instanceID, event)...))
+	case agentproto.EventTurnModelSafetyBufferingUpdated:
+		event.Initiator = s.normalizeTurnInitiator(instanceID, event)
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyTurnModelSafetyBuffering(instanceID, event)...))
 	case agentproto.EventTurnDiffUpdated:
 		s.progress.recordTurnDiffSnapshot(instanceID, event)
 		return s.filterEventsForSurfaceVisibility(preface)

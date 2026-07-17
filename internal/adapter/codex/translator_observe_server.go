@@ -512,26 +512,11 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			Initiator:    t.initiatorForTurn(threadID, turnID),
 		}}}, nil
 	case "model/rerouted":
-		threadID := lookupString(message, "params", "threadId")
-		turnID := lookupString(message, "params", "turnId")
-		reroute := agentproto.NormalizeTurnModelReroute(&agentproto.TurnModelReroute{
-			ThreadID:  threadID,
-			TurnID:    turnID,
-			FromModel: lookupString(message, "params", "fromModel"),
-			ToModel:   lookupString(message, "params", "toModel"),
-			Reason:    lookupString(message, "params", "reason"),
-		})
-		if reroute == nil || reroute.ThreadID == "" || reroute.TurnID == "" {
-			return Result{}, nil
-		}
-		return Result{Events: []agentproto.Event{{
-			Kind:         agentproto.EventTurnModelRerouted,
-			ThreadID:     reroute.ThreadID,
-			TurnID:       reroute.TurnID,
-			ModelReroute: reroute,
-			TrafficClass: t.trafficClassForTurn(reroute.ThreadID, reroute.TurnID),
-			Initiator:    t.initiatorForTurn(reroute.ThreadID, reroute.TurnID),
-		}}}, nil
+		return t.observeModelRerouted(message), nil
+	case "model/verification":
+		return t.observeModelVerification(message), nil
+	case "model/safetyBuffering/updated":
+		return t.observeModelSafetyBuffering(message), nil
 	case "warning", "guardianWarning", "deprecationNotice", "configWarning":
 		return t.observeProtocolNotice(method, message), nil
 	case "turn/started":

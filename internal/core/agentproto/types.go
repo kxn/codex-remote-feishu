@@ -35,33 +35,35 @@ const (
 type EventKind string
 
 const (
-	EventThreadsSnapshot               EventKind = "threads.snapshot"
-	EventThreadHistoryRead             EventKind = "thread.history.read"
-	EventThreadDiscovered              EventKind = "thread.discovered"
-	EventThreadFocused                 EventKind = "thread.focused"
-	EventThreadRuntimeStatusUpdated    EventKind = "thread.runtime_status.updated"
-	EventProcessChildRestartUpdated    EventKind = "process.child.restart.updated"
-	EventConfigObserved                EventKind = "config.observed"
-	EventLocalInteractionObserved      EventKind = "local.interaction.observed"
-	EventThreadTokenUsageUpdated       EventKind = "thread.token_usage.updated"
-	EventTurnDiffUpdated               EventKind = "turn.diff.updated"
-	EventTurnModelRerouted             EventKind = "turn.model_rerouted"
-	EventTurnPlanUpdated               EventKind = "turn.plan.updated"
-	EventTurnStarted                   EventKind = "turn.started"
-	EventTurnCompleted                 EventKind = "turn.completed"
-	EventItemStarted                   EventKind = "item.started"
-	EventItemDelta                     EventKind = "item.delta"
-	EventItemTerminalInteraction       EventKind = "item.command_execution.terminal_interaction"
-	EventItemReasoningSummaryPartAdded EventKind = "item.reasoning.summary_part_added"
-	EventItemFileChangePatchUpdated    EventKind = "item.file_change.patch_updated"
-	EventItemCompleted                 EventKind = "item.completed"
-	EventMCPOAuthLoginURLReady         EventKind = "mcp.oauth_login.authorization_url"
-	EventMCPOAuthLoginCompleted        EventKind = "mcp.oauth_login.completed"
-	EventRequestStarted                EventKind = "request.started"
-	EventRequestResolved               EventKind = "request.resolved"
-	EventProtocolNotice                EventKind = "protocol.notice"
-	EventModelCatalogUpdated           EventKind = "models.catalog.updated"
-	EventSystemError                   EventKind = "system.error"
+	EventThreadsSnapshot                 EventKind = "threads.snapshot"
+	EventThreadHistoryRead               EventKind = "thread.history.read"
+	EventThreadDiscovered                EventKind = "thread.discovered"
+	EventThreadFocused                   EventKind = "thread.focused"
+	EventThreadRuntimeStatusUpdated      EventKind = "thread.runtime_status.updated"
+	EventProcessChildRestartUpdated      EventKind = "process.child.restart.updated"
+	EventConfigObserved                  EventKind = "config.observed"
+	EventLocalInteractionObserved        EventKind = "local.interaction.observed"
+	EventThreadTokenUsageUpdated         EventKind = "thread.token_usage.updated"
+	EventTurnDiffUpdated                 EventKind = "turn.diff.updated"
+	EventTurnModelRerouted               EventKind = "turn.model_rerouted"
+	EventTurnModelVerification           EventKind = "turn.model_verification"
+	EventTurnModelSafetyBufferingUpdated EventKind = "turn.model_safety_buffering.updated"
+	EventTurnPlanUpdated                 EventKind = "turn.plan.updated"
+	EventTurnStarted                     EventKind = "turn.started"
+	EventTurnCompleted                   EventKind = "turn.completed"
+	EventItemStarted                     EventKind = "item.started"
+	EventItemDelta                       EventKind = "item.delta"
+	EventItemTerminalInteraction         EventKind = "item.command_execution.terminal_interaction"
+	EventItemReasoningSummaryPartAdded   EventKind = "item.reasoning.summary_part_added"
+	EventItemFileChangePatchUpdated      EventKind = "item.file_change.patch_updated"
+	EventItemCompleted                   EventKind = "item.completed"
+	EventMCPOAuthLoginURLReady           EventKind = "mcp.oauth_login.authorization_url"
+	EventMCPOAuthLoginCompleted          EventKind = "mcp.oauth_login.completed"
+	EventRequestStarted                  EventKind = "request.started"
+	EventRequestResolved                 EventKind = "request.resolved"
+	EventProtocolNotice                  EventKind = "protocol.notice"
+	EventModelCatalogUpdated             EventKind = "models.catalog.updated"
+	EventSystemError                     EventKind = "system.error"
 )
 
 type ChildRestartStatus string
@@ -87,49 +89,51 @@ type FileChangeRecord struct {
 }
 
 type Event struct {
-	Seq                  uint64                   `json:"seq,omitempty"`
-	Kind                 EventKind                `json:"kind"`
-	CommandID            string                   `json:"commandId,omitempty"`
-	ThreadID             string                   `json:"threadId,omitempty"`
-	TurnID               string                   `json:"turnId,omitempty"`
-	TurnCompletionOrigin TurnCompletionOrigin     `json:"turnCompletionOrigin,omitempty"`
-	ItemID               string                   `json:"itemId,omitempty"`
-	RequestID            string                   `json:"requestId,omitempty"`
-	Status               string                   `json:"status,omitempty"`
-	ErrorMessage         string                   `json:"errorMessage,omitempty"`
-	CWD                  string                   `json:"cwd,omitempty"`
-	FocusSource          string                   `json:"focusSource,omitempty"`
-	Action               string                   `json:"action,omitempty"`
-	ItemKind             string                   `json:"itemKind,omitempty"`
-	Delta                string                   `json:"delta,omitempty"`
-	TurnDiff             string                   `json:"turnDiff,omitempty"`
-	Name                 string                   `json:"name,omitempty"`
-	Preview              string                   `json:"preview,omitempty"`
-	Model                string                   `json:"model,omitempty"`
-	ReasoningEffort      string                   `json:"reasoningEffort,omitempty"`
-	AccessMode           string                   `json:"accessMode,omitempty"`
-	PlanMode             string                   `json:"planMode,omitempty"`
-	ObservedPermission   *ObservedPermissionState `json:"observedPermission,omitempty"`
-	ConfigScope          string                   `json:"configScope,omitempty"`
-	Loaded               bool                     `json:"loaded,omitempty"`
-	Archived             bool                     `json:"archived,omitempty"`
-	TrafficClass         TrafficClass             `json:"trafficClass,omitempty"`
-	Initiator            Initiator                `json:"initiator,omitempty"`
-	Problem              *ErrorInfo               `json:"problem,omitempty"`
-	RequestPrompt        *RequestPrompt           `json:"requestPrompt,omitempty"`
-	MCPOAuthLogin        *MCPOAuthLoginEvent      `json:"mcpOAuthLogin,omitempty"`
-	MCPToolProgress      *MCPToolCallProgress     `json:"mcpToolProgress,omitempty"`
-	ApprovalReview       *AutoApprovalReview      `json:"approvalReview,omitempty"`
-	TokenUsage           *ThreadTokenUsage        `json:"tokenUsage,omitempty"`
-	ModelReroute         *TurnModelReroute        `json:"modelReroute,omitempty"`
-	ModelCatalog         *ModelCatalogSnapshot    `json:"modelCatalog,omitempty"`
-	ProtocolNotice       *ProtocolNotice          `json:"protocolNotice,omitempty"`
-	PlanSnapshot         *TurnPlanSnapshot        `json:"planSnapshot,omitempty"`
-	ThreadHistory        *ThreadHistoryRecord     `json:"threadHistory,omitempty"`
-	RuntimeStatus        *ThreadRuntimeStatus     `json:"runtimeStatus,omitempty"`
-	Metadata             map[string]any           `json:"metadata,omitempty"`
-	Threads              []ThreadSnapshotRecord   `json:"threads,omitempty"`
-	FileChanges          []FileChangeRecord       `json:"fileChanges,omitempty"`
+	Seq                  uint64                    `json:"seq,omitempty"`
+	Kind                 EventKind                 `json:"kind"`
+	CommandID            string                    `json:"commandId,omitempty"`
+	ThreadID             string                    `json:"threadId,omitempty"`
+	TurnID               string                    `json:"turnId,omitempty"`
+	TurnCompletionOrigin TurnCompletionOrigin      `json:"turnCompletionOrigin,omitempty"`
+	ItemID               string                    `json:"itemId,omitempty"`
+	RequestID            string                    `json:"requestId,omitempty"`
+	Status               string                    `json:"status,omitempty"`
+	ErrorMessage         string                    `json:"errorMessage,omitempty"`
+	CWD                  string                    `json:"cwd,omitempty"`
+	FocusSource          string                    `json:"focusSource,omitempty"`
+	Action               string                    `json:"action,omitempty"`
+	ItemKind             string                    `json:"itemKind,omitempty"`
+	Delta                string                    `json:"delta,omitempty"`
+	TurnDiff             string                    `json:"turnDiff,omitempty"`
+	Name                 string                    `json:"name,omitempty"`
+	Preview              string                    `json:"preview,omitempty"`
+	Model                string                    `json:"model,omitempty"`
+	ReasoningEffort      string                    `json:"reasoningEffort,omitempty"`
+	AccessMode           string                    `json:"accessMode,omitempty"`
+	PlanMode             string                    `json:"planMode,omitempty"`
+	ObservedPermission   *ObservedPermissionState  `json:"observedPermission,omitempty"`
+	ConfigScope          string                    `json:"configScope,omitempty"`
+	Loaded               bool                      `json:"loaded,omitempty"`
+	Archived             bool                      `json:"archived,omitempty"`
+	TrafficClass         TrafficClass              `json:"trafficClass,omitempty"`
+	Initiator            Initiator                 `json:"initiator,omitempty"`
+	Problem              *ErrorInfo                `json:"problem,omitempty"`
+	RequestPrompt        *RequestPrompt            `json:"requestPrompt,omitempty"`
+	MCPOAuthLogin        *MCPOAuthLoginEvent       `json:"mcpOAuthLogin,omitempty"`
+	MCPToolProgress      *MCPToolCallProgress      `json:"mcpToolProgress,omitempty"`
+	ApprovalReview       *AutoApprovalReview       `json:"approvalReview,omitempty"`
+	TokenUsage           *ThreadTokenUsage         `json:"tokenUsage,omitempty"`
+	ModelReroute         *TurnModelReroute         `json:"modelReroute,omitempty"`
+	ModelVerification    *TurnModelVerification    `json:"modelVerification,omitempty"`
+	ModelSafetyBuffering *TurnModelSafetyBuffering `json:"modelSafetyBuffering,omitempty"`
+	ModelCatalog         *ModelCatalogSnapshot     `json:"modelCatalog,omitempty"`
+	ProtocolNotice       *ProtocolNotice           `json:"protocolNotice,omitempty"`
+	PlanSnapshot         *TurnPlanSnapshot         `json:"planSnapshot,omitempty"`
+	ThreadHistory        *ThreadHistoryRecord      `json:"threadHistory,omitempty"`
+	RuntimeStatus        *ThreadRuntimeStatus      `json:"runtimeStatus,omitempty"`
+	Metadata             map[string]any            `json:"metadata,omitempty"`
+	Threads              []ThreadSnapshotRecord    `json:"threads,omitempty"`
+	FileChanges          []FileChangeRecord        `json:"fileChanges,omitempty"`
 }
 
 type ThreadSnapshotRecord struct {

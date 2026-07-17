@@ -204,32 +204,34 @@ type InstanceRecord struct {
 }
 
 type ThreadRecord struct {
-	ThreadID                string
-	ForkedFromID            string
-	Source                  *agentproto.ThreadSourceRecord
-	Name                    string
-	Preview                 string
-	FirstUserMessage        string
-	LastUserMessage         string
-	LastAssistantMessage    string
-	WorkspaceKey            string
-	CWD                     string
-	State                   string
-	RuntimeStatus           *agentproto.ThreadRuntimeStatus
-	ExplicitModel           string
-	ExplicitReasoningEffort string
-	ObservedPermission      *agentproto.ObservedPermissionState
-	ObservedAccessMode      string
-	ObservedPlanMode        PlanModeSetting
-	LastModelReroute        *agentproto.TurnModelReroute
-	Loaded                  bool
-	Archived                bool
-	TrafficClass            agentproto.TrafficClass
-	TokenUsage              *agentproto.ThreadTokenUsage
-	ProtocolNotices         []agentproto.ProtocolNotice
-	UndeliveredReplay       *ThreadReplayRecord
-	LastUsedAt              time.Time
-	ListOrder               int
+	ThreadID                 string
+	ForkedFromID             string
+	Source                   *agentproto.ThreadSourceRecord
+	Name                     string
+	Preview                  string
+	FirstUserMessage         string
+	LastUserMessage          string
+	LastAssistantMessage     string
+	WorkspaceKey             string
+	CWD                      string
+	State                    string
+	RuntimeStatus            *agentproto.ThreadRuntimeStatus
+	ExplicitModel            string
+	ExplicitReasoningEffort  string
+	ObservedPermission       *agentproto.ObservedPermissionState
+	ObservedAccessMode       string
+	ObservedPlanMode         PlanModeSetting
+	LastModelReroute         *agentproto.TurnModelReroute
+	LastModelVerification    *agentproto.TurnModelVerification
+	LastModelSafetyBuffering *agentproto.TurnModelSafetyBuffering
+	Loaded                   bool
+	Archived                 bool
+	TrafficClass             agentproto.TrafficClass
+	TokenUsage               *agentproto.ThreadTokenUsage
+	ProtocolNotices          []agentproto.ProtocolNotice
+	UndeliveredReplay        *ThreadReplayRecord
+	LastUsedAt               time.Time
+	ListOrder                int
 }
 
 type ThreadReplayKind string
