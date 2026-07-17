@@ -47,6 +47,9 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 	if run.Options.Addons == nil || run.Options.Addons.Preset == nil || *run.Options.Addons.Preset {
 		t.Fatalf("expected preset=false addons, got %#v", run.Options.Addons)
 	}
+	if _, ok := run.Context.Deadline(); !ok {
+		t.Fatalf("expected bounded registration context")
+	}
 
 	expiresAt := time.Now().UTC().Add(10 * time.Minute)
 	run.EmitQRCode(feishuRegistrationQRCode{
@@ -78,6 +81,36 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 	}
 	if !run.Cancelled {
 		t.Fatalf("expected registration run to be cancelled after completion")
+	}
+}
+
+func TestFeishuOnboardingRegistrationPreQRRunIsBoundedAndCleanedUp(t *testing.T) {
+	cfg := configForRegistrationTest()
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+	runner := &fakeFeishuRegistrationRunner{}
+	app.feishuRuntime.registration = runner
+
+	view, err := app.createFeishuOnboardingSession(context.Background())
+	if err != nil {
+		t.Fatalf("createFeishuOnboardingSession: %v", err)
+	}
+	if len(runner.runs) != 1 {
+		t.Fatalf("expected one registration run, got %d", len(runner.runs))
+	}
+	run := runner.runs[0]
+	if _, ok := run.Context.Deadline(); !ok {
+		t.Fatalf("expected bounded registration context")
+	}
+	if view.ExpiresAt.IsZero() {
+		t.Fatalf("expected pre-QR session to have a cleanup deadline")
+	}
+
+	app.cleanupFeishuOnboardingSessions(view.ExpiresAt.Add(16 * time.Minute))
+	if _, ok := app.snapshotFeishuOnboardingSession(view.ID); ok {
+		t.Fatalf("expected pre-QR session to be removed after cleanup deadline")
+	}
+	if !run.Cancelled {
+		t.Fatalf("expected pre-QR registration run to be cancelled during cleanup")
 	}
 }
 
@@ -119,8 +152,8 @@ type fakeFeishuRegistrationRunner struct {
 	autoFailure *feishuRegistrationFailure
 }
 
-func (f *fakeFeishuRegistrationRunner) Start(_ context.Context, options feishuRegistrationOptions, callbacks feishuRegistrationCallbacks) feishuRegistrationRun {
-	run := &fakeFeishuRegistrationRun{Options: options, callbacks: callbacks}
+func (f *fakeFeishuRegistrationRunner) Start(ctx context.Context, options feishuRegistrationOptions, callbacks feishuRegistrationCallbacks) feishuRegistrationRun {
+	run := &fakeFeishuRegistrationRun{Context: ctx, Options: options, callbacks: callbacks}
 	f.runs = append(f.runs, run)
 	if f.autoQRCode != nil {
 		callbacks.OnQRCode(*f.autoQRCode)
@@ -135,6 +168,7 @@ func (f *fakeFeishuRegistrationRunner) Start(_ context.Context, options feishuRe
 }
 
 type fakeFeishuRegistrationRun struct {
+	Context   context.Context
 	Options   feishuRegistrationOptions
 	callbacks feishuRegistrationCallbacks
 	Cancelled bool

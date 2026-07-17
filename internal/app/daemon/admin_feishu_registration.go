@@ -50,6 +50,8 @@ type feishuRegistrationCallbacks struct {
 	OnFailure  func(feishuRegistrationFailure)
 }
 
+const defaultFeishuRegistrationTimeout = 10 * time.Minute
+
 type sdkFeishuRegistrationRunner struct{}
 
 func newLiveFeishuRegistrationRunner() feishuRegistrationRunner {
@@ -206,9 +208,12 @@ func (a *App) createFeishuOnboardingSession(ctx context.Context) (feishuOnboardi
 	if err != nil {
 		return feishuOnboardingSessionView{}, err
 	}
+	now := time.Now().UTC()
+	expiresAt := now.Add(defaultFeishuRegistrationTimeout)
 	session := &feishuOnboardingSession{
-		ID:     sessionID,
-		Status: feishuOnboardingStatusPending,
+		ID:        sessionID,
+		Status:    feishuOnboardingStatusPending,
+		ExpiresAt: expiresAt,
 	}
 	a.feishuRuntime.mu.Lock()
 	if a.feishuRuntime.onboarding == nil {
@@ -221,31 +226,44 @@ func (a *App) createFeishuOnboardingSession(ctx context.Context) (feishuOnboardi
 	if runner == nil {
 		runner = newLiveFeishuRegistrationRunner()
 	}
-	run := runner.Start(context.Background(), feishuRegistrationOptions{
+	runCtx, cancel := context.WithTimeout(context.Background(), defaultFeishuRegistrationTimeout)
+	run := runner.Start(runCtx, feishuRegistrationOptions{
 		Source:     "codex-remote-feishu",
 		Addons:     buildFeishuRegistrationAddons(feishuapp.DefaultManifest()),
 		CreateOnly: true,
-	}, a.feishuRegistrationCallbacks(session.ID))
+	}, a.feishuRegistrationCallbacks(session.ID, cancel))
+	run = feishuRegistrationRunWithCancel{
+		run:    run,
+		cancel: cancel,
+	}
 	a.feishuRuntime.mu.Lock()
+	view := feishuOnboardingSessionView{}
 	if stored := a.feishuRuntime.onboarding[session.ID]; stored != nil {
 		stored.RegistrationRun = run
 		if feishuOnboardingStatusIsTerminal(stored.Status) {
 			cancelFeishuRegistrationRunLocked(stored)
 		}
+		view = feishuOnboardingSessionToView(stored)
 	}
 	a.feishuRuntime.mu.Unlock()
-	return feishuOnboardingSessionToView(session), nil
+	return view, nil
 }
 
-func (a *App) feishuRegistrationCallbacks(sessionID string) feishuRegistrationCallbacks {
+func (a *App) feishuRegistrationCallbacks(sessionID string, cancel context.CancelFunc) feishuRegistrationCallbacks {
 	return feishuRegistrationCallbacks{
 		OnQRCode: func(info feishuRegistrationQRCode) {
 			a.applyFeishuRegistrationQRCode(sessionID, info)
 		},
 		OnComplete: func(result feishuRegistrationResult) {
+			if cancel != nil {
+				cancel()
+			}
 			a.applyFeishuRegistrationResult(sessionID, result)
 		},
 		OnFailure: func(failure feishuRegistrationFailure) {
+			if cancel != nil {
+				cancel()
+			}
 			a.applyFeishuRegistrationFailure(sessionID, failure)
 		},
 	}
@@ -331,4 +349,18 @@ func cancelFeishuRegistrationRunLocked(session *feishuOnboardingSession) {
 	run := session.RegistrationRun
 	session.RegistrationRun = nil
 	run.Cancel()
+}
+
+type feishuRegistrationRunWithCancel struct {
+	run    feishuRegistrationRun
+	cancel context.CancelFunc
+}
+
+func (r feishuRegistrationRunWithCancel) Cancel() {
+	if r.cancel != nil {
+		r.cancel()
+	}
+	if r.run != nil {
+		r.run.Cancel()
+	}
 }
