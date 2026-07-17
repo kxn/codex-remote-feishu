@@ -286,21 +286,18 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		if forceSyncPrompt {
 			inlineSourceMessageID = action.MessageID
 		}
-		promptEvents, blocked := a.promptVSCodeCompatibilityAtLocked(action.SurfaceSessionID, now, forceSyncPrompt, inlineSourceMessageID)
-		if replace, rest := a.firstProjectableCardReplacementLocked(action, promptEvents); replace != nil {
+		recoveryEvents := a.runSurfaceRecoveryPipelineLocked(ctx, now, surfaceRecoveryPipelineOptions{
+			VSCodeSurfaceFilter:         action.SurfaceSessionID,
+			VSCodeForceSyncPrompt:       forceSyncPrompt,
+			VSCodeInlineSourceMessageID: inlineSourceMessageID,
+			RunVSCodeRecovery:           true,
+			RunDetachedVSCodePrompt:     true,
+		})
+		if replace, rest := a.firstProjectableCardReplacementLocked(action, recoveryEvents); replace != nil {
 			inlineResult = replace
-			promptEvents = rest
+			recoveryEvents = rest
 		}
-		a.handleUIEventsLocked(ctx, promptEvents)
-		if !blocked {
-			recoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
-			recoveryEvents = append(recoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
-			if replace, rest := a.firstProjectableCardReplacementLocked(action, recoveryEvents); replace != nil {
-				inlineResult = replace
-				recoveryEvents = rest
-			}
-			a.handleUIEventsLocked(ctx, recoveryEvents)
-		}
+		a.handleUIEventsLocked(ctx, recoveryEvents)
 	}
 	return inlineResult
 }
@@ -580,21 +577,17 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 			log.Printf("relay send command failed: instance=%s kind=%s err=%v", hello.Instance.InstanceID, command.Kind, err)
 		}
 	}
-	a.consumeVSCodeCompatibilityFollowupLocked(ctx, now)
-	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
-	a.handleUIEventsLocked(ctx, vscodePromptEvents)
-	vscodeRecoveryEvents := []eventcontract.Event{}
-	if !vscodeBlocked {
-		vscodeRecoveryEvents = a.maybeRecoverVSCodeSurfacesLocked(now)
-		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
-	}
-	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
-	headlessRecoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
-	a.handleUIEventsLocked(ctx, headlessRecoveryEvents)
 	a.maybeShutdownExternalAccessIdleLocked(now)
-	a.syncSurfaceResumeStateLocked(nil)
-	a.syncClaudeWorkspaceProfileStateLocked()
-	a.syncWorkspaceSurfaceContextFilesLocked()
+	a.runSurfaceRecoveryPipelineLocked(ctx, now, surfaceRecoveryPipelineOptions{
+		ConsumeVSCodeCompatibilityFollowup: true,
+		RunVSCodeRecovery:                  true,
+		RunDetachedVSCodePrompt:            true,
+		RunHeadlessRecovery:                true,
+		HandleEvents:                       true,
+		SyncAllSurfaceResumeState:          true,
+		SyncClaudeWorkspaceProfileState:    true,
+		SyncWorkspaceSurfaceContextFiles:   true,
+	})
 }
 
 func (a *App) onEvents(ctx context.Context, instanceID string, events []agentproto.Event) {
@@ -648,14 +641,12 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 		}
 		switch event.Kind {
 		case agentproto.EventThreadsSnapshot, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused:
-			a.consumeVSCodeCompatibilityFollowupLocked(ctx, now)
-			vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
-			uiEvents = append(uiEvents, vscodePromptEvents...)
-			if !vscodeBlocked {
-				uiEvents = append(uiEvents, a.maybeRecoverVSCodeSurfacesLocked(now)...)
-				uiEvents = append(uiEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
-			}
-			uiEvents = append(uiEvents, a.maybeRecoverHeadlessSurfacesLocked(now)...)
+			uiEvents = append(uiEvents, a.runSurfaceRecoveryPipelineLocked(ctx, now, surfaceRecoveryPipelineOptions{
+				ConsumeVSCodeCompatibilityFollowup: true,
+				RunVSCodeRecovery:                  true,
+				RunDetachedVSCodePrompt:            true,
+				RunHeadlessRecovery:                true,
+			})...)
 		}
 		a.recordManagedHeadlessResumeOutcomeEventsLocked(uiEvents, now)
 		a.handleUIEventsLocked(ctx, uiEvents)
@@ -810,18 +801,14 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 	if inst.Source == "vscode" {
 		a.invalidateVSCodeCompatibilityCacheLocked()
 	}
-	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
-	a.handleUIEventsLocked(ctx, vscodePromptEvents)
-	vscodeRecoveryEvents := []eventcontract.Event{}
-	if !vscodeBlocked {
-		vscodeRecoveryEvents = a.maybeRecoverVSCodeSurfacesLocked(now)
-		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
-	}
-	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
-	headlessRecoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
-	a.handleUIEventsLocked(ctx, headlessRecoveryEvents)
-	a.syncSurfaceResumeStateLocked(nil)
-	a.syncWorkspaceSurfaceContextFilesLocked()
+	a.runSurfaceRecoveryPipelineLocked(ctx, now, surfaceRecoveryPipelineOptions{
+		RunVSCodeRecovery:                true,
+		RunDetachedVSCodePrompt:          true,
+		RunHeadlessRecovery:              true,
+		HandleEvents:                     true,
+		SyncAllSurfaceResumeState:        true,
+		SyncWorkspaceSurfaceContextFiles: true,
+	})
 }
 
 // onTick runs on the daemon's 100ms heartbeat.
@@ -842,17 +829,13 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.reapIdleHeadless(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
 	a.surfaceResumeRuntime.vscodeStartupCheckDue = false
-	a.consumeVSCodeCompatibilityFollowupLocked(ctx, now)
-	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
-	a.handleUIEventsLocked(ctx, vscodePromptEvents)
-	vscodeRecoveryEvents := []eventcontract.Event{}
-	if !vscodeBlocked {
-		vscodeRecoveryEvents = a.maybeRecoverVSCodeSurfacesLocked(now)
-		vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
-	}
-	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
-	headlessRecoveryEvents := a.maybeRecoverHeadlessSurfacesLocked(now)
-	a.handleUIEventsLocked(ctx, headlessRecoveryEvents)
+	a.runSurfaceRecoveryPipelineLocked(ctx, now, surfaceRecoveryPipelineOptions{
+		ConsumeVSCodeCompatibilityFollowup: true,
+		RunVSCodeRecovery:                  true,
+		RunDetachedVSCodePrompt:            true,
+		RunHeadlessRecovery:                true,
+		HandleEvents:                       true,
+	})
 	a.syncFeishuTimeSensitiveLocked(ctx)
 	a.maybeStartFeishuPermissionRefreshLocked(now)
 	a.maybeScheduleCronJobsLocked(now)

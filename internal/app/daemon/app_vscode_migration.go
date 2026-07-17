@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"sort"
@@ -320,22 +319,11 @@ func (a *App) finishVSCodeCompatibilityRefreshLocked(token uint64, startedAt tim
 	a.vscodeCompatibility.NeedsFollowup = !a.shuttingDown
 }
 
-func (a *App) consumeVSCodeCompatibilityFollowupLocked(ctx context.Context, now time.Time) {
+func (a *App) consumeVSCodeCompatibilityFollowupLocked() {
 	if !a.vscodeCompatibility.NeedsFollowup {
 		return
 	}
 	a.vscodeCompatibility.NeedsFollowup = false
-	if now.IsZero() {
-		now = time.Now().UTC()
-	}
-	promptEvents, blocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
-	a.handleUIEventsLocked(ctx, promptEvents)
-	if blocked {
-		return
-	}
-	vscodeRecoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
-	vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
-	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
 }
 
 func (a *App) invalidateVSCodeCompatibilityCacheLocked() {
