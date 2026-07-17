@@ -90,7 +90,7 @@ func (t *Translator) observeMCPOAuthLoginCompleted(message map[string]any) (Resu
 	requestID, exists := t.pendingMCPOAuthLoginKeys[mcpOAuthLoginFlowKey(serverName, threadID)]
 	if !exists {
 		t.debugf("observe mcp oauth login completed without pending flow: server=%s thread=%s", serverName, threadID)
-		return Result{}, true
+		return t.observeCapabilityState("mcpServer/oauthLogin/completed", message), true
 	}
 	pending := t.pendingMCPOAuthLogins[requestID]
 	t.clearPendingMCPOAuthLogin(requestID, pending)

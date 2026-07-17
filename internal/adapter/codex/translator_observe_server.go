@@ -405,7 +405,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if result, handled := t.observeMCPOAuthLoginCompleted(message); handled {
 			return result, nil
 		}
-		return Result{}, nil
+		return t.observeCapabilityState(method, message), nil
 	case "error":
 		problem := parseCodexProblemEvent(message)
 		if problem == nil {
@@ -527,6 +527,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		return t.observeThreadSettingsUpdated(message), nil
 	case "warning", "guardianWarning", "deprecationNotice", "configWarning":
 		return t.observeProtocolNotice(method, message), nil
+	case "skills/changed", "mcpServer/startupStatus/updated", "app/list/updated", "account/updated", "account/rateLimits/updated", "account/login/completed", "accountLoginCompleted":
+		return t.observeCapabilityState(method, message), nil
 	case "turn/started":
 		return t.observeTurnStarted(message), nil
 	case "turn/completed":

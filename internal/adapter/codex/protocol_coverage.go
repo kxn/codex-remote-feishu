@@ -258,11 +258,11 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 		{
 			Direction:              ProtocolDirectionServerNotification,
 			TargetLayer:            ProtocolTargetStateOnly,
-			Status:                 ProtocolStatusPlanned,
+			Status:                 ProtocolStatusSupported,
 			Owner:                  "#695",
 			Cadence:                ProtocolCadenceEvent,
 			FeishuProjectionPolicy: FeishuProjectionStateOnly,
-			Notes:                  "Capability/account/app/MCP notifications are passive state inputs for later status surfaces.",
+			Notes:                  "Capability/account/app/MCP notifications are passive state-only inputs; MCP OAuth active login lifecycle remains separate.",
 			Methods: []string{
 				"skills/changed",
 				"mcpServer/oauthLogin/completed",
@@ -272,8 +272,6 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 				"app/list/updated",
 				"account/login/completed",
 				"accountLoginCompleted",
-				"remoteControl/status/changed",
-				"windowsSandbox/setupCompleted",
 			},
 		},
 		{
@@ -294,6 +292,7 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 				"fs/changed",
 				"fuzzyFileSearch/sessionUpdated",
 				"fuzzyFileSearch/sessionCompleted",
+				"remoteControl/status/changed",
 				"thread/environment/connected",
 				"thread/environment/disconnected",
 				"thread/realtime/started",
@@ -302,6 +301,7 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 				"thread/realtime/sdp",
 				"thread/realtime/error",
 				"thread/realtime/closed",
+				"windowsSandbox/setupCompleted",
 			},
 		},
 		{

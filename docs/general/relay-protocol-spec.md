@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-07-17`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`thread/archived` / `thread/deleted` / `thread/unarchived` / `thread/closed` / `thread/goal/*` / `thread/settings/updated` 到 state-only thread state carrier、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`thread/archived` / `thread/deleted` / `thread/unarchived` / `thread/closed` / `thread/goal/*` / `thread/settings/updated` 到 state-only thread state carrier、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`skills/changed` / `mcpServer/startupStatus/updated` / `mcpServer/oauthLogin/completed` / `app/list/updated` / `account/*` passive notifications 到 state-only `capability.state.updated` carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -625,6 +625,46 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - deleted 会把已选中的旧 thread 清成 attached-unbound，避免后续输入继续路由到已删除 thread
 - closed 只标记 thread runtime `notLoaded`，不会 detach surface，也不会清空当前 thread selection
 - goal/settings 只保存 latest state，不默认生成 Feishu 消息或卡片
+
+### 5.4.4 Capability / account / app / MCP status state
+
+这是 wrapper 对 capability/account/app/MCP status 类 passive notifications 的 state-only 承接。
+
+当前覆盖的 native methods：
+
+- `skills/changed`
+- `mcpServer/startupStatus/updated`
+- `mcpServer/oauthLogin/completed`
+- `app/list/updated`
+- `account/updated`
+- `account/rateLimits/updated`
+- `account/login/completed`
+- `accountLoginCompleted`
+
+关键字段：
+
+- `capabilityState.method`
+- `capabilityState.threadId?`
+- `capabilityState.skillsChanged`
+- `capabilityState.mcpServerStartupStatus.name/status/error?/failureReason?`
+- `capabilityState.mcpOAuthLoginCompleted.name/threadId?/success/error?`
+- `capabilityState.apps[]`
+  - `id`
+  - `name`
+  - `description?`
+- `capabilityState.account.authMode?/planType?`
+- `capabilityState.rateLimits`
+  - sparse map，按 upstream 原样保留已出现字段
+- `capabilityState.accountLoginCompleted.loginId?/success/error?`
+
+当前语义：
+
+- 这些通知只作为 instance / thread 的 latest state 输入，默认不生成 Feishu 聊天消息、卡片或菜单。
+- `skills/changed` 只是 invalidation signal；是否主动触发 `skills/list` 或刷新用户菜单不在当前 carrier 语义内。
+- `mcpServer/startupStatus/updated.failureReason=reauthenticationRequired` 会被保留，供后续诊断页或 OAuth 引导判断使用。
+- `mcpServer/oauthLogin/completed` 有 pending `/mcpoauth` 主动流程时仍会生成原有 `mcp.oauth_login.completed` 完成事件；无 pending flow 的 completion 不广播到无关 chat，只进入 `capability.state.updated`。
+- `account/rateLimits/updated` 按 sparse update 处理，不假设每次都是全量 rate limit snapshot。
+- 主动 `mcpServer/oauth/login` lifecycle、账号登录入口、app/skills 管理 UI 仍属于后续产品或相邻 issue，不由这条 state-only carrier 承诺。
 
 ### 5.5 `config.observed`
 

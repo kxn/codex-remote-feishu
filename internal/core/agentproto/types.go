@@ -43,6 +43,7 @@ const (
 	EventThreadLifecycleUpdated          EventKind = "thread.lifecycle.updated"
 	EventThreadGoalUpdated               EventKind = "thread.goal.updated"
 	EventThreadSettingsUpdated           EventKind = "thread.settings.updated"
+	EventCapabilityStateUpdated          EventKind = "capability.state.updated"
 	EventProcessChildRestartUpdated      EventKind = "process.child.restart.updated"
 	EventConfigObserved                  EventKind = "config.observed"
 	EventLocalInteractionObserved        EventKind = "local.interaction.observed"
@@ -137,6 +138,7 @@ type Event struct {
 	ThreadLifecycle      *ThreadLifecycleUpdate    `json:"threadLifecycle,omitempty"`
 	ThreadGoal           *ThreadGoalUpdate         `json:"threadGoal,omitempty"`
 	ThreadSettings       *ThreadSettingsUpdate     `json:"threadSettings,omitempty"`
+	CapabilityState      *CapabilityStateUpdate    `json:"capabilityState,omitempty"`
 	Metadata             map[string]any            `json:"metadata,omitempty"`
 	Threads              []ThreadSnapshotRecord    `json:"threads,omitempty"`
 	FileChanges          []FileChangeRecord        `json:"fileChanges,omitempty"`

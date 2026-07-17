@@ -1,8 +1,8 @@
 # App-Server 第三批 Backlog 产品方向草案
 
 > Type: `draft`
-> Updated: `2026-04-26`
-> Summary: 将 #233 中第三批非主路径 app-server 能力面翻译成产品语言，明确哪些更像账号/连接器能力，哪些更像原生客户端能力，哪些只是底层管理 RPC。
+> Updated: `2026-07-17`
+> Summary: 将 #233 中第三批非主路径 app-server 能力面翻译成产品语言，明确哪些更像账号/连接器能力，哪些更像原生客户端能力，哪些只是底层管理 RPC；当前 account/app/MCP status/skills passive notifications 已由 #689-P5/#695 转入底层 state-only carrier，产品展示仍后置。
 
 ## 1. 文档定位
 
@@ -14,6 +14,12 @@
 4. 哪些只是底层 RPC，不一定值得直接暴露给最终用户。
 
 本文是 backlog 方向草案，不代表当前代码已实现行为。
+
+当前实现分流：
+
+- #689-P5/#695 已把 `skills/changed`、`mcpServer/startupStatus/updated`、`mcpServer/oauthLogin/completed`、`app/list/updated`、`account/updated`、`account/rateLimits/updated`、`account/login/completed` 承接为底层 state-only carrier。
+- #670 仍负责完整主动 `mcpServer/oauth/login` lifecycle 的入口、URL 承载与 completion 收敛；#695 不替代它。
+- 本文后续仍只作为产品化方向草案，不表示这些状态已经有账号页、连接器页或菜单入口。
 
 ## 2. 背景
 

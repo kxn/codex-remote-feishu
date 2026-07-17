@@ -118,8 +118,8 @@ func TestMCPOAuthLoginCompletedUsesProtocolCorrelation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer returned error: %v", err)
 	}
-	if len(ignored.Events) != 0 {
-		t.Fatalf("unexpected event for unmatched completion: %#v", ignored.Events)
+	if len(ignored.Events) != 1 || ignored.Events[0].Kind != agentproto.EventCapabilityStateUpdated {
+		t.Fatalf("expected unmatched completion to remain state-only, got %#v", ignored.Events)
 	}
 	result, err := tr.ObserveServer([]byte(`{"method":"mcpServer/oauthLogin/completed","params":{"name":"docs","threadId":"thread-1","success":true}}`))
 	if err != nil {

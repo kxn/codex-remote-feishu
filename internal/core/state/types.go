@@ -198,6 +198,7 @@ type InstanceRecord struct {
 	ActiveThreadID          string
 	ActiveTurnID            string
 	ModelCatalog            *agentproto.ModelCatalogSnapshot
+	LastCapabilityState     *agentproto.CapabilityStateUpdate
 	ProtocolNotices         []agentproto.ProtocolNotice
 	CWDDefaults             map[string]ModelConfigRecord
 	Threads                 map[string]*ThreadRecord
@@ -219,6 +220,7 @@ type ThreadRecord struct {
 	LifecycleState           *agentproto.ThreadLifecycleUpdate
 	ThreadGoal               *agentproto.ThreadGoalUpdate
 	ThreadSettings           *agentproto.ThreadSettingsUpdate
+	LastCapabilityState      *agentproto.CapabilityStateUpdate
 	ExplicitModel            string
 	ExplicitReasoningEffort  string
 	ObservedPermission       *agentproto.ObservedPermissionState

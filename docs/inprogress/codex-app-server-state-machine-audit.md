@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-07-17`
-> Summary: 对照 OpenAI 官方 Codex App Server 页面与 `openai/codex` 最新源码/schema（当前 protocol coverage 快照复核到 HEAD `315195492c80fdade38e917c18f9584efd599304`），按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮补记 approval-carrying `mcpServer/elicitation/request` 的 `_meta.codex_approval_kind / persist` contract，并同步记录本仓库只产品化 once/session、`always` 仅提示不支持的边界，以及 `mcpServer/oauth/login -> oauthLogin/completed` 的最小 `/mcpoauth` 支持。
+> Summary: 对照 OpenAI 官方 Codex App Server 页面与 `openai/codex` 最新源码/schema（当前 protocol coverage 快照复核到 HEAD `315195492c80fdade38e917c18f9584efd599304`），按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮补记 capability/account/app/MCP status passive notifications 已进入 state-only `capability.state.updated` carrier，主动账号/app/skills 管理 UI 与完整 OAuth lifecycle 仍后置。
 
 ## 1. 审计范围与判定口径
 
@@ -453,11 +453,12 @@ Headless / cron synthetic initialize 当前 opt-out：
 - `account/rateLimits/read`
 - `account/rateLimits/updated`
 
-当前实现结论：`未遵循/未实现`，但 server request 子面已有 `unsupported-fail-closed` policy。
+当前实现结论：`部分遵循`。
 
 现状：
 
-- relay/headless 完全没有这组状态机的 command / event 建模。
+- `account/updated`、`account/rateLimits/updated`、`account/login/completed` 已进入 state-only `capability.state.updated` carrier，保留 `authMode?`、`planType?`、sparse `rateLimits`、`loginId?`、`success`、`error?`。
+- relay/headless 仍没有账号 login/read/logout/rateLimits/read 等主动 command 建模，也没有账号管理 UI。
 - `account/chatgptAuthTokens/refresh` 作为 Codex server request 已被 translator 识别为 `unsupported_server_request`，orchestrator 会自动回写 structured failure；不会展示为普通飞书确认卡，也不会伪造 token。
 - 因此如果未来想让 Feishu/headless 参与 ChatGPT 登录、外部 token 刷新、rate limit 展示，这一层基本要从头设计。
 
@@ -512,11 +513,16 @@ Headless / cron synthetic initialize 当前 opt-out：
   - completion notification 按 pending flow 的 `name + threadId` 相关；找不到 pending flow 时只记录/忽略，不广播到无关 chat。
   - Feishu 只发送完整授权链接 notice 和最终成功/失败 notice，不做打字机/流式 patch。
 
-仍未承接：
+当前 #695 已补齐 passive state-only 承接：
 
 - `app/list -> app/list/updated`
 - `mcpServer/startupStatus/updated`
 - `skills/changed`
+
+这三类通知会进入 `capability.state.updated`，只记录 latest instance/thread state，不生成 Feishu 聊天消息或卡片。`mcpServer/startupStatus/updated.failureReason=reauthenticationRequired` 会保留，供后续 OAuth 引导或诊断页使用。
+
+仍未承接：
+
 - `mcpServerStatus/list`、`mcpServer/resource/read`、`config/mcpServer/reload` 等管理面
 
 ### 3.16 Realtime / watch / Windows / fuzzy search 状态机
@@ -596,11 +602,11 @@ Headless / cron synthetic initialize 当前 opt-out：
 | dynamic tool call (`item/tool/call`) | 部分遵循 | relay / Feishu / headless 已接 `request.started -> 自动 unsupported 回写 -> request.resolved` 的最小 fail-closed 链路，但仍未实现真正的 client-side callback executor |
 | `review/start -> enteredReviewMode -> exitedReviewMode` | 未遵循/未实现 | relay/headless 无此能力 |
 | `command/exec*` | 未遵循/未实现 | 仅解析 turn 内 command item 的 output delta |
-| `account/*` auth state machine | 未遵循/未实现 | 完全未建模 |
-| `app/list -> app/list/updated` | 未遵循/未实现 | 完全未建模 |
+| `account/*` auth state machine | 部分遵循 | passive `account/updated` / `rateLimits/updated` / `login/completed` 已进入 state-only `capability.state.updated`；主动 login/read/logout/rateLimits/read 与账号 UI 未实现 |
+| `app/list -> app/list/updated` | 部分遵循 | `app/list/updated` 已进入 state-only `capability.state.updated`；主动 `app/list` 与 app 管理 UI 未实现 |
 | `mcpServer/oauth/login -> ...completed` | 遵循但有适配压缩 | 已通过 `CommandMCPOAuthLogin` 与 `/mcpoauth <server>` 支持最小发起、URL-ready、completed 成功/失败收敛；无 server picker / account UI；completion 只按 pending `name + threadId` 相关，未关联则不广播 |
-| `mcpServer/startupStatus/updated` | 未遵循/未实现 | 当前无 startup status 事件建模 |
-| `skills/changed` | 未遵循/未实现 | 当前无 skills invalidation 事件建模 |
+| `mcpServer/startupStatus/updated` | 部分遵循 | 已进入 state-only `capability.state.updated`，保留 `name/status/error/failureReason`；无状态页或自动 OAuth 引导 |
+| `skills/changed` | 部分遵循 | 已进入 state-only `capability.state.updated` invalidation signal；未主动触发 skills list 或菜单刷新 |
 | `thread/realtime/*` | 未遵循/未实现 | 当前无 realtime command/event 面；而且最新 upstream 已改成 transcript `delta/done` 两段通知 |
 | `fs/watch -> fs/changed -> fs/unwatch` | 未遵循/未实现 | 当前无 watch/session 建模 |
 | `windowsSandbox/setup*` | 未遵循/未实现 | 完全未建模 |
@@ -769,7 +775,7 @@ Headless / cron synthetic initialize 当前 opt-out：
 | request surfaces：command/file approval、`item/permissions/requestApproval`、`mcpServer/elicitation/request`、`item/tool/requestUserInput` | `允许做产品语义适配，但要守住协议不变量` | 透传真实 `requestId` / params | 统一 request abstraction 可以，但要保留 method / requestType / availableDecisions / scope / nullable `turnId`；approval-carrying elicitation 还要保留 `_meta.codex_approval_kind / persist` | 卡片可产品化，但 resolve 前后 gate 必须准确；`mcp_server_elicitation_approval` 当前只开放 once/session，`always` 只提示不支持 | 必须能回写响应 | `requestId` 关联、pending/resolved、granted subset / action / unanswered 语义；MCP elicitation response 使用 top-level `_meta` |
 | dynamic tool call：`dynamicToolCall -> item/tool/call` | `允许做产品语义适配，但仅在决定支持时` | 透传 | 当前已建模 request / resolve，并在 relay 路径自动回写 unsupported；若 claim full support，仍必须补齐真正 callback executor | 当前 UI 只做只读 fail-closed 提示，不暴露交互表单 | headless 当前同样自动回写 unsupported | `callId`、item lifecycle、success/result 不能丢 |
 | review / realtime / fs watch / windows / fuzzy search | `当前无需纳入产品面，后续按需求再决定` | 只要不破坏 native path | 不 claim 支持时可不建模 | 默认不产品化 | 暂不主动驱动 | 一旦 claim 支持，就要遵守 detached vs inline、`sessionId` / `watchId`、close/completed 终态 |
-| account / app / MCP OAuth / skills / plugin/marketplace 邻接面 | `按需纳入 relay/headless；未产品化部分只要求透传不破坏` | 透传 | OAuth login 已建模最小 command/event；app/list、skills、account 仍可先不建模 | OAuth 当前只放显式 `/mcpoauth <server>`，不进主菜单；其它默认不放进 chat 主交互 | OAuth 可主动发起；其它暂不主动驱动 | login completed、OAuth completed、list invalidation 等通知不能被误改语义；OAuth completion 必须按 pending `name + threadId` 相关，不得按 timing/current thread 猜 |
+| account / app / MCP OAuth / skills / plugin/marketplace 邻接面 | `按需纳入 relay/headless；未产品化部分只要求透传不破坏` | 透传 | OAuth login 已建模最小 command/event；account/app/skills/MCP status passive notifications 已进入 state-only `capability.state.updated` | OAuth 当前只放显式 `/mcpoauth <server>`，不进主菜单；其它默认不放进 chat 主交互 | OAuth 可主动发起；其它暂不主动驱动 | login completed、OAuth completed、list invalidation 等通知不能被误改语义；OAuth completion 有 pending 时必须按 `name + threadId` 相关，无 pending 时只记录 state-only，不得按 timing/current thread 猜 |
 | simple RPC：`thread/memoryMode/set`、`memory/reset`、`thread/inject_items`、`marketplace/add`、`mcpServer/tool/call` | `不属于本轮主状态机优先级` | 透传 | 后续如实现，单独设计 command 语义 | 不要硬塞进现有 turn/approval UI | 暂不支持 | 不和状态机 backlog 混淆 |
 
 ## 9. 推荐后续顺序
@@ -784,10 +790,10 @@ Headless / cron synthetic initialize 当前 opt-out：
    - dynamic tool `item/tool/call` 的真正 callback executor
    - `review/start`
 3. 然后再看“明显偏 native/browser 客户端，但后续也许值得做”的：
-   - `mcpServer/startupStatus/updated`
-   - `app/list/updated`
+   - `mcpServer/startupStatus/updated` 的产品展示 / OAuth 引导
+   - `app/list/updated` 的产品展示 / 管理入口
    - `mcpServer/oauth/login -> ...completed` 的 server picker / account UI 后续再看；最小 `/mcpoauth` 链路已完成
-   - `skills/changed`
+   - `skills/changed` 后是否主动刷新 skills list / 菜单
 4. 明确放到后面、不要和 turn 主链 correctness 混做的：
    - `thread/realtime/*`
    - `fs/watch -> fs/changed -> fs/unwatch`
