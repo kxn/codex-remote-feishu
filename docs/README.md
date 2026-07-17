@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-05-13`
-> Summary: 更新非 Linux 当前用户自动启动实现文档索引。
+> Updated: `2026-07-17`
+> Summary: 同步 WebSetup/Admin 飞书接入文档 SSOT 归档后的索引。
 
 ## 1. 适用范围
 
@@ -196,14 +196,8 @@
 - [repository-review-2026-04.md](./draft/repository-review-2026-04.md)
 - [turn-diff-frozen-preview-mock.html](./draft/turn-diff-frozen-preview-mock.html)
 - [upstream-retryable-turn-autocontinue-design.md](./draft/upstream-retryable-turn-autocontinue-design.md)
-- [web-admin-user-mock.html](./draft/web-admin-user-mock.html)
 - [web-preview-snapshot-design.md](./draft/web-preview-snapshot-design.md)
 - [web-preview-renderer-architecture-redesign.md](./draft/web-preview-renderer-architecture-redesign.md)
-- [web-onboarding-admin-workflow-prd.md](./draft/web-onboarding-admin-workflow-prd.md)
-- [web-onboarding-admin-user-view.md](./draft/web-onboarding-admin-user-view.md)
-- [web-setup-user-mock.html](./draft/web-setup-user-mock.html)
-- [web-setup-flow-v2.md](./draft/web-setup-flow-v2.md)
-- [web-setup-wizard-redesign.md](./draft/web-setup-wizard-redesign.md)
 - [workspace-mode-redesign.md](./draft/workspace-mode-redesign.md)
 
 ### 6.5 `obsoleted`
@@ -213,5 +207,14 @@
 - [claude-normal-mode-poc-design.md](./obsoleted/claude-normal-mode-poc-design.md)
 - [claude-provider-protocol-mapping.md](./obsoleted/claude-provider-protocol-mapping.md)
 - [feishu-headless-instance-design.md](./obsoleted/feishu-headless-instance-design.md)
+- [web-admin-redesign-mock.html](./obsoleted/web-admin-redesign-mock.html)
+- [web-admin-setup-redesign-plan.md](./obsoleted/web-admin-setup-redesign-plan.md)
+- [web-admin-user-mock.html](./obsoleted/web-admin-user-mock.html)
 - [web-install-admin-prerequisites-design.md](./obsoleted/web-install-admin-prerequisites-design.md)
 - [web-install-admin-ui-design.md](./obsoleted/web-install-admin-ui-design.md)
+- [web-onboarding-admin-user-view.md](./obsoleted/web-onboarding-admin-user-view.md)
+- [web-onboarding-admin-workflow-prd.md](./obsoleted/web-onboarding-admin-workflow-prd.md)
+- [web-setup-flow-v2.md](./obsoleted/web-setup-flow-v2.md)
+- [web-setup-redesign-mock.html](./obsoleted/web-setup-redesign-mock.html)
+- [web-setup-user-mock.html](./obsoleted/web-setup-user-mock.html)
+- [web-setup-wizard-redesign.md](./obsoleted/web-setup-wizard-redesign.md)

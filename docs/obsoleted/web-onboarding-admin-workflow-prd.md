@@ -1,8 +1,11 @@
 # Web Onboarding And Admin Workflow PRD
 
-> Type: `draft`
-> Updated: `2026-05-01`
-> Summary: 当前 web workflow 已收敛到一个明确基线：setup 继续是 `v1.7.0` 向导，admin 继续是 `v1.7.0` 管理页，admin 默认加入 `Claude 配置` 与 `Codex Provider`，权限检查允许强制跳过。
+> Type: `obsoleted`
+> Updated: `2026-07-17`
+> Summary: 历史 Web Onboarding/Admin workflow PRD，仍描述旧权限/事件/回调分步流程；当前飞书接入 SSOT 已转为自动配置路径。
+> Superseded By: `docs/implemented/web-admin-ui-redesign.md`
+
+> 注意：本文是历史归档，不再作为当前实现依据。文中的“当前”均指归档前的旧基线。
 
 ## 1. 页面职责
 

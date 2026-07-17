@@ -1,8 +1,8 @@
 # Web Codex Provider 管理设计
 
 > Type: `draft`
-> Updated: `2026-05-01`
-> Summary: 固定共享 home 前提下的 Codex Provider 管理边界：provider 与密钥由本仓库自行管理，只放在 admin 页面，启动时用 `-c` 覆盖与子进程环境变量注入，并补齐与 `/claudeprofile` 同槽位互斥的 runtime 命令入口。
+> Updated: `2026-07-17`
+> Summary: 固定共享 home 前提下的 Codex Provider 管理边界：provider 与密钥由本仓库自行管理，只放在 admin 页面，启动时用 `-c` 覆盖与子进程环境变量注入，并将 Web 页面基线引用切到历史归档。
 
 ## 1. 背景
 
@@ -387,10 +387,10 @@ setup 不出现任何 provider 配置入口。
 本轮已经同步到当前结论的文档与 mock：
 
 - `docs/implemented/web-admin-ui-redesign.md`
-- `docs/draft/web-onboarding-admin-workflow-prd.md`
-- `docs/draft/web-onboarding-admin-user-view.md`
-- `docs/draft/web-setup-flow-v2.md`
-- `docs/draft/web-admin-user-mock.html`
+- `docs/obsoleted/web-onboarding-admin-workflow-prd.md`（历史页面基线）
+- `docs/obsoleted/web-onboarding-admin-user-view.md`（历史页面基线）
+- `docs/obsoleted/web-setup-flow-v2.md`（历史页面基线）
+- `docs/obsoleted/web-admin-user-mock.html`（历史 mock）
 - `docs/general/remote-surface-state-machine.md`
 - `docs/general/feishu-card-ui-state-machine.md`
 

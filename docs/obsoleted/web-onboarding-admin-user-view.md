@@ -1,8 +1,11 @@
 # Web Setup And Admin User View
 
-> Type: `draft`
-> Updated: `2026-05-01`
-> Summary: 从用户视角看，setup 是一次性向导，admin 是日常管理页；两者都以 `v1.7.0` 页面结构为基线，admin 默认增加 `Claude 配置` 与 `Codex Provider`，权限检查允许强制跳过。
+> Type: `obsoleted`
+> Updated: `2026-07-17`
+> Summary: 历史 Web Setup/Admin 用户视角方案，仍描述旧权限/事件/回调分步流程；当前飞书接入 SSOT 已转为自动配置路径。
+> Superseded By: `docs/implemented/web-admin-ui-redesign.md`
+
+> 注意：本文是历史归档，不再作为当前实现依据。文中的“当前”均指归档前的旧基线。
 
 ## 1. setup
 

@@ -1,8 +1,11 @@
 # Web Setup / Web Admin 改造方案与技术调研（V2 合并版）
 
-> Type: `draft`
-> Updated: `2026-05-04`
-> Summary: 这份 V2 文档现在只保留当前结论：web 页面以 `v1.7.0` 为基线，admin 默认新增 `Claude 配置` 与 `Codex Provider`，权限检查允许强制跳过，Setup/Admin 的连接与安装期测试继续遵守真实版本号、后台真实链接与显式测试目标的现行合同。
+> Type: `obsoleted`
+> Updated: `2026-07-17`
+> Summary: 历史 Web Setup/Admin V2 方案，仍描述旧权限/事件/回调分步流程；当前飞书接入 SSOT 已转为自动配置路径。
+> Superseded By: `docs/implemented/web-admin-ui-redesign.md`
+
+> 注意：本文是历史归档，不再作为当前实现依据。文中的“当前”均指归档前的旧基线。
 
 ## 1. 当前页面基线
 

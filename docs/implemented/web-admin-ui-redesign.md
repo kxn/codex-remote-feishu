@@ -1,8 +1,8 @@
 # Web 管理界面重设计
 
 > Type: `implemented`
-> Updated: `2026-05-04`
-> Summary: 当前 admin 页面以 `v1.7.0` 为基线，默认主界面保留机器人管理、系统集成、Claude 配置、Codex Provider、存储管理五块；页面标题使用后端真实版本号，新增机器人流程与 setup 保持相同边界，并支持权限强制跳过。
+> Updated: `2026-07-17`
+> Summary: 当前 admin 页面以 `v1.7.0` 主结构为基线，默认保留机器人管理、系统集成、Claude 配置、Codex Provider、存储管理五块；新增机器人入口与 setup 共用当前飞书接入边界，不再保留旧的权限/事件/回调分步合同。
 
 ## 1. 文档定位
 
@@ -10,9 +10,9 @@
 
 相关参照：
 
-- [web-admin-user-mock.html](../draft/web-admin-user-mock.html)
-- [web-onboarding-admin-user-view.md](../draft/web-onboarding-admin-user-view.md)
-- [web-setup-wizard-redesign.md](../draft/web-setup-wizard-redesign.md)
+- [web-admin-user-mock.html](../obsoleted/web-admin-user-mock.html)（历史 mock）
+- [web-onboarding-admin-user-view.md](../obsoleted/web-onboarding-admin-user-view.md)（历史流程文档）
+- [web-setup-wizard-redesign.md](../obsoleted/web-setup-wizard-redesign.md)（历史流程文档）
 
 ## 2. 用户可见合同
 
@@ -40,31 +40,32 @@ admin 继续保持 `v1.7.0` 的默认主结构，当前固定顺序为：
 
 - 左侧显示现有机器人和 `新增机器人`
 - 右侧显示当前机器人的状态和测试入口
-- `新增机器人` 的连接与权限处理流程，和 setup 里的新建流程保持同样边界
+- `新增机器人` 的飞书接入流程，和 setup 里的飞书连接流程保持同样边界
 
 ## 4.1 页面标题与后台链接
 
 - admin 顶部标题和浏览器标题都使用后端真实版本号，例如 `Codex Remote Feishu v1.7.0 管理`
-- 机器人相关的权限、事件、回调、菜单入口都由后端返回真实飞书后台链接
+- 机器人相关的飞书后台入口由后端返回真实链接
 - admin 前端不再自己拼默认应用首页或旧兜底链接
 
-## 4.2 新增机器人的连接与测试
+## 4.2 新增机器人的连接
 
 - `新增机器人` 和 setup 继续共用同一套连接交互：
-  - `扫码创建` 和 `手动输入`
-  - 扫码默认自动开始，并按 2 秒轮询
+  - 扫码新建飞书应用
+  - 手动接入已有飞书应用
   - `App ID`、`App Secret` 必填，`机器人名称` 可选
-- 权限检查仍允许 `强制跳过这一步`
-- 安装期测试发送目标使用当前机器人绑定的 web test recipient，不再回退 recent-surface fallback
+- 连接完成后进入当前自动配置/确认路径；admin 不再保留旧的 `权限检查 / 事件订阅 / 回调配置` 分步合同
+- 需要人工处理的飞书后台事项，应以当前后端返回的状态和链接为准
 
-## 5. 新增机器人里的权限规则
+## 5. 新增机器人里的配置边界
 
-新增机器人时，权限检查采用和 setup 一样的正式规则：
+新增机器人不再单独定义一套权限检查规则。
 
-- 补齐权限后继续
-- 允许 `强制跳过这一步`
-- 跳过后继续后面的设置
-- 后续仍可回到这里重新检查
+当前边界是：
+
+- 连接入口由 admin 页面提供
+- 飞书应用的能力收敛由后端自动配置路径负责
+- 菜单、权限或其他飞书后台事项如果需要人工处理，应通过当前状态、链接和提示暴露，不在 admin 文档中保留旧三步流程
 
 ## 6. Claude 配置
 
@@ -85,4 +86,5 @@ admin 继续保持 `v1.7.0` 的默认主结构，当前固定顺序为：
 - admin 不是新的 setup 页面
 - setup/admin 的主界面结构都以 `v1.7.0` 为基线
 - 当前接受的新默认主界面新增内容是 `Claude 配置` 与 `Codex Provider`
+- 飞书接入流程的当前 SSOT 是 setup/admin 共用的连接入口和后端自动配置状态，不是旧的权限/事件/回调分步文档
 - 如果以后要改默认结构，必须先同步文档和 mock，再改产品页面

@@ -1,5 +1,12 @@
 # Web Admin & Setup 界面重构方案
 
+> Type: `obsoleted`
+> Updated: `2026-07-17`
+> Summary: 历史 Web Admin/Setup 视觉与文案重构清单，包含旧 setup 分步流程文案，不再作为当前实现依据。
+> Superseded By: `docs/implemented/web-admin-ui-redesign.md`
+
+> 注意：本文是历史归档。文中的行号、文案和流程描述来自旧实现，不代表当前 WebSetup/Admin SSOT。
+
 ## 概述
 
 对 `web/` 目录下的 Admin（管理页面）和 Setup（设置向导）界面进行视觉重设计、文案重写和移动端适配优化。**只改样式和文案，不动功能逻辑。**

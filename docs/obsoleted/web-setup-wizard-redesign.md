@@ -1,8 +1,11 @@
 # Web Setup 向导流程重设计
 
-> Type: `draft`
-> Updated: `2026-04-29`
-> Summary: 当前 setup 页面以 `v1.7.0` 为基线，保留左侧步骤栏和右侧单步正文；权限检查支持强制跳过，事件与回调继续留在 setup 内完成。
+> Type: `obsoleted`
+> Updated: `2026-07-17`
+> Summary: 历史 Web Setup 向导方案，仍描述旧权限/事件/回调分步流程；当前飞书接入 SSOT 已转为自动配置路径。
+> Superseded By: `docs/implemented/web-admin-ui-redesign.md`
+
+> 注意：本文是历史归档，不再作为当前实现依据。文中的“当前”均指归档前的旧基线。
 
 ## 1. 文档定位
 
@@ -10,8 +13,8 @@
 
 相关参照：
 
-- [web-setup-user-mock.html](./web-setup-user-mock.html)
-- [web-onboarding-admin-user-view.md](./web-onboarding-admin-user-view.md)
+- [web-setup-user-mock.html](../obsoleted/web-setup-user-mock.html)
+- [web-onboarding-admin-user-view.md](../obsoleted/web-onboarding-admin-user-view.md)
 - [web-admin-ui-redesign.md](../implemented/web-admin-ui-redesign.md)
 
 ## 2. 用户可见合同

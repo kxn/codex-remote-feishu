@@ -1,9 +1,9 @@
 # Web 安装与管理界面前置改造设计（已废弃）
 
 > Type: `obsoleted`
-> Updated: `2026-05-12`
-> Summary: 这份“Web 安装与管理界面前置改造”草稿形成于早期方案阶段，文中大量前提已经失效，保留仅用于历史背景，不再作为当前实现依据。
-> Superseded By: `docs/general/install-deploy-design.md`, `docs/draft/web-setup-wizard-redesign.md`, `docs/draft/web-admin-ui-redesign.md`
+> Updated: `2026-07-17`
+> Summary: 这份“Web 安装与管理界面前置改造”草稿形成于早期方案阶段，文中大量前提已经失效；同步已归档 WebSetup/Admin 文档链接，保留仅用于历史背景。
+> Superseded By: `docs/general/install-deploy-design.md`, `docs/obsoleted/web-setup-wizard-redesign.md`, `docs/implemented/web-admin-ui-redesign.md`
 
 ## 1. 文档定位
 
@@ -27,7 +27,7 @@
 
 产品层设计见：
 
-- [web-admin-ui-redesign.md](./web-admin-ui-redesign.md)
+- [web-admin-ui-redesign.md](../implemented/web-admin-ui-redesign.md)
 
 ## 1.1 当前落地状态
 
@@ -954,7 +954,7 @@ scopes JSON 以当前已确认样例为基线：
 
 ## 9. 参考资料
 
-- [web-admin-ui-redesign.md](./web-admin-ui-redesign.md)
+- [web-admin-ui-redesign.md](../implemented/web-admin-ui-redesign.md)
 - [internal/config/envfile.go](../../internal/config/envfile.go)
 - [internal/app/daemon/entry.go](../../internal/app/daemon/entry.go)
 - [internal/app/daemon/app.go](../../internal/app/daemon/app.go)

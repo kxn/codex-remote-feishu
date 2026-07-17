@@ -1,8 +1,8 @@
 # 工程可维护性与测试覆盖审查（2026-04）
 
 > Type: `draft`
-> Updated: `2026-04-07`
-> Summary: 基于当前仓库做一次独立审查，记录维护性热点、测试覆盖、已修复问题和后续建议。
+> Updated: `2026-07-17`
+> Summary: 基于当前仓库做一次独立审查，记录维护性热点、测试覆盖、已修复问题和后续建议；同步 Web admin 设计文档迁移后的链接。
 
 ## 1. 范围与方法
 
@@ -188,7 +188,7 @@
 相关文件：
 
 - [web/src/routes/admin/AdminPanels.tsx](../../web/src/routes/admin/AdminPanels.tsx)
-- [docs/draft/web-admin-ui-redesign.md](./web-admin-ui-redesign.md)
+- [docs/implemented/web-admin-ui-redesign.md](../implemented/web-admin-ui-redesign.md)
 
 当前页面虽然功能齐全，但仍保留不少 setup 和工程调试语义。
 

@@ -1,32 +1,32 @@
 # 飞书 Setup 自动配置改造设计（vNext）
 
 > Type: `draft`
-> Updated: `2026-05-09`
-> Summary: 基于 Feishu `application/v7` 自动配置能力重设计 setup 的飞书配置阶段，明确长连接与能力基线走后端固定值，删除脆弱的 events/callback 安装期测试，并补齐发布与审核不确定性下的降级策略。
+> Updated: `2026-07-17`
+> Summary: 基于 Feishu `application/v7` 自动配置能力重设计 setup 的飞书配置阶段，明确长连接与能力基线走后端固定值，删除脆弱的 events/callback 安装期测试，并将旧版页面基线引用切到历史归档。
 
 ## 1. 文档定位
 
-本文讨论的是下一版 setup / web admin 中“飞书应用配置”这一段的改造方案。
+本文记录 setup / web admin 中“飞书应用配置”自动配置改造的设计背景和目标边界。
 
 它要解决四件事：
 
-1. 把当前依赖人工跳转后台的权限、事件、回调配置，尽可能改成程序化自动收敛。
-2. 删除当前脆弱的 `验证 events` / `验证 callback` 安装期测试链路。
+1. 把改造前依赖人工跳转后台的权限、事件、回调配置，尽可能改成程序化自动收敛。
+2. 删除改造前脆弱的 `验证 events` / `验证 callback` 安装期测试链路。
 3. 在 Feishu 发布与管理员审核存在不确定性的前提下，定义可接受的交互和降级路径。
 4. 给后续实现提供一个单一版本设计基线，避免 setup、admin、manifest、后台调用各自发散。
 
-当前已生效的旧版页面基线仍记录在：
+旧版页面基线已归档，仅作为历史背景：
 
-- [web-setup-flow-v2.md](./web-setup-flow-v2.md)
-- [web-setup-wizard-redesign.md](./web-setup-wizard-redesign.md)
+- [web-setup-flow-v2.md](../obsoleted/web-setup-flow-v2.md)
+- [web-setup-wizard-redesign.md](../obsoleted/web-setup-wizard-redesign.md)
 
-本文是 vNext 目标设计，不代表当前代码已经实现。
+当前代码已经采用 `飞书自动配置` 主路径；本文保留为该改造的设计背景和边界说明。
 
-## 2. 当前问题
+## 2. 改造前问题
 
 ### 2.1 手工流程过碎
 
-当前 setup 固定步骤仍是：
+改造前 setup 固定步骤是：
 
 1. `环境检查`
 2. `飞书连接`
@@ -42,7 +42,7 @@
 
 ### 2.2 安装期测试链路很脆
 
-当前 `事件订阅` 和 `回调配置` 会尝试发送测试消息或测试卡片。这条链路依赖 `web test recipient`，而这个 recipient 只在部分路径上能可靠拿到。
+改造前 `事件订阅` 和 `回调配置` 会尝试发送测试消息或测试卡片。这条链路依赖 `web test recipient`，而这个 recipient 只在部分路径上能可靠拿到。
 
 直接问题有三个：
 

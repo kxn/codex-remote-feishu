@@ -1,9 +1,9 @@
 # Web 安装与管理界面设计草案（已废弃）
 
 > Type: `obsoleted`
-> Updated: `2026-04-07`
-> Summary: 原“安装与管理界面总设计稿”已拆分为 setup 向导重设计、管理页重设计和前置改造文档，本文不再作为当前设计依据。
-> Superseded By: `docs/draft/web-setup-wizard-redesign.md`, `docs/draft/web-admin-ui-redesign.md`, `docs/obsoleted/web-install-admin-prerequisites-design.md`
+> Updated: `2026-07-17`
+> Summary: 原“安装与管理界面总设计稿”已拆分并归档；同步已归档 WebSetup/Admin 文档链接，本文不再作为当前设计依据。
+> Superseded By: `docs/obsoleted/web-setup-wizard-redesign.md`, `docs/implemented/web-admin-ui-redesign.md`, `docs/obsoleted/web-install-admin-prerequisites-design.md`
 
 ## 1. 说明
 
@@ -23,8 +23,8 @@
 
 当前如果要看：
 
-- setup 交互：请看 [../draft/web-setup-wizard-redesign.md](../draft/web-setup-wizard-redesign.md)
-- admin 管理页：请看 [../draft/web-admin-ui-redesign.md](../draft/web-admin-ui-redesign.md)
+- setup 历史交互：请看 [../obsoleted/web-setup-wizard-redesign.md](../obsoleted/web-setup-wizard-redesign.md)
+- admin 当前管理页：请看 [../implemented/web-admin-ui-redesign.md](../implemented/web-admin-ui-redesign.md)
 - 实现前置改造的历史背景：请看 [../obsoleted/web-install-admin-prerequisites-design.md](../obsoleted/web-install-admin-prerequisites-design.md)
 
 ## 3. 保留原因

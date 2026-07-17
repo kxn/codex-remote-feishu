@@ -1,8 +1,8 @@
 # Web 设计规范
 
 > Type: `general`
-> Updated: `2026-04-24`
-> Summary: 补充页面 Mock 与真实产品页面的用户可见合同、可见内容审计、反馈合同与按 Mock 落产品的一致性基线，要求用户可见结构、交互、反馈槽位和文案保持受控。
+> Updated: `2026-07-17`
+> Summary: 更新 Web 页面设计基线参照，避免继续把已归档的旧 WebSetup 分步方案当作当前落地参照。
 
 ## 1. 适用范围
 
@@ -193,9 +193,9 @@
 
 当前仓库已有的参考方向：
 
-- [web-setup-wizard-redesign.md](../draft/web-setup-wizard-redesign.md)
-  - 体现“单步曝光”“普通用户优先”“移动端 shell 收敛”“避免未来步骤长滚动泄露”
 - [web-admin-ui-redesign.md](../implemented/web-admin-ui-redesign.md)
   - 体现“主界面与技术详情分层”“默认文案采用用户任务口径”“移动端与桌面端共用但收敛的信息架构”
+- [web-setup-wizard-redesign.md](../obsoleted/web-setup-wizard-redesign.md)
+  - 历史 setup 分步方案，仅作为“单步曝光”和“避免信息过载”的背景参考，不再作为当前流程 SSOT
 
 这些文档是现有落地参照，但本文件才是后续 Web 改动的统一基线。
