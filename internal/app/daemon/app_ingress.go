@@ -838,7 +838,6 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.syncManagedHeadlessLocked(now)
 	a.maybeRefreshIdleManagedHeadlessLocked(now)
 	a.reapIdleHeadless(now)
-	a.syncManagedHeadlessLocked(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
 	a.surfaceResumeRuntime.vscodeStartupCheckDue = false
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)

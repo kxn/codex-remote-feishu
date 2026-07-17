@@ -1648,6 +1648,82 @@ func TestSurfaceResumeRecoverySyncPreservesBackoffForSameRecoveryTarget(t *testi
 	}
 }
 
+func TestSurfaceResumeRecoveryDueGateSkipsBackoffEntries(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		Backend:            "codex",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    "/data/dl/droid",
+		ResumeWorkspaceKey: "/data/dl/droid",
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+	app := newRestoreHintTestApp(stateDir)
+	now := time.Date(2026, 6, 5, 4, 0, 0, 0, time.UTC)
+	recovery := app.surfaceResumeRuntime.recovery["surface-1"]
+	if recovery == nil {
+		t.Fatal("expected recovery state")
+	}
+	recovery.NextAttemptAt = now.Add(time.Minute)
+
+	if app.hasDueHeadlessSurfaceRecoveryLocked(now) {
+		t.Fatal("expected no due headless recovery during backoff")
+	}
+	if events := app.maybeRecoverHeadlessSurfacesLocked(now); len(events) != 0 {
+		t.Fatalf("expected backoff recovery tick to stay silent, got %#v", events)
+	}
+	if !app.hasDueHeadlessSurfaceRecoveryLocked(now.Add(time.Minute)) {
+		t.Fatal("expected headless recovery to become due after backoff")
+	}
+}
+
+func TestDetachedVSCodePromptScanUsesDirtyGate(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	updatedAt := time.Date(2026, 6, 5, 4, 0, 0, 0, time.UTC)
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID: "surface-1",
+		GatewayID:        "app-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ProductMode:      "vscode",
+		Backend:          "vscode",
+		ResumeInstanceID: "inst-vscode-1",
+		UpdatedAt:        updatedAt,
+	})
+	app := newRestoreHintTestApp(stateDir)
+	app.daemonStartedAt = updatedAt.Add(time.Second)
+
+	events := app.maybePromptDetachedVSCodeSurfacesLocked()
+	if len(events) != 1 {
+		t.Fatalf("expected initial detached VS Code prompt, got %#v", events)
+	}
+	if app.surfaceResumeRuntime.vscodeDetachedPromptScanDue {
+		t.Fatal("expected detached prompt scan gate to be cleared after scan")
+	}
+	if events := app.maybePromptDetachedVSCodeSurfacesLocked(); len(events) != 0 {
+		t.Fatalf("expected clean detached prompt scan to skip, got %#v", events)
+	}
+
+	app.markVSCodeDetachedPromptScanDueLocked()
+	events = app.maybePromptDetachedVSCodeSurfacesLocked()
+	if len(events) != 0 {
+		t.Fatalf("expected already-noticed detached VS Code surface to stay silent, got %#v", events)
+	}
+	if app.surfaceResumeRuntime.vscodeDetachedPromptScanDue {
+		t.Fatal("expected detached prompt scan gate to clear after dirty rescan")
+	}
+}
+
 func seedVSCodeResumeInstance(app *App, instanceID, threadID string) {
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              instanceID,

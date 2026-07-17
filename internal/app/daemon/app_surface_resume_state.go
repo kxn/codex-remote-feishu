@@ -43,6 +43,7 @@ func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	a.materializeSurfaceResumeStateLocked()
 	a.syncSurfaceResumeRecoveryStateLocked()
 	a.surfaceResumeRuntime.vscodeStartupCheckDue = storedVSCodeResumeExists(store)
+	a.markVSCodeDetachedPromptScanDueLocked()
 }
 
 func (a *App) SurfaceResumeState(surfaceID string) *surfaceresume.Entry {
@@ -127,6 +128,7 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 		if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
 			log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
 		}
+		a.markVSCodeDetachedPromptScanDueLocked()
 	}
 	for surfaceID := range existing {
 		if _, ok := desired[surfaceID]; ok {
@@ -135,6 +137,7 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 		if err := a.surfaceResumeRuntime.store.Delete(surfaceID); err != nil {
 			log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
 		}
+		a.markVSCodeDetachedPromptScanDueLocked()
 	}
 	a.syncVSCodeResumeNoticeStateLocked(desired)
 	a.syncSurfaceResumeRecoveryStateLocked()
@@ -164,6 +167,7 @@ func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTa
 			if err := a.surfaceResumeRuntime.store.Delete(strings.TrimSpace(surface.SurfaceSessionID)); err != nil {
 				log.Printf("clear surface resume state failed: surface=%s err=%v", surface.SurfaceSessionID, err)
 			}
+			a.markVSCodeDetachedPromptScanDueLocked()
 			continue
 		}
 		if current, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok && surfaceresume.SameEntryContent(current, entry) {
@@ -173,6 +177,7 @@ func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTa
 		if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
 			log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
 		}
+		a.markVSCodeDetachedPromptScanDueLocked()
 	}
 	if !touched {
 		return
@@ -204,6 +209,7 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 			if err := a.surfaceResumeRuntime.store.Delete(surfaceID); err != nil {
 				log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
 			}
+			a.markVSCodeDetachedPromptScanDueLocked()
 			touched = true
 			continue
 		}
@@ -216,6 +222,7 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 			if err := a.surfaceResumeRuntime.store.Delete(surfaceID); err != nil {
 				log.Printf("clear surface resume state failed: surface=%s err=%v", surfaceID, err)
 			}
+			a.markVSCodeDetachedPromptScanDueLocked()
 			touched = true
 			continue
 		}
@@ -226,6 +233,7 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 		if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
 			log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
 		}
+		a.markVSCodeDetachedPromptScanDueLocked()
 		touched = true
 	}
 	if !touched {
@@ -415,6 +423,10 @@ func (a *App) syncSurfaceResumeRecoveryStateLocked() {
 	}
 }
 
+func (a *App) markVSCodeDetachedPromptScanDueLocked() {
+	a.surfaceResumeRuntime.vscodeDetachedPromptScanDue = true
+}
+
 func sameSurfaceResumeRecoveryTarget(left, right surfaceresume.Entry) bool {
 	return strings.TrimSpace(left.SurfaceSessionID) == strings.TrimSpace(right.SurfaceSessionID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
@@ -440,8 +452,63 @@ func surfaceResumeEntryNeedsRecovery(entry surfaceresume.Entry) bool {
 	}
 }
 
+func surfaceResumeRecoveryDue(recovery *surfaceResumeRecoveryState, now time.Time) bool {
+	if recovery == nil {
+		return false
+	}
+	return recovery.NextAttemptAt.IsZero() || !now.Before(recovery.NextAttemptAt)
+}
+
+func surfaceResumeRecoveryDueForProductMode(recovery *surfaceResumeRecoveryState, now time.Time, productMode state.ProductMode) bool {
+	if !surfaceResumeRecoveryDue(recovery, now) {
+		return false
+	}
+	return state.NormalizeProductMode(state.ProductMode(recovery.Entry.ProductMode)) == state.NormalizeProductMode(productMode)
+}
+
+func (a *App) hasRunnableHeadlessSurfaceRecoveryLocked(now time.Time, allowMissingTargetFailure bool) bool {
+	for _, recovery := range a.surfaceResumeRuntime.recovery {
+		if recovery == nil || !surfaceResumeRecoveryDue(recovery, now) {
+			continue
+		}
+		if !state.IsHeadlessProductMode(state.ProductMode(recovery.Entry.ProductMode)) {
+			continue
+		}
+		if recovery.Entry.ResumeHeadless && a.shouldDeferHeadlessResumeUntilInitialRefreshLocked(recovery.Entry, allowMissingTargetFailure) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+func (a *App) hasDueHeadlessSurfaceRecoveryLocked(now time.Time) bool {
+	for _, recovery := range a.surfaceResumeRuntime.recovery {
+		if recovery == nil || !surfaceResumeRecoveryDue(recovery, now) {
+			continue
+		}
+		if state.IsHeadlessProductMode(state.ProductMode(recovery.Entry.ProductMode)) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) hasDueVSCodeSurfaceRecoveryLocked(now time.Time) bool {
+	for _, recovery := range a.surfaceResumeRuntime.recovery {
+		if surfaceResumeRecoveryDueForProductMode(recovery, now, state.ProductModeVSCode) {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.Event {
 	if len(a.surfaceResumeRuntime.recovery) == 0 {
+		return nil
+	}
+	allowMissingTargetFailure := a.initialThreadsRefreshRoundCompleteLocked()
+	if !a.hasRunnableHeadlessSurfaceRecoveryLocked(now, allowMissingTargetFailure) {
 		return nil
 	}
 	surfaceIDs := make([]string, 0, len(a.surfaceResumeRuntime.recovery))
@@ -449,7 +516,6 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.
 		surfaceIDs = append(surfaceIDs, surfaceID)
 	}
 	sort.Strings(surfaceIDs)
-	allowMissingTargetFailure := a.initialThreadsRefreshRoundCompleteLocked()
 	events := []eventcontract.Event{}
 	updatedSurfaceIDs := make([]string, 0, len(surfaceIDs))
 	for _, surfaceID := range surfaceIDs {
@@ -457,7 +523,7 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.
 		if recovery == nil {
 			continue
 		}
-		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
+		if !surfaceResumeRecoveryDue(recovery, now) {
 			continue
 		}
 		if recovery.Entry.ResumeHeadless && a.shouldDeferHeadlessResumeUntilInitialRefreshLocked(recovery.Entry, allowMissingTargetFailure) {
@@ -508,7 +574,7 @@ func (a *App) maybeRecoverHeadlessSurfacesLocked(now time.Time) []eventcontract.
 }
 
 func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []eventcontract.Event {
-	if len(a.surfaceResumeRuntime.recovery) == 0 {
+	if len(a.surfaceResumeRuntime.recovery) == 0 || !a.hasDueVSCodeSurfaceRecoveryLocked(now) {
 		return nil
 	}
 	surfaceIDs := make([]string, 0, len(a.surfaceResumeRuntime.recovery))
@@ -523,7 +589,7 @@ func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []eventcontract.Ev
 		if recovery == nil || !state.IsVSCodeProductMode(state.ProductMode(recovery.Entry.ProductMode)) {
 			continue
 		}
-		if !recovery.NextAttemptAt.IsZero() && now.Before(recovery.NextAttemptAt) {
+		if !surfaceResumeRecoveryDue(recovery, now) {
 			continue
 		}
 		restoreEvents, result := a.service.TryAutoResumeVSCodeSurface(surfaceID, recovery.Entry.ResumeInstanceID)
@@ -550,9 +616,10 @@ func (a *App) maybeRecoverVSCodeSurfacesLocked(now time.Time) []eventcontract.Ev
 }
 
 func (a *App) maybePromptDetachedVSCodeSurfacesLocked() []eventcontract.Event {
-	if a.surfaceResumeRuntime.store == nil {
+	if a.surfaceResumeRuntime.store == nil || !a.surfaceResumeRuntime.vscodeDetachedPromptScanDue {
 		return nil
 	}
+	a.surfaceResumeRuntime.vscodeDetachedPromptScanDue = false
 	entries := a.surfaceResumeRuntime.store.Entries()
 	if len(entries) == 0 {
 		return nil

@@ -32,15 +32,16 @@ type vscodeMigrationFlowRecord struct {
 }
 
 type surfaceResumeRuntimeState struct {
-	store                  *surfaceresume.Store
-	recovery               map[string]*surfaceResumeRecoveryState
-	vscodeMigrationFlows   map[string]*vscodeMigrationFlowRecord
-	vscodeMigrationNextSeq int64
-	vscodeResumeNotices    map[string]bool
-	vscodeStartupCheckDue  bool
-	startupRefreshPending  map[string]bool
-	startupRefreshSeen     bool
-	workspaceContextRoots  map[string]string
+	store                       *surfaceresume.Store
+	recovery                    map[string]*surfaceResumeRecoveryState
+	vscodeMigrationFlows        map[string]*vscodeMigrationFlowRecord
+	vscodeMigrationNextSeq      int64
+	vscodeResumeNotices         map[string]bool
+	vscodeStartupCheckDue       bool
+	vscodeDetachedPromptScanDue bool
+	startupRefreshPending       map[string]bool
+	startupRefreshSeen          bool
+	workspaceContextRoots       map[string]string
 }
 
 type claudeWorkspaceProfileRuntimeState struct {
@@ -78,11 +79,12 @@ type feishuRuntimeState struct {
 
 func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {
 	return surfaceResumeRuntimeState{
-		recovery:              map[string]*surfaceResumeRecoveryState{},
-		vscodeMigrationFlows:  map[string]*vscodeMigrationFlowRecord{},
-		vscodeResumeNotices:   map[string]bool{},
-		startupRefreshPending: map[string]bool{},
-		workspaceContextRoots: map[string]string{},
+		recovery:                    map[string]*surfaceResumeRecoveryState{},
+		vscodeMigrationFlows:        map[string]*vscodeMigrationFlowRecord{},
+		vscodeResumeNotices:         map[string]bool{},
+		vscodeDetachedPromptScanDue: true,
+		startupRefreshPending:       map[string]bool{},
+		workspaceContextRoots:       map[string]string{},
 	}
 }
 
