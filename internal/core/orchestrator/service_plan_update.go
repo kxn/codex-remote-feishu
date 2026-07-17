@@ -12,24 +12,6 @@ func turnPlanSnapshotKey(surfaceID, instanceID, threadID, turnID string) string 
 	return strings.Join([]string{surfaceID, instanceID, threadID, turnID}, "::")
 }
 
-func deleteMatchingTurnPlanSnapshots(records map[string]*turnPlanSnapshotRecord, instanceID, threadID, turnID string) {
-	for key, record := range records {
-		if record == nil {
-			continue
-		}
-		if record.InstanceID != instanceID {
-			continue
-		}
-		if threadID != "" && record.ThreadID != threadID {
-			continue
-		}
-		if turnID != "" && record.TurnID != turnID {
-			continue
-		}
-		delete(records, key)
-	}
-}
-
 func equalTurnPlanSnapshot(left, right *agentproto.TurnPlanSnapshot) bool {
 	switch {
 	case left == nil && right == nil:
@@ -81,16 +63,8 @@ func (s *Service) applyTurnPlanUpdate(instanceID string, event agentproto.Event)
 	if surface == nil {
 		return nil
 	}
-	key := turnPlanSnapshotKey(surface.SurfaceSessionID, instanceID, event.ThreadID, event.TurnID)
-	if existing := s.progress.turnPlanSnapshots[key]; existing != nil && equalTurnPlanSnapshot(existing.Snapshot, event.PlanSnapshot) {
+	if !s.upsertTurnPlanSnapshot(surface.SurfaceSessionID, instanceID, event.ThreadID, event.TurnID, event.PlanSnapshot) {
 		return nil
-	}
-	s.progress.turnPlanSnapshots[key] = &turnPlanSnapshotRecord{
-		SurfaceSessionID: surface.SurfaceSessionID,
-		InstanceID:       instanceID,
-		ThreadID:         event.ThreadID,
-		TurnID:           event.TurnID,
-		Snapshot:         agentproto.CloneTurnPlanSnapshot(event.PlanSnapshot),
 	}
 	update := planUpdateFromSnapshot(event.ThreadID, event.TurnID, event.PlanSnapshot)
 	if update == nil {

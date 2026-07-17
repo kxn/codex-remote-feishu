@@ -512,6 +512,39 @@ func (r *serviceProgressRuntime) clearPendingTextForInstance(instanceID string) 
 	}
 }
 
+func (r *serviceProgressRuntime) upsertTurnPlanSnapshot(record *turnPlanSnapshotRecord) bool {
+	if r == nil || record == nil || record.Snapshot == nil {
+		return false
+	}
+	key := turnPlanSnapshotKey(record.SurfaceSessionID, record.InstanceID, record.ThreadID, record.TurnID)
+	if existing := r.turnPlanSnapshots[key]; existing != nil && equalTurnPlanSnapshot(existing.Snapshot, record.Snapshot) {
+		return false
+	}
+	r.turnPlanSnapshots[key] = record
+	return true
+}
+
+func (r *serviceProgressRuntime) clearTurnPlanSnapshots(instanceID, threadID, turnID string) {
+	if r == nil {
+		return
+	}
+	for key, record := range r.turnPlanSnapshots {
+		if record == nil {
+			continue
+		}
+		if record.InstanceID != instanceID {
+			continue
+		}
+		if threadID != "" && record.ThreadID != threadID {
+			continue
+		}
+		if turnID != "" && record.TurnID != turnID {
+			continue
+		}
+		delete(r.turnPlanSnapshots, key)
+	}
+}
+
 func (r *serviceProgressRuntime) instanceHasCompact(instanceID string) bool {
 	if r == nil || r.service == nil {
 		return false

@@ -134,7 +134,7 @@ func (s *Service) clearRequestsForTurn(instanceID, threadID, turnID string) {
 
 func (s *Service) clearTurnArtifacts(instanceID, threadID, turnID string) {
 	deleteMatchingItemBuffers(s.itemBuffers, instanceID, threadID, turnID)
-	deleteMatchingTurnPlanSnapshots(s.progress.turnPlanSnapshots, instanceID, threadID, turnID)
+	s.clearTurnPlanSnapshots(instanceID, threadID, turnID)
 	deleteMatchingMCPToolCallProgress(s.progress.mcpToolCallProgress, instanceID, threadID, turnID)
 	if turnID == "" {
 		return
