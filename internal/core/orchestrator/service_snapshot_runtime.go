@@ -579,6 +579,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	}
 	inst.Online = false
 	inst.ActiveTurnID = ""
+	inst.ModelCatalog = nil
 	events := s.failCompactTurn(instanceID, "当前实例已离线，上下文压缩已中断。", nil, false)
 
 	for _, surface := range s.root.Surfaces {
@@ -635,6 +636,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	}
 	inst.Online = false
 	inst.ActiveTurnID = ""
+	inst.ModelCatalog = nil
 
 	delete(s.threadRefreshes, instanceID)
 

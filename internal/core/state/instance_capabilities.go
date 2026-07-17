@@ -22,3 +22,9 @@ func EffectiveInstanceCapabilities(inst *InstanceRecord) agentproto.Capabilities
 func InstanceSupportsThreadsRefresh(inst *InstanceRecord) bool {
 	return inst != nil && EffectiveInstanceCapabilities(inst).ThreadsRefresh
 }
+
+func InstanceSupportsModelCatalog(inst *InstanceRecord) bool {
+	return inst != nil &&
+		EffectiveInstanceBackend(inst) == agentproto.BackendCodex &&
+		EffectiveInstanceCapabilities(inst).ModelCatalog
+}

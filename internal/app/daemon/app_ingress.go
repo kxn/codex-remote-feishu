@@ -564,6 +564,22 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	} else {
 		a.markStartupThreadsRefreshSettledLocked(hello.Instance.InstanceID)
 	}
+	if state.InstanceSupportsModelCatalog(inst) {
+		command := agentproto.Command{
+			CommandID: a.nextCommandID(),
+			Kind:      agentproto.CommandModelList,
+			ModelList: agentproto.ModelListCommand{
+				IncludeHidden: false,
+				Limit:         50,
+			},
+		}
+		a.mu.Unlock()
+		err := a.sendAgentCommand(hello.Instance.InstanceID, command)
+		a.mu.Lock()
+		if err != nil {
+			log.Printf("relay send command failed: instance=%s kind=%s err=%v", hello.Instance.InstanceID, command.Kind, err)
+		}
+	}
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
 	a.handleUIEventsLocked(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []eventcontract.Event{}

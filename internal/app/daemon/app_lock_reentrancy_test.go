@@ -145,6 +145,71 @@ func TestOnHelloWithoutThreadsRefreshSkipsStartupRefreshAndSettlesRound(t *testi
 	}
 }
 
+func TestOnHelloDispatchesModelCatalogRefreshOnlyWhenCapabilityDeclared(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+
+	var commands []agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		commands = append(commands, command)
+		return nil
+	}
+
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-new",
+			DisplayName:   "workspace",
+			WorkspaceRoot: "/tmp/workspace",
+			WorkspaceKey:  "/tmp/workspace",
+			ShortName:     "workspace",
+			Backend:       agentproto.BackendCodex,
+			Source:        "vscode",
+		},
+		CapabilitiesDeclared: true,
+		Capabilities: agentproto.Capabilities{
+			ModelCatalog: true,
+		},
+	})
+	if len(commands) != 1 || commands[0].Kind != agentproto.CommandModelList {
+		t.Fatalf("expected only model catalog refresh command, got %#v", commands)
+	}
+
+	commands = nil
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-legacy",
+			DisplayName:   "workspace",
+			WorkspaceRoot: "/tmp/workspace",
+			WorkspaceKey:  "/tmp/workspace",
+			ShortName:     "workspace",
+			Backend:       agentproto.BackendCodex,
+			Source:        "vscode",
+		},
+	})
+	if len(commands) != 1 || commands[0].Kind != agentproto.CommandThreadsRefresh {
+		t.Fatalf("expected legacy hello to keep threads refresh only, got %#v", commands)
+	}
+
+	commands = nil
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    "inst-claude",
+			DisplayName:   "workspace",
+			WorkspaceRoot: "/tmp/workspace",
+			WorkspaceKey:  "/tmp/workspace",
+			ShortName:     "workspace",
+			Backend:       agentproto.BackendClaude,
+			Source:        "headless",
+		},
+		CapabilitiesDeclared: true,
+		Capabilities: agentproto.Capabilities{
+			ModelCatalog: true,
+		},
+	})
+	if len(commands) != 0 {
+		t.Fatalf("expected claude model catalog capability to be ignored, got %#v", commands)
+	}
+}
+
 func TestOnHelloRespectsExplicitClaudeCapabilityAdvertisement(t *testing.T) {
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 

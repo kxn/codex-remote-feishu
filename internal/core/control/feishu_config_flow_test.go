@@ -77,6 +77,10 @@ func TestBuildFeishuCommandConfigPageViewResolvesFromCatalogFamily(t *testing.T)
 		CatalogFamilyID:  FeishuCommandModel,
 		CatalogVariantID: "model.codex.normal",
 		CatalogBackend:   agentproto.BackendCodex,
+		FormOptions: []CommandCatalogFormFieldOption{{
+			Label: "GPT 5.5",
+			Value: "gpt-5.5",
+		}},
 	})
 	if page.CommandID != FeishuCommandModel || page.Title == "" {
 		t.Fatalf("expected model config page, got %#v", page)

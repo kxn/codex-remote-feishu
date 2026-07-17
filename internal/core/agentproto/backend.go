@@ -63,6 +63,9 @@ func EffectiveCapabilitiesForBackend(backend Backend, caps Capabilities) Capabil
 	if caps.SessionCatalog {
 		base.SessionCatalog = true
 	}
+	if caps.ModelCatalog {
+		base.ModelCatalog = true
+	}
 	if caps.ResumeByThreadID {
 		base.ResumeByThreadID = true
 	}

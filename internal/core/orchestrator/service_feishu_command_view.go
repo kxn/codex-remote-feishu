@@ -71,6 +71,15 @@ func (s *Service) buildConfigCommandViewState(
 		if strings.TrimSpace(view.Config.FormDefaultValue) == "" {
 			view.Config.FormDefaultValue = s.surfaceClaudeProfileID(surface)
 		}
+	case control.FeishuCommandModel:
+		options, truncated := s.modelCatalogCommandOptions(inst)
+		if len(options) != 0 {
+			view.Config.FormOptions = options
+		}
+		if kind, text := s.maybeModelCatalogStatusText(inst, truncated); text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
+			view.Config.StatusKind = kind
+			view.Config.StatusText = text
+		}
 	}
 	return view
 }

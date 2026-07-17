@@ -460,7 +460,7 @@ func TestBareReasoningCommandPreservesCatalogVariantFromAction(t *testing.T) {
 	}
 }
 
-func TestBareModelCommandBuildsDropdownAndManualFormCard(t *testing.T) {
+func TestBareModelCommandWithoutCatalogBuildsManualFormOnly(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
@@ -469,8 +469,12 @@ func TestBareModelCommandBuildsDropdownAndManualFormCard(t *testing.T) {
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/data/dl/droid",
 		WorkspaceKey:  "/data/dl/droid",
-		Online:        true,
-		Threads:       map[string]*state.ThreadRecord{},
+		Capabilities: agentproto.Capabilities{
+			ModelCatalog: true,
+		},
+		CapabilitiesDeclared: true,
+		Online:               true,
+		Threads:              map[string]*state.ThreadRecord{},
 	})
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -478,15 +482,62 @@ func TestBareModelCommandBuildsDropdownAndManualFormCard(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		Text:             "/model",
 	})
-	if len(events) != 1 {
-		t.Fatalf("expected model catalog, got %#v", events)
+	if len(events) != 2 {
+		t.Fatalf("expected model page plus background refresh, got %#v", events)
 	}
 	catalog := commandCatalogFromEvent(t, events[0])
 	if catalog.CommandID != control.FeishuCommandModel {
 		t.Fatalf("expected model command page, got %#v", catalog)
 	}
+	if len(catalog.Sections) != 1 {
+		t.Fatalf("expected only manual section without dynamic catalog, got %#v", catalog.Sections)
+	}
+	manual := catalog.Sections[0].Entries[0]
+	if manual.Form == nil || manual.Form.CommandText != "/model" {
+		t.Fatalf("expected manual model form, got %#v", manual)
+	}
+	if events[1].Command == nil || events[1].Command.Kind != agentproto.CommandModelList {
+		t.Fatalf("expected background model catalog refresh command, got %#v", events[1])
+	}
+}
+
+func TestBareModelCommandUsesDynamicCatalogOptions(t *testing.T) {
+	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Capabilities: agentproto.Capabilities{
+			ModelCatalog: true,
+		},
+		CapabilitiesDeclared: true,
+		Online:               true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			Entries: []agentproto.ModelCatalogEntry{
+				{Model: "gpt-5.6", DisplayName: "GPT 5.6"},
+				{Model: "hidden-model", DisplayName: "Hidden", Hidden: true},
+				{Model: "gpt-5.6-codex", DisplayName: "GPT 5.6"},
+				{Model: "gpt-5.4-mini", DisplayName: "Mini"},
+			},
+			RefreshedAt: now,
+		},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModelCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/model",
+	})
+	if len(events) != 2 {
+		t.Fatalf("expected model page plus background refresh, got %#v", events)
+	}
+	catalog := commandCatalogFromEvent(t, events[0])
 	if len(catalog.Sections) != 2 {
-		t.Fatalf("expected dropdown + manual sections, got %#v", catalog.Sections)
+		t.Fatalf("expected dynamic dropdown + manual sections, got %#v", catalog.Sections)
 	}
 	preset := catalog.Sections[0].Entries[0]
 	if preset.Form == nil || preset.Form.CommandText != "/model" {
@@ -496,12 +547,17 @@ func TestBareModelCommandBuildsDropdownAndManualFormCard(t *testing.T) {
 		t.Fatalf("expected preset form to use select_static, got %#v", preset.Form.Field)
 	}
 	options := preset.Form.Field.Options
-	if len(options) != 6 || options[0].Value != "gpt-5.5" || options[1].Value != "gpt-5.4" || options[2].Value != "gpt-5.4-mini" || options[3].Value != "gpt-5.3-codex" || options[4].Value != "gpt-5.2" || options[5].Value != "gpt-5.2-codex" {
-		t.Fatalf("unexpected model preset options: %#v", options)
+	if len(options) != 3 {
+		t.Fatalf("expected hidden model to be filtered, got %#v", options)
 	}
-	manual := catalog.Sections[1].Entries[0]
-	if manual.Form == nil || manual.Form.CommandText != "/model" {
-		t.Fatalf("expected manual model form, got %#v", manual)
+	wantValues := []string{"gpt-5.6", "gpt-5.6-codex", "gpt-5.4-mini"}
+	for i, want := range wantValues {
+		if options[i].Value != want {
+			t.Fatalf("option %d value = %q, want %q: %#v", i, options[i].Value, want, options)
+		}
+	}
+	if options[0].Label != "GPT 5.6（gpt-5.6）" || options[1].Label != "GPT 5.6（gpt-5.6-codex）" {
+		t.Fatalf("expected duplicate display names to include model id, got %#v", options)
 	}
 }
 
@@ -514,8 +570,12 @@ func TestBareModelCommandPreservesCatalogVariantFromAction(t *testing.T) {
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/data/dl/droid",
 		WorkspaceKey:  "/data/dl/droid",
-		Online:        true,
-		Threads:       map[string]*state.ThreadRecord{},
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			Entries:     []agentproto.ModelCatalogEntry{{Model: "gpt-5.6", DisplayName: "GPT 5.6"}},
+			RefreshedAt: now,
+		},
+		Online:  true,
+		Threads: map[string]*state.ThreadRecord{},
 	})
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -527,7 +587,7 @@ func TestBareModelCommandPreservesCatalogVariantFromAction(t *testing.T) {
 		CatalogBackend:   agentproto.BackendCodex,
 	})
 	if len(events) != 1 {
-		t.Fatalf("expected model catalog, got %#v", events)
+		t.Fatalf("expected model catalog without refresh for legacy capabilities, got %#v", events)
 	}
 	catalog := commandCatalogFromEvent(t, events[0])
 	if len(catalog.Sections) != 2 {

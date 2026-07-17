@@ -53,7 +53,9 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 				summarizeRemoteStatuses(a.service.ActiveRemoteTurns()),
 				event.Command.Origin.MessageID,
 			)
-			a.service.BindPendingRemoteCommand(event.SurfaceSessionID, event.Command.CommandID)
+			if !orchestrator.NonTurnAgentCommand(event.Command.Kind) {
+				a.service.BindPendingRemoteCommand(event.SurfaceSessionID, event.Command.CommandID)
+			}
 			a.debugf(
 				"dispatch bound: surface=%s instance=%s command=%s pending=%s",
 				event.SurfaceSessionID,
@@ -84,7 +86,9 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 				a.handleUIEventsLocked(context.Background(), rollback)
 				continue
 			}
-			a.traceSteerCommand(event.SurfaceSessionID, instanceID, *event.Command)
+			if !orchestrator.NonTurnAgentCommand(event.Command.Kind) {
+				a.traceSteerCommand(event.SurfaceSessionID, instanceID, *event.Command)
+			}
 			a.mu.Unlock()
 			err := a.sendAgentCommand(instanceID, *event.Command)
 			a.mu.Lock()

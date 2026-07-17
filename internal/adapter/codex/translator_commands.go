@@ -149,6 +149,8 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 			return nil, err
 		}
 		return [][]byte{append(bytes, '\n')}, nil
+	case agentproto.CommandModelList:
+		return t.translateModelList(command)
 	case agentproto.CommandRequestRespond:
 		return t.translateRequestRespond(command)
 	case agentproto.CommandMCPOAuthLogin:

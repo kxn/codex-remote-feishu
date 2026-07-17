@@ -6,15 +6,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
-var commonFeishuModelValues = []string{
-	"gpt-5.5",
-	"gpt-5.4",
-	"gpt-5.4-mini",
-	"gpt-5.3-codex",
-	"gpt-5.2",
-	"gpt-5.2-codex",
-}
-
 const modelPresetCommandFieldName = "command_args_model_preset"
 
 func BuildFeishuCommandConfigPageView(view FeishuCatalogConfigView) FeishuPageView {
@@ -202,12 +193,15 @@ func modelPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPage
 	if view.Sealed {
 		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
 	}
-	sections := []CommandCatalogSection{{
-		Title: "常见模型",
-		Entries: []CommandCatalogEntry{{
-			Form: modelPresetForm(view),
-		}},
-	}}
+	sections := []CommandCatalogSection{}
+	if presetForm := modelPresetForm(view); presetForm != nil {
+		sections = append(sections, CommandCatalogSection{
+			Title: "可用模型",
+			Entries: []CommandCatalogEntry{{
+				Form: presetForm,
+			}},
+		})
+	}
 	manualEntry := CommandCatalogEntry{
 		Form: FeishuCommandFormWithDefault(FeishuCommandModel, strings.TrimSpace(view.FormDefaultValue)),
 	}
@@ -277,17 +271,7 @@ func sealedCommandPageViewForDefinition(def FeishuCommandDefinition, view Feishu
 }
 
 func modelPresetForm(view FeishuCatalogConfigView) *CommandCatalogForm {
-	options := make([]CommandCatalogFormFieldOption, 0, len(commonFeishuModelValues))
-	for _, model := range commonFeishuModelValues {
-		model = strings.TrimSpace(model)
-		if model == "" {
-			continue
-		}
-		options = append(options, CommandCatalogFormFieldOption{
-			Label: model,
-			Value: model,
-		})
-	}
+	options := append([]CommandCatalogFormFieldOption(nil), view.FormOptions...)
 	if len(options) == 0 {
 		return nil
 	}
@@ -302,7 +286,7 @@ func modelPresetForm(view FeishuCatalogConfigView) *CommandCatalogForm {
 		Field: CommandCatalogFormField{
 			Name:         modelPresetCommandFieldName,
 			Kind:         CommandCatalogFormFieldSelectStatic,
-			Label:        "从下拉里选择常见模型。",
+			Label:        "从当前实例返回的列表里选择模型。",
 			Placeholder:  "选择模型",
 			DefaultValue: defaultValue,
 			Options:      options,

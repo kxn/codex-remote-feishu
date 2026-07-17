@@ -97,7 +97,9 @@ func (r *codexBackendRuntime) Backend() agentproto.Backend {
 }
 
 func (r *codexBackendRuntime) Capabilities() agentproto.Capabilities {
-	return agentproto.DefaultCapabilitiesForBackend(agentproto.BackendCodex)
+	capabilities := agentproto.DefaultCapabilitiesForBackend(agentproto.BackendCodex)
+	capabilities.ModelCatalog = true
+	return capabilities
 }
 
 func (r *codexBackendRuntime) Launch(ctx context.Context, app *App, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {

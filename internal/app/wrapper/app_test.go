@@ -85,8 +85,8 @@ func TestWrapperBridgesRelayAndCodexProcess(t *testing.T) {
 	if hello.Instance.Backend != agentproto.BackendCodex {
 		t.Fatalf("wrapper hello backend = %q, want %q", hello.Instance.Backend, agentproto.BackendCodex)
 	}
-	if !hello.Capabilities.ThreadsRefresh || !hello.Capabilities.TurnSteer || !hello.Capabilities.RequestRespond || !hello.Capabilities.ResumeByThreadID || !hello.Capabilities.VSCodeMode {
-		t.Fatalf("wrapper hello capabilities missing codex defaults: %#v", hello.Capabilities)
+	if !hello.Capabilities.ThreadsRefresh || !hello.Capabilities.TurnSteer || !hello.Capabilities.RequestRespond || !hello.Capabilities.ModelCatalog || !hello.Capabilities.ResumeByThreadID || !hello.Capabilities.VSCodeMode {
+		t.Fatalf("wrapper hello capabilities missing codex declared support: %#v", hello.Capabilities)
 	}
 	if hello.Capabilities.SessionCatalog || hello.Capabilities.RequiresCWDForResume {
 		t.Fatalf("wrapper hello capabilities unexpectedly enabled non-codex defaults: %#v", hello.Capabilities)

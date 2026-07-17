@@ -504,6 +504,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventConfigObserved:
 		s.observeConfig(inst, event.ThreadID, event.CWD, event.ConfigScope, event.Model, event.ReasoningEffort, event.AccessMode, event.PlanMode, event.ObservedPermission)
 		return s.filterEventsForSurfaceVisibility(preface)
+	case agentproto.EventModelCatalogUpdated:
+		s.applyModelCatalogUpdated(inst, event)
+		return s.filterEventsForSurfaceVisibility(preface)
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)

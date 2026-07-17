@@ -133,7 +133,11 @@ func (s *Service) openConfigCommandPageForAction(surface *state.SurfaceConsoleRe
 	if view.Config == nil {
 		return nil
 	}
-	return []eventcontract.Event{s.configPageEventFromCatalogView(surface, view)}
+	events := []eventcontract.Event{s.configPageEventFromCatalogView(surface, view)}
+	if strings.TrimSpace(view.Config.CommandID) == control.FeishuCommandModel {
+		events = append(events, s.modelCatalogRefreshEvents(surface)...)
+	}
+	return events
 }
 
 func (s *Service) inlineCommandCardEvents(surface *state.SurfaceConsoleRecord, action control.Action, cardState control.FeishuCatalogConfigView, extra ...eventcontract.Event) []eventcontract.Event {

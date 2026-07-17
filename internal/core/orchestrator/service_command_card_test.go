@@ -92,10 +92,27 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 	if !strings.Contains(summaryText, "推理强度建议使用") {
 		t.Fatalf("expected invalid input summary, got %q", summaryText)
 	}
-	form := catalog.Sections[1].Entries[0].Form
+	form := findCommandCatalogForm(catalog, control.FeishuCommandModel, "command_args")
 	if form == nil || form.Field.DefaultValue != "gpt-5.4 wrong" {
-		t.Fatalf("expected manual form to keep invalid input, got %#v", catalog.Sections[1].Entries[0])
+		t.Fatalf("expected manual form to keep invalid input, got %#v", catalog.Sections)
 	}
+}
+
+func findCommandCatalogForm(catalog *control.FeishuPageView, commandID, fieldName string) *control.CommandCatalogForm {
+	if catalog == nil {
+		return nil
+	}
+	for _, section := range catalog.Sections {
+		for _, entry := range section.Entries {
+			if entry.Form == nil {
+				continue
+			}
+			if entry.Form.CommandID == commandID && entry.Form.Field.Name == fieldName {
+				return entry.Form
+			}
+		}
+	}
+	return nil
 }
 
 func TestCardOwnedReasoningApplyWithoutAttachmentShowsRecoveryCard(t *testing.T) {

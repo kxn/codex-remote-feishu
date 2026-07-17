@@ -197,6 +197,7 @@ type InstanceRecord struct {
 	ObservedFocusedThreadID string
 	ActiveThreadID          string
 	ActiveTurnID            string
+	ModelCatalog            *agentproto.ModelCatalogSnapshot
 	CWDDefaults             map[string]ModelConfigRecord
 	Threads                 map[string]*ThreadRecord
 }

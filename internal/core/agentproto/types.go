@@ -56,6 +56,7 @@ const (
 	EventMCPOAuthLoginCompleted     EventKind = "mcp.oauth_login.completed"
 	EventRequestStarted             EventKind = "request.started"
 	EventRequestResolved            EventKind = "request.resolved"
+	EventModelCatalogUpdated        EventKind = "models.catalog.updated"
 	EventSystemError                EventKind = "system.error"
 )
 
@@ -117,6 +118,7 @@ type Event struct {
 	ApprovalReview       *AutoApprovalReview      `json:"approvalReview,omitempty"`
 	TokenUsage           *ThreadTokenUsage        `json:"tokenUsage,omitempty"`
 	ModelReroute         *TurnModelReroute        `json:"modelReroute,omitempty"`
+	ModelCatalog         *ModelCatalogSnapshot    `json:"modelCatalog,omitempty"`
 	PlanSnapshot         *TurnPlanSnapshot        `json:"planSnapshot,omitempty"`
 	ThreadHistory        *ThreadHistoryRecord     `json:"threadHistory,omitempty"`
 	RuntimeStatus        *ThreadRuntimeStatus     `json:"runtimeStatus,omitempty"`
@@ -183,6 +185,7 @@ const (
 	CommandMCPOAuthLogin       CommandKind = "mcp.oauth_login.start"
 	CommandThreadsRefresh      CommandKind = "threads.refresh"
 	CommandThreadHistoryRead   CommandKind = "thread.history.read"
+	CommandModelList           CommandKind = "model.list"
 	CommandProcessChildRestart CommandKind = "process.child.restart"
 	CommandProcessExit         CommandKind = "process.exit"
 )
@@ -204,16 +207,66 @@ type Input struct {
 }
 
 type Command struct {
-	CommandID string          `json:"commandId,omitempty"`
-	IssuedAt  time.Time       `json:"issuedAt,omitempty"`
-	Kind      CommandKind     `json:"kind"`
-	Origin    Origin          `json:"origin"`
-	Target    Target          `json:"target"`
-	Prompt    Prompt          `json:"prompt,omitempty"`
-	Overrides PromptOverrides `json:"overrides,omitempty"`
-	Request   Request         `json:"request,omitempty"`
-	MCP       MCPCommand      `json:"mcp,omitempty"`
-	Review    ReviewRequest   `json:"review,omitempty"`
+	CommandID string           `json:"commandId,omitempty"`
+	IssuedAt  time.Time        `json:"issuedAt,omitempty"`
+	Kind      CommandKind      `json:"kind"`
+	Origin    Origin           `json:"origin"`
+	Target    Target           `json:"target"`
+	Prompt    Prompt           `json:"prompt,omitempty"`
+	Overrides PromptOverrides  `json:"overrides,omitempty"`
+	Request   Request          `json:"request,omitempty"`
+	ModelList ModelListCommand `json:"modelList,omitempty"`
+	MCP       MCPCommand       `json:"mcp,omitempty"`
+	Review    ReviewRequest    `json:"review,omitempty"`
+}
+
+type ModelListCommand struct {
+	Cursor        string `json:"cursor,omitempty"`
+	Limit         int    `json:"limit,omitempty"`
+	IncludeHidden bool   `json:"includeHidden,omitempty"`
+}
+
+type ModelCatalogSnapshot struct {
+	Entries       []ModelCatalogEntry `json:"entries,omitempty"`
+	NextCursor    string              `json:"nextCursor,omitempty"`
+	IncludeHidden bool                `json:"includeHidden,omitempty"`
+	Unsupported   bool                `json:"unsupported,omitempty"`
+	ErrorMessage  string              `json:"errorMessage,omitempty"`
+	RefreshedAt   time.Time           `json:"refreshedAt,omitempty"`
+}
+
+type ModelCatalogEntry struct {
+	ID                        string                  `json:"id,omitempty"`
+	Model                     string                  `json:"model,omitempty"`
+	DisplayName               string                  `json:"displayName,omitempty"`
+	Description               string                  `json:"description,omitempty"`
+	Hidden                    bool                    `json:"hidden,omitempty"`
+	SupportedReasoningEfforts []ReasoningEffortOption `json:"supportedReasoningEfforts,omitempty"`
+	DefaultReasoningEffort    string                  `json:"defaultReasoningEffort,omitempty"`
+	ServiceTiers              []ModelServiceTier      `json:"serviceTiers,omitempty"`
+	DefaultServiceTier        string                  `json:"defaultServiceTier,omitempty"`
+	Upgrade                   string                  `json:"upgrade,omitempty"`
+	UpgradeInfo               *ModelUpgradeInfo       `json:"upgradeInfo,omitempty"`
+	AvailabilityMessage       string                  `json:"availabilityMessage,omitempty"`
+	IsDefault                 bool                    `json:"isDefault,omitempty"`
+}
+
+type ReasoningEffortOption struct {
+	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	Description     string `json:"description,omitempty"`
+}
+
+type ModelServiceTier struct {
+	ID          string `json:"id,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+type ModelUpgradeInfo struct {
+	Model             string `json:"model,omitempty"`
+	UpgradeCopy       string `json:"upgradeCopy,omitempty"`
+	ModelLink         string `json:"modelLink,omitempty"`
+	MigrationMarkdown string `json:"migrationMarkdown,omitempty"`
 }
 
 type Origin struct {

@@ -37,6 +37,7 @@ type Translator struct {
 	pendingRequestTypes       map[string]agentproto.RequestType
 	pendingMCPOAuthLogins     map[string]pendingMCPOAuthLogin
 	pendingMCPOAuthLoginKeys  map[string]string
+	pendingModelList          map[string]pendingModelList
 }
 
 type pendingThreadCreate struct {
@@ -85,6 +86,11 @@ type pendingMCPOAuthLogin struct {
 	AuthorizationURL string
 }
 
+type pendingModelList struct {
+	CommandID     string
+	IncludeHidden bool
+}
+
 type suppressedResponseContext struct {
 	Action           string
 	ThreadID         string
@@ -124,6 +130,7 @@ func NewTranslator(instanceID string) *Translator {
 		pendingRequestTypes:        map[string]agentproto.RequestType{},
 		pendingMCPOAuthLogins:      map[string]pendingMCPOAuthLogin{},
 		pendingMCPOAuthLoginKeys:   map[string]string{},
+		pendingModelList:           map[string]pendingModelList{},
 	}
 }
 

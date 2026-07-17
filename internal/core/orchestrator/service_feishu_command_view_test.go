@@ -110,3 +110,83 @@ func TestBuildConfigCommandViewStatePopulatesCodexProviderOptions(t *testing.T) 
 		}
 	}
 }
+
+func TestApplyModelCatalogUpdatedStoresSnapshotAndPreservesOnFailure(t *testing.T) {
+	now := time.Date(2026, 5, 2, 9, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Online:     true,
+		Threads:    map[string]*state.ThreadRecord{},
+	})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind: agentproto.EventModelCatalogUpdated,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			Entries: []agentproto.ModelCatalogEntry{{
+				Model:                  "gpt-5.6",
+				DisplayName:            "GPT 5.6",
+				DefaultReasoningEffort: "high",
+				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
+					{ReasoningEffort: "low"},
+					{ReasoningEffort: "high"},
+				},
+			}},
+		},
+	})
+	inst := svc.Instance("inst-1")
+	if inst.ModelCatalog == nil || len(inst.ModelCatalog.Entries) != 1 {
+		t.Fatalf("expected model catalog snapshot, got %#v", inst.ModelCatalog)
+	}
+	if got := inst.ModelCatalog.Entries[0].SupportedReasoningEfforts; len(got) != 2 || got[0].ReasoningEffort != "low" || got[1].ReasoningEffort != "high" {
+		t.Fatalf("expected reasoning metadata to be preserved, got %#v", got)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind: agentproto.EventModelCatalogUpdated,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			ErrorMessage: "temporary failure",
+			Unsupported:  false,
+		},
+	})
+	if inst.ModelCatalog == nil || len(inst.ModelCatalog.Entries) != 1 || inst.ModelCatalog.ErrorMessage != "temporary failure" {
+		t.Fatalf("expected failed refresh to preserve entries and record error, got %#v", inst.ModelCatalog)
+	}
+
+	svc.ApplyInstanceDisconnected("inst-1")
+	if inst.ModelCatalog != nil {
+		t.Fatalf("expected disconnect to clear catalog, got %#v", inst.ModelCatalog)
+	}
+}
+
+func TestBuildConfigCommandViewStatePopulatesModelCatalogOptions(t *testing.T) {
+	now := time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].AttachedInstanceID = "inst-1"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Online:     true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{
+			Entries: []agentproto.ModelCatalogEntry{
+				{Model: "first-model", DisplayName: "First"},
+				{Model: "hidden-model", DisplayName: "Hidden", Hidden: true},
+				{Model: "second-model", DisplayName: "Second"},
+			},
+			RefreshedAt: now,
+		},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandModel)
+	if !ok {
+		t.Fatal("expected model config flow")
+	}
+	view := svc.buildConfigCommandViewState(svc.root.Surfaces["surface-1"], flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if got := view.Config.FormOptions; len(got) != 2 || got[0].Value != "first-model" || got[1].Value != "second-model" {
+		t.Fatalf("expected visible dynamic model options in upstream order, got %#v", got)
+	}
+}
