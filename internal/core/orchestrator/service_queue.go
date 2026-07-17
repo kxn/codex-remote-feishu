@@ -745,29 +745,28 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []even
 	if event.ItemID == "" {
 		return nil
 	}
-	key := itemBufferKey(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 	if event.ItemKind == "file_change" {
-		delete(s.itemBuffers, key)
+		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 		s.progress.recordTurnFileChanges(instanceID, event)
 		return nil
 	}
 	if suppressesCompletedTextRender(event.ItemKind, event.Metadata) {
-		delete(s.itemBuffers, key)
+		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 		return nil
 	}
 	if isDynamicToolCallItem(event.ItemKind) {
-		delete(s.itemBuffers, key)
+		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 		return s.renderDynamicToolCallItem(instanceID, event)
 	}
 	if isImageGenerationItem(event.ItemKind) {
-		delete(s.itemBuffers, key)
+		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 		return s.renderImageItem(instanceID, event)
 	}
 	if isContextCompactionItem(event.ItemKind) {
-		delete(s.itemBuffers, key)
+		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 		return s.progress.renderCompactNotice(instanceID, event)
 	}
-	buf := s.itemBuffers[key]
+	buf := s.itemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 	if buf == nil {
 		buf = s.ensureItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID, event.ItemKind)
 	}
@@ -784,7 +783,7 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []even
 			buf.ItemKind = "agent_message"
 		}
 	}
-	delete(s.itemBuffers, key)
+	s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 	if !rendersTextItem(buf.ItemKind) || strings.TrimSpace(bufferText) == "" {
 		if buf.ItemKind == "plan" && strings.TrimSpace(bufferText) != "" {
 			return s.storePendingPlanProposal(instanceID, event.ThreadID, event.TurnID, event.ItemID, buf.ItemKind, bufferText)

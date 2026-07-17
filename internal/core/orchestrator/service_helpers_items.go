@@ -84,8 +84,25 @@ func (s *Service) ensureItemBuffer(instanceID, threadID, turnID, itemID, itemKin
 	return buf
 }
 
-func deleteMatchingItemBuffers(buffers map[string]*itemBuffer, instanceID, threadID, turnID string) {
-	for key, buf := range buffers {
+func (s *Service) itemBuffer(instanceID, threadID, turnID, itemID string) *itemBuffer {
+	if s == nil {
+		return nil
+	}
+	return s.itemBuffers[itemBufferKey(instanceID, threadID, turnID, itemID)]
+}
+
+func (s *Service) discardItemBuffer(instanceID, threadID, turnID, itemID string) {
+	if s == nil {
+		return
+	}
+	delete(s.itemBuffers, itemBufferKey(instanceID, threadID, turnID, itemID))
+}
+
+func (s *Service) clearItemBuffers(instanceID, threadID, turnID string) {
+	if s == nil {
+		return
+	}
+	for key, buf := range s.itemBuffers {
 		if buf == nil {
 			continue
 		}
@@ -98,7 +115,7 @@ func deleteMatchingItemBuffers(buffers map[string]*itemBuffer, instanceID, threa
 		if turnID != "" && buf.TurnID != turnID {
 			continue
 		}
-		delete(buffers, key)
+		delete(s.itemBuffers, key)
 	}
 }
 

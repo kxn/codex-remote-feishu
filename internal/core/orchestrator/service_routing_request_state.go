@@ -133,7 +133,7 @@ func (s *Service) clearRequestsForTurn(instanceID, threadID, turnID string) {
 }
 
 func (s *Service) clearTurnArtifacts(instanceID, threadID, turnID string) {
-	deleteMatchingItemBuffers(s.itemBuffers, instanceID, threadID, turnID)
+	s.clearItemBuffers(instanceID, threadID, turnID)
 	s.clearTurnPlanSnapshots(instanceID, threadID, turnID)
 	s.clearMCPToolCallProgress(instanceID, threadID, turnID)
 	if turnID == "" {

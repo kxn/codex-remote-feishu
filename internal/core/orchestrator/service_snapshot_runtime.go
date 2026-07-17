@@ -713,7 +713,7 @@ func (s *Service) RemoveInstance(instanceID string) {
 	delete(s.instanceClaims, instanceID)
 	s.clearInstanceRemoteTurnOwnership(instanceID)
 	delete(s.threadRefreshes, instanceID)
-	deleteMatchingItemBuffers(s.itemBuffers, instanceID, "", "")
+	s.clearItemBuffers(instanceID, "", "")
 	s.clearMCPToolCallProgress(instanceID, "", "")
 	s.clearPendingProgressTextForInstance(instanceID)
 }

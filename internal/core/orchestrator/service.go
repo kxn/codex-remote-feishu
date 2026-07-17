@@ -738,7 +738,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		if clearTrackedTurn && surface != nil {
 			surface.ActiveTurnOrigin = ""
 		}
-		deleteMatchingItemBuffers(s.itemBuffers, instanceID, event.ThreadID, event.TurnID)
+		s.clearItemBuffers(instanceID, event.ThreadID, event.TurnID)
 		summary := s.progress.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
 		turnDiff := s.progress.takeTurnDiffSnapshot(instanceID, event.ThreadID, event.TurnID)
 		finalText := s.pendingTurnTextValue(instanceID, event.ThreadID, event.TurnID)
