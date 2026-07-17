@@ -1,8 +1,8 @@
 # Codex App Server 状态机遵循度审计
 
 > Type: `inprogress`
-> Updated: `2026-07-12`
-> Summary: 对照 OpenAI 官方 Codex App Server 页面与 `openai/codex` 最新源码/schema（本轮复核到 HEAD `9e552e9d15ba52bed7077d5357f3e18e330f8f38`），按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮补记 approval-carrying `mcpServer/elicitation/request` 的 `_meta.codex_approval_kind / persist` contract，并同步记录本仓库只产品化 once/session、`always` 仅提示不支持的边界，以及 `mcpServer/oauth/login -> oauthLogin/completed` 的最小 `/mcpoauth` 支持。
+> Updated: `2026-07-17`
+> Summary: 对照 OpenAI 官方 Codex App Server 页面与 `openai/codex` 最新源码/schema（当前 protocol coverage 快照复核到 HEAD `315195492c80fdade38e917c18f9584efd599304`），按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮补记 approval-carrying `mcpServer/elicitation/request` 的 `_meta.codex_approval_kind / persist` contract，并同步记录本仓库只产品化 once/session、`always` 仅提示不支持的边界，以及 `mcpServer/oauth/login -> oauthLogin/completed` 的最小 `/mcpoauth` 支持。
 
 ## 1. 审计范围与判定口径
 
@@ -619,7 +619,18 @@
 - `thread/unsubscribe` 不再等价于“最后一个 subscriber 走后立刻 unload”。当前上游语义是：最后一个 subscriber 离开后，thread 要在“无 subscriber 且无 thread activity 持续 30 分钟”后才 unload，并发 `thread/closed` / `thread/status/changed(notLoaded)`。
 - 上游最近还新增或正式化了几组 simple RPC：`thread/memoryMode/set`、`memory/reset`、`thread/inject_items`、`marketplace/add`、`mcpServer/tool/call`。它们不一定构成高优先级状态机，但需要在后续 protocol coverage 盘点里单列，不要被误以为“旧文档已穷尽全部 surface”。
 
-### 6.3 这份审计此前漏记的族群
+### 6.3 `#690` 后的 repo 内 coverage 基线
+
+- `#690` 已把 protocol coverage 从人工段落迁入 repo 内可测试 manifest：
+  - `internal/adapter/codex/protocol_coverage.go`
+  - `internal/adapter/codex/testdata/app_server_protocol_methods_current.json`
+- 当前快照基于 `openai/codex` HEAD `315195492c80fdade38e917c18f9584efd599304`，记录：
+  - `ClientRequest`：127 个 method。
+  - `ServerRequest`：11 个 method。
+  - `ServerNotification`：72 个 method。
+- 后续判断“某个 app-server method 是否已分类”时，应优先看 manifest 和 `go test ./internal/adapter/codex`，而不是重新依赖本文的人工列表。
+
+### 6.4 这份审计此前漏记的族群
 
 - 旧版审计没有显式列出 `thread/realtime/*`、`mcpServer/startupStatus/updated`、`skills/changed`、`fs/watch -> fs/changed -> fs/unwatch`。
 - 旧版 item 段落也漏记了当前本仓库已经承接的 `item/mcpToolCall/progress`。
@@ -751,6 +762,12 @@
 - `codex-rs/app-server-protocol/src/protocol/v2.rs`
 - `codex-rs/app-server-protocol/schema/json/ServerRequest.json`
 - `codex-rs/app-server-protocol/schema/json/ServerNotification.json`
+
+Repo 内 protocol coverage 基线（`#690`，复核到 `openai/codex` HEAD `315195492c80fdade38e917c18f9584efd599304`）：
+
+- `internal/adapter/codex/protocol_coverage.go`
+- `internal/adapter/codex/protocol_coverage_test.go`
+- `internal/adapter/codex/testdata/app_server_protocol_methods_current.json`
 
 本仓库关键证据：
 
