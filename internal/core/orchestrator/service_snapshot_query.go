@@ -113,17 +113,5 @@ func (s *Service) InstanceHasPendingCompact(instanceID string) bool {
 }
 
 func (s *Service) InstanceHasPendingSteer(instanceID string) bool {
-	for _, binding := range s.turns.pendingSteers {
-		if binding == nil || binding.InstanceID != instanceID {
-			continue
-		}
-		surface := s.root.Surfaces[binding.SurfaceSessionID]
-		if surface == nil {
-			continue
-		}
-		if s.surfaceHasPendingSteer(surface) {
-			return true
-		}
-	}
-	return false
+	return s.instanceHasPendingSteer(instanceID)
 }

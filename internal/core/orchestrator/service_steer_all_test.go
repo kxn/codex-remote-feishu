@@ -83,9 +83,9 @@ func TestSteerAllCommandDispatchesSingleSteerWithAllEligibleQueuedInputs(t *test
 	if len(surface.QueuedQueueItemIDs) != 0 {
 		t.Fatalf("expected queued items removed after steer-all, got %#v", surface.QueuedQueueItemIDs)
 	}
-	binding := svc.turns.pendingSteers["queue-2"]
+	binding := svc.pendingSteerBinding("queue-2")
 	if binding == nil {
-		t.Fatalf("expected steer binding for primary queued item, got %#v", svc.turns.pendingSteers)
+		t.Fatalf("expected steer binding for primary queued item")
 	}
 	if len(binding.QueueItemIDs) != 2 || binding.QueueItemIDs[0] != "queue-2" || binding.QueueItemIDs[1] != "queue-3" {
 		t.Fatalf("unexpected steer binding queue ids: %#v", binding)
@@ -124,8 +124,8 @@ func TestSteerAllCommandAcceptedMarksAllQueuedItemsSteered(t *testing.T) {
 	if surface.QueueItems["queue-2"].Status != state.QueueItemSteered || surface.QueueItems["queue-3"].Status != state.QueueItemSteered {
 		t.Fatalf("expected all steered, got queue-2=%#v queue-3=%#v", surface.QueueItems["queue-2"], surface.QueueItems["queue-3"])
 	}
-	if len(svc.turns.pendingSteers) != 0 {
-		t.Fatalf("expected pending steer bindings cleared, got %#v", svc.turns.pendingSteers)
+	if got := svc.pendingSteerKeysForInstance("inst-1"); len(got) != 0 {
+		t.Fatalf("expected pending steer bindings cleared, got %#v", got)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestSteerAllMenuActionAcceptedPatchesSameCard(t *testing.T) {
 	if requested.Sealed || len(requested.NoticeSections) != 1 {
 		t.Fatalf("expected requested owner card to stay open with a notice section, got %#v", requested)
 	}
-	binding := svc.turns.pendingSteers["queue-2"]
+	binding := svc.pendingSteerBinding("queue-2")
 	if binding == nil || binding.OwnerCardMessageID != "om-menu-steer-2" {
 		t.Fatalf("expected owner-card message id to persist on pending steer, got %#v", binding)
 	}
@@ -402,8 +402,8 @@ func TestSteerAllPendingDisconnectRestoresOriginalQueueOrder(t *testing.T) {
 	}
 
 	disconnect := svc.ApplyInstanceDisconnected("inst-1")
-	if len(svc.turns.pendingSteers) != 0 {
-		t.Fatalf("expected pending steer bindings cleared on disconnect, got %#v", svc.turns.pendingSteers)
+	if got := svc.pendingSteerKeysForInstance("inst-1"); len(got) != 0 {
+		t.Fatalf("expected pending steer bindings cleared on disconnect, got %#v", got)
 	}
 
 	surface := svc.root.Surfaces["surface-1"]

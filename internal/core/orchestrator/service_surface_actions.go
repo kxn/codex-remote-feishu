@@ -547,7 +547,7 @@ func (s *Service) dispatchSteerCandidates(
 		return nil
 	}
 	primaryQueueItemID := queueItemIDs[0]
-	s.turns.pendingSteers[primaryQueueItemID] = &pendingSteerBinding{
+	s.bindPendingSteer(primaryQueueItemID, &pendingSteerBinding{
 		InstanceID:         inst.InstanceID,
 		SurfaceSessionID:   surface.SurfaceSessionID,
 		QueueItemID:        primaryQueueItemID,
@@ -558,7 +558,7 @@ func (s *Service) dispatchSteerCandidates(
 		ThreadID:           activeThreadID,
 		TurnID:             activeTurnID,
 		QueueIndex:         queueIndices[primaryQueueItemID],
-	}
+	})
 	return []eventcontract.Event{{
 		Kind:             eventcontract.KindAgentCommand,
 		SurfaceSessionID: surface.SurfaceSessionID,

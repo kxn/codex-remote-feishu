@@ -370,6 +370,46 @@ func (r *serviceTurnRuntime) isCompactTurn(instanceID, threadID, turnID string) 
 	return binding.ThreadID == "" || threadID == "" || binding.ThreadID == threadID
 }
 
+func (r *serviceTurnRuntime) pendingSteerBinding(key string) *pendingSteerBinding {
+	if r == nil {
+		return nil
+	}
+	return r.pendingSteers[strings.TrimSpace(key)]
+}
+
+func (r *serviceTurnRuntime) bindPendingSteer(key string, binding *pendingSteerBinding) {
+	if r == nil {
+		return
+	}
+	key = strings.TrimSpace(key)
+	if key == "" || binding == nil {
+		return
+	}
+	r.pendingSteers[key] = binding
+}
+
+func (r *serviceTurnRuntime) clearPendingSteer(key string) {
+	if r == nil {
+		return
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return
+	}
+	delete(r.pendingSteers, key)
+}
+
+func (r *serviceTurnRuntime) forEachPendingSteer(fn func(string, *pendingSteerBinding)) {
+	if r == nil || fn == nil {
+		return
+	}
+	for key, binding := range r.pendingSteers {
+		if binding != nil {
+			fn(key, binding)
+		}
+	}
+}
+
 type serviceProgressRuntime struct {
 	service             *Service
 	turnPlanSnapshots   map[string]*turnPlanSnapshotRecord

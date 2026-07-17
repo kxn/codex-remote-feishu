@@ -149,11 +149,7 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 			return
 		}
 	}
-	for _, binding := range s.turns.pendingSteers {
-		if binding == nil || binding.SurfaceSessionID != surfaceID || binding.CommandID != "" {
-			continue
-		}
-		binding.CommandID = commandID
+	if s.bindPendingSteerCommand(surfaceID, commandID) {
 		return
 	}
 }
@@ -208,10 +204,10 @@ func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.Comman
 	}
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
 	if surface == nil {
-		delete(s.turns.pendingSteers, key)
+		s.clearPendingSteer(key)
 		return nil
 	}
-	delete(s.turns.pendingSteers, key)
+	s.clearPendingSteer(key)
 	events := []eventcontract.Event{}
 	if strings.TrimSpace(binding.OwnerCardMessageID) != "" {
 		events = append(events, steerAllCompletedOwnerCardEvent(surface.SurfaceSessionID, binding.OwnerCardMessageID, len(pendingSteerQueueItemIDs(binding))))
@@ -307,28 +303,12 @@ func (s *Service) restorePendingRequestDispatch(surface *state.SurfaceConsoleRec
 	return s.requestPromptRefreshWithNotice(surface, request, noticeCode, noticeText)
 }
 
-func (s *Service) pendingSteerForCommand(instanceID, commandID string) (string, *pendingSteerBinding) {
-	if strings.TrimSpace(commandID) == "" {
-		return "", nil
-	}
-	for key, binding := range s.turns.pendingSteers {
-		if binding == nil || binding.CommandID != commandID {
-			continue
-		}
-		if strings.TrimSpace(instanceID) != "" && binding.InstanceID != instanceID {
-			continue
-		}
-		return key, binding
-	}
-	return "", nil
-}
-
 func (s *Service) restorePendingSteer(key string, notice *control.Notice) []eventcontract.Event {
-	binding := s.turns.pendingSteers[key]
+	binding := s.pendingSteerBinding(key)
 	if binding == nil {
 		return nil
 	}
-	delete(s.turns.pendingSteers, key)
+	s.clearPendingSteer(key)
 	surface := s.root.Surfaces[binding.SurfaceSessionID]
 	if surface == nil {
 		return nil
@@ -393,15 +373,7 @@ func (s *Service) restorePendingSteer(key string, notice *control.Notice) []even
 
 func (s *Service) restorePendingSteersForInstance(instanceID string) []eventcontract.Event {
 	var events []eventcontract.Event
-	keys := make([]string, 0, len(s.turns.pendingSteers))
-	for key, binding := range s.turns.pendingSteers {
-		if binding == nil || binding.InstanceID != instanceID {
-			continue
-		}
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
+	for _, key := range s.pendingSteerKeysForInstance(instanceID) {
 		events = append(events, s.restorePendingSteer(key, nil)...)
 	}
 	return events

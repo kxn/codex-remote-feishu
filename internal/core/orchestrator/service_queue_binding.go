@@ -445,25 +445,6 @@ func (s *Service) interruptibleSurfaceTurn(surface *state.SurfaceConsoleRecord) 
 	return strings.TrimSpace(inst.ActiveThreadID), turnID, true
 }
 
-func (s *Service) surfaceHasPendingSteer(surface *state.SurfaceConsoleRecord) bool {
-	if surface == nil {
-		return false
-	}
-	for _, binding := range s.turns.pendingSteers {
-		if binding == nil || binding.SurfaceSessionID != surface.SurfaceSessionID {
-			continue
-		}
-		for _, queueItemID := range pendingSteerQueueItemIDs(binding) {
-			item := surface.QueueItems[queueItemID]
-			if item == nil || item.Status != state.QueueItemSteering {
-				continue
-			}
-			return true
-		}
-	}
-	return false
-}
-
 func (s *Service) remoteBindingSurfaceByCommand(commandID string) *state.SurfaceConsoleRecord {
 	if s == nil || s.turns == nil {
 		return nil

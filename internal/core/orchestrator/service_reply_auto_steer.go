@@ -72,7 +72,7 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 	if activeThreadID != "" {
 		s.recordThreadUserMessage(inst, activeThreadID, action.Text)
 	}
-	s.turns.pendingSteers[item.ID] = &pendingSteerBinding{
+	s.bindPendingSteer(item.ID, &pendingSteerBinding{
 		InstanceID:       inst.InstanceID,
 		SurfaceSessionID: surface.SurfaceSessionID,
 		QueueItemID:      item.ID,
@@ -82,7 +82,7 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 		ThreadID:         activeThreadID,
 		TurnID:           activeTurnID,
 		QueueIndex:       queueIndex,
-	}
+	})
 	events := s.pendingInputEvents(surface, control.PendingInputState{
 		QueueItemID: item.ID,
 		Status:      string(item.Status),

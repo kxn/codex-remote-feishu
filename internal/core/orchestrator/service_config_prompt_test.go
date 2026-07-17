@@ -1141,13 +1141,13 @@ func TestReactionCreatedSteersQueuedItemAndAcknowledgesWholeInputSet(t *testing.
 	if item == nil || item.Status != state.QueueItemSteering {
 		t.Fatalf("expected second queue item to enter steering pending, got %#v", item)
 	}
-	if binding := svc.turns.pendingSteers["queue-2"]; binding == nil || binding.ThreadID != "thread-1" || binding.TurnID != "turn-1" {
-		t.Fatalf("expected pending steer binding for queue-2, got %#v", svc.turns.pendingSteers)
+	if binding := svc.pendingSteerBinding("queue-2"); binding == nil || binding.ThreadID != "thread-1" || binding.TurnID != "turn-1" {
+		t.Fatalf("expected pending steer binding for queue-2, got %#v", binding)
 	}
 
 	svc.BindPendingRemoteCommand("surface-1", "cmd-steer-1")
 	accepted := svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{CommandID: "cmd-steer-1", Accepted: true})
-	if svc.turns.pendingSteers["queue-2"] != nil {
+	if svc.pendingSteerBinding("queue-2") != nil {
 		t.Fatalf("expected pending steer binding to clear after accepted ack")
 	}
 	if item.Status != state.QueueItemSteered {
@@ -1295,7 +1295,7 @@ func TestReactionCreatedSteerRejectedRestoresOriginalQueueOrder(t *testing.T) {
 	if item := surface.QueueItems["queue-2"]; item == nil || item.Status != state.QueueItemQueued {
 		t.Fatalf("expected rejected steer item to return to queued, got %#v", item)
 	}
-	if svc.turns.pendingSteers["queue-2"] != nil {
+	if svc.pendingSteerBinding("queue-2") != nil {
 		t.Fatalf("expected pending steer binding to clear after rejection")
 	}
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "steer_failed" || !strings.Contains(events[0].Notice.Text, "恢复原排队位置") {
