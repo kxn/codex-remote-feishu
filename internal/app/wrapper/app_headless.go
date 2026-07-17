@@ -14,6 +14,17 @@ import (
 
 const relayBootstrapInitializeID = "relay-bootstrap-initialize"
 
+func headlessNotificationOptOutMethods() []string {
+	return []string{
+		"item/agentMessage/delta",
+		"item/plan/delta",
+		"item/reasoning/textDelta",
+		"item/reasoning/summaryTextDelta",
+		"item/commandExecution/outputDelta",
+		"item/fileChange/outputDelta",
+	}
+}
+
 func (a *App) bootstrapHeadlessCodex(childStdin io.Writer, childStdout io.Reader, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (io.Reader, error) {
 	initializeFrame, err := a.syntheticInitializeFrame()
 	if err != nil || len(initializeFrame) == 0 {
@@ -87,10 +98,8 @@ func (a *App) syntheticInitializeFrame() ([]byte, error) {
 				"version": firstNonEmpty(a.config.Version, "dev"),
 			},
 			"capabilities": map[string]any{
-				"experimentalApi": true,
-				"optOutNotificationMethods": []string{
-					"item/agentMessage/delta",
-				},
+				"experimentalApi":           true,
+				"optOutNotificationMethods": headlessNotificationOptOutMethods(),
 			},
 		},
 	}

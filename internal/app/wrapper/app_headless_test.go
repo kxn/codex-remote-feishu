@@ -53,8 +53,28 @@ func TestBootstrapHeadlessCodexCompletesInitializeHandshake(t *testing.T) {
 				t.Fatalf("expected experimentalApi=true, got %#v", capabilities["experimentalApi"])
 			}
 			methods, _ := capabilities["optOutNotificationMethods"].([]any)
-			if len(methods) != 1 || methods[0] != "item/agentMessage/delta" {
+			wantMethods := []string{
+				"item/agentMessage/delta",
+				"item/plan/delta",
+				"item/reasoning/textDelta",
+				"item/reasoning/summaryTextDelta",
+				"item/commandExecution/outputDelta",
+				"item/fileChange/outputDelta",
+			}
+			if !sameStringAnySlice(methods, wantMethods) {
 				t.Fatalf("unexpected optOutNotificationMethods: %#v", capabilities["optOutNotificationMethods"])
+			}
+			for _, disallowed := range []string{
+				"item/fileChange/patchUpdated",
+				"command/exec/outputDelta",
+				"process/outputDelta",
+				"item/completed",
+				"turn/completed",
+				"serverRequest/resolved",
+			} {
+				if containsAnyString(methods, disallowed) {
+					t.Fatalf("opt-out allowlist must not include %q: %#v", disallowed, methods)
+				}
 			}
 			if got := lookupStringFromMap(frames[1], "method"); got != "initialized" {
 				t.Fatalf("expected second frame to be initialized, got %q", got)
@@ -111,6 +131,37 @@ func TestSyntheticInitializeFrameSkipsNonHeadless(t *testing.T) {
 	}
 }
 
+func TestHeadlessNotificationOptOutMethods(t *testing.T) {
+	got := headlessNotificationOptOutMethods()
+	want := []string{
+		"item/agentMessage/delta",
+		"item/plan/delta",
+		"item/reasoning/textDelta",
+		"item/reasoning/summaryTextDelta",
+		"item/commandExecution/outputDelta",
+		"item/fileChange/outputDelta",
+	}
+	if !sameStringSlice(got, want) {
+		t.Fatalf("unexpected headless opt-out methods: %#v", got)
+	}
+	for _, disallowed := range []string{
+		"item/fileChange/patchUpdated",
+		"command/exec/outputDelta",
+		"process/outputDelta",
+		"item/started",
+		"item/completed",
+		"turn/completed",
+		"serverRequest/resolved",
+		"thread/status/changed",
+		"warning",
+		"error",
+	} {
+		if containsString(got, disallowed) {
+			t.Fatalf("headless opt-out allowlist must not include %q: %#v", disallowed, got)
+		}
+	}
+}
+
 func TestNeedsSyntheticBootstrap(t *testing.T) {
 	tests := []struct {
 		name string
@@ -143,6 +194,48 @@ func TestNeedsSyntheticBootstrap(t *testing.T) {
 			}
 		})
 	}
+}
+
+func sameStringAnySlice(got []any, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameStringSlice(got, want []string) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func containsAnyString(values []any, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func decodeJSONLines(t *testing.T, raw string) []map[string]any {

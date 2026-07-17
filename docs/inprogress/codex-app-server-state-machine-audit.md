@@ -103,13 +103,13 @@
   - 同步 bootstrap 期间如果提前读到其他 stdout 帧，会缓冲并回放给后续 `stdoutLoop`，避免吞掉非握手数据。
   - 证据：`internal/app/wrapper/app_headless.go`、`internal/app/wrapper/app_headless_test.go`、`internal/app/wrapper/app_test.go`
 - `relay/Feishu 归一化层`：
-  - **仍未产品化连接级初始化状态**，也没有把 `optOutNotificationMethods` 等连接级能力显式建模到 headless bootstrap。
+  - **仍未产品化连接级初始化状态**，但 headless / cron synthetic initialize 已显式携带 `optOutNotificationMethods` allowlist，用于关闭飞书不消费的高频 item delta。
   - 但 headless 已不再依赖“未初始化也能继续发业务请求”的侥幸行为。
 
 结论：
 
 - 这条在 VS Code 透传与 headless 主动驱动两条主路径上都已经满足 canonical 握手顺序。
-- 当前剩余缺口主要是“连接级 capabilities / 初始化状态没有产品化暴露”，而不是握手 correctness 本身。
+- 当前剩余缺口主要是“连接级初始化状态没有产品化暴露”，而不是握手 correctness 本身。
 
 ### 3.2 线程启动/恢复主路径：`thread/start | thread/resume | thread/fork`
 
@@ -295,6 +295,20 @@
 - `item/reasoning/summaryPartAdded`
 - `item/fileChange/patchUpdated`
 - `item/mcpToolCall/progress`
+
+Headless / cron synthetic initialize 当前 opt-out：
+
+- `item/agentMessage/delta`
+- `item/plan/delta`
+- `item/reasoning/textDelta`
+- `item/reasoning/summaryTextDelta`
+- `item/commandExecution/outputDelta`
+- `item/fileChange/outputDelta`
+
+不 opt-out 的相邻方法：
+
+- `item/fileChange/patchUpdated`：当前作为 latest-only file-change snapshot 输入 final summary。
+- `command/exec/outputDelta` / `process/outputDelta`：standalone process stream 没有 final duplicate。
 
 部分缺口：
 
