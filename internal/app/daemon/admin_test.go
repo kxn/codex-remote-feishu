@@ -242,7 +242,7 @@ func TestAdminAndSetupRoutesRejectUnauthorizedRemoteRequests(t *testing.T) {
 	}
 }
 
-func TestAdminSkeletonReturnsStructuredNotImplemented(t *testing.T) {
+func TestAdminConfigPutRouteIsNotExposedAsPlaceholder(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
 		ID:        "main",
@@ -272,16 +272,11 @@ func TestAdminSkeletonReturnsStructuredNotImplemented(t *testing.T) {
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
 	app.apiServer.Handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("status = %d, want 501 body=%s", rec.Code, rec.Body.String())
+	if rec.Code == http.StatusNotImplemented {
+		t.Fatalf("PUT /api/admin/config still exposes placeholder 501 body=%s", rec.Body.String())
 	}
-
-	var payload apiErrorPayload
-	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
-		t.Fatalf("decode error payload: %v", err)
-	}
-	if payload.Error.Code != "not_implemented" {
-		t.Fatalf("error code = %q, want not_implemented", payload.Error.Code)
+	if rec.Code != http.StatusMethodNotAllowed && rec.Code != http.StatusNotFound {
+		t.Fatalf("PUT /api/admin/config status = %d, want 404 or 405 body=%s", rec.Code, rec.Body.String())
 	}
 }
 

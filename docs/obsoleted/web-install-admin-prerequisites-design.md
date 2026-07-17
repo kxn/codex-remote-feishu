@@ -2,7 +2,7 @@
 
 > Type: `obsoleted`
 > Updated: `2026-07-17`
-> Summary: 这份“Web 安装与管理界面前置改造”草稿形成于早期方案阶段，文中大量前提已经失效；同步已归档 WebSetup/Admin 文档链接，保留仅用于历史背景。
+> Summary: 这份“Web 安装与管理界面前置改造”草稿形成于早期方案阶段，文中大量前提已经失效；同步已归档 WebSetup/Admin 文档链接，并标记通用 admin config 写入骨架已废弃。
 > Superseded By: `docs/general/install-deploy-design.md`, `docs/obsoleted/web-setup-wizard-redesign.md`, `docs/implemented/web-admin-ui-redesign.md`
 
 ## 1. 文档定位
@@ -769,7 +769,6 @@ scopes JSON 以当前已确认样例为基线：
 - `GET /api/admin/bootstrap-state`
 - `GET /api/admin/runtime-status`
 - `GET /api/admin/config`
-- `PUT /api/admin/config`
 - `GET /api/admin/feishu/apps`
 - `POST /api/admin/feishu/apps`
 - `PUT /api/admin/feishu/apps/:id`
@@ -820,10 +819,9 @@ scopes JSON 以当前已确认样例为基线：
   - `POST /api/admin/storage/preview-drive/:appId/reconcile`
   - `GET /setup`
   - `GET /`
-- 已注册但暂时返回结构化 `501 not_implemented`：
-  - `PUT /api/admin/config`
+- 早期建议的 `PUT /api/admin/config` 通用写入骨架已经废弃；当前写入走 Codex Provider、Claude Profile、Feishu App、VS Code 等专用接口。
 
-这样后续阶段可以在不改路径 contract 的前提下逐步把能力填实。
+这样后续阶段不再保留一个没有产品承接的通用写入占位。
 
 额外约束：
 

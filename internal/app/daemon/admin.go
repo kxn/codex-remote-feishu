@@ -213,7 +213,6 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/desktop-session/quit", a.requireAdmin(a.handleDesktopSessionQuit))
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
-	mux.HandleFunc("PUT /api/admin/config", a.requireAdmin(a.handleNotImplemented("PUT /api/admin/config")))
 	mux.HandleFunc("GET /api/admin/codex/providers", a.requireAdmin(a.handleCodexProvidersList))
 	mux.HandleFunc("POST /api/admin/codex/providers", a.requireAdmin(a.handleCodexProviderCreate))
 	mux.HandleFunc("PUT /api/admin/codex/providers/{id}", a.requireAdmin(a.handleCodexProviderUpdate))
@@ -452,18 +451,6 @@ func (a *App) handleAdminConfig(w http.ResponseWriter, _ *http.Request) {
 		Path:   loaded.Path,
 		Config: redactAdminConfig(loaded.Config),
 	})
-}
-
-func (a *App) handleNotImplemented(endpoint string) http.HandlerFunc {
-	return func(w http.ResponseWriter, _ *http.Request) {
-		writeAPIError(w, http.StatusNotImplemented, apiError{
-			Code:    "not_implemented",
-			Message: "admin endpoint is not implemented yet",
-			Details: map[string]any{
-				"endpoint": endpoint,
-			},
-		})
-	}
 }
 
 func (a *App) requireSetup(next http.HandlerFunc) http.HandlerFunc {
