@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -174,5 +175,73 @@ func TestToolCallbackCommandRejectKeepsPromptSealedAndPointsUserToStop(t *testin
 	record := svc.root.Surfaces["surface-1"].PendingRequests["req-tool-2"]
 	if record == nil || record.PendingDispatchCommandID != "" || record.Phase != frontstagecontract.PhaseWaitingDispatch || record.LifecycleState != requestLifecycleAwaitingBackendConsume {
 		t.Fatalf("expected tool callback record to stay sealed after command reject, got %#v", record)
+	}
+}
+
+func TestUnsupportedServerRequestAutoDispatchesFailClosedResponseWithoutCard(t *testing.T) {
+	now := time.Date(2026, 7, 17, 15, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorLocalUI},
+	})
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventRequestStarted,
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		RequestID: "req-auth-1",
+		RequestPrompt: &agentproto.RequestPrompt{
+			Type:    agentproto.RequestTypeUnsupportedServerRequest,
+			RawType: "account_chatgpt_auth_tokens_refresh",
+			Title:   "不支持的 Codex 请求",
+			Body:    "当前 Feishu Remote/headless 客户端不支持 Codex server request。",
+		},
+		Metadata: map[string]any{
+			"requestType":   string(agentproto.RequestTypeUnsupportedServerRequest),
+			"requestKind":   "account_chatgpt_auth_tokens_refresh",
+			"requestMethod": "account/chatgptAuthTokens/refresh",
+		},
+	})
+	if len(events) != 1 || events[0].Command == nil {
+		t.Fatalf("expected one auto-dispatch command and no request card, got %#v", events)
+	}
+	command := events[0].Command
+	if command.Kind != agentproto.CommandRequestRespond || command.Request.RequestID != "req-auth-1" {
+		t.Fatalf("unexpected unsupported request command: %#v", command)
+	}
+	if command.Request.Response["type"] != "structured" {
+		t.Fatalf("expected structured unsupported response, got %#v", command.Request.Response)
+	}
+	resultPayload, _ := command.Request.Response["result"].(map[string]any)
+	if resultPayload["success"] != false {
+		t.Fatalf("expected fail-closed result, got %#v", command.Request.Response)
+	}
+	errPayload, _ := resultPayload["error"].(map[string]any)
+	if errPayload["code"] != "unsupported_server_request" || errPayload["method"] != "account/chatgptAuthTokens/refresh" {
+		t.Fatalf("expected auditable unsupported error payload, got %#v", resultPayload)
+	}
+	text := strings.ToLower(fmt.Sprint(resultPayload))
+	if strings.Contains(text, "token\":") || strings.Contains(text, "attestation\":") {
+		t.Fatalf("unsupported response must not fake credentials or attestation: %#v", resultPayload)
+	}
+	record := svc.root.Surfaces["surface-1"].PendingRequests["req-auth-1"]
+	if record == nil || record.RequestType != string(agentproto.RequestTypeUnsupportedServerRequest) || record.PendingDispatchCommandID != command.CommandID || record.LifecycleState != requestLifecycleSubmitting {
+		t.Fatalf("expected unsupported request to remain pending until resolved, got %#v", record)
 	}
 }

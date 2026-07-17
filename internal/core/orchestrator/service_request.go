@@ -147,6 +147,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		Questions:            definition.Questions,
 		CurrentQuestionIndex: 0,
 		HintText:             definition.HintText,
+		LocalMeta:            requestPromptLocalMeta(event.Metadata),
 		LifecycleState:       requestLifecycleAwaitingVisibility,
 		VisibilityState:      requestVisibilityPendingVisibility,
 		CardRevision:         1,
@@ -620,6 +621,19 @@ func buildUnsupportedToolCallbackResponse(request *state.RequestPromptRecord) ma
 	}
 }
 
+func requestPromptLocalMeta(metadata map[string]any) map[string]string {
+	localMeta := map[string]string{}
+	for _, key := range []string{"requestMethod", "requestKind", "requestType"} {
+		if value := strings.TrimSpace(metadataString(metadata, key)); value != "" {
+			localMeta[key] = value
+		}
+	}
+	if len(localMeta) == 0 {
+		return nil
+	}
+	return localMeta
+}
+
 func (s *Service) autoDispatchUnsupportedToolCallback(surface *state.SurfaceConsoleRecord, request *state.RequestPromptRecord, threadTitleHint string) []eventcontract.Event {
 	if surface == nil || request == nil {
 		return nil
@@ -665,6 +679,9 @@ func (s *Service) activatePendingRequest(surface *state.SurfaceConsoleRecord, re
 	}
 	if normalizeRequestLifecycleState(request.LifecycleState) == requestLifecycleQueuedInactive {
 		markRequestAwaitingVisibility(request)
+	}
+	if normalizeRequestType(request.RequestType) == string(agentproto.RequestTypeUnsupportedServerRequest) && !requestLifecycleUsesWaitingDispatchPhase(request) {
+		return s.autoDispatchUnsupportedServerRequest(surface, request)
 	}
 	if !requestPromptRenderable(request.RequestType) {
 		return notice(surface, "request_unsupported", fmt.Sprintf("收到 %s 请求，当前飞书端还不能直接处理，已保持为待处理状态。", request.RequestType))

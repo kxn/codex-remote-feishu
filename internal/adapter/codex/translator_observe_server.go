@@ -581,7 +581,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			RequestPrompt: prompt,
 			Metadata:      extractRequestMetadata(method, message, prompt),
 		}}}, nil
-	case "tool/requestUserInput", "item/tool/requestUserInput", "item/tool/call":
+	case "tool/requestUserInput", "item/tool/requestUserInput", "item/tool/call", "account/chatgptAuthTokens/refresh", "attestation/generate", "currentTime/read", "applyPatchApproval", "execCommandApproval":
 		requestID := extractRequestID(message, nil)
 		if requestID == "" {
 			return Result{}, nil

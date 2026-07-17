@@ -344,6 +344,7 @@ const (
 	RequestTypePermissionsRequestApproval RequestType = "permissions_request_approval"
 	RequestTypeMCPServerElicitation       RequestType = "mcp_server_elicitation"
 	RequestTypeToolCallback               RequestType = "tool_callback"
+	RequestTypeUnsupportedServerRequest   RequestType = "unsupported_server_request"
 )
 
 type RequestOption struct {

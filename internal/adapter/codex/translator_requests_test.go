@@ -80,6 +80,36 @@ func TestObserveServerRequestStartedNormalizesApprovalKindAndExtractsOptions(t *
 	}
 }
 
+func TestObserveServerLegacyApprovalMethodsRemainApprovalWithRawMethod(t *testing.T) {
+	tests := []struct {
+		method  string
+		rawType string
+	}{
+		{method: "applyPatchApproval", rawType: "apply_patch_approval"},
+		{method: "execCommandApproval", rawType: "exec_command_approval"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.method, func(t *testing.T) {
+			tr := NewTranslator("inst-1")
+			raw := `{"id":"req-legacy-1","method":"` + tt.method + `","params":{"threadId":"thread-1","turnId":"turn-1","title":"Legacy approval","message":"approve?"}}`
+			result, err := tr.ObserveServer([]byte(raw))
+			if err != nil {
+				t.Fatalf("observe legacy approval: %v", err)
+			}
+			if len(result.Events) != 1 {
+				t.Fatalf("expected one request event, got %#v", result.Events)
+			}
+			event := result.Events[0]
+			if event.RequestPrompt == nil || event.RequestPrompt.Type != agentproto.RequestTypeApproval || event.RequestPrompt.RawType != tt.rawType {
+				t.Fatalf("expected legacy approval prompt, got %#v", event.RequestPrompt)
+			}
+			if event.Metadata["requestType"] != "approval" || event.Metadata["requestKind"] != tt.rawType || event.Metadata["requestMethod"] != tt.method {
+				t.Fatalf("unexpected legacy approval metadata: %#v", event.Metadata)
+			}
+		})
+	}
+}
+
 func TestObserveServerRequestUserInputProducesQuestionMetadata(t *testing.T) {
 	tr := NewTranslator("inst-1")
 
@@ -128,6 +158,91 @@ func TestObserveServerTopLevelToolRequestUserInputProducesQuestionMetadata(t *te
 	}
 	if event.RequestPrompt == nil || event.RequestPrompt.Type != agentproto.RequestTypeRequestUserInput || event.RequestPrompt.RawType != "request_user_input" {
 		t.Fatalf("expected typed request_user_input prompt, got %#v", event.RequestPrompt)
+	}
+}
+
+func TestObserveServerSensitiveRequestsProduceUnsupportedFailClosedPrompt(t *testing.T) {
+	tests := []struct {
+		name    string
+		method  string
+		rawType string
+	}{
+		{name: "chatgpt auth token refresh", method: "account/chatgptAuthTokens/refresh", rawType: "account_chatgpt_auth_tokens_refresh"},
+		{name: "attestation generate", method: "attestation/generate", rawType: "attestation_generate"},
+		{name: "current time read", method: "currentTime/read", rawType: "current_time_read"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := NewTranslator("inst-1")
+			raw := `{"id":"req-sensitive-1","method":"` + tt.method + `","params":{"threadId":"thread-1","turnId":"turn-1"}}`
+			result, err := tr.ObserveServer([]byte(raw))
+			if err != nil {
+				t.Fatalf("observe sensitive request: %v", err)
+			}
+			if len(result.Events) != 1 {
+				t.Fatalf("expected one request started event, got %#v", result.Events)
+			}
+			event := result.Events[0]
+			if event.Kind != agentproto.EventRequestStarted || event.RequestID != "req-sensitive-1" {
+				t.Fatalf("unexpected sensitive request event: %#v", event)
+			}
+			if event.RequestPrompt == nil || event.RequestPrompt.Type != agentproto.RequestTypeUnsupportedServerRequest || event.RequestPrompt.RawType != tt.rawType {
+				t.Fatalf("expected unsupported server request prompt, got %#v", event.RequestPrompt)
+			}
+			if event.Metadata["requestType"] != string(agentproto.RequestTypeUnsupportedServerRequest) || event.Metadata["requestKind"] != tt.rawType || event.Metadata["requestMethod"] != tt.method {
+				t.Fatalf("unexpected sensitive request metadata: %#v", event.Metadata)
+			}
+			if strings.Contains(strings.ToLower(event.RequestPrompt.Body), "token") && strings.Contains(strings.ToLower(event.RequestPrompt.Body), "success") {
+				t.Fatalf("sensitive request body must not imply success: %q", event.RequestPrompt.Body)
+			}
+		})
+	}
+}
+
+func TestSensitiveRequestUnsupportedResponseRoundTripsOriginalID(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	started, err := tr.ObserveServer([]byte(`{"id":"req-auth-1","method":"account/chatgptAuthTokens/refresh","params":{"threadId":"thread-1","turnId":"turn-1"}}`))
+	if err != nil {
+		t.Fatalf("observe sensitive request: %v", err)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one request event, got %#v", started.Events)
+	}
+	event := started.Events[0]
+	payloads, err := tr.TranslateCommand(agentproto.Command{
+		Kind: agentproto.CommandRequestRespond,
+		Request: agentproto.Request{
+			RequestID: event.RequestID,
+			Response: map[string]any{
+				"type": "structured",
+				"result": map[string]any{
+					"success": false,
+					"error": map[string]any{
+						"code":    "unsupported_server_request",
+						"message": "unsupported",
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("translate unsupported response: %v", err)
+	}
+	if len(payloads) != 1 {
+		t.Fatalf("expected one response payload, got %d", len(payloads))
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(payloads[0], &payload); err != nil {
+		t.Fatalf("unmarshal translated response: %v", err)
+	}
+	if payload["id"] != "req-auth-1" {
+		t.Fatalf("expected original request id, got %#v", payload["id"])
+	}
+	resultPayload, _ := payload["result"].(map[string]any)
+	structured, _ := resultPayload["result"].(map[string]any)
+	if structured["success"] != false {
+		t.Fatalf("expected unsupported failure payload, got %#v", payload["result"])
 	}
 }
 

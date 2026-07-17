@@ -446,12 +446,24 @@ Headless / cron synthetic initialize 当前 opt-out：
 - `account/rateLimits/read`
 - `account/rateLimits/updated`
 
-当前实现结论：`未遵循/未实现`
+当前实现结论：`未遵循/未实现`，但 server request 子面已有 `unsupported-fail-closed` policy。
 
 现状：
 
 - relay/headless 完全没有这组状态机的 command / event 建模。
+- `account/chatgptAuthTokens/refresh` 作为 Codex server request 已被 translator 识别为 `unsupported_server_request`，orchestrator 会自动回写 structured failure；不会展示为普通飞书确认卡，也不会伪造 token。
 - 因此如果未来想让 Feishu/headless 参与 ChatGPT 登录、外部 token 刷新、rate limit 展示，这一层基本要从头设计。
+
+### 3.14.1 敏感 ServerRequest fail-closed policy
+
+`#696` 已对当前 coverage manifest 中的敏感/本地环境 server request 建立显式策略：
+
+- `account/chatgptAuthTokens/refresh`：识别为 `unsupported_server_request`，自动回写 `success=false` / `unsupported_server_request`，不生成或伪造 credential。
+- `attestation/generate`：识别为 `unsupported_server_request`，自动 fail-closed，不伪造 attestation。
+- `currentTime/read`：识别为 `unsupported_server_request`，自动 fail-closed；未来如要支持，应单独建受控 read-only carrier，而不是走 generic request。
+- `applyPatchApproval` / `execCommandApproval`：作为 legacy approval 兼容，仍归一到 `approval`，同时保留 raw method / raw kind 便于审计。
+
+这只是 request policy hardening，不代表账号登录、attestation、rate limit 或本地时间 API 已产品化。
 
 ### 3.15 Apps / MCP / Skills / 其他连接器状态机
 

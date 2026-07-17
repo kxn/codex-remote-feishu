@@ -3,6 +3,7 @@ package codex
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -115,6 +116,10 @@ func canonicalRequestType(method, rawType string) agentproto.RequestType {
 		return agentproto.RequestTypePermissionsRequestApproval
 	case "mcpServer/elicitation/request":
 		return agentproto.RequestTypeMCPServerElicitation
+	case "account/chatgptAuthTokens/refresh", "attestation/generate", "currentTime/read":
+		return agentproto.RequestTypeUnsupportedServerRequest
+	case "applyPatchApproval", "execCommandApproval":
+		return agentproto.RequestTypeApproval
 	}
 	raw := strings.ToLower(strings.TrimSpace(rawType))
 	switch {
@@ -154,6 +159,16 @@ func defaultRequestRawType(method string, params map[string]any) string {
 		return "permissions_request_approval"
 	case "mcpServer/elicitation/request":
 		return "mcp_server_elicitation"
+	case "account/chatgptAuthTokens/refresh":
+		return "account_chatgpt_auth_tokens_refresh"
+	case "attestation/generate":
+		return "attestation_generate"
+	case "currentTime/read":
+		return "current_time_read"
+	case "applyPatchApproval":
+		return "apply_patch_approval"
+	case "execCommandApproval":
+		return "exec_command_approval"
 	case "item/fileChange/requestApproval":
 		return "approval_file_change"
 	case "item/commandExecution/requestApproval":
@@ -191,9 +206,35 @@ func extractRequestPrompt(method string, message map[string]any) *agentproto.Req
 		return extractPermissionsRequestPrompt(message)
 	case "mcpServer/elicitation/request":
 		return extractMCPElicitationPrompt(message)
+	case "account/chatgptAuthTokens/refresh", "attestation/generate", "currentTime/read":
+		return extractUnsupportedServerRequestPrompt(method, message)
 	default:
 		return extractGenericRequestPrompt(method, message)
 	}
+}
+
+func extractUnsupportedServerRequestPrompt(method string, message map[string]any) *agentproto.RequestPrompt {
+	request := extractRequestPayload(message)
+	params := lookupMap(message, "params")
+	rawType := effectiveRawRequestType(method, request, params)
+	prompt := &agentproto.RequestPrompt{
+		Type:    agentproto.RequestTypeUnsupportedServerRequest,
+		RawType: normalizeRawRequestType(rawType),
+		Title:   "不支持的 Codex 请求",
+		Body:    unsupportedServerRequestBody(method),
+	}
+	if prompt.RawType == "" {
+		prompt.RawType = normalizeRawRequestType(method)
+	}
+	return prompt
+}
+
+func unsupportedServerRequestBody(method string) string {
+	method = strings.TrimSpace(method)
+	if method == "" {
+		return "当前 Feishu Remote/headless 客户端不支持这类 Codex server request，已按 fail-closed 策略拒绝。"
+	}
+	return fmt.Sprintf("当前 Feishu Remote/headless 客户端不支持 Codex server request %q，已按 fail-closed 策略拒绝。", method)
 }
 
 func extractGenericRequestPrompt(method string, message map[string]any) *agentproto.RequestPrompt {
