@@ -317,18 +317,25 @@ func (a *App) finishVSCodeCompatibilityRefreshLocked(token uint64, startedAt tim
 	a.vscodeCompatibility.Checked = true
 	a.vscodeCompatibility.Issue = issue
 	a.vscodeCompatibility.NextRetryAt = time.Time{}
-	if a.shuttingDown {
+	a.vscodeCompatibility.NeedsFollowup = !a.shuttingDown
+}
+
+func (a *App) consumeVSCodeCompatibilityFollowupLocked(ctx context.Context, now time.Time) {
+	if !a.vscodeCompatibility.NeedsFollowup {
 		return
 	}
-	now := time.Now().UTC()
+	a.vscodeCompatibility.NeedsFollowup = false
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
 	promptEvents, blocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
-	a.handleUIEventsLocked(context.Background(), promptEvents)
+	a.handleUIEventsLocked(ctx, promptEvents)
 	if blocked {
 		return
 	}
 	vscodeRecoveryEvents := a.maybeRecoverVSCodeSurfacesLocked(now)
 	vscodeRecoveryEvents = append(vscodeRecoveryEvents, a.maybePromptDetachedVSCodeSurfacesLocked()...)
-	a.handleUIEventsLocked(context.Background(), vscodeRecoveryEvents)
+	a.handleUIEventsLocked(ctx, vscodeRecoveryEvents)
 }
 
 func (a *App) invalidateVSCodeCompatibilityCacheLocked() {
@@ -337,6 +344,7 @@ func (a *App) invalidateVSCodeCompatibilityCacheLocked() {
 	a.vscodeCompatibility.RefreshInFlight = false
 	a.vscodeCompatibility.NextRetryAt = time.Time{}
 	a.vscodeCompatibility.RefreshToken++
+	a.vscodeCompatibility.NeedsFollowup = false
 }
 
 func (a *App) detachedVSCodeCompatibilityTargetsLocked(surfaceFilter string) []vscodeCompatibilityPromptTarget {

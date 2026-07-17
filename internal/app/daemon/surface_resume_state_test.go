@@ -833,6 +833,7 @@ func TestDaemonAttachedVSCodeSurfacePersistsResumeTargetAndRecoversOnReconnect(t
 			Source:        "vscode",
 		},
 	})
+	flushVSCodeCompatibilityFollowup(t, restarted, time.Now().UTC().Add(time.Second))
 
 	waitForDaemonCondition(t, 2*time.Second, func() bool {
 		snapshot = restarted.service.SurfaceSnapshot("surface-1")
@@ -887,6 +888,7 @@ func TestDaemonVSCodeResumeWaitsForExactInstanceAndNeverUsesHeadless(t *testing.
 	}
 
 	app.onTick(context.Background(), time.Now().UTC())
+	flushVSCodeCompatibilityFollowup(t, app, time.Now().UTC().Add(time.Second))
 	if headlessStarted {
 		t.Fatal("expected vscode resume path to avoid starting headless")
 	}
@@ -941,6 +943,7 @@ func TestDaemonDetachedVSCodeModePromptsOpenVSCodeAfterRestart(t *testing.T) {
 	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
 
 	app.onTick(context.Background(), time.Now().UTC())
+	flushVSCodeCompatibilityFollowup(t, app, time.Now().UTC().Add(time.Second))
 
 	snapshot := app.service.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.ProductMode != "vscode" || snapshot.Attachment.InstanceID != "" {
@@ -981,6 +984,7 @@ func TestDaemonVSCodeResumeOpenPromptPatchesIntoSameCardOnExactReconnect(t *test
 	app.sendAgentCommand = func(string, agentproto.Command) error { return nil }
 
 	app.onTick(context.Background(), time.Now().UTC())
+	flushVSCodeCompatibilityFollowup(t, app, time.Now().UTC().Add(time.Second))
 	initial := waitForLifecycleOperationTitle(t, gateway, "请先打开 VS Code")
 
 	app.onHello(context.Background(), agentproto.Hello{
@@ -993,6 +997,7 @@ func TestDaemonVSCodeResumeOpenPromptPatchesIntoSameCardOnExactReconnect(t *test
 			Source:        "vscode",
 		},
 	})
+	flushVSCodeCompatibilityFollowup(t, app, time.Now().UTC().Add(time.Second))
 
 	waitForDaemonCondition(t, 2*time.Second, func() bool {
 		for _, op := range gateway.snapshotOperations() {

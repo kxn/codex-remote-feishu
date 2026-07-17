@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,9 +34,9 @@ func TestDaemonTickRunsVSCodeCompatibilityDetectInBackgroundAndAvoidsDuplicateLa
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, false)
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
-	detectCalls := 0
+	var detectCalls atomic.Int32
 	app.vscodeDetect = func() (vscodeDetectResponse, error) {
-		detectCalls++
+		detectCalls.Add(1)
 		select {
 		case started <- struct{}{}:
 		default:
@@ -52,14 +53,19 @@ func TestDaemonTickRunsVSCodeCompatibilityDetectInBackgroundAndAvoidsDuplicateLa
 	waitForTestSignal(t, started, "vscode compatibility detect start")
 
 	app.onTick(context.Background(), base.Add(time.Second))
-	if detectCalls != 1 {
-		t.Fatalf("detect calls while refresh is in flight = %d, want 1", detectCalls)
+	if got := detectCalls.Load(); got != 1 {
+		t.Fatalf("detect calls while refresh is in flight = %d, want 1", got)
 	}
 	if snapshot := app.service.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.Attachment.InstanceID != "" {
 		t.Fatalf("expected vscode surface to remain detached while detect is pending, got %#v", snapshot)
 	}
 
 	close(release)
+	waitForVSCodeCompatibilityFollowup(t, app)
+	if got := len(gateway.snapshotOperations()); got != 0 {
+		t.Fatalf("expected async refresh not to deliver cards before the next daemon tick, got %#v", gateway.snapshotOperations())
+	}
+	app.onTick(context.Background(), base.Add(2*time.Second))
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入迁移失败")
 	if !operationHasCallbackButton(card, "重试迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
 		t.Fatalf("expected retry button after async auto-migrate failure, got %#v", card.CardElements)
@@ -83,10 +89,9 @@ func TestDaemonTickRetriesVSCodeCompatibilityDetectAfterBackoff(t *testing.T) {
 
 	gateway := newLifecycleGateway()
 	app, _, _ := newVSCodeAdminTestAppWithGateway(t, gateway, home, binaryPath, false)
-	detectCalls := 0
+	var detectCalls atomic.Int32
 	app.vscodeDetect = func() (vscodeDetectResponse, error) {
-		detectCalls++
-		if detectCalls == 1 {
+		if detectCalls.Add(1) == 1 {
 			return vscodeDetectResponse{}, errors.New("boom")
 		}
 		return vscodeDetectResponse{
@@ -100,16 +105,18 @@ func TestDaemonTickRetriesVSCodeCompatibilityDetectAfterBackoff(t *testing.T) {
 	waitForDaemonCondition(t, 2*time.Second, func() bool {
 		app.mu.Lock()
 		defer app.mu.Unlock()
-		return detectCalls == 1 && !app.vscodeCompatibility.RefreshInFlight && app.vscodeCompatibility.NextRetryAt.Equal(base.Add(vscodeCompatibilityRetryBackoff))
+		return detectCalls.Load() == 1 && !app.vscodeCompatibility.RefreshInFlight && app.vscodeCompatibility.NextRetryAt.Equal(base.Add(vscodeCompatibilityRetryBackoff))
 	})
 
 	app.onTick(context.Background(), base.Add(5*time.Second))
-	if detectCalls != 1 {
-		t.Fatalf("detect calls before backoff expiry = %d, want 1", detectCalls)
+	if got := detectCalls.Load(); got != 1 {
+		t.Fatalf("detect calls before backoff expiry = %d, want 1", got)
 	}
 
 	app.onTick(context.Background(), base.Add(vscodeCompatibilityRetryBackoff+time.Second))
-	waitForDaemonCondition(t, 2*time.Second, func() bool { return detectCalls == 2 })
+	waitForDaemonCondition(t, 2*time.Second, func() bool { return detectCalls.Load() == 2 })
+	waitForVSCodeCompatibilityFollowup(t, app)
+	app.onTick(context.Background(), base.Add(vscodeCompatibilityRetryBackoff+2*time.Second))
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入迁移失败")
 	if !operationHasCallbackButton(card, "重试迁移并重新接入", vscodeMigrationOwnerPayloadKind, vscodeMigrationOwnerActionRun) {
 		t.Fatalf("expected retry button after retry succeeds, got %#v", card.CardElements)
@@ -141,6 +148,8 @@ func TestDaemonTickVSCodeFollowupGuidancePatchesAsyncCompatibilityCard(t *testin
 	}
 
 	app.onTick(context.Background(), time.Now().UTC())
+	waitForVSCodeCompatibilityFollowup(t, app)
+	app.onTick(context.Background(), time.Now().UTC().Add(time.Second))
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入迁移失败")
 
 	app.handleUIEvents(context.Background(), []eventcontract.Event{{
@@ -181,4 +190,19 @@ func waitForLifecycleOperationTitle(t *testing.T, gateway *lifecycleGateway, tit
 		return false
 	})
 	return found
+}
+
+func flushVSCodeCompatibilityFollowup(t *testing.T, app *App, now time.Time) {
+	t.Helper()
+	waitForVSCodeCompatibilityFollowup(t, app)
+	app.onTick(context.Background(), now)
+}
+
+func waitForVSCodeCompatibilityFollowup(t *testing.T, app *App) {
+	t.Helper()
+	waitForDaemonCondition(t, 2*time.Second, func() bool {
+		app.mu.Lock()
+		defer app.mu.Unlock()
+		return !app.vscodeCompatibility.RefreshInFlight && app.vscodeCompatibility.NeedsFollowup
+	})
 }

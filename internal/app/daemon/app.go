@@ -84,6 +84,7 @@ type vscodeCompatibilityCacheState struct {
 	RefreshInFlight bool
 	NextRetryAt     time.Time
 	RefreshToken    uint64
+	NeedsFollowup   bool
 }
 
 type App struct {

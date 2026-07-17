@@ -211,6 +211,7 @@ func TestDaemonVSCodeCompatibilityBlocksAutoResumeUntilMigrationApplied(t *testi
 			Source:        "vscode",
 		},
 	})
+	flushVSCodeCompatibilityFollowup(t, app, time.Now().UTC().Add(time.Second))
 
 	snapshot := app.service.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
@@ -533,7 +534,7 @@ func TestDaemonTickChecksVSCodeCompatibilityOnlyOnceForRestoredVSCodeSurface(t *
 	}
 
 	app.onTick(context.Background(), time.Now().UTC())
-	app.onTick(context.Background(), time.Now().UTC().Add(time.Second))
+	flushVSCodeCompatibilityFollowup(t, app, time.Now().UTC().Add(time.Second))
 
 	waitForDaemonCondition(t, 2*time.Second, func() bool { return detectCalls == 1 })
 	card := waitForLifecycleOperationTitle(t, gateway, "VS Code 接入迁移失败")

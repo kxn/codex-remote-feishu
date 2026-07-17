@@ -580,6 +580,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 			log.Printf("relay send command failed: instance=%s kind=%s err=%v", hello.Instance.InstanceID, command.Kind, err)
 		}
 	}
+	a.consumeVSCodeCompatibilityFollowupLocked(ctx, now)
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
 	a.handleUIEventsLocked(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []eventcontract.Event{}
@@ -647,6 +648,7 @@ func (a *App) onEvents(ctx context.Context, instanceID string, events []agentpro
 		}
 		switch event.Kind {
 		case agentproto.EventThreadsSnapshot, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused:
+			a.consumeVSCodeCompatibilityFollowupLocked(ctx, now)
 			vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
 			uiEvents = append(uiEvents, vscodePromptEvents...)
 			if !vscodeBlocked {
@@ -840,6 +842,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.reapIdleHeadless(now)
 	a.ensureMinIdleManagedHeadlessLocked(now)
 	a.surfaceResumeRuntime.vscodeStartupCheckDue = false
+	a.consumeVSCodeCompatibilityFollowupLocked(ctx, now)
 	vscodePromptEvents, vscodeBlocked := a.maybePromptVSCodeCompatibilityAtLocked("", now)
 	a.handleUIEventsLocked(ctx, vscodePromptEvents)
 	vscodeRecoveryEvents := []eventcontract.Event{}
