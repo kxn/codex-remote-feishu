@@ -235,7 +235,7 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 			view.CompatibleFreeVisibleInst = inst
 		}
 	}
-	if includePersisted && s.catalog.persistedThreads != nil {
+	if includePersisted && s.catalog.hasPersistedThreads() {
 		thread, err := s.catalog.persistedThreadByIDForBackend(backend, threadID)
 		if err == nil && ordinaryThreadVisible(thread) {
 			found = true
@@ -258,7 +258,7 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 }
 
 func (s *Service) persistedThreadView(surface *state.SurfaceConsoleRecord, threadID string) *mergedThreadView {
-	if s == nil || s.catalog.persistedThreads == nil {
+	if s == nil || !s.catalog.hasPersistedThreads() {
 		return nil
 	}
 	thread, err := s.catalog.persistedThreadByIDForBackend(agentproto.BackendCodex, strings.TrimSpace(threadID))

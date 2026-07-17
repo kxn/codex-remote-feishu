@@ -165,6 +165,10 @@ func (r *serviceCatalogRuntime) setPersistedThreadCatalog(catalog threadcatalogc
 	r.persistedWorkspaces = map[agentproto.Backend]map[string]time.Time{}
 }
 
+func (r *serviceCatalogRuntime) hasPersistedThreads() bool {
+	return r != nil && r.persistedThreads != nil
+}
+
 func (r *serviceCatalogRuntime) recentPersistedThreads(limit int) []state.ThreadRecord {
 	return r.recentPersistedThreadsForBackend(agentproto.BackendCodex, limit)
 }

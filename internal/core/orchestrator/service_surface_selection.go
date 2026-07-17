@@ -605,7 +605,7 @@ func (s *Service) mergeWorkspaceSelectionRecencyFromOnlineThreads(surface *state
 }
 
 func (s *Service) mergeWorkspaceSelectionRecencyFromPersistedWorkspaces(surface *state.SurfaceConsoleRecord, latest map[string]time.Time, seen map[string]bool, visible map[string]struct{}) {
-	if s == nil || s.catalog.persistedThreads == nil {
+	if s == nil || !s.catalog.hasPersistedThreads() {
 		return
 	}
 	workspaces := s.catalog.recentPersistedWorkspaces(persistedRecentWorkspaceLimit)

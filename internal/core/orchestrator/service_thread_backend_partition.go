@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*mergedThreadView, backend agentproto.Backend, filterByBackend bool) {
-	if s == nil || s.catalog.persistedThreads == nil {
+	if s == nil || !s.catalog.hasPersistedThreads() {
 		return
 	}
 	threads := s.catalog.recentPersistedThreads(persistedRecentThreadLimit)
