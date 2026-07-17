@@ -90,9 +90,10 @@ type onboardingWorkflowMachineStepView struct {
 
 type onboardingWorkflowAutoConfigView struct {
 	onboardingWorkflowStageView
-	Decision *onboardingWorkflowDecisionView `json:"decision,omitempty"`
-	Plan     *feishu.AutoConfigPlan          `json:"plan,omitempty"`
-	Error    string                          `json:"error,omitempty"`
+	Decision       *onboardingWorkflowDecisionView `json:"decision,omitempty"`
+	Plan           *feishu.AutoConfigPlan          `json:"plan,omitempty"`
+	LongConnection *feishu.LongConnectionStatus    `json:"longConnection,omitempty"`
+	Error          string                          `json:"error,omitempty"`
 }
 
 type onboardingWorkflowAppView struct {
@@ -272,6 +273,7 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 			Error:                       err.Error(),
 		}
 	}
+	longConnection, longConnectionErr := a.readOnboardingLongConnectionStatus(runtimeCfg)
 
 	planCtx, cancel := context.WithTimeout(context.Background(), defaultFeishuAutoConfigPlanTimeout)
 	defer cancel()
@@ -292,8 +294,12 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 	}
 
 	view := onboardingWorkflowAutoConfigView{
-		Decision: decision,
-		Plan:     &plan,
+		Decision:       decision,
+		Plan:           &plan,
+		LongConnection: longConnection,
+	}
+	if longConnectionErr != nil {
+		view.Error = longConnectionErr.Error()
 	}
 	canContinueDegraded := onboardingAutoConfigCanContinueDegraded(plan)
 	switch plan.Status {
@@ -336,7 +342,34 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 	default:
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "暂时无法读取飞书自动配置状态，请稍后重试。"), false, false, []string{"retry"})
 	}
+	view.onboardingWorkflowStageView.Summary = appendLongConnectionSummary(view.onboardingWorkflowStageView.Summary, longConnection, longConnectionErr)
 	return view
+}
+
+var getFeishuLongConnectionStatus = feishu.GetLongConnectionStatus
+
+func (a *App) readOnboardingLongConnectionStatus(runtimeCfg feishu.LiveGatewayConfig) (*feishu.LongConnectionStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	status, err := getFeishuLongConnectionStatus(ctx, runtimeCfg)
+	if err != nil {
+		return nil, err
+	}
+	return &status, nil
+}
+
+func appendLongConnectionSummary(summary string, status *feishu.LongConnectionStatus, err error) string {
+	summary = strings.TrimSpace(summary)
+	switch {
+	case status != nil && status.OnlineInstanceCount > 0:
+		return summary
+	case status != nil && status.OnlineInstanceCount == 0:
+		return firstNonEmpty(summary, "飞书应用配置已收敛。") + " 暂未确认本机长连接在线。"
+	case err != nil:
+		return firstNonEmpty(summary, "飞书应用配置已收敛。") + " 暂未确认长连接在线状态。"
+	default:
+		return summary
+	}
 }
 
 func buildBlockedOnboardingAutoConfigStage(summary string) onboardingWorkflowAutoConfigView {

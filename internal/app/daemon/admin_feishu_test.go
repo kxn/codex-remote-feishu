@@ -310,18 +310,9 @@ func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	}
 	app, configPath := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
 	app.feishuRuntime.setup = &fakeFeishuSetupClient{
-		startResult: feishuRegistrationStartResult{
-			DeviceCode:      "device-1",
-			VerificationURL: "https://example.test/qr",
-			ExpiresAt:       time.Now().Add(5 * time.Minute),
-		},
-		pollResults: []feishuRegistrationPollResult{{
-			Status:    feishuOnboardingStatusReady,
-			AppID:     "cli_qr",
-			AppSecret: "secret_qr",
-		}},
 		describeResult: feishuAppIdentity{DisplayName: "扫码 Bot"},
 	}
+	app.feishuRuntime.registration = immediateRegistrationRunner("https://example.test/qr", "cli_qr", "secret_qr")
 
 	createRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions", "")
 	if createRec.Code != http.StatusCreated {
@@ -331,8 +322,11 @@ func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	if err := json.NewDecoder(createRec.Body).Decode(&createResp); err != nil {
 		t.Fatalf("decode onboarding create: %v", err)
 	}
-	if createResp.Session.Status != feishuOnboardingStatusPending || createResp.Session.ID == "" || createResp.Session.QRCodeDataURL == "" {
+	if createResp.Session.ID == "" || createResp.Session.QRCodeDataURL == "" {
 		t.Fatalf("unexpected onboarding session: %#v", createResp.Session)
+	}
+	if createResp.Session.Status != feishuOnboardingStatusPending && createResp.Session.Status != feishuOnboardingStatusReady {
+		t.Fatalf("create session status = %q, want pending or ready", createResp.Session.Status)
 	}
 
 	getRec := performAdminRequest(t, app, http.MethodGet, "/api/setup/feishu/onboarding/sessions/"+createResp.Session.ID, "")
@@ -428,18 +422,9 @@ func TestAdminFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	}
 	app, configPath := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
 	app.feishuRuntime.setup = &fakeFeishuSetupClient{
-		startResult: feishuRegistrationStartResult{
-			DeviceCode:      "device-admin-1",
-			VerificationURL: "https://example.test/admin-qr",
-			ExpiresAt:       time.Now().Add(5 * time.Minute),
-		},
-		pollResults: []feishuRegistrationPollResult{{
-			Status:    feishuOnboardingStatusReady,
-			AppID:     "cli_admin_qr",
-			AppSecret: "secret_admin_qr",
-		}},
 		describeResult: feishuAppIdentity{DisplayName: "Admin 扫码 Bot"},
 	}
+	app.feishuRuntime.registration = immediateRegistrationRunner("https://example.test/admin-qr", "cli_admin_qr", "secret_admin_qr")
 
 	createRec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/onboarding/sessions", "")
 	if createRec.Code != http.StatusCreated {
@@ -490,18 +475,9 @@ func TestSetupFeishuOnboardingRetryDoesNotDuplicateAppAfterVerifyFailure(t *test
 	}
 	app, configPath := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
 	app.feishuRuntime.setup = &fakeFeishuSetupClient{
-		startResult: feishuRegistrationStartResult{
-			DeviceCode:      "device-2",
-			VerificationURL: "https://example.test/qr-2",
-			ExpiresAt:       time.Now().Add(5 * time.Minute),
-		},
-		pollResults: []feishuRegistrationPollResult{{
-			Status:    feishuOnboardingStatusReady,
-			AppID:     "cli_retry",
-			AppSecret: "secret_retry",
-		}},
 		describeResult: feishuAppIdentity{DisplayName: "Retry Bot"},
 	}
+	app.feishuRuntime.registration = immediateRegistrationRunner("https://example.test/qr-2", "cli_retry", "secret_retry")
 
 	createRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions", "")
 	if createRec.Code != http.StatusCreated {

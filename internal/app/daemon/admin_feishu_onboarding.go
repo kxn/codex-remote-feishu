@@ -67,6 +67,7 @@ type feishuAppIdentity struct {
 type feishuOnboardingSession struct {
 	ID                 string
 	Status             string
+	RegistrationRun    feishuRegistrationRun
 	DeviceCode         string
 	VerificationURL    string
 	QRCodeDataURL      string
@@ -411,48 +412,10 @@ func (a *App) cleanupFeishuOnboardingSessions(now time.Time) {
 			continue
 		}
 		if !session.ExpiresAt.IsZero() && now.After(session.ExpiresAt.Add(15*time.Minute)) {
+			cancelFeishuRegistrationRunLocked(session)
 			delete(a.feishuRuntime.onboarding, sessionID)
 		}
 	}
-}
-
-func (a *App) createFeishuOnboardingSession(ctx context.Context) (feishuOnboardingSessionView, error) {
-	a.cleanupFeishuOnboardingSessions(time.Now().UTC())
-	result, err := a.feishuRuntime.setup.StartRegistration(ctx)
-	if err != nil {
-		return feishuOnboardingSessionView{}, err
-	}
-	sessionID, err := randomHex(12)
-	if err != nil {
-		return feishuOnboardingSessionView{}, err
-	}
-	qrCodeDataURL, err := qrCodeDataURL(result.VerificationURL)
-	if err != nil {
-		return feishuOnboardingSessionView{}, err
-	}
-	session := &feishuOnboardingSession{
-		ID:              sessionID,
-		Status:          feishuOnboardingStatusPending,
-		DeviceCode:      result.DeviceCode,
-		VerificationURL: result.VerificationURL,
-		QRCodeDataURL:   qrCodeDataURL,
-		ExpiresAt:       result.ExpiresAt.UTC(),
-		PollInterval:    result.Interval,
-		NextPollAt:      time.Now().UTC().Add(result.Interval),
-	}
-	a.feishuRuntime.mu.Lock()
-	if a.feishuRuntime.onboarding == nil {
-		a.feishuRuntime.onboarding = map[string]*feishuOnboardingSession{}
-	}
-	a.feishuRuntime.onboarding[session.ID] = session
-	a.feishuRuntime.mu.Unlock()
-	log.Printf(
-		"feishu onboarding created: session=%s expires_at=%s poll_interval=%s",
-		session.ID,
-		session.ExpiresAt.Format(time.RFC3339),
-		session.PollInterval,
-	)
-	return feishuOnboardingSessionToView(session), nil
 }
 
 func (a *App) refreshFeishuOnboardingSession(ctx context.Context, sessionID string) (feishuOnboardingSessionView, bool, error) {
@@ -469,6 +432,11 @@ func (a *App) refreshFeishuOnboardingSession(ctx context.Context, sessionID stri
 		session.Status = feishuOnboardingStatusExpired
 		session.ErrorCode = "expired_token"
 		session.ErrorMessage = "二维码已过期，请重新开始扫码。"
+	}
+	if strings.TrimSpace(session.DeviceCode) == "" {
+		view := feishuOnboardingSessionToView(session)
+		a.feishuRuntime.mu.Unlock()
+		return view, true, nil
 	}
 	shouldPoll := session.Status == feishuOnboardingStatusPending && (session.NextPollAt.IsZero() || !now.Before(session.NextPollAt))
 	deviceCode := session.DeviceCode
@@ -929,6 +897,7 @@ func (a *App) markOnboardingSessionCompleted(sessionID, gatewayID string, app ad
 	session.CompletedApp = &appCopy
 	session.CompletedMutation = mutation
 	session.CompletedResult = &resultCopy
+	cancelFeishuRegistrationRunLocked(session)
 	return feishuOnboardingSessionToView(session)
 }
 

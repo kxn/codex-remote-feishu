@@ -500,6 +500,10 @@ export interface OnboardingWorkflowMachineStep extends OnboardingWorkflowStage {
 export interface OnboardingWorkflowAutoConfig extends OnboardingWorkflowStage {
   decision?: OnboardingWorkflowDecision;
   plan?: FeishuAppAutoConfigPlan;
+  longConnection?: {
+    onlineInstanceCount: number;
+    checkedAt: string;
+  };
   error?: string;
 }
 

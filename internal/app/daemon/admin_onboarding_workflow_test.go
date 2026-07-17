@@ -22,6 +22,17 @@ func stubSetupAutoConfigPlanner(t *testing.T, planner func(context.Context, feis
 	})
 }
 
+func stubSetupLongConnectionStatus(t *testing.T, status feishu.LongConnectionStatus, err error) {
+	t.Helper()
+	oldStatus := getFeishuLongConnectionStatus
+	getFeishuLongConnectionStatus = func(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
+		return status, err
+	}
+	t.Cleanup(func() {
+		getFeishuLongConnectionStatus = oldStatus
+	})
+}
+
 func stubSetupAutostartStatus(t *testing.T) {
 	t.Helper()
 	oldDetectAutostart := detectAutostart
@@ -221,6 +232,40 @@ func TestSetupOnboardingWorkflowDoesNotHonorDeferredAutoConfigForBlockingStates(
 				t.Fatalf("allowed actions = %#v, defer should not be exposed", workflow.App.AutoConfig.AllowedActions)
 			}
 		})
+	}
+}
+
+func TestSetupOnboardingWorkflowIncludesLongConnectionStatus(t *testing.T) {
+	app := newVerifiedSetupWorkflowApp(t)
+	stubSetupAutoConfigPlanner(t, func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
+		return feishu.AutoConfigPlan{
+			Status:  feishu.AutoConfigStatusClean,
+			Summary: "飞书应用配置已收敛。",
+		}, nil
+	})
+	stubSetupLongConnectionStatus(t, feishu.LongConnectionStatus{
+		OnlineInstanceCount: 0,
+		CheckedAt:           time.Now().UTC(),
+	}, nil)
+
+	workflow, err := app.buildOnboardingWorkflow("main")
+	if err != nil {
+		t.Fatalf("buildOnboardingWorkflow: %v", err)
+	}
+	if workflow.App == nil {
+		t.Fatal("workflow app is nil")
+	}
+	if workflow.App.AutoConfig.LongConnection == nil {
+		t.Fatalf("expected long connection status in auto-config view")
+	}
+	if workflow.App.AutoConfig.LongConnection.OnlineInstanceCount != 0 {
+		t.Fatalf("unexpected long connection status: %#v", workflow.App.AutoConfig.LongConnection)
+	}
+	if workflow.App.AutoConfig.Status != onboardingStageStatusComplete {
+		t.Fatalf("auto-config status = %q, want complete", workflow.App.AutoConfig.Status)
+	}
+	if !strings.Contains(workflow.App.AutoConfig.Summary, "暂未确认本机长连接在线") {
+		t.Fatalf("expected concise long-connection hint, got %q", workflow.App.AutoConfig.Summary)
 	}
 }
 

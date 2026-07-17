@@ -831,7 +831,7 @@ func intMapValue(values map[string]interface{}, key string) int {
 
 func ResolveReceiveTarget(chatID, actorUserID string) (string, string) {
 	if strings.TrimSpace(chatID) != "" {
-		return chatID, larkim.ReceiveIdTypeChatId
+		return chatID, "chat_id"
 	}
 	actorUserID = strings.TrimSpace(actorUserID)
 	if actorUserID == "" {
@@ -839,10 +839,10 @@ func ResolveReceiveTarget(chatID, actorUserID string) (string, string) {
 	}
 	switch {
 	case strings.HasPrefix(actorUserID, "ou_"):
-		return actorUserID, larkim.ReceiveIdTypeOpenId
+		return actorUserID, "open_id"
 	case strings.HasPrefix(actorUserID, "on_"):
-		return actorUserID, larkim.ReceiveIdTypeUnionId
+		return actorUserID, "union_id"
 	default:
-		return actorUserID, larkim.ReceiveIdTypeUserId
+		return actorUserID, "user_id"
 	}
 }

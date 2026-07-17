@@ -73,6 +73,7 @@ type feishuRuntimeState struct {
 	permissionRefreshInFlight bool
 	onboarding                map[string]*feishuOnboardingSession
 	setup                     feishuSetupClient
+	registration              feishuRegistrationRunner
 }
 
 func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {

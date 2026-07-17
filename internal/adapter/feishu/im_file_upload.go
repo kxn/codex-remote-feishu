@@ -109,12 +109,12 @@ func imFileTypeForSemantic(fileName string, semantic imUploadedFileSemantic) (st
 		if ext != "mp4" {
 			return "", fmt.Errorf("video messages require an .mp4 file")
 		}
-		return larkim.FileTypeMp4, nil
+		return larkim.CreateFileFileTypeMp4, nil
 	case imUploadedFileSemanticAudio:
 		if ext != "opus" {
 			return "", fmt.Errorf("audio messages require an .opus file")
 		}
-		return larkim.FileTypeOpus, nil
+		return larkim.CreateFileFileTypeOpus, nil
 	default:
 		return imAttachmentFileTypeFromName(fileName), nil
 	}
@@ -124,17 +124,17 @@ func imAttachmentFileTypeFromName(fileName string) string {
 	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(strings.TrimSpace(fileName))), ".")
 	switch ext {
 	case "pdf":
-		return larkim.FileTypePdf
+		return larkim.CreateFileFileTypePdf
 	case "doc", "docx", "docm", "dot", "dotx", "dotm", "wps":
-		return larkim.FileTypeDoc
+		return larkim.CreateFileFileTypeDoc
 	case "xls", "xlsx", "xlsm", "xlt", "xltx", "xltm", "csv", "et":
-		return larkim.FileTypeXls
+		return larkim.CreateFileFileTypeXls
 	case "ppt", "pptx", "pptm", "pps", "ppsx", "ppsm", "pot", "potx", "potm", "dps", "dpt":
-		return larkim.FileTypePpt
+		return larkim.CreateFileFileTypePpt
 	default:
 		// Attachment sends intentionally collapse media-specific extensions such as
 		// .mp4/.opus into a generic file upload so the final message semantics stay
 		// aligned with msg_type=file instead of implicitly turning into video/audio.
-		return larkim.FileTypeStream
+		return larkim.CreateFileFileTypeStream
 	}
 }
