@@ -714,6 +714,6 @@ func (s *Service) RemoveInstance(instanceID string) {
 	s.clearInstanceRemoteTurnOwnership(instanceID)
 	delete(s.threadRefreshes, instanceID)
 	deleteMatchingItemBuffers(s.itemBuffers, instanceID, "", "")
-	deleteMatchingMCPToolCallProgress(s.progress.mcpToolCallProgress, instanceID, "", "")
+	s.clearMCPToolCallProgress(instanceID, "", "")
 	s.clearPendingProgressTextForInstance(instanceID)
 }

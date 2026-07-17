@@ -432,6 +432,43 @@ func newServiceProgressRuntime(service *Service) *serviceProgressRuntime {
 	}
 }
 
+func (r *serviceProgressRuntime) isDuplicateMCPToolCallProgress(record *mcpToolCallProgressRecord) bool {
+	if r == nil || record == nil {
+		return false
+	}
+	key := mcpToolCallProgressKey(record.SurfaceSessionID, record.InstanceID, record.ThreadID, record.TurnID, record.ItemID)
+	return equalMCPToolCallProgressRecord(r.mcpToolCallProgress[key], record)
+}
+
+func (r *serviceProgressRuntime) storeMCPToolCallProgress(record *mcpToolCallProgressRecord) {
+	if r == nil || record == nil {
+		return
+	}
+	key := mcpToolCallProgressKey(record.SurfaceSessionID, record.InstanceID, record.ThreadID, record.TurnID, record.ItemID)
+	r.mcpToolCallProgress[key] = record
+}
+
+func (r *serviceProgressRuntime) clearMCPToolCallProgress(instanceID, threadID, turnID string) {
+	if r == nil {
+		return
+	}
+	for key, record := range r.mcpToolCallProgress {
+		if record == nil {
+			continue
+		}
+		if record.InstanceID != instanceID {
+			continue
+		}
+		if threadID != "" && record.ThreadID != threadID {
+			continue
+		}
+		if turnID != "" && record.TurnID != turnID {
+			continue
+		}
+		delete(r.mcpToolCallProgress, key)
+	}
+}
+
 func (r *serviceProgressRuntime) pendingTurnTextItem(instanceID, threadID, turnID string) *completedTextItem {
 	if r == nil {
 		return nil

@@ -27,24 +27,6 @@ func mcpToolCallProgressKey(surfaceID, instanceID, threadID, turnID, itemID stri
 	return strings.Join([]string{surfaceID, instanceID, threadID, turnID, itemID}, "::")
 }
 
-func deleteMatchingMCPToolCallProgress(records map[string]*mcpToolCallProgressRecord, instanceID, threadID, turnID string) {
-	for key, record := range records {
-		if record == nil {
-			continue
-		}
-		if record.InstanceID != instanceID {
-			continue
-		}
-		if threadID != "" && record.ThreadID != threadID {
-			continue
-		}
-		if turnID != "" && record.TurnID != turnID {
-			continue
-		}
-		delete(records, key)
-	}
-}
-
 func equalMCPToolCallProgressRecord(left, right *mcpToolCallProgressRecord) bool {
 	switch {
 	case left == nil && right == nil:
@@ -84,15 +66,14 @@ func (s *Service) handleMCPToolCallItemProgress(instanceID string, event agentpr
 	if record == nil {
 		return nil
 	}
-	key := mcpToolCallProgressKey(surface.SurfaceSessionID, instanceID, event.ThreadID, event.TurnID, event.ItemID)
-	if existing := s.progress.mcpToolCallProgress[key]; existing != nil && equalMCPToolCallProgressRecord(existing, record) {
+	if s.isDuplicateMCPToolCallProgress(record) {
 		return nil
 	}
 	progress := s.ensureProgressForMCPToolCall(surface, instanceID, event.ThreadID, event.TurnID, event.ItemID, final)
 	if progress == nil {
 		return nil
 	}
-	s.progress.mcpToolCallProgress[key] = record
+	s.storeMCPToolCallProgress(record)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
 	execprogress.UpsertEntry(progress, mcpToolCallProgressEntry(*record))
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)

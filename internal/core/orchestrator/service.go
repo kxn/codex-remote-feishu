@@ -762,7 +762,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		)
 		events = append(events, s.finalizeExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID, event.Status, finalText)...)
 		s.clearTurnPlanSnapshots(instanceID, event.ThreadID, event.TurnID)
-		deleteMatchingMCPToolCallProgress(s.progress.mcpToolCallProgress, instanceID, event.ThreadID, event.TurnID)
+		s.clearMCPToolCallProgress(instanceID, event.ThreadID, event.TurnID)
 		compactEvents := s.completeCompactTurn(instanceID, event)
 		if event.Initiator.Kind == agentproto.InitiatorLocalUI {
 			events = append(events, s.enterHandoff(instanceID)...)
