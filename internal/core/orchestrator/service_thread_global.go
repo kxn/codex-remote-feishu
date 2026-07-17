@@ -412,6 +412,15 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if merged.RuntimeStatus == nil && secondary.RuntimeStatus != nil {
 		merged.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(secondary.RuntimeStatus)
 	}
+	if merged.LifecycleState == nil && secondary.LifecycleState != nil {
+		merged.LifecycleState = agentproto.CloneThreadLifecycleUpdate(secondary.LifecycleState)
+	}
+	if merged.ThreadGoal == nil && secondary.ThreadGoal != nil {
+		merged.ThreadGoal = agentproto.CloneThreadGoalUpdate(secondary.ThreadGoal)
+	}
+	if merged.ThreadSettings == nil && secondary.ThreadSettings != nil {
+		merged.ThreadSettings = agentproto.CloneThreadSettingsUpdate(secondary.ThreadSettings)
+	}
 	if merged.TokenUsage == nil && secondary.TokenUsage != nil {
 		merged.TokenUsage = agentproto.CloneThreadTokenUsage(secondary.TokenUsage)
 	}
@@ -429,6 +438,9 @@ func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
 	}
 	threadCopy := *thread
 	threadCopy.RuntimeStatus = agentproto.CloneThreadRuntimeStatus(thread.RuntimeStatus)
+	threadCopy.LifecycleState = agentproto.CloneThreadLifecycleUpdate(thread.LifecycleState)
+	threadCopy.ThreadGoal = agentproto.CloneThreadGoalUpdate(thread.ThreadGoal)
+	threadCopy.ThreadSettings = agentproto.CloneThreadSettingsUpdate(thread.ThreadSettings)
 	threadCopy.TokenUsage = agentproto.CloneThreadTokenUsage(thread.TokenUsage)
 	threadCopy.LastModelReroute = agentproto.CloneTurnModelReroute(thread.LastModelReroute)
 	threadCopy.LastModelVerification = agentproto.CloneTurnModelVerification(thread.LastModelVerification)

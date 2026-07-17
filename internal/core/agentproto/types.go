@@ -40,6 +40,9 @@ const (
 	EventThreadDiscovered                EventKind = "thread.discovered"
 	EventThreadFocused                   EventKind = "thread.focused"
 	EventThreadRuntimeStatusUpdated      EventKind = "thread.runtime_status.updated"
+	EventThreadLifecycleUpdated          EventKind = "thread.lifecycle.updated"
+	EventThreadGoalUpdated               EventKind = "thread.goal.updated"
+	EventThreadSettingsUpdated           EventKind = "thread.settings.updated"
 	EventProcessChildRestartUpdated      EventKind = "process.child.restart.updated"
 	EventConfigObserved                  EventKind = "config.observed"
 	EventLocalInteractionObserved        EventKind = "local.interaction.observed"
@@ -131,6 +134,9 @@ type Event struct {
 	PlanSnapshot         *TurnPlanSnapshot         `json:"planSnapshot,omitempty"`
 	ThreadHistory        *ThreadHistoryRecord      `json:"threadHistory,omitempty"`
 	RuntimeStatus        *ThreadRuntimeStatus      `json:"runtimeStatus,omitempty"`
+	ThreadLifecycle      *ThreadLifecycleUpdate    `json:"threadLifecycle,omitempty"`
+	ThreadGoal           *ThreadGoalUpdate         `json:"threadGoal,omitempty"`
+	ThreadSettings       *ThreadSettingsUpdate     `json:"threadSettings,omitempty"`
 	Metadata             map[string]any            `json:"metadata,omitempty"`
 	Threads              []ThreadSnapshotRecord    `json:"threads,omitempty"`
 	FileChanges          []FileChangeRecord        `json:"fileChanges,omitempty"`

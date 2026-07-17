@@ -571,6 +571,12 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			s.touchThread(thread)
 		}
 		return s.filterEventsForSurfaceVisibility(preface)
+	case agentproto.EventThreadLifecycleUpdated:
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadLifecycleUpdate(instanceID, event)...))
+	case agentproto.EventThreadGoalUpdated:
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadGoalUpdate(instanceID, event)...))
+	case agentproto.EventThreadSettingsUpdated:
+		return s.filterEventsForSurfaceVisibility(append(preface, s.applyThreadSettingsUpdate(instanceID, event)...))
 	case agentproto.EventThreadsSnapshot:
 		delete(s.threadRefreshes, instanceID)
 		nextThreads := map[string]*state.ThreadRecord{}

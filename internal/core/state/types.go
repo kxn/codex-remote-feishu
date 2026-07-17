@@ -216,6 +216,9 @@ type ThreadRecord struct {
 	CWD                      string
 	State                    string
 	RuntimeStatus            *agentproto.ThreadRuntimeStatus
+	LifecycleState           *agentproto.ThreadLifecycleUpdate
+	ThreadGoal               *agentproto.ThreadGoalUpdate
+	ThreadSettings           *agentproto.ThreadSettingsUpdate
 	ExplicitModel            string
 	ExplicitReasoningEffort  string
 	ObservedPermission       *agentproto.ObservedPermissionState

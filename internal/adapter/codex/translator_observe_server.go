@@ -517,6 +517,14 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		return t.observeModelVerification(message), nil
 	case "model/safetyBuffering/updated":
 		return t.observeModelSafetyBuffering(message), nil
+	case "thread/archived", "thread/unarchived", "thread/deleted", "thread/closed":
+		return t.observeThreadLifecycle(message, normalizeThreadLifecycleMethod(method)), nil
+	case "thread/goal/updated":
+		return t.observeThreadGoalUpdated(message), nil
+	case "thread/goal/cleared":
+		return t.observeThreadGoalCleared(message), nil
+	case "thread/settings/updated":
+		return t.observeThreadSettingsUpdated(message), nil
 	case "warning", "guardianWarning", "deprecationNotice", "configWarning":
 		return t.observeProtocolNotice(method, message), nil
 	case "turn/started":

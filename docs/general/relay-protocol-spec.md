@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-07-17`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`thread/archived` / `thread/deleted` / `thread/unarchived` / `thread/closed` / `thread/goal/*` / `thread/settings/updated` 到 state-only thread state carrier、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
 
 ## 1. 文档定位
 
@@ -41,6 +41,13 @@
 - `thread/status/changed`
 - `thread/name/updated`
 - `thread/tokenUsage/updated`
+- `thread/archived`
+- `thread/deleted`
+- `thread/unarchived`
+- `thread/closed`
+- `thread/goal/updated`
+- `thread/goal/cleared`
+- `thread/settings/updated`
 - `turn/start`
 - `turn/steer`
 - `turn/interrupt`
@@ -583,6 +590,41 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - orchestrator 只把 notice 记录到 instance / thread 的最近 notice state，默认不生成 Feishu card、notice 或消息。
 - 这条 carrier 是 P1 底层承接，不代表 Feishu notice center 或安全告警产品展示已经完成。
 - `windows/worldWritableWarning` 当前仍是 planned follow-up；在确认上游 payload 前不并入本 carrier。
+
+### 5.4.3 Thread lifecycle / goal / settings state
+
+这是 wrapper 对 thread-level passive notifications 的 state-only 承接。
+
+当前覆盖的 native methods：
+
+- `thread/archived`
+- `thread/deleted`
+- `thread/unarchived`
+- `thread/closed`
+- `thread/goal/updated`
+- `thread/goal/cleared`
+- `thread/settings/updated`
+
+关键字段：
+
+- `threadLifecycle.threadId`
+- `threadLifecycle.action`
+  - `archived`
+  - `unarchived`
+  - `deleted`
+  - `closed`
+- `threadGoal.threadId`
+- `threadGoal.turnId?`
+- `threadGoal.objective/status/tokenBudget/tokensUsed/timeUsedSeconds/cleared`
+- `threadSettings.threadId`
+- `threadSettings.model/reasoningEffort/approvalPolicy/sandbox`
+
+当前语义：
+
+- archived / unarchived 只更新 thread 的列表可见性状态
+- deleted 会把已选中的旧 thread 清成 attached-unbound，避免后续输入继续路由到已删除 thread
+- closed 只标记 thread runtime `notLoaded`，不会 detach surface，也不会清空当前 thread selection
+- goal/settings 只保存 latest state，不默认生成 Feishu 消息或卡片
 
 ### 5.5 `config.observed`
 

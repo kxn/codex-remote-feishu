@@ -240,11 +240,11 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 		{
 			Direction:              ProtocolDirectionServerNotification,
 			TargetLayer:            ProtocolTargetStateOnly,
-			Status:                 ProtocolStatusPlanned,
+			Status:                 ProtocolStatusSupported,
 			Owner:                  "#694",
 			Cadence:                ProtocolCadenceEvent,
 			FeishuProjectionPolicy: FeishuProjectionStateOnly,
-			Notes:                  "Thread lifecycle/goal/settings must not be confused with detach or active routing decisions.",
+			Notes:                  "Thread lifecycle/goal/settings are stored as state-only carriers; thread/closed is not detach.",
 			Methods: []string{
 				"thread/archived",
 				"thread/deleted",

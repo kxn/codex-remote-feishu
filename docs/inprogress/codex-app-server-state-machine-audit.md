@@ -572,9 +572,10 @@ Headless / cron synthetic initialize 当前 opt-out：
 | `thread/list + cursor/filter` | 部分遵循 | 只实现“刷新快照”，固定 `limit=50`，没有 cursor/filter 面 |
 | `thread/read(includeTurns)` | 遵循但有适配压缩 | 被压成 `thread.history.read` |
 | `thread/loaded/list` | 未遵循/未实现 | 无真实 command 建模 |
-| `thread/status/changed` | 未遵循/未实现 | 当前完全没消费 |
-| `thread/unsubscribe -> thread/closed` | 未遵循/未实现 | 当前无 command / event 建模；且上游现在是“无 subscriber 且无 activity 30 分钟后才 unload”，不是立即 `closed` |
-| `thread/archive/unarchive` | 未遵循/未实现 | 无 command / event 建模 |
+| `thread/status/changed` | 严格遵循 | 已进入 `thread.runtime_status.updated`，会更新 loaded/runtime flags |
+| `thread/unsubscribe -> thread/closed` | 遵循但仅 state-only | `thread/closed` 已承接为 runtime `notLoaded`，不会 detach surface；尚无主动 `thread/unsubscribe` command 面 |
+| `thread/archive/unarchive/delete` | 遵循但仅 state-only | archived/unarchived 更新列表可见性；deleted 清理 selected thread 防误路由，不开放主动 command |
+| `thread/goal/*` / `thread/settings/updated` | 遵循但仅 state-only | goal/settings latest state 已保存，不做 Feishu goal UI |
 | `thread/compact/start` | 遵循但有适配压缩 | 已接通，能看到 `contextCompaction` |
 | `thread/rollback` | 未遵循/未实现 | 无 command 建模 |
 | `thread/shellCommand` | 未遵循/未实现 | 无 command 建模 |
