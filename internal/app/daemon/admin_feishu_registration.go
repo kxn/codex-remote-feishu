@@ -285,7 +285,6 @@ func (a *App) applyFeishuRegistrationQRCode(sessionID string, info feishuRegistr
 	if session == nil {
 		return
 	}
-	now := time.Now().UTC()
 	interval := info.Interval
 	if interval <= 0 {
 		interval = 5 * time.Second
@@ -295,7 +294,6 @@ func (a *App) applyFeishuRegistrationQRCode(sessionID string, info feishuRegistr
 	session.QRCodeDataURL = qrCodeDataURL
 	session.ExpiresAt = info.ExpiresAt.UTC()
 	session.PollInterval = interval
-	session.NextPollAt = now.Add(interval)
 }
 
 func (a *App) applyFeishuRegistrationResult(sessionID string, result feishuRegistrationResult) {

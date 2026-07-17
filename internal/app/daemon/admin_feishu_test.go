@@ -69,41 +69,9 @@ func (f *fakeAdminGatewayController) Status() []feishu.GatewayStatus {
 }
 
 type fakeFeishuSetupClient struct {
-	startResult    feishuRegistrationStartResult
-	startErr       error
-	pollResults    []feishuRegistrationPollResult
-	pollErr        error
-	pollErrs       []error
 	describeResult feishuAppIdentity
 	describeErr    error
-	pollCalls      int
 	describeCalls  int
-}
-
-func (f *fakeFeishuSetupClient) StartRegistration(context.Context) (feishuRegistrationStartResult, error) {
-	return f.startResult, f.startErr
-}
-
-func (f *fakeFeishuSetupClient) PollRegistration(context.Context, string) (feishuRegistrationPollResult, error) {
-	if len(f.pollErrs) > 0 {
-		err := f.pollErrs[0]
-		f.pollErrs = f.pollErrs[1:]
-		if err != nil {
-			return feishuRegistrationPollResult{}, err
-		}
-	}
-	if f.pollErr != nil {
-		return feishuRegistrationPollResult{}, f.pollErr
-	}
-	index := f.pollCalls
-	f.pollCalls++
-	if len(f.pollResults) == 0 {
-		return feishuRegistrationPollResult{Status: feishuOnboardingStatusPending}, nil
-	}
-	if index >= len(f.pollResults) {
-		index = len(f.pollResults) - 1
-	}
-	return f.pollResults[index], nil
 }
 
 func (f *fakeFeishuSetupClient) DescribeApp(context.Context, string, string) (feishuAppIdentity, error) {
@@ -358,6 +326,11 @@ func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	if completeResp.Guide.RecommendedNextStep != "runtimeRequirements" || len(completeResp.Guide.RemainingManualActions) == 0 {
 		t.Fatalf("unexpected onboarding guide: %#v", completeResp.Guide)
 	}
+	for _, action := range completeResp.Guide.RemainingManualActions {
+		if strings.Contains(action, "drive:drive") {
+			t.Fatalf("onboarding guide should not hard-code manual drive permission after registration addons, got %#v", completeResp.Guide)
+		}
+	}
 	if completeResp.Session.Status != feishuOnboardingStatusCompleted {
 		t.Fatalf("expected completed onboarding session, got %#v", completeResp.Session)
 	}
@@ -374,44 +347,6 @@ func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	}
 	if len(gateway.applied) != 0 {
 		t.Fatalf("expected onboarding completion to avoid legacy verify notices, got %#v", gateway.applied)
-	}
-}
-
-func TestSetupFeishuOnboardingPollTransientErrorKeepsPending(t *testing.T) {
-	cfg := config.DefaultAppConfig()
-	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
-	setupClient := &fakeFeishuSetupClient{
-		startResult: feishuRegistrationStartResult{
-			DeviceCode:      "device-poll-retry",
-			VerificationURL: "https://example.test/retry-qr",
-			ExpiresAt:       time.Now().Add(5 * time.Minute),
-		},
-		pollErrs: []error{errors.New("temporary poll timeout")},
-	}
-	app.feishuRuntime.setup = setupClient
-
-	createRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions", "")
-	if createRec.Code != http.StatusCreated {
-		t.Fatalf("create onboarding status = %d, want 201 body=%s", createRec.Code, createRec.Body.String())
-	}
-	var createResp feishuOnboardingSessionResponse
-	if err := json.NewDecoder(createRec.Body).Decode(&createResp); err != nil {
-		t.Fatalf("decode onboarding create: %v", err)
-	}
-
-	getRec := performAdminRequest(t, app, http.MethodGet, "/api/setup/feishu/onboarding/sessions/"+createResp.Session.ID, "")
-	if getRec.Code != http.StatusOK {
-		t.Fatalf("get onboarding after transient poll failure status = %d, want 200 body=%s", getRec.Code, getRec.Body.String())
-	}
-	var getResp feishuOnboardingSessionResponse
-	if err := json.NewDecoder(getRec.Body).Decode(&getResp); err != nil {
-		t.Fatalf("decode onboarding get after transient failure: %v", err)
-	}
-	if getResp.Session.Status != feishuOnboardingStatusPending {
-		t.Fatalf("expected onboarding session to stay pending, got %#v", getResp.Session)
-	}
-	if getResp.Session.ErrorCode != "" || getResp.Session.ErrorMessage != "" {
-		t.Fatalf("expected transient poll failure to stay hidden from page state, got %#v", getResp.Session)
 	}
 }
 

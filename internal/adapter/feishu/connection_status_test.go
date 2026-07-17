@@ -67,3 +67,60 @@ func TestGetLongConnectionStatusSurfacesAPIError(t *testing.T) {
 		t.Fatalf("expected error code in %q", err.Error())
 	}
 }
+
+func TestGetBotInfoReturnsAppName(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"tenant-token"}`))
+		case "/open-apis/bot/v3/info":
+			if got := r.Header.Get("Authorization"); got != "Bearer tenant-token" {
+				t.Fatalf("Authorization = %q, want tenant token", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"success","bot":{"app_name":"扫码 Bot","open_id":"ou_bot"}}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	info, err := GetBotInfo(context.Background(), LiveGatewayConfig{
+		GatewayID: "main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+		Domain:    server.URL,
+	})
+	if err != nil {
+		t.Fatalf("GetBotInfo: %v", err)
+	}
+	if info.AppName != "扫码 Bot" || info.OpenID != "ou_bot" {
+		t.Fatalf("unexpected bot info: %#v", info)
+	}
+}
+
+func TestGetBotInfoSurfacesAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "tenant_access_token") {
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"tenant-token"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"code":99991663,"msg":"bot not enabled"}`))
+	}))
+	defer server.Close()
+
+	_, err := GetBotInfo(context.Background(), LiveGatewayConfig{
+		GatewayID: "main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+		Domain:    server.URL,
+	})
+	if err == nil {
+		t.Fatal("expected API error")
+	}
+	if !strings.Contains(err.Error(), "99991663") {
+		t.Fatalf("expected error code in %q", err.Error())
+	}
+}
