@@ -13,7 +13,7 @@ import (
 
 func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	restoreAutoConfigHooks(t)
-	autoConfigListScopes = func(context.Context, LiveGatewayConfig) ([]AppScopeStatus, error) {
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
 		return []AppScopeStatus{{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1}}, nil
 	}
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
@@ -70,7 +70,7 @@ func TestApplyAppAutoConfigEnablesBotBeforeConfigPatch(t *testing.T) {
 	restoreAutoConfigHooks(t)
 	phase := 0
 	var calls []string
-	autoConfigListScopes = func(context.Context, LiveGatewayConfig) ([]AppScopeStatus, error) {
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
 		return nil, nil
 	}
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
@@ -136,7 +136,7 @@ func TestApplyAppAutoConfigEnablesBotBeforeConfigPatch(t *testing.T) {
 func TestPublishAppAutoConfigBlocksUntilApplyCompletes(t *testing.T) {
 	restoreAutoConfigHooks(t)
 	calledPublish := false
-	autoConfigListScopes = func(context.Context, LiveGatewayConfig) ([]AppScopeStatus, error) {
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
 		return nil, nil
 	}
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
@@ -171,7 +171,7 @@ func TestPlanAppAutoConfigReturnsUnsupportedPlanInsteadOfError(t *testing.T) {
 			Msg:  "unsupported application",
 		}
 	}
-	autoConfigListScopes = func(context.Context, LiveGatewayConfig) ([]AppScopeStatus, error) {
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
 		return nil, nil
 	}
 

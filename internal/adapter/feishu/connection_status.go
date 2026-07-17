@@ -45,8 +45,12 @@ type botInfoHTTPResponse struct {
 }
 
 func GetLongConnectionStatus(ctx context.Context, cfg LiveGatewayConfig) (LongConnectionStatus, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	broker := NewFeishuCallBrokerWithHTTPClient(cfg.GatewayID, nil, client)
+	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).GetLongConnectionStatus(ctx)
+}
+
+func (c *SetupClient) GetLongConnectionStatus(ctx context.Context) (LongConnectionStatus, error) {
+	client, broker := c.http()
+	cfg := c.config
 	token, err := getTenantAccessTokenHTTP(ctx, broker, client, cfg)
 	if err != nil {
 		return LongConnectionStatus{}, err
@@ -59,7 +63,7 @@ func GetLongConnectionStatus(ctx context.Context, cfg LiveGatewayConfig) (LongCo
 		Retry:      RetrySafe,
 		Permission: PermissionFailFast,
 	}, func(callCtx context.Context, httpClient *http.Client) (longConnectionStatusHTTPResponse, error) {
-		req, err := http.NewRequestWithContext(callCtx, http.MethodGet, strings.TrimRight(feishuHTTPDomain(cfg), "/")+"/open-apis/event/v1/connection", nil)
+		req, err := http.NewRequestWithContext(callCtx, http.MethodGet, strings.TrimRight(setupHTTPDomain(cfg), "/")+"/open-apis/event/v1/connection", nil)
 		if err != nil {
 			return longConnectionStatusHTTPResponse{}, err
 		}
@@ -91,8 +95,12 @@ func GetLongConnectionStatus(ctx context.Context, cfg LiveGatewayConfig) (LongCo
 }
 
 func GetBotInfo(ctx context.Context, cfg LiveGatewayConfig) (BotInfo, error) {
-	client := &http.Client{Timeout: 15 * time.Second}
-	broker := NewFeishuCallBrokerWithHTTPClient(cfg.GatewayID, nil, client)
+	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).GetBotInfo(ctx)
+}
+
+func (c *SetupClient) GetBotInfo(ctx context.Context) (BotInfo, error) {
+	client, broker := c.http()
+	cfg := c.config
 	token, err := getTenantAccessTokenHTTP(ctx, broker, client, cfg)
 	if err != nil {
 		return BotInfo{}, err
@@ -105,7 +113,7 @@ func GetBotInfo(ctx context.Context, cfg LiveGatewayConfig) (BotInfo, error) {
 		Retry:      RetrySafe,
 		Permission: PermissionFailFast,
 	}, func(callCtx context.Context, httpClient *http.Client) (botInfoHTTPResponse, error) {
-		req, err := http.NewRequestWithContext(callCtx, http.MethodGet, strings.TrimRight(feishuHTTPDomain(cfg), "/")+"/open-apis/bot/v3/info", nil)
+		req, err := http.NewRequestWithContext(callCtx, http.MethodGet, strings.TrimRight(setupHTTPDomain(cfg), "/")+"/open-apis/bot/v3/info", nil)
 		if err != nil {
 			return botInfoHTTPResponse{}, err
 		}
@@ -136,7 +144,7 @@ func GetBotInfo(ctx context.Context, cfg LiveGatewayConfig) (BotInfo, error) {
 	}, nil
 }
 
-func getTenantAccessTokenHTTP(ctx context.Context, broker *FeishuCallBroker, client *http.Client, cfg LiveGatewayConfig) (string, error) {
+func getTenantAccessTokenHTTP(ctx context.Context, broker *FeishuCallBroker, client *http.Client, cfg SetupClientConfig) (string, error) {
 	payload, err := json.Marshal(map[string]string{
 		"app_id":     strings.TrimSpace(cfg.AppID),
 		"app_secret": strings.TrimSpace(cfg.AppSecret),
@@ -152,7 +160,7 @@ func getTenantAccessTokenHTTP(ctx context.Context, broker *FeishuCallBroker, cli
 		Retry:      RetryOff,
 		Permission: PermissionFailFast,
 	}, func(callCtx context.Context, httpClient *http.Client) (tenantAccessTokenHTTPResponse, error) {
-		req, err := http.NewRequestWithContext(callCtx, http.MethodPost, strings.TrimRight(feishuHTTPDomain(cfg), "/")+"/open-apis/auth/v3/tenant_access_token/internal", bytes.NewReader(payload))
+		req, err := http.NewRequestWithContext(callCtx, http.MethodPost, strings.TrimRight(setupHTTPDomain(cfg), "/")+"/open-apis/auth/v3/tenant_access_token/internal", bytes.NewReader(payload))
 		if err != nil {
 			return tenantAccessTokenHTTPResponse{}, err
 		}
@@ -178,11 +186,4 @@ func getTenantAccessTokenHTTP(ctx context.Context, broker *FeishuCallBroker, cli
 		return "", err
 	}
 	return strings.TrimSpace(resp.TenantAccessToken), nil
-}
-
-func feishuHTTPDomain(cfg LiveGatewayConfig) string {
-	if strings.TrimSpace(cfg.Domain) != "" {
-		return strings.TrimSpace(cfg.Domain)
-	}
-	return "https://open.feishu.cn"
 }

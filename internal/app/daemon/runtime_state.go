@@ -78,7 +78,6 @@ type feishuRuntimeState struct {
 	permissionNextRefresh     time.Time
 	permissionRefreshInFlight bool
 	onboarding                map[string]*feishuOnboardingSession
-	setup                     feishuSetupClient
 	registration              feishuRegistrationRunner
 }
 

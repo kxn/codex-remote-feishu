@@ -240,7 +240,6 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 	app.upgradeRuntime.DevManifest = app.defaultDevManifestLookup
 	app.cronRuntime.bitableFactory = app.defaultCronBitableFactory
 	app.cronRuntime.gatewayIdentityLookup = app.defaultCronGatewayIdentityLookup
-	app.feishuRuntime.setup = newLiveFeishuSetupClient()
 	app.feishuRuntime.registration = newLiveFeishuRegistrationRunner()
 	app.relay = relayws.NewServer(relayws.ServerCallbacks{
 		OnHello:      app.enqueueHello,

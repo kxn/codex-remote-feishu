@@ -15,8 +15,12 @@ type AppScopeStatus struct {
 }
 
 func ListAppScopes(ctx context.Context, cfg LiveGatewayConfig) ([]AppScopeStatus, error) {
-	client := NewLarkClient(cfg.AppID, cfg.AppSecret)
-	broker := NewFeishuCallBroker(cfg.GatewayID, client)
+	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ListAppScopes(ctx)
+}
+
+func (c *SetupClient) ListAppScopes(ctx context.Context) ([]AppScopeStatus, error) {
+	_, broker := c.sdk()
+	cfg := c.liveGatewayConfig()
 	resp, err := DoSDK(ctx, broker, CallSpec{
 		GatewayID:  cfg.GatewayID,
 		API:        "application.v6.scope.list",

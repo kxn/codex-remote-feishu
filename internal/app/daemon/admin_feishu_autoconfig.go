@@ -17,16 +17,54 @@ const (
 )
 
 var (
-	planFeishuAppAutoConfig = func(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
-		return feishu.PlanAppAutoConfig(ctx, cfg, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy())
-	}
-	applyFeishuAppAutoConfig = func(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error) {
-		return feishu.ApplyAppAutoConfig(ctx, cfg, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy())
-	}
-	publishFeishuAppAutoConfig = func(ctx context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error) {
-		return feishu.PublishAppAutoConfig(ctx, cfg, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy(), req)
-	}
+	feishuSetupFacade daemonFeishuSetupFacade = liveDaemonFeishuSetupFacade{}
 )
+
+type daemonFeishuSetupFacade interface {
+	PlanAutoConfig(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error)
+	ApplyAutoConfig(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error)
+	PublishAutoConfig(context.Context, feishu.LiveGatewayConfig, feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error)
+	LongConnectionStatus(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error)
+	DescribeApp(context.Context, string, string) (feishuAppIdentity, error)
+}
+
+type liveDaemonFeishuSetupFacade struct{}
+
+func (liveDaemonFeishuSetupFacade) PlanAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
+	client := feishu.NewSetupClient(feishu.SetupClientConfigFromLiveGatewayConfig(cfg))
+	return client.PlanAppAutoConfig(ctx, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy())
+}
+
+func (liveDaemonFeishuSetupFacade) ApplyAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error) {
+	client := feishu.NewSetupClient(feishu.SetupClientConfigFromLiveGatewayConfig(cfg))
+	return client.ApplyAppAutoConfig(ctx, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy())
+}
+
+func (liveDaemonFeishuSetupFacade) PublishAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error) {
+	client := feishu.NewSetupClient(feishu.SetupClientConfigFromLiveGatewayConfig(cfg))
+	return client.PublishAppAutoConfig(ctx, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy(), req)
+}
+
+func (liveDaemonFeishuSetupFacade) LongConnectionStatus(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
+	return feishu.NewSetupClient(feishu.SetupClientConfigFromLiveGatewayConfig(cfg)).GetLongConnectionStatus(ctx)
+}
+
+func (liveDaemonFeishuSetupFacade) DescribeApp(ctx context.Context, appID, appSecret string) (feishuAppIdentity, error) {
+	appID = strings.TrimSpace(appID)
+	appSecret = strings.TrimSpace(appSecret)
+	if appID == "" || appSecret == "" {
+		return feishuAppIdentity{}, errMissingFeishuAppCredentials
+	}
+	botInfo, err := feishu.NewSetupClient(feishu.SetupClientConfig{
+		GatewayID: "feishu-onboarding-" + appID,
+		AppID:     appID,
+		AppSecret: appSecret,
+	}).GetBotInfo(ctx)
+	if err != nil {
+		return feishuAppIdentity{}, err
+	}
+	return feishuAppIdentity{DisplayName: strings.TrimSpace(botInfo.AppName)}, nil
+}
 
 func (a *App) handleFeishuAppAutoConfigPlan(w http.ResponseWriter, r *http.Request) {
 	summary, runtimeCfg, err := a.loadFeishuAutoConfigTarget(r.PathValue("id"))
@@ -36,7 +74,7 @@ func (a *App) handleFeishuAppAutoConfigPlan(w http.ResponseWriter, r *http.Reque
 	}
 	planCtx, cancel := context.WithTimeout(r.Context(), defaultFeishuAutoConfigPlanTimeout)
 	defer cancel()
-	plan, err := planFeishuAppAutoConfig(planCtx, runtimeCfg)
+	plan, err := feishuSetupFacade.PlanAutoConfig(planCtx, runtimeCfg)
 	if err != nil {
 		a.writeFeishuAutoConfigGatewayError(w, "failed to build feishu auto-config plan", err)
 		return
@@ -55,7 +93,7 @@ func (a *App) handleFeishuAppAutoConfigApply(w http.ResponseWriter, r *http.Requ
 	}
 	applyCtx, cancel := context.WithTimeout(r.Context(), defaultFeishuAutoConfigApplyTimeout)
 	defer cancel()
-	result, err := applyFeishuAppAutoConfig(applyCtx, runtimeCfg)
+	result, err := feishuSetupFacade.ApplyAutoConfig(applyCtx, runtimeCfg)
 	if err != nil {
 		a.writeFeishuAutoConfigGatewayError(w, "failed to apply feishu auto-config", err)
 		return
@@ -91,7 +129,7 @@ func (a *App) handleFeishuAppAutoConfigPublish(w http.ResponseWriter, r *http.Re
 	}
 	publishCtx, cancel := context.WithTimeout(r.Context(), defaultFeishuAutoConfigPublishTimeout)
 	defer cancel()
-	result, err := publishFeishuAppAutoConfig(publishCtx, runtimeCfg, feishu.AutoConfigPublishRequest{
+	result, err := feishuSetupFacade.PublishAutoConfig(publishCtx, runtimeCfg, feishu.AutoConfigPublishRequest{
 		Remark:    strings.TrimSpace(req.Remark),
 		Changelog: strings.TrimSpace(req.Changelog),
 		Version:   strings.TrimSpace(req.Version),

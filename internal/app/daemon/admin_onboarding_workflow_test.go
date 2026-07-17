@@ -15,22 +15,24 @@ import (
 
 func stubSetupAutoConfigPlanner(t *testing.T, planner func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error)) {
 	t.Helper()
-	oldPlan := planFeishuAppAutoConfig
-	planFeishuAppAutoConfig = planner
-	t.Cleanup(func() {
-		planFeishuAppAutoConfig = oldPlan
-	})
+	workflowSetupFacade(t).plan = planner
 }
 
 func stubSetupLongConnectionStatus(t *testing.T, status feishu.LongConnectionStatus, err error) {
 	t.Helper()
-	oldStatus := getFeishuLongConnectionStatus
-	getFeishuLongConnectionStatus = func(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
+	workflowSetupFacade(t).status = func(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
 		return status, err
 	}
-	t.Cleanup(func() {
-		getFeishuLongConnectionStatus = oldStatus
-	})
+}
+
+func workflowSetupFacade(t *testing.T) *setupFacadeFunc {
+	t.Helper()
+	if current, ok := feishuSetupFacade.(*setupFacadeFunc); ok {
+		return current
+	}
+	facade := &setupFacadeFunc{}
+	stubFeishuSetupFacade(t, facade)
+	return facade
 }
 
 func stubSetupAutostartStatus(t *testing.T) {

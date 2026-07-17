@@ -277,7 +277,7 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 
 	planCtx, cancel := context.WithTimeout(context.Background(), defaultFeishuAutoConfigPlanTimeout)
 	defer cancel()
-	plan, err := planFeishuAppAutoConfig(planCtx, runtimeCfg)
+	plan, err := feishuSetupFacade.PlanAutoConfig(planCtx, runtimeCfg)
 	if err != nil {
 		if onboardingAutoConfigDeferred(state.AutoConfigDecision) {
 			return onboardingWorkflowAutoConfigView{
@@ -346,12 +346,10 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 	return view
 }
 
-var getFeishuLongConnectionStatus = feishu.GetLongConnectionStatus
-
 func (a *App) readOnboardingLongConnectionStatus(runtimeCfg feishu.LiveGatewayConfig) (*feishu.LongConnectionStatus, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	status, err := getFeishuLongConnectionStatus(ctx, runtimeCfg)
+	status, err := feishuSetupFacade.LongConnectionStatus(ctx, runtimeCfg)
 	if err != nil {
 		return nil, err
 	}

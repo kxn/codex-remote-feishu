@@ -22,7 +22,7 @@ const (
 )
 
 var (
-	autoConfigListScopes            = ListAppScopes
+	autoConfigListScopes            = (*SetupClient).ListAppScopes
 	autoConfigGetApplication        = getApplicationConfig
 	autoConfigGetApplicationVersion = getApplicationVersion
 	autoConfigPatchConfig           = patchV7AppConfig
@@ -31,11 +31,9 @@ var (
 )
 
 type autoConfigService struct {
-	cfg      LiveGatewayConfig
+	client   *SetupClient
 	manifest feishuapp.Manifest
 	policy   feishuapp.FixedPolicy
-	client   *lark.Client
-	broker   *FeishuCallBroker
 }
 
 type autoConfigSnapshot struct {
@@ -47,31 +45,40 @@ type autoConfigSnapshot struct {
 }
 
 func PlanAppAutoConfig(ctx context.Context, cfg LiveGatewayConfig, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigPlan, error) {
-	return newAutoConfigService(cfg, manifest, policy).Plan(ctx)
+	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).PlanAppAutoConfig(ctx, manifest, policy)
 }
 
 func ApplyAppAutoConfig(ctx context.Context, cfg LiveGatewayConfig, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigApplyResult, error) {
-	return newAutoConfigService(cfg, manifest, policy).Apply(ctx)
+	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ApplyAppAutoConfig(ctx, manifest, policy)
 }
 
 func PublishAppAutoConfig(ctx context.Context, cfg LiveGatewayConfig, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy, req AutoConfigPublishRequest) (AutoConfigPublishResult, error) {
-	return newAutoConfigService(cfg, manifest, policy).Publish(ctx, req)
+	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).PublishAppAutoConfig(ctx, manifest, policy, req)
 }
 
-func newAutoConfigService(cfg LiveGatewayConfig, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) *autoConfigService {
+func (c *SetupClient) PlanAppAutoConfig(ctx context.Context, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigPlan, error) {
+	return newAutoConfigService(c, manifest, policy).Plan(ctx)
+}
+
+func (c *SetupClient) ApplyAppAutoConfig(ctx context.Context, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigApplyResult, error) {
+	return newAutoConfigService(c, manifest, policy).Apply(ctx)
+}
+
+func (c *SetupClient) PublishAppAutoConfig(ctx context.Context, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy, req AutoConfigPublishRequest) (AutoConfigPublishResult, error) {
+	return newAutoConfigService(c, manifest, policy).Publish(ctx, req)
+}
+
+func newAutoConfigService(client *SetupClient, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) *autoConfigService {
 	if manifest.Scopes.Scopes.Tenant == nil && manifest.Scopes.Scopes.User == nil && len(manifest.ScopeRequirements) == 0 && len(manifest.Events) == 0 && len(manifest.Callbacks) == 0 {
 		manifest = feishuapp.DefaultManifest()
 	}
 	if strings.TrimSpace(policy.EventSubscriptionType) == "" {
 		policy = feishuapp.DefaultFixedPolicy()
 	}
-	client := NewLarkClient(cfg.AppID, cfg.AppSecret)
 	return &autoConfigService{
-		cfg:      cfg,
+		client:   client,
 		manifest: manifest,
 		policy:   policy,
-		client:   client,
-		broker:   NewFeishuCallBroker(cfg.GatewayID, client),
 	}
 }
 
@@ -108,7 +115,9 @@ func (s *autoConfigService) Apply(ctx context.Context) (AutoConfigApplyResult, e
 
 	// Some scope updates require bot ability to be enabled first.
 	if plan.Diff.AbilityPatchRequired {
-		if err := autoConfigPatchAbility(ctx, s.broker, s.client, s.cfg.AppID, v7PatchAbilityRequest{
+		sdkClient, broker := s.client.sdk()
+		cfg := s.client.liveGatewayConfig()
+		if err := autoConfigPatchAbility(ctx, broker, sdkClient, cfg.AppID, v7PatchAbilityRequest{
 			Bot: &v7PatchAbilityBot{Enable: s.policy.BotEnabled},
 		}); err != nil {
 			updatedPlan := overridePlanFromAPIError(plan, err)
@@ -124,7 +133,9 @@ func (s *autoConfigService) Apply(ctx context.Context) (AutoConfigApplyResult, e
 	}
 	if plan.Diff.ConfigPatchRequired {
 		req := s.buildConfigPatchRequest(plan.Diff)
-		if err := autoConfigPatchConfig(ctx, s.broker, s.client, s.cfg.AppID, req); err != nil {
+		sdkClient, broker := s.client.sdk()
+		cfg := s.client.liveGatewayConfig()
+		if err := autoConfigPatchConfig(ctx, broker, sdkClient, cfg.AppID, req); err != nil {
 			updatedPlan := overridePlanFromAPIError(plan, err)
 			outcome := "blocked"
 			if updatedPlan.Status == AutoConfigStatusUnsupported {
@@ -193,7 +204,9 @@ func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRe
 		Changelog:            firstNonEmpty(strings.TrimSpace(req.Changelog), autoConfigDefaultPublishChangelog),
 		Version:              strings.TrimSpace(req.Version),
 	}
-	versionID, version, err := autoConfigPublish(ctx, s.broker, s.client, s.cfg.AppID, publishReq)
+	sdkClient, broker := s.client.sdk()
+	cfg := s.client.liveGatewayConfig()
+	versionID, version, err := autoConfigPublish(ctx, broker, sdkClient, cfg.AppID, publishReq)
 	if err != nil {
 		updatedPlan := overridePlanFromAPIError(plan, err)
 		outcome := "blocked"
@@ -224,11 +237,13 @@ func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRe
 }
 
 func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapshot, error) {
-	app, err := autoConfigGetApplication(ctx, s.broker, s.client, s.cfg.AppID)
+	sdkClient, broker := s.client.sdk()
+	cfg := s.client.liveGatewayConfig()
+	app, err := autoConfigGetApplication(ctx, broker, sdkClient, cfg.AppID)
 	if err != nil {
 		return autoConfigSnapshot{}, err
 	}
-	scopes, err := autoConfigListScopes(ctx, s.cfg)
+	scopes, err := autoConfigListScopes(s.client, ctx)
 	if err != nil {
 		return autoConfigSnapshot{}, err
 	}
@@ -240,13 +255,13 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 		return snapshot, nil
 	}
 	if versionID := strings.TrimSpace(stringValue(app.OnlineVersionId)); versionID != "" {
-		snapshot.onlineVersion, err = autoConfigGetApplicationVersion(ctx, s.broker, s.client, s.cfg.AppID, versionID)
+		snapshot.onlineVersion, err = autoConfigGetApplicationVersion(ctx, broker, sdkClient, cfg.AppID, versionID)
 		if err != nil {
 			return autoConfigSnapshot{}, err
 		}
 	}
 	if versionID := strings.TrimSpace(stringValue(app.UnauditVersionId)); versionID != "" {
-		snapshot.unauditVersion, err = autoConfigGetApplicationVersion(ctx, s.broker, s.client, s.cfg.AppID, versionID)
+		snapshot.unauditVersion, err = autoConfigGetApplicationVersion(ctx, broker, sdkClient, cfg.AppID, versionID)
 		if err != nil {
 			return autoConfigSnapshot{}, err
 		}

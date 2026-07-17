@@ -22,12 +22,10 @@ import (
 
 func stubSetupAutoConfigPlan(t *testing.T, plan feishu.AutoConfigPlan) {
 	t.Helper()
-	oldPlan := planFeishuAppAutoConfig
-	planFeishuAppAutoConfig = func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
-		return plan, nil
-	}
-	t.Cleanup(func() {
-		planFeishuAppAutoConfig = oldPlan
+	stubFeishuSetupFacade(t, setupFacadeFunc{
+		plan: func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
+			return plan, nil
+		},
 	})
 }
 

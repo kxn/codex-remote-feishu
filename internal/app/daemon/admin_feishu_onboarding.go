@@ -24,11 +24,7 @@ const (
 	feishuOnboardingStatusFailed    = "failed"
 )
 
-type feishuSetupClient interface {
-	DescribeApp(context.Context, string, string) (feishuAppIdentity, error)
-}
-
-type liveFeishuSetupClient struct{}
+var errMissingFeishuAppCredentials = errors.New("missing app credentials")
 
 type feishuAppIdentity struct {
 	DisplayName string
@@ -83,29 +79,6 @@ type feishuOnboardingGuideView struct {
 	AutoConfiguredSummary  string   `json:"autoConfiguredSummary,omitempty"`
 	RemainingManualActions []string `json:"remainingManualActions,omitempty"`
 	RecommendedNextStep    string   `json:"recommendedNextStep,omitempty"`
-}
-
-func newLiveFeishuSetupClient() feishuSetupClient {
-	return &liveFeishuSetupClient{}
-}
-
-func (c *liveFeishuSetupClient) DescribeApp(ctx context.Context, appID, appSecret string) (feishuAppIdentity, error) {
-	appID = strings.TrimSpace(appID)
-	appSecret = strings.TrimSpace(appSecret)
-	if appID == "" || appSecret == "" {
-		return feishuAppIdentity{}, errors.New("missing app credentials")
-	}
-	botInfo, err := feishu.GetBotInfo(ctx, feishu.LiveGatewayConfig{
-		GatewayID: "feishu-onboarding-" + appID,
-		AppID:     appID,
-		AppSecret: appSecret,
-	})
-	if err != nil {
-		return feishuAppIdentity{}, err
-	}
-	return feishuAppIdentity{
-		DisplayName: strings.TrimSpace(botInfo.AppName),
-	}, nil
 }
 
 func (a *App) snapshotFeishuOnboardingSession(sessionID string) (feishuOnboardingSessionView, bool) {
@@ -175,12 +148,9 @@ func (a *App) suggestFeishuAppName(ctx context.Context, requestedName, appID, ap
 }
 
 func (a *App) resolveFeishuAppIdentity(ctx context.Context, appID, appSecret string) (feishuAppIdentity, error) {
-	if a.feishuRuntime.setup == nil {
-		return feishuAppIdentity{}, errors.New("feishu setup client unavailable")
-	}
 	timeoutCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	return a.feishuRuntime.setup.DescribeApp(timeoutCtx, appID, appSecret)
+	return feishuSetupFacade.DescribeApp(timeoutCtx, appID, appSecret)
 }
 
 func feishuOnboardingSessionToView(session *feishuOnboardingSession) feishuOnboardingSessionView {
