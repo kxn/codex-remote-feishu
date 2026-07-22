@@ -176,6 +176,7 @@
 - [current-thread-patch-v1-prd.md](./draft/current-thread-patch-v1-prd.md)
 - [current-thread-patch-v1-tech-plan.md](./draft/current-thread-patch-v1-tech-plan.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
+- [feishu-group-context-multi-bot-design.md](./draft/feishu-group-context-multi-bot-design.md)
 - [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)
 - [feishu-card-render-format-audit.md](./draft/feishu-card-render-format-audit.md)
 - [feishu-card-render-risk-map.md](./draft/feishu-card-render-risk-map.md)
