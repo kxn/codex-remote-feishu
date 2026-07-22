@@ -120,6 +120,31 @@ func parseFeishuEventText(rawContent string, mentions []*larkim.MentionEvent) (d
 	return normalizeFeishuTextMentions(rawText, mentions), normalizeFeishuCommandCandidate(rawText, mentions), nil
 }
 
+func groupMessageMentionGateReason(env InboundEnv, message *larkim.EventMessage) string {
+	if message == nil {
+		return ""
+	}
+	if strings.EqualFold(strings.TrimSpace(stringPtr(message.ChatType)), "p2p") {
+		return ""
+	}
+	botOpenID := strings.TrimSpace(env.BotOpenID)
+	if botOpenID == "" {
+		return "bot_identity_unavailable"
+	}
+	if len(message.Mentions) == 0 {
+		return "ignored_no_mentions_in_group"
+	}
+	for _, mention := range message.Mentions {
+		if mention == nil || mention.Id == nil {
+			continue
+		}
+		if strings.TrimSpace(stringPtr(mention.Id.OpenId)) == botOpenID {
+			return ""
+		}
+	}
+	return "ignored_not_mentioned_current_bot"
+}
+
 func normalizeFeishuTextMentions(rawText string, mentions []*larkim.MentionEvent) string {
 	replacements := feishuMentionReplacements(mentions)
 	if len(replacements) == 0 {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
@@ -21,6 +22,7 @@ const (
 )
 
 func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
+	g.refreshBotIdentity(ctx)
 	inboundLane := gatewaypkg.NewSurfaceInboundLane(ctx, g.inboundEnv(), gatewayDispatcher(handler))
 	dispatch := dispatcher.NewEventDispatcher("", "")
 	dispatch.OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
@@ -47,6 +49,23 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		return handleGatewayEventAction(ctx, action, handler)
 	})
 	return newGatewayWSRunner(g.config, dispatch, g.emitState).Run(ctx)
+}
+
+func (g *LiveGateway) refreshBotIdentity(ctx context.Context) {
+	if g == nil || strings.TrimSpace(g.currentBotOpenID()) != "" {
+		return
+	}
+	if strings.TrimSpace(g.config.AppID) == "" || strings.TrimSpace(g.config.AppSecret) == "" {
+		return
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	info, err := GetBotInfo(lookupCtx, g.config)
+	if err != nil {
+		log.Printf("feishu bot identity lookup failed: gateway=%s err=%v", strings.TrimSpace(g.config.GatewayID), err)
+		return
+	}
+	g.setBotOpenID(info.OpenID)
 }
 
 func handleGatewayEventAction(ctx context.Context, action control.Action, handler ActionHandler) error {

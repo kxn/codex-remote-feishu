@@ -73,6 +73,38 @@ func TestHandleGatewayEventActionReturnsImmediatelyForMenuAction(t *testing.T) {
 	}
 }
 
+func TestRefreshBotIdentityCachesBotOpenID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"tenant-token"}`))
+		case "/open-apis/bot/v3/info":
+			if got := r.Header.Get("Authorization"); got != "Bearer tenant-token" {
+				t.Fatalf("Authorization = %q, want tenant token", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"success","bot":{"app_name":"Codex Bot","open_id":"ou_bot"}}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	gateway := NewLiveGateway(LiveGatewayConfig{
+		GatewayID: "app-1",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+		Domain:    server.URL,
+	})
+
+	gateway.refreshBotIdentity(t.Context())
+
+	if got := gateway.currentBotOpenID(); got != "ou_bot" {
+		t.Fatalf("bot open id = %q, want ou_bot", got)
+	}
+}
+
 func TestLiveGatewayCommandMessageAcksBeforeHandlerCompletes(t *testing.T) {
 	holdConn := make(chan struct{})
 	defer close(holdConn)
@@ -86,6 +118,7 @@ func TestLiveGatewayCommandMessageAcksBeforeHandlerCompletes(t *testing.T) {
 		GatewayID: "app-1",
 		AppID:     "cli_xxx",
 		AppSecret: "secret_xxx",
+		BotOpenID: "ou_bot",
 		Domain:    server.URL,
 	})
 
@@ -148,6 +181,7 @@ func TestLiveGatewayPlainTextAcksBeforeQueuedHandlerCompletes(t *testing.T) {
 		GatewayID: "app-1",
 		AppID:     "cli_xxx",
 		AppSecret: "secret_xxx",
+		BotOpenID: "ou_bot",
 		Domain:    server.URL,
 	})
 

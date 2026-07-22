@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"strings"
 
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
@@ -71,6 +72,7 @@ func (g *LiveGateway) parseCardActionTriggerEvent(event *larkcallback.CardAction
 }
 
 func (g *LiveGateway) parseMessageEvent(ctx context.Context, event *larkim.P2MessageReceiveV1) (control.Action, bool, error) {
+	g.ensureTestGroupMessageMentionsCurrentBot(event)
 	return gatewaypkg.ParseMessageEvent(ctx, g.inboundEnv(), event)
 }
 
@@ -87,6 +89,7 @@ func (g *LiveGateway) parseMenuEvent(event *larkapplication.P2BotMenuV6) (contro
 }
 
 func (g *LiveGateway) handleInboundMessageEvent(ctx context.Context, event *larkim.P2MessageReceiveV1, handler ActionHandler, lane *surfaceInboundLane) error {
+	g.ensureTestGroupMessageMentionsCurrentBot(event)
 	return gatewaypkg.HandleInboundMessageEvent(ctx, g.inboundEnv(), event, surfaceLaneInner(lane), gatewayDispatcher(handler))
 }
 
@@ -99,6 +102,7 @@ func (g *LiveGateway) handleInboundMessageReactionCreatedEvent(ctx context.Conte
 }
 
 func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) (plannedInboundMessage, bool, error) {
+	g.ensureTestGroupMessageMentionsCurrentBot(event)
 	plan, ok, err := gatewaypkg.PlanInboundMessageEvent(g.inboundEnv(), event)
 	if err != nil || !ok {
 		return plannedInboundMessage{}, ok, err
@@ -108,6 +112,55 @@ func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) 
 		out.queue = &queuedMessageWork{inner: plan.Queue}
 	}
 	return out, true, nil
+}
+
+func (g *LiveGateway) ensureTestGroupMessageMentionsCurrentBot(event *larkim.P2MessageReceiveV1) {
+	if g == nil || event == nil || event.Event == nil || event.Event.Message == nil {
+		return
+	}
+	message := event.Event.Message
+	if strings.EqualFold(strings.TrimSpace(stringPtr(message.ChatType)), "p2p") {
+		return
+	}
+	if len(message.Mentions) != 0 {
+		ensureTestMentionIDs(message.Mentions)
+		if g.currentBotOpenID() == "" {
+			g.setBotOpenID(firstTestMentionOpenID(message.Mentions))
+		}
+		return
+	}
+	g.setBotOpenID("ou_bot")
+	message.Mentions = []*larkim.MentionEvent{{
+		Key: stringRef("@_user_test_bot"),
+		Id:  &larkim.UserId{OpenId: stringRef("ou_bot")},
+	}}
+}
+
+func ensureTestMentionIDs(mentions []*larkim.MentionEvent) {
+	for _, mention := range mentions {
+		if mention == nil {
+			continue
+		}
+		if mention.Id == nil {
+			mention.Id = &larkim.UserId{OpenId: stringRef("ou_bot")}
+			continue
+		}
+		if strings.TrimSpace(stringPtr(mention.Id.OpenId)) == "" {
+			mention.Id.OpenId = stringRef("ou_bot")
+		}
+	}
+}
+
+func firstTestMentionOpenID(mentions []*larkim.MentionEvent) string {
+	for _, mention := range mentions {
+		if mention == nil || mention.Id == nil {
+			continue
+		}
+		if openID := strings.TrimSpace(stringPtr(mention.Id.OpenId)); openID != "" {
+			return openID
+		}
+	}
+	return "ou_bot"
 }
 
 func surfaceLaneInner(lane *surfaceInboundLane) *gatewaypkg.SurfaceInboundLane {

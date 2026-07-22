@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -31,6 +32,7 @@ type LiveGatewayConfig struct {
 	GatewayID      string
 	AppID          string
 	AppSecret      string
+	BotOpenID      string
 	Domain         string
 	TempDir        string
 	UseSystemProxy bool
@@ -60,6 +62,7 @@ type LiveGateway struct {
 	stateHook func(GatewayState, error)
 	reactions map[string]string
 	messages  map[string]string
+	botOpenID string
 }
 
 type gatewayMessage struct {
@@ -106,6 +109,7 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 		broker:    NewFeishuCallBroker(config.GatewayID, client),
 		reactions: map[string]string{},
 		messages:  map[string]string{},
+		botOpenID: strings.TrimSpace(config.BotOpenID),
 	}
 	gateway.downloadImageFn = gateway.downloadImage
 	gateway.downloadFileFn = gateway.downloadFile

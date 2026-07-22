@@ -21,6 +21,7 @@ type QuotedMessageInputs struct {
 
 type InboundEnv struct {
 	GatewayID                        string
+	BotOpenID                        string
 	LookupSurfaceMessage             func(messageID string) string
 	ParseTextActionWithoutCatalog    func(text string) (control.Action, bool)
 	QuotedInputs                     func(context.Context, *larkim.EventMessage) []agentproto.Input

@@ -31,6 +31,7 @@ func (g *LiveGateway) routingEnv() gatewaypkg.RoutingEnv {
 func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 	return gatewaypkg.InboundEnv{
 		GatewayID:                     g.config.GatewayID,
+		BotOpenID:                     g.currentBotOpenID(),
 		LookupSurfaceMessage:          g.lookupSurfaceMessage,
 		ParseTextActionWithoutCatalog: control.ParseFeishuTextActionWithoutCatalog,
 		QuotedInputs:                  g.quotedInputs,
@@ -48,6 +49,28 @@ func (g *LiveGateway) inboundEnv() gatewaypkg.InboundEnv {
 		DownloadFile:               g.downloadFileFn,
 		DeliverAsyncInboundFailure: g.deliverAsyncInboundFailure,
 	}
+}
+
+func (g *LiveGateway) currentBotOpenID() string {
+	if g == nil {
+		return ""
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return strings.TrimSpace(g.botOpenID)
+}
+
+func (g *LiveGateway) setBotOpenID(openID string) {
+	if g == nil {
+		return
+	}
+	openID = strings.TrimSpace(openID)
+	if openID == "" {
+		return
+	}
+	g.mu.Lock()
+	g.botOpenID = openID
+	g.mu.Unlock()
 }
 
 func (g *LiveGateway) lookupSurfaceMessage(messageID string) string {
