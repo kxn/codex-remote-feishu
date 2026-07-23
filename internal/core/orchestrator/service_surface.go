@@ -93,6 +93,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		}
 		s.normalizeSurfaceProductMode(surface)
 		s.surfaceCurrentWorkspaceKey(surface)
+		s.ensureFeishuRoomContextForSurface(surface)
 		surface.LastInboundAt = s.now()
 		return surface
 	}
@@ -117,6 +118,7 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		SurfaceMessages:     map[string]*state.SurfaceMessageRecord{},
 	}
 	s.root.Surfaces[action.SurfaceSessionID] = surface
+	s.ensureFeishuRoomContextForSurface(surface)
 	return surface
 }
 

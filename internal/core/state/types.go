@@ -161,6 +161,7 @@ const (
 type Root struct {
 	Instances                       map[string]*InstanceRecord
 	Surfaces                        map[string]*SurfaceConsoleRecord
+	FeishuRoomContexts              map[string]*FeishuRoomContextRecord
 	WorkspaceDefaults               map[string]ModelConfigRecord
 	CodexProviders                  map[string]CodexProviderRecord
 	ClaudeProfiles                  map[string]ClaudeProfileRecord
@@ -305,6 +306,13 @@ type SurfaceConsoleRecord struct {
 	AutoWhip             AutoWhipRuntimeRecord
 	AutoContinue         AutoContinueRuntimeRecord
 	ReviewSession        *ReviewSessionRecord
+}
+
+type FeishuRoomContextRecord struct {
+	RoomID            string
+	ChatID            string
+	GatewayIDs        map[string]bool
+	SurfaceSessionIDs map[string]bool
 }
 
 type ReviewSessionPhase string
@@ -681,6 +689,7 @@ func NewRoot() *Root {
 	return &Root{
 		Instances:                       map[string]*InstanceRecord{},
 		Surfaces:                        map[string]*SurfaceConsoleRecord{},
+		FeishuRoomContexts:              map[string]*FeishuRoomContextRecord{},
 		WorkspaceDefaults:               map[string]ModelConfigRecord{},
 		CodexProviders:                  map[string]CodexProviderRecord{},
 		ClaudeProfiles:                  map[string]ClaudeProfileRecord{},
