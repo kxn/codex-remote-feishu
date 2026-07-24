@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
@@ -191,7 +192,12 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			firstNonEmpty(command.WorkspaceKey, command.ThreadCWD),
 			err,
 		)
-		return a.handleManagedHeadlessLaunchFailure(command, err, now)
+		// When the launch fails because the workspace directory no longer
+		// exists, the OS reports an opaque "directory name is invalid" error.
+		// Replace it with an explanatory message so the Feishu client learns
+		// the real cause instead of a generic failure.
+		launchErr := explainMissingWorkspaceLaunchError(command, workDir, err)
+		return a.handleManagedHeadlessLaunchFailure(command, launchErr, now)
 	}
 
 	a.managedHeadlessRuntime.Processes[command.InstanceID] = &headlessruntime.Process{
@@ -214,6 +220,30 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		workDir,
 	)
 	return a.service.HandleHeadlessLaunchStarted(command.SurfaceSessionID, command.InstanceID, pid)
+}
+
+// explainMissingWorkspaceLaunchError upgrades an opaque launch failure into an
+// explanatory one when the cause is that the workspace directory no longer
+// exists on disk (e.g. it was moved or deleted after the thread was created).
+// On any other failure it returns the original error untouched.
+func explainMissingWorkspaceLaunchError(command control.DaemonCommand, workDir string, err error) error {
+	workDir = strings.TrimSpace(workDir)
+	if workDir == "" {
+		return err
+	}
+	if info, statErr := os.Stat(workDir); statErr == nil && info.IsDir() {
+		return err
+	}
+	return agentproto.ErrorInfo{
+		Code:             "headless_workspace_dir_missing",
+		Layer:            "daemon",
+		Stage:            "headless_start",
+		Operation:        "start_headless",
+		Message:          fmt.Sprintf("工作区目录已不存在：%s，可能已被移动或删除。请重新选择目录，或重新接入该工作区。", workDir),
+		Details:          err.Error(),
+		SurfaceSessionID: command.SurfaceSessionID,
+		ThreadID:         command.ThreadID,
+	}
 }
 
 func (a *App) handleManagedHeadlessLaunchFailure(command control.DaemonCommand, err error, now time.Time) []eventcontract.Event {
