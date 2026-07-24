@@ -156,6 +156,67 @@ func TestTransitionSurfaceRouteCoreRejectsConflictingAttachWithoutMutation(t *te
 	}
 }
 
+func TestTransitionSurfaceRouteCoreAllowsSameRoomWorkspaceOwnerButKeepsInstanceExclusive(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "shared-a",
+		WorkspaceRoot: "/data/dl/shared",
+		WorkspaceKey:  "/data/dl/shared",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "A", CWD: "/data/dl/shared", Loaded: true},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-2",
+		DisplayName:   "shared-b",
+		WorkspaceRoot: "/data/dl/shared",
+		WorkspaceKey:  "/data/dl/shared",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-2": {ThreadID: "thread-2", Name: "B", CWD: "/data/dl/shared", Loaded: true},
+		},
+	})
+	svc.MaterializeSurface("feishu:app-1:chat:oc_room", "app-1", "oc_room", "user-1")
+	svc.MaterializeSurface("feishu:app-2:chat:oc_room", "app-2", "oc_room", "user-2")
+	first := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	second := svc.root.Surfaces["feishu:app-2:chat:oc_room"]
+
+	if !svc.transitionSurfaceRouteCore(first, svc.root.Instances["inst-1"], surfaceRouteCoreState{
+		AttachedInstanceID: "inst-1",
+		WorkspaceKey:       "/data/dl/shared",
+		RouteMode:          state.RouteModePinned,
+		SelectedThreadID:   "thread-1",
+		ThreadClaimPolicy:  surfaceRouteThreadClaimVisible,
+	}) {
+		t.Fatal("expected first room surface attach to succeed")
+	}
+	if !svc.transitionSurfaceRouteCore(second, svc.root.Instances["inst-2"], surfaceRouteCoreState{
+		AttachedInstanceID: "inst-2",
+		WorkspaceKey:       "/data/dl/shared",
+		RouteMode:          state.RouteModePinned,
+		SelectedThreadID:   "thread-2",
+		ThreadClaimPolicy:  surfaceRouteThreadClaimVisible,
+	}) {
+		t.Fatal("expected second same-room surface to share workspace claim with a different instance/thread")
+	}
+	if claim := svc.workspaceClaims["/data/dl/shared"]; claim == nil || claim.OwnerScope != workspaceClaimOwnerRoom || claim.OwnerID != "feishu:chat:oc_room" {
+		t.Fatalf("expected room workspace claim, got %#v", claim)
+	}
+
+	if svc.transitionSurfaceRouteCore(second, svc.root.Instances["inst-1"], surfaceRouteCoreState{
+		AttachedInstanceID: "inst-1",
+		WorkspaceKey:       "/data/dl/shared",
+		RouteMode:          state.RouteModePinned,
+		SelectedThreadID:   "thread-1",
+		ThreadClaimPolicy:  surfaceRouteThreadClaimVisible,
+	}) {
+		t.Fatal("expected same-room attach to claimed instance/thread to remain rejected")
+	}
+}
+
 func TestTransitionSurfaceRouteCoreRejectsHeadlessThreadOutsideAttachedWorkspace(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

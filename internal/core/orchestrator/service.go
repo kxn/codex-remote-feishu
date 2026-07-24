@@ -156,6 +156,8 @@ type instanceClaimRecord struct {
 type workspaceClaimRecord struct {
 	WorkspaceKey     string
 	SurfaceSessionID string
+	OwnerScope       workspaceClaimOwnerScope
+	OwnerID          string
 }
 
 type threadClaimRecord struct {

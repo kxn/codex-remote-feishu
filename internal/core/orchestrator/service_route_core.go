@@ -185,7 +185,8 @@ func (s *Service) canTransitionSurfaceRouteCore(surface *state.SurfaceConsoleRec
 	currentAttachedInstanceID := strings.TrimSpace(surface.AttachedInstanceID)
 	sameAttachment := currentAttachedInstanceID != "" && currentAttachedInstanceID == next.AttachedInstanceID
 	if surfaceUsesWorkspaceClaimsRaw(surface) && !sameAttachment {
-		if owner := s.workspaceClaimSurfaceRaw(next.WorkspaceKey); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+		claimOwner := s.workspaceClaimOwner(next.WorkspaceKey)
+		if claimOwner.valid() && !claimOwner.same(s.workspaceClaimOwnerForSurface(surface)) {
 			return false
 		}
 	}

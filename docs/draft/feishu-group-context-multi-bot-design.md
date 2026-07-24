@@ -268,10 +268,11 @@ room context 至少需要支持：
 
 ### 9.5 当前落地状态
 
-截至 2026-07-24，已完成两块底座：
+截至 2026-07-24，已完成三块底座：
 
 1. room identity/state：`state.Root.FeishuRoomContexts` 保存 `feishu:chat:<chatID>` room context；`ensureSurface` 在群聊 surface materialize/resume 时登记 gateway/surface evidence；私聊 surface 不进入 room context。当前只提供 room surface 枚举能力，不改变 workspace claim、active lock 或用户可见行为。
 2. Feishu 群管理员校验：adapter 层提供 `ChatAdminChecker`，通过 `GET /open-apis/im/v1/chats/:chat_id` 获取 `owner_id` / `user_manager_id_list`，不把 `bot_manager_id_list` 当作用户权限；缺 chat、缺 actor、API 失败或权限缺失都 fail closed；查询结果有短 TTL cache，只供后续 destructive admin action 调用。
+3. workspace claim owner：`workspaceClaims` 已从单 `SurfaceSessionID` 扩展为 `surface` / `room` 结构化 owner；同 room 群 surface 可以共享 workspace claim，不同 room / 私聊 surface 仍互斥；instance/thread claim 仍保持 surface 独占。
 
 ## 10. 已完成调研问题
 
