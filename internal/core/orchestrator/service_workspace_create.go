@@ -137,6 +137,9 @@ func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.S
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
+	if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
+		return blocked
+	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	s.nextHeadlessID++

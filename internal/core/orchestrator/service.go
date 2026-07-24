@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -13,11 +14,27 @@ import (
 )
 
 type Config struct {
-	TurnHandoffWait    time.Duration
-	HeadlessLaunchWait time.Duration
-	LocalPauseMaxWait  time.Duration
-	DetachAbandonWait  time.Duration
-	GitAvailable       bool
+	TurnHandoffWait     time.Duration
+	HeadlessLaunchWait  time.Duration
+	LocalPauseMaxWait   time.Duration
+	DetachAbandonWait   time.Duration
+	GitAvailable        bool
+	ChatAdminAuthorizer ChatAdminAuthorizer
+}
+
+type ChatAdminAuthorizer interface {
+	AuthorizeChatAdmin(context.Context, ChatAdminAuthorizationRequest) ChatAdminAuthorizationDecision
+}
+
+type ChatAdminAuthorizationRequest struct {
+	GatewayID   string
+	ChatID      string
+	ActorOpenID string
+}
+
+type ChatAdminAuthorizationDecision struct {
+	Allowed bool
+	Reason  string
 }
 
 type Service struct {

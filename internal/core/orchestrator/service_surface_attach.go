@@ -23,13 +23,13 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	if surface.AttachedInstanceID != "" && currentWorkspace == workspaceKey {
 		return notice(surface, "workspace_already_attached", fmt.Sprintf("当前已接管工作区：%s。", workspaceKey))
 	}
-	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
-		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
-	}
 	if surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace != workspaceKey {
 		if blocked := s.blockFreshThreadAttach(surface, options.OverlayCleanup); blocked != nil {
 			return blocked
 		}
+	}
+	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
@@ -49,6 +49,9 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 		}
 		return notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")
 	}
+	if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
+		return blocked
+	}
 
 	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, options.OverlayCleanup)
 
@@ -59,6 +62,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	}) {
 		return append(events, notice(surface, "workspace_instance_busy", "目标工作区当前暂时不可接管，请稍后重试。")...)
 	}
+	s.syncFeishuRoomWorkspaceBinding(surface, workspaceKey)
 	surface.LastSelection = &state.SelectionAnnouncementRecord{
 		ThreadID:  "",
 		RouteMode: string(state.RouteModeUnbound),
@@ -142,6 +146,9 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	if owner := s.instanceClaimSurface(instanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))
 	}
+	if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
+		return blocked
+	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
@@ -175,6 +182,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 		}
 		return append(events, notice(surface, "instance_busy", fmt.Sprintf("%s 当前已被其他飞书会话接管，请等待对方 /detach。", inst.DisplayName))...)
 	}
+	s.syncFeishuRoomWorkspaceBinding(surface, workspaceKey)
 	lastTitle := ""
 	lastPreview := ""
 	if surface.SelectedThreadID != "" {

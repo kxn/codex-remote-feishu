@@ -1,9 +1,11 @@
 package orchestrator
 
 import (
+	"context"
 	"sort"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -81,6 +83,103 @@ func (s *Service) feishuRoomSurfaces(roomID string) []*state.SurfaceConsoleRecor
 		return surfaces[i].SurfaceSessionID < surfaces[j].SurfaceSessionID
 	})
 	return surfaces
+}
+
+func (s *Service) prepareFeishuRoomWorkspaceChange(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return nil
+	}
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	current := normalizeWorkspaceClaimKey(room.WorkspaceKey)
+	if current == "" || current == workspaceKey {
+		return nil
+	}
+	if blocked := s.blockUnsafeFeishuRoomWorkspaceReset(room); blocked != "" {
+		return notice(surface, "room_workspace_busy", blocked)
+	}
+	authorizer := s.config.ChatAdminAuthorizer
+	if authorizer == nil {
+		return notice(surface, "room_workspace_admin_required", "无法确认群管理员身份，不能切换群 workspace。")
+	}
+	decision := authorizer.AuthorizeChatAdmin(context.Background(), ChatAdminAuthorizationRequest{
+		GatewayID:   strings.TrimSpace(surface.GatewayID),
+		ChatID:      strings.TrimSpace(room.ChatID),
+		ActorOpenID: strings.TrimSpace(surface.ActorUserID),
+	})
+	if !decision.Allowed {
+		return notice(surface, "room_workspace_admin_required", "只有群管理员可以切换群 workspace。")
+	}
+	s.resetFeishuRoomWorkspaceSurfaces(room, surface)
+	room.WorkspaceResetGeneration++
+	room.WorkspaceKey = ""
+	return nil
+}
+
+func (s *Service) syncFeishuRoomWorkspaceBinding(surface *state.SurfaceConsoleRecord, workspaceKey string) {
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return
+	}
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return
+	}
+	if normalizeWorkspaceClaimKey(room.WorkspaceKey) == workspaceKey {
+		return
+	}
+	room.WorkspaceKey = workspaceKey
+	room.WorkspaceUpdatedBy = strings.TrimSpace(surface.ActorUserID)
+	room.WorkspaceUpdatedAt = s.now()
+}
+
+func (s *Service) blockUnsafeFeishuRoomWorkspaceReset(room *state.FeishuRoomContextRecord) string {
+	for _, surface := range s.feishuRoomSurfaces(room.RoomID) {
+		if surface == nil {
+			continue
+		}
+		if surface.PendingHeadless != nil {
+			return "当前群内有工作区正在启动，请等待完成后再切换。"
+		}
+		if surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+			return "当前群内有请求正在等待处理，请处理完成后再切换。"
+		}
+		if review := s.activeReviewSession(surface); review != nil && strings.TrimSpace(review.ActiveTurnID) != "" {
+			return "当前群内有审阅请求正在执行，请等待完成后再切换。"
+		}
+		if surface.ActiveQueueItemID != "" {
+			if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil {
+				switch item.Status {
+				case state.QueueItemDispatching, state.QueueItemRunning:
+					return "当前群内有请求正在执行，请等待完成后再切换。"
+				}
+			}
+		}
+		if inst := s.root.Instances[surface.AttachedInstanceID]; inst != nil && strings.TrimSpace(inst.ActiveTurnID) != "" {
+			return "当前群内有请求正在执行，请等待完成后再切换。"
+		}
+	}
+	return ""
+}
+
+func (s *Service) resetFeishuRoomWorkspaceSurfaces(room *state.FeishuRoomContextRecord, keep *state.SurfaceConsoleRecord) {
+	for _, surface := range s.feishuRoomSurfaces(room.RoomID) {
+		if surface == nil || surface == keep {
+			continue
+		}
+		_ = s.finalizeDetachedSurface(surface)
+		surface.QueueItems = map[string]*state.QueueItemRecord{}
+		surface.QueuedQueueItemIDs = nil
+		surface.StagedImages = map[string]*state.StagedImageRecord{}
+		surface.StagedFiles = map[string]*state.StagedFileRecord{}
+		clearSurfaceRequests(surface)
+		surface.ActiveRequestCapture = nil
+		surface.ActiveExecProgress = nil
+		surface.ActiveReasoning = nil
+		surface.ReviewSession = nil
+		s.clearPlanProposalRuntime(surface)
+		s.clearTargetPickerRuntime(surface)
+	}
 }
 
 func surfaceIsFeishuChat(surface *state.SurfaceConsoleRecord) bool {

@@ -166,11 +166,23 @@ func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.Su
 		}
 		return notice(surface, "workspace_key_missing", "当前无法确定目标会话所属的 workspace，暂时不能在 headless 模式接管。请切到 `/mode vscode` 后再试。")
 	}
+	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
+	if surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace != workspaceKey {
+		if blocked := s.blockFreshThreadAttach(surface, cleanup); blocked != nil {
+			return blocked
+		}
+	}
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		return attachSurfaceToKnownThreadWorkspaceBusyNotice(surface, mode)
 	}
 	if owner := s.instanceClaimSurface(inst.InstanceID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, mode)
+	}
+	if owner := s.threadClaimSurface(view.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
+		return attachSurfaceToKnownThreadThreadBusyNotice(surface, mode)
+	}
+	if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
+		return blocked
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
@@ -229,6 +241,7 @@ func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.Su
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 		return append(events, attachSurfaceToKnownThreadThreadBusyNotice(surface, mode)...)
 	}
+	s.syncFeishuRoomWorkspaceBinding(surface, workspaceKey)
 
 	title := displayThreadTitle(inst, thread)
 	preview := threadPreview(thread)
@@ -367,6 +380,12 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 		return notice(surface, "thread_cwd_missing", "目标会话缺少可恢复的工作目录，当前无法在后台恢复该会话。")
 	}
 	threadCWD := strings.TrimSpace(threadCWD(view))
+	currentWorkspace := s.surfaceCurrentWorkspaceKey(surface)
+	if surface.AttachedInstanceID != "" && currentWorkspace != "" && currentWorkspace != workspaceKey {
+		if blocked := s.blockFreshThreadAttach(surface, cleanup); blocked != nil {
+			return blocked
+		}
+	}
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		if mode == startHeadlessModeHeadlessRestore {
 			return []eventcontract.Event{{
@@ -376,6 +395,9 @@ func (s *Service) startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surfac
 			}}
 		}
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管。")
+	}
+	if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
+		return blocked
 	}
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	s.nextHeadlessID++

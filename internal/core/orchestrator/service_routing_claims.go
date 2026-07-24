@@ -152,7 +152,42 @@ func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord
 			return key
 		}
 	}
+	if room := s.ensureFeishuRoomContextForSurface(surface); room != nil {
+		if key := normalizeWorkspaceClaimKey(room.WorkspaceKey); key != "" {
+			roomOwner := workspaceClaimOwner{
+				Scope:                   workspaceClaimOwnerRoom,
+				ID:                      room.RoomID,
+				DisplaySurfaceSessionID: surface.SurfaceSessionID,
+			}
+			if claim := s.workspaceClaims[key]; claim != nil {
+				if owner := s.workspaceClaimOwnerFromRecord(claim); owner.valid() && !owner.same(roomOwner) {
+					return ""
+				}
+			} else if owner := s.explicitWorkspaceClaimOwnerWithoutCurrentFallback(key); owner.valid() && !owner.same(roomOwner) {
+				return ""
+			}
+			surface.ClaimedWorkspaceKey = key
+			s.bindWorkspaceClaim(surface, key)
+			return key
+		}
+	}
 	return ""
+}
+
+func (s *Service) explicitWorkspaceClaimOwnerWithoutCurrentFallback(workspaceKey string) workspaceClaimOwner {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return workspaceClaimOwner{}
+	}
+	for _, candidate := range s.root.Surfaces {
+		if candidate == nil || !s.surfaceUsesWorkspaceClaims(candidate) {
+			continue
+		}
+		if normalizeWorkspaceClaimKey(candidate.ClaimedWorkspaceKey) == workspaceKey {
+			return s.workspaceClaimOwnerForSurface(candidate)
+		}
+	}
+	return workspaceClaimOwner{}
 }
 
 func (s *Service) surfaceAttachmentDisplayName(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {

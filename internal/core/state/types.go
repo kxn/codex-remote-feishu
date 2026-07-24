@@ -309,10 +309,14 @@ type SurfaceConsoleRecord struct {
 }
 
 type FeishuRoomContextRecord struct {
-	RoomID            string
-	ChatID            string
-	GatewayIDs        map[string]bool
-	SurfaceSessionIDs map[string]bool
+	RoomID                   string
+	ChatID                   string
+	WorkspaceKey             string
+	WorkspaceUpdatedBy       string
+	WorkspaceUpdatedAt       time.Time
+	WorkspaceResetGeneration int
+	GatewayIDs               map[string]bool
+	SurfaceSessionIDs        map[string]bool
 }
 
 type ReviewSessionPhase string

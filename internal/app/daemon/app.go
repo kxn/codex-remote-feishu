@@ -185,8 +185,13 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 	if err != nil {
 		panic(err)
 	}
+	chatAdminAuthorizer := &feishuChatAdminAuthorizer{}
 	app := &App{
-		service:                     orchestrator.NewService(time.Now, orchestrator.Config{TurnHandoffWait: 800 * time.Millisecond, GitAvailable: gitExecutableAvailable()}, renderer.NewPlanner()),
+		service: orchestrator.NewService(time.Now, orchestrator.Config{
+			TurnHandoffWait:     800 * time.Millisecond,
+			GitAvailable:        gitExecutableAvailable(),
+			ChatAdminAuthorizer: chatAdminAuthorizer,
+		}, renderer.NewPlanner()),
 		projector:                   feishu.NewProjector(),
 		gateway:                     gateway,
 		serverIdentity:              serverIdentity,
@@ -223,6 +228,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		finalPreviewTimeout:         90 * time.Second,
 		commandAnchorRecallDelay:    8 * time.Second,
 	}
+	chatAdminAuthorizer.app = app
 	app.codexUpgradeRuntime.Inspect = func(ctx context.Context, opts codexupgrade.InspectOptions) (codexupgrade.Installation, error) {
 		return codexupgrade.Inspect(ctx, opts), nil
 	}
