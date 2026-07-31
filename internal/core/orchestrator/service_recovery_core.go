@@ -30,6 +30,35 @@ func (s *Service) prepareSurfaceForExecutionReattach(surface *state.SurfaceConso
 	return s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
 }
 
+func (s *Service) enterPromptDispatchRestartPendingRoute(surface *state.SurfaceConsoleRecord, workspaceKey string) bool {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if surface == nil || workspaceKey == "" {
+		return false
+	}
+	if !s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: workspaceKey}) {
+		return false
+	}
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		s.bindWorkspaceClaim(surface, workspaceKey)
+	}
+	return true
+}
+
+func (s *Service) finishPromptDispatchRestartPendingRoute(surface *state.SurfaceConsoleRecord, pending *state.HeadlessLaunchRecord) {
+	if surface == nil || pending == nil || pending.Purpose != state.HeadlessLaunchPurposePromptDispatchRestart {
+		return
+	}
+	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey), pending.ThreadCWD)
+	if workspaceKey == "" {
+		workspaceKey = normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey)
+	}
+	if workspaceKey == "" {
+		_ = s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{})
+		return
+	}
+	_ = s.enterPromptDispatchRestartPendingRoute(surface, workspaceKey)
+}
+
 func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil

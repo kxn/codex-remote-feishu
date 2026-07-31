@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -32,45 +31,7 @@ func (s *Service) surfaceThreadPickRouteMode(surface *state.SurfaceConsoleRecord
 }
 
 func normalizeWorkspaceClaimKey(value string) string {
-	raw := strings.TrimSpace(value)
-	value = state.ResolveWorkspaceKey(raw)
-	if value == "" {
-		return ""
-	}
-	if !shouldResolveWorkspacePathOnHost(runtime.GOOS, raw) {
-		return value
-	}
-	if resolved, err := state.ResolveWorkspaceRootOnHost(raw); err == nil {
-		if resolved = state.ResolveWorkspaceKey(resolved); resolved != "" {
-			return resolved
-		}
-	}
-	return value
-}
-
-func shouldResolveWorkspacePathOnHost(goos, raw string) bool {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(goos)) {
-	case "windows":
-		if isWindowsVolumePath(raw) || strings.HasPrefix(raw, `\\`) || strings.HasPrefix(raw, `//`) || strings.HasPrefix(raw, `\`) {
-			return true
-		}
-	default:
-		if strings.HasPrefix(raw, "/") {
-			return true
-		}
-	}
-	switch raw {
-	case ".", "..":
-		return true
-	}
-	return strings.HasPrefix(raw, "./") ||
-		strings.HasPrefix(raw, "../") ||
-		strings.HasPrefix(raw, `.\\`) ||
-		strings.HasPrefix(raw, `..\\`)
+	return state.ResolveWorkspaceClaimKey(value)
 }
 
 func looksLikeWorkspacePath(value string) bool {
@@ -81,19 +42,10 @@ func looksLikeWorkspacePath(value string) bool {
 	if filepath.IsAbs(value) {
 		return true
 	}
-	if isWindowsVolumePath(value) {
+	if state.IsWindowsVolumePath(value) {
 		return true
 	}
 	return strings.Contains(value, "/") || strings.Contains(value, `\`)
-}
-
-func isWindowsVolumePath(value string) bool {
-	value = strings.TrimSpace(value)
-	if len(value) < 2 || value[1] != ':' {
-		return false
-	}
-	drive := value[0]
-	return (drive >= 'a' && drive <= 'z') || (drive >= 'A' && drive <= 'Z')
 }
 
 func instanceWorkspaceClaimKey(inst *state.InstanceRecord) string {

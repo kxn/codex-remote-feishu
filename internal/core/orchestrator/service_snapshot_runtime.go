@@ -458,6 +458,9 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 	if pending == nil {
 		return nil
 	}
+	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+		s.finishPromptDispatchRestartPendingRoute(surface, pending)
+	}
 	if pending.AutoRestore {
 		notice := NoticeForHeadlessRestoreFailure(HeadlessRestoreLaunchFailureCode(err))
 		if notice == nil {
@@ -549,8 +552,12 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 	events := s.failCompactTurn(instanceID, "当前实例已离线，上下文压缩已中断。", nil, false)
 
 	for _, surface := range s.root.Surfaces {
-		if s.consumeSurfacePendingHeadlessLaunch(surface, instanceID) == nil {
+		pending := s.consumeSurfacePendingHeadlessLaunch(surface, instanceID)
+		if pending == nil {
 			continue
+		}
+		if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+			s.finishPromptDispatchRestartPendingRoute(surface, pending)
 		}
 		events = append(events, s.maybeFinalizePendingTargetPicker(surface, nil, "当前工作目标准备已中断，请重新发送 /list、/use 或 /useall 再试一次。")...)
 	}

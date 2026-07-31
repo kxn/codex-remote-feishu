@@ -1709,6 +1709,13 @@ Feishu 群聊 surface 对 bot 能力设置有额外覆盖规则：`/mode`、prov
 | `G7 VSCodeCompatibilityBlocked` | 只影响 daemon 的 detached-vscode 恢复路径：exact-instance auto-resume 与普通 open-vscode prompt 会被抑制，改发必要的修复/失败反馈；legacy `editor_settings` 若能安全静默迁到 `managed_shim`，则不会长时间停在这条 gate。surface 侧 `/list`、`/mode`、`/status` 等动作仍按 route matrix 正常处理。若提示由 stamped `/mode vscode` 当前卡同步触发，则优先承接到当前卡；后台恢复路径仍走独立 runtime 提示。异步兼容性检测 goroutine 只允许更新 compatibility cache 和 follow-up 标记；实际 prompt/recovery 必须等下一次 daemon 串行入口通过统一 surface recovery pipeline 消费该标记，避免绕过 orchestrator service 的串行状态边界 |
 | `G12 BotCapabilitySettingsInvalid` | 仅当 canonical map 中已有 record 但 record 无法规范化，或 storage key 与 record gateway 不一致时进入；absent record 不属于该 gate。effective capability read 不回退 surface raw 值，普通 action、plan proposal、Claude snapshot restore、queued prompt 与 AutoContinue dispatch 均停止并返回 `bot_capability_settings_invalid`；已有 queued/AutoContinue 状态保留，不会被错误推进，重复 dispatch notice 按分钟冷却。`/stop`、`/detach` 与 `/workspace detach` 仍允许释放执行与 route 资源。正常 store materialize / private configuration transaction 会拒绝非法 record，修复状态文件并重启后退出该 gate |
 
+Claude `PendingHeadless(Purpose=prompt_dispatch_restart)` 额外规则：
+
+1. 进入 pending 时不再让 surface 保留 `AttachedInstanceID="" + RouteMode=pinned/new_thread_ready + SelectedThreadID/PreparedThreadCWD` 的混合 carrier；route core 会统一切到 detached-unbound，并只保留当前 workspace claim。
+2. pending record 自身持有后续恢复 route intent：`ThreadID` 表示连回后恢复 pinned thread，`PrepareNewThread` + `ThreadCWD` 表示连回后恢复 `R5 NewThreadReady`；成功连接时从 pending intent 重建 route，而不是依赖 surface 上的旧 route 残留。
+3. 启动失败、启动超时或启动中断会消费 pending，并通过同一 recovery cleanup 把 surface 保持为 detached workspace state：无 attached instance、无 selected thread、无 prepared route，但 workspace claim 保留给用户继续 `/use`、`/new` 或重新发送文本恢复。
+4. workspace key 解析使用 `state.ResolveHeadlessResumeWorkspaceKey(...)` 作为 SSOT：`ResumeWorkspaceKey` / surface workspace 是稳定 workspace root，`ThreadCWD` / queued CWD 是工作目录；当 cwd 位于 workspace root 下时不会把 workspace claim 收窄成子目录。
+
 retained-offline overlay 额外规则：
 
 1. 条件：`Attachment.InstanceID != ""` 且 `Dispatch.InstanceOnline=false`。
@@ -1861,6 +1868,7 @@ retained-offline overlay 额外规则：
 42. **managed headless 连回时用全局 thread view 命中其它实例的同名 thread，导致 workspace/CWD 串用并误报 `workspace_busy`**：已修复。当前连接回调只使用当前实例上的 thread，并用 `PendingHeadless.WorkspaceKey/ThreadCWD` 覆盖缓存元数据；如果可见实例 attach 返回 busy/not-found notice，`TryAutoResumeHeadlessSurface` 会把它作为真正恢复失败返回给 daemon，而不是伪装成 `ThreadAttached`。
 43. **room workspace 恢复冲突进入 blocked state 后没有普通群命令自愈入口**：这是有意保留的 operator-recoverable degraded state，不是 attach/use 成功后的半死态。daemon 在任何 route/owner mutation 前 fail closed，向当前交互明确提示检查 daemon 日志、修复持久化状态并重启；`/list`、`/use` 或菜单 callback 不允许在多份冲突 workspace 中静默任选。修复并重启是当前唯一安全出口，冲突 workspace 明细只进入日志，不进入用户卡片。
 44. **同一 GatewayID 更换 AppID 后，新机器人继承旧 surface/会话或旧 primary**：已修复。bot identity transition 会在新 runtime 启动前排空旧 generation 并撤销旧 bot-owned durable/runtime state；room workspace 作为 room-owned durable fact 保留，因此新机器人首次进入该群仍能看到群工作区，但必须建立自己的 surface 与会话。transition 失败时 identity store 保留 pending 栅栏，新 runtime 不启动；后续即使改回旧 AppID 或同槽位重建同 AppID，也会作为新 generation 启动，不会进入半新半旧的可交互状态。
+45. **Claude `prompt_dispatch_restart` 进入 pending 后留下 `AttachedInstanceID=""` 但仍 pinned/new-thread-ready 的混合 route，启动失败或超时后变成无实例但有 selected/prepared carrier 的半死态**：已修复。prompt restart 现在经 recovery core 进入 detached workspace state，只保留 workspace claim；pending record 自身保存 thread/new-thread intent，成功连回后从 pending 重建 route，启动失败/超时/中断则消费 pending 并保持可继续恢复的 detached workspace。workspace root 与 thread cwd 的解析也统一到 `state.ResolveHeadlessResumeWorkspaceKey(...)`，不会再把 queued CWD 子目录误写成 workspace claim。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

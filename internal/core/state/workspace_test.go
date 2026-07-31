@@ -47,3 +47,43 @@ func TestResolveWorkspaceRootOnHostResolvesSymlink(t *testing.T) {
 		t.Fatalf("ResolveWorkspaceRootOnHost() = %q, want %q", resolved, target)
 	}
 }
+
+func TestResolveHeadlessResumeWorkspaceKeyKeepsWorkspaceRootForSubdirectoryCWD(t *testing.T) {
+	got := ResolveHeadlessResumeWorkspaceKey(
+		testutil.WorkspacePath("data", "dl", "repo"),
+		testutil.WorkspacePath("data", "dl", "repo", "pkg"),
+	)
+	want := testutil.WorkspacePath("data", "dl", "repo")
+	if got != want {
+		t.Fatalf("ResolveHeadlessResumeWorkspaceKey() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveHeadlessResumeWorkspaceKeyUsesCWDWhenOutsideWorkspace(t *testing.T) {
+	got := ResolveHeadlessResumeWorkspaceKey(
+		testutil.WorkspacePath("data", "dl", "repo"),
+		testutil.WorkspacePath("data", "dl", "other"),
+	)
+	want := testutil.WorkspacePath("data", "dl", "other")
+	if got != want {
+		t.Fatalf("ResolveHeadlessResumeWorkspaceKey() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveWorkspaceClaimKeyForGOOSWindowsKeepsSlashRootWorkspaceKeysLogical(t *testing.T) {
+	if got := ResolveWorkspaceClaimKeyForGOOS("windows", "/data/dl/demo"); got != "/data/dl/demo" {
+		t.Fatalf("ResolveWorkspaceClaimKeyForGOOS(windows) = %q, want /data/dl/demo", got)
+	}
+}
+
+func TestShouldResolveWorkspacePathOnHostWindowsResolvesRelativeDotPaths(t *testing.T) {
+	if !ShouldResolveWorkspacePathOnHost("windows", "./demo") {
+		t.Fatal("expected relative dot path to resolve on host")
+	}
+}
+
+func TestShouldResolveWorkspacePathOnHostWindowsResolvesVolumePaths(t *testing.T) {
+	if !ShouldResolveWorkspacePathOnHost("windows", `D:\data\dl\demo`) {
+		t.Fatal("expected volume path to resolve on host")
+	}
+}

@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -111,6 +112,183 @@ func TestDispatchNextRestartsClaudeHeadlessForQueuedReasoningMismatch(t *testing
 	}
 	if events[2].DaemonCommand.Kind != control.DaemonCommandStartHeadless || events[2].DaemonCommand.ClaudeReasoningEffort != "low" {
 		t.Fatalf("unexpected start command: %#v", events[2].DaemonCommand)
+	}
+}
+
+func TestDispatchNextClaudePromptRestartUsesRecoveryRouteBoundary(t *testing.T) {
+	svc, surface, _ := newClaudeHeadlessPreflightService(t)
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:                    "queue-1",
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       "msg-1",
+		SourceMessagePreview:  "继续处理",
+		ReplyToMessageID:      "msg-1",
+		ReplyToMessagePreview: "继续处理",
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride: state.ModelConfigRecord{
+			ReasoningEffort: "low",
+			AccessMode:      agentproto.AccessModeFullAccess,
+		},
+		FrozenPlanMode:     state.PlanModeSettingOff,
+		RouteModeAtEnqueue: state.RouteModePinned,
+		Status:             state.QueueItemQueued,
+	}
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+
+	events := svc.dispatchNext(surface)
+
+	if len(events) == 0 || surface.PendingHeadless == nil {
+		t.Fatalf("expected restart preflight, got events=%#v pending=%#v", events, surface.PendingHeadless)
+	}
+	if surface.AttachedInstanceID != "" {
+		t.Fatalf("expected restart pending state to detach active instance, got %q", surface.AttachedInstanceID)
+	}
+	if surface.RouteMode != state.RouteModeUnbound || surface.SelectedThreadID != "" || surface.PreparedThreadCWD != "" {
+		t.Fatalf("expected restart pending state to clear route carrier, route=%q selected=%q prepared=%q", surface.RouteMode, surface.SelectedThreadID, surface.PreparedThreadCWD)
+	}
+	if surface.ClaimedWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected restart pending state to keep workspace carrier, got %q", surface.ClaimedWorkspaceKey)
+	}
+	if claim := svc.threadClaims["thread-1"]; claim != nil {
+		t.Fatalf("expected restart pending state to release thread claim, got %#v", claim)
+	}
+	if claim := svc.instanceClaims["inst-claude-1"]; claim != nil {
+		t.Fatalf("expected restart pending state to release source instance claim, got %#v", claim)
+	}
+}
+
+func TestHandleClaudePromptRestartLaunchFailedLeavesConsistentDetachedWorkspace(t *testing.T) {
+	svc, surface, _ := newClaudeHeadlessPreflightService(t)
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:                    "queue-1",
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       "msg-1",
+		SourceMessagePreview:  "继续处理",
+		ReplyToMessageID:      "msg-1",
+		ReplyToMessagePreview: "继续处理",
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride: state.ModelConfigRecord{
+			ReasoningEffort: "low",
+			AccessMode:      agentproto.AccessModeFullAccess,
+		},
+		FrozenPlanMode:     state.PlanModeSettingOff,
+		RouteModeAtEnqueue: state.RouteModePinned,
+		Status:             state.QueueItemQueued,
+	}
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+	_ = svc.dispatchNext(surface)
+	pending := surface.PendingHeadless
+	if pending == nil {
+		t.Fatal("expected pending prompt restart")
+	}
+
+	events := svc.HandleHeadlessLaunchFailed(surface.SurfaceSessionID, pending.InstanceID, errors.New("boom"))
+
+	if surface.PendingHeadless != nil {
+		t.Fatalf("expected failed restart to clear pending, got %#v", surface.PendingHeadless)
+	}
+	if surface.AttachedInstanceID != "" || surface.RouteMode != state.RouteModeUnbound || surface.SelectedThreadID != "" || surface.PreparedThreadCWD != "" {
+		t.Fatalf("expected failed restart to leave detached workspace state, attached=%q route=%q selected=%q prepared=%q", surface.AttachedInstanceID, surface.RouteMode, surface.SelectedThreadID, surface.PreparedThreadCWD)
+	}
+	if surface.ClaimedWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected failed restart to keep workspace carrier for manual recovery, got %q", surface.ClaimedWorkspaceKey)
+	}
+	if claim := svc.threadClaims["thread-1"]; claim != nil {
+		t.Fatalf("expected failed restart to release thread claim, got %#v", claim)
+	}
+	if len(events) == 0 || events[0].Notice == nil || events[0].Notice.Code != "headless_start_failed" {
+		t.Fatalf("expected launch failure notice, got %#v", events)
+	}
+}
+
+func TestTickClaudePromptRestartTimeoutLeavesConsistentDetachedWorkspace(t *testing.T) {
+	svc, surface, _ := newClaudeHeadlessPreflightService(t)
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:                    "queue-1",
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       "msg-1",
+		SourceMessagePreview:  "继续处理",
+		ReplyToMessageID:      "msg-1",
+		ReplyToMessagePreview: "继续处理",
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride: state.ModelConfigRecord{
+			ReasoningEffort: "low",
+			AccessMode:      agentproto.AccessModeFullAccess,
+		},
+		FrozenPlanMode:     state.PlanModeSettingOff,
+		RouteModeAtEnqueue: state.RouteModePinned,
+		Status:             state.QueueItemQueued,
+	}
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+	_ = svc.dispatchNext(surface)
+	pending := surface.PendingHeadless
+	if pending == nil {
+		t.Fatal("expected pending prompt restart")
+	}
+
+	events := svc.Tick(pending.ExpiresAt)
+
+	if surface.PendingHeadless != nil {
+		t.Fatalf("expected timed-out restart to clear pending, got %#v", surface.PendingHeadless)
+	}
+	if surface.AttachedInstanceID != "" || surface.RouteMode != state.RouteModeUnbound || surface.SelectedThreadID != "" || surface.PreparedThreadCWD != "" {
+		t.Fatalf("expected timed-out restart to leave detached workspace state, attached=%q route=%q selected=%q prepared=%q", surface.AttachedInstanceID, surface.RouteMode, surface.SelectedThreadID, surface.PreparedThreadCWD)
+	}
+	if surface.ClaimedWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected timed-out restart to keep workspace carrier for manual recovery, got %q", surface.ClaimedWorkspaceKey)
+	}
+	if claim := svc.threadClaims["thread-1"]; claim != nil {
+		t.Fatalf("expected timed-out restart to release thread claim, got %#v", claim)
+	}
+	if len(events) < 2 || events[1].Notice == nil || events[1].Notice.Code != "headless_start_timeout" {
+		t.Fatalf("expected timeout notice, got %#v", events)
+	}
+}
+
+func TestClaudePromptRestartKeepsWorkspaceRootWhenQueuedCWDIsSubdirectory(t *testing.T) {
+	svc, surface, inst := newClaudeHeadlessPreflightService(t)
+	inst.Threads["thread-1"].CWD = "/data/dl/repo/pkg"
+	inst.Threads["thread-1"].WorkspaceKey = "/data/dl/repo"
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:                    "queue-1",
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       "msg-1",
+		SourceMessagePreview:  "继续处理",
+		ReplyToMessageID:      "msg-1",
+		ReplyToMessagePreview: "继续处理",
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo/pkg", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride: state.ModelConfigRecord{
+			ReasoningEffort: "low",
+			AccessMode:      agentproto.AccessModeFullAccess,
+		},
+		FrozenPlanMode:     state.PlanModeSettingOff,
+		RouteModeAtEnqueue: state.RouteModePinned,
+		Status:             state.QueueItemQueued,
+	}
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+
+	_ = svc.dispatchNext(surface)
+
+	if surface.PendingHeadless == nil {
+		t.Fatal("expected pending prompt restart")
+	}
+	if surface.PendingHeadless.WorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected restart workspace key to stay at workspace root, got %#v", surface.PendingHeadless)
+	}
+	if surface.PendingHeadless.ThreadCWD != "/data/dl/repo/pkg" {
+		t.Fatalf("expected restart thread cwd to keep queued/thread cwd, got %#v", surface.PendingHeadless)
 	}
 }
 

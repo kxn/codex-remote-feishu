@@ -109,7 +109,7 @@ func windowsWorkspaceCreateFallbackPath() string {
 
 func windowsVolumeRoot(path string) string {
 	path = strings.TrimSpace(path)
-	if !isWindowsVolumePath(path) {
+	if !state.IsWindowsVolumePath(path) {
 		return ""
 	}
 	return path[:2] + "/"

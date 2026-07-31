@@ -159,7 +159,9 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 		return nil
 	}
 	events := []eventcontract.Event{}
-	if surface.AttachedInstanceID == pending.InstanceID {
+	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+		s.finishPromptDispatchRestartPendingRoute(surface, pending)
+	} else if surface.AttachedInstanceID == pending.InstanceID {
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 	}
 	events = append(events, eventcontract.Event{

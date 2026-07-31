@@ -572,7 +572,7 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	if threadID == "" {
 		return nil
 	}
-	attemptWorkspaceKey := normalizeHeadlessResumeWorkspaceKey(attempt.WorkspaceKey, attempt.ThreadCWD)
+	attemptWorkspaceKey := state.ResolveHeadlessResumeWorkspaceKey(attempt.WorkspaceKey, attempt.ThreadCWD)
 	backend := agentproto.NormalizeBackend(attempt.Backend)
 	if strings.TrimSpace(string(backend)) == "" && surface != nil {
 		backend = s.surfaceBackend(surface)
@@ -598,21 +598,6 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 	}
 	cloned.Thread = thread
 	return &cloned
-}
-
-func normalizeHeadlessResumeWorkspaceKey(workspaceKey, threadCWD string) string {
-	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
-	threadCWD = normalizeWorkspaceClaimKey(threadCWD)
-	if workspaceKey == "" {
-		return threadCWD
-	}
-	if threadCWD == "" || threadCWD == workspaceKey {
-		return workspaceKey
-	}
-	if strings.HasPrefix(threadCWD, workspaceKey+"/") {
-		return workspaceKey
-	}
-	return threadCWD
 }
 
 func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, workspaceKey, threadCWD string, backend agentproto.Backend) *mergedThreadView {

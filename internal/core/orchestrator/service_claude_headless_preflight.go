@@ -25,7 +25,7 @@ func (s *Service) maybeRestartClaudeHeadlessForPrompt(surface *state.SurfaceCons
 	if current == desired {
 		return nil, false
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(workspaceHint, s.surfaceCurrentWorkspaceKey(surface), inst.WorkspaceRoot))
+	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(s.surfaceCurrentWorkspaceKey(surface), inst.WorkspaceKey, inst.WorkspaceRoot), workspaceHint)
 	attempt := s.buildCurrentHeadlessResumeAttempt(surface, workspaceKey, desired.Backend)
 	if normalizeWorkspaceClaimKey(attempt.WorkspaceKey) == "" {
 		return notice(surface, "claude_reasoning_restart_workspace_missing", "当前无法确定 Claude headless 的工作区，暂时不能自动切换推理强度。"), true
@@ -70,7 +70,9 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 	if !s.claimWorkspace(surface, workspaceKey) {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
-	surface.AttachedInstanceID = ""
+	if !s.enterPromptDispatchRestartPendingRoute(surface, workspaceKey) {
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
+	}
 	s.adoptSurfacePendingHeadlessLaunch(surface, pending)
 
 	return []eventcontract.Event{

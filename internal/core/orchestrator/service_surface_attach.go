@@ -417,23 +417,16 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 	if surface == nil || inst == nil || pending == nil {
 		return nil
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD, inst.WorkspaceKey, inst.WorkspaceRoot))
-	if workspaceKey != "" && !s.claimWorkspace(surface, workspaceKey) {
-		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
-	}
+	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot, pending.WorkspaceKey), pending.ThreadCWD)
+	next := promptDispatchRestartRouteState(inst.InstanceID, workspaceKey, pending)
 	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
-		AttachedInstanceID:   inst.InstanceID,
-		WorkspaceKey:         workspaceKey,
-		RouteMode:            surface.RouteMode,
-		SelectedThreadID:     strings.TrimSpace(surface.SelectedThreadID),
-		PreparedThreadCWD:    strings.TrimSpace(surface.PreparedThreadCWD),
-		PreparedFromThreadID: strings.TrimSpace(surface.PreparedFromThreadID),
-		ThreadClaimPolicy: func() surfaceRouteThreadClaimPolicy {
-			if strings.TrimSpace(surface.SelectedThreadID) == "" {
-				return surfaceRouteThreadClaimNone
-			}
-			return surfaceRouteThreadClaimKnown
-		}(),
+		AttachedInstanceID:   next.AttachedInstanceID,
+		WorkspaceKey:         next.WorkspaceKey,
+		RouteMode:            next.RouteMode,
+		SelectedThreadID:     next.SelectedThreadID,
+		PreparedThreadCWD:    next.PreparedThreadCWD,
+		PreparedFromThreadID: next.PreparedFromThreadID,
+		ThreadClaimPolicy:    next.ThreadClaimPolicy,
 	}) {
 		return attachSurfaceToKnownThreadInstanceBusyNotice(surface, inst, attachSurfaceToKnownThreadDefault)
 	}
@@ -444,4 +437,27 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 		s.retargetManagedHeadlessInstance(inst, workspaceKey)
 	}
 	return nil
+}
+
+func promptDispatchRestartRouteState(instanceID, workspaceKey string, pending *state.HeadlessLaunchRecord) surfaceRouteCoreState {
+	next := surfaceRouteCoreState{
+		AttachedInstanceID: strings.TrimSpace(instanceID),
+		WorkspaceKey:       normalizeWorkspaceClaimKey(workspaceKey),
+		RouteMode:          state.RouteModeUnbound,
+	}
+	if pending == nil {
+		return next
+	}
+	if pending.PrepareNewThread {
+		next.RouteMode = state.RouteModeNewThreadReady
+		next.PreparedThreadCWD = strings.TrimSpace(firstNonEmpty(pending.ThreadCWD, next.WorkspaceKey))
+		next.PreparedFromThreadID = strings.TrimSpace(pending.ThreadID)
+		return next
+	}
+	if threadID := strings.TrimSpace(pending.ThreadID); threadID != "" {
+		next.RouteMode = state.RouteModePinned
+		next.SelectedThreadID = threadID
+		next.ThreadClaimPolicy = surfaceRouteThreadClaimKnown
+	}
+	return next
 }
