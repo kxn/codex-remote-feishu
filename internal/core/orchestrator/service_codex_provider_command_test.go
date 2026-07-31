@@ -37,6 +37,32 @@ func TestCodexProviderCommandSwitchesDetachedSurface(t *testing.T) {
 	}
 }
 
+func TestCodexProviderCommandExplicitCurrentSelectionWritesCanonicalBotProfile(t *testing.T) {
+	now := time.Date(2026, 7, 31, 18, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
+		state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
+		GatewayID: "app-1", ProductMode: state.ProductModeNormal, Backend: agentproto.BackendCodex,
+		CodexProviderID: "team-proxy", UpdatedAt: now.Add(-time.Minute),
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionCodexProviderCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
+		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprovider team-proxy",
+	})
+	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
+	if record.CodexProviderID != "team-proxy" || record.CodexProfileID != "team-proxy" || !record.UpdatedAt.Equal(now) {
+		t.Fatalf("explicit current selection did not write canonical profile evidence: %#v", record)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_current" {
+		t.Fatalf("explicit current selection should remain a runtime no-op: %#v", events)
+	}
+}
+
 func TestCodexProviderCommandRejectsBusySurface(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

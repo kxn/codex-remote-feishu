@@ -9,6 +9,7 @@ import (
 	"time"
 
 	headlessruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -95,6 +96,30 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			ThreadID:         command.ThreadID,
 		}
 		return a.handleManagedHeadlessLaunchFailure(command, errInfo, now)
+	}
+	if backend == agentproto.BackendCodex && a.profileCatalogMigrationErr != nil {
+		return a.handleManagedHeadlessLaunchFailure(command, agentproto.ErrorInfoFromError(a.profileCatalogMigrationErr, agentproto.ErrorInfo{
+			Code:             "profile_catalog_degraded",
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          "Codex Profile 配置迁移未完成，当前不能启动新实例。",
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+			Retryable:        false,
+		}), now)
+	}
+	if backend == agentproto.BackendCodex && a.surfaceProfileSelectionConflict(command.SurfaceSessionID) {
+		return a.handleManagedHeadlessLaunchFailure(command, agentproto.ErrorInfo{
+			Code:             surfaceresume.CodexProfileSelectionStatusConflict,
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          "当前工作区的 Codex Profile 选择存在迁移冲突，请重新选择后再试。",
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+			Retryable:        false,
+		}, now)
 	}
 	env = append(env,
 		"CODEX_REMOTE_INSTANCE_ID="+command.InstanceID,
@@ -230,6 +255,14 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		workDir,
 	)
 	return a.service.HandleHeadlessLaunchStarted(command.SurfaceSessionID, command.InstanceID, pid)
+}
+
+func (a *App) surfaceProfileSelectionConflict(surfaceID string) bool {
+	if a.surfaceResumeRuntime.store == nil {
+		return false
+	}
+	entry, ok := a.surfaceResumeRuntime.store.Get(surfaceID)
+	return ok && entry.CodexProfileSelectionStatus == surfaceresume.CodexProfileSelectionStatusConflict
 }
 
 func validateHeadlessWorkDir(workDir string) error {

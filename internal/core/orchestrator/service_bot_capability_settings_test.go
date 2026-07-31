@@ -917,8 +917,8 @@ func TestPrivateProviderAndProfileCommandsWriteBotCapabilitySettings(t *testing.
 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionCodexProviderCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprovider team-proxy"})
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.CodexProviderID != "team-proxy" {
-		t.Fatalf("bot codex provider = %q, want team-proxy", record.CodexProviderID)
+	if record.CodexProviderID != "team-proxy" || record.CodexProfileID != "team-proxy" {
+		t.Fatalf("bot codex provider/profile = %q/%q, want team-proxy/team-proxy", record.CodexProviderID, record.CodexProfileID)
 	}
 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/mode claude"})

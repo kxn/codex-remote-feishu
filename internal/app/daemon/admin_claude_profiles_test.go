@@ -7,7 +7,64 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+func TestAdminClaudeContextPreferenceUsesIndependentItemETag(t *testing.T) {
+	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+	list := performAdminRequest(t, app, http.MethodGet, "/api/admin/claude/profiles", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("initial list status = %d body=%s", list.Code, list.Body.String())
+	}
+	var listed claudeProfilesResponse
+	if err := json.NewDecoder(list.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode initial list: %v", err)
+	}
+	if len(listed.Profiles) != 1 || listed.Profiles[0].ContextPreference.Revision != 1 || listed.Profiles[0].ContextPreference.ETag == "" {
+		t.Fatalf("default Claude preference missing: %#v", listed.Profiles)
+	}
+	preference := listed.Profiles[0].ContextPreference
+	path := "/api/admin/claude/profiles/default/context-preference"
+	missing := performAdminRequest(t, app, http.MethodPut, path, `{"mode":"extended_1m"}`)
+	if missing.Code != http.StatusPreconditionRequired {
+		t.Fatalf("missing precondition status = %d body=%s", missing.Code, missing.Body.String())
+	}
+	assertAdminAPIErrorCode(t, missing, "profile_preference_revision_required")
+	stale := performAdminRequestWithIfMatch(t, app, http.MethodPut, path, `{"mode":"extended_1m"}`, `"stale"`)
+	if stale.Code != http.StatusPreconditionFailed || stale.Header().Get("ETag") != preference.ETag {
+		t.Fatalf("stale precondition status = %d etag=%q body=%s", stale.Code, stale.Header().Get("ETag"), stale.Body.String())
+	}
+	staleError := assertAdminAPIErrorCode(t, stale, "profile_preference_revision_conflict")
+	if staleError.Details == nil {
+		t.Fatalf("stale preference omitted current state: %s", stale.Body.String())
+	}
+	updated := performAdminRequestWithIfMatch(t, app, http.MethodPut, path, `{"mode":"extended_1m"}`, preference.ETag)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("context update status = %d body=%s", updated.Code, updated.Body.String())
+	}
+	var response claudeContextPreferenceResponse
+	if err := json.NewDecoder(updated.Body).Decode(&response); err != nil {
+		t.Fatalf("decode context update: %v", err)
+	}
+	if response.ContextPreference.Revision != 2 || response.ContextPreference.Mode != state.ClaudeContextModeExtended {
+		t.Fatalf("unexpected context update: %#v", response.ContextPreference)
+	}
+	if response.ContextPreference.ETag == preference.ETag || updated.Header().Get("ETag") != response.ContextPreference.ETag {
+		t.Fatalf("context ETag did not advance: old=%q response=%#v header=%q", preference.ETag, response, updated.Header().Get("ETag"))
+	}
+
+	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/claude/profiles", `{"name":"DevSeek","model":"claude-sonnet-4-5"}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var created claudeProfileResponse
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.Profile.ContextPreference.Revision != 1 || created.Profile.ContextPreference.ETag == "" {
+		t.Fatalf("Claude write response omitted context preference: %#v", created.Profile)
+	}
+}
 
 func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")

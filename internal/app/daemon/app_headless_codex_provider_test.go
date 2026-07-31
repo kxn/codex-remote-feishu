@@ -86,6 +86,52 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 	}
 }
 
+func TestDaemonStartsCodexHeadlessWithCanonicalProfileID(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	stateDir := filepath.Join(root, "state")
+	cfg := config.DefaultAppConfig()
+	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
+		Name: "Canonical Profile", BaseURL: "https://canonical.example/v1", APIKey: "canonical-secret",
+		Model: "gpt-5.4", ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
+	}
+	if !strings.HasPrefix(record.ID, "cp_") {
+		t.Fatalf("generated profile ID = %q, want canonical cp_ prefix", record.ID)
+	}
+	cfg.Codex.Profiles = []config.CodexAPIProfileRecord{record}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote", BaseEnv: []string{"PATH=/usr/bin"}, LaunchArgs: []string{"app-server"},
+		Paths: relayruntime.Paths{LogsDir: t.TempDir(), StateDir: stateDir},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4326, nil
+	}
+
+	app.startManagedHeadless(control.DaemonCommand{
+		Kind: control.DaemonCommandStartHeadless, InstanceID: "inst-canonical-profile", ThreadCWD: root,
+		Backend: agentproto.BackendCodex, CodexProviderID: record.ID,
+	})
+	if !containsEnvEntry(captured.Env, config.CodexRuntimeProviderIDEnv+"="+record.ID) {
+		t.Fatalf("canonical profile did not reach launcher: env=%#v args=%#v", captured.Env, captured.Args)
+	}
+	args := strings.Join(captured.Args, "\n")
+	if !strings.Contains(args, `model_provider="`+record.ID+`"`) ||
+		!strings.Contains(args, `model_providers.`+record.ID+`.base_url="https://canonical.example/v1"`) {
+		t.Fatalf("canonical profile launch overrides lost exact ID: %#v", captured.Args)
+	}
+}
+
 func TestDaemonStartsCodexHeadlessWithDefaultProviderKeepsLaunchArgsClean(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	if err := config.WriteAppConfig(configPath, config.DefaultAppConfig()); err != nil {
@@ -132,5 +178,40 @@ func TestDaemonStartsCodexHeadlessWithDefaultProviderKeepsLaunchArgsClean(t *tes
 	}
 	if containsEnvEntry(captured.Env, config.CodexProviderAPIKeyEnv+"=") {
 		t.Fatalf("expected built-in default provider to avoid provider key env, got %#v", captured.Env)
+	}
+}
+
+func TestDaemonRejectsIncompleteMigratedCodexProfileBeforeLaunch(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	stateDir := filepath.Join(root, "state")
+	cfg := config.DefaultAppConfig()
+	cfg.Codex.Providers = []config.CodexProviderConfig{{
+		ID: "incomplete", Name: "Incomplete", BaseURL: "https://proxy.example/v1", APIKey: "secret",
+	}}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/bin/false",
+		Paths:      relayruntime.Paths{StateDir: stateDir},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	launched := false
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		launched = true
+		return 1, nil
+	}
+
+	app.handleDaemonCommand(control.DaemonCommand{
+		Kind:            control.DaemonCommandStartHeadless,
+		InstanceID:      "headless-incomplete",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "incomplete",
+	})
+	if launched {
+		t.Fatal("incomplete migrated Codex Profile reached the launcher")
 	}
 }

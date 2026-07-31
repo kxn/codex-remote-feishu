@@ -35,7 +35,9 @@ func NormalizeBotCapabilitySettingsRecord(record BotCapabilitySettingsRecord) (B
 	if record.GatewayID == "" {
 		return BotCapabilitySettingsRecord{}, false
 	}
-	codexProviderID := NormalizeDesiredCodexProviderID(record.CodexProviderID)
+	record.CodexProviderID = NormalizeDesiredCodexProviderID(record.CodexProviderID)
+	record = CanonicalizeBotCapabilityProfileSelection(record)
+	codexProviderID := record.CodexProviderID
 	claudeProfileID := NormalizeDesiredClaudeProfileID(record.ClaudeProfileID)
 	contract := NormalizeSurfaceBackendContract(SurfaceBackendContract{
 		ProductMode:     record.ProductMode,
@@ -54,6 +56,15 @@ func NormalizeBotCapabilitySettingsRecord(record BotCapabilitySettingsRecord) (B
 		record.UpdatedAt = record.UpdatedAt.UTC()
 	}
 	return record, true
+}
+
+func CanonicalizeBotCapabilityProfileSelection(record BotCapabilitySettingsRecord) BotCapabilitySettingsRecord {
+	record.CodexProfileID = strings.TrimSpace(record.CodexProfileID)
+	if record.CodexProfileID == "" {
+		record.CodexProfileID = CodexProfileIDFromLegacyProviderID(record.CodexProviderID)
+	}
+	record.CodexProviderID = LegacyCodexProviderIDFromProfileID(record.CodexProfileID)
+	return record
 }
 
 func NormalizeModelConfigRecord(record ModelConfigRecord) ModelConfigRecord {

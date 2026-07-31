@@ -14,29 +14,33 @@ import (
 )
 
 const (
-	StateVersion  = 1
-	StateFileName = "surface-resume-state.json"
+	StateVersion                        = 1
+	StateFileName                       = "surface-resume-state.json"
+	CodexProfileSelectionStatusConflict = "profile_selection_conflict"
 )
 
 type Entry struct {
-	SurfaceSessionID   string    `json:"surfaceSessionID"`
-	GatewayID          string    `json:"gatewayID,omitempty"`
-	ChatID             string    `json:"chatID,omitempty"`
-	ActorUserID        string    `json:"actorUserID,omitempty"`
-	ProductMode        string    `json:"productMode,omitempty"`
-	Backend            string    `json:"backend,omitempty"`
-	CodexProviderID    string    `json:"codexProviderID,omitempty"`
-	ClaudeProfileID    string    `json:"claudeProfileID,omitempty"`
-	Verbosity          string    `json:"verbosity,omitempty"`
-	PlanMode           string    `json:"planMode,omitempty"`
-	ResumeInstanceID   string    `json:"resumeInstanceID,omitempty"`
-	ResumeThreadID     string    `json:"resumeThreadID,omitempty"`
-	ResumeThreadTitle  string    `json:"resumeThreadTitle,omitempty"`
-	ResumeThreadCWD    string    `json:"resumeThreadCWD,omitempty"`
-	ResumeWorkspaceKey string    `json:"resumeWorkspaceKey,omitempty"`
-	ResumeRouteMode    string    `json:"resumeRouteMode,omitempty"`
-	ResumeHeadless     bool      `json:"resumeHeadless,omitempty"`
-	UpdatedAt          time.Time `json:"updatedAt,omitempty"`
+	SurfaceSessionID            string                   `json:"surfaceSessionID"`
+	GatewayID                   string                   `json:"gatewayID,omitempty"`
+	ChatID                      string                   `json:"chatID,omitempty"`
+	ActorUserID                 string                   `json:"actorUserID,omitempty"`
+	ProductMode                 string                   `json:"productMode,omitempty"`
+	Backend                     string                   `json:"backend,omitempty"`
+	CodexProviderID             string                   `json:"codexProviderID,omitempty"`
+	CodexProfileID              string                   `json:"codexProfileID,omitempty"`
+	CodexProfileSelectionStatus string                   `json:"codexProfileSelectionStatus,omitempty"`
+	CodexAdmissionRef           *state.CodexAdmissionRef `json:"codexAdmissionRef,omitempty"`
+	ClaudeProfileID             string                   `json:"claudeProfileID,omitempty"`
+	Verbosity                   string                   `json:"verbosity,omitempty"`
+	PlanMode                    string                   `json:"planMode,omitempty"`
+	ResumeInstanceID            string                   `json:"resumeInstanceID,omitempty"`
+	ResumeThreadID              string                   `json:"resumeThreadID,omitempty"`
+	ResumeThreadTitle           string                   `json:"resumeThreadTitle,omitempty"`
+	ResumeThreadCWD             string                   `json:"resumeThreadCWD,omitempty"`
+	ResumeWorkspaceKey          string                   `json:"resumeWorkspaceKey,omitempty"`
+	ResumeRouteMode             string                   `json:"resumeRouteMode,omitempty"`
+	ResumeHeadless              bool                     `json:"resumeHeadless,omitempty"`
+	UpdatedAt                   time.Time                `json:"updatedAt,omitempty"`
 }
 
 type StateFile struct {
@@ -253,16 +257,29 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ActorUserID = strings.TrimSpace(entry.ActorUserID)
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
 	entry.CodexProviderID = strings.TrimSpace(entry.CodexProviderID)
+	entry.CodexProfileID = strings.TrimSpace(entry.CodexProfileID)
+	entry.CodexProfileSelectionStatus = strings.TrimSpace(entry.CodexProfileSelectionStatus)
+	entry.CodexAdmissionRef = normalizeCodexAdmissionRef(entry.CodexAdmissionRef)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
+	codexProviderID := entry.CodexProviderID
+	if entry.CodexProfileID != "" {
+		codexProviderID = state.LegacyCodexProviderIDFromProfileID(entry.CodexProfileID)
+	}
 	rawContract := state.PersistedSurfaceBackendContract(
 		state.ProductMode(entry.ProductMode),
 		agentproto.Backend(strings.TrimSpace(entry.Backend)),
-		entry.CodexProviderID,
+		codexProviderID,
 		entry.ClaudeProfileID,
 	)
 	entry.Backend = string(rawContract.Backend)
 	entry.CodexProviderID = state.EffectiveSurfaceCodexProviderID(rawContract)
 	entry.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(rawContract)
+	entry = CanonicalizeEntryProfileSelection(entry)
+	if entry.CodexProviderID == "" {
+		entry.CodexProfileID = ""
+		entry.CodexProfileSelectionStatus = ""
+		entry.CodexAdmissionRef = nil
+	}
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
 	entry.PlanMode = ""
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
@@ -301,6 +318,9 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
 		state.NormalizeHeadlessBackend(agentproto.Backend(left.Backend)) == state.NormalizeHeadlessBackend(agentproto.Backend(right.Backend)) &&
 		strings.TrimSpace(left.CodexProviderID) == strings.TrimSpace(right.CodexProviderID) &&
+		strings.TrimSpace(left.CodexProfileID) == strings.TrimSpace(right.CodexProfileID) &&
+		strings.TrimSpace(left.CodexProfileSelectionStatus) == strings.TrimSpace(right.CodexProfileSelectionStatus) &&
+		sameCodexAdmissionRef(left.CodexAdmissionRef, right.CodexAdmissionRef) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&
@@ -311,4 +331,44 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ResumeWorkspaceKey) == strings.TrimSpace(right.ResumeWorkspaceKey) &&
 		strings.TrimSpace(left.ResumeRouteMode) == strings.TrimSpace(right.ResumeRouteMode) &&
 		left.ResumeHeadless == right.ResumeHeadless
+}
+
+func CanonicalizeEntryProfileSelection(entry Entry) Entry {
+	mode := state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode)))
+	backend := state.NormalizeSurfaceBackend(mode, agentproto.Backend(strings.TrimSpace(entry.Backend)))
+	if !state.IsHeadlessProductMode(mode) || backend != agentproto.BackendCodex {
+		entry.CodexProfileID = ""
+		entry.CodexProfileSelectionStatus = ""
+		entry.CodexAdmissionRef = nil
+		return entry
+	}
+	entry.CodexProfileID = strings.TrimSpace(entry.CodexProfileID)
+	if entry.CodexProfileID == "" {
+		entry.CodexProfileID = state.CodexProfileIDFromLegacyProviderID(entry.CodexProviderID)
+	}
+	entry.CodexProviderID = state.LegacyCodexProviderIDFromProfileID(entry.CodexProfileID)
+	return entry
+}
+
+func normalizeCodexAdmissionRef(value *state.CodexAdmissionRef) *state.CodexAdmissionRef {
+	if value == nil {
+		return nil
+	}
+	normalized := *value
+	normalized.ProfileRef.ID = strings.TrimSpace(normalized.ProfileRef.ID)
+	normalized.ContextPreferenceRef.ProfileID = strings.TrimSpace(normalized.ContextPreferenceRef.ProfileID)
+	if normalized.ProfileRef.ID == "" || normalized.ProfileRef.Revision == 0 ||
+		normalized.ContextPreferenceRef.ProfileID != normalized.ProfileRef.ID || normalized.ContextPreferenceRef.Revision == 0 {
+		return nil
+	}
+	return &normalized
+}
+
+func sameCodexAdmissionRef(left, right *state.CodexAdmissionRef) bool {
+	left = normalizeCodexAdmissionRef(left)
+	right = normalizeCodexAdmissionRef(right)
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }

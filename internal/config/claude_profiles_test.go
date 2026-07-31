@@ -5,6 +5,24 @@ import (
 	"testing"
 )
 
+func TestSplitClaudeExtendedContextSuffix(t *testing.T) {
+	for _, tc := range []struct {
+		input   string
+		model   string
+		enabled bool
+	}{
+		{input: " claude-sonnet-4-5[1m] ", model: "claude-sonnet-4-5", enabled: true},
+		{input: "claude-sonnet-4-5[1m][1M]", model: "claude-sonnet-4-5", enabled: true},
+		{input: "claude-sonnet-4-5", model: "claude-sonnet-4-5", enabled: false},
+		{input: "model[1m]-preview", model: "model[1m]-preview", enabled: false},
+	} {
+		model, enabled := SplitClaudeExtendedContextSuffix(tc.input)
+		if model != tc.model || enabled != tc.enabled {
+			t.Fatalf("SplitClaudeExtendedContextSuffix(%q) = %q, %v; want %q, %v", tc.input, model, enabled, tc.model, tc.enabled)
+		}
+	}
+}
+
 func TestWriteAppConfigNormalizesClaudeProfiles(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	cfg := DefaultAppConfig()

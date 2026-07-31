@@ -108,6 +108,7 @@ func (s *Store) Put(record state.BotCapabilitySettingsRecord) error {
 	if s == nil {
 		return nil
 	}
+	record = state.CanonicalizeBotCapabilityProfileSelection(record)
 	normalized, ok := state.NormalizeBotCapabilitySettingsRecord(record)
 	if !ok {
 		return fmt.Errorf("bot capability settings requires gateway id")
@@ -127,6 +128,7 @@ func (s *Store) ReplaceAll(records []state.BotCapabilitySettingsRecord) error {
 	}
 	entries := make(map[string]state.BotCapabilitySettingsRecord, len(records))
 	for _, record := range records {
+		record = state.CanonicalizeBotCapabilityProfileSelection(record)
 		normalized, ok := state.NormalizeBotCapabilitySettingsRecord(record)
 		if !ok {
 			return fmt.Errorf("bot capability settings requires gateway id")

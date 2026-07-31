@@ -217,10 +217,17 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/codex/providers", a.requireAdmin(a.handleCodexProviderCreate))
 	mux.HandleFunc("PUT /api/admin/codex/providers/{id}", a.requireAdmin(a.handleCodexProviderUpdate))
 	mux.HandleFunc("DELETE /api/admin/codex/providers/{id}", a.requireAdmin(a.handleCodexProviderDelete))
+	mux.HandleFunc("GET /api/admin/codex/profiles", a.requireAdmin(a.handleCodexProfilesList))
+	mux.HandleFunc("POST /api/admin/codex/profiles", a.requireAdmin(a.handleCodexProfileCreate))
+	mux.HandleFunc("PUT /api/admin/codex/profiles/{id}", a.requireAdmin(a.handleCodexProfileUpdate))
+	mux.HandleFunc("DELETE /api/admin/codex/profiles/{id}", a.requireAdmin(a.handleCodexProfileDelete))
+	mux.HandleFunc("GET /api/admin/codex/profiles/{id}/references", a.requireAdmin(a.handleCodexProfileReferences))
+	mux.HandleFunc("PUT /api/admin/codex/profiles/{id}/context-preference", a.requireAdmin(a.handleCodexContextPreferenceUpdate))
 	mux.HandleFunc("GET /api/admin/claude/profiles", a.requireAdmin(a.handleClaudeProfilesList))
 	mux.HandleFunc("POST /api/admin/claude/profiles", a.requireAdmin(a.handleClaudeProfileCreate))
 	mux.HandleFunc("PUT /api/admin/claude/profiles/{id}", a.requireAdmin(a.handleClaudeProfileUpdate))
 	mux.HandleFunc("DELETE /api/admin/claude/profiles/{id}", a.requireAdmin(a.handleClaudeProfileDelete))
+	mux.HandleFunc("PUT /api/admin/claude/profiles/{id}/context-preference", a.requireAdmin(a.handleClaudeContextPreferenceUpdate))
 	mux.HandleFunc("GET /api/admin/external-access/status", a.requireAdmin(a.handleAdminExternalAccessStatus))
 	mux.HandleFunc("POST /api/admin/external-access/link", a.requireAdmin(a.handleAdminExternalAccessLink))
 	mux.HandleFunc("GET /api/admin/feishu/manifest", a.requireAdmin(a.handleFeishuManifest))
@@ -285,6 +292,7 @@ func (a *App) ConfigureAdmin(opts AdminRuntimeOptions) {
 		envOverrideGatewayID: opts.EnvOverrideGatewayID,
 	}
 	a.mu.Unlock()
+	a.reconcileProfileCatalogMigration()
 }
 
 func (a *App) adminPrefixMux(base http.Handler) http.Handler {

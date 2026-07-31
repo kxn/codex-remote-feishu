@@ -17,7 +17,10 @@ const (
 )
 
 type CodexSettings struct {
-	Providers []CodexProviderConfig `json:"providers,omitempty"`
+	ProfileCatalogMigrationVersion int                               `json:"profileCatalogMigrationVersion,omitempty"`
+	MigrationDiagnostics           []CodexProfileMigrationDiagnostic `json:"profileCatalogMigrationDiagnostics,omitempty"`
+	Profiles                       []CodexAPIProfileRecord           `json:"profiles,omitempty"`
+	Providers                      []CodexProviderConfig             `json:"providers,omitempty"`
 }
 
 type CodexProviderConfig struct {
@@ -128,7 +131,7 @@ func NormalizeCodexProviders(providers []CodexProviderConfig) []CodexProviderCon
 			ID:              strings.TrimSpace(provider.ID),
 			Name:            strings.TrimSpace(provider.Name),
 			BaseURL:         strings.TrimSpace(provider.BaseURL),
-			APIKey:          strings.TrimSpace(provider.APIKey),
+			APIKey:          provider.APIKey,
 			Model:           strings.TrimSpace(provider.Model),
 			ReasoningEffort: NormalizeCodexReasoningEffort(provider.ReasoningEffort),
 		}
@@ -143,6 +146,16 @@ func NormalizeCodexProviders(providers []CodexProviderConfig) []CodexProviderCon
 
 func ListCodexProviders(cfg AppConfig) []CodexProvider {
 	providers := []CodexProvider{BuiltInCodexProvider()}
+	if len(cfg.Codex.Profiles) > 0 {
+		for _, record := range NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles) {
+			profile, ok := CurrentCodexAPIProfile(record)
+			if !ok {
+				continue
+			}
+			providers = append(providers, CodexProvider{CodexProviderConfig: codexProviderConfigFromAPIProfile(profile)})
+		}
+		return providers
+	}
 	for _, provider := range NormalizeCodexProviders(cfg.Codex.Providers) {
 		providers = append(providers, CodexProvider{CodexProviderConfig: provider})
 	}
@@ -163,16 +176,39 @@ func IndexOfCodexProvider(providers []CodexProviderConfig, providerID string) in
 }
 
 func ResolveCodexProvider(cfg AppConfig, providerID string) (CodexProvider, bool) {
-	providerID = NormalizeCodexProviderID(providerID)
-	if providerID == CodexDefaultProviderID {
+	providerID = strings.TrimSpace(providerID)
+	if providerID == "" || strings.EqualFold(providerID, CodexDefaultProviderID) || providerID == CodexNativeProfileID {
 		return BuiltInCodexProvider(), true
 	}
+	if len(cfg.Codex.Profiles) > 0 {
+		index := IndexOfCodexAPIProfile(cfg.Codex.Profiles, providerID)
+		if index < 0 {
+			return CodexProvider{}, false
+		}
+		profile, ok := CurrentCodexAPIProfile(cfg.Codex.Profiles[index])
+		if !ok {
+			return CodexProvider{}, false
+		}
+		return CodexProvider{CodexProviderConfig: codexProviderConfigFromAPIProfile(profile)}, true
+	}
+	providerID = NormalizeCodexProviderID(providerID)
 	for _, provider := range NormalizeCodexProviders(cfg.Codex.Providers) {
 		if provider.ID == providerID {
 			return CodexProvider{CodexProviderConfig: provider}, true
 		}
 	}
 	return CodexProvider{}, false
+}
+
+func codexProviderConfigFromAPIProfile(profile CodexAPIProfileSecretConfig) CodexProviderConfig {
+	return CodexProviderConfig{
+		ID:              profile.ID,
+		Name:            profile.Name,
+		BaseURL:         profile.BaseURL,
+		APIKey:          profile.APIKey,
+		Model:           profile.Model,
+		ReasoningEffort: profile.ReasoningEffort,
+	}
 }
 
 func PrepareCodexProviderCreate(existing []CodexProviderConfig, requested CodexProviderConfig) (CodexProviderConfig, error) {

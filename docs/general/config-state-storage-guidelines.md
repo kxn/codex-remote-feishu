@@ -1,8 +1,8 @@
 # Configuration State Storage Guidelines
 
 > Type: `general`
-> Updated: `2026-05-09`
-> Summary: 新增配置项存储决策规则，区分显示配置、本地副作用配置、启动合同、backend 行为默认值和 backend 可变状态。
+> Updated: `2026-07-31`
+> Summary: 规定配置项的 owner 与冻结边界，并补充 Profile definition、上下文偏好、desired selection 和 admission revision 的独立存储合同。
 
 ## 1. 适用范围
 
@@ -250,3 +250,23 @@
 - Claude reasoning 若未来要支持运行中无损切换，需要先确认不再依赖 Claude launch-time managed settings pin（当前仍会把 `CLAUDE_CODE_EFFORT_LEVEL` 等键冻结进启动合同并在 restart 后生效）
 
 在这些调研完成前，对应配置不得直接做成强持久 SSOT。
+
+## 7. Profile Catalog 存储合同
+
+Profile 不是单一配置对象。连接定义、运行偏好、路由选择和已经接纳的执行合同必须由不同 owner 保存：
+
+| 事实 | owner | 存储 | 引用语义 |
+| --- | --- | --- | --- |
+| Codex API Profile definition current + retained revisions | Profile Catalog | 权限为 `0600` 的 app config | current 用于新 admission；retained revision 只为精确历史引用保留。 |
+| Codex/Claude context preference current + retained revisions | Context Preference Catalog | state dir 下权限为 `0600` 的 `profile-context-preferences.json` | 与 definition 使用独立 Revision 和 strong item ETag。 |
+| bot default / route desired Profile ID | Profile Selection | bot capability / surface resume durable state | 浮动引用；下一次 admission 才解析 current definition 和 preference。 |
+| queue / pending / active / recovery admission | 对应生命周期 owner | 进程内状态或真实 recovery store | 同时冻结 definition revision 与 preference revision，不得启动时改读 current。 |
+
+具体约束：
+
+- Secret-bearing definition 与 HTTP、orchestrator、surface DTO 必须分型；API Key 不能进入 summary、日志、引用清单或 persisted runtime state。旧配置中的 Base URL 即使为保留迁移证据，也只有满足无 userinfo/query/fragment 的绝对 HTTP(S) 合同才能进入公开 summary；不安全原值继续只留在 secret definition，公开端点留空并标记 definition incomplete。
+- Profile 名称、模型或上下文偏好更新不能改写已经冻结的 admission。删除和历史 GC 必须以完整 Reference Index 为准，且 current revision 永不被历史清理删除。
+- `codex.providers[]` 只允许作为旧配置迁移输入；迁移完成后 canonical writer 只写 `codex.profiles[]`。旧 API 可以做 transport adapter，但不能保留第二套校验或双写。
+- bot/surface desired 以 `CodexProfileID` 为 canonical owner，`CodexProviderID` 只由它派生供兼容 transport 消费。legacy writer 必须原子更新 canonical ID 与兼容投影，normalization 遇到双字段不一致时不能让 Provider 反向覆盖 Profile。
+- admin config owner 配置后，每次相关 runtime/store readiness 变化都必须 reconcile Profile migration；context preference、bot capability、surface resume 任一 store 未就绪或损坏时记录 degraded gate，而不是跳过 coordinator。只有三个 store 均 ready 才执行写入：先写 preference 与真实 durable selection/recovery owner，最后提交 app config migration marker。marker 未提交或任一 store 损坏时，Profile mutation 与 managed Codex launch 都 fail closed，不把损坏状态解释为空 Catalog；后续 store 修复并重新配置时由成功 reconcile 清除临时 gate。P2P canonicalization 遇到不同 Codex 选择时保留 `profile_selection_conflict`，不生成精确 admission，并阻止对应 surface 启动直到用户显式重选。
+- Claude 模型名中的终止 `[1m]` 只作为旧配置迁移输入；canonical definition 保存 base model，上下文选择保存在独立 preference revision。managed launch 必须从 preference 重建 custom model 的终止 `[1m]`；内建 default 的 1M 偏好固定投影为 `sonnet[1m]`，不能把拆分后的 base model 直接启动而改变升级前行为。

@@ -119,35 +119,37 @@ type App struct {
 	relayConnMu      sync.Mutex
 	upgradeStateIOMu sync.Mutex
 
-	pendingGlobalRuntimeNotices map[string][]eventcontract.Event
-	recentGlobalRuntimeNotices  map[string]map[string]time.Time
-	headlessRuntime             HeadlessRuntimeConfig
-	vscodeDetect                func() (vscodeDetectResponse, error)
-	detectPlatformDefaults      func() (install.PlatformDefaults, error)
-	vscodeCompatibility         vscodeCompatibilityCacheState
-	managedHeadlessRuntime      headlessruntime.State
-	pendingThreadHistoryReads   map[string]pendingThreadHistoryRead
-	pendingMCPOAuthLogins       map[string]pendingMCPOAuthLogin
-	childRestartWaiters         map[string]*childRestartWaiter
-	gitWorkspaceImports         map[string]*gitWorkspaceImportRuntime
-	gitWorkspaceWorktrees       map[string]*gitWorkspaceWorktreeRuntime
-	startHeadless               func(relayruntime.HeadlessLaunchOptions) (int, error)
-	stopProcess                 func(int, time.Duration) error
-	sendAgentCommand            func(string, agentproto.Command) error
-	ingress                     *ingressPump
-	ingressCancel               context.CancelFunc
-	ingressStarted              bool
-	ingressWG                   sync.WaitGroup
-	gatewayRunCancel            context.CancelFunc
-	gatewayRunDone              chan struct{}
-	relayConnections            map[string]*relayConnectionState
-	feishuRuntime               feishuRuntimeState
-	daemonAsyncRuntime          daemonAsyncRuntimeState
-	cronRuntime                 cronRuntimeState
-	botCapabilitySettingsState  botCapabilitySettingsRuntimeState
-	feishuBotIdentityState      feishuBotIdentityRuntimeState
-	feishuRoomState             feishuRoomRuntimeState
-	claudeWorkspaceProfileState claudeWorkspaceProfileRuntimeState
+	pendingGlobalRuntimeNotices   map[string][]eventcontract.Event
+	recentGlobalRuntimeNotices    map[string]map[string]time.Time
+	headlessRuntime               HeadlessRuntimeConfig
+	vscodeDetect                  func() (vscodeDetectResponse, error)
+	detectPlatformDefaults        func() (install.PlatformDefaults, error)
+	vscodeCompatibility           vscodeCompatibilityCacheState
+	managedHeadlessRuntime        headlessruntime.State
+	pendingThreadHistoryReads     map[string]pendingThreadHistoryRead
+	pendingMCPOAuthLogins         map[string]pendingMCPOAuthLogin
+	childRestartWaiters           map[string]*childRestartWaiter
+	gitWorkspaceImports           map[string]*gitWorkspaceImportRuntime
+	gitWorkspaceWorktrees         map[string]*gitWorkspaceWorktreeRuntime
+	startHeadless                 func(relayruntime.HeadlessLaunchOptions) (int, error)
+	stopProcess                   func(int, time.Duration) error
+	sendAgentCommand              func(string, agentproto.Command) error
+	ingress                       *ingressPump
+	ingressCancel                 context.CancelFunc
+	ingressStarted                bool
+	ingressWG                     sync.WaitGroup
+	gatewayRunCancel              context.CancelFunc
+	gatewayRunDone                chan struct{}
+	relayConnections              map[string]*relayConnectionState
+	feishuRuntime                 feishuRuntimeState
+	daemonAsyncRuntime            daemonAsyncRuntimeState
+	cronRuntime                   cronRuntimeState
+	botCapabilitySettingsState    botCapabilitySettingsRuntimeState
+	feishuBotIdentityState        feishuBotIdentityRuntimeState
+	feishuRoomState               feishuRoomRuntimeState
+	claudeWorkspaceProfileState   claudeWorkspaceProfileRuntimeState
+	profileContextPreferenceState profileContextPreferenceRuntimeState
+	profileCatalogMigrationErr    error
 
 	adminAuth                  *adminauth.Manager
 	admin                      adminRuntimeState
@@ -327,22 +329,18 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.headlessRuntime = cfg
 	a.cronRuntime.repoManager = cronrepo.NewManager(cfg.Paths.StateDir)
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.configureFeishuBotIdentityStateLocked(cfg.Paths.StateDir)
 	a.configureBotCapabilitySettingsStateLocked(cfg.Paths.StateDir)
 	a.configureFeishuRoomStateLocked(cfg.Paths.StateDir)
 	a.configureClaudeWorkspaceProfileStateLocked(cfg.Paths.StateDir)
+	a.configureProfileContextPreferenceStateLocked(cfg.Paths.StateDir)
 	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)
-	if loaded, err := a.loadAdminConfig(); err == nil {
-		a.syncCodexProvidersCatalogLocked(loaded.Config)
-		a.syncClaudeProfilesCatalogLocked(loaded.Config)
-	} else {
-		log.Printf("load config catalogs failed during headless runtime setup: err=%v", err)
-	}
 	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncBotCapabilitySettingsStateLocked()
 	a.syncFeishuRoomStateLocked()
 	a.syncSurfaceResumeStateLocked(nil)
+	a.mu.Unlock()
+	a.reconcileProfileCatalogMigration()
 }
 
 func (a *App) SetToolRuntime(cfg toolruntime.Config) {

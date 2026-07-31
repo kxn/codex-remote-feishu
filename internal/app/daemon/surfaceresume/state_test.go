@@ -1,10 +1,14 @@
 package surfaceresume
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -86,5 +90,65 @@ func TestLoadStoreMarksRepairedHeadlessWorkspaceDirty(t *testing.T) {
 	}
 	if !store.Dirty() {
 		t.Fatal("expected repaired state to be marked dirty for persistence")
+	}
+}
+
+func TestCanonicalizeEntriesRetainsConflictingCodexSelectionDiagnostic(t *testing.T) {
+	entries, changed := CanonicalizeEntries(map[string]Entry{
+		"feishu:main:user:ou_old": {
+			SurfaceSessionID: "feishu:main:user:ou_old", GatewayID: "main", ChatID: "oc_chat", ActorUserID: "ou_old",
+			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProviderID: "proxy-a",
+			UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+		},
+		"feishu:main:user:ou_new": {
+			SurfaceSessionID: "feishu:main:user:ou_new", GatewayID: "main", ChatID: "oc_chat", ActorUserID: "ou_new",
+			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProviderID: "proxy-b",
+			UpdatedAt: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC),
+		},
+	})
+	if !changed || len(entries) != 1 {
+		t.Fatalf("canonical entries = %#v changed=%v, want one merged diagnostic entry", entries, changed)
+	}
+	for _, entry := range entries {
+		raw, err := json.Marshal(entry)
+		if err != nil {
+			t.Fatalf("marshal canonical entry: %v", err)
+		}
+		if !strings.Contains(string(raw), `"codexProfileSelectionStatus":"profile_selection_conflict"`) {
+			t.Fatalf("canonicalization discarded conflicting provider evidence: %s", raw)
+		}
+	}
+}
+
+func TestCanonicalizeEntryProfileSelectionUsesProfileAsCanonicalOwner(t *testing.T) {
+	entry := CanonicalizeEntryProfileSelection(Entry{
+		ProductMode:     string(state.ProductModeNormal),
+		Backend:         string(agentproto.BackendCodex),
+		CodexProviderID: "legacy-new",
+		CodexProfileID:  "canonical-old",
+	})
+	if entry.CodexProfileID != "canonical-old" || entry.CodexProviderID != "canonical-old" {
+		t.Fatalf("canonical profile selection drifted: %#v", entry)
+	}
+}
+
+func TestNormalizeEntryClearsCodexProfileStateOutsideCodexBackend(t *testing.T) {
+	entry, ok := NormalizeEntry(Entry{
+		SurfaceSessionID:            "surface-1",
+		ProductMode:                 string(state.ProductModeNormal),
+		Backend:                     string(agentproto.BackendClaude),
+		CodexProviderID:             "team-proxy",
+		CodexProfileID:              "team-proxy",
+		CodexProfileSelectionStatus: CodexProfileSelectionStatusConflict,
+		CodexAdmissionRef: &state.CodexAdmissionRef{
+			ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 1},
+			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 1},
+		},
+	})
+	if !ok {
+		t.Fatal("expected normalized entry")
+	}
+	if entry.CodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexProfileSelectionStatus != "" || entry.CodexAdmissionRef != nil {
+		t.Fatalf("non-Codex entry retained Codex profile state: %#v", entry)
 	}
 }

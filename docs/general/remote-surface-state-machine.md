@@ -125,6 +125,7 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
 13. room context 的 `ActiveLock` 是同 room workspace 执行互斥的 SSOT：dispatching 时写入 surface / instance / thread / turn / queue item evidence，turn started 后用真实 thread/turn 刷新；普通 queue、未 attached 群 surface 的 room-workspace 文本自动接管、AutoContinue 与 AutoWhip 在派发前若发现其它 same-room surface 仍有 dispatching/running item 或 instance active turn，会保留当前 queued/pending 状态并返回 `room_workspace_active` notice；AutoContinue / AutoWhip 这类 tick 驱动入口会对该 notice 做短冷却，避免同一 active holder 持续刷屏。
 14. stale `ActiveLock` 不单独造成永久 busy：若锁指向的 surface 不存在或已无可证明 active work，下一次 same-room dispatch 检查会清掉并继续；room workspace reset 也会清掉 room active lock。
 15. 合法四段式 Feishu 私聊和群聊 surface 的 effective capability settings 都读取 gateway/bot 级 `BotCapabilitySettings`。`/mode`、provider/profile、model/reasoning/access/plan 只允许私聊修改；每个命令从最新 gateway record 开始，只更新自己拥有的字段，再把结果投影到同 gateway 已 materialize 的 surface，且只有合法私聊配置事务可以在 record 缺失时首建。plan confirmation 与 Claude workspace snapshot 等运行生命周期转换只能字段级更新已有 record；record 缺失时保留当前 surface 的 route-derived 执行状态，不能从群聊或生命周期路径反向整记录初始化 SSOT。旧私聊 surface 和 surface resume entry 同样不能整记录回写。record 同时保存 Codex provider 与 Claude profile 的非活动选择，active backend contract 只暴露当前一侧；非法 identity、gateway 不匹配或非 Feishu surface 保持本地设置语义。群聊 dispatch、headless launch contract 与 catalog context 使用 bot record 作为能力默认；群聊菜单隐藏这些入口，手输或卡片回调尝试修改时返回 `bot_capability_private_required` 或同卡错误提示。群 surface 自身仍保存 workspace/session/queue/staged input/AutoWhip/AutoContinue 等 context runtime。
+   - Codex 选择的 canonical 字段是 `CodexProfileID`，`CodexProviderID` 只是兼容投影。旧 `/codexprovider` writer 必须在同一 mutation 中更新两者；normalization 始终由 Profile ID 反推 legacy Provider，不能形成两个可漂移 owner。
 16. bot capability lookup 明确区分 not-applicable / absent / valid / invalid：只有 absent 会按既定 lifecycle 语义暂用当前 surface 的 route-derived 状态；若 map 中已有 record 但无法规范化，或 storage key 与 record gateway 不一致，则进入 `BotCapabilitySettingsInvalid` gate，effective read 不回退 raw surface，配置、route lifecycle、queue 与 AutoContinue dispatch 都 fail closed。正常 store materialize 与字段级 transaction 不会产生该状态；异常时仍允许 `/stop`、`/detach` 与 `/workspace detach` 释放资源，修复持久化状态并重启后可恢复。
 17. room context 还持有群级 `PrimaryGatewayID`，作为“无 @ 普通消息由哪个 bot 承接”的 durable SSOT。daemon 的 `FeishuRoomStateRecord` 通过历史文件路径 `feishu-room-primary.json` 的 schema v2 统一持久化 room/chat、workspace/update/reset 与 primary/update durable 字段；文件名仅为原位兼容保留，不再代表 primary-only 数据模型。gateway 入站热路径只读取 daemon 维护的 copy-on-write primary snapshot，snapshot 在 room state materialize、primary sync 与 AppID identity cleanup 后刷新；`ActiveLock`、gateway evidence、surface evidence 仍只属于运行时状态。
 18. 启动顺序先装载 durable room state，再装载 surface resume。旧 schema v1 只含 primary 时会原位升级；某个 room 尚无 durable workspace 且所有 surface resume 候选一致时，只在启动事务内补录一次并立即写入 room state。room 一旦有 durable workspace，surface resume 不再反向覆盖它。
@@ -170,6 +171,8 @@ surface 不是单一枚举，而是五层正交状态叠加。
    1. 进程内已有 Feishu surface 会在 bot record 更新、bot store materialize、surface resume materialize 和下一次 ingress 时刷新能力投影。
    2. daemon 重启后，startup 可以先从 `surface resume state` materialize latent surface，但 bot capability store materialize 后会以 gateway record 覆盖其能力投影。
    3. `surface resume state` 当前仍携带 `ProductMode` / `Backend` / `ClaudeProfileID` 作为 latent route materialize 的执行 hint，并记录 `Verbosity` / instance / thread / workspace / route 及 headless thread restore 所需的 thread title / thread cwd / `ResumeHeadless` 标记；它不是 Feishu bot capability 的持久化 owner，也不再持久化或恢复 `PlanMode`。合法 Feishu surface 在 bot store materialize 后必须由 gateway record 覆盖前三项能力投影。其中 `ResumeWorkspaceKey` 表示稳定 workspace root，`ResumeThreadCWD` 表示最近活跃 cwd；两者在 load/write 时都使用 claim-key canonicalization，避免同一宿主目录因路径别名被当成不同 workspace。当 headless entry 的 workspace 不是 CWD 的祖先时，前者属于过期 surface context，load/save canonicalization 会改正为 CWD，避免跨仓库恢复。这里的 `ResumeHeadless` 现在只代表“恢复一个 concrete headless thread”，不再复用来表示 `fresh workspace prepare`。旧 entry 缺失 `Backend` 时会 lazy 默认成 `codex`；若 backend 是 `claude` 且 entry 缺失 profile，则会 lazy 默认成内置 `default`；若旧 entry 带着非空 `ClaudeProfileID`，load/save canonicalization 会反向把 headless backend 纠正回 `claude`，避免把 Claude exact-thread 恢复目标误投到 Codex 路由；若旧 entry 误把 `pending fresh workspace` 写成 `ResumeHeadless=true + ResumeRouteMode=pinned + ResumeThreadID=\"\"`，load 时会自动迁回 workspace-owned `new_thread_ready` 语义。
+   - Codex route desired 同时保存 canonical `CodexProfileID` 和由它派生的 legacy `CodexProviderID`；带 concrete resume thread 的迁移记录还保存 definition + preference 两类 Revision 组成的 `CodexAdmissionRef`。通用 surface projector 只有在 thread 与 Profile 都未变化时才保留这份精确 ref，不能用浮动 desired 重建后把它清掉。
+   - Feishu P2P identity canonicalization 若合并到同一 gateway/chat 的旧 entry 带有不同 Codex 选择，合并 entry 持久化 `CodexProfileSelectionStatus=profile_selection_conflict`。Profile migration 同步写入结构化诊断且不生成 admission ref；该 surface 的 Codex launch fail closed。用户在私聊显式重选后，更新后的 canonical bot record 会清除冲突状态；即使重选 ID 与当前显示值相同，这次显式动作仍写入新的 selection evidence，但保持 runtime no-op，不触发无意义 restart。
    4. 对合法 Feishu surface，resume entry 里的能力字段只作为 materialize 顺序中的执行 hint；gateway 级 bot capability record 载入后必须覆盖这些投影，且 resume entry 不能反向写回 record。
    5. headless surface（当前 persisted token 仍是 `ProductMode=normal`）随后会按 persisted resume target 继续尝试恢复：
       1. 优先 exact visible thread 恢复。
@@ -1551,6 +1554,7 @@ daemon startup 的 vscode resume 额外规则：
    5. `thread.focused`
 2. daemon startup 时会先根据 `surface resume state` materialize latent detached surface，并恢复 route、`ProductMode`、`Backend`、`ClaudeProfileID` 与 `Verbosity` 执行 hint；合法 Feishu surface 随后由 gateway bot capability store 覆盖能力投影，`PlanMode` 也只从该 bot store 恢复。`surface resume state` 仍是 surface route 与 headless thread 恢复目标的唯一持久化源，但不是 bot capability 的第二写源。startup 不再导入独立的 `headless-restore-hints.json`。
 3. `surface resume state` 只有成功载入后才会 materialize 并进入后台恢复；读取、JSON 或 schema version 失败时，daemon 会把该 store 标为 read-only degraded，不创建替代空 store、不清掉进程内已有 recovery episode，也不允许后续 sync 覆盖原文件。若状态已成功解码但 canonical sanitation 保存失败，规范化后的 entry 仍可用于 materialize/recovery，但 store 保持只读。修复文件并重新 configure（通常是重启 daemon）后才恢复持久化写入。
+   - Profile Catalog migration 只在 admin config 与 context preference、bot capability、surface resume 三个 durable store 均 ready 后运行，因此 `SetHeadlessRuntime -> ConfigureAdmin` 与反向初始化顺序不会制造不可恢复 degraded。
 4. 后台恢复前置条件：
    1. surface 当前处于 headless 主链（当前持久化 token 仍是 `ProductMode=normal`）
    2. surface 当前没有显式 attach
@@ -1871,6 +1875,8 @@ retained-offline overlay 额外规则：
 44. **同一 GatewayID 更换 AppID 后，新机器人继承旧 surface/会话或旧 primary**：已修复。bot identity transition 会在新 runtime 启动前排空旧 generation 并撤销旧 bot-owned durable/runtime state；room workspace 作为 room-owned durable fact 保留，因此新机器人首次进入该群仍能看到群工作区，但必须建立自己的 surface 与会话。transition 失败时 identity store 保留 pending 栅栏，新 runtime 不启动；后续即使改回旧 AppID 或同槽位重建同 AppID，也会作为新 generation 启动，不会进入半新半旧的可交互状态。
 45. **Claude `prompt_dispatch_restart` 进入 pending 后留下 `AttachedInstanceID=""` 但仍 pinned/new-thread-ready 的混合 route，启动失败或超时后变成无实例但有 selected/prepared carrier 的半死态**：已修复。prompt restart 现在经 recovery core 进入 detached workspace state，只保留 workspace claim；pending record 自身保存 thread/new-thread intent，成功连回后从 pending 重建 route，启动失败/超时/中断则消费 pending 并保持可继续恢复的 detached workspace。workspace root 与 thread cwd 的解析也统一到 `state.ResolveHeadlessResumeWorkspaceKey(...)`，不会再把 queued CWD 子目录误写成 workspace claim。
 
+46. **Profile migration 将 legacy Codex desired/ref 写入 surface resume 后，又被通用 projector 用浮动 Provider 重建并清掉精确 admission；P2P 旧 identity 合并还会静默覆盖不同 Profile 选择**：已修复。projector 只在同 thread + 同 Profile 时保留 definition/preference 精确 ref；冲突合并写入 `profile_selection_conflict`，对应 surface 启动 fail closed，并以私聊显式重选作为手动出口。
+
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 
 ## 9. `/new` 相关补充文档
@@ -1911,6 +1917,8 @@ retained-offline overlay 额外规则：
 13. room state v2 是否仍是 workspace/primary durable SSOT；surface resume 只能补录缺失 workspace 或提供冲突证据，不能覆盖已持久化 room workspace；冲突 room 的所有 ingress 入口必须继续 fail closed。
 14. room workspace 切换后，已 reset sibling 的旧 surface resume target 是否在同一次 sync 中被清掉；不得让 previous-target fallback 把旧 workspace 重新写回并在重启时制造伪冲突。
 15. GatewayID 槽位的 committed AppID 变化时，旧 gateway action generation 是否先关闭并排空，identity store 是否先写入 pending transition，旧 bot-owned state 是否在新 runtime upsert 前完成可重放清理；room workspace 必须保留，AppSecret-only 更新不得误清状态。清理失败后改回旧 AppID、删除失败后同槽位重建同 AppID，以及旧 turn patch flow/transaction 都必须覆盖在回归测试中。
+
+16. Codex Profile migration 后，bot/surface desired 是否始终以 `CodexProfileID` 为 canonical owner，精确 `CodexAdmissionRef` 是否只在同 thread + 同 Profile 时保留；P2P selection conflict 是否仍会阻断对应 surface launch，并能由显式私聊重选解除。
 
 ## 11. 待讨论取舍
 

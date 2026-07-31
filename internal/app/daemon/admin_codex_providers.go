@@ -2,10 +2,12 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 type adminCodexSettingsView struct {
@@ -41,16 +43,14 @@ type codexProviderWriteRequest struct {
 }
 
 func (a *App) handleCodexProvidersList(w http.ResponseWriter, _ *http.Request) {
-	loaded, err := a.loadAdminConfig()
+	a.adminConfigMu.Lock()
+	profiles, err := a.codexProfileSummariesLocked()
+	a.adminConfigMu.Unlock()
 	if err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_unavailable",
-			Message: "failed to load config",
-			Details: err.Error(),
-		})
+		writeCodexProfileServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, codexProvidersResponse{Providers: adminCodexProvidersView(loaded.Config)})
+	writeJSON(w, http.StatusOK, codexProvidersResponse{Providers: legacyCodexProviderViews(profiles)})
 }
 
 func (a *App) handleCodexProviderCreate(w http.ResponseWriter, r *http.Request) {
@@ -65,61 +65,20 @@ func (a *App) handleCodexProviderCreate(w http.ResponseWriter, r *http.Request) 
 	}
 
 	a.adminConfigMu.Lock()
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_unavailable",
-			Message: "failed to load config",
-			Details: err.Error(),
-		})
-		return
-	}
-
-	updated := loaded.Config
-	requested := codexProviderConfigFromRequest(req)
-	providerID := config.CodexProviderIDFromName(strings.TrimSpace(requested.Name))
-	profileIndex := config.IndexOfCodexProvider(updated.Codex.Providers, providerID)
-
-	var provider config.CodexProviderConfig
-	if profileIndex >= 0 {
-		provider, err = config.PrepareCodexProviderUpdate(updated.Codex.Providers, providerID, requested)
-	} else {
-		provider, err = config.PrepareCodexProviderCreate(updated.Codex.Providers, requested)
-	}
-	if err != nil {
-		a.adminConfigMu.Unlock()
-		writeCodexProviderConfigError(w, err)
-		return
-	}
-
-	if index := config.IndexOfCodexProvider(updated.Codex.Providers, provider.ID); index >= 0 {
-		updated.Codex.Providers[index] = provider
-	} else {
-		updated.Codex.Providers = append(updated.Codex.Providers, provider)
-	}
-	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_write_failed",
-			Message: "failed to save codex provider config",
-			Details: err.Error(),
-		})
-		return
-	}
+	profile, err := a.createCodexProfileLocked(codexAPIProfileInputFromLegacyRequest(req))
 	a.adminConfigMu.Unlock()
-	a.mu.Lock()
-	a.syncCodexProvidersCatalogLocked(updated)
-	a.mu.Unlock()
-
+	if err != nil {
+		writeCodexProfileServiceError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusCreated, codexProviderResponse{
-		Provider: adminCodexProviderViewFromConfig(config.CodexProvider{CodexProviderConfig: provider}),
+		Provider: legacyCodexProviderView(profile),
 	})
 }
 
 func (a *App) handleCodexProviderUpdate(w http.ResponseWriter, r *http.Request) {
-	providerID := config.CanonicalCodexProviderID(r.PathValue("id"))
-	if config.IsBuiltInCodexProviderID(providerID) {
+	providerID := strings.TrimSpace(r.PathValue("id"))
+	if config.IsBuiltInCodexProviderID(providerID) || providerID == config.CodexNativeProfileID {
 		writeAPIError(w, http.StatusConflict, apiError{
 			Code:    "codex_provider_read_only",
 			Message: "the built-in default codex provider cannot be edited",
@@ -139,58 +98,30 @@ func (a *App) handleCodexProviderUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 
 	a.adminConfigMu.Lock()
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_unavailable",
-			Message: "failed to load config",
-			Details: err.Error(),
-		})
-		return
+	profiles, err := a.codexProfileSummariesLocked()
+	current, found := findCodexProfileSummary(profiles, providerID)
+	if err == nil && !found {
+		err = fmt.Errorf("profile_not_found")
 	}
-
-	updated := loaded.Config
-	provider, err := config.PrepareCodexProviderUpdate(updated.Codex.Providers, providerID, codexProviderConfigFromRequest(req))
-	if err != nil {
-		a.adminConfigMu.Unlock()
-		writeCodexProviderConfigError(w, err)
-		return
-	}
-
-	index := config.IndexOfCodexProvider(updated.Codex.Providers, providerID)
-	if index < 0 {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusNotFound, apiError{
-			Code:    "codex_provider_not_found",
-			Message: "codex provider not found",
-			Details: providerID,
-		})
-		return
-	}
-	updated.Codex.Providers[index] = provider
-	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_write_failed",
-			Message: "failed to save codex provider config",
-			Details: err.Error(),
-		})
-		return
+	var profile state.CodexProfileSummary
+	if err == nil {
+		input := codexAPIProfileInputFromLegacyRequest(req)
+		input.ReviewModel = current.ReviewModel
+		profile, _, err = a.updateCodexProfileLocked(providerID, current.ETag, input)
 	}
 	a.adminConfigMu.Unlock()
-	a.mu.Lock()
-	a.syncCodexProvidersCatalogLocked(updated)
-	a.mu.Unlock()
-
+	if err != nil {
+		writeCodexProfileServiceError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, codexProviderResponse{
-		Provider: adminCodexProviderViewFromConfig(config.CodexProvider{CodexProviderConfig: provider}),
+		Provider: legacyCodexProviderView(profile),
 	})
 }
 
 func (a *App) handleCodexProviderDelete(w http.ResponseWriter, r *http.Request) {
-	providerID := config.CanonicalCodexProviderID(r.PathValue("id"))
-	if config.IsBuiltInCodexProviderID(providerID) {
+	providerID := strings.TrimSpace(r.PathValue("id"))
+	if config.IsBuiltInCodexProviderID(providerID) || providerID == config.CodexNativeProfileID {
 		writeAPIError(w, http.StatusConflict, apiError{
 			Code:    "codex_provider_read_only",
 			Message: "the built-in default codex provider cannot be deleted",
@@ -200,47 +131,33 @@ func (a *App) handleCodexProviderDelete(w http.ResponseWriter, r *http.Request) 
 	}
 
 	a.adminConfigMu.Lock()
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_unavailable",
-			Message: "failed to load config",
-			Details: err.Error(),
-		})
-		return
+	profiles, err := a.codexProfileSummariesLocked()
+	current, found := findCodexProfileSummary(profiles, providerID)
+	if err == nil && !found {
+		err = fmt.Errorf("profile_not_found")
 	}
-
-	updated := loaded.Config
-	index := config.IndexOfCodexProvider(updated.Codex.Providers, providerID)
-	if index < 0 {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusNotFound, apiError{
-			Code:    "codex_provider_not_found",
-			Message: "codex provider not found",
-			Details: providerID,
-		})
-		return
-	}
-
-	updated.Codex.Providers = append(updated.Codex.Providers[:index], updated.Codex.Providers[index+1:]...)
-	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
-		a.adminConfigMu.Unlock()
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_write_failed",
-			Message: "failed to save codex provider config",
-			Details: err.Error(),
-		})
-		return
+	if err == nil {
+		_, _, err = a.deleteCodexProfileLocked(providerID, current.ETag)
 	}
 	a.adminConfigMu.Unlock()
-	a.mu.Lock()
-	a.syncCodexProvidersCatalogLocked(updated)
-	a.mu.Unlock()
+	if err != nil {
+		writeCodexProfileServiceError(w, err)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func adminPersistedCodexSettingsView(cfg config.AppConfig) adminCodexSettingsView {
+	if len(cfg.Codex.Profiles) > 0 {
+		view := adminCodexSettingsView{Providers: make([]adminCodexProviderView, 0, len(cfg.Codex.Profiles))}
+		for _, record := range config.NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles) {
+			profile, ok := config.CurrentCodexAPIProfile(record)
+			if ok {
+				view.Providers = append(view.Providers, legacyCodexProviderView(codexAPIProfileSummary(profile, state.ProfileContextPreference{})))
+			}
+		}
+		return view
+	}
 	providers := config.NormalizeCodexProviders(cfg.Codex.Providers)
 	view := adminCodexSettingsView{Providers: make([]adminCodexProviderView, 0, len(providers))}
 	for _, provider := range providers {
@@ -250,6 +167,56 @@ func adminPersistedCodexSettingsView(cfg config.AppConfig) adminCodexSettingsVie
 		view.Providers = nil
 	}
 	return view
+}
+
+func legacyCodexProviderViews(profiles []state.CodexProfileSummary) []adminCodexProviderView {
+	views := make([]adminCodexProviderView, 0, len(profiles))
+	for _, profile := range profiles {
+		if profile.Kind == state.CodexProfileKindOAuth {
+			continue
+		}
+		views = append(views, legacyCodexProviderView(profile))
+	}
+	return views
+}
+
+func legacyCodexProviderView(profile state.CodexProfileSummary) adminCodexProviderView {
+	if profile.Kind == state.CodexProfileKindNative {
+		return adminCodexProviderView{
+			ID:       config.CodexDefaultProviderID,
+			Name:     config.CodexDefaultProviderName,
+			BuiltIn:  true,
+			ReadOnly: true,
+		}
+	}
+	return adminCodexProviderView{
+		ID:              profile.ID,
+		Name:            profile.Name,
+		BaseURL:         profile.BaseURL,
+		HasAPIKey:       profile.HasAPIKey,
+		Model:           profile.Model,
+		ReasoningEffort: profile.ReasoningEffort,
+		Persisted:       true,
+	}
+}
+
+func findCodexProfileSummary(profiles []state.CodexProfileSummary, profileID string) (state.CodexProfileSummary, bool) {
+	for _, profile := range profiles {
+		if profile.ID == strings.TrimSpace(profileID) {
+			return profile, true
+		}
+	}
+	return state.CodexProfileSummary{}, false
+}
+
+func codexAPIProfileInputFromLegacyRequest(req codexProviderWriteRequest) config.CodexAPIProfileInput {
+	return config.CodexAPIProfileInput{
+		Name:            optionalStringValue(req.Name),
+		BaseURL:         optionalStringValue(req.BaseURL),
+		APIKey:          rawOptionalStringValue(req.APIKey),
+		Model:           optionalStringValue(req.Model),
+		ReasoningEffort: optionalStringValue(req.ReasoningEffort),
+	}
 }
 
 func adminCodexProvidersView(cfg config.AppConfig) []adminCodexProviderView {

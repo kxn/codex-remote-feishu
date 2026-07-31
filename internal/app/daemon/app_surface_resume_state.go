@@ -284,8 +284,52 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 			}
 		}
 	}
+	if previous, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok {
+		if sameCodexProfileSelection(previous, entry) {
+			entry.CodexProfileID = previous.CodexProfileID
+			if !a.surfaceProfileSelectionExplicitlyUpdated(previous, entry) {
+				entry.CodexProfileSelectionStatus = previous.CodexProfileSelectionStatus
+			}
+		}
+		if shouldPreserveCodexAdmissionRef(previous, entry, clearResumeTarget) {
+			entry.CodexProfileID = previous.CodexAdmissionRef.ProfileRef.ID
+			admissionRef := *previous.CodexAdmissionRef
+			entry.CodexAdmissionRef = &admissionRef
+		}
+	}
 	normalized, ok := surfaceresume.NormalizeEntry(entry)
 	return normalized, ok
+}
+
+func (a *App) surfaceProfileSelectionExplicitlyUpdated(previous, current surfaceresume.Entry) bool {
+	if strings.TrimSpace(previous.CodexProfileSelectionStatus) == "" || strings.TrimSpace(previous.GatewayID) == "" {
+		return false
+	}
+	currentProfileID := state.CodexProfileIDFromLegacyProviderID(current.CodexProviderID)
+	for _, record := range a.service.BotCapabilitySettings() {
+		if record.GatewayID == previous.GatewayID && record.CodexProfileID == currentProfileID && record.UpdatedAt.After(previous.UpdatedAt) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameCodexProfileSelection(previous, current surfaceresume.Entry) bool {
+	previousProfileID := strings.TrimSpace(previous.CodexProfileID)
+	if previousProfileID == "" {
+		previousProfileID = state.CodexProfileIDFromLegacyProviderID(previous.CodexProviderID)
+	}
+	return previousProfileID == state.CodexProfileIDFromLegacyProviderID(current.CodexProviderID)
+}
+
+func shouldPreserveCodexAdmissionRef(previous, current surfaceresume.Entry, clearResumeTarget bool) bool {
+	if clearResumeTarget || previous.CodexAdmissionRef == nil || strings.TrimSpace(current.ResumeThreadID) == "" ||
+		strings.TrimSpace(previous.ResumeThreadID) != strings.TrimSpace(current.ResumeThreadID) {
+		return false
+	}
+	profileID := state.CodexProfileIDFromLegacyProviderID(current.CodexProviderID)
+	return previous.CodexAdmissionRef.ProfileRef.ID == profileID &&
+		previous.CodexAdmissionRef.ContextPreferenceRef.ProfileID == profileID
 }
 
 func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleRecord) (surfaceResumeTarget, bool) {

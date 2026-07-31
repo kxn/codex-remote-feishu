@@ -95,7 +95,7 @@ func TestWriteAppConfigNormalizesCodexProviders(t *testing.T) {
 		t.Fatalf("len(loaded.Config.Codex.Providers) = %d, want 1", len(loaded.Config.Codex.Providers))
 	}
 	provider := loaded.Config.Codex.Providers[0]
-	if provider.ID != "team-proxy" || provider.Name != "Team Proxy" || provider.BaseURL != "https://proxy.example/v1" || provider.APIKey != "secret" {
+	if provider.ID != "team-proxy" || provider.Name != "Team Proxy" || provider.BaseURL != "https://proxy.example/v1" || provider.APIKey != " secret " {
 		t.Fatalf("unexpected provider after normalization: %#v", provider)
 	}
 	if provider.Model != "gpt-5.4" || provider.ReasoningEffort != "xhigh" {

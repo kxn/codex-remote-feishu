@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 )
 
@@ -122,6 +124,7 @@ func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCa
 	merged.ResumeWorkspaceKey = bestResume.entry.ResumeWorkspaceKey
 	merged.ResumeRouteMode = bestResume.entry.ResumeRouteMode
 	merged.ResumeHeadless = bestResume.entry.ResumeHeadless
+	merged.CodexProfileSelectionStatus = mergedCodexProfileSelectionStatus(candidates)
 	merged.UpdatedAt = latestAt
 
 	normalized, ok := NormalizeEntry(merged)
@@ -129,6 +132,31 @@ func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCa
 		return merged
 	}
 	return normalized
+}
+
+func mergedCodexProfileSelectionStatus(candidates []feishuP2PSurfaceResumeCandidate) string {
+	profileIDs := map[string]struct{}{}
+	status := ""
+	for _, candidate := range candidates {
+		entry := candidate.entry
+		if strings.TrimSpace(entry.CodexProfileSelectionStatus) == CodexProfileSelectionStatusConflict {
+			status = CodexProfileSelectionStatusConflict
+		}
+		mode := state.NormalizeProductMode(state.ProductMode(entry.ProductMode))
+		backend := state.NormalizeSurfaceBackend(mode, agentproto.Backend(entry.Backend))
+		if !state.IsHeadlessProductMode(mode) || backend != agentproto.BackendCodex {
+			continue
+		}
+		profileID := strings.TrimSpace(entry.CodexProfileID)
+		if profileID == "" {
+			profileID = state.CodexProfileIDFromLegacyProviderID(entry.CodexProviderID)
+		}
+		profileIDs[profileID] = struct{}{}
+	}
+	if len(profileIDs) > 1 {
+		return CodexProfileSelectionStatusConflict
+	}
+	return status
 }
 
 func betterFeishuSurfaceUserID(current, candidate string) string {

@@ -185,6 +185,7 @@ type BotCapabilitySettingsRecord struct {
 	ProductMode         ProductMode
 	Backend             agentproto.Backend
 	CodexProviderID     string
+	CodexProfileID      string
 	ClaudeProfileID     string
 	PromptOverride      ModelConfigRecord
 	PlanMode            PlanModeSetting

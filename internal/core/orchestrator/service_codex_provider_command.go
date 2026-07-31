@@ -56,7 +56,16 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	currentProviderID := s.surfaceCodexProviderID(surface)
 	currentWorkspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface))
 	targetLabel := s.codexProviderDisplayName(target.ID)
+	applySelection := func() {
+		s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
+			record.CodexProviderID = target.ID
+			record.CodexProfileID = state.CodexProfileIDFromLegacyProviderID(target.ID)
+		}, func(local *state.SurfaceConsoleRecord) {
+			s.setSurfaceCodexProviderID(local, target.ID)
+		})
+	}
 	if target.ID == currentProviderID {
+		applySelection()
 		text := fmt.Sprintf("当前已在使用 Codex Provider：%s。", targetLabel)
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
@@ -98,11 +107,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	events := s.discardDrafts(surface)
 	events = s.queueHeadlessContractRestart(events, surface, continuation)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
-	s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-		record.CodexProviderID = target.ID
-	}, func(local *state.SurfaceConsoleRecord) {
-		s.setSurfaceCodexProviderID(local, target.ID)
-	})
+	applySelection()
 	if currentWorkspaceKey == "" {
 		text := fmt.Sprintf("已切换到 Codex Provider：%s。当前没有接管中的工作区。", targetLabel)
 		if commandCardOwnsInlineResult(action) {

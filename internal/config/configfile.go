@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	currentConfigVersion = 1
+	currentConfigVersion = 2
 
 	defaultRelayListenHost                   = "127.0.0.1"
 	defaultRelayListenPort                   = 9500
@@ -207,6 +207,9 @@ func WriteAppConfig(path string, cfg AppConfig) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
+		return err
+	}
 	cfg = cfg.normalized()
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -278,6 +281,9 @@ func readConfigFile(path string) (AppConfig, error) {
 			return AppConfig{}, unsupportedLegacyConfigPathError(path)
 		}
 		return AppConfig{}, fmt.Errorf("parse json config %s: %w", path, err)
+	}
+	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
+		return AppConfig{}, fmt.Errorf("validate codex profile catalog %s: %w", path, err)
 	}
 	return cfg.normalized(), nil
 }
@@ -420,6 +426,7 @@ func (cfg AppConfig) normalized() AppConfig {
 	}
 
 	cfg.Codex.Providers = NormalizeCodexProviders(cfg.Codex.Providers)
+	cfg.Codex.Profiles = NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles)
 	cfg.Claude.Profiles = NormalizeClaudeProfiles(cfg.Claude.Profiles)
 
 	if cfg.Debug.Pprof != nil {

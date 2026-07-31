@@ -1,10 +1,14 @@
 package daemon
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/profilecontextstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 type adminClaudeSettingsView struct {
@@ -12,17 +16,18 @@ type adminClaudeSettingsView struct {
 }
 
 type adminClaudeProfileView struct {
-	ID              string `json:"id"`
-	Name            string `json:"name,omitempty"`
-	AuthMode        string `json:"authMode,omitempty"`
-	BaseURL         string `json:"baseURL,omitempty"`
-	HasAuthToken    bool   `json:"hasAuthToken"`
-	Model           string `json:"model,omitempty"`
-	SmallModel      string `json:"smallModel,omitempty"`
-	ReasoningEffort string `json:"reasoningEffort,omitempty"`
-	BuiltIn         bool   `json:"builtIn,omitempty"`
-	Persisted       bool   `json:"persisted"`
-	ReadOnly        bool   `json:"readOnly,omitempty"`
+	ID                string                         `json:"id"`
+	Name              string                         `json:"name,omitempty"`
+	AuthMode          string                         `json:"authMode,omitempty"`
+	BaseURL           string                         `json:"baseURL,omitempty"`
+	HasAuthToken      bool                           `json:"hasAuthToken"`
+	Model             string                         `json:"model,omitempty"`
+	SmallModel        string                         `json:"smallModel,omitempty"`
+	ReasoningEffort   string                         `json:"reasoningEffort,omitempty"`
+	BuiltIn           bool                           `json:"builtIn,omitempty"`
+	Persisted         bool                           `json:"persisted"`
+	ReadOnly          bool                           `json:"readOnly,omitempty"`
+	ContextPreference state.ProfileContextPreference `json:"contextPreference"`
 }
 
 type claudeProfilesResponse struct {
@@ -31,6 +36,10 @@ type claudeProfilesResponse struct {
 
 type claudeProfileResponse struct {
 	Profile adminClaudeProfileView `json:"profile"`
+}
+
+type claudeContextPreferenceResponse struct {
+	ContextPreference state.ProfileContextPreference `json:"contextPreference"`
 }
 
 type claudeProfileWriteRequest struct {
@@ -43,6 +52,8 @@ type claudeProfileWriteRequest struct {
 }
 
 func (a *App) handleClaudeProfilesList(w http.ResponseWriter, _ *http.Request) {
+	a.adminConfigMu.Lock()
+	defer a.adminConfigMu.Unlock()
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		writeAPIError(w, http.StatusInternalServerError, apiError{
@@ -52,10 +63,19 @@ func (a *App) handleClaudeProfilesList(w http.ResponseWriter, _ *http.Request) {
 		})
 		return
 	}
-	writeJSON(w, http.StatusOK, claudeProfilesResponse{Profiles: adminClaudeProfilesView(loaded.Config)})
+	views, err := a.adminClaudeProfilesViewWithContextLocked(loaded.Config)
+	if err != nil {
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, claudeProfilesResponse{Profiles: views})
 }
 
 func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) {
+	if err := a.profileCatalogMutationError(); err != nil {
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
 	var req claudeProfileWriteRequest
 	if err := decodeJSONBody(r, &req); err != nil {
 		writeAPIError(w, http.StatusBadRequest, apiError{
@@ -121,7 +141,28 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 	} else {
 		updated.Claude.Profiles = append(updated.Claude.Profiles, profile)
 	}
+	preferenceStore, err := a.profileContextPreferenceStore()
+	if err != nil {
+		a.adminConfigMu.Unlock()
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
+	_, preferenceExisted := preferenceStore.ClaudeCurrent(profile.ID)
+	if err := preferenceStore.EnsureClaudeProfile(profile.ID, state.ClaudeContextModeDefault); err != nil {
+		a.adminConfigMu.Unlock()
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
 	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
+		if !preferenceExisted {
+			if cleanupErr := preferenceStore.DeleteClaudeProfile(profile.ID); cleanupErr != nil {
+				combined := fmt.Errorf("config_write_failed: %v; preference rollback failed: %w", err, cleanupErr)
+				a.markProfileCatalogDegraded(combined)
+				a.adminConfigMu.Unlock()
+				writeAPIError(w, http.StatusInternalServerError, apiError{Code: "config_write_failed", Message: "failed to save claude profile config", Details: combined.Error()})
+				return
+			}
+		}
 		a.adminConfigMu.Unlock()
 		writeAPIError(w, http.StatusInternalServerError, apiError{
 			Code:    "config_write_failed",
@@ -135,12 +176,19 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 	a.syncClaudeProfilesCatalogLocked(updated)
 	a.mu.Unlock()
 
+	preference, _ := preferenceStore.ClaudeCurrent(profile.ID)
+	view := adminClaudeProfileViewFromConfig(config.ClaudeProfile{ClaudeProfileConfig: profile})
+	view.ContextPreference = preference
 	writeJSON(w, http.StatusCreated, claudeProfileResponse{
-		Profile: adminClaudeProfileViewFromConfig(config.ClaudeProfile{ClaudeProfileConfig: profile}),
+		Profile: view,
 	})
 }
 
 func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := a.profileCatalogMutationError(); err != nil {
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
 	profileID := config.CanonicalClaudeProfileID(r.PathValue("id"))
 	if config.IsBuiltInClaudeProfileID(profileID) {
 		writeAPIError(w, http.StatusConflict, apiError{
@@ -186,6 +234,7 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 
 	current := updated.Claude.Profiles[index]
+	previousProfileID := current.ID
 	if req.Name != nil {
 		name := optionalStringValue(req.Name)
 		if name == "" {
@@ -236,8 +285,31 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	if req.ReasoningEffort != nil {
 		current.ReasoningEffort = config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort))
 	}
+	preferenceStore, err := a.profileContextPreferenceStore()
+	if err != nil {
+		a.adminConfigMu.Unlock()
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
+	preferenceRenamed := current.ID != previousProfileID
+	if preferenceRenamed {
+		if err := preferenceStore.RenameClaudeProfile(previousProfileID, current.ID); err != nil {
+			a.adminConfigMu.Unlock()
+			writeClaudeContextPreferenceError(w, err)
+			return
+		}
+	}
 	updated.Claude.Profiles[index] = current
 	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
+		if preferenceRenamed {
+			if rollbackErr := preferenceStore.RenameClaudeProfile(current.ID, previousProfileID); rollbackErr != nil {
+				combined := fmt.Errorf("config_write_failed: %v; preference rollback failed: %w", err, rollbackErr)
+				a.markProfileCatalogDegraded(combined)
+				a.adminConfigMu.Unlock()
+				writeAPIError(w, http.StatusInternalServerError, apiError{Code: "config_write_failed", Message: "failed to save claude profile config", Details: combined.Error()})
+				return
+			}
+		}
 		a.adminConfigMu.Unlock()
 		writeAPIError(w, http.StatusInternalServerError, apiError{
 			Code:    "config_write_failed",
@@ -251,12 +323,19 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	a.syncClaudeProfilesCatalogLocked(updated)
 	a.mu.Unlock()
 
+	preference, _ := preferenceStore.ClaudeCurrent(current.ID)
+	view := adminClaudeProfileViewFromConfig(config.ClaudeProfile{ClaudeProfileConfig: current})
+	view.ContextPreference = preference
 	writeJSON(w, http.StatusOK, claudeProfileResponse{
-		Profile: adminClaudeProfileViewFromConfig(config.ClaudeProfile{ClaudeProfileConfig: current}),
+		Profile: view,
 	})
 }
 
 func (a *App) handleClaudeProfileDelete(w http.ResponseWriter, r *http.Request) {
+	if err := a.profileCatalogMutationError(); err != nil {
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
 	profileID := config.CanonicalClaudeProfileID(r.PathValue("id"))
 	if config.IsBuiltInClaudeProfileID(profileID) {
 		writeAPIError(w, http.StatusConflict, apiError{
@@ -301,11 +380,116 @@ func (a *App) handleClaudeProfileDelete(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
+	preferenceStore, storeErr := a.profileContextPreferenceStore()
+	if storeErr == nil {
+		storeErr = preferenceStore.DeleteClaudeProfile(profileID)
+	}
+	if storeErr != nil {
+		storeErr = a.rollbackProfileConfig(loaded.Path, loaded.Config, fmt.Errorf("profile_preference_write_failed: %w", storeErr))
+		a.adminConfigMu.Unlock()
+		writeClaudeContextPreferenceError(w, storeErr)
+		return
+	}
 	a.adminConfigMu.Unlock()
 	a.mu.Lock()
 	a.syncClaudeProfilesCatalogLocked(updated)
 	a.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *App) handleClaudeContextPreferenceUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := a.profileCatalogMutationError(); err != nil {
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
+	if strings.TrimSpace(r.Header.Get("If-Match")) == "" {
+		writeAPIError(w, http.StatusPreconditionRequired, apiError{Code: "profile_preference_revision_required", Message: "If-Match is required"})
+		return
+	}
+	var req codexContextPreferenceWriteRequest
+	if err := decodeJSONBody(r, &req); err != nil {
+		writeAPIError(w, http.StatusBadRequest, apiError{Code: "invalid_request", Message: "failed to decode claude context preference", Details: err.Error()})
+		return
+	}
+	profileID := config.CanonicalClaudeProfileID(r.PathValue("id"))
+	if profileID == "" {
+		profileID = config.ClaudeDefaultProfileID
+	}
+	a.adminConfigMu.Lock()
+	loaded, err := a.loadAdminConfig()
+	if err == nil && !config.IsBuiltInClaudeProfileID(profileID) && config.IndexOfClaudeProfile(loaded.Config.Claude.Profiles, profileID) < 0 {
+		err = fmt.Errorf("claude_profile_not_found")
+	}
+	var preference state.ProfileContextPreference
+	currentETag := ""
+	if err == nil {
+		store, storeErr := a.profileContextPreferenceStore()
+		if storeErr != nil {
+			err = storeErr
+		} else {
+			current, _ := store.ClaudeCurrent(profileID)
+			preference = current
+			currentETag = current.ETag
+			var updated state.ProfileContextPreference
+			updated, _, err = store.UpdateClaude(profileID, req.Mode, r.Header.Get("If-Match"))
+			if err == nil {
+				preference = updated
+			}
+		}
+	}
+	a.adminConfigMu.Unlock()
+	if currentETag != "" {
+		w.Header().Set("ETag", currentETag)
+	}
+	if err != nil {
+		if errors.Is(err, profilecontextstate.ErrETagMismatch) {
+			writeAPIError(w, http.StatusPreconditionFailed, apiError{
+				Code: "profile_preference_revision_conflict", Message: "the preference changed; reload and retry",
+				Details: map[string]any{"contextPreference": preference},
+			})
+			return
+		}
+		writeClaudeContextPreferenceError(w, err)
+		return
+	}
+	w.Header().Set("ETag", preference.ETag)
+	writeJSON(w, http.StatusOK, claudeContextPreferenceResponse{ContextPreference: preference})
+}
+
+func (a *App) adminClaudeProfilesViewWithContextLocked(cfg config.AppConfig) ([]adminClaudeProfileView, error) {
+	store, err := a.profileContextPreferenceStore()
+	if err != nil {
+		return nil, err
+	}
+	profiles := config.ListClaudeProfiles(cfg)
+	views := make([]adminClaudeProfileView, 0, len(profiles))
+	for _, profile := range profiles {
+		preference, ok := store.ClaudeCurrent(profile.ID)
+		if !ok {
+			return nil, fmt.Errorf("claude profile context preference missing for %s", profile.ID)
+		}
+		view := adminClaudeProfileViewFromConfig(profile)
+		view.ContextPreference = preference
+		views = append(views, view)
+	}
+	return views, nil
+}
+
+func writeClaudeContextPreferenceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, profilecontextstate.ErrPreconditionRequired):
+		writeAPIError(w, http.StatusPreconditionRequired, apiError{Code: "profile_preference_revision_required", Message: "If-Match is required"})
+	case errors.Is(err, profilecontextstate.ErrETagMismatch):
+		writeAPIError(w, http.StatusPreconditionFailed, apiError{Code: "profile_preference_revision_conflict", Message: "the preference changed; reload and retry"})
+	case strings.Contains(err.Error(), "not_found"):
+		writeAPIError(w, http.StatusNotFound, apiError{Code: "claude_profile_not_found", Message: "claude profile not found"})
+	case strings.Contains(err.Error(), "unavailable"), strings.Contains(err.Error(), "degraded"):
+		writeAPIError(w, http.StatusServiceUnavailable, apiError{Code: "profile_catalog_degraded", Message: "profile context preferences are unavailable", Details: err.Error()})
+	case strings.Contains(err.Error(), "write_failed"), strings.Contains(err.Error(), "rollback failed"):
+		writeAPIError(w, http.StatusInternalServerError, apiError{Code: "profile_write_failed", Message: "failed to save profile context state", Details: err.Error()})
+	default:
+		writeAPIError(w, http.StatusBadRequest, apiError{Code: "invalid_context_preference", Message: "invalid profile context preference", Details: err.Error()})
+	}
 }
 
 func adminPersistedClaudeSettingsView(cfg config.AppConfig) adminClaudeSettingsView {

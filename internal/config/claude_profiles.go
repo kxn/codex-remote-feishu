@@ -86,6 +86,16 @@ func NormalizeClaudeReasoningEffort(value string) string {
 	}
 }
 
+func SplitClaudeExtendedContextSuffix(model string) (string, bool) {
+	model = strings.TrimSpace(model)
+	extended := false
+	for strings.HasSuffix(strings.ToLower(model), "[1m]") {
+		model = strings.TrimSpace(model[:len(model)-len("[1m]")])
+		extended = true
+	}
+	return model, extended
+}
+
 func CanonicalClaudeProfileID(value string) string {
 	value = strings.TrimSpace(strings.ToLower(value))
 	if value == "" {
