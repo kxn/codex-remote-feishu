@@ -380,6 +380,90 @@ func TestMultiGatewayControllerUpsertRestartsWorker(t *testing.T) {
 	waitFakeGatewayStopped(t, first)
 }
 
+func TestMultiGatewayControllerRemoveDrainsActiveGenerationActions(t *testing.T) {
+	controller := NewMultiGatewayController()
+	runtime := newFakeGatewayRuntime("app-1")
+	controller.newGateway = func(GatewayAppConfig) gatewayRuntime {
+		return runtime
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := controller.UpsertApp(ctx, GatewayAppConfig{
+		GatewayID: "app-1",
+		AppID:     "cli_app-1",
+		AppSecret: "secret_app-1",
+		Enabled:   true,
+	}); err != nil {
+		t.Fatalf("UpsertApp: %v", err)
+	}
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var (
+		handledMu sync.Mutex
+		handled   int
+	)
+	go func() {
+		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult {
+			handledMu.Lock()
+			handled++
+			current := handled
+			handledMu.Unlock()
+			if current == 1 {
+				close(entered)
+				<-release
+			}
+			return nil
+		})
+	}()
+	waitFakeGatewayStarted(t, runtime)
+
+	firstDone := make(chan struct{})
+	go func() {
+		runtime.dispatch(context.Background(), control.Action{GatewayID: "app-1"})
+		close(firstDone)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for active generation action")
+	}
+
+	removeDone := make(chan error, 1)
+	go func() {
+		removeDone <- controller.RemoveApp(context.Background(), "app-1")
+	}()
+	waitFakeGatewayStopped(t, runtime)
+	select {
+	case err := <-removeDone:
+		t.Fatalf("RemoveApp returned before active action drained: %v", err)
+	default:
+	}
+
+	runtime.dispatch(context.Background(), control.Action{GatewayID: "app-1"})
+	close(release)
+	select {
+	case <-firstDone:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for active action to finish")
+	}
+	select {
+	case err := <-removeDone:
+		if err != nil {
+			t.Fatalf("RemoveApp: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for RemoveApp")
+	}
+
+	handledMu.Lock()
+	defer handledMu.Unlock()
+	if handled != 1 {
+		t.Fatalf("handled actions = %d, want only the action admitted before removal", handled)
+	}
+}
+
 func TestMultiGatewayControllerStartsAndStopsPreviewMaintenance(t *testing.T) {
 	controller := NewMultiGatewayController()
 	runtime := newFakeGatewayRuntime("app-1")
@@ -458,6 +542,7 @@ type fakeGatewayRuntime struct {
 
 	mu               sync.Mutex
 	stateHook        func(GatewayState, error)
+	actionHandler    ActionHandler
 	applyCalls       [][]Operation
 	applyFn          func(context.Context, []Operation) error
 	sendIMFileCalls  []IMFileSendRequest
@@ -478,7 +563,10 @@ func newFakeGatewayRuntime(gatewayID string) *fakeGatewayRuntime {
 	}
 }
 
-func (f *fakeGatewayRuntime) Start(ctx context.Context, _ ActionHandler) error {
+func (f *fakeGatewayRuntime) Start(ctx context.Context, handler ActionHandler) error {
+	f.mu.Lock()
+	f.actionHandler = handler
+	f.mu.Unlock()
 	f.emitState(GatewayStateConnected, nil)
 	select {
 	case f.startedCh <- struct{}{}:
@@ -490,6 +578,16 @@ func (f *fakeGatewayRuntime) Start(ctx context.Context, _ ActionHandler) error {
 	default:
 	}
 	return nil
+}
+
+func (f *fakeGatewayRuntime) dispatch(ctx context.Context, action control.Action) *ActionResult {
+	f.mu.Lock()
+	handler := f.actionHandler
+	f.mu.Unlock()
+	if handler == nil {
+		return nil
+	}
+	return handler(ctx, action)
 }
 
 func (f *fakeGatewayRuntime) Apply(_ context.Context, operations []Operation) error {

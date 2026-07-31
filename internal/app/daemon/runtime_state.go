@@ -9,6 +9,7 @@ import (
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/claudeworkspaceprofile"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishubotidentity"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishuroomstate"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -61,6 +62,10 @@ type claudeWorkspaceProfileRuntimeState struct {
 
 type botCapabilitySettingsRuntimeState struct {
 	persistedStoreRuntimeState[*botcapabilitysettings.Store]
+}
+
+type feishuBotIdentityRuntimeState struct {
+	persistedStoreRuntimeState[*feishubotidentity.Store]
 }
 
 type feishuRoomRuntimeState struct {

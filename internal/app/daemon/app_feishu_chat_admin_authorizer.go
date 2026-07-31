@@ -85,3 +85,20 @@ func (a *feishuChatAdminAuthorizer) chatAdminChecker(cfg feishu.GatewayAppConfig
 	}
 	return checker
 }
+
+func (a *feishuChatAdminAuthorizer) purgeGateway(gatewayID string) {
+	if a == nil {
+		return
+	}
+	gatewayID = canonicalGatewayID(gatewayID)
+	if gatewayID == "" {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for key := range a.checkers {
+		if canonicalGatewayID(key.GatewayID) == gatewayID {
+			delete(a.checkers, key)
+		}
+	}
+}

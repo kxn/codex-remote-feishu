@@ -91,6 +91,7 @@ type App struct {
 	service             *orchestrator.Service
 	projector           *feishu.Projector
 	gateway             feishu.Gateway
+	feishuChatAdmins    *feishuChatAdminAuthorizer
 	finalBlockPreviewer previewpkg.FinalBlockPreviewService
 	relay               *relayws.Server
 	serverIdentity      agentproto.ServerIdentity
@@ -112,6 +113,7 @@ type App struct {
 	mu               sync.Mutex
 	shutdownMu       sync.Mutex
 	adminConfigMu    sync.Mutex
+	feishuApplyMu    sync.Mutex
 	listenMu         sync.Mutex
 	ingressRunMu     sync.Mutex
 	relayConnMu      sync.Mutex
@@ -143,6 +145,7 @@ type App struct {
 	daemonAsyncRuntime          daemonAsyncRuntimeState
 	cronRuntime                 cronRuntimeState
 	botCapabilitySettingsState  botCapabilitySettingsRuntimeState
+	feishuBotIdentityState      feishuBotIdentityRuntimeState
 	feishuRoomState             feishuRoomRuntimeState
 	claudeWorkspaceProfileState claudeWorkspaceProfileRuntimeState
 
@@ -196,6 +199,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		}, renderer.NewPlanner()),
 		projector:                   feishu.NewProjector(),
 		gateway:                     gateway,
+		feishuChatAdmins:            chatAdminAuthorizer,
 		serverIdentity:              serverIdentity,
 		daemonStartedAt:             daemonStartedAt,
 		daemonLifecycleID:           daemonLifecycleID(serverIdentity, daemonStartedAt),
@@ -324,6 +328,7 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.cronRuntime.repoManager = cronrepo.NewManager(cfg.Paths.StateDir)
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.configureFeishuBotIdentityStateLocked(cfg.Paths.StateDir)
 	a.configureBotCapabilitySettingsStateLocked(cfg.Paths.StateDir)
 	a.configureFeishuRoomStateLocked(cfg.Paths.StateDir)
 	a.configureClaudeWorkspaceProfileStateLocked(cfg.Paths.StateDir)

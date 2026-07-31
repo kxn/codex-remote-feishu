@@ -8,6 +8,8 @@ import (
 
 func (c *MultiGatewayController) UpsertApp(ctx context.Context, cfg GatewayAppConfig) error {
 	cfg = normalizeGatewayAppConfig(cfg)
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
 
 	c.mu.Lock()
 	worker := c.workers[cfg.GatewayID]
@@ -15,7 +17,12 @@ func (c *MultiGatewayController) UpsertApp(ctx context.Context, cfg GatewayAppCo
 		worker = &gatewayWorker{}
 		c.workers[cfg.GatewayID] = worker
 	}
-	c.stopWorkerLocked(worker)
+	gate := c.retireWorkerLocked(worker)
+	c.mu.Unlock()
+	gate.wait()
+
+	c.mu.Lock()
+	c.finishWorkerStopLocked(worker)
 	worker.config = cfg
 	worker.status = GatewayStatus{
 		GatewayID:      cfg.GatewayID,
@@ -47,14 +54,23 @@ func (c *MultiGatewayController) UpsertApp(ctx context.Context, cfg GatewayAppCo
 
 func (c *MultiGatewayController) RemoveApp(_ context.Context, gatewayID string) error {
 	gatewayID = normalizeGatewayID(gatewayID)
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	worker := c.workers[gatewayID]
 	if worker == nil {
+		c.mu.Unlock()
 		return nil
 	}
-	c.stopWorkerLocked(worker)
+	gate := c.retireWorkerLocked(worker)
+	c.mu.Unlock()
+	gate.wait()
+
+	c.mu.Lock()
+	c.finishWorkerStopLocked(worker)
 	delete(c.workers, gatewayID)
+	c.mu.Unlock()
 	return nil
 }
 

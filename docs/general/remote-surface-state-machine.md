@@ -130,6 +130,7 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
 18. 启动顺序先装载 durable room state，再装载 surface resume。旧 schema v1 只含 primary 时会原位升级；某个 room 尚无 durable workspace 且所有 surface resume 候选一致时，只在启动事务内补录一次并立即写入 room state。room 一旦有 durable workspace，surface resume 不再反向覆盖它。
 19. 同 room 的 surface resume 候选彼此不一致，或与 durable room workspace 不一致时，daemon 记录排序后的冲突诊断并在统一 ingress 入口阻断普通文本、`/list`、`/use` 与菜单回调，返回 `room_workspace_recovery_conflict`；不得按最新时间或当前 bot 静默任选 workspace。修复持久化状态并重启后退出该 fail-closed 状态。
 20. surface resume 在当前 surface 暂时无法生成 target 时，只能回退上一份与当前 effective workspace 一致的 target。管理员把 room workspace 从 A 切到 B 后，sibling surface 的 effective workspace 已由 room SSOT 变成 B；daemon 必须在同一持久化事务中丢弃 sibling 的旧 A target，再写入 room=B，避免一次合法切换在下次启动时制造伪恢复冲突。当前 surface 仍有明确 target 时不走这条 fallback，真实不一致仍由启动 conflict gate fail closed。
+21. `GatewayID` 只表示可复用配置槽位，committed AppID/generation 才表示当前 bot identity。AppID 替换或配置删除时，controller 会先关闭旧 gateway generation 的 action gate、取消事件源并等待已经进入的 action 排空；随后 daemon 在 identity store 写入 pending transition，并以可重放 identity transition 清掉该 gateway 的 surface、surface resume、bot capability、匹配的 room primary、claim/UI/turn/progress/permission、turn patch flow/transaction 等 bot-owned runtime。room workspace 继续保留；新 App 不会继承旧 surface、旧会话、旧 primary 或旧 `/bendtomywill` owner card。durable 清理或 identity commit 任一步失败时，新 runtime 不启动，后续 apply 继续重放同一 transition；即使配置改回旧 AppID 或同槽位重建同 AppID，也会先完成旧 generation 清理并提交新 generation。仅 AppSecret 变化不会触发该清理。
 
 ### 2.3 飞书私聊 surface identity 当前依赖 preferred actor id
 
@@ -1858,6 +1859,7 @@ retained-offline overlay 额外规则：
 41. **auto-restore 启动的 managed headless 已经连回，但 exact-thread 接管失败后，surface 仍保留 `PendingHeadless` 到启动超时，并且同一持久化目标的非目标元数据刷新会重置 daemon 侧失败节流，导致恢复失败提示反复刷屏**：已修复。当前连接后接管失败会立刻清掉本轮 pending、kill 这次拉起的 headless，并把缺 workspace/cwd 等接管失败归一到 `headless_restore_*` 恢复失败族；daemon 同步恢复运行态时只用真实恢复目标身份判断是否重置 backoff，标题/时间等非目标元数据刷新不会让同一 episode 重新投影；若同一 episode 已发过相同恢复失败，连接失败或后续 timeout 只保留状态转移和 kill，不再重复投递失败卡。
 42. **managed headless 连回时用全局 thread view 命中其它实例的同名 thread，导致 workspace/CWD 串用并误报 `workspace_busy`**：已修复。当前连接回调只使用当前实例上的 thread，并用 `PendingHeadless.WorkspaceKey/ThreadCWD` 覆盖缓存元数据；如果可见实例 attach 返回 busy/not-found notice，`TryAutoResumeHeadlessSurface` 会把它作为真正恢复失败返回给 daemon，而不是伪装成 `ThreadAttached`。
 43. **room workspace 恢复冲突进入 blocked state 后没有普通群命令自愈入口**：这是有意保留的 operator-recoverable degraded state，不是 attach/use 成功后的半死态。daemon 在任何 route/owner mutation 前 fail closed，向当前交互明确提示检查 daemon 日志、修复持久化状态并重启；`/list`、`/use` 或菜单 callback 不允许在多份冲突 workspace 中静默任选。修复并重启是当前唯一安全出口，冲突 workspace 明细只进入日志，不进入用户卡片。
+44. **同一 GatewayID 更换 AppID 后，新机器人继承旧 surface/会话或旧 primary**：已修复。bot identity transition 会在新 runtime 启动前排空旧 generation 并撤销旧 bot-owned durable/runtime state；room workspace 作为 room-owned durable fact 保留，因此新机器人首次进入该群仍能看到群工作区，但必须建立自己的 surface 与会话。transition 失败时 identity store 保留 pending 栅栏，新 runtime 不启动；后续即使改回旧 AppID 或同槽位重建同 AppID，也会作为新 generation 启动，不会进入半新半旧的可交互状态。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 
@@ -1898,6 +1900,7 @@ retained-offline overlay 额外规则：
 12. Feishu room workspace 切换是否仍只在真正 destructive workspace change 前触发，且当前 surface blocker、同 room unsafe blocker、管理员校验、sibling reset、最终 binding 写入保持同一顺序；普通同 workspace `/use` / session 选择不能调用管理员 API。
 13. room state v2 是否仍是 workspace/primary durable SSOT；surface resume 只能补录缺失 workspace 或提供冲突证据，不能覆盖已持久化 room workspace；冲突 room 的所有 ingress 入口必须继续 fail closed。
 14. room workspace 切换后，已 reset sibling 的旧 surface resume target 是否在同一次 sync 中被清掉；不得让 previous-target fallback 把旧 workspace 重新写回并在重启时制造伪冲突。
+15. GatewayID 槽位的 committed AppID 变化时，旧 gateway action generation 是否先关闭并排空，identity store 是否先写入 pending transition，旧 bot-owned state 是否在新 runtime upsert 前完成可重放清理；room workspace 必须保留，AppSecret-only 更新不得误清状态。清理失败后改回旧 AppID、删除失败后同槽位重建同 AppID，以及旧 turn patch flow/transaction 都必须覆盖在回归测试中。
 
 ## 11. 待讨论取舍
 

@@ -11,9 +11,11 @@ import (
 )
 
 func (c *MultiGatewayController) Start(ctx context.Context, handler ActionHandler) error {
+	c.lifecycleMu.Lock()
 	c.mu.Lock()
 	if c.started {
 		c.mu.Unlock()
+		c.lifecycleMu.Unlock()
 		return nil
 	}
 	c.started = true
@@ -27,14 +29,17 @@ func (c *MultiGatewayController) Start(ctx context.Context, handler ActionHandle
 		_ = c.ensureWorkerRunningLocked(gatewayID)
 		c.mu.Unlock()
 	}
+	c.lifecycleMu.Unlock()
 
 	<-ctx.Done()
+	c.lifecycleMu.Lock()
 	c.stopAllWorkers()
 	c.mu.Lock()
 	c.started = false
 	c.startCtx = nil
 	c.actionHandler = nil
 	c.mu.Unlock()
+	c.lifecycleMu.Unlock()
 	return nil
 }
 
@@ -232,7 +237,8 @@ func (c *MultiGatewayController) ensureWorkerRunningLocked(gatewayID string) err
 
 	workerCtx, cancel := context.WithCancel(c.startCtx)
 	worker.cancel = cancel
-	handler := c.actionHandler
+	worker.actionGate = newGatewayActionGate()
+	handler := worker.actionGate.handler(c.actionHandler)
 	go func(runtime gatewayRuntime, ctx context.Context) {
 		err := runtime.Start(ctx, handler)
 		if ctx.Err() != nil {
@@ -282,25 +288,47 @@ func (c *MultiGatewayController) updateWorkerError(gatewayID string, err error) 
 
 func (c *MultiGatewayController) stopAllWorkers() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	gates := make([]*gatewayActionGate, 0, len(c.workers))
 	for _, worker := range c.workers {
-		c.stopWorkerLocked(worker)
+		gates = append(gates, c.retireWorkerLocked(worker))
 	}
+	c.mu.Unlock()
+	for _, gate := range gates {
+		gate.wait()
+	}
+	c.mu.Lock()
+	for _, worker := range c.workers {
+		c.finishWorkerStopLocked(worker)
+	}
+	c.mu.Unlock()
 }
 
-func (c *MultiGatewayController) stopWorkerLocked(worker *gatewayWorker) {
+func (c *MultiGatewayController) retireWorkerLocked(worker *gatewayWorker) *gatewayActionGate {
 	if worker == nil {
-		return
+		return nil
 	}
+	gate := worker.actionGate
+	gate.close()
 	if worker.cancel != nil {
 		worker.cancel()
 		worker.cancel = nil
 	}
-	worker.runtime = nil
-	worker.previewer = nil
+	if worker.runtime != nil || gate != nil {
+		worker.generation++
+	}
 	if worker.config.Enabled {
 		worker.status.State = GatewayStateStopped
 	}
+	return gate
+}
+
+func (c *MultiGatewayController) finishWorkerStopLocked(worker *gatewayWorker) {
+	if worker == nil {
+		return
+	}
+	worker.runtime = nil
+	worker.previewer = nil
+	worker.actionGate = nil
 }
 
 func (c *MultiGatewayController) workerIDsLocked() []string {

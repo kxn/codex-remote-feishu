@@ -138,20 +138,65 @@ func (s *Store) Put(entry Entry) error {
 	if !ok {
 		return fmt.Errorf("surface resume entry requires surface id")
 	}
-	s.entries[normalized.SurfaceSessionID] = normalized
-	if canonical, changed := CanonicalizeEntries(s.entries); changed {
-		s.entries = canonical
-		s.dirty = true
+	entries := s.Entries()
+	entries[normalized.SurfaceSessionID] = normalized
+	if canonical, changed := CanonicalizeEntries(entries); changed {
+		entries = canonical
 	}
-	return s.Save()
+	return s.replaceEntries(entries)
 }
 
 func (s *Store) Delete(surfaceID string) error {
 	if s == nil {
 		return nil
 	}
-	delete(s.entries, strings.TrimSpace(surfaceID))
-	return s.Save()
+	entries := s.Entries()
+	delete(entries, strings.TrimSpace(surfaceID))
+	return s.replaceEntries(entries)
+}
+
+func (s *Store) ReplaceAll(entries map[string]Entry) error {
+	if s == nil {
+		return nil
+	}
+	normalizedEntries := make(map[string]Entry, len(entries))
+	for _, entry := range entries {
+		normalized, ok := NormalizeEntry(entry)
+		if !ok {
+			return fmt.Errorf("surface resume entry requires surface id")
+		}
+		normalizedEntries[normalized.SurfaceSessionID] = normalized
+	}
+	if canonical, changed := CanonicalizeEntries(normalizedEntries); changed {
+		normalizedEntries = canonical
+	}
+	return s.replaceEntries(normalizedEntries)
+}
+
+func (s *Store) replaceEntries(entries map[string]Entry) error {
+	if sameEntries(s.entries, entries) {
+		return nil
+	}
+	previous := s.entries
+	s.entries = entries
+	if err := s.Save(); err != nil {
+		s.entries = previous
+		return err
+	}
+	return nil
+}
+
+func sameEntries(left, right map[string]Entry) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftEntry := range left {
+		rightEntry, ok := right[key]
+		if !ok || !SameEntryContent(leftEntry, rightEntry) || !leftEntry.UpdatedAt.Equal(rightEntry.UpdatedAt) {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) Save() error {

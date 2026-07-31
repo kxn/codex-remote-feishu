@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -164,22 +165,73 @@ func (a *App) runtimeGatewayConfigFor(cfg config.AppConfig, gatewayID string) (f
 }
 
 func (a *App) applyRuntimeFeishuConfig(cfg config.AppConfig, gatewayID string) error {
+	a.feishuApplyMu.Lock()
+	defer a.feishuApplyMu.Unlock()
+
 	controller, err := a.gatewayController()
 	if err != nil {
 		return err
 	}
 	if runtimeCfg, ok := a.runtimeGatewayConfigFor(cfg, gatewayID); ok {
+		transition, err := a.planFeishuBotIdentityTransition(gatewayID, runtimeCfg.AppID)
+		if err != nil {
+			return err
+		}
+		if transition.Kind == feishuBotIdentityReplace {
+			if err := controller.RemoveApp(context.Background(), gatewayID); err != nil {
+				return err
+			}
+		}
+		if err := a.commitFeishuBotIdentityTransition(transition); err != nil {
+			return err
+		}
 		if err := controller.UpsertApp(context.Background(), runtimeCfg); err != nil {
 			return err
 		}
 		a.clearFeishuRuntimeApplyPending(gatewayID)
 		return nil
 	}
+	transition, err := a.planFeishuBotIdentityTransition(gatewayID, "")
+	if err != nil {
+		return err
+	}
 	if err := controller.RemoveApp(context.Background(), gatewayID); err != nil {
+		return err
+	}
+	if err := a.commitFeishuBotIdentityTransition(transition); err != nil {
 		return err
 	}
 	a.clearFeishuPermissionGaps(gatewayID)
 	a.clearFeishuRuntimeApplyPending(gatewayID)
+	return nil
+}
+
+func (a *App) applyRuntimeFeishuConfigs(cfg config.AppConfig) error {
+	gatewayIDs := map[string]bool{}
+	for _, runtimeCfg := range a.runtimeGatewayApps(cfg) {
+		if gatewayID := canonicalGatewayID(runtimeCfg.GatewayID); gatewayID != "" {
+			gatewayIDs[gatewayID] = true
+		}
+	}
+	a.mu.Lock()
+	if a.feishuBotIdentityState.store != nil {
+		for gatewayID := range a.feishuBotIdentityState.store.Entries() {
+			gatewayIDs[canonicalGatewayID(gatewayID)] = true
+		}
+	}
+	a.mu.Unlock()
+	ordered := make([]string, 0, len(gatewayIDs))
+	for gatewayID := range gatewayIDs {
+		if gatewayID != "" {
+			ordered = append(ordered, gatewayID)
+		}
+	}
+	sort.Strings(ordered)
+	for _, gatewayID := range ordered {
+		if err := a.applyRuntimeFeishuConfig(cfg, gatewayID); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -149,10 +149,8 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		EnvOverrideActive:    envOverrideActive,
 		EnvOverrideGatewayID: cfg.FeishuGatewayID,
 	})
-	for _, gatewayApp := range app.runtimeGatewayApps(loadedConfig.Config) {
-		if err := controller.UpsertApp(ctx, gatewayApp); err != nil {
-			return err
-		}
+	if err := app.applyRuntimeFeishuConfigs(loadedConfig.Config); err != nil {
+		return err
 	}
 	app.ConfigurePprof(pprofBindAddrForDebugSettings(loadedConfig.Config.Debug))
 	if cfg.DebugRelayRaw {

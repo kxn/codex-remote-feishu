@@ -10,6 +10,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 )
 
@@ -70,10 +71,12 @@ type gatewayWorker struct {
 	runtime    gatewayRuntime
 	previewer  gatewayPreviewRuntime
 	cancel     context.CancelFunc
+	actionGate *gatewayActionGate
 	generation uint64
 }
 
 type MultiGatewayController struct {
+	lifecycleMu         sync.Mutex
 	mu                  sync.RWMutex
 	workers             map[string]*gatewayWorker
 	started             bool
@@ -83,6 +86,64 @@ type MultiGatewayController struct {
 
 	newGateway   func(GatewayAppConfig) gatewayRuntime
 	newPreviewer func(gatewayRuntime, GatewayAppConfig) gatewayPreviewRuntime
+}
+
+type gatewayActionGate struct {
+	mu     sync.Mutex
+	cond   *sync.Cond
+	closed bool
+	active int
+}
+
+func newGatewayActionGate() *gatewayActionGate {
+	gate := &gatewayActionGate{}
+	gate.cond = sync.NewCond(&gate.mu)
+	return gate
+}
+
+func (g *gatewayActionGate) handler(next ActionHandler) ActionHandler {
+	if g == nil || next == nil {
+		return next
+	}
+	return func(ctx context.Context, action control.Action) *ActionResult {
+		g.mu.Lock()
+		if g.closed {
+			g.mu.Unlock()
+			return nil
+		}
+		g.active++
+		g.mu.Unlock()
+
+		defer func() {
+			g.mu.Lock()
+			g.active--
+			if g.active == 0 {
+				g.cond.Broadcast()
+			}
+			g.mu.Unlock()
+		}()
+		return next(ctx, action)
+	}
+}
+
+func (g *gatewayActionGate) close() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	g.closed = true
+	g.mu.Unlock()
+}
+
+func (g *gatewayActionGate) wait() {
+	if g == nil {
+		return
+	}
+	g.mu.Lock()
+	for g.active > 0 {
+		g.cond.Wait()
+	}
+	g.mu.Unlock()
 }
 
 func NewMultiGatewayController() *MultiGatewayController {

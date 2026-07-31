@@ -116,8 +116,50 @@ func (s *Store) Put(record state.BotCapabilitySettingsRecord) error {
 	if key == "" {
 		return fmt.Errorf("bot capability settings requires gateway id")
 	}
-	s.entries[key] = normalized
-	return s.Save()
+	entries := s.Entries()
+	entries[key] = normalized
+	return s.replaceEntries(entries)
+}
+
+func (s *Store) ReplaceAll(records []state.BotCapabilitySettingsRecord) error {
+	if s == nil {
+		return nil
+	}
+	entries := make(map[string]state.BotCapabilitySettingsRecord, len(records))
+	for _, record := range records {
+		normalized, ok := state.NormalizeBotCapabilitySettingsRecord(record)
+		if !ok {
+			return fmt.Errorf("bot capability settings requires gateway id")
+		}
+		entries[state.BotCapabilitySettingsKey(normalized.GatewayID)] = normalized
+	}
+	return s.replaceEntries(entries)
+}
+
+func (s *Store) replaceEntries(entries map[string]state.BotCapabilitySettingsRecord) error {
+	if sameEntries(s.entries, entries) {
+		return nil
+	}
+	previous := s.entries
+	s.entries = entries
+	if err := s.Save(); err != nil {
+		s.entries = previous
+		return err
+	}
+	return nil
+}
+
+func sameEntries(left, right map[string]state.BotCapabilitySettingsRecord) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftRecord := range left {
+		rightRecord, ok := right[key]
+		if !ok || leftRecord != rightRecord {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Store) Save() error {

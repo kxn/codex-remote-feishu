@@ -51,6 +51,18 @@ func turnRenderKey(instanceID, threadID, turnID string) string {
 	return instanceID + "\x00" + threadID + "\x00" + turnID
 }
 
+func (s *Service) clearItemBuffersForInstance(instanceID string) {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return
+	}
+	for key, buffer := range s.itemBuffers {
+		if buffer != nil && strings.TrimSpace(buffer.InstanceID) == instanceID {
+			delete(s.itemBuffers, key)
+		}
+	}
+}
+
 func threadStateForInstance(inst *state.InstanceRecord) string {
 	if !inst.Online {
 		return "offline"

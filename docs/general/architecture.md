@@ -270,11 +270,13 @@ Feishu surface identity 的跨层 contract 由零 adapter 依赖的 `internal/fe
 - `managedHeadlessRuntime` 负责 daemon 侧 managed headless 进程状态
 - `cronRuntime` 负责 cron state、active runs、exit targets、scheduler scan 与 bitable/repo runtime 依赖
 - `feishuRuntime` 负责 runtime-apply、permission gap refresh、onboarding 与 time-sensitive runtime
-- `persistedStoreRuntimeState[T]` 负责 surface resume、bot capability settings、Feishu room primary、Claude workspace profile 四个 durable JSON store 的统一载入状态与可写门禁
+- `persistedStoreRuntimeState[T]` 负责 surface resume、bot capability settings、Feishu room state、Feishu bot identity、Claude workspace profile 五个 durable JSON store 的统一载入状态与可写门禁
 
 这些 runtime 仍留在 `internal/app/daemon` 同包内，但状态拥有者、receiver 和顶层调度边界已经分开；`App` 主要保留 lifecycle、依赖注入、跨 runtime 编排，以及少量必须集中托管的共享资源。
 
-四个 durable JSON store 共享同一条 fail-closed load policy：文件不存在时得到 writable 空 store；成功载入时允许 materialize 和 sync；读取、JSON、schema version 或 dirty sanitation 保存失败时进入显式 read-only degraded。纯载入失败不会创建替代空 store、不会把虚假空状态 materialize 到 orchestrator，也不会清掉现有内存 recovery episode；已成功解码但 sanitation 保存失败时仍可读取和 materialize 规范化数据，但所有后续 sync 写入都会被统一门禁。修复状态文件后，下一次 runtime configure（通常是 daemon restart）会重新载入并退出 degraded。
+五个 durable JSON store 共享同一条 fail-closed load policy：文件不存在时得到 writable 空 store；成功载入时允许 materialize 和 sync；读取、JSON、schema version 或 dirty sanitation 保存失败时进入显式 read-only degraded。纯载入失败不会创建替代空 store、不会把虚假空状态 materialize 到 orchestrator，也不会清掉现有内存 recovery episode；已成功解码但 sanitation 保存失败时仍可读取和 materialize 规范化数据，但所有后续 sync 写入都会被统一门禁。修复状态文件后，下一次 runtime configure（通常是 daemon restart）会重新载入并退出 degraded。
+
+Feishu 多 gateway 的 identity 边界进一步区分两层事实：`GatewayID` 是可复用配置槽位，`feishu-bot-identities.json` 中已提交的 AppID/generation 才是该槽位当前 bot identity。startup、admin apply 与 retry 都必须在 runtime upsert 前经过同一个 identity reconcile owner。仅 AppSecret 变化时保留业务状态；AppID 替换或配置删除时，旧 gateway generation 会先停止接收新 action 并排空已进入的 action，再在 identity store 写入 pending transition，之后以可重放事务撤销旧 surface/resume、bot capability、匹配的 room primary 与相关内存 runtime，room workspace 不随 bot identity 删除。pending transition 是失败恢复栅栏：任一 durable 清理或 identity commit 失败时，新 App runtime 不得启动；即使后续配置改回旧 AppID 或同槽位重建同 AppID，也必须先完成清理并提交新 generation，下一次 apply 从仍未提交的 identity transition 重放。清理范围包括 daemon 侧 `/bendtomywill` turn patch flow/transaction，避免旧 owner card 或异步事务在新 bot identity 下继续投递。
 
 其中 daemon 自带的本地 Feishu tool listener 当前固定监听 `127.0.0.1:9502`，对外暴露的是 MCP-native streamable HTTP 协议面，而不再是仓库自定义 `manifest/call` 路由。它继续保留：
 

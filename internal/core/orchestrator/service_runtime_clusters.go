@@ -414,6 +414,68 @@ func (r *serviceTurnRuntime) forEachPendingSteer(fn func(string, *pendingSteerBi
 	}
 }
 
+func (r *serviceTurnRuntime) runtimeInstancesForSurface(surfaceID string) map[string]bool {
+	instances := map[string]bool{}
+	if r == nil {
+		return instances
+	}
+	surfaceID = strings.TrimSpace(surfaceID)
+	collect := func(instanceID, bindingSurfaceID string) {
+		instanceID = strings.TrimSpace(instanceID)
+		if instanceID != "" && strings.TrimSpace(bindingSurfaceID) == surfaceID {
+			instances[instanceID] = true
+		}
+	}
+	for instanceID, binding := range r.pendingRemote {
+		if binding != nil {
+			collect(firstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
+		}
+	}
+	for instanceID, binding := range r.activeRemote {
+		if binding != nil {
+			collect(firstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
+		}
+	}
+	for _, binding := range r.pendingSteers {
+		if binding != nil {
+			collect(binding.InstanceID, binding.SurfaceSessionID)
+		}
+	}
+	for instanceID, binding := range r.compactTurns {
+		if binding != nil {
+			collect(firstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
+		}
+	}
+	return instances
+}
+
+func (r *serviceTurnRuntime) purgeSurface(surfaceID string) {
+	if r == nil {
+		return
+	}
+	surfaceID = strings.TrimSpace(surfaceID)
+	for instanceID, binding := range r.pendingRemote {
+		if binding != nil && strings.TrimSpace(binding.SurfaceSessionID) == surfaceID {
+			delete(r.pendingRemote, instanceID)
+		}
+	}
+	for instanceID, binding := range r.activeRemote {
+		if binding != nil && strings.TrimSpace(binding.SurfaceSessionID) == surfaceID {
+			delete(r.activeRemote, instanceID)
+		}
+	}
+	for key, binding := range r.pendingSteers {
+		if binding != nil && strings.TrimSpace(binding.SurfaceSessionID) == surfaceID {
+			delete(r.pendingSteers, key)
+		}
+	}
+	for instanceID, binding := range r.compactTurns {
+		if binding != nil && strings.TrimSpace(binding.SurfaceSessionID) == surfaceID {
+			delete(r.compactTurns, instanceID)
+		}
+	}
+}
+
 type serviceProgressRuntime struct {
 	service             *Service
 	turnPlanSnapshots   map[string]*turnPlanSnapshotRecord
@@ -605,4 +667,48 @@ func (r *serviceProgressRuntime) isCompactTurn(instanceID, threadID, turnID stri
 		return false
 	}
 	return r.service.turns.isCompactTurn(instanceID, threadID, turnID)
+}
+
+func (r *serviceProgressRuntime) purgeSurface(surfaceID string, instanceIDs map[string]bool) {
+	if r == nil {
+		return
+	}
+	surfaceID = strings.TrimSpace(surfaceID)
+	for key, record := range r.mcpToolCallProgress {
+		if record != nil && strings.TrimSpace(record.SurfaceSessionID) == surfaceID {
+			delete(r.mcpToolCallProgress, key)
+		}
+	}
+	for key, record := range r.turnPlanSnapshots {
+		if record != nil && strings.TrimSpace(record.SurfaceSessionID) == surfaceID {
+			delete(r.turnPlanSnapshots, key)
+		}
+	}
+	for instanceID := range instanceIDs {
+		instanceID = strings.TrimSpace(instanceID)
+		if instanceID == "" {
+			continue
+		}
+		prefix := instanceID + "\x00"
+		for key := range r.pendingTurnText {
+			if strings.HasPrefix(key, prefix) {
+				delete(r.pendingTurnText, key)
+			}
+		}
+		for key := range r.pendingPlanProposal {
+			if strings.HasPrefix(key, prefix) {
+				delete(r.pendingPlanProposal, key)
+			}
+		}
+		for key := range r.turnFileChanges {
+			if strings.HasPrefix(key, prefix) {
+				delete(r.turnFileChanges, key)
+			}
+		}
+		for key := range r.turnDiffSnapshots {
+			if strings.HasPrefix(key, prefix) {
+				delete(r.turnDiffSnapshots, key)
+			}
+		}
+	}
 }

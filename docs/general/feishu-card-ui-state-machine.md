@@ -787,6 +787,12 @@ MCP request 卡片当前新增的可视语义：
 - old daemon card：直接拒绝并提示重开卡片
 - route / attach 上下文已变化但仍有稳定 owner anchor 的旧卡：优先主动 seal 成已失效态，而不是继续把“第一次再点旧卡才发现过期”留给用户
 
+### 6.4 bot identity generation 的 callback 边界
+
+`GatewayID` 是可复用配置槽位，不足以证明 callback 仍属于当前机器人。AppID 替换或配置删除时，controller 会先关闭旧 gateway generation 的 action gate、取消事件源，并等待已经进入统一 action handler 的 callback 排空；只有此后 daemon 才写入 pending identity transition、撤销旧 surface 与 UI/card runtime、提交新的 bot identity generation 并启动新 runtime。
+
+因此新 App 不会沿用同一 GatewayID 下旧机器人的 surface owner、card owner 或 callback runtime。旧 generation 在 gate 关闭后到达的 callback 会被拒绝进入业务 handler；已经进入的 callback 会先完成，再由 identity transition 统一清理其结果。pending transition 会在 durable 清理或 identity commit 失败时保留不可撤回的清理栅栏，后续即使配置改回旧 AppID，也必须先清掉旧 generation 的 card owner；`/bendtomywill` 的 turn patch flow/transaction 也属于这组 card runtime，不能在新 bot identity 下继续投递。这个边界与 `daemon_lifecycle_id` 互补：前者隔离同一 daemon 内的 bot identity 代次，后者隔离 daemon 重启代次。
+
 ## 7. 当前回归基线
 
 ### 7.1 当前关键实现文件
@@ -970,6 +976,10 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 old / old-card 生命周期分类，以及 reject detail 已按当前 UI intent / command 语义收束
 - [internal/app/daemon/app_feishu_room_state_test.go](../../internal/app/daemon/app_feishu_room_state_test.go)
   - 锁定 room workspace 恢复冲突在普通文本、`/list`、`/use` 与当前菜单回调前统一 fail closed；当前 callback 只 append 冲突 notice 并返回空同步结果，旧 lifecycle callback 则仍优先按 `old_card` 拒绝
+- [internal/adapter/feishu/controller_test.go](../../internal/adapter/feishu/controller_test.go)
+  - 锁定 gateway remove/upsert 会先关闭旧 action generation，拒绝随后到达的 callback，并等待已经进入 handler 的 callback 排空
+- [internal/app/daemon/admin_feishu_identity_test.go](../../internal/app/daemon/admin_feishu_identity_test.go)
+  - 锁定 AppID 替换会在新 runtime 启动前清理旧 surface/UI runtime 和 turn patch owner runtime，AppSecret-only 更新保留状态，durable 清理失败则保持 pending transition 可重放且不启动新 App；改回旧 AppID 或同槽位重建同 AppID 也会作为新 generation 启动
 - [internal/core/orchestrator/service_config_prompt_test.go](../../internal/core/orchestrator/service_config_prompt_test.go)
 - [internal/core/orchestrator/service_reply_auto_steer_test.go](../../internal/core/orchestrator/service_reply_auto_steer_test.go)
 - [internal/core/orchestrator/service_steer_all_test.go](../../internal/core/orchestrator/service_steer_all_test.go)
@@ -993,6 +1003,7 @@ MCP request 卡片当前新增的可视语义：
 8. request prompt / selection prompt / path picker / target picker 是否把产品状态机职责偷渡进 Feishu UI 层
 9. `/history` 的 owner-card runtime 与 history 业务态是否仍保持单一真相源，而不是重新长回两套 owner lifecycle
 10. route / attach 上下文变化后，workspace page / target picker / path picker / history / review picker 这类旧卡是否仍会留下“看似可点、第一次点才报过期”的假活状态
+11. AppID 替换或删除时，旧 gateway generation 的 callback 是否在旧 surface/UI runtime 清理前完成关闭与排空；identity pending transition 是否能挡住清理失败后的旧 AppID unchanged 启动；新 App 不得因复用 GatewayID 而继承旧 card owner 或 turn patch owner runtime
 
 ## 待讨论取舍
 

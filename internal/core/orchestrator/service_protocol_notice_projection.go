@@ -135,6 +135,21 @@ func (s *Service) clearActiveNoticePrefix(kind, surfaceID, instanceID, threadID,
 	}
 }
 
+func (s *Service) clearActiveNoticesForSurface(surfaceID string) {
+	surfaceID = strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(surfaceID)), " "))
+	if surfaceID == "" {
+		return
+	}
+	for key := range s.activeNoticeCooldowns {
+		for _, part := range strings.Split(key, "|") {
+			if part == surfaceID {
+				delete(s.activeNoticeCooldowns, key)
+				break
+			}
+		}
+	}
+}
+
 func activeNoticeCooldownKey(parts ...string) string {
 	normalized := make([]string, 0, len(parts))
 	for _, part := range parts {

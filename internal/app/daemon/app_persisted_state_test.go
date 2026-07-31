@@ -11,6 +11,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/claudeworkspaceprofile"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishubotidentity"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishuroomstate"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -387,6 +388,111 @@ func TestSurfaceResumeLoadFailurePreservesExistingRecoveryRuntime(t *testing.T) 
 
 	if got := app.surfaceResumeRuntime.recovery["surface-existing"]; got != recovery {
 		t.Fatalf("load failure replaced existing recovery runtime: got %#v, want %#v", got, recovery)
+	}
+}
+
+func TestFeishuBotIdentityLoadFailureBlocksTransitionAndPreservesOriginal(t *testing.T) {
+	t.Parallel()
+
+	failures := []struct {
+		name     string
+		original []byte
+	}{
+		{name: "broken JSON", original: []byte("{broken-json\n")},
+		{name: "unknown version", original: []byte("{\"version\":999,\"entries\":{}}\n")},
+	}
+	for _, failure := range failures {
+		failure := failure
+		t.Run(failure.name, func(t *testing.T) {
+			t.Parallel()
+			stateDir := t.TempDir()
+			path := feishubotidentity.StatePath(stateDir)
+			if err := os.WriteFile(path, failure.original, 0o600); err != nil {
+				t.Fatalf("write invalid identity state: %v", err)
+			}
+
+			app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+			app.mu.Lock()
+			app.configureFeishuBotIdentityStateLocked(stateDir)
+			runtime := app.feishuBotIdentityState.persistedStoreRuntimeState
+			app.mu.Unlock()
+			assertPersistedStateDegraded(t, persistedStateDiagnostic{
+				status:       runtime.status,
+				path:         runtime.path,
+				err:          runtime.diagnosticErr,
+				storePresent: runtime.store != nil,
+			}, path)
+
+			if _, err := app.planFeishuBotIdentityTransition("app-1", "cli_new"); err == nil {
+				t.Fatal("identity transition was allowed while state was degraded")
+			}
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("read identity state after blocked transition: %v", err)
+			}
+			if !bytes.Equal(got, failure.original) {
+				t.Fatalf("identity load failure was overwritten: got %q, want %q", got, failure.original)
+			}
+		})
+	}
+}
+
+func TestFeishuBotIdentityReloadRecoversAfterFileRepair(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := feishubotidentity.StatePath(stateDir)
+	if err := os.WriteFile(path, []byte("{broken-json\n"), 0o600); err != nil {
+		t.Fatalf("write broken identity state: %v", err)
+	}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.mu.Lock()
+	app.configureFeishuBotIdentityStateLocked(stateDir)
+	app.mu.Unlock()
+	if _, err := app.planFeishuBotIdentityTransition("app-1", "cli_current"); err == nil {
+		t.Fatal("identity transition was allowed before repair")
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("repair identity state: %v", err)
+	}
+	app.mu.Lock()
+	app.configureFeishuBotIdentityStateLocked(stateDir)
+	app.mu.Unlock()
+	transition, err := app.planFeishuBotIdentityTransition("app-1", "cli_current")
+	if err != nil {
+		t.Fatalf("plan identity transition after repair: %v", err)
+	}
+	if err := app.commitFeishuBotIdentityTransition(transition); err != nil {
+		t.Fatalf("commit identity transition after repair: %v", err)
+	}
+	identity, ok := app.feishuBotIdentityState.store.Get("app-1")
+	if !ok || identity.AppID != "cli_current" || identity.Generation != 1 {
+		t.Fatalf("identity after repair = %#v, present=%v", identity, ok)
+	}
+}
+
+func TestFeishuBotIdentityIOErrorIsExplicitlyDegraded(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := feishubotidentity.StatePath(stateDir)
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatalf("create directory at identity state path: %v", err)
+	}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.mu.Lock()
+	app.configureFeishuBotIdentityStateLocked(stateDir)
+	runtime := app.feishuBotIdentityState.persistedStoreRuntimeState
+	app.mu.Unlock()
+	assertPersistedStateDegraded(t, persistedStateDiagnostic{
+		status:       runtime.status,
+		path:         runtime.path,
+		err:          runtime.diagnosticErr,
+		storePresent: runtime.store != nil,
+	}, path)
+	if _, err := app.planFeishuBotIdentityTransition("app-1", "cli_current"); err == nil {
+		t.Fatal("identity transition was allowed after identity state I/O error")
 	}
 }
 
