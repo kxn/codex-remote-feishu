@@ -881,9 +881,9 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 
 ## 16. 重构后基线与实施计划
 
-### 16.1 `master@37cf4612` 的当前 owner 图
+### 16.1 `master@5675cf16` 的当前 owner 图
 
-本节记录 2026-07-31 大规模重构完成后的实现基线。它是执行索引，不改变 8.7 的稳定端口合同。
+本节记录 2026-07-31 大规模重构完成后的实现基线。发布前新增的 `5675cf16` 只统一 Feishu room/surface resume 的 workspace claim-key canonicalization，没有改变下表 owner、durable/进程内边界或迁移来源。该表是执行索引，不改变 8.7 的稳定端口合同。
 
 | 当前事实 | 当前 owner / carrier | 已具备能力 | 目标差距 |
 | --- | --- | --- | --- |
