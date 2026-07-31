@@ -100,7 +100,7 @@ func (a *App) reconcileFeishuRoomWorkspaceStateLocked(entries map[string]surface
 		if !ok || !ref.IsChat() {
 			continue
 		}
-		workspaceKey := state.ResolveWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
+		workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
 		roomID := state.FeishuRoomKey(ref.ScopeID)
 		if workspaceKey == "" || roomID == "" {
 			continue
@@ -126,7 +126,7 @@ func (a *App) reconcileFeishuRoomWorkspaceStateLocked(entries map[string]surface
 				a.recordFeishuRoomWorkspaceConflictLocked(roomID, roomCandidates)
 				continue
 			}
-			if _, matches := roomCandidates[state.NormalizeWorkspaceKey(record.WorkspaceKey)]; !matches {
+			if _, matches := roomCandidates[state.ResolveWorkspaceClaimKey(record.WorkspaceKey)]; !matches {
 				a.recordFeishuRoomWorkspaceConflictLocked(roomID, roomCandidates)
 			}
 			continue

@@ -82,6 +82,9 @@ func LoadStore(path string) (*Store, error) {
 		if strings.TrimSpace(key) != canonicalKey {
 			store.dirty = true
 		}
+		if !sameRecord(record, normalized) {
+			store.dirty = true
+		}
 		store.entries[canonicalKey] = normalized
 	}
 	return store, nil

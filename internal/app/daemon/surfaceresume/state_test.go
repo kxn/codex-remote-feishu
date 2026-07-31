@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func TestNormalizeEntryRepairsHeadlessWorkspaceOutsideThreadPath(t *testing.T) {
@@ -37,6 +39,38 @@ func TestNormalizeEntryPreservesHeadlessWorkspaceContainingThreadPath(t *testing
 	}
 	if entry.ResumeWorkspaceKey != "/data/projects/droid" {
 		t.Fatalf("expected containing workspace root to be retained, got %#v", entry)
+	}
+}
+
+func TestNormalizeEntryResolvesHeadlessWorkspaceClaimKey(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "real")
+	threadDir := filepath.Join(target, "pkg")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
+		t.Fatalf("mkdir thread dir: %v", err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+	threadCWD := filepath.Join(link, "pkg")
+
+	entry, ok := NormalizeEntry(Entry{
+		SurfaceSessionID:   "surface-1",
+		ProductMode:        "normal",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadCWD:    threadCWD,
+		ResumeWorkspaceKey: link,
+		ResumeHeadless:     true,
+	})
+	if !ok {
+		t.Fatal("expected normalized entry")
+	}
+	if want := state.ResolveWorkspaceClaimKey(threadCWD); entry.ResumeThreadCWD != want {
+		t.Fatalf("thread cwd = %q, want claim key %q", entry.ResumeThreadCWD, want)
+	}
+	if want := state.ResolveHeadlessResumeWorkspaceKey(link, threadCWD); entry.ResumeWorkspaceKey != want {
+		t.Fatalf("workspace key = %q, want headless resume key %q", entry.ResumeWorkspaceKey, want)
 	}
 }
 

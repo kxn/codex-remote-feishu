@@ -300,13 +300,13 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 	snapshot := a.service.SurfaceSnapshot(surface.SurfaceSessionID)
 	workspaceKey := ""
 	if snapshot != nil {
-		workspaceKey = state.ResolveWorkspaceKey(snapshot.WorkspaceKey)
+		workspaceKey = state.ResolveWorkspaceClaimKey(snapshot.WorkspaceKey)
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		target := surfaceResumeTarget{
 			ResumeInstanceID:   strings.TrimSpace(surface.AttachedInstanceID),
 			ResumeThreadID:     strings.TrimSpace(surface.SelectedThreadID),
-			ResumeWorkspaceKey: state.ResolveWorkspaceKey(workspaceKey, surface.ClaimedWorkspaceKey, surface.PreparedThreadCWD),
+			ResumeWorkspaceKey: state.ResolveWorkspaceClaimKey(workspaceKey, surface.ClaimedWorkspaceKey, surface.PreparedThreadCWD),
 			ResumeRouteMode:    strings.TrimSpace(string(surface.RouteMode)),
 		}
 		if snapshot != nil {
@@ -320,8 +320,11 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 			if inst := a.service.Instance(target.ResumeInstanceID); inst != nil {
 				if current := inst.Threads[target.ResumeThreadID]; current != nil {
 					thread = current
-					target.ResumeThreadCWD = state.ResolveWorkspaceKey(thread.CWD)
-					target.ResumeWorkspaceKey = state.ResolveWorkspaceKey(target.ResumeWorkspaceKey, thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
+					target.ResumeThreadCWD = state.ResolveWorkspaceClaimKey(thread.CWD)
+					target.ResumeWorkspaceKey = state.ResolveHeadlessResumeWorkspaceKey(
+						state.ResolveWorkspaceClaimKey(target.ResumeWorkspaceKey, thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot),
+						target.ResumeThreadCWD,
+					)
 				}
 			}
 			target.ResumeThreadTitle = threadtitle.StoredTitle(target.ResumeThreadTitle, threadtitle.Context{
@@ -338,7 +341,7 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 			if pending.PrepareNewThread {
 				routeMode = state.RouteModeNewThreadReady
 			}
-			if resumeWorkspaceKey := state.ResolveWorkspaceKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
+			if resumeWorkspaceKey := state.ResolveWorkspaceClaimKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
 				return surfaceResumeTarget{
 					ResumeWorkspaceKey: resumeWorkspaceKey,
 					ResumeRouteMode:    string(routeMode),
@@ -349,14 +352,14 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 		return surfaceResumeTarget{
 			ResumeThreadID:     strings.TrimSpace(pending.ThreadID),
 			ResumeThreadTitle:  strings.TrimSpace(pending.ThreadTitle),
-			ResumeThreadCWD:    state.ResolveWorkspaceKey(pending.ThreadCWD),
-			ResumeWorkspaceKey: state.ResolveWorkspaceKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD),
+			ResumeThreadCWD:    state.ResolveWorkspaceClaimKey(pending.ThreadCWD),
+			ResumeWorkspaceKey: state.ResolveHeadlessResumeWorkspaceKey(state.ResolveWorkspaceClaimKey(workspaceKey, pending.WorkspaceKey), pending.ThreadCWD),
 			ResumeRouteMode:    string(state.RouteModePinned),
 			ResumeHeadless:     true,
 		}, workspaceKey, true
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady {
-		workspaceKey = state.ResolveWorkspaceKey(workspaceKey, surface.PreparedThreadCWD)
+		workspaceKey = state.ResolveWorkspaceClaimKey(workspaceKey, surface.PreparedThreadCWD)
 		if workspaceKey != "" {
 			return surfaceResumeTarget{
 				ResumeWorkspaceKey: workspaceKey,
@@ -368,11 +371,11 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 }
 
 func previousSurfaceResumeTargetMatchesWorkspace(entry surfaceresume.Entry, effectiveWorkspaceKey string) bool {
-	effectiveWorkspaceKey = state.NormalizeWorkspaceKey(effectiveWorkspaceKey)
+	effectiveWorkspaceKey = state.ResolveWorkspaceClaimKey(effectiveWorkspaceKey)
 	if effectiveWorkspaceKey == "" || !surfaceResumeEntryNeedsRecovery(entry) {
 		return true
 	}
-	previousWorkspaceKey := state.ResolveWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
+	previousWorkspaceKey := state.ResolveHeadlessResumeWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
 	return previousWorkspaceKey != "" && previousWorkspaceKey == effectiveWorkspaceKey
 }
 
@@ -449,8 +452,8 @@ func sameSurfaceResumeRecoveryTarget(left, right surfaceresume.Entry) bool {
 			strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID)
 	case state.IsHeadlessProductMode(state.ProductMode(left.ProductMode)) && state.IsHeadlessProductMode(state.ProductMode(right.ProductMode)):
 		return strings.TrimSpace(left.ResumeThreadID) == strings.TrimSpace(right.ResumeThreadID) &&
-			state.NormalizeWorkspaceKey(left.ResumeThreadCWD) == state.NormalizeWorkspaceKey(right.ResumeThreadCWD) &&
-			state.NormalizeWorkspaceKey(left.ResumeWorkspaceKey) == state.NormalizeWorkspaceKey(right.ResumeWorkspaceKey)
+			state.ResolveWorkspaceClaimKey(left.ResumeThreadCWD) == state.ResolveWorkspaceClaimKey(right.ResumeThreadCWD) &&
+			state.ResolveHeadlessResumeWorkspaceKey(left.ResumeWorkspaceKey, left.ResumeThreadCWD) == state.ResolveHeadlessResumeWorkspaceKey(right.ResumeWorkspaceKey, right.ResumeThreadCWD)
 	default:
 		return false
 	}
@@ -459,7 +462,7 @@ func sameSurfaceResumeRecoveryTarget(left, right surfaceresume.Entry) bool {
 func surfaceResumeEntryNeedsRecovery(entry surfaceresume.Entry) bool {
 	switch {
 	case state.IsHeadlessProductMode(state.ProductMode(entry.ProductMode)):
-		return strings.TrimSpace(entry.ResumeThreadID) != "" || state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey) != ""
+		return strings.TrimSpace(entry.ResumeThreadID) != "" || state.ResolveWorkspaceClaimKey(entry.ResumeWorkspaceKey) != ""
 	case state.IsVSCodeProductMode(state.ProductMode(entry.ProductMode)):
 		return strings.TrimSpace(entry.ResumeInstanceID) != ""
 	default:

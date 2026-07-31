@@ -28,8 +28,15 @@ func ResolveWorkspaceKey(values ...string) string {
 	return ""
 }
 
-func ResolveWorkspaceClaimKey(value string) string {
-	return ResolveWorkspaceClaimKeyForGOOS(runtime.GOOS, value)
+func ResolveWorkspaceClaimKey(values ...string) string {
+	for _, value := range values {
+		raw := strings.TrimSpace(value)
+		if ResolveWorkspaceKey(raw) == "" {
+			continue
+		}
+		return ResolveWorkspaceClaimKeyForGOOS(runtime.GOOS, raw)
+	}
+	return ""
 }
 
 func ResolveWorkspaceClaimKeyForGOOS(goos, value string) string {

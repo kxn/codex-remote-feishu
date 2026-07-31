@@ -27,7 +27,7 @@ func NormalizeFeishuRoomStateRecord(record FeishuRoomStateRecord) (FeishuRoomSta
 	}
 	record.PrimaryGatewayID = strings.TrimSpace(record.PrimaryGatewayID)
 	record.PrimaryUpdatedBy = strings.TrimSpace(record.PrimaryUpdatedBy)
-	record.WorkspaceKey = NormalizeWorkspaceKey(record.WorkspaceKey)
+	record.WorkspaceKey = ResolveWorkspaceClaimKey(record.WorkspaceKey)
 	record.WorkspaceUpdatedBy = strings.TrimSpace(record.WorkspaceUpdatedBy)
 	if record.WorkspaceResetGeneration < 0 {
 		record.WorkspaceResetGeneration = 0

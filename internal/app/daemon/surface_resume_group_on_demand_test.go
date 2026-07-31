@@ -366,8 +366,9 @@ func TestFeishuGroupOnDemandTextWithFilesReturnsRecoveryPrompt(t *testing.T) {
 		ResumeHeadless:     true,
 	})
 	app := newRestoreHintTestApp(stateDir)
+	startHeadlessCalls := 0
 	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
-		t.Fatal("text with files must not start on-demand headless recovery")
+		startHeadlessCalls++
 		return 0, nil
 	}
 
@@ -388,6 +389,9 @@ func TestFeishuGroupOnDemandTextWithFilesReturnsRecoveryPrompt(t *testing.T) {
 
 	if snapshot := app.service.SurfaceSnapshot("feishu:app-1:chat:oc_room"); snapshot == nil || snapshot.PendingHeadless.InstanceID != "" {
 		t.Fatalf("expected text with files to avoid pending headless, got %#v", snapshot)
+	}
+	if startHeadlessCalls != 0 {
+		t.Fatalf("text with files must not start on-demand headless recovery, got %d calls", startHeadlessCalls)
 	}
 	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
 		t.Fatalf("expected no continuation for text with files, got %#v", continuation)
@@ -412,8 +416,9 @@ func TestFeishuGroupOnDemandVSCodeReturnsUnsupportedPrompt(t *testing.T) {
 		ResumeInstanceID: "inst-vscode-1",
 	})
 	app := newRestoreHintTestApp(stateDir)
+	startHeadlessCalls := 0
 	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
-		t.Fatal("VS Code group on-demand recovery must not start headless")
+		startHeadlessCalls++
 		return 0, nil
 	}
 
@@ -429,6 +434,9 @@ func TestFeishuGroupOnDemandVSCodeReturnsUnsupportedPrompt(t *testing.T) {
 
 	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
 		t.Fatalf("expected no VS Code continuation, got %#v", continuation)
+	}
+	if startHeadlessCalls != 0 {
+		t.Fatalf("VS Code group on-demand recovery must not start headless, got %d calls", startHeadlessCalls)
 	}
 	gateway := app.gateway.(*recordingGateway)
 	if len(gateway.operations) != 1 || gateway.operations[0].CardTitle != "当前群暂不能自动恢复 VS Code" {

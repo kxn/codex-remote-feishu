@@ -267,8 +267,8 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.PlanMode = ""
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
 	entry.ResumeThreadID = strings.TrimSpace(entry.ResumeThreadID)
-	entry.ResumeThreadCWD = state.NormalizeWorkspaceKey(entry.ResumeThreadCWD)
-	entry.ResumeWorkspaceKey = state.NormalizeWorkspaceKey(entry.ResumeWorkspaceKey)
+	entry.ResumeThreadCWD = state.ResolveWorkspaceClaimKey(entry.ResumeThreadCWD)
+	entry.ResumeWorkspaceKey = state.ResolveWorkspaceClaimKey(entry.ResumeWorkspaceKey)
 	entry.ResumeThreadTitle = threadtitle.NormalizeStoredInput(entry.ResumeThreadTitle, threadtitle.Context{
 		ThreadID:     entry.ResumeThreadID,
 		ThreadCWD:    entry.ResumeThreadCWD,
@@ -282,7 +282,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 		entry.ResumeHeadless = false
 	}
 	if entry.ResumeHeadless {
-		entry.ResumeWorkspaceKey = normalizeHeadlessResumeWorkspace(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
+		entry.ResumeWorkspaceKey = state.ResolveHeadlessResumeWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
 	}
 	if entry.SurfaceSessionID == "" {
 		return Entry{}, false
@@ -291,20 +291,6 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 		entry.UpdatedAt = entry.UpdatedAt.UTC()
 	}
 	return entry, true
-}
-
-func normalizeHeadlessResumeWorkspace(workspaceKey, threadCWD string) string {
-	workspaceKey = state.NormalizeWorkspaceKey(workspaceKey)
-	threadCWD = state.NormalizeWorkspaceKey(threadCWD)
-	if workspaceKey == "" || threadCWD == "" {
-		return state.ResolveWorkspaceKey(workspaceKey, threadCWD)
-	}
-	relative, err := filepath.Rel(workspaceKey, threadCWD)
-	if err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return workspaceKey
-	}
-	// Headless exact-thread restore is owned by the selected thread path.
-	return threadCWD
 }
 
 func SameEntryContent(left, right Entry) bool {
@@ -321,8 +307,8 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID) &&
 		strings.TrimSpace(left.ResumeThreadID) == strings.TrimSpace(right.ResumeThreadID) &&
 		strings.TrimSpace(left.ResumeThreadTitle) == strings.TrimSpace(right.ResumeThreadTitle) &&
-		state.NormalizeWorkspaceKey(left.ResumeThreadCWD) == state.NormalizeWorkspaceKey(right.ResumeThreadCWD) &&
-		state.NormalizeWorkspaceKey(left.ResumeWorkspaceKey) == state.NormalizeWorkspaceKey(right.ResumeWorkspaceKey) &&
+		strings.TrimSpace(left.ResumeThreadCWD) == strings.TrimSpace(right.ResumeThreadCWD) &&
+		strings.TrimSpace(left.ResumeWorkspaceKey) == strings.TrimSpace(right.ResumeWorkspaceKey) &&
 		strings.TrimSpace(left.ResumeRouteMode) == strings.TrimSpace(right.ResumeRouteMode) &&
 		left.ResumeHeadless == right.ResumeHeadless
 }

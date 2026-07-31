@@ -1,6 +1,8 @@
 package state
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -22,6 +24,30 @@ func TestNormalizeFeishuRoomStateRecord(t *testing.T) {
 	}
 	if record.PrimaryUpdatedBy != "ou_user" || !record.PrimaryUpdatedAt.Equal(updatedAt.UTC()) {
 		t.Fatalf("metadata = %#v, want UTC-normalized update metadata", record)
+	}
+}
+
+func TestNormalizeFeishuRoomStateRecordResolvesWorkspaceClaimKey(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "real")
+	if err := os.Mkdir(target, 0o755); err != nil {
+		t.Fatalf("mkdir target: %v", err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	record, ok := NormalizeFeishuRoomStateRecord(FeishuRoomStateRecord{
+		RoomID:       "feishu:chat:oc_room",
+		ChatID:       "oc_room",
+		WorkspaceKey: filepath.Join(link, "."),
+	})
+	if !ok {
+		t.Fatal("expected valid room workspace record")
+	}
+	if want := ResolveWorkspaceClaimKey(link); record.WorkspaceKey != want {
+		t.Fatalf("workspace key = %q, want claim key %q", record.WorkspaceKey, want)
 	}
 }
 
