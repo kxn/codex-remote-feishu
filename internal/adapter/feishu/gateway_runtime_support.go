@@ -10,6 +10,7 @@ import (
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 )
 
 func gatewayDispatcher(handler ActionHandler) gatewaypkg.ActionDispatcher {
@@ -87,14 +88,39 @@ func (g *LiveGateway) lookupSurfaceMessage(messageID string) string {
 	return strings.TrimSpace(g.messages[messageID])
 }
 
-func (g *LiveGateway) surfaceForCardAction(messageID, chatID, operatorID string) string {
+func (g *LiveGateway) surfaceForCardAction(lookup gatewaypkg.CardActionSurfaceLookup) string {
 	if g == nil {
 		return ""
 	}
-	if surfaceID := g.lookupSurfaceMessage(messageID); surfaceID != "" {
+	if surfaceID := g.lookupSurfaceMessage(lookup.MessageID); surfaceID != "" {
 		return surfaceID
 	}
-	return gatewaypkg.SurfaceIDForInbound(g.config.GatewayID, chatID, "", operatorID)
+	return trustedPayloadSurfaceForCardAction(
+		g.config.GatewayID,
+		lookup.PayloadSurfaceSessionID,
+		lookup.ChatID,
+		lookup.OperatorID,
+	)
+}
+
+func trustedPayloadSurfaceForCardAction(gatewayID, surfaceSessionID, chatID, operatorID string) string {
+	ref, ok := feishuidentity.ParseSurfaceRef(surfaceSessionID)
+	if !ok || ref.GatewayID != normalizeGatewayID(gatewayID) {
+		return ""
+	}
+	switch {
+	case ref.IsUser():
+		if ref.ScopeID != strings.TrimSpace(operatorID) {
+			return ""
+		}
+	case ref.IsChat():
+		if ref.ScopeID != strings.TrimSpace(chatID) {
+			return ""
+		}
+	default:
+		return ""
+	}
+	return ref.SurfaceID()
 }
 
 func (g *LiveGateway) deliverAsyncInboundFailure(ctx context.Context, surfaceID, chatID, actorUserID, replyToMessageID, body string) {

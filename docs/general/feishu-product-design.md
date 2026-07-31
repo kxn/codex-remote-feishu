@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-05-04`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron`、结构化计划更新与共享过程卡的产品语义；其中 `autocontinue` 现由 orchestrator 本地 codex/gateway error-family policy 驱动，不再直接依赖 upstream `willRetry`。
+> Updated: `2026-07-31`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron`、结构化计划更新、共享过程卡与 callback surface carrier 的产品语义；其中 `autocontinue` 现由 orchestrator 本地 codex/gateway error-family policy 驱动，不再直接依赖 upstream `willRetry`。
 
 ## 1. 文档定位
 
@@ -32,11 +32,13 @@
 卡片回调还有一个额外规则：
 
 - 若 callback 带着 `open_message_id`，会先回查该消息已记录的 `surfaceSessionId`
-- 只有当消息没有命中已记录 surface 时，才回退到 callback 自带的 operator id 重新推导 surface
+- 当消息没有命中已记录 surface 时，只接受卡片 payload 中由 adapter render 层写入的可信 `surface_session_id`
+- `surface_session_id` 必须匹配当前 gateway；`user` scope 必须匹配 callback operator preferred actor id，`chat` scope 必须匹配 callback context open_chat_id
+- 如果消息映射和可信 `surface_session_id` 都不存在，callback 直接 fail closed，不再用 operator/chat 重新推导新 surface
 
-这样可以避免同一个私聊用户在“文本消息 / 菜单 / 卡片按钮”之间因为拿到的飞书 id 类型不同而裂成两个 surface。
+这样可以避免同一个私聊用户在“文本消息 / 菜单 / 卡片按钮”之间因为拿到的飞书 id 类型不同而裂成两个 surface，也避免 gateway runtime hot rebuild 后把私聊卡误猜成群聊 surface。
 
-这个规则定义在 [gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go) 的 `surfaceIDForInbound()`、`surfaceForCardAction()` 与相关 user-id 解析函数中。
+这个规则定义在 [gateway/routing.go](../../internal/adapter/feishu/gateway/routing.go)、[gateway_runtime_support.go](../../internal/adapter/feishu/gateway_runtime_support.go) 与相关 user-id 解析函数中。
 
 ## 3. 当前支持的飞书入口
 

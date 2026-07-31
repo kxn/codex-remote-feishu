@@ -227,6 +227,8 @@ Feishu 平台适配层，负责：
 
 Feishu surface identity 的跨层 contract 由零 adapter 依赖的 `internal/feishuidentity` 单独持有。gateway、preview、daemon、state 和 orchestrator 都复用同一套四段式 `feishu:<gatewayID>:<user|chat>:<scopeID>` build / parse / validate；未知 scope 或额外分段会直接拒绝，不再由各层维护 parser 或搜索字符串片段。
 
+卡片 callback 的 surface identity 当前不再依赖 gateway runtime-local `message_id -> surface` map 这一单点状态。gateway 仍优先用已记录消息映射恢复原 surface；runtime hot rebuild 后若映射缺失，则只接受最终卡片 payload 中由 adapter render 层写入的 `surface_session_id`，并校验 gateway 与 actor/chat 一致；无法证明的 callback fail closed，不再用 `open_chat_id + operator` 猜测新 surface。
+
 当前普通飞书入站的 ACK 边界已经前移：
 
 - 轻量 command / menu / 非同步回包 card action：尽早 ACK

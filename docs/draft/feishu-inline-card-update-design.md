@@ -1,7 +1,7 @@
 # Feishu 卡片原地更新设计
 
 > Type: `draft`
-> Updated: `2026-04-11`
+> Updated: `2026-07-31`
 > Summary: 盘点当前 Feishu 卡片交互，明确哪些适合改成点击后原地更新，并给出推荐链路与分阶段落地方案。
 
 ## 1. 文档定位
@@ -144,7 +144,7 @@
 
 - [internal/core/orchestrator/service_surface.go](../../internal/core/orchestrator/service_surface.go)
 - [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
-- [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
+- [internal/adapter/feishu/gateway/routing.go](../../internal/adapter/feishu/gateway/routing.go)
 
 当前属于这一类的卡片包括：
 

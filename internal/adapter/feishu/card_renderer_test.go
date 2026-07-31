@@ -123,6 +123,122 @@ func TestRenderOperationCardV2EnvelopeFromOperationFieldsPreservesNativeV2Intera
 	}
 }
 
+func TestRenderOperationCardStampsCallbackSurfaceSessionID(t *testing.T) {
+	operation := Operation{
+		Kind:             OperationSendCard,
+		SurfaceSessionID: "feishu:app-1:user:user-1",
+		CardTitle:        "命令菜单",
+		CardElements: []map[string]any{
+			cardCallbackButtonElement("工作区", "default", map[string]any{
+				"kind": "show_all_workspaces",
+			}, false, ""),
+		},
+	}
+
+	payload := renderOperationCard(operation, operation.effectiveCardEnvelope())
+	body, _ := payload["body"].(map[string]any)
+	elements, _ := body["elements"].([]map[string]any)
+	value := renderedButtonCallbackValue(t, elements[0])
+	if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
+		t.Fatalf("expected callback surface stamp, got %#v", value)
+	}
+}
+
+func TestRenderOperationCardStampsLegacyButtonCallbackSurfaceSessionID(t *testing.T) {
+	operation := Operation{
+		Kind:             OperationSendCard,
+		SurfaceSessionID: "feishu:app-1:chat:oc_1",
+		CardTitle:        "旧卡",
+		CardElements: []map[string]any{{
+			"tag": "action",
+			"actions": []map[string]any{{
+				"tag": "button",
+				"text": map[string]any{
+					"tag":     "plain_text",
+					"content": "继续",
+				},
+				"value": map[string]any{
+					"kind": "show_threads",
+				},
+			}},
+		}},
+	}
+
+	payload := renderOperationCard(operation, operation.effectiveCardEnvelope())
+	body, _ := payload["body"].(map[string]any)
+	elements, _ := body["elements"].([]map[string]any)
+	actions, _ := elements[0]["actions"].([]map[string]any)
+	value, _ := actions[0]["value"].(map[string]any)
+	if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:chat:oc_1" {
+		t.Fatalf("expected legacy callback surface stamp, got %#v", value)
+	}
+}
+
+func TestRenderOperationCardStampsCallbackSurfaceSessionIDInAnySliceBehaviors(t *testing.T) {
+	operation := Operation{
+		Kind:             OperationSendCard,
+		SurfaceSessionID: "feishu:app-1:user:user-1",
+		CardTitle:        "raw",
+		CardElements: []map[string]any{{
+			"tag": "button",
+			"behaviors": []any{
+				map[string]any{
+					"type": "callback",
+					"value": map[string]any{
+						"kind": "show_all_workspaces",
+					},
+				},
+			},
+		}},
+	}
+
+	payload := renderOperationCard(operation, operation.effectiveCardEnvelope())
+	body, _ := payload["body"].(map[string]any)
+	elements, _ := body["elements"].([]map[string]any)
+	behaviors, _ := elements[0]["behaviors"].([]any)
+	behavior, _ := behaviors[0].(map[string]any)
+	value, _ := behavior["value"].(map[string]any)
+	if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
+		t.Fatalf("expected callback surface stamp, got %#v", value)
+	}
+}
+
+func TestRenderOperationCardStampsEveryCallbackBehaviorSurfaceSessionID(t *testing.T) {
+	operation := Operation{
+		Kind:             OperationSendCard,
+		SurfaceSessionID: "feishu:app-1:user:user-1",
+		CardTitle:        "raw",
+		CardElements: []map[string]any{{
+			"tag": "button",
+			"behaviors": []map[string]any{
+				{
+					"type": "callback",
+					"value": map[string]any{
+						"kind": "show_all_workspaces",
+					},
+				},
+				{
+					"type": "callback",
+					"value": map[string]any{
+						"kind": "show_recent_workspaces",
+					},
+				},
+			},
+		}},
+	}
+
+	payload := renderOperationCard(operation, operation.effectiveCardEnvelope())
+	body, _ := payload["body"].(map[string]any)
+	elements, _ := body["elements"].([]map[string]any)
+	behaviors, _ := elements[0]["behaviors"].([]map[string]any)
+	for i, behavior := range behaviors {
+		value, _ := behavior["value"].(map[string]any)
+		if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
+			t.Fatalf("expected callback behavior %d surface stamp, got %#v", i, value)
+		}
+	}
+}
+
 func TestRenderOperationCardPrefersStructuredDocument(t *testing.T) {
 	payload := renderOperationCard(Operation{
 		Kind:         OperationSendCard,

@@ -34,6 +34,7 @@ const (
 	CardActionPayloadKeyEntryName             = "entry_name"
 	CardActionPayloadKeyTargetValue           = "target_value"
 	CardActionPayloadKeyDaemonLifecycleID     = "daemon_lifecycle_id"
+	CardActionPayloadKeySurfaceSessionID      = "surface_session_id"
 	CardPathPickerDirectorySelectFieldName    = "path_picker_directory"
 	CardPathPickerFileSelectFieldName         = "path_picker_file"
 	CardTargetPickerWorkspaceFieldName        = "target_picker_workspace"

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 type cardEnvelopeVersion string
@@ -112,7 +113,10 @@ func renderOperationCard(operation Operation, version cardEnvelopeVersion) map[s
 	if doc == nil {
 		return nil
 	}
-	return renderCardDocument(doc, version, operation.CardUpdateMulti)
+	return stampRenderedCardCallbackSurface(
+		renderCardDocument(doc, version, operation.CardUpdateMulti),
+		operation.SurfaceSessionID,
+	)
 }
 
 func (operation Operation) effectiveCardEnvelope() cardEnvelopeVersion {
@@ -163,6 +167,76 @@ func renderCardDocument(doc *cardDocument, version cardEnvelopeVersion, updateMu
 			"elements": elements,
 		},
 	}
+}
+
+func stampRenderedCardCallbackSurface(payload map[string]any, surfaceSessionID string) map[string]any {
+	surfaceSessionID = strings.TrimSpace(surfaceSessionID)
+	if len(payload) == 0 || surfaceSessionID == "" {
+		return payload
+	}
+	stampCardCallbackValue(payload, surfaceSessionID)
+	return payload
+}
+
+func stampCardCallbackValue(value any, surfaceSessionID string) {
+	switch typed := value.(type) {
+	case map[string]any:
+		stampCallbackBehaviorValues(typed, surfaceSessionID)
+		if callbackValue := legacyButtonCallbackValue(typed); callbackValue != nil {
+			callbackValue[frontstagecontract.CardActionPayloadKeySurfaceSessionID] = surfaceSessionID
+		}
+		for _, raw := range typed {
+			stampCardCallbackValue(raw, surfaceSessionID)
+		}
+	case []map[string]any:
+		for _, item := range typed {
+			stampCardCallbackValue(item, surfaceSessionID)
+		}
+	case []any:
+		for _, item := range typed {
+			stampCardCallbackValue(item, surfaceSessionID)
+		}
+	}
+}
+
+func stampCallbackBehaviorValues(element map[string]any, surfaceSessionID string) {
+	switch behaviors := element["behaviors"].(type) {
+	case []map[string]any:
+		for _, behavior := range behaviors {
+			if value := callbackValueFromBehavior(behavior); value != nil {
+				value[frontstagecontract.CardActionPayloadKeySurfaceSessionID] = surfaceSessionID
+			}
+		}
+	case []any:
+		for _, raw := range behaviors {
+			behavior, _ := raw.(map[string]any)
+			if value := callbackValueFromBehavior(behavior); value != nil {
+				value[frontstagecontract.CardActionPayloadKeySurfaceSessionID] = surfaceSessionID
+			}
+		}
+	}
+}
+
+func callbackValueFromBehavior(behavior map[string]any) map[string]any {
+	if behavior["type"] != "callback" {
+		return nil
+	}
+	value, _ := behavior["value"].(map[string]any)
+	if len(value) == 0 {
+		return nil
+	}
+	return value
+}
+
+func legacyButtonCallbackValue(element map[string]any) map[string]any {
+	if tag, _ := element["tag"].(string); tag != "button" {
+		return nil
+	}
+	value, _ := element["value"].(map[string]any)
+	if len(value) == 0 {
+		return nil
+	}
+	return value
 }
 
 func InvalidateOperationCard(operation *Operation) {

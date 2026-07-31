@@ -11,7 +11,14 @@ import (
 
 type RoutingEnv struct {
 	GatewayID            string
-	SurfaceForCardAction func(messageID, chatID, operatorID string) string
+	SurfaceForCardAction func(CardActionSurfaceLookup) string
+}
+
+type CardActionSurfaceLookup struct {
+	MessageID               string
+	PayloadSurfaceSessionID string
+	ChatID                  string
+	OperatorID              string
 }
 
 type QuotedMessageInputs struct {

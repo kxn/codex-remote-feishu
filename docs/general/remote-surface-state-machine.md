@@ -41,7 +41,7 @@
 15. [internal/core/orchestrator/service_overlay_runtime.go](../../internal/core/orchestrator/service_overlay_runtime.go)
 16. [internal/core/orchestrator/service_recovery.go](../../internal/core/orchestrator/service_recovery.go)
 16. [internal/codexstate/sqlite_threads.go](../../internal/codexstate/sqlite_threads.go)
-17. [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
+17. [internal/adapter/feishu/gateway/routing.go](../../internal/adapter/feishu/gateway/routing.go)
 18. [internal/adapter/feishu/gateway.go](../../internal/adapter/feishu/gateway.go)
 19. [internal/adapter/feishu/gateway_runtime.go](../../internal/adapter/feishu/gateway_runtime.go)
 20. [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
@@ -142,7 +142,7 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
    2. `user_id`
    3. `union_id`
 3. 文本消息、bot menu、reaction actor、卡片 callback operator 都必须遵守同一优先级。
-4. 卡片 callback 还必须先尝试通过 `open_message_id -> 已记录的 surfaceSessionId` 回到原 surface；只有消息查不到时，才允许回退到 callback 自带 operator id 推导 surface。
+4. 卡片 callback 还必须先尝试通过 `open_message_id -> 已记录的 surfaceSessionId` 回到原 surface；消息查不到时，只接受卡片 payload 中可信的 `surface_session_id` carrier。该 carrier 必须匹配当前 gateway，且 `user` scope 要匹配 callback operator preferred actor id、`chat` scope 要匹配 callback context open_chat_id；仍无法证明时直接 fail closed，不再回退到 operator/chat 推导新 surface。
 
 这个规则是当前状态机正确性的前置条件之一。否则同一个飞书私聊用户可能被裂成两个 surface：
 

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-07-31`
-> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；bare `/model` 的下拉候选现在只来自当前 Codex instance 的动态 `model/list` 缓存，无缓存/旧 app-server/刷新失败时只保留手动输入；Codex/VS Code 下 bare `/reasoning` 现在以当前模型的动态 `supportedReasoningEfforts` 投影快捷项，目录不可校验时只保留自动并给出说明，不再展示全局硬编码推理档位；Feishu 群聊菜单会隐藏 bot 能力设置项，手输或卡片回调尝试修改 `/mode`、provider/profile、model/reasoning/access/plan 时同卡或 notice 提示到私聊修改；`/primary on/off/status/refresh` 已接入统一 command family，群聊工具菜单按当前 room primary 状态投影设置/取消/切换/查看/刷新按钮，单聊菜单隐藏但文本命令返回群聊限定提示；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许；`/mcpoauth <server>` 当前只发起 MCP OAuth RPC lifecycle，并用 append-only notice 展示授权链接与完成/失败结果，不进入 request card 或菜单 owner-flow。
+> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；卡片 callback surface identity 现在按 `open_message_id` 记录优先、`surface_session_id` carrier 次之、无法证明则 fail closed，不再按 `open_chat_id + operator` 猜 scope；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；bare `/model` 的下拉候选现在只来自当前 Codex instance 的动态 `model/list` 缓存，无缓存/旧 app-server/刷新失败时只保留手动输入；Codex/VS Code 下 bare `/reasoning` 现在以当前模型的动态 `supportedReasoningEfforts` 投影快捷项，目录不可校验时只保留自动并给出说明，不再展示全局硬编码推理档位；Feishu 群聊菜单会隐藏 bot 能力设置项，手输或卡片回调尝试修改 `/mode`、provider/profile、model/reasoning/access/plan 时同卡或 notice 提示到私聊修改；`/primary on/off/status/refresh` 已接入统一 command family，群聊工具菜单按当前 room primary 状态投影设置/取消/切换/查看/刷新按钮，单聊菜单隐藏但文本命令返回群聊限定提示；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许；`/mcpoauth <server>` 当前只发起 MCP OAuth RPC lifecycle，并用 append-only notice 展示授权链接与完成/失败结果，不进入 request card 或菜单 owner-flow。
 
 ## 1. 文档定位
 
@@ -80,7 +80,7 @@
   - 对飞书文件/目录选择器，当前先产出 `FeishuPathPickerView` read model，再连同 `FeishuPathPickerContext` 穿过 `UIEvent` 边界；进入目录、返回上一级、文件选择属于 controller 内 pure navigation，confirm/cancel 则转到 picker consumer handoff
 - `projector`
   - 负责把 `control.UIEvent` 渲染成 Feishu 卡片
-  - 负责把当前需要的 callback payload 字段写进卡片按钮/表单/下拉
+  - 负责把当前需要的 callback 业务字段写进卡片按钮/表单/下拉；最终 callback surface carrier `surface_session_id` 由 adapter render 层基于 `Operation.SurfaceSessionID` 统一写入，避免每个 projector 页面重复维护
   - 纯 projector builder / payload projection 现在已下沉到邻接子包 `internal/adapter/feishu/projector`；`internal/adapter/feishu/projector.go` 继续保留 `Projector` 入口、`Operation` 组装与少量兼容 wrapper
   - 对共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / 被动 `context_compaction` / `reasoning_summary`），负责在首次发送时打开 `config.update_multi=true`，让后续同一 active segment card 可被 `message.patch` 更新；首卡当前固定顶层 append，不继承 turn reply anchor。若当前 active segment card 在 projector 层按“每行一个 element”的粒度已放不下，projector 会停止复用旧卡并新开下一张 progress segment card，而不是继续在同一张卡上裁掉旧历史。
   - 对 turn timeline 文本（非 final assistant 文本、`用户补充` 这类轻量 text event），负责根据 `ReplyToMessageID` 选择 reply 发送；reply 失败时 gateway 会回退到普通 text/card create。若某条 `OperationSendText` 携带显式 attention annotation，gateway 会改走结构化 `post` 文本，把单目标 `at` 与 attention 正文合并投递；当前正式启用的 attention 锚点都落在原卡片/主消息本身，不再派生独立 `attention_ping` timeline text
@@ -196,6 +196,7 @@
 | --- | --- | --- |
 | `kind` | button/form `value.kind` | 决定 gateway 解析成哪种 `control.Action` |
 | `daemon_lifecycle_id` | projector stamp 到按钮/form | 允许 daemon 判定“这张卡是否来自当前 daemon 生命周期” |
+| `surface_session_id` | adapter render 层 stamp 到最终 callback value | 允许 gateway 在 runtime hot rebuild 后仍恢复原 surface；若 `open_message_id` 记录缺失且该字段缺失或不可信，callback fail closed |
 
 当前 owner：
 
@@ -246,7 +247,7 @@
 
 ### 4.3 当前表单提交规则
 
-`gateway_routing.go` 当前约定：
+`gateway/routing.go` 当前约定：
 
 - `page_local_submit`
   - 必须携带 `value.action_kind`，并按它直接回填 `Action.Kind`
@@ -425,10 +426,12 @@ MCP request 卡片当前新增的可视语义：
 卡片 callback 回到哪个 surface，当前按下面顺序解析：
 
 1. 优先用 `open_message_id -> 已记录的 surfaceSessionID`
-2. 如果消息映射找不到，再回退到 callback operator 的 preferred actor id
-3. 最后才退到 `open_chat_id`
+2. 如果消息映射找不到，再读取 callback payload 里的 `surface_session_id`
+3. `surface_session_id` 必须是 `feishu:<gatewayID>:user:<scopeID>` 或 `feishu:<gatewayID>:chat:<scopeID>`，并且 `gatewayID` 匹配当前 gateway
+4. `user` scope 还要求 `scopeID == callback operator preferred actor id`；`chat` scope 还要求 `scopeID == callback context open_chat_id`
+5. 如果消息映射和可信 `surface_session_id` 都不存在，gateway 直接 fail closed，不再按 `open_chat_id + operator` 推导一个新 surface
 
-这个顺序是当前 P2P surface 不被拆裂的前提之一。
+这个顺序是当前 P2P surface 不被拆裂、且 runtime hot rebuild 后旧卡仍能回到原 surface 的前提之一。
 
 ## 5. 当前同步 Replace 与 Append 边界
 
@@ -809,7 +812,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/control/feishu_path_picker.go](../../internal/core/control/feishu_path_picker.go)
 - [internal/adapter/feishu/gateway_runtime.go](../../internal/adapter/feishu/gateway_runtime.go)
 - [internal/core/frontstagecontract/callback_payload.go](../../internal/core/frontstagecontract/callback_payload.go)
-- [internal/adapter/feishu/gateway_routing.go](../../internal/adapter/feishu/gateway_routing.go)
+- [internal/adapter/feishu/gateway/routing.go](../../internal/adapter/feishu/gateway/routing.go)
 - [internal/adapter/feishu/projector.go](../../internal/adapter/feishu/projector.go)
 - [internal/adapter/feishu/projector/request.go](../../internal/adapter/feishu/projector/request.go)
 - [internal/core/orchestrator/service_ui_runtime.go](../../internal/core/orchestrator/service_ui_runtime.go)

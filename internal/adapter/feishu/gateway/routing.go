@@ -36,7 +36,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 	}
 	surfaceSessionID := ""
 	if env.SurfaceForCardAction != nil {
-		surfaceSessionID = strings.TrimSpace(env.SurfaceForCardAction(messageID, chatID, operatorID))
+		surfaceSessionID = strings.TrimSpace(env.SurfaceForCardAction(CardActionSurfaceLookup{
+			MessageID:               messageID,
+			PayloadSurfaceSessionID: stringMapValue(value, cardActionPayloadKeySurfaceSessionID),
+			ChatID:                  chatID,
+			OperatorID:              operatorID,
+		}))
 	}
 	if surfaceSessionID == "" {
 		return control.Action{}, false

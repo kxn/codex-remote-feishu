@@ -360,7 +360,11 @@ func TestSurfaceForCardActionPrefersRecordedMessageSurface(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-1", "feishu:app-1:user:ou_user")
 
-	got := gateway.surfaceForCardAction("om-card-1", "oc_1", "user_1")
+	got := gateway.surfaceForCardAction(gatewaypkg.CardActionSurfaceLookup{
+		MessageID:  "om-card-1",
+		ChatID:     "oc_1",
+		OperatorID: "user_1",
+	})
 	if got != "feishu:app-1:user:ou_user" {
 		t.Fatalf("expected recorded surface to win, got %q", got)
 	}

@@ -31,6 +31,7 @@ const (
 	cardActionPayloadKeyEntryName             = frontstagecontract.CardActionPayloadKeyEntryName
 	cardActionPayloadKeyTargetValue           = frontstagecontract.CardActionPayloadKeyTargetValue
 	cardActionPayloadKeyDaemonLifecycleID     = frontstagecontract.CardActionPayloadKeyDaemonLifecycleID
+	cardActionPayloadKeySurfaceSessionID      = frontstagecontract.CardActionPayloadKeySurfaceSessionID
 	cardPathPickerDirectorySelectFieldName    = frontstagecontract.CardPathPickerDirectorySelectFieldName
 	cardPathPickerFileSelectFieldName         = frontstagecontract.CardPathPickerFileSelectFieldName
 	cardTargetPickerWorkspaceFieldName        = frontstagecontract.CardTargetPickerWorkspaceFieldName
