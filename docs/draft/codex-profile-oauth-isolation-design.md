@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-07-31`
-> Summary: 统一 Codex/Claude 的用户可见 Profile 语义，设计 Codex OAuth 连接身份隔离、API Profile 运行认证隔离、可独立修改的上下文偏好、跨 Profile 会话恢复以及 Web/飞书管理交互，并明确共享同一 OS 用户时的安全边界。
+> Summary: 统一 Codex/Claude 的用户可见 Profile 语义，设计 Codex OAuth 连接身份隔离、API Profile 运行认证隔离、可独立修改的上下文偏好、跨 Profile 会话恢复以及 Web/飞书管理交互，并按重构后 owner 拆分为 #763-#769 七个执行单元。
 
 ## 1. 文档定位
 
@@ -443,7 +443,7 @@ capability preflight 必须在隔离临时 `CODEX_HOME` 中运行无生产数据
 
 ### 8.7 稳定架构端口
 
-目标架构只承诺以下领域端口，不承诺当前 service、package 或文件名。并行重构稳定后，实现应先寻找最新 owner，再把这些端口落到现有边界；不能反过来把旧 `CodexProvider*` 载体当作目标设计。
+目标架构只承诺以下领域端口，不承诺当前 service、package 或文件名。实施每个子单前应核对最新 owner，再把这些端口落到现有边界；不能反过来把旧 `CodexProvider*` 载体当作目标设计。
 
 | 端口 | 唯一职责 | 主要输入 | 主要输出 / 副作用 |
 | --- | --- | --- | --- |
@@ -786,7 +786,7 @@ PUT    /api/admin/claude/profiles/{id}/context-preference
 ### 14.2 配置迁移
 
 - `codex.providers[]` 一次性迁移为 `codex.profiles[]`，每条记录 `kind=api`，ID 保持不变，初始 Revision 为 1。旧记录允许 model/reasoning 为空，而新合同要求必填；迁移必须保留 Base URL/API Key 和原 ID，并把该项标记为 `profile_definition_incomplete`，由 Web 要求补齐，managed launch fail closed，不能从本机 base config 猜值。
-- bot default 与 route desired 中的 `CodexProviderID` 迁移为浮动 `CodexProfileID`；queue/pending/route actual 等已经接纳的状态迁移为 `CodexAdmissionRef{ProfileRef:{ID, Revision:1}, ContextPreferenceRef:{ProfileID:ID, Revision:1}}`。不能把所有旧字段机械替换成同一种 ref。
+- bot default 与 durable surface resume 中的 route desired `CodexProviderID` 迁移为浮动 `CodexProfileID`；surface resume 新增的 route actual/recovery provenance 使用 `CodexAdmissionRef{ProfileRef:{ID, Revision:1}, ContextPreferenceRef:{ProfileID:ID, Revision:1}}`。当前 queue、`PendingHeadless` 和 active instance 都是 daemon 进程内状态，不存在可由启动迁移器读取的旧 on-disk record；它们必须在 cutover 后首次 admission/launch 时直接写入精确 ref，不能伪装成需要从磁盘迁移，也不能继续只保存浮动 ID。
 - 指向不存在旧 Provider 的引用迁移为 `profile_not_found` 诊断状态，保留原始 ID 供修复；不能映射到 native，也不能丢弃后把 UI 显示成默认值。
 - API Profile secret config 继续进入权限受限的 app config；OAuth 只读描述符进入独立 runtime state store；两者不能写入同一用户可编辑数组。
 - Codex 所有现存 Profile 迁移时创建 `codex_default` context preference Revision 1；Claude 所有现存 Profile 创建“模型默认” preference Revision 1。该迁移不改写已保存模型名；若旧 Claude 自建 Profile 的模型名已带终止 `[1m]`，迁移器原子拆成无后缀 base model + 已启用 preference，保证行为不变。
@@ -819,7 +819,7 @@ Remote 不解析或合并 `[profiles.<name>]`、`$CODEX_HOME/<name>.config.toml`
 
 bot default 和 route desired 可以持有相同 Profile ID，但语义不同：前者决定未来 workspace 默认，后者决定当前 workspace 下一次 admission。route actual 才证明上次使用的精确合同。任何物理存储实现都必须通过 `CodexProfileSelection`/admission 单一 mutation owner；若并行重构后它们仍分属不同文件，需提供带代次的幂等事务和 crash recovery，不能由多个 handler 顺序裸写。
 
-Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除的唯一引用视图。每个 queue、dispatch、route actual、pending/active child 和 recovery owner 持有完整 admission lease，不能因为 child provenance 已 rebind 就释放仍在运行的旧 Thread Policy 或 preference 引用。更新事务必须先写新 Revision/current pointer，旧 Revision 默认继续保留；rebind 必须先 acquire 两类新 lease、提交 owner state，再 release 两类旧 lease；GC 只能在所有 owner 已持久提交释放后执行。daemon 启动时先从 durable queue/pending/runtime/recovery state 重建 lease，再清理孤立旧 Revision，不能按进程内计数直接删除。任一 `CurrentRevision` 永不作为 retained history 被 GC；删除整个 Profile 仍必须先通过完整引用检查。
+Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除的唯一引用视图。每个 queue、dispatch、route actual、pending/active child 和 recovery owner 持有完整 admission lease，不能因为 child provenance 已 rebind 就释放仍在运行的旧 Thread Policy 或 preference 引用。更新事务必须先写新 Revision/current pointer，旧 Revision 默认继续保留；rebind 必须先 acquire 两类新 lease、提交 owner state，再 release 两类旧 lease；GC 只能在所有 owner 已提交释放后执行。daemon 启动时先从 durable surface resume/recovery 和其它确实落盘的 owner 重建 lease，再清理孤立旧 Revision；queue、`PendingHeadless`、active child 等进程内 lease 只参与当前进程的引用视图，不能被虚构成 durable source。任一 `CurrentRevision` 永不作为 retained history 被 GC；删除整个 Profile 仍必须先通过完整引用检查。
 
 ### 14.5 Expand / migrate / cutover
 
@@ -827,7 +827,7 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 
 1. `expand`：新增 `codex.profiles[]`、OAuth descriptor、Claude/Codex context preference、浮动 desired selection、精确 frozen admission ref、Connection Contract 和 Thread Policy schema；旧运行时仍不读取新字段。
 2. `plan`：只读加载并校验 config、bot capability、surface/route resume 和 workspace override 旧状态，生成确定性迁移计划；任何损坏或冲突先进入 degraded 诊断，不边读边改。
-3. `migrate`：`codex.providers[]` 一对一变成 `kind=api`、Revision=1、CredentialGeneration=1、ConnectionGeneration=1，并为所有 Claude/Codex Profile 建立 preference Revision 1；字段不完整项保持可见但不可启动。旧 `default` 只映射到 `native`，绝不因为检测到 OAuth 自动改成 `oauth`；旧 Provider ID 在 bot/route desired 中映射为 Profile ID，在已经接纳的 queue/pending/actual 中映射为 definition + preference Revision 1 精确 admission ref，override key 映射到同 ID Profile；不存在的 ID 保留为显式迁移诊断。
+3. `migrate`：`codex.providers[]` 一对一变成 `kind=api`、Revision=1、CredentialGeneration=1、ConnectionGeneration=1，并为所有 Claude/Codex Profile 建立 preference Revision 1；字段不完整项保持可见但不可启动。旧 `default` 只映射到 `native`，绝不因为检测到 OAuth 自动改成 `oauth`；旧 Provider ID 在 bot/surface-resume route desired 中映射为 Profile ID，durable route actual/recovery provenance 映射为 definition + preference Revision 1 精确 admission ref，override key 映射到同 ID Profile；不存在的 ID 保留为显式迁移诊断。启动迁移发生在写流量开放前，旧进程内 queue/pending/active state 不作为迁移输入；新进程创建这些 carrier 时必须直接使用 canonical admission ref。
 4. `commit`：先原子写各新 store，再最后写 migration generation/commit marker。中途崩溃时下次按同一输入幂等重算；marker 未提交前不开放 Profile mutation 或 managed Codex launch。
 5. `cutover`：所有 canonical reader/writer 只使用 Profile schema；旧字段只允许迁移器读取，旧 API/命令 alias 通过 canonical Profile service 适配，不能继续写旧 SSOT。
 6. `contract`：兼容窗口结束后删除旧字段读取、transport alias 和 frozen legacy evidence，并提升 schema version。
@@ -879,16 +879,55 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 
 后台计时器不能因为这些错误原样重复 launch/resume 或重复发通知。一次 episode 内只保留首个结构化原因和最新状态；只有表中明确的输入变化或用户动作创建新 episode。表中的“用户重试”始终只允许执行一个新 episode，不开启定时/指数退避循环；对确定性错误，UI 默认引导用户先完成表中修正，不能自动替用户点击重试。
 
-## 16. 实施分段
+## 16. 重构后基线与实施计划
 
-1. 建立 Profile definition、独立 context preference、两类 Revision 和旧 Provider/Claude model suffix 迁移，不改变用户交互。
-2. 实现 OAuth auth-only probe、只读 catalog、API Profile ephemeral credential store 与按实例专用 env 的运行认证隔离。
-3. 建立 Connection Contract、浮动 desired/精确 frozen admission ref 和 definition/preference revision retention/GC。
-4. 实现含 context 的 Thread Policy、真实 start/resume/TurnStarted 后的 Effective Thread Contract 和 translator resume config，修复跨 Profile exact-thread 恢复。
-5. 迁移 WebUI、飞书命令和用户可见文案到 Profile，并为 Claude/Codex 接入各自 context 控件。
-6. 删除内部旧 Provider SSOT 和到期兼容入口，同步 canonical 状态机文档。
+### 16.1 `master@37cf4612` 的当前 owner 图
 
-阶段只表示执行顺序，不是默认停点。完整交付必须包含迁移、测试、文档和兼容清理。
+本节记录 2026-07-31 大规模重构完成后的实现基线。它是执行索引，不改变 8.7 的稳定端口合同。
+
+| 当前事实 | 当前 owner / carrier | 已具备能力 | 目标差距 |
+| --- | --- | --- | --- |
+| Codex/Claude secret definition | `internal/config/codex_providers.go`、`claude_profiles.go` 与对应 admin handler | app config 持久化、secret 不回填、基础 CRUD | 没有 Profile kind、immutable Revision、item ETag、retained history；Codex 仍叫 Provider，Claude context 与 definition 混合 |
+| 运行时 catalog 投影 | daemon `app_*_catalog.go` -> orchestrator `root.CodexProviders/ClaudeProfiles` | 飞书可读取稳定名称/ID 列表 | 只有显示字段，没有 OAuth/native 描述符、preference summary 或 unavailable state |
+| Feishu bot default | gateway 级 `bot-capability-settings.json` -> `BotCapabilitySettingsRecord` | 已是 mode/provider/profile/model/reasoning/access/plan 单写源；私聊 mutation 做字段级事务 | 字段仍是浮动旧 ID；没有 admission、revision 或 route actual；非 Feishu surface 仍走本地 carrier |
+| route desired 与跨 daemon 恢复 | `surface-resume-state.json` 的 backend/Profile ID、workspace/thread target | 可恢复选择和 exact-thread 目标；恢复失败 episode 已去重 | desired 与 actual/provenance 未分离；没有精确 admission ref、Connection Contract 或迁移诊断 |
+| queue/pending/active | `QueueItemRecord`、`HeadlessLaunchRecord`、`InstanceRecord` | queue 已冻结 prompt override；pending/instance 已携带 backend + ID | 三者是进程内状态，只保存浮动 ID/当前字段；没有 admission lease、definition/preference revision 或 connection identity |
+| 实例兼容与复用 | `surface_backend.go`、`service_surface_contract_compatibility.go`、`service_surface_contract_resolution.go` | desired/observed backend contract 与统一 workspace/thread resolver 已建立 | 兼容只比较 backend + ID，无法区分 Key/端点 generation、capability 或 actual Provider identity |
+| managed launch | `app_headless.go` -> `apply*Headless*` -> wrapper env/args | backend-aware 启动、Claude reasoning restart、实例 hello actual ID | daemon 在启动时按 ID 重新读取 current app config，已 admission 动作会漂移；公共合同与 secret launch material 未分型；OAuth/native 清理和 probe 尚不存在 |
+| Codex start/resume | `translator_commands.go`、`translator_restart_restore.go` | start 可投影 model/reasoning override，thread settings/model catalog 有部分 observed state | Remote resume、compact resume、child restart restore 均缺 `modelProvider`；start 会克隆最近本地模板；没有 Resume Policy、review/context 或 response/effective contract 校验 |
+| Web | `CodexProviderSection.tsx`、`ClaudeProfileSection.tsx` 与旧 REST API | 两套 CRUD 共用 editor shell，已有桌面/移动布局和固定 notice slot | Codex 命名、只读 preference 编辑、ETag、OAuth/native 状态、context 控件、引用预检均缺失 |
+| 飞书 config-flow | command display/config-flow + orchestrator option builder | 裸命令、菜单 handoff、同卡 replace、gateway 私聊可写已统一 | 仍为 `/codexprovider`/“Claude 配置”；普通 static select 无 Profile 分页；没有 unavailable descriptor/context 状态 |
+
+基线结论：重构已经提供了可复用的 selection SSOT、backend contract resolver、recovery transaction、config-flow 和 persisted-store fail-closed 模式；实现不应另建平行 owner。反过来，现有 `CodexProviderRecord`、`HeadlessLaunchContract` 和 app config lookup 都不足以承载 revision-safe Profile，只做字段改名会继续保留错误边界。
+
+### 16.2 执行单元
+
+1. **[#763 - A: Profile Catalog 与迁移](https://github.com/kxn/codex-remote-feishu/issues/763)**：建立 Codex definition revision、Claude/Codex 独立 context preference revision、strong item ETag、redacted DTO 和启动前幂等迁移；保留旧 transport adapter，但 canonical writer 单轨。
+2. **[#764 - B: OAuth Probe 与 Runtime Resolver](https://github.com/kxn/codex-remote-feishu/issues/764)**：实现无 thread 的 auth-only probe、官方 OAuth/native descriptor、capability fixture、Connection Contract 与独立 Secret Launch Material；收口 API ephemeral credential store、实例专用 env 和认证/端点清理。
+3. **[#765 - C: Admission、实例与恢复状态](https://github.com/kxn/codex-remote-feishu/issues/765)**：在 gateway bot default 之上增加 route desired/actual 分离；让 queue/pending/active/recovery 使用 definition + preference 精确 admission ref；扩展实例 hello/兼容、Reference Index、retention/GC 和删除占用检查。
+4. **[#766 - D: Profile-aware Resume Policy](https://github.com/kxn/codex-remote-feishu/issues/766)**：为 start/resume/compact/child restart 建立统一 typed Resume Policy；补齐 observed Provider/model/reasoning/context 与 Effective Thread Contract，覆盖 preserve/apply 两条分支和真实 `TurnStarted` clamp。
+5. **[#767 - E: WebUI](https://github.com/kxn/codex-remote-feishu/issues/767)**：将 Codex Provider 页面迁移为 Codex Profile，与 Claude Profile 对齐；接入只读连接详情、可写 context preference、ETag 冲突、OAuth refresh、引用删除和桌面/移动验收。
+6. **[#768 - F: 飞书 Profile 选择](https://github.com/kxn/codex-remote-feishu/issues/768)**：迁移用户可见命名和 canonical `/codexprofile`，复用 gateway selection owner；实现 50 项分页 select、不可用 OAuth 状态、callback 快速 inline replace、旧 alias 与卡片安全/预算测试。
+7. **[#769 - G: 兼容收口与总体验收](https://github.com/kxn/codex-remote-feishu/issues/769)**：删除到期内部 Provider SSOT/双写和旧字段读取，完成迁移/降级矩阵、状态机与发布说明，全链路 verifier 后关闭父单；旧 transport alias 是否到期按实际发布周期执行，不提前破坏承诺窗口。
+
+### 16.3 依赖与并行关系
+
+- A 是所有后续单元的 schema/API 基线，必须先完成。
+- B 依赖 A；C 依赖 A 的 ref/revision，并在 Connection Contract 部分依赖 B。
+- D 依赖 B 的 resolver 输出和 C 的 admission/instance carrier。
+- E 可在 A 的 canonical API/DTO 稳定后开始，但 OAuth/native 完整状态验收依赖 B；不得自行复制 probe/resolver 逻辑。
+- F 的卡片外壳可在 A 后准备，真实切换验收依赖 C/D；不得继续直接写旧 Provider 字段形成第二条 selection 路径。
+- E 与 F 在底层 DTO/selection 合同稳定后并行。
+- G 依赖 A-F 全部完成。
+
+阶段只表示依赖顺序，不是默认停点。父 issue 只负责调度和结果回卷，不直接承载生产补丁；每个 medium/large 子 issue 在关闭前做独立 verifier。
+
+### 16.4 当前调度结论
+
+- #763-#769 均已达到执行闭包并通过 `full` issue workflow lint；`status:implementable-now` 表示子单边界稳定，不表示可以越过依赖抢跑。
+- 当前唯一无前置依赖的执行单元是 #763。#764 依赖 #763；#765 可在 #763 后先推进 admission carrier，但完整 Connection Contract 兼容依赖 #764；#766 依赖 #764/#765。
+- #767 可在 #763 后开始，完整 OAuth 状态验收依赖 #764；#768 可在 #763 后准备卡片外壳，真实切换验收依赖 #765/#766。两者在共享 DTO/selection 合同稳定后可以并行。
+- #769 等待 #763-#768 全部发布并回卷，负责兼容收口、总体验收和父单 close-out。
 
 ## 17. 测试与验收
 
@@ -958,17 +997,38 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 
 ## 19. 实现参考
 
+- `internal/core/state/surface_backend.go`
+- `internal/core/state/bot_capability_settings.go`
+- `internal/core/state/types.go`
+- `internal/app/daemon/botcapabilitysettings/state.go`
+- `internal/app/daemon/surfaceresume/state.go`
+- `internal/app/daemon/app_surface_resume_state.go`
+- `internal/app/daemon/app_persisted_state.go`
 - `internal/config/codex_providers.go`
+- `internal/config/claude_profiles.go`
 - `internal/config/codex_provider_env.go`
 - `internal/app/daemon/app_headless_codex_provider.go`
+- `internal/app/daemon/app_headless_claude_profile.go`
+- `internal/app/daemon/app_headless.go`
 - `internal/app/daemon/admin_codex_providers.go`
+- `internal/app/daemon/admin_claude_profiles.go`
 - `internal/core/state/codex_provider.go`
+- `internal/core/state/claude_workspace_profiles.go`
 - `internal/core/orchestrator/service_codex_provider_command.go`
+- `internal/core/orchestrator/service_surface_command_settings.go`
+- `internal/core/orchestrator/service_bot_capability_settings.go`
 - `internal/core/orchestrator/service_surface_contract_compatibility.go`
+- `internal/core/orchestrator/service_surface_contract_resolution.go`
+- `internal/core/orchestrator/service_headless_contract_switch.go`
+- `internal/core/orchestrator/service_queue.go`
 - `internal/adapter/codex/translator_commands.go`
 - `internal/adapter/codex/translator_restart_restore.go`
+- `internal/adapter/codex/translator_thread_state.go`
+- `internal/app/wrapper/backend_runtime.go`
 - `web/src/routes/admin/CodexProviderSection.tsx`
 - `web/src/routes/admin/ClaudeProfileSection.tsx`
+- `internal/core/control/feishu_config_flow.go`
+- `internal/core/orchestrator/service_feishu_command_view.go`
 - `docs/general/config-state-storage-guidelines.md`
 - `docs/general/feishu-menu-card-usage-guidelines.md`
 - `docs/general/feishu-card-ui-state-machine.md`
