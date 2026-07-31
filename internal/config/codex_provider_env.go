@@ -67,11 +67,22 @@ func LookupUserShellEnvValue(env []string, key string) (string, error) {
 }
 
 func BuildCodexChildEnv(currentEnv, proxyEnv, args []string) []string {
+	return buildCodexChildEnv(currentEnv, proxyEnv, args, true)
+}
+
+func BuildCodexResolvedChildEnv(currentEnv, proxyEnv, args []string) []string {
+	return buildCodexChildEnv(currentEnv, proxyEnv, args, false)
+}
+
+func buildCodexChildEnv(currentEnv, proxyEnv, args []string, supplementProvider bool) []string {
 	env := FilterEnvWithoutProxy(append([]string{}, currentEnv...))
 	env = append(env, proxyEnv...)
 	env = SupplementDetachedPATH(env)
-	supplemented, _ := supplementCodexProviderEnv(env, args)
-	return supplemented
+	if supplementProvider {
+		supplemented, _ := supplementCodexProviderEnv(env, args)
+		return supplemented
+	}
+	return env
 }
 
 func SupplementDetachedPATH(env []string) []string {

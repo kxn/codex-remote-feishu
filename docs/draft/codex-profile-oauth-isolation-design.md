@@ -1,7 +1,7 @@
 # Codex Profile 与 OAuth 隔离设计
 
 > Type: `draft`
-> Updated: `2026-07-31`
+> Updated: `2026-08-01`
 > Summary: 统一 Codex/Claude 的用户可见 Profile 语义，设计 Codex OAuth 连接身份隔离、API Profile 运行认证隔离、可独立修改的上下文偏好、跨 Profile 会话恢复以及 Web/飞书管理交互，并按重构后 owner 拆分为 #763-#769 七个执行单元。
 
 ## 1. 文档定位
@@ -330,6 +330,8 @@ ResolveCodexProfileRuntime(ref CodexAdmissionRef) (CodexProfileRuntimeProjection
 
 私有启动材料不能进入 orchestrator state、日志、错误 details 或 API response。
 
+daemon 是 Runtime Resolver 和 Secret Launch Material 的唯一 owner。wrapper 不再读取 app config、Profile catalog 或 secret，也不从用户 shell 补回 managed launch 已清除的 Profile Key；它只转发 daemon 已解析出的 args/env。这样 public contract、secret 读取和 child 启动之间只有一条投影链，不会因 daemon/wrapper 各自解析 current config 而产生版本漂移或认证串用。
+
 ### 8.2 启动投影
 
 | Profile | CLI 投影 | 认证环境 |
@@ -339,6 +341,12 @@ ResolveCodexProfileRuntime(ref CodexAdmissionRef) (CodexProfileRuntimeProjection
 | `api` | `model_provider`、完整 `model_providers.*`、`cli_auth_credentials_store="ephemeral"` | 移除原生 OAuth/API 认证环境，只设置当前 Profile 的专用 Key env |
 
 API Profile 的用户可见 Profile ID 不能直接作为 Codex `model_provider`。resolver 必须生成带产品命名空间的内部 `CodexModelProviderID`，并确认它不与当前有效配置中的 Provider ID 冲突；内部 Provider 名称使用固定安全名称，不能把用户可编辑名称直接传给上游的 `OpenAI` 特殊判断。
+
+OAuth Profile 的 persisted descriptor 只能作为显示状态和上次观察结果。每次真正启动 OAuth child 前，daemon 必须在启动调用栈内完成一次 auth-only probe；若已有 probe 正在进行，可以等待该 probe 收口。fresh probe 得到 `missing`、`unknown`、自定义部署或 capability 不支持时，resolver 使用稳定错误 fail closed，不继续使用同 daemon 生命周期内旧的 `detected` 描述符。若 fresh probe 需要释放 daemon 锁，启动调用栈在真正创建 child 前必须重新验证 shutdown 状态、pending launch ownership 与 managed process reservation，避免用户显式取消或重复 start 后产生孤儿进程。
+
+native 的 Connection evidence 在 daemon 启动时通过独立短生命周期 app-server 读取一次：保留原始 `CODEX_HOME` 与认证环境，在中性临时 cwd 中只执行 `initialize -> initialized -> config/read`，不创建 thread/turn，也不周期重试。probe 观察 selected Provider、对应 endpoint、`chatgpt_base_url`、当前配置中的 Provider ID 集合以及这些 Provider 声明的 `env_key` 名称；API 内部 Provider ID 必须避开这组 ID，API/OAuth child 必须从环境中清理这些 native Provider env key，防止 daemon 为 native 补入的任意 shell secret 被带进隔离 Profile。raw observation 不允许 JSON 序列化；无 userinfo/query/fragment 的普通 HTTP(S) base URL 可作为 public endpoint identity，其它 URL 只投影为不可逆 opaque hash，不能把凭据、query 或自定义部署细节带入 DTO、日志和状态。
+
+native `ConnectionGeneration` 按 daemon lifecycle 保守推进。probe 成功时 public contract 使用脱敏 evidence；probe 失败时 native 仍原样启动，但只得到当前 lifecycle 的空 identity evidence，不能借失败结果证明旧连接可复用。非 native Profile 依赖 native probe 结果来证明 Provider ID 不碰撞且动态 env key 已清理；因此 native probe 失败时 API/OAuth 启动 fail closed，不选择备用 Provider ID，也不把旧 reserved set 当作当前事实。这个边界允许 native 保守原样运行，但禁止 API/OAuth 在无法证明隔离时继续启动。
 
 API Profile 必须显式投影：
 
@@ -924,9 +932,10 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 
 ### 16.4 当前调度结论
 
-- #763-#769 均已达到执行闭包并通过 `full` issue workflow lint；`status:implementable-now` 表示子单边界稳定，不表示可以越过依赖抢跑。
-- 当前唯一无前置依赖的执行单元是 #763。#764 依赖 #763；#765 可在 #763 后先推进 admission carrier，但完整 Connection Contract 兼容依赖 #764；#766 依赖 #764/#765。
-- #767 可在 #763 后开始，完整 OAuth 状态验收依赖 #764；#768 可在 #763 后准备卡片外壳，真实切换验收依赖 #765/#766。两者在共享 DTO/selection 合同稳定后可以并行。
+- #763 已完成并回卷为后续 schema/API 基线；#764 正在执行验证、verifier 与发布收尾，完成后为 #765/#766 提供 Runtime Resolver、Connection Contract 与 Secret Launch Material 输入。
+- #765 是 #764 close-out 后的下一 ready 执行单元；它可在 #763 基线上推进 admission carrier，但完整实例兼容与恢复语义必须消费 #764 的 Connection Contract。
+- #766 依赖 #764 的 resolver 输出和 #765 的 admission/instance carrier，不能在二者完成前独立实现 Resume Policy。
+- #767 可在 #763 后继续准备 Profile API/Web 外壳，完整 OAuth/native 状态验收依赖 #764；#768 可在 #763 后准备卡片外壳，真实切换验收依赖 #765/#766。两者在共享 DTO/selection 合同稳定后可以并行。
 - #769 等待 #763-#768 全部发布并回卷，负责兼容收口、总体验收和父单 close-out。
 
 ## 17. 测试与验收

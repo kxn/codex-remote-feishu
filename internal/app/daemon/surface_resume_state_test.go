@@ -1504,7 +1504,7 @@ func TestDaemonNormalResumeFailureEmitsNoticeAfterFirstRefresh(t *testing.T) {
 	}
 }
 
-func TestDaemonHeadlessResumeProviderPrepareFailureUsesProviderNotice(t *testing.T) {
+func TestDaemonHeadlessResumeProviderPrepareFailureUsesRevisionUnavailableNotice(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -1553,8 +1553,8 @@ func TestDaemonHeadlessResumeProviderPrepareFailureUsesProviderNotice(t *testing
 		t.Fatalf("expected one restore failure notice, got %#v", gateway.operations)
 	}
 	text := operationCardText(gateway.operations[0])
-	if !strings.Contains(text, "Provider") || !strings.Contains(text, "配置") {
-		t.Fatalf("expected provider-specific restore failure notice, got %q", text)
+	if !strings.Contains(text, "Profile") || !strings.Contains(text, "版本") || !strings.Contains(text, "重新选择") {
+		t.Fatalf("expected revision-specific restore failure notice, got %q", text)
 	}
 }
 

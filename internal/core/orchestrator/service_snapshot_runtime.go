@@ -478,7 +478,7 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 		return s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
-		notice := NoticeForProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+		problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 			Code:             "workspace_create_start_failed",
 			Layer:            "daemon",
 			Stage:            "headless_start",
@@ -486,8 +486,12 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 			Message:          "无法准备这个工作区。",
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Retryable:        true,
-		}))
+		})
+		notice := NoticeForProblem(problem)
 		notice.Code = "workspace_create_start_failed"
+		if isCodexProfileLaunchFailureCode(problem.Code) {
+			notice.Code = problem.Code
+		}
 		notice.Title = "工作区准备失败"
 		events := []eventcontract.Event{{
 			Kind:             eventcontract.KindNotice,
@@ -508,6 +512,9 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 	})
 	notice := NoticeForProblem(problem)
 	notice.Code = "headless_start_failed"
+	if isCodexProfileLaunchFailureCode(problem.Code) {
+		notice.Code = problem.Code
+	}
 	notice.Title = "恢复准备失败"
 	events := []eventcontract.Event{{
 		Kind:             eventcontract.KindNotice,
@@ -515,6 +522,21 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 		Notice:           &notice,
 	}}
 	return s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
+}
+
+func isCodexProfileLaunchFailureCode(code string) bool {
+	switch strings.TrimSpace(code) {
+	case "profile_definition_incomplete",
+		"profile_secret_missing",
+		"oauth_missing",
+		"oauth_probe_unknown",
+		"oauth_deployment_unsupported",
+		"codex_capability_unsupported",
+		"profile_revision_unavailable":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) ApplyInstanceConnected(instanceID string) []eventcontract.Event {

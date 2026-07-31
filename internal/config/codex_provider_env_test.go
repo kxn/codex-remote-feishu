@@ -200,6 +200,27 @@ env_key = "CUSTOM_API_KEY"
 	}
 }
 
+func TestBuildCodexResolvedChildEnvDoesNotSupplementMissingProviderKeyFromShell(t *testing.T) {
+	previous := lookupUserShellEnvValue
+	lookupUserShellEnvValue = func(_ []string, key string) (string, error) {
+		if key == "PATH" {
+			return "/usr/bin", nil
+		}
+		return "shell-secret", nil
+	}
+	defer func() { lookupUserShellEnvValue = previous }()
+
+	args := []string{
+		"app-server",
+		"-c", `model_provider="codex_remote_profile_test"`,
+		"-c", `model_providers.codex_remote_profile_test.env_key="CODEX_REMOTE_CODEX_PROFILE_API_KEY"`,
+	}
+	got := BuildCodexResolvedChildEnv([]string{"PATH=/bin"}, nil, args)
+	if value, ok := lookupEnvValue(got, "CODEX_REMOTE_CODEX_PROFILE_API_KEY"); ok || value != "" {
+		t.Fatalf("resolved child env supplemented a missing key: %#v", got)
+	}
+}
+
 func TestSupplementDetachedPATHMergesInteractiveShellPATH(t *testing.T) {
 	originalLookup := lookupUserShellEnvValue
 	defer func() { lookupUserShellEnvValue = originalLookup }()

@@ -31,7 +31,7 @@ func (a *App) handleDaemonCommand(command control.DaemonCommand) []eventcontract
 func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventcontract.Event {
 	switch command.Kind {
 	case control.DaemonCommandStartHeadless:
-		return a.startManagedHeadless(command)
+		return a.startManagedHeadlessLocked(command)
 	case control.DaemonCommandKillHeadless:
 		return a.killManagedHeadless(command)
 	case control.DaemonCommandAdmin:
@@ -68,6 +68,12 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventco
 }
 
 func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontract.Event {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.startManagedHeadlessLocked(command)
+}
+
+func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventcontract.Event {
 	cfg := a.headlessRuntime
 	now := time.Now().UTC()
 	if strings.TrimSpace(cfg.BinaryPath) == "" {
@@ -121,6 +127,10 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			Retryable:        false,
 		}, now)
 	}
+	launchAuthorization := a.captureHeadlessLaunchAuthorizationLocked(command)
+	if !a.headlessLaunchStillAuthorizedLocked(launchAuthorization) {
+		return nil
+	}
 	env = append(env,
 		"CODEX_REMOTE_INSTANCE_ID="+command.InstanceID,
 		"CODEX_REMOTE_INSTANCE_SOURCE=headless",
@@ -138,9 +148,9 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
 	}
 	launchArgs := append([]string{}, cfg.LaunchArgs...)
-	env, launchArgs, err := a.applyCodexHeadlessProviderConfig(env, launchArgs, backend, command.CodexProviderID)
+	env, launchArgs, err := a.applyCodexHeadlessProviderConfigLocked(env, launchArgs, backend, command.CodexProviderID)
 	if err != nil {
-		return a.handleManagedHeadlessLaunchFailure(command, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+		return a.handleManagedHeadlessLaunchFailure(command, codexHeadlessLaunchProblem(err, agentproto.ErrorInfo{
 			Code:             "codex_provider_prepare_failed",
 			Layer:            "daemon",
 			Stage:            "headless_start",
@@ -212,6 +222,9 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 			}), now)
 		}
 	}
+	if !a.headlessLaunchStillAuthorizedLocked(launchAuthorization) {
+		return nil
+	}
 
 	pid, err := a.startHeadless(relayruntime.HeadlessLaunchOptions{
 		BinaryPath: cfg.BinaryPath,
@@ -255,6 +268,51 @@ func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontrac
 		workDir,
 	)
 	return a.service.HandleHeadlessLaunchStarted(command.SurfaceSessionID, command.InstanceID, pid)
+}
+
+type headlessLaunchAuthorization struct {
+	surfaceID           string
+	instanceID          string
+	requirePending      bool
+	authorizedAtCapture bool
+}
+
+func (a *App) captureHeadlessLaunchAuthorizationLocked(command control.DaemonCommand) headlessLaunchAuthorization {
+	auth := headlessLaunchAuthorization{
+		surfaceID:           strings.TrimSpace(command.SurfaceSessionID),
+		instanceID:          strings.TrimSpace(command.InstanceID),
+		authorizedAtCapture: true,
+	}
+	if auth.surfaceID == "" || auth.instanceID == "" {
+		return auth
+	}
+	auth.requirePending = true
+	auth.authorizedAtCapture = false
+	surface := a.service.Surface(auth.surfaceID)
+	if surface == nil || surface.PendingHeadless == nil {
+		return auth
+	}
+	auth.authorizedAtCapture = strings.TrimSpace(surface.PendingHeadless.InstanceID) == auth.instanceID
+	return auth
+}
+
+func (a *App) headlessLaunchStillAuthorizedLocked(auth headlessLaunchAuthorization) bool {
+	if a.shuttingDown {
+		return false
+	}
+	if auth.instanceID != "" && a.managedHeadlessRuntime.Processes[auth.instanceID] != nil {
+		return false
+	}
+	if !auth.requirePending {
+		return true
+	}
+	if !auth.authorizedAtCapture {
+		return false
+	}
+	surface := a.service.Surface(auth.surfaceID)
+	return surface != nil &&
+		surface.PendingHeadless != nil &&
+		strings.TrimSpace(surface.PendingHeadless.InstanceID) == auth.instanceID
 }
 
 func (a *App) surfaceProfileSelectionConflict(surfaceID string) bool {

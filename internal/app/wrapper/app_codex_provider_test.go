@@ -1,37 +1,27 @@
 package wrapper
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 )
 
-func TestBuildCodexChildLaunchAddsConfiguredCodexProviderOverrides(t *testing.T) {
-	configPath := filepath.Join(t.TempDir(), "config.json")
-	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
-		ID:      "team-proxy",
-		Name:    "Team Proxy",
-		BaseURL: "https://proxy.example/v1",
-		APIKey:  "provider-secret",
-	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
-
+func TestBuildCodexChildLaunchForwardsDaemonResolvedProfileWithoutReadingConfig(t *testing.T) {
+	t.Setenv(codexprofile.CodexProfileAPIKeyEnv, "provider-secret")
 	app := New(Config{
 		Backend:         "codex",
 		CodexProviderID: "team-proxy",
-		ConfigPath:      configPath,
+		ConfigPath:      "/missing/app-config.json",
+		Source:          "vscode",
 	})
 
-	args, env := app.buildCodexChildLaunch([]string{"app-server"})
-	if !strings.Contains(strings.Join(args, "\n"), `model_provider="team-proxy"`) {
-		t.Fatalf("expected provider override args, got %#v", args)
+	baseArgs := []string{"app-server", "-c", `model_provider="codex_remote_profile_1234"`}
+	args, env := app.buildCodexChildLaunch(baseArgs)
+	if strings.Join(args, "\x00") != strings.Join(baseArgs, "\x00") {
+		t.Fatalf("wrapper changed daemon-resolved args: %#v", args)
 	}
-	if got := lookupEnv(env, config.CodexProviderAPIKeyEnv); got != "provider-secret" {
+	if got := lookupEnv(env, codexprofile.CodexProfileAPIKeyEnv); got != "provider-secret" {
 		t.Fatalf("expected provider secret env, got %q", got)
 	}
 }

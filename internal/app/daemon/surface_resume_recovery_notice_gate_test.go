@@ -104,3 +104,19 @@ func TestDaemonUngatedRestoreOutcomeGateSuppressesRepeatedConnectFailureNotice(t
 		t.Fatalf("expected repeated workspace-busy restore notice to be suppressed while preserving daemon command, got %#v", filtered)
 	}
 }
+
+func TestCodexProfileLaunchFailuresAreTerminalForAutomaticRecovery(t *testing.T) {
+	for _, code := range []string{
+		"profile_definition_incomplete",
+		"profile_secret_missing",
+		"oauth_missing",
+		"oauth_probe_unknown",
+		"oauth_deployment_unsupported",
+		"codex_capability_unsupported",
+		"profile_revision_unavailable",
+	} {
+		if !isTerminalSurfaceResumeFailure(code) {
+			t.Fatalf("%s must stop automatic recovery retries", code)
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
@@ -51,6 +52,9 @@ func startChild(cmd *exec.Cmd) (io.WriteCloser, io.ReadCloser, io.ReadCloser, er
 }
 
 func childEnvWithProxy(proxyEnv, args []string) []string {
+	if parseBoolEnv(codexprofile.CodexRuntimeResolvedEnv) {
+		return config.BuildCodexResolvedChildEnv(os.Environ(), proxyEnv, args)
+	}
 	return config.BuildCodexChildEnv(os.Environ(), proxyEnv, args)
 }
 

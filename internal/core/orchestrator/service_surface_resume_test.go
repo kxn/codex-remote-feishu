@@ -285,6 +285,56 @@ func TestHeadlessRestoreFailureNoticeAcceptsCanonicalWorkspaceBusyCode(t *testin
 	}
 }
 
+func TestHeadlessLaunchFailurePreservesStructuredProfileReason(t *testing.T) {
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.root.Surfaces["surface-1"].PendingHeadless = &state.HeadlessLaunchRecord{
+		InstanceID: "inst-headless-1",
+		Purpose:    state.HeadlessLaunchPurposeThreadRestore,
+	}
+
+	events := svc.HandleHeadlessLaunchFailed("surface-1", "inst-headless-1", agentproto.ErrorInfo{
+		Code:      "profile_secret_missing",
+		Message:   "Codex Profile 缺少 API Key。",
+		Retryable: false,
+	})
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected failure notice, got %#v", events)
+	}
+	if got := events[0].Notice.Code; got != "profile_secret_missing" {
+		t.Fatalf("notice code = %q, want profile_secret_missing", got)
+	}
+	if !strings.Contains(events[0].Notice.Text, "API Key") {
+		t.Fatalf("notice text lost structured reason: %q", events[0].Notice.Text)
+	}
+}
+
+func TestAutoRestoreFailurePreservesStructuredProfileReason(t *testing.T) {
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.root.Surfaces["surface-1"].PendingHeadless = &state.HeadlessLaunchRecord{
+		InstanceID:  "inst-headless-1",
+		AutoRestore: true,
+		Purpose:     state.HeadlessLaunchPurposeThreadRestore,
+	}
+
+	events := svc.HandleHeadlessLaunchFailed("surface-1", "inst-headless-1", agentproto.ErrorInfo{
+		Code:    "oauth_missing",
+		Message: "本机 Codex 当前没有可用的 ChatGPT 登录。",
+	})
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected restore failure notice, got %#v", events)
+	}
+	if got := events[0].Notice.Code; got != "oauth_missing" {
+		t.Fatalf("notice code = %q, want oauth_missing", got)
+	}
+	if !strings.Contains(events[0].Notice.Text, "登录") {
+		t.Fatalf("notice text lost OAuth reason: %q", events[0].Notice.Text)
+	}
+}
+
 func TestTryAutoResumeHeadlessSurfaceReturnsFailureWhenVisibleAttachIsWorkspaceBusy(t *testing.T) {
 	now := time.Date(2026, 7, 26, 18, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

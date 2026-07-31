@@ -14,6 +14,7 @@ import (
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
+	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/app/codexupgrade"
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
 	codexupgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/codexupgraderuntime"
@@ -33,14 +34,15 @@ import (
 )
 
 type HeadlessRuntimeConfig struct {
-	BinaryPath string
-	ConfigPath string
-	BaseEnv    []string
-	Paths      relayruntime.Paths
-	LaunchArgs []string
-	IdleTTL    time.Duration
-	KillGrace  time.Duration
-	StartTTL   time.Duration
+	BinaryPath      string
+	CodexRealBinary string
+	ConfigPath      string
+	BaseEnv         []string
+	Paths           relayruntime.Paths
+	LaunchArgs      []string
+	IdleTTL         time.Duration
+	KillGrace       time.Duration
+	StartTTL        time.Duration
 
 	IdleRefreshInterval time.Duration
 	IdleRefreshTimeout  time.Duration
@@ -132,6 +134,9 @@ type App struct {
 	gitWorkspaceImports           map[string]*gitWorkspaceImportRuntime
 	gitWorkspaceWorktrees         map[string]*gitWorkspaceWorktreeRuntime
 	startHeadless                 func(relayruntime.HeadlessLaunchOptions) (int, error)
+	runCodexCapabilityPreflight   func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error)
+	runCodexOAuthProbe            func(context.Context, codexprofile.OAuthProbeOptions) (codexprofile.OAuthProbeObservation, error)
+	runCodexNativeConfigProbe     func(context.Context, codexprofile.NativeConfigProbeOptions) (codexprofile.NativeConfigObservation, error)
 	stopProcess                   func(int, time.Duration) error
 	sendAgentCommand              func(string, agentproto.Command) error
 	ingress                       *ingressPump
@@ -149,6 +154,9 @@ type App struct {
 	feishuRoomState               feishuRoomRuntimeState
 	claudeWorkspaceProfileState   claudeWorkspaceProfileRuntimeState
 	profileContextPreferenceState profileContextPreferenceRuntimeState
+	codexRuntimeCapability        codexRuntimeCapabilityState
+	codexOAuthProfileState        codexOAuthProfileRuntimeState
+	codexNativeConnection         codexNativeConnectionRuntimeState
 	profileCatalogMigrationErr    error
 
 	adminAuth                  *adminauth.Manager
@@ -221,6 +229,9 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		gitWorkspaceImports:         map[string]*gitWorkspaceImportRuntime{},
 		gitWorkspaceWorktrees:       map[string]*gitWorkspaceWorktreeRuntime{},
 		startHeadless:               relayruntime.StartDetachedWrapper,
+		runCodexCapabilityPreflight: codexprofile.RunCapabilityPreflight,
+		runCodexOAuthProbe:          codexprofile.RunOAuthProbe,
+		runCodexNativeConfigProbe:   codexprofile.RunNativeConfigProbe,
 		stopProcess:                 relayruntime.TerminateProcess,
 		ingress:                     newIngressPump(),
 		relayConnections:            map[string]*relayConnectionState{},
@@ -334,6 +345,7 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.configureFeishuRoomStateLocked(cfg.Paths.StateDir)
 	a.configureClaudeWorkspaceProfileStateLocked(cfg.Paths.StateDir)
 	a.configureProfileContextPreferenceStateLocked(cfg.Paths.StateDir)
+	a.configureCodexOAuthProfileStateLocked(cfg.Paths.StateDir)
 	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)
 	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncBotCapabilitySettingsStateLocked()
@@ -430,7 +442,10 @@ func (a *App) Run(ctx context.Context) error {
 	a.listenMu.Unlock()
 
 	errCh := make(chan error, 4)
+	a.ensureCodexRuntimeCapability(ctx)
+	a.ensureCodexNativeConnectionEvidence(ctx)
 	a.startIngressPump(ctx, errCh)
+	a.requestCodexOAuthProbe(ctx, false)
 
 	go func() {
 		if err := a.relayServer.Serve(relayListener); err != nil && err != http.ErrServerClosed {

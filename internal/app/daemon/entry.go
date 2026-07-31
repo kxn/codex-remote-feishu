@@ -18,6 +18,7 @@ import (
 	toolruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/desktopsession"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/conversationtrace"
@@ -105,12 +106,17 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		identity,
 	)
 	baseEnv := buildDaemonHeadlessBaseEnv(os.Environ(), capturedProxyEnv)
+	codexRealBinary := strings.TrimSpace(loadedConfig.Config.Wrapper.CodexRealBinary)
+	if resolved, resolveErr := wrapper.ResolveNormalCodexBinaryPreview(codexRealBinary); resolveErr == nil {
+		codexRealBinary = resolved
+	}
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
-		BinaryPath: identity.BinaryPath,
-		ConfigPath: cfg.ConfigPath,
-		BaseEnv:    baseEnv,
-		Paths:      paths,
-		MinIdle:    1,
+		BinaryPath:      identity.BinaryPath,
+		CodexRealBinary: codexRealBinary,
+		ConfigPath:      cfg.ConfigPath,
+		BaseEnv:         baseEnv,
+		Paths:           paths,
+		MinIdle:         1,
 	})
 	app.SetToolRuntime(toolruntime.Config{
 		ListenAddr: net.JoinHostPort(loadedConfig.Config.Tool.ListenHost, strconv.Itoa(loadedConfig.Config.Tool.ListenPort)),

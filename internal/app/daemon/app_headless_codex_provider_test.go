@@ -1,10 +1,12 @@
 package daemon
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -28,10 +30,11 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
-		BinaryPath: "/tmp/codex-remote",
-		ConfigPath: configPath,
-		BaseEnv:    []string{"PATH=/usr/bin"},
-		LaunchArgs: []string{"app-server"},
+		BinaryPath:      "/tmp/codex-remote",
+		CodexRealBinary: "fake-codex",
+		ConfigPath:      configPath,
+		BaseEnv:         []string{"PATH=/usr/bin", "OPENAI_API_KEY=global-secret", "CUSTOM_API_KEY=native-secret"},
+		LaunchArgs:      []string{"app-server"},
 		Paths: relayruntime.Paths{
 			LogsDir:  t.TempDir(),
 			StateDir: t.TempDir(),
@@ -45,6 +48,10 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 		AdminURL:        "http://localhost:9501/admin/",
 		SetupURL:        "http://localhost:9501/setup",
 	})
+	app.runCodexNativeConfigProbe = func(context.Context, codexprofile.NativeConfigProbeOptions) (codexprofile.NativeConfigObservation, error) {
+		return codexprofile.NativeConfigObservation{ProviderEnvKeys: []string{"CUSTOM_API_KEY"}}, nil
+	}
+	app.ensureCodexNativeConnectionEvidence(context.Background())
 	app.service.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, "team-proxy", "", "", "")
 
 	var captured relayruntime.HeadlessLaunchOptions
@@ -53,14 +60,16 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 		return 4324, nil
 	}
 
-	app.startManagedHeadless(control.DaemonCommand{
+	command := control.DaemonCommand{
 		Kind:             control.DaemonCommandStartHeadless,
 		SurfaceSessionID: "surface-1",
 		InstanceID:       "inst-codex-provider",
 		ThreadCWD:        "/data/dl/repo",
 		Backend:          agentproto.BackendCodex,
 		CodexProviderID:  "team-proxy",
-	})
+	}
+	authorizePendingHeadlessForTest(t, app, command)
+	app.startManagedHeadless(command)
 
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=codex") {
 		t.Fatalf("expected codex backend env, got %#v", captured.Env)
@@ -68,15 +77,25 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 	if !containsEnvEntry(captured.Env, config.CodexRuntimeProviderIDEnv+"=team-proxy") {
 		t.Fatalf("expected runtime provider id env, got %#v", captured.Env)
 	}
-	if !containsEnvEntry(captured.Env, config.CodexProviderAPIKeyEnv+"=provider-secret") {
+	if !containsEnvEntry(captured.Env, codexprofile.CodexProfileAPIKeyEnv+"=provider-secret") {
 		t.Fatalf("expected provider api key env, got %#v", captured.Env)
+	}
+	if containsEnvEntry(captured.Env, "OPENAI_API_KEY=") || containsEnvEntry(captured.Env, config.CodexProviderAPIKeyEnv+"=") {
+		t.Fatalf("expected conflicting auth env to be cleared, got %#v", captured.Env)
+	}
+	if containsEnvEntry(captured.Env, "CUSTOM_API_KEY=native-secret") {
+		t.Fatalf("expected native provider env key to be cleared, got %#v", captured.Env)
 	}
 	args := strings.Join(captured.Args, "\n")
 	for _, want := range []string{
-		`model_provider="team-proxy"`,
-		`model_providers.team-proxy.name="Team Proxy"`,
-		`model_providers.team-proxy.base_url="https://proxy.example/v1"`,
-		`model_providers.team-proxy.env_key="CODEX_REMOTE_CODEX_PROVIDER_API_KEY"`,
+		`model_provider="codex_remote_profile_`,
+		`.name="Codex Remote API"`,
+		`.base_url="https://proxy.example/v1"`,
+		`.wire_api="responses"`,
+		`.env_key="CODEX_REMOTE_CODEX_PROFILE_API_KEY"`,
+		`.requires_openai_auth=false`,
+		`.supports_websockets=false`,
+		`cli_auth_credentials_store="ephemeral"`,
 		`model="gpt-5.4"`,
 		`model_reasoning_effort="xhigh"`,
 	} {
@@ -126,9 +145,10 @@ func TestDaemonStartsCodexHeadlessWithCanonicalProfileID(t *testing.T) {
 		t.Fatalf("canonical profile did not reach launcher: env=%#v args=%#v", captured.Env, captured.Args)
 	}
 	args := strings.Join(captured.Args, "\n")
-	if !strings.Contains(args, `model_provider="`+record.ID+`"`) ||
-		!strings.Contains(args, `model_providers.`+record.ID+`.base_url="https://canonical.example/v1"`) {
-		t.Fatalf("canonical profile launch overrides lost exact ID: %#v", captured.Args)
+	if !strings.Contains(args, `model_provider="codex_remote_profile_`) ||
+		strings.Contains(args, `model_provider="`+record.ID+`"`) ||
+		!strings.Contains(args, `.base_url="https://canonical.example/v1"`) {
+		t.Fatalf("canonical profile was not projected to an internal provider: %#v", captured.Args)
 	}
 }
 
@@ -165,18 +185,17 @@ func TestDaemonStartsCodexHeadlessWithDefaultProviderKeepsLaunchArgsClean(t *tes
 	}
 
 	app.startManagedHeadless(control.DaemonCommand{
-		Kind:             control.DaemonCommandStartHeadless,
-		SurfaceSessionID: "surface-1",
-		InstanceID:       "inst-codex-default",
-		ThreadCWD:        "/data/dl/repo",
-		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  config.CodexDefaultProviderID,
+		Kind:            control.DaemonCommandStartHeadless,
+		InstanceID:      "inst-codex-default",
+		ThreadCWD:       "/data/dl/repo",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: config.CodexDefaultProviderID,
 	})
 
 	if strings.Contains(strings.Join(captured.Args, "\n"), "model_provider=") {
 		t.Fatalf("expected built-in default provider to avoid provider overrides, got %#v", captured.Args)
 	}
-	if containsEnvEntry(captured.Env, config.CodexProviderAPIKeyEnv+"=") {
+	if containsEnvEntry(captured.Env, codexprofile.CodexProfileAPIKeyEnv+"=") {
 		t.Fatalf("expected built-in default provider to avoid provider key env, got %#v", captured.Env)
 	}
 }
@@ -213,5 +232,25 @@ func TestDaemonRejectsIncompleteMigratedCodexProfileBeforeLaunch(t *testing.T) {
 	})
 	if launched {
 		t.Fatal("incomplete migrated Codex Profile reached the launcher")
+	}
+}
+
+func TestCodexHeadlessLaunchProblemPreservesStableRuntimeReason(t *testing.T) {
+	problem := codexHeadlessLaunchProblem(
+		&codexprofile.RuntimeError{Code: codexprofile.ErrorProfileSecretMissing},
+		agentproto.ErrorInfo{
+			Code:      "codex_provider_prepare_failed",
+			Message:   "Codex Provider 准备失败。",
+			Retryable: true,
+		},
+	)
+	if problem.Code != codexprofile.ErrorProfileSecretMissing {
+		t.Fatalf("problem code = %q, want %q", problem.Code, codexprofile.ErrorProfileSecretMissing)
+	}
+	if problem.Retryable {
+		t.Fatal("deterministic Profile failure must not be marked retryable")
+	}
+	if !strings.Contains(problem.Message, "API Key") {
+		t.Fatalf("problem message = %q, want actionable API Key reason", problem.Message)
 	}
 }

@@ -66,7 +66,7 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		return 4322, nil
 	}
 
-	app.startManagedHeadless(control.DaemonCommand{
+	command := control.DaemonCommand{
 		Kind:                  control.DaemonCommandStartHeadless,
 		SurfaceSessionID:      "surface-1",
 		InstanceID:            "inst-claude-profile",
@@ -75,7 +75,9 @@ func TestDaemonStartsClaudeHeadlessWithCustomProfileLaunchEnv(t *testing.T) {
 		Backend:               agentproto.BackendClaude,
 		ClaudeProfileID:       "devseek",
 		ClaudeReasoningEffort: "high",
-	})
+	}
+	authorizePendingHeadlessForTest(t, app, command)
+	app.startManagedHeadless(command)
 
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=claude") {
 		t.Fatalf("expected claude backend env for managed headless launch, got %#v", captured.Env)
@@ -172,7 +174,7 @@ func TestDaemonClaudeReasoningOverrideClearsProfileBudgetThinkingFlags(t *testin
 		return 4322, nil
 	}
 
-	app.startManagedHeadless(control.DaemonCommand{
+	command := control.DaemonCommand{
 		Kind:                  control.DaemonCommandStartHeadless,
 		SurfaceSessionID:      "surface-1",
 		InstanceID:            "inst-claude-profile-low",
@@ -181,7 +183,9 @@ func TestDaemonClaudeReasoningOverrideClearsProfileBudgetThinkingFlags(t *testin
 		Backend:               agentproto.BackendClaude,
 		ClaudeProfileID:       "devseek",
 		ClaudeReasoningEffort: "low",
-	})
+	}
+	authorizePendingHeadlessForTest(t, app, command)
+	app.startManagedHeadless(command)
 
 	if !containsEnvEntry(captured.Env, config.ClaudeEffortLevelEnv+"=low") {
 		t.Fatalf("expected explicit low reasoning override, got %#v", captured.Env)
@@ -243,7 +247,7 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 		return 4323, nil
 	}
 
-	app.startManagedHeadless(control.DaemonCommand{
+	command := control.DaemonCommand{
 		Kind:             control.DaemonCommandStartHeadless,
 		SurfaceSessionID: "surface-1",
 		InstanceID:       "inst-claude-default",
@@ -251,7 +255,9 @@ func TestDaemonStartsClaudeHeadlessWithBuiltInDefaultProfileKeepsCurrentClaudeEn
 		ThreadCWD:        "/data/dl/repo",
 		Backend:          agentproto.BackendClaude,
 		ClaudeProfileID:  config.ClaudeDefaultProfileID,
-	})
+	}
+	authorizePendingHeadlessForTest(t, app, command)
+	app.startManagedHeadless(command)
 
 	if !containsEnvEntry(captured.Env, config.ClaudeConfigDirEnv+"=/tmp/current-claude") ||
 		!containsEnvEntry(captured.Env, config.ClaudeModelEnv+"=current-model") {

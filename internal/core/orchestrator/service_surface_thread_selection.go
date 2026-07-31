@@ -628,6 +628,48 @@ func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, workspaceK
 
 func headlessRestoreFailureNotice(code string) *control.Notice {
 	switch strings.TrimSpace(code) {
+	case "profile_definition_incomplete":
+		return &control.Notice{
+			Code:  "profile_definition_incomplete",
+			Title: "Codex Profile 不可用",
+			Text:  "当前 Codex Profile 缺少必需的模型或推理配置，请先完成配置后再恢复会话。",
+		}
+	case "profile_secret_missing":
+		return &control.Notice{
+			Code:  "profile_secret_missing",
+			Title: "Codex Profile 不可用",
+			Text:  "当前 Codex Profile 缺少可用的 API Key，请先更新 Profile 后再恢复会话。",
+		}
+	case "oauth_missing":
+		return &control.Notice{
+			Code:  "oauth_missing",
+			Title: "Codex 登录不可用",
+			Text:  "本机 Codex 当前没有可用的 ChatGPT 登录，请先重新登录后再恢复会话。",
+		}
+	case "oauth_probe_unknown":
+		return &control.Notice{
+			Code:  "oauth_probe_unknown",
+			Title: "Codex 登录状态未知",
+			Text:  "暂时无法确认本机 Codex 的 ChatGPT 登录状态，请刷新状态后再试。",
+		}
+	case "oauth_deployment_unsupported":
+		return &control.Notice{
+			Code:  "oauth_deployment_unsupported",
+			Title: "Codex 登录部署暂不支持",
+			Text:  "当前 ChatGPT 登录使用了暂不支持的自定义部署，请改用本机默认或官方部署。",
+		}
+	case "codex_capability_unsupported":
+		return &control.Notice{
+			Code:  "codex_capability_unsupported",
+			Title: "Codex 版本不兼容",
+			Text:  "当前 Codex 版本不支持所需的 Profile 隔离能力，请先升级 Codex。",
+		}
+	case "profile_revision_unavailable":
+		return &control.Notice{
+			Code:  "profile_revision_unavailable",
+			Title: "Codex Profile 已变化",
+			Text:  "这个任务引用的 Codex Profile 版本已经不可用，请重新选择 Profile。",
+		}
 	case "headless_restore_provider_unavailable":
 		return &control.Notice{
 			Code:  "headless_restore_provider_unavailable",
@@ -662,11 +704,17 @@ func headlessRestoreFailureNotice(code string) *control.Notice {
 			Title: "恢复失败",
 			Text:  "之前的会话缺少可恢复的工作目录，暂时无法自动恢复，请稍后重试或尝试其他会话。",
 		}
-	default:
+	case "thread_not_found", "headless_restore_thread_not_found":
 		return &control.Notice{
 			Code:  "headless_restore_thread_not_found",
 			Title: "恢复失败",
 			Text:  "暂时无法找到之前会话，请稍后重试或尝试其他会话。",
+		}
+	default:
+		return &control.Notice{
+			Code:  "headless_restore_start_failed",
+			Title: "恢复失败",
+			Text:  "之前的会话暂时无法恢复，请检查错误原因后重试或尝试其他会话。",
 		}
 	}
 }
@@ -678,6 +726,14 @@ func NoticeForHeadlessRestoreFailure(code string) *control.Notice {
 func HeadlessRestoreLaunchFailureCode(err error) string {
 	problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{})
 	switch strings.TrimSpace(problem.Code) {
+	case "profile_definition_incomplete",
+		"profile_secret_missing",
+		"oauth_missing",
+		"oauth_probe_unknown",
+		"oauth_deployment_unsupported",
+		"codex_capability_unsupported",
+		"profile_revision_unavailable":
+		return strings.TrimSpace(problem.Code)
 	case "codex_provider_prepare_failed":
 		return "headless_restore_provider_unavailable"
 	case "claude_profile_prepare_failed", "claude_settings_prepare_failed":
