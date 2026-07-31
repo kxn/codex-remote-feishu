@@ -12,7 +12,7 @@ func TestDaemonIngressUsesCentralSurfaceRecoveryPipeline(t *testing.T) {
 		t.Fatalf("read app_ingress.go: %v", err)
 	}
 	source := string(data)
-	entrypoints := []string{"handleAction", "onHello", "onEvents", "onDisconnect", "onTick"}
+	entrypoints := []string{"handleActionLocked", "onHello", "onEvents", "onDisconnect", "onTick"}
 	for _, entrypoint := range entrypoints {
 		body := functionBodyForStructureTest(t, source, entrypoint)
 		if !strings.Contains(body, "runSurfaceRecoveryPipelineLocked") {
@@ -29,6 +29,10 @@ func TestDaemonIngressUsesCentralSurfaceRecoveryPipeline(t *testing.T) {
 				t.Fatalf("%s still calls recovery primitive %s directly", entrypoint, primitive)
 			}
 		}
+	}
+	handleActionBody := functionBodyForStructureTest(t, source, "handleAction")
+	if !strings.Contains(handleActionBody, "handleActionLocked") {
+		t.Fatalf("handleAction no longer delegates to the locked ingress episode")
 	}
 }
 

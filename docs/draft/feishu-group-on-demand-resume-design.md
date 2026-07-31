@@ -110,7 +110,7 @@ V1 推荐实现边界：
    - `Action` 的 clone，包括 `GatewayID`、`SurfaceSessionID`、`ChatID`、`ActorUserID`、`MessageID`、`TargetMessageID`、`Text`、`Inputs`、`SteerInputs`、`Inbound`。
    - 触发时间和过期时间。建议过期时间与 `PendingHeadless.ExpiresAt` 对齐。
    - continuation kind，例如 `group_on_demand_text_dispatch`，避免和 `prompt_dispatch_restart` 混淆。
-6. `PendingHeadless` 已成功 attach 后，由 `ApplyInstanceConnected()` 产生的 attach 成功事件或 daemon 后续 sync 点触发 replay：先清 continuation，再把 clone 的 action 重新走 `applyIngressActionLocked()`，但必须跳过再次 on-demand recovery 入口，避免循环。
+6. `PendingHeadless` 已成功 attach 后，由 `ApplyInstanceConnected()` 产生的 attach 成功事件或 daemon 后续 sync 点触发 replay：先清 continuation，再把 clone 的 action 重新走统一 locked ingress episode，重新经过 rejected/room/upgrade/turn-patch 等动态 gate；replay 入口必须跳过再次 on-demand recovery，避免循环。
 7. 如果 `PendingHeadless` 超时、启动失败、connect attach failure，清掉 continuation，并只对当前消息所在群回复一次恢复失败 notice。这个 notice 属于用户触发反馈，不走 background lifecycle fanout。
 8. 如果 on-demand 恢复发现 workspace/thread busy，复用现有 failure notice，但本次失败仍应调用 `recordSurfaceResumeFailureLocked()` 写 backoff；同一用户连续 @ 的间隔内可以直接返回“还在恢复/稍后重试”，不要每条消息都重新拉 headless。
 
@@ -248,8 +248,8 @@ TDD 步骤：
    - `Waiting` / `Skipped`：返回一条当前交互 notice，说明正在准备恢复或无法恢复。
 4. `replayPendingGroupOnDemandActionLocked(surfaceID)`：
    - 在 `onHello()` 的 `ApplyInstanceConnected()` 后、`onTick()` 处理 pending timeout 后检查。
-   - 如果 surface 已 attached 且 continuation 未过期，清 continuation 后调用一个跳过 on-demand gate 的 ingress apply helper。
-   - replay 不能再次写入相同 continuation。
+   - 如果 surface 已 attached 且 continuation 未过期，清 continuation 后调用统一 locked ingress episode helper。
+   - replay 必须重新经过当前动态 ingress gate，并且不能再次写入相同 continuation。
 5. 超时/失败清理：
    - `gateUngatedManagedHeadlessResumeOutcomeEventsLocked()` 看到该 surface 的 `headless_restore_*` failure 时，清 continuation。
    - `PendingHeadless` 消费后如果未 attached，也清 continuation。

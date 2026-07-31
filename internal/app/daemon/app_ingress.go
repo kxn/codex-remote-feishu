@@ -186,9 +186,17 @@ func (a *App) HandleGatewayAction(ctx context.Context, action control.Action) *f
 	return a.handleAction(ctx, action)
 }
 
+type ingressEpisodeOptions struct {
+	allowGroupOnDemandResume bool
+}
+
 func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.ActionResult {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.handleActionLocked(ctx, action, ingressEpisodeOptions{allowGroupOnDemandResume: true})
+}
+
+func (a *App) handleActionLocked(ctx context.Context, action control.Action, options ingressEpisodeOptions) *feishu.ActionResult {
 	if a.shuttingDown {
 		log.Printf(
 			"surface action ignored during shutdown: surface=%s chat=%s actor=%s kind=%s message=%s",
@@ -266,14 +274,16 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 		a.syncWorkspaceSurfaceContextFilesLocked()
 		return inlineResult
 	}
-	if events, handled := a.maybeStartFeishuGroupOnDemandResumeLocked(action); handled {
-		a.handleUIEventsLocked(ctx, events)
-		a.syncSurfaceResumeStateLocked(nil)
-		a.syncClaudeWorkspaceProfileStateLocked()
-		a.syncBotCapabilitySettingsStateLocked()
-		a.syncFeishuRoomStateLocked()
-		a.syncWorkspaceSurfaceContextFilesLocked()
-		return nil
+	if options.allowGroupOnDemandResume {
+		if events, handled := a.maybeStartFeishuGroupOnDemandResumeLocked(action); handled {
+			a.handleUIEventsLocked(ctx, events)
+			a.syncSurfaceResumeStateLocked(nil)
+			a.syncClaudeWorkspaceProfileStateLocked()
+			a.syncBotCapabilitySettingsStateLocked()
+			a.syncFeishuRoomStateLocked()
+			a.syncWorkspaceSurfaceContextFilesLocked()
+			return nil
+		}
 	}
 	events := a.applyIngressActionLocked(action)
 	contract := control.ResolveFeishuFrontstageActionContract(action)
@@ -541,14 +551,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	connectEvents := a.service.ApplyInstanceConnected(inst.InstanceID)
 	connectEvents = a.gateUngatedManagedHeadlessResumeOutcomeEventsLocked(connectEvents, now)
 	a.handleUIEventsLocked(ctx, connectEvents)
-	if replayEvents := a.replayGroupOnDemandResumeContinuationsLocked(inst.InstanceID, now); len(replayEvents) != 0 {
-		a.handleUIEventsLocked(ctx, replayEvents)
-		a.syncSurfaceResumeStateLocked(nil)
-		a.syncClaudeWorkspaceProfileStateLocked()
-		a.syncBotCapabilitySettingsStateLocked()
-		a.syncFeishuRoomStateLocked()
-		a.syncWorkspaceSurfaceContextFilesLocked()
-	}
+	a.replayGroupOnDemandResumeContinuationsLocked(ctx, inst.InstanceID, now)
 	if inst.Source == "vscode" {
 		a.invalidateVSCodeCompatibilityCacheLocked()
 	}

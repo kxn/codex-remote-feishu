@@ -3,10 +3,14 @@ package daemon
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
+	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
+	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -275,6 +279,75 @@ func TestFeishuGroupOnDemandReplayDispatchesOriginalTextAfterHeadlessConnect(t *
 	}
 }
 
+func TestFeishuGroupOnDemandReplayRechecksUpgradeOwnerGate(t *testing.T) {
+	stateDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	putGroupOnDemandResumeStateForTest(t, stateDir, workspaceDir)
+	app := newRestoreHintTestApp(stateDir)
+	var sent []agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		sent = append(sent, command)
+		return nil
+	}
+
+	pendingInstanceID := startGroupOnDemandPendingForTest(t, app, workspaceDir)
+	app.mu.Lock()
+	app.newUpgradeOwnerFlowLocked("feishu:app-1:chat:oc_room", "ou_user", "om-upgrade-card", upgraderuntime.OwnerFlowStageRunning)
+	app.mu.Unlock()
+	gateway := app.gateway.(*recordingGateway)
+	gateway.operations = nil
+
+	connectGroupOnDemandPendingForTest(app, pendingInstanceID, workspaceDir)
+
+	if prompts := promptCommands(sent); len(prompts) != 0 {
+		t.Fatalf("expected upgrade owner gate to block replayed prompt dispatch, got %#v", prompts)
+	}
+	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
+		t.Fatalf("expected blocked replay to clear continuation, got %#v", continuation)
+	}
+	if !gatewayOperationsContainText(gateway.operations, "普通输入和其他操作已暂停") {
+		t.Fatalf("expected upgrade running notice after replay, got %#v", gateway.operations)
+	}
+}
+
+func TestFeishuGroupOnDemandReplayRechecksTurnPatchTransactionGate(t *testing.T) {
+	stateDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	putGroupOnDemandResumeStateForTest(t, stateDir, workspaceDir)
+	app := newRestoreHintTestApp(stateDir)
+	var sent []agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		sent = append(sent, command)
+		return nil
+	}
+
+	pendingInstanceID := startGroupOnDemandPendingForTest(t, app, workspaceDir)
+	app.turnPatchRuntime.ActiveTx[pendingInstanceID] = &turnpatchruntime.Transaction{
+		ID:               "tx-1",
+		InstanceID:       pendingInstanceID,
+		Kind:             turnpatchruntime.TransactionKindApply,
+		InitiatorSurface: "feishu:app-1:chat:oc_room",
+		PausedSurfaceIDs: map[string]bool{"feishu:app-1:chat:oc_room": true},
+		Stage:            turnpatchruntime.TransactionStageApplyingRestart,
+		StartedAt:        time.Now().UTC(),
+		UpdatedAt:        time.Now().UTC(),
+	}
+	gateway := app.gateway.(*recordingGateway)
+	gateway.operations = nil
+
+	connectGroupOnDemandPendingForTest(app, pendingInstanceID, workspaceDir)
+
+	if prompts := promptCommands(sent); len(prompts) != 0 {
+		t.Fatalf("expected turn patch gate to block replayed prompt dispatch, got %#v", prompts)
+	}
+	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
+		t.Fatalf("expected blocked replay to clear continuation, got %#v", continuation)
+	}
+	if !gatewayOperationsContainText(gateway.operations, "当前正在修补当前会话") {
+		t.Fatalf("expected turn patch running notice after replay, got %#v", gateway.operations)
+	}
+}
+
 func TestFeishuGroupOnDemandTextWithFilesReturnsRecoveryPrompt(t *testing.T) {
 	t.Parallel()
 
@@ -361,4 +434,77 @@ func TestFeishuGroupOnDemandVSCodeReturnsUnsupportedPrompt(t *testing.T) {
 	if len(gateway.operations) != 1 || gateway.operations[0].CardTitle != "当前群暂不能自动恢复 VS Code" {
 		t.Fatalf("expected one VS Code unsupported prompt, got %#v", gateway.operations)
 	}
+}
+
+func putGroupOnDemandResumeStateForTest(t *testing.T, stateDir, workspaceDir string) {
+	t.Helper()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "feishu:app-1:chat:oc_room",
+		GatewayID:          "app-1",
+		ChatID:             "oc_room",
+		ActorUserID:        "ou_user",
+		ProductMode:        "normal",
+		Backend:            "codex",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    workspaceDir,
+		ResumeWorkspaceKey: workspaceDir,
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+}
+
+func startGroupOnDemandPendingForTest(t *testing.T, app *App, workspaceDir string) string {
+	t.Helper()
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		return 4321, nil
+	}
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_user",
+		MessageID:        "om-on-demand-1",
+		Text:             "继续刚才的任务",
+	})
+	pending := app.service.SurfaceSnapshot("feishu:app-1:chat:oc_room").PendingHeadless
+	if pending.InstanceID == "" || !testutil.SamePath(pending.ThreadCWD, workspaceDir) {
+		t.Fatalf("expected pending headless before replay, got %#v", pending)
+	}
+	return pending.InstanceID
+}
+
+func connectGroupOnDemandPendingForTest(app *App, instanceID, workspaceDir string) {
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:    instanceID,
+			DisplayName:   "headless",
+			WorkspaceRoot: workspaceDir,
+			WorkspaceKey:  workspaceDir,
+			ShortName:     "headless",
+			Source:        "headless",
+			Managed:       true,
+			PID:           4321,
+		},
+	})
+}
+
+func promptCommands(commands []agentproto.Command) []agentproto.Command {
+	prompts := make([]agentproto.Command, 0)
+	for _, command := range commands {
+		if command.Kind == agentproto.CommandPromptSend {
+			prompts = append(prompts, command)
+		}
+	}
+	return prompts
+}
+
+func gatewayOperationsContainText(operations []feishu.Operation, want string) bool {
+	for _, operation := range operations {
+		if strings.Contains(operation.CardBody, want) || strings.Contains(operationCardText(operation), want) {
+			return true
+		}
+	}
+	return false
 }

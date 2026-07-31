@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -107,12 +108,12 @@ func (a *App) saveGroupOnDemandResumeContinuationLocked(surfaceID string, action
 	}
 }
 
-func (a *App) replayGroupOnDemandResumeContinuationsLocked(instanceID string, now time.Time) []eventcontract.Event {
+func (a *App) replayGroupOnDemandResumeContinuationsLocked(ctx context.Context, instanceID string, now time.Time) {
 	instanceID = strings.TrimSpace(instanceID)
 	if instanceID == "" || len(a.surfaceResumeRuntime.groupOnDemandContinuations) == 0 {
-		return nil
+		return
 	}
-	events := []eventcontract.Event{}
+	replays := make([]control.Action, 0)
 	for surfaceID, continuation := range a.surfaceResumeRuntime.groupOnDemandContinuations {
 		if continuation == nil {
 			delete(a.surfaceResumeRuntime.groupOnDemandContinuations, surfaceID)
@@ -127,9 +128,11 @@ func (a *App) replayGroupOnDemandResumeContinuationsLocked(instanceID string, no
 			continue
 		}
 		delete(a.surfaceResumeRuntime.groupOnDemandContinuations, surfaceID)
-		events = append(events, a.applyIngressActionLocked(cloneControlAction(continuation.Action))...)
+		replays = append(replays, cloneControlAction(continuation.Action))
 	}
-	return events
+	for _, action := range replays {
+		a.handleActionLocked(ctx, action, ingressEpisodeOptions{allowGroupOnDemandResume: false})
+	}
 }
 
 func (a *App) consumeGroupOnDemandResumeContinuationLocked(surfaceID string) (*groupOnDemandResumeContinuation, bool) {
