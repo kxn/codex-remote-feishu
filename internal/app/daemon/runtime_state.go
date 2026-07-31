@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
@@ -95,6 +96,7 @@ type cronRuntimeState struct {
 type feishuRuntimeState struct {
 	mu                        sync.RWMutex
 	permissionMu              sync.RWMutex
+	primaryGatewayByChat      atomic.Value
 	runtimeApply              map[string]feishuRuntimeApplyPendingState
 	timeSensitive             map[string]feishuTimeSensitiveState
 	attentionRequests         map[string]time.Time

@@ -153,6 +153,9 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	if !ok || room.WorkspaceKey != "/data/workspaces/shared" || room.PrimaryGatewayID != "" {
 		t.Fatalf("room state after identity change = %#v, present=%v", room, ok)
 	}
+	if got := app.gatewayRuntimeHooks().PrimaryGatewayForChat("oc_room"); got != "" {
+		t.Fatalf("primary snapshot after identity change = %q, want empty", got)
+	}
 	if _, ok := app.feishuRuntime.timeSensitive[privateSurfaceID]; ok {
 		t.Fatal("old time-sensitive cache survived identity change")
 	}

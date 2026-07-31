@@ -63,14 +63,3 @@ func (s *Service) FeishuRoomState() []state.FeishuRoomStateRecord {
 	}
 	return records
 }
-
-func (s *Service) FeishuRoomPrimaryGateway(chatID string) string {
-	if s == nil || s.root == nil {
-		return ""
-	}
-	room := s.root.FeishuRoomContexts[state.FeishuRoomKey(chatID)]
-	if room == nil {
-		return ""
-	}
-	return room.PrimaryGatewayID
-}

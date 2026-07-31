@@ -135,7 +135,7 @@ func (a *App) gatewayRuntimeHooks() gatewayRuntimeHooks {
 		return gatewayRuntimeHooks{}
 	}
 	return gatewayRuntimeHooks{
-		PrimaryGatewayForChat: a.service.FeishuRoomPrimaryGateway,
+		PrimaryGatewayForChat: a.feishuPrimaryGatewayForChat,
 	}
 }
 

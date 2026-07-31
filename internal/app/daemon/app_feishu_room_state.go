@@ -36,15 +36,57 @@ func (a *App) materializeFeishuRoomStateLocked() {
 		records = append(records, record)
 	}
 	a.service.MaterializeFeishuRoomState(records)
+	a.refreshFeishuPrimaryGatewaySnapshotLocked()
 }
 
 func (a *App) syncFeishuRoomStateLocked() {
+	a.refreshFeishuPrimaryGatewaySnapshotLocked()
 	if !a.feishuRoomState.writable() || a.feishuRoomState.store == nil {
 		return
 	}
 	if err := a.feishuRoomState.store.ReplaceAll(a.service.FeishuRoomState()); err != nil {
 		log.Printf("persist feishu room state failed: err=%v", err)
 	}
+}
+
+func (a *App) refreshFeishuPrimaryGatewaySnapshotLocked() {
+	if a == nil {
+		return
+	}
+	a.feishuRuntime.primaryGatewayByChat.Store(buildFeishuPrimaryGatewayIndex(a.service.FeishuRoomState()))
+}
+
+func buildFeishuPrimaryGatewayIndex(records []state.FeishuRoomStateRecord) map[string]string {
+	index := map[string]string{}
+	for _, record := range records {
+		normalized, ok := state.NormalizeFeishuRoomStateRecord(record)
+		if !ok {
+			continue
+		}
+		primary := canonicalGatewayID(normalized.PrimaryGatewayID)
+		if primary == "" {
+			continue
+		}
+		if key := state.FeishuRoomKey(normalized.ChatID); key != "" {
+			index[key] = primary
+		}
+	}
+	return index
+}
+
+func (a *App) feishuPrimaryGatewayForChat(chatID string) string {
+	if a == nil {
+		return ""
+	}
+	key := state.FeishuRoomKey(chatID)
+	if key == "" {
+		return ""
+	}
+	snapshot, _ := a.feishuRuntime.primaryGatewayByChat.Load().(map[string]string)
+	if len(snapshot) == 0 {
+		return ""
+	}
+	return snapshot[key]
 }
 
 func (a *App) reconcileFeishuRoomWorkspaceStateLocked(entries map[string]surfaceresume.Entry) {

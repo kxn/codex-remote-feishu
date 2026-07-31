@@ -155,6 +155,7 @@ func (a *App) commitFeishuBotIdentityTransition(transition feishuBotIdentityTran
 	}
 
 	removedSurfaceIDs = append(removedSurfaceIDs, a.service.PurgeGatewayIdentityState(transition.GatewayID)...)
+	a.refreshFeishuPrimaryGatewaySnapshotLocked()
 	a.purgeFeishuGatewayRuntimeStateLocked(transition.GatewayID, removedSurfaceIDs)
 	return nil
 }
