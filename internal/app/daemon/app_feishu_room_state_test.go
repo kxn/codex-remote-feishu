@@ -174,15 +174,16 @@ func TestSetHeadlessRuntimeBackfillsRoomWorkspaceFromConsistentSurfaceResumeStat
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{Paths: relayruntime.Paths{StateDir: stateDir}})
 
+	expectedWorkspace := state.ResolveWorkspaceClaimKey(workspaceDir)
 	records := app.service.FeishuRoomState()
-	if len(records) != 1 || records[0].WorkspaceKey != state.NormalizeWorkspaceKey(workspaceDir) {
+	if len(records) != 1 || records[0].WorkspaceKey != expectedWorkspace {
 		t.Fatalf("materialized room state = %#v, want one backfilled workspace", records)
 	}
 	reloaded, err := feishuroomstate.LoadStore(feishuroomstate.StatePath(stateDir))
 	if err != nil {
 		t.Fatalf("reload room state: %v", err)
 	}
-	if record, ok := reloaded.Get("oc_room"); !ok || record.WorkspaceKey != state.NormalizeWorkspaceKey(workspaceDir) {
+	if record, ok := reloaded.Get("oc_room"); !ok || record.WorkspaceKey != expectedWorkspace {
 		t.Fatalf("persisted room state = %#v, present=%v", record, ok)
 	}
 }
@@ -214,8 +215,9 @@ func TestSetHeadlessRuntimeMigratesLegacyPrimaryAndWorkspaceAsOneRoomRecord(t *t
 	if err != nil {
 		t.Fatalf("reload migrated room state: %v", err)
 	}
+	expectedWorkspace := state.ResolveWorkspaceClaimKey(workspaceDir)
 	record, ok := reloaded.Get("oc_room")
-	if !ok || record.PrimaryGatewayID != "app-1" || record.PrimaryUpdatedBy != "ou_admin" || record.WorkspaceKey != state.NormalizeWorkspaceKey(workspaceDir) {
+	if !ok || record.PrimaryGatewayID != "app-1" || record.PrimaryUpdatedBy != "ou_admin" || record.WorkspaceKey != expectedWorkspace {
 		t.Fatalf("migrated room record = %#v, present=%v", record, ok)
 	}
 	if reloaded.Dirty() {
@@ -355,8 +357,9 @@ func TestDurableRoomWorkspaceRejectsMismatchedSurfaceResumeTarget(t *testing.T) 
 	if len(gateway.operations) != 1 || gateway.operations[0].Kind != feishu.OperationSendCard || gateway.operations[0].CardTitle != "群工作区状态冲突" {
 		t.Fatalf("mismatched durable/surface state operations = %#v", gateway.operations)
 	}
+	expectedWorkspace := state.ResolveWorkspaceClaimKey(durableWorkspace)
 	records := app.service.FeishuRoomState()
-	if len(records) != 1 || records[0].WorkspaceKey != state.NormalizeWorkspaceKey(durableWorkspace) {
+	if len(records) != 1 || records[0].WorkspaceKey != expectedWorkspace {
 		t.Fatalf("durable room workspace must remain authoritative, got %#v", records)
 	}
 }
@@ -477,8 +480,9 @@ func TestRoomWorkspaceSwitchClearsSiblingStaleResumeTargetBeforeRestart(t *testi
 	if restarted.feishuRoomState.workspaceConflicts["feishu:chat:oc_room"] {
 		t.Fatal("valid room workspace switch became a recovery conflict after restart")
 	}
+	expectedWorkspace := state.ResolveWorkspaceClaimKey(workspaceB)
 	records := restarted.service.FeishuRoomState()
-	if len(records) != 1 || records[0].WorkspaceKey != state.NormalizeWorkspaceKey(workspaceB) {
+	if len(records) != 1 || records[0].WorkspaceKey != expectedWorkspace {
 		t.Fatalf("restarted room state = %#v, want workspace B", records)
 	}
 }
