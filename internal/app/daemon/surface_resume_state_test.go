@@ -23,7 +23,7 @@ import (
 
 const testCanonicalResumeWorkspace = "/tmp/codex-remote/workspace-demo"
 
-func TestManagedHeadlessWorkspaceBusyIsReportedOncePerRecoveryEpisode(t *testing.T) {
+func TestManagedHeadlessWorkspaceBusyStaysSilentDuringAutomaticRecovery(t *testing.T) {
 	app := New(":0", ":0", nil, serverIdentityForTest())
 	app.surfaceResumeRuntime.recovery["surface-1"] = &surfaceResumeRecoveryState{}
 	events := []eventcontract.Event{{
@@ -34,12 +34,12 @@ func TestManagedHeadlessWorkspaceBusyIsReportedOncePerRecoveryEpisode(t *testing
 	now := time.Date(2026, 7, 26, 18, 0, 0, 0, time.UTC)
 
 	first := app.gateUngatedManagedHeadlessResumeOutcomeEventsLocked(events, now)
-	if len(first) != 1 || first[0].Notice == nil || first[0].Notice.Code != "headless_restore_workspace_busy" {
-		t.Fatalf("expected first workspace-busy failure to be delivered, got %#v", first)
+	if len(first) != 0 {
+		t.Fatalf("expected automatic workspace-busy failure to stay silent, got %#v", first)
 	}
 	recovery := app.surfaceResumeRuntime.recovery["surface-1"]
-	if !recovery.NextAttemptAt.Equal(now.Add(surfaceResumeRetryBackoff)) || recovery.LastNoticeCode != "headless_restore_workspace_busy" {
-		t.Fatalf("expected workspace-busy failure to establish backoff and notice state, got %#v", recovery)
+	if !recovery.NextAttemptAt.Equal(now.Add(surfaceResumeRetryBackoff)) || recovery.LastFailureCode != "headless_restore_workspace_busy" || recovery.LastNoticeCode != "" {
+		t.Fatalf("expected workspace-busy failure to establish silent backoff, got %#v", recovery)
 	}
 
 	second := app.gateUngatedManagedHeadlessResumeOutcomeEventsLocked(events, now.Add(time.Second))
@@ -1668,11 +1668,11 @@ func TestSurfaceResumeRecoverySyncPreservesBackoffForSameRecoveryTarget(t *testi
 	app := newRestoreHintTestApp(stateDir)
 	now := time.Date(2026, 6, 5, 3, 20, 0, 0, time.UTC)
 	displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_start_timeout", now)
-	if !emit || displayCode != "headless_restore_start_timeout" {
-		t.Fatalf("expected first restore failure to emit, display=%q emit=%t", displayCode, emit)
+	if emit || displayCode != "headless_restore_start_timeout" {
+		t.Fatalf("expected retryable restore failure to stay silent, display=%q emit=%t", displayCode, emit)
 	}
 	before := app.surfaceResumeRuntime.recovery["surface-1"]
-	if before == nil || before.NextAttemptAt.IsZero() || before.LastNoticeCode == "" {
+	if before == nil || before.NextAttemptAt.IsZero() || before.LastFailureCode != "headless_restore_start_timeout" || before.LastNoticeCode != "" {
 		t.Fatalf("expected recovery backoff to be recorded, got %#v", before)
 	}
 
@@ -1723,11 +1723,11 @@ func TestSurfaceResumeRecoverySyncPreservesBackoffWhenHeadlessInstanceHintChange
 	app := newRestoreHintTestApp(stateDir)
 	now := time.Date(2026, 6, 5, 3, 20, 0, 0, time.UTC)
 	displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_start_timeout", now)
-	if !emit || displayCode != "headless_restore_start_timeout" {
-		t.Fatalf("expected first restore failure to emit, display=%q emit=%t", displayCode, emit)
+	if emit || displayCode != "headless_restore_start_timeout" {
+		t.Fatalf("expected retryable restore failure to stay silent, display=%q emit=%t", displayCode, emit)
 	}
 	before := app.surfaceResumeRuntime.recovery["surface-1"]
-	if before == nil || before.NextAttemptAt.IsZero() || before.LastNoticeCode == "" || before.StickyFailureCode == "" {
+	if before == nil || before.NextAttemptAt.IsZero() || before.LastFailureCode != "headless_restore_start_timeout" || before.LastNoticeCode != "" || before.StickyFailureCode == "" {
 		t.Fatalf("expected recovery backoff and notice state to be recorded, got %#v", before)
 	}
 

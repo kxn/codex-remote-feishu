@@ -29,18 +29,19 @@ func surfaceResumeFailureSpecificity(code string) int {
 }
 
 func shouldUpgradeSurfaceResumeStickyFailure(current, next string) bool {
+	if isTerminalSurfaceResumeFailure(next) && !isTerminalSurfaceResumeFailure(current) {
+		return true
+	}
 	return surfaceResumeFailureSpecificity(next) > surfaceResumeFailureSpecificity(current)
 }
 
 func isTerminalSurfaceResumeFailure(code string) bool {
 	switch strings.TrimSpace(code) {
 	case "headless_restore_workspace_missing",
-		"headless_restore_thread_not_found",
 		"headless_restore_thread_cwd_missing",
 		"headless_restore_provider_unavailable",
 		"headless_restore_claude_profile_unavailable",
 		"headless_restore_runtime_unavailable",
-		"thread_not_found",
 		"thread_cwd_missing",
 		"workspace_not_found",
 		"surface_resume_target_not_found",
@@ -56,6 +57,13 @@ func isTerminalSurfaceResumeFailure(code string) bool {
 	default:
 		return false
 	}
+}
+
+func shouldEmitSurfaceResumeFailureNotice(recovery *surfaceResumeRecoveryState, code string) bool {
+	if recovery != nil && strings.EqualFold(strings.TrimSpace(recovery.Entry.ProductMode), "vscode") {
+		return true
+	}
+	return isTerminalSurfaceResumeFailure(code)
 }
 
 func (a *App) recordSurfaceResumeFailureLocked(surfaceID, code string, now time.Time) (string, bool) {
@@ -76,6 +84,9 @@ func (a *App) recordSurfaceResumeFailureLocked(surfaceID, code string, now time.
 	displayCode := strings.TrimSpace(firstNonEmpty(recovery.StickyFailureCode, code))
 	if displayCode == "" {
 		return "", false
+	}
+	if !shouldEmitSurfaceResumeFailureNotice(recovery, displayCode) {
+		return displayCode, false
 	}
 	if recovery.LastNoticeCode == "" {
 		recovery.LastNoticeCode = displayCode

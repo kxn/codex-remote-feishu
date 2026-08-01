@@ -46,8 +46,8 @@ func TestDaemonPendingHeadlessRestoreTimeoutSuppressesRepeatedNotice(t *testing.
 	gateway := app.gateway.(*recordingGateway)
 	gateway.operations = nil
 
-	if displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_start_timeout", now.Add(time.Second)); !emit || displayCode != "headless_restore_start_timeout" {
-		t.Fatalf("expected first restore timeout to be recorded as emitted, display=%q emit=%t", displayCode, emit)
+	if displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_start_timeout", now.Add(time.Second)); emit || displayCode != "headless_restore_start_timeout" {
+		t.Fatalf("expected restore timeout to stay silent, display=%q emit=%t", displayCode, emit)
 	}
 
 	app.onTick(context.Background(), expiresAt.Add(time.Second))
@@ -80,8 +80,8 @@ func TestDaemonUngatedRestoreOutcomeGateSuppressesRepeatedConnectFailureNotice(t
 	})
 	app := newRestoreHintTestApp(stateDir)
 	now := time.Date(2026, 7, 26, 9, 30, 0, 0, time.UTC)
-	if displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_workspace_busy", now); !emit || displayCode != "headless_restore_workspace_busy" {
-		t.Fatalf("expected first workspace-busy restore failure to be recorded as emitted, display=%q emit=%t", displayCode, emit)
+	if displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_workspace_busy", now); emit || displayCode != "headless_restore_workspace_busy" {
+		t.Fatalf("expected workspace-busy restore failure to stay silent, display=%q emit=%t", displayCode, emit)
 	}
 
 	filtered := app.gateUngatedManagedHeadlessResumeOutcomeEventsLocked([]eventcontract.Event{
@@ -118,5 +118,82 @@ func TestCodexProfileLaunchFailuresAreTerminalForAutomaticRecovery(t *testing.T)
 		if !isTerminalSurfaceResumeFailure(code) {
 			t.Fatalf("%s must stop automatic recovery retries", code)
 		}
+	}
+}
+
+func TestMissingThreadRestoreFailureRemainsRetryable(t *testing.T) {
+	for _, code := range []string{
+		"thread_not_found",
+		"headless_restore_thread_not_found",
+	} {
+		if isTerminalSurfaceResumeFailure(code) {
+			t.Fatalf("%s should stay retryable because thread catalogs can arrive after startup recovery begins", code)
+		}
+	}
+}
+
+func TestRetryableAutomaticRestoreFailureStaysSilent(t *testing.T) {
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		Backend:            "codex",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    "/data/dl/droid",
+		ResumeWorkspaceKey: "/data/dl/droid",
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+	app := newRestoreHintTestApp(stateDir)
+	now := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
+
+	displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_start_timeout", now)
+	if displayCode != "headless_restore_start_timeout" || emit {
+		t.Fatalf("expected retryable automatic restore failure to stay silent, display=%q emit=%t", displayCode, emit)
+	}
+	recovery := app.surfaceResumeRuntime.recovery["surface-1"]
+	if recovery == nil || recovery.NextAttemptAt.IsZero() || recovery.LastFailureCode != "headless_restore_start_timeout" {
+		t.Fatalf("expected silent retryable failure to still record backoff, got %#v", recovery)
+	}
+	if recovery.LastNoticeCode != "" {
+		t.Fatalf("expected silent retryable failure not to mark notice as delivered, got %#v", recovery)
+	}
+}
+
+func TestTerminalAutomaticRestoreFailureUpgradesSilentRetryableFailure(t *testing.T) {
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "surface-1",
+		GatewayID:          "app-1",
+		ChatID:             "chat-1",
+		ActorUserID:        "user-1",
+		ProductMode:        "normal",
+		Backend:            "codex",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    "/data/dl/droid/missing",
+		ResumeWorkspaceKey: "/data/dl/droid",
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+	app := newRestoreHintTestApp(stateDir)
+	now := time.Date(2026, 7, 26, 10, 30, 0, 0, time.UTC)
+
+	displayCode, emit := app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_start_timeout", now)
+	if displayCode != "headless_restore_start_timeout" || emit {
+		t.Fatalf("expected initial retryable restore failure to stay silent, display=%q emit=%t", displayCode, emit)
+	}
+
+	displayCode, emit = app.recordSurfaceResumeFailureLocked("surface-1", "headless_restore_thread_cwd_missing", now.Add(time.Second))
+	if displayCode != "headless_restore_thread_cwd_missing" || !emit {
+		t.Fatalf("expected later terminal restore failure to emit, display=%q emit=%t", displayCode, emit)
+	}
+	recovery := app.surfaceResumeRuntime.recovery["surface-1"]
+	if recovery == nil || recovery.StickyFailureCode != "headless_restore_thread_cwd_missing" || recovery.TerminalFailureCode != "headless_restore_thread_cwd_missing" || recovery.LastNoticeCode != "headless_restore_thread_cwd_missing" {
+		t.Fatalf("expected terminal failure to upgrade silent retryable state, got %#v", recovery)
 	}
 }
