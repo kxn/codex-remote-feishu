@@ -152,6 +152,48 @@ func TestMissingOAuthProbeStillInitializesContextPreference(t *testing.T) {
 	t.Fatal("missing OAuth descriptor did not receive a context preference")
 }
 
+func TestCodexOAuthProbeRefreshesMaterializedProfileCatalog(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	cfg := config.DefaultAppConfig()
+	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
+		Name: "API", BaseURL: "https://api.example/v1", APIKey: "secret", Model: "model", ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
+	}
+	cfg.Codex.Profiles = []config.CodexAPIProfileRecord{record}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		CodexRealBinary: "fake-codex",
+		ConfigPath:      configPath,
+		Paths:           relayruntime.Paths{StateDir: filepath.Join(root, "state")},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	app.syncCodexProvidersCatalogFromConfig()
+	if _, ok := findServiceCodexProfile(app, state.OAuthCodexProfileID); ok {
+		t.Fatal("OAuth profile should not be materialized before the probe")
+	}
+	app.runCodexOAuthProbe = func(context.Context, codexprofile.OAuthProbeOptions) (codexprofile.OAuthProbeObservation, error) {
+		return testDetectedOAuthObservation(), nil
+	}
+
+	if !app.requestCodexOAuthProbe(context.Background(), false) {
+		t.Fatal("OAuth probe request was not started")
+	}
+	waitForCodexOAuthState(t, app, codexprofile.OAuthProbeStatusDetected)
+	profile, ok := findServiceCodexProfile(app, state.OAuthCodexProfileID)
+	if !ok {
+		t.Fatalf("OAuth profile was not materialized after probe; profiles=%#v", app.service.CodexProfiles())
+	}
+	if !profile.Available || profile.Name != "ChatGPT 登录" {
+		t.Fatalf("unexpected materialized OAuth profile: %#v", profile)
+	}
+}
+
 func TestCodexCapabilityPreflightRunsOnceAndFailsClosed(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{})
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
@@ -636,6 +678,15 @@ func newOAuthLaunchAuthorizationTestApp(t *testing.T) (*App, control.DaemonComma
 		Backend:          agentproto.BackendCodex,
 		CodexProviderID:  state.OAuthCodexProfileID,
 	}
+}
+
+func findServiceCodexProfile(app *App, profileID string) (state.CodexProfileSummary, bool) {
+	for _, profile := range app.service.CodexProfiles() {
+		if profile.ID == profileID {
+			return profile, true
+		}
+	}
+	return state.CodexProfileSummary{}, false
 }
 
 func waitForCodexOAuthState(t *testing.T, app *App, want codexprofile.OAuthProbeStatus) state.CodexOAuthProfileState {

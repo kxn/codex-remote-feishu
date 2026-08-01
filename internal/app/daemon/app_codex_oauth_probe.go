@@ -139,6 +139,7 @@ func (a *App) runCodexOAuthProbeTask(ctx context.Context, task codexOAuthProbeTa
 		}
 	}
 	observation.CapabilitySet = task.capabilitySet
+	loaded, configErr := a.loadAdminConfig()
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -169,6 +170,9 @@ func (a *App) runCodexOAuthProbeTask(ctx context.Context, task codexOAuthProbeTa
 		return preferenceErr
 	}
 	a.codexOAuthProfileState.probeCompleted = true
+	if configErr == nil {
+		a.syncCodexProvidersCatalogLocked(loaded.Config)
+	}
 	return nil
 }
 
