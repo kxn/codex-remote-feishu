@@ -11,8 +11,8 @@ import type {
   BootstrapState,
   ClaudeProfilesResponse,
   ClaudeProfileSummary,
-  CodexProvidersResponse,
-  CodexProviderSummary,
+  CodexProfilesResponse,
+  CodexProfileSummary,
   FeishuAppAutoConfigApplyResponse,
   FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigPlanResponse,
@@ -85,7 +85,7 @@ export function AdminRoute() {
     {},
   );
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
-  const [codexProviders, setCodexProviders] = useState<CodexProviderSummary[]>([]);
+  const [codexProviders, setCodexProviders] = useState<CodexProfileSummary[]>([]);
   const [codexProvidersError, setCodexProvidersError] = useState("");
   const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfileSummary[]>([]);
   const [claudeProfilesError, setClaudeProfilesError] = useState("");
@@ -209,7 +209,7 @@ export function AdminRoute() {
     ] = await Promise.all([
       requestJSON<BootstrapState>("/api/admin/bootstrap-state"),
       requestJSON<FeishuAppsResponse>("/api/admin/feishu/apps"),
-      safeRequest<CodexProvidersResponse>("/api/admin/codex/providers"),
+      safeRequest<CodexProfilesResponse>("/api/admin/codex/profiles"),
       safeRequest<ClaudeProfilesResponse>("/api/admin/claude/profiles"),
       loadAutostartState("/api/admin/autostart/detect"),
       loadVSCodeState("/api/admin/vscode/detect"),
@@ -245,7 +245,7 @@ export function AdminRoute() {
     setBootstrap(bootstrapState);
     setApps(appList.apps);
     setSelectedRobotID(nextSelectedRobotID);
-    setCodexProviders(codexProvidersResult.data?.providers || []);
+    setCodexProviders(codexProvidersResult.data?.profiles || []);
     setCodexProvidersError(codexProvidersResult.error);
     setClaudeProfiles(claudeProfilesResult.data?.profiles || []);
     setClaudeProfilesError(claudeProfilesResult.error);

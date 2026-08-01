@@ -136,12 +136,23 @@ export async function sendJSON<TResponse>(
   body?: unknown,
   options?: JSONRequestOptions,
 ): Promise<TResponse> {
+  return sendJSONWithHeaders(path, method, body, {}, options);
+}
+
+export async function sendJSONWithHeaders<TResponse>(
+  path: string,
+  method: string,
+  body: unknown,
+  extraHeaders: Record<string, string>,
+  options?: JSONRequestOptions,
+): Promise<TResponse> {
   const headers: Record<string, string> = {};
   const init: RequestInit = { method, headers };
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
     init.body = JSON.stringify(body);
   }
+  Object.assign(headers, extraHeaders);
   return requestJSON<TResponse>(path, init, options);
 }
 

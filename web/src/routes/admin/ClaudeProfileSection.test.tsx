@@ -15,7 +15,7 @@ describe("ClaudeProfileSection", () => {
         id: "devseek",
         name: "DevSeek",
         authMode: "auth_token",
-        baseURL: "https://proxy.internal/v1",
+        baseURL: "https://api.example.com/v1",
         hasAuthToken: true,
         model: "mimo-v2.5-pro",
         smallModel: "mimo-v2.5-haiku",
@@ -23,6 +23,12 @@ describe("ClaudeProfileSection", () => {
         builtIn: false,
         persisted: true,
         readOnly: false,
+        contextPreference: {
+          profileID: "devseek",
+          revision: 2,
+          etag: '"claude-context-preference:devseek:2"',
+          mode: "default",
+        },
       }),
     ];
     const { calls } = installMockFetch({
@@ -42,6 +48,12 @@ describe("ClaudeProfileSection", () => {
               builtIn: false,
               persisted: true,
               readOnly: false,
+              contextPreference: {
+                profileID: "devseek-updated",
+                revision: 2,
+                etag: '"claude-context-preference:devseek-updated:2"',
+                mode: "default",
+              },
             }),
           },
         };
@@ -63,7 +75,26 @@ describe("ClaudeProfileSection", () => {
               builtIn: false,
               persisted: true,
               readOnly: false,
+              contextPreference: {
+                profileID: "new-profile",
+                revision: 1,
+                etag: '"claude-context-preference:new-profile:1"',
+                mode: "default",
+              },
             }),
+          },
+        };
+      },
+      "/api/admin/claude/profiles/devseek-updated/context-preference": (call) => {
+        const body = JSON.parse(String(call.init?.body ?? "{}"));
+        return {
+          body: {
+            contextPreference: {
+              profileID: "devseek-updated",
+              revision: 3,
+              etag: '"claude-context-preference:devseek:3"',
+              mode: body.mode,
+            },
           },
         };
       },
@@ -102,6 +133,7 @@ describe("ClaudeProfileSection", () => {
     await user.clear(screen.getByLabelText("轻量模型"));
     await user.type(screen.getByLabelText("轻量模型"), "mimo-v2.6-mini");
     await user.selectOptions(screen.getByLabelText("推理强度"), "max");
+    await user.click(screen.getByLabelText("使用 1M 上下文"));
     await user.click(screen.getByRole("button", { name: "保存修改" }));
 
     expect(await screen.findByText("Claude 配置已保存。")).toBeInTheDocument();
@@ -117,6 +149,16 @@ describe("ClaudeProfileSection", () => {
       smallModel: "mimo-v2.6-mini",
       reasoningEffort: "max",
     });
+    const preferenceCall = calls.find(
+      (call) =>
+        call.method === "PUT" &&
+        call.path === "/api/admin/claude/profiles/devseek-updated/context-preference",
+    );
+    expect(preferenceCall).toBeDefined();
+    expect((preferenceCall?.init?.headers as Record<string, string>)["If-Match"]).toBe(
+      '"claude-context-preference:devseek-updated:2"',
+    );
+    expect(JSON.parse(String(preferenceCall?.init?.body))).toEqual({ mode: "extended_1m" });
     expect(await screen.findByRole("button", { name: /DevSeek 2/ })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /新增配置/ }));
@@ -143,5 +185,58 @@ describe("ClaudeProfileSection", () => {
       smallModel: "haiku-4",
       reasoningEffort: "medium",
     });
+  });
+
+  it("lets the built-in profile save the 1M context preference", async () => {
+    const user = userEvent.setup();
+    const { calls } = installMockFetch({
+      "/api/admin/claude/profiles/default/context-preference": (call) => {
+        const body = JSON.parse(String(call.init?.body ?? "{}"));
+        return {
+          body: {
+            contextPreference: {
+              profileID: "default",
+              revision: 2,
+              etag: '"claude-context-preference:default:2"',
+              mode: body.mode,
+            },
+          },
+        };
+      },
+    });
+
+    render(
+      <ClaudeProfileSection
+        profiles={[
+          makeClaudeProfile({
+            contextPreference: {
+              profileID: "default",
+              revision: 1,
+              etag: '"claude-context-preference:default:1"',
+              mode: "default",
+            },
+          }),
+        ]}
+        loadError=""
+        setProfiles={() => {}}
+        onReload={async () => {}}
+      />,
+    );
+
+    expect(await screen.findByText("内建默认开启后使用 Sonnet 1M。")).toBeInTheDocument();
+    await user.click(screen.getByLabelText("使用 1M 上下文"));
+    await user.click(screen.getByRole("button", { name: "保存上下文偏好" }));
+
+    expect(await screen.findByText("上下文偏好已保存。")).toBeInTheDocument();
+    const preferenceCall = calls.find(
+      (call) =>
+        call.method === "PUT" &&
+        call.path === "/api/admin/claude/profiles/default/context-preference",
+    );
+    expect(preferenceCall).toBeDefined();
+    expect((preferenceCall?.init?.headers as Record<string, string>)["If-Match"]).toBe(
+      '"claude-context-preference:default:1"',
+    );
+    expect(JSON.parse(String(preferenceCall?.init?.body))).toEqual({ mode: "extended_1m" });
   });
 });

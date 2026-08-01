@@ -3,14 +3,14 @@ import {
   type FormEvent,
   type SetStateAction,
 } from "react";
-import { formatError, requestVoid, sendJSON } from "../../lib/api";
+import { APIRequestError, formatError, requestVoid, sendJSON, sendJSONWithHeaders } from "../../lib/api";
 import type {
   ClaudeProfileResponse,
   ClaudeProfileSummary,
   ClaudeProfileWriteRequest,
+  CodexContextPreferenceResponse,
 } from "../../lib/types";
 import {
-  ConfigBuiltInDetailCard,
   ConfigDeleteConfirmModal,
   ConfigFormDetailCard,
   ConfigSectionShell,
@@ -25,6 +25,7 @@ type ClaudeProfileDraft = {
   model: string;
   smallModel: string;
   reasoningEffort: string;
+  contextMode: string;
 };
 
 type ClaudeProfileSectionProps = {
@@ -36,6 +37,8 @@ type ClaudeProfileSectionProps = {
 
 const newClaudeProfileID = "new-claude-profile";
 const claudeReasoningOptions = ["low", "medium", "high", "max"] as const;
+const claudeContextModeDefault = "default";
+const claudeContextModeExtended = "extended_1m";
 
 export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
   const { profiles, loadError, setProfiles, onReload } = props;
@@ -66,7 +69,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationError = validateDraft(draft);
+    const validationError = validateDraft(draft, editorMode);
     if (validationError) {
       setDetailNotice({ tone: "warn", message: validationError });
       return;
@@ -87,7 +90,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
         return;
       }
 
-      if (!activeProfile || activeProfile.builtIn) {
+      if (!activeProfile) {
         setDetailNotice({
           tone: "danger",
           message: "当前配置不能直接编辑，请重新选择后再试。",
@@ -95,20 +98,30 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
         return;
       }
 
-      const response = await sendJSON<ClaudeProfileResponse>(
-        `/api/admin/claude/profiles/${encodeURIComponent(activeProfile.id)}`,
-        "PUT",
-        buildUpdatePayload(draft),
-      );
+      let nextProfile = activeProfile;
+      if (!activeProfile.builtIn) {
+        const response = await sendJSON<ClaudeProfileResponse>(
+          `/api/admin/claude/profiles/${encodeURIComponent(activeProfile.id)}`,
+          "PUT",
+          buildUpdatePayload(draft),
+        );
+        nextProfile = response.profile;
+      }
+      if (draft.contextMode !== contextMode(nextProfile)) {
+        nextProfile = await saveContextPreference(nextProfile, draft.contextMode);
+      }
       setProfiles((current) =>
-        appendOrReplaceProfile(current, response.profile, activeProfile.id),
+        appendOrReplaceProfile(current, nextProfile, activeProfile.id),
       );
-      selectPersistedItem(response.profile);
-      setDetailNotice({ tone: "good", message: "Claude 配置已保存。" });
+      selectPersistedItem(nextProfile);
+      setDetailNotice({
+        tone: "good",
+        message: activeProfile.builtIn ? "上下文偏好已保存。" : "Claude 配置已保存。",
+      });
     } catch (error) {
       setDetailNotice({
         tone: "danger",
-        message: `保存没有完成：${formatError(error)}`,
+        message: `保存没有完成：${describeClaudeProfileError(error)}`,
       });
     } finally {
       setActionBusy("");
@@ -169,6 +182,8 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
         onStartCreate={startCreateBlank}
         getItemTitle={profileTitle}
         getItemSummary={profileCardSummary}
+        newItemTitle="新增配置"
+        newItemSummary="新建 Claude Profile"
         detailCard={renderClaudeProfileDetailCard({
           actionBusy,
           activeProfile,
@@ -195,6 +210,26 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
       />
     </>
   );
+
+  async function saveContextPreference(
+    profile: ClaudeProfileSummary,
+    mode: string,
+  ): Promise<ClaudeProfileSummary> {
+    const preference = profile.contextPreference;
+    if (!preference) {
+      throw new APIRequestError(428, "If-Match is required", "profile_preference_revision_required");
+    }
+    const response = await sendJSONWithHeaders<CodexContextPreferenceResponse>(
+      `/api/admin/claude/profiles/${encodeURIComponent(profile.id)}/context-preference`,
+      "PUT",
+      { mode },
+      { "If-Match": preference.etag },
+    );
+    return {
+      ...profile,
+      contextPreference: response.contextPreference,
+    };
+  }
 }
 
 type ClaudeDetailCardProps = Pick<
@@ -224,34 +259,27 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
     onStartCreate,
   } = props;
 
-  if (editorMode === "built-in") {
-    return (
-      <ConfigBuiltInDetailCard
-        title={profileTitle(activeProfile)}
-        description="系统默认的 Claude 连接"
-        notice={detailNotice}
-        heroTitle="系统默认配置"
-        heroDescription="如需使用其他端点或模型，请新增配置。"
-        startCreateLabel="新增自定义配置"
-        onStartCreate={onStartCreate}
-      />
-    );
-  }
-
   const title =
     editorMode === "create"
       ? draft.name.trim()
         ? `新增配置：${draft.name.trim()}`
         : "新增 Claude 配置"
       : profileTitle(activeProfile);
+  const isBuiltIn = editorMode === "built-in";
 
   return (
     <ConfigFormDetailCard
       title={title}
-      description={editorMode === "create" ? "填写连接信息" : ""}
+      description={
+        isBuiltIn
+          ? "系统默认的 Claude 连接"
+          : editorMode === "create"
+            ? "填写连接信息"
+            : ""
+      }
       notice={detailNotice}
       onSave={onSave}
-      submitLabel={editorMode === "create" ? "保存配置" : "保存修改"}
+      submitLabel={isBuiltIn ? "保存上下文偏好" : editorMode === "create" ? "保存配置" : "保存修改"}
       submitDisabled={actionBusy === "save-claude-profile"}
       secondaryAction={
         editorMode === "create" ? (
@@ -263,7 +291,7 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
           >
             取消
           </button>
-        ) : (
+        ) : !isBuiltIn ? (
           <button
             className="danger-button"
             disabled={Boolean(deleteTargetID) || actionBusy === "delete-claude-profile"}
@@ -272,10 +300,16 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
           >
             删除配置
           </button>
-        )
+        ) : null
       }
     >
-      <div className="form-grid" style={{ marginTop: "1rem" }}>
+      {isBuiltIn ? (
+        <div className="completed-card profile-hero-card">
+          <h3>系统默认配置</h3>
+          <p>内建默认开启后使用 Sonnet 1M。</p>
+        </div>
+      ) : null}
+      {!isBuiltIn ? <div className="form-grid" style={{ marginTop: "1rem" }}>
         <label className="field form-grid-span-2">
           <span>
             名称 <em className="field-required">*</em>
@@ -297,7 +331,7 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
           <span>端点地址</span>
           <input
             value={draft.baseURL}
-            placeholder="例如：https://proxy.internal/v1"
+            placeholder="例如：https://api.example.com/v1"
             onChange={(event) =>
               onDraftChange((current) => ({
                 ...current,
@@ -368,7 +402,26 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
             ))}
           </select>
         </label>
-      </div>
+      </div> : null}
+      <label className="field form-grid-span-2" style={{ marginTop: "1rem" }}>
+        <span>上下文大小</span>
+        <span className="checkbox-line">
+          <input
+            aria-label="使用 1M 上下文"
+            checked={draft.contextMode === claudeContextModeExtended}
+            type="checkbox"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                contextMode: event.target.checked
+                  ? claudeContextModeExtended
+                  : claudeContextModeDefault,
+              }))
+            }
+          />
+          <span>使用 1M 上下文</span>
+        </span>
+      </label>
     </ConfigFormDetailCard>
   );
 }
@@ -381,6 +434,7 @@ function createEmptyDraft(): ClaudeProfileDraft {
     model: "",
     smallModel: "",
     reasoningEffort: "",
+    contextMode: claudeContextModeDefault,
   };
 }
 
@@ -392,10 +446,14 @@ function createDraftFromProfile(profile: ClaudeProfileSummary): ClaudeProfileDra
     model: profile.model?.trim() || "",
     smallModel: profile.smallModel?.trim() || "",
     reasoningEffort: normalizeClaudeReasoningEffort(profile.reasoningEffort),
+    contextMode: contextMode(profile),
   };
 }
 
-function validateDraft(draft: ClaudeProfileDraft): string {
+function validateDraft(draft: ClaudeProfileDraft, editorMode: string): string {
+  if (editorMode === "built-in") {
+    return "";
+  }
   if (!draft.name.trim()) {
     return "请填写名称。";
   }
@@ -461,6 +519,10 @@ function normalizeClaudeReasoningEffort(value: string | undefined): string {
     : "";
 }
 
+function contextMode(profile: ClaudeProfileSummary): string {
+  return profile.contextPreference?.mode || claudeContextModeDefault;
+}
+
 function profileTitle(profile: ClaudeProfileSummary | null): string {
   if (!profile) {
     return "当前配置";
@@ -477,7 +539,26 @@ function profileTitle(profile: ClaudeProfileSummary | null): string {
 
 function profileCardSummary(profile: ClaudeProfileSummary): string {
   if (profile.builtIn) {
-    return "本机默认配置";
+    return contextMode(profile) === claudeContextModeExtended
+      ? "本机默认配置 · 1M"
+      : "本机默认配置";
   }
-  return profile.baseURL?.trim() || "自定义连接配置";
+  return [
+    profile.baseURL?.trim() || "自定义连接配置",
+    contextMode(profile) === claudeContextModeExtended ? "1M" : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function describeClaudeProfileError(error: unknown): string {
+  if (error instanceof APIRequestError) {
+    switch (error.code) {
+      case "profile_preference_revision_required":
+        return "页面状态已过期，请重新读取后再保存。";
+      case "profile_preference_revision_conflict":
+        return "上下文偏好已被其他窗口修改，请重新读取后再保存。";
+      default:
+        break;
+    }
+  }
+  return formatError(error);
 }

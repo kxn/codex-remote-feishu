@@ -98,6 +98,7 @@ export interface ClaudeProfileSummary {
   builtIn?: boolean;
   persisted: boolean;
   readOnly?: boolean;
+  contextPreference?: ProfileContextPreference;
 }
 
 export interface ClaudeProfilesResponse {
@@ -114,6 +115,67 @@ export interface ClaudeProfileWriteRequest {
   authToken?: string;
   model?: string;
   smallModel?: string;
+  reasoningEffort?: string;
+}
+
+export interface ProfileContextPreference {
+  profileID: string;
+  revision: number;
+  etag: string;
+  mode: string;
+}
+
+export interface CodexProfileSummary {
+  id: string;
+  revision?: number;
+  etag?: string;
+  kind: "native" | "oauth" | "api" | string;
+  name?: string;
+  baseURL?: string;
+  model?: string;
+  reviewModel?: string;
+  reasoningEffort?: string;
+  statusCode?: string;
+  available: boolean;
+  hasAPIKey?: boolean;
+  editable: boolean;
+  deletable: boolean;
+  contextEditable: boolean;
+  contextPreference: ProfileContextPreference;
+  requestedContextWindow?: number;
+  effectiveContextWindow?: number;
+  contextStatus?: string;
+}
+
+export interface CodexProfilesResponse {
+  profiles: CodexProfileSummary[];
+}
+
+export interface CodexProfileResponse {
+  profile: CodexProfileSummary;
+}
+
+export interface CodexContextPreferenceResponse {
+  contextPreference: ProfileContextPreference;
+}
+
+export interface CodexProfileReference {
+  kind: string;
+  name?: string;
+  reason?: string;
+}
+
+export interface CodexProfileReferencesResponse {
+  profileID: string;
+  references: CodexProfileReference[];
+}
+
+export interface CodexProfileWriteRequest {
+  name?: string;
+  baseURL?: string;
+  apiKey?: string;
+  model?: string;
+  reviewModel?: string;
   reasoningEffort?: string;
 }
 

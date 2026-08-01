@@ -701,6 +701,11 @@ button {
   color: var(--text-secondary);
 }
 
+.field-hint {
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .field-required {
   font-style: normal;
   color: var(--danger);
@@ -749,6 +754,19 @@ button {
 
 .checkbox-row {
   margin-top: 0.15rem;
+}
+
+.checkbox-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.checkbox-line input[type="checkbox"] {
+  width: auto;
+  min-width: 1rem;
+  height: 1rem;
+  padding: 0;
 }
 
 /* ─── Manifest / Info Card ─── */

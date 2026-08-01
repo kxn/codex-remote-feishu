@@ -178,6 +178,9 @@ type ConfigSectionShellProps<TItem extends ConfigEditorItem> = {
   onStartCreate: () => void;
   getItemTitle: (item: TItem) => string;
   getItemSummary: (item: TItem) => string;
+  getItemTag?: (item: TItem) => string;
+  newItemTitle?: string;
+  newItemSummary?: string;
   detailCard: ReactNode;
 };
 
@@ -197,6 +200,9 @@ export function ConfigSectionShell<TItem extends ConfigEditorItem>(
     onStartCreate,
     getItemTitle,
     getItemSummary,
+    getItemTag,
+    newItemTitle,
+    newItemSummary,
     detailCard,
   } = props;
 
@@ -256,7 +262,7 @@ export function ConfigSectionShell<TItem extends ConfigEditorItem>(
               <div className="profile-list-head">
                 <strong>{getItemTitle(item)}</strong>
                 <span className="robot-tag">
-                  {item.builtIn ? "默认" : "自定义"}
+                  {getItemTag ? getItemTag(item) : item.builtIn ? "默认" : "自定义"}
                 </span>
               </div>
               <p>{getItemSummary(item)}</p>
@@ -268,10 +274,10 @@ export function ConfigSectionShell<TItem extends ConfigEditorItem>(
             onClick={() => onStartCreate()}
           >
             <div className="profile-list-head">
-              <strong>新增配置</strong>
+              <strong>{newItemTitle ?? "新增配置"}</strong>
               <span className="robot-tag">新增</span>
             </div>
-            <p>新建配置</p>
+            <p>{newItemSummary ?? "新建配置"}</p>
           </button>
         </div>
         {detailCard}
@@ -384,6 +390,7 @@ type ConfigDeleteConfirmModalProps<TItem extends ConfigEditorItem> = {
   getItemTitle: (item: TItem | null) => string;
   onCancel: () => void;
   onConfirm: () => void;
+  children?: ReactNode;
 };
 
 export function ConfigDeleteConfirmModal<TItem extends ConfigEditorItem>(
@@ -397,6 +404,7 @@ export function ConfigDeleteConfirmModal<TItem extends ConfigEditorItem>(
     getItemTitle,
     onCancel,
     onConfirm,
+    children,
   } = props;
 
   if (!targetID) {
@@ -420,6 +428,7 @@ export function ConfigDeleteConfirmModal<TItem extends ConfigEditorItem>(
           {getItemTitle(targetItem)}
           ”，此操作不可恢复。
         </p>
+        {children}
         <div className="modal-actions">
           <button
             className="ghost-button"

@@ -2,6 +2,7 @@ import type {
   AutostartDetectResponse,
   BootstrapState,
   ClaudeProfileSummary,
+  CodexProfileSummary,
   CodexProviderSummary,
   FeishuAppAutoConfigApplyResponse,
   FeishuAppAutoConfigPlan,
@@ -130,6 +131,35 @@ export function makeClaudeProfile(
     builtIn: true,
     persisted: false,
     readOnly: true,
+    contextPreference: {
+      profileID: "default",
+      revision: 1,
+      etag: '"claude-context-preference:default:1"',
+      mode: "default",
+    },
+    ...overrides,
+  };
+}
+
+export function makeCodexProfile(
+  overrides: Partial<CodexProfileSummary> = {},
+): CodexProfileSummary {
+  return {
+    id: "codex-native",
+    revision: 1,
+    etag: '"codex-profile-definition:codex-native:1"',
+    kind: "native",
+    name: "本机默认",
+    available: true,
+    editable: false,
+    deletable: false,
+    contextEditable: true,
+    contextPreference: {
+      profileID: "codex-native",
+      revision: 1,
+      etag: '"codex-context-preference:codex-native:1"',
+      mode: "codex_default",
+    },
     ...overrides,
   };
 }

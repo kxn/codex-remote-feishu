@@ -95,22 +95,25 @@ type ProfileContextPreference struct {
 }
 
 type CodexProfileSummary struct {
-	ID                string                   `json:"id"`
-	Revision          uint64                   `json:"revision,omitempty"`
-	ETag              string                   `json:"etag,omitempty"`
-	Kind              CodexProfileKind         `json:"kind"`
-	Name              string                   `json:"name"`
-	BaseURL           string                   `json:"baseURL,omitempty"`
-	Model             string                   `json:"model,omitempty"`
-	ReviewModel       string                   `json:"reviewModel,omitempty"`
-	ReasoningEffort   string                   `json:"reasoningEffort,omitempty"`
-	StatusCode        string                   `json:"statusCode,omitempty"`
-	Available         bool                     `json:"available"`
-	HasAPIKey         bool                     `json:"hasAPIKey,omitempty"`
-	Editable          bool                     `json:"editable"`
-	Deletable         bool                     `json:"deletable"`
-	ContextEditable   bool                     `json:"contextEditable"`
-	ContextPreference ProfileContextPreference `json:"contextPreference"`
+	ID                     string                   `json:"id"`
+	Revision               uint64                   `json:"revision,omitempty"`
+	ETag                   string                   `json:"etag,omitempty"`
+	Kind                   CodexProfileKind         `json:"kind"`
+	Name                   string                   `json:"name"`
+	BaseURL                string                   `json:"baseURL,omitempty"`
+	Model                  string                   `json:"model,omitempty"`
+	ReviewModel            string                   `json:"reviewModel,omitempty"`
+	ReasoningEffort        string                   `json:"reasoningEffort,omitempty"`
+	StatusCode             string                   `json:"statusCode,omitempty"`
+	Available              bool                     `json:"available"`
+	HasAPIKey              bool                     `json:"hasAPIKey,omitempty"`
+	Editable               bool                     `json:"editable"`
+	Deletable              bool                     `json:"deletable"`
+	ContextEditable        bool                     `json:"contextEditable"`
+	ContextPreference      ProfileContextPreference `json:"contextPreference"`
+	RequestedContextWindow int64                    `json:"requestedContextWindow,omitempty"`
+	EffectiveContextWindow int64                    `json:"effectiveContextWindow,omitempty"`
+	ContextStatus          string                   `json:"contextStatus,omitempty"`
 }
 
 func CodexProfileDefinitionETag(profileID string, revision uint64) string {
