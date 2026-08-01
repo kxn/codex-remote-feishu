@@ -210,6 +210,9 @@ type InstanceRecord struct {
 	ShortName               string
 	Backend                 agentproto.Backend
 	CodexProviderID         string
+	CodexAdmissionRef       *CodexAdmissionRef
+	CodexConnectionContract *CodexConnectionContract
+	CodexThreadPolicy       *CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
 	Source                  string
@@ -291,44 +294,47 @@ type SurfaceConsoleRecord struct {
 	ActorUserID      string
 	// ProductMode carries the outer runtime shape: headless vs vscode.
 	// Backend carries the inner provider choice inside that shape.
-	ProductMode          ProductMode
-	Backend              agentproto.Backend
-	CodexProviderID      string
-	ClaudeProfileID      string
-	Verbosity            SurfaceVerbosity
-	PlanMode             PlanModeSetting
-	PlanModeOverrideSet  bool
-	ClaimedWorkspaceKey  string
-	AttachedInstanceID   string
-	SelectedThreadID     string
-	LastInboundAt        time.Time
-	RouteMode            RouteMode
-	Abandoning           bool
-	DispatchMode         DispatchMode
-	ActiveTurnOrigin     agentproto.InitiatorKind
-	ActiveQueueItemID    string
-	QueuedQueueItemIDs   []string
-	StagedImages         map[string]*StagedImageRecord
-	StagedFiles          map[string]*StagedFileRecord
-	QueueItems           map[string]*QueueItemRecord
-	PreparedThreadCWD    string
-	PreparedFromThreadID string
-	PreparedAt           time.Time
-	PromptOverride       ModelConfigRecord
-	PendingHeadless      *HeadlessLaunchRecord
-	PendingRequests      map[string]*RequestPromptRecord
-	PendingRequestOrder  []string
-	ActiveRequestCapture *RequestCaptureRecord
-	ActiveExecProgress   *ExecCommandProgressRecord
-	ActiveReasoning      *SurfaceReasoningProgressRecord
-	RecentFinalCards     []*FinalCardRecord
-	SurfaceMessageSeq    int
-	SurfaceMessages      map[string]*SurfaceMessageRecord
-	LastThreadHistory    *agentproto.ThreadHistoryRecord
-	LastSelection        *SelectionAnnouncementRecord
-	AutoWhip             AutoWhipRuntimeRecord
-	AutoContinue         AutoContinueRuntimeRecord
-	ReviewSession        *ReviewSessionRecord
+	ProductMode             ProductMode
+	Backend                 agentproto.Backend
+	CodexProviderID         string
+	CodexAdmissionRef       *CodexAdmissionRef
+	CodexConnectionContract *CodexConnectionContract
+	CodexThreadPolicy       *CodexThreadPolicy
+	ClaudeProfileID         string
+	Verbosity               SurfaceVerbosity
+	PlanMode                PlanModeSetting
+	PlanModeOverrideSet     bool
+	ClaimedWorkspaceKey     string
+	AttachedInstanceID      string
+	SelectedThreadID        string
+	LastInboundAt           time.Time
+	RouteMode               RouteMode
+	Abandoning              bool
+	DispatchMode            DispatchMode
+	ActiveTurnOrigin        agentproto.InitiatorKind
+	ActiveQueueItemID       string
+	QueuedQueueItemIDs      []string
+	StagedImages            map[string]*StagedImageRecord
+	StagedFiles             map[string]*StagedFileRecord
+	QueueItems              map[string]*QueueItemRecord
+	PreparedThreadCWD       string
+	PreparedFromThreadID    string
+	PreparedAt              time.Time
+	PromptOverride          ModelConfigRecord
+	PendingHeadless         *HeadlessLaunchRecord
+	PendingRequests         map[string]*RequestPromptRecord
+	PendingRequestOrder     []string
+	ActiveRequestCapture    *RequestCaptureRecord
+	ActiveExecProgress      *ExecCommandProgressRecord
+	ActiveReasoning         *SurfaceReasoningProgressRecord
+	RecentFinalCards        []*FinalCardRecord
+	SurfaceMessageSeq       int
+	SurfaceMessages         map[string]*SurfaceMessageRecord
+	LastThreadHistory       *agentproto.ThreadHistoryRecord
+	LastSelection           *SelectionAnnouncementRecord
+	AutoWhip                AutoWhipRuntimeRecord
+	AutoContinue            AutoContinueRuntimeRecord
+	ReviewSession           *ReviewSessionRecord
 }
 
 type FeishuRoomContextRecord struct {
@@ -507,6 +513,8 @@ type PendingAutoContinueEpisodeRecord struct {
 	FrozenRouteMode            RouteMode
 	FrozenOverride             ModelConfigRecord
 	FrozenPlanMode             PlanModeSetting
+	CodexAdmissionRef          *CodexAdmissionRef
+	CodexThreadPolicy          *CodexThreadPolicy
 	RootReplyToMessageID       string
 	RootReplyToMessagePreview  string
 	NoticeMessageID            string
@@ -544,25 +552,28 @@ const (
 )
 
 type HeadlessLaunchRecord struct {
-	InstanceID            string
-	ThreadID              string
-	ThreadTitle           string
-	WorkspaceKey          string
-	ThreadCWD             string
-	Backend               agentproto.Backend
-	CodexProviderID       string
-	ClaudeProfileID       string
-	ClaudeReasoningEffort string
-	ThreadName            string
-	ThreadPreview         string
-	RequestedAt           time.Time
-	ExpiresAt             time.Time
-	Status                HeadlessLaunchStatus
-	Purpose               HeadlessLaunchPurpose
-	PrepareNewThread      bool
-	PID                   int
-	SourceInstanceID      string
-	AutoRestore           bool
+	InstanceID              string
+	ThreadID                string
+	ThreadTitle             string
+	WorkspaceKey            string
+	ThreadCWD               string
+	Backend                 agentproto.Backend
+	CodexProviderID         string
+	CodexAdmissionRef       *CodexAdmissionRef
+	CodexConnectionContract *CodexConnectionContract
+	CodexThreadPolicy       *CodexThreadPolicy
+	ClaudeProfileID         string
+	ClaudeReasoningEffort   string
+	ThreadName              string
+	ThreadPreview           string
+	RequestedAt             time.Time
+	ExpiresAt               time.Time
+	Status                  HeadlessLaunchStatus
+	Purpose                 HeadlessLaunchPurpose
+	PrepareNewThread        bool
+	PID                     int
+	SourceInstanceID        string
+	AutoRestore             bool
 }
 
 type SelectionAnnouncementRecord struct {
@@ -714,6 +725,8 @@ type QueueItemRecord struct {
 	FrozenDispatchPlan agentproto.PromptDispatchPlan
 	FrozenOverride     ModelConfigRecord
 	FrozenPlanMode     PlanModeSetting
+	CodexAdmissionRef  *CodexAdmissionRef
+	CodexThreadPolicy  *CodexThreadPolicy
 	RouteModeAtEnqueue RouteMode
 	Status             QueueItemStatus
 }

@@ -99,6 +99,100 @@ func TestDetachedUseFreezesHeadlessLaunchContractIntoPendingAndCommand(t *testin
 	}
 }
 
+func TestDetachedUseFreezesCodexAdmissionRefIntoPendingAndCommand(t *testing.T) {
+	now := time.Date(2026, 8, 1, 9, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("team-proxy"), "", "")
+	svc.root.Surfaces["surface-1"].CodexAdmissionRef = &state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+	}
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendCodex,
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", WorkspaceKey: "/data/dl/repo", CWD: "/data/dl/repo/web", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	if len(events) != 2 || events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected detached /use to start headless launch, got %#v", events)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	surface.CodexProviderID = "other-profile"
+	surface.CodexAdmissionRef = &state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "other-profile", Revision: 1},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "other-profile", Revision: 1},
+	}
+
+	want := state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+	}
+	pending := surface.PendingHeadless
+	if pending == nil || pending.CodexAdmissionRef == nil || *pending.CodexAdmissionRef != want {
+		t.Fatalf("expected pending launch to freeze codex admission ref, got %#v", pending)
+	}
+	if got := events[1].DaemonCommand.CodexAdmissionRef; got == nil || *got != want {
+		t.Fatalf("expected daemon command to carry frozen codex admission ref, got %#v", events[1].DaemonCommand)
+	}
+}
+
+func TestCodexInstanceCompatibilityRequiresMatchingConnectionContract(t *testing.T) {
+	now := time.Date(2026, 8, 1, 9, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("team-proxy"), "", "")
+	svc.root.Surfaces["surface-1"].CodexAdmissionRef = &state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 8},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+	}
+	svc.root.Surfaces["surface-1"].CodexConnectionContract = &state.CodexConnectionContract{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 8},
+		ConnectionGeneration: 2,
+		ConnectionContractID: "conn-new",
+		Kind:                 state.CodexProfileKindAPI,
+		CapabilitySet:        "codex_profile_v1",
+	}
+
+	compatible := svc.surfaceInstanceCompatibleForAttach(svc.root.Surfaces["surface-1"], &state.InstanceRecord{
+		InstanceID:      "inst-old",
+		WorkspaceRoot:   "/data/dl/repo",
+		WorkspaceKey:    "/data/dl/repo",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "team-proxy",
+		CodexAdmissionRef: &state.CodexAdmissionRef{
+			ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+		},
+		CodexConnectionContract: &state.CodexConnectionContract{
+			ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+			ConnectionGeneration: 1,
+			ConnectionContractID: "conn-old",
+			Kind:                 state.CodexProfileKindAPI,
+			CapabilitySet:        "codex_profile_v1",
+		},
+		Online:  true,
+		Threads: map[string]*state.ThreadRecord{},
+	})
+
+	if compatible {
+		t.Fatalf("expected same-provider codex instance with stale connection contract to be incompatible")
+	}
+}
+
 func TestDetachCancelsPendingHeadlessLaunch(t *testing.T) {
 	now := time.Date(2026, 4, 8, 10, 12, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

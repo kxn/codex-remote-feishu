@@ -33,11 +33,27 @@ func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleReco
 	result := surfaceInstanceCompatibility{Visible: true, Compatible: true}
 	switch observed.Backend {
 	case agentproto.BackendCodex:
+		if desiredConnectionID := codexConnectionContractID(surface.CodexConnectionContract); desiredConnectionID != "" {
+			result.Compatible = desiredConnectionID == codexConnectionContractID(inst.CodexConnectionContract)
+			break
+		}
+		if desiredAdmissionRef := state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef); desiredAdmissionRef != nil {
+			observedAdmissionRef := state.NormalizeCodexAdmissionRef(inst.CodexAdmissionRef)
+			result.Compatible = observedAdmissionRef != nil && *desiredAdmissionRef == *observedAdmissionRef
+			break
+		}
 		result.Compatible = state.NormalizeCodexProviderID(observed.CodexProviderID) == state.EffectiveSurfaceCodexProviderID(desired)
 	case agentproto.BackendClaude:
 		result.Compatible = state.NormalizeClaudeProfileID(observed.ClaudeProfileID) == state.EffectiveSurfaceClaudeProfileID(desired)
 	}
 	return result
+}
+
+func codexConnectionContractID(contract *state.CodexConnectionContract) string {
+	if contract == nil {
+		return ""
+	}
+	return strings.TrimSpace(contract.ConnectionContractID)
 }
 
 func (s *Service) surfaceInstanceVisibleForSelection(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {

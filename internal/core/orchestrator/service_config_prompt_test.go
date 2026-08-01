@@ -707,6 +707,62 @@ func TestQueuedMessageFreezesSurfaceOverrideAtEnqueue(t *testing.T) {
 	}
 }
 
+func TestQueuedMessageFreezesCodexAdmissionRefAtEnqueue(t *testing.T) {
+	now := time.Date(2026, 8, 1, 9, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("team-proxy"), "", "")
+	svc.root.Surfaces["surface-1"].CodexAdmissionRef = &state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+	}
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Backend:                 agentproto.BackendCodex,
+		CodexProviderID:         "team-proxy",
+		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(svc.root.Surfaces["surface-1"].CodexAdmissionRef),
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventLocalInteractionObserved,
+		ThreadID: "thread-1",
+		Action:   "turn_start",
+	})
+
+	queued := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	if len(queued) != 1 || queued[0].PendingInput == nil || queued[0].PendingInput.Status != string(state.QueueItemQueued) {
+		t.Fatalf("expected queued-only event while paused, got %#v", queued)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	surface.CodexProviderID = "other-profile"
+	surface.CodexAdmissionRef = &state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "other-profile", Revision: 1},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "other-profile", Revision: 1},
+	}
+
+	item := surface.QueueItems[surface.QueuedQueueItemIDs[0]]
+	want := state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+	}
+	if item.CodexAdmissionRef == nil || *item.CodexAdmissionRef != want {
+		t.Fatalf("expected queue item to freeze codex admission ref, got %#v", item)
+	}
+}
+
 func TestLocalInteractionPausesRemoteQueueAndHandoffResumes(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

@@ -49,6 +49,11 @@ func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) st
 	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
 	contract := state.NormalizeSurfaceBackendContract(settings.Contract)
 	launch := state.HeadlessCodexLaunchContract(state.EffectiveSurfaceCodexProviderID(contract))
+	if launch.Backend == agentproto.BackendCodex && surface != nil {
+		launch.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef)
+		launch.CodexConnectionContract = state.CloneCodexConnectionContract(surface.CodexConnectionContract)
+		launch.CodexThreadPolicy = state.CloneCodexThreadPolicy(surface.CodexThreadPolicy)
+	}
 	if contract.Backend == agentproto.BackendClaude {
 		launch = state.HeadlessClaudeLaunchContract(state.EffectiveSurfaceClaudeProfileID(contract), settings.PromptOverride.ReasoningEffort)
 	}
@@ -73,6 +78,9 @@ func (s *Service) applyHeadlessLaunchContract(command *control.DaemonCommand, co
 	contract = state.NormalizeHeadlessLaunchContract(contract)
 	command.Backend = contract.Backend
 	command.CodexProviderID = contract.CodexProviderID
+	command.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(contract.CodexAdmissionRef)
+	command.CodexConnectionContract = state.CloneCodexConnectionContract(contract.CodexConnectionContract)
+	command.CodexThreadPolicy = state.CloneCodexThreadPolicy(contract.CodexThreadPolicy)
 	command.ClaudeProfileID = contract.ClaudeProfileID
 	command.ClaudeReasoningEffort = contract.ClaudeReasoningEffort
 }

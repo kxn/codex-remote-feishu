@@ -101,6 +101,8 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		FrozenDispatchPlan:    dispatchPlan,
 		FrozenOverride:        s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
 		FrozenPlanMode:        s.freezePlanModeForPrompt(surface),
+		CodexAdmissionRef:     s.freezeCodexAdmissionRefForPrompt(surface),
+		CodexThreadPolicy:     s.freezeCodexThreadPolicyForPrompt(surface),
 		RouteModeAtEnqueue:    routeMode,
 		Status:                state.QueueItemQueued,
 	}
@@ -125,10 +127,32 @@ func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, 
 		FrozenDispatchPlan:    dispatchPlan,
 		FrozenOverride:        s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
 		FrozenPlanMode:        s.freezePlanModeForPrompt(surface),
+		CodexAdmissionRef:     s.freezeCodexAdmissionRefForPrompt(surface),
+		CodexThreadPolicy:     s.freezeCodexThreadPolicyForPrompt(surface),
 		RouteModeAtEnqueue:    routeMode,
 		Status:                state.QueueItemQueued,
 	}
 	return s.enqueuePreparedQueueItem(surface, item, front)
+}
+
+func (s *Service) freezeCodexAdmissionRefForPrompt(surface *state.SurfaceConsoleRecord) *state.CodexAdmissionRef {
+	if surface == nil {
+		return nil
+	}
+	if s.surfaceDesiredContract(surface).Backend != agentproto.BackendCodex {
+		return nil
+	}
+	return state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef)
+}
+
+func (s *Service) freezeCodexThreadPolicyForPrompt(surface *state.SurfaceConsoleRecord) *state.CodexThreadPolicy {
+	if surface == nil {
+		return nil
+	}
+	if s.surfaceDesiredContract(surface).Backend != agentproto.BackendCodex {
+		return nil
+	}
+	return state.CloneCodexThreadPolicy(surface.CodexThreadPolicy)
 }
 
 func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, front bool) []eventcontract.Event {

@@ -40,58 +40,72 @@ func codexHeadlessLaunchProblem(err error, defaults agentproto.ErrorInfo) agentp
 func (a *App) applyCodexHeadlessProviderConfig(baseEnv, baseArgs []string, backend agentproto.Backend, providerID string) ([]string, []string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return a.applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs, backend, providerID)
+	env, args, _, err := a.applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs, backend, providerID, nil)
+	return env, args, err
 }
 
-func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string, backend agentproto.Backend, providerID string) ([]string, []string, error) {
+func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string, backend agentproto.Backend, providerID string, admissionRef *state.CodexAdmissionRef) ([]string, []string, *codexprofile.RuntimeProjection, error) {
 	env := append([]string{}, baseEnv...)
 	args := append([]string{}, baseArgs...)
 	if agentproto.NormalizeBackend(backend) != agentproto.BackendCodex {
-		return env, args, nil
+		return env, args, nil, nil
 	}
 
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	profileID := state.CodexProfileIDFromLegacyProviderID(providerID)
 	profileRevision := uint64(1)
+	ref := state.NormalizeCodexAdmissionRef(admissionRef)
+	if ref != nil {
+		profileID = ref.ProfileRef.ID
+		profileRevision = ref.ProfileRef.Revision
+	}
 	var oauthState *state.CodexOAuthProfileState
 	if profileID != config.CodexNativeProfileID && profileID != config.CodexOAuthProfileID {
 		index := config.IndexOfCodexAPIProfile(loaded.Config.Codex.Profiles, profileID)
 		if index < 0 {
-			return nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorProfileRevisionUnavailable}
+			return nil, nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorProfileRevisionUnavailable}
 		}
-		profile, ok := config.CurrentCodexAPIProfile(loaded.Config.Codex.Profiles[index])
-		if !ok {
-			return nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorProfileRevisionUnavailable}
+		if ref == nil {
+			profile, ok := config.CurrentCodexAPIProfile(loaded.Config.Codex.Profiles[index])
+			if !ok {
+				return nil, nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorProfileRevisionUnavailable}
+			}
+			profileRevision = profile.Revision
 		}
-		profileRevision = profile.Revision
 	} else if profileID == config.CodexOAuthProfileID {
 		if err := a.ensureCodexOAuthProfileForLaunchLocked(context.Background()); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 	capabilitySet := a.effectiveCodexRuntimeCapabilitySetLocked()
 	if profileID == config.CodexOAuthProfileID {
 		profile, ok := a.codexOAuthProfileState.current()
 		if !ok {
-			return nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorOAuthProbeUnknown}
+			return nil, nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorOAuthProbeUnknown}
 		}
-		profileRevision = profile.Revision
+		if ref == nil {
+			profileRevision = profile.Revision
+		}
 		oauthState = &profile
 	}
 	preferenceStore, err := a.profileContextPreferenceStore()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	preference, ok := preferenceStore.CodexCurrent(profileID)
-	if !ok {
-		return nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorProfileRevisionUnavailable}
+	effectiveRef := state.CodexAdmissionRef{
+		ProfileRef: state.CodexProfileRef{ID: profileID, Revision: profileRevision},
 	}
-	ref := state.CodexAdmissionRef{
-		ProfileRef:           state.CodexProfileRef{ID: profileID, Revision: profileRevision},
-		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: profileID, Revision: preference.Revision},
+	if ref != nil {
+		effectiveRef.ContextPreferenceRef = ref.ContextPreferenceRef
+	} else {
+		preference, ok := preferenceStore.CodexCurrent(profileID)
+		if !ok {
+			return nil, nil, nil, &codexprofile.RuntimeError{Code: codexprofile.ErrorProfileRevisionUnavailable}
+		}
+		effectiveRef.ContextPreferenceRef = state.CodexContextPreferenceRef{ProfileID: profileID, Revision: preference.Revision}
 	}
 	nativeEvidence, reservedProviderIDs, nativeProviderEnvKeys, nativeConfigProbeFailed := a.effectiveCodexNativeConnectionLocked()
 	resolver := codexprofile.RuntimeResolver{
@@ -106,12 +120,12 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 		OAuthState:              oauthState,
 		CapabilitySet:           capabilitySet,
 	}
-	projection, err := resolver.Resolve(ref)
+	projection, err := resolver.Resolve(effectiveRef)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	env, args = codexprofile.ApplyLaunchMaterial(env, args, projection.Launch)
 	args = append(args, codexprofile.LegacyThreadCLIOverrides(projection.Thread)...)
 	env = config.UpsertEnvValue(env, codexprofile.CodexRuntimeResolvedEnv, "1")
-	return env, args, nil
+	return env, args, &projection, nil
 }

@@ -139,6 +139,63 @@ func TestAutoContinueDispatchesAutoContinueEligibleFailureImmediately(t *testing
 	}
 }
 
+func TestAutoContinueCarriesFrozenCodexAdmissionRef(t *testing.T) {
+	now := time.Date(2026, 8, 1, 13, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	surface.Backend = agentproto.BackendCodex
+	surface.CodexProviderID = "team-proxy"
+	surface.CodexAdmissionRef = &state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+	}
+	surface.CodexThreadPolicy = &state.CodexThreadPolicy{
+		ThreadPolicyID:     "policy-team-proxy-r3",
+		ContextMode:        state.CodexContextModePrice272K,
+		ContextWindow:      272000,
+		AutoCompactLimit:   244800,
+		PreferenceRevision: 3,
+	}
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
+	original := surface.QueueItems[surface.ActiveQueueItemID]
+	if original == nil {
+		t.Fatal("expected original active queue item")
+	}
+	original.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef)
+	original.CodexThreadPolicy = state.CloneCodexThreadPolicy(surface.CodexThreadPolicy)
+	events := completeRemoteTurnWithFinalText(t, svc, "turn-1", "interrupted", "upstream stream closed", "", &agentproto.ErrorInfo{
+		Code:      "responseStreamDisconnected",
+		Layer:     "codex",
+		Stage:     "runtime_error",
+		Message:   "upstream stream closed",
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Retryable: false,
+	})
+	if len(events) == 0 {
+		t.Fatal("expected autocontinue events")
+	}
+	wantRef := state.CodexAdmissionRef{
+		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
+		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},
+	}
+	episode := surface.AutoContinue.Episode
+	if episode == nil || episode.CodexAdmissionRef == nil || *episode.CodexAdmissionRef != wantRef {
+		t.Fatalf("expected autocontinue episode to inherit frozen admission ref, got %#v", episode)
+	}
+	active := surface.QueueItems[surface.ActiveQueueItemID]
+	if active == nil || active.CodexAdmissionRef == nil || *active.CodexAdmissionRef != wantRef {
+		t.Fatalf("expected autocontinue queue item to carry frozen admission ref, got %#v", active)
+	}
+	if active.CodexThreadPolicy == nil || active.CodexThreadPolicy.ContextMode != state.CodexContextModePrice272K ||
+		active.CodexThreadPolicy.PreferenceRevision != 3 {
+		t.Fatalf("expected autocontinue queue item to carry frozen thread policy, got %#v", active)
+	}
+}
+
 func TestAutoContinueDoesNotScheduleAfterUserStopEvenWithAutoContinueEligibleProblem(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

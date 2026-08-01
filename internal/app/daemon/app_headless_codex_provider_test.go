@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -149,6 +150,68 @@ func TestDaemonStartsCodexHeadlessWithCanonicalProfileID(t *testing.T) {
 		strings.Contains(args, `model_provider="`+record.ID+`"`) ||
 		!strings.Contains(args, `.base_url="https://canonical.example/v1"`) {
 		t.Fatalf("canonical profile was not projected to an internal provider: %#v", captured.Args)
+	}
+}
+
+func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	stateDir := filepath.Join(root, "state")
+	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
+		Name: "Team Proxy", BaseURL: "https://old.example/v1", APIKey: "old-secret",
+		Model: "gpt-5.4", ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
+	}
+	record, changed, err := config.PrepareCodexAPIProfileUpdate(record, config.CodexAPIProfileInput{
+		Name: "Team Proxy", BaseURL: "https://new.example/v1", APIKey: "new-secret",
+		Model: "gpt-5.5", ReasoningEffort: "medium",
+	})
+	if err != nil || !changed {
+		t.Fatalf("PrepareCodexAPIProfileUpdate changed=%v err=%v", changed, err)
+	}
+	cfg := config.DefaultAppConfig()
+	cfg.Codex.Profiles = []config.CodexAPIProfileRecord{record}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote", BaseEnv: []string{"PATH=/usr/bin"}, LaunchArgs: []string{"app-server"},
+		Paths: relayruntime.Paths{LogsDir: t.TempDir(), StateDir: stateDir},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4327, nil
+	}
+
+	app.startManagedHeadless(control.DaemonCommand{
+		Kind:            control.DaemonCommandStartHeadless,
+		InstanceID:      "inst-frozen-profile",
+		ThreadCWD:       root,
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: record.ID,
+		CodexAdmissionRef: &state.CodexAdmissionRef{
+			ProfileRef:           state.CodexProfileRef{ID: record.ID, Revision: 1},
+			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: record.ID, Revision: 1},
+		},
+	})
+
+	if !containsEnvEntry(captured.Env, codexprofile.CodexProfileAPIKeyEnv+"=old-secret") {
+		t.Fatalf("expected frozen old API key env, got %#v", captured.Env)
+	}
+	args := strings.Join(captured.Args, "\n")
+	for _, want := range []string{`.base_url="https://old.example/v1"`, `model="gpt-5.4"`, `model_reasoning_effort="high"`} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("expected frozen launch args to contain %q, got %#v", want, captured.Args)
+		}
+	}
+	if strings.Contains(args, "https://new.example/v1") || containsEnvEntry(captured.Env, codexprofile.CodexProfileAPIKeyEnv+"=new-secret") {
+		t.Fatalf("launch drifted to current profile revision: env=%#v args=%#v", captured.Env, captured.Args)
 	}
 }
 

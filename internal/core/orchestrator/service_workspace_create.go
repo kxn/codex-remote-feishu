@@ -153,18 +153,21 @@ func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.S
 	}
 	launchContract := s.headlessLaunchContract(surface)
 	s.adoptSurfacePendingHeadlessLaunch(surface, &state.HeadlessLaunchRecord{
-		InstanceID:            instanceID,
-		WorkspaceKey:          workspaceKey,
-		ThreadCWD:             workspaceKey,
-		Backend:               launchContract.Backend,
-		CodexProviderID:       launchContract.CodexProviderID,
-		ClaudeProfileID:       launchContract.ClaudeProfileID,
-		ClaudeReasoningEffort: launchContract.ClaudeReasoningEffort,
-		RequestedAt:           s.now(),
-		ExpiresAt:             s.now().Add(s.config.HeadlessLaunchWait),
-		Status:                state.HeadlessLaunchStarting,
-		Purpose:               state.HeadlessLaunchPurposeFreshWorkspace,
-		PrepareNewThread:      prepareNewThread,
+		InstanceID:              instanceID,
+		WorkspaceKey:            workspaceKey,
+		ThreadCWD:               workspaceKey,
+		Backend:                 launchContract.Backend,
+		CodexProviderID:         launchContract.CodexProviderID,
+		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(launchContract.CodexAdmissionRef),
+		CodexConnectionContract: state.CloneCodexConnectionContract(launchContract.CodexConnectionContract),
+		CodexThreadPolicy:       state.CloneCodexThreadPolicy(launchContract.CodexThreadPolicy),
+		ClaudeProfileID:         launchContract.ClaudeProfileID,
+		ClaudeReasoningEffort:   launchContract.ClaudeReasoningEffort,
+		RequestedAt:             s.now(),
+		ExpiresAt:               s.now().Add(s.config.HeadlessLaunchWait),
+		Status:                  state.HeadlessLaunchStarting,
+		Purpose:                 state.HeadlessLaunchPurposeFreshWorkspace,
+		PrepareNewThread:        prepareNewThread,
 	})
 	s.syncFeishuRoomWorkspaceBinding(surface, workspaceKey)
 	noticeTitle := "正在接入工作区"

@@ -110,6 +110,17 @@ func (s *Service) consumeSurfacePendingHeadlessLaunch(surface *state.SurfaceCons
 	return pending
 }
 
+func (s *Service) RecordPendingHeadlessCodexRuntime(surfaceID, instanceID string, admissionRef *state.CodexAdmissionRef, connection *state.CodexConnectionContract, threadPolicy *state.CodexThreadPolicy) {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	pending := s.pendingSurfaceHeadlessLaunch(surface, instanceID)
+	if pending == nil {
+		return
+	}
+	pending.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(admissionRef)
+	pending.CodexConnectionContract = state.CloneCodexConnectionContract(connection)
+	pending.CodexThreadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
+}
+
 func (s *Service) setSurfaceDetachAbandoning(surface *state.SurfaceConsoleRecord, until time.Time) {
 	if surface == nil {
 		return

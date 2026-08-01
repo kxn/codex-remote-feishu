@@ -219,10 +219,11 @@ func TestTurnPatchApplySuccessWritesRolloutAndRestartsChild(t *testing.T) {
 	})
 
 	waitForTurnPatchCondition(t, func() bool {
-		return app.turnPatchRuntime.ActiveTx["inst-1"] == nil
+		return turnPatchTestTransactionIdle(app, "inst-1")
 	})
-	if flow.Stage != turnpatchruntime.FlowStageApplied || strings.TrimSpace(flow.PatchID) == "" || strings.TrimSpace(flow.BackupPath) == "" {
-		t.Fatalf("unexpected flow state after apply success: %#v", flow)
+	applied := turnPatchTestFlowSnapshot(t, app, flow.FlowID)
+	if applied.Stage != turnpatchruntime.FlowStageApplied || strings.TrimSpace(applied.PatchID) == "" || strings.TrimSpace(applied.BackupPath) == "" {
+		t.Fatalf("unexpected flow state after apply success: %#v", applied)
 	}
 	updatedRaw, err := os.ReadFile(rolloutPath)
 	if err != nil {
@@ -305,10 +306,11 @@ func TestTurnPatchApplyAcceptsImmediateRestartAck(t *testing.T) {
 	}
 
 	waitForTurnPatchCondition(t, func() bool {
-		return app.turnPatchRuntime.ActiveTx["inst-1"] == nil
+		return turnPatchTestTransactionIdle(app, "inst-1")
 	})
-	if flow.Stage != turnpatchruntime.FlowStageApplied || strings.TrimSpace(flow.PatchID) == "" || strings.TrimSpace(flow.BackupPath) == "" {
-		t.Fatalf("unexpected flow state after immediate ack: %#v", flow)
+	applied := turnPatchTestFlowSnapshot(t, app, flow.FlowID)
+	if applied.Stage != turnpatchruntime.FlowStageApplied || strings.TrimSpace(applied.PatchID) == "" || strings.TrimSpace(applied.BackupPath) == "" {
+		t.Fatalf("unexpected flow state after immediate ack: %#v", applied)
 	}
 	updatedRaw, err := os.ReadFile(rolloutPath)
 	if err != nil {
@@ -392,10 +394,11 @@ func TestTurnPatchApplyRestartRejectAutoRollsBack(t *testing.T) {
 	})
 
 	waitForTurnPatchCondition(t, func() bool {
-		return app.turnPatchRuntime.ActiveTx["inst-1"] == nil
+		return turnPatchTestTransactionIdle(app, "inst-1")
 	})
-	if flow.Stage != turnpatchruntime.FlowStageFailed {
-		t.Fatalf("expected flow to end in failed-after-recovery state, got %#v", flow)
+	failed := turnPatchTestFlowSnapshot(t, app, flow.FlowID)
+	if failed.Stage != turnpatchruntime.FlowStageFailed {
+		t.Fatalf("expected flow to end in failed-after-recovery state, got %#v", failed)
 	}
 	restoredRaw, err := os.ReadFile(rolloutPath)
 	if err != nil {
@@ -425,6 +428,23 @@ func mustOnlyTurnPatchFlow(t *testing.T, app *App) *turnpatchruntime.FlowRecord 
 	}
 	t.Fatal("missing active patch flow")
 	return nil
+}
+
+func turnPatchTestTransactionIdle(app *App, instanceID string) bool {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	return app.turnPatchRuntime.ActiveTx[instanceID] == nil
+}
+
+func turnPatchTestFlowSnapshot(t *testing.T, app *App, flowID string) turnpatchruntime.FlowRecord {
+	t.Helper()
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	flow := app.findTurnPatchFlowByFlowIDLocked(flowID)
+	if flow == nil {
+		t.Fatalf("missing turn patch flow %q", flowID)
+	}
+	return *flow
 }
 
 func mustReceiveRestartCommand(t *testing.T, ch <-chan agentproto.Command) agentproto.Command {

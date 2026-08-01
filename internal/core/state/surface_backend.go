@@ -20,10 +20,13 @@ type InstanceBackendContract struct {
 }
 
 type HeadlessLaunchContract struct {
-	Backend               agentproto.Backend
-	CodexProviderID       string
-	ClaudeProfileID       string
-	ClaudeReasoningEffort string
+	Backend                 agentproto.Backend
+	CodexProviderID         string
+	CodexAdmissionRef       *CodexAdmissionRef
+	CodexConnectionContract *CodexConnectionContract
+	CodexThreadPolicy       *CodexThreadPolicy
+	ClaudeProfileID         string
+	ClaudeReasoningEffort   string
 }
 
 func VSCodeSurfaceBackendContract() SurfaceBackendContract {
@@ -160,7 +163,11 @@ func NormalizeHeadlessLaunchContract(contract HeadlessLaunchContract) HeadlessLa
 	case agentproto.BackendClaude:
 		return HeadlessClaudeLaunchContract(contract.ClaudeProfileID, contract.ClaudeReasoningEffort)
 	default:
-		return HeadlessCodexLaunchContract(contract.CodexProviderID)
+		normalized := HeadlessCodexLaunchContract(contract.CodexProviderID)
+		normalized.CodexAdmissionRef = NormalizeCodexAdmissionRef(contract.CodexAdmissionRef)
+		normalized.CodexConnectionContract = CloneCodexConnectionContract(contract.CodexConnectionContract)
+		normalized.CodexThreadPolicy = CloneCodexThreadPolicy(contract.CodexThreadPolicy)
+		return normalized
 	}
 }
 
@@ -181,10 +188,13 @@ func HeadlessLaunchContractFromPending(pending *HeadlessLaunchRecord) HeadlessLa
 		return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{})
 	}
 	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
-		Backend:               pending.Backend,
-		CodexProviderID:       pending.CodexProviderID,
-		ClaudeProfileID:       pending.ClaudeProfileID,
-		ClaudeReasoningEffort: pending.ClaudeReasoningEffort,
+		Backend:                 pending.Backend,
+		CodexProviderID:         pending.CodexProviderID,
+		CodexAdmissionRef:       pending.CodexAdmissionRef,
+		CodexConnectionContract: pending.CodexConnectionContract,
+		CodexThreadPolicy:       pending.CodexThreadPolicy,
+		ClaudeProfileID:         pending.ClaudeProfileID,
+		ClaudeReasoningEffort:   pending.ClaudeReasoningEffort,
 	})
 }
 
@@ -193,10 +203,13 @@ func HeadlessLaunchContractFromInstance(inst *InstanceRecord) HeadlessLaunchCont
 		return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{})
 	}
 	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
-		Backend:               inst.Backend,
-		CodexProviderID:       inst.CodexProviderID,
-		ClaudeProfileID:       inst.ClaudeProfileID,
-		ClaudeReasoningEffort: inst.ClaudeReasoningEffort,
+		Backend:                 inst.Backend,
+		CodexProviderID:         inst.CodexProviderID,
+		CodexAdmissionRef:       inst.CodexAdmissionRef,
+		CodexConnectionContract: inst.CodexConnectionContract,
+		CodexThreadPolicy:       inst.CodexThreadPolicy,
+		ClaudeProfileID:         inst.ClaudeProfileID,
+		ClaudeReasoningEffort:   inst.ClaudeReasoningEffort,
 	})
 }
 

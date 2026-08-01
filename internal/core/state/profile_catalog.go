@@ -40,6 +40,53 @@ type CodexAdmissionRef struct {
 	ContextPreferenceRef CodexContextPreferenceRef `json:"contextPreferenceRef"`
 }
 
+func NormalizeCodexAdmissionRef(value *CodexAdmissionRef) *CodexAdmissionRef {
+	if value == nil {
+		return nil
+	}
+	profileID := strings.TrimSpace(value.ProfileRef.ID)
+	preferenceProfileID := strings.TrimSpace(value.ContextPreferenceRef.ProfileID)
+	if profileID == "" || preferenceProfileID != profileID || value.ProfileRef.Revision == 0 || value.ContextPreferenceRef.Revision == 0 {
+		return nil
+	}
+	return &CodexAdmissionRef{
+		ProfileRef: CodexProfileRef{
+			ID:       profileID,
+			Revision: value.ProfileRef.Revision,
+		},
+		ContextPreferenceRef: CodexContextPreferenceRef{
+			ProfileID: preferenceProfileID,
+			Revision:  value.ContextPreferenceRef.Revision,
+		},
+	}
+}
+
+func CloneCodexConnectionContract(value *CodexConnectionContract) *CodexConnectionContract {
+	if value == nil || strings.TrimSpace(value.ConnectionContractID) == "" {
+		return nil
+	}
+	clone := *value
+	clone.ProfileRef.ID = strings.TrimSpace(clone.ProfileRef.ID)
+	clone.ConnectionContractID = strings.TrimSpace(clone.ConnectionContractID)
+	clone.ModelProviderID = strings.TrimSpace(clone.ModelProviderID)
+	clone.ModelEndpointID = strings.TrimSpace(clone.ModelEndpointID)
+	clone.ChatGPTEndpointID = strings.TrimSpace(clone.ChatGPTEndpointID)
+	clone.CapabilitySet = strings.TrimSpace(clone.CapabilitySet)
+	return &clone
+}
+
+func CloneCodexThreadPolicy(value *CodexThreadPolicy) *CodexThreadPolicy {
+	if value == nil || strings.TrimSpace(value.ThreadPolicyID) == "" {
+		return nil
+	}
+	clone := *value
+	clone.ThreadPolicyID = strings.TrimSpace(clone.ThreadPolicyID)
+	clone.Model = strings.TrimSpace(clone.Model)
+	clone.ReviewModel = strings.TrimSpace(clone.ReviewModel)
+	clone.ReasoningEffort = strings.TrimSpace(clone.ReasoningEffort)
+	return &clone
+}
+
 type ProfileContextPreference struct {
 	ProfileID string `json:"profileID"`
 	Revision  uint64 `json:"revision"`

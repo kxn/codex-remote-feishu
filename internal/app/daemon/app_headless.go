@@ -148,7 +148,7 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
 	}
 	launchArgs := append([]string{}, cfg.LaunchArgs...)
-	env, launchArgs, err := a.applyCodexHeadlessProviderConfigLocked(env, launchArgs, backend, command.CodexProviderID)
+	env, launchArgs, codexProjection, err := a.applyCodexHeadlessProviderConfigLocked(env, launchArgs, backend, command.CodexProviderID, command.CodexAdmissionRef)
 	if err != nil {
 		return a.handleManagedHeadlessLaunchFailure(command, codexHeadlessLaunchProblem(err, agentproto.ErrorInfo{
 			Code:             "codex_provider_prepare_failed",
@@ -160,6 +160,9 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 			ThreadID:         command.ThreadID,
 			Retryable:        true,
 		}), now)
+	}
+	if codexProjection != nil {
+		a.service.RecordPendingHeadlessCodexRuntime(command.SurfaceSessionID, command.InstanceID, command.CodexAdmissionRef, &codexProjection.Connection, &codexProjection.Thread)
 	}
 	env, claudeRuntimeSettings, err = a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID)
 	if err != nil {

@@ -305,6 +305,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
 		return s.attachHeadlessPromptDispatchRestart(surface, inst, pending)
 	}
+	s.applyPendingHeadlessRuntimeToInstance(surface, inst, pending)
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		pendingContract := state.HeadlessLaunchContractFromPending(pending)
 		if pendingContract.Backend == agentproto.BackendClaude {
@@ -368,6 +369,24 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	return events
 }
 
+func (s *Service) applyPendingHeadlessRuntimeToInstance(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, pending *state.HeadlessLaunchRecord) {
+	if surface == nil || inst == nil || pending == nil {
+		return
+	}
+	if state.NormalizeHeadlessBackend(pending.Backend) != agentproto.BackendCodex {
+		return
+	}
+	admissionRef := state.NormalizeCodexAdmissionRef(pending.CodexAdmissionRef)
+	connection := state.CloneCodexConnectionContract(pending.CodexConnectionContract)
+	threadPolicy := state.CloneCodexThreadPolicy(pending.CodexThreadPolicy)
+	inst.CodexAdmissionRef = admissionRef
+	inst.CodexConnectionContract = connection
+	inst.CodexThreadPolicy = threadPolicy
+	surface.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(admissionRef)
+	surface.CodexConnectionContract = state.CloneCodexConnectionContract(connection)
+	surface.CodexThreadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
+}
+
 func (s *Service) finishFailedAutoRestoreThreadConnect(surface *state.SurfaceConsoleRecord, pending *state.HeadlessLaunchRecord, events []eventcontract.Event) []eventcontract.Event {
 	if surface == nil || pending == nil || !pending.AutoRestore {
 		return events
@@ -417,6 +436,7 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 	if surface == nil || inst == nil || pending == nil {
 		return nil
 	}
+	s.applyPendingHeadlessRuntimeToInstance(surface, inst, pending)
 	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot, pending.WorkspaceKey), pending.ThreadCWD)
 	next := promptDispatchRestartRouteState(inst.InstanceID, workspaceKey, pending)
 	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
