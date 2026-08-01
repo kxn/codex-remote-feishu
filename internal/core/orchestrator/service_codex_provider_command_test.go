@@ -101,8 +101,36 @@ func TestCodexProfileCommandRejectsUnavailableOAuthProfile(t *testing.T) {
 		t.Fatalf("unavailable profile changed provider: %#v", surface)
 	}
 	if len(events) != 1 || events[0].PageView == nil ||
-		!containsPageSectionLine(events[0].PageView.NoticeSections, "当前不可用") {
+		!containsPageSectionLine(events[0].PageView.NoticeSections, "未检测到 ChatGPT 登录") {
 		t.Fatalf("expected inline structured unavailable error, got %#v", events)
+	}
+}
+
+func TestCodexProfileCommandRejectsUnavailableAPIProfileWithFriendlyReason(t *testing.T) {
+	now := time.Date(2026, 8, 1, 11, 6, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "expensivecodex", Kind: state.CodexProfileKindAPI, Name: "expensivecodex", Available: false, StatusCode: "profile_definition_incomplete"},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCodexProviderCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/codexprofile expensivecodex",
+	})
+
+	if surface.CodexProviderID != state.DefaultCodexProviderID {
+		t.Fatalf("unavailable profile changed provider: %#v", surface)
+	}
+	if len(events) != 1 || events[0].PageView == nil ||
+		!containsPageSectionLine(events[0].PageView.NoticeSections, "配置不完整") ||
+		containsPageSectionLine(events[0].PageView.NoticeSections, "profile_definition_incomplete") {
+		t.Fatalf("expected friendly unavailable API error, got %#v", events)
 	}
 }
 

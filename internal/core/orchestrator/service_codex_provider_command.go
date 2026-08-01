@@ -56,9 +56,10 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 		})
 	}
 	if !target.Available {
+		reason := codexProfileUnavailableReasonText(target)
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       fmt.Sprintf("Codex Profile %s 当前不可用，不能切换。", codexProfileDisplayName(target)),
+			StatusText:       fmt.Sprintf("Codex Profile %s 当前不可用：%s", codexProfileDisplayName(target), reason),
 			FormDefaultValue: strings.TrimSpace(target.ID),
 		})
 	}

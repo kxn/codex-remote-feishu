@@ -134,14 +134,44 @@ func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableSt
 	if view.Config.CurrentValue != state.NativeCodexProfileID || view.Config.FormDefaultValue != state.NativeCodexProfileID {
 		t.Fatalf("current/default profile = %q/%q, want native", view.Config.CurrentValue, view.Config.FormDefaultValue)
 	}
-	if got := view.Config.FormOptions; len(got) != 2 || got[0].Value != state.NativeCodexProfileID || got[1].Value != "team-proxy" {
-		t.Fatalf("expected only available profiles in submit options, got %#v", got)
+	if got := view.Config.FormOptions; len(got) != 3 || got[0].Value != state.NativeCodexProfileID || got[1].Value != state.OAuthCodexProfileID || got[2].Value != "team-proxy" {
+		t.Fatalf("expected available and unavailable profiles in submit options, got %#v", got)
+	} else if got[1].Label != "ChatGPT 登录（不可用）" {
+		t.Fatalf("expected unavailable profile label to be marked, got %#v", got[1])
 	}
-	if view.Config.StatusKind != "info" || !strings.Contains(view.Config.StatusText, "ChatGPT 登录：missing") {
+	if view.Config.StatusKind != "info" ||
+		!strings.Contains(view.Config.StatusText, "ChatGPT 登录：未检测到 ChatGPT 登录") ||
+		strings.Contains(view.Config.StatusText, "missing") {
 		t.Fatalf("expected unavailable OAuth status row, got kind=%q text=%q", view.Config.StatusKind, view.Config.StatusText)
 	}
 	if !view.Config.FormPagination {
 		t.Fatal("expected codex profile config flow to enable pagination")
+	}
+}
+
+func TestBuildConfigCommandViewStateMapsUnavailableAPIProfileReason(t *testing.T) {
+	now := time.Date(2026, 8, 1, 10, 35, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "expensivecodex", Kind: state.CodexProfileKindAPI, Name: "expensivecodex", Available: false, StatusCode: "profile_definition_incomplete"},
+	})
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	if !ok {
+		t.Fatal("expected codex profile config flow")
+	}
+	view := svc.buildConfigCommandViewState(svc.root.Surfaces["surface-1"], flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if got := view.Config.FormOptions; len(got) != 2 || got[1].Value != "expensivecodex" || got[1].Label != "expensivecodex（不可用）" {
+		t.Fatalf("expected unavailable API profile in options, got %#v", got)
+	}
+	if !strings.Contains(view.Config.StatusText, "expensivecodex：配置不完整") ||
+		strings.Contains(view.Config.StatusText, "profile_definition_incomplete") {
+		t.Fatalf("expected friendly unavailable API reason, got %q", view.Config.StatusText)
 	}
 }
 

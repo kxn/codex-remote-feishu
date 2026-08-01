@@ -63,7 +63,7 @@ func (s *Service) buildConfigCommandViewState(
 	view.Config.PlanModeOverrideSet = summary.PlanModeOverrideSet
 	switch flow.CommandID {
 	case control.FeishuCommandCodexProvider:
-		view.Config.FormOptions = s.codexProfileCommandOptions(false)
+		view.Config.FormOptions = s.codexProfileCommandOptions(true)
 		view.Config.FormPagination = true
 		if strings.TrimSpace(view.Config.StatusText) == "" {
 			if lines := s.unavailableCodexProfileLines(); len(lines) != 0 {
@@ -275,6 +275,9 @@ func (s *Service) codexProfileCommandOptions(includeUnavailable bool) []control.
 		if labelCounts[label] > 1 && !strings.EqualFold(label, strings.TrimSpace(profile.ID)) {
 			label += "（" + strings.TrimSpace(profile.ID) + "）"
 		}
+		if !profile.Available {
+			label += "（不可用）"
+		}
 		options = append(options, control.CommandCatalogFormFieldOption{
 			Label: label,
 			Value: strings.TrimSpace(profile.ID),
@@ -299,13 +302,33 @@ func (s *Service) unavailableCodexProfileLines() []string {
 		if name == "" {
 			name = strings.TrimSpace(profile.ID)
 		}
-		reason := strings.TrimSpace(profile.StatusCode)
-		if reason == "" {
-			reason = "当前不可用"
-		}
+		reason := codexProfileUnavailableReasonText(profile)
 		lines = append(lines, name+"："+reason)
 	}
 	return lines
+}
+
+func codexProfileUnavailableReasonText(profile state.CodexProfileSummary) string {
+	switch strings.TrimSpace(profile.StatusCode) {
+	case "oauth_missing", "missing":
+		return "未检测到 ChatGPT 登录，请在本机完成 Codex 登录后再使用。"
+	case "oauth_probe_unknown", "unknown":
+		return "暂时无法确认 ChatGPT 登录状态，请稍后刷新或到 Web 管理界面检查。"
+	case "oauth_deployment_unsupported":
+		return "当前 ChatGPT 登录部署暂不支持这个 Profile。"
+	case "codex_capability_unsupported":
+		return "当前 Codex 版本暂不支持 Profile 隔离能力。"
+	case "profile_definition_incomplete":
+		return "配置不完整，请到 Web 管理界面补齐端点、模型和推理配置。"
+	case "profile_secret_missing":
+		return "缺少 API Key，请到 Web 管理界面补齐后再使用。"
+	case "profile_revision_unavailable":
+		return "当前保存的 Profile 版本已经不可用，请到 Web 管理界面刷新或重新保存。"
+	case "profile_catalog_degraded":
+		return "Profile 目录暂不可用，请稍后刷新。"
+	default:
+		return "当前不可用，请到 Web 管理界面检查配置。"
+	}
 }
 
 func (s *Service) claudeProfileCommandOptions() []control.CommandCatalogFormFieldOption {
