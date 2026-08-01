@@ -3,7 +3,6 @@ import type {
   BootstrapState,
   ClaudeProfileSummary,
   CodexProfileSummary,
-  CodexProviderSummary,
   FeishuAppAutoConfigApplyResponse,
   FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigPlanResponse,
@@ -160,20 +159,6 @@ export function makeCodexProfile(
       etag: '"codex-context-preference:codex-native:1"',
       mode: "codex_default",
     },
-    ...overrides,
-  };
-}
-
-export function makeCodexProvider(
-  overrides: Partial<CodexProviderSummary> = {},
-): CodexProviderSummary {
-  return {
-    id: "default",
-    name: "系统默认",
-    hasApiKey: false,
-    builtIn: true,
-    persisted: false,
-    readOnly: true,
     ...overrides,
   };
 }

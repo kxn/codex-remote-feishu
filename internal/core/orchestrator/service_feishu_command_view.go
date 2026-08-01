@@ -308,39 +308,6 @@ func (s *Service) unavailableCodexProfileLines() []string {
 	return lines
 }
 
-func (s *Service) codexProviderCommandOptions() []control.CommandCatalogFormFieldOption {
-	providers := s.CodexProviders()
-	if len(providers) == 0 {
-		return []control.CommandCatalogFormFieldOption{{
-			Label: state.DefaultCodexProviderName,
-			Value: state.DefaultCodexProviderID,
-		}}
-	}
-	labelCounts := map[string]int{}
-	for _, provider := range providers {
-		label := strings.TrimSpace(provider.Name)
-		if label == "" {
-			label = provider.ID
-		}
-		labelCounts[label]++
-	}
-	options := make([]control.CommandCatalogFormFieldOption, 0, len(providers))
-	for _, provider := range providers {
-		label := strings.TrimSpace(provider.Name)
-		if label == "" {
-			label = provider.ID
-		}
-		if labelCounts[label] > 1 && !strings.EqualFold(label, strings.TrimSpace(provider.ID)) {
-			label += "（" + strings.TrimSpace(provider.ID) + "）"
-		}
-		options = append(options, control.CommandCatalogFormFieldOption{
-			Label: label,
-			Value: strings.TrimSpace(provider.ID),
-		})
-	}
-	return options
-}
-
 func (s *Service) claudeProfileCommandOptions() []control.CommandCatalogFormFieldOption {
 	profiles := s.ClaudeProfiles()
 	if len(profiles) == 0 {

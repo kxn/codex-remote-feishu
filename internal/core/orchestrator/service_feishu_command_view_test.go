@@ -74,18 +74,19 @@ func TestBuildConfigCommandViewStatePopulatesClaudeProfileOptions(t *testing.T) 
 	}
 }
 
-func TestBuildConfigCommandViewStatePopulatesCodexProviderOptions(t *testing.T) {
+func TestBuildConfigCommandViewStatePopulatesCodexProfileOptions(t *testing.T) {
 	now := time.Date(2026, 5, 1, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{
-		{ID: "team-proxy", Name: "Team Proxy"},
-		{ID: "team-proxy-2", Name: "Team Proxy"},
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
+		{ID: "team-proxy-2", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 	})
 
 	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
 	if !ok {
-		t.Fatal("expected codex provider config flow")
+		t.Fatal("expected codex profile config flow")
 	}
 	view := svc.buildConfigCommandViewState(svc.root.Surfaces["surface-1"], flow, control.FeishuCatalogConfigView{})
 	if view.Config == nil {
@@ -98,7 +99,7 @@ func TestBuildConfigCommandViewStatePopulatesCodexProviderOptions(t *testing.T) 
 		t.Fatalf("default value = %q, want %q", view.Config.FormDefaultValue, "team-proxy")
 	}
 	if got := view.Config.FormOptions; len(got) != 3 {
-		t.Fatalf("expected default + 2 custom providers, got %#v", got)
+		t.Fatalf("expected native + 2 API profiles, got %#v", got)
 	} else {
 		if got[0].Label != "本机默认" || got[0].Value != state.NativeCodexProfileID {
 			t.Fatalf("unexpected built-in default option: %#v", got[0])

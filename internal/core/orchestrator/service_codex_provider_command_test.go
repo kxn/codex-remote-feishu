@@ -10,11 +10,26 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func materializeTestCodexProfiles(svc *Service, profiles ...state.CodexProfileSummary) {
+	records := []state.CodexProfileSummary{{
+		ID:        state.NativeCodexProfileID,
+		Kind:      state.CodexProfileKindNative,
+		Name:      "本机默认",
+		Available: true,
+	}}
+	for _, profile := range profiles {
+		profile.Kind = state.CodexProfileKindAPI
+		profile.Available = true
+		records = append(records, profile)
+	}
+	svc.MaterializeCodexProfiles(records)
+}
+
 func TestCodexProviderCommandSwitchesDetachedSurface(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	surface := svc.root.Surfaces["surface-1"]
 
@@ -105,7 +120,7 @@ func containsPageSectionLine(sections []control.FeishuCardTextSection, fragment 
 func TestCodexProviderCommandExplicitCurrentSelectionWritesCanonicalBotProfile(t *testing.T) {
 	now := time.Date(2026, 7, 31, 18, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.MaterializeSurfaceResumeWithCodexProvider(
 		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
 		state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
@@ -132,7 +147,7 @@ func TestCodexProviderCommandRejectsBusySurface(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	surface := svc.root.Surfaces["surface-1"]
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
@@ -163,10 +178,7 @@ func TestCodexProviderCommandRestartsWorkspace(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", state.PlanModeSettingOff)
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{
-		{ID: "default", Name: state.DefaultCodexProviderName},
-		{ID: "team-proxy", Name: "Team Proxy"},
-	})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	workspaceKey := "/data/dl/repo"
 	surface := svc.root.Surfaces["surface-1"]
@@ -212,10 +224,7 @@ func TestCodexProviderCommandRestartsPinnedCodexThread(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{
-		{ID: "default", Name: state.DefaultCodexProviderName},
-		{ID: "team-proxy", Name: "Team Proxy"},
-	})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-visible",
 		DisplayName:     "repo",
@@ -290,7 +299,7 @@ func TestCodexProviderCommandRejectedInVSCodeMode(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 25, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeVSCodeSurfaceForTest(svc, "surface-vscode")
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionCodexProviderCommand,

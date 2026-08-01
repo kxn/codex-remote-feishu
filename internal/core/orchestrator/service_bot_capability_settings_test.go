@@ -190,7 +190,7 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 			svc := newServiceForTest(&now)
-			svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+			materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 			svc.UpsertInstance(&state.InstanceRecord{
 				InstanceID:    "inst-1",
 				Backend:       agentproto.BackendCodex,
@@ -243,7 +243,7 @@ func TestPrivateCapabilityCommandsRemainGatewayIsolated(t *testing.T) {
 func TestPrivateBackendSwitchPreservesInactiveProviderAndProfileSelections(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{ID: "devseek", Name: "DevSeek"}})
 
 	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionCodexProviderCommand, "app-1", "ou_user", "/codexprovider team-proxy"))
@@ -910,7 +910,7 @@ func TestGroupSurfaceBotCapabilitySettingsAreGatewayScoped(t *testing.T) {
 func TestPrivateProviderAndProfileCommandsWriteBotCapabilitySettings(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{ID: "devseek", Name: "DevSeek"}})
 	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
@@ -983,7 +983,7 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			svc := newServiceForTest(&now)
-			svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+			materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 			svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{ID: "devseek", Name: "DevSeek"}})
 			svc.UpsertInstance(&state.InstanceRecord{
 				InstanceID:    "inst-1",

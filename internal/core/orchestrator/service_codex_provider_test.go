@@ -29,3 +29,14 @@ func TestCodexProvidersMaterializeBuiltInAndDisambiguateDuplicateNames(t *testin
 		t.Fatalf("unexpected second custom provider: %#v", got[2])
 	}
 }
+
+func TestCodexProvidersDoNotBackfillCanonicalProfiles(t *testing.T) {
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "team-proxy", Name: "Team Proxy"}})
+
+	profiles := svc.CodexProfiles()
+	if len(profiles) != 1 || profiles[0].ID != state.NativeCodexProfileID {
+		t.Fatalf("legacy provider catalog must not synthesize canonical profiles: %#v", profiles)
+	}
+}

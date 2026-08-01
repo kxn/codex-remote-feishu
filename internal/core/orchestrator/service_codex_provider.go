@@ -25,9 +25,6 @@ func (s *Service) MaterializeCodexProviders(records []state.CodexProviderRecord)
 		}
 		s.root.CodexProviders[current.ID] = current
 	}
-	if len(s.root.CodexProfiles) == 0 {
-		s.MaterializeCodexProfiles(codexProfilesFromLegacyProviders(s.root.CodexProviders))
-	}
 }
 
 func (s *Service) MaterializeCodexProfiles(records []state.CodexProfileSummary) {
@@ -80,20 +77,6 @@ func (s *Service) CodexProfiles() []state.CodexProfileSummary {
 		}
 		return left.ID < right.ID
 	})
-	return profiles
-}
-
-func codexProfilesFromLegacyProviders(providers map[string]state.CodexProviderRecord) []state.CodexProfileSummary {
-	profiles := make([]state.CodexProfileSummary, 0, len(providers))
-	for _, provider := range providers {
-		provider = state.NormalizeCodexProviderRecord(provider)
-		profiles = append(profiles, state.CodexProfileSummary{
-			ID:        state.CodexProfileIDFromLegacyProviderID(provider.ID),
-			Kind:      state.CodexProfileKindAPI,
-			Name:      provider.Name,
-			Available: true,
-		})
-	}
 	return profiles
 }
 

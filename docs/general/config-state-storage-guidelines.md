@@ -136,7 +136,7 @@
 当前例子：
 
 - `/mode`
-- `/codexprovider`
+- `/codexprofile`（旧 `/codexprovider` 只作为兼容 alias）
 - `/claudeprofile`
 
 设计要求：
@@ -209,7 +209,7 @@
 | AutoContinue | Local Only With Side Effects | 否 | runtime memory only | 当前不持久化是合理行为。 |
 | AutoWhip | Local Only With Side Effects | 否 | runtime memory only | 当前不持久化是合理行为。 |
 | `/mode` | Local Routing / Launch Contract | 是 | `surfaceSessionID` | desired state 应由本系统持有。 |
-| `/codexprovider` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `providerID` | provider 定义和 surface 选择应分开。 |
+| `/codexprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | Profile 定义和 surface 选择应分开；旧 `/codexprovider` 只作为兼容 transport alias。 |
 | `/claudeprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | profile 定义和 surface 选择应分开。 |
 | Codex headless model | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `model` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
 | Codex headless reasoning | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `reasoning` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
