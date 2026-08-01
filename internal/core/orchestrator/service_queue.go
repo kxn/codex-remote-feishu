@@ -88,6 +88,20 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	}
 	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
+	frozenOverride := s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides)
+	codexAdmissionRef := s.freezeCodexAdmissionRefForPrompt(surface)
+	codexConnectionContract := s.freezeCodexConnectionContractForPrompt(surface)
+	codexThreadPolicy := s.freezeCodexThreadPolicyForPrompt(surface)
+	var routeAdjustmentEvents []eventcontract.Event
+	adjustment := s.maybeStartNewThreadForCodexModelGroupSwitch(surface, inst, dispatchPlan, routeMode, overrides, frozenOverride, codexThreadPolicy)
+	if adjustment.Applied {
+		dispatchPlan = adjustment.DispatchPlan
+		threadID = dispatchPlan.ExecutionThreadID
+		cwd = dispatchPlan.CWD
+		routeMode = adjustment.RouteMode
+		frozenOverride = adjustment.FrozenOverride
+		routeAdjustmentEvents = adjustment.Events
+	}
 	item := &state.QueueItemRecord{
 		SurfaceSessionID:        surface.SurfaceSessionID,
 		ActorUserID:             surface.ActorUserID,
@@ -99,18 +113,18 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		ReplyToMessagePreview:   normalizeSourceMessagePreview(sourceMessagePreview),
 		Inputs:                  inputs,
 		FrozenDispatchPlan:      dispatchPlan,
-		FrozenOverride:          s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
+		FrozenOverride:          frozenOverride,
 		FrozenPlanMode:          s.freezePlanModeForPrompt(surface),
-		CodexAdmissionRef:       s.freezeCodexAdmissionRefForPrompt(surface),
-		CodexConnectionContract: s.freezeCodexConnectionContractForPrompt(surface),
-		CodexThreadPolicy:       s.freezeCodexThreadPolicyForPrompt(surface),
+		CodexAdmissionRef:       codexAdmissionRef,
+		CodexConnectionContract: codexConnectionContract,
+		CodexThreadPolicy:       codexThreadPolicy,
 		RouteModeAtEnqueue:      routeMode,
 		Status:                  state.QueueItemQueued,
 	}
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
 	}
-	return s.enqueuePreparedQueueItem(surface, item, front)
+	return append(routeAdjustmentEvents, s.enqueuePreparedQueueItem(surface, item, front)...)
 }
 
 func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-02`
-> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、headless lazy recovery、动态/固定模型菜单、prompt override guard 与 typed Codex resume policy；详细历史补充保留在正文各日期段落。
+> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、headless lazy recovery、动态/固定模型菜单、prompt override guard、跨模型组自动新会话与 typed Codex resume policy；详细历史补充保留在正文各日期段落。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`（含 hidden alias `/codexprovider`）现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -12,7 +12,7 @@
 
 ## 1. 文档定位
 
-2026-08-01 #766 补充：Codex Profile-aware resume 不再把 requested policy 当作 observed actual。普通 dispatch、compact 与 `process.child.restart` restore 在目标 thread 已有同 connection/provider 的 `CodexEffectiveThreadContract` 时使用 `preserve_thread_settings`，保留 observed model/reasoning，同时仍请求当前 Profile 的 context preference；否则使用 `apply_target_profile`。`CodexEffectiveThreadContract` 只记录 `thread/started` 或 `thread.settings.updated` 已证明的 provider/model/reasoning，以及 `turn/started` 的 requested/effective context window；缺少 provider evidence 或 observed provider 与 Resume Policy 冲突时，wrapper 在 `turn.started` 上附带 `codex_protocol_incomplete`，不把 requested provider/model/reasoning 伪装成 actual。
+2026-08-01 #766 补充：Codex Profile-aware resume 不再把 requested policy 当作 observed actual。普通 dispatch、compact 与 `process.child.restart` restore 在目标 thread 已有同 connection/provider 的 `CodexEffectiveThreadContract` 时使用 `preserve_thread_settings`，保留 observed model/reasoning，同时仍请求当前 Profile 的 context preference；否则使用 `apply_target_profile`。`CodexEffectiveThreadContract` 只记录 `thread/started` 或 `thread.settings.updated` 已证明的 provider/model/reasoning，以及 `turn/started` 的 requested/effective context window；缺少 provider evidence 或 observed provider 与 Resume Policy 冲突时，wrapper 在 `turn.started` 上附带 `codex_protocol_incomplete`，不把 requested provider/model/reasoning 伪装成 actual。2026-08-02 补充：Codex headless 普通 dispatch 在冻结 queue item 时会比较旧 thread 已证明模型组与当前目标模型组；目前模型组只分 `gpt` 与 `non_gpt`。双方都可判定且不同组时，不再复用旧 thread，而是同步把 surface 切到 `new_thread_ready`，保留原 workspace/cwd，改发 `start_new` 并提示用户已自动新建会话；目标模型继续由 typed `CodexResumePolicy` 或用户显式 override 持有，不在 wrapper/adapter 清理历史 item。
 
 这份文档描述的是**当前代码已经实现**的 remote surface 状态机，不是历史问题列表，也不是未来方案草稿。
 
@@ -243,12 +243,14 @@ surface 不是单一枚举，而是五层正交状态叠加。
    2. Codex `/model` 与 `/reasoning` 会先按当前 Codex Profile 判定模型目录模式：native/OAuth、未配置模型的 API Profile、以及模型名看起来属于 GPT/OpenAI 系的 API Profile 继续使用当前 instance-scoped `model.list` 目录；配置了非 GPT/OpenAI 系模型的 API Profile 视为 fixed，只信 Profile 配置的模型和推理强度。fixed Profile 下手输其它模型或非 Profile 配置的推理强度会被拒绝，切到 fixed Profile 时会清掉旧 model/reasoning override，保留 access/plan。
    3. 非 fixed 场景下，Codex `/model` 与 `/reasoning` 继续按当前 instance-scoped `model.list` 目录校验 `model + reasoning` tuple：已知不支持时普通命令拒绝，已知模型切换时清掉不兼容的旧 reasoning override；未知模型、目录不可用或模型未声明 efforts 时只提示无法本地校验，保留高级手输能力。
    4. Codex queue dispatch 与 auto-continue dispatch 在真正生成 `prompt.send` 前会再次检查 frozen override；fixed Profile 下若残留不匹配的 model override，会清空这次 command 的 model/reasoning override、保留 access，并追加 `prompt_override_model_dropped` 全局 runtime notice；非 fixed 场景下若动态目录可判定 `model + reasoning` 不兼容，会清空这次 command 的 reasoning override，保留 model/access，并追加 `prompt_override_reasoning_dropped` 全局 runtime notice。这两类 notice 使用 `prompt_override_guard` family 和 dedupe key，避免同一不兼容组合连续刷屏。
-   5. headless 主链的 base config 当前只读取 thread explicit config、backend/profile-scoped workspace defaults、fixed Codex API Profile 的 profile 模型策略与 surface override；旧 `InstanceRecord.CWDDefaults` 和旧 workspace-defaults storage key 都不再参与 headless fallback。`CWDDefaults` 仅保留给 `vscode` 的 observed-config 展示与 freeze 语义。
-   6. Claude headless 的 runtime `permissionMode` 现在会通过标准 `config.observed(thread)` 回填 thread observed access/plan；`/status`、`/access`、`/plan` 和 headless prompt freeze 都读这条 observed state，而不是把它误持久成 workspace default。
-   7. Claude headless 在没有飞书显式 `/access` override 时，下一条 prompt 的 base access 会优先跟随当前 thread observed access；旧的 Claude workspace default access 不再参与这条解析。
-   8. Claude reasoning 仍由 profile/default + surface explicit override 生成 headless launch contract；本轮 Codex “自动=不下发 reasoning override”不改变 Claude 的 `workspace+profile` snapshot、`prompt_dispatch_restart` 或 profile default reasoning 语义。
-   9. `vscode` 主链只冻结飞书显式 requested override；observed cwd/thread config 仍可用于 `/status` / 参数卡展示，但不会在没有本地显式覆盖时被重新下发给 backend。
-   10. Codex translator 收到 empty access override 时不会改写 `approvalPolicy` / `sandboxPolicy`；只有显式 `full` / `confirm` 才会下发对应权限策略。
+   5. Codex headless 普通 `resume_existing + follow_execution_thread` dispatch 会在 queue freeze 时执行模型组兼容检查：旧 thread 模型优先取 `CodexEffectiveThread.Model`，再取 `ExplicitModel` / `ThreadSettings.Model` / `LastModelReroute.ToModel`；目标模型优先取非 thread 来源的 prompt config，再取当前 `CodexThreadPolicy` 的 explicit/default 目标。若旧组与目标组分别可判定且一个是 `gpt`、另一个是 `non_gpt`，本次输入会改写为 `start_new`，surface 同步进入 `R5 NewThreadReady`，`PreparedFromThreadID` 记录旧 thread，`PreparedThreadCWD` 保留原 cwd，并追加 `codex_model_group_new_thread` notice。不可判定或同组时继续复用旧 thread。
+   6. 跨模型组自动新会话不进入 detour / review / keep-selection 临时会话路径，也不在 adapter 清理 Codex 历史。若目标模型来自 `CodexThreadPolicy`，dispatch 会清掉由旧 thread base config 推导出的 model override，避免 prompt override 反向覆盖目标 Profile policy。
+   7. headless 主链的 base config 当前只读取 thread explicit config、backend/profile-scoped workspace defaults、fixed Codex API Profile 的 profile 模型策略与 surface override；旧 `InstanceRecord.CWDDefaults` 和旧 workspace-defaults storage key 都不再参与 headless fallback。`CWDDefaults` 仅保留给 `vscode` 的 observed-config 展示与 freeze 语义。
+   8. Claude headless 的 runtime `permissionMode` 现在会通过标准 `config.observed(thread)` 回填 thread observed access/plan；`/status`、`/access`、`/plan` 和 headless prompt freeze 都读这条 observed state，而不是把它误持久成 workspace default。
+   9. Claude headless 在没有飞书显式 `/access` override 时，下一条 prompt 的 base access 会优先跟随当前 thread observed access；旧的 Claude workspace default access 不再参与这条解析。
+   10. Claude reasoning 仍由 profile/default + surface explicit override 生成 headless launch contract；本轮 Codex “自动=不下发 reasoning override”不改变 Claude 的 `workspace+profile` snapshot、`prompt_dispatch_restart` 或 profile default reasoning 语义。
+   11. `vscode` 主链只冻结飞书显式 requested override；observed cwd/thread config 仍可用于 `/status` / 参数卡展示，但不会在没有本地显式覆盖时被重新下发给 backend。
+   12. Codex translator 收到 empty access override 时不会改写 `approvalPolicy` / `sandboxPolicy`；只有显式 `full` / `confirm` 才会下发对应权限策略。
 10. headless workspace-first 主链当前已经完成这一轮产品收窄：
    1. bare `/workspace` 是工作会话父页，固定展示 `切换`、`从目录新建`、`从 GIT URL 新建`、`解除接管` 四个入口；bare `/workspace new` 是只含三条新建路径的子页。
    2. `/workspace list` 与 alias `/list` / `/use` / `/useall` / `show_workspace_threads` 都收敛到同一张 `切换工作会话` 卡。
