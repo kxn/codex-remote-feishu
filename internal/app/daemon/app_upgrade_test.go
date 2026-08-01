@@ -2,12 +2,14 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/codexupgrade"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -345,6 +347,155 @@ func TestFlushUpgradeResultEmitsNoticeAndClearsPendingState(t *testing.T) {
 	}
 	if updated.PendingUpgrade != nil {
 		t.Fatalf("expected pending upgrade result to be cleared, got %#v", updated.PendingUpgrade)
+	}
+}
+
+func TestFlushUpgradeResultKeepsPendingStateWhenDeliveryFails(t *testing.T) {
+	gateway := newLifecycleGateway()
+	gateway.applyErr = errors.New("lark temporarily unavailable")
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.CurrentVersion = "v1.1.0"
+	stateValue.PendingUpgrade = &install.PendingUpgrade{
+		Phase:            install.PendingUpgradePhaseCommitted,
+		TargetTrack:      install.ReleaseTrackProduction,
+		TargetVersion:    "v1.1.0",
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:9",
+		ChatID:           "chat-9",
+		ActorUserID:      "user-9",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	app.onTick(context.Background(), time.Now().UTC())
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.PendingUpgrade == nil {
+		t.Fatalf("expected pending upgrade result to remain after failed delivery")
+	}
+	if updated.PendingUpgrade.Phase != install.PendingUpgradePhaseCommitted {
+		t.Fatalf("pending phase = %q, want committed", updated.PendingUpgrade.Phase)
+	}
+}
+
+func TestFlushUpgradeResultKeepsPendingStateWhenPermissionDeliveryFails(t *testing.T) {
+	gateway := newLifecycleGateway()
+	gateway.applyErr = &feishu.APIError{
+		API:  "im.v1.message.create",
+		Code: 99990001,
+		Msg:  "permission denied",
+		PermissionViolations: []feishu.APIErrorPermissionViolation{
+			{Type: "tenant", Subject: "im:message"},
+		},
+	}
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.CurrentVersion = "v1.1.0"
+	stateValue.PendingUpgrade = &install.PendingUpgrade{
+		Phase:            install.PendingUpgradePhaseCommitted,
+		TargetTrack:      install.ReleaseTrackProduction,
+		TargetVersion:    "v1.1.0",
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:9",
+		ChatID:           "chat-9",
+		ActorUserID:      "user-9",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	app.onTick(context.Background(), time.Now().UTC())
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.PendingUpgrade == nil {
+		t.Fatalf("expected pending upgrade result to remain after permission delivery failure")
+	}
+	if updated.PendingUpgrade.ResultDeliveryLastError == "" {
+		t.Fatalf("expected permission delivery failure to be recorded")
+	}
+}
+
+func TestFlushUpgradeResultRetriesAfterFailedDeliveryAndAcksSuccess(t *testing.T) {
+	gateway := newLifecycleGateway()
+	gateway.applyErr = errors.New("lark temporarily unavailable")
+	app, statePath := newUpgradeTestApp(t, gateway)
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.CurrentVersion = "v1.1.0"
+	stateValue.PendingUpgrade = &install.PendingUpgrade{
+		Phase:            install.PendingUpgradePhaseCommitted,
+		TargetTrack:      install.ReleaseTrackProduction,
+		TargetVersion:    "v1.1.0",
+		GatewayID:        "main",
+		SurfaceSessionID: "feishu:main:chat:9",
+		ChatID:           "chat-9",
+		ActorUserID:      "user-9",
+	}
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	now := time.Now().UTC()
+	app.onTick(context.Background(), now)
+	afterFailure, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState after failure: %v", err)
+	}
+	if afterFailure.PendingUpgrade == nil || afterFailure.PendingUpgrade.ResultDeliveryAttempts != 1 {
+		t.Fatalf("pending upgrade after failure = %#v, want one recorded delivery attempt", afterFailure.PendingUpgrade)
+	}
+
+	restartedGateway := newLifecycleGateway()
+	restarted := New(":0", ":0", restartedGateway, agentproto.ServerIdentity{
+		BinaryIdentity: agentproto.BinaryIdentity{
+			Version:    "v1.1.0",
+			BinaryPath: filepath.Join(filepath.Dir(statePath), "codex-remote"),
+		},
+	})
+	restarted.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: filepath.Join(filepath.Dir(statePath), "codex-remote"),
+		Paths: relayruntime.Paths{
+			DataDir:  filepath.Dir(statePath),
+			StateDir: filepath.Dir(statePath),
+			LogsDir:  filepath.Dir(statePath),
+		},
+	})
+	restarted.onTick(context.Background(), now.Add(6*time.Second))
+
+	waitForUpgradeOperation(t, restartedGateway, func(ops []feishuOperationView) bool {
+		for _, op := range ops {
+			if op.CardTitle == "Upgrade" && op.SurfaceSessionID == "feishu:main:chat:9" {
+				return true
+			}
+		}
+		return false
+	})
+
+	updated, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.PendingUpgrade != nil {
+		t.Fatalf("expected pending upgrade result to be acked after retry success, got %#v", updated.PendingUpgrade)
 	}
 }
 

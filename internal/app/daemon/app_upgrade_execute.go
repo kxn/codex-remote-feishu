@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -240,13 +241,17 @@ func (a *App) maybeFlushUpgradeResultLocked(now time.Time) []eventcontract.Event
 	if strings.TrimSpace(pending.SurfaceSessionID) == "" || strings.TrimSpace(pending.ChatID) == "" {
 		return nil
 	}
-	a.service.MaterializeSurface(pending.SurfaceSessionID, pending.GatewayID, pending.ChatID, pending.ActorUserID)
-	events := []eventcontract.Event{upgradeNoticeEvent(pending.SurfaceSessionID, "upgrade_result", buildUpgradeResultText(stateValue))}
-	stateValue.PendingUpgrade = nil
+	if pending.ResultDeliveryNextAttemptAt != nil && now.Before(*pending.ResultDeliveryNextAttemptAt) {
+		return nil
+	}
+	pending.ResultDeliveryAttempts++
+	pending.ResultDeliveryLastAttemptAt = &now
+	pending.ResultDeliveryLastError = ""
 	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
 		return nil
 	}
-	return events
+	a.service.MaterializeSurface(pending.SurfaceSessionID, pending.GatewayID, pending.ChatID, pending.ActorUserID)
+	return []eventcontract.Event{upgradeNoticeEvent(pending.SurfaceSessionID, "upgrade_result", buildUpgradeResultText(stateValue))}
 }
 
 func buildUpgradeResultText(stateValue install.InstallState) string {
@@ -262,4 +267,73 @@ func buildUpgradeResultText(stateValue install.InstallState) string {
 	default:
 		return "升级失败。"
 	}
+}
+
+func isUpgradeResultDeliveryEvent(event eventcontract.Event) bool {
+	if event.Kind != eventcontract.KindNotice || event.Notice == nil {
+		return false
+	}
+	return strings.TrimSpace(event.Notice.Code) == "upgrade_result"
+}
+
+func (a *App) ackUpgradeResultDeliveryLocked(event eventcontract.Event) {
+	if !isUpgradeResultDeliveryEvent(event) {
+		return
+	}
+	stateValue, ok, err := a.loadUpgradeStateLocked(false)
+	if err != nil || !ok || stateValue.PendingUpgrade == nil {
+		return
+	}
+	if !pendingUpgradeMatchesResultEvent(stateValue.PendingUpgrade, event) {
+		return
+	}
+	stateValue.PendingUpgrade = nil
+	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
+		logUpgradeResultDeliveryStateError("ack", event, err)
+	}
+}
+
+func (a *App) recordUpgradeResultDeliveryFailureLocked(event eventcontract.Event, deliveryErr error, now time.Time) {
+	if !isUpgradeResultDeliveryEvent(event) {
+		return
+	}
+	stateValue, ok, err := a.loadUpgradeStateLocked(false)
+	if err != nil || !ok || stateValue.PendingUpgrade == nil {
+		return
+	}
+	pending := stateValue.PendingUpgrade
+	if !pendingUpgradeMatchesResultEvent(pending, event) {
+		return
+	}
+	pending.ResultDeliveryLastError = strings.TrimSpace(deliveryErr.Error())
+	if pending.ResultDeliveryLastError == "" {
+		pending.ResultDeliveryLastError = "delivery failed"
+	}
+	next := now.Add(a.upgradeRuntime.ResultScanEvery)
+	if a.upgradeRuntime.ResultScanEvery <= 0 {
+		next = now.Add(time.Minute)
+	}
+	pending.ResultDeliveryNextAttemptAt = &next
+	if err := a.writeUpgradeStateLocked(stateValue); err != nil {
+		logUpgradeResultDeliveryStateError("failure", event, err)
+	}
+}
+
+func pendingUpgradeMatchesResultEvent(pending *install.PendingUpgrade, event eventcontract.Event) bool {
+	if pending == nil {
+		return false
+	}
+	if strings.TrimSpace(pending.SurfaceSessionID) != strings.TrimSpace(event.SurfaceSessionID) {
+		return false
+	}
+	switch pending.Phase {
+	case install.PendingUpgradePhaseCommitted, install.PendingUpgradePhaseRolledBack, install.PendingUpgradePhaseFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+func logUpgradeResultDeliveryStateError(action string, event eventcontract.Event, err error) {
+	log.Printf("upgrade result delivery %s state write failed: surface=%s err=%v", action, event.SurfaceSessionID, err)
 }

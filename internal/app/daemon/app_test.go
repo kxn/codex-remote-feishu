@@ -103,6 +103,7 @@ type lifecycleGateway struct {
 	mu         sync.Mutex
 	next       int
 	operations []feishu.Operation
+	applyErr   error
 }
 
 func newLifecycleGateway() *lifecycleGateway {
@@ -128,6 +129,9 @@ func (g *lifecycleGateway) Start(ctx context.Context, _ feishu.ActionHandler) er
 func (g *lifecycleGateway) Apply(_ context.Context, operations []feishu.Operation) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.applyErr != nil {
+		return g.applyErr
+	}
 	for i := range operations {
 		if operations[i].Kind != feishu.OperationSendCard || operations[i].MessageID != "" {
 			continue

@@ -45,19 +45,23 @@ type ConfigSnapshot struct {
 }
 
 type PendingUpgrade struct {
-	Phase            string        `json:"phase,omitempty"`
-	Source           UpgradeSource `json:"source,omitempty"`
-	TargetTrack      ReleaseTrack  `json:"targetTrack,omitempty"`
-	TargetVersion    string        `json:"targetVersion,omitempty"`
-	TargetSlot       string        `json:"targetSlot,omitempty"`
-	TargetBinaryPath string        `json:"targetBinaryPath,omitempty"`
-	HelperUnitName   string        `json:"helperUnitName,omitempty"`
-	GatewayID        string        `json:"gatewayID,omitempty"`
-	SurfaceSessionID string        `json:"surfaceSessionID,omitempty"`
-	ChatID           string        `json:"chatID,omitempty"`
-	ActorUserID      string        `json:"actorUserID,omitempty"`
-	SourceMessageID  string        `json:"sourceMessageID,omitempty"`
-	RequestedAt      *time.Time    `json:"requestedAt,omitempty"`
+	Phase                       string        `json:"phase,omitempty"`
+	Source                      UpgradeSource `json:"source,omitempty"`
+	TargetTrack                 ReleaseTrack  `json:"targetTrack,omitempty"`
+	TargetVersion               string        `json:"targetVersion,omitempty"`
+	TargetSlot                  string        `json:"targetSlot,omitempty"`
+	TargetBinaryPath            string        `json:"targetBinaryPath,omitempty"`
+	HelperUnitName              string        `json:"helperUnitName,omitempty"`
+	GatewayID                   string        `json:"gatewayID,omitempty"`
+	SurfaceSessionID            string        `json:"surfaceSessionID,omitempty"`
+	ChatID                      string        `json:"chatID,omitempty"`
+	ActorUserID                 string        `json:"actorUserID,omitempty"`
+	SourceMessageID             string        `json:"sourceMessageID,omitempty"`
+	RequestedAt                 *time.Time    `json:"requestedAt,omitempty"`
+	ResultDeliveryAttempts      int           `json:"resultDeliveryAttempts,omitempty"`
+	ResultDeliveryLastAttemptAt *time.Time    `json:"resultDeliveryLastAttemptAt,omitempty"`
+	ResultDeliveryNextAttemptAt *time.Time    `json:"resultDeliveryNextAttemptAt,omitempty"`
+	ResultDeliveryLastError     string        `json:"resultDeliveryLastError,omitempty"`
 }
 
 const (

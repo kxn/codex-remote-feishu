@@ -138,10 +138,12 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 		if err := a.deliverUIEventLocked(context.Background(), event); err != nil {
 			chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 			log.Printf("gateway apply failed: chat=%s event=%s err=%v", chatID, event.Kind, err)
+			a.recordUpgradeResultDeliveryFailureLocked(event, err, time.Now())
 			a.queueGatewayFailureNotice(event, err)
 			continue
 		}
 		deliveredAt := time.Now()
+		a.ackUpgradeResultDeliveryLocked(event)
 		if isGlobalRuntimeNotice {
 			a.recordGlobalRuntimeNoticeLocked(event, deliveredAt)
 		}
@@ -258,6 +260,9 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event eventcont
 	if err != nil {
 		if a.observeFeishuPermissionError(gatewayID, err) {
 			log.Printf("feishu permission gap observed during ui delivery: gateway=%s surface=%s event=%s err=%v", gatewayID, event.SurfaceSessionID, event.Kind, err)
+			if isUpgradeResultDeliveryEvent(event) {
+				return err
+			}
 			return nil
 		}
 		return err
