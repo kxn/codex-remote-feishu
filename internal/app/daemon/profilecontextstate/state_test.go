@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -60,12 +61,14 @@ func TestStoreMaintainsIndependentImmutablePreferences(t *testing.T) {
 	if current, ok := loaded.CodexCurrent("team-proxy"); !ok || current.Revision != 2 {
 		t.Fatalf("reloaded preference = %#v ok=%v", current, ok)
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("preference store mode = %o, want 600", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("preference store mode = %o, want 600", info.Mode().Perm())
+		}
 	}
 }
 
