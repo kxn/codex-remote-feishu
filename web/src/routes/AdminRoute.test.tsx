@@ -94,7 +94,7 @@ describe("AdminRoute", () => {
       }),
     ).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "机器人管理" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Claude 配置" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Claude Profile" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Codex Profile" })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /新增机器人/ })).toBeInTheDocument();
     expect(calls.length).toBeGreaterThan(0);
@@ -678,7 +678,7 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    const heading = await screen.findByRole("heading", { name: "Claude 配置" });
+    const heading = await screen.findByRole("heading", { name: "Claude Profile" });
     const section = heading.closest("section");
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText("本机默认配置")).toBeInTheDocument();
@@ -846,7 +846,7 @@ describe("AdminRoute", () => {
     expect(screen.queryByRole("button", { name: /DevSeek$/ })).not.toBeInTheDocument();
 
     const claudeSection = screen
-      .getByRole("heading", { name: "Claude 配置" })
+      .getByRole("heading", { name: "Claude Profile" })
       .closest("section");
     expect(claudeSection).not.toBeNull();
 

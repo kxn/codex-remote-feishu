@@ -170,9 +170,9 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
   return (
     <>
       <ConfigSectionShell
-        sectionTitle="Claude 配置"
-        sectionDescription="Claude 连接配置"
-        emptyLoadErrorTitle="当前还不能读取 Claude 配置"
+        sectionTitle="Claude Profile"
+        sectionDescription="管理 Claude 连接与上下文偏好"
+        emptyLoadErrorTitle="当前还不能读取 Claude Profile"
         loadError={loadError}
         onReload={onReload}
         items={profiles}
