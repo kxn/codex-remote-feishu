@@ -212,6 +212,151 @@ func TestPromptSendDispatchDropsKnownIncompatibleReasoningOverride(t *testing.T)
 	}
 }
 
+func TestModelCommandRejectsOtherModelForFixedCodexAPIProfile(t *testing.T) {
+	now := time.Date(2026, 8, 2, 1, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Backend:    agentproto.BackendCodex,
+		Online:     true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{Entries: []agentproto.ModelCatalogEntry{
+			{Model: "gpt-5.5", DisplayName: "GPT 5.5"},
+		}},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModelCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/model gpt-5.5",
+	})
+
+	catalog := commandCatalogFromEvent(t, events[0])
+	summary := commandCatalogSummaryText(catalog)
+	if !strings.Contains(summary, "当前 Codex Profile 使用固定模型 deepseek-v4-flash") {
+		t.Fatalf("expected fixed profile rejection, got %q", summary)
+	}
+	if got := surface.PromptOverride; got != (state.ModelConfigRecord{}) {
+		t.Fatalf("expected rejected fixed profile model not to mutate override, got %#v", got)
+	}
+}
+
+func TestModelCommandRejectsReasoningForFixedCodexAPIProfileWithoutReasoning(t *testing.T) {
+	now := time.Date(2026, 8, 2, 1, 22, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Backend:    agentproto.BackendCodex,
+		Online:     true,
+		Threads:    map[string]*state.ThreadRecord{},
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModelCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/model deepseek-v4-flash high",
+	})
+
+	catalog := commandCatalogFromEvent(t, events[0])
+	summary := commandCatalogSummaryText(catalog)
+	if !strings.Contains(summary, "未配置固定推理强度时请保持自动") {
+		t.Fatalf("expected fixed profile reasoning rejection, got %q", summary)
+	}
+	if got := surface.PromptOverride; got != (state.ModelConfigRecord{}) {
+		t.Fatalf("expected rejected fixed profile reasoning not to mutate override, got %#v", got)
+	}
+}
+
+func TestPromptSendDispatchDropsMismatchedModelOverrideForFixedCodexAPIProfile(t *testing.T) {
+	now := time.Date(2026, 8, 2, 1, 25, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Backend:    agentproto.BackendCodex,
+		Online:     true,
+		Threads:    map[string]*state.ThreadRecord{},
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	item := &state.QueueItemRecord{
+		ID:               "queue-1",
+		SurfaceSessionID: "surface-1",
+		FrozenOverride: state.ModelConfigRecord{
+			Model:           "gpt-5.5",
+			ReasoningEffort: "high",
+			AccessMode:      agentproto.AccessModeFullAccess,
+		},
+	}
+
+	command, guardEvents := svc.promptSendCommandAndGuardEventsFromQueueItem(surface, item, "user-1", "msg-1")
+	if command.Overrides.Model != "" || command.Overrides.ReasoningEffort != "" || command.Overrides.AccessMode != agentproto.AccessModeFullAccess {
+		t.Fatalf("expected fixed profile to drop model/reasoning overrides only, got %#v", command.Overrides)
+	}
+	if len(guardEvents) != 1 || guardEvents[0].Notice == nil || guardEvents[0].Notice.Code != "prompt_override_model_dropped" {
+		t.Fatalf("expected fixed profile model guard notice, got %#v", guardEvents)
+	}
+	if !strings.Contains(guardEvents[0].Notice.Text, "deepseek-v4-flash") {
+		t.Fatalf("expected guard notice to mention fixed model, got %#v", guardEvents[0].Notice)
+	}
+}
+
+func TestReasoningCardUsesFixedCodexAPIProfileReasoning(t *testing.T) {
+	now := time.Date(2026, 8, 2, 1, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Online:     true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{Entries: []agentproto.ModelCatalogEntry{{
+			Model: "gpt-5.5",
+			SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
+				{ReasoningEffort: "low"},
+				{ReasoningEffort: "medium"},
+			},
+		}}},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReasoningCommand,
+		SurfaceSessionID: "surface-1",
+		Text:             "/reasoning",
+	})
+	catalog := commandCatalogFromEvent(t, events[0])
+	buttons := catalog.Sections[0].Entries[0].Buttons
+	if len(buttons) != 2 || buttons[0].CommandText != "/reasoning clear" || buttons[1].CommandText != "/reasoning high" {
+		t.Fatalf("expected automatic + fixed profile reasoning option, got %#v", buttons)
+	}
+	if summary := commandCatalogSummaryText(catalog); strings.Contains(summary, "gpt-5.5") {
+		t.Fatalf("fixed profile reasoning card should not describe stale GPT catalog, got %q", summary)
+	}
+}
+
 func TestReasoningCardDoesNotUseStaleCatalogAfterRefreshFailure(t *testing.T) {
 	now := time.Date(2026, 5, 4, 9, 50, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

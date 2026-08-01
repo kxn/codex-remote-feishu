@@ -254,3 +254,72 @@ func TestBuildConfigCommandViewStatePopulatesModelCatalogOptions(t *testing.T) {
 		t.Fatalf("expected visible dynamic model options in upstream order, got %#v", got)
 	}
 }
+
+func TestBuildConfigCommandViewStateUsesFixedCodexAPIProfileModelOptions(t *testing.T) {
+	now := time.Date(2026, 8, 2, 1, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Online:     true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{Entries: []agentproto.ModelCatalogEntry{
+			{Model: "gpt-5.5", DisplayName: "GPT 5.5"},
+			{Model: "provider-custom", DisplayName: "DeepseekV4Flash"},
+		}},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandModel)
+	if !ok {
+		t.Fatal("expected model config flow")
+	}
+	view := svc.buildConfigCommandViewState(surface, flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if got := view.Config.FormOptions; len(got) != 1 || got[0].Value != "deepseek-v4-flash" {
+		t.Fatalf("expected fixed API profile model option only, got %#v", got)
+	}
+	if strings.Contains(view.Config.StatusText, "模型列表") {
+		t.Fatalf("fixed profile should not surface dynamic catalog status, got %q", view.Config.StatusText)
+	}
+}
+
+func TestBuildConfigCommandViewStateKeepsDynamicCatalogForGPTCodexAPIProfile(t *testing.T) {
+	now := time.Date(2026, 8, 2, 1, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "gpt-profile", Kind: state.CodexProfileKindAPI, Name: "GPT Proxy", Model: "gpt-5.5", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "gpt-profile", "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Online:     true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{Entries: []agentproto.ModelCatalogEntry{
+			{Model: "gpt-5.5", DisplayName: "GPT 5.5"},
+			{Model: "gpt-5.5-mini", DisplayName: "GPT 5.5 Mini"},
+		}},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandModel)
+	if !ok {
+		t.Fatal("expected model config flow")
+	}
+	view := svc.buildConfigCommandViewState(surface, flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if got := view.Config.FormOptions; len(got) != 2 || got[0].Value != "gpt-5.5" || got[1].Value != "gpt-5.5-mini" {
+		t.Fatalf("expected dynamic GPT profile model options, got %#v", got)
+	}
+}

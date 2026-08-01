@@ -68,12 +68,21 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	currentProfileID := s.surfaceCodexProfileID(surface)
 	currentWorkspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface))
 	targetLabel := codexProfileDisplayName(target)
+	_, targetFixedModel := fixedCodexAPIProfileModel(target)
 	applySelection := func() {
 		s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
 			record.CodexProfileID = target.ID
 			record.CodexProviderID = targetProviderID
+			if targetFixedModel {
+				record.PromptOverride.Model = ""
+				record.PromptOverride.ReasoningEffort = ""
+			}
 		}, func(local *state.SurfaceConsoleRecord) {
 			s.setSurfaceCodexProviderID(local, targetProviderID)
+			if targetFixedModel {
+				local.PromptOverride.Model = ""
+				local.PromptOverride.ReasoningEffort = ""
+			}
 		})
 	}
 	if target.ID == currentProfileID {

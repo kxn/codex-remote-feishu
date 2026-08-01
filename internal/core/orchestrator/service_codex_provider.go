@@ -146,6 +146,8 @@ func (s *Service) CodexProviders() []state.CodexProviderRecord {
 func normalizeCodexProfileSummary(value state.CodexProfileSummary) state.CodexProfileSummary {
 	value.ID = strings.TrimSpace(value.ID)
 	value.Name = strings.TrimSpace(value.Name)
+	value.Model = strings.TrimSpace(value.Model)
+	value.ReasoningEffort = normalizeModelReasoningEffort(value.ReasoningEffort)
 	if value.Kind == "" {
 		value.Kind = state.CodexProfileKindAPI
 	}
@@ -220,6 +222,60 @@ func (s *Service) surfaceCodexProfileID(surface *state.SurfaceConsoleRecord) str
 		}
 	}
 	return state.CodexProfileIDFromLegacyProviderID(s.surfaceCodexProviderID(surface))
+}
+
+func (s *Service) codexProfileSummaryByID(profileID string) (state.CodexProfileSummary, bool) {
+	profileID = strings.TrimSpace(profileID)
+	if s == nil || s.root == nil || profileID == "" {
+		return state.CodexProfileSummary{}, false
+	}
+	if s.root.CodexProfiles != nil {
+		if profile, ok := s.root.CodexProfiles[profileID]; ok {
+			return normalizeCodexProfileSummary(profile), true
+		}
+	}
+	for _, profile := range s.CodexProfiles() {
+		if strings.EqualFold(strings.TrimSpace(profile.ID), profileID) {
+			return normalizeCodexProfileSummary(profile), true
+		}
+	}
+	return state.CodexProfileSummary{}, false
+}
+
+func (s *Service) surfaceCodexProfileSummary(surface *state.SurfaceConsoleRecord) (state.CodexProfileSummary, bool) {
+	return s.codexProfileSummaryByID(s.surfaceCodexProfileID(surface))
+}
+
+func fixedCodexAPIProfileModel(profile state.CodexProfileSummary) (string, bool) {
+	profile = normalizeCodexProfileSummary(profile)
+	if profile.Kind != state.CodexProfileKindAPI {
+		return "", false
+	}
+	model := strings.TrimSpace(profile.Model)
+	if model == "" || isDynamicCodexProfileModel(model) {
+		return "", false
+	}
+	return model, true
+}
+
+func fixedCodexAPIProfileReasoning(profile state.CodexProfileSummary) string {
+	if _, ok := fixedCodexAPIProfileModel(profile); !ok {
+		return ""
+	}
+	return normalizeModelReasoningEffort(profile.ReasoningEffort)
+}
+
+func isDynamicCodexProfileModel(model string) bool {
+	model = strings.ToLower(strings.TrimSpace(model))
+	if model == "" {
+		return true
+	}
+	for _, prefix := range []string{"gpt-", "o1", "o3", "o4", "codex-"} {
+		if strings.HasPrefix(model, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) setSurfaceCodexProviderID(surface *state.SurfaceConsoleRecord, providerID string) {

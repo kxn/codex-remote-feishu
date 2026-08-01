@@ -366,27 +366,53 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 		},
 		CodexResume: CodexResumePolicyForThread(item.CodexConnectionContract, item.CodexThreadPolicy, codexResumeTargetThread(inst, dispatchPlan)),
 	}
-	if !guard.DroppedReasoning {
-		return command, nil
+	guardEvents := []eventcontract.Event{}
+	if guard.DroppedModel {
+		guardEvents = append(guardEvents, modelOverrideGuardNoticeEvent(surface, guard))
 	}
-	return command, []eventcontract.Event{modelReasoningGuardNoticeEvent(surface, guard)}
+	if guard.DroppedReasoning {
+		guardEvents = append(guardEvents, modelReasoningGuardNoticeEvent(surface, guard))
+	}
+	return command, guardEvents
 }
 
 type promptOverrideGuardResult struct {
+	DroppedModel     bool
 	DroppedReasoning bool
 	Model            string
+	FixedModel       string
 	ReasoningEffort  string
 	SupportedEfforts []string
 }
 
 func (s *Service) sanitizePromptOverridesForDispatch(surface *state.SurfaceConsoleRecord, override state.ModelConfigRecord) (state.ModelConfigRecord, promptOverrideGuardResult) {
 	override = compactPromptOverride(override)
-	if surface == nil || strings.TrimSpace(override.ReasoningEffort) == "" {
+	if surface == nil {
 		return override, promptOverrideGuardResult{}
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	backend := s.promptConfigBackend(inst, surface)
 	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		return override, promptOverrideGuardResult{}
+	}
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			overrideModel := strings.TrimSpace(override.Model)
+			overrideEffort := strings.TrimSpace(override.ReasoningEffort)
+			override.Model = ""
+			override.ReasoningEffort = ""
+			if overrideModel != "" && !strings.EqualFold(overrideModel, fixedModel) {
+				return compactPromptOverride(override), promptOverrideGuardResult{
+					DroppedModel:    true,
+					Model:           overrideModel,
+					FixedModel:      fixedModel,
+					ReasoningEffort: overrideEffort,
+				}
+			}
+			return compactPromptOverride(override), promptOverrideGuardResult{}
+		}
+	}
+	if strings.TrimSpace(override.ReasoningEffort) == "" {
 		return override, promptOverrideGuardResult{}
 	}
 	validation := s.checkModelReasoningSupport(inst, override.Model, override.ReasoningEffort)
@@ -418,6 +444,27 @@ func modelReasoningGuardNoticeEvent(surface *state.SurfaceConsoleRecord, guard p
 		surface,
 		eventcontract.NoticePayload{Notice: control.Notice{
 			Code:             "prompt_override_reasoning_dropped",
+			Text:             text,
+			DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
+			DeliveryFamily:   control.NoticeDeliveryFamilyPromptOverrideGuard,
+			DeliveryDedupKey: dedupKey,
+		}},
+		eventcontract.EventMeta{},
+	)
+}
+
+func modelOverrideGuardNoticeEvent(surface *state.SurfaceConsoleRecord, guard promptOverrideGuardResult) eventcontract.Event {
+	model := strings.TrimSpace(guard.Model)
+	fixedModel := strings.TrimSpace(guard.FixedModel)
+	text := "当前 Codex Profile 使用固定模型，已忽略不匹配的模型覆盖。"
+	if model != "" && fixedModel != "" {
+		text = "当前 Codex Profile 使用固定模型 " + fixedModel + "，已忽略不匹配的模型覆盖 " + model + "。"
+	}
+	dedupKey := "prompt_override_model:" + model + ":" + fixedModel
+	return surfaceEventFromPayload(
+		surface,
+		eventcontract.NoticePayload{Notice: control.Notice{
+			Code:             "prompt_override_model_dropped",
 			Text:             text,
 			DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
 			DeliveryFamily:   control.NoticeDeliveryFamilyPromptOverrideGuard,

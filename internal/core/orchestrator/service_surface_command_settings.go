@@ -658,6 +658,49 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
+	fixedProfileModel := ""
+	fixedProfileReasoning := ""
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if model, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			fixedProfileModel = model
+			fixedProfileReasoning = fixedCodexAPIProfileReasoning(profile)
+		}
+	}
+	if fixedProfileModel != "" && !strings.EqualFold(strings.TrimSpace(parts[1]), fixedProfileModel) {
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+			StatusKind:       "error",
+			StatusText:       "当前 Codex Profile 使用固定模型 " + fixedProfileModel + "，不能切换到其它模型。如需使用其它模型，请切换 Codex Profile。",
+			FormDefaultValue: actionCommandArgumentText(action),
+		})
+	}
+	if fixedProfileModel != "" && len(parts) == 3 && fixedProfileReasoning != "" &&
+		!strings.EqualFold(normalizeModelReasoningEffort(parts[2]), fixedProfileReasoning) {
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+			StatusKind:       "error",
+			StatusText:       "当前 Codex Profile 使用固定推理强度 " + fixedProfileReasoning + "，不能切换到其它推理强度。",
+			FormDefaultValue: actionCommandArgumentText(action),
+		})
+	}
+	if fixedProfileModel != "" && len(parts) == 3 && fixedProfileReasoning == "" {
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+			StatusKind:       "error",
+			StatusText:       "当前 Codex Profile 使用固定模型 " + fixedProfileModel + "；未配置固定推理强度时请保持自动。",
+			FormDefaultValue: actionCommandArgumentText(action),
+		})
+	}
+	if fixedProfileModel != "" {
+		return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+			override.Model = ""
+			override.ReasoningEffort = ""
+		}, func(control.PromptRouteSummary) surfaceSettingFeedback {
+			text := "已恢复使用当前 Codex Profile 的固定模型：" + fixedProfileModel + "。"
+			return surfaceSettingFeedback{
+				NoticeCode:     "surface_fixed_profile_model_restored",
+				NoticeText:     text,
+				CardStatusText: text,
+			}
+		})
+	}
 	effort := ""
 	modelReasoningWarning := ""
 	if len(parts) == 3 {
@@ -737,6 +780,35 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 		})
 	}
 	backend := s.surfaceBackend(surface)
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			fixedReasoning := fixedCodexAPIProfileReasoning(profile)
+			if fixedReasoning == "" {
+				return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+					StatusKind:       "error",
+					StatusText:       "当前 Codex Profile 使用固定模型 " + fixedModel + "；未配置固定推理强度时请保持自动。",
+					FormDefaultValue: actionCommandArgumentText(action),
+				})
+			}
+			if normalizeModelReasoningEffort(parts[1]) != fixedReasoning {
+				return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+					StatusKind:       "error",
+					StatusText:       "当前 Codex Profile 使用固定推理强度 " + fixedReasoning + "，不能切换到其它推理强度。",
+					FormDefaultValue: actionCommandArgumentText(action),
+				})
+			}
+			return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+				override.ReasoningEffort = ""
+			}, func(control.PromptRouteSummary) surfaceSettingFeedback {
+				text := "已恢复使用当前 Codex Profile 的固定推理强度：" + fixedReasoning + "。"
+				return surfaceSettingFeedback{
+					NoticeCode:     "surface_fixed_profile_reasoning_restored",
+					NoticeText:     text,
+					CardStatusText: text,
+				}
+			})
+		}
+	}
 	effort := ""
 	reasoningWarning := ""
 	if len(parts) == 2 {

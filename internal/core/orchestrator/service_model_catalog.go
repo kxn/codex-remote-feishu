@@ -54,7 +54,15 @@ func (s *Service) applyModelCatalogUpdated(inst *state.InstanceRecord, event age
 	inst.ModelCatalog = incoming
 }
 
-func (s *Service) modelCatalogCommandOptions(inst *state.InstanceRecord) ([]control.CommandCatalogFormFieldOption, bool) {
+func (s *Service) modelCatalogCommandOptions(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) ([]control.CommandCatalogFormFieldOption, bool) {
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if model, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			return []control.CommandCatalogFormFieldOption{{
+				Label: model,
+				Value: model,
+			}}, false
+		}
+	}
 	if inst == nil || inst.ModelCatalog == nil || len(inst.ModelCatalog.Entries) == 0 {
 		return nil, false
 	}
@@ -87,7 +95,20 @@ func (s *Service) modelCatalogCommandOptions(inst *state.InstanceRecord) ([]cont
 	return options, len(entries) > modelCatalogMenuOptionLimit
 }
 
-func (s *Service) modelReasoningCommandOptions(inst *state.InstanceRecord, model string) ([]control.CommandCatalogFormFieldOption, string, string) {
+func (s *Service) modelReasoningCommandOptions(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, model string) ([]control.CommandCatalogFormFieldOption, string, string) {
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			options := modelReasoningAutomaticOptions()
+			if effort := fixedCodexAPIProfileReasoning(profile); effort != "" {
+				options = append(options, control.CommandCatalogFormFieldOption{
+					Label: effort,
+					Value: effort,
+				})
+				return options, "info", "当前 Codex Profile 使用固定模型 " + fixedModel + "；推理强度来自 Profile 配置。"
+			}
+			return options, "info", "当前 Codex Profile 使用固定模型 " + fixedModel + "；未配置固定推理强度时将保持自动。"
+		}
+	}
 	model = strings.TrimSpace(model)
 	if model == "" {
 		return modelReasoningAutomaticOptions(), "info", "当前模型尚未明确；卡片只提供自动，若确定底层支持，可手动发送 /reasoning <effort>。"
@@ -281,7 +302,12 @@ func modelCatalogOptionBaseLabel(entry agentproto.ModelCatalogEntry) string {
 	return label
 }
 
-func (s *Service) maybeModelCatalogStatusText(inst *state.InstanceRecord, truncated bool) (string, string) {
+func (s *Service) maybeModelCatalogStatusText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, truncated bool) (string, string) {
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if _, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			return "", ""
+		}
+	}
 	if truncated {
 		return "info", "模型列表较长，当前只显示前 50 个；没有出现在下拉里的模型仍可手动输入完整名称。"
 	}

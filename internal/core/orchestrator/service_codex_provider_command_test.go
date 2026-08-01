@@ -79,6 +79,50 @@ func TestCodexProfileCommandCanonicalSlashSwitchesBotProfile(t *testing.T) {
 	}
 }
 
+func TestCodexProfileCommandClearsModelOverrideWhenSwitchingToFixedAPIProfile(t *testing.T) {
+	now := time.Date(2026, 8, 2, 1, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
+		state.ProductModeNormal, agentproto.BackendCodex, state.OAuthCodexProfileID, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
+	surface.PromptOverride = state.ModelConfigRecord{
+		Model:           "gpt-5.5",
+		ReasoningEffort: "high",
+		AccessMode:      agentproto.AccessModeConfirm,
+	}
+	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
+		GatewayID: "app-1", ProductMode: state.ProductModeNormal, Backend: agentproto.BackendCodex,
+		CodexProviderID: state.OAuthCodexProfileID, CodexProfileID: state.OAuthCodexProfileID,
+		PromptOverride: surface.PromptOverride,
+		UpdatedAt:      now.Add(-time.Minute),
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionCodexProviderCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
+		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile deepseek-profile",
+	})
+
+	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
+	if record.CodexProfileID != "deepseek-profile" || record.CodexProviderID != "deepseek-profile" {
+		t.Fatalf("bot codex profile/provider = %q/%q, want deepseek-profile", record.CodexProfileID, record.CodexProviderID)
+	}
+	if record.PromptOverride.Model != "" || record.PromptOverride.ReasoningEffort != "" || record.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected fixed profile switch to clear model/reasoning only, got %#v", record.PromptOverride)
+	}
+	if surface.PromptOverride.Model != "" || surface.PromptOverride.ReasoningEffort != "" || surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected surface projection to clear model/reasoning only, got %#v", surface.PromptOverride)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_switched" {
+		t.Fatalf("expected switched notice, got %#v", events)
+	}
+}
+
 func TestCodexProfileCommandRejectsUnavailableOAuthProfile(t *testing.T) {
 	now := time.Date(2026, 8, 1, 11, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

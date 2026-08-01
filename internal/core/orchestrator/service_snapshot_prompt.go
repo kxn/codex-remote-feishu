@@ -174,6 +174,12 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 			Value:  s.claudeProfileReasoningEffort(s.promptConfigClaudeProfileID(inst, surface)),
 			Source: "profile",
 		}
+	} else if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			override.Model = ""
+			baseModel = configValue{Value: fixedModel, Source: "profile"}
+			baseEffort = configValue{Value: fixedCodexAPIProfileReasoning(profile), Source: "profile"}
+		}
 	}
 	effectiveModel := baseModel
 	if override.Model != "" {
