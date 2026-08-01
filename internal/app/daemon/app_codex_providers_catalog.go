@@ -59,17 +59,7 @@ func (a *App) materializeCodexProfileSummariesLocked(cfg config.AppConfig) []sta
 		if !ok {
 			continue
 		}
-		profiles = append(profiles, state.CodexProfileSummary{
-			ID:              current.ID,
-			Revision:        current.Revision,
-			Kind:            state.CodexProfileKindAPI,
-			Name:            current.Name,
-			StatusCode:      config.CodexAPIProfileStatus(current),
-			Available:       config.CodexAPIProfileStatus(current) == "" && strings.TrimSpace(current.APIKey) != "",
-			Editable:        true,
-			Deletable:       true,
-			ContextEditable: true,
-		})
+		profiles = append(profiles, codexAPIProfileSummary(current, state.ProfileContextPreference{}))
 	}
 	return profiles
 }
