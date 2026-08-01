@@ -125,7 +125,6 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 		return nil, nil, nil, err
 	}
 	env, args = codexprofile.ApplyLaunchMaterial(env, args, projection.Launch)
-	args = append(args, codexprofile.LegacyThreadCLIOverrides(projection.Thread)...)
 	env = config.UpsertEnvValue(env, codexprofile.CodexRuntimeResolvedEnv, "1")
 	return env, args, &projection, nil
 }

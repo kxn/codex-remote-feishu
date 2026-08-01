@@ -52,15 +52,7 @@ func (a *App) materializeCodexProfileSummariesLocked(cfg config.AppConfig) []sta
 		ContextEditable: true,
 	}}
 	if oauth, ok := a.codexOAuthProfileState.current(); ok {
-		profiles = append(profiles, state.CodexProfileSummary{
-			ID:              state.OAuthCodexProfileID,
-			Revision:        oauth.Revision,
-			Kind:            state.CodexProfileKindOAuth,
-			Name:            "ChatGPT 登录",
-			StatusCode:      strings.TrimSpace(firstNonEmpty(oauth.AvailabilityCode, oauth.LastProbeErrorCode, oauth.Status)),
-			Available:       strings.TrimSpace(oauth.Status) == "detected" && strings.TrimSpace(oauth.AvailabilityCode) == "",
-			ContextEditable: true,
-		})
+		profiles = append(profiles, codexOAuthProfileSummary(oauth, state.ProfileContextPreference{}))
 	}
 	for _, record := range config.NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles) {
 		current, ok := config.CurrentCodexAPIProfile(record)
@@ -80,4 +72,17 @@ func (a *App) materializeCodexProfileSummariesLocked(cfg config.AppConfig) []sta
 		})
 	}
 	return profiles
+}
+
+func codexOAuthProfileSummary(oauth state.CodexOAuthProfileState, preference state.ProfileContextPreference) state.CodexProfileSummary {
+	return state.CodexProfileSummary{
+		ID:                state.OAuthCodexProfileID,
+		Revision:          oauth.Revision,
+		Kind:              state.CodexProfileKindOAuth,
+		Name:              "ChatGPT 登录",
+		StatusCode:        strings.TrimSpace(firstNonEmpty(oauth.AvailabilityCode, oauth.LastProbeErrorCode, oauth.Status)),
+		Available:         strings.TrimSpace(oauth.Status) == "detected" && strings.TrimSpace(oauth.AvailabilityCode) == "",
+		ContextEditable:   true,
+		ContextPreference: preference,
+	}
 }

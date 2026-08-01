@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"golang.org/x/text/cases"
 )
 
 type CodexProfileKind = state.CodexProfileKind
@@ -282,7 +283,7 @@ func ValidateCodexAPIProfileRecords(records []CodexAPIProfileRecord) error {
 			return fmt.Errorf("missing or stale current codex profile revision for %q", record.ID)
 		}
 		for _, name := range names {
-			if strings.EqualFold(strings.TrimSpace(name), strings.TrimSpace(current.Name)) {
+			if codexProfileNameKey(name) == codexProfileNameKey(current.Name) {
 				return fmt.Errorf("duplicate codex profile name")
 			}
 		}
@@ -304,17 +305,21 @@ func PruneCodexAPIProfileHistory(record CodexAPIProfileRecord, retained map[uint
 }
 
 func validateCodexProfileNameUnique(records []CodexAPIProfileRecord, exceptID, name string) error {
-	name = strings.TrimSpace(name)
+	nameKey := codexProfileNameKey(name)
 	for _, record := range records {
 		if record.ID == exceptID {
 			continue
 		}
 		current, ok := CurrentCodexAPIProfile(record)
-		if ok && strings.EqualFold(strings.TrimSpace(current.Name), name) {
+		if ok && codexProfileNameKey(current.Name) == nameKey {
 			return fmt.Errorf("codex profile name already exists")
 		}
 	}
 	return nil
+}
+
+func codexProfileNameKey(name string) string {
+	return cases.Fold().String(strings.TrimSpace(name))
 }
 
 func validateCodexAPIProfileInput(input CodexAPIProfileInput, requireKey bool) (CodexAPIProfileInput, error) {

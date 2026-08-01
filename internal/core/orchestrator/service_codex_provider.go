@@ -80,6 +80,43 @@ func (s *Service) CodexProfiles() []state.CodexProfileSummary {
 	return profiles
 }
 
+func (s *Service) CodexProfileContextEvidence(profileID string, preferenceRevision uint64) (int64, int64, string, bool) {
+	profileID = strings.TrimSpace(profileID)
+	if s == nil || s.root == nil || profileID == "" {
+		return 0, 0, "", false
+	}
+	var selected *state.ThreadRecord
+	for _, inst := range s.root.Instances {
+		if inst == nil {
+			continue
+		}
+		ref := state.NormalizeCodexAdmissionRef(inst.CodexAdmissionRef)
+		if ref == nil || ref.ProfileRef.ID != profileID {
+			continue
+		}
+		if preferenceRevision != 0 && ref.ContextPreferenceRef.Revision != preferenceRevision {
+			continue
+		}
+		for _, thread := range inst.Threads {
+			if thread == nil || thread.CodexEffectiveThread == nil {
+				continue
+			}
+			effective := thread.CodexEffectiveThread
+			if effective.RequestedContextWindow == 0 && effective.EffectiveContextWindow == 0 && strings.TrimSpace(effective.ContextStatus) == "" {
+				continue
+			}
+			if selected == nil || thread.LastUsedAt.After(selected.LastUsedAt) {
+				selected = thread
+			}
+		}
+	}
+	if selected == nil {
+		return 0, 0, "", false
+	}
+	effective := selected.CodexEffectiveThread
+	return effective.RequestedContextWindow, effective.EffectiveContextWindow, strings.TrimSpace(effective.ContextStatus), true
+}
+
 func (s *Service) CodexProviders() []state.CodexProviderRecord {
 	if s.root == nil || len(s.root.CodexProviders) == 0 {
 		return []state.CodexProviderRecord{state.NormalizeCodexProviderRecord(state.CodexProviderRecord{

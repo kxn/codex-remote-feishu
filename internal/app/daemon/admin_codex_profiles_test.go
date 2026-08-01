@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -205,6 +206,136 @@ func TestAdminCodexProfilesCanonicalCRUDUsesItemETagsAndRedaction(t *testing.T) 
 	deleted := performAdminRequestWithIfMatch(t, app, http.MethodDelete, updatePath, "", updated.ETag)
 	if deleted.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d body=%s", deleted.Code, deleted.Body.String())
+	}
+}
+
+func TestAdminCodexProfilesListIncludesOAuthAndAllowsContextPreference(t *testing.T) {
+	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{CodexRealBinary: "fake-codex"})
+	app.runCodexCapabilityPreflight = func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error) {
+		return codexprofile.CapabilityPreflightObservation{CapabilitySet: codexprofile.CodexProfileCapabilitySetV1}, nil
+	}
+	app.runCodexOAuthProbe = func(context.Context, codexprofile.OAuthProbeOptions) (codexprofile.OAuthProbeObservation, error) {
+		return testDetectedOAuthObservation(), nil
+	}
+	app.ensureCodexRuntimeCapability(context.Background())
+	if !app.requestCodexOAuthProbe(context.Background(), false) {
+		t.Fatal("OAuth probe request was not started")
+	}
+	waitForCodexOAuthState(t, app, codexprofile.OAuthProbeStatusDetected)
+
+	list := performAdminRequest(t, app, http.MethodGet, "/api/admin/codex/profiles", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	var response codexProfilesResponse
+	if err := json.NewDecoder(list.Body).Decode(&response); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	oauth, ok := findCodexProfileSummary(response.Profiles, state.OAuthCodexProfileID)
+	if !ok {
+		t.Fatalf("OAuth profile missing from admin canonical list: %#v", response.Profiles)
+	}
+	if oauth.Kind != state.CodexProfileKindOAuth || oauth.Editable || oauth.Deletable || !oauth.ContextEditable ||
+		oauth.ContextPreference.ETag == "" || oauth.ContextPreference.Revision == 0 {
+		t.Fatalf("unexpected OAuth summary: %#v", oauth)
+	}
+
+	update := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/profiles/"+state.OAuthCodexProfileID+"/context-preference", `{"mode":"extended_1m"}`, oauth.ContextPreference.ETag)
+	if update.Code != http.StatusOK {
+		t.Fatalf("OAuth context update status = %d body=%s", update.Code, update.Body.String())
+	}
+	var updated codexContextPreferenceResponse
+	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode context update: %v", err)
+	}
+	if updated.ContextPreference.ProfileID != state.OAuthCodexProfileID || updated.ContextPreference.Mode != state.CodexContextModeExtended {
+		t.Fatalf("unexpected OAuth context preference update: %#v", updated.ContextPreference)
+	}
+}
+
+func TestAdminCodexProfilesProjectObservedContextEvidence(t *testing.T) {
+	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", `{
+	  "name":"Team Proxy",
+	  "baseURL":"https://proxy.example/v1",
+	  "apiKey":"secret",
+	  "model":"gpt-5.4",
+	  "reasoningEffort":"high"
+	}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var createResponse codexProfileResponse
+	if err := json.NewDecoder(create.Body).Decode(&createResponse); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	profile := createResponse.Profile
+	contextUpdate := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/profiles/"+profile.ID+"/context-preference", `{"mode":"extended_1m"}`, profile.ContextPreference.ETag)
+	if contextUpdate.Code != http.StatusOK {
+		t.Fatalf("context update status = %d body=%s", contextUpdate.Code, contextUpdate.Body.String())
+	}
+	var contextResponse codexContextPreferenceResponse
+	if err := json.NewDecoder(contextUpdate.Body).Decode(&contextResponse); err != nil {
+		t.Fatalf("decode context update: %v", err)
+	}
+	profile.ContextPreference = contextResponse.ContextPreference
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-context",
+		Backend:    agentproto.BackendCodex,
+		Online:     true,
+		CodexAdmissionRef: &state.CodexAdmissionRef{
+			ProfileRef:           state.CodexProfileRef{ID: profile.ID, Revision: profile.Revision},
+			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: profile.ID, Revision: profile.ContextPreference.Revision},
+		},
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID: "thread-1",
+				CodexEffectiveThread: &agentproto.CodexEffectiveThreadContract{
+					RequestedContextWindow: 1000000,
+					EffectiveContextWindow: 272000,
+					ContextStatus:          agentproto.CodexContextPreferenceClamped,
+				},
+			},
+		},
+	})
+
+	list := performAdminRequest(t, app, http.MethodGet, "/api/admin/codex/profiles", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	var response codexProfilesResponse
+	if err := json.NewDecoder(list.Body).Decode(&response); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	observed, ok := findCodexProfileSummary(response.Profiles, profile.ID)
+	if !ok {
+		t.Fatalf("created profile missing from list: %#v", response.Profiles)
+	}
+	if observed.RequestedContextWindow != 1000000 ||
+		observed.EffectiveContextWindow != 272000 ||
+		observed.ContextStatus != agentproto.CodexContextPreferenceClamped {
+		t.Fatalf("context evidence was not projected into profile summary: %#v", observed)
+	}
+
+	contextUpdate = performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/profiles/"+profile.ID+"/context-preference", `{"mode":"price_guard_272k"}`, observed.ContextPreference.ETag)
+	if contextUpdate.Code != http.StatusOK {
+		t.Fatalf("second context update status = %d body=%s", contextUpdate.Code, contextUpdate.Body.String())
+	}
+	list = performAdminRequest(t, app, http.MethodGet, "/api/admin/codex/profiles", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("second list status = %d body=%s", list.Code, list.Body.String())
+	}
+	response = codexProfilesResponse{}
+	if err := json.NewDecoder(list.Body).Decode(&response); err != nil {
+		t.Fatalf("decode second list: %v", err)
+	}
+	observed, ok = findCodexProfileSummary(response.Profiles, profile.ID)
+	if !ok {
+		t.Fatalf("created profile missing from second list: %#v", response.Profiles)
+	}
+	if observed.EffectiveContextWindow != 0 || observed.ContextStatus != "" {
+		t.Fatalf("stale context evidence from old preference revision was projected: %#v", observed)
 	}
 }
 

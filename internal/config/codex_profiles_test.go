@@ -107,6 +107,21 @@ func TestPrepareCodexAPIProfileCreateRequiresModelAndReasoning(t *testing.T) {
 	}
 }
 
+func TestPrepareCodexAPIProfileCreateRejectsUnicodeCaseFoldDuplicateName(t *testing.T) {
+	existing, err := PrepareCodexAPIProfileCreate(nil, CodexAPIProfileInput{
+		Name: "Straße", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate existing: %v", err)
+	}
+	_, err = PrepareCodexAPIProfileCreate([]CodexAPIProfileRecord{existing}, CodexAPIProfileInput{
+		Name: "STRASSE", BaseURL: "https://other.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+	})
+	if err == nil {
+		t.Fatal("PrepareCodexAPIProfileCreate accepted a Unicode case-fold duplicate profile name")
+	}
+}
+
 func TestPrepareCodexAPIProfileCreateRejectsUnsafeBaseURL(t *testing.T) {
 	for _, baseURL := range []string{
 		"proxy.example/v1",

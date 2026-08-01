@@ -210,6 +210,7 @@ func (a *App) handleCodexContextPreferenceUpdate(w http.ResponseWriter, r *http.
 func (a *App) codexProfileSummariesLocked() ([]state.CodexProfileSummary, error) {
 	a.mu.Lock()
 	migrationErr := a.profileCatalogMigrationErr
+	oauth, hasOAuth := a.codexOAuthProfileState.current()
 	a.mu.Unlock()
 	if migrationErr != nil {
 		return nil, fmt.Errorf("profile_catalog_degraded: %w", migrationErr)
@@ -234,6 +235,13 @@ func (a *App) codexProfileSummariesLocked() ([]state.CodexProfileSummary, error)
 		ContextEditable:   true,
 		ContextPreference: nativePreference,
 	}}
+	if hasOAuth {
+		oauthPreference, ok := preferenceStore.CodexCurrent(config.CodexOAuthProfileID)
+		if !ok {
+			return nil, fmt.Errorf("profile_catalog_degraded: oauth context preference is missing")
+		}
+		profiles = append(profiles, codexOAuthProfileSummary(oauth, oauthPreference))
+	}
 	for _, record := range config.NormalizeCodexAPIProfileRecords(loaded.Config.Codex.Profiles) {
 		current, ok := config.CurrentCodexAPIProfile(record)
 		if !ok {
@@ -245,7 +253,23 @@ func (a *App) codexProfileSummariesLocked() ([]state.CodexProfileSummary, error)
 		}
 		profiles = append(profiles, codexAPIProfileSummary(current, preference))
 	}
+	a.applyCodexProfileObservedContext(profiles)
 	return profiles, nil
+}
+
+func (a *App) applyCodexProfileObservedContext(profiles []state.CodexProfileSummary) {
+	if a == nil || a.service == nil {
+		return
+	}
+	for index := range profiles {
+		requested, effective, status, ok := a.service.CodexProfileContextEvidence(profiles[index].ID, profiles[index].ContextPreference.Revision)
+		if !ok {
+			continue
+		}
+		profiles[index].RequestedContextWindow = requested
+		profiles[index].EffectiveContextWindow = effective
+		profiles[index].ContextStatus = status
+	}
 }
 
 func (a *App) createCodexProfileLocked(input config.CodexAPIProfileInput) (state.CodexProfileSummary, error) {

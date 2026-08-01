@@ -14,6 +14,7 @@ require (
 	github.com/yuin/goldmark v1.7.13
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
 	golang.org/x/sys v0.40.0
+	golang.org/x/text v0.34.0
 	modernc.org/sqlite v1.46.0
 )
 
