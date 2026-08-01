@@ -71,6 +71,7 @@ func (t *Translator) observeThreadSettingsUpdated(message map[string]any) Result
 	}
 	update := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
 		ThreadID:        lookupStringFromAny(params["threadId"]),
+		ModelProviderID: firstNonEmptyString(lookupStringFromAny(settings["modelProvider"]), lookupStringFromAny(settings["modelProviderId"])),
 		Model:           firstNonEmptyString(lookupStringFromAny(settings["model"]), lookupStringFromAny(settings["modelId"])),
 		ReasoningEffort: firstNonEmptyString(lookupStringFromAny(settings["reasoningEffort"]), lookupStringFromAny(settings["reasoning_effort"])),
 		ApprovalPolicy:  lookupStringFromAny(settings["approvalPolicy"]),
@@ -79,6 +80,7 @@ func (t *Translator) observeThreadSettingsUpdated(message map[string]any) Result
 	if update == nil {
 		return Result{}
 	}
+	t.mergeObservedThread(update.ThreadID, update.ModelProviderID, update.Model, update.ReasoningEffort)
 	return Result{Events: []agentproto.Event{{
 		Kind:           agentproto.EventThreadSettingsUpdated,
 		ThreadID:       update.ThreadID,

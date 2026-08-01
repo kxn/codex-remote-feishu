@@ -8,8 +8,10 @@ type Translator struct {
 	debugLog                   func(string, ...any)
 	currentThreadID            string
 	knownThreadCWD             map[string]string
+	observedThreads            map[string]codexObservedThread
 	pendingRemoteTurnByThread  map[string]string
 	pendingLocalTurnByThread   map[string]bool
+	pendingCodexPolicyByThread map[string]*agentproto.CodexResumePolicy
 	pendingLocalNewThreadTurn  bool
 	pendingTurnProblems        map[string]agentproto.ErrorInfo
 	pendingThreadCreate        map[string]pendingThreadCreate
@@ -24,6 +26,7 @@ type Translator struct {
 	internalTurnIDs            map[string]bool
 	turnInitiators             map[string]agentproto.Initiator
 	suppressedThreadStarted    map[string]bool
+	childRestartRestorePolicy  *agentproto.CodexResumePolicy
 
 	latestThreadStartParams map[string]any
 	latestTurnStartTemplate map[string]any
@@ -91,6 +94,12 @@ type pendingModelList struct {
 	IncludeHidden bool
 }
 
+type codexObservedThread struct {
+	ModelProviderID string
+	Model           string
+	ReasoningEffort string
+}
+
 type suppressedResponseContext struct {
 	Action           string
 	ThreadID         string
@@ -108,8 +117,10 @@ func NewTranslator(instanceID string) *Translator {
 	return &Translator{
 		instanceID:                 instanceID,
 		knownThreadCWD:             map[string]string{},
+		observedThreads:            map[string]codexObservedThread{},
 		pendingRemoteTurnByThread:  map[string]string{},
 		pendingLocalTurnByThread:   map[string]bool{},
+		pendingCodexPolicyByThread: map[string]*agentproto.CodexResumePolicy{},
 		pendingTurnProblems:        map[string]agentproto.ErrorInfo{},
 		pendingThreadCreate:        map[string]pendingThreadCreate{},
 		pendingThreadResume:        map[string]pendingThreadResume{},

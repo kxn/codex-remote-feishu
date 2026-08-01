@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -55,8 +56,8 @@ func TestWrapperBridgesRelayAndCodexProcess(t *testing.T) {
 
 	stdinReader, stdinWriter := io.Pipe()
 	defer stdinWriter.Close()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 
 	cfg := Config{
 		RelayServerURL:   wsURL,
@@ -182,8 +183,8 @@ func TestWrapperHeadlessBootstrapsInitializeBeforeRelayCommands(t *testing.T) {
 	defer httpServer.Close()
 	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 
 	cfg := Config{
 		RelayServerURL:   wsURL,
@@ -274,8 +275,8 @@ func TestWrapperRejectsSteerWhenCodexRejectsExpectedTurn(t *testing.T) {
 	defer httpServer.Close()
 	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 
 	cfg := Config{
 		RelayServerURL:   wsURL,
@@ -383,8 +384,8 @@ func TestWrapperKeepsEphemeralHelperTrafficOnStdoutAndAnnotatesRelay(t *testing.
 
 	stdinReader, stdinWriter := io.Pipe()
 	defer stdinWriter.Close()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 
 	cfg := Config{
 		RelayServerURL:   wsURL,
@@ -481,8 +482,8 @@ func TestWrapperWritesRawFramesWhenEnabled(t *testing.T) {
 
 	stdinReader, stdinWriter := io.Pipe()
 	defer stdinWriter.Close()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 	rawPath := filepath.Join(t.TempDir(), "wrapper-raw.ndjson")
 
 	cfg := Config{
@@ -594,8 +595,8 @@ func TestWrapperExitsWhenDaemonRequestsProcessExit(t *testing.T) {
 	defer httpServer.Close()
 	wsURL := "ws" + strings.TrimPrefix(httpServer.URL, "http")
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 
 	cfg := Config{
 		RelayServerURL:   wsURL,
@@ -683,8 +684,8 @@ func TestWrapperRestartsChildWithoutExitingAndRestoresFocusedThread(t *testing.T
 
 	stdinReader, stdinWriter := io.Pipe()
 	defer stdinWriter.Close()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 	rawPath := filepath.Join(t.TempDir(), "wrapper-restart.raw.ndjson")
 
 	cfg := Config{
@@ -784,8 +785,8 @@ func TestWrapperFailsBeforeStartingChildWhenRelayBootstrapFails(t *testing.T) {
 
 	stdinReader, stdinWriter := io.Pipe()
 	defer stdinWriter.Close()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 
 	cfg := Config{
 		RelayServerURL:   "ws://127.0.0.1:1/ws/agent",
@@ -814,7 +815,24 @@ func TestWrapperFailsBeforeStartingChildWhenRelayBootstrapFails(t *testing.T) {
 	}
 }
 
-func waitForEvent(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time.Duration, match func([]agentproto.Event) bool, stdout, stderr *bytes.Buffer, done <-chan error) {
+type testBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *testBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *testBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+func waitForEvent(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time.Duration, match func([]agentproto.Event) bool, stdout, stderr *testBuffer, done <-chan error) {
 	t.Helper()
 	deadline := time.After(timeout)
 	var exitErr error
@@ -845,7 +863,7 @@ func batchHasEvent(events []agentproto.Event, match func(agentproto.Event) bool)
 	return false
 }
 
-func waitForObservedEvents(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time.Duration, stdout, stderr *bytes.Buffer, done <-chan error, matchers ...func(agentproto.Event) bool) {
+func waitForObservedEvents(t *testing.T, eventsCh <-chan []agentproto.Event, timeout time.Duration, stdout, stderr *testBuffer, done <-chan error, matchers ...func(agentproto.Event) bool) {
 	t.Helper()
 	if len(matchers) == 0 {
 		return
@@ -886,7 +904,7 @@ func waitForObservedEvents(t *testing.T, eventsCh <-chan []agentproto.Event, tim
 	}
 }
 
-func waitForAck(t *testing.T, ackCh <-chan agentproto.CommandAck, timeout time.Duration, match func(agentproto.CommandAck) bool, stdout, stderr *bytes.Buffer, done <-chan error) {
+func waitForAck(t *testing.T, ackCh <-chan agentproto.CommandAck, timeout time.Duration, match func(agentproto.CommandAck) bool, stdout, stderr *testBuffer, done <-chan error) {
 	t.Helper()
 	deadline := time.After(timeout)
 	var exitErr error
@@ -908,7 +926,7 @@ func waitForAck(t *testing.T, ackCh <-chan agentproto.CommandAck, timeout time.D
 	}
 }
 
-func waitForStdout(t *testing.T, timeout time.Duration, stdout, stderr *bytes.Buffer, done <-chan error, match func(string) bool) {
+func waitForStdout(t *testing.T, timeout time.Duration, stdout, stderr *testBuffer, done <-chan error, match func(string) bool) {
 	t.Helper()
 	deadline := time.After(timeout)
 	ticker := time.NewTicker(50 * time.Millisecond)

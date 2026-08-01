@@ -1,7 +1,6 @@
 package wrapper
 
 import (
-	"bytes"
 	"context"
 	"io"
 	"net/http"
@@ -52,8 +51,8 @@ func TestWrapperStartupRefreshBorrowsVSCodeThreadList(t *testing.T) {
 
 	stdinReader, stdinWriter := io.Pipe()
 	defer stdinWriter.Close()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 	rawPath := filepath.Join(t.TempDir(), "wrapper-raw.ndjson")
 
 	cfg := Config{

@@ -143,7 +143,7 @@ func (r *restartOrderFakeRuntime) TranslateCommand(agentproto.Command) (runtimeC
 	return runtimeCommandResult{}, nil
 }
 
-func (r *restartOrderFakeRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan) error {
+func (r *restartOrderFakeRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan, *agentproto.CodexResumePolicy) error {
 	return nil
 }
 
@@ -161,9 +161,11 @@ func TestRestartChildSessionStopsCurrentIOBeforeLaunchingReplacement(t *testing.
 	currentStopped := make(chan struct{})
 	currentWriteDone := make(chan struct{})
 	currentStdoutDone := make(chan struct{})
+	currentStderrDone := make(chan struct{})
 	current := &childSession{
 		writeDone:  currentWriteDone,
 		stdoutDone: currentStdoutDone,
+		stderrDone: currentStderrDone,
 		cancel: func() {
 			select {
 			case <-currentStopped:
@@ -171,6 +173,7 @@ func TestRestartChildSessionStopsCurrentIOBeforeLaunchingReplacement(t *testing.
 				close(currentStopped)
 				close(currentWriteDone)
 				close(currentStdoutDone)
+				close(currentStderrDone)
 			}
 		},
 	}

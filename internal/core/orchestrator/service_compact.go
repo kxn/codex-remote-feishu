@@ -82,6 +82,7 @@ func (s *Service) handleCompactCommand(surface *state.SurfaceConsoleRecord, acti
 			Target: agentproto.Target{
 				ThreadID: threadID,
 			},
+			CodexResume: CodexResumePolicyForThread(surface.CodexConnectionContract, surface.CodexThreadPolicy, codexResumeThreadByID(inst, threadID)),
 		},
 	})
 	return events

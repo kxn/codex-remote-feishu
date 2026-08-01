@@ -34,13 +34,16 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 				t.knownThreadCWD[threadID],
 				choose(command.Origin.Surface, command.Origin.ChatID),
 			)
+			params := map[string]any{
+				"threadId": threadID,
+				"cwd":      choose(command.Target.CWD, t.knownThreadCWD[threadID]),
+			}
+			applyCodexResumePolicyToThreadParams(params, command.CodexResume)
+			t.recordCodexPolicyForThread(threadID, command.CodexResume)
 			payload := map[string]any{
 				"id":     requestID,
 				"method": "thread/resume",
-				"params": map[string]any{
-					"threadId": threadID,
-					"cwd":      choose(command.Target.CWD, t.knownThreadCWD[threadID]),
-				},
+				"params": params,
 			}
 			bytes, err := json.Marshal(payload)
 			if err != nil {
@@ -253,7 +256,7 @@ func (t *Translator) translatePromptSendThreadStart(command agentproto.Command, 
 		Command: command,
 		Action:  "thread/start",
 	}
-	params := t.buildThreadStartParams(command.Target.CWD, command.Overrides)
+	params := t.buildThreadStartParamsWithPolicy(command.Target.CWD, command.Overrides, command.CodexResume)
 	if ephemeral {
 		params["ephemeral"] = true
 		params["persistExtendedHistory"] = false
@@ -347,13 +350,16 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 			choose(command.Origin.Surface, command.Origin.ChatID),
 			len(command.Prompt.Inputs),
 		)
+		params := map[string]any{
+			"threadId": command.Target.ThreadID,
+			"cwd":      choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID]),
+		}
+		applyCodexResumePolicyToThreadParams(params, command.CodexResume)
+		t.recordCodexPolicyForThread(command.Target.ThreadID, command.CodexResume)
 		payload := map[string]any{
 			"id":     requestID,
 			"method": "thread/resume",
-			"params": map[string]any{
-				"threadId": command.Target.ThreadID,
-				"cwd":      choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID]),
-			},
+			"params": params,
 		}
 		bytes, err := json.Marshal(payload)
 		if err != nil {
@@ -435,6 +441,30 @@ func (t *Translator) buildThreadStartParams(cwd string, overrides agentproto.Pro
 	return params
 }
 
+func (t *Translator) buildThreadStartParamsWithPolicy(cwd string, overrides agentproto.PromptOverrides, policy *agentproto.CodexResumePolicy) map[string]any {
+	params := map[string]any{}
+	if agentproto.NormalizeCodexResumePolicy(policy) == nil {
+		params = cloneMap(t.latestThreadStartParams)
+	}
+	if len(params) == 0 {
+		params = map[string]any{}
+	}
+	params["cwd"] = choose(cwd, lookupStringFromAny(params["cwd"]))
+	setDefault(params, "model", nil)
+	setDefault(params, "modelProvider", nil)
+	setDefault(params, "config", map[string]any{})
+	setDefault(params, "approvalPolicy", "on-request")
+	setDefault(params, "baseInstructions", nil)
+	setDefault(params, "developerInstructions", nil)
+	setDefault(params, "sandbox", "read-only")
+	setDefault(params, "personality", nil)
+	setDefault(params, "experimentalRawEvents", false)
+	setDefault(params, "dynamicTools", nil)
+	applyCodexResumePolicyToThreadParams(params, policy)
+	applyPromptOverridesToThreadStart(params, overrides)
+	return params
+}
+
 func (t *Translator) directTurnStart(threadID string, command agentproto.Command, newThread bool) ([]byte, string, error) {
 	delete(t.pendingLocalTurnByThread, threadID)
 	t.pendingRemoteTurnByThread[threadID] = choose(command.Origin.Surface, command.Origin.ChatID)
@@ -450,7 +480,9 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	setDefault(template, "personality", nil)
 	setDefault(template, "collaborationMode", nil)
 	setDefault(template, "attachments", []any{})
+	applyCodexResumePolicyToTurnStart(template, command.CodexResume)
 	applyPromptOverridesToTurnStart(template, command.Overrides)
+	t.recordCodexPolicyForThread(threadID, command.CodexResume)
 	requestID := t.nextRequest("turn-start")
 	payload := map[string]any{
 		"id":     requestID,
@@ -467,6 +499,15 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 		return nil, "", err
 	}
 	return append(bytes, '\n'), requestID, nil
+}
+
+func (t *Translator) recordCodexPolicyForThread(threadID string, policy *agentproto.CodexResumePolicy) {
+	threadID = strings.TrimSpace(threadID)
+	policy = agentproto.NormalizeCodexResumePolicy(policy)
+	if threadID == "" || policy == nil {
+		return
+	}
+	t.pendingCodexPolicyByThread[threadID] = policy
 }
 
 func (t *Translator) directCompactStart(command agentproto.Command) ([]byte, string, error) {

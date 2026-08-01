@@ -448,6 +448,7 @@ func cloneThreadRecord(thread *state.ThreadRecord) *state.ThreadRecord {
 	threadCopy.LastModelReroute = agentproto.CloneTurnModelReroute(thread.LastModelReroute)
 	threadCopy.LastModelVerification = agentproto.CloneTurnModelVerification(thread.LastModelVerification)
 	threadCopy.LastModelSafetyBuffering = agentproto.CloneTurnModelSafetyBuffering(thread.LastModelSafetyBuffering)
+	threadCopy.CodexEffectiveThread = agentproto.CloneCodexEffectiveThreadContract(thread.CodexEffectiveThread)
 	threadCopy.LastCapabilityState = agentproto.CloneCapabilityStateUpdate(thread.LastCapabilityState)
 	threadCopy.Source = agentproto.CloneThreadSourceRecord(thread.Source)
 	threadCopy.ObservedPermission = agentproto.CloneObservedPermissionState(thread.ObservedPermission)

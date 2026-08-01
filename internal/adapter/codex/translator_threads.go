@@ -89,6 +89,12 @@ func parseThreadRecord(result any) agentproto.ThreadSnapshotRecord {
 			lookupStringFromAny(object["cwd"]),
 			lookupStringFromAny(object["path"]),
 		),
+		ModelProviderID: choose(
+			lookupStringFromAny(object["modelProvider"]),
+			lookupStringFromAny(object["modelProviderId"]),
+			lookupStringFromAny(object["model_provider"]),
+			lookupStringFromAny(object["model_provider_id"]),
+		),
 		Model: choose(
 			lookupString(object, "latestCollaborationMode", "settings", "model"),
 			lookupString(object, "collaborationMode", "settings", "model"),

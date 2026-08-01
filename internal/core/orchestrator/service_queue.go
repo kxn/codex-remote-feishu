@@ -89,22 +89,23 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	item := &state.QueueItemRecord{
-		SurfaceSessionID:      surface.SurfaceSessionID,
-		ActorUserID:           surface.ActorUserID,
-		SourceKind:            state.QueueItemSourceUser,
-		SourceMessageID:       sourceMessageID,
-		SourceMessagePreview:  normalizeSourceMessagePreview(sourceMessagePreview),
-		SourceMessageIDs:      uniqueStrings(append([]string{sourceMessageID}, relatedMessageIDs...)),
-		ReplyToMessageID:      sourceMessageID,
-		ReplyToMessagePreview: normalizeSourceMessagePreview(sourceMessagePreview),
-		Inputs:                inputs,
-		FrozenDispatchPlan:    dispatchPlan,
-		FrozenOverride:        s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
-		FrozenPlanMode:        s.freezePlanModeForPrompt(surface),
-		CodexAdmissionRef:     s.freezeCodexAdmissionRefForPrompt(surface),
-		CodexThreadPolicy:     s.freezeCodexThreadPolicyForPrompt(surface),
-		RouteModeAtEnqueue:    routeMode,
-		Status:                state.QueueItemQueued,
+		SurfaceSessionID:        surface.SurfaceSessionID,
+		ActorUserID:             surface.ActorUserID,
+		SourceKind:              state.QueueItemSourceUser,
+		SourceMessageID:         sourceMessageID,
+		SourceMessagePreview:    normalizeSourceMessagePreview(sourceMessagePreview),
+		SourceMessageIDs:        uniqueStrings(append([]string{sourceMessageID}, relatedMessageIDs...)),
+		ReplyToMessageID:        sourceMessageID,
+		ReplyToMessagePreview:   normalizeSourceMessagePreview(sourceMessagePreview),
+		Inputs:                  inputs,
+		FrozenDispatchPlan:      dispatchPlan,
+		FrozenOverride:          s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
+		FrozenPlanMode:          s.freezePlanModeForPrompt(surface),
+		CodexAdmissionRef:       s.freezeCodexAdmissionRefForPrompt(surface),
+		CodexConnectionContract: s.freezeCodexConnectionContractForPrompt(surface),
+		CodexThreadPolicy:       s.freezeCodexThreadPolicyForPrompt(surface),
+		RouteModeAtEnqueue:      routeMode,
+		Status:                  state.QueueItemQueued,
 	}
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
@@ -118,19 +119,20 @@ func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, 
 	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	item := &state.QueueItemRecord{
-		SurfaceSessionID:      surface.SurfaceSessionID,
-		ActorUserID:           surface.ActorUserID,
-		SourceKind:            state.QueueItemSourceAutoWhip,
-		ReplyToMessageID:      strings.TrimSpace(replyToMessageID),
-		ReplyToMessagePreview: normalizeSourceMessagePreview(replyToMessagePreview),
-		Inputs:                inputs,
-		FrozenDispatchPlan:    dispatchPlan,
-		FrozenOverride:        s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
-		FrozenPlanMode:        s.freezePlanModeForPrompt(surface),
-		CodexAdmissionRef:     s.freezeCodexAdmissionRefForPrompt(surface),
-		CodexThreadPolicy:     s.freezeCodexThreadPolicyForPrompt(surface),
-		RouteModeAtEnqueue:    routeMode,
-		Status:                state.QueueItemQueued,
+		SurfaceSessionID:        surface.SurfaceSessionID,
+		ActorUserID:             surface.ActorUserID,
+		SourceKind:              state.QueueItemSourceAutoWhip,
+		ReplyToMessageID:        strings.TrimSpace(replyToMessageID),
+		ReplyToMessagePreview:   normalizeSourceMessagePreview(replyToMessagePreview),
+		Inputs:                  inputs,
+		FrozenDispatchPlan:      dispatchPlan,
+		FrozenOverride:          s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
+		FrozenPlanMode:          s.freezePlanModeForPrompt(surface),
+		CodexAdmissionRef:       s.freezeCodexAdmissionRefForPrompt(surface),
+		CodexConnectionContract: s.freezeCodexConnectionContractForPrompt(surface),
+		CodexThreadPolicy:       s.freezeCodexThreadPolicyForPrompt(surface),
+		RouteModeAtEnqueue:      routeMode,
+		Status:                  state.QueueItemQueued,
 	}
 	return s.enqueuePreparedQueueItem(surface, item, front)
 }
@@ -153,6 +155,16 @@ func (s *Service) freezeCodexThreadPolicyForPrompt(surface *state.SurfaceConsole
 		return nil
 	}
 	return state.CloneCodexThreadPolicy(surface.CodexThreadPolicy)
+}
+
+func (s *Service) freezeCodexConnectionContractForPrompt(surface *state.SurfaceConsoleRecord) *state.CodexConnectionContract {
+	if surface == nil {
+		return nil
+	}
+	if s.surfaceDesiredContract(surface).Backend != agentproto.BackendCodex {
+		return nil
+	}
+	return state.CloneCodexConnectionContract(surface.CodexConnectionContract)
 }
 
 func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, front bool) []eventcontract.Event {
@@ -333,6 +345,7 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 	}
 	dispatchPlan := queuedItemPromptDispatchPlan(item)
 	overrides, guard := s.sanitizePromptOverridesForDispatch(surface, item.FrozenOverride)
+	inst := s.root.Instances[surface.AttachedInstanceID]
 	command := &agentproto.Command{
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
@@ -351,6 +364,7 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 			AccessMode:      overrides.AccessMode,
 			PlanMode:        frozenPlanModeOverrideValue(item.FrozenPlanMode),
 		},
+		CodexResume: CodexResumePolicyForThread(item.CodexConnectionContract, item.CodexThreadPolicy, codexResumeTargetThread(inst, dispatchPlan)),
 	}
 	if !guard.DroppedReasoning {
 		return command, nil

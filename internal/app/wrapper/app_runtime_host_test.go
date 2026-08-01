@@ -1,7 +1,6 @@
 package wrapper
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -49,8 +48,8 @@ func TestWrapperClaudeHelloAndShutdown(t *testing.T) {
 	}))
 	defer httpServer.Close()
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 
 	app := New(Config{
 		RelayServerURL:   "ws" + strings.TrimPrefix(httpServer.URL, "http"),
@@ -623,7 +622,7 @@ func TestWrapperClaudePromptStartNewRestartsOutOfResumedSession(t *testing.T) {
 	}
 }
 
-func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
+func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *testBuffer, *testBuffer, <-chan error) {
 	t.Helper()
 	repoRoot := wrapperTestRepoRoot(t)
 
@@ -659,8 +658,8 @@ func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-ch
 		_ = server.Close()
 	})
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 	cfg.RelayServerURL = "ws" + strings.TrimPrefix(httpServer.URL, "http")
 	cfg.DisplayName = firstNonEmpty(cfg.DisplayName, "codex-remote")
 	cfg.WorkspaceRoot = firstNonEmpty(cfg.WorkspaceRoot, repoRoot)
@@ -700,18 +699,18 @@ func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-ch
 	return server, eventsCh, ackCh, &stdout, &stderr, done
 }
 
-func startWrapperClaudeRuntimeTestApp(t *testing.T, scenario string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
+func startWrapperClaudeRuntimeTestApp(t *testing.T, scenario string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *testBuffer, *testBuffer, <-chan error) {
 	t.Helper()
 	repoRoot := wrapperTestRepoRoot(t)
 	return startWrapperClaudeRuntimeTestAppForWorkspace(t, scenario, repoRoot)
 }
 
-func startWrapperClaudeRuntimeTestAppForWorkspace(t *testing.T, scenario, workspaceRoot string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
+func startWrapperClaudeRuntimeTestAppForWorkspace(t *testing.T, scenario, workspaceRoot string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *testBuffer, *testBuffer, <-chan error) {
 	t.Helper()
 	return startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(t, scenario, workspaceRoot, "")
 }
 
-func startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(t *testing.T, scenario, workspaceRoot, resumeThreadID string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *bytes.Buffer, *bytes.Buffer, <-chan error) {
+func startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(t *testing.T, scenario, workspaceRoot, resumeThreadID string) (*relayws.Server, <-chan []agentproto.Event, <-chan agentproto.CommandAck, *testBuffer, *testBuffer, <-chan error) {
 	t.Helper()
 	t.Setenv("CLAUDE_BIN", installMockClaudeHelper(t, scenario))
 
@@ -747,8 +746,8 @@ func startWrapperClaudeRuntimeTestAppForWorkspaceAndResume(t *testing.T, scenari
 		_ = server.Close()
 	})
 
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
+	var stdout testBuffer
+	var stderr testBuffer
 	app := New(Config{
 		RelayServerURL:   "ws" + strings.TrimPrefix(httpServer.URL, "http"),
 		InstanceID:       "inst-claude-runtime",

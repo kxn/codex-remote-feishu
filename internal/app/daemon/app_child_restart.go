@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 )
 
 func (a *App) restartRelayChildCodex(instanceID string) error {
@@ -23,10 +24,20 @@ func (a *App) newRelayChildCodexRestartCommand(instanceID string) (agentproto.Co
 	if a.sendAgentCommand == nil {
 		return agentproto.Command{}, fmt.Errorf("agent command sender is unavailable")
 	}
-	return agentproto.Command{
+	command := agentproto.Command{
 		CommandID: a.nextCommandID(),
 		Kind:      agentproto.CommandProcessChildRestart,
-	}, nil
+	}
+	if a.service != nil {
+		for _, inst := range a.service.Instances() {
+			if inst == nil || strings.TrimSpace(inst.InstanceID) != instanceID {
+				continue
+			}
+			command.CodexResume = orchestrator.CodexResumePolicyForThread(inst.CodexConnectionContract, inst.CodexThreadPolicy, inst.Threads[strings.TrimSpace(inst.ActiveThreadID)])
+			break
+		}
+	}
+	return command, nil
 }
 
 func (a *App) sendRelayChildRestartCommand(instanceID string, command agentproto.Command) error {

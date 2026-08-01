@@ -25,6 +25,7 @@ type childSession struct {
 	ioCancel    context.CancelFunc
 	writeCancel context.CancelFunc
 	stdoutDone  chan struct{}
+	stderrDone  chan struct{}
 	writeDone   chan struct{}
 }
 
@@ -81,9 +82,10 @@ func startChildSessionIO(ctx context.Context, session *childSession, parentStdou
 	session.writeCancel = writeCancel
 	session.writeDone = make(chan struct{})
 	session.stdoutDone = make(chan struct{})
+	session.stderrDone = make(chan struct{})
 	go writeLoop(writeCtx, session.stdin, writeCh, errCh, debugf, rawLogger, reportProblem, session.writeDone)
 	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, debugf, rawLogger, reportProblem, session.stdoutDone)
-	go streamCopy(session.stderr, parentStderr, errCh)
+	go streamCopy(session.stderr, parentStderr, errCh, session.stderrDone)
 }
 
 func signalStopChildSession(session *childSession, debugf func(string, ...any)) {
@@ -137,7 +139,10 @@ func waitForSessionIOStopped(session *childSession, timeout time.Duration) {
 	if !wait(session.writeDone) {
 		return
 	}
-	_ = wait(session.stdoutDone)
+	if !wait(session.stdoutDone) {
+		return
+	}
+	_ = wait(session.stderrDone)
 }
 
 func waitForSessionStdoutStopped(session *childSession, timeout time.Duration) bool {
@@ -155,7 +160,7 @@ func waitForSessionStdoutStopped(session *childSession, timeout time.Duration) b
 }
 
 func (a *App) restartChildSession(ctx context.Context, request restartRequest, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
-	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartDispatchPlan(request.DispatchPlan)); err != nil {
+	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartDispatchPlan(request.DispatchPlan), request.CodexResume); err != nil {
 		return nil, err
 	}
 	// Restart must fence old child IO before the new child is launched. The

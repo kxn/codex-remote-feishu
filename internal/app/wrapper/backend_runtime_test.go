@@ -1,11 +1,13 @@
 package wrapper
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
 
@@ -69,7 +71,7 @@ func TestClaudeBackendRuntimePrepareChildRestartStoresResolvedResumeTarget(t *te
 	if err := runtime.PrepareChildRestart("cmd-prompt-claude-resume", agentproto.PromptDispatchPlan{
 		ExecutionThreadID: "resume-session-1",
 		CWD:               workspaceRoot,
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("PrepareChildRestart: %v", err)
 	}
 	if runtime.pendingLaunchResume == nil {
@@ -80,6 +82,43 @@ func TestClaudeBackendRuntimePrepareChildRestartStoresResolvedResumeTarget(t *te
 	}
 	if runtime.pendingLaunchResume.CWD != workspaceRoot {
 		t.Fatalf("pending launch resume cwd = %q, want %q", runtime.pendingLaunchResume.CWD, workspaceRoot)
+	}
+}
+
+func TestCodexBackendRuntimePrepareChildRestartStoresResumePolicy(t *testing.T) {
+	runtime := &codexBackendRuntime{translator: codex.NewTranslator("inst-1")}
+	if _, err := runtime.translator.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {
+		t.Fatalf("seed thread: %v", err)
+	}
+	policy := &agentproto.CodexResumePolicy{
+		Mode:            agentproto.CodexResumeApplyTargetProfile,
+		ModelProviderID: "codex_remote_profile_team",
+		ModelMode:       agentproto.CodexThreadValueExplicit,
+		Model:           "gpt-5.4",
+		ReasoningMode:   agentproto.CodexThreadValueExplicit,
+		ReasoningEffort: "high",
+	}
+	if err := runtime.PrepareChildRestart("cmd-restart", agentproto.PromptDispatchPlan{}, policy); err != nil {
+		t.Fatalf("PrepareChildRestart: %v", err)
+	}
+	frame, _, ok, err := runtime.BuildChildRestartRestoreFrame("cmd-restart")
+	if err != nil {
+		t.Fatalf("BuildChildRestartRestoreFrame: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected restore frame")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(frame, &payload); err != nil {
+		t.Fatalf("unmarshal restore frame: %v", err)
+	}
+	params, _ := payload["params"].(map[string]any)
+	if params["modelProvider"] != "codex_remote_profile_team" || params["model"] != "gpt-5.4" {
+		t.Fatalf("expected restart restore policy in frame, got %#v", params)
+	}
+	config, _ := params["config"].(map[string]any)
+	if config["model_reasoning_effort"] != "high" {
+		t.Fatalf("expected restart restore reasoning in frame, got %#v", config)
 	}
 }
 
@@ -138,7 +177,7 @@ func TestClaudeBackendRuntimePrepareChildRestartExplicitStartNewClearsResumeTarg
 	if err := runtime.PrepareChildRestart("cmd-prompt-claude-start-new", agentproto.PromptDispatchPlan{
 		CWD:           workspaceRoot,
 		ExecutionMode: agentproto.PromptExecutionModeStartNew,
-	}); err != nil {
+	}, nil); err != nil {
 		t.Fatalf("PrepareChildRestart: %v", err)
 	}
 	if runtime.pendingLaunchResume != nil {

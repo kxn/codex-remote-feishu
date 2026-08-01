@@ -37,6 +37,7 @@ type shutdownRequest struct {
 type restartRequest struct {
 	CommandID    string
 	DispatchPlan *agentproto.PromptDispatchPlan
+	CodexResume  *agentproto.CodexResumePolicy
 	EmitEvent    bool
 	ResultCh     chan error
 }
@@ -304,9 +305,10 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 					}
 				}
 				request := restartRequest{
-					CommandID: command.CommandID,
-					EmitEvent: true,
-					ResultCh:  make(chan error, 1),
+					CommandID:   command.CommandID,
+					CodexResume: agentproto.CloneCodexResumePolicy(command.CodexResume),
+					EmitEvent:   true,
+					ResultCh:    make(chan error, 1),
 				}
 				select {
 				case restartCh <- request:

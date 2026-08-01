@@ -256,6 +256,7 @@ type ThreadRecord struct {
 	LastModelReroute         *agentproto.TurnModelReroute
 	LastModelVerification    *agentproto.TurnModelVerification
 	LastModelSafetyBuffering *agentproto.TurnModelSafetyBuffering
+	CodexEffectiveThread     *agentproto.CodexEffectiveThreadContract
 	Loaded                   bool
 	Archived                 bool
 	TrafficClass             agentproto.TrafficClass
@@ -514,6 +515,7 @@ type PendingAutoContinueEpisodeRecord struct {
 	FrozenOverride             ModelConfigRecord
 	FrozenPlanMode             PlanModeSetting
 	CodexAdmissionRef          *CodexAdmissionRef
+	CodexConnectionContract    *CodexConnectionContract
 	CodexThreadPolicy          *CodexThreadPolicy
 	RootReplyToMessageID       string
 	RootReplyToMessagePreview  string
@@ -722,13 +724,14 @@ type QueueItemRecord struct {
 	SteerInputs           []agentproto.Input
 	RestoreAsStagedImage  bool
 	// #429 execution carrier; runtime/product follow-ups are in #430/#428.
-	FrozenDispatchPlan agentproto.PromptDispatchPlan
-	FrozenOverride     ModelConfigRecord
-	FrozenPlanMode     PlanModeSetting
-	CodexAdmissionRef  *CodexAdmissionRef
-	CodexThreadPolicy  *CodexThreadPolicy
-	RouteModeAtEnqueue RouteMode
-	Status             QueueItemStatus
+	FrozenDispatchPlan      agentproto.PromptDispatchPlan
+	FrozenOverride          ModelConfigRecord
+	FrozenPlanMode          PlanModeSetting
+	CodexAdmissionRef       *CodexAdmissionRef
+	CodexConnectionContract *CodexConnectionContract
+	CodexThreadPolicy       *CodexThreadPolicy
+	RouteModeAtEnqueue      RouteMode
+	Status                  QueueItemStatus
 }
 
 type StagedImageRecord struct {

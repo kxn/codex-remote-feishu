@@ -75,6 +75,52 @@ func applyPromptOverridesToThreadStart(params map[string]any, overrides agentpro
 	}
 }
 
+func applyCodexResumePolicyToThreadParams(params map[string]any, policy *agentproto.CodexResumePolicy) {
+	policy = agentproto.NormalizeCodexResumePolicy(policy)
+	if policy == nil {
+		return
+	}
+	params["modelProvider"] = policy.ModelProviderID
+	if shouldSendCodexPolicyValue(policy.ModelMode) && policy.Model != "" {
+		params["model"] = policy.Model
+	} else {
+		delete(params, "model")
+	}
+	configMap := lookupMapFromAny(params["config"])
+	if shouldSendCodexPolicyValue(policy.ReasoningMode) && policy.ReasoningEffort != "" {
+		configMap["model_reasoning_effort"] = policy.ReasoningEffort
+		configMap["reasoning_effort"] = policy.ReasoningEffort
+	} else {
+		delete(configMap, "model_reasoning_effort")
+		delete(configMap, "reasoning_effort")
+	}
+	if policy.ReviewModelMode == agentproto.CodexReviewModelExplicit && policy.ReviewModel != "" {
+		configMap["review_model"] = policy.ReviewModel
+	} else {
+		delete(configMap, "review_model")
+	}
+	if policy.ContextWindow > 0 {
+		configMap["model_context_window"] = policy.ContextWindow
+	} else {
+		delete(configMap, "model_context_window")
+	}
+	if policy.AutoCompactLimit > 0 {
+		configMap["model_auto_compact_token_limit"] = policy.AutoCompactLimit
+	} else {
+		delete(configMap, "model_auto_compact_token_limit")
+	}
+	params["config"] = configMap
+}
+
+func shouldSendCodexPolicyValue(mode string) bool {
+	switch mode {
+	case agentproto.CodexThreadValueExplicit, agentproto.CodexThreadValuePreservedObserved:
+		return true
+	default:
+		return false
+	}
+}
+
 func applyPromptOverridesToTurnStart(template map[string]any, overrides agentproto.PromptOverrides) {
 	if overrides.Model != "" {
 		template["model"] = overrides.Model
@@ -116,6 +162,19 @@ func applyPromptOverridesToTurnStart(template map[string]any, overrides agentpro
 	if agentproto.NormalizeAccessMode(overrides.AccessMode) != "" {
 		template["approvalPolicy"] = agentproto.ApprovalPolicyForAccessMode(overrides.AccessMode)
 		template["sandboxPolicy"] = agentproto.TurnSandboxPolicyForAccessMode(overrides.AccessMode)
+	}
+}
+
+func applyCodexResumePolicyToTurnStart(template map[string]any, policy *agentproto.CodexResumePolicy) {
+	policy = agentproto.NormalizeCodexResumePolicy(policy)
+	if policy == nil {
+		return
+	}
+	if shouldSendCodexPolicyValue(policy.ModelMode) && policy.Model != "" {
+		template["model"] = policy.Model
+	}
+	if shouldSendCodexPolicyValue(policy.ReasoningMode) && policy.ReasoningEffort != "" {
+		template["effort"] = policy.ReasoningEffort
 	}
 }
 

@@ -720,7 +720,11 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			inst.ActiveThreadID = event.ThreadID
 		}
 		if event.ThreadID != "" {
-			s.touchThread(s.ensureThread(inst, event.ThreadID))
+			thread := s.ensureThread(inst, event.ThreadID)
+			if event.CodexEffectiveThread != nil {
+				thread.CodexEffectiveThread = agentproto.CloneCodexEffectiveThreadContract(event.CodexEffectiveThread)
+			}
+			s.touchThread(thread)
 		}
 		s.maybeActivateReviewSession(instanceID, event)
 		if trackActiveTurn {

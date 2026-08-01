@@ -29,6 +29,7 @@ type ThreadGoalUpdate struct {
 
 type ThreadSettingsUpdate struct {
 	ThreadID        string `json:"threadId,omitempty"`
+	ModelProviderID string `json:"modelProviderId,omitempty"`
 	Model           string `json:"model,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 	ApprovalPolicy  string `json:"approvalPolicy,omitempty"`
@@ -117,6 +118,7 @@ func NormalizeThreadSettingsUpdate(update *ThreadSettingsUpdate) *ThreadSettings
 	}
 	normalized := &ThreadSettingsUpdate{
 		ThreadID:        strings.TrimSpace(update.ThreadID),
+		ModelProviderID: strings.TrimSpace(update.ModelProviderID),
 		Model:           strings.TrimSpace(update.Model),
 		ReasoningEffort: strings.TrimSpace(update.ReasoningEffort),
 		ApprovalPolicy:  strings.TrimSpace(update.ApprovalPolicy),
@@ -125,7 +127,7 @@ func NormalizeThreadSettingsUpdate(update *ThreadSettingsUpdate) *ThreadSettings
 	if normalized.ThreadID == "" {
 		return nil
 	}
-	if normalized.Model == "" && normalized.ReasoningEffort == "" && normalized.ApprovalPolicy == "" && normalized.Sandbox == "" {
+	if normalized.ModelProviderID == "" && normalized.Model == "" && normalized.ReasoningEffort == "" && normalized.ApprovalPolicy == "" && normalized.Sandbox == "" {
 		return nil
 	}
 	return normalized

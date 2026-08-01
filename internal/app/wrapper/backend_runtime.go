@@ -59,7 +59,7 @@ type backendRuntime interface {
 	ObserveClient([]byte) (runtimeObserveResult, error)
 	ObserveServer([]byte) (runtimeObserveResult, error)
 	TranslateCommand(agentproto.Command) (runtimeCommandResult, error)
-	PrepareChildRestart(string, agentproto.PromptDispatchPlan) error
+	PrepareChildRestart(string, agentproto.PromptDispatchPlan, *agentproto.CodexResumePolicy) error
 	BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error)
 	CancelChildRestartRestore(string)
 }
@@ -156,7 +156,10 @@ func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runt
 	return result, nil
 }
 
-func (r *codexBackendRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan) error {
+func (r *codexBackendRuntime) PrepareChildRestart(_ string, _ agentproto.PromptDispatchPlan, policy *agentproto.CodexResumePolicy) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.translator.PrepareChildRestartRestorePolicy(policy)
 	return nil
 }
 
@@ -463,7 +466,7 @@ func newTurnSteerResponseGate(command agentproto.Command, frame []byte) (*runtim
 	}, nil
 }
 
-func (r *claudeBackendRuntime) PrepareChildRestart(_ string, dispatchPlan agentproto.PromptDispatchPlan) error {
+func (r *claudeBackendRuntime) PrepareChildRestart(_ string, dispatchPlan agentproto.PromptDispatchPlan, _ *agentproto.CodexResumePolicy) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	resume, err := r.resolveLaunchResumeTarget(dispatchPlan)

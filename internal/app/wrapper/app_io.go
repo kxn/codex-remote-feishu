@@ -283,7 +283,8 @@ func logRawFrame(rawLogger *debuglog.RawLogger, channel, direction string, paylo
 	})
 }
 
-func streamCopy(src io.Reader, dst io.Writer, errCh chan<- error) {
+func streamCopy(src io.Reader, dst io.Writer, errCh chan<- error, done chan<- struct{}) {
+	defer close(done)
 	if _, err := io.Copy(dst, src); err != nil && !strings.Contains(err.Error(), "file already closed") {
 		errCh <- err
 	}
