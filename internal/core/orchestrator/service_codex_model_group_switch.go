@@ -215,7 +215,7 @@ func (s *Service) codexProfileSwitchStartsNewThread(surface *state.SurfaceConsol
 }
 
 func (s *Service) codexProfileSwitchNewThreadContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, previous headlessContractSwitchContinuation) headlessContractSwitchContinuation {
-	next := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, agentproto.BackendCodex, true)
+	next := s.buildHeadlessWorkspaceRouteRestartContinuation(surface, workspaceKey, agentproto.BackendCodex, true)
 	next.RestartManagedNow = previous.RestartManagedNow
 	next.RestartInstanceID = previous.RestartInstanceID
 	if next.Attempt.ThreadCWD == "" {

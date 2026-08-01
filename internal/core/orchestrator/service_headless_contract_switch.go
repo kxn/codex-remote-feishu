@@ -10,9 +10,10 @@ import (
 )
 
 type headlessContractSwitchContinuation struct {
-	Attempt           SurfaceResumeAttempt
-	RestartManagedNow bool
-	RestartInstanceID string
+	Attempt               SurfaceResumeAttempt
+	RestartManagedNow     bool
+	RestartInstanceID     string
+	WorkspaceRouteRestart bool
 }
 
 func (s *Service) buildHeadlessWorkspaceContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend, prepareNewThread bool) headlessContractSwitchContinuation {
@@ -31,6 +32,14 @@ func (s *Service) buildHeadlessWorkspaceContinuation(surface *state.SurfaceConso
 	if resolution := s.resolveWorkspaceContract(surface, workspaceKey, backend); resolution.Mode == contractResolutionRestartManaged && resolution.RestartInstance != nil {
 		continuation.RestartManagedNow = true
 		continuation.RestartInstanceID = strings.TrimSpace(resolution.RestartInstance.InstanceID)
+	}
+	return continuation
+}
+
+func (s *Service) buildHeadlessWorkspaceRouteRestartContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, backend agentproto.Backend, prepareNewThread bool) headlessContractSwitchContinuation {
+	continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, backend, prepareNewThread)
+	if continuation.Attempt.WorkspaceKey != "" {
+		continuation.WorkspaceRouteRestart = true
 	}
 	return continuation
 }
@@ -94,6 +103,7 @@ func (s *Service) buildHeadlessContractSwitchContinuation(surface *state.Surface
 
 	selectedThreadID := strings.TrimSpace(continuation.Attempt.ThreadID)
 	if selectedThreadID == "" {
+		continuation.WorkspaceRouteRestart = true
 		if resolution := s.resolveWorkspaceContract(surface, workspaceKey, backend); resolution.Mode == contractResolutionRestartManaged && resolution.RestartInstance != nil {
 			continuation.RestartManagedNow = true
 			continuation.RestartInstanceID = strings.TrimSpace(resolution.RestartInstance.InstanceID)
@@ -127,7 +137,7 @@ func (s *Service) restartHeadlessContractContinuationWithOverlayCleanup(surface 
 	if normalizeWorkspaceClaimKey(attempt.WorkspaceKey) == "" {
 		return nil
 	}
-	return s.startHeadlessForContractSwitchWithOverlayCleanup(surface, attempt, cleanup)
+	return s.startHeadlessForContractSwitchWithOverlayCleanup(surface, continuation, cleanup)
 }
 
 func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, resolution contractResolution, options attachWorkspaceOptions) []eventcontract.Event {
@@ -156,18 +166,22 @@ func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceCon
 }
 
 func (s *Service) startHeadlessForContractSwitch(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt) []eventcontract.Event {
-	return s.startHeadlessForContractSwitchWithOverlayCleanup(surface, attempt, surfaceOverlayRouteCleanupOptions{})
+	return s.startHeadlessForContractSwitchWithOverlayCleanup(surface, headlessContractSwitchContinuation{Attempt: attempt}, surfaceOverlayRouteCleanupOptions{})
 }
 
-func (s *Service) startHeadlessForContractSwitchWithOverlayCleanup(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
+func (s *Service) startHeadlessForContractSwitchWithOverlayCleanup(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
+	attempt := continuation.Attempt
 	if strings.TrimSpace(attempt.ThreadID) != "" {
 		view := s.headlessRestoreView(surface, attempt)
 		if view != nil {
 			return s.startHeadlessForResolvedThreadWithModeAndOverlayCleanup(surface, view, startHeadlessModeDefault, cleanup)
 		}
+	}
+	if continuation.WorkspaceRouteRestart {
+		return s.startWorkspaceRouteRestartHeadlessWithOverlayCleanup(surface, attempt, cleanup)
 	}
 	return s.startFreshWorkspaceHeadlessWithOverlayCleanup(surface, attempt.WorkspaceKey, attempt.PrepareNewThread, cleanup)
 }

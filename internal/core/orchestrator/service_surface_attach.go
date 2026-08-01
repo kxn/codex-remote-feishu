@@ -306,6 +306,9 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		return s.attachHeadlessPromptDispatchRestart(surface, inst, pending)
 	}
 	s.applyPendingHeadlessRuntimeToInstance(surface, inst, pending)
+	if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		return s.attachHeadlessWorkspaceRouteRestart(surface, inst, pending)
+	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		pendingContract := state.HeadlessLaunchContractFromPending(pending)
 		if pendingContract.Backend == agentproto.BackendClaude {
@@ -367,6 +370,65 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		},
 	)
 	return events
+}
+
+func (s *Service) attachHeadlessWorkspaceRouteRestart(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, pending *state.HeadlessLaunchRecord) []eventcontract.Event {
+	if surface == nil || inst == nil || pending == nil {
+		return nil
+	}
+	pendingContract := state.HeadlessLaunchContractFromPending(pending)
+	if pendingContract.Backend == agentproto.BackendClaude {
+		s.setSurfaceDesiredContract(surface, state.HeadlessClaudeSurfaceBackendContract(pendingContract.ClaudeProfileID))
+	} else {
+		s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
+	}
+	workspaceKey := normalizeWorkspaceClaimKey(pending.WorkspaceKey)
+	if workspaceKey == "" {
+		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot), pending.ThreadCWD)
+	}
+	if workspaceKey == "" {
+		s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
+		return notice(surface, "workspace_route_restart_failed", "当前工作区信息缺失，无法完成运行环境重启。请重新 /list 选择工作区。")
+	}
+	next := surfaceRouteCoreState{
+		AttachedInstanceID: strings.TrimSpace(inst.InstanceID),
+		WorkspaceKey:       workspaceKey,
+		RouteMode:          state.RouteModeUnbound,
+	}
+	if pending.PrepareNewThread {
+		next.RouteMode = state.RouteModeNewThreadReady
+		next.PreparedThreadCWD = workspaceKey
+		next.PreparedFromThreadID = strings.TrimSpace(pending.ThreadID)
+	}
+	if !s.transitionSurfaceRouteCore(surface, inst, next) {
+		s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
+		return append(
+			notice(surface, "workspace_route_restart_failed", "当前工作区暂时不可接管，已取消这次运行环境重启。请稍后重试。"),
+			eventcontract.Event{
+				Kind:             eventcontract.KindDaemonCommand,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				DaemonCommand: &control.DaemonCommand{
+					Kind:             control.DaemonCommandKillHeadless,
+					SurfaceSessionID: surface.SurfaceSessionID,
+					InstanceID:       pending.InstanceID,
+					WorkspaceKey:     pending.WorkspaceKey,
+					ThreadCWD:        pending.ThreadCWD,
+				},
+			},
+		)
+	}
+	surface.Backend = state.EffectiveInstanceBackend(inst)
+	s.resetSurfaceExecutionGates(surface)
+	s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
+	if isHeadlessInstance(inst) && workspaceKey != "" {
+		s.retargetManagedHeadlessInstance(inst, workspaceKey)
+	}
+	if !pending.PrepareNewThread {
+		return notice(surface, "workspace_route_restarted", "当前工作区已重新准备完成。")
+	}
+	surface.PreparedAt = s.now()
+	events := s.threadSelectionEvents(surface, "", string(state.RouteModeNewThreadReady), preparedNewThreadSelectionTitle())
+	return append(events, notice(surface, "new_thread_ready", "当前工作区已重新准备完成。下一条文本会创建新会话。")...)
 }
 
 func (s *Service) applyPendingHeadlessRuntimeToInstance(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, pending *state.HeadlessLaunchRecord) {

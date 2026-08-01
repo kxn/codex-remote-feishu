@@ -150,7 +150,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	resumeEvents := s.restartHeadlessContractContinuation(surface, continuation)
 	statusText := fmt.Sprintf("已切换到 Codex Profile：%s。正在重新准备当前工作区。", targetLabel)
 	if startNewThreadForModelGroup {
-		statusText = fmt.Sprintf("已切换到 Codex Profile：%s。正在重新接入当前工作区，并会进入新会话待命。", targetLabel)
+		statusText = fmt.Sprintf("已切换到 Codex Profile：%s。正在重新准备当前工作区，并会进入新会话待命。", targetLabel)
 		resumeEvents = append([]eventcontract.Event{codexModelGroupNewThreadNoticeEvent(surface)}, resumeEvents...)
 	}
 	if commandCardOwnsInlineResult(action) {

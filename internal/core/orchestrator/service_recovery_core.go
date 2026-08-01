@@ -59,6 +59,24 @@ func (s *Service) finishPromptDispatchRestartPendingRoute(surface *state.Surface
 	_ = s.enterPromptDispatchRestartPendingRoute(surface, workspaceKey)
 }
 
+func (s *Service) finishWorkspaceRouteRestartPendingRoute(surface *state.SurfaceConsoleRecord, pending *state.HeadlessLaunchRecord) {
+	if surface == nil || pending == nil || pending.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		return
+	}
+	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey))
+	if workspaceKey == "" {
+		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey("", pending.ThreadCWD)
+	}
+	if workspaceKey == "" {
+		_ = s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{})
+		return
+	}
+	_ = s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: workspaceKey})
+	if s.surfaceUsesWorkspaceClaims(surface) {
+		s.bindWorkspaceClaim(surface, workspaceKey)
+	}
+}
+
 func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil

@@ -552,6 +552,7 @@ const (
 	HeadlessLaunchPurposeThreadRestore         HeadlessLaunchPurpose = "thread_restore"
 	HeadlessLaunchPurposeFreshWorkspace        HeadlessLaunchPurpose = "fresh_workspace"
 	HeadlessLaunchPurposePromptDispatchRestart HeadlessLaunchPurpose = "prompt_dispatch_restart"
+	HeadlessLaunchPurposeWorkspaceRouteRestart HeadlessLaunchPurpose = "workspace_route_restart"
 )
 
 type HeadlessLaunchRecord struct {

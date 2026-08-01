@@ -296,7 +296,7 @@ func (s *Service) continueWorkspaceAfterNormalBackendSwitch(surface *state.Surfa
 		return nil
 	}
 	targetBackend := state.SurfaceDesiredBackendContract(surface).Backend
-	continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, true)
+	continuation := s.buildHeadlessWorkspaceRouteRestartContinuation(surface, workspaceKey, targetBackend, true)
 	resolution := s.resolveWorkspaceContract(surface, workspaceKey, targetBackend)
 	return s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{PrepareNewThread: true})
 }

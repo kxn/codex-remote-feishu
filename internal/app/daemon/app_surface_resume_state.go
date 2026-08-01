@@ -380,11 +380,7 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 		return target, workspaceKey, true
 	}
 	if pending := surface.PendingHeadless; pending != nil {
-		if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
-			routeMode := state.RouteModeUnbound
-			if pending.PrepareNewThread {
-				routeMode = state.RouteModeNewThreadReady
-			}
+		if routeMode, ok := pendingHeadlessWorkspaceRouteMode(pending); ok {
 			if resumeWorkspaceKey := state.ResolveWorkspaceClaimKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
 				return surfaceResumeTarget{
 					ResumeWorkspaceKey: resumeWorkspaceKey,
@@ -412,6 +408,22 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 		}
 	}
 	return surfaceResumeTarget{}, workspaceKey, false
+}
+
+func pendingHeadlessWorkspaceRouteMode(pending *state.HeadlessLaunchRecord) (state.RouteMode, bool) {
+	if pending == nil {
+		return "", false
+	}
+	switch pending.Purpose {
+	case state.HeadlessLaunchPurposeFreshWorkspace, state.HeadlessLaunchPurposeWorkspaceRouteRestart:
+		routeMode := state.RouteModeUnbound
+		if pending.PrepareNewThread {
+			routeMode = state.RouteModeNewThreadReady
+		}
+		return routeMode, true
+	default:
+		return "", false
+	}
 }
 
 func previousSurfaceResumeTargetMatchesWorkspace(entry surfaceresume.Entry, effectiveWorkspaceKey string) bool {

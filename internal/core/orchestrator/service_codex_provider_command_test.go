@@ -272,7 +272,9 @@ func TestCodexProviderCommandRestartsWorkspace(t *testing.T) {
 	if surface.PendingHeadless == nil {
 		t.Fatalf("expected workspace restart to schedule pending headless, got %#v", surface)
 	}
-	if surface.PendingHeadless.CodexProviderID != "team-proxy" || !surface.PendingHeadless.PrepareNewThread {
+	if surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
+		surface.PendingHeadless.CodexProviderID != "team-proxy" ||
+		!surface.PendingHeadless.PrepareNewThread {
 		t.Fatalf("expected pending headless to carry provider and preserve new-thread-ready, got %#v", surface.PendingHeadless)
 	}
 	if len(events) != 3 {
@@ -281,8 +283,8 @@ func TestCodexProviderCommandRestartsWorkspace(t *testing.T) {
 	if events[0].Notice == nil || events[0].Notice.Code != "codex_provider_switched" {
 		t.Fatalf("expected switched notice first, got %#v", events)
 	}
-	if events[1].Notice == nil || events[1].Notice.Code != "workspace_create_starting" {
-		t.Fatalf("expected workspace_create_starting second, got %#v", events)
+	if events[1].Notice == nil || events[1].Notice.Code != "workspace_route_restart_starting" {
+		t.Fatalf("expected workspace_route_restart_starting second, got %#v", events)
 	}
 	if events[2].DaemonCommand == nil || events[2].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
 		t.Fatalf("expected start headless daemon command third, got %#v", events)
@@ -367,7 +369,7 @@ func TestCodexProviderCommandRestartsPinnedCodexThread(t *testing.T) {
 	}
 }
 
-func TestCodexProfileCommandCrossModelGroupRestartsWorkspaceForNewThread(t *testing.T) {
+func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *testing.T) {
 	now := time.Date(2026, 8, 2, 11, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
@@ -387,7 +389,7 @@ func TestCodexProfileCommandCrossModelGroupRestartsWorkspaceForNewThread(t *test
 		Managed:         true,
 		Online:          true,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "旧 Deepseek 会话", CWD: "/data/dl/repo", Loaded: true},
+			"thread-1": {ThreadID: "thread-1", Name: "旧 Deepseek 会话", CWD: "/tmp/other-repo", Loaded: true},
 		},
 	})
 
@@ -414,16 +416,20 @@ func TestCodexProfileCommandCrossModelGroupRestartsWorkspaceForNewThread(t *test
 	if surface.PendingHeadless == nil {
 		t.Fatalf("expected pending headless restart, got %#v", surface)
 	}
+	pending := surface.PendingHeadless
 	if surface.PendingHeadless.ThreadID != "" ||
-		surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeFreshWorkspace ||
+		string(surface.PendingHeadless.Purpose) != "workspace_route_restart" ||
 		!surface.PendingHeadless.PrepareNewThread {
-		t.Fatalf("expected cross-model profile switch to restart workspace for a new thread, got %#v", surface.PendingHeadless)
+		t.Fatalf("expected cross-model profile switch to restart current workspace route for a new thread, got %#v", surface.PendingHeadless)
 	}
 	if surface.PendingHeadless.CodexProviderID != "gpt-profile" {
 		t.Fatalf("expected pending headless to carry target profile, got %#v", surface.PendingHeadless)
 	}
+	if surface.PendingHeadless.WorkspaceKey != "/data/dl/repo" || surface.PendingHeadless.ThreadCWD != "/data/dl/repo" || surface.ClaimedWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected pending restart to preserve current workspace, surface=%#v pending=%#v", surface, surface.PendingHeadless)
+	}
 	if len(events) != 5 {
-		t.Fatalf("expected kill + switched notice + new-thread notice + workspace restart notice + start command, got %#v", events)
+		t.Fatalf("expected kill + switched notice + new-thread notice + route restart notice + start command, got %#v", events)
 	}
 	if events[0].DaemonCommand == nil || events[0].DaemonCommand.Kind != control.DaemonCommandKillHeadless {
 		t.Fatalf("expected first event to kill old managed headless, got %#v", events)
@@ -434,14 +440,68 @@ func TestCodexProfileCommandCrossModelGroupRestartsWorkspaceForNewThread(t *test
 	if events[2].Notice == nil || events[2].Notice.Code != "codex_model_group_new_thread" {
 		t.Fatalf("expected cross-model-group notice third, got %#v", events)
 	}
-	if events[3].Notice == nil || events[3].Notice.Code != "workspace_create_starting" {
-		t.Fatalf("expected workspace restart notice fourth, got %#v", events)
+	if events[3].Notice == nil || events[3].Notice.Code == "workspace_create_starting" || events[3].Notice.Code != "workspace_route_restart_starting" {
+		t.Fatalf("expected current-workspace route restart notice fourth, got %#v", events)
 	}
 	if events[4].DaemonCommand == nil ||
 		events[4].DaemonCommand.Kind != control.DaemonCommandStartHeadless ||
 		events[4].DaemonCommand.ThreadID != "" ||
-		events[4].DaemonCommand.CodexProviderID != "gpt-profile" {
+		events[4].DaemonCommand.CodexProviderID != "gpt-profile" ||
+		events[4].DaemonCommand.WorkspaceKey != "/data/dl/repo" ||
+		events[4].DaemonCommand.ThreadCWD != "/data/dl/repo" {
 		t.Fatalf("expected start headless to create a new thread under target profile, got %#v", events[4])
+	}
+
+	svc.root.Instances["inst-deepseek"].Online = false
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      pending.InstanceID,
+		DisplayName:     "repo",
+		WorkspaceRoot:   "/data/dl/repo",
+		WorkspaceKey:    "/data/dl/repo",
+		ShortName:       "repo",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "gpt-profile",
+		Source:          "headless",
+		Managed:         true,
+		Online:          true,
+		Threads:         map[string]*state.ThreadRecord{},
+	})
+	connectEvents := svc.ApplyInstanceConnected(pending.InstanceID)
+	if surface.PendingHeadless != nil ||
+		surface.AttachedInstanceID != pending.InstanceID ||
+		surface.SelectedThreadID != "" ||
+		surface.RouteMode != state.RouteModeNewThreadReady ||
+		surface.PreparedThreadCWD != "/data/dl/repo" ||
+		surface.ClaimedWorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected connected target profile to restore same-workspace new-thread-ready route, surface=%#v events=%#v", surface, connectEvents)
+	}
+	for _, event := range connectEvents {
+		if event.Notice != nil && (event.Notice.Code == "workspace_attached" || event.Notice.Code == "workspace_create_starting") {
+			t.Fatalf("expected route restart connect not to emit workspace onboarding notice, got %#v", connectEvents)
+		}
+		if event.TargetPickerView != nil {
+			t.Fatalf("expected route restart connect not to open workspace picker, got %#v", connectEvents)
+		}
+	}
+
+	textEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-1",
+		Text:             "继续",
+	})
+	command := firstCodexCommand(textEvents, agentproto.CommandPromptSend)
+	if command == nil ||
+		command.Target.ExecutionMode != agentproto.PromptExecutionModeStartNew ||
+		!command.Target.CreateThreadIfMissing ||
+		command.Target.ThreadID != "" ||
+		command.Target.CWD != "/data/dl/repo" {
+		t.Fatalf("expected next text to start a new thread in the same workspace under target profile, got events=%#v command=%#v", textEvents, command)
+	}
+	if got := svc.root.Instances[pending.InstanceID].CodexProviderID; got != "gpt-profile" {
+		t.Fatalf("expected connected headless instance to keep target profile, got %q", got)
 	}
 }
 

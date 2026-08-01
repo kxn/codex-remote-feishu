@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-02`
-> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、headless lazy recovery、动态/固定模型菜单、prompt override guard、跨模型组自动新会话与 typed Codex resume policy；详细历史补充保留在正文各日期段落。
+> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、headless lazy recovery、动态/固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话与 typed Codex resume policy；详细历史补充保留在正文各日期段落。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`（含 hidden alias `/codexprovider`）现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -12,7 +12,7 @@
 
 ## 1. 文档定位
 
-2026-08-01 #766 补充：Codex Profile-aware resume 不再把 requested policy 当作 observed actual。普通 dispatch、compact 与 `process.child.restart` restore 在目标 thread 已有同 connection/provider 的 `CodexEffectiveThreadContract` 时使用 `preserve_thread_settings`，保留 observed model/reasoning，同时仍请求当前 Profile 的 context preference；否则使用 `apply_target_profile`。`CodexEffectiveThreadContract` 只记录 `thread/started` 或 `thread.settings.updated` 已证明的 provider/model/reasoning，以及 `turn/started` 的 requested/effective context window；缺少 provider evidence 或 observed provider 与 Resume Policy 冲突时，wrapper 在 `turn.started` 上附带 `codex_protocol_incomplete`，不把 requested provider/model/reasoning 伪装成 actual。2026-08-02 补充：Codex headless 的跨模型组自动新会话有两道状态机边界：`/codexprofile` 在生成 headless continuation 时先比较当前 thread/source runtime 组与目标 Profile 组，普通 dispatch 在冻结 queue item 时再比较旧 thread 已证明模型组与当前目标模型组；目前模型组只分 `gpt` 与 `non_gpt`。双方都可判定且不同组时，不再复用旧 thread，而是进入 workspace/new-thread continuation 或同步把 surface 切到 `new_thread_ready`，提示用户已自动新建会话；目标模型继续由 typed `CodexResumePolicy`、目标 Profile 或用户显式 override 持有，不在 wrapper/adapter 清理历史 item。
+2026-08-01 #766 补充：Codex Profile-aware resume 不再把 requested policy 当作 observed actual。普通 dispatch、compact 与 `process.child.restart` restore 在目标 thread 已有同 connection/provider 的 `CodexEffectiveThreadContract` 时使用 `preserve_thread_settings`，保留 observed model/reasoning，同时仍请求当前 Profile 的 context preference；否则使用 `apply_target_profile`。`CodexEffectiveThreadContract` 只记录 `thread/started` 或 `thread.settings.updated` 已证明的 provider/model/reasoning，以及 `turn/started` 的 requested/effective context window；缺少 provider evidence 或 observed provider 与 Resume Policy 冲突时，wrapper 在 `turn.started` 上附带 `codex_protocol_incomplete`，不把 requested provider/model/reasoning 伪装成 actual。2026-08-02 补充：Codex headless 的跨模型组自动新会话有两道状态机边界：`/codexprofile` 在生成 headless continuation 时先比较当前 thread/source runtime 组与目标 Profile 组，普通 dispatch 在冻结 queue item 时再比较旧 thread 已证明模型组与当前目标模型组；目前模型组只分 `gpt` 与 `non_gpt`。双方都可判定且不同组时，不再复用旧 thread；profile/backend 切换进入 `workspace_route_restart + PrepareNewThread=true`，dispatch guard 同步把 surface 切到 `new_thread_ready`，并提示用户已自动新建会话。目标模型继续由 typed `CodexResumePolicy`、目标 Profile 或用户显式 override 持有，不在 wrapper/adapter 清理历史 item。
 
 这份文档描述的是**当前代码已经实现**的 remote surface 状态机，不是历史问题列表，也不是未来方案草稿。
 
@@ -243,7 +243,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
    2. Codex `/model` 与 `/reasoning` 会先按当前 Codex Profile 判定模型目录模式：native/OAuth、未配置模型的 API Profile、以及模型名看起来属于 GPT/OpenAI 系的 API Profile 继续使用当前 instance-scoped `model.list` 目录；配置了非 GPT/OpenAI 系模型的 API Profile 视为 fixed，只信 Profile 配置的模型和推理强度。fixed Profile 下手输其它模型或非 Profile 配置的推理强度会被拒绝，切到 fixed Profile 时会清掉旧 model/reasoning override，保留 access/plan。
    3. 非 fixed 场景下，Codex `/model` 与 `/reasoning` 继续按当前 instance-scoped `model.list` 目录校验 `model + reasoning` tuple：已知不支持时普通命令拒绝，已知模型切换时清掉不兼容的旧 reasoning override；未知模型、目录不可用或模型未声明 efforts 时只提示无法本地校验，保留高级手输能力。
    4. Codex queue dispatch 与 auto-continue dispatch 在真正生成 `prompt.send` 前会再次检查 frozen override；fixed Profile 下若残留不匹配的 model override，会清空这次 command 的 model/reasoning override、保留 access，并追加 `prompt_override_model_dropped` 全局 runtime notice；非 fixed 场景下若动态目录可判定 `model + reasoning` 不兼容，会清空这次 command 的 reasoning override，保留 model/access，并追加 `prompt_override_reasoning_dropped` 全局 runtime notice。这两类 notice 使用 `prompt_override_guard` family 和 dedupe key，避免同一不兼容组合连续刷屏。
-   5. Codex headless 的跨模型组检查先发生在 `/codexprofile` continuation 规划阶段：若当前 pinned thread 的 source 组与目标 Profile 组分别可判定且一个是 `gpt`、另一个是 `non_gpt`，切换不会生成 exact-thread restore，而是转换成 fresh workspace + `PrepareNewThread=true` 的 continuation；pending headless 和 daemon start command 不携带旧 `ThreadID`，旧 managed child 仍会被显式 kill，连回后进入 `R5 NewThreadReady`。
+   5. Codex headless 的跨模型组检查先发生在 `/codexprofile` continuation 规划阶段：若当前 pinned thread 的 source 组与目标 Profile 组分别可判定且一个是 `gpt`、另一个是 `non_gpt`，切换不会生成 exact-thread restore，也不会借用 `fresh_workspace` onboarding；它会转换成 `PendingHeadless(Purpose=workspace_route_restart, PrepareNewThread=true)`。该 pending 与 daemon start command 不携带旧 `ThreadID`，`WorkspaceKey` / `ThreadCWD` 以切换前当前 workspace claim 为 SSOT，不让旧 thread CWD 反向改变 workspace；旧 managed child 仍会被显式 kill，连回后直接进入 `R5 NewThreadReady`。
    6. 普通 `resume_existing + follow_execution_thread` dispatch 仍保留第二道兼容检查：旧 thread 模型优先取 `CodexEffectiveThread.Model`，再取 `ExplicitModel` / `ThreadSettings.Model` / `LastModelReroute.ToModel`；目标模型优先取非 thread 来源的 prompt config，再取当前 `CodexThreadPolicy` 的 explicit/default 目标。若旧组与目标组分别可判定且不同，本次输入会改写为 `start_new`，surface 同步进入 `R5 NewThreadReady`，`PreparedFromThreadID` 记录旧 thread，`PreparedThreadCWD` 保留原 cwd，并追加 `codex_model_group_new_thread` notice。不可判定或同组时继续复用旧 thread。
    7. 跨模型组自动新会话不进入 detour / review / keep-selection 临时会话路径，也不在 adapter 清理 Codex 历史。若目标模型来自 `CodexThreadPolicy`，dispatch 会清掉由旧 thread base config 推导出的 model override，避免 prompt override 反向覆盖目标 Profile policy。
    8. headless 主链的 base config 当前只读取 thread explicit config、backend/profile-scoped workspace defaults、fixed Codex API Profile 的 profile 模型策略与 surface override；旧 `InstanceRecord.CWDDefaults` 和旧 workspace-defaults storage key 都不再参与 headless fallback。`CWDDefaults` 仅保留给 `vscode` 的 observed-config 展示与 freeze 语义。
@@ -711,7 +711,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. 只有 `ProductMode=normal && Backend=claude` 时允许切换；其他 mode/backend 会直接拒绝并要求先 `/mode claude`。
    3. request gate、`PendingHeadless`、live remote work 与 delayed-detach 当前都会阻断 profile 切换，不会让 surface 进入半重启状态。
    4. detached idle 私聊切 profile 时，canonical bot transaction 只更新 record 的 `ClaudeProfileID`，保留其它私聊最新写入的 `PlanMode / PromptOverride`；结果投影到同 gateway surface，不从发起 surface 整记录覆盖其它字段。只有不使用 bot capability record 的 non-canonical local surface 会在没有当前 workspace 时沿用本地 `PlanMode / PromptOverride` reset，这条 local cleanup 不会写入 gateway record。
-   5. 当前 workspace 已占用时，切 profile 会先 detach-like 清理旧 runtime，再按目标 `workspace+profile` 快照恢复飞书临时 `ReasoningEffort / AccessMode` override，并把 `PlanMode` 归零、`Model` 清空；随后按切换前的 continuation intent 直接 fresh-restart 到新 profile：原来只是 workspace-owned `unbound/new_thread_ready` 时继续走 fresh workspace prepare；原来已经 pinned 到某个 Claude thread 时，会保留该 exact-thread 恢复目标并直接拉起新的 thread-restore headless，而不会要求用户重新 `/use`。
+   5. 当前 workspace 已占用时，切 profile 会先 detach-like 清理旧 runtime，再按目标 `workspace+profile` 快照恢复飞书临时 `ReasoningEffort / AccessMode` override，并把 `PlanMode` 归零、`Model` 清空；随后按切换前的 continuation intent 直接重启到新 profile：原来只是 workspace-owned `unbound/new_thread_ready` 时走 `workspace_route_restart`，保留当前 workspace claim 并在连回后恢复 workspace route；原来已经 pinned 到某个 Claude thread 时，会保留该 exact-thread 恢复目标并直接拉起新的 thread-restore headless，而不会要求用户重新 `/use`。
    6. 若切换前当前 surface 接着的正是一个 Claude managed headless，切 profile 时还会先显式 kill 旧 child，再启动新 profile 对应的 child，避免 surface 被错误地重新 attach 回“旧 profile 但同 workspace”的在线实例。
 7. `ClaudeProfileID` 的业务 owner 是 gateway/bot record，surface 同名字段只是 runtime projection：
    1. `/mode claude`、workspace attach、visible resume 与 fresh/preselected headless launch 都读取 effective bot contract，并把 profile 投影冻结到当前执行合同。
@@ -736,7 +736,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. 只有 `ProductMode=normal && Backend=codex` 时允许切换；其他 mode/backend 会直接拒绝并要求先 `/mode codex`。
    3. request gate、`PendingHeadless`、live remote work 与 delayed-detach 当前都会阻断 Profile 切换，不会让 surface 进入半重启状态。
    4. detached idle 私聊切 Profile 时，只更新 bot record 的 canonical `CodexProfileID`，并同步写入由该 Profile 派生的 legacy `CodexProviderID`；结果投影到同 gateway surface，但不会从发起 surface 整记录覆盖其它参数。
-   5. 当前 workspace 已占用时，切 Profile 会先按切换前状态规划 continuation，再 detach-like 清理旧 runtime，并 fresh-restart 到新 Profile：原来只是 workspace-owned `unbound/new_thread_ready` 时继续走 fresh workspace prepare；原来已经 pinned 到某个 Codex thread 且模型组不变时，会保留该 exact-thread 恢复目标并直接拉起新的 thread-restore headless；若模型组从 `gpt` 切到 `non_gpt` 或反向切换，则不恢复旧 thread，而是保留 workspace、启动 fresh workspace headless 并进入新会话待命。
+   5. 当前 workspace 已占用时，切 Profile 会先按切换前状态规划 continuation，再 detach-like 清理旧 runtime，并重启到新 Profile：原来只是 workspace-owned `unbound/new_thread_ready` 时走 `workspace_route_restart`，保留当前 workspace claim 并在连回后恢复 workspace route；原来已经 pinned 到某个 Codex thread 且模型组不变时，会保留该 exact-thread 恢复目标并直接拉起新的 thread-restore headless；若模型组从 `gpt` 切到 `non_gpt` 或反向切换，则不恢复旧 thread，而是保留 workspace、走 `workspace_route_restart + PrepareNewThread=true` 并进入新会话待命。
    6. 若切换前当前 surface 接着的正是一个 Codex managed headless，切 Profile 时还会先显式 kill 旧 child，再启动新 Profile 对应的 child，避免 surface 被错误地重新 attach 回“旧 Profile 但同 workspace”的在线实例。
 
 ### 4.1.2 `vscode` `/list` 先选 instance，并显式投影“当前实例”
@@ -807,10 +807,11 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 1. `starting` 时不能旁路 attach/use/follow/new。
 2. detached `/use` 触发的 preselected headless，在实例连上后会直接落到目标 thread，不会再进入手工 selecting。
 3. `/mode vscode` 与 `/detach` 都会主动取消当前恢复流程，并回到 detached 态；此外还有启动超时 watchdog。
-4. `PendingHeadless` 当前有三类产品语义：
+4. `PendingHeadless` 当前有四类产品语义：
    1. `Purpose=thread_restore`：显式 `/use` 一个需要后台恢复的 thread，或 auto-restore。
    2. `Purpose=fresh_workspace`：`/workspace new dir` 流程选了一个当前没有可复用实例的目录。
    3. `Purpose=prompt_dispatch_restart`：Claude queue / auto-continue / review apply 在 dispatch 前发现 frozen reasoning 与当前 runtime contract 不一致，需要先 restart 成匹配实例。
+   4. `Purpose=workspace_route_restart`：当前 workspace 已确定，但 profile/backend/runtime contract 变化需要启动新的 managed headless，并在连回后恢复原 workspace route intent；`PrepareNewThread=true` 时直接进入 `R5 NewThreadReady`，不打开 `/list` picker，不发送 workspace onboarding 成功提示。
 5. 旧 `/newinstance`、旧 `/killinstance` 当前都不再进入 parser；若实例连上时读到历史兼容残留的 pending headless，只会自动结束并提示改用 `/use` / `/useall`。
 6. 后台 auto-restore 触发的 pending headless 也复用同一个 `G1` gate：
    1. 启动阶段默认静默，不额外发 “headless_starting”。
@@ -1474,13 +1475,15 @@ G0 None
 G1 PendingHeadlessStarting
   -- instance connected 且 pending.Purpose=fresh_workspace 且 pending.PrepareNewThread=false --> R1 AttachedUnbound + G0 None
   -- instance connected 且 pending.Purpose=fresh_workspace 且 pending.PrepareNewThread=true --> R5 NewThreadReady + G0 None
+  -- instance connected 且 pending.Purpose=workspace_route_restart 且 pending.PrepareNewThread=false --> R1 AttachedUnbound + G0 None
+  -- instance connected 且 pending.Purpose=workspace_route_restart 且 pending.PrepareNewThread=true --> R5 NewThreadReady + G0 None
   -- instance connected 且 pending.ThreadID != "" 且非 auto-restore --> R2 AttachedPinned + G0 None
   -- instance connected 且 pending.ThreadID != "" 且 auto-restore --> R2 AttachedPinned + G0 None + 单条恢复成功 notice
   -- instance connected 且 pending.ThreadID != "" 且 auto-restore exact-thread 接管失败 --> kill headless + clear pending + R0 Detached + 单条恢复失败 notice
-  -- instance connected 且 pending.ThreadID == "" 且也不是 fresh_workspace（仅历史兼容兜底） --> kill headless + generic notice + G0 None
+  -- instance connected 且 pending.ThreadID == "" 且也不是 fresh_workspace/workspace_route_restart（仅历史兼容兜底） --> kill headless + generic notice + G0 None
   -- /mode codex|claude|vscode（目标 backend 或 ProductMode 发生变化） --> kill headless + clear persisted resume target + G0 None + R0 Detached(目标 mode/backend)
   -- /detach --> kill headless + G0 None + R0 Detached
-  -- Tick timeout --> kill headless + clear pending + detach if needed
+  -- Tick timeout --> kill headless + clear pending；thread/fresh workspace 路径按需 detach，`workspace_route_restart` / `prompt_dispatch_restart` 保留当前 workspace route
 ```
 
 daemon startup 的 headless resume 额外规则：
@@ -1514,6 +1517,7 @@ daemon startup 的 headless resume 额外规则：
    1. 若目标 route 是普通 workspace attach，则进入 `R1 AttachedUnbound` 并发一条 “已先回到工作区” notice
    2. 若目标 route 是 `new_thread_ready`，则直接进入 `R5 NewThreadReady`
    3. 若需要先 fresh-start workspace，则会先发 `workspace_create_starting`；成功后再按上面两种 route 落位
+   4. 若当前 workspace 已确定但 runtime contract 需要重启，则会进入 `workspace_route_restart_starting`；成功后直接回到同 workspace 的 `R1 AttachedUnbound` 或 `R5 NewThreadReady`，失败/超时也保留 workspace claim，不把用户主路径引回 `/list`
 7. 若首轮 refresh 已完成，但 visible/workspace 路径仍无法恢复：
    1. 若目标属于普通 non-headless resume 且连 workspace route 也不存在：保持 `R0 Detached`，发一条恢复失败提示，并进入 daemon 内存态 backoff
    2. 若目标已经进入 fresh workspace prepare，但 launcher 失败或超时：保持 `R0 Detached`，发 `workspace_create_start_failed` / `workspace_create_start_timeout`

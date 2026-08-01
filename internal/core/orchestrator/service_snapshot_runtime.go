@@ -461,6 +461,24 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
 		s.finishPromptDispatchRestartPendingRoute(surface, pending)
 	}
+	if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		s.finishWorkspaceRouteRestartPendingRoute(surface, pending)
+		notice := control.Notice{
+			Code:  "workspace_route_restart_failed",
+			Title: "当前工作区重启失败",
+			Text:  "当前工作区的运行环境暂时无法重新准备，请稍后重试。",
+		}
+		if problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{}); problem.Code != "" && isCodexProfileLaunchFailureCode(problem.Code) {
+			notice.Code = problem.Code
+			notice.Text = NoticeForProblem(problem).Text
+		}
+		events := []eventcontract.Event{{
+			Kind:             eventcontract.KindNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice:           &notice,
+		}}
+		return s.maybeFinalizePendingTargetPicker(surface, events, notice.Text)
+	}
 	if pending.AutoRestore {
 		notice := NoticeForHeadlessRestoreFailure(HeadlessRestoreLaunchFailureCode(err))
 		if notice == nil {
@@ -580,6 +598,19 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 		}
 		if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
 			s.finishPromptDispatchRestartPendingRoute(surface, pending)
+		}
+		if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+			s.finishWorkspaceRouteRestartPendingRoute(surface, pending)
+			events = append(events, eventcontract.Event{
+				Kind:             eventcontract.KindNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice: &control.Notice{
+					Code:  "workspace_route_restart_interrupted",
+					Title: "当前工作区重启中断",
+					Text:  "当前工作区的运行环境准备已中断，请稍后重试。",
+				},
+			})
+			continue
 		}
 		events = append(events, s.maybeFinalizePendingTargetPicker(surface, nil, "当前工作目标准备已中断，请重新发送 /list、/use 或 /useall 再试一次。")...)
 	}

@@ -111,19 +111,22 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndRestartsManagedMismatch(t
 	if !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") || !surface.PendingHeadless.PrepareNewThread {
 		t.Fatalf("expected restart path to preserve workspace/new-thread intent, got %#v", surface.PendingHeadless)
 	}
-	var sawKillOld, sawWorkspaceStarting, sawStartNew bool
+	if surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		t.Fatalf("expected restart path to use current-workspace route restart, got %#v", surface.PendingHeadless)
+	}
+	var sawKillOld, sawWorkspaceRouteRestart, sawStartNew bool
 	for _, event := range events {
 		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandKillHeadless && event.DaemonCommand.InstanceID == "inst-claude-old" {
 			sawKillOld = true
 		}
-		if event.Notice != nil && event.Notice.Code == "workspace_create_starting" {
-			sawWorkspaceStarting = true
+		if event.Notice != nil && event.Notice.Code == "workspace_route_restart_starting" {
+			sawWorkspaceRouteRestart = true
 		}
 		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandStartHeadless {
 			sawStartNew = true
 		}
 	}
-	if !sawKillOld || !sawWorkspaceStarting || !sawStartNew {
+	if !sawKillOld || !sawWorkspaceRouteRestart || !sawStartNew {
 		t.Fatalf("expected backend switch to kill mismatched managed headless and start replacement, got %#v", events)
 	}
 }

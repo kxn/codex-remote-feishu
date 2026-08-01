@@ -387,12 +387,16 @@ func threadLastAssistantSnippet(thread *state.ThreadRecord, limit int) string {
 }
 
 func headlessPendingNoticeCode(pending *state.HeadlessLaunchRecord) string {
-	_ = pending
+	if pending != nil && pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		return "workspace_route_restart_starting"
+	}
 	return "headless_starting"
 }
 
 func headlessPendingNoticeText(pending *state.HeadlessLaunchRecord) string {
-	_ = pending
+	if pending != nil && pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		return "当前工作区正在重新准备运行环境，请等待完成，或执行 /detach 取消。"
+	}
 	return "恢复流程仍在进行中，请等待完成，或执行 /detach 取消。"
 }
 

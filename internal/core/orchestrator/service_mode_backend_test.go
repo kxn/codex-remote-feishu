@@ -118,6 +118,9 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 	if surface.PendingHeadless == nil || !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") {
 		t.Fatalf("expected claude mode switch to prepare workspace headless, got %#v", surface.PendingHeadless)
 	}
+	if surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		t.Fatalf("expected claude mode switch to restart current workspace route, got %#v", surface.PendingHeadless)
+	}
 	if !surface.PendingHeadless.PrepareNewThread {
 		t.Fatalf("expected claude mode switch to preserve new-thread-ready intent, got %#v", surface.PendingHeadless)
 	}
@@ -136,8 +139,8 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 	if events[0].Notice == nil || events[0].Notice.Code != "surface_mode_switched" {
 		t.Fatalf("expected surface_mode_switched notice first, got %#v", events)
 	}
-	if events[1].Notice == nil || events[1].Notice.Code != "workspace_create_starting" {
-		t.Fatalf("expected workspace_create_starting notice second, got %#v", events)
+	if events[1].Notice == nil || events[1].Notice.Code != "workspace_route_restart_starting" {
+		t.Fatalf("expected workspace_route_restart_starting notice second, got %#v", events)
 	}
 	if events[2].DaemonCommand == nil || events[2].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
 		t.Fatalf("expected start headless daemon command third, got %#v", events)
@@ -202,26 +205,29 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeExistingWorkspaceAndPrepares
 		t.Fatalf("expected profile-mismatched claude workspace to start matching headless, got %#v", surface)
 	}
 	if surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
-		t.Fatalf("expected backend switch fresh-start path to stay unbound until launch completes, got %#v", surface)
+		t.Fatalf("expected backend switch route restart path to stay unbound until launch completes, got %#v", surface)
 	}
-	if !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") || !surface.PendingHeadless.PrepareNewThread || !strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
+	if surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
+		!strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") ||
+		!surface.PendingHeadless.PrepareNewThread ||
+		!strings.EqualFold(surface.ClaimedWorkspaceKey, "/data/dl/repo") {
 		t.Fatalf("expected backend switch to preserve workspace/new-thread intent in pending headless, got %#v", surface)
 	}
 	if surface.PreparedFromThreadID != "" || surface.PreparedThreadCWD != "" {
-		t.Fatalf("expected fresh-start path not to pre-bind prepared thread route before launch, got %#v", surface)
+		t.Fatalf("expected route restart path not to pre-bind prepared thread route before launch, got %#v", surface)
 	}
 
-	var sawSwitchNotice, sawWorkspaceStarting bool
+	var sawSwitchNotice, sawWorkspaceRouteRestart bool
 	for _, event := range events {
 		if event.Notice != nil && event.Notice.Code == "surface_mode_switched" {
 			sawSwitchNotice = true
 		}
-		if event.Notice != nil && event.Notice.Code == "workspace_create_starting" {
-			sawWorkspaceStarting = true
+		if event.Notice != nil && event.Notice.Code == "workspace_route_restart_starting" {
+			sawWorkspaceRouteRestart = true
 		}
 	}
-	if !sawSwitchNotice || !sawWorkspaceStarting {
-		t.Fatalf("expected switch notice + fresh-start notice, got %#v", events)
+	if !sawSwitchNotice || !sawWorkspaceRouteRestart {
+		t.Fatalf("expected switch notice + current-workspace route restart notice, got %#v", events)
 	}
 }
 

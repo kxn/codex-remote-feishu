@@ -161,6 +161,8 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 	events := []eventcontract.Event{}
 	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
 		s.finishPromptDispatchRestartPendingRoute(surface, pending)
+	} else if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		s.finishWorkspaceRouteRestartPendingRoute(surface, pending)
 	} else if surface.AttachedInstanceID == pending.InstanceID {
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 	}
@@ -191,6 +193,13 @@ func pendingHeadlessTimeoutNotice(pending *state.HeadlessLaunchRecord) *control.
 			Code:  "headless_restore_start_timeout",
 			Title: "恢复失败",
 			Text:  "之前的会话恢复超时，请稍后重试或尝试其他会话。",
+		}
+	}
+	if pending != nil && pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
+		return &control.Notice{
+			Code:  "workspace_route_restart_timeout",
+			Title: "当前工作区重启超时",
+			Text:  "当前工作区的运行环境准备超时，已自动取消；工作区选择仍会保留，请稍后重试。",
 		}
 	}
 	return &control.Notice{

@@ -117,7 +117,9 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 	if surface.PendingHeadless == nil {
 		t.Fatalf("expected workspace restart to schedule pending headless, got %#v", surface)
 	}
-	if surface.PendingHeadless.ClaudeProfileID != "profile-b" || !surface.PendingHeadless.PrepareNewThread {
+	if surface.PendingHeadless.ClaudeProfileID != "profile-b" ||
+		surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
+		!surface.PendingHeadless.PrepareNewThread {
 		t.Fatalf("expected pending headless to carry profile-b and preserve new-thread-ready, got %#v", surface.PendingHeadless)
 	}
 	if surface.PlanMode != state.PlanModeSettingOff {
@@ -132,8 +134,8 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 	if events[0].Notice == nil || events[0].Notice.Code != "claude_profile_switched" {
 		t.Fatalf("expected switched notice first, got %#v", events)
 	}
-	if events[1].Notice == nil || events[1].Notice.Code != "workspace_create_starting" {
-		t.Fatalf("expected workspace_create_starting second, got %#v", events)
+	if events[1].Notice == nil || events[1].Notice.Code != "workspace_route_restart_starting" {
+		t.Fatalf("expected workspace_route_restart_starting second, got %#v", events)
 	}
 	if events[2].DaemonCommand == nil || events[2].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
 		t.Fatalf("expected start headless daemon command third, got %#v", events)

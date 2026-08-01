@@ -124,6 +124,52 @@ func (s *Service) startFreshWorkspaceHeadlessWithOptions(surface *state.SurfaceC
 }
 
 func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.SurfaceConsoleRecord, workspaceKey string, prepareNewThread bool, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
+	noticeText := fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后你就可以直接发送文本开启新会话。", normalizeWorkspaceClaimKey(workspaceKey))
+	if prepareNewThread {
+		noticeText = fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后会直接进入新会话待命。", normalizeWorkspaceClaimKey(workspaceKey))
+	}
+	return s.startWorkspaceHeadlessLaunchWithOverlayCleanup(surface, workspaceKey, workspaceHeadlessLaunchOptions{
+		Purpose:                  state.HeadlessLaunchPurposeFreshWorkspace,
+		PrepareNewThread:         prepareNewThread,
+		ValidateRoomWorkspaceSet: true,
+		NoticeCode:               "workspace_create_starting",
+		NoticeTitle:              "正在接入工作区",
+		NoticeText:               noticeText,
+		OverlayCleanup:           cleanup,
+	})
+}
+
+func (s *Service) startWorkspaceRouteRestartHeadlessWithOverlayCleanup(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
+	workspaceKey := normalizeWorkspaceClaimKey(attempt.WorkspaceKey)
+	if workspaceKey == "" {
+		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey("", attempt.ThreadCWD)
+	}
+	noticeText := fmt.Sprintf("正在按当前工作区 `%s` 重新准备运行环境。", workspaceKey)
+	if attempt.PrepareNewThread {
+		noticeText = fmt.Sprintf("正在按当前工作区 `%s` 重新准备运行环境，完成后会直接进入新会话待命。", workspaceKey)
+	}
+	return s.startWorkspaceHeadlessLaunchWithOverlayCleanup(surface, workspaceKey, workspaceHeadlessLaunchOptions{
+		Purpose:                  state.HeadlessLaunchPurposeWorkspaceRouteRestart,
+		PrepareNewThread:         attempt.PrepareNewThread,
+		ValidateRoomWorkspaceSet: false,
+		NoticeCode:               "workspace_route_restart_starting",
+		NoticeTitle:              "正在重新准备当前工作区",
+		NoticeText:               noticeText,
+		OverlayCleanup:           cleanup,
+	})
+}
+
+type workspaceHeadlessLaunchOptions struct {
+	Purpose                  state.HeadlessLaunchPurpose
+	PrepareNewThread         bool
+	ValidateRoomWorkspaceSet bool
+	NoticeCode               string
+	NoticeTitle              string
+	NoticeText               string
+	OverlayCleanup           surfaceOverlayRouteCleanupOptions
+}
+
+func (s *Service) startWorkspaceHeadlessLaunchWithOverlayCleanup(surface *state.SurfaceConsoleRecord, workspaceKey string, options workspaceHeadlessLaunchOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil
 	}
@@ -131,20 +177,38 @@ func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.S
 	if workspaceKey == "" {
 		return notice(surface, "workspace_create_invalid", "目录路径无效，请重新选择。")
 	}
-	if blocked := s.blockFreshThreadAttach(surface, cleanup); blocked != nil {
+	if blocked := s.blockFreshThreadAttach(surface, options.OverlayCleanup); blocked != nil {
 		return blocked
 	}
 	if owner := s.workspaceBusyOwnerForSurface(surface, workspaceKey); owner != nil {
 		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
 	}
-	if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
-		return blocked
+	if options.ValidateRoomWorkspaceSet {
+		if blocked := s.prepareFeishuRoomWorkspaceChange(surface, workspaceKey); blocked != nil {
+			return blocked
+		}
 	}
+	if options.Purpose == "" {
+		options.Purpose = state.HeadlessLaunchPurposeFreshWorkspace
+	}
+	if options.NoticeCode == "" {
+		options.NoticeCode = "workspace_create_starting"
+	}
+	if options.NoticeTitle == "" {
+		options.NoticeTitle = "正在接入工作区"
+	}
+	if strings.TrimSpace(options.NoticeText) == "" && options.PrepareNewThread {
+		options.NoticeText = fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后会直接进入新会话待命。", workspaceKey)
+	}
+	if strings.TrimSpace(options.NoticeText) == "" {
+		options.NoticeText = fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后你就可以直接发送文本开启新会话。", workspaceKey)
+	}
+
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	s.nextHeadlessID++
 	instanceID := fmt.Sprintf("inst-headless-workspace-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
-	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, cleanup)
+	events := s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, options.OverlayCleanup)
 	if !s.claimWorkspace(surface, workspaceKey) {
 		return append(events, notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")...)
 	}
@@ -166,23 +230,20 @@ func (s *Service) startFreshWorkspaceHeadlessWithOverlayCleanup(surface *state.S
 		RequestedAt:             s.now(),
 		ExpiresAt:               s.now().Add(s.config.HeadlessLaunchWait),
 		Status:                  state.HeadlessLaunchStarting,
-		Purpose:                 state.HeadlessLaunchPurposeFreshWorkspace,
-		PrepareNewThread:        prepareNewThread,
+		Purpose:                 options.Purpose,
+		PrepareNewThread:        options.PrepareNewThread,
 	})
-	s.syncFeishuRoomWorkspaceBinding(surface, workspaceKey)
-	noticeTitle := "正在接入工作区"
-	noticeText := fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后你就可以直接发送文本开启新会话。", workspaceKey)
-	if prepareNewThread {
-		noticeText = fmt.Sprintf("正在把 `%s` 接入为可用工作区，完成后会直接进入新会话待命。", workspaceKey)
+	if options.ValidateRoomWorkspaceSet {
+		s.syncFeishuRoomWorkspaceBinding(surface, workspaceKey)
 	}
 	events = append(events,
 		eventcontract.Event{
 			Kind:             eventcontract.KindNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
 			Notice: &control.Notice{
-				Code:  "workspace_create_starting",
-				Title: noticeTitle,
-				Text:  noticeText,
+				Code:  options.NoticeCode,
+				Title: options.NoticeTitle,
+				Text:  options.NoticeText,
 			},
 		},
 		eventcontract.Event{
