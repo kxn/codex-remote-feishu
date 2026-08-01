@@ -550,6 +550,7 @@ func isCodexProfileLaunchFailureCode(code string) bool {
 		"oauth_probe_unknown",
 		"oauth_deployment_unsupported",
 		"codex_capability_unsupported",
+		"managed_model_catalog_missing",
 		"profile_revision_unavailable":
 		return true
 	default:

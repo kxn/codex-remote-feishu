@@ -161,3 +161,69 @@ func TestCodexHeadlessThreadObservedModelReasoningFeedPromptFreeze(t *testing.T)
 		t.Fatalf("expected queue item to keep default access, got %#v", item.FrozenOverride)
 	}
 }
+
+func TestDynamicCodexAPIProfileModelFeedsPromptFreeze(t *testing.T) {
+	now := time.Date(2026, 8, 2, 13, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{
+			ID:              "deepseek-profile",
+			Kind:            state.CodexProfileKindAPI,
+			Name:            "DeepSeek",
+			BaseURL:         "https://api.deepseek.com/",
+			Model:           "deepseek-v4-flash",
+			ReasoningEffort: "high",
+			Available:       true,
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-deepseek",
+		Backend:       agentproto.BackendCodex,
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "默认会话", CWD: "/data/dl/repo"},
+		},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-deepseek"
+	surface.SelectedThreadID = "thread-1"
+	surface.RouteMode = state.RouteModePinned
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-deepseek"], "thread-1") {
+		t.Fatal("expected test setup to claim thread")
+	}
+
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected surface snapshot")
+	}
+	if snapshot.NextPrompt.BaseModel != "deepseek-v4-flash" || snapshot.NextPrompt.BaseModelSource != "profile" {
+		t.Fatalf("expected dynamic API profile model as prompt base, got %#v", snapshot.NextPrompt)
+	}
+	if snapshot.NextPrompt.EffectiveModel != "deepseek-v4-flash" || snapshot.NextPrompt.EffectiveModelSource != "profile" {
+		t.Fatalf("expected dynamic API profile model as effective model, got %#v", snapshot.NextPrompt)
+	}
+	if snapshot.NextPrompt.BaseReasoningEffort != "high" || snapshot.NextPrompt.BaseReasoningEffortSource != "profile" {
+		t.Fatalf("expected dynamic API profile reasoning as prompt base, got %#v", snapshot.NextPrompt)
+	}
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "继续",
+	})
+
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected queue item")
+	}
+	if item.FrozenOverride.Model != "deepseek-v4-flash" || item.FrozenOverride.ReasoningEffort != "" {
+		t.Fatalf("expected queue item to freeze API profile model without implicit reasoning override, got %#v", item.FrozenOverride)
+	}
+}

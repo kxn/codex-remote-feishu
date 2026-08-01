@@ -84,7 +84,7 @@ func TestCodexProfileCommandClearsModelOverrideWhenSwitchingToFixedAPIProfile(t 
 	svc := newServiceForTest(&now)
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
-		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+		{ID: "custom-profile", Kind: state.CodexProfileKindAPI, Name: "Custom API", Model: "provider-custom", ReasoningEffort: "high", Available: true},
 	})
 	svc.MaterializeSurfaceResumeWithCodexProvider(
 		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
@@ -105,12 +105,12 @@ func TestCodexProfileCommandClearsModelOverrideWhenSwitchingToFixedAPIProfile(t 
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind: control.ActionCodexProviderCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
-		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile deepseek-profile",
+		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile custom-profile",
 	})
 
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.CodexProfileID != "deepseek-profile" || record.CodexProviderID != "deepseek-profile" {
-		t.Fatalf("bot codex profile/provider = %q/%q, want deepseek-profile", record.CodexProfileID, record.CodexProviderID)
+	if record.CodexProfileID != "custom-profile" || record.CodexProviderID != "custom-profile" {
+		t.Fatalf("bot codex profile/provider = %q/%q, want custom-profile", record.CodexProfileID, record.CodexProviderID)
 	}
 	if record.PromptOverride.Model != "" || record.PromptOverride.ReasoningEffort != "" || record.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("expected fixed profile switch to clear model/reasoning only, got %#v", record.PromptOverride)
@@ -373,32 +373,32 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 	now := time.Date(2026, 8, 2, 11, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
-		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "Deepseek", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+		{ID: "custom-profile", Kind: state.CodexProfileKindAPI, Name: "Custom API", Model: "provider-custom", ReasoningEffort: "high", Available: true},
 		{ID: "gpt-profile", Kind: state.CodexProfileKindAPI, Name: "GPT", Model: "gpt-5.5", ReasoningEffort: "xhigh", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-deepseek",
+		InstanceID:      "inst-custom",
 		DisplayName:     "repo",
 		WorkspaceRoot:   "/data/dl/repo",
 		WorkspaceKey:    "/data/dl/repo",
 		ShortName:       "repo",
 		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "deepseek-profile",
+		CodexProviderID: "custom-profile",
 		Source:          "headless",
 		Managed:         true,
 		Online:          true,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "旧 Deepseek 会话", CWD: "/tmp/other-repo", Loaded: true},
+			"thread-1": {ThreadID: "thread-1", Name: "旧自定义模型会话", CWD: "/tmp/other-repo", Loaded: true},
 		},
 	})
 
 	surface := svc.root.Surfaces["surface-1"]
-	surface.AttachedInstanceID = "inst-deepseek"
+	surface.AttachedInstanceID = "inst-custom"
 	surface.ClaimedWorkspaceKey = "/data/dl/repo"
 	surface.SelectedThreadID = "thread-1"
 	surface.RouteMode = state.RouteModePinned
-	if !svc.claimKnownThread(surface, svc.root.Instances["inst-deepseek"], "thread-1") {
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-custom"], "thread-1") {
 		t.Fatal("expected test setup to claim thread")
 	}
 
@@ -452,7 +452,7 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 		t.Fatalf("expected start headless to create a new thread under target profile, got %#v", events[4])
 	}
 
-	svc.root.Instances["inst-deepseek"].Online = false
+	svc.root.Instances["inst-custom"].Online = false
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      pending.InstanceID,
 		DisplayName:     "repo",

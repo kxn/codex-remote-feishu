@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
+	"github.com/kxn/codex-remote-feishu/internal/codexcatalog"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -31,6 +32,8 @@ func codexHeadlessLaunchProblem(err error, defaults agentproto.ErrorInfo) agentp
 		problem.Message = "当前 ChatGPT 登录使用了暂不支持的自定义部署，请改用本机默认或官方部署。"
 	case codexprofile.ErrorCodexCapabilityUnsupported:
 		problem.Message = "当前 Codex 版本不支持所需的 Profile 隔离能力，请先升级 Codex。"
+	case codexprofile.ErrorManagedModelCatalogMissing:
+		problem.Message = "当前运行目录无法准备 Codex 模型目录，请检查服务安装状态后再试。"
 	case codexprofile.ErrorProfileRevisionUnavailable:
 		problem.Message = "这个任务引用的 Codex Profile 版本已经不可用，请重新选择 Profile。"
 	}
@@ -119,9 +122,13 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 		NativeConfigProbeFailed: nativeConfigProbeFailed,
 		OAuthState:              oauthState,
 		CapabilitySet:           capabilitySet,
+		ManagedModelCatalogDir:  codexcatalog.ManagedModelCatalogDir(a.headlessRuntime.Paths.StateDir),
 	}
 	projection, err := resolver.Resolve(effectiveRef)
 	if err != nil {
+		return nil, nil, nil, err
+	}
+	if err := codexprofile.EnsureLaunchManagedFiles(projection.Launch); err != nil {
 		return nil, nil, nil, err
 	}
 	env, args = codexprofile.ApplyLaunchMaterial(env, args, projection.Launch)

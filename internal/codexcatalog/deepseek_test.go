@@ -1,0 +1,111 @@
+package codexcatalog
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"testing"
+)
+
+func TestIsDeepSeekEndpoint(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseURL string
+		want    bool
+	}{
+		{name: "official endpoint", baseURL: "https://api.deepseek.com/", want: true},
+		{name: "official endpoint with path", baseURL: "https://api.deepseek.com/v1", want: true},
+		{name: "official endpoint without scheme", baseURL: "api.deepseek.com/v1", want: true},
+		{name: "official endpoint with port", baseURL: "https://api.deepseek.com:443/v1", want: true},
+		{name: "lookalike host", baseURL: "https://api.deepseek.com.evil/v1", want: false},
+		{name: "other endpoint", baseURL: "https://proxy.example/v1", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsDeepSeekEndpoint(tt.baseURL); got != tt.want {
+				t.Fatalf("IsDeepSeekEndpoint(%q) = %v, want %v", tt.baseURL, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsDeepSeekProfile(t *testing.T) {
+	if !IsDeepSeekProfile("https://proxy.example/v1", "deepseek-v4-flash") {
+		t.Fatal("expected deepseek model prefix to identify DeepSeek profile")
+	}
+	if !IsDeepSeekProfile("https://api.deepseek.com/", "gpt-5.5") {
+		t.Fatal("expected DeepSeek endpoint to identify DeepSeek profile")
+	}
+	if IsDeepSeekProfile("https://proxy.example/v1", "provider-custom") {
+		t.Fatal("expected non-DeepSeek profile to stay generic")
+	}
+}
+
+func TestManagedDeepSeekModelCatalogPath(t *testing.T) {
+	dir := ManagedModelCatalogDir("/var/lib/codex-remote")
+	if want := filepath.Join("/var/lib/codex-remote", "codex-model-catalogs"); dir != want {
+		t.Fatalf("ManagedModelCatalogDir = %q, want %q", dir, want)
+	}
+	if got := DeepSeekModelCatalogPath(dir); got != filepath.Join(dir, DeepSeekModelCatalogFileName) {
+		t.Fatalf("DeepSeekModelCatalogPath = %q", got)
+	}
+	if got := ManagedModelCatalogDir(""); got != "" {
+		t.Fatalf("empty state dir should not produce managed dir, got %q", got)
+	}
+}
+
+func TestDeepSeekModelCatalogJSON(t *testing.T) {
+	raw := DeepSeekModelCatalogJSON()
+	if len(raw) == 0 {
+		t.Fatal("expected embedded DeepSeek model catalog")
+	}
+	raw[0] = ' '
+	if again := DeepSeekModelCatalogJSON(); len(again) == 0 || again[0] != '{' {
+		t.Fatal("DeepSeekModelCatalogJSON must return a defensive copy")
+	}
+
+	var catalog struct {
+		Models []struct {
+			Slug                    string `json:"slug"`
+			ContextWindow           int    `json:"context_window"`
+			MaxContextWindow        int    `json:"max_context_window"`
+			DefaultReasoningLevel   string `json:"default_reasoning_level"`
+			BaseInstructions        string `json:"base_instructions"`
+			SupportedReasoningLevel []struct {
+				Effort string `json:"effort"`
+			} `json:"supported_reasoning_levels"`
+			ModelMessages *struct {
+				InstructionsTemplate string `json:"instructions_template"`
+			} `json:"model_messages"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(DeepSeekModelCatalogJSON(), &catalog); err != nil {
+		t.Fatalf("DeepSeek model catalog must be valid JSON: %v", err)
+	}
+	if len(catalog.Models) != 2 {
+		t.Fatalf("expected two DeepSeek models, got %#v", catalog.Models)
+	}
+	for _, model := range catalog.Models {
+		if model.ContextWindow != 1048576 || model.MaxContextWindow != 1048576 {
+			t.Fatalf("unexpected context window for %s: %#v", model.Slug, model)
+		}
+		if model.DefaultReasoningLevel != "high" {
+			t.Fatalf("default reasoning for %s = %q, want high", model.Slug, model.DefaultReasoningLevel)
+		}
+		if model.ModelMessages == nil || model.ModelMessages.InstructionsTemplate == "" {
+			t.Fatalf("expected %s to keep official model_messages instructions template", model.Slug)
+		}
+		if model.BaseInstructions == "" {
+			t.Fatalf("expected %s to keep official base_instructions", model.Slug)
+		}
+		got := make([]string, 0, len(model.SupportedReasoningLevel))
+		for _, effort := range model.SupportedReasoningLevel {
+			got = append(got, effort.Effort)
+		}
+		if len(got) != 3 || got[0] != "low" || got[1] != "high" || got[2] != "max" {
+			t.Fatalf("supported reasoning for %s = %#v, want low/high/max", model.Slug, got)
+		}
+	}
+	if catalog.Models[0].Slug != "deepseek-v4-flash" || catalog.Models[1].Slug != "deepseek-v4-pro" {
+		t.Fatalf("unexpected DeepSeek model order: %#v", catalog.Models)
+	}
+}

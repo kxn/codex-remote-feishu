@@ -260,9 +260,9 @@ func TestBuildConfigCommandViewStateUsesFixedCodexAPIProfileModelOptions(t *test
 	svc := newServiceForTest(&now)
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
-		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepseekV4Flash", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+		{ID: "custom-profile", Kind: state.CodexProfileKindAPI, Name: "Custom API", Model: "provider-custom", ReasoningEffort: "high", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -283,11 +283,47 @@ func TestBuildConfigCommandViewStateUsesFixedCodexAPIProfileModelOptions(t *test
 	if view.Config == nil {
 		t.Fatal("expected config view")
 	}
-	if got := view.Config.FormOptions; len(got) != 1 || got[0].Value != "deepseek-v4-flash" {
+	if got := view.Config.FormOptions; len(got) != 1 || got[0].Value != "provider-custom" {
 		t.Fatalf("expected fixed API profile model option only, got %#v", got)
 	}
 	if strings.Contains(view.Config.StatusText, "模型列表") {
 		t.Fatalf("fixed profile should not surface dynamic catalog status, got %q", view.Config.StatusText)
+	}
+}
+
+func TestBuildConfigCommandViewStateUsesDynamicCatalogForDeepSeekCodexAPIProfile(t *testing.T) {
+	now := time.Date(2026, 8, 2, 2, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{
+			ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "DeepSeek",
+			BaseURL: "https://api.deepseek.com/", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true,
+		},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-1"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID: "inst-1",
+		Online:     true,
+		ModelCatalog: &agentproto.ModelCatalogSnapshot{Entries: []agentproto.ModelCatalogEntry{
+			{Model: "deepseek-v4-flash", DisplayName: "DeepSeek V4 Flash"},
+			{Model: "deepseek-v4-pro", DisplayName: "DeepSeek V4 Pro"},
+		}},
+		Threads: map[string]*state.ThreadRecord{},
+	})
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandModel)
+	if !ok {
+		t.Fatal("expected model config flow")
+	}
+	view := svc.buildConfigCommandViewState(surface, flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if got := view.Config.FormOptions; len(got) != 2 || got[0].Value != "deepseek-v4-flash" || got[1].Value != "deepseek-v4-pro" {
+		t.Fatalf("expected dynamic DeepSeek profile model options, got %#v", got)
 	}
 }
 

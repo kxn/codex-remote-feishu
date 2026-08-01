@@ -230,6 +230,28 @@ func TestCodexUnknownThreadModelKeepsThread(t *testing.T) {
 	}
 }
 
+func TestCodexDynamicDeepSeekProfileKeepsNonGPTModelGroup(t *testing.T) {
+	now := time.Date(2026, 8, 2, 10, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	profile := state.CodexProfileSummary{
+		ID:              "deepseek-profile",
+		Kind:            state.CodexProfileKindAPI,
+		Name:            "DeepSeek",
+		BaseURL:         "https://api.deepseek.com/",
+		Model:           "deepseek-v4-flash",
+		ReasoningEffort: "high",
+		Available:       true,
+	}
+
+	group, known := svc.codexProfileModelGroup(profile)
+	if !known || group != "non_gpt" {
+		t.Fatalf("DeepSeek dynamic profile group = %q/%v, want non_gpt/true", group, known)
+	}
+	if _, fixed := fixedCodexAPIProfileModel(profile); fixed {
+		t.Fatal("DeepSeek catalog-backed profile must stay dynamic, not fixed")
+	}
+}
+
 func codexModelGroupSwitchInstance(threadModel string) *state.InstanceRecord {
 	return &state.InstanceRecord{
 		InstanceID:              "inst-1",

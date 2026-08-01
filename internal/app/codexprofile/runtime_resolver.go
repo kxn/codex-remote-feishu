@@ -1,14 +1,18 @@
 package codexprofile
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/codexcatalog"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -18,6 +22,7 @@ const (
 	ErrorProfileDefinitionIncomplete = "profile_definition_incomplete"
 	ErrorProfileSecretMissing        = "profile_secret_missing"
 	ErrorOAuthMissing                = "oauth_missing"
+	ErrorManagedModelCatalogMissing  = "managed_model_catalog_missing"
 )
 
 type RuntimeResolver struct {
@@ -29,6 +34,7 @@ type RuntimeResolver struct {
 	NativeProviderEnvKeys   []string
 	NativeConfigProbeFailed bool
 	CapabilitySet           string
+	ManagedModelCatalogDir  string
 }
 
 type RuntimeProjection struct {
@@ -41,6 +47,12 @@ type SecretLaunchMaterial struct {
 	CLIOverrides   []string
 	ClearedEnvKeys []string
 	SecretChildEnv []string
+	ManagedFiles   []LaunchManagedFile
+}
+
+type LaunchManagedFile struct {
+	Path    string
+	Content []byte
 }
 
 func (SecretLaunchMaterial) MarshalJSON() ([]byte, error) {
@@ -58,6 +70,59 @@ func ApplyLaunchMaterial(baseEnv, baseArgs []string, material SecretLaunchMateri
 	}
 	args := append(append([]string{}, baseArgs...), material.CLIOverrides...)
 	return env, args
+}
+
+func EnsureLaunchManagedFiles(material SecretLaunchMaterial) error {
+	for _, file := range material.ManagedFiles {
+		if err := ensureLaunchManagedFile(file); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureLaunchManagedFile(file LaunchManagedFile) error {
+	path := filepath.Clean(strings.TrimSpace(file.Path))
+	if path == "" || !filepath.IsAbs(path) {
+		return fmt.Errorf("managed launch file path must be absolute")
+	}
+	if len(file.Content) == 0 {
+		return fmt.Errorf("managed launch file %q has empty content", path)
+	}
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create managed launch file dir: %w", err)
+	}
+	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, file.Content) {
+		return nil
+	}
+	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("create managed launch temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := tmp.Write(file.Content); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write managed launch temp file: %w", err)
+	}
+	if err := tmp.Chmod(0o600); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("chmod managed launch temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close managed launch temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("replace managed launch file: %w", err)
+	}
+	cleanup = false
+	return nil
 }
 
 func LegacyThreadCLIOverrides(policy state.CodexThreadPolicy) []string {
@@ -172,6 +237,17 @@ func (r RuntimeResolver) resolveAPI(ref state.CodexAdmissionRef, preference stat
 		},
 		ClearedEnvKeys: nonNativeClearedEnvKeys(r.NativeProviderEnvKeys),
 		SecretChildEnv: []string{CodexProfileAPIKeyEnv + "=" + profile.APIKey},
+	}
+	if codexcatalog.IsDeepSeekProfile(profile.BaseURL, profile.Model) {
+		catalogPath := codexcatalog.DeepSeekModelCatalogPath(r.ManagedModelCatalogDir)
+		if catalogPath == "" {
+			return RuntimeProjection{}, runtimeError(ErrorManagedModelCatalogMissing)
+		}
+		launch.CLIOverrides = append(launch.CLIOverrides, "-c", codexOverride("model_catalog_json", catalogPath))
+		launch.ManagedFiles = append(launch.ManagedFiles, LaunchManagedFile{
+			Path:    catalogPath,
+			Content: codexcatalog.DeepSeekModelCatalogJSON(),
+		})
 	}
 	return RuntimeProjection{Connection: connection, Thread: thread, Launch: launch}, nil
 }

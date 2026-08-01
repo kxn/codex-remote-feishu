@@ -108,7 +108,7 @@ func (s *Service) codexProfileModelGroup(profile state.CodexProfileSummary) (str
 	if strings.TrimSpace(profile.ID) == "" {
 		return "", false
 	}
-	if model, fixed := fixedCodexAPIProfileModel(profile); fixed {
+	if model := strings.TrimSpace(profile.Model); model != "" {
 		group := codexModelGroup(model)
 		return group, group != ""
 	}

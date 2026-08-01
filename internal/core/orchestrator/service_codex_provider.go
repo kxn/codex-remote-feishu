@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/codexcatalog"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -252,7 +253,7 @@ func fixedCodexAPIProfileModel(profile state.CodexProfileSummary) (string, bool)
 		return "", false
 	}
 	model := strings.TrimSpace(profile.Model)
-	if model == "" || isDynamicCodexProfileModel(model) {
+	if model == "" || isDynamicCodexProfileModel(profile.BaseURL, model) {
 		return "", false
 	}
 	return model, true
@@ -265,7 +266,10 @@ func fixedCodexAPIProfileReasoning(profile state.CodexProfileSummary) string {
 	return normalizeModelReasoningEffort(profile.ReasoningEffort)
 }
 
-func isDynamicCodexProfileModel(model string) bool {
+func isDynamicCodexProfileModel(baseURL, model string) bool {
+	if codexcatalog.IsDeepSeekProfile(baseURL, model) {
+		return true
+	}
 	model = strings.ToLower(strings.TrimSpace(model))
 	if model == "" {
 		return true

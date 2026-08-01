@@ -2,6 +2,7 @@ package codexprofile
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -88,6 +89,78 @@ func TestRuntimeResolverProjectsAPIConnectionThreadAndSecretSeparately(t *testin
 	}
 	if _, err := json.Marshal(projection.Launch); err == nil {
 		t.Fatal("secret launch material must reject JSON serialization")
+	}
+}
+
+func TestRuntimeResolverProjectsDeepSeekManagedModelCatalog(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_deepseek",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "DeepSeek",
+		BaseURL:              "https://api.deepseek.com/",
+		APIKey:               "deepseek-secret",
+		Model:                "deepseek-v4-flash",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	catalogPath := filepath.Join(managedDir, "deepseek-models-v1.json")
+	if !strings.Contains(strings.Join(projection.Launch.CLIOverrides, "\n"), `model_catalog_json="`+catalogPath+`"`) {
+		t.Fatalf("launch overrides missing managed catalog path: %#v", projection.Launch.CLIOverrides)
+	}
+	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
+		t.Fatalf("expected one managed DeepSeek catalog file, got %#v", projection.Launch.ManagedFiles)
+	}
+	content := string(projection.Launch.ManagedFiles[0].Content)
+	for _, want := range []string{"deepseek-v4-flash", "deepseek-v4-pro", `"effort": "max"`} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("managed DeepSeek catalog missing %q: %s", want, content)
+		}
+	}
+	if strings.Contains(content, profile.APIKey) {
+		t.Fatal("managed DeepSeek catalog leaked API key")
+	}
+}
+
+func TestRuntimeResolverRejectsDeepSeekWithoutManagedModelCatalogDir(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_deepseek",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "DeepSeek",
+		BaseURL:              "https://api.deepseek.com/",
+		APIKey:               "deepseek-secret",
+		Model:                "deepseek-v4-flash",
+		ReasoningEffort:      "high",
+	}
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:    fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet: CodexProfileCapabilitySetV1,
+	}
+
+	_, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if got := RuntimeErrorCode(err); got != ErrorManagedModelCatalogMissing {
+		t.Fatalf("error code = %q, want %q (err=%v)", got, ErrorManagedModelCatalogMissing, err)
 	}
 }
 

@@ -175,6 +175,15 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 			Source: "profile",
 		}
 	} else if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		profile = normalizeCodexProfileSummary(profile)
+		if profile.Kind == state.CodexProfileKindAPI {
+			if model := strings.TrimSpace(profile.Model); model != "" {
+				baseModel = configValue{Value: model, Source: "profile"}
+			}
+			if effort := normalizeModelReasoningEffort(profile.ReasoningEffort); effort != "" {
+				baseEffort = configValue{Value: effort, Source: "profile"}
+			}
+		}
 		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
 			override.Model = ""
 			baseModel = configValue{Value: fixedModel, Source: "profile"}

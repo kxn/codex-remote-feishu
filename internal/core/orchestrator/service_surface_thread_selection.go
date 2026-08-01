@@ -664,6 +664,12 @@ func headlessRestoreFailureNotice(code string) *control.Notice {
 			Title: "Codex 版本不兼容",
 			Text:  "当前 Codex 版本不支持所需的 Profile 隔离能力，请先升级 Codex。",
 		}
+	case "managed_model_catalog_missing":
+		return &control.Notice{
+			Code:  "managed_model_catalog_missing",
+			Title: "Codex Profile 不可用",
+			Text:  "当前运行目录无法准备 Codex 模型目录，请检查服务安装状态后再恢复会话。",
+		}
 	case "profile_revision_unavailable":
 		return &control.Notice{
 			Code:  "profile_revision_unavailable",
@@ -732,6 +738,7 @@ func HeadlessRestoreLaunchFailureCode(err error) string {
 		"oauth_probe_unknown",
 		"oauth_deployment_unsupported",
 		"codex_capability_unsupported",
+		"managed_model_catalog_missing",
 		"profile_revision_unavailable":
 		return strings.TrimSpace(problem.Code)
 	case "codex_provider_prepare_failed":

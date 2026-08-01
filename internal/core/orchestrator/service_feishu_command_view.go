@@ -318,6 +318,8 @@ func codexProfileUnavailableReasonText(profile state.CodexProfileSummary) string
 		return "当前 ChatGPT 登录部署暂不支持这个 Profile。"
 	case "codex_capability_unsupported":
 		return "当前 Codex 版本暂不支持 Profile 隔离能力。"
+	case "managed_model_catalog_missing":
+		return "当前运行目录无法准备 Codex 模型目录，请检查服务安装状态后再试。"
 	case "profile_definition_incomplete":
 		return "配置不完整，请到 Web 管理界面补齐端点、模型和推理配置。"
 	case "profile_secret_missing":

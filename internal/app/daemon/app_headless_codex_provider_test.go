@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -109,6 +110,80 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 	}
 }
 
+func TestDaemonStartsDeepSeekCodexHeadlessWithManagedModelCatalog(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	stateDir := filepath.Join(root, "state")
+	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
+		Name: "DeepSeek", BaseURL: "https://api.deepseek.com/", APIKey: "deepseek-secret",
+		Model: "deepseek-v4-flash", ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
+	}
+	cfg := config.DefaultAppConfig()
+	cfg.Codex.Profiles = []config.CodexAPIProfileRecord{record}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath:      "/tmp/codex-remote",
+		CodexRealBinary: "fake-codex",
+		ConfigPath:      configPath,
+		BaseEnv:         []string{"PATH=/usr/bin", "OPENAI_API_KEY=global-secret"},
+		LaunchArgs:      []string{"app-server"},
+		Paths: relayruntime.Paths{
+			LogsDir:  filepath.Join(root, "logs"),
+			StateDir: stateDir,
+		},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	app.runCodexNativeConfigProbe = func(context.Context, codexprofile.NativeConfigProbeOptions) (codexprofile.NativeConfigObservation, error) {
+		return codexprofile.NativeConfigObservation{}, nil
+	}
+	app.ensureCodexNativeConnectionEvidence(context.Background())
+	app.service.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, record.ID, "", "", "")
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4330, nil
+	}
+	command := control.DaemonCommand{
+		Kind:             control.DaemonCommandStartHeadless,
+		SurfaceSessionID: "surface-1",
+		InstanceID:       "inst-deepseek-profile",
+		ThreadCWD:        root,
+		Backend:          agentproto.BackendCodex,
+		CodexProviderID:  record.ID,
+	}
+	authorizePendingHeadlessForTest(t, app, command)
+	app.startManagedHeadless(command)
+
+	catalogPath := codexConfigOverrideValue(captured.Args, "model_catalog_json")
+	if catalogPath == "" {
+		t.Fatalf("expected DeepSeek launch to include model_catalog_json, args=%#v", captured.Args)
+	}
+	if !strings.HasPrefix(catalogPath, stateDir+string(os.PathSeparator)) {
+		t.Fatalf("expected managed catalog under state dir %q, got %q", stateDir, catalogPath)
+	}
+	raw, err := os.ReadFile(catalogPath)
+	if err != nil {
+		t.Fatalf("expected managed DeepSeek catalog file: %v", err)
+	}
+	content := string(raw)
+	for _, want := range []string{`"slug": "deepseek-v4-flash"`, `"slug": "deepseek-v4-pro"`, `"default_reasoning_level": "high"`, `"effort": "max"`} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("managed DeepSeek catalog missing %q: %s", want, content)
+		}
+	}
+	if strings.Contains(content, "deepseek-secret") {
+		t.Fatal("managed DeepSeek catalog leaked API key")
+	}
+}
+
 func TestDaemonStartsCodexHeadlessWithCanonicalProfileID(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.json")
@@ -154,6 +229,18 @@ func TestDaemonStartsCodexHeadlessWithCanonicalProfileID(t *testing.T) {
 		!strings.Contains(args, `.base_url="https://canonical.example/v1"`) {
 		t.Fatalf("canonical profile was not projected to an internal provider: %#v", captured.Args)
 	}
+}
+
+func codexConfigOverrideValue(args []string, key string) string {
+	prefix := key + "="
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] != "-c" || !strings.HasPrefix(args[index+1], prefix) {
+			continue
+		}
+		value := strings.TrimPrefix(args[index+1], prefix)
+		return strings.Trim(value, `"`)
+	}
+	return ""
 }
 
 func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
