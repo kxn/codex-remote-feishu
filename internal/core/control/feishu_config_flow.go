@@ -107,7 +107,7 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 	{
 		CommandID:       FeishuCommandCodexProvider,
 		ActionKind:      ActionCodexProviderCommand,
-		BareCommand:     "/codexprovider",
+		BareCommand:     "/codexprofile",
 		IntentKind:      FeishuUIIntentShowCodexProviderCatalog,
 		PageBuilder:     codexProviderPageViewFromCommandConfigView,
 		CurrentValueKey: FeishuConfigFlowValueSurfaceCodexProvider,
@@ -253,11 +253,26 @@ func ResolveFeishuConfigFlowDefinitionFromAction(action Action) (FeishuConfigFlo
 
 func FeishuConfigFlowIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 	def, ok := ResolveFeishuConfigFlowDefinitionFromAction(action)
-	if !ok || !isBareInlineCommand(action.Text, def.BareCommand) {
+	if !ok || !isConfigFlowOpenAction(action, def) {
 		return nil, false
 	}
 	return &FeishuUIIntent{
 		Kind:    def.IntentKind,
 		RawText: action.Text,
+		Cursor:  action.Cursor,
 	}, true
+}
+
+func isConfigFlowOpenAction(action Action, def FeishuConfigFlowDefinition) bool {
+	if isBareConfigFlowCommand(action.Text, def) {
+		return true
+	}
+	return action.LocalPageAction && strings.HasPrefix(strings.TrimSpace(action.Text), strings.TrimSpace(def.BareCommand)+" ")
+}
+
+func isBareConfigFlowCommand(text string, def FeishuConfigFlowDefinition) bool {
+	if isBareInlineCommand(text, def.BareCommand) {
+		return true
+	}
+	return def.CommandID == FeishuCommandCodexProvider && isBareInlineCommand(text, "/codexprovider")
 }

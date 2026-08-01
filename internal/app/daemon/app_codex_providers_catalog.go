@@ -26,6 +26,7 @@ func (a *App) syncCodexProvidersCatalogLocked(cfg config.AppConfig) {
 		return
 	}
 	a.service.MaterializeCodexProviders(materializeCodexProviderRecords(cfg))
+	a.service.MaterializeCodexProfiles(a.materializeCodexProfileSummariesLocked(cfg))
 }
 
 func (a *App) syncCodexProvidersCatalogFromConfig() {
@@ -40,4 +41,43 @@ func (a *App) syncCodexProvidersCatalogFromConfig() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.syncCodexProvidersCatalogLocked(loaded.Config)
+}
+
+func (a *App) materializeCodexProfileSummariesLocked(cfg config.AppConfig) []state.CodexProfileSummary {
+	profiles := []state.CodexProfileSummary{{
+		ID:              state.NativeCodexProfileID,
+		Kind:            state.CodexProfileKindNative,
+		Name:            "本机默认",
+		Available:       true,
+		ContextEditable: true,
+	}}
+	if oauth, ok := a.codexOAuthProfileState.current(); ok {
+		profiles = append(profiles, state.CodexProfileSummary{
+			ID:              state.OAuthCodexProfileID,
+			Revision:        oauth.Revision,
+			Kind:            state.CodexProfileKindOAuth,
+			Name:            "ChatGPT 登录",
+			StatusCode:      strings.TrimSpace(firstNonEmpty(oauth.AvailabilityCode, oauth.LastProbeErrorCode, oauth.Status)),
+			Available:       strings.TrimSpace(oauth.Status) == "detected" && strings.TrimSpace(oauth.AvailabilityCode) == "",
+			ContextEditable: true,
+		})
+	}
+	for _, record := range config.NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles) {
+		current, ok := config.CurrentCodexAPIProfile(record)
+		if !ok {
+			continue
+		}
+		profiles = append(profiles, state.CodexProfileSummary{
+			ID:              current.ID,
+			Revision:        current.Revision,
+			Kind:            state.CodexProfileKindAPI,
+			Name:            current.Name,
+			StatusCode:      config.CodexAPIProfileStatus(current),
+			Available:       config.CodexAPIProfileStatus(current) == "" && strings.TrimSpace(current.APIKey) != "",
+			Editable:        true,
+			Deletable:       true,
+			ContextEditable: true,
+		})
+	}
+	return profiles
 }

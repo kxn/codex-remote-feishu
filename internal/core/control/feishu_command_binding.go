@@ -51,11 +51,15 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 	bindings := make(map[string]FeishuCommandBinding)
 
 	for _, def := range FeishuConfigFlowDefinitions() {
+		flow := def
 		bindings[def.CommandID] = FeishuCommandBinding{
 			FamilyID:            def.CommandID,
 			Kind:                FeishuCommandBindingConfigFlow,
 			LauncherDisposition: FeishuFrontstageLauncherKeep,
-			intentBuilder:       bareInlineIntentBuilder(def.IntentKind, def.BareCommand, false),
+			intentBuilder: func(action Action) (*FeishuUIIntent, bool) {
+				action.CommandID = flow.CommandID
+				return FeishuConfigFlowIntentFromAction(action)
+			},
 		}
 	}
 

@@ -10,19 +10,22 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func (s *Service) resolveCodexProviderSelection(value string) (state.CodexProviderRecord, bool) {
-	targetID := state.NormalizeCodexProviderID(value)
-	for _, provider := range s.CodexProviders() {
-		if strings.EqualFold(strings.TrimSpace(provider.ID), targetID) {
-			return provider, true
+func (s *Service) resolveCodexProfileSelection(value string) (state.CodexProfileSummary, bool) {
+	targetID := strings.TrimSpace(value)
+	if strings.EqualFold(targetID, state.DefaultCodexProviderID) {
+		targetID = state.NativeCodexProfileID
+	}
+	for _, profile := range s.CodexProfiles() {
+		if strings.EqualFold(strings.TrimSpace(profile.ID), targetID) {
+			return profile, true
 		}
 	}
-	return state.CodexProviderRecord{}, false
+	return state.CodexProfileSummary{}, false
 }
 
 func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	if !s.surfaceIsHeadless(surface) || s.surfaceBackend(surface) != agentproto.BackendCodex {
-		text := "当前不在 Codex 模式，暂时不能切换 Codex Provider。请先 `/mode codex`。"
+		text := "当前不在 Codex 模式，暂时不能切换 Codex Profile。请先 `/mode codex`。"
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind: "error",
@@ -39,34 +42,42 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：`/codexprovider` 查看当前状态；`/codexprovider <provider-id>`。",
+			StatusText:       "用法：`/codexprofile` 查看当前状态；`/codexprofile <profile-id>`。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
 
-	target, ok := s.resolveCodexProviderSelection(parts[1])
+	target, ok := s.resolveCodexProfileSelection(parts[1])
 	if !ok {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "找不到这个 Codex Provider。请从下拉里选择已有配置，或到管理页先创建。",
-			FormDefaultValue: state.NormalizeCodexProviderID(parts[1]),
+			StatusText:       "找不到这个 Codex Profile。请从下拉里选择已有 Profile，或到管理页先创建。",
+			FormDefaultValue: strings.TrimSpace(parts[1]),
+		})
+	}
+	if !target.Available {
+		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
+			StatusKind:       "error",
+			StatusText:       fmt.Sprintf("Codex Profile %s 当前不可用，不能切换。", codexProfileDisplayName(target)),
+			FormDefaultValue: strings.TrimSpace(target.ID),
 		})
 	}
 
-	currentProviderID := s.surfaceCodexProviderID(surface)
+	targetProviderID := state.LegacyCodexProviderIDFromProfileID(target.ID)
+	currentProfileID := s.surfaceCodexProfileID(surface)
 	currentWorkspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface))
-	targetLabel := s.codexProviderDisplayName(target.ID)
+	targetLabel := codexProfileDisplayName(target)
 	applySelection := func() {
 		s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-			record.CodexProviderID = target.ID
-			record.CodexProfileID = state.CodexProfileIDFromLegacyProviderID(target.ID)
+			record.CodexProfileID = target.ID
+			record.CodexProviderID = targetProviderID
 		}, func(local *state.SurfaceConsoleRecord) {
-			s.setSurfaceCodexProviderID(local, target.ID)
+			s.setSurfaceCodexProviderID(local, targetProviderID)
 		})
 	}
-	if target.ID == currentProviderID {
+	if target.ID == currentProfileID {
 		applySelection()
-		text := fmt.Sprintf("当前已在使用 Codex Provider：%s。", targetLabel)
+		text := fmt.Sprintf("当前已在使用 Codex Profile：%s。", targetLabel)
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
@@ -93,7 +104,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if surface.PendingHeadless != nil || s.surfaceHasLiveRemoteWork(surface) || s.surfaceNeedsDelayedDetach(surface, inst) {
-		text := "当前仍有执行中的 turn、派发中的请求、排队消息或工作区准备流程，暂时不能切换 Codex Provider。请等待完成、/stop，或先 /detach。"
+		text := "当前仍有执行中的 turn、派发中的请求、排队消息或工作区准备流程，暂时不能切换 Codex Profile。请等待完成、/stop，或先 /detach。"
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				StatusKind: "error",
@@ -109,7 +120,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	applySelection()
 	if currentWorkspaceKey == "" {
-		text := fmt.Sprintf("已切换到 Codex Provider：%s。当前没有接管中的工作区。", targetLabel)
+		text := fmt.Sprintf("已切换到 Codex Profile：%s。当前没有接管中的工作区。", targetLabel)
 		if commandCardOwnsInlineResult(action) {
 			return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 				Sealed:     true,
@@ -122,7 +133,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 
 	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
 	resumeEvents := s.restartHeadlessContractContinuation(surface, continuation)
-	statusText := fmt.Sprintf("已切换到 Codex Provider：%s。正在重新准备当前工作区。", targetLabel)
+	statusText := fmt.Sprintf("已切换到 Codex Profile：%s。正在重新准备当前工作区。", targetLabel)
 	if commandCardOwnsInlineResult(action) {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,
@@ -132,4 +143,11 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	}
 	events = append(events, notice(surface, "codex_provider_switched", statusText)...)
 	return append(events, resumeEvents...)
+}
+
+func codexProfileDisplayName(profile state.CodexProfileSummary) string {
+	if name := strings.TrimSpace(profile.Name); name != "" {
+		return name
+	}
+	return strings.TrimSpace(profile.ID)
 }

@@ -37,6 +37,71 @@ func TestCodexProviderCommandSwitchesDetachedSurface(t *testing.T) {
 	}
 }
 
+func TestCodexProfileCommandCanonicalSlashSwitchesBotProfile(t *testing.T) {
+	now := time.Date(2026, 8, 1, 11, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
+		state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionCodexProviderCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
+		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile team-proxy",
+	})
+
+	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
+	if record.CodexProfileID != "team-proxy" || record.CodexProviderID != "team-proxy" {
+		t.Fatalf("bot codex profile/provider = %q/%q, want team-proxy/team-proxy", record.CodexProfileID, record.CodexProviderID)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_switched" ||
+		!strings.Contains(events[0].Notice.Text, "Codex Profile") {
+		t.Fatalf("expected codex profile switched notice, got %#v", events)
+	}
+}
+
+func TestCodexProfileCommandRejectsUnavailableOAuthProfile(t *testing.T) {
+	now := time.Date(2026, 8, 1, 11, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: state.OAuthCodexProfileID, Kind: state.CodexProfileKindOAuth, Name: "ChatGPT 登录", Available: false, StatusCode: "missing"},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCodexProviderCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/codexprofile " + state.OAuthCodexProfileID,
+	})
+
+	if surface.CodexProviderID != state.DefaultCodexProviderID {
+		t.Fatalf("unavailable profile changed provider: %#v", surface)
+	}
+	if len(events) != 1 || events[0].PageView == nil ||
+		!containsPageSectionLine(events[0].PageView.NoticeSections, "当前不可用") {
+		t.Fatalf("expected inline structured unavailable error, got %#v", events)
+	}
+}
+
+func containsPageSectionLine(sections []control.FeishuCardTextSection, fragment string) bool {
+	for _, section := range sections {
+		for _, line := range section.Lines {
+			if strings.Contains(line, fragment) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func TestCodexProviderCommandExplicitCurrentSelectionWritesCanonicalBotProfile(t *testing.T) {
 	now := time.Date(2026, 7, 31, 18, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

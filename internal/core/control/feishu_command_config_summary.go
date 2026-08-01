@@ -59,8 +59,8 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 		}
 	case FeishuCommandCodexProvider:
 		return []FeishuCardTextSection{
-			singleValueCardSection("当前配置", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, state.DefaultCodexProviderName))),
-			singleValueCardSection("切换方式", "切换后会重启当前工作区，并按新的 Codex Provider 重新准备当前会话。"),
+			singleValueCardSection("当前 Profile", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, "本机默认"))),
+			singleValueCardSection("切换方式", "切换后会重启当前工作区，并按新的 Codex Profile 重新准备当前会话。"),
 		}
 	case FeishuCommandClaudeProfile:
 		return []FeishuCardTextSection{

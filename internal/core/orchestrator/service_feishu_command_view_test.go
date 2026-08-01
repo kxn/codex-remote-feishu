@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -99,7 +100,7 @@ func TestBuildConfigCommandViewStatePopulatesCodexProviderOptions(t *testing.T) 
 	if got := view.Config.FormOptions; len(got) != 3 {
 		t.Fatalf("expected default + 2 custom providers, got %#v", got)
 	} else {
-		if got[0].Label != state.DefaultCodexProviderName || got[0].Value != state.DefaultCodexProviderID {
+		if got[0].Label != "本机默认" || got[0].Value != state.NativeCodexProfileID {
 			t.Fatalf("unexpected built-in default option: %#v", got[0])
 		}
 		if got[1].Label != "Team Proxy（team-proxy）" || got[1].Value != "team-proxy" {
@@ -108,6 +109,38 @@ func TestBuildConfigCommandViewStatePopulatesCodexProviderOptions(t *testing.T) 
 		if got[2].Label != "Team Proxy（team-proxy-2）" || got[2].Value != "team-proxy-2" {
 			t.Fatalf("unexpected second custom option: %#v", got[2])
 		}
+	}
+}
+
+func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableStatus(t *testing.T) {
+	now := time.Date(2026, 8, 1, 10, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "ignored", Available: true},
+		{ID: state.OAuthCodexProfileID, Kind: state.CodexProfileKindOAuth, Name: "ChatGPT 登录", Available: false, StatusCode: "missing"},
+		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
+	})
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	if !ok {
+		t.Fatal("expected codex profile config flow")
+	}
+	view := svc.buildConfigCommandViewState(svc.root.Surfaces["surface-1"], flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if view.Config.CurrentValue != state.NativeCodexProfileID || view.Config.FormDefaultValue != state.NativeCodexProfileID {
+		t.Fatalf("current/default profile = %q/%q, want native", view.Config.CurrentValue, view.Config.FormDefaultValue)
+	}
+	if got := view.Config.FormOptions; len(got) != 2 || got[0].Value != state.NativeCodexProfileID || got[1].Value != "team-proxy" {
+		t.Fatalf("expected only available profiles in submit options, got %#v", got)
+	}
+	if view.Config.StatusKind != "info" || !strings.Contains(view.Config.StatusText, "ChatGPT 登录：missing") {
+		t.Fatalf("expected unavailable OAuth status row, got kind=%q text=%q", view.Config.StatusKind, view.Config.StatusText)
+	}
+	if !view.Config.FormPagination {
+		t.Fatal("expected codex profile config flow to enable pagination")
 	}
 }
 

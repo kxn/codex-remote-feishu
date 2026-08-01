@@ -498,6 +498,8 @@ type CommandCatalogForm struct {
 	CatalogBackend   agentproto.Backend
 	SubmitLabel      string
 	SubmitValue      map[string]any
+	Paginated        bool
+	Cursor           int
 	Field            CommandCatalogFormField
 }
 

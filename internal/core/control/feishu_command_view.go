@@ -31,6 +31,8 @@ type FeishuCatalogConfigView struct {
 	PlanModeOverrideSet         bool
 	FormDefaultValue            string
 	FormOptions                 []CommandCatalogFormFieldOption
+	FormCursor                  int
+	FormPagination              bool
 	StatusKind                  string
 	StatusText                  string
 	Sealed                      bool

@@ -50,12 +50,14 @@ func codexProviderPageViewFromCommandConfigView(view FeishuCatalogConfigView) Fe
 		Entries: []CommandCatalogEntry{{
 			Form: &CommandCatalogForm{
 				CommandID:   FeishuCommandCodexProvider,
-				CommandText: "/codexprovider",
+				CommandText: "/codexprofile",
 				SubmitLabel: "切换",
+				Paginated:   view.FormPagination,
+				Cursor:      view.FormCursor,
 				Field: CommandCatalogFormField{
 					Name:         "command_args",
 					Kind:         CommandCatalogFormFieldSelectStatic,
-					Placeholder:  "选择 Codex Provider",
+					Placeholder:  "选择 Codex Profile",
 					DefaultValue: defaultValue,
 					Options:      append([]CommandCatalogFormFieldOption(nil), view.FormOptions...),
 				},

@@ -25,6 +25,76 @@ func (s *Service) MaterializeCodexProviders(records []state.CodexProviderRecord)
 		}
 		s.root.CodexProviders[current.ID] = current
 	}
+	if len(s.root.CodexProfiles) == 0 {
+		s.MaterializeCodexProfiles(codexProfilesFromLegacyProviders(s.root.CodexProviders))
+	}
+}
+
+func (s *Service) MaterializeCodexProfiles(records []state.CodexProfileSummary) {
+	if s.root == nil {
+		return
+	}
+	s.root.CodexProfiles = map[string]state.CodexProfileSummary{}
+	for _, record := range records {
+		current := normalizeCodexProfileSummary(record)
+		if current.ID == "" {
+			continue
+		}
+		s.root.CodexProfiles[current.ID] = current
+	}
+	if _, ok := s.root.CodexProfiles[state.NativeCodexProfileID]; !ok {
+		s.root.CodexProfiles[state.NativeCodexProfileID] = normalizeCodexProfileSummary(state.CodexProfileSummary{
+			ID:              state.NativeCodexProfileID,
+			Kind:            state.CodexProfileKindNative,
+			Name:            "本机默认",
+			Available:       true,
+			ContextEditable: true,
+		})
+	}
+}
+
+func (s *Service) CodexProfiles() []state.CodexProfileSummary {
+	if s.root == nil || len(s.root.CodexProfiles) == 0 {
+		return []state.CodexProfileSummary{normalizeCodexProfileSummary(state.CodexProfileSummary{
+			ID:              state.NativeCodexProfileID,
+			Kind:            state.CodexProfileKindNative,
+			Name:            "本机默认",
+			Available:       true,
+			ContextEditable: true,
+		})}
+	}
+	profiles := make([]state.CodexProfileSummary, 0, len(s.root.CodexProfiles))
+	for _, record := range s.root.CodexProfiles {
+		profiles = append(profiles, normalizeCodexProfileSummary(record))
+	}
+	sort.SliceStable(profiles, func(i, j int) bool {
+		left := profiles[i]
+		right := profiles[j]
+		leftRank := codexProfileKindRank(left.Kind)
+		rightRank := codexProfileKindRank(right.Kind)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		if left.Name != right.Name {
+			return left.Name < right.Name
+		}
+		return left.ID < right.ID
+	})
+	return profiles
+}
+
+func codexProfilesFromLegacyProviders(providers map[string]state.CodexProviderRecord) []state.CodexProfileSummary {
+	profiles := make([]state.CodexProfileSummary, 0, len(providers))
+	for _, provider := range providers {
+		provider = state.NormalizeCodexProviderRecord(provider)
+		profiles = append(profiles, state.CodexProfileSummary{
+			ID:        state.CodexProfileIDFromLegacyProviderID(provider.ID),
+			Kind:      state.CodexProfileKindAPI,
+			Name:      provider.Name,
+			Available: true,
+		})
+	}
+	return profiles
 }
 
 func (s *Service) CodexProviders() []state.CodexProviderRecord {
@@ -51,6 +121,41 @@ func (s *Service) CodexProviders() []state.CodexProviderRecord {
 		return left.ID < right.ID
 	})
 	return providers
+}
+
+func normalizeCodexProfileSummary(value state.CodexProfileSummary) state.CodexProfileSummary {
+	value.ID = strings.TrimSpace(value.ID)
+	value.Name = strings.TrimSpace(value.Name)
+	if value.Kind == "" {
+		value.Kind = state.CodexProfileKindAPI
+	}
+	switch value.ID {
+	case state.NativeCodexProfileID:
+		value.Kind = state.CodexProfileKindNative
+		value.Name = "本机默认"
+		value.Available = true
+	case state.OAuthCodexProfileID:
+		value.Kind = state.CodexProfileKindOAuth
+		if value.Name == "" {
+			value.Name = "ChatGPT 登录"
+		}
+	default:
+		if value.Name == "" {
+			value.Name = value.ID
+		}
+	}
+	return value
+}
+
+func codexProfileKindRank(kind state.CodexProfileKind) int {
+	switch kind {
+	case state.CodexProfileKindNative:
+		return 0
+	case state.CodexProfileKindOAuth:
+		return 1
+	default:
+		return 2
+	}
 }
 
 func (s *Service) codexProviderRecord(providerID string) state.CodexProviderRecord {
@@ -84,6 +189,17 @@ func (s *Service) SurfaceCodexProviderID(surfaceID string) string {
 
 func (s *Service) surfaceCodexProviderID(surface *state.SurfaceConsoleRecord) string {
 	return state.EffectiveSurfaceCodexProviderID(s.surfaceDesiredContract(surface))
+}
+
+func (s *Service) surfaceCodexProfileID(surface *state.SurfaceConsoleRecord) string {
+	if s != nil && s.root != nil {
+		if record, status := state.LookupSurfaceBotCapabilitySettings(s.root, surface); status == state.BotCapabilitySettingsLookupValid {
+			if profileID := strings.TrimSpace(record.CodexProfileID); profileID != "" {
+				return profileID
+			}
+		}
+	}
+	return state.CodexProfileIDFromLegacyProviderID(s.surfaceCodexProviderID(surface))
 }
 
 func (s *Service) setSurfaceCodexProviderID(surface *state.SurfaceConsoleRecord, providerID string) {

@@ -147,7 +147,10 @@ func (s *Service) buildCommandConfigViewForAction(surface *state.SurfaceConsoleR
 }
 
 func (s *Service) openConfigCommandPageForAction(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
-	view := s.buildCommandConfigViewForAction(surface, action, control.FeishuCatalogConfigView{})
+	view := s.buildCommandConfigViewForAction(surface, action, control.FeishuCatalogConfigView{
+		FormCursor:       action.Cursor,
+		FormDefaultValue: actionCommandArgumentText(action),
+	})
 	if view.Config == nil {
 		return nil
 	}

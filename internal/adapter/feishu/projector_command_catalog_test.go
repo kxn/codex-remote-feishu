@@ -2,8 +2,11 @@ package feishu
 
 import (
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -163,6 +166,126 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 	}
 	if formElements[1]["form_action_type"] != "submit" {
 		t.Fatalf("expected V2 submit button, got %#v", formElements[1])
+	}
+}
+
+func TestProjectInteractiveCommandCatalogPaginatesCodexProfileSelect(t *testing.T) {
+	options := make([]control.CommandCatalogFormFieldOption, 0, 50)
+	longName := strings.Repeat("极", 64)
+	for i := 0; i < 50; i++ {
+		options = append(options, control.CommandCatalogFormFieldOption{
+			Label: longName,
+			Value: "profile-" + strconv.Itoa(i),
+		})
+	}
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", commandCatalogEvent(control.FeishuPageView{
+		Title:       "切换 Codex Profile",
+		Interactive: true,
+		Sections: []control.CommandCatalogSection{{
+			Title: "立即切换",
+			Entries: []control.CommandCatalogEntry{{
+				Form: &control.CommandCatalogForm{
+					CommandID:   control.FeishuCommandCodexProvider,
+					CommandText: "/codexprofile",
+					SubmitLabel: "切换",
+					Paginated:   true,
+					Cursor:      20,
+					Field: control.CommandCatalogFormField{
+						Name:         "command_args",
+						Kind:         control.CommandCatalogFormFieldSelectStatic,
+						Placeholder:  "选择 Codex Profile",
+						DefaultValue: "profile-25",
+						Options:      options,
+					},
+				},
+			}},
+		}},
+	}))
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	formContainer := ops[0].CardElements[1]
+	formElements, _ := formContainer["elements"].([]map[string]any)
+	selectElement := formElements[0]
+	renderedOptions, _ := selectElement["options"].([]map[string]any)
+	if len(renderedOptions) != 10 {
+		t.Fatalf("expected one page of options, got %#v", renderedOptions)
+	}
+	if selectElement["initial_option"] != "profile-25" {
+		t.Fatalf("expected visible current selection to stay selected, got %#v", selectElement)
+	}
+	buttons := cardElementButtons(t, ops[0].CardElements[2])
+	if len(buttons) != 2 {
+		t.Fatalf("expected previous and next page buttons, got %#v", ops[0].CardElements[2])
+	}
+	prevValue := cardButtonPayload(t, buttons[0])
+	nextValue := cardButtonPayload(t, buttons[1])
+	if prevValue["kind"] != "page_local_action" || prevValue["action_kind"] != string(control.ActionCodexProviderCommand) || prevValue["cursor"] != 10 {
+		t.Fatalf("unexpected previous payload: %#v", prevValue)
+	}
+	if nextValue["kind"] != "page_local_action" || nextValue["action_kind"] != string(control.ActionCodexProviderCommand) || nextValue["cursor"] != 30 {
+		t.Fatalf("unexpected next payload: %#v", nextValue)
+	}
+	size, err := cardtransport.InteractiveMessageCardSize(ops[0].CardTitle, ops[0].CardTitleTag, cardThemeInfo, ops[0].CardElements, true)
+	if err != nil {
+		t.Fatalf("measure card size: %v", err)
+	}
+	if size > cardtransport.InteractiveCardTransportLimitBytes {
+		t.Fatalf("profile selector card size %d exceeds budget %d", size, cardtransport.InteractiveCardTransportLimitBytes)
+	}
+	if len(ops[0].CardElements) >= 200 {
+		t.Fatalf("profile selector card uses too many elements: %d", len(ops[0].CardElements))
+	}
+}
+
+func TestProjectInteractiveCommandCatalogPaginationPreservesOffPageSelection(t *testing.T) {
+	options := make([]control.CommandCatalogFormFieldOption, 0, 25)
+	for i := 0; i < 25; i++ {
+		options = append(options, control.CommandCatalogFormFieldOption{
+			Label: "Profile " + strconv.Itoa(i),
+			Value: "profile-" + strconv.Itoa(i),
+		})
+	}
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", commandCatalogEvent(control.FeishuPageView{
+		Title:       "切换 Codex Profile",
+		Interactive: true,
+		Sections: []control.CommandCatalogSection{{
+			Entries: []control.CommandCatalogEntry{{
+				Form: &control.CommandCatalogForm{
+					CommandID:   control.FeishuCommandCodexProvider,
+					CommandText: "/codexprofile",
+					SubmitLabel: "切换",
+					Paginated:   true,
+					Cursor:      10,
+					Field: control.CommandCatalogFormField{
+						Name:         "command_args",
+						Kind:         control.CommandCatalogFormFieldSelectStatic,
+						Placeholder:  "选择 Codex Profile",
+						DefaultValue: "profile-5",
+						Options:      options,
+					},
+				},
+			}},
+		}},
+	}))
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	formElements, _ := ops[0].CardElements[0]["elements"].([]map[string]any)
+	selectElement := formElements[0]
+	if selectElement["initial_option"] != "profile-5" {
+		t.Fatalf("expected off-page current selection to be preserved, got %#v", selectElement)
+	}
+	buttons := cardElementButtons(t, ops[0].CardElements[1])
+	if len(buttons) != 2 {
+		t.Fatalf("expected previous and next page buttons, got %#v", ops[0].CardElements[1])
+	}
+	prevValue := cardButtonPayload(t, buttons[0])
+	nextValue := cardButtonPayload(t, buttons[1])
+	if prevValue["action_arg"] != "profile-5" || nextValue["action_arg"] != "profile-5" {
+		t.Fatalf("expected pagination payloads to preserve selected profile, prev=%#v next=%#v", prevValue, nextValue)
 	}
 }
 

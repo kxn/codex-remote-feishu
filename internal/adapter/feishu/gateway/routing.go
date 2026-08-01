@@ -303,6 +303,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			CatalogVariantID: catalogVariantID,
 			CatalogBackend:   catalogBackend,
 			LocalPageAction:  kind == cardActionKindPageLocalAction,
+			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
 			Inbound:          meta,
 		}, true
 	case cardActionKindUpgradeOwnerFlow:

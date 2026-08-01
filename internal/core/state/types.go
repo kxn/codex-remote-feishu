@@ -165,6 +165,7 @@ type Root struct {
 	BotCapabilitySettings           map[string]BotCapabilitySettingsRecord
 	WorkspaceDefaults               map[string]ModelConfigRecord
 	CodexProviders                  map[string]CodexProviderRecord
+	CodexProfiles                   map[string]CodexProfileSummary
 	ClaudeProfiles                  map[string]ClaudeProfileRecord
 	ClaudeWorkspaceProfileSnapshots map[string]ClaudeWorkspaceProfileSnapshotRecord
 }
@@ -762,6 +763,7 @@ func NewRoot() *Root {
 		BotCapabilitySettings:           map[string]BotCapabilitySettingsRecord{},
 		WorkspaceDefaults:               map[string]ModelConfigRecord{},
 		CodexProviders:                  map[string]CodexProviderRecord{},
+		CodexProfiles:                   map[string]CodexProfileSummary{},
 		ClaudeProfiles:                  map[string]ClaudeProfileRecord{},
 		ClaudeWorkspaceProfileSnapshots: map[string]ClaudeWorkspaceProfileSnapshotRecord{},
 	}

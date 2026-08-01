@@ -63,9 +63,16 @@ func (s *Service) buildConfigCommandViewState(
 	view.Config.PlanModeOverrideSet = summary.PlanModeOverrideSet
 	switch flow.CommandID {
 	case control.FeishuCommandCodexProvider:
-		view.Config.FormOptions = s.codexProviderCommandOptions()
+		view.Config.FormOptions = s.codexProfileCommandOptions(false)
+		view.Config.FormPagination = true
+		if strings.TrimSpace(view.Config.StatusText) == "" {
+			if lines := s.unavailableCodexProfileLines(); len(lines) != 0 {
+				view.Config.StatusKind = "info"
+				view.Config.StatusText = strings.Join(lines, "\n")
+			}
+		}
 		if strings.TrimSpace(view.Config.FormDefaultValue) == "" {
-			view.Config.FormDefaultValue = s.surfaceCodexProviderID(surface)
+			view.Config.FormDefaultValue = s.surfaceCodexProfileID(surface)
 		}
 	case control.FeishuCommandClaudeProfile:
 		view.Config.FormOptions = s.claudeProfileCommandOptions()
@@ -155,9 +162,9 @@ func (s *Service) resolveConfigFlowValue(
 		return state.SurfaceModeAlias(state.ProductMode(normalized.ProductMode), normalized.Backend)
 	case control.FeishuConfigFlowValueSurfaceCodexProvider:
 		if surface != nil {
-			return s.surfaceCodexProviderID(surface)
+			return s.surfaceCodexProfileID(surface)
 		}
-		return state.DefaultCodexProviderID
+		return state.NativeCodexProfileID
 	case control.FeishuConfigFlowValueSurfaceClaudeProfile:
 		if surface != nil {
 			return s.surfaceClaudeProfileID(surface)
@@ -231,10 +238,74 @@ func (s *Service) applyCommandConfigCardState(base *control.FeishuCatalogConfigV
 	if strings.TrimSpace(cardState.StatusText) != "" {
 		base.StatusText = strings.TrimSpace(cardState.StatusText)
 	}
+	if cardState.FormCursor != 0 {
+		base.FormCursor = cardState.FormCursor
+	}
+	if cardState.FormPagination {
+		base.FormPagination = true
+	}
 	if cardState.Sealed {
 		base.Sealed = true
 	}
 	return base
+}
+
+func (s *Service) codexProfileCommandOptions(includeUnavailable bool) []control.CommandCatalogFormFieldOption {
+	profiles := s.CodexProfiles()
+	options := make([]control.CommandCatalogFormFieldOption, 0, len(profiles))
+	labelCounts := map[string]int{}
+	for _, profile := range profiles {
+		if !profile.Available && !includeUnavailable {
+			continue
+		}
+		label := strings.TrimSpace(profile.Name)
+		if label == "" {
+			label = profile.ID
+		}
+		labelCounts[label]++
+	}
+	for _, profile := range profiles {
+		if !profile.Available && !includeUnavailable {
+			continue
+		}
+		label := strings.TrimSpace(profile.Name)
+		if label == "" {
+			label = profile.ID
+		}
+		if labelCounts[label] > 1 && !strings.EqualFold(label, strings.TrimSpace(profile.ID)) {
+			label += "（" + strings.TrimSpace(profile.ID) + "）"
+		}
+		options = append(options, control.CommandCatalogFormFieldOption{
+			Label: label,
+			Value: strings.TrimSpace(profile.ID),
+		})
+	}
+	if len(options) == 0 {
+		return []control.CommandCatalogFormFieldOption{{
+			Label: "本机默认",
+			Value: state.NativeCodexProfileID,
+		}}
+	}
+	return options
+}
+
+func (s *Service) unavailableCodexProfileLines() []string {
+	lines := make([]string, 0)
+	for _, profile := range s.CodexProfiles() {
+		if profile.Available {
+			continue
+		}
+		name := strings.TrimSpace(profile.Name)
+		if name == "" {
+			name = strings.TrimSpace(profile.ID)
+		}
+		reason := strings.TrimSpace(profile.StatusCode)
+		if reason == "" {
+			reason = "当前不可用"
+		}
+		lines = append(lines, name+"："+reason)
+	}
+	return lines
 }
 
 func (s *Service) codexProviderCommandOptions() []control.CommandCatalogFormFieldOption {

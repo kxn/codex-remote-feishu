@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	commandCatalogRootLabel = "菜单首页"
-	menuHomeProductName     = "Codex Remote Feishu"
-	menuHomeGitHubLabel     = "kxn/codex-remote-feishu"
-	menuHomeGitHubURL       = "https://github.com/kxn/codex-remote-feishu"
-	menuHomeUsageGuideURL   = "https://my.feishu.cn/docx/PTncdNBf1oS9N5xBikBcGi2enzc"
-	menuHomeVersionFallback = "dev"
+	commandCatalogRootLabel               = "菜单首页"
+	menuHomeProductName                   = "Codex Remote Feishu"
+	menuHomeGitHubLabel                   = "kxn/codex-remote-feishu"
+	menuHomeGitHubURL                     = "https://github.com/kxn/codex-remote-feishu"
+	menuHomeUsageGuideURL                 = "https://my.feishu.cn/docx/PTncdNBf1oS9N5xBikBcGi2enzc"
+	menuHomeVersionFallback               = "dev"
+	commandCatalogPaginatedSelectPageSize = 10
 )
 
 type PageRenderOptions struct {
@@ -69,8 +70,8 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 				}
 			}
 			if view.Interactive && entry.Form != nil {
-				if formElement, ok := pageFormElement(*entry.Form, view.CatalogBackend, daemonLifecycleID); ok {
-					elements = append(elements, formElement)
+				if formElements := pageFormElements(*entry.Form, view.CatalogBackend, daemonLifecycleID); len(formElements) != 0 {
+					elements = append(elements, formElements...)
 				}
 			}
 		}
@@ -88,14 +89,14 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 	return elements
 }
 
-func pageFormElement(form control.CommandCatalogForm, pageBackend controlBackend, daemonLifecycleID string) (map[string]any, bool) {
+func pageFormElements(form control.CommandCatalogForm, pageBackend controlBackend, daemonLifecycleID string) []map[string]any {
 	field := form.Field
 	formName := commandCatalogFormName(form)
 	submitValue := cloneActionPayload(form.SubmitValue)
 	if len(submitValue) == 0 {
 		actionKind, ok := control.ActionKindForFeishuCommandID(strings.TrimSpace(form.CommandID))
 		if !ok {
-			return nil, false
+			return nil
 		}
 		submitValue = actionPayloadPageSubmit(
 			string(actionKind),
@@ -118,14 +119,78 @@ func pageFormElement(form control.CommandCatalogForm, pageBackend controlBackend
 	if len(submitButton) != 0 {
 		submitButton["name"] = commandCatalogSubmitButtonName(formName)
 	}
-	return map[string]any{
+	field = paginatedCommandCatalogFormField(field, form)
+	elements := []map[string]any{{
 		"tag":  "form",
 		"name": formName,
 		"elements": []map[string]any{
 			commandCatalogFormFieldElement(field),
 			submitButton,
 		},
-	}, true
+	}}
+	if group := commandCatalogFormPaginationButtons(form, pageBackend, daemonLifecycleID); len(group) != 0 {
+		elements = append(elements, group)
+	}
+	return elements
+}
+
+func paginatedCommandCatalogFormField(field control.CommandCatalogFormField, form control.CommandCatalogForm) control.CommandCatalogFormField {
+	if !form.Paginated || field.Kind != control.CommandCatalogFormFieldSelectStatic || len(field.Options) <= commandCatalogPaginatedSelectPageSize {
+		return field
+	}
+	cursor := normalizeCommandCatalogFormCursor(form.Cursor, len(field.Options))
+	end := cursor + commandCatalogPaginatedSelectPageSize
+	if end > len(field.Options) {
+		end = len(field.Options)
+	}
+	field.Options = append([]control.CommandCatalogFormFieldOption(nil), field.Options[cursor:end]...)
+	return field
+}
+
+func commandCatalogFormPaginationButtons(form control.CommandCatalogForm, pageBackend controlBackend, daemonLifecycleID string) map[string]any {
+	if !form.Paginated || len(form.Field.Options) <= commandCatalogPaginatedSelectPageSize {
+		return nil
+	}
+	actionKind, ok := control.ActionKindForFeishuCommandID(strings.TrimSpace(form.CommandID))
+	if !ok {
+		return nil
+	}
+	cursor := normalizeCommandCatalogFormCursor(form.Cursor, len(form.Field.Options))
+	buttons := make([]map[string]any, 0, 2)
+	if cursor > 0 {
+		buttons = append(buttons, commandCatalogFormPageButton("上一页", form, actionKind, pageBackend, daemonLifecycleID, maxInt(cursor-commandCatalogPaginatedSelectPageSize, 0)))
+	}
+	if next := cursor + commandCatalogPaginatedSelectPageSize; next < len(form.Field.Options) {
+		buttons = append(buttons, commandCatalogFormPageButton("下一页", form, actionKind, pageBackend, daemonLifecycleID, next))
+	}
+	return cardButtonGroupElement(buttons)
+}
+
+func commandCatalogFormPageButton(label string, form control.CommandCatalogForm, actionKind control.ActionKind, pageBackend controlBackend, daemonLifecycleID string, cursor int) map[string]any {
+	payload := actionPayloadPageLocalAction(string(actionKind), strings.TrimSpace(form.Field.DefaultValue))
+	payload[cardActionPayloadKeyCursor] = cursor
+	if resolved, ok := resolveCatalogActionForPage(control.Action{
+		Kind:             actionKind,
+		Text:             strings.TrimSpace(form.CommandText),
+		CommandID:        strings.TrimSpace(form.CommandID),
+		CatalogFamilyID:  strings.TrimSpace(form.CatalogFamilyID),
+		CatalogVariantID: strings.TrimSpace(form.CatalogVariantID),
+		CatalogBackend:   pageCatalogBackend(pageBackend, form.CatalogBackend),
+	}, pageCatalogBackend(pageBackend, form.CatalogBackend)); ok {
+		payload = actionPayloadWithCatalog(payload, resolved.FamilyID, resolved.VariantID, string(resolved.Backend))
+	}
+	return cardCallbackButtonElement(label, "default", stampActionValue(payload, daemonLifecycleID), false, "")
+}
+
+func normalizeCommandCatalogFormCursor(cursor, total int) int {
+	if cursor < 0 {
+		return 0
+	}
+	if total <= 0 || cursor < total {
+		return cursor
+	}
+	lastPage := (total - 1) / commandCatalogPaginatedSelectPageSize * commandCatalogPaginatedSelectPageSize
+	return maxInt(lastPage, 0)
 }
 
 type controlBackend = agentproto.Backend

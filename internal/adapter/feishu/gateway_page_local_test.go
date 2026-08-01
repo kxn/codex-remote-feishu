@@ -46,6 +46,39 @@ func TestParseCardActionTriggerEventBuildsLocalPageAction(t *testing.T) {
 	}
 }
 
+func TestParseCardActionTriggerEventBuildsLocalPageActionWithCursor(t *testing.T) {
+	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
+	gateway.recordSurfaceMessage("om-card-local-page-1", "feishu:app-1:user:user-1")
+	userID := "user-1"
+	event := &larkcallback.CardActionTriggerEvent{
+		Event: &larkcallback.CardActionTriggerRequest{
+			Operator: &larkcallback.Operator{UserID: &userID},
+			Action: &larkcallback.CallBackAction{
+				Value: map[string]interface{}{
+					"kind":        "page_local_action",
+					"action_kind": string(control.ActionCodexProviderCommand),
+					"cursor":      30,
+				},
+			},
+			Context: &larkcallback.Context{
+				OpenChatID:    "oc_1",
+				OpenMessageID: "om-card-local-page-1",
+			},
+		},
+	}
+
+	action, ok := gateway.parseCardActionTriggerEvent(event)
+	if !ok {
+		t.Fatal("expected page_local_action callback to be parsed")
+	}
+	if action.Kind != control.ActionCodexProviderCommand || action.Text != "/codexprofile" || action.Cursor != 30 {
+		t.Fatalf("unexpected paginated local action: %#v", action)
+	}
+	if !action.LocalPageAction {
+		t.Fatalf("expected local page action marker, got %#v", action)
+	}
+}
+
 func TestParseCardActionTriggerEventBuildsLocalPageSubmitActionFromFormValue(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
 	gateway.recordSurfaceMessage("om-card-form-local-1", "feishu:app-1:user:user-1")
