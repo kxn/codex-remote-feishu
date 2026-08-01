@@ -125,6 +125,11 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	}
 
 	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendCodex)
+	startNewThreadForModelGroup := false
+	if s.codexProfileSwitchStartsNewThread(surface, continuation, target) {
+		continuation = s.codexProfileSwitchNewThreadContinuation(surface, currentWorkspaceKey, continuation)
+		startNewThreadForModelGroup = continuation.Attempt.PrepareNewThread
+	}
 	events := s.discardDrafts(surface)
 	events = s.queueHeadlessContractRestart(events, surface, continuation)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
@@ -144,6 +149,10 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
 	resumeEvents := s.restartHeadlessContractContinuation(surface, continuation)
 	statusText := fmt.Sprintf("已切换到 Codex Profile：%s。正在重新准备当前工作区。", targetLabel)
+	if startNewThreadForModelGroup {
+		statusText = fmt.Sprintf("已切换到 Codex Profile：%s。正在重新接入当前工作区，并会进入新会话待命。", targetLabel)
+		resumeEvents = append([]eventcontract.Event{codexModelGroupNewThreadNoticeEvent(surface)}, resumeEvents...)
+	}
 	if commandCardOwnsInlineResult(action) {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			Sealed:     true,

@@ -103,6 +103,51 @@ func codexThreadModelForGroupSwitch(thread *state.ThreadRecord) string {
 	return ""
 }
 
+func (s *Service) codexProfileModelGroup(profile state.CodexProfileSummary) (string, bool) {
+	profile = normalizeCodexProfileSummary(profile)
+	if strings.TrimSpace(profile.ID) == "" {
+		return "", false
+	}
+	if model, fixed := fixedCodexAPIProfileModel(profile); fixed {
+		group := codexModelGroup(model)
+		return group, group != ""
+	}
+	switch profile.Kind {
+	case state.CodexProfileKindNative, state.CodexProfileKindOAuth, state.CodexProfileKindAPI:
+		return "gpt", true
+	default:
+		return "", false
+	}
+}
+
+func (s *Service) codexCurrentThreadModelGroupForSwitch(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string) (string, bool) {
+	threadID = strings.TrimSpace(threadID)
+	if threadID != "" && inst != nil {
+		if group := codexModelGroup(codexThreadModelForGroupSwitch(inst.Threads[threadID])); group != "" {
+			return group, true
+		}
+	}
+	if inst != nil {
+		if group := codexThreadPolicyModelGroup(inst.CodexThreadPolicy); group != "" {
+			return group, true
+		}
+		if profile, ok := s.codexProfileSummaryByID(instCodexProfileID(inst)); ok {
+			if group, known := s.codexProfileModelGroup(profile); known {
+				return group, true
+			}
+		}
+	}
+	if surface != nil {
+		if group := codexThreadPolicyModelGroup(surface.CodexThreadPolicy); group != "" {
+			return group, true
+		}
+		if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+			return s.codexProfileModelGroup(profile)
+		}
+	}
+	return "", false
+}
+
 func (s *Service) codexTargetModelForGroupSwitch(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string, requestedOverride state.ModelConfigRecord, threadPolicy *state.CodexThreadPolicy) (string, string) {
 	resolution := s.resolvePromptConfig(inst, surface, threadID, cwd, requestedOverride)
 	threadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
@@ -120,15 +165,63 @@ func (s *Service) codexTargetModelForGroupSwitch(inst *state.InstanceRecord, sur
 	return "", ""
 }
 
+func codexThreadPolicyModelGroup(policy *state.CodexThreadPolicy) string {
+	policy = state.CloneCodexThreadPolicy(policy)
+	if policy == nil {
+		return ""
+	}
+	switch strings.TrimSpace(policy.ModelMode) {
+	case state.CodexThreadValueExplicit:
+		return codexModelGroup(policy.Model)
+	case state.CodexThreadValueDefault:
+		return codexModelGroup(defaultPromptModelForBackend(agentproto.BackendCodex))
+	default:
+		return ""
+	}
+}
+
+func instCodexProfileID(inst *state.InstanceRecord) string {
+	if inst == nil {
+		return ""
+	}
+	if contract := state.CloneCodexConnectionContract(inst.CodexConnectionContract); contract != nil && strings.TrimSpace(contract.ProfileRef.ID) != "" {
+		return strings.TrimSpace(contract.ProfileRef.ID)
+	}
+	return state.CodexProfileIDFromLegacyProviderID(inst.CodexProviderID)
+}
+
 func codexModelGroup(model string) string {
 	model = strings.ToLower(strings.TrimSpace(model))
 	if model == "" {
 		return ""
 	}
-	if strings.HasPrefix(model, "gpt") {
-		return "gpt"
+	for _, prefix := range []string{"gpt", "o1", "o3", "o4", "codex-"} {
+		if strings.HasPrefix(model, prefix) {
+			return "gpt"
+		}
 	}
 	return "non_gpt"
+}
+
+func (s *Service) codexProfileSwitchStartsNewThread(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, target state.CodexProfileSummary) bool {
+	threadID := strings.TrimSpace(continuation.Attempt.ThreadID)
+	if surface == nil || threadID == "" {
+		return false
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	sourceGroup, sourceKnown := s.codexCurrentThreadModelGroupForSwitch(surface, inst, threadID)
+	targetGroup, targetKnown := s.codexProfileModelGroup(target)
+	return sourceKnown && targetKnown && sourceGroup != "" && targetGroup != "" && sourceGroup != targetGroup
+}
+
+func (s *Service) codexProfileSwitchNewThreadContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, previous headlessContractSwitchContinuation) headlessContractSwitchContinuation {
+	next := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, agentproto.BackendCodex, true)
+	next.RestartManagedNow = previous.RestartManagedNow
+	next.RestartInstanceID = previous.RestartInstanceID
+	if next.Attempt.ThreadCWD == "" {
+		next.Attempt.ThreadCWD = strings.TrimSpace(firstNonEmpty(previous.Attempt.ThreadCWD, next.Attempt.WorkspaceKey))
+	}
+	return next
 }
 
 func codexModelGroupNewThreadNoticeEvent(surface *state.SurfaceConsoleRecord) eventcontract.Event {

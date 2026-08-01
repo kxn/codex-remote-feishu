@@ -367,6 +367,84 @@ func TestCodexProviderCommandRestartsPinnedCodexThread(t *testing.T) {
 	}
 }
 
+func TestCodexProfileCommandCrossModelGroupRestartsWorkspaceForNewThread(t *testing.T) {
+	now := time.Date(2026, 8, 2, 11, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: "deepseek-profile", Kind: state.CodexProfileKindAPI, Name: "Deepseek", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true},
+		{ID: "gpt-profile", Kind: state.CodexProfileKindAPI, Name: "GPT", Model: "gpt-5.5", ReasoningEffort: "xhigh", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-deepseek",
+		DisplayName:     "repo",
+		WorkspaceRoot:   "/data/dl/repo",
+		WorkspaceKey:    "/data/dl/repo",
+		ShortName:       "repo",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "deepseek-profile",
+		Source:          "headless",
+		Managed:         true,
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "旧 Deepseek 会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-deepseek"
+	surface.ClaimedWorkspaceKey = "/data/dl/repo"
+	surface.SelectedThreadID = "thread-1"
+	surface.RouteMode = state.RouteModePinned
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-deepseek"], "thread-1") {
+		t.Fatal("expected test setup to claim thread")
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCodexProviderCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/codexprofile gpt-profile",
+	})
+
+	if surface.CodexProviderID != "gpt-profile" {
+		t.Fatalf("expected switched profile, got %#v", surface)
+	}
+	if surface.PendingHeadless == nil {
+		t.Fatalf("expected pending headless restart, got %#v", surface)
+	}
+	if surface.PendingHeadless.ThreadID != "" ||
+		surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeFreshWorkspace ||
+		!surface.PendingHeadless.PrepareNewThread {
+		t.Fatalf("expected cross-model profile switch to restart workspace for a new thread, got %#v", surface.PendingHeadless)
+	}
+	if surface.PendingHeadless.CodexProviderID != "gpt-profile" {
+		t.Fatalf("expected pending headless to carry target profile, got %#v", surface.PendingHeadless)
+	}
+	if len(events) != 5 {
+		t.Fatalf("expected kill + switched notice + new-thread notice + workspace restart notice + start command, got %#v", events)
+	}
+	if events[0].DaemonCommand == nil || events[0].DaemonCommand.Kind != control.DaemonCommandKillHeadless {
+		t.Fatalf("expected first event to kill old managed headless, got %#v", events)
+	}
+	if events[1].Notice == nil || events[1].Notice.Code != "codex_provider_switched" {
+		t.Fatalf("expected switched notice second, got %#v", events)
+	}
+	if events[2].Notice == nil || events[2].Notice.Code != "codex_model_group_new_thread" {
+		t.Fatalf("expected cross-model-group notice third, got %#v", events)
+	}
+	if events[3].Notice == nil || events[3].Notice.Code != "workspace_create_starting" {
+		t.Fatalf("expected workspace restart notice fourth, got %#v", events)
+	}
+	if events[4].DaemonCommand == nil ||
+		events[4].DaemonCommand.Kind != control.DaemonCommandStartHeadless ||
+		events[4].DaemonCommand.ThreadID != "" ||
+		events[4].DaemonCommand.CodexProviderID != "gpt-profile" {
+		t.Fatalf("expected start headless to create a new thread under target profile, got %#v", events[4])
+	}
+}
+
 func TestCodexProviderCommandRejectedInVSCodeMode(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 25, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
