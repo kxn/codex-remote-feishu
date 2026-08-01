@@ -12,6 +12,20 @@ test("admin profiles can be managed on desktop and mobile", async ({ page }) => 
     .filter({ has: page.getByRole("heading", { name: "Codex Profile", exact: true }) })
     .first();
   await expect(codexSection.getByRole("heading", { name: "Codex Profile", exact: true })).toBeVisible();
+  await codexSection.getByRole("button", { name: /新增 Profile/ }).click();
+  await codexSection.getByLabel(/名称/).fill("E2E Profile");
+  await codexSection.getByLabel(/端点地址/).fill("https://api.example.com/v1");
+  await codexSection.getByLabel(/API Key/).fill("e2e-secret");
+  await codexSection.getByLabel("主模型").fill("gpt-5.4");
+  await codexSection.getByLabel("推理强度").fill("high");
+  await codexSection.getByRole("button", { name: "保存 Profile" }).click();
+  await expect(codexSection.getByText("Codex Profile 已创建。")).toBeVisible();
+  await expect(codexSection.getByRole("button", { name: /E2E Profile/ })).toBeVisible();
+  await codexSection.getByRole("button", { name: "删除 Profile" }).click();
+  await page.getByRole("button", { name: "确认删除" }).click();
+  await expect(codexSection.getByText("Codex Profile 已删除。")).toBeVisible();
+  await expect(codexSection.getByRole("button", { name: /E2E Profile/ })).toHaveCount(0);
+
   await codexSection.getByRole("button", { name: /Team Proxy/ }).click();
   await expect(codexSection.getByLabel("上下文大小")).toBeVisible();
   await codexSection.getByLabel("上下文大小").selectOption("price_guard_272k");
@@ -30,7 +44,10 @@ test("admin profiles can be managed on desktop and mobile", async ({ page }) => 
   await expect(claudeSection.getByText("Claude 配置已保存。")).toBeVisible();
 });
 
+type CodexProfile = ReturnType<typeof codexProfiles>[number];
+
 async function installAdminMocks(page: Page) {
+  const codexProfileState = codexProfiles();
   await page.route("**/api/admin/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -59,14 +76,53 @@ async function installAdminMocks(page: Page) {
       return;
     }
     if (path.endsWith("/api/admin/codex/profiles") && method === "GET") {
-      await route.fulfill({ json: { profiles: codexProfiles() } });
+      await route.fulfill({ json: { profiles: codexProfileState } });
+      return;
+    }
+    if (path.endsWith("/api/admin/codex/profiles") && method === "POST") {
+      const profile: CodexProfile = {
+        id: "e2e-profile",
+        revision: 1,
+        etag: '"codex-profile-definition:e2e-profile:1"',
+        kind: "api",
+        name: String(body?.name ?? ""),
+        baseURL: String(body?.baseURL ?? ""),
+        model: String(body?.model ?? ""),
+        reviewModel: String(body?.reviewModel ?? ""),
+        reasoningEffort: String(body?.reasoningEffort ?? ""),
+        available: true,
+        hasAPIKey: true,
+        editable: true,
+        deletable: true,
+        contextEditable: true,
+        contextPreference: {
+          profileID: "e2e-profile",
+          revision: 1,
+          etag: '"codex-context-preference:e2e-profile:1"',
+          mode: "codex_default",
+        },
+      };
+      codexProfileState.push(profile);
+      await route.fulfill({ status: 201, json: { profile } });
+      return;
+    }
+    if (path.endsWith("/api/admin/codex/profiles/e2e-profile/references")) {
+      await route.fulfill({ json: { profileID: "e2e-profile", references: [] } });
+      return;
+    }
+    if (path.endsWith("/api/admin/codex/profiles/e2e-profile") && method === "DELETE") {
+      const index = codexProfileState.findIndex((profile) => profile.id === "e2e-profile");
+      if (index >= 0) {
+        codexProfileState.splice(index, 1);
+      }
+      await route.fulfill({ status: 204, body: "" });
       return;
     }
     if (path.endsWith("/api/admin/codex/profiles/team-proxy") && method === "PUT") {
       await route.fulfill({
         json: {
           profile: {
-            ...codexProfiles()[1],
+            ...codexProfileState.find((profile) => profile.id === "team-proxy"),
             name: body?.name,
             contextPreference: {
               profileID: "team-proxy",
