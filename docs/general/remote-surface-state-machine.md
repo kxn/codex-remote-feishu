@@ -1558,7 +1558,7 @@ daemon startup 的 vscode resume 额外规则：
    5. `thread.focused`
 2. daemon startup 时会先根据 `surface resume state` materialize latent detached surface，并恢复 route、`ProductMode`、`Backend`、`ClaudeProfileID` 与 `Verbosity` 执行 hint；合法 Feishu surface 随后由 gateway bot capability store 覆盖能力投影，`PlanMode` 也只从该 bot store 恢复。`surface resume state` 仍是 surface route 与 headless thread 恢复目标的唯一持久化源，但不是 bot capability 的第二写源。startup 不再导入独立的 `headless-restore-hints.json`。
 3. `surface resume state` 只有成功载入后才会 materialize 并进入后台恢复；读取、JSON 或 schema version 失败时，daemon 会把该 store 标为 read-only degraded，不创建替代空 store、不清掉进程内已有 recovery episode，也不允许后续 sync 覆盖原文件。若状态已成功解码但 canonical sanitation 保存失败，规范化后的 entry 仍可用于 materialize/recovery，但 store 保持只读。修复文件并重新 configure（通常是重启 daemon）后才恢复持久化写入。
-   - Profile Catalog migration 只在 admin config 与 context preference、bot capability、surface resume 三个 durable store 均 ready 后运行，因此 `SetHeadlessRuntime -> ConfigureAdmin` 与反向初始化顺序不会制造不可恢复 degraded。
+   - Profile Catalog migration 只在 admin config 与 context preference、bot capability、surface resume 三个 durable store 均 ready 后运行，因此 `SetHeadlessRuntime -> ConfigureAdmin` 与反向初始化顺序不会制造不可恢复 degraded。若 config 已经标记完成 migration，但 context preference store 缺少当前 config 中的 Codex/Claude profile 条目，startup 会先按 config 幂等补齐缺项再 verify / materialize catalog；只有 store 读取损坏、不可写、legacy provider marker 冲突或 profile record 本身无法解析时才进入 profile catalog degraded。
 4. 后台恢复前置条件：
    1. surface 当前处于 headless 主链（当前持久化 token 仍是 `ProductMode=normal`）
    2. surface 当前没有显式 attach
@@ -1882,6 +1882,8 @@ retained-offline overlay 额外规则：
 46. **Profile migration 将 legacy Codex desired/ref 写入 surface resume 后，又被通用 projector 用浮动 Provider 重建并清掉精确 admission；P2P 旧 identity 合并还会静默覆盖不同 Profile 选择**：已修复。projector 只在同 thread + 同 Profile 时保留 definition/preference 精确 ref；冲突合并写入 `profile_selection_conflict`，对应 surface 启动 fail closed，并以私聊显式重选作为手动出口。
 
 47. **OAuth Profile 启动前 fresh auth probe 释放 daemon 锁后，旧 start 命令可能在 `/detach`、shutdown 或重复 start 后继续启动孤儿 headless 进程**：已修复。带 `SurfaceSessionID + InstanceID` 的 managed headless start 必须在捕获授权时看到原 surface 仍持有 exact pending launch；如果 pending 已被 `/detach` 等操作提前消费，start 命令会静默放弃且不会再执行 probe。对于仍被授权的启动，真正调用 `startHeadless` 前还会重新检查 daemon 未 shutdown、原 pending 仍指向同一 `InstanceID`，且同一 managed instance 尚未登记进程。若授权已失效，启动静默放弃，不再生成无法 kill 的孤儿进程或重复进程。
+
+48. **已迁移 profile catalog 的 context preference state 缺少后续新增/历史遗漏的 Claude profile，导致升级后 Claude session 恢复被误判为“Claude 配置不可用”**：已修复。当前 startup 在 `ProfileCatalogMigrationVersion>=1` 且 durable stores 可读写时，会从 committed config 幂等补齐缺失的 Codex/Claude context preference，再执行 catalog verify 与 materialize；因此 `mimo`、`glm` 这类已存在于 config 的 Claude profile 不会因为 preference state 缺项而阻断 headless restore。真正损坏或不可写的 preference store 仍保持 fail-closed degraded。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

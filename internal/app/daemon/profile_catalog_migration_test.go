@@ -415,6 +415,65 @@ func TestConfigureAdminProjectsCommittedCatalogAfterHeadlessRuntime(t *testing.T
 	}
 }
 
+func TestCommittedProfileCatalogRepairsMissingContextPreferences(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	stateDir := filepath.Join(root, "state")
+	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
+		Name: "Expensive Codex", BaseURL: "https://codex.example/v1", APIKey: "secret",
+		Model: "gpt-5.4", ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
+	}
+	cfg := config.DefaultAppConfig()
+	cfg.Codex.Profiles = []config.CodexAPIProfileRecord{record}
+	cfg.Codex.ProfileCatalogMigrationVersion = profileCatalogMigrationVersion
+	cfg.Claude.Profiles = []config.ClaudeProfileConfig{
+		{ID: "mimo", Name: "Mimo", AuthMode: config.ClaudeAuthModeAuthToken, AuthToken: "secret", BaseURL: "https://claude.example", Model: "mimo-v2.5-pro"},
+		{ID: "glm", Name: "GLM", AuthMode: config.ClaudeAuthModeAuthToken, AuthToken: "secret", BaseURL: "https://claude.example", Model: "glm-5.1[1m]"},
+	}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	preferenceStore := profilecontextstate.NewStore(profilecontextstate.StatePath(stateDir))
+	if err := preferenceStore.EnsureCodexProfile(config.CodexNativeProfileID, state.CodexContextModeDefault); err != nil {
+		t.Fatalf("seed native preference: %v", err)
+	}
+	if err := preferenceStore.EnsureClaudeProfile(config.ClaudeDefaultProfileID, state.ClaudeContextModeDefault); err != nil {
+		t.Fatalf("seed claude default preference: %v", err)
+	}
+
+	app := startProfileMigrationTestApp(t, configPath, stateDir)
+	app.mu.Lock()
+	migrationErr := app.profileCatalogMigrationErr
+	app.mu.Unlock()
+	if migrationErr != nil {
+		t.Fatalf("committed catalog repair entered degraded mode: %v", migrationErr)
+	}
+	repaired, err := profilecontextstate.LoadStore(profilecontextstate.StatePath(stateDir))
+	if err != nil {
+		t.Fatalf("load repaired preferences: %v", err)
+	}
+	if preference, ok := repaired.CodexCurrent(record.ID); !ok || preference.Mode != state.CodexContextModeDefault {
+		t.Fatalf("repaired codex preference = %#v ok=%v", preference, ok)
+	}
+	if preference, ok := repaired.ClaudeCurrent("mimo"); !ok || preference.Mode != state.ClaudeContextModeDefault {
+		t.Fatalf("repaired mimo preference = %#v ok=%v", preference, ok)
+	}
+	if preference, ok := repaired.ClaudeCurrent("glm"); !ok || preference.Mode != state.ClaudeContextModeExtended {
+		t.Fatalf("repaired glm preference = %#v ok=%v", preference, ok)
+	}
+
+	list := performAdminRequest(t, app, http.MethodGet, "/api/admin/claude/profiles", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("claude profiles status = %d body=%s", list.Code, list.Body.String())
+	}
+	if _, _, err := app.applyClaudeHeadlessProfileEnv(nil, agentproto.BackendClaude, "mimo"); err != nil {
+		t.Fatalf("apply repaired claude profile: %v", err)
+	}
+}
+
 func TestProfileCatalogMigrationFailsClosedWhenPreferenceStateIsCorrupt(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.json")

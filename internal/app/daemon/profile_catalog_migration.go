@@ -47,6 +47,9 @@ func (a *App) runProfileCatalogMigrationLocked() error {
 		if err := a.verifyProfileMigrationStoresWritable(); err != nil {
 			return err
 		}
+		if err := a.ensureCommittedProfileContextPreferences(loaded.Config); err != nil {
+			return err
+		}
 		if err := a.verifyCommittedProfileCatalog(loaded.Config); err != nil {
 			return err
 		}
@@ -110,6 +113,34 @@ func (a *App) runProfileCatalogMigrationLocked() error {
 	a.materializeBotCapabilitySettingsStateLocked()
 	a.syncSurfaceResumeStateLocked(nil)
 	a.mu.Unlock()
+	return nil
+}
+
+func (a *App) ensureCommittedProfileContextPreferences(cfg config.AppConfig) error {
+	store, err := a.profileContextPreferenceStore()
+	if err != nil {
+		return err
+	}
+	if err := store.EnsureCodexProfile(config.CodexNativeProfileID, state.CodexContextModeDefault); err != nil {
+		return fmt.Errorf("ensure native codex context preference: %w", err)
+	}
+	for _, record := range cfg.Codex.Profiles {
+		if err := store.EnsureCodexProfile(record.ID, state.CodexContextModeDefault); err != nil {
+			return fmt.Errorf("ensure codex context preference for %s: %w", record.ID, err)
+		}
+	}
+	if err := store.EnsureClaudeProfile(config.ClaudeDefaultProfileID, state.ClaudeContextModeDefault); err != nil {
+		return fmt.Errorf("ensure default claude context preference: %w", err)
+	}
+	for _, profile := range cfg.Claude.Profiles {
+		mode := state.ClaudeContextModeDefault
+		if _, extended := config.SplitClaudeExtendedContextSuffix(profile.Model); extended {
+			mode = state.ClaudeContextModeExtended
+		}
+		if err := store.EnsureClaudeProfile(profile.ID, mode); err != nil {
+			return fmt.Errorf("ensure claude context preference for %s: %w", profile.ID, err)
+		}
+	}
 	return nil
 }
 
