@@ -144,6 +144,41 @@ func TestTurnPatchRequestFlowAdvancesAndRejectsOtherUser(t *testing.T) {
 	}
 }
 
+func TestTurnPatchRequestRejectsMissingActorWhenOwnerIsKnown(t *testing.T) {
+	app, _, _ := newTurnPatchTestApp(t)
+	_, _ = interceptTurnPatchTestAction(t, app, control.Action{
+		Kind:             control.ActionTurnPatchCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/bendtomywill",
+	})
+	flow := mustOnlyTurnPatchFlow(t, app)
+	firstQuestionID := flow.Candidates[0].QuestionID
+	app.service.Surface("surface-1").ActorUserID = ""
+
+	events, handled := interceptTurnPatchTestAction(t, app, control.Action{
+		Kind:             control.ActionRespondRequest,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		MessageID:        "om-patch-1",
+		Request: &control.ActionRequestResponse{
+			RequestID:       flow.RequestID,
+			RequestType:     "request_user_input",
+			RequestRevision: flow.Revision,
+			Answers: map[string][]string{
+				firstQuestionID: {"patched refusal"},
+			},
+		},
+		RequestAnswers: map[string][]string{
+			firstQuestionID: {"patched refusal"},
+		},
+	})
+	if !handled || len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "turn_patch_unauthorized" {
+		t.Fatalf("expected missing actor to be unauthorized, got handled=%v events=%#v", handled, events)
+	}
+}
+
 func TestTurnPatchApplySuccessWritesRolloutAndRestartsChild(t *testing.T) {
 	app, rolloutPath, _ := newTurnPatchTestApp(t)
 	_, _ = interceptTurnPatchTestAction(t, app, control.Action{

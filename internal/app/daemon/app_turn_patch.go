@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -208,8 +209,7 @@ func (a *App) handleTurnPatchRequestActionLocked(action control.Action, flow *tu
 			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_expired", "这张修补卡已失效，请重新发送 `/bendtomywill`。"),
 		}
 	}
-	actorUserID := strings.TrimSpace(firstNonEmpty(action.ActorUserID, a.service.SurfaceActorUserID(action.SurfaceSessionID)))
-	if owner := strings.TrimSpace(flow.OwnerUserID); owner != "" && actorUserID != "" && owner != actorUserID {
+	if owneridentity.Decide(flow.OwnerUserID, action.ActorUserID, a.service.SurfaceActorUserID(action.SurfaceSessionID)) != owneridentity.DecisionAllow {
 		a.ensureSurfaceRouteForNotice(action)
 		return []eventcontract.Event{
 			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_unauthorized", "这张修补卡只允许发起者本人操作。"),

@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 )
 
 const (
@@ -91,8 +92,7 @@ func (a *App) requireUpgradeOwnerFlowLocked(surfaceID, flowID, actorUserID strin
 	if strings.TrimSpace(flow.SurfaceSessionID) != "" && strings.TrimSpace(flow.SurfaceSessionID) != strings.TrimSpace(surfaceID) {
 		return nil, []eventcontract.Event{upgradeNoticeEvent(strings.TrimSpace(surfaceID), "upgrade_owner_expired", "这张升级卡片已失效，请重新发送 `/upgrade latest`。")}
 	}
-	actorUserID = strings.TrimSpace(firstNonEmpty(actorUserID, a.service.SurfaceActorUserID(surfaceID)))
-	if owner := strings.TrimSpace(flow.OwnerUserID); owner != "" && actorUserID != "" && owner != actorUserID {
+	if owneridentity.Decide(flow.OwnerUserID, actorUserID, a.service.SurfaceActorUserID(surfaceID)) != owneridentity.DecisionAllow {
 		return nil, []eventcontract.Event{upgradeNoticeEvent(strings.TrimSpace(surfaceID), "upgrade_owner_unauthorized", "这张升级卡片只允许发起者本人操作。")}
 	}
 	return flow, nil

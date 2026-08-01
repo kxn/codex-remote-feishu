@@ -734,6 +734,33 @@ func TestPathPickerRejectsNonOwnerAndPreservesGate(t *testing.T) {
 	}
 }
 
+func TestPathPickerRejectsMissingActorWhenOwnerIsKnown(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	events := svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:     control.PathPickerModeDirectory,
+		RootPath: root,
+	})
+	view := singlePathPickerEvent(t, events)
+	svc.root.Surfaces["surface-1"].ActorUserID = ""
+
+	rejectEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPathPickerCancel,
+		SurfaceSessionID: "surface-1",
+		PickerID:         view.PickerID,
+	})
+	if len(rejectEvents) != 1 || rejectEvents[0].Notice == nil || rejectEvents[0].Notice.Code != "path_picker_unauthorized" {
+		t.Fatalf("expected missing actor to be unauthorized, got %#v", rejectEvents)
+	}
+	if svc.activePathPicker(svc.root.Surfaces["surface-1"]) == nil {
+		t.Fatalf("expected missing actor action to preserve active picker")
+	}
+}
+
 func TestPathPickerExpiresAndClearsGate(t *testing.T) {
 	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

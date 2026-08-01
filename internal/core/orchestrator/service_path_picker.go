@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -331,8 +332,7 @@ func (s *Service) requireActivePathPicker(surface *state.SurfaceConsoleRecord, p
 	if strings.TrimSpace(pickerID) == "" || strings.TrimSpace(record.PickerID) != strings.TrimSpace(pickerID) {
 		return nil, notice(surface, "path_picker_expired", "这个旧路径选择器已失效，请重新发起。")
 	}
-	actorUserID = strings.TrimSpace(firstNonEmpty(actorUserID, surface.ActorUserID))
-	if ownerUserID := strings.TrimSpace(record.OwnerUserID); ownerUserID != "" && actorUserID != "" && ownerUserID != actorUserID {
+	if owneridentity.Decide(record.OwnerUserID, actorUserID, surface.ActorUserID) != owneridentity.DecisionAllow {
 		return nil, notice(surface, "path_picker_unauthorized", "这个路径选择器只允许发起者本人操作，请让发起者继续完成或取消。")
 	}
 	return record, nil

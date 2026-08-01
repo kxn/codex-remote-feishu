@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
+	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -266,8 +267,7 @@ func (s *Service) requireActiveReviewCommitPicker(surface *state.SurfaceConsoleR
 		s.clearReviewCommitPickerRuntime(surface)
 		return nil, nil, "review_commit_picker_expired", "这张 commit 选择卡片已失效，请重新发送 `/review commit`。"
 	}
-	actorUserID = strings.TrimSpace(firstNonEmpty(actorUserID, surface.ActorUserID))
-	if ownerUserID := strings.TrimSpace(flow.OwnerUserID); ownerUserID != "" && actorUserID != "" && ownerUserID != actorUserID {
+	if owneridentity.Decide(flow.OwnerUserID, actorUserID, surface.ActorUserID) != owneridentity.DecisionAllow {
 		return nil, nil, "review_commit_picker_unauthorized", "这张 commit 选择卡片只允许发起者本人操作。"
 	}
 	if fromCardAction {

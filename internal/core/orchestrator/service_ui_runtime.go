@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
+	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -491,8 +492,7 @@ func (s *Service) requireActiveOwnerCardFlow(surface *state.SurfaceConsoleRecord
 	if strings.TrimSpace(flowID) == "" || strings.TrimSpace(flow.FlowID) != strings.TrimSpace(flowID) {
 		return nil, notice(surface, "owner_card_expired", strings.TrimSpace(expiredText))
 	}
-	actorUserID = strings.TrimSpace(firstNonEmpty(actorUserID, surface.ActorUserID))
-	if ownerUserID := strings.TrimSpace(flow.OwnerUserID); ownerUserID != "" && actorUserID != "" && ownerUserID != actorUserID {
+	if owneridentity.Decide(flow.OwnerUserID, actorUserID, surface.ActorUserID) != owneridentity.DecisionAllow {
 		return nil, notice(surface, "owner_card_unauthorized", strings.TrimSpace(unauthorizedText))
 	}
 	return flow, nil

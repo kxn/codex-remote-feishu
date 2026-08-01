@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -106,8 +107,7 @@ func (a *App) requireVSCodeMigrationFlowLocked(surfaceID, flowID, actorUserID st
 	if flow == nil || strings.TrimSpace(flow.FlowID) != flowID {
 		return nil, []eventcontract.Event{vscodeMigrationStandaloneEvent(surfaceID, true, "迁移卡片已失效", []string{"这张 VS Code 迁移卡片已失效，请重新发送 `/vscode-migrate`。"}, "", "error", nil)}
 	}
-	actorUserID = strings.TrimSpace(firstNonEmpty(actorUserID, a.service.SurfaceActorUserID(surfaceID)))
-	if owner := strings.TrimSpace(flow.OwnerUserID); owner != "" && actorUserID != "" && owner != actorUserID {
+	if owneridentity.Decide(flow.OwnerUserID, actorUserID, a.service.SurfaceActorUserID(surfaceID)) != owneridentity.DecisionAllow {
 		return nil, []eventcontract.Event{vscodeMigrationStandaloneEvent(surfaceID, true, "无法执行迁移", []string{"这张 VS Code 迁移卡片只允许发起者本人操作。"}, "", "error", nil)}
 	}
 	return flow, nil

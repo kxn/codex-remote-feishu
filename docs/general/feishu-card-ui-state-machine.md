@@ -72,6 +72,7 @@
 - `orchestrator / Feishu UI controller`
   - 负责 `show_*`、`/menu`、bare config-card 这类 pure navigation 的 controller 分流与事件构建
   - 负责通过阶段 1 暴露的 `Feishu*Context` query/policy 边界生成 UI-owned read model 与 request 事件
+  - owner-card / picker / review 等 context-bound flow 当前统一经 `internal/core/owneridentity` 判定 owner identity：owner 为空保持开放；owner 非空时必须能从 action actor 或 surface actor 得到同一用户，否则按 unauthorized fail-closed
   - 对 headless 主链 `/list` / `/use` / `/useall`，以及 attach-unbound / `selected_thread_lost` / `thread_claim_lost` 这类被动恢复入口，当前先产出 `FeishuTargetPickerView` read model，再连同 `FeishuTargetPickerContext` 穿过 `UIEvent` 边界
   - 对 VS Code instance/thread selection、kick-thread confirm，以及仍保留 selection 卡形态的少量兼容路径，当前统一先产出 `FeishuSelectionView` read model，再连同 `FeishuSelectionContext` 穿过 `UIEvent` 边界
   - 对 `/menu`、bare `/admin`，以及 bare `/mode` `/autowhip` `/autocontinue` `/reasoning` `/access` `/plan` `/model` `/verbose` `/claudeprofile` `/codexprofile`（含 hidden alias `/codexprovider`），当前统一产出 `FeishuPageView` read model，并连同 `FeishuPageContext` 走 `UIEventFeishuPageView` 边界（配置页内部仍复用 catalog-to-page builder 生成 page 内容）
@@ -713,7 +714,7 @@ MCP request 卡片当前新增的可视语义：
   - `path_picker_expired`
   - `path_picker_unauthorized`
   - `history_expired`
-  - 这些提示的目的就是阻止旧卡或非 owner 点击继续改写当前前台状态，因此当前继续保留为显式独立拒绝提示
+  - 这些提示的目的就是阻止旧卡、非 owner 点击，或 owner 已知但 callback/surface actor identity 缺失的动作继续改写当前前台状态，因此当前继续保留为显式独立拒绝提示
 3. legacy `FeishuSelectionView`
   - headless 主链 `/workspace list`，以及 alias `/list` / `/use` / `/useall`，已迁到 target picker
   - VS Code instance/thread selection 与 kick-thread confirm 当前仍走 `FeishuSelectionView`，但 adapter live 路径已经直接消费 `FeishuSelectionView + FeishuSelectionSemantics`，不再回退 `FeishuDirectSelectionPrompt`
