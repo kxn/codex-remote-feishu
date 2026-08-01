@@ -93,6 +93,49 @@ func TestTranslatePromptSendApplyTargetProfileDefaultPolicyOmitsModelReasoningAn
 	}
 }
 
+func TestTranslatePromptSendApplyTargetProfilePolicyAddsTurnStartCollaborationSettings(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","collaborationMode":{"mode":"custom","settings":{"model":"gpt-5.5","reasoning_effort":"xhigh"}}}}`)); err != nil {
+		t.Fatalf("seed current turn template: %v", err)
+	}
+
+	commands, err := tr.TranslateCommand(agentproto.Command{
+		Kind:   agentproto.CommandPromptSend,
+		Origin: agentproto.Origin{ChatID: "surface-1"},
+		Target: agentproto.Target{ThreadID: "thread-1", CWD: "/tmp/project"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+		Overrides: agentproto.PromptOverrides{
+			AccessMode: agentproto.AccessModeFullAccess,
+			PlanMode:   "off",
+		},
+		CodexResume: &agentproto.CodexResumePolicy{
+			Mode:            agentproto.CodexResumeApplyTargetProfile,
+			ModelProviderID: "codex_remote_profile_deepseek",
+			ModelMode:       agentproto.CodexThreadValueExplicit,
+			Model:           "deepseek-v4-flash",
+			ReasoningMode:   agentproto.CodexThreadValueExplicit,
+			ReasoningEffort: "high",
+			ContextMode:     "extended_1m",
+		},
+	})
+	if err != nil {
+		t.Fatalf("translate command: %v", err)
+	}
+
+	params := payloadParams(t, decodeSinglePayload(t, commands), "turn/start")
+	if params["model"] != "deepseek-v4-flash" || params["effort"] != "high" {
+		t.Fatalf("expected top-level profile policy, got %#v", params)
+	}
+	collaborationMode, _ := params["collaborationMode"].(map[string]any)
+	settings, _ := collaborationMode["settings"].(map[string]any)
+	if settings["model"] != "deepseek-v4-flash" || settings["reasoning_effort"] != "high" {
+		t.Fatalf("expected profile policy in collaborationMode settings, got %#v", params["collaborationMode"])
+	}
+	if collaborationMode["mode"] != "default" {
+		t.Fatalf("expected prompt plan override to preserve default mode, got %#v", params["collaborationMode"])
+	}
+}
+
 func TestTranslateCompactAndChildRestartRestoreCarryCodexResumePolicy(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	if _, err := tr.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-current","cwd":"/tmp/current"}}`)); err != nil {

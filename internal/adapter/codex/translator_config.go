@@ -170,11 +170,34 @@ func applyCodexResumePolicyToTurnStart(template map[string]any, policy *agentpro
 	if policy == nil {
 		return
 	}
+	collaborationMode := lookupMapFromAny(template["collaborationMode"])
+	settings := lookupMapFromAny(collaborationMode["settings"])
 	if shouldSendCodexPolicyValue(policy.ModelMode) && policy.Model != "" {
 		template["model"] = policy.Model
+		settings["model"] = policy.Model
+	} else {
+		delete(template, "model")
+		delete(settings, "model")
 	}
 	if shouldSendCodexPolicyValue(policy.ReasoningMode) && policy.ReasoningEffort != "" {
 		template["effort"] = policy.ReasoningEffort
+		settings["reasoning_effort"] = policy.ReasoningEffort
+	} else {
+		delete(template, "effort")
+		delete(settings, "reasoning_effort")
+	}
+	if len(settings) != 0 {
+		if len(collaborationMode) == 0 {
+			collaborationMode = map[string]any{}
+		}
+		if lookupStringFromAny(collaborationMode["mode"]) == "" {
+			collaborationMode["mode"] = "custom"
+		}
+		collaborationMode["settings"] = settings
+		template["collaborationMode"] = collaborationMode
+	} else if len(collaborationMode) != 0 {
+		delete(collaborationMode, "settings")
+		template["collaborationMode"] = collaborationMode
 	}
 }
 
