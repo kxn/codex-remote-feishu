@@ -150,10 +150,11 @@ func TestMultiGatewayControllerApplyFallsBackToSoleGateway(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if len(runtimes["app-1"].applyCalls) != 1 {
-		t.Fatalf("unexpected apply calls: %#v", runtimes["app-1"].applyCalls)
+	applyCalls := runtimes.get(t, "app-1").applyCallsSnapshot()
+	if len(applyCalls) != 1 {
+		t.Fatalf("unexpected apply calls: %#v", applyCalls)
 	}
-	if got := runtimes["app-1"].applyCalls[0][0].Text; got != "hello" {
+	if got := applyCalls[0][0].Text; got != "hello" {
 		t.Fatalf("unexpected operation text: %q", got)
 	}
 }
@@ -172,10 +173,11 @@ func TestMultiGatewayControllerSendIMFileFallsBackToSoleGateway(t *testing.T) {
 	if result.GatewayID != "app-1" {
 		t.Fatalf("unexpected result gateway: %#v", result)
 	}
-	if len(runtimes["app-1"].sendIMFileCalls) != 1 {
-		t.Fatalf("unexpected send file calls: %#v", runtimes["app-1"].sendIMFileCalls)
+	sendFileCalls := runtimes.get(t, "app-1").sendIMFileCallsSnapshot()
+	if len(sendFileCalls) != 1 {
+		t.Fatalf("unexpected send file calls: %#v", sendFileCalls)
 	}
-	if got := runtimes["app-1"].sendIMFileCalls[0].GatewayID; got != "app-1" {
+	if got := sendFileCalls[0].GatewayID; got != "app-1" {
 		t.Fatalf("expected resolved gateway id in runtime request, got %q", got)
 	}
 }
@@ -217,10 +219,11 @@ func TestMultiGatewayControllerSendIMVideoFallsBackToSoleGateway(t *testing.T) {
 	if result.GatewayID != "app-1" {
 		t.Fatalf("unexpected result gateway: %#v", result)
 	}
-	if len(runtimes["app-1"].sendIMVideoCalls) != 1 {
-		t.Fatalf("unexpected send video calls: %#v", runtimes["app-1"].sendIMVideoCalls)
+	sendVideoCalls := runtimes.get(t, "app-1").sendIMVideoCallsSnapshot()
+	if len(sendVideoCalls) != 1 {
+		t.Fatalf("unexpected send video calls: %#v", sendVideoCalls)
 	}
-	if got := runtimes["app-1"].sendIMVideoCalls[0].GatewayID; got != "app-1" {
+	if got := sendVideoCalls[0].GatewayID; got != "app-1" {
 		t.Fatalf("expected resolved gateway id in runtime request, got %q", got)
 	}
 }
@@ -265,8 +268,10 @@ func TestMultiGatewayControllerRewriteFinalBlockFallsBackToSurfaceGateway(t *tes
 	if result.Block.Text != "app-2:hello" {
 		t.Fatalf("unexpected rewritten block: %#v", result.Block)
 	}
-	if previewers["app-1"].calls != 0 || previewers["app-2"].calls != 1 {
-		t.Fatalf("unexpected previewer calls: app-1=%d app-2=%d", previewers["app-1"].calls, previewers["app-2"].calls)
+	app1Calls := previewers.get(t, "app-1").callsSnapshot()
+	app2Calls := previewers.get(t, "app-2").callsSnapshot()
+	if app1Calls != 0 || app2Calls != 1 {
+		t.Fatalf("unexpected previewer calls: app-1=%d app-2=%d", app1Calls, app2Calls)
 	}
 }
 
@@ -288,21 +293,21 @@ func newTargetResolverTestController(states map[string]testGatewayWorkerState) *
 	return controller
 }
 
-func startGatewayControllerForTest(t *testing.T, gatewayIDs []string, withPreviewers bool) (*MultiGatewayController, map[string]*fakeGatewayRuntime, map[string]*fakePreviewer) {
+func startGatewayControllerForTest(t *testing.T, gatewayIDs []string, withPreviewers bool) (*MultiGatewayController, *fakeGatewayRuntimeRegistry, *fakePreviewerRegistry) {
 	t.Helper()
 
 	controller := NewMultiGatewayController()
-	runtimes := map[string]*fakeGatewayRuntime{}
-	previewers := map[string]*fakePreviewer{}
+	runtimes := newFakeGatewayRuntimeRegistry()
+	previewers := newFakePreviewerRegistry()
 	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
 		runtime := newFakeGatewayRuntime(cfg.GatewayID)
-		runtimes[cfg.GatewayID] = runtime
+		runtimes.set(cfg.GatewayID, runtime)
 		return runtime
 	}
 	if withPreviewers {
 		controller.newPreviewer = func(_ gatewayRuntime, cfg GatewayAppConfig) gatewayPreviewRuntime {
 			previewer := &fakePreviewer{gatewayID: cfg.GatewayID}
-			previewers[cfg.GatewayID] = previewer
+			previewers.set(cfg.GatewayID, previewer)
 			return previewer
 		}
 	}
@@ -325,7 +330,7 @@ func startGatewayControllerForTest(t *testing.T, gatewayIDs []string, withPrevie
 		done <- controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
 	}()
 	for _, gatewayID := range gatewayIDs {
-		waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, gatewayID))
+		waitFakeGatewayStarted(t, runtimes.wait(t, gatewayID))
 	}
 
 	t.Cleanup(func() {

@@ -17,10 +17,10 @@ import (
 
 func TestMultiGatewayControllerRoutesApplyByGatewayID(t *testing.T) {
 	controller := NewMultiGatewayController()
-	runtimes := map[string]*fakeGatewayRuntime{}
+	runtimes := newFakeGatewayRuntimeRegistry()
 	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
 		runtime := newFakeGatewayRuntime(cfg.GatewayID)
-		runtimes[cfg.GatewayID] = runtime
+		runtimes.set(cfg.GatewayID, runtime)
 		return runtime
 	}
 
@@ -43,8 +43,10 @@ func TestMultiGatewayControllerRoutesApplyByGatewayID(t *testing.T) {
 		done <- controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
 	}()
 
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-1"))
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-2"))
+	app1 := runtimes.wait(t, "app-1")
+	app2 := runtimes.wait(t, "app-2")
+	waitFakeGatewayStarted(t, app1)
+	waitFakeGatewayStarted(t, app2)
 
 	err := controller.Apply(context.Background(), []Operation{
 		{GatewayID: "app-1", Kind: OperationSendText, Text: "one"},
@@ -53,11 +55,13 @@ func TestMultiGatewayControllerRoutesApplyByGatewayID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if len(runtimes["app-1"].applyCalls) != 1 || runtimes["app-1"].applyCalls[0][0].Text != "one" {
-		t.Fatalf("unexpected app-1 apply calls: %#v", runtimes["app-1"].applyCalls)
+	app1ApplyCalls := app1.applyCallsSnapshot()
+	if len(app1ApplyCalls) != 1 || app1ApplyCalls[0][0].Text != "one" {
+		t.Fatalf("unexpected app-1 apply calls: %#v", app1ApplyCalls)
 	}
-	if len(runtimes["app-2"].applyCalls) != 1 || runtimes["app-2"].applyCalls[0][0].Text != "two" {
-		t.Fatalf("unexpected app-2 apply calls: %#v", runtimes["app-2"].applyCalls)
+	app2ApplyCalls := app2.applyCallsSnapshot()
+	if len(app2ApplyCalls) != 1 || app2ApplyCalls[0][0].Text != "two" {
+		t.Fatalf("unexpected app-2 apply calls: %#v", app2ApplyCalls)
 	}
 
 	statuses := controller.Status()
@@ -127,16 +131,16 @@ func TestMultiGatewayControllerPropagatesMutatedOperationsBackToCaller(t *testin
 
 func TestMultiGatewayControllerRoutesPreviewByGatewayID(t *testing.T) {
 	controller := NewMultiGatewayController()
-	runtimes := map[string]*fakeGatewayRuntime{}
-	previewers := map[string]*fakePreviewer{}
+	runtimes := newFakeGatewayRuntimeRegistry()
+	previewers := newFakePreviewerRegistry()
 	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
 		runtime := newFakeGatewayRuntime(cfg.GatewayID)
-		runtimes[cfg.GatewayID] = runtime
+		runtimes.set(cfg.GatewayID, runtime)
 		return runtime
 	}
 	controller.newPreviewer = func(_ gatewayRuntime, cfg GatewayAppConfig) gatewayPreviewRuntime {
 		previewer := &fakePreviewer{gatewayID: cfg.GatewayID}
-		previewers[cfg.GatewayID] = previewer
+		previewers.set(cfg.GatewayID, previewer)
 		return previewer
 	}
 
@@ -156,8 +160,8 @@ func TestMultiGatewayControllerRoutesPreviewByGatewayID(t *testing.T) {
 	go func() {
 		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
 	}()
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-1"))
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-2"))
+	waitFakeGatewayStarted(t, runtimes.wait(t, "app-1"))
+	waitFakeGatewayStarted(t, runtimes.wait(t, "app-2"))
 
 	result, err := controller.RewriteFinalBlock(context.Background(), previewpkg.FinalBlockPreviewRequest{
 		GatewayID: "app-2",
@@ -173,17 +177,19 @@ func TestMultiGatewayControllerRoutesPreviewByGatewayID(t *testing.T) {
 	if result.Block.Text != "app-2:hello" {
 		t.Fatalf("unexpected rewritten block: %#v", result.Block)
 	}
-	if previewers["app-1"].calls != 0 || previewers["app-2"].calls != 1 {
-		t.Fatalf("unexpected previewer calls: app-1=%d app-2=%d", previewers["app-1"].calls, previewers["app-2"].calls)
+	app1Calls := previewers.get(t, "app-1").callsSnapshot()
+	app2Calls := previewers.get(t, "app-2").callsSnapshot()
+	if app1Calls != 0 || app2Calls != 1 {
+		t.Fatalf("unexpected previewer calls: app-1=%d app-2=%d", app1Calls, app2Calls)
 	}
 }
 
 func TestMultiGatewayControllerRoutesSendIMFileByGatewayID(t *testing.T) {
 	controller := NewMultiGatewayController()
-	runtimes := map[string]*fakeGatewayRuntime{}
+	runtimes := newFakeGatewayRuntimeRegistry()
 	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
 		runtime := newFakeGatewayRuntime(cfg.GatewayID)
-		runtimes[cfg.GatewayID] = runtime
+		runtimes.set(cfg.GatewayID, runtime)
 		return runtime
 	}
 
@@ -203,8 +209,10 @@ func TestMultiGatewayControllerRoutesSendIMFileByGatewayID(t *testing.T) {
 	go func() {
 		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
 	}()
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-1"))
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-2"))
+	app1 := runtimes.wait(t, "app-1")
+	app2 := runtimes.wait(t, "app-2")
+	waitFakeGatewayStarted(t, app1)
+	waitFakeGatewayStarted(t, app2)
 
 	result, err := controller.SendIMFile(context.Background(), IMFileSendRequest{
 		GatewayID:        "app-2",
@@ -215,13 +223,15 @@ func TestMultiGatewayControllerRoutesSendIMFileByGatewayID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendIMFile: %v", err)
 	}
-	if len(runtimes["app-1"].sendIMFileCalls) != 0 {
-		t.Fatalf("unexpected app-1 send calls: %#v", runtimes["app-1"].sendIMFileCalls)
+	app1Calls := app1.sendIMFileCallsSnapshot()
+	if len(app1Calls) != 0 {
+		t.Fatalf("unexpected app-1 send calls: %#v", app1Calls)
 	}
-	if len(runtimes["app-2"].sendIMFileCalls) != 1 {
-		t.Fatalf("unexpected app-2 send calls: %#v", runtimes["app-2"].sendIMFileCalls)
+	app2Calls := app2.sendIMFileCallsSnapshot()
+	if len(app2Calls) != 1 {
+		t.Fatalf("unexpected app-2 send calls: %#v", app2Calls)
 	}
-	got := runtimes["app-2"].sendIMFileCalls[0]
+	got := app2Calls[0]
 	if got.SurfaceSessionID != "surface-2" || got.ChatID != "oc_2" || got.Path != "/tmp/report.pdf" {
 		t.Fatalf("unexpected send request: %#v", got)
 	}
@@ -232,10 +242,10 @@ func TestMultiGatewayControllerRoutesSendIMFileByGatewayID(t *testing.T) {
 
 func TestMultiGatewayControllerRoutesSendIMImageByGatewayID(t *testing.T) {
 	controller := NewMultiGatewayController()
-	runtimes := map[string]*fakeGatewayRuntime{}
+	runtimes := newFakeGatewayRuntimeRegistry()
 	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
 		runtime := newFakeGatewayRuntime(cfg.GatewayID)
-		runtimes[cfg.GatewayID] = runtime
+		runtimes.set(cfg.GatewayID, runtime)
 		return runtime
 	}
 
@@ -255,8 +265,10 @@ func TestMultiGatewayControllerRoutesSendIMImageByGatewayID(t *testing.T) {
 	go func() {
 		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
 	}()
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-1"))
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-2"))
+	app1 := runtimes.wait(t, "app-1")
+	app2 := runtimes.wait(t, "app-2")
+	waitFakeGatewayStarted(t, app1)
+	waitFakeGatewayStarted(t, app2)
 
 	result, err := controller.SendIMImage(context.Background(), IMImageSendRequest{
 		GatewayID:        "app-2",
@@ -267,13 +279,15 @@ func TestMultiGatewayControllerRoutesSendIMImageByGatewayID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SendIMImage: %v", err)
 	}
-	if len(runtimes["app-1"].sendIMImageCalls) != 0 {
-		t.Fatalf("unexpected app-1 send calls: %#v", runtimes["app-1"].sendIMImageCalls)
+	app1Calls := app1.sendIMImageCallsSnapshot()
+	if len(app1Calls) != 0 {
+		t.Fatalf("unexpected app-1 send calls: %#v", app1Calls)
 	}
-	if len(runtimes["app-2"].sendIMImageCalls) != 1 {
-		t.Fatalf("unexpected app-2 send calls: %#v", runtimes["app-2"].sendIMImageCalls)
+	app2Calls := app2.sendIMImageCallsSnapshot()
+	if len(app2Calls) != 1 {
+		t.Fatalf("unexpected app-2 send calls: %#v", app2Calls)
 	}
-	got := runtimes["app-2"].sendIMImageCalls[0]
+	got := app2Calls[0]
 	if got.SurfaceSessionID != "surface-2" || got.ChatID != "oc_2" || got.Path != "/tmp/preview.png" {
 		t.Fatalf("unexpected send request: %#v", got)
 	}
@@ -284,10 +298,10 @@ func TestMultiGatewayControllerRoutesSendIMImageByGatewayID(t *testing.T) {
 
 func TestMultiGatewayControllerRoutesDriveCommentReadByGatewayID(t *testing.T) {
 	controller := NewMultiGatewayController()
-	runtimes := map[string]*fakeGatewayRuntime{}
+	runtimes := newFakeGatewayRuntimeRegistry()
 	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
 		runtime := newFakeGatewayRuntime(cfg.GatewayID)
-		runtimes[cfg.GatewayID] = runtime
+		runtimes.set(cfg.GatewayID, runtime)
 		return runtime
 	}
 
@@ -307,8 +321,10 @@ func TestMultiGatewayControllerRoutesDriveCommentReadByGatewayID(t *testing.T) {
 	go func() {
 		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
 	}()
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-1"))
-	waitFakeGatewayStarted(t, waitForFakeRuntime(t, runtimes, "app-2"))
+	app1 := runtimes.wait(t, "app-1")
+	app2 := runtimes.wait(t, "app-2")
+	waitFakeGatewayStarted(t, app1)
+	waitFakeGatewayStarted(t, app2)
 
 	result, err := controller.ReadDriveFileComments(context.Background(), DriveFileCommentReadRequest{
 		GatewayID: "app-2",
@@ -318,13 +334,15 @@ func TestMultiGatewayControllerRoutesDriveCommentReadByGatewayID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadDriveFileComments: %v", err)
 	}
-	if len(runtimes["app-1"].readCommentCalls) != 0 {
-		t.Fatalf("unexpected app-1 comment read calls: %#v", runtimes["app-1"].readCommentCalls)
+	app1Calls := app1.readCommentCallsSnapshot()
+	if len(app1Calls) != 0 {
+		t.Fatalf("unexpected app-1 comment read calls: %#v", app1Calls)
 	}
-	if len(runtimes["app-2"].readCommentCalls) != 1 {
-		t.Fatalf("unexpected app-2 comment read calls: %#v", runtimes["app-2"].readCommentCalls)
+	app2Calls := app2.readCommentCallsSnapshot()
+	if len(app2Calls) != 1 {
+		t.Fatalf("unexpected app-2 comment read calls: %#v", app2Calls)
 	}
-	got := runtimes["app-2"].readCommentCalls[0]
+	got := app2Calls[0]
 	if got.FileToken != "file-token-1" || got.FileType != "file" {
 		t.Fatalf("unexpected read request: %#v", got)
 	}
@@ -555,6 +573,64 @@ type fakeGatewayRuntime struct {
 	readCommentFn    func(context.Context, DriveFileCommentReadRequest) (DriveFileCommentReadResult, error)
 }
 
+type fakeGatewayRuntimeRegistry struct {
+	mu       sync.Mutex
+	runtimes map[string]*fakeGatewayRuntime
+	waiters  map[string][]chan struct{}
+}
+
+func newFakeGatewayRuntimeRegistry() *fakeGatewayRuntimeRegistry {
+	return &fakeGatewayRuntimeRegistry{
+		runtimes: map[string]*fakeGatewayRuntime{},
+		waiters:  map[string][]chan struct{}{},
+	}
+}
+
+func (r *fakeGatewayRuntimeRegistry) set(gatewayID string, runtime *fakeGatewayRuntime) {
+	r.mu.Lock()
+	r.runtimes[gatewayID] = runtime
+	waiters := r.waiters[gatewayID]
+	delete(r.waiters, gatewayID)
+	r.mu.Unlock()
+
+	for _, waiter := range waiters {
+		close(waiter)
+	}
+}
+
+func (r *fakeGatewayRuntimeRegistry) get(t *testing.T, gatewayID string) *fakeGatewayRuntime {
+	t.Helper()
+
+	r.mu.Lock()
+	runtime := r.runtimes[gatewayID]
+	r.mu.Unlock()
+	if runtime == nil {
+		t.Fatalf("runtime %s was not created", gatewayID)
+	}
+	return runtime
+}
+
+func (r *fakeGatewayRuntimeRegistry) wait(t *testing.T, gatewayID string) *fakeGatewayRuntime {
+	t.Helper()
+
+	for {
+		r.mu.Lock()
+		if runtime := r.runtimes[gatewayID]; runtime != nil {
+			r.mu.Unlock()
+			return runtime
+		}
+		waiter := make(chan struct{})
+		r.waiters[gatewayID] = append(r.waiters[gatewayID], waiter)
+		r.mu.Unlock()
+
+		select {
+		case <-waiter:
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timed out waiting for runtime %s to be created", gatewayID)
+		}
+	}
+}
+
 func newFakeGatewayRuntime(gatewayID string) *fakeGatewayRuntime {
 	return &fakeGatewayRuntime{
 		gatewayID: gatewayID,
@@ -601,6 +677,17 @@ func (f *fakeGatewayRuntime) Apply(_ context.Context, operations []Operation) er
 	return nil
 }
 
+func (f *fakeGatewayRuntime) applyCallsSnapshot() [][]Operation {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	calls := make([][]Operation, 0, len(f.applyCalls))
+	for _, call := range f.applyCalls {
+		calls = append(calls, append([]Operation(nil), call...))
+	}
+	return calls
+}
+
 func (f *fakeGatewayRuntime) SendIMFile(ctx context.Context, req IMFileSendRequest) (IMFileSendResult, error) {
 	f.mu.Lock()
 	f.sendIMFileCalls = append(f.sendIMFileCalls, req)
@@ -616,6 +703,13 @@ func (f *fakeGatewayRuntime) SendIMFile(ctx context.Context, req IMFileSendReque
 		FileKey:          "file-key-" + f.gatewayID,
 		MessageID:        "msg-" + f.gatewayID,
 	}, nil
+}
+
+func (f *fakeGatewayRuntime) sendIMFileCallsSnapshot() []IMFileSendRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]IMFileSendRequest(nil), f.sendIMFileCalls...)
 }
 
 func (f *fakeGatewayRuntime) SendIMImage(ctx context.Context, req IMImageSendRequest) (IMImageSendResult, error) {
@@ -635,6 +729,13 @@ func (f *fakeGatewayRuntime) SendIMImage(ctx context.Context, req IMImageSendReq
 	}, nil
 }
 
+func (f *fakeGatewayRuntime) sendIMImageCallsSnapshot() []IMImageSendRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]IMImageSendRequest(nil), f.sendIMImageCalls...)
+}
+
 func (f *fakeGatewayRuntime) SendIMVideo(ctx context.Context, req IMVideoSendRequest) (IMVideoSendResult, error) {
 	f.mu.Lock()
 	f.sendIMVideoCalls = append(f.sendIMVideoCalls, req)
@@ -650,6 +751,13 @@ func (f *fakeGatewayRuntime) SendIMVideo(ctx context.Context, req IMVideoSendReq
 		FileKey:          "video-key-" + f.gatewayID,
 		MessageID:        "msg-" + f.gatewayID,
 	}, nil
+}
+
+func (f *fakeGatewayRuntime) sendIMVideoCallsSnapshot() []IMVideoSendRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]IMVideoSendRequest(nil), f.sendIMVideoCalls...)
 }
 
 func (f *fakeGatewayRuntime) ReadDriveFileComments(ctx context.Context, req DriveFileCommentReadRequest) (DriveFileCommentReadResult, error) {
@@ -680,6 +788,13 @@ func (f *fakeGatewayRuntime) ReadDriveFileComments(ctx context.Context, req Driv
 	}, nil
 }
 
+func (f *fakeGatewayRuntime) readCommentCallsSnapshot() []DriveFileCommentReadRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]DriveFileCommentReadRequest(nil), f.readCommentCalls...)
+}
+
 func (f *fakeGatewayRuntime) Client() *lark.Client { return nil }
 
 func (f *fakeGatewayRuntime) SetStateHook(hook func(GatewayState, error)) {
@@ -698,17 +813,57 @@ func (f *fakeGatewayRuntime) emitState(state GatewayState, err error) {
 }
 
 type fakePreviewer struct {
+	mu                 sync.Mutex
 	gatewayID          string
 	calls              int
 	maintenanceStarted chan struct{}
 	maintenanceStopped chan struct{}
 }
 
+type fakePreviewerRegistry struct {
+	mu         sync.Mutex
+	previewers map[string]*fakePreviewer
+}
+
+func newFakePreviewerRegistry() *fakePreviewerRegistry {
+	return &fakePreviewerRegistry{previewers: map[string]*fakePreviewer{}}
+}
+
+func (r *fakePreviewerRegistry) set(gatewayID string, previewer *fakePreviewer) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.previewers[gatewayID] = previewer
+}
+
+func (r *fakePreviewerRegistry) get(t *testing.T, gatewayID string) *fakePreviewer {
+	t.Helper()
+
+	r.mu.Lock()
+	previewer := r.previewers[gatewayID]
+	r.mu.Unlock()
+	if previewer == nil {
+		t.Fatalf("previewer %s was not created", gatewayID)
+	}
+	return previewer
+}
+
 func (f *fakePreviewer) RewriteFinalBlock(_ context.Context, req previewpkg.FinalBlockPreviewRequest) (previewpkg.FinalBlockPreviewResult, error) {
+	f.mu.Lock()
 	f.calls++
+	gatewayID := f.gatewayID
+	f.mu.Unlock()
+
 	block := req.Block
-	block.Text = f.gatewayID + ":" + block.Text
+	block.Text = gatewayID + ":" + block.Text
 	return previewpkg.FinalBlockPreviewResult{Block: block}, nil
+}
+
+func (f *fakePreviewer) callsSnapshot() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.calls
 }
 
 func (f *fakePreviewer) SetWebPreviewPublisher(previewpkg.WebPreviewPublisher) {}
@@ -748,22 +903,6 @@ func waitFakeGatewayStopped(t *testing.T, runtime *fakeGatewayRuntime) {
 	case <-runtime.stoppedCh:
 	case <-time.After(3 * time.Second):
 		t.Fatalf("timed out waiting for gateway %s to stop", runtime.gatewayID)
-	}
-}
-
-func waitForFakeRuntime(t *testing.T, runtimes map[string]*fakeGatewayRuntime, gatewayID string) *fakeGatewayRuntime {
-	t.Helper()
-	deadline := time.After(3 * time.Second)
-	for {
-		if runtime := runtimes[gatewayID]; runtime != nil {
-			return runtime
-		}
-		select {
-		case <-deadline:
-			t.Fatalf("timed out waiting for runtime %s to be created", gatewayID)
-		default:
-			time.Sleep(10 * time.Millisecond)
-		}
 	}
 }
 

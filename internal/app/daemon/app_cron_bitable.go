@@ -2,17 +2,16 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/app/bitablevalue"
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -435,7 +434,7 @@ func (a *App) ensureCronMetaRecord(ctx context.Context, api feishu.BitableAPI, b
 		if record == nil {
 			continue
 		}
-		currentKey := cronValueString(record.Fields["instance_scope_key"])
+		currentKey := bitablevalue.String(record.Fields["instance_scope_key"])
 		if currentKey != "" && currentKey != scopeKey {
 			return "", fmt.Errorf("当前 Cron 多维表格已绑定到其他实例：%s", currentKey)
 		}
@@ -485,9 +484,9 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 		if record == nil {
 			continue
 		}
-		key := cronValueString(record.Fields["工作区键"])
+		key := bitablevalue.String(record.Fields["工作区键"])
 		if strings.TrimSpace(key) == "" {
-			key = cronValueString(record.Fields["工作区名称"])
+			key = bitablevalue.String(record.Fields["工作区名称"])
 		}
 		if strings.TrimSpace(key) == "" {
 			continue
@@ -513,7 +512,7 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 			recordID := strings.TrimSpace(stringValue(record.RecordId))
 			if recordID != "" {
 				result[row.Key] = recordID
-				if cronValueString(record.Fields["工作区名称"]) == row.Name && cronValueString(record.Fields["当前状态"]) == row.Status {
+				if bitablevalue.String(record.Fields["工作区名称"]) == row.Name && bitablevalue.String(record.Fields["当前状态"]) == row.Status {
 					continue
 				}
 				pendingUpdates = append(pendingUpdates, feishu.BitableRecordUpdate{RecordID: recordID, Fields: fields})
@@ -531,7 +530,7 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 		if recordID == "" {
 			continue
 		}
-		if cronValueString(record.Fields["当前状态"]) == "已失效" {
+		if bitablevalue.String(record.Fields["当前状态"]) == "已失效" {
 			continue
 		}
 		pendingUpdates = append(pendingUpdates, feishu.BitableRecordUpdate{
@@ -581,9 +580,9 @@ func (a *App) loadCronWorkspaceIndex(ctx context.Context, api feishu.BitableAPI,
 			continue
 		}
 		values[recordID] = cronrt.WorkspaceRow{
-			Name:   cronValueString(record.Fields["工作区名称"]),
-			Key:    cronValueString(record.Fields["工作区键"]),
-			Status: cronValueString(record.Fields["当前状态"]),
+			Name:   bitablevalue.String(record.Fields["工作区名称"]),
+			Key:    bitablevalue.String(record.Fields["工作区键"]),
+			Status: bitablevalue.String(record.Fields["当前状态"]),
 		}
 	}
 	return values, nil
@@ -680,167 +679,6 @@ func cronJobFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord ma
 		return cronrt.JobState{}, false, reloadErr
 	}
 	return job, disabled, nil
-}
-
-func cronValueString(value any) string {
-	switch typed := value.(type) {
-	case nil:
-		return ""
-	case string:
-		return typed
-	case map[string]any:
-		for _, key := range []string{"text", "name", "label", "title", "value", "id", "record_id", "recordId"} {
-			if text := strings.TrimSpace(cronValueString(typed[key])); text != "" {
-				return text
-			}
-		}
-		if values := cronValueStringSlice(typed); len(values) > 0 {
-			return strings.Join(values, "\n")
-		}
-		return ""
-	case []any:
-		parts := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if text := strings.TrimSpace(cronValueString(item)); text != "" {
-				parts = append(parts, text)
-			}
-		}
-		return strings.Join(parts, "\n")
-	case []string:
-		return strings.Join(typed, "\n")
-	default:
-		return fmt.Sprint(value)
-	}
-}
-
-func cronValueBool(value any) (bool, bool) {
-	switch typed := value.(type) {
-	case nil:
-		return false, true
-	case bool:
-		return typed, true
-	case int:
-		return typed != 0, true
-	case int32:
-		return typed != 0, true
-	case int64:
-		return typed != 0, true
-	case float32:
-		return typed != 0, true
-	case float64:
-		return typed != 0, true
-	case json.Number:
-		if parsed, err := typed.Int64(); err == nil {
-			return parsed != 0, true
-		}
-		return false, false
-	case string:
-		switch strings.ToLower(strings.TrimSpace(typed)) {
-		case "", "0", "false", "off", "no", "unchecked", "停用":
-			return false, true
-		case "1", "true", "on", "yes", "checked", "启用":
-			return true, true
-		default:
-			return false, false
-		}
-	case map[string]any:
-		for _, key := range []string{"checked", "value", "text", "name", "label"} {
-			if nested, ok := typed[key]; ok {
-				if enabled, valid := cronValueBool(nested); valid {
-					return enabled, true
-				}
-			}
-		}
-		return false, false
-	case []any:
-		if len(typed) == 0 {
-			return false, true
-		}
-		if len(typed) == 1 {
-			return cronValueBool(typed[0])
-		}
-		return false, false
-	case []string:
-		if len(typed) == 0 {
-			return false, true
-		}
-		if len(typed) == 1 {
-			return cronValueBool(typed[0])
-		}
-		return false, false
-	default:
-		return cronValueBool(fmt.Sprint(value))
-	}
-}
-
-func cronValueStringSlice(value any) []string {
-	switch typed := value.(type) {
-	case nil:
-		return nil
-	case []string:
-		return append([]string(nil), typed...)
-	case map[string]any:
-		for _, key := range []string{"record_ids", "recordIds", "ids", "values"} {
-			if values := cronValueStringSlice(typed[key]); len(values) > 0 {
-				return values
-			}
-		}
-		for _, key := range []string{"record_id", "recordId", "id", "value", "text", "name", "label"} {
-			if text := strings.TrimSpace(cronValueString(typed[key])); text != "" {
-				return []string{text}
-			}
-		}
-		return nil
-	case []any:
-		values := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if nested := cronValueStringSlice(item); len(nested) > 0 {
-				values = append(values, nested...)
-				continue
-			}
-			if text := strings.TrimSpace(cronValueString(item)); text != "" {
-				values = append(values, text)
-			}
-		}
-		return values
-	default:
-		text := strings.TrimSpace(cronValueString(value))
-		if text == "" {
-			return nil
-		}
-		return []string{text}
-	}
-}
-
-func cronValueInt(value any) int {
-	switch typed := value.(type) {
-	case int:
-		return typed
-	case int32:
-		return int(typed)
-	case int64:
-		return int(typed)
-	case float64:
-		return int(typed)
-	case float32:
-		return int(typed)
-	case json.Number:
-		parsed, _ := typed.Int64()
-		return int(parsed)
-	case map[string]any:
-		for _, key := range []string{"value", "number", "text"} {
-			if keyValue, ok := typed[key]; ok {
-				return cronValueInt(keyValue)
-			}
-		}
-		return 0
-	case string:
-		parsed, _ := strconv.Atoi(strings.TrimSpace(typed))
-		return parsed
-	default:
-		parsed, _ := strconv.Atoi(strings.TrimSpace(fmt.Sprint(value)))
-		return parsed
-	}
 }
 
 func stringValue(value *string) string {

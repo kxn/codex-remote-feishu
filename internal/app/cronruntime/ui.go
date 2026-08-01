@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/bitablevalue"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
@@ -122,7 +123,7 @@ func DailyTimeFromFields(fields map[string]any) (int, int, bool) {
 	if len(fields) == 0 {
 		return 0, 0, false
 	}
-	if text := strings.TrimSpace(valueString(fields["调度时间"])); text != "" {
+	if text := strings.TrimSpace(bitablevalue.String(fields["调度时间"])); text != "" {
 		return parseCronClockText(text)
 	}
 	hourValue, hourExists := fields["每天-时"]
@@ -130,8 +131,8 @@ func DailyTimeFromFields(fields map[string]any) (int, int, bool) {
 	if !hourExists && !minuteExists {
 		return 0, 0, false
 	}
-	hour := valueInt(hourValue)
-	minute := valueInt(minuteValue)
+	hour := bitablevalue.Int(hourValue)
+	minute := bitablevalue.Int(minuteValue)
 	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
 		return 0, 0, false
 	}
