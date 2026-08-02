@@ -58,10 +58,10 @@ func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	if !reflect.DeepEqual(plan.Diff.MissingCallbacks, []string{"card.action.trigger"}) {
 		t.Fatalf("missing callbacks = %#v", plan.Diff.MissingCallbacks)
 	}
-	if len(plan.BlockingRequirements) != 2 {
+	if len(plan.BlockingRequirements) != 3 {
 		t.Fatalf("blocking requirements = %#v", plan.BlockingRequirements)
 	}
-	if len(plan.DegradableRequirements) != 1 || plan.DegradableRequirements[0].Key != "drive:drive" {
+	if len(plan.DegradableRequirements) != 0 {
 		t.Fatalf("degradable requirements = %#v", plan.DegradableRequirements)
 	}
 }
@@ -219,7 +219,7 @@ func testAutoConfigManifest() feishuapp.Manifest {
 		},
 		ScopeRequirements: []feishuapp.ScopeRequirement{
 			{Scope: "im:message", ScopeType: "tenant", Feature: "core", Required: true},
-			{Scope: "drive:drive", ScopeType: "tenant", Feature: "preview", Required: false, DegradeMessage: "markdown preview disabled"},
+			{Scope: "drive:drive", ScopeType: "tenant", Feature: "preview", Required: true},
 		},
 		Events: []feishuapp.EventRequirement{
 			{Event: "im.message.receive_v1", Feature: "core", Required: true},

@@ -123,16 +123,15 @@
     {
       "area": "单聊权限",
       "items": [
-        "如果需要和机器人单聊，额外开通 P2P 消息只读权限。",
-        "如果需要在单聊列表里标记“等待你输入”的机器人，额外开通 im:datasync.feed_card.time_sensitive:write。"
+        "开通 P2P 消息只读权限。",
+        "开通 im:datasync.feed_card.time_sensitive:write。"
       ]
     },
     {
       "area": "Markdown 预览权限",
       "items": [
-        "如果要启用 assistant 最终回复里的本地 .md 预览，推荐直接开通 drive:drive。",
-        "当前实现会实际创建云空间目录、上传文件、查询文件链接，并给目录和文件增加协作者权限。",
-        "如果不开通这部分权限，机器人主功能仍可用，但 .md 链接不会变成飞书预览链接。"
+        "开通 drive:drive。",
+        "当前实现会实际创建云空间目录、上传文件、查询文件链接，并给目录和文件增加协作者权限。"
       ]
     }
   ],

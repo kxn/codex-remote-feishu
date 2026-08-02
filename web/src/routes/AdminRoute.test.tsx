@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
+  makeAutoConfigApplyResponse,
+  makeAutoConfigPlan,
+  makeAutoConfigPlanResponse,
+  makeAutoConfigPublishResponse,
   makeBootstrap,
   makeClaudeProfile,
   makeCodexProfile,
@@ -70,6 +74,22 @@ function makeSingleRobotAdminRoutes(
       }),
     },
     ...routes,
+  });
+}
+
+function makeAdminAutoConfigPlan(
+  app = makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+  planOverrides: Parameters<typeof makeAutoConfigPlan>[0] = {},
+) {
+  return makeAutoConfigPlanResponse({
+    app,
+    plan: makeAutoConfigPlan({
+      status: "clean",
+      summary: "飞书配置已就绪。",
+      blockingRequirements: [],
+      degradableRequirements: [],
+      ...planOverrides,
+    }),
   });
 }
 
@@ -185,6 +205,13 @@ describe("AdminRoute", () => {
           lastCheckedAt: "2026-08-02T06:30:00Z",
         },
       },
+      "/api/admin/feishu/apps/bot-permission/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(makeApp({
+          id: "bot-permission",
+          name: "权限机器人",
+          appId: "cli_permission",
+        })),
+      },
       "/api/admin/autostart/detect": {
         body: {
           platform: "linux",
@@ -228,6 +255,154 @@ describe("AdminRoute", () => {
     });
   });
 
+  it("applies and publishes permission fixes from the permission card", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({
+      id: "bot-permission",
+      name: "权限机器人",
+      appId: "cli_permission",
+    });
+    let checkCount = 0;
+    let applied = false;
+    let published = false;
+
+    const { calls } = installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [app],
+        },
+      },
+      "/api/admin/feishu/apps/bot-permission/permissions/check": () => {
+        checkCount += 1;
+        return {
+          body: {
+            app,
+            ready: checkCount > 1,
+            missingScopes:
+              checkCount > 1
+                ? []
+                : [
+                    {
+                      scope: "im:message.group_at_msg:readonly",
+                      scopeType: "tenant",
+                    },
+                  ],
+            grantJSON:
+              '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_at_msg:readonly"\n    ],\n    "user": []\n  }\n}',
+            lastCheckedAt: "2026-08-02T06:30:00Z",
+          },
+        };
+      },
+      "/api/admin/feishu/apps/bot-permission/auto-config/plan": () => {
+        return {
+          body: makeAdminAutoConfigPlan(app, {
+            status: published
+              ? "awaiting_review"
+              : applied
+                ? "publish_required"
+                : "apply_required",
+            summary: published
+              ? "飞书正在审核发布。"
+              : applied
+                ? "已自动补齐飞书配置。"
+                : "飞书配置还需要补齐。",
+            publish: {
+              needsPublish: applied && !published,
+              awaitingReview: published,
+            },
+          }),
+        };
+      },
+      "/api/admin/feishu/apps/bot-permission/auto-config/apply": () => {
+        applied = true;
+        return {
+          body: makeAutoConfigApplyResponse({
+            app,
+            result: {
+              status: "publish_required",
+              summary: "已自动补齐飞书配置。",
+              blockingReason: "",
+              actions: [],
+              plan: makeAutoConfigPlan({
+                status: "publish_required",
+                summary: "已自动补齐飞书配置。",
+                blockingRequirements: [],
+                degradableRequirements: [],
+                publish: {
+                  needsPublish: true,
+                  awaitingReview: false,
+                },
+              }),
+            },
+          }),
+        };
+      },
+      "/api/admin/feishu/apps/bot-permission/auto-config/publish": () => {
+        published = true;
+        return {
+          body: makeAutoConfigPublishResponse({
+            app,
+            result: {
+              status: "awaiting_review",
+              summary: "飞书正在审核发布。",
+              blockingReason: "",
+              actions: [],
+              plan: makeAutoConfigPlan({
+                status: "awaiting_review",
+                summary: "飞书正在审核发布。",
+                publish: {
+                  needsPublish: false,
+                  awaitingReview: true,
+                },
+              }),
+            },
+          }),
+        };
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-permission": {
+        body: makePreviewDriveStatus({
+          gatewayId: "bot-permission",
+          name: "权限机器人",
+        }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "自动补齐" }));
+    expect(await screen.findByText("已自动补齐飞书配置。")).toBeInTheDocument();
+    expect(await screen.findByText("权限已就绪")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "提交发布" }));
+    expect(await screen.findByText("飞书正在审核发布。")).toBeInTheDocument();
+    expect(await screen.findByText("飞书正在审核发布")).toBeInTheDocument();
+    expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(true);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(true);
+  });
+
   it("shows a ready permission check result", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
@@ -246,6 +421,9 @@ describe("AdminRoute", () => {
           grantJSON: '{\n  "scopes": {\n    "tenant": [],\n    "user": []\n  }\n}',
           lastCheckedAt: "2026-08-02T06:30:00Z",
         },
+      },
+      "/api/admin/feishu/apps/bot-ready/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(app),
       },
     }));
 

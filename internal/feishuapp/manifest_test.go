@@ -117,12 +117,10 @@ func TestDefaultManifestRequirementsMetadata(t *testing.T) {
 		if strings.TrimSpace(item.Feature) == "" {
 			t.Fatalf("event %q missing feature metadata", item.Event)
 		}
-		if !item.Required && strings.TrimSpace(item.DegradeMessage) == "" {
-			t.Fatalf("optional event %q missing degradeMessage", item.Event)
+		if !item.Required {
+			t.Fatalf("event %q should be required in the default manifest", item.Event)
 		}
-		if item.Required {
-			requiredEvents++
-		}
+		requiredEvents++
 	}
 	if requiredEvents == 0 {
 		t.Fatal("expected at least one required event")
@@ -133,15 +131,22 @@ func TestDefaultManifestRequirementsMetadata(t *testing.T) {
 		if strings.TrimSpace(item.Feature) == "" {
 			t.Fatalf("callback %q missing feature metadata", item.Callback)
 		}
-		if !item.Required && strings.TrimSpace(item.DegradeMessage) == "" {
-			t.Fatalf("optional callback %q missing degradeMessage", item.Callback)
+		if !item.Required {
+			t.Fatalf("callback %q should be required in the default manifest", item.Callback)
 		}
-		if item.Required {
-			requiredCallbacks++
-		}
+		requiredCallbacks++
 	}
 	if requiredCallbacks == 0 {
 		t.Fatal("expected at least one required callback")
+	}
+
+	for _, item := range manifest.ScopeRequirements {
+		if strings.TrimSpace(item.Feature) == "" {
+			t.Fatalf("scope %q missing feature metadata", item.Scope)
+		}
+		if !item.Required {
+			t.Fatalf("scope %q should be required in the default manifest", item.Scope)
+		}
 	}
 }
 

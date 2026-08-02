@@ -13,6 +13,9 @@ import type {
   ClaudeProfileSummary,
   CodexProfilesResponse,
   CodexProfileSummary,
+  FeishuAppAutoConfigApplyResponse,
+  FeishuAppAutoConfigPlanResponse,
+  FeishuAppAutoConfigPublishResponse,
   FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
@@ -35,6 +38,7 @@ import {
 } from "./shared/helpers";
 import {
   resolveRuntimeApplyFailureTarget,
+  runAutoConfigMutation,
   saveAndVerifyFeishuApp,
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
@@ -49,6 +53,10 @@ type DetailNotice = {
   tone: NoticeTone;
   message: string;
 };
+
+type AutoConfigState =
+  | { status: "idle" }
+  | { status: "ready"; data: FeishuAppAutoConfigPlanResponse };
 
 type PermissionCheckState =
   | { status: "idle" }
@@ -89,6 +97,9 @@ export function AdminRoute() {
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
+  const [autoConfigPlans, setAutoConfigPlans] = useState<Record<string, AutoConfigState>>(
+    {},
+  );
   const [permissionChecks, setPermissionChecks] = useState<
     Record<string, PermissionCheckState>
   >({});
@@ -126,6 +137,9 @@ export function AdminRoute() {
     () => apps.find((app) => app.id === selectedRobotID) ?? null,
     [apps, selectedRobotID],
   );
+  const selectedAutoConfig: AutoConfigState = selectedApp
+    ? autoConfigPlans[selectedApp.id] || { status: "idle" }
+    : { status: "idle" };
   const selectedPermissionCheck: PermissionCheckState = selectedApp
     ? permissionChecks[selectedApp.id] || { status: "idle" }
     : { status: "idle" };
@@ -174,6 +188,13 @@ export function AdminRoute() {
   }, []);
 
   useEffect(() => {
+    setAutoConfigPlans((current) => {
+      const next: Record<string, AutoConfigState> = {};
+      for (const app of apps) {
+        next[app.id] = current[app.id] || { status: "idle" };
+      }
+      return next;
+    });
     setPermissionChecks((current) => {
       const next: Record<string, PermissionCheckState> = {};
       for (const app of apps) {
@@ -324,6 +345,94 @@ export function AdminRoute() {
 
   function syncAppSummary(app: FeishuAppSummary) {
     setApps((current) => current.map((item) => (item.id === app.id ? app : item)));
+  }
+
+  function syncAutoConfigPlan(
+    app: FeishuAppSummary,
+    plan: FeishuAppAutoConfigPlanResponse["plan"],
+  ) {
+    syncAppSummary(app);
+    setAutoConfigPlans((current) => ({
+      ...current,
+      [app.id]: {
+        status: "ready",
+        data: {
+          app,
+          plan,
+        },
+      },
+    }));
+  }
+
+  async function applyRobotConfiguration() {
+    if (!selectedApp?.id) {
+      return;
+    }
+    const appID = selectedApp.id;
+    setActionBusy("permission-apply");
+    try {
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigApplyResponse>({
+        path: `/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/apply`,
+        init: { method: "POST" },
+        fallbackErrorMessage: "当前还不能自动补齐，请稍后重试。",
+        fallbackSuccessMessage: "已自动补齐飞书配置。",
+      });
+      if (!result.ok) {
+        setDetailNotice({ tone: "danger", message: result.message });
+        return;
+      }
+      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
+      setDetailNotice(result.notice);
+      await checkRobotPermissions({ appID, silent: true });
+    } catch {
+      setDetailNotice({ tone: "danger", message: "当前还不能自动补齐，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function loadRobotConfigurationPlan(appID: string) {
+    const response = await requestJSONAllowHTTPError<
+      FeishuAppAutoConfigPlanResponse | APIErrorShape
+    >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/plan`);
+    if (!response.ok) {
+      return;
+    }
+    const payload = response.data as FeishuAppAutoConfigPlanResponse;
+    syncAutoConfigPlan(payload.app, payload.plan);
+  }
+
+  async function publishRobotConfiguration() {
+    if (!selectedApp?.id) {
+      return;
+    }
+    const appID = selectedApp.id;
+    setActionBusy("permission-publish");
+    try {
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigPublishResponse>({
+        path: `/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/publish`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+        fallbackErrorMessage: "当前还不能提交发布，请稍后重试。",
+        fallbackSuccessMessage: "已提交发布。",
+      });
+      if (!result.ok) {
+        setDetailNotice({ tone: "danger", message: result.message });
+        return;
+      }
+      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
+      setDetailNotice(result.notice);
+      await checkRobotPermissions({ appID, silent: true });
+    } catch {
+      setDetailNotice({ tone: "danger", message: "当前还不能提交发布，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
   }
 
   async function deleteRobot() {
@@ -504,16 +613,18 @@ export function AdminRoute() {
     });
   }
 
-  async function checkRobotPermissions() {
-    if (!selectedApp?.id) {
+  async function checkRobotPermissions(options?: { appID?: string; silent?: boolean }) {
+    const appID = options?.appID || selectedApp?.id;
+    if (!appID) {
       return;
     }
-    const appID = selectedApp.id;
     setPermissionChecks((current) => ({
       ...current,
       [appID]: { status: "loading" },
     }));
-    setActionBusy("permission-check");
+    if (!options?.silent) {
+      setActionBusy("permission-check");
+    }
     try {
       const response = await requestJSONAllowHTTPError<
         FeishuAppPermissionCheckResponse | APIErrorShape
@@ -526,7 +637,9 @@ export function AdminRoute() {
             message: "当前还不能完成权限检查，请稍后重试。",
           },
         }));
-        setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
+        if (!options?.silent) {
+          setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
+        }
         return;
       }
       const data = response.data as FeishuAppPermissionCheckResponse;
@@ -535,6 +648,7 @@ export function AdminRoute() {
         ...current,
         [appID]: { status: "ready", data },
       }));
+      await loadRobotConfigurationPlan(appID);
     } catch {
       setPermissionChecks((current) => ({
         ...current,
@@ -543,9 +657,13 @@ export function AdminRoute() {
           message: "当前还不能完成权限检查，请稍后重试。",
         },
       }));
-      setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
+      if (!options?.silent) {
+        setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
+      }
     } finally {
-      setActionBusy("");
+      if (!options?.silent) {
+        setActionBusy("");
+      }
     }
   }
 
@@ -823,7 +941,12 @@ export function AdminRoute() {
     if (!selectedApp) {
       return null;
     }
-    const disabled = actionBusy === "permission-check";
+    const disabled = Boolean(actionBusy);
+    const autoConfigPlan =
+      selectedAutoConfig.status === "ready" ? selectedAutoConfig.data.plan : null;
+    const canApply = autoConfigPlan?.status === "apply_required";
+    const canPublish = autoConfigPlan?.status === "publish_required";
+    const awaitingReview = autoConfigPlan?.status === "awaiting_review";
     return (
       <section className="card">
         <div className="card-head">
@@ -859,12 +982,47 @@ export function AdminRoute() {
         ) : null}
         {selectedPermissionCheck.status === "ready" ? (
           selectedPermissionCheck.data.ready ? (
-            <div className="notice-banner good">权限已就绪</div>
+            <div className="detail-stack">
+              <div className="notice-banner good">权限已就绪</div>
+              {canApply ? (
+                <>
+                  <div className="notice-banner warn">飞书配置还需要补齐</div>
+                  <div className="button-row">
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => void applyRobotConfiguration()}
+                    >
+                      自动补齐
+                    </button>
+                  </div>
+                </>
+              ) : null}
+              {canPublish ? (
+                <div className="button-row">
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => void publishRobotConfiguration()}
+                  >
+                    提交发布
+                  </button>
+                </div>
+              ) : null}
+              {awaitingReview ? (
+                <div className="notice-banner warn">飞书正在审核发布</div>
+              ) : null}
+            </div>
           ) : (
             <div className="detail-stack">
               <div className="notice-banner warn">
                 还缺少 {selectedPermissionCheck.data.missingScopes?.length || 0} 项权限
               </div>
+              {awaitingReview ? (
+                <div className="notice-banner warn">飞书正在审核发布</div>
+              ) : null}
               <div className="req-group">
                 {(selectedPermissionCheck.data.missingScopes || []).map((item) => (
                   <div
@@ -894,6 +1052,25 @@ export function AdminRoute() {
                     <button
                       className="primary-button"
                       type="button"
+                      disabled={disabled}
+                      onClick={() => void applyRobotConfiguration()}
+                    >
+                      自动补齐
+                    </button>
+                    {canPublish ? (
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => void publishRobotConfiguration()}
+                      >
+                        提交发布
+                      </button>
+                    ) : null}
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={disabled}
                       onClick={() =>
                         void copyPermissionGrantJSON(selectedPermissionCheck.data)
                       }
