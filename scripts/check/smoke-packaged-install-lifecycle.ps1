@@ -252,8 +252,9 @@ try {
 
   Write-Output "packaged installer lifecycle smoke passed"
 } finally {
-  if (Test-Path -LiteralPath $statePath -PathType Leaf -and Test-Path -LiteralPath (Join-Path $installBinDir "codex-remote.exe") -PathType Leaf) {
-    & (Join-Path $installBinDir "codex-remote.exe") service uninstall-user -state-path $statePath *> $null
+  $cleanupBinary = Join-Path $installBinDir "codex-remote.exe"
+  if ((Test-Path -LiteralPath $statePath -PathType Leaf) -and (Test-Path -LiteralPath $cleanupBinary -PathType Leaf)) {
+    & $cleanupBinary service uninstall-user -state-path $statePath *> $null
   }
   schtasks /Delete /TN $taskName /F *> $null
   Stop-CodexRemoteProcesses $installBinDir

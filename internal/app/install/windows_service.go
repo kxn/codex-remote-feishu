@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
@@ -72,7 +73,7 @@ func renderTaskSchedulerLogonXML(state InstallState) (string, error) {
 	workingDirectory := normalizeServicePathValue(state.BaseDir)
 
 	lines := []string{
-		`<?xml version="1.0" encoding="UTF-8"?>`,
+		`<?xml version="1.0" encoding="UTF-16"?>`,
 		`<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">`,
 		`  <RegistrationInfo>`,
 		`    <URI>` + xmlEscape(taskName) + `</URI>`,
@@ -186,11 +187,26 @@ func installTaskSchedulerLogonTask(ctx context.Context, state InstallState) (Ins
 	if err := serviceMkdirAll(filepath.Dir(state.ServiceUnitPath), 0o755); err != nil {
 		return InstallState{}, err
 	}
-	if err := serviceWriteFile(state.ServiceUnitPath, []byte(xmlContent), 0o644); err != nil {
+	if err := serviceWriteFile(state.ServiceUnitPath, utf16LEWithBOM(xmlContent), 0o644); err != nil {
 		return InstallState{}, err
 	}
 	_, err = taskSchedulerRunner(ctx, "/Create", "/TN", taskSchedulerTaskNameForInstance(state.InstanceID), "/XML", state.ServiceUnitPath, "/F")
 	return state, err
+}
+
+func utf16LEWithBOM(value string) []byte {
+	encoded := utf16.Encode([]rune(value))
+	out := make([]byte, 2, 2+len(encoded)*2)
+	out[0] = 0xff
+	out[1] = 0xfe
+	for _, value := range encoded {
+		out = appendUTF16LE(out, value)
+	}
+	return out
+}
+
+func appendUTF16LE(out []byte, value uint16) []byte {
+	return append(out, byte(value), byte(value>>8))
 }
 
 func uninstallTaskSchedulerLogonTask(ctx context.Context, state InstallState) error {

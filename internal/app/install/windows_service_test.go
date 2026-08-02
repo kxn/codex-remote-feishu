@@ -119,6 +119,13 @@ func TestInstallTaskSchedulerLogonRegistersXMLTask(t *testing.T) {
 	if _, err := os.Stat(updated.ServiceUnitPath); err != nil {
 		t.Fatalf("task XML was not written: %v", err)
 	}
+	xmlBytes, err := os.ReadFile(updated.ServiceUnitPath)
+	if err != nil {
+		t.Fatalf("ReadFile(task XML): %v", err)
+	}
+	if !bytes.HasPrefix(xmlBytes, []byte{0xff, 0xfe}) {
+		t.Fatalf("task XML should be UTF-16LE with BOM, got prefix % x", xmlBytes[:min(4, len(xmlBytes))])
+	}
 	wantCalls := []string{strings.Join([]string{"/Create", "/TN", taskSchedulerTaskNameForInstance("stable"), "/XML", updated.ServiceUnitPath, "/F"}, " ")}
 	if !reflect.DeepEqual(calls, wantCalls) {
 		t.Fatalf("task scheduler calls = %#v, want %#v", calls, wantCalls)
