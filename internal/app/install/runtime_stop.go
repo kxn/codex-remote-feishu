@@ -52,9 +52,19 @@ func stopInstallStateProcess(ctx context.Context, stateValue InstallState, paths
 		if !ok {
 			return fmt.Errorf("unsupported managed service manager %q", effectiveServiceManager(stateValue))
 		}
-		return driver.StopAndWait(ctx, stateValue, opts.StopGrace, opts.PollInterval)
+		if err := driver.StopAndWait(ctx, stateValue, opts.StopGrace, opts.PollInterval); err != nil {
+			return err
+		}
+		if effectiveServiceManager(stateValue) == ServiceManagerTaskSchedulerLogon {
+			return terminateInstallStatePID(paths, opts.StopGrace, hooks)
+		}
+		return nil
 	}
 
+	return terminateInstallStatePID(paths, opts.StopGrace, hooks)
+}
+
+func terminateInstallStatePID(paths relayruntime.Paths, grace time.Duration, hooks runtimeControlHooks) error {
 	pid, err := hooks.ReadPID(paths.PIDFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -65,7 +75,7 @@ func stopInstallStateProcess(ctx context.Context, stateValue InstallState, paths
 	if pid <= 0 {
 		return nil
 	}
-	if err := hooks.TerminateProcess(pid, opts.StopGrace); err != nil {
+	if err := hooks.TerminateProcess(pid, grace); err != nil {
 		return err
 	}
 	_ = hooks.RemoveFile(paths.PIDFile)
