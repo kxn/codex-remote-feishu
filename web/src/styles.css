@@ -96,6 +96,17 @@ a:hover {
   outline-offset: 2px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -271,7 +282,6 @@ a:hover {
 
 .card,
 .panel,
-.soft-card-v2,
 .completed-card {
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -285,9 +295,17 @@ a:hover {
   margin-bottom: 16px;
 }
 
-.soft-card-v2,
 .completed-card {
   padding: 24px;
+}
+
+.profile-section {
+  display: grid;
+  gap: 16px;
+}
+
+.stack-top {
+  margin-top: 16px;
 }
 
 .card-head,
@@ -311,7 +329,6 @@ a:hover {
 
 .card h3,
 .panel h3,
-.soft-card-v2 h4,
 .completed-card h3,
 .section-heading h4 {
   margin: 0;
@@ -719,6 +736,11 @@ a:hover {
   gap: 12px;
 }
 
+.two-col {
+  display: grid;
+  gap: 16px;
+}
+
 .req-group,
 .ordered-checklist {
   margin-top: 16px;
@@ -734,6 +756,7 @@ a:hover {
 .ordered-checklist li,
 .req-item {
   display: flex;
+  align-items: flex-start;
   gap: 8px;
   padding: 8px 0;
   border-top: 1px solid var(--border);
@@ -774,6 +797,19 @@ a:hover {
   margin-top: 7px;
 }
 
+.req-item .label {
+  flex: 1;
+}
+
+.req-item > div {
+  flex: 1;
+}
+
+.storage-row-action {
+  flex: none;
+  margin-left: auto;
+}
+
 .definition-list,
 .def-list {
   margin: 12px 0 0;
@@ -803,13 +839,6 @@ a:hover {
   word-break: break-all;
 }
 
-.soft-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.soft-grid.two-column,
 .two-col {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1429,9 +1458,8 @@ a:hover {
 
   .card,
   .panel,
-  .soft-card-v2,
-  .completed-card,
-  .opt-card {
+    .completed-card,
+    .opt-card {
     padding: 16px;
   }
 
@@ -1441,9 +1469,7 @@ a:hover {
   .robot-layout,
   .profile-layout,
   .split,
-  .soft-grid,
-  .soft-grid.two-column,
-  .two-col,
+    .two-col,
   .stat-row,
   .stat-grid {
     grid-template-columns: 1fr;

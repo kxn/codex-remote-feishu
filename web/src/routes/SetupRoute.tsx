@@ -908,10 +908,6 @@ export function SetupRoute() {
       <div className="detail-stack">
         <div className="scan-preview">
           <div>
-            <h4 style={{ margin: 0 }}>扫码创建</h4>
-            <p className="support-copy">
-              使用飞书扫描二维码，页面将自动完成后续操作。
-            </p>
             <div className="scan-frame">
               {onboardingSession?.qrCodeDataUrl ? (
                 <img alt="飞书扫码创建二维码" src={onboardingSession.qrCodeDataUrl} />
@@ -941,7 +937,7 @@ export function SetupRoute() {
                 onboardingSession?.status === "failed" ||
                 onboardingSession?.status === "expired") && (
                 <button
-                  className="secondary-button"
+                  className="primary-button"
                   type="button"
                   disabled={actionBusy === "qr-start"}
                   onClick={() => resetConnectFlow()}
@@ -951,7 +947,7 @@ export function SetupRoute() {
               )}
               {onboardingSession?.status === "ready" && connectError ? (
                 <button
-                  className="secondary-button"
+                  className="primary-button"
                   type="button"
                   disabled={actionBusy === "qr-complete"}
                   onClick={() => {

@@ -365,7 +365,7 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
       }
     >
       {isConnectionEditable ? (
-        <div className="form-grid" style={{ marginTop: "1rem" }}>
+        <div className="form-grid stack-top">
           <label className="field form-grid-span-2">
             <span>
               名称 <em className="field-required">*</em>
@@ -473,12 +473,12 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
           </label>
         </div>
       ) : (
-        <div className="completed-card profile-hero-card">
+        <div className="hero-card">
           <h3>{providerKindLabel(activeProvider)}</h3>
           <p>{readOnlyProfileDescription(activeProvider)}</p>
         </div>
       )}
-      <label className="field form-grid-span-2" style={{ marginTop: "1rem" }}>
+      <label className="field form-grid-span-2 stack-top">
         <span>上下文大小</span>
         <select
           aria-label="上下文大小"

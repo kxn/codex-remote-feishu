@@ -20,7 +20,8 @@ test("admin core flows work on desktop and mobile", async ({ page }) => {
 
   await openAdminArea(page, "系统");
   await expect(page.getByRole("heading", { name: "系统", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "系统集成" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "自动运行" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "VS Code 集成" })).toBeVisible();
   await page.setViewportSize({ width: 812, height: 393 });
   await expect(page.getByRole("heading", { name: "系统", exact: true })).toBeVisible();
   await page.setViewportSize({ width: 393, height: 812 });
@@ -30,7 +31,7 @@ test("admin core flows work on desktop and mobile", async ({ page }) => {
   await page.getByRole("button", { name: "Codex" }).click();
 
   const codexSection = page
-    .locator("section.panel")
+    .locator("section.profile-section")
     .filter({ has: page.getByRole("heading", { name: "Codex", exact: true }) })
     .first();
   await expect(codexSection.getByRole("heading", { name: "Codex", exact: true })).toBeVisible();
@@ -57,7 +58,7 @@ test("admin core flows work on desktop and mobile", async ({ page }) => {
 
   await page.getByRole("button", { name: "Claude" }).click();
   const claudeSection = page
-    .locator("section.panel")
+    .locator("section.profile-section")
     .filter({ has: page.getByRole("heading", { name: "Claude", exact: true }) })
     .first();
   await expect(claudeSection.getByRole("heading", { name: "Claude", exact: true })).toBeVisible();

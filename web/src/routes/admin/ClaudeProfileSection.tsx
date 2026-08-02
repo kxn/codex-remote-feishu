@@ -304,12 +304,12 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
       }
     >
       {isBuiltIn ? (
-        <div className="completed-card profile-hero-card">
+        <div className="hero-card">
           <h3>系统默认配置</h3>
           <p>内建默认开启后使用 Sonnet 1M。</p>
         </div>
       ) : null}
-      {!isBuiltIn ? <div className="form-grid" style={{ marginTop: "1rem" }}>
+      {!isBuiltIn ? <div className="form-grid stack-top">
         <label className="field form-grid-span-2">
           <span>
             名称 <em className="field-required">*</em>
@@ -403,7 +403,7 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
           </select>
         </label>
       </div> : null}
-      <label className="field form-grid-span-2" style={{ marginTop: "1rem" }}>
+      <label className="field form-grid-span-2 stack-top">
         <span>上下文大小</span>
         <span className="checkbox-line">
           <input

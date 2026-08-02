@@ -208,11 +208,7 @@ export function ConfigSectionShell<TItem extends ConfigEditorItem>(
 
   if (loadError && items.length === 0) {
     return (
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>{sectionTitle}</h2>
-          <p>{sectionDescription}</p>
-        </div>
+      <section className="card">
         <div className="empty-state error">
           <strong>{emptyLoadErrorTitle}</strong>
           <p>{loadError}</p>
@@ -231,11 +227,8 @@ export function ConfigSectionShell<TItem extends ConfigEditorItem>(
   }
 
   return (
-    <section className="panel">
-      <div className="step-stage-head">
-        <h2>{sectionTitle}</h2>
-        <p>{sectionDescription}</p>
-      </div>
+    <section className="profile-section" aria-label={`${sectionTitle} 配置`}>
+      <h2 className="sr-only">{sectionTitle}</h2>
       {loadError ? (
         <div className="notice-banner warn">
           <div className="inline-status-row">
@@ -250,7 +243,7 @@ export function ConfigSectionShell<TItem extends ConfigEditorItem>(
           </div>
         </div>
       ) : null}
-      <div className="profile-layout" style={{ marginTop: "1rem" }}>
+      <div className="profile-layout">
         <div className="profile-list">
           {items.map((item) => (
             <button
@@ -308,15 +301,15 @@ export function ConfigBuiltInDetailCard(props: ConfigBuiltInDetailCardProps) {
   } = props;
 
   return (
-    <section className="panel">
+    <section className="card">
       <div className="step-stage-head">
-        <h2>{title}</h2>
+        <h3>{title}</h3>
         <p>{description}</p>
       </div>
       {notice ? (
         <div className={`notice-banner ${notice.tone}`}>{notice.message}</div>
       ) : null}
-      <div className="completed-card profile-hero-card">
+      <div className="hero-card">
         <h3>{heroTitle}</h3>
         <p>{heroDescription}</p>
       </div>
@@ -357,9 +350,9 @@ export function ConfigFormDetailCard(props: ConfigFormDetailCardProps) {
   } = props;
 
   return (
-    <section className="panel">
+    <section className="card">
       <div className="step-stage-head">
-        <h2>{title}</h2>
+        <h3>{title}</h3>
         <p>{description}</p>
       </div>
       {notice ? (
@@ -431,7 +424,7 @@ export function ConfigDeleteConfirmModal<TItem extends ConfigEditorItem>(
         {children}
         <div className="modal-actions">
           <button
-            className="ghost-button"
+            className="secondary-button"
             type="button"
             onClick={() => onCancel()}
           >

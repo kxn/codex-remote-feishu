@@ -742,24 +742,26 @@ export function AdminRoute() {
   function renderRequirementSection(
     title: string,
     requirements: FeishuAppAutoConfigRequirementStatus[],
+    tone: "warn" | "danger",
   ) {
     if (requirements.length === 0) {
       return null;
     }
     return (
-      <div className="detail-stack">
-        <strong>{title}</strong>
-        <div className="detail-stack">
-          {requirements.map((item) => {
-            const display = describeAutoConfigRequirementDisplay(item);
-            return (
-              <p key={`${item.kind}:${item.key}`} className="support-copy">
-                <strong>{display.label}</strong>
-                {display.detail ? `：${display.detail}` : ""}
-              </p>
-            );
-          })}
-        </div>
+      <div className="req-group">
+        <div className={`req-group-title ${tone}`}>{title}</div>
+        {requirements.map((item) => {
+          const display = describeAutoConfigRequirementDisplay(item);
+          return (
+            <div key={`${item.kind}:${item.key}`} className="req-item">
+              <span className={`dot ${tone}`} />
+              <div>
+                <div className="label">{display.label}</div>
+                {display.detail ? <div className="detail">{display.detail}</div> : null}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -828,8 +830,8 @@ export function AdminRoute() {
               当前原因：{describeAutoConfigBlockingReason(plan.blockingReason)}
             </p>
           ) : null}
-          {renderRequirementSection("还需要处理", blockingRequirements)}
-          {renderRequirementSection("可按降级继续", degradableRequirements)}
+          {renderRequirementSection("还需要处理", blockingRequirements, "danger")}
+          {renderRequirementSection("可按降级继续", degradableRequirements, "warn")}
           <div className="button-row">
             {plan.status === "apply_required" ? (
               <button
@@ -925,78 +927,73 @@ export function AdminRoute() {
             </button>
           </div>
           {connectMode === "qr" ? (
-            <div className="panel">
-              <div className="scan-preview">
-                <div>
-                  <h4 style={{ margin: 0 }}>扫码创建</h4>
-                  <p className="support-copy">
-                    使用飞书扫描二维码，页面将自动完成后续操作
-                  </p>
-                  <div className="scan-frame">
-                    {onboardingSession?.qrCodeDataUrl ? (
-                      <img alt="飞书扫码创建二维码" src={onboardingSession.qrCodeDataUrl} />
-                    ) : (
-                      <span>二维码准备中</span>
-                    )}
-                  </div>
+            <div className="scan-preview">
+              <div>
+                <div className="scan-frame">
+                  {onboardingSession?.qrCodeDataUrl ? (
+                    <img alt="飞书扫码创建二维码" src={onboardingSession.qrCodeDataUrl} />
+                  ) : (
+                    <span>二维码准备中</span>
+                  )}
                 </div>
-                <div className="detail-stack">
-                  {onboardingSession?.status === "pending" ? (
-                    <div className="notice-banner warn">正在等待扫码结果...</div>
-                  ) : null}
-                  {onboardingSession?.status === "ready" && !connectError ? (
-                    <div className="notice-banner good">
-                      扫码成功，连接验证已通过，正在加入机器人列表...
-                    </div>
-                  ) : null}
-                  {onboardingSession?.status === "failed" ||
-                  onboardingSession?.status === "expired" ||
-                  connectError ? (
-                    <div className="notice-banner danger">
-                      {connectError || "当前扫码没有继续成功，请重新开始。"}
-                    </div>
-                  ) : null}
-                  <div className="button-row">
-                    {(connectError ||
-                      onboardingSession?.status === "failed" ||
-                      onboardingSession?.status === "expired") && (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={actionBusy === "qr-start"}
-                        onClick={() => resetConnectFlow()}
-                      >
-                        重新扫码
-                      </button>
-                    )}
-                    {onboardingSession?.status === "ready" && connectError ? (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={actionBusy === "qr-complete"}
-                        onClick={() => {
-                          if (onboardingSession?.id) {
-                            clearConnectError();
-                            void completeQRCodeSession(onboardingSession.id);
-                          }
-                        }}
-                      >
-                        重新验证
-                      </button>
-                    ) : null}
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => changeConnectMode("manual")}
-                    >
-                      改用手动输入
-                    </button>
+                <p className="qr-hint">用飞书扫一扫，创建并接入机器人</p>
+              </div>
+              <div className="detail-stack">
+                {onboardingSession?.status === "pending" ? (
+                  <div className="notice-banner warn">正在等待扫码结果...</div>
+                ) : null}
+                {onboardingSession?.status === "ready" && !connectError ? (
+                  <div className="notice-banner good">
+                    扫码成功，连接验证已通过，正在加入机器人列表...
                   </div>
+                ) : null}
+                {onboardingSession?.status === "failed" ||
+                onboardingSession?.status === "expired" ||
+                connectError ? (
+                  <div className="notice-banner danger">
+                    {connectError || "当前扫码没有继续成功，请重新开始。"}
+                  </div>
+                ) : null}
+                <div className="button-row">
+                  {(connectError ||
+                    onboardingSession?.status === "failed" ||
+                    onboardingSession?.status === "expired") && (
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={actionBusy === "qr-start"}
+                      onClick={() => resetConnectFlow()}
+                    >
+                      重新扫码
+                    </button>
+                  )}
+                  {onboardingSession?.status === "ready" && connectError ? (
+                    <button
+                      className="primary-button"
+                      type="button"
+                      disabled={actionBusy === "qr-complete"}
+                      onClick={() => {
+                        if (onboardingSession?.id) {
+                          clearConnectError();
+                          void completeQRCodeSession(onboardingSession.id);
+                        }
+                      }}
+                    >
+                      重新验证
+                    </button>
+                  ) : null}
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => changeConnectMode("manual")}
+                  >
+                    改用手动输入
+                  </button>
                 </div>
               </div>
             </div>
           ) : (
-            <div className="panel">
+            <div className="detail-stack stack-top">
               <div className="form-grid">
                 <label className="field">
                   <span>
@@ -1230,7 +1227,7 @@ export function AdminRoute() {
                   </p>
                   <div className="button-row">
                     <button
-                      className="secondary-button"
+                      className="primary-button"
                       type="button"
                       onClick={() =>
                         void copyPermissionGrantJSON(selectedPermissionCheck.data)
@@ -1550,107 +1547,88 @@ export function AdminRoute() {
     return (
       <>
         <h1 className="area-title">系统</h1>
-        <p className="area-desc">自动运行、VS Code 集成与本地存储</p>
+        <p className="area-desc">本机集成、会话信息与存储维护</p>
         <section className="card">
-          <h3>系统集成</h3>
-          <div className="soft-grid two-column" style={{ marginTop: "1rem" }}>
-            <article className="soft-card-v2">
-              <h4>自动运行</h4>
-              <p>{describeAutostart(autostart, autostartError)}</p>
-              {autostartError ? (
-                <div className="notice-banner warn">{autostartError}</div>
-              ) : null}
-              {!autostartError && autostart?.supported && !autostart.enabled ? (
-                <div className="button-row">
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    disabled={actionBusy === "autostart" || !autostart.canApply}
-                    onClick={() => void enableAutostart()}
-                  >
-                    启用自动运行
-                  </button>
-                </div>
-              ) : null}
-            </article>
-            <article className="soft-card-v2">
-              <h4>VS Code 集成</h4>
-              <p>{describeVSCode(vscode, vscodeError)}</p>
-              {vscodeError ? (
-                <div className="notice-banner warn">{vscodeError}</div>
-              ) : null}
-              <div className="button-row">
-                <button
-                  className="ghost-button"
-                  type="button"
-                  disabled={actionBusy === "vscode"}
-                  onClick={() => void repairVSCode()}
-                >
-                  重新检查并修复
-                </button>
-              </div>
-            </article>
+          <h3>自动运行</h3>
+          <div className="status-line">
+            <span className={`dot ${autostart?.enabled ? "good" : "idle"}`} />
+            <span>{describeAutostart(autostart, autostartError)}</span>
+          </div>
+          {autostartError ? (
+            <div className="notice-banner warn">{autostartError}</div>
+          ) : null}
+          {!autostartError && autostart?.supported && !autostart.enabled ? (
+            <div className="button-row">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={actionBusy === "autostart" || !autostart.canApply}
+                onClick={() => void enableAutostart()}
+              >
+                启用自动运行
+              </button>
+            </div>
+          ) : null}
+        </section>
+        <section className="card">
+          <h3>VS Code 集成</h3>
+          <div className="status-line">
+            <span className={`dot ${vscode && vscodeIsReady(vscode) ? "good" : "warn"}`} />
+            <span>{describeVSCode(vscode, vscodeError)}</span>
+          </div>
+          {vscodeError ? (
+            <div className="notice-banner warn">{vscodeError}</div>
+          ) : null}
+          <div className="button-row">
+            <button
+              className="primary-button"
+              type="button"
+              disabled={actionBusy === "vscode"}
+              onClick={() => void repairVSCode()}
+            >
+              重新检查并修复
+            </button>
           </div>
         </section>
         <section className="card">
-          <h3>本地存储</h3>
-          <div className="soft-grid" style={{ marginTop: "1rem" }}>
-            <article className="soft-card-v2">
-              <h4>预览文件</h4>
-              <p>{formatFileSummary(previewSummary.fileCount, previewSummary.bytes)}</p>
-              {previewError ? <div className="notice-banner warn">{previewError}</div> : null}
-              <div className="button-row">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={actionBusy === "cleanup-preview" || apps.length === 0}
-                  onClick={() => void cleanupPreviewDrive()}
-                >
-                  清理旧预览
-                </button>
-              </div>
-            </article>
-            <article className="soft-card-v2">
-              <h4>图片暂存</h4>
-              <p>{formatFileSummary(imageStaging?.fileCount || 0, imageStaging?.totalBytes || 0)}</p>
-              {imageStagingError ? (
-                <div className="notice-banner warn">{imageStagingError}</div>
-              ) : null}
-              <div className="button-row">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={actionBusy === "cleanup-image"}
-                  onClick={() => void cleanupImageStaging()}
-                >
-                  清理旧图片
-                </button>
-              </div>
-            </article>
-            <article className="soft-card-v2">
-              <h4>日志文件</h4>
-              <p>{formatFileSummary(logsStorage?.fileCount || 0, logsStorage?.totalBytes || 0)}</p>
-              {logsStorageError ? (
-                <div className="notice-banner warn">{logsStorageError}</div>
-              ) : null}
-              <div className="button-row">
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={actionBusy === "cleanup-logs"}
-                  onClick={() => void cleanupLogsStorage()}
-                >
-                  清理一天前日志
-                </button>
-              </div>
-            </article>
+          <h3>存储维护</h3>
+          <p className="card-sub">清理本地缓存的旧文件</p>
+          {previewError ? <div className="notice-banner warn">{previewError}</div> : null}
+          {imageStagingError ? (
+            <div className="notice-banner warn">{imageStagingError}</div>
+          ) : null}
+          {logsStorageError ? (
+            <div className="notice-banner warn">{logsStorageError}</div>
+          ) : null}
+          <div className="req-group">
+            <StorageCleanupRow
+              title="预览文件"
+              summary={formatFileSummary(previewSummary.fileCount, previewSummary.bytes)}
+              buttonLabel="清理旧预览"
+              disabled={actionBusy === "cleanup-preview" || apps.length === 0}
+              onClick={() => void cleanupPreviewDrive()}
+            />
+            <StorageCleanupRow
+              title="图片暂存"
+              summary={formatFileSummary(imageStaging?.fileCount || 0, imageStaging?.totalBytes || 0)}
+              buttonLabel="清理旧图片"
+              disabled={actionBusy === "cleanup-image"}
+              onClick={() => void cleanupImageStaging()}
+            />
+            <StorageCleanupRow
+              title="日志文件"
+              summary={formatFileSummary(logsStorage?.fileCount || 0, logsStorage?.totalBytes || 0)}
+              buttonLabel="清理一天前日志"
+              disabled={actionBusy === "cleanup-logs"}
+              onClick={() => void cleanupLogsStorage()}
+            />
           </div>
         </section>
         <section className="card">
-          <h3>访问方式</h3>
+          <h3>会话信息</h3>
           <dl className="definition-list">
             <div>
-              <dt>当前访问</dt>
+              <dt>访问方式</dt>
               <dd>{describeAdminSession(bootstrap)}</dd>
             </div>
           </dl>
@@ -1709,7 +1687,7 @@ export function AdminRoute() {
             </p>
             <div className="modal-actions">
               <button
-                className="ghost-button"
+                className="secondary-button"
                 type="button"
                 onClick={() => setPublishTargetID(null)}
               >
@@ -1743,7 +1721,7 @@ export function AdminRoute() {
             </p>
             <div className="modal-actions">
               <button
-                className="ghost-button"
+                className="secondary-button"
                 type="button"
                 onClick={() => setDeleteTargetID(null)}
               >
@@ -1857,6 +1835,31 @@ function describeVSCode(
   return vscodeIsReady(vscode)
     ? "当前已接入。"
     : "检测到 VS Code 集成未完成，请先修复。";
+}
+
+function StorageCleanupRow(props: {
+  title: string;
+  summary: string;
+  buttonLabel: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div className="req-item">
+      <div>
+        <div className="label">{props.title}</div>
+        <div className="detail">{props.summary}</div>
+      </div>
+      <button
+        className="secondary-button storage-row-action"
+        type="button"
+        disabled={props.disabled}
+        onClick={props.onClick}
+      >
+        {props.buttonLabel}
+      </button>
+    </div>
+  );
 }
 
 function formatBytes(value: number): string {
