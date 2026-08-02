@@ -49,12 +49,9 @@ describe("SetupRoute", () => {
 
     render(<SetupRoute />);
 
-    expect(
-      await screen.findByRole("heading", {
-        name: "Codex Remote Feishu v1.7.0 安装程序",
-      }),
-    ).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
+    expect(await screen.findByText("Codex Remote")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "连接飞书机器人" })).toBeInTheDocument();
+    expect(document.title).toBe("Codex Remote Feishu v1.7.0 安装程序");
     await waitFor(() => {
       expect(
         calls.some((call) => call.path === "/g/demo/api/setup/feishu/onboarding/sessions"),
@@ -165,14 +162,14 @@ describe("SetupRoute", () => {
 
     render(<SetupRoute />);
 
-    expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "连接飞书机器人" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "手动输入" }));
     await user.type(screen.getByLabelText("机器人名称（可选）"), "团队机器人");
     await user.type(screen.getByLabelText("App ID"), "cli_manual");
     await user.type(screen.getByLabelText("App Secret"), "secret_manual");
     await user.click(screen.getByRole("button", { name: "验证并继续" }));
 
-    expect(await screen.findByRole("heading", { name: "飞书自动配置" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "配置飞书机器人" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "自动补齐" }));
 
     expect(await screen.findByRole("button", { name: "继续发布" })).toBeInTheDocument();
@@ -183,7 +180,7 @@ describe("SetupRoute", () => {
       await screen.findByRole("heading", { name: "已提交发布，正在等待管理员处理" }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "先按降级继续" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "菜单确认" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "确认机器人菜单" })).not.toBeInTheDocument();
   });
 
   it("allows deferring optional auto-config work and continues to menu", async () => {
@@ -215,7 +212,7 @@ describe("SetupRoute", () => {
 
     render(<SetupRoute />);
 
-    expect(await screen.findByRole("heading", { name: "飞书自动配置" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "配置飞书机器人" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "先按降级继续" }));
 
     await waitFor(() => {
@@ -227,7 +224,7 @@ describe("SetupRoute", () => {
         ),
       ).toBe(true);
     });
-    expect(await screen.findByRole("heading", { name: "菜单确认" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "确认机器人菜单" })).toBeInTheDocument();
   });
 
   it("shows autostart warning and hides enable action when apply is unavailable", async () => {
@@ -265,11 +262,12 @@ describe("SetupRoute", () => {
 
     render(<SetupRoute />);
 
-    expect(await screen.findByRole("heading", { name: "自动启动" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "本机集成" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "自动运行" })).toBeInTheDocument();
     expect(screen.getByText("自动启动状态暂时不可写。")).toBeInTheDocument();
     expect(screen.getByText("稍后可以在管理页重试。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "启用自动启动" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "稍后处理" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "稍后处理自动运行" })).toBeInTheDocument();
   });
 
   it("starts qr onboarding automatically, polls every 5 seconds, and advances to auto-config", async () => {
@@ -331,9 +329,9 @@ describe("SetupRoute", () => {
 
     render(<SetupRoute />);
 
-    expect(await screen.findByRole("heading", { name: "飞书连接" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "连接飞书机器人" })).toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "飞书自动配置" }, { timeout: 7_000 }),
+      await screen.findByRole("heading", { name: "配置飞书机器人" }, { timeout: 7_000 }),
     ).toBeInTheDocument();
   }, 10_000);
 

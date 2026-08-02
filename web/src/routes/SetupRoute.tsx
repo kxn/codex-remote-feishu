@@ -5,6 +5,7 @@ import {
   requestVoid,
   sendJSON,
 } from "../lib/api";
+import { BrandLockup, Toast } from "../components/ui";
 import { navigateToLocalPath } from "../lib/navigation";
 import { relativeLocalPath } from "../lib/paths";
 import type {
@@ -42,6 +43,8 @@ type SetupStepID =
   | "vscode"
   | "done";
 
+type SetupActID = 1 | 2 | 3;
+
 type NoticeTone = "good" | "warn" | "danger";
 
 type Notice = {
@@ -55,14 +58,20 @@ type ManualConnectForm = {
   appSecret: string;
 };
 
-const setupSteps: Array<{ id: SetupStepID; name: string }> = [
-  { id: "runtime_requirements", name: "环境检查" },
-  { id: "connect", name: "飞书连接" },
-  { id: "auto_config", name: "飞书自动配置" },
-  { id: "menu", name: "菜单确认" },
-  { id: "autostart", name: "自动启动" },
-  { id: "vscode", name: "VS Code 集成" },
-  { id: "done", name: "完成" },
+const setupActs: Array<{ id: SetupActID; name: string; stepIDs: SetupStepID[] }> = [
+  { id: 1, name: "准备环境", stepIDs: ["runtime_requirements"] },
+  { id: 2, name: "连接飞书机器人", stepIDs: ["connect", "auto_config", "menu"] },
+  { id: 3, name: "本机集成", stepIDs: ["autostart", "vscode"] },
+];
+
+const setupStepOrder: SetupStepID[] = [
+  "runtime_requirements",
+  "connect",
+  "auto_config",
+  "menu",
+  "autostart",
+  "vscode",
+  "done",
 ];
 
 const vscodeApplyTimeoutMs = 10_000;
@@ -83,6 +92,7 @@ export function SetupRoute() {
   const [actionBusy, setActionBusy] = useState("");
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [finishingSetup, setFinishingSetup] = useState(false);
+  const [expandedActs, setExpandedActs] = useState<Record<number, boolean>>({});
 
   const activeApp = useMemo(() => {
     if (workflow?.app?.app) {
@@ -99,9 +109,6 @@ export function SetupRoute() {
   const adminURL = relativeLocalPath(bootstrap?.admin.url || "/");
   const activeConsoleLinks = activeApp?.consoleLinks;
   const isReadOnlyApp = Boolean(activeApp?.readOnly);
-  const currentStageIndex = setupSteps.findIndex(
-    (step) => step.id === normalizeSetupStepID(workflow?.currentStage),
-  );
   const stageMap = useMemo(() => {
     const next = new Map<string, string>();
     for (const stage of workflow?.stages || []) {
@@ -119,6 +126,12 @@ export function SetupRoute() {
     autostart: isResolvedStageStatus(stageMap.get("autostart") || ""),
     vscode: isResolvedStageStatus(stageMap.get("vscode") || ""),
     done: currentStep === "done" || normalizeSetupStepID(workflow?.currentStage) === "done",
+  };
+  const currentAct = setupActForStep(currentStep);
+  const actDone: Record<SetupActID, boolean> = {
+    1: stepDone.runtime_requirements,
+    2: stepDone.connect && stepDone.auto_config && stepDone.menu,
+    3: stepDone.autostart && stepDone.vscode,
   };
   const {
     connectMode,
@@ -558,11 +571,22 @@ export function SetupRoute() {
     setCurrentStep(stepID);
   }
 
+  function goToAct(actID: SetupActID) {
+    setExpandedActs((current) => ({ ...current, [actID]: !current[actID] }));
+    if (actID === currentAct) {
+      return;
+    }
+    const firstOpenStep = setupActs
+      .find((act) => act.id === actID)
+      ?.stepIDs.find((stepID) => !stepDone[stepID]);
+    setCurrentStep(firstOpenStep || firstStepForAct(actID));
+  }
+
   function goToNextStep(from: SetupStepID) {
-    const currentIndex = setupSteps.findIndex((step) => step.id === from);
-    const next = setupSteps[currentIndex + 1];
+    const currentIndex = setupStepOrder.findIndex((step) => step === from);
+    const next = setupStepOrder[currentIndex + 1];
     if (next) {
-      setCurrentStep(next.id);
+      setCurrentStep(next);
     }
   }
 
@@ -577,9 +601,8 @@ export function SetupRoute() {
       case "menu":
         return renderMenuStep();
       case "autostart":
-        return renderAutostartStep();
       case "vscode":
-        return renderVSCodeStep();
+        return renderMachineIntegrationStep();
       case "done":
         return renderDoneStep();
       default:
@@ -587,12 +610,219 @@ export function SetupRoute() {
     }
   }
 
+  function renderConnectSubsteps(current: "connect" | "auto_config" | "menu") {
+    const order: Array<{ id: "connect" | "auto_config" | "menu"; label: string }> = [
+      { id: "connect", label: "连接" },
+      { id: "auto_config", label: "配置" },
+      { id: "menu", label: "菜单" },
+    ];
+    const currentIndex = order.findIndex((item) => item.id === current);
+    return (
+      <div className="substeps">
+        {order.map((item, index) => (
+          <span
+            key={item.id}
+            className={index < currentIndex ? "done" : index === currentIndex ? "current" : ""}
+          >
+            {index < currentIndex ? `✓ ${item.label}` : item.label}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  function renderMachineIntegrationStep() {
+    return (
+      <section className="step-section">
+        <div className="step-stage-head">
+          <h2>本机集成</h2>
+          <p>可选，之后可在管理页面处理。</p>
+        </div>
+        <div className="two-col">
+          {renderAutostartCard()}
+          {renderVSCodeCard()}
+        </div>
+        {stepDone.autostart && stepDone.vscode ? (
+          <div className="button-row">
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => goToStep("done")}
+            >
+              完成设置
+            </button>
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
+  function renderAutostartCard() {
+    if (!autostartStage) {
+      return (
+        <article className="opt-card">
+          <h3>自动运行</h3>
+          <div className="opt-tag">可选</div>
+          <p className="opt-status">自动启动状态暂不可用。</p>
+        </article>
+      );
+    }
+    const autostartWarning = autostartStage.autostart?.warning?.trim() || "";
+    const autostartLingerHint = autostartStage.autostart?.lingerHint?.trim() || "";
+    const isComplete = isResolvedStageStatus(autostartStage.status);
+    return (
+      <article className="opt-card">
+        <h3>自动运行</h3>
+        <div className="opt-tag">可选</div>
+        <div className="status-line">
+          <span className={`dot ${isComplete ? "good" : "idle"}`} />
+          <span className={isComplete ? "txt good" : "txt idle"}>
+            {isComplete ? "已处理自动运行" : autostartStage.summary}
+          </span>
+        </div>
+        {autostartWarning ? <div className="notice warn">{autostartWarning}</div> : null}
+        {autostartLingerHint ? <div className="notice warn">{autostartLingerHint}</div> : null}
+        <div className="button-row">
+          {autostartStage.allowedActions?.includes("apply") ? (
+            <button
+              className="primary-button"
+              type="button"
+              disabled={actionBusy === "autostart-apply"}
+              onClick={() => void applyAutostartAndContinue()}
+            >
+              启用自动启动
+            </button>
+          ) : null}
+          {autostartStage.allowedActions?.includes("record_enabled") ? (
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={actionBusy === "autostart-enabled"}
+              onClick={() =>
+                void saveMachineDecision(
+                  "autostart",
+                  "enabled",
+                  "已记录自动启动状态。",
+                )
+              }
+            >
+              保持当前状态并继续
+            </button>
+          ) : null}
+          {autostartStage.allowedActions?.includes("defer") ? (
+            <button
+              className="ghost-button"
+              type="button"
+              aria-label="稍后处理自动运行"
+              disabled={actionBusy === "autostart-deferred"}
+              onClick={() =>
+                void saveMachineDecision(
+                  "autostart",
+                  "deferred",
+                  "已记录稍后处理自动启动。",
+                )
+              }
+            >
+              稍后处理
+            </button>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
+
+  function renderVSCodeCard() {
+    if (!vscodeStage) {
+      return (
+        <article className="opt-card">
+          <h3>VS Code 集成</h3>
+          <div className="opt-tag">可选</div>
+          <p className="opt-status">VS Code 集成状态暂不可用。</p>
+        </article>
+      );
+    }
+    const isComplete = isResolvedStageStatus(vscodeStage.status);
+    return (
+      <article className="opt-card">
+        <h3>VS Code 集成</h3>
+        <div className="opt-tag">可选</div>
+        <div className="status-line">
+          <span className={`dot ${isComplete ? "good" : "idle"}`} />
+          <span className={isComplete ? "txt good" : "txt idle"}>
+            {isComplete ? "VS Code 集成已处理" : vscodeStage.summary}
+          </span>
+        </div>
+        <div className="button-row">
+          {vscodeStage.allowedActions?.includes("apply") ? (
+            <button
+              className="primary-button"
+              type="button"
+              disabled={actionBusy === "vscode-apply"}
+              onClick={() => void applyVSCodeAndContinue()}
+            >
+              完成当前机器集成
+            </button>
+          ) : null}
+          {vscodeStage.allowedActions?.includes("record_managed_shim") ? (
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={actionBusy === "vscode-managed_shim"}
+              onClick={() =>
+                void saveMachineDecision(
+                  "vscode",
+                  "managed_shim",
+                  "已记录当前 VS Code 集成状态。",
+                )
+              }
+            >
+              保持当前状态并继续
+            </button>
+          ) : null}
+          {vscodeStage.allowedActions?.includes("remote_only") ? (
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={actionBusy === "vscode-remote_only"}
+              onClick={() =>
+                void saveMachineDecision(
+                  "vscode",
+                  "remote_only",
+                  "已记录稍后在目标 SSH 机器上处理 VS Code 集成。",
+                )
+              }
+            >
+              留到 SSH 目标机处理
+            </button>
+          ) : null}
+          {vscodeStage.allowedActions?.includes("defer") ? (
+            <button
+              className="ghost-button"
+              type="button"
+              aria-label="稍后处理 VS Code 集成"
+              disabled={actionBusy === "vscode-deferred"}
+              onClick={() =>
+                void saveMachineDecision(
+                  "vscode",
+                  "deferred",
+                  "已记录稍后处理 VS Code 集成。",
+                )
+              }
+            >
+              稍后处理
+            </button>
+          ) : null}
+        </div>
+      </article>
+    );
+  }
+
   function renderEnvironmentStep() {
     const blockingChecks = buildEnvironmentActionItems(runtimeRequirements);
     return (
       <section className="step-section">
         <div className="step-stage-head">
-          <h2>环境检查</h2>
+          <h2>准备环境</h2>
           <p>确认服务与运行条件正常</p>
         </div>
         {runtimeRequirements?.ready ? (
@@ -603,13 +833,8 @@ export function SetupRoute() {
           </div>
         )}
         {blockingChecks.length > 0 ? (
-          <div className="panel">
-            <div className="section-heading">
-              <div>
-                <h4>当前需要处理</h4>
-                <p>请先修复下面的问题，再重新检查。</p>
-              </div>
-            </div>
+          <div className="req-group">
+            <div className="req-group-title danger">当前需要处理</div>
             <ul className="ordered-checklist">
               {blockingChecks.map((item) => (
                 <li key={item.id}>
@@ -650,9 +875,10 @@ export function SetupRoute() {
     return (
       <section className="step-section">
         <div className="step-stage-head">
-          <h2>飞书连接</h2>
+          <h2>连接飞书机器人</h2>
           <p>扫码创建或手动输入接入飞书应用</p>
         </div>
+        {renderConnectSubsteps("connect")}
         {connectionStatus === "complete" ? (
           <div className="notice-banner good">当前飞书应用连接验证已通过。</div>
         ) : null}
@@ -679,7 +905,7 @@ export function SetupRoute() {
 
   function renderQRCodePanel() {
     return (
-      <div className="panel">
+      <div className="detail-stack">
         <div className="scan-preview">
           <div>
             <h4 style={{ margin: 0 }}>扫码创建</h4>
@@ -754,7 +980,7 @@ export function SetupRoute() {
 
   function renderManualPanel() {
     return (
-      <div className="panel">
+      <div className="detail-stack">
         {isReadOnlyApp ? (
           <div className="notice-banner warn">
             当前机器人信息由当前运行环境提供，网页里不能修改，只能完成连接验证。
@@ -830,7 +1056,7 @@ export function SetupRoute() {
       return (
         <section className="step-section">
           <div className="step-stage-head">
-            <h2>飞书自动配置</h2>
+            <h2>配置飞书机器人</h2>
             <p>请先完成飞书连接。</p>
           </div>
           <div className="notice-banner warn">当前还没有可用的飞书应用。</div>
@@ -848,18 +1074,19 @@ export function SetupRoute() {
     return (
       <section className="step-section">
         <div className="step-stage-head">
-          <h2>飞书自动配置</h2>
+          <h2>配置飞书机器人</h2>
           <p>
             自动检查并尽可能补齐权限、事件、回调和发布状态，避免再走测试消息路径。
           </p>
         </div>
+        {renderConnectSubsteps("auto_config")}
 
         <div className={`notice-banner ${onboardingAutoConfigNoticeTone(autoConfigStage.status)}`}>
           {autoConfigStage.summary?.trim() ||
             (plan ? describeAutoConfigSummary(plan.status) : "当前还没有读取到自动配置状态。")}
         </div>
 
-        <div className="panel">
+        <div className="detail-stack">
           <div className="section-heading">
             <div>
               <h4>{describeAutoConfigHeadline(plan?.status || autoConfigStage.status)}</h4>
@@ -959,7 +1186,7 @@ export function SetupRoute() {
       return (
         <section className="step-section">
           <div className="step-stage-head">
-            <h2>菜单确认</h2>
+            <h2>确认机器人菜单</h2>
             <p>请先完成前面的步骤。</p>
           </div>
           <div className="notice-banner warn">当前还没有可继续的飞书应用。</div>
@@ -970,9 +1197,10 @@ export function SetupRoute() {
     return (
       <section className="step-section">
         <div className="step-stage-head">
-          <h2>菜单确认</h2>
+          <h2>确认机器人菜单</h2>
           <p>在飞书后台确认机器人菜单配置，然后回到这里继续。</p>
         </div>
+        {renderConnectSubsteps("menu")}
         <div className={`notice-banner ${menuStage.status === "complete" ? "good" : menuStage.status === "blocked" ? "warn" : "warn"}`}>
           {menuStage.summary}
         </div>
@@ -1011,186 +1239,6 @@ export function SetupRoute() {
     );
   }
 
-  function renderAutostartStep() {
-    if (!autostartStage) {
-      return (
-        <section className="step-section">
-          <div className="step-stage-head">
-            <h2>自动启动</h2>
-            <p>自动启动状态暂不可用。</p>
-          </div>
-        </section>
-      );
-    }
-    const autostartWarning = autostartStage.autostart?.warning?.trim() || "";
-    const autostartLingerHint = autostartStage.autostart?.lingerHint?.trim() || "";
-
-    return (
-      <section className="step-section">
-        <div className="step-stage-head">
-          <h2>自动启动</h2>
-          <p>决定是否在登录后自动运行。</p>
-        </div>
-        <div className={`notice-banner ${autostartStage.status === "complete" ? "good" : "warn"}`}>
-          {autostartStage.summary}
-        </div>
-        {autostartWarning ? (
-          <div className="notice-banner warn">{autostartWarning}</div>
-        ) : null}
-        {autostartLingerHint ? (
-          <div className="notice-banner">{autostartLingerHint}</div>
-        ) : null}
-        <div className="button-row">
-          {autostartStage.allowedActions?.includes("apply") ? (
-            <button
-              className="primary-button"
-              type="button"
-              disabled={actionBusy === "autostart-apply"}
-              onClick={() => void applyAutostartAndContinue()}
-            >
-              启用自动启动
-            </button>
-          ) : null}
-          {autostartStage.allowedActions?.includes("record_enabled") ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={actionBusy === "autostart-enabled"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "autostart",
-                  "enabled",
-                  "已记录自动启动状态。",
-                )
-              }
-            >
-              保持当前状态并继续
-            </button>
-          ) : null}
-          {autostartStage.allowedActions?.includes("defer") ? (
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={actionBusy === "autostart-deferred"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "autostart",
-                  "deferred",
-                  "已记录稍后处理自动启动。",
-                )
-              }
-            >
-              稍后处理
-            </button>
-          ) : null}
-          {isResolvedStageStatus(autostartStage.status) ? (
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => goToNextStep("autostart")}
-            >
-              继续
-            </button>
-          ) : null}
-        </div>
-      </section>
-    );
-  }
-
-  function renderVSCodeStep() {
-    if (!vscodeStage) {
-      return (
-        <section className="step-section">
-          <div className="step-stage-head">
-            <h2>VS Code 集成</h2>
-            <p>VS Code 集成状态暂不可用。</p>
-          </div>
-        </section>
-      );
-    }
-
-    return (
-      <section className="step-section">
-        <div className="step-stage-head">
-          <h2>VS Code 集成</h2>
-          <p>决定如何处理这台机器上的 VS Code 集成。</p>
-        </div>
-        <div className={`notice-banner ${vscodeStage.status === "complete" ? "good" : "warn"}`}>
-          {vscodeStage.summary}
-        </div>
-        <div className="button-row">
-          {vscodeStage.allowedActions?.includes("apply") ? (
-            <button
-              className="primary-button"
-              type="button"
-              disabled={actionBusy === "vscode-apply"}
-              onClick={() => void applyVSCodeAndContinue()}
-            >
-              完成当前机器集成
-            </button>
-          ) : null}
-          {vscodeStage.allowedActions?.includes("record_managed_shim") ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={actionBusy === "vscode-managed_shim"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "vscode",
-                  "managed_shim",
-                  "已记录当前 VS Code 集成状态。",
-                )
-              }
-            >
-              保持当前状态并继续
-            </button>
-          ) : null}
-          {vscodeStage.allowedActions?.includes("remote_only") ? (
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={actionBusy === "vscode-remote_only"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "vscode",
-                  "remote_only",
-                  "已记录稍后在目标 SSH 机器上处理 VS Code 集成。",
-                )
-              }
-            >
-              留到 SSH 目标机处理
-            </button>
-          ) : null}
-          {vscodeStage.allowedActions?.includes("defer") ? (
-            <button
-              className="ghost-button"
-              type="button"
-              disabled={actionBusy === "vscode-deferred"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "vscode",
-                  "deferred",
-                  "已记录稍后处理 VS Code 集成。",
-                )
-              }
-            >
-              稍后处理
-            </button>
-          ) : null}
-          {isResolvedStageStatus(vscodeStage.status) ? (
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={() => goToNextStep("vscode")}
-            >
-              继续
-            </button>
-          ) : null}
-        </div>
-      </section>
-    );
-  }
-
   function renderDoneStep() {
     return (
       <section className="step-section">
@@ -1218,27 +1266,32 @@ export function SetupRoute() {
 
   if (loading) {
     return (
-      <div className="product-page">
-        <header className="product-topbar">
-          <h1>{title}</h1>
+      <div className="setup-page">
+        <header className="topbar">
+          <BrandLockup subtitle="安装向导" />
         </header>
-        <section className="panel">
+        {renderSetupProgress(currentAct, actDone)}
+        <main className="column">
+        <section className="card">
           <div className="empty-state">
             <div className="loading-dot" />
             <span>正在读取最新状态</span>
           </div>
         </section>
+        </main>
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="product-page">
-        <header className="product-topbar">
-          <h1>{title}</h1>
+      <div className="setup-page">
+        <header className="topbar">
+          <BrandLockup subtitle="安装向导" />
         </header>
-        <section className="panel">
+        {renderSetupProgress(currentAct, actDone)}
+        <main className="column">
+        <section className="card">
           <div className="empty-state error">
             <strong>当前页面暂时无法打开</strong>
             <p>{loadError}</p>
@@ -1253,55 +1306,33 @@ export function SetupRoute() {
             </div>
           </div>
         </section>
+        </main>
       </div>
     );
   }
 
   return (
-    <div className="product-page">
-      <header className="product-topbar">
-        <h1>{title}</h1>
+    <div className="setup-page">
+      <header className="topbar">
+        <BrandLockup subtitle="安装向导" />
       </header>
-      {notice ? (
-        <div className="product-notice-slot">
-          <div className={`notice-banner ${notice.tone}`}>{notice.message}</div>
-        </div>
-      ) : null}
-      <main className="setup-grid">
-        <aside className="panel step-rail">
-          <div className="step-stage-head">
-            <h2>设置流程</h2>
-            <p>共 7 步</p>
-          </div>
-          <div className="step-list">
-            {setupSteps.map((step, index) => {
-              const stageStatus = stageMap.get(step.id) || "";
-              const disabled =
-                currentStageIndex >= 0 &&
-                index > currentStageIndex &&
-                !isResolvedStageStatus(stageStatus);
-              return (
-                <button
-                  key={step.id}
-                  className={`step-item${step.id === currentStep ? " active" : ""}${stepDone[step.id] ? " done" : ""}`}
-                  disabled={disabled}
-                  type="button"
-                  onClick={() => goToStep(step.id)}
-                >
-                  <strong>{step.name}</strong>
-                  <span>
-                    {step.id === currentStep
-                      ? "进行中"
-                      : stepDone[step.id]
-                        ? "已完成"
-                        : "待处理"}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </aside>
-        <section className="panel step-stage">{renderCurrentStep()}</section>
+      {renderSetupProgress(currentAct, actDone)}
+      <main className="column">
+        {notice ? <Toast tone={notice.tone} message={notice.message} /> : null}
+        {renderWorkflowGuidance(workflow)}
+        {setupActs.map((act) => {
+          if (act.id === currentAct) {
+            return (
+              <section key={act.id} className="card">
+                {renderCurrentStep()}
+              </section>
+            );
+          }
+          return renderActSummaryRow(act.id);
+        })}
+        {currentStep === "done" ? (
+          <section className="card done-card">{renderDoneStep()}</section>
+        ) : null}
       </main>
 
       {publishConfirmOpen ? (
@@ -1337,6 +1368,104 @@ export function SetupRoute() {
         </div>
       ) : null}
     </div>
+  );
+
+  function renderActSummaryRow(actID: SetupActID) {
+    const done = actDone[actID];
+    const future = !done && currentAct !== actID;
+    const open = Boolean(expandedActs[actID]);
+    const content = (
+      <>
+        <span className={`dot ${done ? "good" : "idle"}`} />
+        <span className="row-name">{actName(actID)}</span>
+        <span className="row-sum">{done ? collapsedActSummary(actID) : "未开始"}</span>
+      </>
+    );
+
+    if (future) {
+      return (
+        <div key={actID} className="act-row future">
+          {content}
+        </div>
+      );
+    }
+
+    return (
+      <div key={actID}>
+        <button className="act-row done" type="button" onClick={() => goToAct(actID)}>
+          {content}
+        </button>
+        {open ? (
+          <ul className="collapsed-detail">
+            {collapsedActDetail(actID).map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
+}
+
+function renderSetupProgress(
+  currentAct: SetupActID | 4,
+  actDone: Record<SetupActID, boolean>,
+) {
+  return (
+    <div className="progress-wrap">
+      <div className="progress" aria-hidden="true">
+        {setupActs.map((act) => (
+          <div
+            key={act.id}
+            className={`seg${actDone[act.id] ? " done" : ""}${act.id === currentAct ? " active" : ""}`}
+          />
+        ))}
+      </div>
+      <div className="progress-labels">
+        {setupActs.map((act) => (
+          <span
+            key={act.id}
+            className={`${actDone[act.id] ? "done" : ""}${act.id === currentAct ? " active" : ""}`.trim()}
+          >
+            {act.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function renderWorkflowGuidance(workflow: OnboardingWorkflowResponse | null) {
+  if (!workflow || workflow.completion.canComplete || workflow.currentStage === "done") {
+    return null;
+  }
+  const blockingReason = workflow.completion.blockingReason?.trim() || "";
+  const recommendedNextStep = describeRecommendedNextStep(
+    workflow.guide?.recommendedNextStep || workflow.currentStage,
+  );
+  const remainingManualActions = (workflow.guide?.remainingManualActions || [])
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!blockingReason && !recommendedNextStep && remainingManualActions.length === 0) {
+    return null;
+  }
+  return (
+    <section className="notice warn">
+      <strong>当前还不能完成设置</strong>
+      {blockingReason ? <div>{blockingReason}</div> : null}
+      {recommendedNextStep ? <div className="sub">建议：{recommendedNextStep}</div> : null}
+      {remainingManualActions.length > 0 ? (
+        <div className="req-group">
+          <div className="req-group-title warn">还需要你手动处理</div>
+          {remainingManualActions.map((item) => (
+            <div key={item} className="req-item">
+              <span className="dot warn" />
+              <div className="detail">{item}</div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -1375,14 +1504,14 @@ function renderAutoConfigRequirementList(
     return null;
   }
   return (
-    <div className="panel">
+    <div className="req-group">
+      <div className={`req-group-title ${tone}`}>{title}</div>
       <div className="section-heading">
         <div>
-          <h4>{title}</h4>
           <p>
             {tone === "danger"
-              ? "这些问题会阻塞当前 setup。"
-              : "这些问题不会阻塞 setup，但会影响部分能力。"}
+              ? "这些问题会阻塞当前设置。"
+              : "这些问题不会阻塞设置，但会影响部分能力。"}
           </p>
         </div>
       </div>
@@ -1446,4 +1575,78 @@ function buildSetupPageTitle(bootstrap: BootstrapState | null): string {
   const name = bootstrap?.product.name?.trim() || "Codex Remote Feishu";
   const version = bootstrap?.product.version?.trim();
   return version ? `${name} ${version} 安装程序` : `${name} 安装程序`;
+}
+
+function setupActForStep(stepID: SetupStepID): SetupActID | 4 {
+  switch (stepID) {
+    case "runtime_requirements":
+      return 1;
+    case "connect":
+    case "auto_config":
+    case "menu":
+      return 2;
+    case "autostart":
+    case "vscode":
+      return 3;
+    case "done":
+      return 4;
+  }
+}
+
+function firstStepForAct(actID: SetupActID): SetupStepID {
+  switch (actID) {
+    case 1:
+      return "runtime_requirements";
+    case 2:
+      return "connect";
+    case 3:
+      return "autostart";
+  }
+}
+
+function actName(actID: SetupActID): string {
+  return setupActs.find((act) => act.id === actID)?.name || "";
+}
+
+function collapsedActSummary(actID: SetupActID): string {
+  switch (actID) {
+    case 1:
+      return "环境正常";
+    case 2:
+      return "机器人已接入";
+    case 3:
+      return "本机集成已处理";
+  }
+}
+
+function collapsedActDetail(actID: SetupActID): string[] {
+  switch (actID) {
+    case 1:
+      return ["服务运行条件与对话后端都已就绪。"];
+    case 2:
+      return ["飞书机器人已经连接。", "自动配置与菜单确认已经完成。"];
+    case 3:
+      return ["自动运行和 VS Code 集成已完成或已记录稍后处理。"];
+  }
+}
+
+function describeRecommendedNextStep(value: string | undefined): string {
+  switch (value?.trim()) {
+    case "runtime_requirements":
+      return "先重新检查本机环境。";
+    case "connect":
+      return "先连接飞书机器人。";
+    case "auto_config":
+      return "先完成飞书自动配置。";
+    case "menu":
+      return "先确认机器人菜单。";
+    case "autostart":
+      return "选择是否启用自动运行。";
+    case "vscode":
+      return "选择如何处理 VS Code 集成。";
+    case "done":
+      return "进入管理页面。";
+    default:
+      return "";
+  }
 }

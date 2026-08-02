@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
@@ -50,9 +50,62 @@ function makeAdminAutoConfigPlan(
   });
 }
 
+function makeSingleRobotAdminRoutes(
+  app = makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+  routes: Record<string, unknown> = {},
+) {
+  return withClaudeProfiles({
+    "/api/admin/bootstrap-state": { body: makeBootstrap() },
+    "/api/admin/feishu/apps": {
+      body: {
+        apps: [app],
+      },
+    },
+    [`/api/admin/feishu/apps/${app.id}/auto-config/plan`]: {
+      body: makeAdminAutoConfigPlan({
+        id: app.id,
+        name: app.name,
+        appId: app.appId,
+      }),
+    },
+    "/api/admin/autostart/detect": {
+      body: {
+        platform: "linux",
+        supported: true,
+        status: "enabled",
+        configured: true,
+        enabled: true,
+        canApply: true,
+      },
+    },
+    "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+    "/api/admin/storage/image-staging": {
+      body: makeImageStagingStatus(),
+    },
+    "/api/admin/storage/logs": {
+      body: makeLogsStorageStatus(),
+    },
+    [`/api/admin/storage/preview-drive/${app.id}`]: {
+      body: makePreviewDriveStatus({
+        gatewayId: app.id,
+        name: app.name,
+      }),
+    },
+    ...routes,
+  });
+}
+
+async function openAdminArea(
+  user: ReturnType<typeof userEvent.setup>,
+  name: "总览" | "机器人" | "对话后端" | "系统",
+) {
+  await user.click(screen.getAllByRole("button", { name })[0]);
+}
+
 describe("AdminRoute", () => {
   it("keeps local API requests dot-relative when mounted under a prefixed path", async () => {
     window.history.replaceState({}, "", "/g/demo/admin");
+    const user = userEvent.setup();
 
     const { calls } = installMockFetch(withClaudeProfiles({
       "/g/demo/api/admin/bootstrap-state": {
@@ -93,10 +146,15 @@ describe("AdminRoute", () => {
         name: "Codex Remote Feishu v1.7.0 管理",
       }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "机器人管理" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Claude Profile" })).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "Codex Profile" })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /新增机器人/ })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "机器人" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "对话后端" }).length).toBeGreaterThan(0);
+    await openAdminArea(user, "机器人");
+    expect(await screen.findByRole("heading", { name: "机器人" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /添加机器人/ })).toBeInTheDocument();
+    await openAdminArea(user, "对话后端");
+    expect(await screen.findByRole("heading", { name: "Claude" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Codex" }));
+    expect(await screen.findByRole("heading", { name: "Codex" })).toBeInTheDocument();
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
     expect(
@@ -112,6 +170,7 @@ describe("AdminRoute", () => {
 
   it("marks robots with auto-config work remaining and shows the warning in detail", async () => {
     window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
 
     installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
@@ -168,6 +227,7 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
+    await openAdminArea(user, "机器人");
     expect(await screen.findByText("待补齐")).toBeInTheDocument();
     expect(await screen.findByText("当前还需要自动补齐配置")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "自动补齐配置" })).toBeInTheDocument();
@@ -176,6 +236,7 @@ describe("AdminRoute", () => {
 
   it("shows manual-maintenance state when auto-config is unsupported", async () => {
     window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
 
     installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
@@ -224,6 +285,7 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
+    await openAdminArea(user, "机器人");
     expect(await screen.findByText("手动维护")).toBeInTheDocument();
     expect(await screen.findByText("当前应用需要手动维护")).toBeInTheDocument();
     expect(
@@ -234,6 +296,159 @@ describe("AdminRoute", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("unsupported_application")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "自动补齐配置" })).not.toBeInTheDocument();
+  });
+
+  it("checks robot permissions through the admin route and displays backend-provided scopes", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [
+            makeApp({
+              id: "bot-permission",
+              name: "权限机器人",
+              appId: "cli_permission",
+            }),
+          ],
+        },
+      },
+      "/api/admin/feishu/apps/bot-permission/auto-config/plan": {
+        body: makeAdminAutoConfigPlan({
+          id: "bot-permission",
+          name: "权限机器人",
+          appId: "cli_permission",
+        }),
+      },
+      "/api/admin/feishu/apps/bot-permission/permissions/check": {
+        body: {
+          app: makeApp({
+            id: "bot-permission",
+            name: "权限机器人",
+            appId: "cli_permission",
+          }),
+          ready: false,
+          missingScopes: [
+            {
+              scope: "im:message.group_msg:readonly",
+              scopeType: "tenant",
+            },
+          ],
+          grantJSON:
+            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_msg:readonly"\n    ],\n    "user": []\n  }\n}',
+          lastCheckedAt: "2026-08-02T06:30:00Z",
+        },
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-permission": {
+        body: makePreviewDriveStatus({
+          gatewayId: "bot-permission",
+          name: "权限机器人",
+        }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
+    expect(screen.getByText("im:message.group_msg:readonly")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/im:message\.group_msg:readonly/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "复制导入 JSON" }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("im:message.group_msg:readonly"));
+    expect(await screen.findByText("导入 JSON 已复制。")).toBeInTheDocument();
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
+  it("shows a ready permission check result", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({
+      id: "bot-ready",
+      name: "权限就绪机器人",
+      appId: "cli_ready",
+    });
+
+    installMockFetch(makeSingleRobotAdminRoutes(app, {
+      "/api/admin/feishu/apps/bot-ready/permissions/check": {
+        body: {
+          app,
+          ready: true,
+          missingScopes: [],
+          grantJSON: '{\n  "scopes": {\n    "tenant": [],\n    "user": []\n  }\n}',
+          lastCheckedAt: "2026-08-02T06:30:00Z",
+        },
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+
+    expect(await screen.findByText("权限已就绪")).toBeInTheDocument();
+    expect(screen.queryByText(/还缺少/)).not.toBeInTheDocument();
+  });
+
+  it("shows a retryable permission check failure", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({
+      id: "bot-failed",
+      name: "权限检查失败机器人",
+      appId: "cli_failed",
+    });
+
+    installMockFetch(makeSingleRobotAdminRoutes(app, {
+      "/api/admin/feishu/apps/bot-failed/permissions/check": {
+        status: 502,
+        body: {
+          error: {
+            code: "feishu_permission_check_failed",
+            message: "failed to check feishu app permissions",
+          },
+        },
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+
+    expect(await screen.findByText("当前还不能完成权限检查，请稍后重试。")).toBeInTheDocument();
+    expect(screen.getByText("权限检查没有完成，请稍后重试。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "重新检查" }).length).toBeGreaterThan(0);
   });
 
   it("lazy-loads auto-config plan only for the selected robot", async () => {
@@ -289,7 +504,6 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    await screen.findByRole("heading", { name: "主机器人" });
     await waitFor(() => {
       expect(
         calls.some((call) => call.path === "/api/admin/feishu/apps/bot-1/auto-config/plan"),
@@ -299,6 +513,8 @@ describe("AdminRoute", () => {
       calls.some((call) => call.path === "/api/admin/feishu/apps/bot-2/auto-config/plan"),
     ).toBe(false);
 
+    await openAdminArea(user, "机器人");
+    await screen.findByRole("heading", { name: "主机器人" });
     await user.click(screen.getByRole("button", { name: /备用机器人/ }));
 
     expect(await screen.findByRole("heading", { name: "备用机器人" })).toBeInTheDocument();
@@ -398,7 +614,8 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    await user.click(await screen.findByRole("button", { name: /新增机器人/ }));
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: /添加机器人/ }));
     expect(await screen.findByRole("button", { name: "扫码创建" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "手动输入" }));
     await user.type(screen.getByLabelText("机器人名称（可选）"), "运营机器人");
@@ -463,11 +680,12 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
+    await openAdminArea(user, "机器人");
     await user.click(await screen.findByRole("button", { name: "删除机器人" }));
     expect(await screen.findByRole("dialog")).toHaveTextContent("确认删除机器人");
     await user.click(screen.getByRole("button", { name: "确认删除" }));
 
-    expect(await screen.findByRole("heading", { name: "新增机器人" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "添加机器人" })).toBeInTheDocument();
     expect(await screen.findByText("机器人已删除。")).toBeInTheDocument();
   });
 
@@ -581,6 +799,7 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
+    await openAdminArea(user, "机器人");
     await user.click(await screen.findByRole("button", { name: "自动补齐配置" }));
     await user.click(await screen.findByRole("button", { name: "提交发布" }));
     expect(await screen.findByRole("dialog")).toHaveTextContent("确认提交发布");
@@ -636,6 +855,7 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
+    await openAdminArea(user, "系统");
     expect(await screen.findByText("128 个文件，约 860 MB")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "清理一天前日志" }));
     expect(await screen.findByText("58 个文件，约 420 MB")).toBeInTheDocument();
@@ -643,6 +863,7 @@ describe("AdminRoute", () => {
 
   it("renders the Claude configuration panel on the v1.7.0 admin layout", async () => {
     window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
 
     installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
@@ -678,7 +899,8 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    const heading = await screen.findByRole("heading", { name: "Claude Profile" });
+    await openAdminArea(user, "对话后端");
+    const heading = await screen.findByRole("heading", { name: "Claude" });
     const section = heading.closest("section");
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText("本机默认配置")).toBeInTheDocument();
@@ -686,6 +908,7 @@ describe("AdminRoute", () => {
 
   it("renders the Codex provider panel on the v1.7.0 admin layout", async () => {
     window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
 
     installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
@@ -721,7 +944,9 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
-    const heading = await screen.findByRole("heading", { name: "Codex Profile" });
+    await openAdminArea(user, "对话后端");
+    await user.click(screen.getByRole("button", { name: "Codex" }));
+    const heading = await screen.findByRole("heading", { name: "Codex" });
     const section = heading.closest("section");
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText("本机默认 · 跟随 Codex")).toBeInTheDocument();
@@ -814,6 +1039,7 @@ describe("AdminRoute", () => {
 
     render(<AdminRoute />);
 
+    await openAdminArea(user, "对话后端");
     await user.click(await screen.findByRole("button", { name: /DevSeek/ }));
 
     expect(screen.queryByText("认证方式")).not.toBeInTheDocument();
@@ -846,7 +1072,7 @@ describe("AdminRoute", () => {
     expect(screen.queryByRole("button", { name: /DevSeek$/ })).not.toBeInTheDocument();
 
     const claudeSection = screen
-      .getByRole("heading", { name: "Claude Profile" })
+      .getByRole("heading", { name: "Claude" })
       .closest("section");
     expect(claudeSection).not.toBeNull();
 

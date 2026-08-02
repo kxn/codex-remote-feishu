@@ -91,7 +91,7 @@ describe("CodexProviderSection", () => {
 
     await user.click(await screen.findByRole("button", { name: /Team Proxy/ }));
 
-    expect(screen.getByRole("heading", { name: "Codex Profile" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Codex" })).toBeInTheDocument();
     expect(screen.queryByText("model_provider")).not.toBeInTheDocument();
     expect(screen.queryByText("env_key")).not.toBeInTheDocument();
     expect(screen.queryByText("requires_openai_auth")).not.toBeInTheDocument();
@@ -113,7 +113,7 @@ describe("CodexProviderSection", () => {
     expect(apiKeyInput.value).toBe("updated-secret");
     await user.click(screen.getByRole("button", { name: "保存修改" }));
 
-    expect(await screen.findByText("Codex Profile 已保存。")).toBeInTheDocument();
+    expect(await screen.findByText("Codex 配置已保存。")).toBeInTheDocument();
     const updateCall = calls.find(
       (call) => call.method === "PUT" && call.path === "/api/admin/codex/profiles/team-proxy",
     );
@@ -230,7 +230,7 @@ describe("CodexProviderSection", () => {
     await user.type(screen.getByLabelText(/名称/), "Team Proxy 2");
     await user.click(screen.getByRole("button", { name: "保存修改" }));
 
-    expect(await screen.findByText("Codex Profile 已保存。")).toBeInTheDocument();
+    expect(await screen.findByText("Codex 配置已保存。")).toBeInTheDocument();
     const updateCall = calls.find(
       (call) => call.method === "PUT" && call.path === "/api/admin/codex/profiles/team-proxy",
     );
@@ -420,7 +420,7 @@ describe("CodexProviderSection", () => {
     );
 
     await user.click(await screen.findByRole("button", { name: /Team Proxy/ }));
-    await user.click(screen.getByRole("button", { name: "删除 Profile" }));
+    await user.click(screen.getByRole("button", { name: "删除配置" }));
 
     expect(await screen.findByText("当前仍有使用中的会话。")).toBeInTheDocument();
     expect(screen.getByText("会话 · 当前会话")).toBeInTheDocument();
@@ -429,7 +429,7 @@ describe("CodexProviderSection", () => {
 
     await user.click(screen.getByRole("button", { name: "确认删除" }));
 
-    expect(await screen.findByText(/这个 Profile 仍在使用中/)).toBeInTheDocument();
+    expect(await screen.findByText(/这个配置仍在使用中/)).toBeInTheDocument();
     expect(screen.queryByText("/tmp/private/workspace")).not.toBeInTheDocument();
   });
 
@@ -495,15 +495,15 @@ describe("CodexProviderSection", () => {
       />,
     );
 
-    await user.click(await screen.findByRole("button", { name: /新增 Profile/ }));
+    await user.click(await screen.findByRole("button", { name: /新增配置/ }));
     await user.type(screen.getByLabelText(/名称/), "新代理");
     await user.type(screen.getByLabelText(/端点地址/), "https://proxy.new/v1");
     await user.type(screen.getByLabelText(/API Key/), "new-secret");
-    await user.click(screen.getByRole("button", { name: "保存 Profile" }));
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
     expect(await screen.findByText("请填写主模型。")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("主模型"), "gpt-5.5");
-    await user.click(screen.getByRole("button", { name: "保存 Profile" }));
+    await user.click(screen.getByRole("button", { name: "保存配置" }));
     expect(await screen.findByText("请填写推理强度。")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("推理强度"), "vendor-custom-effort");

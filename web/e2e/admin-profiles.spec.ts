@@ -4,40 +4,63 @@ test.beforeEach(async ({ page }) => {
   await installAdminMocks(page);
 });
 
-test("admin profiles can be managed on desktop and mobile", async ({ page }) => {
+test("admin core flows work on desktop and mobile", async ({ page }) => {
   await page.goto("/admin");
+  await expect(page.getByRole("heading", { name: /管理/ })).toBeVisible();
+  await expect(page.getByText("系统当前状态与需要处理的事项")).toBeVisible();
+
+  await openAdminArea(page, "机器人");
+  await expect(page.getByRole("heading", { name: "机器人", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "权限机器人" })).toBeVisible();
+  await page.getByRole("button", { name: "检查权限" }).click();
+  await expect(page.getByText("还缺少 1 项权限")).toBeVisible();
+  await expect(
+    page.locator(".req-item .label", { hasText: "im:message.group_msg:readonly" }),
+  ).toBeVisible();
+
+  await openAdminArea(page, "系统");
+  await expect(page.getByRole("heading", { name: "系统", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "系统集成" })).toBeVisible();
+  await page.setViewportSize({ width: 812, height: 393 });
+  await expect(page.getByRole("heading", { name: "系统", exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 393, height: 812 });
+  await expect(page.getByRole("heading", { name: "系统", exact: true })).toBeVisible();
+
+  await openAdminArea(page, "对话后端");
+  await page.getByRole("button", { name: "Codex" }).click();
 
   const codexSection = page
     .locator("section.panel")
-    .filter({ has: page.getByRole("heading", { name: "Codex Profile", exact: true }) })
+    .filter({ has: page.getByRole("heading", { name: "Codex", exact: true }) })
     .first();
-  await expect(codexSection.getByRole("heading", { name: "Codex Profile", exact: true })).toBeVisible();
-  await codexSection.getByRole("button", { name: /新增 Profile/ }).click();
-  await codexSection.getByLabel(/名称/).fill("E2E Profile");
+  await expect(codexSection.getByRole("heading", { name: "Codex", exact: true })).toBeVisible();
+  await codexSection.getByRole("button", { name: /新增配置/ }).click();
+  await codexSection.getByLabel(/名称/).fill("E2E 配置");
   await codexSection.getByLabel(/端点地址/).fill("https://api.example.com/v1");
   await codexSection.getByLabel(/API Key/).fill("e2e-secret");
   await codexSection.getByLabel("主模型").fill("gpt-5.5");
   await codexSection.getByLabel("推理强度").fill("high");
-  await codexSection.getByRole("button", { name: "保存 Profile" }).click();
-  await expect(codexSection.getByText("Codex Profile 已创建。")).toBeVisible();
-  await expect(codexSection.getByRole("button", { name: /E2E Profile/ })).toBeVisible();
-  await codexSection.getByRole("button", { name: "删除 Profile" }).click();
+  await codexSection.getByRole("button", { name: "保存配置" }).click();
+  await expect(codexSection.getByText("Codex 配置已创建。")).toBeVisible();
+  await expect(codexSection.getByRole("button", { name: /E2E 配置/ })).toBeVisible();
+  await codexSection.getByRole("button", { name: "删除配置" }).click();
   await page.getByRole("button", { name: "确认删除" }).click();
-  await expect(codexSection.getByText("Codex Profile 已删除。")).toBeVisible();
-  await expect(codexSection.getByRole("button", { name: /E2E Profile/ })).toHaveCount(0);
+  await expect(codexSection.getByText("Codex 配置已删除。")).toBeVisible();
+  await expect(codexSection.getByRole("button", { name: /E2E 配置/ })).toHaveCount(0);
 
   await codexSection.getByRole("button", { name: /Team Proxy/ }).click();
   await expect(codexSection.getByLabel("上下文大小")).toBeVisible();
   await codexSection.getByLabel("上下文大小").selectOption("price_guard_272k");
   await expect(codexSection.getByText("按费用优先请求 272K；这不是单次请求费用硬上限。")).toBeVisible();
   await codexSection.getByRole("button", { name: "保存修改" }).click();
-  await expect(codexSection.getByText("Codex Profile 已保存。")).toBeVisible();
+  await expect(codexSection.getByText("Codex 配置已保存。")).toBeVisible();
 
+  await page.getByRole("button", { name: "Claude" }).click();
   const claudeSection = page
     .locator("section.panel")
-    .filter({ has: page.getByRole("heading", { name: "Claude Profile", exact: true }) })
+    .filter({ has: page.getByRole("heading", { name: "Claude", exact: true }) })
     .first();
-  await expect(claudeSection.getByRole("heading", { name: "Claude Profile", exact: true })).toBeVisible();
+  await expect(claudeSection.getByRole("heading", { name: "Claude", exact: true })).toBeVisible();
   await claudeSection.getByRole("button", { name: /DevSeek/ }).click();
   await claudeSection.getByLabel("使用 1M 上下文").check();
   await claudeSection.getByRole("button", { name: "保存修改" }).click();
@@ -45,6 +68,13 @@ test("admin profiles can be managed on desktop and mobile", async ({ page }) => 
 });
 
 type CodexProfile = ReturnType<typeof codexProfiles>[number];
+
+async function openAdminArea(page: Page, name: string) {
+  await page
+    .locator(".side-nav button:visible, .bottom-tabs button:visible")
+    .filter({ hasText: name })
+    .click();
+}
 
 async function installAdminMocks(page: Page) {
   const codexProfileState = codexProfiles();
@@ -72,7 +102,41 @@ async function installAdminMocks(page: Page) {
       return;
     }
     if (path.endsWith("/api/admin/feishu/apps")) {
-      await route.fulfill({ json: { apps: [] } });
+      await route.fulfill({ json: { apps: adminApps() } });
+      return;
+    }
+    if (path.endsWith("/api/admin/feishu/apps/e2e-bot/auto-config/plan")) {
+      await route.fulfill({
+        json: {
+          app: adminApps()[0],
+          plan: {
+            status: "clean",
+            summary: "飞书后台配置已就绪。",
+            blockingReason: "",
+            actions: [],
+            blockingRequirements: [],
+            degradableRequirements: [],
+          },
+        },
+      });
+      return;
+    }
+    if (path.endsWith("/api/admin/feishu/apps/e2e-bot/permissions/check")) {
+      await route.fulfill({
+        json: {
+          app: adminApps()[0],
+          ready: false,
+          missingScopes: [
+            {
+              scope: "im:message.group_msg:readonly",
+              scopeType: "tenant",
+            },
+          ],
+          grantJSON:
+            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_msg:readonly"\n    ],\n    "user": []\n  }\n}',
+          lastCheckedAt: "2026-08-02T06:30:00Z",
+        },
+      });
       return;
     }
     if (path.endsWith("/api/admin/codex/profiles") && method === "GET") {
@@ -238,6 +302,21 @@ async function installAdminMocks(page: Page) {
       });
       return;
     }
+    if (path.endsWith("/api/admin/storage/preview-drive/e2e-bot")) {
+      await route.fulfill({
+        json: {
+          gatewayId: "e2e-bot",
+          name: "权限机器人",
+          summary: {
+            fileCount: 0,
+            scopeCount: 0,
+            estimatedBytes: 0,
+            unknownSizeFileCount: 0,
+          },
+        },
+      });
+      return;
+    }
     await route.fulfill({ status: 404, json: { error: { message: `unmocked ${path}` } } });
   });
 }
@@ -252,9 +331,32 @@ function bootstrapState() {
     config: { path: "", version: 1 },
     relay: { listenHost: "127.0.0.1", listenPort: "9500", serverURL: "ws://127.0.0.1:9500/ws/agent" },
     admin: { listenHost: "127.0.0.1", listenPort: "9501", url: "/admin/", setupURL: "/setup", setupTokenRequired: false },
-    feishu: { appCount: 0, enabledAppCount: 0, configuredAppCount: 0, runtimeConfiguredApps: 0 },
+    feishu: { appCount: 1, enabledAppCount: 1, configuredAppCount: 1, runtimeConfiguredApps: 1 },
     gateways: [],
   };
+}
+
+function adminApps() {
+  return [
+    {
+      id: "e2e-bot",
+      name: "权限机器人",
+      appId: "cli_permission",
+      hasSecret: true,
+      enabled: true,
+      disabled: false,
+      readOnly: false,
+      runtimeOnly: false,
+      verifiedAt: "2026-08-02T06:30:00Z",
+      status: {
+        id: "e2e-bot",
+        state: "connected",
+        label: "已连接",
+        connected: true,
+      },
+      onboarding: {},
+    },
+  ];
 }
 
 function codexProfiles() {

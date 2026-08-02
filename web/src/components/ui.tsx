@@ -1,226 +1,164 @@
-import { useId, useState, type MouseEvent, type PropsWithChildren, type ReactNode } from "react";
+import {
+  type AnchorHTMLAttributes,
+  type ButtonHTMLAttributes,
+  type PropsWithChildren,
+  type ReactNode,
+} from "react";
 import { BrandLogo } from "./BrandLogo";
 
-type ShellScaffoldProps = {
-  routeLabel: string;
-  subtitle: string;
-  railContent: ReactNode;
-  railToggleLabel: string;
-  railClassName?: string;
-  mainClassName?: string;
-  children: ReactNode;
-};
+export type NoticeTone = "good" | "warn" | "danger";
+export type ButtonTone = "primary" | "secondary" | "ghost" | "danger";
+export type StatusTone = NoticeTone | "idle" | "neutral";
 
-export function ShellScaffold(props: ShellScaffoldProps) {
-  const { routeLabel, subtitle, railContent, railToggleLabel, railClassName, mainClassName, children } = props;
-  const [railOpen, setRailOpen] = useState(false);
-  const railBodyID = useId();
-
-  function handleRailBodyClick(event: MouseEvent<HTMLDivElement>) {
-    const target = event.target as HTMLElement | null;
-    if (!target?.closest("a,button")) {
-      return;
-    }
-    setRailOpen(false);
-  }
-
+export function BrandLockup(props: { subtitle: string; compact?: boolean }) {
   return (
-    <div className={`app-shell shell-scaffold${railOpen ? " rail-open" : ""}`}>
-      <aside className={`side-rail${railClassName ? ` ${railClassName}` : ""}`}>
-        <div className="shell-rail-header">
-          <div className="brand-lockup">
-            <BrandLogo className="brand-mark" />
-            <div>
-              <p className="brand-kicker">{routeLabel}</p>
-              <h1>Codex Remote</h1>
-            </div>
-          </div>
-          <button
-            className="shell-rail-toggle"
-            type="button"
-            aria-expanded={railOpen}
-            aria-controls={railBodyID}
-            onClick={() => setRailOpen((open) => !open)}
-          >
-            {railOpen ? `收起${railToggleLabel}` : `打开${railToggleLabel}`}
-          </button>
-        </div>
-        <div id={railBodyID} className="shell-rail-body" onClick={handleRailBodyClick}>
-          <p className="side-copy">{subtitle}</p>
-          {railContent}
-        </div>
-      </aside>
-      <main className={`main-stage${mainClassName ? ` ${mainClassName}` : ""}`}>{children}</main>
+    <div className={props.compact ? "brand brand-compact" : "brand"}>
+      <BrandLogo className="brand-mark" />
+      <div>
+        <div className="brand-name">Codex Remote</div>
+        <div className="brand-sub">{props.subtitle}</div>
+      </div>
     </div>
   );
 }
 
-export function ShellFrame(props: {
-  routeLabel: string;
-  title: string;
-  subtitle: string;
-  nav: Array<{ label: string; href: string }>;
-  actions?: ReactNode;
-  children: ReactNode;
-}) {
-  const { routeLabel, title, subtitle, nav, actions, children } = props;
-  return (
-    <ShellScaffold
-      routeLabel={routeLabel}
-      subtitle={subtitle}
-      railToggleLabel="分区导航"
-      railContent={
-        <nav className="side-nav" aria-label="Page Sections">
-          {nav.map((item) => (
-            <a key={item.href} href={item.href}>
-              {item.label}
-            </a>
-          ))}
-        </nav>
-      }
-    >
-        <header className="page-hero">
-          <div>
-            <p className="page-kicker">{routeLabel}</p>
-            <h2>{title}</h2>
-          </div>
-          {actions ? <div className="hero-actions">{actions}</div> : null}
-        </header>
-        {children}
-    </ShellScaffold>
-  );
+export function AppButton(
+  props: ButtonHTMLAttributes<HTMLButtonElement> & {
+    tone?: ButtonTone;
+  },
+) {
+  const { className, tone = "secondary", ...rest } = props;
+  return <button className={joinClassNames("btn", `btn-${tone}`, className)} {...rest} />;
 }
 
-export function Panel(props: PropsWithChildren<{ id?: string; title: string; description?: string; className?: string; actions?: ReactNode }>) {
-  const { id, title, description, className, actions, children } = props;
+export function AppLink(
+  props: AnchorHTMLAttributes<HTMLAnchorElement> & {
+    tone?: Exclude<ButtonTone, "danger">;
+  },
+) {
+  const { className, tone = "ghost", ...rest } = props;
+  return <a className={joinClassNames("btn", `btn-${tone}`, className)} {...rest} />;
+}
+
+export function Card(
+  props: PropsWithChildren<{
+    title?: string;
+    description?: string;
+    className?: string;
+    actions?: ReactNode;
+  }>,
+) {
+  const { actions, children, className, description, title } = props;
   return (
-    <section id={id} className={`panel${className ? ` ${className}` : ""}`}>
-      <div className="panel-head">
-        <div>
-          <h3>{title}</h3>
-          {description ? <p>{description}</p> : null}
+    <section className={joinClassNames("card", className)}>
+      {title || description || actions ? (
+        <div className="card-head">
+          <div>
+            {title ? <h3>{title}</h3> : null}
+            {description ? <p className="card-sub">{description}</p> : null}
+          </div>
+          {actions ? <div className="card-actions">{actions}</div> : null}
         </div>
-        {actions ? <div className="panel-actions">{actions}</div> : null}
-      </div>
+      ) : null}
       {children}
     </section>
   );
 }
 
-export function StatGrid(props: PropsWithChildren) {
-  return <div className="stat-grid">{props.children}</div>;
-}
-
-export function StatCard(props: { label: string; value: string | number; detail?: string; tone?: "default" | "accent" | "warn" }) {
+export function Notice(
+  props: PropsWithChildren<{
+    tone: NoticeTone;
+    title?: string;
+    className?: string;
+  }>,
+) {
   return (
-    <div className={`stat-card${props.tone ? ` ${props.tone}` : ""}`}>
-      <p>{props.label}</p>
-      <strong>{props.value}</strong>
-      {props.detail ? <span>{props.detail}</span> : null}
+    <div className={joinClassNames("notice", props.tone, props.className)}>
+      {props.title ? <strong>{props.title}</strong> : null}
+      {props.children}
     </div>
   );
 }
 
-export function StatusBadge(props: { value: string; tone?: "neutral" | "good" | "warn" | "danger" }) {
-  return <span className={`status-badge ${props.tone ?? "neutral"}`}>{props.value}</span>;
-}
-
-export function DefinitionList(props: { items: Array<{ label: string; value: ReactNode }> }) {
+export function Toast(props: { tone: NoticeTone; message: string }) {
   return (
-    <dl className="definition-list">
-      {props.items.map((item) => (
-        <div key={item.label}>
-          <dt>{item.label}</dt>
-          <dd>{item.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-export function DataList(props: { items: Array<{ title: string; meta?: string; detail?: string; tone?: "neutral" | "good" | "warn" | "danger" }> }) {
-  return (
-    <div className="data-list">
-      {props.items.map((item) => (
-        <article key={`${item.title}-${item.meta ?? ""}`} className="data-row">
-          <div>
-            <h4>{item.title}</h4>
-            {item.detail ? <p>{item.detail}</p> : null}
-          </div>
-          <div className="data-meta">
-            {item.meta ? <span>{item.meta}</span> : null}
-            {item.tone ? <StatusBadge value={toneLabel(item.tone)} tone={item.tone} /> : null}
-          </div>
-        </article>
-      ))}
+    <div className={`toast ${props.tone}`} role="status">
+      {props.message}
     </div>
   );
 }
 
-export function LoadingState(props: { title: string; description?: string }) {
+export function StatusDot(props: { tone?: StatusTone }) {
+  return <span className={`dot ${props.tone ?? "idle"}`} aria-hidden="true" />;
+}
+
+export function Badge(props: PropsWithChildren<{ tone?: NoticeTone | "neutral" }>) {
+  return <span className={`badge ${props.tone ?? "neutral"}`}>{props.children}</span>;
+}
+
+export function LoadingLine(props: { children: ReactNode }) {
   return (
-    <Panel title={props.title} description={props.description}>
-      <div className="empty-state">
-        <div className="loading-dot" />
-        <span>正在读取最新状态</span>
-      </div>
-    </Panel>
+    <div className="loading-line">
+      <span className="spinner" />
+      {props.children}
+    </div>
   );
 }
 
-export function ErrorState(props: { title: string; description?: string; detail: string }) {
+export function EmptyState(
+  props: PropsWithChildren<{
+    tone?: "default" | "error";
+    title?: string;
+  }>,
+) {
   return (
-    <Panel title={props.title} description={props.description}>
-      <div className="empty-state error">
-        <strong>加载失败</strong>
-        <p>{props.detail}</p>
-      </div>
-    </Panel>
+    <div className={joinClassNames("empty-state", props.tone === "error" ? "error" : "")}>
+      {props.title ? <strong>{props.title}</strong> : null}
+      {props.children}
+    </div>
   );
 }
 
-export function BlockingModal(props: {
-  open: boolean;
-  title: string;
-  message: string;
-  detail?: string;
-  confirmLabel?: string;
-  onConfirm: () => void;
-}) {
+export function ConfirmModal(
+  props: PropsWithChildren<{
+    open: boolean;
+    title: string;
+    description: string;
+    confirmLabel: string;
+    confirmTone?: "primary" | "danger";
+    confirmDisabled?: boolean;
+    onCancel: () => void;
+    onConfirm: () => void;
+  }>,
+) {
   if (!props.open) {
     return null;
   }
+  const titleID = props.title.replace(/\s+/g, "-").toLowerCase();
   return (
     <div className="modal-backdrop" role="presentation">
-      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="blocking-modal-title">
-        <p className="page-kicker">Blocking Error</p>
-        <h3 id="blocking-modal-title">{props.title}</h3>
-        <p>{props.message}</p>
-        {props.detail ? (
-          <details className="modal-detail">
-            <summary>查看技术详情</summary>
-            <pre>{props.detail}</pre>
-          </details>
-        ) : null}
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby={titleID}>
+        <h3 id={titleID}>{props.title}</h3>
+        <p className="modal-copy">{props.description}</p>
+        {props.children}
         <div className="modal-actions">
-          <button className="primary-button" type="button" onClick={props.onConfirm}>
-            {props.confirmLabel ?? "我知道了"}
-          </button>
+          <AppButton type="button" tone="secondary" onClick={props.onCancel}>
+            取消
+          </AppButton>
+          <AppButton
+            type="button"
+            tone={props.confirmTone === "danger" ? "danger" : "primary"}
+            disabled={props.confirmDisabled}
+            onClick={props.onConfirm}
+          >
+            {props.confirmLabel}
+          </AppButton>
         </div>
       </div>
     </div>
   );
 }
 
-function toneLabel(tone: "neutral" | "good" | "warn" | "danger"): string {
-  switch (tone) {
-    case "good":
-      return "Healthy";
-    case "warn":
-      return "Attention";
-    case "danger":
-      return "Blocked";
-    default:
-      return "Info";
-  }
+function joinClassNames(...values: Array<string | undefined | false>): string {
+  return values.filter(Boolean).join(" ");
 }

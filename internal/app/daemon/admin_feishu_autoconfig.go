@@ -67,9 +67,9 @@ func (liveDaemonFeishuSetupFacade) DescribeApp(ctx context.Context, appID, appSe
 }
 
 func (a *App) handleFeishuAppAutoConfigPlan(w http.ResponseWriter, r *http.Request) {
-	summary, runtimeCfg, err := a.loadFeishuAutoConfigTarget(r.PathValue("id"))
+	summary, runtimeCfg, err := a.loadFeishuLiveGatewayTarget(r.PathValue("id"))
 	if err != nil {
-		a.writeFeishuAutoConfigError(w, err)
+		a.writeFeishuAppTargetError(w, err)
 		return
 	}
 	planCtx, cancel := context.WithTimeout(r.Context(), defaultFeishuAutoConfigPlanTimeout)
@@ -86,9 +86,9 @@ func (a *App) handleFeishuAppAutoConfigPlan(w http.ResponseWriter, r *http.Reque
 }
 
 func (a *App) handleFeishuAppAutoConfigApply(w http.ResponseWriter, r *http.Request) {
-	summary, runtimeCfg, err := a.loadFeishuAutoConfigTarget(r.PathValue("id"))
+	summary, runtimeCfg, err := a.loadFeishuLiveGatewayTarget(r.PathValue("id"))
 	if err != nil {
-		a.writeFeishuAutoConfigError(w, err)
+		a.writeFeishuAppTargetError(w, err)
 		return
 	}
 	applyCtx, cancel := context.WithTimeout(r.Context(), defaultFeishuAutoConfigApplyTimeout)
@@ -113,9 +113,9 @@ func (a *App) handleFeishuAppAutoConfigApply(w http.ResponseWriter, r *http.Requ
 }
 
 func (a *App) handleFeishuAppAutoConfigPublish(w http.ResponseWriter, r *http.Request) {
-	summary, runtimeCfg, err := a.loadFeishuAutoConfigTarget(r.PathValue("id"))
+	summary, runtimeCfg, err := a.loadFeishuLiveGatewayTarget(r.PathValue("id"))
 	if err != nil {
-		a.writeFeishuAutoConfigError(w, err)
+		a.writeFeishuAppTargetError(w, err)
 		return
 	}
 	var req feishuAppAutoConfigPublishRequest
@@ -152,7 +152,7 @@ func (a *App) handleFeishuAppAutoConfigPublish(w http.ResponseWriter, r *http.Re
 	})
 }
 
-func (a *App) loadFeishuAutoConfigTarget(gatewayID string) (adminFeishuAppSummary, feishu.LiveGatewayConfig, error) {
+func (a *App) loadFeishuLiveGatewayTarget(gatewayID string) (adminFeishuAppSummary, feishu.LiveGatewayConfig, error) {
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return adminFeishuAppSummary{}, feishu.LiveGatewayConfig{}, err
@@ -182,7 +182,7 @@ func liveGatewayConfigFromRuntime(cfg feishu.GatewayAppConfig) feishu.LiveGatewa
 	}
 }
 
-func (a *App) writeFeishuAutoConfigError(w http.ResponseWriter, err error) {
+func (a *App) writeFeishuAppTargetError(w http.ResponseWriter, err error) {
 	switch {
 	case strings.HasPrefix(err.Error(), "feishu_app_not_found:"):
 		writeAPIError(w, http.StatusNotFound, apiError{

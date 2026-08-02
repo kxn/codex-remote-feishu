@@ -251,7 +251,7 @@ func buildOnboardingConnectionStage(app *adminFeishuAppSummary) onboardingWorkfl
 
 func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.FeishuAppOnboardingState) onboardingWorkflowAutoConfigView {
 	decision := onboardingDecisionViewFromConfig(state.AutoConfigDecision)
-	_, runtimeCfg, err := a.loadFeishuAutoConfigTarget(gatewayID)
+	_, runtimeCfg, err := a.loadFeishuLiveGatewayTarget(gatewayID)
 	if err != nil {
 		summary := "暂时无法读取飞书自动配置状态，请稍后重试。"
 		switch {

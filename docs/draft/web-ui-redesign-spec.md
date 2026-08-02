@@ -385,8 +385,9 @@ Codex Remote 是一个跑在用户自己机器上的守护进程（Go 后端 + �
 
 - 内容：「机器人」详情页新增「权限检查」区块，交互与验收标准见 6.4 表。用户价值：机器人缺权限时给出缺失清单和可一键导入飞书开放平台的授权 JSON，用户导入后重新检查。
 - **含后端工作——这是第 10 章第 7 条的唯一例外**：旧端点 `GET /api/admin/feishu/apps/{id}/permission-check`、`POST .../test-events`、`POST .../test-callback` 已被删除，且有测试 `TestAdminLegacyFeishuInstallTestRoutesAreRemoved`（`internal/app/daemon/admin_feishu_test.go:303`）守备这些路径不得复活。实现新端点时要么启用新路径，要么在同一改动中说明理由并同步更新该测试；禁止静默绕开。
-- 后端内部已有权限检查逻辑可参考复用：`PrimaryBotPermissionChecker`（`internal/core/orchestrator/service.go:41`，挂载于 `internal/app/daemon/app.go:251`）。
-- 前端 `web/src/lib/types.ts` 的遗留死类型：`FeishuAppPermissionCheckResponse`（约 220 行）若与新端点响应形状一致则复用，否则随实现修正；`FeishuAppTestStartResponse`（约 383 行）属已否决的收发测试，删除。
+- 新端点路径固定为 `GET /api/admin/feishu/apps/{id}/permissions/check`。响应字段：`app`、`ready`、`missingScopes[]`（`scope` / `scopeType`）、`grantJSON`、`lastCheckedAt`。`missingScopes` 与 `grantJSON` 均由后端根据 `feishuapp.DefaultManifest()` 和飞书已授权 scope 计算，前端不得维护第二份权限清单。
+- 后端内部已有权限检查逻辑可参考复用：`PrimaryBotPermissionChecker`（`internal/core/orchestrator/service.go:41`，挂载于 `internal/app/daemon/app.go:251`）。当前 Admin 权限检查面向完整 manifest scope 状态，不等同于主机器人群消息权限检查；两者都必须继续以 manifest / 飞书授权结果为底层事实源，不能在前端分叉规则。
+- 前端 `web/src/lib/types.ts` 复用 `FeishuAppPermissionCheckResponse` 作为该端点响应类型；已否决收发测试对应的 `FeishuAppTestStartResponse` 不得恢复。
 - 落地顺序（对第 8 章的补充）：先定后端端点契约并同步本章 → Admin mock 补该区块并经需求方确认 → 前端实现。
 
 ### 9.2 已否决（实现者不得重新引入）

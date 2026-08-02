@@ -380,14 +380,6 @@ export interface FeishuAppAutoConfigPublishResponse {
   result: FeishuAppAutoConfigPublishResult;
 }
 
-export interface FeishuAppTestStartResponse {
-  gatewayId: string;
-  startedAt: string;
-  expiresAt: string;
-  phrase?: string;
-  message: string;
-}
-
 export interface FeishuOnboardingSession {
   id: string;
   status: string;

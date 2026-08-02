@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   APIRequestError,
   type APIErrorShape,
@@ -18,6 +18,7 @@ import type {
   FeishuAppAutoConfigPlanResponse,
   FeishuAppAutoConfigPublishResponse,
   FeishuAppAutoConfigRequirementStatus,
+  FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
   FeishuAppsResponse,
@@ -54,6 +55,7 @@ import {
 import { runAdminStorageCleanup } from "./shared/adminStorage";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
 import { CodexProviderSection } from "./admin/CodexProviderSection";
+import { BrandLockup, Toast } from "../components/ui";
 
 type NoticeTone = "good" | "warn" | "danger";
 
@@ -68,22 +70,51 @@ type AutoConfigState =
   | { status: "ready"; data: FeishuAppAutoConfigPlanResponse }
   | { status: "error"; message: string };
 
+type PermissionCheckState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; data: FeishuAppPermissionCheckResponse }
+  | { status: "error"; message: string };
+
 type NewRobotForm = {
   name: string;
   appId: string;
   appSecret: string;
 };
 
+type AdminAreaID = "overview" | "bots" | "backends" | "system";
+type BackendTabID = "claude" | "codex";
+type OverviewTodoItem = {
+  id: string;
+  text: string;
+  tone: "warn" | "danger" | "idle";
+  area: AdminAreaID;
+  robotID?: string;
+};
+
 const newRobotID = "new";
+
+const adminAreas: Array<{ id: AdminAreaID; name: string }> = [
+  { id: "overview", name: "总览" },
+  { id: "bots", name: "机器人" },
+  { id: "backends", name: "对话后端" },
+  { id: "system", name: "系统" },
+];
+
 export function AdminRoute() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [activeArea, setActiveArea] = useState<AdminAreaID>("overview");
+  const [backendTab, setBackendTab] = useState<BackendTabID>("claude");
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
   const [autoConfigPlans, setAutoConfigPlans] = useState<Record<string, AutoConfigState>>(
     {},
   );
+  const [permissionChecks, setPermissionChecks] = useState<
+    Record<string, PermissionCheckState>
+  >({});
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
   const [codexProviders, setCodexProviders] = useState<CodexProfileSummary[]>([]);
   const [codexProvidersError, setCodexProvidersError] = useState("");
@@ -122,6 +153,9 @@ export function AdminRoute() {
   const selectedAutoConfig: AutoConfigState = selectedApp
     ? autoConfigPlans[selectedApp.id] || { status: "idle" }
     : { status: "idle" };
+  const selectedPermissionCheck: PermissionCheckState = selectedApp
+    ? permissionChecks[selectedApp.id] || { status: "idle" }
+    : { status: "idle" };
   const versionTitle = buildAdminPageTitle(bootstrap);
   const previewSummary = useMemo(() => {
     return Object.values(previewMap).reduce(
@@ -149,6 +183,7 @@ export function AdminRoute() {
     onCompleteSuccess: async (appID) => {
       await loadAdminPage({ preferredRobotID: appID });
       setSelectedRobotID(appID);
+      setActiveArea("bots");
       setDetailNotice({ tone: "good", message: "已完成连接验证。" });
     },
     resetSessionOnSuccess: true,
@@ -168,6 +203,13 @@ export function AdminRoute() {
   useEffect(() => {
     setAutoConfigPlans((current) => {
       const next: Record<string, AutoConfigState> = {};
+      for (const app of apps) {
+        next[app.id] = current[app.id] || { status: "idle" };
+      }
+      return next;
+    });
+    setPermissionChecks((current) => {
+      const next: Record<string, PermissionCheckState> = {};
       for (const app of apps) {
         next[app.id] = current[app.id] || { status: "idle" };
       }
@@ -330,6 +372,7 @@ export function AdminRoute() {
         reload: (appID) => loadAdminPage({ preferredRobotID: appID }),
       });
       setSelectedRobotID(result.appID);
+      setActiveArea("bots");
       if (!result.verified) {
         setDetailNotice({
           tone: "danger",
@@ -631,6 +674,71 @@ export function AdminRoute() {
     });
   }
 
+  async function checkRobotPermissions() {
+    if (!selectedApp?.id) {
+      return;
+    }
+    const appID = selectedApp.id;
+    setPermissionChecks((current) => ({
+      ...current,
+      [appID]: { status: "loading" },
+    }));
+    setActionBusy("permission-check");
+    try {
+      const response = await requestJSONAllowHTTPError<
+        FeishuAppPermissionCheckResponse | APIErrorShape
+      >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/permissions/check`);
+      if (!response.ok) {
+        setPermissionChecks((current) => ({
+          ...current,
+          [appID]: {
+            status: "error",
+            message: "当前还不能完成权限检查，请稍后重试。",
+          },
+        }));
+        setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
+        return;
+      }
+      const data = response.data as FeishuAppPermissionCheckResponse;
+      syncAppSummary(data.app);
+      setPermissionChecks((current) => ({
+        ...current,
+        [appID]: { status: "ready", data },
+      }));
+    } catch {
+      setPermissionChecks((current) => ({
+        ...current,
+        [appID]: {
+          status: "error",
+          message: "当前还不能完成权限检查，请稍后重试。",
+        },
+      }));
+      setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function copyPermissionGrantJSON(data: FeishuAppPermissionCheckResponse) {
+    const content = data.grantJSON?.trim();
+    if (!content || !navigator.clipboard?.writeText) {
+      setDetailNotice({
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(content);
+      setDetailNotice({ tone: "good", message: "导入 JSON 已复制。" });
+    } catch {
+      setDetailNotice({
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
+      });
+    }
+  }
+
   function renderRequirementSection(
     title: string,
     requirements: FeishuAppAutoConfigRequirementStatus[],
@@ -669,17 +777,17 @@ export function AdminRoute() {
 
     if (selectedAutoConfig.status === "idle" || selectedAutoConfig.status === "loading") {
       return (
-        <article className="soft-card-v2" style={{ marginTop: "1rem" }}>
-          <h4>飞书自动配置</h4>
+        <section className="card">
+          <h3>自动配置</h3>
           <div className="notice-banner warn">正在检查当前配置，请稍候...</div>
-        </article>
+        </section>
       );
     }
 
     if (selectedAutoConfig.status === "error") {
       return (
-        <article className="soft-card-v2" style={{ marginTop: "1rem" }}>
-          <h4>飞书自动配置</h4>
+        <section className="card">
+          <h3>自动配置</h3>
           <div className="detail-stack">
             <div className="notice-banner warn">{selectedAutoConfig.message}</div>
             <div className="button-row">
@@ -693,7 +801,7 @@ export function AdminRoute() {
               </button>
             </div>
           </div>
-        </article>
+        </section>
       );
     }
 
@@ -706,10 +814,10 @@ export function AdminRoute() {
     );
 
     return (
-      <article className="soft-card-v2" style={{ marginTop: "1rem" }}>
+      <section className="card">
         <div className="detail-stack">
           <div>
-            <h4>飞书自动配置</h4>
+            <h3>自动配置</h3>
             <p>{plan.summary?.trim() || describeAutoConfigSummary(plan.status)}</p>
           </div>
           <div className={`notice-banner ${autoConfigNoticeTone(plan.status)}`}>
@@ -786,16 +894,16 @@ export function AdminRoute() {
             </p>
           ) : null}
         </div>
-      </article>
+      </section>
     );
   }
 
   function renderRobotDetail() {
     if (!selectedApp) {
       return (
-        <section className="panel">
+        <section className="card">
           <div className="step-stage-head">
-            <h2>新增机器人</h2>
+            <h3>添加机器人</h3>
             <p>扫码或手动输入接入飞书应用</p>
           </div>
           <div className="choice-toggle">
@@ -949,309 +1057,644 @@ export function AdminRoute() {
               </div>
             </div>
           )}
-          {detailNotice ? (
-            <div className={`notice-banner ${detailNotice.tone}`}>
-              {detailNotice.message}
-            </div>
-          ) : null}
         </section>
       );
     }
 
     return (
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>{selectedApp.name || "未命名机器人"}</h2>
-          <p>连接状态与自动配置</p>
-        </div>
-        <dl className="definition-list">
-          <div>
-            <dt>App ID</dt>
-            <dd>{selectedApp.appId || "未填写"}</dd>
+      <>
+        <section className="card">
+          <div className="card-head">
+            <div>
+              <h3>{selectedApp.name || "未命名机器人"}</h3>
+              <p className="card-sub">连接与启用状态</p>
+            </div>
+            <span className={`badge ${connectionTone(selectedApp)}`}>
+              {describeConnectionState(selectedApp)}
+            </span>
           </div>
-          <div>
-            <dt>连接</dt>
-            <dd>{describeConnectionState(selectedApp)}</dd>
-          </div>
-          <div>
-            <dt>启用状态</dt>
-            <dd>{selectedApp.enabled ? "已启用" : "未启用"}</dd>
-          </div>
-          <div>
-            <dt>最近验证</dt>
-            <dd>{selectedApp.verifiedAt ? formatTimestamp(selectedApp.verifiedAt) : "暂未验证"}</dd>
-          </div>
-        </dl>
-        {selectedApp.runtimeApply?.pending ? (
-          <div className="notice-banner warn">
-            当前机器人还在同步设置，请稍后刷新状态后再继续操作。
-          </div>
-        ) : null}
+          <dl className="definition-list">
+            <div>
+              <dt>连接</dt>
+              <dd>{describeConnectionState(selectedApp)}</dd>
+            </div>
+            <div>
+              <dt>启用状态</dt>
+              <dd>{selectedApp.enabled ? "已启用" : "未启用"}</dd>
+            </div>
+            <div>
+              <dt>最近验证</dt>
+              <dd>{selectedApp.verifiedAt ? formatTimestamp(selectedApp.verifiedAt) : "暂未验证"}</dd>
+            </div>
+          </dl>
+          {selectedApp.runtimeApply?.pending ? (
+            <div className="notice-banner warn">
+              当前机器人还在同步设置，请稍后刷新状态后再继续操作。
+            </div>
+          ) : null}
+        </section>
         {renderAutoConfigCard()}
-        {detailNotice ? (
-          <div className={`notice-banner ${detailNotice.tone}`}>
-            {detailNotice.message}
+        {renderPermissionCheckCard()}
+        <section className="card">
+          <h3>连接信息</h3>
+          <dl className="definition-list">
+            <div>
+              <dt>App ID</dt>
+              <dd className="mono">{selectedApp.appId || "未填写"}</dd>
+            </div>
+            <div>
+              <dt>飞书后台</dt>
+              <dd>
+                {selectedApp.consoleLinks?.auth ? (
+                  <a
+                    className="inline-link"
+                    href={selectedApp.consoleLinks.auth}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    应用权限页面
+                  </a>
+                ) : null}
+                {selectedApp.consoleLinks?.auth && selectedApp.consoleLinks?.bot ? " · " : null}
+                {selectedApp.consoleLinks?.bot ? (
+                  <a
+                    className="inline-link"
+                    href={selectedApp.consoleLinks.bot}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    机器人后台
+                  </a>
+                ) : null}
+                {!selectedApp.consoleLinks?.auth && !selectedApp.consoleLinks?.bot
+                  ? "暂不可用"
+                  : null}
+              </dd>
+            </div>
+          </dl>
+        </section>
+        <section className="card">
+          <h3>危险区</h3>
+          {selectedApp.readOnly ? (
+            <div className="notice-banner warn">当前机器人由运行环境提供，不能在这里删除。</div>
+          ) : (
+            <p className="card-sub">删除后将移除这个机器人，此操作不可恢复。</p>
+          )}
+          <div className="button-row">
+            <button
+              className="danger-button"
+              type="button"
+              disabled={Boolean(selectedApp.readOnly)}
+              onClick={() => setDeleteTargetID(selectedApp.id)}
+            >
+              删除机器人
+            </button>
           </div>
-        ) : null}
-        <div className="button-row">
+        </section>
+      </>
+    );
+  }
+
+  function renderPermissionCheckCard() {
+    if (!selectedApp) {
+      return null;
+    }
+    const disabled = actionBusy === "permission-check";
+    return (
+      <section className="card">
+        <div className="card-head">
+          <div>
+            <h3>权限检查</h3>
+            <p className="card-sub">确认飞书后台已授予机器人需要的权限</p>
+          </div>
           <button
-            className="danger-button"
+            className="secondary-button"
             type="button"
-            disabled={Boolean(selectedApp.readOnly)}
-            onClick={() => setDeleteTargetID(selectedApp.id)}
+            disabled={disabled}
+            onClick={() => void checkRobotPermissions()}
           >
-            删除机器人
+            检查权限
           </button>
         </div>
-        {selectedApp.readOnly ? (
-          <p className="support-copy">当前机器人由运行环境提供，不能在这里删除。</p>
+        {selectedPermissionCheck.status === "idle" ? (
+          <div className="empty-state">需要确认权限时，可以在这里检查当前授权状态。</div>
+        ) : null}
+        {selectedPermissionCheck.status === "loading" ? (
+          <div className="notice-banner warn">正在检查权限...</div>
+        ) : null}
+        {selectedPermissionCheck.status === "error" ? (
+          <div className="detail-stack">
+            <div className="notice-banner warn">{selectedPermissionCheck.message}</div>
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={disabled}
+                onClick={() => void checkRobotPermissions()}
+              >
+                重新检查
+              </button>
+            </div>
+          </div>
+        ) : null}
+        {selectedPermissionCheck.status === "ready" ? (
+          selectedPermissionCheck.data.ready ? (
+            <div className="notice-banner good">权限已就绪</div>
+          ) : (
+            <div className="detail-stack">
+              <div className="notice-banner warn">
+                还缺少 {selectedPermissionCheck.data.missingScopes?.length || 0} 项权限
+              </div>
+              <div className="req-group">
+                {(selectedPermissionCheck.data.missingScopes || []).map((item) => (
+                  <div
+                    className="req-item"
+                    key={`${item.scopeType || "tenant"}:${item.scope}`}
+                  >
+                    <span className="dot warn" />
+                    <div className="label mono">{item.scope}</div>
+                    {item.scopeType ? <span className="badge neutral">{item.scopeType}</span> : null}
+                  </div>
+                ))}
+              </div>
+              {selectedPermissionCheck.data.grantJSON ? (
+                <>
+                  <textarea
+                    className="permission-json"
+                    readOnly
+                    value={selectedPermissionCheck.data.grantJSON}
+                    aria-label="权限导入 JSON"
+                  />
+                  <p className="support-copy">
+                    到飞书后台导入后，回到这里重新检查。
+                  </p>
+                  <div className="button-row">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() =>
+                        void copyPermissionGrantJSON(selectedPermissionCheck.data)
+                      }
+                    >
+                      复制导入 JSON
+                    </button>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )
         ) : null}
       </section>
     );
   }
 
-  if (loading) {
-    return (
-      <div className="product-page">
-        <header className="product-topbar">
-          <h1>{versionTitle}</h1>
-          <p>飞书机器人、系统集成与本地存储</p>
-        </header>
-        <section className="panel">
-          <div className="empty-state">
-            <div className="loading-dot" />
-            <span>正在读取最新状态</span>
-          </div>
-        </section>
-      </div>
-    );
+  function changeArea(area: AdminAreaID) {
+    setActiveArea(area);
   }
 
-  if (loadError) {
+  function renderAdminChrome(content: ReactNode, options?: { showToast?: boolean }) {
     return (
-      <div className="product-page">
-        <header className="product-topbar">
-          <h1>{versionTitle}</h1>
-          <p>飞书机器人、系统集成与本地存储</p>
-        </header>
-        <section className="panel">
-          <div className="empty-state error">
-            <strong>当前页面暂时无法打开</strong>
-            <p>{loadError}</p>
-            <div className="button-row">
+      <div className="admin-page">
+        <aside className="sidebar">
+          <BrandLockup subtitle="管理" />
+          <nav className="side-nav" aria-label="管理导航">
+            {adminAreas.map((area) => (
               <button
-                className="secondary-button"
+                key={area.id}
+                className={activeArea === area.id ? "on" : ""}
                 type="button"
-                onClick={() => void loadAdminPage()}
+                onClick={() => changeArea(area.id)}
               >
-                重新加载
+                {area.name}
               </button>
-            </div>
-          </div>
-        </section>
+            ))}
+          </nav>
+        </aside>
+        <header className="mobile-brand">
+          <BrandLockup subtitle="管理" compact />
+        </header>
+        <main className="content">
+          {options?.showToast !== false && detailNotice ? (
+            <Toast tone={detailNotice.tone} message={detailNotice.message} />
+          ) : null}
+          {content}
+        </main>
+        <nav className="bottom-tabs" aria-label="管理导航">
+          {adminAreas.map((area) => (
+            <button
+              key={area.id}
+              className={activeArea === area.id ? "on" : ""}
+              type="button"
+              onClick={() => changeArea(area.id)}
+            >
+              {area.name}
+            </button>
+          ))}
+        </nav>
       </div>
     );
   }
 
-  return (
-    <div className="product-page">
-      <header className="product-topbar">
-        <h1>{versionTitle}</h1>
-        <p>飞书机器人、系统集成与本地存储</p>
-      </header>
+  function renderCurrentArea() {
+    switch (activeArea) {
+      case "bots":
+        return renderBotsArea();
+      case "backends":
+        return renderBackendsArea();
+      case "system":
+        return renderSystemArea();
+      default:
+        return renderOverviewArea();
+    }
+  }
 
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>机器人管理</h2>
-          <p>已接入的飞书应用</p>
+  function renderOverviewArea() {
+    const connectedCount = apps.filter((app) => describeConnectionState(app) === "连接正常").length;
+    const totalBytes =
+      previewSummary.bytes +
+      (imageStaging?.totalBytes || 0) +
+      (logsStorage?.totalBytes || 0);
+    const totalFiles =
+      previewSummary.fileCount +
+      (imageStaging?.fileCount || 0) +
+      (logsStorage?.fileCount || 0);
+    const todoItems = buildOverviewTodoItems();
+
+    return (
+      <>
+        <h1 className="area-title">{versionTitle}</h1>
+        <p className="area-desc">系统当前状态与需要处理的事项</p>
+        <div className="stat-row">
+          <article className="stat-card">
+            <p>机器人</p>
+            <strong>{apps.length}</strong>
+            <span>
+              <span className={`dot ${connectedCount === apps.length ? "good" : "warn"}`} />
+              {connectedCount} 个连接正常
+            </span>
+          </article>
+          <article className="stat-card">
+            <p>存储占用</p>
+            <strong>约 {formatBytes(totalBytes)}</strong>
+            <span>{totalFiles} 个文件</span>
+          </article>
+          <article className="stat-card">
+            <p>系统集成</p>
+            <div className="status-stack">
+              <span className="status-line">
+                <span className={`dot ${autostart?.enabled ? "good" : "idle"}`} />
+                自动运行{autostart?.enabled ? "已启用" : "未启用"}
+              </span>
+              <span className="status-line">
+                <span className={`dot ${vscode && vscodeIsReady(vscode) ? "good" : "warn"}`} />
+                VS Code{vscode && vscodeIsReady(vscode) ? "已接入" : "需要修复"}
+              </span>
+            </div>
+          </article>
         </div>
-        <div className="robot-layout" style={{ marginTop: "1rem" }}>
-          <div className="robot-list">
+        <section className="card">
+          <h3>需要处理</h3>
+          {todoItems.length === 0 ? (
+            <div className="empty-state">一切正常，当前没有需要处理的事项。</div>
+          ) : (
+            <div className="req-group">
+              {todoItems.map((item) => (
+                <div className="req-item" key={item.id}>
+                  <span className={`dot ${item.tone}`} />
+                  <div className="label">{item.text}</div>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => {
+                      if (item.robotID) {
+                        setSelectedRobotID(item.robotID);
+                      }
+                      setActiveArea(item.area);
+                    }}
+                  >
+                    前往处理
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </>
+    );
+  }
+
+  function buildOverviewTodoItems(): OverviewTodoItem[] {
+    const items: OverviewTodoItem[] = [];
+    for (const app of apps) {
+      if (app.runtimeApply?.pending) {
+        items.push({
+          id: `${app.id}:runtime`,
+          text: `「${app.name || "未命名机器人"}」正在同步运行设置`,
+          tone: "warn",
+          area: "bots",
+          robotID: app.id,
+        });
+      }
+      const tag = autoConfigTagForApp(app);
+      if (tag?.warn) {
+        items.push({
+          id: `${app.id}:auto-config`,
+          text: `「${app.name || "未命名机器人"}」自动配置：${tag.label}`,
+          tone: "warn",
+          area: "bots",
+          robotID: app.id,
+        });
+      }
+    }
+    if (vscodeError || (vscode && !vscodeIsReady(vscode))) {
+      items.push({
+        id: "vscode",
+        text: "VS Code 集成需要修复",
+        tone: "warn",
+        area: "system",
+      });
+    }
+    if (!autostartError && autostart?.supported && !autostart.enabled) {
+      items.push({
+        id: "autostart",
+        text: "自动运行未启用",
+        tone: "idle",
+        area: "system",
+      });
+    }
+    const storageFileCount =
+      previewSummary.fileCount +
+      (imageStaging?.fileCount || 0) +
+      (logsStorage?.fileCount || 0);
+    if (storageFileCount > 0) {
+      items.push({
+        id: "storage",
+        text: `存储可清理（${storageFileCount} 个文件）`,
+        tone: "idle",
+        area: "system",
+      });
+    }
+    return items;
+  }
+
+  function autoConfigTagForApp(app: FeishuAppSummary) {
+    const autoConfigState = autoConfigPlans[app.id];
+    if (app.runtimeApply?.pending) {
+      return describeAutoConfigTag("runtime_pending");
+    }
+    if (autoConfigState?.status === "ready") {
+      return describeAutoConfigTag(autoConfigState.data.plan.status);
+    }
+    if (autoConfigState?.status === "loading") {
+      return describeAutoConfigTag("loading");
+    }
+    return null;
+  }
+
+  function renderBotsArea() {
+    return (
+      <>
+        <h1 className="area-title">机器人</h1>
+        <p className="area-desc">飞书机器人的连接与自动配置</p>
+        <div className="split">
+          <div className="list-pane">
             {apps.map((app) => {
-              const autoConfigState = autoConfigPlans[app.id];
-              let planStatus = "";
-              if (app.runtimeApply?.pending) {
-                planStatus = "runtime_pending";
-              } else if (autoConfigState?.status === "ready") {
-                planStatus = autoConfigState.data.plan.status;
-              } else if (autoConfigState?.status === "loading") {
-                planStatus = "loading";
-              }
-              const statusTag = describeAutoConfigTag(planStatus);
+              const tag = autoConfigTagForApp(app);
               return (
                 <button
                   key={app.id}
-                  className={`robot-list-button${selectedRobotID === app.id ? " active" : ""}`}
+                  className={`list-row${selectedRobotID === app.id ? " on" : ""}`}
                   type="button"
                   onClick={() => {
                     setDetailNotice(null);
                     setSelectedRobotID(app.id);
                   }}
                 >
-                  <div className="robot-list-head">
-                    <strong>{app.name || "未命名机器人"}</strong>
-                    {statusTag ? (
-                      <span className={`robot-tag${statusTag.warn ? " warn" : ""}`}>
-                        {statusTag.label}
-                      </span>
-                    ) : null}
-                  </div>
-                  <p>{app.appId || "未填写 App ID"}</p>
+                  <span className={`dot ${connectionTone(app)}`} />
+                  <span className="row-main">
+                    <span className="row-title">{app.name || "未命名机器人"}</span>
+                    <span className="row-sub">{app.appId || "未填写 App ID"}</span>
+                  </span>
+                  {tag ? (
+                    <span className={`badge ${tag.warn ? "warn" : "good"}`}>
+                      {tag.label}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
             <button
-              className={`robot-list-button${selectedRobotID === newRobotID ? " active" : ""}`}
+              className={`list-row${selectedRobotID === newRobotID ? " on" : ""}`}
               type="button"
               onClick={() => {
                 setDetailNotice(null);
                 setSelectedRobotID(newRobotID);
               }}
             >
-              <div className="robot-list-head">
-                <strong>新增机器人</strong>
-                <span className="robot-tag">新增</span>
-              </div>
-              <p>点击开始接入</p>
+              <span className="row-main">
+                <span className="row-title inline-link">添加机器人</span>
+              </span>
             </button>
           </div>
-          {renderRobotDetail()}
+          <div className="detail-pane">{renderRobotDetail()}</div>
         </div>
-      </section>
+      </>
+    );
+  }
 
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>系统集成</h2>
-          <p>自动运行与 VS Code 集成</p>
+  function renderBackendsArea() {
+    return (
+      <>
+        <h1 className="area-title">对话后端</h1>
+        <p className="area-desc">管理 Claude 与 Codex 的连接配置和上下文偏好</p>
+        <div className="tab-bar">
+          <button
+            className={backendTab === "claude" ? "on" : ""}
+            type="button"
+            onClick={() => setBackendTab("claude")}
+          >
+            Claude
+          </button>
+          <button
+            className={backendTab === "codex" ? "on" : ""}
+            type="button"
+            onClick={() => setBackendTab("codex")}
+          >
+            Codex
+          </button>
         </div>
-        <div className="soft-grid two-column" style={{ marginTop: "1rem" }}>
-          <article className="soft-card-v2">
-            <h4>自动运行设置</h4>
-            <p>{describeAutostart(autostart, autostartError)}</p>
-            {autostartError ? (
-              <div className="notice-banner warn">{autostartError}</div>
-            ) : null}
-            {!autostartError && autostart?.supported && !autostart.enabled ? (
+        {backendTab === "claude" ? (
+          <ClaudeProfileSection
+            loadError={claudeProfilesError}
+            profiles={claudeProfiles}
+            setProfiles={setClaudeProfiles}
+            onReload={async () => {
+              await loadAdminPage({ preferredRobotID: selectedRobotID });
+            }}
+          />
+        ) : (
+          <CodexProviderSection
+            loadError={codexProvidersError}
+            providers={codexProviders}
+            setProviders={setCodexProviders}
+            onReload={async () => {
+              await loadAdminPage({ preferredRobotID: selectedRobotID });
+            }}
+          />
+        )}
+      </>
+    );
+  }
+
+  function renderSystemArea() {
+    return (
+      <>
+        <h1 className="area-title">系统</h1>
+        <p className="area-desc">自动运行、VS Code 集成与本地存储</p>
+        <section className="card">
+          <h3>系统集成</h3>
+          <div className="soft-grid two-column" style={{ marginTop: "1rem" }}>
+            <article className="soft-card-v2">
+              <h4>自动运行</h4>
+              <p>{describeAutostart(autostart, autostartError)}</p>
+              {autostartError ? (
+                <div className="notice-banner warn">{autostartError}</div>
+              ) : null}
+              {!autostartError && autostart?.supported && !autostart.enabled ? (
+                <div className="button-row">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={actionBusy === "autostart" || !autostart.canApply}
+                    onClick={() => void enableAutostart()}
+                  >
+                    启用自动运行
+                  </button>
+                </div>
+              ) : null}
+            </article>
+            <article className="soft-card-v2">
+              <h4>VS Code 集成</h4>
+              <p>{describeVSCode(vscode, vscodeError)}</p>
+              {vscodeError ? (
+                <div className="notice-banner warn">{vscodeError}</div>
+              ) : null}
+              <div className="button-row">
+                <button
+                  className="ghost-button"
+                  type="button"
+                  disabled={actionBusy === "vscode"}
+                  onClick={() => void repairVSCode()}
+                >
+                  重新检查并修复
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+        <section className="card">
+          <h3>本地存储</h3>
+          <div className="soft-grid" style={{ marginTop: "1rem" }}>
+            <article className="soft-card-v2">
+              <h4>预览文件</h4>
+              <p>{formatFileSummary(previewSummary.fileCount, previewSummary.bytes)}</p>
+              {previewError ? <div className="notice-banner warn">{previewError}</div> : null}
               <div className="button-row">
                 <button
                   className="secondary-button"
                   type="button"
-                  disabled={actionBusy === "autostart" || !autostart.canApply}
-                  onClick={() => void enableAutostart()}
+                  disabled={actionBusy === "cleanup-preview" || apps.length === 0}
+                  onClick={() => void cleanupPreviewDrive()}
                 >
-                  启用自动运行
+                  清理旧预览
                 </button>
               </div>
-            ) : null}
-          </article>
-          <article className="soft-card-v2">
-            <h4>VS Code 集成</h4>
-            <p>{describeVSCode(vscode, vscodeError)}</p>
-            {vscodeError ? (
-              <div className="notice-banner warn">{vscodeError}</div>
-            ) : null}
-            <div className="button-row">
-              <button
-                className="ghost-button"
-                type="button"
-                disabled={actionBusy === "vscode"}
-                onClick={() => void repairVSCode()}
-              >
-                重新检查并修复
-              </button>
+            </article>
+            <article className="soft-card-v2">
+              <h4>图片暂存</h4>
+              <p>{formatFileSummary(imageStaging?.fileCount || 0, imageStaging?.totalBytes || 0)}</p>
+              {imageStagingError ? (
+                <div className="notice-banner warn">{imageStagingError}</div>
+              ) : null}
+              <div className="button-row">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={actionBusy === "cleanup-image"}
+                  onClick={() => void cleanupImageStaging()}
+                >
+                  清理旧图片
+                </button>
+              </div>
+            </article>
+            <article className="soft-card-v2">
+              <h4>日志文件</h4>
+              <p>{formatFileSummary(logsStorage?.fileCount || 0, logsStorage?.totalBytes || 0)}</p>
+              {logsStorageError ? (
+                <div className="notice-banner warn">{logsStorageError}</div>
+              ) : null}
+              <div className="button-row">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={actionBusy === "cleanup-logs"}
+                  onClick={() => void cleanupLogsStorage()}
+                >
+                  清理一天前日志
+                </button>
+              </div>
+            </article>
+          </div>
+        </section>
+        <section className="card">
+          <h3>访问方式</h3>
+          <dl className="definition-list">
+            <div>
+              <dt>当前访问</dt>
+              <dd>{describeAdminSession(bootstrap)}</dd>
             </div>
-          </article>
+          </dl>
+        </section>
+      </>
+    );
+  }
+
+  if (loading) {
+    return renderAdminChrome(
+      <section className="card">
+        <div className="empty-state">
+          <div className="loading-dot" />
+          <span>正在读取最新状态</span>
         </div>
-      </section>
+      </section>,
+      { showToast: false },
+    );
+  }
 
-      <ClaudeProfileSection
-        loadError={claudeProfilesError}
-        profiles={claudeProfiles}
-        setProfiles={setClaudeProfiles}
-        onReload={async () => {
-          await loadAdminPage({ preferredRobotID: selectedRobotID });
-        }}
-      />
-
-      <CodexProviderSection
-        loadError={codexProvidersError}
-        providers={codexProviders}
-        setProviders={setCodexProviders}
-        onReload={async () => {
-          await loadAdminPage({ preferredRobotID: selectedRobotID });
-        }}
-      />
-
-      <section className="panel">
-        <div className="step-stage-head">
-          <h2>存储管理</h2>
-          <p>预览文件、图片暂存与日志清理</p>
+  if (loadError) {
+    return renderAdminChrome(
+      <section className="card">
+        <div className="empty-state error">
+          <strong>当前页面暂时无法打开</strong>
+          <p>{loadError}</p>
+          <div className="button-row">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => void loadAdminPage()}
+            >
+              重新加载
+            </button>
+          </div>
         </div>
-        <div className="soft-grid" style={{ marginTop: "1rem" }}>
-          <article className="soft-card-v2">
-            <h4>预览文件</h4>
-            <p>
-              {formatFileSummary(previewSummary.fileCount, previewSummary.bytes)}
-            </p>
-            {previewError ? <div className="notice-banner warn">{previewError}</div> : null}
-            <div className="button-row">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={actionBusy === "cleanup-preview" || apps.length === 0}
-                onClick={() => void cleanupPreviewDrive()}
-              >
-                清理旧预览
-              </button>
-            </div>
-          </article>
-          <article className="soft-card-v2">
-            <h4>图片暂存</h4>
-            <p>
-              {formatFileSummary(
-                imageStaging?.fileCount || 0,
-                imageStaging?.totalBytes || 0,
-              )}
-            </p>
-            {imageStagingError ? (
-              <div className="notice-banner warn">{imageStagingError}</div>
-            ) : null}
-            <div className="button-row">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={actionBusy === "cleanup-image"}
-                onClick={() => void cleanupImageStaging()}
-              >
-                清理旧图片
-              </button>
-            </div>
-          </article>
-          <article className="soft-card-v2">
-            <h4>日志文件</h4>
-            <p>
-              {formatFileSummary(
-                logsStorage?.fileCount || 0,
-                logsStorage?.totalBytes || 0,
-              )}
-            </p>
-            {logsStorageError ? (
-              <div className="notice-banner warn">{logsStorageError}</div>
-            ) : null}
-            <div className="button-row">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={actionBusy === "cleanup-logs"}
-                onClick={() => void cleanupLogsStorage()}
-              >
-                清理一天前日志
-              </button>
-            </div>
-          </article>
-        </div>
-      </section>
+      </section>,
+      { showToast: false },
+    );
+  }
 
+  return renderAdminChrome(
+    <>
+      {renderCurrentArea()}
       {publishTargetID ? (
         <div className="modal-backdrop" role="presentation">
           <div
@@ -1284,7 +1727,6 @@ export function AdminRoute() {
           </div>
         </div>
       ) : null}
-
       {deleteTargetID ? (
         <div className="modal-backdrop" role="presentation">
           <div
@@ -1319,7 +1761,7 @@ export function AdminRoute() {
           </div>
         </div>
       ) : null}
-    </div>
+    </>,
   );
 }
 
@@ -1354,6 +1796,36 @@ function describeConnectionState(app: FeishuAppSummary): string {
     default:
       return "待确认";
   }
+}
+
+function connectionTone(app: FeishuAppSummary): "good" | "warn" | "danger" | "idle" {
+  switch (app.status?.state) {
+    case "connected":
+      return "good";
+    case "error":
+      return "danger";
+    case "disabled":
+      return "idle";
+    default:
+      return "warn";
+  }
+}
+
+function describeAdminSession(bootstrap: BootstrapState | null): string {
+  const session = bootstrap?.session;
+  if (!session) {
+    return "暂不可用";
+  }
+  if (session.trustedLoopback) {
+    return "本机直连";
+  }
+  if (!session.authenticated) {
+    return "未认证";
+  }
+  if (session.expiresAt) {
+    return `已认证会话，到期时间 ${formatTimestamp(session.expiresAt)}`;
+  }
+  return "已认证会话";
 }
 
 function describeAutostart(

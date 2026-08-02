@@ -101,14 +101,14 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         }
         setProviders((current) => appendOrReplaceProvider(current, nextProfile));
         selectPersistedItem(nextProfile);
-        setDetailNotice({ tone: "good", message: "Codex Profile 已创建。" });
+        setDetailNotice({ tone: "good", message: "Codex 配置已创建。" });
         return;
       }
 
       if (!activeProvider) {
         setDetailNotice({
           tone: "danger",
-          message: "当前 Profile 不存在，请重新选择后再试。",
+          message: "当前配置不存在，请重新选择后再试。",
         });
         return;
       }
@@ -134,7 +134,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
       selectPersistedItem(nextProfile);
       setDetailNotice({
         tone: "good",
-        message: connectionEditable ? "Codex Profile 已保存。" : "上下文偏好已保存。",
+        message: connectionEditable ? "Codex 配置已保存。" : "上下文偏好已保存。",
       });
     } catch (error) {
       setDetailNotice({
@@ -175,7 +175,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
       setDeleteTargetID(null);
       setDetailNotice({
         tone: "warn",
-        message: "这个 Profile 不能删除。",
+        message: "这个配置不能删除。",
       });
       return;
     }
@@ -195,7 +195,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
       setDeleteTargetID(null);
       setDeleteReferences([]);
       applyNextItems(nextProviders);
-      setDetailNotice({ tone: "good", message: "Codex Profile 已删除。" });
+      setDetailNotice({ tone: "good", message: "Codex 配置已删除。" });
     } catch (error) {
       setDetailNotice({
         tone: "danger",
@@ -209,9 +209,9 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
   return (
     <>
       <ConfigSectionShell
-        sectionTitle="Codex Profile"
+        sectionTitle="Codex"
         sectionDescription="管理 Codex 连接与上下文偏好"
-        emptyLoadErrorTitle="当前还不能读取 Codex Profile"
+        emptyLoadErrorTitle="当前还不能读取 Codex 配置"
         loadError={loadError}
         onReload={onReload}
         items={providers}
@@ -222,8 +222,8 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         getItemTitle={providerTitle}
         getItemSummary={providerCardSummary}
         getItemTag={providerKindLabel}
-        newItemTitle="新增 Profile"
-        newItemSummary="新建 API Profile"
+        newItemTitle="新增配置"
+        newItemSummary="新建 API 配置"
         detailCard={renderCodexProviderDetailCard({
           actionBusy,
           activeProvider,
@@ -242,7 +242,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
       <ConfigDeleteConfirmModal
         targetID={deleteTargetID}
         items={providers}
-        dialogTitle="确认删除 Codex Profile"
+        dialogTitle="确认删除 Codex 配置"
         confirmDisabled={actionBusy === "delete-codex-profile"}
         getItemTitle={providerTitle}
         onCancel={() => {
@@ -316,8 +316,8 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
   const title =
     editorMode === "create"
       ? draft.name.trim()
-        ? `新增 Profile：${draft.name.trim()}`
-        : "新增 Codex Profile"
+        ? `新增配置：${draft.name.trim()}`
+        : "新增 Codex 配置"
       : providerTitle(activeProvider);
   const description =
     editorMode === "create"
@@ -337,7 +337,7 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
       submitLabel={
         isConnectionEditable
           ? editorMode === "create"
-            ? "保存 Profile"
+            ? "保存配置"
             : "保存修改"
           : "保存上下文偏好"
       }
@@ -359,7 +359,7 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
             type="button"
             onClick={() => onDeleteTargetChange(activeProvider.id)}
           >
-            删除 Profile
+            删除配置
           </button>
         ) : null
       }
@@ -601,9 +601,9 @@ function removeProvider(
 
 function providerTitle(provider: CodexProfileSummary | null): string {
   if (!provider) {
-    return "当前 Profile";
+    return "当前配置";
   }
-  return provider.name?.trim() || "未命名 Profile";
+  return provider.name?.trim() || "未命名配置";
 }
 
 function providerCardSummary(provider: CodexProfileSummary): string {
@@ -629,7 +629,7 @@ function providerKindLabel(provider: CodexProfileSummary | null): string {
     case "api":
       return "API";
     default:
-      return "Profile";
+      return "配置";
   }
 }
 
@@ -651,7 +651,7 @@ function statusLabel(statusCode?: string): string {
     case "codex_capability_unsupported":
       return "当前 Codex 版本暂不支持";
     case "profile_catalog_degraded":
-      return "Profile 暂不可用";
+      return "配置暂不可用";
     default:
       return statusCode ? "暂不可用" : "";
   }
@@ -725,18 +725,18 @@ function describeCodexProfileError(error: unknown): string {
       case "duplicate_codex_provider_name":
         return "这个名称已经存在，请换一个名字。";
       case "codex_profile_read_only":
-        return "这个 Profile 的连接身份不能直接修改。";
+        return "这个配置的连接身份不能直接修改。";
       case "codex_profile_not_found":
       case "codex_provider_not_found":
-        return "当前 Profile 已经不存在，请重新读取后再试。";
+        return "当前配置已经不存在，请重新读取后再试。";
       case "profile_revision_required":
       case "profile_preference_revision_required":
         return "页面状态已过期，请重新读取后再保存。";
       case "profile_revision_conflict":
       case "profile_preference_revision_conflict":
-        return "这个 Profile 已被其他窗口修改，请重新读取后再保存。";
+        return "这个配置已被其他窗口修改，请重新读取后再保存。";
       case "codex_profile_in_use":
-        return "这个 Profile 仍在使用中，请先切换或结束相关会话。";
+        return "这个配置仍在使用中，请先切换或结束相关会话。";
       default:
         break;
     }
