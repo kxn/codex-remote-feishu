@@ -2,14 +2,13 @@ package feishu
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	lark "github.com/larksuite/oapi-sdk-go/v3"
+	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
 const (
@@ -58,23 +57,6 @@ type chatInfoCacheKey struct {
 type chatInfoCacheEntry struct {
 	info      ChatInfo
 	expiresAt time.Time
-}
-
-type chatInfoHTTPResponse struct {
-	Code int    `json:"code"`
-	Msg  string `json:"msg"`
-	Data struct {
-		ChatID            string   `json:"chat_id"`
-		OwnerID           string   `json:"owner_id"`
-		UserManagerIDList []string `json:"user_manager_id_list"`
-		BotManagerIDList  []string `json:"bot_manager_id_list"`
-		Chat              struct {
-			ChatID            string   `json:"chat_id"`
-			OwnerID           string   `json:"owner_id"`
-			UserManagerIDList []string `json:"user_manager_id_list"`
-			BotManagerIDList  []string `json:"bot_manager_id_list"`
-		} `json:"chat"`
-	} `json:"data"`
 }
 
 func NewChatAdminChecker(config SetupClientConfig, ttl time.Duration) *ChatAdminChecker {
@@ -166,72 +148,42 @@ func (c *ChatAdminChecker) fetchChatInfo(ctx context.Context, chatID, userIDType
 	if c == nil || c.setup == nil {
 		return ChatInfo{}, fmt.Errorf("chat info unavailable: checker not configured")
 	}
-	client, broker := c.setup.http()
-	cfg := c.setup.config
-	token, err := getTenantAccessTokenHTTP(ctx, broker, client, cfg)
-	if err != nil {
-		return ChatInfo{}, err
-	}
-	resp, err := DoHTTP(ctx, broker, CallSpec{
-		GatewayID:   cfg.GatewayID,
+	_, broker := c.setup.sdk()
+	resp, err := DoSDK(ctx, broker, CallSpec{
+		GatewayID:   broker.gatewayID,
 		API:         "im.v1.chat.get",
 		Class:       CallClassIMRead,
 		Priority:    CallPriorityInteractive,
 		ResourceKey: FeishuResourceKey{ReceiveTarget: chatID},
 		Retry:       RetrySafe,
 		Permission:  PermissionFailFast,
-	}, func(callCtx context.Context, httpClient *http.Client) (chatInfoHTTPResponse, error) {
-		endpoint := strings.TrimRight(setupHTTPDomain(cfg), "/") + "/open-apis/im/v1/chats/" + url.PathEscape(chatID)
-		req, err := http.NewRequestWithContext(callCtx, http.MethodGet, endpoint, nil)
-		if err != nil {
-			return chatInfoHTTPResponse{}, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		query := req.URL.Query()
-		query.Set("user_id_type", userIDType)
-		req.URL.RawQuery = query.Encode()
-		httpResp, err := httpClient.Do(req)
-		if err != nil {
-			return chatInfoHTTPResponse{}, err
-		}
-		defer httpResp.Body.Close()
-		if httpResp.StatusCode != http.StatusOK {
-			return chatInfoHTTPResponse{}, fmt.Errorf("chat info request failed: status=%d", httpResp.StatusCode)
-		}
-		var decoded chatInfoHTTPResponse
-		if err := json.NewDecoder(io.LimitReader(httpResp.Body, 1<<20)).Decode(&decoded); err != nil {
-			return chatInfoHTTPResponse{}, err
-		}
-		if decoded.Code != 0 {
-			return chatInfoHTTPResponse{}, fmt.Errorf("im.v1.chat.get failed: code=%d msg=%s", decoded.Code, decoded.Msg)
-		}
-		return decoded, nil
+	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkim.GetChatResp, error) {
+		req := larkim.NewGetChatReqBuilder().
+			ChatId(chatID).
+			UserIdType(userIDType).
+			Build()
+		return sdkClient.Im.V1.Chat.Get(callCtx, req)
 	})
 	if err != nil {
 		return ChatInfo{}, err
 	}
-	return resp.toChatInfo(chatID, userIDType), nil
+	if resp == nil {
+		return ChatInfo{}, fmt.Errorf("im.v1.chat.get returned nil response")
+	}
+	if !resp.Success() {
+		return ChatInfo{}, newAPIError("im.v1.chat.get", resp.ApiResp, resp.CodeError)
+	}
+	return chatInfoFromSDKResp(resp, chatID, userIDType), nil
 }
 
-func (r chatInfoHTTPResponse) toChatInfo(fallbackChatID, userIDType string) ChatInfo {
+func chatInfoFromSDKResp(resp *larkim.GetChatResp, fallbackChatID, userIDType string) ChatInfo {
 	info := ChatInfo{
-		ChatID:              strings.TrimSpace(r.Data.ChatID),
-		OwnerID:             strings.TrimSpace(r.Data.OwnerID),
-		UserManagerIDList:   trimStringSlice(r.Data.UserManagerIDList),
-		BotManagerIDList:    trimStringSlice(r.Data.BotManagerIDList),
 		RequestedUserIDType: userIDType,
 	}
-	if info.ChatID == "" {
-		info.ChatID = strings.TrimSpace(r.Data.Chat.ChatID)
-	}
-	if info.OwnerID == "" {
-		info.OwnerID = strings.TrimSpace(r.Data.Chat.OwnerID)
-	}
-	if len(info.UserManagerIDList) == 0 {
-		info.UserManagerIDList = trimStringSlice(r.Data.Chat.UserManagerIDList)
-	}
-	if len(info.BotManagerIDList) == 0 {
-		info.BotManagerIDList = trimStringSlice(r.Data.Chat.BotManagerIDList)
+	if resp != nil && resp.Data != nil {
+		info.OwnerID = strings.TrimSpace(stringValue(resp.Data.OwnerId))
+		info.UserManagerIDList = trimStringSlice(resp.Data.UserManagerIdList)
+		info.BotManagerIDList = trimStringSlice(resp.Data.BotManagerIdList)
 	}
 	if info.ChatID == "" {
 		info.ChatID = strings.TrimSpace(fallbackChatID)

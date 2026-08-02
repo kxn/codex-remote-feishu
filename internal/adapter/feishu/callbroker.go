@@ -3,7 +3,6 @@ package feishu
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -136,11 +135,10 @@ type permissionBlockState struct {
 }
 
 type FeishuCallBroker struct {
-	gatewayID  string
-	sdkClient  *lark.Client
-	httpClient *http.Client
-	now        func() time.Time
-	sleep      func(context.Context, time.Duration) error
+	gatewayID string
+	sdkClient *lark.Client
+	now       func() time.Time
+	sleep     func(context.Context, time.Duration) error
 
 	mu               sync.Mutex
 	appBucket        callBucketState
@@ -154,7 +152,6 @@ func NewFeishuCallBroker(gatewayID string, sdkClient *lark.Client) *FeishuCallBr
 	return &FeishuCallBroker{
 		gatewayID:        normalizeGatewayID(gatewayID),
 		sdkClient:        sdkClient,
-		httpClient:       &http.Client{Timeout: defaultLarkRequestTimeout},
 		now:              func() time.Time { return time.Now().UTC() },
 		sleep:            sleepWithContext,
 		classBuckets:     map[CallClass]*callBucketState{},
@@ -162,17 +159,6 @@ func NewFeishuCallBroker(gatewayID string, sdkClient *lark.Client) *FeishuCallBr
 		permissionBlocks: map[string]*permissionBlockState{},
 		apiPermissions:   map[string]string{},
 	}
-}
-
-func NewFeishuCallBrokerWithHTTPClient(gatewayID string, sdkClient *lark.Client, httpClient *http.Client) *FeishuCallBroker {
-	broker := NewFeishuCallBroker(gatewayID, sdkClient)
-	if broker == nil {
-		return nil
-	}
-	if httpClient != nil {
-		broker.httpClient = httpClient
-	}
-	return broker
 }
 
 func DoSDK[T any](ctx context.Context, broker *FeishuCallBroker, spec CallSpec, fn func(context.Context, *lark.Client) (T, error)) (T, error) {
@@ -192,27 +178,6 @@ func DoSDK[T any](ctx context.Context, broker *FeishuCallBroker, spec CallSpec, 
 	typed, ok := result.(T)
 	if !ok {
 		return zero, fmt.Errorf("feishu sdk call failed: unexpected result type %T", result)
-	}
-	return typed, err
-}
-
-func DoHTTP[T any](ctx context.Context, broker *FeishuCallBroker, spec CallSpec, fn func(context.Context, *http.Client) (T, error)) (T, error) {
-	var zero T
-	if fn == nil {
-		return zero, fmt.Errorf("feishu http call failed: nil function")
-	}
-	if broker == nil || broker.httpClient == nil {
-		return zero, fmt.Errorf("feishu http call failed: broker client not configured")
-	}
-	result, err := broker.do(ctx, spec, func(callCtx context.Context) (any, error) {
-		return fn(callCtx, broker.httpClient)
-	})
-	if result == nil {
-		return zero, err
-	}
-	typed, ok := result.(T)
-	if !ok {
-		return zero, fmt.Errorf("feishu http call failed: unexpected result type %T", result)
 	}
 	return typed, err
 }

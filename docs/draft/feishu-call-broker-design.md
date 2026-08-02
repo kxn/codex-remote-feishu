@@ -1,7 +1,7 @@
 # 统一飞书调用入口设计
 
 > Type: `draft`
-> Updated: `2026-04-18`
+> Updated: `2026-08-02`
 > Summary: 初版统一飞书调用入口设计，整理当前调用面、限速风险、统一调度器分层、重试/backoff 策略与后续调研问题。
 
 ## 1. 背景
@@ -12,8 +12,8 @@
 - IM 入站补全读取（引用消息查询、图片资源下载）
 - Drive 预览目录、文件、权限与清理
 - Bitable / Cron 的表、字段、记录与权限操作
-- 应用 scope 查询与权限状态刷新
-- onboarding / websetup 的飞书注册直连 HTTP 请求
+- 应用 scope 查询、权限状态刷新与 websetup 自动配置检查
+- 长连接握手等少数 SDK 无法统一承接的传输层请求
 
 这些调用目前的共同问题不是“没有 SDK client”，而是：
 
@@ -254,17 +254,17 @@
 
 ### 5.2 统一入口形式
 
-建议统一入口同时支持 SDK 和 raw HTTP 两种调用形态：
+建议普通业务 OpenAPI 统一走 SDK 形态；raw HTTP 只作为显式 allowlist 的传输层例外：
 
 ```go
 DoSDK[T any](ctx context.Context, spec CallSpec, fn func(context.Context, *lark.Client) (T, error)) (T, error)
-DoHTTP[T any](ctx context.Context, spec CallSpec, fn func(context.Context, *http.Client) (T, error)) (T, error)
 ```
 
 这样：
 
-- `gateway_runtime.go`、`bitable_api.go`、`markdown_preview_lark_api.go` 走 `DoSDK`
-- `admin_feishu_onboarding.go` 走 `DoHTTP`
+- `gateway_runtime.go`、`bitable_api.go`、`markdown_preview_lark_api.go`、websetup 自动配置检查走 `DoSDK`
+- `bot.v3.info` 这类仍没有 generated service API 的接口，也应优先走 SDK raw method，而不是自己维护 token + HTTP client
+- 传输层例外，例如长连接握手，必须进入结构性 allowlist
 - 两边共享同一套：
   - 排队
   - 限速
@@ -825,9 +825,8 @@ type FeishuResourceKey struct {
 除了 broker 本身的调用能力，还需要一层结构性约束，避免后续代码继续照着旧模式新增直调：
 
 1. 普通业务飞书 SDK 调用只允许出现在 `DoSDK(...)` 的 broker 闭包内
-2. 普通业务 raw HTTP 飞书请求只允许出现在 `DoHTTP(...)` 的 broker 闭包内
-3. 例外路径必须进入显式白名单，并记录“为什么不能按普通业务调用处理”
-4. 当前明确例外是 `internal/adapter/feishu/longconn.go`，因为它属于长连接握手与传输层基础设施
+2. 普通业务 raw HTTP 飞书请求不再作为常规入口；例外路径必须进入显式白名单，并记录“为什么不能按普通业务调用处理”
+3. 当前明确例外是 `internal/adapter/feishu/longconn.go`，因为它属于长连接握手与传输层基础设施
 
 ## 15. 当前待进一步调研的问题
 

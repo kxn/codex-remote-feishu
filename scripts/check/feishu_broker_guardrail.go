@@ -64,7 +64,7 @@ func main() {
 		}
 		fmt.Fprintln(os.Stderr)
 	}
-	fmt.Fprintln(os.Stderr, "Route ordinary Feishu SDK/OpenAPI traffic through feishu.DoSDK / feishu.DoHTTP broker closures instead.")
+	fmt.Fprintln(os.Stderr, "Route ordinary Feishu SDK/OpenAPI traffic through feishu.DoSDK broker closures; raw HTTP needs an explicit transport-level allowlist entry.")
 	os.Exit(1)
 }
 
@@ -127,14 +127,23 @@ func scanFile(root, rel string) []violation {
 				allow:  "a feishu.DoSDK callback",
 			})
 		}
-		if isFeishuRawHTTPRequest(call) && !insideBrokerClosure(stack, "DoHTTP") {
+		if isFeishuRawSDKMethodCall(call) && !insideBrokerClosure(stack, "DoSDK") {
+			out = append(out, violation{
+				file:   rel,
+				line:   line,
+				kind:   "direct_feishu_sdk_raw_call",
+				detail: selectorChainString(call.Fun),
+				allow:  "a feishu.DoSDK callback with an explicit no-generated-service reason",
+			})
+		}
+		if isFeishuRawHTTPRequest(call) {
 			if reason := strings.TrimSpace(rawHTTPAllowlist[rel]); reason == "" {
 				out = append(out, violation{
 					file:   rel,
 					line:   line,
 					kind:   "direct_feishu_http_request",
 					detail: selectorChainString(call.Fun),
-					allow:  "a feishu.DoHTTP callback",
+					allow:  "rawHTTPAllowlist with a transport-level reason",
 				})
 			}
 		}
@@ -205,7 +214,9 @@ func isFeishuSDKCall(call *ast.CallExpr) bool {
 		switch {
 		case parts[i] == "Im" && (parts[i+1] == "V1" || parts[i+1] == "V2"):
 			return true
-		case parts[i] == "Application" && parts[i+1] == "V6":
+		case parts[i] == "Application" && (parts[i+1] == "V6" || parts[i+1] == "V7"):
+			return true
+		case parts[i] == "Event" && parts[i+1] == "V1":
 			return true
 		case parts[i] == "Drive" && parts[i+1] == "V1":
 			return true
@@ -214,6 +225,22 @@ func isFeishuSDKCall(call *ast.CallExpr) bool {
 		}
 	}
 	return false
+}
+
+func isFeishuRawSDKMethodCall(call *ast.CallExpr) bool {
+	parts := selectorChain(call.Fun)
+	if len(parts) != 2 {
+		return false
+	}
+	if parts[0] != "sdkClient" && parts[0] != "client" {
+		return false
+	}
+	switch parts[1] {
+	case "Get", "Post", "Patch", "Put", "Delete":
+		return true
+	default:
+		return false
+	}
 }
 
 func isFeishuRawHTTPRequest(call *ast.CallExpr) bool {

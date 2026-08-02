@@ -2,13 +2,11 @@ package feishu
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
-	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
+	larkapplicationv7 "github.com/larksuite/oapi-sdk-go/v3/service/application/v7"
 )
 
 type v7PatchConfigRequest struct {
@@ -57,93 +55,192 @@ type v7PublishRequest struct {
 	Version              string `json:"version,omitempty"`
 }
 
-type v7CodeResponse struct {
-	larkcore.CodeError
-}
-
-type v7PublishResponse struct {
-	larkcore.CodeError
-	Data *struct {
-		VersionID string `json:"version_id,omitempty"`
-		Version   string `json:"version,omitempty"`
-	} `json:"data,omitempty"`
-}
-
 func patchV7AppConfig(ctx context.Context, broker *FeishuCallBroker, client *lark.Client, appID string, req v7PatchConfigRequest) error {
-	apiResp, err := DoSDK(ctx, broker, CallSpec{
+	resp, err := DoSDK(ctx, broker, CallSpec{
 		GatewayID:  broker.gatewayID,
 		API:        "application.v7.application.config.patch",
 		Class:      CallClassMetaHTTP,
 		Priority:   CallPriorityInteractive,
 		Retry:      RetrySafe,
 		Permission: PermissionFailFast,
-	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkcore.ApiResp, error) {
-		return sdkClient.Patch(callCtx, v7AppPath(appID, "config"), req, larkcore.AccessTokenTypeTenant)
+	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkapplicationv7.PatchApplicationConfigResp, error) {
+		return sdkClient.Application.V7.ApplicationConfig.Patch(callCtx, toSDKPatchApplicationConfigReq(appID, req))
 	})
 	if err != nil {
 		return err
 	}
-	var decoded v7CodeResponse
-	if err := json.Unmarshal(apiResp.RawBody, &decoded); err != nil {
-		return err
+	if resp == nil {
+		return fmt.Errorf("application.v7.application.config.patch returned nil response")
 	}
-	if decoded.Code != 0 {
-		return newAPIError("application.v7.application.config.patch", apiResp, decoded.CodeError)
+	if !resp.Success() {
+		return newAPIError("application.v7.application.config.patch", resp.ApiResp, resp.CodeError)
 	}
 	return nil
 }
 
 func patchV7AppAbility(ctx context.Context, broker *FeishuCallBroker, client *lark.Client, appID string, req v7PatchAbilityRequest) error {
-	apiResp, err := DoSDK(ctx, broker, CallSpec{
+	resp, err := DoSDK(ctx, broker, CallSpec{
 		GatewayID:  broker.gatewayID,
 		API:        "application.v7.application.ability.patch",
 		Class:      CallClassMetaHTTP,
 		Priority:   CallPriorityInteractive,
 		Retry:      RetrySafe,
 		Permission: PermissionFailFast,
-	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkcore.ApiResp, error) {
-		return sdkClient.Patch(callCtx, v7AppPath(appID, "ability"), req, larkcore.AccessTokenTypeTenant)
+	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkapplicationv7.PatchApplicationAbilityResp, error) {
+		return sdkClient.Application.V7.ApplicationAbility.Patch(callCtx, toSDKPatchApplicationAbilityReq(appID, req))
 	})
 	if err != nil {
 		return err
 	}
-	var decoded v7CodeResponse
-	if err := json.Unmarshal(apiResp.RawBody, &decoded); err != nil {
-		return err
+	if resp == nil {
+		return fmt.Errorf("application.v7.application.ability.patch returned nil response")
 	}
-	if decoded.Code != 0 {
-		return newAPIError("application.v7.application.ability.patch", apiResp, decoded.CodeError)
+	if !resp.Success() {
+		return newAPIError("application.v7.application.ability.patch", resp.ApiResp, resp.CodeError)
 	}
 	return nil
 }
 
 func publishV7App(ctx context.Context, broker *FeishuCallBroker, client *lark.Client, appID string, req v7PublishRequest) (string, string, error) {
-	apiResp, err := DoSDK(ctx, broker, CallSpec{
+	resp, err := DoSDK(ctx, broker, CallSpec{
 		GatewayID:  broker.gatewayID,
 		API:        "application.v7.application.publish.create",
 		Class:      CallClassMetaHTTP,
 		Priority:   CallPriorityInteractive,
 		Retry:      RetrySafe,
 		Permission: PermissionFailFast,
-	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkcore.ApiResp, error) {
-		return sdkClient.Post(callCtx, v7AppPath(appID, "publish"), req, larkcore.AccessTokenTypeTenant)
+	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkapplicationv7.CreateApplicationPublishResp, error) {
+		return sdkClient.Application.V7.ApplicationPublish.Create(callCtx, toSDKCreateApplicationPublishReq(appID, req))
 	})
 	if err != nil {
 		return "", "", err
 	}
-	var decoded v7PublishResponse
-	if err := json.Unmarshal(apiResp.RawBody, &decoded); err != nil {
-		return "", "", err
+	if resp == nil {
+		return "", "", fmt.Errorf("application.v7.application.publish.create returned nil response")
 	}
-	if decoded.Code != 0 {
-		return "", "", newAPIError("application.v7.application.publish.create", apiResp, decoded.CodeError)
+	if !resp.Success() {
+		return "", "", newAPIError("application.v7.application.publish.create", resp.ApiResp, resp.CodeError)
 	}
-	if decoded.Data == nil {
+	if resp.Data == nil {
 		return "", "", nil
 	}
-	return strings.TrimSpace(decoded.Data.VersionID), strings.TrimSpace(decoded.Data.Version), nil
+	return strings.TrimSpace(stringValue(resp.Data.VersionId)), strings.TrimSpace(stringValue(resp.Data.Version)), nil
 }
 
-func v7AppPath(appID string, tail string) string {
-	return fmt.Sprintf("/open-apis/application/v7/applications/%s/%s", url.PathEscape(strings.TrimSpace(appID)), strings.TrimSpace(tail))
+func toSDKPatchApplicationConfigReq(appID string, req v7PatchConfigRequest) *larkapplicationv7.PatchApplicationConfigReq {
+	return larkapplicationv7.NewPatchApplicationConfigReqBuilder().
+		AppId(strings.TrimSpace(appID)).
+		Body(toSDKPatchApplicationConfigReqBody(req)).
+		Build()
+}
+
+func toSDKPatchApplicationConfigReqBody(req v7PatchConfigRequest) *larkapplicationv7.PatchApplicationConfigReqBody {
+	return &larkapplicationv7.PatchApplicationConfigReqBody{
+		Scope:    toSDKAppConfigScope(req.Scope),
+		Event:    toSDKAppConfigEvent(req.Event),
+		Callback: toSDKAppConfigCallback(req.Callback),
+	}
+}
+
+func toSDKAppConfigScope(scope *v7PatchConfigScope) *larkapplicationv7.AppConfigScope {
+	if scope == nil {
+		return nil
+	}
+	return &larkapplicationv7.AppConfigScope{
+		AddScopes:    toSDKAppConfigScopeItems(scope.AddScopes),
+		RemoveScopes: toSDKAppConfigScopeItems(scope.RemoveScopes),
+	}
+}
+
+func toSDKAppConfigScopeItems(items []v7PatchConfigScopeItem) []*larkapplicationv7.AppConfigScopeItem {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]*larkapplicationv7.AppConfigScopeItem, 0, len(items))
+	for _, item := range items {
+		out = append(out, &larkapplicationv7.AppConfigScopeItem{
+			ScopeName: v7StringPtr(strings.TrimSpace(item.ScopeName)),
+			TokenType: v7StringPtr(strings.TrimSpace(item.TokenType)),
+		})
+	}
+	return out
+}
+
+func toSDKAppConfigEvent(event *v7PatchConfigEvent) *larkapplicationv7.AppConfigEvent {
+	if event == nil {
+		return nil
+	}
+	return &larkapplicationv7.AppConfigEvent{
+		SubscriptionType: v7StringPtr(strings.TrimSpace(event.SubscriptionType)),
+		RequestUrl:       cloneStringPtr(event.RequestURL),
+		AddEvents:        append([]string(nil), event.AddEvents...),
+		RemoveEvents:     append([]string(nil), event.RemoveEvents...),
+	}
+}
+
+func toSDKAppConfigCallback(callback *v7PatchConfigCallback) *larkapplicationv7.AppConfigCallback {
+	if callback == nil {
+		return nil
+	}
+	return &larkapplicationv7.AppConfigCallback{
+		CallbackType:    v7StringPtr(strings.TrimSpace(callback.CallbackType)),
+		RequestUrl:      cloneStringPtr(callback.RequestURL),
+		AddCallbacks:    append([]string(nil), callback.AddCallbacks...),
+		RemoveCallbacks: append([]string(nil), callback.RemoveCallbacks...),
+	}
+}
+
+func toSDKPatchApplicationAbilityReq(appID string, req v7PatchAbilityRequest) *larkapplicationv7.PatchApplicationAbilityReq {
+	return larkapplicationv7.NewPatchApplicationAbilityReqBuilder().
+		AppId(strings.TrimSpace(appID)).
+		Body(toSDKPatchApplicationAbilityReqBody(req)).
+		Build()
+}
+
+func toSDKPatchApplicationAbilityReqBody(req v7PatchAbilityRequest) *larkapplicationv7.PatchApplicationAbilityReqBody {
+	var bot *larkapplicationv7.AppAbilityBot
+	if req.Bot != nil {
+		bot = &larkapplicationv7.AppAbilityBot{Enable: v7BoolPtr(req.Bot.Enable)}
+	}
+	return &larkapplicationv7.PatchApplicationAbilityReqBody{Bot: bot}
+}
+
+func toSDKCreateApplicationPublishReq(appID string, req v7PublishRequest) *larkapplicationv7.CreateApplicationPublishReq {
+	return larkapplicationv7.NewCreateApplicationPublishReqBuilder().
+		AppId(strings.TrimSpace(appID)).
+		Body(toSDKCreateApplicationPublishReqBody(req)).
+		Build()
+}
+
+func toSDKCreateApplicationPublishReqBody(req v7PublishRequest) *larkapplicationv7.CreateApplicationPublishReqBody {
+	body := &larkapplicationv7.CreateApplicationPublishReqBody{
+		Remark:    v7StringPtr(req.Remark),
+		Changelog: v7StringPtr(req.Changelog),
+	}
+	if value := strings.TrimSpace(req.MobileDefaultAbility); value != "" {
+		body.MobileDefaultAbility = v7StringPtr(value)
+	}
+	if value := strings.TrimSpace(req.PcDefaultAbility); value != "" {
+		body.PcDefaultAbility = v7StringPtr(value)
+	}
+	if value := strings.TrimSpace(req.Version); value != "" {
+		body.Version = v7StringPtr(value)
+	}
+	return body
+}
+
+func v7StringPtr(value string) *string {
+	return &value
+}
+
+func v7BoolPtr(value bool) *bool {
+	return &value
+}
+
+func cloneStringPtr(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
 }

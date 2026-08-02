@@ -1,9 +1,7 @@
 package feishu
 
 import (
-	"net/http"
 	"strings"
-	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 )
@@ -17,11 +15,9 @@ type SetupClientConfig struct {
 }
 
 type SetupClient struct {
-	config     SetupClientConfig
-	sdkClient  *lark.Client
-	httpClient *http.Client
-	broker     *FeishuCallBroker
-	httpBroker *FeishuCallBroker
+	config    SetupClientConfig
+	sdkClient *lark.Client
+	broker    *FeishuCallBroker
 }
 
 func SetupClientConfigFromLiveGatewayConfig(cfg LiveGatewayConfig) SetupClientConfig {
@@ -46,14 +42,11 @@ func (c SetupClientConfig) liveGatewayConfig() LiveGatewayConfig {
 
 func NewSetupClient(config SetupClientConfig) *SetupClient {
 	config.GatewayID = normalizeGatewayID(config.GatewayID)
-	sdkClient := NewLarkClient(config.AppID, config.AppSecret)
-	httpClient := &http.Client{Timeout: 15 * time.Second}
+	sdkClient := NewLarkClientWithOpenBaseURL(config.AppID, config.AppSecret, setupHTTPDomain(config))
 	return &SetupClient{
-		config:     config,
-		sdkClient:  sdkClient,
-		httpClient: httpClient,
-		broker:     NewFeishuCallBroker(config.GatewayID, sdkClient),
-		httpBroker: NewFeishuCallBrokerWithHTTPClient(config.GatewayID, nil, httpClient),
+		config:    config,
+		sdkClient: sdkClient,
+		broker:    NewFeishuCallBroker(config.GatewayID, sdkClient),
 	}
 }
 
@@ -69,13 +62,6 @@ func (c *SetupClient) sdk() (*lark.Client, *FeishuCallBroker) {
 		return nil, nil
 	}
 	return c.sdkClient, c.broker
-}
-
-func (c *SetupClient) http() (*http.Client, *FeishuCallBroker) {
-	if c == nil {
-		return nil, nil
-	}
-	return c.httpClient, c.httpBroker
 }
 
 func setupHTTPDomain(cfg SetupClientConfig) string {

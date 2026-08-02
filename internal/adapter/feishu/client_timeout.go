@@ -18,12 +18,24 @@ const (
 	previewDriveBackgroundCleanupTimeout = 45 * time.Second
 )
 
-func NewLarkClient(appID, appSecret string) *lark.Client {
+func NewLarkClient(appID, appSecret string, options ...lark.ClientOptionFunc) *lark.Client {
+	clientOptions := []lark.ClientOptionFunc{
+		lark.WithReqTimeout(defaultLarkRequestTimeout),
+	}
+	clientOptions = append(clientOptions, options...)
 	return lark.NewClient(
 		strings.TrimSpace(appID),
 		strings.TrimSpace(appSecret),
-		lark.WithReqTimeout(defaultLarkRequestTimeout),
+		clientOptions...,
 	)
+}
+
+func NewLarkClientWithOpenBaseURL(appID, appSecret, openBaseURL string) *lark.Client {
+	var options []lark.ClientOptionFunc
+	if openBaseURL = strings.TrimSpace(openBaseURL); openBaseURL != "" {
+		options = append(options, lark.WithOpenBaseUrl(openBaseURL))
+	}
+	return NewLarkClient(appID, appSecret, options...)
 }
 
 func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
