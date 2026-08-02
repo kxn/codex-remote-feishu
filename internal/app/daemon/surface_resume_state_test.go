@@ -1383,10 +1383,18 @@ func TestDaemonHeadlessResumePassesStableWorkspaceRootToLaunch(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	repoRoot := filepath.Join(t.TempDir(), "repo")
-	repoWeb := filepath.Join(repoRoot, "web")
-	if err := os.MkdirAll(repoWeb, 0o755); err != nil {
+	rawRepoRoot := filepath.Join(t.TempDir(), "repo")
+	rawRepoWeb := filepath.Join(rawRepoRoot, "web")
+	if err := os.MkdirAll(rawRepoWeb, 0o755); err != nil {
 		t.Fatalf("mkdir test workspace: %v", err)
+	}
+	repoRoot, err := state.ResolveWorkspaceRootOnHost(rawRepoRoot)
+	if err != nil {
+		t.Fatalf("resolve test workspace root: %v", err)
+	}
+	repoWeb, err := state.ResolveWorkspaceRootOnHost(rawRepoWeb)
+	if err != nil {
+		t.Fatalf("resolve test thread cwd: %v", err)
 	}
 	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
 		SurfaceSessionID:   "surface-1",
