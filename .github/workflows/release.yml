@@ -317,10 +317,21 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  installer-lifecycle:
+    needs: build-release-assets
+    if: ${{ needs.build-release-assets.outputs.run_packaging == 'true' }}
+    uses: ./.github/workflows/installer-lifecycle.yml
+    with:
+      ref: ${{ needs.build-release-assets.outputs.source_ref }}
+      version: v0.0.0
+      upgrade_version: ${{ needs.build-release-assets.outputs.version }}
+      upgrade_track: ${{ needs.build-release-assets.outputs.track }}
+
   publish-release-assets:
     needs:
       - build-release-assets
       - build-macos-packaged-installer
+      - installer-lifecycle
     if: ${{ needs.build-release-assets.outputs.upload_assets == 'true' }}
     runs-on: ubuntu-latest
 

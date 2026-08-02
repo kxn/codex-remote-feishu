@@ -1,0 +1,170 @@
+name: Installer Lifecycle
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to test. Defaults to the ref that triggered this workflow.
+        required: false
+        default: ""
+        type: string
+      version:
+        description: First-install fixture version.
+        required: false
+        default: v0.0.0
+        type: string
+      upgrade_version:
+        description: Upgrade fixture version.
+        required: false
+        default: v0.1.0-beta.1
+        type: string
+      upgrade_track:
+        description: Upgrade fixture track.
+        required: false
+        default: beta
+        type: string
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        default: ""
+        type: string
+      version:
+        required: false
+        default: v0.0.0
+        type: string
+      upgrade_version:
+        required: false
+        default: v0.1.0-beta.1
+        type: string
+      upgrade_track:
+        required: false
+        default: beta
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-lifecycle-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-fixtures:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve Go version spec
+        id: go_version
+        shell: bash
+        run: echo "version=$(bash scripts/ci/go-version-spec.sh)" >> "${GITHUB_OUTPUT}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: ${{ steps.go_version.outputs.version }}
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build first-install fixture
+        env:
+          CODEX_REMOTE_BUILD_FLAVOR: shipping
+        run: bash scripts/release/build-artifacts.sh "${{ inputs.version }}" dist-first
+
+      - name: Build upgrade fixture
+        env:
+          CODEX_REMOTE_BUILD_FLAVOR: shipping
+        run: bash scripts/release/build-artifacts.sh "${{ inputs.upgrade_version }}" dist-upgrade --skip-admin-ui-build
+
+      - name: Upload first-install fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-lifecycle-first
+          path: dist-first
+          if-no-files-found: error
+          compression-level: 0
+
+      - name: Upload upgrade fixture
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-lifecycle-upgrade
+          path: dist-upgrade
+          if-no-files-found: error
+          compression-level: 0
+
+  lifecycle-windows:
+    needs: build-fixtures
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Download first-install fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-lifecycle-first
+          path: ${{ runner.temp }}\installer-lifecycle\first
+
+      - name: Download upgrade fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-lifecycle-upgrade
+          path: ${{ runner.temp }}\installer-lifecycle\upgrade
+
+      - name: Smoke packaged installer lifecycle
+        shell: pwsh
+        run: |
+          ./scripts/check/smoke-packaged-install-lifecycle.ps1 `
+            -Version "${{ inputs.version }}" `
+            -UpgradeVersion "${{ inputs.upgrade_version }}" `
+            -UpgradeTrack "${{ inputs.upgrade_track }}" `
+            -ProdDistDir "$env:RUNNER_TEMP\installer-lifecycle\first" `
+            -UpgradeDistDir "$env:RUNNER_TEMP\installer-lifecycle\upgrade"
+
+  lifecycle-macos:
+    needs: build-fixtures
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Download first-install fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-lifecycle-first
+          path: ${{ runner.temp }}/installer-lifecycle/first
+
+      - name: Download upgrade fixture
+        uses: actions/download-artifact@v4
+        with:
+          name: installer-lifecycle-upgrade
+          path: ${{ runner.temp }}/installer-lifecycle/upgrade
+
+      - name: Smoke packaged installer lifecycle
+        run: |
+          bash scripts/check/smoke-packaged-install-lifecycle.sh \
+            --version "${{ inputs.version }}" \
+            --upgrade-version "${{ inputs.upgrade_version }}" \
+            --upgrade-track "${{ inputs.upgrade_track }}" \
+            --prod-dist-dir "${RUNNER_TEMP}/installer-lifecycle/first" \
+            --upgrade-dist-dir "${RUNNER_TEMP}/installer-lifecycle/upgrade"

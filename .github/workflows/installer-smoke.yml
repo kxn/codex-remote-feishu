@@ -4,11 +4,14 @@ on:
   push:
     paths:
       - ".github/workflows/installer-smoke.yml"
+      - ".github/workflows/installer-lifecycle.yml"
       - "scripts/ci/go-version-spec.sh"
       - "install-release.sh"
       - "install-release.ps1"
       - "scripts/check/smoke-install-release.sh"
       - "scripts/check/smoke-install-release.ps1"
+      - "scripts/check/smoke-packaged-install-lifecycle.sh"
+      - "scripts/check/smoke-packaged-install-lifecycle.ps1"
       - "scripts/check/smoke-macos-installer-result-model.sh"
       - "scripts/check/smoke-windows-nsis-installer.ps1"
       - "scripts/release/build-artifacts.sh"
@@ -28,11 +31,14 @@ on:
   pull_request:
     paths:
       - ".github/workflows/installer-smoke.yml"
+      - ".github/workflows/installer-lifecycle.yml"
       - "scripts/ci/go-version-spec.sh"
       - "install-release.sh"
       - "install-release.ps1"
       - "scripts/check/smoke-install-release.sh"
       - "scripts/check/smoke-install-release.ps1"
+      - "scripts/check/smoke-packaged-install-lifecycle.sh"
+      - "scripts/check/smoke-packaged-install-lifecycle.ps1"
       - "scripts/check/smoke-macos-installer-result-model.sh"
       - "scripts/check/smoke-windows-nsis-installer.ps1"
       - "scripts/release/build-artifacts.sh"
