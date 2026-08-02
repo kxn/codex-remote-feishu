@@ -73,8 +73,10 @@ func DefaultManifest() Manifest {
 					"base:app:create",
 					"bitable:app",
 					"im:datasync.feed_card.time_sensitive:write",
+					"im:chat:readonly",
 					"im:message",
 					"im:message.group_at_msg:readonly",
+					"im:message.group_msg:readonly",
 					"im:message.p2p_msg:readonly",
 					"im:message.reactions:read",
 					"im:message.reactions:write_only",
@@ -110,6 +112,12 @@ func DefaultManifest() Manifest {
 				Required:  true,
 			},
 			{
+				Scope:     "im:chat:readonly",
+				ScopeType: "tenant",
+				Feature:   "room_admin",
+				Required:  true,
+			},
+			{
 				Scope:     "im:message",
 				ScopeType: "tenant",
 				Feature:   "core_message_flow",
@@ -119,6 +127,12 @@ func DefaultManifest() Manifest {
 				Scope:     "im:message.group_at_msg:readonly",
 				ScopeType: "tenant",
 				Feature:   "group_mentions",
+				Required:  true,
+			},
+			{
+				Scope:     "im:message.group_msg:readonly",
+				ScopeType: "tenant",
+				Feature:   "primary_room_bot",
 				Required:  true,
 			},
 			{

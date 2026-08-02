@@ -84,8 +84,10 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 - `bitable:app`
 - `drive:drive`
 - `im:datasync.feed_card.time_sensitive:write`
+- `im:chat:readonly`
 - `im:message`
 - `im:message.group_at_msg:readonly`
+- `im:message.group_msg:readonly`
 - `im:message.p2p_msg:readonly`
 - `im:message.reactions:read`
 - `im:message.reactions:write_only`
@@ -100,18 +102,15 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 - 接收图片消息
 - 发送文本消息
 - 发送卡片消息
+- 读取群信息
+- 接收群聊普通消息和 @ 消息
 - 添加和移除消息 reaction
 
 如果你计划使用 `/cron` 定时任务，再额外确认：
 
 - `bitable:app` 已开通，用于创建和访问当前 daemon 实例的专属多维表格
 
-如果你计划在群聊里使用 `/primary on` 设置“本群主机器人”，让它承接没有 `@` 任何人的普通群消息，再给这个机器人应用额外开通以下任一权限：
-
-- `im:message.group_msg`
-- `im:message.group_msg:readonly`
-
-这不是基础安装必选权限。没有开通时，机器人仍可处理单聊消息和群里明确 `@` 它的消息；只是 `/primary on` 会拒绝设置，未 `@` 群消息也不会被它承接。开通权限后，重新执行 `/primary on` 或 `/primary refresh` 即可刷新运行时缓存。
+群聊普通消息读取现在按基础安装处理。没有开通时，机器人仍可处理单聊消息和群里明确 `@` 它的消息；但 `/primary on` 会拒绝设置，未 `@` 群消息也不会被它承接。开通权限后，重新执行 `/primary on` 或 `/primary refresh` 即可刷新运行时缓存。
 
 ### 2. 事件订阅
 
