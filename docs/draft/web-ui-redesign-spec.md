@@ -1,8 +1,8 @@
 # Web 前端（Setup / Admin）UI 重设计交接规范
 
 > Type: `draft`
-> Updated: `2026-08-01`
-> Summary: 第 9 章可选增强已拍板：仅批准「机器人权限检查」（含新后端端点，为后端禁令唯一例外），运维操作/收发测试/运行实况均否决；6.4、6.7 同步收录。前置版本含样式规格章节（4.6–4.13）与三幕 Setup / 四区 Admin 信息架构。
+> Updated: `2026-08-02`
+> Summary: 修正落地前 mock/spec 漂移：Codex 示例模型统一到 gpt-5.5，用户可见 profile 文案改为「配置」，权限检查示例 scope 对齐当前 manifest 口径；第 9 章可选增强仍仅批准「机器人权限检查」。
 
 ## 1. 这份文档是什么
 
@@ -314,7 +314,7 @@ Codex Remote 是一个跑在用户自己机器上的守护进程（Go 后端 + �
 | 详情 · 状态 | （app.status / runtimeApply） | 连接（正常/已停用/需要处理/待确认）、启用状态（只读）、最近验证时间；`runtimeApply.pending` 时 warn 横幅并禁用 auto-config 按钮 | 文案映射原样迁移 |
 | 详情 · 自动配置 | `GET .../auto-config/plan`、`POST .../apply`、`POST .../publish` | 同 Setup 子步 B 的展示与按钮（apply_required→「自动补齐配置」；publish_required→「提交发布」+ 确认对话框；任意状态→「重新检查」）；plan 加载失败特判 `feishu_app_runtime_unavailable` | 确认对话框、错误 details 直出策略保留 |
 | 详情 · 连接信息 | — | App ID、飞书后台外链（`consoleLinks.auth` / `consoleLinks.bot`） | 折叠进详情块，不平铺 |
-| 详情 · 权限检查 | 新端点，见第 9.1 章 | 「检查权限」按钮 → 卡片内「检查中…」→ 三态结果：① 全部就绪（成功色一行「权限已就绪」）；② 有缺失（缺失 scope 逐条列出 + 「复制导入 JSON」按钮 + 指引一行「到飞书后台导入后，回到这里重新检查」）；③ 检查失败（toast + 卡片内可重试） | 缺失清单与导入 JSON 原样来自后端响应，前端禁止自行推断或拼接权限内容；scope 原文（如 `im:message.group_msg`）允许在此区块显示——它与飞书开放平台后台用词一致，属用户可操作信息，是 4.5 的登记例外；复制成功走 toast |
+| 详情 · 权限检查 | 新端点，见第 9.1 章 | 「检查权限」按钮 → 卡片内「检查中…」→ 三态结果：① 全部就绪（成功色一行「权限已就绪」）；② 有缺失（缺失 scope 逐条列出 + 「复制导入 JSON」按钮 + 指引一行「到飞书后台导入后，回到这里重新检查」）；③ 检查失败（toast + 卡片内可重试） | 缺失清单与导入 JSON 原样来自后端响应，前端禁止自行推断或拼接权限内容；scope 原文（如 `im:message.group_msg:readonly`）允许在此区块显示——它与飞书开放平台后台用词一致，属用户可操作信息，是 4.5 的登记例外；复制成功走 toast |
 | 详情 · 危险区 | `DELETE /api/admin/feishu/apps/{id}` | 删除按钮 + 确认对话框（显示机器人名、「此操作不可恢复」）；`readOnly` 禁用并说明「当前机器人由运行环境提供，不能在这里删除」 | 保留 |
 
 ### 6.5 区 3 · 对话后端
@@ -353,7 +353,7 @@ Codex Remote 是一个跑在用户自己机器上的守护进程（Go 后端 + �
 
 1. 选中机器人自动拉取 auto-config plan；切换机器人重置发布目标与扫码流程
 2. 扫码完整状态机（自动创建 → 轮询 → ready 自动 complete → 成功刷新选中）
-3. 全部确认对话框 ×4：删除机器人、提交发布、删 Claude 配置、删 Codex Profile（后者内含 references 预取与"使用中"警告列表）
+3. 全部确认对话框 ×4：删除机器人、提交发布、删 Claude 配置、删 Codex 配置（后者内含 references 预取与"使用中"警告列表）
 4. etag/If-Match 乐观锁：冲突文案保留，不发明自动重试
 5. 上下文偏好总是独立的第二个请求（带各自 etag）
 6. 错误 code → 中文文案的全部映射表（Codex 10+、Claude 2、auto-config details 直出）

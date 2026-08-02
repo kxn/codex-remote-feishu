@@ -16,8 +16,8 @@
     #s=readonly-bot      运行环境提供的机器人（不可删除）
     #s=qr-expired        添加机器人扫码过期
     #s=add-fail          手动添加首次验证失败
-    #s=conflict          保存 Profile 首次提示被其他窗口修改
-    #s=refs              删除 Codex Profile 时列出使用中引用
+    #s=conflict          保存配置首次提示被其他窗口修改
+    #s=refs              删除 Codex 配置时列出使用中引用
     #s=storage-partial   预览文件清理部分失败
     #s=load-error        整页加载失败态（重新加载恢复）
     无 hash              默认数据（含若干待处理项）
@@ -347,7 +347,7 @@ const S = {
   codex: [
     { id: "native", kind: "native", name: "本机默认", editable: false, contextEditable: true, deletable: false, available: true, statusTag: "", baseURL: "", model: "", review: "", effort: "", ctx: "codex_default" },
     { id: "oauth", kind: "oauth", name: "ChatGPT 登录", editable: false, contextEditable: true, deletable: false, available: false, statusTag: "未检测到登录", baseURL: "", model: "", review: "", effort: "", ctx: "codex_default" },
-    { id: "cx3", kind: "api", name: "研发代理", editable: true, contextEditable: true, deletable: true, available: true, statusTag: "", baseURL: "https://api.example.com/v1", model: "gpt-5.4", review: "", effort: "high", ctx: "price_guard_272k" },
+    { id: "cx3", kind: "api", name: "研发代理", editable: true, contextEditable: true, deletable: true, available: true, statusTag: "", baseURL: "https://api.example.com/v1", model: "gpt-5.5", review: "", effort: "high", ctx: "price_guard_272k" },
   ],
   selectedCodex: "cx3",
   codexMobileDetail: false,
@@ -648,9 +648,9 @@ function reqList(title, tone, items) {
   </div>`;
 }
 const MISSING_SCOPES = [
-  { scope: "im:message.group_msg", scopeType: "获取群组消息" },
+  { scope: "im:message.group_msg:readonly", scopeType: "获取群组消息" },
   { scope: "im:message", scopeType: "读取与发送消息" },
-  { scope: "im:chat:readonly", scopeType: "读取会话信息" },
+  { scope: "im:chat:read", scopeType: "读取会话信息" },
 ];
 function renderPermCheck() {
   if (S.permState === "checking") return `<div class="loading-line"><span class="spinner"></span>正在检查权限</div>`;
@@ -991,12 +991,12 @@ function renderCodex() {
         <button class="list-row ${S.selectedCodex === p.id && S.codexEditor !== "new" ? "on" : ""}" onclick="selectCodex('${p.id}')">
           <span class="dot ${p.available ? "good" : "warn"}"></span>
           <span class="row-main">
-            <div class="row-title">${esc(p.name || "未命名 Profile")}</div>
+            <div class="row-title">${esc(p.name || "未命名配置")}</div>
             <div class="row-sub">${esc(codexSummary(p))}</div>
           </span>
         </button>`).join("")}
       <button class="list-row" onclick="newCodex()">
-        <span class="row-main"><div class="row-title" style="color:var(--teal);">新增 Profile</div></span>
+        <span class="row-main"><div class="row-title" style="color:var(--teal);">新增配置</div></span>
       </button>
     </div>
     <div class="detail-pane">
@@ -1024,11 +1024,11 @@ function ctxHint(ctx) {
 }
 function renderCodexEditor() {
   const d = S.codexDraft;
-  if (!d) return `<section class="card empty-state">请在左侧选择一个 Profile。</section>`;
+  if (!d) return `<section class="card empty-state">请在左侧选择一个配置。</section>`;
   const isNew = S.codexEditor === "new";
   const connEditable = isNew || (d.kind === "api" && d.editable);
   let html = `<section class="card">
-    <h3>${isNew ? "新增 Codex Profile" : esc(d.name || "未命名 Profile")}</h3>
+    <h3>${isNew ? "新增 Codex 配置" : esc(d.name || "未命名配置")}</h3>
     <p class="card-sub">${isNew ? "填写 API 连接信息" : connEditable ? "连接信息和上下文偏好" : d.contextEditable ? "连接身份不可编辑，上下文偏好可单独调整。" : "连接身份和上下文偏好不可编辑。"}</p>`;
   if (!connEditable) {
     html += `<div class="hero-card"><strong>${KIND_LABEL[d.kind]}</strong>${d.kind === "oauth" ? "连接身份由 Codex 登录管理。" : "连接身份由本机 Codex 管理。"}</div>`;
@@ -1047,7 +1047,7 @@ function renderCodexEditor() {
         ${d.errs?.apiKey ? `<div class="err">${d.errs.apiKey}</div>` : !isNew ? `<div class="hint">留空表示不修改。</div>` : ""}
       </div>
       <div class="field"><label>主模型</label>
-        <input class="${d.errs?.model ? "invalid" : ""}" placeholder="例如：gpt-5.4" value="${esc(d.model || "")}" oninput="S.codexDraft.model=this.value">
+        <input class="${d.errs?.model ? "invalid" : ""}" placeholder="例如：gpt-5.5" value="${esc(d.model || "")}" oninput="S.codexDraft.model=this.value">
         ${d.errs?.model ? `<div class="err">${d.errs.model}</div>` : ""}
       </div>
       <div class="field"><label>审阅模型</label>
@@ -1059,7 +1059,7 @@ function renderCodexEditor() {
         ${d.errs?.effort ? `<div class="err">${d.errs.effort}</div>` : ""}
       </div>`;
   }
-  if (d.conflict) html += `<div class="notice warn"><strong>保存没有完成</strong>这个 Profile 已被其他窗口修改，请重新读取后再保存。</div>`;
+  if (d.conflict) html += `<div class="notice warn"><strong>保存没有完成</strong>这个配置已被其他窗口修改，请重新读取后再保存。</div>`;
   html += `
     <div class="field"><label>上下文大小</label>
       <select ${!d.contextEditable ? "disabled" : ""} onchange="S.codexDraft.ctx=this.value;render()">
@@ -1072,8 +1072,8 @@ function renderCodexEditor() {
   } else {
     const submitDisabled = !connEditable && !d.contextEditable;
     html += `<div class="btn-row">
-      <button class="btn btn-primary" ${submitDisabled ? "disabled" : ""} onclick="saveCodex()">${connEditable ? (isNew ? "保存 Profile" : "保存修改") : "保存上下文偏好"}</button>
-      ${!isNew && d.deletable ? `<button class="btn btn-danger" onclick="openDeleteCodex()">删除 Profile</button>` : ""}
+      <button class="btn btn-primary" ${submitDisabled ? "disabled" : ""} onclick="saveCodex()">${connEditable ? (isNew ? "保存配置" : "保存修改") : "保存上下文偏好"}</button>
+      ${!isNew && d.deletable ? `<button class="btn btn-danger" onclick="openDeleteCodex()">删除配置</button>` : ""}
     </div>`;
   }
   html += `</section>`;
@@ -1105,11 +1105,11 @@ function saveCodex() {
       const id = "cx" + Date.now();
       S.codex.push({ id, kind: "api", name: d.name.trim(), editable: true, contextEditable: true, deletable: true, available: true, statusTag: "", baseURL: d.baseURL.trim(), model: d.model.trim(), review: d.review, effort: d.effort.trim(), ctx: d.ctx });
       S.selectedCodex = id; S.codexEditor = id;
-      showToast("good", "Codex Profile 已创建。");
+      showToast("good", "Codex 配置已创建。");
     } else {
       const p = S.codex.find(x => x.id === S.codexEditor);
       Object.assign(p, { name: d.name, baseURL: d.baseURL, model: d.model, review: d.review, effort: d.effort, ctx: d.ctx });
-      showToast("good", connEditable ? "Codex Profile 已保存。" : "上下文偏好已保存。");
+      showToast("good", connEditable ? "Codex 配置已保存。" : "上下文偏好已保存。");
     }
     render();
   }, 1200);
@@ -1122,7 +1122,7 @@ function deleteCodex() {
     S.selectedCodex = S.codex[0].id; S.codexEditor = null; S.codexDraft = null; S.codexMobileDetail = false;
     S.deleteCodexModal = false;
     render();
-    showToast("good", "Codex Profile 已删除。");
+    showToast("good", "Codex 配置已删除。");
   }, 900);
   render();
 }
@@ -1246,9 +1246,9 @@ function renderModal() {
     ] : [];
     html = `<div class="modal-backdrop" role="presentation">
       <div class="modal-card" role="dialog" aria-modal="true">
-        <h3>确认删除 Codex Profile</h3>
-        <p>删除后将移除“${esc(S.codexDraft?.name || "当前 Profile")}”，此操作不可恢复。</p>
-        ${refs.length ? `<div class="notice warn"><strong>这个 Profile 仍在使用中</strong>删除前请确认以下引用可以中断。</div>
+        <h3>确认删除 Codex 配置</h3>
+        <p>删除后将移除“${esc(S.codexDraft?.name || "当前配置")}”，此操作不可恢复。</p>
+        ${refs.length ? `<div class="notice warn"><strong>这个配置仍在使用中</strong>删除前请确认以下引用可以中断。</div>
           <ul class="ref-list">${refs.map(r => `<li><span class="badge warn">${r.kind}</span><span style="flex:1;">${esc(r.name.trim())}</span><span style="color:var(--text-muted);">${r.reason}</span></li>`).join("")}</ul>` : ""}
         <div class="modal-actions">
           <button class="btn btn-secondary" onclick="closeDeleteCodex()">取消</button>
