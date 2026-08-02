@@ -120,7 +120,7 @@ func TestRuntimeResolverProjectsDeepSeekManagedModelCatalog(t *testing.T) {
 		t.Fatalf("Resolve: %v", err)
 	}
 	catalogPath := filepath.Join(managedDir, "deepseek-models-v1.json")
-	if !strings.Contains(strings.Join(projection.Launch.CLIOverrides, "\n"), `model_catalog_json="`+catalogPath+`"`) {
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
 		t.Fatalf("launch overrides missing managed catalog path: %#v", projection.Launch.CLIOverrides)
 	}
 	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
@@ -135,6 +135,15 @@ func TestRuntimeResolverProjectsDeepSeekManagedModelCatalog(t *testing.T) {
 	if strings.Contains(content, profile.APIKey) {
 		t.Fatal("managed DeepSeek catalog leaked API key")
 	}
+}
+
+func containsCLIOverride(args []string, override string) bool {
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == "-c" && args[index+1] == override {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRuntimeResolverRejectsDeepSeekWithoutManagedModelCatalogDir(t *testing.T) {

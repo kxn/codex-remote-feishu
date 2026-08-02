@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -166,7 +167,13 @@ func TestDaemonStartsDeepSeekCodexHeadlessWithManagedModelCatalog(t *testing.T) 
 	if catalogPath == "" {
 		t.Fatalf("expected DeepSeek launch to include model_catalog_json, args=%#v", captured.Args)
 	}
-	if !strings.HasPrefix(catalogPath, stateDir+string(os.PathSeparator)) {
+	relCatalogPath, err := filepath.Rel(stateDir, catalogPath)
+	if err != nil {
+		t.Fatalf("expected managed catalog under state dir %q, got %q: %v", stateDir, catalogPath, err)
+	}
+	if relCatalogPath == "." || relCatalogPath == ".." ||
+		strings.HasPrefix(relCatalogPath, ".."+string(os.PathSeparator)) ||
+		filepath.IsAbs(relCatalogPath) {
 		t.Fatalf("expected managed catalog under state dir %q, got %q", stateDir, catalogPath)
 	}
 	raw, err := os.ReadFile(catalogPath)
@@ -238,9 +245,21 @@ func codexConfigOverrideValue(args []string, key string) string {
 			continue
 		}
 		value := strings.TrimPrefix(args[index+1], prefix)
-		return strings.Trim(value, `"`)
+		unquoted, err := strconv.Unquote(value)
+		if err != nil {
+			return ""
+		}
+		return unquoted
 	}
 	return ""
+}
+
+func TestCodexConfigOverrideValueUnquotesEscapedWindowsPath(t *testing.T) {
+	want := `C:\Users\runneradmin\AppData\Local\Temp\state\codex-model-catalogs\deepseek-models-v1.json`
+	got := codexConfigOverrideValue([]string{"app-server", "-c", "model_catalog_json=" + strconv.Quote(want)}, "model_catalog_json")
+	if got != want {
+		t.Fatalf("override value = %q, want %q", got, want)
+	}
 }
 
 func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
