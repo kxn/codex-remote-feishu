@@ -9,7 +9,7 @@ on:
         default: master
         type: string
       version:
-        description: Binary version string. Defaults to manual-<short-sha>.
+        description: Binary version string. Defaults to a valid placeholder for the selected track.
         required: false
         default: ""
         type: string
@@ -92,10 +92,28 @@ jobs:
           version='${{ inputs.version }}'
           package_label='${{ inputs.package_label }}'
           if [[ -z "${version}" ]]; then
-            version="manual-${short_commit}"
+            case '${{ inputs.track }}' in
+              production)
+                version="v0.0.0"
+                ;;
+              beta)
+                version="v0.0.0-beta.0"
+                ;;
+              alpha)
+                version="v0.0.0-alpha.0"
+                ;;
+              *)
+                echo "unsupported track: ${{ inputs.track }}" >&2
+                exit 1
+                ;;
+            esac
           fi
           if [[ -z "${package_label}" ]]; then
             package_label="manual-${short_commit}"
+          fi
+          if ! [[ "${package_label}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+            echo "package_label must contain only letters, numbers, dot, underscore, or dash: ${package_label}" >&2
+            exit 1
           fi
           artifact_name="manual-build-dist-${package_label}"
           echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
