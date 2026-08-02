@@ -249,6 +249,7 @@ try {
   if ($LASTEXITCODE -eq 0) {
     Fail "Task Scheduler task still exists after uninstall: $taskName"
   }
+  $global:LASTEXITCODE = 0
 
   Write-Output "packaged installer lifecycle smoke passed"
 } finally {
@@ -268,4 +269,5 @@ try {
   if (Test-Path -LiteralPath $workDir) {
     Remove-Item -LiteralPath $workDir -Force -Recurse -ErrorAction SilentlyContinue
   }
+  $global:LASTEXITCODE = 0
 }
