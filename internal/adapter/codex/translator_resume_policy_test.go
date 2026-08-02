@@ -22,9 +22,9 @@ func TestTranslatePromptSendApplyTargetProfilePolicyUsesTypedStartPayload(t *tes
 			Mode:             agentproto.CodexResumeApplyTargetProfile,
 			ModelProviderID:  "codex_remote_profile_team",
 			ModelMode:        agentproto.CodexThreadValueExplicit,
-			Model:            "gpt-5.4",
+			Model:            "gpt-5.5",
 			ReviewModelMode:  agentproto.CodexReviewModelExplicit,
-			ReviewModel:      "gpt-5.4-review",
+			ReviewModel:      "gpt-5.5-review",
 			ReasoningMode:    agentproto.CodexThreadValueExplicit,
 			ReasoningEffort:  "high",
 			ContextMode:      "extended_1m",
@@ -37,11 +37,11 @@ func TestTranslatePromptSendApplyTargetProfilePolicyUsesTypedStartPayload(t *tes
 	}
 	payload := decodeSinglePayload(t, commands)
 	params := payloadParams(t, payload, "thread/start")
-	if params["modelProvider"] != "codex_remote_profile_team" || params["model"] != "gpt-5.4" {
+	if params["modelProvider"] != "codex_remote_profile_team" || params["model"] != "gpt-5.5" {
 		t.Fatalf("expected typed profile provider/model, got %#v", params)
 	}
 	config := payloadConfig(t, params)
-	if config["model_reasoning_effort"] != "high" || config["reasoning_effort"] != "high" || config["review_model"] != "gpt-5.4-review" {
+	if config["model_reasoning_effort"] != "high" || config["reasoning_effort"] != "high" || config["review_model"] != "gpt-5.5-review" {
 		t.Fatalf("expected explicit thread policy in config, got %#v", config)
 	}
 	if config["model_context_window"] != float64(1000000) || config["model_auto_compact_token_limit"] != float64(900000) {
@@ -192,7 +192,7 @@ func TestObserveTurnStartedEmitsEffectiveContextEvidence(t *testing.T) {
 			Mode:             agentproto.CodexResumeApplyTargetProfile,
 			ModelProviderID:  "codex_remote_profile_team",
 			ModelMode:        agentproto.CodexThreadValueExplicit,
-			Model:            "gpt-5.4",
+			Model:            "gpt-5.5",
 			ReasoningMode:    agentproto.CodexThreadValueExplicit,
 			ReasoningEffort:  "high",
 			ContextMode:      "extended_1m",
@@ -203,7 +203,7 @@ func TestObserveTurnStartedEmitsEffectiveContextEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
 	}
-	if _, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-1","modelProvider":"codex_remote_profile_team","model":"gpt-5.4","config":{"model_reasoning_effort":"high"}}}}`)); err != nil {
+	if _, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-1","modelProvider":"codex_remote_profile_team","model":"gpt-5.5","config":{"model_reasoning_effort":"high"}}}}`)); err != nil {
 		t.Fatalf("observe thread started: %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestObserveTurnStartedEmitsEffectiveContextEvidence(t *testing.T) {
 		t.Fatalf("expected effective thread contract on turn started, got %#v", result.Events)
 	}
 	effective := result.Events[0].CodexEffectiveThread
-	if effective.ModelProviderID != "codex_remote_profile_team" || effective.Model != "gpt-5.4" || effective.ReasoningEffort != "high" {
+	if effective.ModelProviderID != "codex_remote_profile_team" || effective.Model != "gpt-5.5" || effective.ReasoningEffort != "high" {
 		t.Fatalf("unexpected effective model contract: %#v", effective)
 	}
 	if effective.RequestedContextWindow != 1000000 || effective.EffectiveContextWindow != 272000 || effective.ContextStatus != agentproto.CodexContextPreferenceClamped {
@@ -234,7 +234,7 @@ func TestObserveTurnStartedDoesNotForgeEffectiveProviderWithoutEvidence(t *testi
 			Mode:            agentproto.CodexResumeApplyTargetProfile,
 			ModelProviderID: "codex_remote_profile_team",
 			ModelMode:       agentproto.CodexThreadValueExplicit,
-			Model:           "gpt-5.4",
+			Model:           "gpt-5.5",
 			ReasoningMode:   agentproto.CodexThreadValueExplicit,
 			ReasoningEffort: "high",
 		},
@@ -270,7 +270,7 @@ func TestObserveTurnStartedBuildsEffectiveFromObservedThreadEvidence(t *testing.
 			Mode:             agentproto.CodexResumeApplyTargetProfile,
 			ModelProviderID:  "codex_remote_profile_team",
 			ModelMode:        agentproto.CodexThreadValueExplicit,
-			Model:            "gpt-5.4",
+			Model:            "gpt-5.5",
 			ReasoningMode:    agentproto.CodexThreadValueExplicit,
 			ReasoningEffort:  "high",
 			ContextWindow:    1000000,
@@ -280,7 +280,7 @@ func TestObserveTurnStartedBuildsEffectiveFromObservedThreadEvidence(t *testing.
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
 	}
-	if _, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-1","modelProvider":"codex_remote_profile_team","model":"gpt-5.4","config":{"model_reasoning_effort":"high"}}}}`)); err != nil {
+	if _, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-1","modelProvider":"codex_remote_profile_team","model":"gpt-5.5","config":{"model_reasoning_effort":"high"}}}}`)); err != nil {
 		t.Fatalf("observe thread started: %v", err)
 	}
 
@@ -293,7 +293,7 @@ func TestObserveTurnStartedBuildsEffectiveFromObservedThreadEvidence(t *testing.
 	}
 	effective := result.Events[0].CodexEffectiveThread
 	if effective.ModelProviderID != "codex_remote_profile_team" ||
-		effective.Model != "gpt-5.4" ||
+		effective.Model != "gpt-5.5" ||
 		effective.ReasoningEffort != "high" {
 		t.Fatalf("expected observed provider/model/reasoning, got %#v", effective)
 	}
@@ -316,13 +316,13 @@ func TestObserveTurnStartedReportsProtocolIncompleteOnProviderMismatch(t *testin
 			Mode:            agentproto.CodexResumeApplyTargetProfile,
 			ModelProviderID: "codex_remote_profile_team",
 			ModelMode:       agentproto.CodexThreadValueExplicit,
-			Model:           "gpt-5.4",
+			Model:           "gpt-5.5",
 		},
 	})
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
 	}
-	if _, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-1","modelProvider":"other-provider","model":"gpt-5.4"}}}`)); err != nil {
+	if _, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-1","modelProvider":"other-provider","model":"gpt-5.5"}}}`)); err != nil {
 		t.Fatalf("observe thread started: %v", err)
 	}
 

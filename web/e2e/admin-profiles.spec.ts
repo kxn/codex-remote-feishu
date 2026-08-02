@@ -16,7 +16,7 @@ test("admin profiles can be managed on desktop and mobile", async ({ page }) => 
   await codexSection.getByLabel(/名称/).fill("E2E Profile");
   await codexSection.getByLabel(/端点地址/).fill("https://api.example.com/v1");
   await codexSection.getByLabel(/API Key/).fill("e2e-secret");
-  await codexSection.getByLabel("主模型").fill("gpt-5.4");
+  await codexSection.getByLabel("主模型").fill("gpt-5.5");
   await codexSection.getByLabel("推理强度").fill("high");
   await codexSection.getByRole("button", { name: "保存 Profile" }).click();
   await expect(codexSection.getByText("Codex Profile 已创建。")).toBeVisible();
@@ -276,7 +276,7 @@ function codexProfiles() {
       kind: "api",
       name: "Team Proxy",
       baseURL: "https://api.example.com/v1",
-      model: "gpt-5.4",
+      model: "gpt-5.5",
       reviewModel: "",
       reasoningEffort: "high",
       available: true,

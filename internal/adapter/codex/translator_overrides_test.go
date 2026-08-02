@@ -19,7 +19,7 @@ func TestTranslatePromptSendAppliesOverridesToExistingThreadTurnStart(t *testing
 		Origin:    agentproto.Origin{ChatID: "surface-1"},
 		Target:    agentproto.Target{ThreadID: "thread-1", CWD: "/tmp/project"},
 		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
-		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4", ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess},
+		Overrides: agentproto.PromptOverrides{Model: "gpt-5.5", ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess},
 	})
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
@@ -32,7 +32,7 @@ func TestTranslatePromptSendAppliesOverridesToExistingThreadTurnStart(t *testing
 		t.Fatalf("unmarshal turn/start: %v", err)
 	}
 	params, _ := turnStart["params"].(map[string]any)
-	if params["model"] != "gpt-5.4" || params["effort"] != "high" {
+	if params["model"] != "gpt-5.5" || params["effort"] != "high" {
 		t.Fatalf("expected top-level overrides in turn/start, got %#v", params)
 	}
 	if params["approvalPolicy"] != "never" || !reflect.DeepEqual(params["sandboxPolicy"], map[string]any{"type": "dangerFullAccess"}) {
@@ -40,7 +40,7 @@ func TestTranslatePromptSendAppliesOverridesToExistingThreadTurnStart(t *testing
 	}
 	settings, _ := params["collaborationMode"].(map[string]any)
 	settingsMap, _ := settings["settings"].(map[string]any)
-	if settingsMap["model"] != "gpt-5.4" || settingsMap["reasoning_effort"] != "high" {
+	if settingsMap["model"] != "gpt-5.5" || settingsMap["reasoning_effort"] != "high" {
 		t.Fatalf("expected collaborationMode settings override, got %#v", params["collaborationMode"])
 	}
 }
@@ -53,7 +53,7 @@ func TestTranslatePromptSendAppliesOverridesToNewThreadStartAndFollowupTurn(t *t
 		Origin:    agentproto.Origin{ChatID: "surface-1"},
 		Target:    agentproto.Target{CWD: "/tmp/project"},
 		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
-		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4", ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess},
+		Overrides: agentproto.PromptOverrides{Model: "gpt-5.5", ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess},
 	})
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
@@ -66,7 +66,7 @@ func TestTranslatePromptSendAppliesOverridesToNewThreadStartAndFollowupTurn(t *t
 		t.Fatalf("unmarshal thread/start: %v", err)
 	}
 	params, _ := threadStart["params"].(map[string]any)
-	if params["model"] != "gpt-5.4" {
+	if params["model"] != "gpt-5.5" {
 		t.Fatalf("expected thread/start override model, got %#v", params)
 	}
 	if params["approvalPolicy"] != "never" || params["sandbox"] != "danger-full-access" {
@@ -89,7 +89,7 @@ func TestTranslatePromptSendAppliesOverridesToNewThreadStartAndFollowupTurn(t *t
 		t.Fatalf("unmarshal followup turn/start: %v", err)
 	}
 	turnParams, _ := turnStart["params"].(map[string]any)
-	if turnParams["model"] != "gpt-5.4" || turnParams["effort"] != "high" {
+	if turnParams["model"] != "gpt-5.5" || turnParams["effort"] != "high" {
 		t.Fatalf("expected followup turn/start overrides, got %#v", turnParams)
 	}
 	if turnParams["approvalPolicy"] != "never" || !reflect.DeepEqual(turnParams["sandboxPolicy"], map[string]any{"type": "dangerFullAccess"}) {
@@ -151,7 +151,7 @@ func TestTranslatePromptSendEmptyAccessPreservesObservedPolicies(t *testing.T) {
 		Origin:    agentproto.Origin{ChatID: "surface-1"},
 		Target:    agentproto.Target{ThreadID: "thread-1", CWD: "/tmp/project"},
 		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
-		Overrides: agentproto.PromptOverrides{Model: "gpt-5.4"},
+		Overrides: agentproto.PromptOverrides{Model: "gpt-5.5"},
 	})
 	if err != nil {
 		t.Fatalf("translate command: %v", err)
@@ -294,7 +294,7 @@ func TestStructuredLocalTurnStartDoesNotOverwriteReusableTurnTemplate(t *testing
 
 func TestInternalHelperThreadStartDoesNotPoisonRemoteThreadStart(t *testing.T) {
 	tr := NewTranslator("inst-1")
-	if _, err := tr.ObserveClient([]byte(`{"id":"helper-thread-1","method":"thread/start","params":{"cwd":"/tmp/project","approvalPolicy":"never","sandbox":"read-only","ephemeral":true,"persistExtendedHistory":false,"model":"gpt-5.4","config":{"model_reasoning_effort":"low"}}}`)); err != nil {
+	if _, err := tr.ObserveClient([]byte(`{"id":"helper-thread-1","method":"thread/start","params":{"cwd":"/tmp/project","approvalPolicy":"never","sandbox":"read-only","ephemeral":true,"persistExtendedHistory":false,"model":"gpt-5.5","config":{"model_reasoning_effort":"low"}}}`)); err != nil {
 		t.Fatalf("observe helper thread start: %v", err)
 	}
 

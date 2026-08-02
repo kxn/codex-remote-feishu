@@ -35,10 +35,10 @@ func TestMenuActionReasoningPresets(t *testing.T) {
 
 func TestMenuActionDynamicModelPreset(t *testing.T) {
 	tests := map[string]string{
-		"model_gpt-5.4":       "/model gpt-5.4",
-		"model_gpt-5.4-mini":  "/model gpt-5.4-mini",
-		"model-gpt-5.4":       "/model gpt-5.4",
-		" model_gpt-5.4 \n\t": "/model gpt-5.4",
+		"model_gpt-5.5":       "/model gpt-5.5",
+		"model_gpt-5.5-mini":  "/model gpt-5.5-mini",
+		"model-gpt-5.5":       "/model gpt-5.5",
+		" model_gpt-5.5 \n\t": "/model gpt-5.5",
 	}
 	for key, wantText := range tests {
 		got, ok := menuAction(key)

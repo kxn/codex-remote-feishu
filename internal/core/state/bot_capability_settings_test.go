@@ -17,7 +17,7 @@ func TestNormalizeBotCapabilitySettingsRecord(t *testing.T) {
 		CodexProviderID: " team-proxy ",
 		ClaudeProfileID: " devseek ",
 		PromptOverride: ModelConfigRecord{
-			Model:           " gpt-5.4 ",
+			Model:           " gpt-5.5 ",
 			ReasoningEffort: " HIGH ",
 			AccessMode:      " confirm ",
 		},
@@ -38,7 +38,7 @@ func TestNormalizeBotCapabilitySettingsRecord(t *testing.T) {
 	if record.CodexProviderID != "team-proxy" || record.ClaudeProfileID != "devseek" {
 		t.Fatalf("provider/profile = %q/%q, want team-proxy/devseek", record.CodexProviderID, record.ClaudeProfileID)
 	}
-	if record.PromptOverride.Model != "gpt-5.4" || record.PromptOverride.ReasoningEffort != "high" || record.PromptOverride.AccessMode != "confirm" {
+	if record.PromptOverride.Model != "gpt-5.5" || record.PromptOverride.ReasoningEffort != "high" || record.PromptOverride.AccessMode != "confirm" {
 		t.Fatalf("PromptOverride = %#v, want compact normalized values", record.PromptOverride)
 	}
 	if record.PlanMode != PlanModeSettingOn || !record.PlanModeOverrideSet {
@@ -80,7 +80,7 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing
 		ProductMode:      ProductModeNormal,
 		Backend:          agentproto.BackendCodex,
 		CodexProviderID:  "team-proxy",
-		PromptOverride:   ModelConfigRecord{Model: "gpt-5.4"},
+		PromptOverride:   ModelConfigRecord{Model: "gpt-5.5"},
 		PlanMode:         PlanModeSettingOff,
 	}
 

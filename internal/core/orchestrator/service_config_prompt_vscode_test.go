@@ -96,7 +96,7 @@ func TestVSCodePromptOnlySendsLocalRequestedOverride(t *testing.T) {
 		},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModelCommand, SurfaceSessionID: "surface-1", Text: "/model gpt-5.4 high"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModelCommand, SurfaceSessionID: "surface-1", Text: "/model gpt-5.5 high"})
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
@@ -105,7 +105,7 @@ func TestVSCodePromptOnlySendsLocalRequestedOverride(t *testing.T) {
 		Text:             "继续",
 	})
 	command := promptSendCommandFromEvents(t, events)
-	if command.Overrides.Model != "gpt-5.4" || command.Overrides.ReasoningEffort != "high" {
+	if command.Overrides.Model != "gpt-5.5" || command.Overrides.ReasoningEffort != "high" {
 		t.Fatalf("expected explicit model/reasoning override, got %#v", command.Overrides)
 	}
 	if command.Overrides.AccessMode != "" || command.Overrides.PlanMode != "" {

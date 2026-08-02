@@ -48,12 +48,12 @@ func TestShortenThreadID(t *testing.T) {
 }
 
 func TestFeishuCommandFormWithDefaultClones(t *testing.T) {
-	form := FeishuCommandFormWithDefault(FeishuCommandModel, "gpt-5.4")
+	form := FeishuCommandFormWithDefault(FeishuCommandModel, "gpt-5.5")
 	if form == nil {
 		t.Fatal("expected form")
 	}
-	if form.Field.DefaultValue != "gpt-5.4" {
-		t.Fatalf("default value = %q, want gpt-5.4", form.Field.DefaultValue)
+	if form.Field.DefaultValue != "gpt-5.5" {
+		t.Fatalf("default value = %q, want gpt-5.5", form.Field.DefaultValue)
 	}
 
 	original, ok := FeishuCommandForm(FeishuCommandModel)

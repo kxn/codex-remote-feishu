@@ -219,7 +219,7 @@ const (
 	requestCaptureModeDeclineWithFeedback = "decline_with_feedback"
 	requestCaptureModeSameRequestDecline  = "same_request_decline_with_feedback"
 	requestCaptureModePlanReviseFeedback  = "plan_revise_feedback"
-	defaultModel                          = "gpt-5.4"
+	defaultModel                          = "gpt-5.5"
 	defaultReasoningEffort                = "xhigh"
 )
 

@@ -24,7 +24,7 @@ func TestLoadAppConfigRejectsCorruptCodexProfileCatalog(t *testing.T) {
         "name": "Team Proxy",
         "baseURL": "https://proxy.example/v1",
         "apiKey": "secret",
-        "model": "gpt-5.4",
+        "model": "gpt-5.5",
         "reasoningEffort": "high"
       }]
     }]
@@ -45,7 +45,7 @@ func TestMigrateLegacyCodexProvidersCreatesRevisionOneProfiles(t *testing.T) {
 		Name:            " Team Proxy ",
 		BaseURL:         " https://proxy.example/v1 ",
 		APIKey:          " secret with spaces ",
-		Model:           "gpt-5.4",
+		Model:           "gpt-5.5",
 		ReasoningEffort: "high",
 	}}
 
@@ -99,7 +99,7 @@ func TestMigrateLegacyCodexProvidersKeepsIncompleteProfileVisible(t *testing.T) 
 func TestPrepareCodexAPIProfileCreateRequiresModelAndReasoning(t *testing.T) {
 	for _, input := range []CodexAPIProfileInput{
 		{Name: "Missing Model", BaseURL: "https://proxy.example/v1", APIKey: "secret", ReasoningEffort: "high"},
-		{Name: "Missing Reasoning", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4"},
+		{Name: "Missing Reasoning", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5"},
 	} {
 		if _, err := PrepareCodexAPIProfileCreate(nil, input); err == nil {
 			t.Fatalf("PrepareCodexAPIProfileCreate(%#v) expected validation error", input)
@@ -109,13 +109,13 @@ func TestPrepareCodexAPIProfileCreateRequiresModelAndReasoning(t *testing.T) {
 
 func TestPrepareCodexAPIProfileCreateRejectsUnicodeCaseFoldDuplicateName(t *testing.T) {
 	existing, err := PrepareCodexAPIProfileCreate(nil, CodexAPIProfileInput{
-		Name: "Straße", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+		Name: "Straße", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	})
 	if err != nil {
 		t.Fatalf("PrepareCodexAPIProfileCreate existing: %v", err)
 	}
 	_, err = PrepareCodexAPIProfileCreate([]CodexAPIProfileRecord{existing}, CodexAPIProfileInput{
-		Name: "STRASSE", BaseURL: "https://other.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+		Name: "STRASSE", BaseURL: "https://other.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	})
 	if err == nil {
 		t.Fatal("PrepareCodexAPIProfileCreate accepted a Unicode case-fold duplicate profile name")
@@ -134,7 +134,7 @@ func TestPrepareCodexAPIProfileCreateRejectsUnsafeBaseURL(t *testing.T) {
 			Name:            "Team Proxy",
 			BaseURL:         baseURL,
 			APIKey:          "secret",
-			Model:           "gpt-5.4",
+			Model:           "gpt-5.5",
 			ReasoningEffort: "high",
 		})
 		if err == nil {
@@ -151,12 +151,12 @@ func TestValidateCodexAPIProfileRecordsRejectsUnsafeHistoricalRevision(t *testin
 			{
 				ID: "team-proxy", Revision: 1, CredentialGeneration: 1, ConnectionGeneration: 1,
 				Kind: CodexProfileKindAPI, Name: "Team\nProxy", BaseURL: "https://proxy.example/v1",
-				APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+				APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 			},
 			{
 				ID: "team-proxy", Revision: 2, CredentialGeneration: 1, ConnectionGeneration: 1,
 				Kind: CodexProfileKindAPI, Name: "Team Proxy", BaseURL: "https://proxy.example/v1",
-				APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+				APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 			},
 		},
 	}
@@ -169,7 +169,7 @@ func TestValidateCodexAPIProfileRecordsRejectsGenerationDrift(t *testing.T) {
 	base := CodexAPIProfileSecretConfig{
 		ID: "team-proxy", Revision: 1, CredentialGeneration: 1, ConnectionGeneration: 1,
 		Kind: CodexProfileKindAPI, Name: "Team Proxy", BaseURL: "https://proxy.example/v1",
-		APIKey: "old-secret", Model: "gpt-5.4", ReasoningEffort: "high",
+		APIKey: "old-secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}
 	for _, mutate := range []func(*CodexAPIProfileSecretConfig){
 		func(next *CodexAPIProfileSecretConfig) { next.APIKey = "new-secret" },
@@ -190,8 +190,8 @@ func TestPrepareCodexAPIProfileUpdateUsesImmutableRevisions(t *testing.T) {
 		Name:            "Team Proxy",
 		BaseURL:         "https://proxy.example/v1",
 		APIKey:          " secret with spaces ",
-		Model:           "gpt-5.4",
-		ReviewModel:     "gpt-5.4-mini",
+		Model:           "gpt-5.5",
+		ReviewModel:     "gpt-5.5-mini",
 		ReasoningEffort: "custom-effort",
 	})
 	if err != nil {
@@ -205,8 +205,8 @@ func TestPrepareCodexAPIProfileUpdateUsesImmutableRevisions(t *testing.T) {
 	unchanged, changed, err := PrepareCodexAPIProfileUpdate(record, CodexAPIProfileInput{
 		Name:            "Team Proxy",
 		BaseURL:         "https://proxy.example/v1",
-		Model:           "gpt-5.4",
-		ReviewModel:     "gpt-5.4-mini",
+		Model:           "gpt-5.5",
+		ReviewModel:     "gpt-5.5-mini",
 		ReasoningEffort: "custom-effort",
 	})
 	if err != nil || changed {
@@ -221,8 +221,8 @@ func TestPrepareCodexAPIProfileUpdateUsesImmutableRevisions(t *testing.T) {
 		Name:            "Team Proxy",
 		BaseURL:         "https://proxy.example/v1",
 		APIKey:          "replacement-secret",
-		Model:           "gpt-5.4",
-		ReviewModel:     "gpt-5.4-mini",
+		Model:           "gpt-5.5",
+		ReviewModel:     "gpt-5.5-mini",
 		ReasoningEffort: "custom-effort",
 	})
 	if err != nil || !changed {

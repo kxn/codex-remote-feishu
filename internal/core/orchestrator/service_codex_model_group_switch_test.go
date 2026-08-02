@@ -69,7 +69,7 @@ func TestCodexSameModelGroupSwitchKeepsThread(t *testing.T) {
 		threadModel string
 		targetModel string
 	}{
-		{name: "gpt to gpt", threadModel: "gpt-5.4", targetModel: "gpt-5.5"},
+		{name: "gpt to gpt", threadModel: "gpt-5.5", targetModel: "gpt-5.5"},
 		{name: "non gpt to non gpt", threadModel: "deepseek-v4-flash", targetModel: "qwen-coder"},
 	}
 	for _, tt := range tests {

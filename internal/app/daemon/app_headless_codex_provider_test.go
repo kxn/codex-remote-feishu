@@ -23,7 +23,7 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 		Name:            "Team Proxy",
 		BaseURL:         "https://proxy.example/v1",
 		APIKey:          "provider-secret",
-		Model:           "gpt-5.4",
+		Model:           "gpt-5.5",
 		ReasoningEffort: "xhigh",
 	}}
 	configPath := filepath.Join(t.TempDir(), "config.json")
@@ -104,7 +104,7 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 			t.Fatalf("expected launch args to contain %q, got %#v", want, captured.Args)
 		}
 	}
-	for _, forbidden := range []string{`model="gpt-5.4"`, `model_reasoning_effort="xhigh"`, `review_model=`} {
+	for _, forbidden := range []string{`model="gpt-5.5"`, `model_reasoning_effort="xhigh"`, `review_model=`} {
 		if strings.Contains(args, forbidden) {
 			t.Fatalf("launch args must not contain thread policy override %q: %#v", forbidden, captured.Args)
 		}
@@ -198,7 +198,7 @@ func TestDaemonStartsCodexHeadlessWithCanonicalProfileID(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
 		Name: "Canonical Profile", BaseURL: "https://canonical.example/v1", APIKey: "canonical-secret",
-		Model: "gpt-5.4", ReasoningEffort: "high",
+		Model: "gpt-5.5", ReasoningEffort: "high",
 	})
 	if err != nil {
 		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
@@ -268,7 +268,7 @@ func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
 	stateDir := filepath.Join(root, "state")
 	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
 		Name: "Team Proxy", BaseURL: "https://old.example/v1", APIKey: "old-secret",
-		Model: "gpt-5.4", ReasoningEffort: "high",
+		Model: "gpt-5.5", ReasoningEffort: "high",
 	})
 	if err != nil {
 		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
@@ -319,7 +319,7 @@ func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
 			t.Fatalf("expected frozen launch args to contain %q, got %#v", want, captured.Args)
 		}
 	}
-	for _, forbidden := range []string{`model="gpt-5.4"`, `model_reasoning_effort="high"`, `review_model=`} {
+	for _, forbidden := range []string{`model="gpt-5.5"`, `model_reasoning_effort="high"`, `review_model=`} {
 		if strings.Contains(args, forbidden) {
 			t.Fatalf("frozen launch args must not contain thread policy override %q: %#v", forbidden, captured.Args)
 		}

@@ -65,7 +65,7 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 		WorkspaceKey:  "/data/dl/droid",
 		ModelCatalog: &agentproto.ModelCatalogSnapshot{
 			Entries: []agentproto.ModelCatalogEntry{{
-				Model: "gpt-5.4",
+				Model: "gpt-5.5",
 				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
 					{ReasoningEffort: "medium"},
 					{ReasoningEffort: "high"},
@@ -82,7 +82,7 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		MessageID:        "om-card-1",
-		Text:             "/model gpt-5.4 wrong",
+		Text:             "/model gpt-5.5 wrong",
 		CatalogFamilyID:  control.FeishuCommandModel,
 		CatalogVariantID: "model.codex.normal",
 		CatalogBackend:   "codex",
@@ -103,7 +103,7 @@ func TestCardOwnedModelInvalidInputStaysOnCard(t *testing.T) {
 		t.Fatalf("expected invalid input summary, got %q", summaryText)
 	}
 	form := findCommandCatalogForm(catalog, control.FeishuCommandModel, "command_args")
-	if form == nil || form.Field.DefaultValue != "gpt-5.4 wrong" {
+	if form == nil || form.Field.DefaultValue != "gpt-5.5 wrong" {
 		t.Fatalf("expected manual form to keep invalid input, got %#v", catalog.Sections)
 	}
 }

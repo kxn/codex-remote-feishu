@@ -569,7 +569,7 @@ func TestBareModelCommandUsesDynamicCatalogOptions(t *testing.T) {
 				{Model: "gpt-5.6", DisplayName: "GPT 5.6"},
 				{Model: "hidden-model", DisplayName: "Hidden", Hidden: true},
 				{Model: "gpt-5.6-codex", DisplayName: "GPT 5.6"},
-				{Model: "gpt-5.4-mini", DisplayName: "Mini"},
+				{Model: "gpt-5.5-mini", DisplayName: "Mini"},
 			},
 			RefreshedAt: now,
 		},
@@ -599,7 +599,7 @@ func TestBareModelCommandUsesDynamicCatalogOptions(t *testing.T) {
 	if len(options) != 3 {
 		t.Fatalf("expected hidden model to be filtered, got %#v", options)
 	}
-	wantValues := []string{"gpt-5.6", "gpt-5.6-codex", "gpt-5.4-mini"}
+	wantValues := []string{"gpt-5.6", "gpt-5.6-codex", "gpt-5.5-mini"}
 	for i, want := range wantValues {
 		if options[i].Value != want {
 			t.Fatalf("option %d value = %q, want %q: %#v", i, options[i].Value, want, options)

@@ -131,7 +131,7 @@ func TestStatusIgnoresHeadlessObservedCWDDefaultsAndAppliesSurfaceOverride(t *te
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModelCommand,
 		SurfaceSessionID: "surface-1",
-		Text:             "/model gpt-5.4 high",
+		Text:             "/model gpt-5.5 high",
 	})
 
 	snapshot := svc.SurfaceSnapshot("surface-1")
@@ -147,7 +147,7 @@ func TestStatusIgnoresHeadlessObservedCWDDefaultsAndAppliesSurfaceOverride(t *te
 	if snapshot.NextPrompt.BaseModelSource != "unknown" || snapshot.NextPrompt.BaseReasoningEffortSource != "unknown" {
 		t.Fatalf("expected headless cwd default sources to stay unknown, got %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.EffectiveModel != "gpt-5.4" || snapshot.NextPrompt.EffectiveReasoningEffort != "high" {
+	if snapshot.NextPrompt.EffectiveModel != "gpt-5.5" || snapshot.NextPrompt.EffectiveReasoningEffort != "high" {
 		t.Fatalf("expected effective config to use surface override, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectiveModelSource != "surface_override" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "surface_override" {

@@ -64,7 +64,7 @@ func TestNewRelayChildCodexRestartCommandCarriesCodexResumePolicy(t *testing.T) 
 		CodexThreadPolicy: &state.CodexThreadPolicy{
 			ThreadPolicyID:  "thread-policy-r7",
 			ModelMode:       state.CodexThreadValueExplicit,
-			Model:           "gpt-5.4",
+			Model:           "gpt-5.5",
 			ReasoningMode:   state.CodexThreadValueExplicit,
 			ReasoningEffort: "high",
 			ContextMode:     state.CodexContextModePrice272K,
@@ -81,7 +81,7 @@ func TestNewRelayChildCodexRestartCommandCarriesCodexResumePolicy(t *testing.T) 
 		t.Fatalf("newRelayChildCodexRestartCommand: %v", err)
 	}
 	if command.CodexResume == nil || command.CodexResume.ModelProviderID != "codex_remote_profile_team" ||
-		command.CodexResume.Model != "gpt-5.4" || command.CodexResume.ReasoningEffort != "high" {
+		command.CodexResume.Model != "gpt-5.5" || command.CodexResume.ReasoningEffort != "high" {
 		t.Fatalf("expected codex resume policy on restart command, got %#v", command.CodexResume)
 	}
 }

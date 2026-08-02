@@ -94,7 +94,7 @@ func TestCodexBackendRuntimePrepareChildRestartStoresResumePolicy(t *testing.T) 
 		Mode:            agentproto.CodexResumeApplyTargetProfile,
 		ModelProviderID: "codex_remote_profile_team",
 		ModelMode:       agentproto.CodexThreadValueExplicit,
-		Model:           "gpt-5.4",
+		Model:           "gpt-5.5",
 		ReasoningMode:   agentproto.CodexThreadValueExplicit,
 		ReasoningEffort: "high",
 	}
@@ -113,7 +113,7 @@ func TestCodexBackendRuntimePrepareChildRestartStoresResumePolicy(t *testing.T) 
 		t.Fatalf("unmarshal restore frame: %v", err)
 	}
 	params, _ := payload["params"].(map[string]any)
-	if params["modelProvider"] != "codex_remote_profile_team" || params["model"] != "gpt-5.4" {
+	if params["modelProvider"] != "codex_remote_profile_team" || params["model"] != "gpt-5.5" {
 		t.Fatalf("expected restart restore policy in frame, got %#v", params)
 	}
 	config, _ := params["config"].(map[string]any)

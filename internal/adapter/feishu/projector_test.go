@@ -953,7 +953,7 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 				Question:       "请选择模型",
 				DirectResponse: true,
 				Options: []control.RequestPromptQuestionOption{
-					{Label: "gpt-5.4", Description: "推荐"},
+					{Label: "gpt-5.5", Description: "推荐"},
 					{Label: "gpt-5.3"},
 				},
 			},
@@ -988,13 +988,13 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	if got := markdownContent(ops[0].CardElements[3]); !strings.Contains(got, "问题 1/2") {
 		t.Fatalf("expected first question heading after progress, got %#v", ops[0].CardElements[3])
 	}
-	if got := plainTextContent(ops[0].CardElements[4]); !containsAll(got, "标题：模型", "说明：", "请选择模型", "可选项：", "- gpt-5.4：推荐") {
+	if got := plainTextContent(ops[0].CardElements[4]); !containsAll(got, "标题：模型", "说明：", "请选择模型", "可选项：", "- gpt-5.5：推荐") {
 		t.Fatalf("expected first question body after heading, got %#v", ops[0].CardElements[4])
 	}
 	value := cardButtonPayload(t, ops[0].CardElements[5])
 	requestAnswers, _ := value["request_answers"].(map[string]any)
 	modelAnswers, _ := requestAnswers["model"].([]any)
-	if value["kind"] != "request_respond" || len(modelAnswers) != 1 || modelAnswers[0] != "gpt-5.4" {
+	if value["kind"] != "request_respond" || len(modelAnswers) != 1 || modelAnswers[0] != "gpt-5.5" {
 		t.Fatalf("unexpected request option payload: %#v", value)
 	}
 	if value["request_revision"] != 3 {
@@ -1042,7 +1042,7 @@ func TestProjectRequestUserInputPromptAsCard(t *testing.T) {
 	renderedValue := renderedButtonCallbackValue(t, renderedElements[5])
 	renderedAnswers, _ := renderedValue["request_answers"].(map[string]any)
 	renderedModelAnswers, _ := renderedAnswers["model"].([]any)
-	if renderedValue["kind"] != "request_respond" || len(renderedModelAnswers) != 1 || renderedModelAnswers[0] != "gpt-5.4" {
+	if renderedValue["kind"] != "request_respond" || len(renderedModelAnswers) != 1 || renderedModelAnswers[0] != "gpt-5.5" {
 		t.Fatalf("unexpected rendered direct-response payload: %#v", renderedValue)
 	}
 	if renderedValue["request_revision"] != 3 {
@@ -1082,10 +1082,10 @@ func TestProjectRequestUserInputPromptRendersCurrentFormQuestionAsSingleStepForm
 				Header:         "模型",
 				Question:       "请选择模型",
 				Answered:       true,
-				DefaultValue:   "gpt-5.4",
+				DefaultValue:   "gpt-5.5",
 				DirectResponse: true,
 				Options: []control.RequestPromptQuestionOption{
-					{Label: "gpt-5.4"},
+					{Label: "gpt-5.5"},
 					{Label: "gpt-5.3"},
 				},
 			},
@@ -1154,7 +1154,7 @@ func TestProjectRequestUserInputPromptRendersCancelFooterWithoutSubmitAction(t *
 				Question:       "请选择模型",
 				DirectResponse: true,
 				Options: []control.RequestPromptQuestionOption{
-					{Label: "gpt-5.4"},
+					{Label: "gpt-5.5"},
 					{Label: "gpt-5.3"},
 				},
 			},
@@ -1208,7 +1208,7 @@ func TestProjectRequestUserInputPromptRendersSealedStatusWithoutActions(t *testi
 				Question:       "请选择模型",
 				DirectResponse: true,
 				Options: []control.RequestPromptQuestionOption{
-					{Label: "gpt-5.4"},
+					{Label: "gpt-5.5"},
 					{Label: "gpt-5.3"},
 				},
 			},
@@ -1249,10 +1249,10 @@ func TestProjectRequestUserInputPromptShowsQuestionProgressAndAnswerStatus(t *te
 				Header:         "模型",
 				Question:       "请选择模型",
 				Answered:       true,
-				DefaultValue:   "gpt-5.4",
+				DefaultValue:   "gpt-5.5",
 				DirectResponse: true,
 				Options: []control.RequestPromptQuestionOption{
-					{Label: "gpt-5.4"},
+					{Label: "gpt-5.5"},
 					{Label: "gpt-5.3"},
 				},
 			},
@@ -1275,7 +1275,7 @@ func TestProjectRequestUserInputPromptShowsQuestionProgressAndAnswerStatus(t *te
 		t.Fatalf("expected first question heading after progress, got %#v", ops[0].CardElements[1])
 	}
 	firstQuestion := plainTextContent(ops[0].CardElements[2])
-	if !strings.Contains(firstQuestion, "状态：已回答") || !strings.Contains(firstQuestion, "当前答案：gpt-5.4") {
+	if !strings.Contains(firstQuestion, "状态：已回答") || !strings.Contains(firstQuestion, "当前答案：gpt-5.5") {
 		t.Fatalf("expected first question to include answered status and current answer, got %q", firstQuestion)
 	}
 	firstButton := ops[0].CardElements[3]

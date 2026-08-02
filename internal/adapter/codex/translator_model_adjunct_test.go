@@ -41,7 +41,7 @@ func TestObserveServerModelVerificationProducesStateOnlyEvent(t *testing.T) {
 func TestObserveServerModelSafetyBufferingUpdatedProducesStateOnlyEvent(t *testing.T) {
 	tr := NewTranslator("inst-1")
 
-	result, err := tr.ObserveServer([]byte(`{"method":"model/safetyBuffering/updated","params":{"threadId":"thread-1","turnId":"turn-1","model":"gpt-5.4","useCases":["coding","analysis"],"reasons":["policy","capacity"],"showBufferingUi":true,"fasterModel":"gpt-5.4-mini"}}`))
+	result, err := tr.ObserveServer([]byte(`{"method":"model/safetyBuffering/updated","params":{"threadId":"thread-1","turnId":"turn-1","model":"gpt-5.5","useCases":["coding","analysis"],"reasons":["policy","capacity"],"showBufferingUi":true,"fasterModel":"gpt-5.5-mini"}}`))
 	if err != nil {
 		t.Fatalf("observe model safety buffering updated: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestObserveServerModelSafetyBufferingUpdatedProducesStateOnlyEvent(t *testi
 	if event.ModelSafetyBuffering == nil {
 		t.Fatalf("expected safety buffering payload, got %#v", event)
 	}
-	if event.ModelSafetyBuffering.Model != "gpt-5.4" || event.ModelSafetyBuffering.FasterModel != "gpt-5.4-mini" || !event.ModelSafetyBuffering.ShowBufferingUI {
+	if event.ModelSafetyBuffering.Model != "gpt-5.5" || event.ModelSafetyBuffering.FasterModel != "gpt-5.5-mini" || !event.ModelSafetyBuffering.ShowBufferingUI {
 		t.Fatalf("unexpected safety buffering payload: %#v", event.ModelSafetyBuffering)
 	}
 	if !reflect.DeepEqual(event.ModelSafetyBuffering.UseCases, []string{"coding", "analysis"}) {

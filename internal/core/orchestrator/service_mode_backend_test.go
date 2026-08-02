@@ -15,7 +15,7 @@ func TestModeCommandSwitchesDetachedSurfaceToClaude(t *testing.T) {
 	svc := newServiceForTest(&now)
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionStatus, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1"})
 	surface := svc.root.Surfaces["surface-1"]
-	surface.PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
+	surface.PromptOverride = state.ModelConfigRecord{Model: "gpt-5.5"}
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModeCommand,
@@ -99,7 +99,7 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndPreparesHeadless(t *testi
 	})
 	surface := svc.root.Surfaces["surface-1"]
 	surface.ClaudeProfileID = "devseek"
-	surface.PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
+	surface.PromptOverride = state.ModelConfigRecord{Model: "gpt-5.5"}
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModeCommand,

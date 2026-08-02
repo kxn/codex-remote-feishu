@@ -148,27 +148,27 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 		{
 			name:      "model then provider",
 			firstKind: control.ActionModelCommand,
-			firstText: "/model gpt-5.4 high",
+			firstText: "/model gpt-5.5 high",
 			stale: func(surface *state.SurfaceConsoleRecord) {
 				surface.PromptOverride = state.ModelConfigRecord{}
 			},
 			secondKind: control.ActionCodexProviderCommand,
 			secondText: "/codexprovider team-proxy",
 			check: func(record state.BotCapabilitySettingsRecord) bool {
-				return record.CodexProviderID == "team-proxy" && record.PromptOverride.Model == "gpt-5.4" && record.PromptOverride.ReasoningEffort == "high"
+				return record.CodexProviderID == "team-proxy" && record.PromptOverride.Model == "gpt-5.5" && record.PromptOverride.ReasoningEffort == "high"
 			},
 		},
 		{
 			name:      "model then reasoning",
 			firstKind: control.ActionModelCommand,
-			firstText: "/model gpt-5.4 high",
+			firstText: "/model gpt-5.5 high",
 			stale: func(surface *state.SurfaceConsoleRecord) {
 				surface.PromptOverride = state.ModelConfigRecord{}
 			},
 			secondKind: control.ActionReasoningCommand,
 			secondText: "/reasoning low",
 			check: func(record state.BotCapabilitySettingsRecord) bool {
-				return record.PromptOverride.Model == "gpt-5.4" && record.PromptOverride.ReasoningEffort == "low"
+				return record.PromptOverride.Model == "gpt-5.5" && record.PromptOverride.ReasoningEffort == "low"
 			},
 		},
 		{
@@ -197,7 +197,7 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 				WorkspaceRoot: "/data/dl/project",
 				WorkspaceKey:  "/data/dl/project",
 				ModelCatalog: &agentproto.ModelCatalogSnapshot{Entries: []agentproto.ModelCatalogEntry{{
-					Model: "gpt-5.4",
+					Model: "gpt-5.5",
 					SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
 						{ReasoningEffort: "high"},
 						{ReasoningEffort: "low"},
@@ -783,7 +783,7 @@ func TestPrivateAccessCommandWritesBotCapabilitySettings(t *testing.T) {
 		WorkspaceKey:  "/data/dl/project",
 		ModelCatalog: &agentproto.ModelCatalogSnapshot{
 			Entries: []agentproto.ModelCatalogEntry{{
-				Model: "gpt-5.4",
+				Model: "gpt-5.5",
 				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
 					{ReasoningEffort: "high"},
 					{ReasoningEffort: "low"},
@@ -844,7 +844,7 @@ func TestGroupPromptSummaryUsesBotCapabilitySettings(t *testing.T) {
 		Backend:         agentproto.BackendCodex,
 		CodexProviderID: "default",
 		PromptOverride: state.ModelConfigRecord{
-			Model:           "gpt-5.4",
+			Model:           "gpt-5.5",
 			ReasoningEffort: "high",
 			AccessMode:      agentproto.AccessModeConfirm,
 		},
@@ -867,8 +867,8 @@ func TestGroupPromptSummaryUsesBotCapabilitySettings(t *testing.T) {
 	surface.AttachedInstanceID = "inst-1"
 
 	summary := svc.resolveNextPromptSummary(svc.root.Instances["inst-1"], surface, "", "", state.ModelConfigRecord{})
-	if summary.OverrideModel != "gpt-5.4" || summary.OverrideReasoningEffort != "high" {
-		t.Fatalf("summary override = %q/%q, want gpt-5.4/high", summary.OverrideModel, summary.OverrideReasoningEffort)
+	if summary.OverrideModel != "gpt-5.5" || summary.OverrideReasoningEffort != "high" {
+		t.Fatalf("summary override = %q/%q, want gpt-5.5/high", summary.OverrideModel, summary.OverrideReasoningEffort)
 	}
 	if summary.EffectiveAccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("summary access = %q, want confirm", summary.EffectiveAccessMode)
@@ -939,7 +939,7 @@ func TestPrivateModelAndReasoningCommandsWriteBotCapabilitySettings(t *testing.T
 		WorkspaceKey:  "/data/dl/project",
 		ModelCatalog: &agentproto.ModelCatalogSnapshot{
 			Entries: []agentproto.ModelCatalogEntry{{
-				Model: "gpt-5.4",
+				Model: "gpt-5.5",
 				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
 					{ReasoningEffort: "high"},
 					{ReasoningEffort: "low"},
@@ -952,10 +952,10 @@ func TestPrivateModelAndReasoningCommandsWriteBotCapabilitySettings(t *testing.T
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
 	surface.AttachedInstanceID = "inst-1"
 
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModelCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/model gpt-5.4 high"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModelCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/model gpt-5.5 high"})
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PromptOverride.Model != "gpt-5.4" || record.PromptOverride.ReasoningEffort != "high" {
-		t.Fatalf("bot model/reasoning = %#v, want gpt-5.4/high", record.PromptOverride)
+	if record.PromptOverride.Model != "gpt-5.5" || record.PromptOverride.ReasoningEffort != "high" {
+		t.Fatalf("bot model/reasoning = %#v, want gpt-5.5/high", record.PromptOverride)
 	}
 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionReasoningCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/reasoning low"})
@@ -975,7 +975,7 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 		{name: "mode", kind: control.ActionModeCommand, text: "/mode claude"},
 		{name: "codex provider", kind: control.ActionCodexProviderCommand, text: "/codexprovider team-proxy"},
 		{name: "claude profile", kind: control.ActionClaudeProfileCommand, text: "/claudeprofile devseek"},
-		{name: "model", kind: control.ActionModelCommand, text: "/model gpt-5.4 high"},
+		{name: "model", kind: control.ActionModelCommand, text: "/model gpt-5.5 high"},
 		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning low"},
 		{name: "access", kind: control.ActionAccessCommand, text: "/access confirm"},
 		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on"},
@@ -992,7 +992,7 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 				WorkspaceKey:  "/data/dl/project",
 				ModelCatalog: &agentproto.ModelCatalogSnapshot{
 					Entries: []agentproto.ModelCatalogEntry{{
-						Model: "gpt-5.4",
+						Model: "gpt-5.5",
 						SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
 							{ReasoningEffort: "high"},
 							{ReasoningEffort: "low"},

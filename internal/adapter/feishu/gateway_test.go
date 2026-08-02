@@ -387,7 +387,7 @@ func TestParseSurfaceRefRequiresGatewayAwareFormat(t *testing.T) {
 func TestParseTextActionRecognizesModelAndReasoningCommands(t *testing.T) {
 	tests := map[string]control.ActionKind{
 		"/model":           control.ActionModelCommand,
-		"/model gpt-5.4":   control.ActionModelCommand,
+		"/model gpt-5.5":   control.ActionModelCommand,
 		"/reasoning high":  control.ActionReasoningCommand,
 		"/effort medium":   control.ActionReasoningCommand,
 		"/access":          control.ActionAccessCommand,
@@ -1035,7 +1035,7 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromFormValue(t *testi
 					"catalog_backend":    string(agentproto.BackendClaude),
 				},
 				FormValue: map[string]interface{}{
-					"command_args": "gpt-5.4 high",
+					"command_args": "gpt-5.5 high",
 				},
 			},
 			Context: &larkcallback.Context{
@@ -1049,7 +1049,7 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromFormValue(t *testi
 	if !ok {
 		t.Fatal("expected page_submit callback to be parsed")
 	}
-	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.4 high" {
+	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.5 high" {
 		t.Fatalf("unexpected form submit action: %#v", action)
 	}
 	if action.CatalogFamilyID != control.FeishuCommandModel || action.CatalogVariantID != "model.default" || action.CatalogBackend != agentproto.BackendClaude {
@@ -1102,7 +1102,7 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromSelectStaticFormVa
 					"field_name":  "command_args",
 				},
 				FormValue: map[string]interface{}{
-					"command_args": []interface{}{"gpt-5.4-mini"},
+					"command_args": []interface{}{"gpt-5.5-mini"},
 				},
 			},
 			Context: &larkcallback.Context{
@@ -1116,7 +1116,7 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromSelectStaticFormVa
 	if !ok {
 		t.Fatal("expected page_submit callback to be parsed")
 	}
-	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.4-mini" {
+	if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.5-mini" {
 		t.Fatalf("unexpected select_static form submit action: %#v", action)
 	}
 }
@@ -1134,7 +1134,7 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromSelectStaticOption
 					"action_kind": string(control.ActionModelCommand),
 					"field_name":  "command_args",
 				},
-				Option: "gpt-5.4-mini",
+				Option: "gpt-5.5-mini",
 			},
 		},
 		{
@@ -1145,7 +1145,7 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromSelectStaticOption
 					"action_kind": string(control.ActionModelCommand),
 					"field_name":  "command_args",
 				},
-				Options: []string{"gpt-5.4-mini"},
+				Options: []string{"gpt-5.5-mini"},
 			},
 		},
 	}
@@ -1170,7 +1170,7 @@ func TestParseCardActionTriggerEventBuildsPageSubmitActionFromSelectStaticOption
 			if !ok {
 				t.Fatal("expected select_static fallback callback to be parsed")
 			}
-			if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.4-mini" {
+			if action.Kind != control.ActionModelCommand || action.Text != "/model gpt-5.5-mini" {
 				t.Fatalf("unexpected select_static fallback submit action: %#v", action)
 			}
 		})
@@ -1824,7 +1824,7 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAnswers(t *testing.T) {
 					"request_type":     "request_user_input",
 					"request_revision": "7",
 					"request_answers": map[string]interface{}{
-						"model": []interface{}{"gpt-5.4"},
+						"model": []interface{}{"gpt-5.5"},
 					},
 				},
 			},
@@ -1842,7 +1842,7 @@ func TestParseCardActionTriggerEventBuildsRequestRespondAnswers(t *testing.T) {
 	if action.Kind != control.ActionRespondRequest || action.Request == nil || action.Request.RequestID != "req-ui-1" {
 		t.Fatalf("unexpected action: %#v", action)
 	}
-	if got := action.Request.Answers["model"]; len(got) != 1 || got[0] != "gpt-5.4" {
+	if got := action.Request.Answers["model"]; len(got) != 1 || got[0] != "gpt-5.5" {
 		t.Fatalf("unexpected request answers payload: %#v", action.Request.Answers)
 	}
 	if action.Request.RequestRevision != 7 {
@@ -1904,7 +1904,7 @@ func TestParseCardActionTriggerEventBuildsSubmitRequestFormAction(t *testing.T) 
 					"request_revision": 5,
 				},
 				FormValue: map[string]interface{}{
-					"model": "gpt-5.4",
+					"model": "gpt-5.5",
 					"notes": "请用中文回复",
 				},
 			},

@@ -28,7 +28,7 @@ func TestObserveClientTurnStartProducesLocalInteraction(t *testing.T) {
 
 func TestObserveClientTurnStartEmitsObservedThreadConfig(t *testing.T) {
 	tr := NewTranslator("inst-1")
-	result, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","collaborationMode":{"mode":"custom","settings":{"model":"gpt-5.4","reasoning_effort":"high"}}}}`))
+	result, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project","collaborationMode":{"mode":"custom","settings":{"model":"gpt-5.5","reasoning_effort":"high"}}}}`))
 	if err != nil {
 		t.Fatalf("observe client: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestObserveClientTurnStartEmitsObservedThreadConfig(t *testing.T) {
 	if result.Events[0].Kind != agentproto.EventConfigObserved {
 		t.Fatalf("expected first event to be config observation, got %#v", result.Events[0])
 	}
-	if result.Events[0].ConfigScope != "thread" || result.Events[0].Model != "gpt-5.4" || result.Events[0].ReasoningEffort != "high" || result.Events[0].PlanMode != "off" {
+	if result.Events[0].ConfigScope != "thread" || result.Events[0].Model != "gpt-5.5" || result.Events[0].ReasoningEffort != "high" || result.Events[0].PlanMode != "off" {
 		t.Fatalf("unexpected observed config event: %#v", result.Events[0])
 	}
 	if result.Events[1].Kind != agentproto.EventLocalInteractionObserved || result.Events[1].Action != "turn_start" {

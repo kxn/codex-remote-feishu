@@ -30,7 +30,7 @@ func TestProfileCatalogStartupMigrationIsIdempotentAndCommitsLast(t *testing.T) 
 		Name:            "Team Proxy",
 		BaseURL:         "https://proxy.example/v1",
 		APIKey:          " secret ",
-		Model:           "gpt-5.4",
+		Model:           "gpt-5.5",
 		ReasoningEffort: "high",
 	}}
 	cfg.Claude.Profiles = []config.ClaudeProfileConfig{{
@@ -152,7 +152,7 @@ func TestProfileCatalogMigrationPreservesSurfaceAdmissionRefAfterProjection(t *t
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
 	cfg.Codex.Providers = []config.CodexProviderConfig{{
-		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("WriteAppConfig: %v", err)
@@ -196,7 +196,7 @@ func TestProfileCatalogMigrationRedactsUnsafeLegacyEndpointFromPublicSummary(t *
 		Name:            "Unsafe Proxy",
 		BaseURL:         "https://visible-user:visible-pass@proxy.example/v1?token=url-secret",
 		APIKey:          "stored-api-secret",
-		Model:           "gpt-5.4",
+		Model:           "gpt-5.5",
 		ReasoningEffort: "high",
 	}}
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -229,8 +229,8 @@ func TestProfileCatalogMigrationRecordsCanonicalSurfaceSelectionConflict(t *test
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
 	cfg.Codex.Providers = []config.CodexProviderConfig{
-		{ID: "proxy-a", Name: "Proxy A", BaseURL: "https://a.example/v1", APIKey: "a", Model: "gpt-5.4", ReasoningEffort: "high"},
-		{ID: "proxy-b", Name: "Proxy B", BaseURL: "https://b.example/v1", APIKey: "b", Model: "gpt-5.4", ReasoningEffort: "high"},
+		{ID: "proxy-a", Name: "Proxy A", BaseURL: "https://a.example/v1", APIKey: "a", Model: "gpt-5.5", ReasoningEffort: "high"},
+		{ID: "proxy-b", Name: "Proxy B", BaseURL: "https://b.example/v1", APIKey: "b", Model: "gpt-5.5", ReasoningEffort: "high"},
 	}
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("WriteAppConfig: %v", err)
@@ -319,7 +319,7 @@ func TestProfileCatalogMigrationRunsWhenStoresBecomeReadyAfterAdmin(t *testing.T
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
 	cfg.Codex.Providers = []config.CodexProviderConfig{{
-		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("WriteAppConfig: %v", err)
@@ -368,7 +368,7 @@ func TestConfigureAdminProjectsCommittedCatalogAfterHeadlessRuntime(t *testing.T
 	stateDir := filepath.Join(root, "state")
 	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
 		Name: "Committed", BaseURL: "https://committed.example/v1", APIKey: "secret",
-		Model: "gpt-5.4", ReasoningEffort: "high",
+		Model: "gpt-5.5", ReasoningEffort: "high",
 	})
 	if err != nil {
 		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
@@ -421,7 +421,7 @@ func TestCommittedProfileCatalogRepairsMissingContextPreferences(t *testing.T) {
 	stateDir := filepath.Join(root, "state")
 	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
 		Name: "Expensive Codex", BaseURL: "https://codex.example/v1", APIKey: "secret",
-		Model: "gpt-5.4", ReasoningEffort: "high",
+		Model: "gpt-5.5", ReasoningEffort: "high",
 	})
 	if err != nil {
 		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
@@ -480,7 +480,7 @@ func TestProfileCatalogMigrationFailsClosedWhenPreferenceStateIsCorrupt(t *testi
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
 	cfg.Codex.Providers = []config.CodexProviderConfig{{
-		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("WriteAppConfig: %v", err)
@@ -540,7 +540,7 @@ func TestProfileCatalogMigrationFailsClosedWhenSelectionStateIsCorrupt(t *testin
 			stateDir := filepath.Join(root, "state")
 			cfg := config.DefaultAppConfig()
 			cfg.Codex.Providers = []config.CodexProviderConfig{{
-				ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+				ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 			}}
 			if err := config.WriteAppConfig(configPath, cfg); err != nil {
 				t.Fatalf("WriteAppConfig: %v", err)
@@ -559,7 +559,7 @@ func TestProfileCatalogMigrationFailsClosedWhenSelectionStateIsCorrupt(t *testin
 			if migrationErr == nil {
 				t.Fatal("corrupt selection state did not establish the profile migration gate")
 			}
-			mutation := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", `{"name":"Blocked","baseURL":"https://blocked.example/v1","apiKey":"secret","model":"gpt-5.4","reasoningEffort":"high"}`)
+			mutation := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", `{"name":"Blocked","baseURL":"https://blocked.example/v1","apiKey":"secret","model":"gpt-5.5","reasoningEffort":"high"}`)
 			if mutation.Code != http.StatusServiceUnavailable {
 				t.Fatalf("profile mutation status = %d body=%s", mutation.Code, mutation.Body.String())
 			}
@@ -586,7 +586,7 @@ func TestProfileCatalogMigrationPreservesDanglingSelectionDiagnostic(t *testing.
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
 	cfg.Codex.Providers = []config.CodexProviderConfig{{
-		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.4", ReasoningEffort: "high",
+		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("WriteAppConfig: %v", err)
@@ -639,7 +639,7 @@ func TestProfileCatalogMigrationFailureBlocksProfileMutations(t *testing.T) {
 		path string
 		body string
 	}{
-		{path: "/api/admin/codex/profiles", body: `{"name":"Blocked","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.4","reasoningEffort":"high"}`},
+		{path: "/api/admin/codex/profiles", body: `{"name":"Blocked","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.5","reasoningEffort":"high"}`},
 		{path: "/api/admin/claude/profiles", body: `{"name":"Blocked","model":"claude-sonnet-4-5"}`},
 	} {
 		rec := performAdminRequest(t, app, http.MethodPost, request.path, request.body)
@@ -706,7 +706,7 @@ func TestProfileCreateRollsBackPreferenceWhenConfigWriteFails(t *testing.T) {
 		path string
 		body string
 	}{
-		{path: "/api/admin/codex/profiles", body: `{"name":"Blocked Codex","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.4","reasoningEffort":"high"}`},
+		{path: "/api/admin/codex/profiles", body: `{"name":"Blocked Codex","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.5","reasoningEffort":"high"}`},
 		{path: "/api/admin/claude/profiles", body: `{"name":"Blocked Claude","model":"claude-sonnet-4-5"}`},
 	} {
 		rec := performAdminRequest(t, app, http.MethodPost, request.path, request.body)

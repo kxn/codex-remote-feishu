@@ -122,7 +122,7 @@ func TestStatusUsesSurfaceDefaultsWhenObservedConfigUnknown(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected surface snapshot")
 	}
-	if snapshot.NextPrompt.EffectiveModel != "gpt-5.4" || snapshot.NextPrompt.EffectiveModelSource != "surface_default" {
+	if snapshot.NextPrompt.EffectiveModel != "gpt-5.5" || snapshot.NextPrompt.EffectiveModelSource != "surface_default" {
 		t.Fatalf("expected default model fallback, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectiveReasoningEffort != "xhigh" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "surface_default" {
@@ -145,7 +145,7 @@ func TestHeadlessTextMessageIgnoresLegacyCWDDefaultsWhenNoSurfaceOverride(t *tes
 		Online:                  true,
 		ObservedFocusedThreadID: "thread-1",
 		CWDDefaults: map[string]state.ModelConfigRecord{
-			"/data/dl/droid": {Model: "gpt-5.4", ReasoningEffort: "high"},
+			"/data/dl/droid": {Model: "gpt-5.5", ReasoningEffort: "high"},
 		},
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
@@ -168,7 +168,7 @@ func TestHeadlessTextMessageIgnoresLegacyCWDDefaultsWhenNoSurfaceOverride(t *tes
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.4" || item.FrozenOverride.ReasoningEffort != "" {
+	if item.FrozenOverride.Model != "gpt-5.5" || item.FrozenOverride.ReasoningEffort != "" {
 		t.Fatalf("expected queued item to ignore legacy cwd defaults and freeze surface defaults, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
@@ -184,7 +184,7 @@ func TestResolveWorkspaceDefaultsPartitionsByBackend(t *testing.T) {
 		Backend:         agentproto.BackendCodex,
 		CodexProviderID: state.DefaultCodexProviderID,
 	})] = state.ModelConfigRecord{
-		Model:           "gpt-5.4",
+		Model:           "gpt-5.5",
 		ReasoningEffort: "high",
 	}
 	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
@@ -222,7 +222,7 @@ func TestResolveWorkspaceDefaultsPartitionsByBackend(t *testing.T) {
 	if !ok {
 		t.Fatal("expected codex workspace defaults")
 	}
-	if defaults.Model != "gpt-5.4" || defaults.ReasoningEffort != "high" {
+	if defaults.Model != "gpt-5.5" || defaults.ReasoningEffort != "high" {
 		t.Fatalf("expected codex-scoped workspace defaults, got %#v", defaults)
 	}
 }
@@ -259,7 +259,7 @@ func TestTextMessageFreezesFallbackReasoningWhenConfigUnknown(t *testing.T) {
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.4" {
+	if item.FrozenOverride.Model != "gpt-5.5" {
 		t.Fatalf("expected queued item to freeze default model, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
@@ -664,7 +664,7 @@ func TestQueuedMessageFreezesSurfaceOverrideAtEnqueue(t *testing.T) {
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModelCommand,
 		SurfaceSessionID: "surface-1",
-		Text:             "/model gpt-5.4 high",
+		Text:             "/model gpt-5.5 high",
 	})
 
 	queued := svc.ApplySurfaceAction(control.Action{
@@ -702,7 +702,7 @@ func TestQueuedMessageFreezesSurfaceOverrideAtEnqueue(t *testing.T) {
 	if prompt == nil {
 		t.Fatalf("expected resumed queue item to dispatch prompt command, got %#v", resumed)
 	}
-	if prompt.Overrides.Model != "gpt-5.4" || prompt.Overrides.ReasoningEffort != "high" {
+	if prompt.Overrides.Model != "gpt-5.5" || prompt.Overrides.ReasoningEffort != "high" {
 		t.Fatalf("expected queued message to keep original frozen override, got %#v", prompt.Overrides)
 	}
 }

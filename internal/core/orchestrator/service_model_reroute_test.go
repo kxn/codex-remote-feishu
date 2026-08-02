@@ -25,7 +25,7 @@ func TestTurnModelReroutedUpdatesThreadModelAndSnapshot(t *testing.T) {
 				ThreadID:      "thread-1",
 				Name:          "修复登录流程",
 				CWD:           "/data/dl/droid",
-				ExplicitModel: "gpt-5.4",
+				ExplicitModel: "gpt-5.5",
 			},
 		},
 	})
@@ -45,8 +45,8 @@ func TestTurnModelReroutedUpdatesThreadModelAndSnapshot(t *testing.T) {
 		ModelReroute: &agentproto.TurnModelReroute{
 			ThreadID:  "thread-1",
 			TurnID:    "turn-1",
-			FromModel: "gpt-5.4",
-			ToModel:   "gpt-5.4-mini",
+			FromModel: "gpt-5.5",
+			ToModel:   "gpt-5.5-mini",
 			Reason:    "safety_downgrade",
 		},
 	}); len(events) != 0 {
@@ -57,13 +57,13 @@ func TestTurnModelReroutedUpdatesThreadModelAndSnapshot(t *testing.T) {
 	if thread == nil {
 		t.Fatal("expected thread record to exist")
 	}
-	if thread.ExplicitModel != "gpt-5.4-mini" {
+	if thread.ExplicitModel != "gpt-5.5-mini" {
 		t.Fatalf("expected effective model to switch to rerouted target, got %#v", thread)
 	}
 	if thread.LastModelReroute == nil {
 		t.Fatalf("expected thread to retain reroute payload, got %#v", thread)
 	}
-	if thread.LastModelReroute.FromModel != "gpt-5.4" || thread.LastModelReroute.ToModel != "gpt-5.4-mini" || thread.LastModelReroute.TurnID != "turn-1" {
+	if thread.LastModelReroute.FromModel != "gpt-5.5" || thread.LastModelReroute.ToModel != "gpt-5.5-mini" || thread.LastModelReroute.TurnID != "turn-1" {
 		t.Fatalf("unexpected stored reroute payload: %#v", thread.LastModelReroute)
 	}
 
@@ -74,13 +74,13 @@ func TestTurnModelReroutedUpdatesThreadModelAndSnapshot(t *testing.T) {
 	if snapshot.Attachment.SelectedThreadModelReroute == nil {
 		t.Fatalf("expected selected thread reroute in attachment snapshot, got %#v", snapshot.Attachment)
 	}
-	if snapshot.Attachment.SelectedThreadModelReroute.ToModel != "gpt-5.4-mini" {
+	if snapshot.Attachment.SelectedThreadModelReroute.ToModel != "gpt-5.5-mini" {
 		t.Fatalf("unexpected attachment reroute payload: %#v", snapshot.Attachment.SelectedThreadModelReroute)
 	}
 	if len(snapshot.Threads) != 1 {
 		t.Fatalf("expected one thread in snapshot, got %#v", snapshot.Threads)
 	}
-	if snapshot.Threads[0].Model != "gpt-5.4-mini" {
+	if snapshot.Threads[0].Model != "gpt-5.5-mini" {
 		t.Fatalf("expected thread summary model to reflect reroute target, got %#v", snapshot.Threads[0])
 	}
 	if snapshot.Threads[0].LastModelReroute == nil || snapshot.Threads[0].LastModelReroute.Reason != "safety_downgrade" {

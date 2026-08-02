@@ -33,7 +33,7 @@ func TestProjectInteractiveCommandCatalogRendersBreadcrumbsAndCommandForm(t *tes
 						Name:        "command_args",
 						Kind:        control.CommandCatalogFormFieldText,
 						Label:       "输入模型名，或输入“模型名 推理强度”。",
-						Placeholder: "gpt-5.4 high",
+						Placeholder: "gpt-5.5 high",
 					},
 				},
 			}},
@@ -127,10 +127,10 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 						Kind:         control.CommandCatalogFormFieldSelectStatic,
 						Label:        "从下拉里选择常见模型。",
 						Placeholder:  "选择模型",
-						DefaultValue: "gpt-5.4-mini",
+						DefaultValue: "gpt-5.5-mini",
 						Options: []control.CommandCatalogFormFieldOption{
-							{Label: "gpt-5.4", Value: "gpt-5.4"},
-							{Label: "gpt-5.4-mini", Value: "gpt-5.4-mini"},
+							{Label: "gpt-5.5", Value: "gpt-5.5"},
+							{Label: "gpt-5.5-mini", Value: "gpt-5.5-mini"},
 						},
 					},
 				},
@@ -157,11 +157,11 @@ func TestProjectInteractiveCommandCatalogRendersSelectStaticCommandForm(t *testi
 	if _, ok := formElements[0]["label_position"]; ok {
 		t.Fatalf("expected select_static to omit unsupported label_position property, got %#v", formElements[0])
 	}
-	if formElements[0]["initial_option"] != "gpt-5.4-mini" {
+	if formElements[0]["initial_option"] != "gpt-5.5-mini" {
 		t.Fatalf("expected initial option, got %#v", formElements[0])
 	}
 	options, _ := formElements[0]["options"].([]map[string]any)
-	if len(options) != 2 || options[0]["value"] != "gpt-5.4" || options[1]["value"] != "gpt-5.4-mini" {
+	if len(options) != 2 || options[0]["value"] != "gpt-5.5" || options[1]["value"] != "gpt-5.5-mini" {
 		t.Fatalf("unexpected select_static options: %#v", formElements[0])
 	}
 	if formElements[1]["form_action_type"] != "submit" {

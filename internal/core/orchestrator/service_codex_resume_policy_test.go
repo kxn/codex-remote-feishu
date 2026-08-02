@@ -27,9 +27,9 @@ func TestPromptDispatchProjectsFrozenCodexResumePolicy(t *testing.T) {
 		CodexThreadPolicy: &state.CodexThreadPolicy{
 			ThreadPolicyID:     "thread-policy-r7",
 			ModelMode:          state.CodexThreadValueExplicit,
-			Model:              "gpt-5.4",
+			Model:              "gpt-5.5",
 			ReviewModelMode:    state.CodexReviewModelExplicit,
-			ReviewModel:        "gpt-5.4-review",
+			ReviewModel:        "gpt-5.5-review",
 			ReasoningMode:      state.CodexThreadValueExplicit,
 			ReasoningEffort:    "high",
 			ContextMode:        state.CodexContextModeExtended,
@@ -47,7 +47,7 @@ func TestPromptDispatchProjectsFrozenCodexResumePolicy(t *testing.T) {
 		command.CodexResume.ConnectionContractID != "conn-team-r4" ||
 		command.CodexResume.ThreadPolicyID != "thread-policy-r7" ||
 		command.CodexResume.ModelProviderID != "codex_remote_profile_team" ||
-		command.CodexResume.Model != "gpt-5.4" ||
+		command.CodexResume.Model != "gpt-5.5" ||
 		command.CodexResume.ReasoningEffort != "high" ||
 		command.CodexResume.ContextWindow != 1000000 {
 		t.Fatalf("unexpected codex resume policy: %#v", command.CodexResume)
@@ -218,7 +218,7 @@ func TestTurnStartedStoresCodexEffectiveThreadContract(t *testing.T) {
 			ResumeMode:             agentproto.CodexResumeApplyTargetProfile,
 			ModelProviderID:        "codex_remote_profile_team",
 			ModelMode:              agentproto.CodexThreadValueExplicit,
-			Model:                  "gpt-5.4",
+			Model:                  "gpt-5.5",
 			ReasoningMode:          agentproto.CodexThreadValueExplicit,
 			ReasoningEffort:        "high",
 			RequestedContextWindow: 1000000,

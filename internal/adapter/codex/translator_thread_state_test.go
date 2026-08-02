@@ -66,7 +66,7 @@ func TestObserveServerThreadGoalAndSettingsNotificationsProduceStateEvents(t *te
 		t.Fatalf("expected cleared goal event, got %#v", clearedResult.Events)
 	}
 
-	settingsResult, err := tr.ObserveServer([]byte(`{"method":"thread/settings/updated","params":{"threadId":"thread-1","settings":{"model":"gpt-5.4","reasoning_effort":"high","approvalPolicy":"on-request","sandbox":"workspace-write"}}}`))
+	settingsResult, err := tr.ObserveServer([]byte(`{"method":"thread/settings/updated","params":{"threadId":"thread-1","settings":{"model":"gpt-5.5","reasoning_effort":"high","approvalPolicy":"on-request","sandbox":"workspace-write"}}}`))
 	if err != nil {
 		t.Fatalf("observe settings updated: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestObserveServerThreadGoalAndSettingsNotificationsProduceStateEvents(t *te
 	if settingsEvent.Kind != agentproto.EventThreadSettingsUpdated || settingsEvent.ThreadSettings == nil {
 		t.Fatalf("unexpected settings event: %#v", settingsEvent)
 	}
-	if settingsEvent.ThreadSettings.Model != "gpt-5.4" || settingsEvent.ThreadSettings.ReasoningEffort != "high" || settingsEvent.ThreadSettings.ApprovalPolicy != "on-request" || settingsEvent.ThreadSettings.Sandbox != "workspace-write" {
+	if settingsEvent.ThreadSettings.Model != "gpt-5.5" || settingsEvent.ThreadSettings.ReasoningEffort != "high" || settingsEvent.ThreadSettings.ApprovalPolicy != "on-request" || settingsEvent.ThreadSettings.Sandbox != "workspace-write" {
 		t.Fatalf("unexpected settings payload: %#v", settingsEvent.ThreadSettings)
 	}
 }

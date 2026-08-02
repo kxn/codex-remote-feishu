@@ -24,7 +24,7 @@ func TestObserveServerModelReroutedProducesCanonicalEvent(t *testing.T) {
 		t.Fatalf("observe turn started: %v", err)
 	}
 
-	result, err := tr.ObserveServer([]byte(`{"method":"model/rerouted","params":{"threadId":"thread-1","turnId":"turn-1","fromModel":"gpt-5.4","toModel":"gpt-5.4-mini","reason":"safety_downgrade"}}`))
+	result, err := tr.ObserveServer([]byte(`{"method":"model/rerouted","params":{"threadId":"thread-1","turnId":"turn-1","fromModel":"gpt-5.5","toModel":"gpt-5.5-mini","reason":"safety_downgrade"}}`))
 	if err != nil {
 		t.Fatalf("observe model rerouted: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestObserveServerModelReroutedProducesCanonicalEvent(t *testing.T) {
 	if event.ModelReroute == nil {
 		t.Fatalf("expected reroute payload, got %#v", event)
 	}
-	if event.ModelReroute.FromModel != "gpt-5.4" || event.ModelReroute.ToModel != "gpt-5.4-mini" || event.ModelReroute.Reason != "safety_downgrade" {
+	if event.ModelReroute.FromModel != "gpt-5.5" || event.ModelReroute.ToModel != "gpt-5.5-mini" || event.ModelReroute.Reason != "safety_downgrade" {
 		t.Fatalf("unexpected reroute payload: %#v", event.ModelReroute)
 	}
 }

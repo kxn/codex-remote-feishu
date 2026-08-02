@@ -1701,7 +1701,7 @@ func TestUseThreadAttachedVSCodeRejectsCrossInstanceSelection(t *testing.T) {
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionImageMessage, SurfaceSessionID: "surface-1", MessageID: "msg-img", LocalPath: "/tmp/img.png", MIMEType: "image/png"})
-	svc.root.Surfaces["surface-1"].PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
+	svc.root.Surfaces["surface-1"].PromptOverride = state.ModelConfigRecord{Model: "gpt-5.5"}
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionUseThread,
@@ -1716,7 +1716,7 @@ func TestUseThreadAttachedVSCodeRejectsCrossInstanceSelection(t *testing.T) {
 	if surface.AttachedInstanceID != "inst-1" || surface.SelectedThreadID != "thread-1" || surface.RouteMode != state.RouteModeFollowLocal {
 		t.Fatalf("expected attached vscode surface to stay on current instance, got %#v", surface)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{Model: "gpt-5.4"}) {
+	if surface.PromptOverride != (state.ModelConfigRecord{Model: "gpt-5.5"}) {
 		t.Fatalf("expected invalid cross-instance /use not to clear prompt override, got %#v", surface.PromptOverride)
 	}
 	if len(surface.StagedImages) != 1 {

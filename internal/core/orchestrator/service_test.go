@@ -394,7 +394,7 @@ func TestApplySurfaceActionModelInvalidReasoningReturnsCommandView(t *testing.T)
 		InstanceID: "inst-1",
 		ModelCatalog: &agentproto.ModelCatalogSnapshot{
 			Entries: []agentproto.ModelCatalogEntry{{
-				Model: "gpt-5.4",
+				Model: "gpt-5.5",
 				SupportedReasoningEfforts: []agentproto.ReasoningEffortOption{
 					{ReasoningEffort: "medium"},
 					{ReasoningEffort: "high"},
@@ -408,7 +408,7 @@ func TestApplySurfaceActionModelInvalidReasoningReturnsCommandView(t *testing.T)
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/model gpt-5.4 nope",
+		Text:             "/model gpt-5.5 nope",
 	})
 	if len(events) != 1 {
 		t.Fatalf("expected invalid model args to reopen command view, got %#v", events)
@@ -1604,7 +1604,7 @@ func TestModeCommandSwitchesDetachedSurface(t *testing.T) {
 	svc := newServiceForTest(&now)
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionStatus, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1"})
 	surface := svc.root.Surfaces["surface-1"]
-	surface.PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
+	surface.PromptOverride = state.ModelConfigRecord{Model: "gpt-5.5"}
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModeCommand,
@@ -1788,7 +1788,7 @@ func TestVSCodeAttachCanSwitchInstanceWithoutDetach(t *testing.T) {
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionImageMessage, SurfaceSessionID: "surface-1", MessageID: "msg-img", LocalPath: "/tmp/img.png", MIMEType: "image/png"})
-	svc.root.Surfaces["surface-1"].PromptOverride = state.ModelConfigRecord{Model: "gpt-5.4"}
+	svc.root.Surfaces["surface-1"].PromptOverride = state.ModelConfigRecord{Model: "gpt-5.5"}
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachInstance,

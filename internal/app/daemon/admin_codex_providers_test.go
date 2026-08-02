@@ -15,7 +15,7 @@ func TestAdminCodexProvidersCompatibilityProjectionAndRedaction(t *testing.T) {
   "name":"Team Proxy",
   "baseURL":"https://proxy.internal/v1",
   "apiKey":"secret-key",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if create.Code != http.StatusCreated {
@@ -28,7 +28,7 @@ func TestAdminCodexProvidersCompatibilityProjectionAndRedaction(t *testing.T) {
 	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create: %v", err)
 	}
-	if !strings.HasPrefix(created.Provider.ID, "cp_") || !created.Provider.HasAPIKey || created.Provider.Model != "gpt-5.4" {
+	if !strings.HasPrefix(created.Provider.ID, "cp_") || !created.Provider.HasAPIKey || created.Provider.Model != "gpt-5.5" {
 		t.Fatalf("unexpected legacy projection: %#v", created.Provider)
 	}
 
@@ -63,11 +63,11 @@ func TestAdminCodexProvidersCompatibilityProjectionAndRedaction(t *testing.T) {
 func TestAdminCodexProviderCompatibilityUsesCanonicalValidation(t *testing.T) {
 	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 	for _, body := range []string{
-		`{"name":" ","baseURL":"https://proxy.internal/v1","apiKey":"secret","model":"gpt-5.4","reasoningEffort":"high"}`,
-		`{"name":"Missing Key","baseURL":"https://proxy.internal/v1","model":"gpt-5.4","reasoningEffort":"high"}`,
+		`{"name":" ","baseURL":"https://proxy.internal/v1","apiKey":"secret","model":"gpt-5.5","reasoningEffort":"high"}`,
+		`{"name":"Missing Key","baseURL":"https://proxy.internal/v1","model":"gpt-5.5","reasoningEffort":"high"}`,
 		`{"name":"Missing Model","baseURL":"https://proxy.internal/v1","apiKey":"secret","reasoningEffort":"high"}`,
-		`{"name":"Missing Reasoning","baseURL":"https://proxy.internal/v1","apiKey":"secret","model":"gpt-5.4"}`,
-		`{"name":"Bad Reasoning","baseURL":"https://proxy.internal/v1","apiKey":"secret","model":"gpt-5.4","reasoningEffort":"bad\nvalue"}`,
+		`{"name":"Missing Reasoning","baseURL":"https://proxy.internal/v1","apiKey":"secret","model":"gpt-5.5"}`,
+		`{"name":"Bad Reasoning","baseURL":"https://proxy.internal/v1","apiKey":"secret","model":"gpt-5.5","reasoningEffort":"bad\nvalue"}`,
 	} {
 		rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/providers", body)
 		if rec.Code != http.StatusBadRequest {
@@ -79,7 +79,7 @@ func TestAdminCodexProviderCompatibilityUsesCanonicalValidation(t *testing.T) {
   "name":"中文代理",
   "baseURL":"https://proxy.internal/v1",
   "apiKey":"secret-key",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"turbo"
 }`)
 	if customReasoning.Code != http.StatusCreated {

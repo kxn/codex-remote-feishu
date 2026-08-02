@@ -423,7 +423,7 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
             <span>主模型</span>
             <input
               value={draft.model}
-              placeholder="例如：gpt-5.4"
+              placeholder="例如：gpt-5.5"
               onChange={(event) =>
                 onDraftChange((current) => ({
                   ...current,

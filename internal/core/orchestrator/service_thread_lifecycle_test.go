@@ -140,13 +140,13 @@ func TestThreadGoalAndSettingsStoreLatestStateOnly(t *testing.T) {
 		ThreadID: "thread-1",
 		ThreadSettings: &agentproto.ThreadSettingsUpdate{
 			ThreadID:        "thread-1",
-			Model:           "gpt-5.4",
+			Model:           "gpt-5.5",
 			ReasoningEffort: "high",
 			ApprovalPolicy:  "on-request",
 			Sandbox:         "workspace-write",
 		},
 	})
-	if thread.ThreadSettings == nil || thread.ThreadSettings.Model != "gpt-5.4" {
+	if thread.ThreadSettings == nil || thread.ThreadSettings.Model != "gpt-5.5" {
 		t.Fatalf("expected settings state, got %#v", thread.ThreadSettings)
 	}
 

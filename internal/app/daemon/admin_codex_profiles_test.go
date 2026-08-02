@@ -40,8 +40,8 @@ func TestAdminCodexProfilesCanonicalCRUDUsesItemETagsAndRedaction(t *testing.T) 
   "name":"Team Proxy",
   "baseURL":"https://proxy.example/v1",
   "apiKey":" secret with spaces ",
-  "model":"gpt-5.4",
-  "reviewModel":"gpt-5.4-mini",
+  "model":"gpt-5.5",
+  "reviewModel":"gpt-5.5-mini",
   "reasoningEffort":"custom-effort"
 }`)
 	if create.Code != http.StatusCreated {
@@ -113,7 +113,7 @@ func TestAdminCodexProfilesCanonicalCRUDUsesItemETagsAndRedaction(t *testing.T) 
   "name":" team proxy ",
   "baseURL":"https://other.example/v1",
   "apiKey":"different",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if duplicate.Code != http.StatusConflict {
@@ -260,7 +260,7 @@ func TestAdminCodexProfilesProjectObservedContextEvidence(t *testing.T) {
 	  "name":"Team Proxy",
 	  "baseURL":"https://proxy.example/v1",
 	  "apiKey":"secret",
-	  "model":"gpt-5.4",
+	  "model":"gpt-5.5",
 	  "reasoningEffort":"high"
 	}`)
 	if create.Code != http.StatusCreated {
@@ -345,7 +345,7 @@ func TestAdminCodexProfileUpdateRetainsReferencedOldRevision(t *testing.T) {
   "name":"Team Proxy",
   "baseURL":"https://old.example/v1",
   "apiKey":"old-secret",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if create.Code != http.StatusCreated {
@@ -395,7 +395,7 @@ func TestAdminCodexProfileDeleteInUseReturnsRedactedReferences(t *testing.T) {
   "name":"Team Proxy",
   "baseURL":"https://api.example/v1",
   "apiKey":"secret with spaces",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if create.Code != http.StatusCreated {
@@ -441,7 +441,7 @@ func TestAdminCodexProfileUpdateRefreshesSurfaceDesiredRuntimeContract(t *testin
   "name":"Team Proxy",
   "baseURL":"https://old.example/v1",
   "apiKey":"old-secret",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if create.Code != http.StatusCreated {
@@ -508,7 +508,7 @@ func TestAdminCodexContextPreferenceUpdateRefreshesSurfaceDesiredRuntimeContract
   "name":"Team Proxy",
   "baseURL":"https://api.example/v1",
   "apiKey":"secret",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if create.Code != http.StatusCreated {
@@ -551,7 +551,7 @@ func TestAdminCodexProfilesRejectIncompleteNewDefinition(t *testing.T) {
 	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 	for _, body := range []string{
 		`{"name":"No Model","baseURL":"https://proxy.example/v1","apiKey":"secret","reasoningEffort":"high"}`,
-		`{"name":"No Reasoning","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.4"}`,
+		`{"name":"No Reasoning","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.5"}`,
 	} {
 		rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", body)
 		if rec.Code != http.StatusBadRequest {
@@ -566,7 +566,7 @@ func TestLegacyCodexProviderAPIWritesOnlyCanonicalProfileStore(t *testing.T) {
   "name":"Legacy Client Proxy",
   "baseURL":"https://proxy.example/v1",
   "apiKey":"secret",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if create.Code != http.StatusCreated {
@@ -591,7 +591,7 @@ func TestLegacyCodexProviderAPIWritesOnlyCanonicalProfileStore(t *testing.T) {
   "name":"legacy client proxy",
   "baseURL":"https://other.example/v1",
   "apiKey":"different",
-  "model":"gpt-5.4",
+  "model":"gpt-5.5",
   "reasoningEffort":"high"
 }`)
 	if duplicate.Code != http.StatusConflict {

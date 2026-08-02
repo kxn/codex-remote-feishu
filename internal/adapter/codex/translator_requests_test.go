@@ -113,7 +113,7 @@ func TestObserveServerLegacyApprovalMethodsRemainApprovalWithRawMethod(t *testin
 func TestObserveServerRequestUserInputProducesQuestionMetadata(t *testing.T) {
 	tr := NewTranslator("inst-1")
 
-	result, err := tr.ObserveServer([]byte(`{"id":"req-ui-1","method":"item/tool/requestUserInput","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","questions":[{"id":"model","header":"模型","question":"请选择模型","options":[{"label":"gpt-5.4","description":"推荐"},{"label":"gpt-5.3"}]},{"id":"notes","header":"备注","question":"补充说明","isOther":true,"isSecret":true}]}}`))
+	result, err := tr.ObserveServer([]byte(`{"id":"req-ui-1","method":"item/tool/requestUserInput","params":{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","questions":[{"id":"model","header":"模型","question":"请选择模型","options":[{"label":"gpt-5.5","description":"推荐"},{"label":"gpt-5.3"}]},{"id":"notes","header":"备注","question":"补充说明","isOther":true,"isSecret":true}]}}`))
 	if err != nil {
 		t.Fatalf("observe request user input: %v", err)
 	}
@@ -670,7 +670,7 @@ func TestTranslateRequestRespondUserInputPreservesAnswerPayload(t *testing.T) {
 			RequestID: "req-ui-1",
 			Response: map[string]any{
 				"answers": map[string]any{
-					"model": map[string]any{"answers": []string{"gpt-5.4"}},
+					"model": map[string]any{"answers": []string{"gpt-5.5"}},
 					"notes": map[string]any{"answers": []string{"请用中文回复"}},
 				},
 			},

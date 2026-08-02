@@ -21,7 +21,7 @@ func TestTurnModelVerificationStoresStateOnly(t *testing.T) {
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {
 				ThreadID:      "thread-1",
-				ExplicitModel: "gpt-5.4",
+				ExplicitModel: "gpt-5.5",
 			},
 		},
 	})
@@ -50,7 +50,7 @@ func TestTurnModelVerificationStoresStateOnly(t *testing.T) {
 	if thread.LastModelVerification.Verifications[0].ID != "verify-1" {
 		t.Fatalf("unexpected verification state: %#v", thread.LastModelVerification)
 	}
-	if thread.ExplicitModel != "gpt-5.4" || thread.LastModelReroute != nil {
+	if thread.ExplicitModel != "gpt-5.5" || thread.LastModelReroute != nil {
 		t.Fatalf("verification must not affect reroute/effective model state: %#v", thread)
 	}
 }
@@ -68,7 +68,7 @@ func TestTurnModelSafetyBufferingStoresStateOnly(t *testing.T) {
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {
 				ThreadID:      "thread-1",
-				ExplicitModel: "gpt-5.4",
+				ExplicitModel: "gpt-5.5",
 			},
 		},
 	})
@@ -80,11 +80,11 @@ func TestTurnModelSafetyBufferingStoresStateOnly(t *testing.T) {
 		ModelSafetyBuffering: &agentproto.TurnModelSafetyBuffering{
 			ThreadID:        "thread-1",
 			TurnID:          "turn-1",
-			Model:           "gpt-5.4",
+			Model:           "gpt-5.5",
 			UseCases:        []string{"coding"},
 			Reasons:         []string{"policy"},
 			ShowBufferingUI: true,
-			FasterModel:     "gpt-5.4-mini",
+			FasterModel:     "gpt-5.5-mini",
 		},
 	}); len(events) != 0 {
 		t.Fatalf("expected no direct UI events, got %#v", events)
@@ -94,10 +94,10 @@ func TestTurnModelSafetyBufferingStoresStateOnly(t *testing.T) {
 	if thread.LastModelSafetyBuffering == nil {
 		t.Fatalf("expected safety buffering state, got %#v", thread)
 	}
-	if thread.LastModelSafetyBuffering.FasterModel != "gpt-5.4-mini" || !thread.LastModelSafetyBuffering.ShowBufferingUI {
+	if thread.LastModelSafetyBuffering.FasterModel != "gpt-5.5-mini" || !thread.LastModelSafetyBuffering.ShowBufferingUI {
 		t.Fatalf("unexpected safety buffering state: %#v", thread.LastModelSafetyBuffering)
 	}
-	if thread.ExplicitModel != "gpt-5.4" || thread.LastModelReroute != nil {
+	if thread.ExplicitModel != "gpt-5.5" || thread.LastModelReroute != nil {
 		t.Fatalf("safety buffering must not affect reroute/effective model state: %#v", thread)
 	}
 }

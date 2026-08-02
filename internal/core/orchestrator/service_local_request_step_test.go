@@ -39,7 +39,7 @@ func TestRespondRequestUserInputStepNavigationRefreshesPromptInline(t *testing.T
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}}},
 				{"id": "notes", "header": "备注", "question": "补充说明"},
 			},
 		},

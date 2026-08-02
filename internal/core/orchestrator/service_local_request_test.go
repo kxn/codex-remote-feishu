@@ -824,7 +824,7 @@ func TestRequestUserInputPromptUsesQuestionsAndStoresState(t *testing.T) {
 			"title":       "需要补充输入",
 			"itemId":      "item-1",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}}},
 				{"id": "notes", "header": "备注", "question": "补充说明", "isOther": true, "isSecret": true},
 			},
 		},
@@ -881,7 +881,7 @@ func TestRespondRequestUserInputOptionDispatchesAnswersAndKeepsPendingStateUntil
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}, {"label": "gpt-5.3"}}},
 			},
 		},
 	})
@@ -891,10 +891,10 @@ func TestRespondRequestUserInputOptionDispatchesAnswersAndKeepsPendingStateUntil
 		SurfaceSessionID: "surface-1",
 		MessageID:        "om-card-1",
 		Request: testRequestAction("req-ui-1", "", "", map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		}, 0),
 		RequestAnswers: map[string][]string{
-			"model": []string{"gpt-5.4"},
+			"model": []string{"gpt-5.5"},
 		},
 	})
 	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
@@ -944,7 +944,7 @@ func TestRespondRequestUserInputRejectsInvalidOptionAnswer(t *testing.T) {
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}}},
 			},
 		},
 	})
@@ -997,7 +997,7 @@ func TestRespondRequestUserInputSavesPartialAnswersUntilComplete(t *testing.T) {
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}, {"label": "gpt-5.3"}}},
 				{"id": "effort", "header": "推理强度", "question": "请选择推理强度", "options": []map[string]any{{"label": "high"}, {"label": "medium"}}},
 			},
 		},
@@ -1007,10 +1007,10 @@ func TestRespondRequestUserInputSavesPartialAnswersUntilComplete(t *testing.T) {
 		Kind:             control.ActionRespondRequest,
 		SurfaceSessionID: "surface-1",
 		Request: testRequestAction("req-ui-1", "", "", map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		}, 0),
 		RequestAnswers: map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		},
 	})
 	if len(events) != 1 || !events[0].InlineReplaceCurrentCard {
@@ -1023,11 +1023,11 @@ func TestRespondRequestUserInputSavesPartialAnswersUntilComplete(t *testing.T) {
 	if prompt.CurrentQuestionIndex != 1 {
 		t.Fatalf("expected partial answer save to advance to next question, got %#v", prompt)
 	}
-	if !prompt.Questions[0].Answered || prompt.Questions[0].DefaultValue != "gpt-5.4" {
+	if !prompt.Questions[0].Answered || prompt.Questions[0].DefaultValue != "gpt-5.5" {
 		t.Fatalf("expected refreshed prompt to show saved answer, got %#v", prompt.Questions[0])
 	}
 	pending := svc.root.Surfaces["surface-1"].PendingRequests["req-ui-1"]
-	if pending == nil || pending.DraftAnswers["model"] != "gpt-5.4" {
+	if pending == nil || pending.DraftAnswers["model"] != "gpt-5.5" {
 		t.Fatalf("expected partial answer to persist in pending request, got %#v", pending)
 	}
 	if pending.CardRevision != 2 {
@@ -1097,7 +1097,7 @@ func TestRespondRequestUserInputMergesSavedOptionWithFormTextAnswer(t *testing.T
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}, {"label": "gpt-5.3"}}},
 				{"id": "notes", "header": "备注", "question": "补充说明"},
 			},
 		},
@@ -1107,10 +1107,10 @@ func TestRespondRequestUserInputMergesSavedOptionWithFormTextAnswer(t *testing.T
 		Kind:             control.ActionRespondRequest,
 		SurfaceSessionID: "surface-1",
 		Request: testRequestAction("req-ui-1", "", "", map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		}, 0),
 		RequestAnswers: map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		},
 	})
 	if len(events) != 1 || !events[0].InlineReplaceCurrentCard {
@@ -1177,7 +1177,7 @@ func TestRespondRequestUserInputSkipOptionalDispatchesStoredAnswers(t *testing.T
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}, {"label": "gpt-5.3"}}},
 				{"id": "notes", "header": "备注", "question": "补充说明", "optional": true, "isOther": true},
 			},
 		},
@@ -1187,10 +1187,10 @@ func TestRespondRequestUserInputSkipOptionalDispatchesStoredAnswers(t *testing.T
 		Kind:             control.ActionRespondRequest,
 		SurfaceSessionID: "surface-1",
 		Request: testRequestAction("req-ui-1", "", "", map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		}, 0),
 		RequestAnswers: map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		},
 	})
 	if len(events) != 1 || !events[0].InlineReplaceCurrentCard {
@@ -1222,7 +1222,7 @@ func TestRespondRequestUserInputSkipOptionalDispatchesStoredAnswers(t *testing.T
 	answers, _ := events[1].Command.Request.Response["answers"].(map[string]any)
 	model, _ := answers["model"].(map[string]any)
 	modelList, _ := model["answers"].([]string)
-	if len(modelList) != 1 || modelList[0] != "gpt-5.4" {
+	if len(modelList) != 1 || modelList[0] != "gpt-5.5" {
 		t.Fatalf("expected answered question to keep selected answer, got %#v", answers["model"])
 	}
 	if _, ok := answers["notes"]; ok {
@@ -1264,7 +1264,7 @@ func TestRespondRequestUserInputDispatchFailureRestoresPendingRequest(t *testing
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}}},
 			},
 		},
 	})
@@ -1273,10 +1273,10 @@ func TestRespondRequestUserInputDispatchFailureRestoresPendingRequest(t *testing
 		Kind:             control.ActionRespondRequest,
 		SurfaceSessionID: "surface-1",
 		Request: testRequestAction("req-ui-1", "", "", map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		}, 1),
 		RequestAnswers: map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		},
 	})
 	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
@@ -1329,7 +1329,7 @@ func TestRespondRequestUserInputRejectsStaleRequestRevision(t *testing.T) {
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}}},
 				{"id": "effort", "header": "推理强度", "question": "请选择推理强度", "options": []map[string]any{{"label": "high"}}},
 			},
 		},
@@ -1339,10 +1339,10 @@ func TestRespondRequestUserInputRejectsStaleRequestRevision(t *testing.T) {
 		Kind:             control.ActionRespondRequest,
 		SurfaceSessionID: "surface-1",
 		Request: testRequestAction("req-ui-1", "", "", map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		}, 1),
 		RequestAnswers: map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		},
 	})
 	if len(events) != 1 || !events[0].InlineReplaceCurrentCard {
@@ -1397,7 +1397,7 @@ func TestRespondRequestUserInputCommandRejectedRestoresPendingRequest(t *testing
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}}},
 			},
 		},
 	})
@@ -1406,10 +1406,10 @@ func TestRespondRequestUserInputCommandRejectedRestoresPendingRequest(t *testing
 		Kind:             control.ActionRespondRequest,
 		SurfaceSessionID: "surface-1",
 		Request: testRequestAction("req-ui-1", "", "", map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		}, 1),
 		RequestAnswers: map[string][]string{
-			"model": {"gpt-5.4"},
+			"model": {"gpt-5.5"},
 		},
 	})
 	if len(events) != 2 || !events[0].InlineReplaceCurrentCard || events[1].Command == nil {
@@ -1462,7 +1462,7 @@ func TestRespondRequestUserInputCancelTurnClearsRequestAndInterruptsTurn(t *test
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}, {"label": "gpt-5.3"}}},
 				{"id": "notes", "header": "备注", "question": "补充说明", "optional": true, "isOther": true},
 			},
 		},
@@ -1522,7 +1522,7 @@ func TestRespondRequestUserInputRejectsSkipOnRequiredQuestion(t *testing.T) {
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}, {"label": "gpt-5.3"}}},
 				{"id": "effort", "header": "推理强度", "question": "请选择推理强度", "options": []map[string]any{{"label": "high"}, {"label": "medium"}}},
 			},
 		},
@@ -1573,7 +1573,7 @@ func TestRespondRequestUserInputRejectsStaleRequestControl(t *testing.T) {
 		Metadata: map[string]any{
 			"requestType": "request_user_input",
 			"questions": []map[string]any{
-				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.4"}, {"label": "gpt-5.3"}}},
+				{"id": "model", "header": "模型", "question": "请选择模型", "options": []map[string]any{{"label": "gpt-5.5"}, {"label": "gpt-5.3"}}},
 				{"id": "effort", "header": "推理强度", "question": "请选择推理强度", "options": []map[string]any{{"label": "high"}, {"label": "medium"}}},
 			},
 		},
@@ -1609,7 +1609,7 @@ func TestRequestPromptQuestionsToControlHidesSecretDefaultWhileKeepingAnsweredSt
 		},
 	}
 	drafts := map[string]string{
-		"model": "gpt-5.4",
+		"model": "gpt-5.5",
 		"token": "secret-token",
 	}
 
@@ -1617,7 +1617,7 @@ func TestRequestPromptQuestionsToControlHidesSecretDefaultWhileKeepingAnsweredSt
 	if len(got) != 2 {
 		t.Fatalf("expected 2 converted questions, got %#v", got)
 	}
-	if !got[0].Answered || got[0].DefaultValue != "gpt-5.4" {
+	if !got[0].Answered || got[0].DefaultValue != "gpt-5.5" {
 		t.Fatalf("expected non-secret question to keep answered default value, got %#v", got[0])
 	}
 	if !got[1].Answered || got[1].DefaultValue != "" {

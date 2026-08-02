@@ -28,7 +28,7 @@ func TestWriteAppConfigNormalizesCodexProviders(t *testing.T) {
 		Name:            " Team Proxy ",
 		BaseURL:         " https://proxy.example/v1 ",
 		APIKey:          " secret ",
-		Model:           " gpt-5.4 ",
+		Model:           " gpt-5.5 ",
 		ReasoningEffort: " XHIGH ",
 	}}
 
@@ -46,7 +46,7 @@ func TestWriteAppConfigNormalizesCodexProviders(t *testing.T) {
 	if provider.ID != "team-proxy" || provider.Name != "Team Proxy" || provider.BaseURL != "https://proxy.example/v1" || provider.APIKey != " secret " {
 		t.Fatalf("unexpected provider after normalization: %#v", provider)
 	}
-	if provider.Model != "gpt-5.4" || provider.ReasoningEffort != "xhigh" {
+	if provider.Model != "gpt-5.5" || provider.ReasoningEffort != "xhigh" {
 		t.Fatalf("expected normalized model/reasoning, got %#v", provider)
 	}
 }

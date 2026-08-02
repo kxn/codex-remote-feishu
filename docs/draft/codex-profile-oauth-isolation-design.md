@@ -419,7 +419,7 @@ Codex 使用三档下拉，不使用 checkbox：
 
 `272K（费用优先）` 也不是计费硬上限。当前上游 `run_turn` 在记录本轮 context diff、skills/plugins 注入和新用户输入之前执行 pre-turn compact，源码 TODO 明确尚未把这些 pending items 计入预估；一次突然加入的大输入仍可能让发出的 request 越过 272K。首版文案只能说“降低长上下文计价概率”。若要承诺绝不跨档，必须另做完整 request token estimator + fail-closed 拒绝/拆分，或等待上游补齐 pre-sampling 预算，不能靠当前压缩阈值冒充保证。
 
-`model_context_window` 会被模型 metadata 的 `max_context_window` 截断。当前 bundled Sol 因 max 同为 272K，即使选择 1M 也只能得到约 258.4K 有效窗口；bundled GPT-5.4 的 max 为 1M，才可得到约 950K 有效窗口。ChatGPT OAuth 还可能从在线 `/models` 取得不同 metadata 并覆盖 bundled fallback，而 app-server `model/list` 不返回 context/max 字段，因此 Web 保存时无法可靠预判。Remote 在第一个真实 turn 的 `TurnStarted.model_context_window` 中记录 effective actual；请求 1M 但 observed effective 明显低于约 950K 时，返回一次结构化 `context_preference_clamped` 状态并在 Profile 详情展示“目标模型限制为 <actual>”，不阻断已开始的 turn，也不静默宣称 1M 已生效。
+`model_context_window` 会被模型 metadata 的 `max_context_window` 截断。当前 bundled Sol 因 max 同为 272K，即使选择 1M 也只能得到约 258.4K 有效窗口；bundled GPT-5.5 的 max 为 1M，才可得到约 950K 有效窗口。ChatGPT OAuth 还可能从在线 `/models` 取得不同 metadata 并覆盖 bundled fallback，而 app-server `model/list` 不返回 context/max 字段，因此 Web 保存时无法可靠预判。Remote 在第一个真实 turn 的 `TurnStarted.model_context_window` 中记录 effective actual；请求 1M 但 observed effective 明显低于约 950K 时，返回一次结构化 `context_preference_clamped` 状态并在 Profile 详情展示“目标模型限制为 <actual>”，不阻断已开始的 turn，也不静默宣称 1M 已生效。
 
 上下文偏好只进入 Thread Policy，不进入 Connection Contract。修改偏好不重启认证 child、不改 OAuth/native 连接身份，也不影响 running/已入队动作；下一次 admission 冻结新的 preference revision。`thread/start` / `thread/resume` 在 `config` 中投影上述两个字段，Effective Thread Contract 同时记录 requested mode、requested raw window、`TurnStarted` observed effective window、metadata source 是否可知以及是否发生 clamp。
 

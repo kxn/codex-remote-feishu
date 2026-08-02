@@ -150,7 +150,7 @@ canonical menu key 语法当前固定为：
 - `/mode vscode` <-> `mode_vscode`
 - `/autowhip on` <-> `autowhip_on`
 - `/autocontinue on` <-> `autocontinue_on`
-- `/model gpt-5.4` <-> `model_gpt-5.4`
+- `/model gpt-5.5` <-> `model_gpt-5.5`
 
 旧 menu key alias 仍兼容：
 

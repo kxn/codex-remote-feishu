@@ -597,7 +597,7 @@ func TestHandleGatewayActionReplacesCardOwnedModelPresetApply(t *testing.T) {
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/model gpt-5.4-mini",
+		Text:             "/model gpt-5.5-mini",
 		Inbound: &control.ActionInboundMeta{
 			CardDaemonLifecycleID: app.daemonLifecycleID,
 		},

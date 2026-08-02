@@ -32,7 +32,7 @@
       {
         "key": "model",
         "name": "使用模型",
-        "description": "打开模型卡片；如果知道完整 key，也可直接使用 `model_gpt-5.4` 这类直达入口。"
+        "description": "打开模型卡片；如果知道完整 key，也可直接使用 `model_gpt-5.5` 这类直达入口。"
       },
       {
         "key": "access",

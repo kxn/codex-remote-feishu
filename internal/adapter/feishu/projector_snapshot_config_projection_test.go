@@ -23,7 +23,7 @@ func TestProjectSnapshotShowsVSCodeNoOverrideAsFollowCurrentState(t *testing.T) 
 			},
 			NextPrompt: control.PromptRouteSummary{
 				CWD:                         "/data/dl/droid",
-				EffectiveModel:              "gpt-5.4",
+				EffectiveModel:              "gpt-5.5",
 				EffectiveReasoningEffort:    "high",
 				EffectiveAccessMode:         "full_access",
 				EffectivePlanMode:           "off",
@@ -44,7 +44,7 @@ func TestProjectSnapshotShowsVSCodeNoOverrideAsFollowCurrentState(t *testing.T) 
 	) {
 		t.Fatalf("expected vscode status projection to show local no-override semantics, got %q", rendered)
 	}
-	if strings.Contains(rendered, "下条飞书消息：Plan 关闭，模型 gpt-5.4") {
+	if strings.Contains(rendered, "下条飞书消息：Plan 关闭，模型 gpt-5.5") {
 		t.Fatalf("vscode status must not render effective defaults as forced overrides, got %q", rendered)
 	}
 }
