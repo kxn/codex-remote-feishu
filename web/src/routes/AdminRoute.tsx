@@ -13,11 +13,6 @@ import type {
   ClaudeProfileSummary,
   CodexProfilesResponse,
   CodexProfileSummary,
-  FeishuAppAutoConfigApplyResponse,
-  FeishuAppAutoConfigPlan,
-  FeishuAppAutoConfigPlanResponse,
-  FeishuAppAutoConfigPublishResponse,
-  FeishuAppAutoConfigRequirementStatus,
   FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
@@ -39,16 +34,7 @@ import {
   vscodeIsReady,
 } from "./shared/helpers";
 import {
-  autoConfigNoticeTone,
-  describeAutoConfigBlockingReason,
-  describeAutoConfigHeadline,
-  describeAutoConfigRequirementDisplay,
-  describeAutoConfigSummary,
-  describeAutoConfigTag,
-} from "./shared/feishuAutoConfig";
-import {
   resolveRuntimeApplyFailureTarget,
-  runAutoConfigMutation,
   saveAndVerifyFeishuApp,
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
@@ -63,12 +49,6 @@ type DetailNotice = {
   tone: NoticeTone;
   message: string;
 };
-
-type AutoConfigState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; data: FeishuAppAutoConfigPlanResponse }
-  | { status: "error"; message: string };
 
 type PermissionCheckState =
   | { status: "idle" }
@@ -109,9 +89,6 @@ export function AdminRoute() {
   const [bootstrap, setBootstrap] = useState<BootstrapState | null>(null);
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
-  const [autoConfigPlans, setAutoConfigPlans] = useState<Record<string, AutoConfigState>>(
-    {},
-  );
   const [permissionChecks, setPermissionChecks] = useState<
     Record<string, PermissionCheckState>
   >({});
@@ -144,15 +121,11 @@ export function AdminRoute() {
   const [previewError, setPreviewError] = useState("");
   const [actionBusy, setActionBusy] = useState("");
   const [deleteTargetID, setDeleteTargetID] = useState<string | null>(null);
-  const [publishTargetID, setPublishTargetID] = useState<string | null>(null);
 
   const selectedApp = useMemo(
     () => apps.find((app) => app.id === selectedRobotID) ?? null,
     [apps, selectedRobotID],
   );
-  const selectedAutoConfig: AutoConfigState = selectedApp
-    ? autoConfigPlans[selectedApp.id] || { status: "idle" }
-    : { status: "idle" };
   const selectedPermissionCheck: PermissionCheckState = selectedApp
     ? permissionChecks[selectedApp.id] || { status: "idle" }
     : { status: "idle" };
@@ -201,13 +174,6 @@ export function AdminRoute() {
   }, []);
 
   useEffect(() => {
-    setAutoConfigPlans((current) => {
-      const next: Record<string, AutoConfigState> = {};
-      for (const app of apps) {
-        next[app.id] = current[app.id] || { status: "idle" };
-      }
-      return next;
-    });
     setPermissionChecks((current) => {
       const next: Record<string, PermissionCheckState> = {};
       for (const app of apps) {
@@ -218,17 +184,6 @@ export function AdminRoute() {
   }, [apps]);
 
   useEffect(() => {
-    if (!selectedApp?.id) {
-      return;
-    }
-    if (selectedAutoConfig.status !== "idle") {
-      return;
-    }
-    void loadAutoConfigPlan(selectedApp.id);
-  }, [selectedApp?.id, selectedAutoConfig.status]);
-
-  useEffect(() => {
-    setPublishTargetID(null);
     if (selectedRobotID === newRobotID) {
       return;
     }
@@ -304,48 +259,6 @@ export function AdminRoute() {
     setLoading(false);
   }
 
-  async function loadAutoConfigPlan(appID: string) {
-    setAutoConfigPlans((current) => ({
-      ...current,
-      [appID]: { status: "loading" },
-    }));
-    try {
-      const response = await requestJSONAllowHTTPError<
-        FeishuAppAutoConfigPlanResponse | APIErrorShape
-      >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/plan`);
-      if (!response.ok) {
-        const payload = readAPIError(response);
-        setAutoConfigPlans((current) => ({
-          ...current,
-          [appID]: {
-            status: "error",
-            message:
-              payload?.code === "feishu_app_runtime_unavailable"
-                ? "当前机器人还在同步运行设置，请稍后再检查自动配置。"
-                : "当前还没有读取到自动配置状态，请稍后重试。",
-          },
-        }));
-        return;
-      }
-      const payload = response.data as FeishuAppAutoConfigPlanResponse;
-      setApps((current) =>
-        current.map((app) => (app.id === payload.app.id ? payload.app : app)),
-      );
-      setAutoConfigPlans((current) => ({
-        ...current,
-        [appID]: { status: "ready", data: payload },
-      }));
-    } catch {
-      setAutoConfigPlans((current) => ({
-        ...current,
-        [appID]: {
-          status: "error",
-          message: "当前还没有读取到自动配置状态，请稍后重试。",
-        },
-      }));
-    }
-  }
-
   async function createRobot() {
     if (!newRobotForm.appId.trim() || !newRobotForm.appSecret.trim()) {
       setDetailNotice({
@@ -411,89 +324,6 @@ export function AdminRoute() {
 
   function syncAppSummary(app: FeishuAppSummary) {
     setApps((current) => current.map((item) => (item.id === app.id ? app : item)));
-  }
-
-  function syncAutoConfigPlan(app: FeishuAppSummary, plan: FeishuAppAutoConfigPlan) {
-    syncAppSummary(app);
-    setAutoConfigPlans((current) => ({
-      ...current,
-      [app.id]: {
-        status: "ready",
-        data: {
-          app,
-          plan,
-        },
-      },
-    }));
-  }
-
-  async function applyAutoConfig() {
-    if (!selectedApp?.id) {
-      return;
-    }
-    setActionBusy("auto-config-apply");
-    try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigApplyResponse>({
-        path: `/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/apply`,
-        init: { method: "POST" },
-        fallbackErrorMessage: "自动补齐没有完成，请稍后重试。",
-        fallbackSuccessMessage: "自动配置状态已更新。",
-      });
-      if (!result.ok) {
-        setDetailNotice({
-          tone: "danger",
-          message: result.message,
-        });
-        return;
-      }
-      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
-      setDetailNotice(result.notice);
-    } catch {
-      setDetailNotice({
-        tone: "danger",
-        message: "自动补齐没有完成，请稍后重试。",
-      });
-    } finally {
-      setActionBusy("");
-    }
-  }
-
-  async function publishAutoConfig() {
-    if (!selectedApp?.id) {
-      return;
-    }
-    setActionBusy("auto-config-publish");
-    try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigPublishResponse>({
-        path: `/api/admin/feishu/apps/${encodeURIComponent(selectedApp.id)}/auto-config/publish`,
-        init: {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-        fallbackErrorMessage: "提交发布没有成功，请稍后重试。",
-        fallbackSuccessMessage: "发布状态已更新。",
-      });
-      if (!result.ok) {
-        setDetailNotice({
-          tone: "danger",
-          message: result.message,
-        });
-        return;
-      }
-      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
-      setDetailNotice(result.notice);
-      setPublishTargetID(null);
-    } catch {
-      setDetailNotice({
-        tone: "danger",
-        message: "提交发布没有成功，请稍后重试。",
-      });
-    } finally {
-      setActionBusy("");
-    }
   }
 
   async function deleteRobot() {
@@ -739,167 +569,6 @@ export function AdminRoute() {
     }
   }
 
-  function renderRequirementSection(
-    title: string,
-    requirements: FeishuAppAutoConfigRequirementStatus[],
-    tone: "warn" | "danger",
-  ) {
-    if (requirements.length === 0) {
-      return null;
-    }
-    return (
-      <div className="req-group">
-        <div className={`req-group-title ${tone}`}>{title}</div>
-        {requirements.map((item) => {
-          const display = describeAutoConfigRequirementDisplay(item);
-          return (
-            <div key={`${item.kind}:${item.key}`} className="req-item">
-              <span className={`dot ${tone}`} />
-              <div>
-                <div className="label">{display.label}</div>
-                {display.detail ? <div className="detail">{display.detail}</div> : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  function renderAutoConfigCard() {
-    if (!selectedApp) {
-      return null;
-    }
-    const disabled =
-      Boolean(selectedApp.runtimeApply?.pending) ||
-      actionBusy === "auto-config-apply" ||
-      actionBusy === "auto-config-publish";
-    const authLink = selectedApp.consoleLinks?.auth?.trim();
-    const botLink = selectedApp.consoleLinks?.bot?.trim();
-
-    if (selectedAutoConfig.status === "idle" || selectedAutoConfig.status === "loading") {
-      return (
-        <section className="card">
-          <h3>自动配置</h3>
-          <div className="notice-banner warn">正在检查当前配置，请稍候...</div>
-        </section>
-      );
-    }
-
-    if (selectedAutoConfig.status === "error") {
-      return (
-        <section className="card">
-          <h3>自动配置</h3>
-          <div className="detail-stack">
-            <div className="notice-banner warn">{selectedAutoConfig.message}</div>
-            <div className="button-row">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={disabled}
-                onClick={() => void loadAutoConfigPlan(selectedApp.id)}
-              >
-                重新检查
-              </button>
-            </div>
-          </div>
-        </section>
-      );
-    }
-
-    const plan = selectedAutoConfig.data.plan;
-    const blockingRequirements = (plan.blockingRequirements || []).filter(
-      (item) => !item.present,
-    );
-    const degradableRequirements = (plan.degradableRequirements || []).filter(
-      (item) => !item.present,
-    );
-
-    return (
-      <section className="card">
-        <div className="detail-stack">
-          <div>
-            <h3>自动配置</h3>
-            <p>{plan.summary?.trim() || describeAutoConfigSummary(plan.status)}</p>
-          </div>
-          <div className={`notice-banner ${autoConfigNoticeTone(plan.status)}`}>
-            {describeAutoConfigHeadline(plan.status)}
-          </div>
-          {plan.blockingReason ? (
-            <p className="support-copy">
-              当前原因：{describeAutoConfigBlockingReason(plan.blockingReason)}
-            </p>
-          ) : null}
-          {renderRequirementSection("还需要处理", blockingRequirements, "danger")}
-          {renderRequirementSection("可按降级继续", degradableRequirements, "warn")}
-          <div className="button-row">
-            {plan.status === "apply_required" ? (
-              <button
-                className="primary-button"
-                type="button"
-                disabled={disabled}
-                onClick={() => void applyAutoConfig()}
-              >
-                自动补齐配置
-              </button>
-            ) : null}
-            {plan.status === "publish_required" ? (
-              <button
-                className="primary-button"
-                type="button"
-                disabled={disabled}
-                onClick={() => setPublishTargetID(selectedApp.id)}
-              >
-                提交发布
-              </button>
-            ) : null}
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={disabled}
-              onClick={() => void loadAutoConfigPlan(selectedApp.id)}
-            >
-              重新检查
-            </button>
-          </div>
-          {authLink || botLink ? (
-            <p className="support-copy">
-              {authLink ? (
-                <>
-                  如需在飞书后台继续查看权限或发布状态，请前往{" "}
-                  <a
-                    className="inline-link"
-                    href={authLink}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    应用权限页面
-                  </a>
-                  。
-                </>
-              ) : null}
-              {authLink && botLink ? <br /> : null}
-              {botLink ? (
-                <>
-                  机器人菜单仍需手动确认，可继续打开{" "}
-                  <a
-                    className="inline-link"
-                    href={botLink}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    机器人后台
-                  </a>
-                  。
-                </>
-              ) : null}
-            </p>
-          ) : null}
-        </div>
-      </section>
-    );
-  }
-
   function renderRobotDetail() {
     if (!selectedApp) {
       return (
@@ -1089,7 +758,6 @@ export function AdminRoute() {
             </div>
           ) : null}
         </section>
-        {renderAutoConfigCard()}
         {renderPermissionCheckCard()}
         <section className="card">
           <h3>连接信息</h3>
@@ -1388,16 +1056,6 @@ export function AdminRoute() {
           robotID: app.id,
         });
       }
-      const tag = autoConfigTagForApp(app);
-      if (tag?.warn) {
-        items.push({
-          id: `${app.id}:auto-config`,
-          text: `「${app.name || "未命名机器人"}」自动配置：${tag.label}`,
-          tone: "warn",
-          area: "bots",
-          robotID: app.id,
-        });
-      }
     }
     if (vscodeError || (vscode && !vscodeIsReady(vscode))) {
       items.push({
@@ -1430,51 +1088,29 @@ export function AdminRoute() {
     return items;
   }
 
-  function autoConfigTagForApp(app: FeishuAppSummary) {
-    const autoConfigState = autoConfigPlans[app.id];
-    if (app.runtimeApply?.pending) {
-      return describeAutoConfigTag("runtime_pending");
-    }
-    if (autoConfigState?.status === "ready") {
-      return describeAutoConfigTag(autoConfigState.data.plan.status);
-    }
-    if (autoConfigState?.status === "loading") {
-      return describeAutoConfigTag("loading");
-    }
-    return null;
-  }
-
   function renderBotsArea() {
     return (
       <>
         <h1 className="area-title">机器人</h1>
         <div className="split">
           <div className="list-pane">
-            {apps.map((app) => {
-              const tag = autoConfigTagForApp(app);
-              return (
-                <button
-                  key={app.id}
-                  className={`list-row${selectedRobotID === app.id ? " on" : ""}`}
-                  type="button"
-                  onClick={() => {
-                    setDetailNotice(null);
-                    setSelectedRobotID(app.id);
-                  }}
-                >
-                  <span className={`dot ${connectionTone(app)}`} />
-                  <span className="row-main">
-                    <span className="row-title">{app.name || "未命名机器人"}</span>
-                    <span className="row-sub">{app.appId || "未填写 App ID"}</span>
-                  </span>
-                  {tag ? (
-                    <span className={`badge ${tag.warn ? "warn" : "good"}`}>
-                      {tag.label}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
+            {apps.map((app) => (
+              <button
+                key={app.id}
+                className={`list-row${selectedRobotID === app.id ? " on" : ""}`}
+                type="button"
+                onClick={() => {
+                  setDetailNotice(null);
+                  setSelectedRobotID(app.id);
+                }}
+              >
+                <span className={`dot ${connectionTone(app)}`} />
+                <span className="row-main">
+                  <span className="row-title">{app.name || "未命名机器人"}</span>
+                  <span className="row-sub">{app.appId || "未填写 App ID"}</span>
+                </span>
+              </button>
+            ))}
             <button
               className={`list-row${selectedRobotID === newRobotID ? " on" : ""}`}
               type="button"
@@ -1665,38 +1301,6 @@ export function AdminRoute() {
   return renderAdminChrome(
     <>
       {renderCurrentArea()}
-      {publishTargetID ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="publish-app-title"
-          >
-            <h3 id="publish-app-title">确认提交发布</h3>
-            <p className="modal-copy">
-              这会把当前自动补齐后的飞书配置提交到发布流程。若飞书要求管理员审核，后续状态会显示为“等待管理员处理”。
-            </p>
-            <div className="modal-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => setPublishTargetID(null)}
-              >
-                取消
-              </button>
-              <button
-                className="primary-button"
-                type="button"
-                disabled={actionBusy === "auto-config-publish"}
-                onClick={() => void publishAutoConfig()}
-              >
-                确认提交
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
       {deleteTargetID ? (
         <div className="modal-backdrop" role="presentation">
           <div

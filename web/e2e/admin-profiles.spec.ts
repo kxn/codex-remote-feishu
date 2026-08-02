@@ -105,22 +105,6 @@ async function installAdminMocks(page: Page) {
       await route.fulfill({ json: { apps: adminApps() } });
       return;
     }
-    if (path.endsWith("/api/admin/feishu/apps/e2e-bot/auto-config/plan")) {
-      await route.fulfill({
-        json: {
-          app: adminApps()[0],
-          plan: {
-            status: "clean",
-            summary: "飞书后台配置已就绪。",
-            blockingReason: "",
-            actions: [],
-            blockingRequirements: [],
-            degradableRequirements: [],
-          },
-        },
-      });
-      return;
-    }
     if (path.endsWith("/api/admin/feishu/apps/e2e-bot/permissions/check")) {
       await route.fulfill({
         json: {
