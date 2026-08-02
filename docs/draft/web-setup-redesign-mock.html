@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex Remote 安装向导</title>
+<!--
+  场景开关（通过 URL hash 进入，页面上不可见）：
+    #s=env-fail             幕 1 环境异常（两类失败条目 + 重新检查）
+    #s=qr-expired           扫码后轮询变为"二维码已过期"（重新扫码分支）
+    #s=qr-fail              扫码成功但连接验证失败（重新验证分支）
+    #s=manual-fail          手动输入首次验证失败（已保存 + 重试成功）
+    #s=readonly-app         运行环境提供的机器人（表单全锁，只能验证）
+    #s=autoconfig-blocked   自动配置受阻态（blocking 清单，刷新后转待补齐）
+    #s=autoconfig-degraded  自动配置降级态（degradable 清单 + 先按降级继续）
+    #s=publish-review       提交发布后进入"等待管理员审核"
+    #s=vscode-timeout       VS Code 集成首次超时（重试后成功）
+    #s=blocked-reason       卡住时展示阻塞原因与推荐下一步（等待审核态）
+    无 hash                 全程 happy path
+-->
+<style>
+:root {
+  --ink: #112B39;
+  --ink-deep: #0A1824;
+  --cream: #F7EBD7;
+  --teal: #0F9588;
+  --teal-bright: #20CBB8;
+  --teal-hover: #0C8075;
+  --amber: #FFB56F;
+  --danger: #C2443B;
+  --bg-card: #FFFFFF;
+  --bg-hover: #F3EFE4;
+  --text-primary: #16242C;
+  --text-secondary: #4A5B64;
+  --text-muted: #7C8A91;
+  --border: #E3DCCB;
+  --border-strong: #CFC6B0;
+  --good-bg: #E4F5F1; --good-border: #A5DED3; --good-text: #0C6E64;
+  --warn-bg: #FDF0DC; --warn-border: #EFCB92; --warn-text: #8A5A1D;
+  --danger-bg: #FAE8E6; --danger-border: #E5AAA3; --danger-text: #96231B;
+  --shadow-card: 0 1px 2px rgba(10,24,36,.06);
+  --shadow-modal: 0 8px 24px rgba(10,24,36,.18);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--cream);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+a { color: var(--teal); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  max-width: 680px; margin: 0 auto; padding: 24px 24px 0;
+}
+.topbar img { width: 32px; height: 32px; }
+.topbar .brand-name { font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.4; }
+.topbar .brand-sub { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+/* ---------- 进度条 ---------- */
+.progress-wrap { max-width: 680px; margin: 0 auto; padding: 16px 24px 0; }
+.progress { display: flex; gap: 8px; }
+.progress .seg { flex: 1; height: 4px; border-radius: 999px; background: var(--border); transition: background .2s ease-out; }
+.progress .seg.done, .progress .seg.active { background: var(--teal); }
+.progress-labels { display: flex; gap: 8px; margin-top: 8px; }
+.progress-labels span { flex: 1; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+.progress-labels span.active { color: var(--ink); font-weight: 500; }
+.progress-labels span.done { color: var(--good-text); }
+
+/* ---------- 主列 ---------- */
+.column { max-width: 680px; margin: 0 auto; padding: 16px 24px 48px; }
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+.act-title { font-size: 24px; line-height: 1.3; font-weight: 600; color: var(--ink); }
+.act-desc { font-size: 13px; line-height: 1.5; color: var(--text-secondary); margin-top: 4px; }
+.card h3 { font-size: 16px; line-height: 1.4; font-weight: 600; color: var(--ink); }
+.section-gap { margin-top: 16px; }
+
+/* ---------- 已完成幕 / 未到幕 ---------- */
+.act-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: var(--shadow-card);
+  padding: 12px 16px; margin-bottom: 16px;
+}
+.act-row.done { cursor: pointer; }
+.act-row.done:hover { background: var(--bg-hover); }
+.act-row .dot { width: 8px; height: 8px; border-radius: 999px; flex: none; }
+.act-row .dot.good { background: var(--teal); }
+.act-row .dot.idle { background: var(--border-strong); }
+.act-row .row-name { font-size: 14px; font-weight: 500; color: var(--ink); }
+.act-row .row-sum { font-size: 12px; color: var(--good-text); margin-left: auto; text-align: right; }
+.act-row.future .row-name { color: var(--text-muted); font-weight: 400; }
+.act-row.future .row-sum { color: var(--text-muted); }
+.collapsed-detail {
+  background: var(--bg-card); border: 1px solid var(--border); border-top: none;
+  border-radius: 0 0 10px 10px; margin: -16px 0 16px; padding: 12px 16px 16px 36px;
+}
+.collapsed-detail li { font-size: 13px; color: var(--text-secondary); line-height: 1.5; list-style: none; padding-left: 0; }
+.collapsed-detail li::before { content: "· "; color: var(--text-muted); }
+
+/* ---------- 子步骤指示 ---------- */
+.substeps { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.substeps span {
+  font-size: 12px; line-height: 1.4; color: var(--text-muted);
+  padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border);
+}
+.substeps span.current { color: var(--teal); border-color: var(--teal); font-weight: 500; }
+.substeps span.done { color: var(--good-text); border-color: var(--good-border); background: var(--good-bg); }
+
+/* ---------- notice ---------- */
+.notice {
+  border-radius: 10px; border: 1px solid; padding: 12px 16px;
+  font-size: 14px; line-height: 1.6; margin-top: 16px;
+}
+.notice strong { font-weight: 500; display: block; }
+.notice.good { background: var(--good-bg); border-color: var(--good-border); color: var(--good-text); }
+.notice.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+.notice.danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+.notice .sub { font-size: 13px; margin-top: 4px; }
+
+/* ---------- toast ---------- */
+.toast {
+  border-radius: 10px; border: 1px solid; padding: 12px 16px;
+  font-size: 14px; margin-bottom: 16px; box-shadow: var(--shadow-modal);
+  background: var(--bg-card);
+}
+.toast.good { background: var(--good-bg); border-color: var(--good-border); color: var(--good-text); }
+.toast.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+.toast.danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  height: 36px; padding: 0 16px; border-radius: 6px;
+  font-size: 14px; font-weight: 500; border: 1px solid transparent;
+  transition: background .15s ease-out, opacity .15s ease-out;
+}
+.btn:disabled { opacity: .5; }
+.btn-primary { background: var(--teal); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--teal-hover); }
+.btn-secondary { background: var(--bg-card); border-color: var(--border); color: var(--text-primary); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-hover); }
+.btn-ghost { background: none; border: none; color: var(--teal); padding: 0 8px; }
+.btn-ghost:hover:not(:disabled) { text-decoration: underline; }
+.btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+
+/* ---------- 模式切换 ---------- */
+.seg-control { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-top: 16px; }
+.seg-control button {
+  flex: 1; height: 36px; border: none; background: var(--bg-card);
+  font-size: 14px; font-weight: 500; color: var(--text-secondary);
+  transition: background .15s ease-out;
+}
+.seg-control button.on { background: var(--teal); color: #fff; }
+
+/* ---------- 二维码 ---------- */
+.qr-box {
+  width: 200px; height: 200px; margin: 16px auto 0;
+  border: 1px solid var(--border); border-radius: 10px; background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 13px;
+}
+.qr-box canvas { display: block; border-radius: 4px; }
+.qr-hint { text-align: center; font-size: 13px; color: var(--text-secondary); margin-top: 12px; }
+
+/* ---------- 表单 ---------- */
+.field { margin-top: 16px; }
+.field label { display: block; font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+.field input {
+  width: 100%; height: 36px; border: 1px solid var(--border); border-radius: 6px;
+  padding: 0 12px; font: inherit; font-size: 14px; color: var(--text-primary); background: #fff;
+  transition: border-color .15s ease-out, box-shadow .15s ease-out;
+}
+.field input:hover { border-color: var(--border-strong); }
+.field input:focus { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(15,149,136,.25); outline: none; }
+.field input:disabled { background: var(--bg-hover); color: var(--text-muted); }
+.field input.invalid { border-color: var(--danger); }
+.field .err { font-size: 12px; color: var(--danger); margin-top: 4px; }
+.field .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* ---------- 需求清单 ---------- */
+.req-group { margin-top: 16px; }
+.req-group-title { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+.req-group-title.danger { color: var(--danger-text); }
+.req-group-title.warn { color: var(--warn-text); }
+.req-item { display: flex; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.req-item .dot { width: 8px; height: 8px; border-radius: 999px; margin-top: 7px; flex: none; }
+.req-item .dot.danger { background: var(--danger); }
+.req-item .dot.warn { background: var(--amber); }
+.req-item .label { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.req-item .detail { font-size: 13px; color: var(--text-secondary); }
+
+/* ---------- 幕 3 双卡 ---------- */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.opt-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow-card); padding: 24px; display: flex; flex-direction: column;
+}
+.opt-card .opt-tag { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.opt-card .opt-status { margin-top: 12px; font-size: 13px; color: var(--text-secondary); flex: 1; }
+.opt-card .btn-row { margin-top: 16px; }
+.status-line { display: flex; align-items: center; gap: 8px; font-size: 13px; margin-top: 12px; }
+.status-line .dot { width: 8px; height: 8px; border-radius: 999px; }
+.status-line .dot.good { background: var(--teal); }
+.status-line .dot.warn { background: var(--amber); }
+.status-line .dot.idle { background: var(--border-strong); }
+.status-line .txt.good { color: var(--good-text); }
+.status-line .txt.warn { color: var(--warn-text); }
+.status-line .txt.idle { color: var(--text-muted); }
+
+/* ---------- 加载 ---------- */
+.spinner {
+  width: 16px; height: 16px; border-radius: 999px; flex: none;
+  border: 2px solid var(--good-border); border-top-color: var(--teal);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-top: 16px; }
+
+/* ---------- 对话框 ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(10,24,36,.45);
+  display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 50;
+}
+.modal-card {
+  background: var(--bg-card); border-radius: 14px; box-shadow: var(--shadow-modal);
+  max-width: 420px; width: 100%; padding: 24px;
+  animation: modal-in .15s ease-out;
+}
+@keyframes modal-in { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: scale(1); } }
+.modal-card h3 { font-size: 16px; font-weight: 600; color: var(--ink); }
+.modal-card p { font-size: 14px; color: var(--text-primary); margin-top: 12px; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+
+/* ---------- 完成页 ---------- */
+.done-card { text-align: center; padding: 48px 24px; }
+.done-card .act-title { margin-top: 0; }
+.done-card .act-desc { margin-top: 8px; }
+.done-card .btn-row { justify-content: center; margin-top: 24px; }
+
+@media (max-width: 767px) {
+  .topbar, .progress-wrap { padding-left: 16px; padding-right: 16px; }
+  .column { padding: 16px 16px 48px; }
+  .card, .opt-card { padding: 16px; }
+  .two-col { grid-template-columns: 1fr; }
+  .btn { height: 40px; }
+  .collapsed-detail { padding-left: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <img src="../../assets/branding/codex-remote-logo.svg" alt="">
+  <div>
+    <div class="brand-name">Codex Remote</div>
+    <div class="brand-sub">安装向导</div>
+  </div>
+</header>
+<div class="progress-wrap">
+  <div class="progress" id="progress-segs"></div>
+  <div class="progress-labels" id="progress-labels"></div>
+</div>
+<main class="column" id="main"></main>
+<div id="modal-root"></div>
+<script>
+"use strict";
+
+/* ================= 状态 ================= */
+const S = {
+  act: 1,                 // 1 准备环境 / 2 连接飞书 / 3 本机集成 / 4 完成
+  env: "ok",              // ok | fail
+  envBusy: false,
+  expandedActs: {},       // 已完成幕展开回看
+  // 幕 2 · 连接
+  connectMode: "qr",      // qr | manual
+  connectDone: false,
+  appName: "",
+  qr: "idle",             // idle | starting | pending | ready | completing | expired | verify-fail | done
+  qrScenario: "",         // expired | fail
+  qrRetried: false,
+  qrTimer: null,
+  // 幕 2 · 手动
+  manual: { appId: "", secret: "", name: "" },
+  manualErr: {},
+  manualBusy: false,
+  manualFail: false,
+  manualScenario: "",
+  manualRetried: false,
+  readonlyApp: false,
+  // 幕 2 · 配置
+  configStage: "apply_required", // apply_required | blocked | degraded | deferred | publish_required | awaiting_review | clean
+  configDone: false,
+  configBusy: "",
+  publishOutcome: "",     // review
+  publishModal: false,
+  publishBusy: false,
+  // 幕 2 · 菜单
+  menuDone: false,
+  menuBusy: false,
+  // 幕 3
+  autostart: "pending",   // pending | busy | enabled | deferred
+  vscode: "pending",      // pending | busy | done | deferred | timeout
+  vscodeScenario: "",
+  vscodeRetried: false,
+  // 反馈
+  toast: null,
+};
+const ACT_NAMES = ["准备环境", "连接飞书机器人", "本机集成"];
+const FEATURE_LISTS = {
+  blocking: [
+    { label: "机器人基础消息能力", detail: "需要在飞书开放平台补齐对应权限后才能继续。" },
+    { label: "卡片交互能力", detail: "需要先在飞书后台开通对应卡片交互回调。" },
+  ],
+  degradable: [
+    { label: "等待输入提醒", detail: "未开通时不影响基础对话，仅缺少等待输入时的提醒。" },
+    { label: "消息 reaction 反馈", detail: "未开通时不影响基础对话，仅缺少消息反馈表情同步。" },
+  ],
+};
+
+/* ================= 场景开关 ================= */
+(function initScenario() {
+  const m = location.hash.match(/s=([\w-]+)/);
+  const s = m ? m[1] : "";
+  switch (s) {
+    case "env-fail": S.env = "fail"; break;
+    case "qr-expired": S.qrScenario = "expired"; break;
+    case "qr-fail": S.qrScenario = "fail"; break;
+    case "manual-fail": S.manualScenario = "fail"; break;
+    case "readonly-app":
+      S.readonlyApp = true; S.connectMode = "manual";
+      S.manual = { appId: "cli_a82f1c9e5b7346d0", secret: "••••••••••••••••", name: "研发助手" };
+      break;
+    case "autoconfig-blocked": S.configStage = "blocked"; break;
+    case "autoconfig-degraded": S.configStage = "degraded"; break;
+    case "publish-review": S.publishOutcome = "review"; break;
+    case "vscode-timeout": S.vscodeScenario = "timeout"; break;
+    case "blocked-reason": S.configStage = "awaiting_review"; break;
+  }
+})();
+window.addEventListener("hashchange", () => location.reload());
+
+/* ================= 工具 ================= */
+function esc(v) {
+  return String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+let toastSeq = 0;
+function showToast(tone, message) {
+  const id = ++toastSeq;
+  S.toast = { tone, message };
+  render();
+  if (tone === "good") {
+    setTimeout(() => { if (id === toastSeq) { S.toast = null; render(); } }, 4000);
+  }
+}
+function currentSub() {
+  if (!S.connectDone) return 1;
+  if (!S.configDone) return 2;
+  return 3;
+}
+function qrStopTimer() {
+  if (S.qrTimer) { clearTimeout(S.qrTimer); S.qrTimer = null; }
+}
+function scrollTop() { window.scrollTo(0, 0); }
+
+/* ================= 渲染 ================= */
+function render() {
+  renderProgress();
+  const main = document.getElementById("main");
+  let html = "";
+  if (S.toast) html += `<div class="toast ${S.toast.tone}" role="status">${esc(S.toast.message)}</div>`;
+  if (S.act === 4) {
+    html += renderDone();
+  } else {
+    html += renderAct(1, renderAct1);
+    html += renderAct(2, renderAct2);
+    html += renderAct(3, renderAct3);
+  }
+  main.innerHTML = html;
+  renderModal();
+  if (S.qr === "pending") drawFakeQR();
+}
+
+function renderProgress() {
+  const segs = document.getElementById("progress-segs");
+  const labels = document.getElementById("progress-labels");
+  let sh = "", lh = "";
+  for (let i = 1; i <= 3; i++) {
+    const cls = i < S.act ? "done" : (i === S.act ? "active" : "");
+    sh += `<div class="seg ${cls}"></div>`;
+    lh += `<span class="${cls}">${ACT_NAMES[i - 1]}</span>`;
+  }
+  segs.innerHTML = sh;
+  labels.innerHTML = lh;
+}
+
+function renderAct(n, contentFn) {
+  if (n < S.act) {
+    const open = !!S.expandedActs[n];
+    return `
+      <div class="act-row done" onclick="toggleAct(${n})" role="button" tabindex="0"
+           onkeydown="if(event.key==='Enter'||event.key===' '){toggleAct(${n})}">
+        <span class="dot good"></span>
+        <span class="row-name">${ACT_NAMES[n - 1]}</span>
+        <span class="row-sum">${collapsedSummary(n)}${open ? "（收起）" : ""}</span>
+      </div>
+      ${open ? `<ul class="collapsed-detail">${collapsedDetail(n).map(li => `<li>${li}</li>`).join("")}</ul>` : ""}`;
+  }
+  if (n > S.act) {
+    return `
+      <div class="act-row future">
+        <span class="dot idle"></span>
+        <span class="row-name">${ACT_NAMES[n - 1]}</span>
+        <span class="row-sum">未开始</span>
+      </div>`;
+  }
+  return contentFn();
+}
+
+function collapsedSummary(n) {
+  if (n === 1) return "环境正常";
+  if (n === 2) return "已连接并完成配置";
+  return "已记录";
+}
+function collapsedDetail(n) {
+  if (n === 1) return ["服务运行条件正常", "对话后端可用"];
+  if (n === 2) {
+    const cfg = S.configStage === "deferred" ? "自动配置已按降级继续" : "自动配置已完成";
+    return [
+      `机器人：${esc(S.appName || "研发助手")}`,
+      "连接验证已通过",
+      cfg,
+      "菜单已确认",
+    ];
+  }
+  const a = S.autostart === "enabled" ? "自动运行：已启用" : "自动运行：稍后处理";
+  const v = S.vscode === "done" ? "VS Code 集成：已完成" : "VS Code 集成：稍后处理";
+  return [a, v];
+}
+function toggleAct(n) {
+  S.expandedActs[n] = !S.expandedActs[n];
+  render();
+}
+
+/* ---------- 幕 1 ---------- */
+function renderAct1() {
+  let body = "";
+  if (S.env === "ok") {
+    body += `<div class="notice good"><strong>环境正常</strong>服务运行条件与对话后端都已就绪。</div>`;
+    body += `<div class="btn-row"><button class="btn btn-primary" onclick="envContinue()">继续</button></div>`;
+  } else {
+    body += `<div class="notice warn"><strong>当前需要处理</strong>请先修复下面的问题，再重新检查。</div>`;
+    body += `<div class="req-group">
+      <div class="req-item"><span class="dot danger"></span><div><div class="label">本机服务</div><div class="detail">当前服务还不能正常启动，请先修复后再重新检查。</div></div></div>
+      <div class="req-item"><span class="dot danger"></span><div><div class="label">对话后端</div><div class="detail">请先保证 Claude 或 Codex 至少一个可用。</div></div></div>
+    </div>`;
+    body += S.envBusy
+      ? `<div class="loading-line"><span class="spinner"></span>正在重新检查环境</div>`
+      : `<div class="btn-row"><button class="btn btn-primary" onclick="envRecheck()">重新检查</button></div>`;
+  }
+  return `<section class="card"><h1 class="act-title">准备环境</h1><p class="act-desc">确认服务与运行条件正常</p>${body}</section>`;
+}
+function envContinue() { S.act = 2; scrollTop(); render(); }
+function envRecheck() {
+  S.envBusy = true; render();
+  setTimeout(() => {
+    S.envBusy = false; S.env = "ok"; S.act = 2;
+    scrollTop(); render();
+    showToast("good", "环境正常，已自动进入飞书连接。");
+  }, 1500);
+}
+
+/* ---------- 幕 2 ---------- */
+function renderAct2() {
+  const sub = currentSub();
+  const subLabel = (i, name) => {
+    const cls = i < sub ? "done" : (i === sub ? "current" : "");
+    return `<span class="${cls}">${i < sub ? "✓ " : ""}${name}</span>`;
+  };
+  let body = `<div class="substeps">${subLabel(1, "连接")}${subLabel(2, "配置")}${subLabel(3, "菜单")}</div>`;
+  if (sub === 1) {
+    if (S.connectMode === "qr" && S.qr === "idle") setTimeout(startQR, 0);
+    body += renderConnect();
+  }
+  else if (sub === 2) body += renderConfig();
+  else body += renderMenu();
+  return `<section class="card"><h1 class="act-title">连接飞书机器人</h1><p class="act-desc">扫码创建或手动输入接入飞书应用</p>${body}</section>`;
+}
+
+/* ----- 幕 2 · 连接 ----- */
+function renderConnect() {
+  let html = "";
+  if (!S.readonlyApp) {
+    html += `<div class="seg-control">
+      <button type="button" class="${S.connectMode === "qr" ? "on" : ""}" onclick="switchMode('qr')">扫码创建</button>
+      <button type="button" class="${S.connectMode === "manual" ? "on" : ""}" onclick="switchMode('manual')">手动输入</button>
+    </div>`;
+  }
+  html += S.connectMode === "qr" ? renderQR() : renderManual();
+  return html;
+}
+
+function renderQR() {
+  if (S.qr === "idle" || S.qr === "starting") {
+    return `<div class="qr-box"><span class="spinner"></span></div>
+      <p class="qr-hint">二维码准备中</p>`;
+  }
+  if (S.qr === "expired") {
+    return `<div class="notice warn"><strong>二维码已过期</strong>请重新扫码继续。</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="qrRestart()">重新扫码</button>
+        <button class="btn btn-ghost" onclick="switchMode('manual')">改用手动输入</button>
+      </div>`;
+  }
+  if (S.qr === "verify-fail") {
+    return `<div class="notice danger"><strong>连接验证没有通过</strong>扫码已经完成，但连接验证没有通过，请重新验证。</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="qrRetryVerify()">重新验证</button>
+        <button class="btn btn-ghost" onclick="qrRestart()">重新扫码</button>
+        <button class="btn btn-ghost" onclick="switchMode('manual')">改用手动输入</button>
+      </div>`;
+  }
+  // pending / ready / completing
+  let notice = `<div class="notice warn">正在等待扫码结果…</div>`;
+  if (S.qr === "ready" || S.qr === "completing") {
+    notice = `<div class="notice good"><strong>扫码成功</strong>正在完成连接验证…</div>`;
+  }
+  return `<div class="qr-box"><canvas id="qr-canvas" width="184" height="184"></canvas></div>
+    <p class="qr-hint">用飞书扫一扫，创建并接入机器人</p>${notice}`;
+}
+
+function renderManual() {
+  const ro = S.readonlyApp;
+  let html = "";
+  if (ro) {
+    html += `<div class="notice warn"><strong>当前机器人由运行环境提供</strong>机器人信息无需修改，完成连接验证即可继续。</div>`;
+  }
+  if (S.manualFail) {
+    html += `<div class="notice danger"><strong>连接验证没有通过</strong>请检查 App ID 和 App Secret 后重试。</div>`;
+  }
+  html += `
+    <div class="field">
+      <label for="f-appid">App ID</label>
+      <input id="f-appid" class="mono ${S.manualErr.appId ? "invalid" : ""}" placeholder="请输入 App ID"
+             value="${esc(S.manual.appId)}" ${ro ? "disabled" : ""} oninput="S.manual.appId=this.value">
+      ${S.manualErr.appId ? `<div class="err">${S.manualErr.appId}</div>` : ""}
+    </div>
+    <div class="field">
+      <label for="f-secret">App Secret</label>
+      <input id="f-secret" type="password" class="${S.manualErr.secret ? "invalid" : ""}" placeholder="请输入 App Secret"
+             value="${esc(S.manual.secret)}" ${ro ? "disabled" : ""} oninput="S.manual.secret=this.value">
+      ${S.manualErr.secret ? `<div class="err">${S.manualErr.secret}</div>` : ""}
+    </div>
+    <div class="field">
+      <label for="f-name">机器人名称（可选）</label>
+      <input id="f-name" placeholder="例如：团队机器人" value="${esc(S.manual.name)}" ${ro ? "disabled" : ""} oninput="S.manual.name=this.value">
+    </div>`;
+  if (S.manualBusy) {
+    html += `<div class="loading-line"><span class="spinner"></span>正在连接并验证</div>`;
+  } else {
+    html += `<div class="btn-row"><button class="btn btn-primary" onclick="manualSubmit()">验证并继续</button></div>`;
+  }
+  return html;
+}
+
+/* ----- 幕 2 · 配置 ----- */
+const HEADLINE = {
+  clean: "已自动完成",
+  degraded: "已完成，但存在功能降级",
+  unsupported: "当前应用需要手动维护",
+  apply_required: "当前还需要自动补齐配置",
+  publish_required: "自动补齐已完成，还需要提交发布",
+  awaiting_review: "已提交发布，正在等待管理员处理",
+  blocked: "当前还不能继续自动配置",
+  deferred: "已按降级继续",
+};
+const SUMMARY = {
+  clean: "当前飞书应用已经满足自动配置要求。",
+  degraded: "基础配置已完成，但仍有部分可选能力没有开通。",
+  unsupported: "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。",
+  apply_required: "当前检查到了仍需自动补齐的配置差异。",
+  publish_required: "自动补齐后的配置已经写入，仍需提交飞书发布。",
+  awaiting_review: "飞书应用变更已经进入审核流程，当前只需等待结果。",
+  blocked: "当前阻塞项仍未解除，自动配置暂时不能继续。",
+  deferred: "已按降级继续，你后续仍可回到这里重新补齐。",
+};
+function noticeTone(stage) {
+  if (stage === "clean") return "good";
+  if (["degraded", "unsupported", "publish_required", "awaiting_review", "deferred"].includes(stage)) return "warn";
+  return "danger";
+}
+function reqList(title, tone, items) {
+  return `<div class="req-group">
+    <div class="req-group-title ${tone}">${title}</div>
+    ${items.map(it => `<div class="req-item"><span class="dot ${tone}"></span><div><div class="label">${it.label}</div><div class="detail">${it.detail}</div></div></div>`).join("")}
+  </div>`;
+}
+function renderConfig() {
+  const st = S.configStage;
+  let html = `<div class="notice ${noticeTone(st)}"><strong>${HEADLINE[st]}</strong>${SUMMARY[st]}</div>`;
+  if (st === "awaiting_review") {
+    html += `<div class="notice warn"><strong>当前还不能继续</strong>飞书开放平台上的应用版本仍在审核中。
+      <div class="sub">建议：等待审核结果，通过后回到这里点击「刷新结果」继续。</div></div>`;
+  }
+  if (st === "apply_required" || st === "blocked") html += reqList("需要先解决的问题", "danger", FEATURE_LISTS.blocking);
+  if (st === "degraded") html += reqList("可按降级继续的能力", "warn", FEATURE_LISTS.degradable);
+  if (S.configBusy) {
+    html += `<div class="loading-line"><span class="spinner"></span>${S.configBusy}</div>`;
+    return html;
+  }
+  const btns = [];
+  if (st === "apply_required" || st === "degraded") btns.push(`<button class="btn btn-primary" onclick="cfgApply()">自动补齐</button>`);
+  if (st === "publish_required") btns.push(`<button class="btn btn-primary" onclick="openPublish()">继续发布</button>`);
+  if (st === "degraded") btns.push(`<button class="btn btn-secondary" onclick="cfgDefer()">先按降级继续</button>`);
+  if (st === "deferred") btns.push(`<button class="btn btn-secondary" onclick="cfgReset()">重新检查自动配置</button>`);
+  if (["apply_required", "blocked", "awaiting_review", "degraded"].includes(st)) btns.push(`<button class="btn btn-secondary" onclick="cfgRefresh()">刷新结果</button>`);
+  if (st === "clean" || st === "deferred") btns.push(`<button class="btn btn-primary" onclick="configContinue()">继续</button>`);
+  btns.push(`<button class="btn btn-ghost" onclick="openConsole('auth')">打开飞书后台</button>`);
+  html += `<div class="btn-row">${btns.join("")}</div>`;
+  return html;
+}
+function cfgApply() {
+  S.configBusy = "正在自动补齐配置"; render();
+  setTimeout(() => {
+    S.configBusy = ""; S.configStage = "publish_required"; render();
+    showToast("good", "自动配置状态已更新。");
+  }, 1800);
+}
+function openPublish() { S.publishModal = true; render(); }
+function closePublish() { S.publishModal = false; render(); }
+function cfgPublish() {
+  S.publishBusy = true; render();
+  setTimeout(() => {
+    S.publishBusy = false; S.publishModal = false;
+    if (S.publishOutcome === "review") {
+      S.configStage = "awaiting_review";
+    } else {
+      S.configStage = "clean";
+    }
+    render();
+    showToast("good", "发布状态已更新。");
+  }, 1500);
+}
+function cfgDefer() {
+  S.configBusy = "正在记录"; render();
+  setTimeout(() => {
+    S.configBusy = ""; S.configStage = "deferred"; render();
+    showToast("good", "已按降级继续，你后续仍可回到这里重新补齐。");
+  }, 900);
+}
+function cfgReset() {
+  S.configBusy = "正在重新检查自动配置"; render();
+  setTimeout(() => {
+    S.configBusy = ""; S.configStage = "apply_required"; S.configDone = false; render();
+    showToast("good", "已恢复自动配置检查，你可以继续补齐或发布。");
+  }, 1200);
+}
+function cfgRefresh() {
+  S.configBusy = "正在刷新结果"; render();
+  setTimeout(() => {
+    S.configBusy = "";
+    if (S.configStage === "blocked") S.configStage = "apply_required";
+    else if (S.configStage === "awaiting_review") { S.configStage = "clean"; }
+    render();
+  }, 1000);
+}
+function configContinue() { S.configDone = true; render(); }
+function openConsole() { showToast("warn", "请在浏览器中打开飞书开放平台继续操作。"); }
+
+/* ----- 幕 2 · 菜单 ----- */
+function renderMenu() {
+  let html = `<div class="notice warn"><strong>还需要确认机器人菜单</strong>在飞书后台确认机器人菜单配置，然后回到这里继续。</div>`;
+  if (S.menuBusy) {
+    html += `<div class="loading-line"><span class="spinner"></span>正在记录菜单确认结果</div>`;
+  } else {
+    html += `<div class="btn-row">
+      <button class="btn btn-primary" onclick="menuConfirm()">我已完成菜单确认</button>
+      <button class="btn btn-ghost" onclick="openConsole('bot')">打开飞书后台</button>
+    </div>`;
+  }
+  return html;
+}
+function menuConfirm() {
+  S.menuBusy = true; render();
+  setTimeout(() => {
+    S.menuBusy = false; S.menuDone = true; S.act = 3;
+    scrollTop(); render();
+    showToast("good", "已记录菜单确认结果。");
+  }, 900);
+}
+
+/* ---------- 幕 3 ---------- */
+function renderAct3() {
+  return `<h1 class="act-title" style="margin-bottom:4px;">本机集成</h1>
+    <p class="act-desc" style="margin-bottom:16px;">可选，之后可在管理页面处理。</p>
+    <div class="two-col">${renderAutostart()}${renderVSCode()}</div>
+    ${machineResolved() ? `<div class="btn-row"><button class="btn btn-primary" onclick="finishAll()">完成设置</button></div>` : ""}`;
+}
+function machineResolved() {
+  return ["enabled", "deferred"].includes(S.autostart) && ["done", "deferred"].includes(S.vscode);
+}
+function renderAutostart() {
+  let inner = "";
+  if (S.autostart === "pending") {
+    inner = `<div class="status-line"><span class="dot idle"></span><span class="txt idle">当前未启用自动运行</span></div>
+      <div class="opt-status">启用后，登录这台机器时会自动运行服务。</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="autostartApply()">启用自动启动</button>
+        <button class="btn btn-ghost" onclick="autostartDefer()">稍后处理</button>
+      </div>`;
+  } else if (S.autostart === "busy") {
+    inner = `<div class="loading-line"><span class="spinner"></span>正在启用自动启动</div>`;
+  } else if (S.autostart === "enabled") {
+    inner = `<div class="status-line"><span class="dot good"></span><span class="txt good">已启用自动运行</span></div>`;
+  } else {
+    inner = `<div class="status-line"><span class="dot idle"></span><span class="txt idle">已记录稍后处理自动启动</span></div>`;
+  }
+  return `<div class="opt-card"><h3>自动运行</h3><div class="opt-tag">可选</div>${inner}</div>`;
+}
+function renderVSCode() {
+  let inner = "";
+  if (S.vscode === "pending") {
+    inner = `<div class="status-line"><span class="dot idle"></span><span class="txt idle">暂未接入</span></div>
+      <div class="opt-status">接入后，可以在这台机器的 VS Code 里直接使用。</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="vscodeApply()">完成当前机器集成</button>
+        <button class="btn btn-ghost" onclick="vscodeDefer()">稍后处理</button>
+      </div>`;
+  } else if (S.vscode === "busy") {
+    inner = `<div class="loading-line"><span class="spinner"></span>正在完成 VS Code 集成</div>`;
+  } else if (S.vscode === "timeout") {
+    inner = `<div class="notice warn"><strong>集成结果待确认</strong>集成请求返回超时，当前还不能确认已完成，请稍后重试。</div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="vscodeApply()">重试</button>
+        <button class="btn btn-ghost" onclick="vscodeDefer()">稍后处理</button>
+      </div>`;
+  } else if (S.vscode === "done") {
+    inner = `<div class="status-line"><span class="dot good"></span><span class="txt good">VS Code 集成已完成</span></div>`;
+  } else {
+    inner = `<div class="status-line"><span class="dot idle"></span><span class="txt idle">已记录稍后处理 VS Code 集成</span></div>`;
+  }
+  return `<div class="opt-card"><h3>VS Code 集成</h3><div class="opt-tag">可选</div>${inner}</div>`;
+}
+function autostartApply() {
+  S.autostart = "busy"; render();
+  setTimeout(() => { S.autostart = "enabled"; render(); showToast("good", "已启用自动启动。"); }, 1200);
+}
+function autostartDefer() {
+  S.autostart = "deferred"; render();
+  showToast("good", "已记录稍后处理自动启动。");
+}
+function vscodeApply() {
+  S.vscode = "busy"; render();
+  setTimeout(() => {
+    if (S.vscodeScenario === "timeout" && !S.vscodeRetried) {
+      S.vscodeRetried = true; S.vscode = "timeout";
+    } else {
+      S.vscode = "done";
+      render(); showToast("good", "VS Code 集成已完成。");
+      return;
+    }
+    render();
+  }, 1500);
+}
+function vscodeDefer() {
+  S.vscode = "deferred"; render();
+  showToast("good", "已记录稍后处理 VS Code 集成。");
+}
+function finishAll() { S.act = 4; scrollTop(); render(); }
+
+/* ---------- 完成 ---------- */
+function renderDone() {
+  return `<section class="card done-card">
+    <h1 class="act-title">欢迎，设置已经完成。</h1>
+    <p class="act-desc">你可以在管理页面继续调整设置、查看存储状态。</p>
+    <div class="btn-row"><button class="btn btn-primary" onclick="enterAdmin()">进入管理页面</button></div>
+  </section>`;
+}
+function enterAdmin() { showToast("good", "正在进入管理页面…"); }
+
+/* ---------- 连接流程动作 ----- */
+function switchMode(mode) {
+  if (S.connectMode === mode) return;
+  qrStopTimer();
+  S.connectMode = mode;
+  S.qr = "idle"; S.qrRetried = false;
+  S.manualErr = {}; S.manualFail = false;
+  render();
+  if (mode === "qr") startQR();
+}
+function startQR() {
+  S.qr = "starting"; render();
+  S.qrTimer = setTimeout(() => {
+    S.qr = "pending"; render();
+    pollQR(0);
+  }, 1200);
+}
+function pollQR(tick) {
+  S.qrTimer = setTimeout(() => {
+    if (S.qrScenario === "expired") { S.qr = "expired"; render(); return; }
+    if (tick >= 2) {
+      S.qr = "ready"; render();
+      S.qrTimer = setTimeout(() => completeQR(), 1200);
+      return;
+    }
+    pollQR(tick + 1);
+  }, 1800);
+}
+function completeQR() {
+  S.qr = "completing"; render();
+  setTimeout(() => {
+    if (S.qrScenario === "fail" && !S.qrRetried) {
+      S.qr = "verify-fail"; render(); return;
+    }
+    qrSuccess();
+  }, 1500);
+}
+function qrRetryVerify() {
+  S.qrRetried = true;
+  S.qr = "completing"; render();
+  setTimeout(() => qrSuccess(), 1500);
+}
+function qrRestart() {
+  qrStopTimer();
+  S.qrRetried = true; // 第二次扫码不再过期/失败
+  startQR();
+}
+function qrSuccess() {
+  S.qr = "done"; S.connectDone = true; S.appName = "研发助手";
+  render();
+  showToast("good", "连接验证成功。");
+}
+function manualSubmit() {
+  S.manualErr = {};
+  if (!S.manual.appId.trim()) S.manualErr.appId = "请填写 App ID。";
+  if (!S.manual.secret.trim()) S.manualErr.secret = "请填写 App Secret。";
+  if (Object.keys(S.manualErr).length) { render(); return; }
+  S.manualBusy = true; render();
+  setTimeout(() => {
+    S.manualBusy = false;
+    if (S.manualScenario === "fail" && !S.manualRetried) {
+      S.manualRetried = true; S.manualFail = true; render(); return;
+    }
+    S.manualFail = false;
+    S.connectDone = true;
+    S.appName = S.manual.name.trim() || "研发助手";
+    render();
+    showToast("good", "连接验证成功。");
+  }, 1500);
+}
+
+/* ---------- 对话框 ---------- */
+function renderModal() {
+  const root = document.getElementById("modal-root");
+  if (!S.publishModal) { root.innerHTML = ""; return; }
+  root.innerHTML = `
+    <div class="modal-backdrop" role="presentation">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="publish-title">
+        <h3 id="publish-title">确认提交发布</h3>
+        <p>这会把当前自动补齐后的飞书配置提交到发布流程。若飞书要求管理员审核，后续状态会显示为“等待管理员处理”。</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closePublish()" ${S.publishBusy ? "disabled" : ""}>取消</button>
+          <button class="btn btn-primary" onclick="cfgPublish()" ${S.publishBusy ? "disabled" : ""}>${S.publishBusy ? "正在提交…" : "确认提交"}</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---------- 假二维码 ---------- */
+function drawFakeQR() {
+  const cv = document.getElementById("qr-canvas");
+  if (!cv) return;
+  const ctx = cv.getContext("2d");
+  const n = 25, cell = 184 / n;
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 184, 184);
+  ctx.fillStyle = "#112B39";
+  let seed = 20260801;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const inFinder = (x, y) =>
+    (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (inFinder(x, y)) continue;
+    if (rnd() > 0.52) ctx.fillRect(x * cell, y * cell, cell, cell);
+  }
+  const finder = (fx, fy) => {
+    ctx.fillStyle = "#112B39"; ctx.fillRect(fx * cell, fy * cell, 7 * cell, 7 * cell);
+    ctx.fillStyle = "#fff"; ctx.fillRect((fx + 1) * cell, (fy + 1) * cell, 5 * cell, 5 * cell);
+    ctx.fillStyle = "#112B39"; ctx.fillRect((fx + 2) * cell, (fy + 2) * cell, 3 * cell, 3 * cell);
+  };
+  finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+}
+
+/* ================= 启动 ================= */
+render();
+</script>
+</body>
+</html>

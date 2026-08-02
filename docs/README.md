@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-07-31`
-> Summary: 新增 Codex Profile 与 OAuth 隔离设计，并将旧 Codex Provider 管理草案移入历史归档。
+> Updated: `2026-08-01`
+> Summary: 新增 Web 前端重设计交接规范草案与 Setup / Admin 两个可运行 mock。
 
 ## 1. 适用范围
 
@@ -200,6 +200,9 @@
 - [upstream-retryable-turn-autocontinue-design.md](./draft/upstream-retryable-turn-autocontinue-design.md)
 - [web-preview-snapshot-design.md](./draft/web-preview-snapshot-design.md)
 - [web-preview-renderer-architecture-redesign.md](./draft/web-preview-renderer-architecture-redesign.md)
+- [web-ui-redesign-spec.md](./draft/web-ui-redesign-spec.md)
+- [web-setup-redesign-mock.html](./draft/web-setup-redesign-mock.html)
+- [web-admin-redesign-mock.html](./draft/web-admin-redesign-mock.html)
 - [workspace-mode-redesign.md](./draft/workspace-mode-redesign.md)
 
 ### 6.5 `obsoleted`

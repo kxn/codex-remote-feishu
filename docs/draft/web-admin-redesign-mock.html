@@ -1,0 +1,1292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex Remote 管理</title>
+<!--
+  场景开关（通过 URL hash 进入，页面上不可见）：
+    #s=all-good          总览"一切正常"空态
+    #s=plan-blocked      选中机器人自动配置受阻
+    #s=plan-degraded     选中机器人自动配置降级
+    #s=plan-review       发布后等待管理员审核
+    #s=runtime-pending   机器人同步中（禁用自动配置按钮）
+    #s=perm-missing      权限检查发现缺失权限（含复制导入 JSON）
+    #s=perm-error        权限检查首次失败（toast + 卡片内重试）
+    #s=readonly-bot      运行环境提供的机器人（不可删除）
+    #s=qr-expired        添加机器人扫码过期
+    #s=add-fail          手动添加首次验证失败
+    #s=conflict          保存 Profile 首次提示被其他窗口修改
+    #s=refs              删除 Codex Profile 时列出使用中引用
+    #s=storage-partial   预览文件清理部分失败
+    #s=load-error        整页加载失败态（重新加载恢复）
+    无 hash              默认数据（含若干待处理项）
+-->
+<style>
+:root {
+  --ink: #112B39;
+  --ink-deep: #0A1824;
+  --cream: #F7EBD7;
+  --teal: #0F9588;
+  --teal-bright: #20CBB8;
+  --teal-hover: #0C8075;
+  --amber: #FFB56F;
+  --danger: #C2443B;
+  --bg-page: #F5F2EA;
+  --bg-card: #FFFFFF;
+  --bg-hover: #F3EFE4;
+  --text-primary: #16242C;
+  --text-secondary: #4A5B64;
+  --text-muted: #7C8A91;
+  --text-on-dark: #E7D5B6;
+  --text-on-dark-muted: #9FB3BC;
+  --border: #E3DCCB;
+  --border-strong: #CFC6B0;
+  --good-bg: #E4F5F1; --good-border: #A5DED3; --good-text: #0C6E64;
+  --warn-bg: #FDF0DC; --warn-border: #EFCB92; --warn-text: #8A5A1D;
+  --danger-bg: #FAE8E6; --danger-border: #E5AAA3; --danger-text: #96231B;
+  --shadow-card: 0 1px 2px rgba(10,24,36,.06);
+  --shadow-modal: 0 8px 24px rgba(10,24,36,.18);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg-page); color: var(--text-primary);
+  font-size: 14px; line-height: 1.6; min-height: 100vh;
+}
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+a { color: var(--teal); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+
+/* ---------- 侧边导航（桌面） ---------- */
+.sidebar {
+  position: fixed; inset: 0 auto 0 0; width: 232px;
+  background: var(--ink-deep); padding: 24px 16px;
+  display: flex; flex-direction: column; gap: 24px; z-index: 20;
+}
+.brand { display: flex; align-items: center; gap: 12px; padding: 0 8px; }
+.brand img { width: 32px; height: 32px; }
+.brand .brand-name { font-size: 16px; font-weight: 600; color: var(--text-on-dark); line-height: 1.4; }
+.brand .brand-sub { font-size: 12px; color: var(--text-on-dark-muted); line-height: 1.4; }
+.side-nav { display: flex; flex-direction: column; gap: 4px; }
+.side-nav button {
+  height: 40px; border: none; border-radius: 8px; background: none;
+  text-align: left; padding: 0 12px; font-size: 14px; font-weight: 500;
+  color: var(--text-on-dark-muted); transition: background .15s ease-out, color .15s ease-out;
+}
+.side-nav button:hover { color: var(--text-on-dark); }
+.side-nav button.on { background: rgba(32,203,184,.14); color: var(--teal-bright); }
+
+/* ---------- 移动端顶部品牌条 + 底部 tab ---------- */
+.mobile-brand {
+  display: none; align-items: center; gap: 12px;
+  background: var(--ink-deep); padding: 12px 16px; position: sticky; top: 0; z-index: 20;
+}
+.mobile-brand img { width: 24px; height: 24px; }
+.mobile-brand .brand-name { font-size: 14px; font-weight: 600; color: var(--text-on-dark); }
+.bottom-tabs {
+  display: none; position: fixed; inset: auto 0 0 0; height: 56px;
+  background: var(--bg-card); border-top: 1px solid var(--border); z-index: 20;
+}
+.bottom-tabs button {
+  flex: 1; border: none; background: none; font-size: 12px; color: var(--text-muted);
+  border-top: 2px solid transparent; font-weight: 500;
+}
+.bottom-tabs button.on { color: var(--teal); border-top-color: var(--teal); }
+
+/* ---------- 内容区 ---------- */
+.content { max-width: 980px; margin: 0 0 0 232px; padding: 28px; }
+.area-title { font-size: 24px; line-height: 1.3; font-weight: 600; color: var(--ink); }
+.area-desc { font-size: 13px; color: var(--text-secondary); margin-top: 4px; margin-bottom: 16px; }
+
+/* ---------- 卡片 / 统计 ---------- */
+.card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow-card); padding: 24px; margin-bottom: 16px;
+}
+.card h3 { font-size: 16px; line-height: 1.4; font-weight: 600; color: var(--ink); }
+.card .card-sub { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+.stat-card {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: var(--shadow-card); padding: 16px 24px;
+}
+.stat-card .label { font-size: 12px; color: var(--text-muted); }
+.stat-card .value { font-size: 28px; line-height: 1.2; font-weight: 600; color: var(--ink); margin-top: 4px; }
+.stat-card .detail { font-size: 12px; color: var(--text-secondary); margin-top: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- 状态点 / 徽标 ---------- */
+.dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; flex: none; }
+.dot.good { background: var(--teal); }
+.dot.warn { background: var(--amber); }
+.dot.danger { background: var(--danger); }
+.dot.idle { background: var(--border-strong); }
+.status-line { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.badge {
+  font-size: 12px; line-height: 1.4; padding: 2px 8px; border-radius: 999px; white-space: nowrap;
+}
+.badge.good { background: var(--good-bg); color: var(--good-text); }
+.badge.warn { background: var(--warn-bg); color: var(--warn-text); }
+.badge.danger { background: var(--danger-bg); color: var(--danger-text); }
+.badge.neutral { background: var(--bg-hover); color: var(--text-secondary); }
+
+/* ---------- notice / toast ---------- */
+.notice { border-radius: 10px; border: 1px solid; padding: 12px 16px; font-size: 14px; margin-top: 12px; }
+.notice strong { font-weight: 500; display: block; }
+.notice .sub { font-size: 13px; margin-top: 4px; }
+.notice.good { background: var(--good-bg); border-color: var(--good-border); color: var(--good-text); }
+.notice.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+.notice.danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+.toast {
+  border-radius: 10px; border: 1px solid; padding: 12px 16px; font-size: 14px;
+  margin-bottom: 16px; box-shadow: var(--shadow-modal);
+}
+.toast.good { background: var(--good-bg); border-color: var(--good-border); color: var(--good-text); }
+.toast.warn { background: var(--warn-bg); border-color: var(--warn-border); color: var(--warn-text); }
+.toast.danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+
+/* ---------- 按钮 ---------- */
+.btn {
+  height: 36px; padding: 0 16px; border-radius: 6px; font-size: 14px; font-weight: 500;
+  border: 1px solid transparent; transition: background .15s ease-out, opacity .15s ease-out;
+}
+.btn:disabled { opacity: .5; }
+.btn-primary { background: var(--teal); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--teal-hover); }
+.btn-secondary { background: var(--bg-card); border-color: var(--border); color: var(--text-primary); }
+.btn-secondary:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-hover); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #A93A32; }
+.btn-ghost { background: none; border: none; color: var(--teal); padding: 0 8px; height: auto; }
+.btn-ghost:hover:not(:disabled) { text-decoration: underline; }
+.btn-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
+
+/* ---------- 分栏（列表 + 详情） ---------- */
+.split { display: grid; grid-template-columns: 280px 1fr; gap: 16px; align-items: start; }
+.list-pane { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-card); overflow: hidden; }
+.list-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  min-height: 44px; padding: 12px 16px; border: none; background: none;
+  text-align: left; border-left: 3px solid transparent; border-bottom: 1px solid var(--border);
+  transition: background .15s ease-out;
+}
+.list-row:last-child { border-bottom: none; }
+.list-row:hover { background: var(--bg-hover); }
+.list-row.on { border-left-color: var(--teal); background: var(--bg-hover); }
+.list-row .row-main { flex: 1; min-width: 0; }
+.list-row .row-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+.list-row .row-sub { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.back-link { display: none; margin-bottom: 12px; }
+
+/* ---------- 定义列表 / 需求清单 ---------- */
+.def-list { margin-top: 12px; }
+.def-list .def-row { display: flex; gap: 12px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
+.def-list dt { width: 96px; flex: none; color: var(--text-muted); font-size: 13px; }
+.def-list dd { color: var(--text-primary); word-break: break-all; }
+.def-list .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.req-group { margin-top: 16px; }
+.req-group-title { font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+.req-group-title.danger { color: var(--danger-text); }
+.req-group-title.warn { color: var(--warn-text); }
+.req-item { display: flex; gap: 8px; padding: 8px 0; border-top: 1px solid var(--border); }
+.req-item .dot { margin-top: 7px; }
+.req-item .label { font-size: 14px; font-weight: 500; }
+.req-item .detail { font-size: 13px; color: var(--text-secondary); }
+
+/* ---------- 表单 ---------- */
+.field { margin-top: 16px; }
+.field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.field input, .field select {
+  width: 100%; height: 36px; border: 1px solid var(--border); border-radius: 6px;
+  padding: 0 12px; font: inherit; font-size: 14px; color: var(--text-primary); background: #fff;
+  transition: border-color .15s ease-out, box-shadow .15s ease-out;
+}
+.field input:hover, .field select:hover { border-color: var(--border-strong); }
+.field input:focus, .field select:focus { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(15,149,136,.25); outline: none; }
+.field input:disabled, .field select:disabled { background: var(--bg-hover); color: var(--text-muted); }
+.field input.invalid { border-color: var(--danger); }
+.field .err { font-size: 12px; color: var(--danger); margin-top: 4px; }
+.field .hint { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.check-row { display: flex; align-items: center; gap: 8px; margin-top: 16px; font-size: 14px; }
+.check-row input { width: 16px; height: 16px; accent-color: var(--teal); }
+.hero-card {
+  margin-top: 12px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-page); padding: 16px; font-size: 14px; color: var(--text-secondary);
+}
+.hero-card strong { color: var(--ink); font-weight: 500; display: block; margin-bottom: 4px; }
+
+/* ---------- tab（对话后端） ---------- */
+.tab-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab-bar button {
+  border: none; background: none; padding: 8px 16px; font-size: 14px; font-weight: 500;
+  color: var(--text-muted); border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.tab-bar button.on { color: var(--teal); border-bottom-color: var(--teal); }
+
+/* ---------- 二维码 ---------- */
+.qr-box {
+  width: 200px; height: 200px; margin: 16px auto 0; border: 1px solid var(--border);
+  border-radius: 10px; background: #fff; display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 13px;
+}
+.qr-hint { text-align: center; font-size: 13px; color: var(--text-secondary); margin-top: 12px; }
+.seg-control { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-top: 16px; }
+.seg-control button { flex: 1; height: 36px; border: none; background: var(--bg-card); font-size: 14px; font-weight: 500; color: var(--text-secondary); }
+.seg-control button.on { background: var(--teal); color: #fff; }
+
+/* ---------- 对话框 ---------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(10,24,36,.45);
+  display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 50;
+}
+.modal-card {
+  background: var(--bg-card); border-radius: 14px; box-shadow: var(--shadow-modal);
+  max-width: 420px; width: 100%; padding: 24px; animation: modal-in .15s ease-out;
+}
+@keyframes modal-in { from { opacity: 0; transform: scale(.98); } to { opacity: 1; transform: scale(1); } }
+.modal-card h3 { font-size: 16px; font-weight: 600; color: var(--ink); }
+.modal-card p { font-size: 14px; margin-top: 12px; }
+.modal-card .ref-list { margin-top: 12px; border-top: 1px solid var(--border); }
+.modal-card .ref-list li {
+  list-style: none; padding: 8px 0; border-bottom: 1px solid var(--border);
+  font-size: 13px; display: flex; gap: 8px; align-items: center;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+
+/* ---------- 加载 / 空态 ---------- */
+.spinner {
+  width: 16px; height: 16px; border-radius: 999px; flex: none;
+  border: 2px solid var(--good-border); border-top-color: var(--teal);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-line { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); margin-top: 12px; }
+.empty-state { text-align: center; padding: 32px 16px; font-size: 14px; color: var(--text-secondary); }
+
+@media (max-width: 767px) {
+  .sidebar { display: none; }
+  .mobile-brand { display: flex; }
+  .bottom-tabs { display: flex; }
+  .content { margin: 0; padding: 16px 16px 80px; }
+  .card { padding: 16px; }
+  .stat-row { grid-template-columns: 1fr; }
+  .split { grid-template-columns: 1fr; }
+  .split .detail-pane { display: none; }
+  .split.show-detail .detail-pane { display: block; }
+  .split.show-detail .list-pane { display: none; }
+  .back-link { display: inline-block; }
+  .btn { height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <img src="../../assets/branding/codex-remote-logo.svg" alt="">
+    <div>
+      <div class="brand-name">Codex Remote</div>
+      <div class="brand-sub">管理</div>
+    </div>
+  </div>
+  <nav class="side-nav" id="side-nav"></nav>
+</aside>
+<div class="mobile-brand">
+  <img src="../../assets/branding/codex-remote-logo.svg" alt="">
+  <div class="brand-name">Codex Remote</div>
+</div>
+<main class="content" id="main"></main>
+<nav class="bottom-tabs" id="bottom-tabs"></nav>
+<div id="modal-root"></div>
+<script>
+"use strict";
+
+/* ================= 状态 ================= */
+const AREAS = [
+  ["overview", "总览"],
+  ["bots", "机器人"],
+  ["backends", "对话后端"],
+  ["system", "系统"],
+];
+const S = {
+  area: "overview",
+  toast: null,
+  loadError: false,
+  // 机器人
+  bots: [
+    { id: "b1", name: "研发助手", appId: "cli_a82f1c9e5b7346d0", plan: "apply_required", conn: "连接正常", enabled: true, verified: "2026-07-30 14:22", runtimePending: false, readOnly: false },
+    { id: "b2", name: "运营机器人", appId: "cli_b93e2d7a4c1581ef", plan: "clean", conn: "连接正常", enabled: true, verified: "2026-07-28 09:41", runtimePending: false, readOnly: false },
+  ],
+  selectedBot: "b1",
+  botMobileDetail: false,
+  botView: "detail",           // detail | add
+  add: { mode: "qr", qr: "idle", appId: "", secret: "", name: "", errs: {}, busy: false, fail: false, retried: false, timer: null },
+  planBusy: "",
+  publishModal: false, publishBusy: false,
+  deleteBotModal: false, deleteBotBusy: false,
+  permState: "idle",           // idle | checking | ready | missing | error
+  permScenario: "ready",       // ready | missing（hash 场景控制）
+  permFailOnce: false,
+  // 对话后端
+  backendTab: "claude",
+  claude: [
+    { id: "default", name: "默认", builtIn: true, ctx1m: true, baseURL: "", model: "", smallModel: "", effort: "" },
+    { id: "c2", name: "研发代理", builtIn: false, ctx1m: false, baseURL: "https://api.example.com/v1", model: "", smallModel: "", effort: "" },
+  ],
+  selectedClaude: "default",
+  claudeMobileDetail: false,
+  claudeEditor: null,          // "new" 或 profile id
+  claudeDraft: null,
+  claudeBusy: false,
+  deleteClaudeModal: false,
+  codex: [
+    { id: "native", kind: "native", name: "本机默认", editable: false, contextEditable: true, deletable: false, available: true, statusTag: "", baseURL: "", model: "", review: "", effort: "", ctx: "codex_default" },
+    { id: "oauth", kind: "oauth", name: "ChatGPT 登录", editable: false, contextEditable: true, deletable: false, available: false, statusTag: "未检测到登录", baseURL: "", model: "", review: "", effort: "", ctx: "codex_default" },
+    { id: "cx3", kind: "api", name: "研发代理", editable: true, contextEditable: true, deletable: true, available: true, statusTag: "", baseURL: "https://api.example.com/v1", model: "gpt-5.4", review: "", effort: "high", ctx: "price_guard_272k" },
+  ],
+  selectedCodex: "cx3",
+  codexMobileDetail: false,
+  codexEditor: null,
+  codexDraft: null,
+  codexBusy: false,
+  deleteCodexModal: false,
+  // 系统
+  autostart: "disabled",       // disabled | busy | enabled
+  vscode: "needs-fix",         // needs-fix | busy | ready
+  storage: {
+    preview: { files: 36, mb: 96, busy: false },
+    images: { files: 12, mb: 24, busy: false },
+    logs: { files: 8, mb: 8, busy: false },
+  },
+  storageWarn: "",
+  // 场景
+  conflictOnce: false,
+  addFailOnce: false,
+  refsOnDelete: false,
+  storagePartial: false,
+};
+
+/* ================= 场景开关 ================= */
+(function initScenario() {
+  const m = location.hash.match(/s=([\w-]+)/);
+  const s = m ? m[1] : "";
+  switch (s) {
+    case "all-good":
+      S.bots[0].plan = "clean"; S.autostart = "enabled"; S.vscode = "ready";
+      S.storage = { preview: { files: 0, mb: 0, busy: false }, images: { files: 0, mb: 0, busy: false }, logs: { files: 0, mb: 0, busy: false } };
+      break;
+    case "plan-blocked": S.bots[0].plan = "blocked"; break;
+    case "plan-degraded": S.bots[0].plan = "degraded"; break;
+    case "plan-review": S.bots[0].plan = "publish_required"; break;
+    case "runtime-pending": S.bots[0].runtimePending = true; break;
+    case "perm-missing": S.permScenario = "missing"; break;
+    case "perm-error": S.permFailOnce = true; break;
+    case "readonly-bot": S.bots[0].readOnly = true; break;
+    case "qr-expired": S.add.qrScenario = "expired"; break;
+    case "add-fail": S.addFailOnce = true; break;
+    case "conflict": S.conflictOnce = true; break;
+    case "refs": S.refsOnDelete = true; break;
+    case "storage-partial": S.storagePartial = true; break;
+    case "load-error": S.loadError = true; break;
+  }
+})();
+window.addEventListener("hashchange", () => location.reload());
+
+/* ================= 工具 ================= */
+function esc(v) {
+  return String(v).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+let toastSeq = 0;
+function showToast(tone, message) {
+  const id = ++toastSeq;
+  S.toast = { tone, message };
+  render();
+  if (tone === "good") setTimeout(() => { if (id === toastSeq) { S.toast = null; render(); } }, 4000);
+}
+function currentBot() { return S.bots.find(b => b.id === S.selectedBot) || null; }
+function gotoArea(area) {
+  S.area = area;
+  window.scrollTo(0, 0);
+  render();
+}
+
+/* ================= 渲染入口 ================= */
+function render() {
+  const nav = document.getElementById("side-nav");
+  const tabs = document.getElementById("bottom-tabs");
+  nav.innerHTML = AREAS.map(([id, name]) =>
+    `<button type="button" class="${S.area === id ? "on" : ""}" onclick="gotoArea('${id}')">${name}</button>`).join("");
+  tabs.innerHTML = AREAS.map(([id, name]) =>
+    `<button type="button" class="${S.area === id ? "on" : ""}" onclick="gotoArea('${id}')">${name}</button>`).join("");
+
+  const main = document.getElementById("main");
+  if (S.loadError) {
+    main.innerHTML = `<section class="card empty-state">
+      <strong>当前页面暂时无法读取状态</strong>
+      <p style="margin-top:8px;">请刷新后重试。</p>
+      <div class="btn-row" style="justify-content:center;"><button class="btn btn-primary" onclick="reloadPage()">重新加载</button></div>
+    </section>`;
+    return;
+  }
+  let html = S.toast ? `<div class="toast ${S.toast.tone}" role="status">${esc(S.toast.message)}</div>` : "";
+  if (S.area === "overview") html += renderOverview();
+  else if (S.area === "bots") html += renderBots();
+  else if (S.area === "backends") html += renderBackends();
+  else html += renderSystem();
+  main.innerHTML = html;
+  renderModal();
+  const cv = document.getElementById("qr-canvas");
+  if (cv) drawFakeQR(cv);
+}
+function reloadPage() {
+  location.href = location.pathname;
+}
+
+/* ================= 总览 ================= */
+function todoItems() {
+  const items = [];
+  for (const b of S.bots) {
+    if (b.runtimePending) items.push({ dot: "warn", text: `「${b.name}」正在同步运行设置`, area: "bots", bot: b.id });
+    const tag = PLAN_TAG[b.plan];
+    if (tag && tag.warn) items.push({ dot: "warn", text: `「${b.name}」自动配置：${tag.label}`, area: "bots", bot: b.id });
+  }
+  if (S.vscode === "needs-fix") items.push({ dot: "warn", text: "VS Code 集成需要修复", area: "system" });
+  if (S.autostart === "disabled") items.push({ dot: "idle", text: "自动运行未启用", area: "system" });
+  const total = S.storage.preview.files + S.storage.images.files + S.storage.logs.files;
+  if (total > 0) items.push({ dot: "idle", text: `存储可清理（${total} 个文件）`, area: "system" });
+  return items;
+}
+function renderOverview() {
+  const connOk = S.bots.filter(b => b.conn === "连接正常").length;
+  const totalMB = S.storage.preview.mb + S.storage.images.mb + S.storage.logs.mb;
+  const todos = todoItems();
+  return `
+    <h1 class="area-title">总览</h1>
+    <p class="area-desc">系统当前状态与需要处理的事项</p>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="label">机器人</div>
+        <div class="value">${S.bots.length}</div>
+        <div class="detail"><span class="dot ${connOk === S.bots.length ? "good" : "warn"}"></span>${connOk} 个连接正常</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">存储占用</div>
+        <div class="value">约 ${totalMB} MB</div>
+        <div class="detail">预览、图片暂存与日志合计</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">系统集成</div>
+        <div class="value" style="font-size:14px;line-height:1.6;margin-top:8px;">
+          <span class="status-line"><span class="dot ${S.autostart === "enabled" ? "good" : "idle"}"></span>自动运行${S.autostart === "enabled" ? "已启用" : "未启用"}</span>
+          <span class="status-line" style="margin-top:4px;"><span class="dot ${S.vscode === "ready" ? "good" : "warn"}"></span>VS Code${S.vscode === "ready" ? "已接入" : "需要修复"}</span>
+        </div>
+      </div>
+    </div>
+    <section class="card">
+      <h3>需要处理</h3>
+      ${todos.length === 0
+        ? `<div class="empty-state">一切正常，当前没有需要处理的事项。</div>`
+        : todos.map(t => `
+          <div class="req-item">
+            <span class="dot ${t.dot}"></span>
+            <div class="label" style="flex:1;">${esc(t.text)}</div>
+            <button class="btn btn-ghost" onclick="todoJump('${t.area}'${t.bot ? `,'${t.bot}'` : ""})">前往处理</button>
+          </div>`).join("")}
+    </section>`;
+}
+function todoJump(area, bot) {
+  if (bot) { S.selectedBot = bot; S.botView = "detail"; }
+  gotoArea(area);
+}
+
+/* ================= 机器人 ================= */
+const PLAN_TAG = {
+  clean: { label: "已完成", warn: false },
+  degraded: { label: "有降级", warn: true },
+  unsupported: { label: "手动维护", warn: true },
+  apply_required: { label: "待补齐", warn: true },
+  publish_required: { label: "待发布", warn: true },
+  awaiting_review: { label: "待审核", warn: true },
+  blocked: { label: "受阻", warn: true },
+  runtime_pending: { label: "同步中", warn: true },
+};
+const HEADLINE = {
+  clean: "已自动完成",
+  degraded: "已完成，但存在功能降级",
+  unsupported: "当前应用需要手动维护",
+  apply_required: "当前还需要自动补齐配置",
+  publish_required: "自动补齐已完成，还需要提交发布",
+  awaiting_review: "已提交发布，正在等待管理员处理",
+  blocked: "当前还不能继续自动配置",
+};
+const SUMMARY = {
+  clean: "当前飞书应用已经满足自动配置要求。",
+  degraded: "基础配置已完成，但仍有部分可选能力没有开通。",
+  unsupported: "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。",
+  apply_required: "当前检查到了仍需自动补齐的配置差异。",
+  publish_required: "自动补齐后的配置已经写入，仍需提交飞书发布。",
+  awaiting_review: "飞书应用变更已经进入审核流程，当前只需等待结果。",
+  blocked: "当前阻塞项仍未解除，自动配置暂时不能继续。",
+};
+const FEATURE_LISTS = {
+  blocking: [
+    { label: "机器人基础消息能力", detail: "需要在飞书开放平台补齐对应权限后才能继续。" },
+    { label: "卡片交互能力", detail: "需要先在飞书后台开通对应卡片交互回调。" },
+  ],
+  degradable: [
+    { label: "等待输入提醒", detail: "未开通时不影响基础对话，仅缺少等待输入时的提醒。" },
+    { label: "消息 reaction 反馈", detail: "未开通时不影响基础对话，仅缺少消息反馈表情同步。" },
+  ],
+};
+function planTone(plan) {
+  if (plan === "clean") return "good";
+  if (["degraded", "unsupported", "publish_required", "awaiting_review"].includes(plan)) return "warn";
+  return "danger";
+}
+function renderBots() {
+  const mobileCls = (S.botMobileDetail || S.botView === "add") ? "show-detail" : "";
+  return `
+    <h1 class="area-title">机器人</h1>
+    <p class="area-desc">飞书机器人的连接与自动配置</p>
+    <div class="split ${mobileCls}">
+      <div class="list-pane">
+        ${S.bots.map(b => {
+          const tag = b.runtimePending ? PLAN_TAG.runtime_pending : PLAN_TAG[b.plan];
+          return `<button class="list-row ${S.selectedBot === b.id && S.botView === "detail" ? "on" : ""}" onclick="selectBot('${b.id}')">
+            <span class="dot ${tag.warn ? "warn" : "good"}"></span>
+            <span class="row-main">
+              <div class="row-title">${esc(b.name || "未命名机器人")}</div>
+              <div class="row-sub">${esc(b.appId || "未填写 App ID")}</div>
+            </span>
+            <span class="badge ${tag.warn ? "warn" : "good"}">${tag.label}</span>
+          </button>`;
+        }).join("")}
+        <button class="list-row" onclick="openAdd()">
+          <span class="row-main"><div class="row-title" style="color:var(--teal);">添加机器人</div></span>
+        </button>
+      </div>
+      <div class="detail-pane">
+        <button class="btn btn-ghost back-link" onclick="closeMobileDetail()">返回列表</button>
+        ${S.botView === "add" ? renderAddBot() : renderBotDetail()}
+      </div>
+    </div>`;
+}
+function selectBot(id) {
+  S.selectedBot = id; S.botView = "detail"; S.botMobileDetail = true; S.planBusy = ""; S.permState = "idle";
+  render();
+}
+function closeMobileDetail() {
+  S.botMobileDetail = false; S.botView = "detail"; render();
+}
+function renderBotDetail() {
+  const b = currentBot();
+  if (!b) return `<section class="card empty-state">请在左侧选择一个机器人。</section>`;
+  const tag = b.runtimePending ? PLAN_TAG.runtime_pending : PLAN_TAG[b.plan];
+  return `
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h3>${esc(b.name || "未命名机器人")}</h3>
+          <p class="card-sub">连接与启用状态</p>
+        </div>
+        <span class="badge ${tag.warn ? "warn" : "good"}">${tag.label}</span>
+      </div>
+      <dl class="def-list">
+        <div class="def-row"><dt>连接</dt><dd><span class="status-line"><span class="dot ${b.conn === "连接正常" ? "good" : "warn"}"></span>${b.conn}</span></dd></div>
+        <div class="def-row"><dt>启用状态</dt><dd>${b.enabled ? "已启用" : "未启用"}</dd></div>
+        <div class="def-row"><dt>最近验证</dt><dd>${b.verified || "暂未验证"}</dd></div>
+      </dl>
+      ${b.runtimePending ? `<div class="notice warn"><strong>正在同步运行设置</strong>当前机器人还在同步运行设置，请稍后再检查自动配置。</div>` : ""}
+    </section>
+    <section class="card">
+      <h3>自动配置</h3>
+      ${renderPlan(b)}
+    </section>
+    <section class="card">
+      <h3>连接信息</h3>
+      <dl class="def-list">
+        <div class="def-row"><dt>App ID</dt><dd class="mono">${esc(b.appId || "未填写")}</dd></div>
+        <div class="def-row"><dt>飞书后台</dt><dd><a href="javascript:void(0)" onclick="openConsole()">应用权限页面</a> · <a href="javascript:void(0)" onclick="openConsole()">机器人后台</a></dd></div>
+      </dl>
+    </section>
+    <section class="card">
+      <h3>权限检查</h3>
+      ${renderPermCheck()}
+    </section>
+    <section class="card">
+      <h3>危险区</h3>
+      ${b.readOnly
+        ? `<div class="notice warn" style="margin-top:12px;">当前机器人由运行环境提供，不能在这里删除。</div>
+           <div class="btn-row"><button class="btn btn-danger" disabled>删除机器人</button></div>`
+        : `<p class="card-sub" style="margin-top:4px;">删除后将移除这个机器人，此操作不可恢复。</p>
+           <div class="btn-row"><button class="btn btn-danger" onclick="openDeleteBot()">删除机器人</button></div>`}
+    </section>`;
+}
+function renderPlan(b) {
+  if (S.planBusy) return `<div class="loading-line"><span class="spinner"></span>${S.planBusy}</div>`;
+  const st = b.plan;
+  const disabled = b.runtimePending ? "disabled" : "";
+  let html = `<div class="notice ${planTone(st)}"><strong>${HEADLINE[st]}</strong>${SUMMARY[st]}</div>`;
+  if (st === "apply_required" || st === "blocked") html += reqList("还需要处理", "danger", FEATURE_LISTS.blocking);
+  if (st === "degraded") html += reqList("可按降级继续", "warn", FEATURE_LISTS.degradable);
+  const btns = [];
+  if (st === "apply_required" || st === "degraded") btns.push(`<button class="btn btn-primary" ${disabled} onclick="planApply()">自动补齐配置</button>`);
+  if (st === "publish_required") btns.push(`<button class="btn btn-primary" ${disabled} onclick="openPublish()">提交发布</button>`);
+  btns.push(`<button class="btn btn-secondary" onclick="planRefresh()">重新检查</button>`);
+  html += `<div class="btn-row">${btns.join("")}</div>`;
+  return html;
+}
+function reqList(title, tone, items) {
+  return `<div class="req-group">
+    <div class="req-group-title ${tone}">${title}</div>
+    ${items.map(it => `<div class="req-item"><span class="dot ${tone}"></span><div><div class="label">${it.label}</div><div class="detail">${it.detail}</div></div></div>`).join("")}
+  </div>`;
+}
+const MISSING_SCOPES = [
+  { scope: "im:message.group_msg", scopeType: "获取群组消息" },
+  { scope: "im:message", scopeType: "读取与发送消息" },
+  { scope: "im:chat:readonly", scopeType: "读取会话信息" },
+];
+function renderPermCheck() {
+  if (S.permState === "checking") return `<div class="loading-line"><span class="spinner"></span>正在检查权限</div>`;
+  if (S.permState === "ready") return `
+    <div class="notice good"><strong>权限已就绪</strong>机器人已具备所需的全部权限。</div>
+    <div class="btn-row"><button class="btn btn-secondary" onclick="permCheck()">重新检查</button></div>`;
+  if (S.permState === "missing") return `
+    <div class="notice warn"><strong>缺少 ${MISSING_SCOPES.length} 项权限</strong>复制导入 JSON 到飞书后台导入，完成后回到这里重新检查。</div>
+    <div class="req-group">
+      <div class="req-group-title warn">缺失权限</div>
+      ${MISSING_SCOPES.map(s => `<div class="req-item"><span class="dot warn"></span><div><div class="label mono">${s.scope}</div><div class="detail">${s.scopeType}</div></div></div>`).join("")}
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="permCopy()">复制导入 JSON</button>
+      <button class="btn btn-secondary" onclick="permCheck()">重新检查</button>
+    </div>`;
+  if (S.permState === "error") return `
+    <div class="notice danger"><strong>检查失败</strong>请稍后重试。</div>
+    <div class="btn-row"><button class="btn btn-secondary" onclick="permCheck()">重新检查</button></div>`;
+  return `
+    <p class="card-sub" style="margin-top:4px;">检查机器人是否已具备所需的飞书权限。</p>
+    <div class="btn-row"><button class="btn btn-secondary" onclick="permCheck()">检查权限</button></div>`;
+}
+function permCheck() {
+  S.permState = "checking"; render();
+  setTimeout(() => {
+    if (S.permFailOnce) {
+      S.permFailOnce = false; S.permState = "error"; render();
+      showToast("warn", "权限检查失败，请稍后重试。");
+      return;
+    }
+    S.permState = S.permScenario === "missing" ? "missing" : "ready";
+    render();
+  }, 1200);
+}
+function permCopy() { showToast("good", "导入 JSON 已复制，请到飞书后台粘贴导入。"); }
+function planApply() {
+  S.planBusy = "正在自动补齐配置"; render();
+  setTimeout(() => {
+    S.planBusy = ""; currentBot().plan = "publish_required"; render();
+    showToast("good", "自动配置状态已更新。");
+  }, 1800);
+}
+function openPublish() { S.publishModal = true; render(); }
+function closePublish() { S.publishModal = false; render(); }
+function planPublish() {
+  S.publishBusy = true; render();
+  setTimeout(() => {
+    S.publishBusy = false; S.publishModal = false;
+    currentBot().plan = location.hash.includes("plan-review") ? "awaiting_review" : "clean";
+    render();
+    showToast("good", "发布状态已更新。");
+  }, 1500);
+}
+function planRefresh() {
+  S.planBusy = "正在重新检查"; render();
+  setTimeout(() => {
+    S.planBusy = "";
+    const b = currentBot();
+    if (b.plan === "blocked") b.plan = "apply_required";
+    else if (b.plan === "awaiting_review") b.plan = "clean";
+    render();
+  }, 1000);
+}
+function openDeleteBot() { S.deleteBotModal = true; render(); }
+function closeDeleteBot() { S.deleteBotModal = false; render(); }
+function deleteBot() {
+  S.deleteBotBusy = true; render();
+  setTimeout(() => {
+    const name = currentBot().name;
+    S.bots = S.bots.filter(b => b.id !== S.selectedBot);
+    S.selectedBot = S.bots[0] ? S.bots[0].id : "";
+    S.deleteBotBusy = false; S.deleteBotModal = false; S.botMobileDetail = false;
+    render();
+    showToast("good", "机器人已删除。");
+  }, 1200);
+}
+function openConsole() { showToast("warn", "请在浏览器中打开飞书开放平台继续操作。"); }
+
+/* ----- 添加机器人 ----- */
+function openAdd() {
+  S.botView = "add";
+  S.add = { mode: "qr", qr: "idle", appId: "", secret: "", name: "", errs: {}, busy: false, fail: false, retried: false, timer: null, qrScenario: S.add.qrScenario };
+  render();
+  setTimeout(addStartQR, 0);
+}
+function renderAddBot() {
+  let html = `<section class="card">
+    <h3>添加机器人</h3>
+    <p class="card-sub">扫码创建或手动输入接入飞书应用</p>
+    <div class="seg-control">
+      <button type="button" class="${S.add.mode === "qr" ? "on" : ""}" onclick="addSwitchMode('qr')">扫码创建</button>
+      <button type="button" class="${S.add.mode === "manual" ? "on" : ""}" onclick="addSwitchMode('manual')">手动输入</button>
+    </div>`;
+  html += S.add.mode === "qr" ? renderAddQR() : renderAddManual();
+  html += `</section>`;
+  return html;
+}
+function renderAddQR() {
+  if (S.add.qr === "idle" || S.add.qr === "starting") {
+    return `<div class="qr-box"><span class="spinner"></span></div><p class="qr-hint">二维码准备中</p>`;
+  }
+  if (S.add.qr === "expired") {
+    return `<div class="notice warn"><strong>二维码已过期</strong>请重新扫码继续。</div>
+      <div class="btn-row"><button class="btn btn-primary" onclick="addRestartQR()">重新扫码</button>
+      <button class="btn btn-ghost" onclick="addSwitchMode('manual')">改用手动输入</button></div>`;
+  }
+  return `<div class="qr-box"><canvas id="qr-canvas" width="184" height="184"></canvas></div>
+    <p class="qr-hint">用飞书扫一扫，创建并接入机器人</p>
+    <div class="notice warn">正在等待扫码结果…</div>`;
+}
+function renderAddManual() {
+  const a = S.add;
+  return `
+    ${a.fail ? `<div class="notice danger"><strong>连接验证没有通过</strong>请检查 App ID 和 App Secret 后重试。</div>` : ""}
+    <div class="field">
+      <label>App ID</label>
+      <input class="${a.errs.appId ? "invalid" : ""}" placeholder="请输入 App ID" value="${esc(a.appId)}" oninput="S.add.appId=this.value">
+      ${a.errs.appId ? `<div class="err">${a.errs.appId}</div>` : ""}
+    </div>
+    <div class="field">
+      <label>App Secret</label>
+      <input type="password" class="${a.errs.secret ? "invalid" : ""}" placeholder="请输入 App Secret" value="${esc(a.secret)}" oninput="S.add.secret=this.value">
+      ${a.errs.secret ? `<div class="err">${a.errs.secret}</div>` : ""}
+    </div>
+    <div class="field">
+      <label>机器人名称（可选）</label>
+      <input placeholder="例如：运营机器人" value="${esc(a.name)}" oninput="S.add.name=this.value">
+    </div>
+    ${a.busy
+      ? `<div class="loading-line"><span class="spinner"></span>正在连接并验证</div>`
+      : `<div class="btn-row"><button class="btn btn-primary" onclick="addSubmit()">连接并验证</button></div>`}`;
+}
+function addSwitchMode(mode) {
+  if (S.add.mode === mode) return;
+  if (S.add.timer) { clearTimeout(S.add.timer); S.add.timer = null; }
+  S.add.mode = mode; S.add.qr = "idle"; S.add.errs = {}; S.add.fail = false;
+  render();
+  if (mode === "qr") setTimeout(addStartQR, 0);
+}
+function addStartQR() {
+  S.add.qr = "starting"; render();
+  S.add.timer = setTimeout(() => {
+    if (S.add.qrScenario === "expired" && !S.add.retried) { S.add.qr = "expired"; render(); return; }
+    S.add.qr = "pending"; render();
+    S.add.timer = setTimeout(() => addQRSuccess(), 4000);
+  }, 1200);
+}
+function addRestartQR() { S.add.retried = true; addStartQR(); }
+function addQRSuccess() { finishAdd("扫码助手"); }
+function addSubmit() {
+  const a = S.add;
+  a.errs = {};
+  if (!a.appId.trim()) a.errs.appId = "请填写 App ID。";
+  if (!a.secret.trim()) a.errs.secret = "请填写 App Secret。";
+  if (Object.keys(a.errs).length) { render(); return; }
+  a.busy = true; render();
+  setTimeout(() => {
+    a.busy = false;
+    if (S.addFailOnce && !a.retried) { a.retried = true; a.fail = true; render(); return; }
+    finishAdd(a.name.trim() || "未命名机器人");
+  }, 1500);
+}
+function finishAdd(name) {
+  const id = "b" + Date.now();
+  S.bots.push({ id, name, appId: "cli_new" + String(Date.now()).slice(-10), plan: "apply_required", conn: "连接正常", enabled: true, verified: "刚刚", runtimePending: false, readOnly: false });
+  S.selectedBot = id; S.botView = "detail";
+  render();
+  showToast("good", "已完成连接验证。");
+}
+
+/* ================= 对话后端 ================= */
+const CTX_LABEL = { codex_default: "跟随 Codex", price_guard_272k: "272K（费用优先）", extended_1m: "1M" };
+const KIND_LABEL = { native: "本机默认", oauth: "ChatGPT 登录", api: "API" };
+function renderBackends() {
+  return `
+    <h1 class="area-title">对话后端</h1>
+    <p class="area-desc">管理 Claude 与 Codex 的连接配置和上下文偏好</p>
+    <div class="tab-bar">
+      <button type="button" class="${S.backendTab === "claude" ? "on" : ""}" onclick="switchBackend('claude')">Claude</button>
+      <button type="button" class="${S.backendTab === "codex" ? "on" : ""}" onclick="switchBackend('codex')">Codex</button>
+    </div>
+    ${S.backendTab === "claude" ? renderClaude() : renderCodex()}`;
+}
+function switchBackend(tab) { S.backendTab = tab; render(); }
+
+/* ----- Claude ----- */
+function claudeSummary(p) {
+  if (p.builtIn) return p.ctx1m ? "本机默认配置 · 1M" : "本机默认配置";
+  return (p.baseURL || "自定义连接配置") + (p.ctx1m ? " · 1M" : "");
+}
+function renderClaude() {
+  const mobileCls = (S.claudeMobileDetail || S.claudeEditor === "new") ? "show-detail" : "";
+  return `<div class="split ${mobileCls}">
+    <div class="list-pane">
+      ${S.claude.map(p => `
+        <button class="list-row ${S.selectedClaude === p.id && S.claudeEditor !== "new" ? "on" : ""}" onclick="selectClaude('${p.id}')">
+          <span class="dot ${p.builtIn ? "good" : "idle"}"></span>
+          <span class="row-main">
+            <div class="row-title">${esc(p.name || "未命名配置")}</div>
+            <div class="row-sub">${esc(claudeSummary(p))}</div>
+          </span>
+        </button>`).join("")}
+      <button class="list-row" onclick="newClaude()">
+        <span class="row-main"><div class="row-title" style="color:var(--teal);">新增配置</div></span>
+      </button>
+    </div>
+    <div class="detail-pane">
+      <button class="btn btn-ghost back-link" onclick="closeClaudeMobile()">返回列表</button>
+      ${renderClaudeEditor()}
+    </div>
+  </div>`;
+}
+function selectClaude(id) {
+  S.selectedClaude = id; S.claudeEditor = id; S.claudeMobileDetail = true; S.claudeBusy = false;
+  const p = S.claude.find(x => x.id === id);
+  S.claudeDraft = { ...p };
+  render();
+}
+function closeClaudeMobile() { S.claudeMobileDetail = false; S.claudeEditor = null; render(); }
+function newClaude() {
+  S.claudeEditor = "new"; S.claudeMobileDetail = true;
+  S.claudeDraft = { name: "", baseURL: "", token: "", model: "", smallModel: "", effort: "", ctx1m: false, errs: {} };
+  render();
+}
+function renderClaudeEditor() {
+  const d = S.claudeDraft;
+  if (!d) return `<section class="card empty-state">请在左侧选择一个配置。</section>`;
+  const isNew = S.claudeEditor === "new";
+  const isBuiltIn = !isNew && d.builtIn;
+  let html = `<section class="card">
+    <h3>${isNew ? "新增 Claude 配置" : esc(d.name || "未命名配置")}</h3>
+    <p class="card-sub">${isBuiltIn ? "系统默认的 Claude 连接" : isNew ? "填写连接信息" : "连接信息和上下文偏好"}</p>`;
+  if (d.conflict) html += `<div class="notice warn"><strong>保存没有完成</strong>${d.conflictMsg}</div>`;
+  if (isBuiltIn) {
+    html += `<div class="hero-card"><strong>系统默认配置</strong>内建默认开启后使用本机 Claude 连接，只需调整上下文偏好。</div>`;
+  } else {
+    html += `
+      <div class="field"><label>名称</label>
+        <input class="${d.errs?.name ? "invalid" : ""}" placeholder="例如：研发代理" value="${esc(d.name || "")}" oninput="S.claudeDraft.name=this.value">
+        ${d.errs?.name ? `<div class="err">${d.errs.name}</div>` : ""}
+      </div>
+      <div class="field"><label>端点地址</label>
+        <input placeholder="例如：https://api.example.com/v1" value="${esc(d.baseURL || "")}" oninput="S.claudeDraft.baseURL=this.value">
+      </div>
+      <div class="field"><label>认证 Token</label>
+        <input type="password" placeholder="输入认证 Token" value="${esc(d.token || "")}" oninput="S.claudeDraft.token=this.value">
+        ${!isNew ? `<div class="hint">留空表示不修改。</div>` : ""}
+      </div>
+      <div class="field"><label>主模型</label>
+        <input placeholder="留空时跟随 Claude 默认" value="${esc(d.model || "")}" oninput="S.claudeDraft.model=this.value">
+      </div>
+      <div class="field"><label>轻量模型</label>
+        <input placeholder="留空时跟随 Claude 默认" value="${esc(d.smallModel || "")}" oninput="S.claudeDraft.smallModel=this.value">
+      </div>
+      <div class="field"><label>推理强度</label>
+        <select onchange="S.claudeDraft.effort=this.value">
+          <option value="" ${!d.effort ? "selected" : ""}>不设置</option>
+          ${["low", "medium", "high", "max"].map(v => `<option value="${v}" ${d.effort === v ? "selected" : ""}>${v}</option>`).join("")}
+        </select>
+      </div>`;
+  }
+  html += `
+    <div class="check-row">
+      <input type="checkbox" id="claude-ctx" ${d.ctx1m ? "checked" : ""} onchange="S.claudeDraft.ctx1m=this.checked">
+      <label for="claude-ctx" style="font-size:14px;font-weight:400;">使用 1M 上下文</label>
+    </div>`;
+  if (S.claudeBusy) {
+    html += `<div class="loading-line"><span class="spinner"></span>正在保存</div>`;
+  } else {
+    html += `<div class="btn-row">
+      <button class="btn btn-primary" onclick="saveClaude()">${isBuiltIn ? "保存上下文偏好" : isNew ? "保存配置" : "保存修改"}</button>
+      ${!isNew && !isBuiltIn ? `<button class="btn btn-danger" onclick="openDeleteClaude()">删除配置</button>` : ""}
+    </div>`;
+  }
+  html += `</section>`;
+  return html;
+}
+function saveClaude() {
+  const d = S.claudeDraft;
+  const isNew = S.claudeEditor === "new";
+  if (!d.builtIn) {
+    d.errs = {};
+    if (!(d.name || "").trim()) d.errs.name = "请填写名称。";
+    if (Object.keys(d.errs).length) { render(); return; }
+  }
+  S.claudeBusy = true; render();
+  setTimeout(() => {
+    S.claudeBusy = false;
+    if (S.conflictOnce) {
+      S.conflictOnce = false;
+      d.conflict = true;
+      d.conflictMsg = d.builtIn ? "上下文偏好已被其他窗口修改，请重新读取后再保存。" : "这个配置已被其他窗口修改，请重新读取后再保存。";
+      render(); return;
+    }
+    d.conflict = false;
+    if (isNew) {
+      const id = "c" + Date.now();
+      S.claude.push({ id, name: d.name.trim(), builtIn: false, ctx1m: d.ctx1m, baseURL: d.baseURL.trim(), model: d.model, smallModel: d.smallModel, effort: d.effort });
+      S.selectedClaude = id; S.claudeEditor = id;
+      showToast("good", "Claude 配置已创建。");
+    } else {
+      const p = S.claude.find(x => x.id === S.claudeEditor);
+      Object.assign(p, { name: d.name, ctx1m: d.ctx1m, baseURL: d.baseURL, model: d.model, smallModel: d.smallModel, effort: d.effort });
+      showToast("good", p.builtIn ? "上下文偏好已保存。" : "Claude 配置已保存。");
+    }
+    render();
+  }, 1200);
+}
+function openDeleteClaude() { S.deleteClaudeModal = true; render(); }
+function closeDeleteClaude() { S.deleteClaudeModal = false; render(); }
+function deleteClaude() {
+  setTimeout(() => {
+    S.claude = S.claude.filter(p => p.id !== S.claudeEditor);
+    S.selectedClaude = S.claude[0].id; S.claudeEditor = null; S.claudeDraft = null; S.claudeMobileDetail = false;
+    S.deleteClaudeModal = false;
+    render();
+    showToast("good", "Claude 配置已删除。");
+  }, 900);
+  render();
+}
+
+/* ----- Codex ----- */
+function codexSummary(p) {
+  const parts = [KIND_LABEL[p.kind] || "API"];
+  if (!p.available && p.statusTag) parts.push(p.statusTag);
+  if (p.baseURL) parts.push(p.baseURL);
+  if (p.model) parts.push(`模型 ${p.model}`);
+  if (p.effort) parts.push(`推理 ${p.effort}`);
+  parts.push(CTX_LABEL[p.ctx]);
+  return parts.join(" · ");
+}
+function renderCodex() {
+  const mobileCls = (S.codexMobileDetail || S.codexEditor === "new") ? "show-detail" : "";
+  return `<div class="split ${mobileCls}">
+    <div class="list-pane">
+      ${S.codex.map(p => `
+        <button class="list-row ${S.selectedCodex === p.id && S.codexEditor !== "new" ? "on" : ""}" onclick="selectCodex('${p.id}')">
+          <span class="dot ${p.available ? "good" : "warn"}"></span>
+          <span class="row-main">
+            <div class="row-title">${esc(p.name || "未命名 Profile")}</div>
+            <div class="row-sub">${esc(codexSummary(p))}</div>
+          </span>
+        </button>`).join("")}
+      <button class="list-row" onclick="newCodex()">
+        <span class="row-main"><div class="row-title" style="color:var(--teal);">新增 Profile</div></span>
+      </button>
+    </div>
+    <div class="detail-pane">
+      <button class="btn btn-ghost back-link" onclick="closeCodexMobile()">返回列表</button>
+      ${renderCodexEditor()}
+    </div>
+  </div>`;
+}
+function selectCodex(id) {
+  S.selectedCodex = id; S.codexEditor = id; S.codexMobileDetail = true; S.codexBusy = false;
+  const p = S.codex.find(x => x.id === id);
+  S.codexDraft = { ...p };
+  render();
+}
+function closeCodexMobile() { S.codexMobileDetail = false; S.codexEditor = null; render(); }
+function newCodex() {
+  S.codexEditor = "new"; S.codexMobileDetail = true;
+  S.codexDraft = { kind: "api", name: "", baseURL: "", apiKey: "", model: "", review: "", effort: "", ctx: "codex_default", editable: true, contextEditable: true, errs: {} };
+  render();
+}
+function ctxHint(ctx) {
+  if (ctx === "codex_default") return "不覆盖 Codex 默认上下文。";
+  if (ctx === "price_guard_272k") return "按费用优先请求 272K；这不是单次请求费用硬上限。";
+  return "新会话开始后确认实际生效值；可能受模型上限影响。";
+}
+function renderCodexEditor() {
+  const d = S.codexDraft;
+  if (!d) return `<section class="card empty-state">请在左侧选择一个 Profile。</section>`;
+  const isNew = S.codexEditor === "new";
+  const connEditable = isNew || (d.kind === "api" && d.editable);
+  let html = `<section class="card">
+    <h3>${isNew ? "新增 Codex Profile" : esc(d.name || "未命名 Profile")}</h3>
+    <p class="card-sub">${isNew ? "填写 API 连接信息" : connEditable ? "连接信息和上下文偏好" : d.contextEditable ? "连接身份不可编辑，上下文偏好可单独调整。" : "连接身份和上下文偏好不可编辑。"}</p>`;
+  if (!connEditable) {
+    html += `<div class="hero-card"><strong>${KIND_LABEL[d.kind]}</strong>${d.kind === "oauth" ? "连接身份由 Codex 登录管理。" : "连接身份由本机 Codex 管理。"}</div>`;
+  } else {
+    html += `
+      <div class="field"><label>名称</label>
+        <input class="${d.errs?.name ? "invalid" : ""}" placeholder="例如：研发代理" value="${esc(d.name || "")}" oninput="S.codexDraft.name=this.value">
+        ${d.errs?.name ? `<div class="err">${d.errs.name}</div>` : ""}
+      </div>
+      <div class="field"><label>端点地址</label>
+        <input class="${d.errs?.baseURL ? "invalid" : ""}" placeholder="例如：https://api.example.com/v1" value="${esc(d.baseURL || "")}" oninput="S.codexDraft.baseURL=this.value">
+        ${d.errs?.baseURL ? `<div class="err">${d.errs.baseURL}</div>` : ""}
+      </div>
+      <div class="field"><label>API Key</label>
+        <input type="password" class="${d.errs?.apiKey ? "invalid" : ""}" placeholder="输入新的 API Key" value="${esc(d.apiKey || "")}" oninput="S.codexDraft.apiKey=this.value">
+        ${d.errs?.apiKey ? `<div class="err">${d.errs.apiKey}</div>` : !isNew ? `<div class="hint">留空表示不修改。</div>` : ""}
+      </div>
+      <div class="field"><label>主模型</label>
+        <input class="${d.errs?.model ? "invalid" : ""}" placeholder="例如：gpt-5.4" value="${esc(d.model || "")}" oninput="S.codexDraft.model=this.value">
+        ${d.errs?.model ? `<div class="err">${d.errs.model}</div>` : ""}
+      </div>
+      <div class="field"><label>审阅模型</label>
+        <input placeholder="留空时跟随主模型" value="${esc(d.review || "")}" oninput="S.codexDraft.review=this.value">
+      </div>
+      <div class="field"><label>推理强度</label>
+        <input class="${d.errs?.effort ? "invalid" : ""}" list="effort-options" placeholder="例如：high" value="${esc(d.effort || "")}" oninput="S.codexDraft.effort=this.value">
+        <datalist id="effort-options"><option value="low"></option><option value="medium"></option><option value="high"></option><option value="xhigh"></option></datalist>
+        ${d.errs?.effort ? `<div class="err">${d.errs.effort}</div>` : ""}
+      </div>`;
+  }
+  if (d.conflict) html += `<div class="notice warn"><strong>保存没有完成</strong>这个 Profile 已被其他窗口修改，请重新读取后再保存。</div>`;
+  html += `
+    <div class="field"><label>上下文大小</label>
+      <select ${!d.contextEditable ? "disabled" : ""} onchange="S.codexDraft.ctx=this.value;render()">
+        ${Object.entries(CTX_LABEL).map(([v, l]) => `<option value="${v}" ${d.ctx === v ? "selected" : ""}>${l}</option>`).join("")}
+      </select>
+      <div class="hint">${ctxHint(d.ctx)}</div>
+    </div>`;
+  if (S.codexBusy) {
+    html += `<div class="loading-line"><span class="spinner"></span>正在保存</div>`;
+  } else {
+    const submitDisabled = !connEditable && !d.contextEditable;
+    html += `<div class="btn-row">
+      <button class="btn btn-primary" ${submitDisabled ? "disabled" : ""} onclick="saveCodex()">${connEditable ? (isNew ? "保存 Profile" : "保存修改") : "保存上下文偏好"}</button>
+      ${!isNew && d.deletable ? `<button class="btn btn-danger" onclick="openDeleteCodex()">删除 Profile</button>` : ""}
+    </div>`;
+  }
+  html += `</section>`;
+  return html;
+}
+function saveCodex() {
+  const d = S.codexDraft;
+  const isNew = S.codexEditor === "new";
+  const connEditable = isNew || (d.kind === "api" && d.editable);
+  if (connEditable) {
+    d.errs = {};
+    if (!(d.name || "").trim()) d.errs.name = "请填写名称。";
+    if (!(d.baseURL || "").trim()) d.errs.baseURL = "请填写端点地址。";
+    if (isNew && !(d.apiKey || "").trim()) d.errs.apiKey = "请填写 API Key。";
+    if (!(d.model || "").trim()) d.errs.model = "请填写主模型。";
+    if (!(d.effort || "").trim()) d.errs.effort = "请填写推理强度。";
+    if (Object.keys(d.errs).length) { render(); return; }
+  }
+  S.codexBusy = true; render();
+  setTimeout(() => {
+    S.codexBusy = false;
+    if (S.conflictOnce) {
+      S.conflictOnce = false;
+      d.conflict = true;
+      render(); return;
+    }
+    d.conflict = false;
+    if (isNew) {
+      const id = "cx" + Date.now();
+      S.codex.push({ id, kind: "api", name: d.name.trim(), editable: true, contextEditable: true, deletable: true, available: true, statusTag: "", baseURL: d.baseURL.trim(), model: d.model.trim(), review: d.review, effort: d.effort.trim(), ctx: d.ctx });
+      S.selectedCodex = id; S.codexEditor = id;
+      showToast("good", "Codex Profile 已创建。");
+    } else {
+      const p = S.codex.find(x => x.id === S.codexEditor);
+      Object.assign(p, { name: d.name, baseURL: d.baseURL, model: d.model, review: d.review, effort: d.effort, ctx: d.ctx });
+      showToast("good", connEditable ? "Codex Profile 已保存。" : "上下文偏好已保存。");
+    }
+    render();
+  }, 1200);
+}
+function openDeleteCodex() { S.deleteCodexModal = true; render(); }
+function closeDeleteCodex() { S.deleteCodexModal = false; render(); }
+function deleteCodex() {
+  setTimeout(() => {
+    S.codex = S.codex.filter(p => p.id !== S.codexEditor);
+    S.selectedCodex = S.codex[0].id; S.codexEditor = null; S.codexDraft = null; S.codexMobileDetail = false;
+    S.deleteCodexModal = false;
+    render();
+    showToast("good", "Codex Profile 已删除。");
+  }, 900);
+  render();
+}
+
+/* ================= 系统 ================= */
+function renderSystem() {
+  return `
+    <h1 class="area-title">系统</h1>
+    <p class="area-desc">本机集成、会话信息与存储维护</p>
+    <section class="card">
+      <h3>自动运行</h3>
+      <div class="status-line" style="margin-top:12px;">
+        <span class="dot ${S.autostart === "enabled" ? "good" : "idle"}"></span>
+        <span>${S.autostart === "enabled" ? "当前已启用。" : S.autostart === "busy" ? "正在启用…" : "当前未启用。"}</span>
+      </div>
+      ${S.autostart === "disabled" ? `<div class="btn-row"><button class="btn btn-primary" onclick="autostartApply()">启用自动运行</button></div>` : ""}
+    </section>
+    <section class="card">
+      <h3>VS Code 集成</h3>
+      <div class="status-line" style="margin-top:12px;">
+        <span class="dot ${S.vscode === "ready" ? "good" : "warn"}"></span>
+        <span>${S.vscode === "ready" ? "当前已接入。" : S.vscode === "busy" ? "正在检查并修复…" : "检测到 VS Code 集成未完成，请先修复。"}</span>
+      </div>
+      ${S.vscode === "needs-fix" ? `<div class="btn-row"><button class="btn btn-primary" onclick="vscodeFix()">重新检查并修复</button></div>` : ""}
+    </section>
+    <section class="card">
+      <h3>存储维护</h3>
+      <p class="card-sub">清理本地缓存的旧文件</p>
+      ${S.storageWarn ? `<div class="notice warn">${S.storageWarn}</div>` : ""}
+      ${storageRow("preview", "预览文件", "清理旧预览")}
+      ${storageRow("images", "图片暂存", "清理旧图片")}
+      ${storageRow("logs", "日志文件", "清理一天前日志")}
+    </section>
+    <section class="card">
+      <h3>会话信息</h3>
+      <dl class="def-list">
+        <div class="def-row"><dt>访问方式</dt><dd><span class="status-line"><span class="dot good"></span>本机直连（受信任）</span></dd></div>
+      </dl>
+    </section>`;
+}
+function storageRow(key, title, btnLabel) {
+  const st = S.storage[key];
+  return `<div class="req-item">
+    <div style="flex:1;">
+      <div class="label">${title}</div>
+      <div class="detail">${st.files} 个文件，约 ${st.mb} MB</div>
+    </div>
+    ${st.busy
+      ? `<span class="spinner" style="margin-top:7px;"></span>`
+      : `<button class="btn btn-secondary" ${st.files === 0 ? "disabled" : ""} onclick="storageCleanup('${key}')">${btnLabel}</button>`}
+  </div>`;
+}
+function autostartApply() {
+  S.autostart = "busy"; render();
+  setTimeout(() => { S.autostart = "enabled"; render(); }, 1200);
+}
+function vscodeFix() {
+  S.vscode = "busy"; render();
+  setTimeout(() => { S.vscode = "ready"; render(); }, 1500);
+}
+function storageCleanup(key) {
+  const st = S.storage[key];
+  st.busy = true; S.storageWarn = ""; render();
+  setTimeout(() => {
+    st.busy = false;
+    if (key === "preview" && S.storagePartial) {
+      S.storagePartial = false;
+      st.files = Math.floor(st.files / 2); st.mb = Math.floor(st.mb / 2);
+      S.storageWarn = "部分预览文件暂时没有清理成功。";
+    } else {
+      st.files = 0; st.mb = 0;
+      const msg = key === "preview" ? "旧预览文件已清理。" : key === "images" ? "旧图片已清理。" : "一天前的日志已清理。";
+      showToast("good", msg);
+    }
+    render();
+  }, 1500);
+}
+
+/* ================= 对话框 ================= */
+function renderModal() {
+  const root = document.getElementById("modal-root");
+  let html = "";
+  if (S.publishModal) {
+    html = `<div class="modal-backdrop" role="presentation">
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <h3>确认提交发布</h3>
+        <p>这会把当前自动补齐后的飞书配置提交到发布流程。若飞书要求管理员审核，后续状态会显示为“等待管理员处理”。</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closePublish()" ${S.publishBusy ? "disabled" : ""}>取消</button>
+          <button class="btn btn-primary" onclick="planPublish()" ${S.publishBusy ? "disabled" : ""}>${S.publishBusy ? "正在提交…" : "确认提交"}</button>
+        </div>
+      </div>
+    </div>`;
+  } else if (S.deleteBotModal) {
+    const b = currentBot();
+    html = `<div class="modal-backdrop" role="presentation">
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <h3>确认删除机器人</h3>
+        <p>删除后将移除“${esc(b?.name || "当前机器人")}”，此操作不可恢复。</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeDeleteBot()" ${S.deleteBotBusy ? "disabled" : ""}>取消</button>
+          <button class="btn btn-danger" onclick="deleteBot()" ${S.deleteBotBusy ? "disabled" : ""}>${S.deleteBotBusy ? "正在删除…" : "确认删除"}</button>
+        </div>
+      </div>
+    </div>`;
+  } else if (S.deleteClaudeModal) {
+    html = `<div class="modal-backdrop" role="presentation">
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <h3>确认删除 Claude 配置</h3>
+        <p>删除后将移除“${esc(S.claudeDraft?.name || "当前配置")}”，此操作不可恢复。</p>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeDeleteClaude()">取消</button>
+          <button class="btn btn-danger" onclick="deleteClaude()">确认删除</button>
+        </div>
+      </div>
+    </div>`;
+  } else if (S.deleteCodexModal) {
+    const refs = S.refsOnDelete ? [
+      { kind: "会话", name: "修复登录过期问题", reason: "正在使用" },
+      { kind: "队列", name: "nightly 数据同步", reason: "等待处理" },
+    ] : [];
+    html = `<div class="modal-backdrop" role="presentation">
+      <div class="modal-card" role="dialog" aria-modal="true">
+        <h3>确认删除 Codex Profile</h3>
+        <p>删除后将移除“${esc(S.codexDraft?.name || "当前 Profile")}”，此操作不可恢复。</p>
+        ${refs.length ? `<div class="notice warn"><strong>这个 Profile 仍在使用中</strong>删除前请确认以下引用可以中断。</div>
+          <ul class="ref-list">${refs.map(r => `<li><span class="badge warn">${r.kind}</span><span style="flex:1;">${esc(r.name.trim())}</span><span style="color:var(--text-muted);">${r.reason}</span></li>`).join("")}</ul>` : ""}
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeDeleteCodex()">取消</button>
+          <button class="btn btn-danger" onclick="deleteCodex()">确认删除</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  root.innerHTML = html;
+}
+
+/* ================= 假二维码 ================= */
+function drawFakeQR(cv) {
+  const ctx = cv.getContext("2d");
+  const n = 25, cell = 184 / n;
+  ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, 184, 184);
+  ctx.fillStyle = "#112B39";
+  let seed = 20260801;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const inFinder = (x, y) => (x < 7 && y < 7) || (x >= n - 7 && y < 7) || (x < 7 && y >= n - 7);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    if (inFinder(x, y)) continue;
+    if (rnd() > 0.52) ctx.fillRect(x * cell, y * cell, cell, cell);
+  }
+  const finder = (fx, fy) => {
+    ctx.fillStyle = "#112B39"; ctx.fillRect(fx * cell, fy * cell, 7 * cell, 7 * cell);
+    ctx.fillStyle = "#fff"; ctx.fillRect((fx + 1) * cell, (fy + 1) * cell, 5 * cell, 5 * cell);
+    ctx.fillStyle = "#112B39"; ctx.fillRect((fx + 2) * cell, (fy + 2) * cell, 3 * cell, 3 * cell);
+  };
+  finder(0, 0); finder(n - 7, 0); finder(0, n - 7);
+}
+
+/* ================= 启动 ================= */
+S.claudeDraft = { ...S.claude[0] };
+S.claudeEditor = "default";
+S.codexDraft = { ...S.codex[2] };
+S.codexEditor = "cx3";
+render();
+</script>
+</body>
+</html>
