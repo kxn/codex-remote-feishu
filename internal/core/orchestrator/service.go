@@ -587,6 +587,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			}
 		}
 		s.touchThread(thread)
+		if strings.TrimSpace(event.TurnID) != "" {
+			s.maybeActivateReviewSession(instanceID, event)
+		}
 		return s.filterEventsForSurfaceVisibility(append(preface, s.threadFocusEvents(instanceID, event.ThreadID)...))
 	case agentproto.EventThreadRuntimeStatusUpdated:
 		thread := s.ensureThread(inst, event.ThreadID)

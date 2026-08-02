@@ -157,6 +157,98 @@ func TestReviewSessionTurnStartActivatesWithoutStealingSelection(t *testing.T) {
 	}
 }
 
+func TestReviewSessionLateThreadSourceUpdateActivatesPendingSessionAndRoutesFinal(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	inst := svc.root.Instances["inst-1"]
+	inst.Threads["thread-review"] = &state.ThreadRecord{
+		ThreadID: "thread-review",
+		Name:     "审阅线程",
+		Preview:  "审阅中",
+		CWD:      repoRoot,
+		Loaded:   true,
+	}
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:           state.ReviewSessionPhasePending,
+		ParentThreadID:  "thread-main",
+		SourceMessageID: "msg-review-start",
+	}
+
+	earlyEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventThreadDiscovered,
+		ThreadID: "thread-review",
+		Name:     "审阅线程",
+		Preview:  "审阅中",
+		CWD:      repoRoot,
+		Metadata: map[string]any{
+			"forkedFromId": "thread-main",
+		},
+	})
+	if len(earlyEvents) != 0 {
+		t.Fatalf("expected early unclassified review thread discovery to stay quiet, got %#v", earlyEvents)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.Phase != state.ReviewSessionPhasePending {
+		t.Fatalf("expected unclassified thread discovery to keep pending session, got %#v", surface.ReviewSession)
+	}
+
+	metadataEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventThreadDiscovered,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata: map[string]any{
+			"forkedFromId": "thread-main",
+			"threadSource": &agentproto.ThreadSourceRecord{
+				Kind:           agentproto.ThreadSourceKindReview,
+				Name:           "review",
+				ParentThreadID: "thread-main",
+			},
+		},
+	})
+	if len(metadataEvents) != 0 {
+		t.Fatalf("expected late review metadata update to stay quiet, got %#v", metadataEvents)
+	}
+	if surface.ReviewSession == nil ||
+		surface.ReviewSession.Phase != state.ReviewSessionPhaseActive ||
+		surface.ReviewSession.ParentThreadID != "thread-main" ||
+		surface.ReviewSession.ReviewThreadID != "thread-review" ||
+		surface.ReviewSession.ActiveTurnID != "turn-review-1" {
+		t.Fatalf("expected late review metadata to activate pending review session, got %#v", surface.ReviewSession)
+	}
+	if surface.SelectedThreadID != "thread-main" {
+		t.Fatalf("expected late review metadata not to steal parent selection, got %q", surface.SelectedThreadID)
+	}
+
+	itemEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "No findings."},
+	})
+	if len(itemEvents) != 0 {
+		t.Fatalf("expected completed agent message to wait for final render, got %#v", itemEvents)
+	}
+
+	finalEvents := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	var finalBlock *render.Block
+	for i := range finalEvents {
+		if finalEvents[i].Block != nil && finalEvents[i].Block.Final {
+			finalBlock = finalEvents[i].Block
+		}
+	}
+	if finalBlock == nil || finalBlock.Text != "No findings." {
+		t.Fatalf("expected final review block on surface, got %#v", finalEvents)
+	}
+}
+
 func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")

@@ -66,8 +66,11 @@ func TestObserveReviewStartResultMarksDetachedReviewThreadAndTurnInitiator(t *te
 	if err != nil {
 		t.Fatalf("observe review/start result: %v", err)
 	}
-	if !result.Suppress || len(result.Events) != 0 {
+	if !result.Suppress || len(result.Events) != 1 {
 		t.Fatalf("expected suppressed review/start response, got %#v", result)
+	}
+	if result.Events[0].Kind != agentproto.EventThreadDiscovered || result.Events[0].ThreadID != "thread-review" || result.Events[0].TurnID != "turn-review-1" {
+		t.Fatalf("unexpected review metadata event: %#v", result.Events[0])
 	}
 
 	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-review","cwd":"/tmp/project"}}}`))
@@ -98,6 +101,57 @@ func TestObserveReviewStartResultMarksDetachedReviewThreadAndTurnInitiator(t *te
 	}
 	if turnStarted.Events[0].Initiator.Kind != agentproto.InitiatorRemoteSurface || turnStarted.Events[0].Initiator.SurfaceSessionID != "surface-1" {
 		t.Fatalf("unexpected review turn initiator: %#v", turnStarted.Events[0].Initiator)
+	}
+}
+
+func TestObserveReviewStartResultBackfillsDetachedReviewThreadWhenThreadStartedArrivesFirst(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.TranslateCommand(agentproto.Command{
+		Kind:   agentproto.CommandReviewStart,
+		Origin: agentproto.Origin{Surface: "surface-1"},
+		Target: agentproto.Target{ThreadID: "thread-main"},
+		Review: agentproto.ReviewRequest{
+			Delivery: agentproto.ReviewDeliveryDetached,
+			Target:   agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindCommit, CommitSHA: "ca015951cc1b21ab351c7a941923af7ae03b39c5"},
+		},
+	}); err != nil {
+		t.Fatalf("translate review start: %v", err)
+	}
+
+	started, err := tr.ObserveServer([]byte(`{"method":"thread/started","params":{"thread":{"id":"thread-review","cwd":"/tmp/project","forkedFromId":"thread-main","source":null}}}`))
+	if err != nil {
+		t.Fatalf("observe early review thread started: %v", err)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one early thread discovered event, got %#v", started.Events)
+	}
+	if _, ok := started.Events[0].Metadata["threadSource"]; ok {
+		t.Fatalf("did not expect review source before review/start result, got %#v", started.Events[0].Metadata)
+	}
+
+	result, err := tr.ObserveServer([]byte(`{"id":"relay-review-start-0","result":{"turn":{"id":"turn-review-1"},"reviewThreadId":"thread-review"}}`))
+	if err != nil {
+		t.Fatalf("observe late review/start result: %v", err)
+	}
+	if !result.Suppress {
+		t.Fatalf("expected suppressed review/start response, got %#v", result)
+	}
+	if len(result.Events) != 1 {
+		t.Fatalf("expected late review metadata update event, got %#v", result.Events)
+	}
+	event := result.Events[0]
+	if event.Kind != agentproto.EventThreadDiscovered || event.ThreadID != "thread-review" || event.TurnID != "turn-review-1" {
+		t.Fatalf("unexpected late review metadata event: %#v", event)
+	}
+	if event.Initiator.Kind != agentproto.InitiatorRemoteSurface || event.Initiator.SurfaceSessionID != "surface-1" {
+		t.Fatalf("unexpected late review metadata initiator: %#v", event.Initiator)
+	}
+	if event.Metadata["forkedFromId"] != "thread-main" {
+		t.Fatalf("expected parent fork metadata, got %#v", event.Metadata)
+	}
+	source, ok := event.Metadata["threadSource"].(*agentproto.ThreadSourceRecord)
+	if !ok || source == nil || source.Kind != agentproto.ThreadSourceKindReview || source.ParentThreadID != "thread-main" {
+		t.Fatalf("expected detached review source metadata, got %#v", event.Metadata["threadSource"])
 	}
 }
 

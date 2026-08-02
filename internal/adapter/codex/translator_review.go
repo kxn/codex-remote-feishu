@@ -94,3 +94,25 @@ func (t *Translator) applyPendingReviewThread(record *agentproto.ThreadSnapshotR
 		record.Source.ParentThreadID = strings.TrimSpace(pending.ParentThreadID)
 	}
 }
+
+func pendingReviewThreadDiscoveredEvent(reviewThreadID, turnID string, pending pendingReviewStart) (agentproto.Event, bool) {
+	reviewThreadID = strings.TrimSpace(reviewThreadID)
+	parentThreadID := strings.TrimSpace(pending.ThreadID)
+	if reviewThreadID == "" || parentThreadID == "" {
+		return agentproto.Event{}, false
+	}
+	return agentproto.Event{
+		Kind:      agentproto.EventThreadDiscovered,
+		ThreadID:  reviewThreadID,
+		TurnID:    strings.TrimSpace(turnID),
+		Initiator: pending.Initiator,
+		Metadata: map[string]any{
+			"forkedFromId": parentThreadID,
+			"threadSource": &agentproto.ThreadSourceRecord{
+				Kind:           agentproto.ThreadSourceKindReview,
+				Name:           "review",
+				ParentThreadID: parentThreadID,
+			},
+		},
+	}, true
+}

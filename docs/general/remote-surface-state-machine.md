@@ -428,10 +428,10 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    5. `SourceMessageID`
    6. `TargetLabel`
    7. `LastReviewText`
-2. review thread 当前必须有显式 `ThreadRecord.Source.Kind=review`；parent thread 关系优先来自 `ForkedFromID`，其次来自 `ThreadSourceRecord.ParentThreadID`。
+2. review thread 当前必须有显式 `ThreadRecord.Source.Kind=review`；parent thread 关系优先来自 `ForkedFromID`，其次来自 `ThreadSourceRecord.ParentThreadID`。若 Codex 先发出不带 `threadSource` 的 `thread/started`，随后 `review/start` result 再带回 `reviewThreadId` / `turn.id`，translator 会补发一条只承载 review metadata 的 `thread.discovered(remote_surface)`，由 orchestrator merge 到同一个 thread record。
 3. 当前激活条件不是“点了某个前台按钮”，而是更底层的 runtime 事实：
    1. 同一 attached instance 上已知某个 review thread
-   2. 该 review thread 命中了当前 surface 的 review runtime 事件：优先是 `turn.started(remote_surface)`；若上游这轮 `turn.started` 还没带回 surface 归属，则 `entered_review_mode` / `exited_review_mode` 生命周期 item 也会把 pending session 提升成 active
+   2. 该 review thread 命中了当前 surface 的 review runtime 事件：优先是 `turn.started(remote_surface)`；若 `review/start` result 晚于无 source 的 `thread/started`，则带 `reviewThreadId` / `turn.id` 的 late `thread.discovered(remote_surface)` 也能把 pending session 提升成 active；若上游这轮 `turn.started` 还没带回 surface 归属，则 `entered_review_mode` / `exited_review_mode` 生命周期 item 也会把 pending session 提升成 active
 4. `SelectedThreadID == ParentThreadID` 是 detached review session 的选择不变量，不再是判断 `ReviewSession` 是否存在的唯一依据。若旧版本或异常投影曾把 `SelectedThreadID` 污染成 `ReviewThreadID`，后续审阅文本、`放弃审阅`、`按审阅意见继续修改` 会先尝试恢复 parent selection，再继续处理。
 5. 新发起 review 时，若当前候选线程本身是 `source=review`，服务端必须先回溯到它的 parent thread，再把 `review.start` 发给 parent；review thread 不能作为新的 review 启动目标。
 6. `V1 Active` 不会把 surface route 从 `pinned/follow` 改成新的 route 值；review session 只是额外改写“普通文本该发到哪个 execution thread”。若用户进入 `/new` 的 `new_thread_ready`，空闲 review session 会先被清掉，避免首条新会话文本继续落到 review thread。
@@ -1405,7 +1405,7 @@ E3 Running
    4. detour 文本当前会显式绕过 reply auto-steer、implicit `/new` 准备态推进，以及 normal/vscode 的 unbound 输入门禁；运行时只把“当前选中 thread 的 cwd / prepared cwd / workspace root”当作临时会话的 base cwd，不会因此改写 surface 自己的 `SelectedThreadID` 或 `RouteMode`
    5. detour turn 收尾后，surface 仍保持原先的 route / selected thread；当前只会在同一 reply lane（或原本的顶层 append lane）追加一条 `detour_returned` notice，提示“临时会话已结束，已切回原会话。”
 23. detached review session 当前复用同一套“execution thread 与 surface selected thread 分离”的承接方式，但语义比 detour 更强：
-   1. review thread 必须先带 `source=review`；surface 会优先在 `turn.started(remote_surface)` 时把它识别成 review session，若这轮 `turn.started` 还没拿到 remote-surface 归属，则会退回由 `entered_review_mode` / `exited_review_mode` 生命周期 item 激活同一个 pending session
+   1. review thread 必须先带 `source=review`；surface 会优先在 `turn.started(remote_surface)` 时把它识别成 review session。若 Codex 的 `thread/started` 早于 `review/start` result 且暂时没有 `threadSource`，translator 会在 result 返回后按 `reviewThreadId` / `turn.id` 补一条 review metadata `thread.discovered(remote_surface)`，orchestrator 会先 merge source 再激活 pending session；若这轮 `turn.started` 还没拿到 remote-surface 归属，则会退回由 `entered_review_mode` / `exited_review_mode` 生命周期 item 激活同一个 pending session
    2. 进入 review session 后，instance 级 `ActiveTurnID/ActiveThreadID` 会跟随 review thread，这保证 `/stop`、running 判定和 request gate 仍能命中真正的 review turn
    3. surface 自己的 `SelectedThreadID` 仍保持 parent thread；因此 review turn 不会污染后续普通 attach/resume 默认目标。`ReviewSession` 的合法性不再依赖 `SelectedThreadID == ParentThreadID`，但这是正常不变量；若旧污染状态里 selected thread 已经变成 review thread，继续审阅文本、放弃审阅、按审阅意见继续修改都会先恢复到 parent selection。若此时用户重新发起 `/review uncommitted` 或 `/review commit <sha>`，启动目标也会先从 review thread 回溯到 parent thread。`/new` 进入 `new_thread_ready` 会清掉空闲 review session
    4. 当 review session 处于 `ActiveTurnID != ""` 时，它也属于 `surfaceHasLiveRemoteWork`；普通文本会先排队，直到当前 review turn 收尾

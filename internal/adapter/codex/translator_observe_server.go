@@ -124,7 +124,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}, nil
 			}
 			turnID := lookupString(message, "result", "turn", "id")
-			reviewThreadID := lookupString(message, "result", "reviewThreadId")
+			explicitReviewThreadID := strings.TrimSpace(lookupString(message, "result", "reviewThreadId"))
+			reviewThreadID := explicitReviewThreadID
 			if reviewThreadID == "" {
 				reviewThreadID = pending.ThreadID
 			}
@@ -138,7 +139,13 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 			}
 			t.debugf("observe server review/start result: request=%s parentThread=%s reviewThread=%s turn=%s initiator=%s", requestID, pending.ThreadID, reviewThreadID, turnID, pending.Initiator.Kind)
-			return Result{Suppress: true}, nil
+			events := []agentproto.Event(nil)
+			if explicitReviewThreadID != "" {
+				if event, ok := pendingReviewThreadDiscoveredEvent(explicitReviewThreadID, turnID, pending); ok {
+					events = append(events, event)
+				}
+			}
+			return Result{Suppress: true, Events: events}, nil
 		}
 		if pending, exists := t.pendingThreadCreate[requestID]; exists {
 			delete(t.pendingThreadCreate, requestID)
