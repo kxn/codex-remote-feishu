@@ -193,7 +193,7 @@ try {
     Fail "installed binary version mismatch: $versionOutput"
   }
 
-  & $liveBinary packaged-install-probe `
+  & $prodBinary packaged-install-probe `
     -base-dir $baseDir `
     -current-version $Version `
     -format json | Set-Content -LiteralPath (Join-Path $resultDir "repair-probe.json")
@@ -203,7 +203,7 @@ try {
   Assert-JsonField (Join-Path $resultDir "repair-probe.json") "mode" "repair"
   Assert-JsonField (Join-Path $resultDir "repair-probe.json") "sameVersion" "True"
 
-  & $liveBinary packaged-install `
+  & $prodBinary packaged-install `
     -state-path $statePath `
     -binary $prodBinary `
     -install-source release `
@@ -217,7 +217,7 @@ try {
   Assert-JsonField (Join-Path $resultDir "repair.json") "mode" "repair"
   Assert-JsonField $statePath "currentVersion" $Version
 
-  & $liveBinary packaged-install `
+  & $upgradeBinary packaged-install `
     -state-path $statePath `
     -binary $upgradeBinary `
     -install-source release `

@@ -220,14 +220,14 @@ assert_json_field "${state_path}" "currentTrack" "production"
 assert_json_field "${state_path}" "serviceManager" "launchd_user"
 "${live_binary}" version | grep -Fx "${version}" >/dev/null
 
-HOME="${base_dir}" "${live_binary}" packaged-install-probe \
+HOME="${base_dir}" "${prod_binary}" packaged-install-probe \
   -base-dir "${base_dir}" \
   -current-version "${version}" \
   -format json > "${result_dir}/repair-probe.json"
 assert_json_field "${result_dir}/repair-probe.json" "mode" "repair"
 assert_json_field "${result_dir}/repair-probe.json" "sameVersion" "True"
 
-HOME="${base_dir}" "${live_binary}" packaged-install \
+HOME="${base_dir}" "${prod_binary}" packaged-install \
   -state-path "${state_path}" \
   -binary "${prod_binary}" \
   -install-source release \
@@ -238,7 +238,7 @@ HOME="${base_dir}" "${live_binary}" packaged-install \
 assert_json_field "${result_dir}/repair.json" "mode" "repair"
 assert_json_field "${state_path}" "currentVersion" "${version}"
 
-HOME="${base_dir}" "${live_binary}" packaged-install \
+HOME="${base_dir}" "${upgrade_binary}" packaged-install \
   -state-path "${state_path}" \
   -binary "${upgrade_binary}" \
   -install-source release \
