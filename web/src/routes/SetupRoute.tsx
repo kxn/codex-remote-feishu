@@ -1138,7 +1138,7 @@ export function SetupRoute() {
             ) : null}
             {autoConfigStage.allowedActions?.includes("defer") ? (
               <button
-                className="ghost-button"
+                className="secondary-button"
                 type="button"
                 disabled={busy}
                 onClick={() => void deferAutoConfig()}
@@ -1207,7 +1207,7 @@ export function SetupRoute() {
         <div className="button-row">
           {activeConsoleLinks?.bot ? (
             <a
-              className="secondary-button"
+              className="ghost-button"
               href={activeConsoleLinks.bot}
               rel="noreferrer"
               target="_blank"
@@ -1227,7 +1227,7 @@ export function SetupRoute() {
           ) : null}
           {menuStage.status === "complete" ? (
             <button
-              className="ghost-button"
+              className="primary-button"
               type="button"
               onClick={() => goToNextStep("menu")}
             >
@@ -1320,19 +1320,20 @@ export function SetupRoute() {
       <main className="column">
         {notice ? <Toast tone={notice.tone} message={notice.message} /> : null}
         {renderWorkflowGuidance(workflow)}
-        {setupActs.map((act) => {
-          if (act.id === currentAct) {
-            return (
-              <section key={act.id} className="card">
-                {renderCurrentStep()}
-              </section>
-            );
-          }
-          return renderActSummaryRow(act.id);
-        })}
         {currentStep === "done" ? (
           <section className="card done-card">{renderDoneStep()}</section>
-        ) : null}
+        ) : (
+          setupActs.map((act) => {
+            if (act.id === currentAct) {
+              return (
+                <section key={act.id} className="card">
+                  {renderCurrentStep()}
+                </section>
+              );
+            }
+            return renderActSummaryRow(act.id);
+          })
+        )}
       </main>
 
       {publishConfirmOpen ? (
@@ -1349,7 +1350,7 @@ export function SetupRoute() {
             </p>
             <div className="modal-actions">
               <button
-                className="ghost-button"
+                className="secondary-button"
                 type="button"
                 onClick={() => setPublishConfirmOpen(false)}
               >

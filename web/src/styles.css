@@ -143,7 +143,7 @@ a:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
+  height: 36px;
   padding: 0 16px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -358,6 +358,12 @@ a:hover {
 .notice-banner strong {
   display: block;
   font-weight: 500;
+}
+
+.notice .sub,
+.notice-banner .sub {
+  margin-top: 4px;
+  font-size: 13px;
 }
 
 .notice.good,
@@ -670,10 +676,11 @@ a:hover {
 }
 
 .scan-preview {
-  display: grid;
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
-  gap: 24px;
-  align-items: start;
+  display: block;
+}
+
+.scan-preview > .detail-stack {
+  margin-top: 12px;
 }
 
 .scan-frame,
@@ -1208,6 +1215,11 @@ a:hover {
   padding: 24px 24px 0;
 }
 
+.setup-page {
+  min-height: 100vh;
+  background: var(--cream);
+}
+
 .progress-wrap {
   max-width: 680px;
   margin: 0 auto;
@@ -1383,6 +1395,11 @@ a:hover {
   font-size: 12px;
 }
 
+.opt-card .opt-status {
+  flex: 1;
+  margin-top: 12px;
+}
+
 .done-card {
   text-align: center;
   padding: 48px 24px;
@@ -1449,7 +1466,7 @@ a:hover {
   .secondary-button,
   .ghost-button,
   .danger-button {
-    min-height: 40px;
+    height: 40px;
   }
 
   .modal-backdrop {
