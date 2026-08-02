@@ -781,7 +781,6 @@ export function AdminRoute() {
       return (
         <section className="card">
           <h3>自动配置</h3>
-          <p className="card-sub">检查飞书后台权限、事件、回调和发布状态。</p>
           <div className="notice-banner warn">正在检查当前配置，请稍候...</div>
         </section>
       );
@@ -791,7 +790,6 @@ export function AdminRoute() {
       return (
         <section className="card">
           <h3>自动配置</h3>
-          <p className="card-sub">检查飞书后台权限、事件、回调和发布状态。</p>
           <div className="detail-stack">
             <div className="notice-banner warn">{selectedAutoConfig.message}</div>
             <div className="button-row">
@@ -822,7 +820,6 @@ export function AdminRoute() {
         <div className="detail-stack">
           <div>
             <h3>自动配置</h3>
-            <p className="card-sub">检查飞书后台权限、事件、回调和发布状态。</p>
             <p>{plan.summary?.trim() || describeAutoConfigSummary(plan.status)}</p>
           </div>
           <div className={`notice-banner ${autoConfigNoticeTone(plan.status)}`}>
@@ -1067,7 +1064,6 @@ export function AdminRoute() {
           <div className="card-head">
             <div>
               <h3>{selectedApp.name || "未命名机器人"}</h3>
-              <p className="card-sub">连接与启用状态</p>
             </div>
             <span className={`badge ${connectionTone(selectedApp)}`}>
               {describeConnectionState(selectedApp)}
@@ -1165,7 +1161,6 @@ export function AdminRoute() {
         <div className="card-head">
           <div>
             <h3>权限检查</h3>
-            <p className="card-sub">确认飞书后台已授予机器人需要的权限</p>
           </div>
           <button
             className="secondary-button"
@@ -1176,9 +1171,6 @@ export function AdminRoute() {
             检查权限
           </button>
         </div>
-        {selectedPermissionCheck.status === "idle" ? (
-          <div className="empty-state">需要确认权限时，可以在这里检查当前授权状态。</div>
-        ) : null}
         {selectedPermissionCheck.status === "loading" ? (
           <div className="notice-banner warn">正在检查权限...</div>
         ) : null}
@@ -1325,7 +1317,6 @@ export function AdminRoute() {
     return (
       <>
         <h1 className="area-title">{versionTitle}</h1>
-        <p className="area-desc">系统当前状态与需要处理的事项</p>
         <div className="stat-row">
           <article className="stat-card">
             <p>机器人</p>
@@ -1457,7 +1448,6 @@ export function AdminRoute() {
     return (
       <>
         <h1 className="area-title">机器人</h1>
-        <p className="area-desc">飞书机器人的连接与自动配置</p>
         <div className="split">
           <div className="list-pane">
             {apps.map((app) => {
@@ -1508,7 +1498,6 @@ export function AdminRoute() {
     return (
       <>
         <h1 className="area-title">对话后端</h1>
-        <p className="area-desc">管理 Claude 与 Codex 的连接配置和上下文偏好</p>
         <div className="tab-bar">
           <button
             className={backendTab === "claude" ? "on" : ""}
@@ -1552,7 +1541,6 @@ export function AdminRoute() {
     return (
       <>
         <h1 className="area-title">系统</h1>
-        <p className="area-desc">本机集成、会话信息与存储维护</p>
         <section className="card">
           <h3>自动运行</h3>
           <div className="status-line">
@@ -1597,7 +1585,6 @@ export function AdminRoute() {
         </section>
         <section className="card">
           <h3>存储维护</h3>
-          <p className="card-sub">清理本地缓存的旧文件</p>
           {previewError ? <div className="notice-banner warn">{previewError}</div> : null}
           {imageStagingError ? (
             <div className="notice-banner warn">{imageStagingError}</div>

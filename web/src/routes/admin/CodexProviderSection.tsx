@@ -322,11 +322,7 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
   const description =
     editorMode === "create"
       ? "填写 API 连接信息"
-      : isConnectionEditable
-        ? "连接信息和上下文偏好"
-        : activeProvider?.contextEditable
-          ? "连接身份不可编辑，上下文偏好可单独调整。"
-          : "连接身份和上下文偏好不可编辑。";
+      : "";
 
   return (
     <ConfigFormDetailCard
@@ -479,7 +475,7 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
         </div>
       )}
       <label className="field form-grid-span-2 stack-top">
-        <span>上下文大小</span>
+        <span className="sr-only">上下文大小</span>
         <select
           aria-label="上下文大小"
           disabled={editorMode !== "create" && !activeProvider?.contextEditable}

@@ -7,7 +7,6 @@ test.beforeEach(async ({ page }) => {
 test("admin core flows work on desktop and mobile", async ({ page }) => {
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: /管理/ })).toBeVisible();
-  await expect(page.getByText("系统当前状态与需要处理的事项")).toBeVisible();
 
   await openAdminArea(page, "机器人");
   await expect(page.getByRole("heading", { name: "机器人", exact: true })).toBeVisible();

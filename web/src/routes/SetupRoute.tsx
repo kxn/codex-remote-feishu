@@ -636,7 +636,6 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>本机集成</h2>
-          <p>可选，之后可在管理页面处理。</p>
         </div>
         <div className="two-col">
           {renderAutostartCard()}
@@ -823,7 +822,6 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>准备环境</h2>
-          <p>确认服务与运行条件正常</p>
         </div>
         {runtimeRequirements?.ready ? (
           <div className="notice-banner good">环境正常</div>
@@ -876,7 +874,6 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>连接飞书机器人</h2>
-          <p>扫码创建或手动输入接入飞书应用</p>
         </div>
         {renderConnectSubsteps("connect")}
         {connectionStatus === "complete" ? (
@@ -1071,9 +1068,6 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>配置飞书机器人</h2>
-          <p>
-            自动检查并尽可能补齐权限、事件、回调和发布状态，避免再走测试消息路径。
-          </p>
         </div>
         {renderConnectSubsteps("auto_config")}
 
@@ -1240,7 +1234,6 @@ export function SetupRoute() {
       <section className="step-section">
         <div className="step-stage-head">
           <h2>欢迎使用</h2>
-          <p>基础设置已完成。</p>
         </div>
         <div className="completed-card">
           <h3>欢迎，设置已经完成。</h3>

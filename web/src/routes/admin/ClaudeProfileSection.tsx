@@ -404,7 +404,7 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
         </label>
       </div> : null}
       <label className="field form-grid-span-2 stack-top">
-        <span>上下文大小</span>
+        <span className="sr-only">上下文大小</span>
         <span className="checkbox-line">
           <input
             aria-label="使用 1M 上下文"

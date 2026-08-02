@@ -347,6 +347,13 @@ a:hover {
   line-height: 1.3;
 }
 
+.area-title + .stat-row,
+.area-title + .split,
+.area-title + .tab-bar,
+.area-title + .card {
+  margin-top: 16px;
+}
+
 .step-stage-head p,
 .section-heading p,
 .card-sub,

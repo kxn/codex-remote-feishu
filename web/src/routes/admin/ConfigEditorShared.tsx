@@ -304,7 +304,7 @@ export function ConfigBuiltInDetailCard(props: ConfigBuiltInDetailCardProps) {
     <section className="card">
       <div className="step-stage-head">
         <h3>{title}</h3>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
       {notice ? (
         <div className={`notice-banner ${notice.tone}`}>{notice.message}</div>
@@ -353,7 +353,7 @@ export function ConfigFormDetailCard(props: ConfigFormDetailCardProps) {
     <section className="card">
       <div className="step-stage-head">
         <h3>{title}</h3>
-        <p>{description}</p>
+        {description ? <p>{description}</p> : null}
       </div>
       {notice ? (
         <div className={`notice-banner ${notice.tone}`}>{notice.message}</div>

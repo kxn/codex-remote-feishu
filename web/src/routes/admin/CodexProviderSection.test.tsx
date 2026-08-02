@@ -358,7 +358,6 @@ describe("CodexProviderSection", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /旧版 Codex/ }));
 
-    expect(screen.getByText("连接身份和上下文偏好不可编辑。")).toBeInTheDocument();
     expect(screen.getByLabelText("上下文大小")).toBeDisabled();
     expect(screen.getByRole("button", { name: "保存上下文偏好" })).toBeDisabled();
   });
