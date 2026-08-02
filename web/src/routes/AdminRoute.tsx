@@ -781,6 +781,7 @@ export function AdminRoute() {
       return (
         <section className="card">
           <h3>自动配置</h3>
+          <p className="card-sub">检查飞书后台权限、事件、回调和发布状态。</p>
           <div className="notice-banner warn">正在检查当前配置，请稍候...</div>
         </section>
       );
@@ -790,6 +791,7 @@ export function AdminRoute() {
       return (
         <section className="card">
           <h3>自动配置</h3>
+          <p className="card-sub">检查飞书后台权限、事件、回调和发布状态。</p>
           <div className="detail-stack">
             <div className="notice-banner warn">{selectedAutoConfig.message}</div>
             <div className="button-row">
@@ -820,6 +822,7 @@ export function AdminRoute() {
         <div className="detail-stack">
           <div>
             <h3>自动配置</h3>
+            <p className="card-sub">检查飞书后台权限、事件、回调和发布状态。</p>
             <p>{plan.summary?.trim() || describeAutoConfigSummary(plan.status)}</p>
           </div>
           <div className={`notice-banner ${autoConfigNoticeTone(plan.status)}`}>
@@ -1209,7 +1212,9 @@ export function AdminRoute() {
                     key={`${item.scopeType || "tenant"}:${item.scope}`}
                   >
                     <span className="dot warn" />
-                    <div className="label mono">{item.scope}</div>
+                    <div>
+                      <div className="label mono">{item.scope}</div>
+                    </div>
                     {item.scopeType ? <span className="badge neutral">{item.scopeType}</span> : null}
                   </div>
                 ))}

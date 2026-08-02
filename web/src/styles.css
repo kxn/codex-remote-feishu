@@ -371,6 +371,20 @@ a:hover {
   line-height: 1.6;
 }
 
+.card-head + .notice,
+.card-head + .notice-banner,
+.card-head + .detail-stack,
+.step-stage-head + .notice,
+.step-stage-head + .notice-banner,
+.step-stage-head + .detail-stack,
+.card > h3 + .notice,
+.card > h3 + .notice-banner,
+.card > h3 + .detail-stack,
+.card > .notice:first-of-type:not(:first-child),
+.card > .notice-banner:first-of-type:not(:first-child) {
+  margin-top: 12px;
+}
+
 .notice strong,
 .notice-banner strong {
   display: block;
@@ -658,11 +672,16 @@ a:hover {
 
 .permission-json {
   width: 100%;
-  min-height: 132px;
+  height: 132px;
   resize: vertical;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 12px;
   line-height: 1.5;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  padding: 8px 12px;
+  color: var(--text-primary);
 }
 
 .choice-toggle,
@@ -798,11 +817,20 @@ a:hover {
 }
 
 .req-item .label {
+  min-width: 0;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .req-item > div {
+  min-width: 0;
   flex: 1;
+}
+
+.req-item > .badge {
+  flex: none;
+  margin-left: auto;
 }
 
 .storage-row-action {
@@ -956,17 +984,26 @@ a:hover {
 .robot-list-button strong,
 .profile-list-button strong,
 .row-title {
+  display: block;
+  min-width: 0;
   color: var(--ink);
   font-size: 14px;
   font-weight: 500;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .robot-list-button p,
 .profile-list-button p,
 .row-sub {
+  display: block;
+  min-width: 0;
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 12px;
+  line-height: 1.4;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -975,6 +1012,21 @@ a:hover {
 .row-main {
   min-width: 0;
   flex: 1;
+}
+
+.profile-list-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.profile-list-button {
+  align-items: stretch;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
 }
 
 .profile-hero-card,
