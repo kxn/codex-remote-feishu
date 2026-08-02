@@ -20,6 +20,7 @@ const (
 )
 
 var packagedInstallEnsureReadyFunc = EnsureDaemonReadyFromStatePath
+var packagedInstallCopyFileFunc = copyFile
 
 type packagedInstallMode string
 
@@ -266,7 +267,7 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 		result.Error = err.Error()
 		return result, err
 	}
-	if err := copyFile(stagedBinary, liveBinaryPath); err != nil {
+	if err := copyPackagedRepairLiveBinary(ctx, opts.GOOS, stagedBinary, liveBinaryPath, packagedInstallStopGrace, packagedInstallPollInterval, packagedInstallCopyFileFunc); err != nil {
 		result.Error = err.Error()
 		return result, err
 	}
@@ -324,6 +325,35 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 	}
 	result.OK = true
 	return result, nil
+}
+
+func copyPackagedRepairLiveBinary(ctx context.Context, goos, sourcePath, targetPath string, timeout, poll time.Duration, copyFileFunc func(string, string) error) error {
+	if copyFileFunc == nil {
+		copyFileFunc = copyFile
+	}
+	if goos != "windows" {
+		return copyFileFunc(sourcePath, targetPath)
+	}
+	if poll <= 0 {
+		poll = 100 * time.Millisecond
+	}
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		if err := copyFileFunc(sourcePath, targetPath); err != nil {
+			lastErr = err
+		} else {
+			return nil
+		}
+		if timeout <= 0 || time.Now().After(deadline) {
+			return lastErr
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(poll):
+		}
+	}
 }
 
 func resolvePackagedInstallSlot(requestedSlot, currentVersion, sourceBinary string) (string, error) {

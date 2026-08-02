@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
@@ -258,6 +260,34 @@ func TestRunPackagedInstallWritesResultFileOnRepairFailure(t *testing.T) {
 		"startupMode=manual",
 		"error=-install-bin-dir cannot be used for existing installs",
 	)
+}
+
+func TestCopyPackagedRepairLiveBinaryRetriesWindowsFileLock(t *testing.T) {
+	attempts := 0
+	err := copyPackagedRepairLiveBinary(
+		context.Background(),
+		"windows",
+		"source",
+		"target",
+		50*time.Millisecond,
+		time.Millisecond,
+		func(sourcePath, targetPath string) error {
+			attempts++
+			if attempts == 1 {
+				return errors.New("rename target: Access is denied.")
+			}
+			if sourcePath != "source" || targetPath != "target" {
+				t.Fatalf("copy args = %q %q", sourcePath, targetPath)
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("copyPackagedRepairLiveBinary: %v", err)
+	}
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
 }
 
 func assertPackagedInstallResultFileContains(t *testing.T, path string, wantFragments ...string) {
