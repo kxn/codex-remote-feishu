@@ -159,12 +159,14 @@ jobs:
             --package-version-label "${{ steps.meta.outputs.package_label }}" \
             --dist-dir dist
 
-      - name: Save base dist for packaging
-        uses: actions/cache/save@v4
+      - name: Upload internal base dist
+        uses: actions/upload-artifact@v4
         with:
+          name: internal-manual-build-base-dist
           path: dist
-          key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
-          enableCrossOsArchive: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   build-macos-packaged-installer:
     needs: build-base-assets
@@ -176,13 +178,11 @@ jobs:
         with:
           ref: ${{ needs.build-base-assets.outputs.source_ref }}
 
-      - name: Restore base dist
-        uses: actions/cache/restore@v4
+      - name: Download internal base dist
+        uses: actions/download-artifact@v4
         with:
+          name: internal-manual-build-base-dist
           path: dist
-          key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
-          fail-on-cache-miss: true
-          enableCrossOsArchive: true
 
       - name: Build macOS packaged installer
         run: |
@@ -192,12 +192,14 @@ jobs:
             --package-version-label "${{ needs.build-base-assets.outputs.package_label }}" \
             --dist-dir dist
 
-      - name: Save macOS packaged installer
-        uses: actions/cache/save@v4
+      - name: Upload internal macOS packaged installer
+        uses: actions/upload-artifact@v4
         with:
+          name: internal-manual-build-macos-packaged-installer
           path: dist/codex-remote-feishu_*_darwin_universal_installer.dmg
-          key: manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}
-          enableCrossOsArchive: true
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
 
   package-download:
     needs:
@@ -212,21 +214,17 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.build-base-assets.outputs.source_ref }}
 
-      - name: Restore base dist
-        uses: actions/cache/restore@v4
+      - name: Download internal base dist
+        uses: actions/download-artifact@v4
         with:
+          name: internal-manual-build-base-dist
           path: dist
-          key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
-          fail-on-cache-miss: true
-          enableCrossOsArchive: true
 
-      - name: Restore macOS packaged installer
-        uses: actions/cache/restore@v4
+      - name: Download internal macOS packaged installer
+        uses: actions/download-artifact@v4
         with:
+          name: internal-manual-build-macos-packaged-installer
           path: dist
-          key: manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}
-          fail-on-cache-miss: true
-          enableCrossOsArchive: true
 
       - name: Refresh checksums
         run: bash scripts/release/write-checksums.sh dist
@@ -257,10 +255,25 @@ jobs:
           compression-level: 0
           retention-days: ${{ fromJSON(inputs.retention_days) }}
 
-      - name: Delete internal transfer caches
+  cleanup-internal-artifacts:
+    needs:
+      - build-base-assets
+      - build-macos-packaged-installer
+      - package-download
+    if: always()
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete internal transfer artifacts
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          gh cache delete "manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}" || true
-          gh cache delete "manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}" || true
+          mapfile -t artifact_ids < <(
+            gh api "repos/${GH_REPO}/actions/runs/${{ github.run_id }}/artifacts" --paginate \
+              --jq '.artifacts[] | select(.name == "internal-manual-build-base-dist" or .name == "internal-manual-build-macos-packaged-installer") | .id'
+          )
+          for artifact_id in "${artifact_ids[@]}"; do
+            gh api --method DELETE "repos/${GH_REPO}/actions/artifacts/${artifact_id}" || true
+          done
