@@ -40,7 +40,7 @@ const (
 )
 
 type onboardingWorkflowResponse struct {
-	Apps                []adminFeishuAppSummary           `json:"apps,omitempty"`
+	Apps                []adminFeishuAppSummary           `json:"apps"`
 	SelectedAppID       string                            `json:"selectedAppId,omitempty"`
 	CurrentStage        string                            `json:"currentStage"`
 	MachineState        string                            `json:"machineState"`

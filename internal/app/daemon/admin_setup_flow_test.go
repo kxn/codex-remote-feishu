@@ -29,6 +29,40 @@ func stubSetupAutoConfigPlan(t *testing.T, plan feishu.AutoConfigPlan) {
 	})
 }
 
+func TestSetupOnboardingWorkflowAlwaysSerializesAppsArray(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	app, token := newRemoteSetupTestApp(t, home)
+	cookie := exchangeSetupSessionCookie(t, app, token)
+
+	req := performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow", "", cookie)
+	rec := performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	body := rec.Body.Bytes()
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		t.Fatalf("decode workflow: %v", err)
+	}
+	appsJSON, ok := raw["apps"]
+	if !ok {
+		t.Fatalf("workflow JSON omitted apps: %s", body)
+	}
+	if string(appsJSON) != "[]" {
+		t.Fatalf("apps JSON = %s, want []", appsJSON)
+	}
+	var apps []adminFeishuAppSummary
+	if err := json.Unmarshal(appsJSON, &apps); err != nil {
+		t.Fatalf("decode apps: %v", err)
+	}
+	if len(apps) != 0 {
+		t.Fatalf("apps length = %d, want 0", len(apps))
+	}
+}
+
 func TestSetupSessionCanUseFeishuAndVSCodeSetupAPIsAfterCredentialsSaved(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
