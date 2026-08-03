@@ -209,7 +209,17 @@ describe("AdminRoute", () => {
           id: "bot-permission",
           name: "权限机器人",
           appId: "cli_permission",
-        })),
+        }), {
+          degradableRequirements: [
+            {
+              kind: "event",
+              key: "im.message.receive_v1",
+              purpose: "接收用户消息",
+              required: false,
+              present: false,
+            },
+          ],
+        }),
       },
       "/api/admin/autostart/detect": {
         body: {
@@ -243,6 +253,8 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
     expect(screen.getByText("im:message.group_msg:readonly")).toBeInTheDocument();
     expect(screen.getByDisplayValue(/im:message\.group_msg:readonly/)).toBeInTheDocument();
+    expect(screen.getByText("事件 im.message.receive_v1")).toBeInTheDocument();
+    expect(screen.getByText("接收用户消息")).toBeInTheDocument();
     expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "复制导入 JSON" }));

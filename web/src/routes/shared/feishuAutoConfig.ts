@@ -9,6 +9,13 @@ export type AutoConfigRequirementDisplay = {
   detail: string;
 };
 
+export type AutoConfigRequirementRow = {
+  key: string;
+  label: string;
+  meta: string;
+  impacts: string[];
+};
+
 export function describeAutoConfigTag(
   status: string,
 ): { label: string; warn: boolean } | null {
@@ -163,17 +170,14 @@ export function describeAutoConfigBlockingReason(reason: string): string {
 export function describeAutoConfigRequirementLabel(
   requirement: FeishuAppAutoConfigRequirementStatus,
 ): string {
-  if (requirement.purpose?.trim()) {
-    return requirement.purpose.trim();
-  }
-  if (requirement.feature?.trim()) {
-    const feature = describeAutoConfigFeature(requirement.feature);
-    if (feature) {
-      return feature;
-    }
-  }
   if (requirement.kind === "scope") {
     return `权限 ${requirement.key}`;
+  }
+  if (requirement.kind === "event") {
+    return `事件 ${requirement.key}`;
+  }
+  if (requirement.kind === "callback") {
+    return `回调 ${requirement.key}`;
   }
   return requirement.key;
 }
@@ -181,19 +185,7 @@ export function describeAutoConfigRequirementLabel(
 export function describeAutoConfigRequirementDetail(
   requirement: FeishuAppAutoConfigRequirementStatus,
 ): string {
-  if (requirement.degradeMessage?.trim()) {
-    return requirement.degradeMessage.trim();
-  }
-  if (requirement.kind === "scope") {
-    return "需要在飞书开放平台补齐对应权限后才能继续。";
-  }
-  if (requirement.kind === "event") {
-    return "需要先在飞书后台开通对应事件。";
-  }
-  if (requirement.kind === "callback") {
-    return "需要先在飞书后台开通对应卡片交互回调。";
-  }
-  return "";
+  return describeAutoConfigRequirementImpacts(requirement).join("、");
 }
 
 export function describeAutoConfigRequirementDisplay(
@@ -203,6 +195,30 @@ export function describeAutoConfigRequirementDisplay(
     label: describeAutoConfigRequirementLabel(requirement),
     detail: describeAutoConfigRequirementDetail(requirement),
   };
+}
+
+export function groupAutoConfigRequirements(
+  requirements: FeishuAppAutoConfigRequirementStatus[],
+): AutoConfigRequirementRow[] {
+  const rows = new Map<string, AutoConfigRequirementRow>();
+  for (const requirement of requirements) {
+    const key = autoConfigRequirementGroupKey(requirement);
+    const row =
+      rows.get(key) ||
+      {
+        key,
+        label: describeAutoConfigRequirementLabel(requirement),
+        meta: describeAutoConfigRequirementMeta(requirement),
+        impacts: [],
+      };
+    for (const impact of describeAutoConfigRequirementImpacts(requirement)) {
+      if (!row.impacts.includes(impact)) {
+        row.impacts.push(impact);
+      }
+    }
+    rows.set(key, row);
+  }
+  return Array.from(rows.values());
 }
 
 export function autoConfigNoticeTone(status: string): "good" | "warn" | "danger" {
@@ -260,6 +276,53 @@ function describeAutoConfigFeature(feature: string): string {
     default:
       return "";
   }
+}
+
+function describeAutoConfigRequirementImpacts(
+  requirement: FeishuAppAutoConfigRequirementStatus,
+): string[] {
+  const impacts: string[] = [];
+  const purpose = requirement.purpose?.trim();
+  if (purpose) {
+    impacts.push(purpose);
+  }
+  const feature = requirement.feature?.trim();
+  if (feature) {
+    const label = describeAutoConfigFeature(feature);
+    if (label && !impacts.includes(label)) {
+      impacts.push(label);
+    }
+  }
+  const degradeMessage = requirement.degradeMessage?.trim();
+  if (degradeMessage && !impacts.includes(degradeMessage)) {
+    impacts.push(degradeMessage);
+  }
+  return impacts;
+}
+
+function describeAutoConfigRequirementMeta(
+  requirement: FeishuAppAutoConfigRequirementStatus,
+): string {
+  if (requirement.kind === "scope") {
+    return requirement.scopeType ? `权限 · ${requirement.scopeType}` : "权限";
+  }
+  if (requirement.kind === "event") {
+    return "事件";
+  }
+  if (requirement.kind === "callback") {
+    return "回调";
+  }
+  return "配置";
+}
+
+function autoConfigRequirementGroupKey(
+  requirement: FeishuAppAutoConfigRequirementStatus,
+): string {
+  return [
+    requirement.kind,
+    requirement.scopeType || "",
+    requirement.key,
+  ].join(":");
 }
 
 function findAutoConfigAction(

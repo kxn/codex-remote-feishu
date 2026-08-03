@@ -93,6 +93,10 @@ describe("SetupRoute", () => {
     expect(screen.queryByText("环境正常")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "准备环境" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "本机集成" })).not.toBeInTheDocument();
+    expect(screen.getByText("权限 im:message:send_as_bot")).toBeInTheDocument();
+    expect(screen.getByText(/机器人可能无法主动回消息/)).toBeInTheDocument();
+    expect(screen.queryByText("这些问题不会阻塞设置，但会影响部分能力。")).not.toBeInTheDocument();
+    expect(screen.queryByText("需要在飞书开放平台补齐对应权限后才能继续。")).not.toBeInTheDocument();
   });
 
   it("connects manually, completes auto-config changes, and stays in auto-config while review is pending", async () => {

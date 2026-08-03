@@ -16,6 +16,7 @@ import type {
   FeishuAppAutoConfigCompleteView,
   FeishuAppAutoConfigCompleteResponse,
   FeishuAppAutoConfigPlanResponse,
+  FeishuAppAutoConfigRequirementStatus,
   FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
@@ -46,6 +47,7 @@ import {
   describeAutoConfigActionFeedback,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
+  groupAutoConfigRequirements,
   autoConfigNoticeTone,
 } from "./shared/feishuAutoConfig";
 import { runAdminStorageCleanup } from "./shared/adminStorage";
@@ -1079,6 +1081,20 @@ export function AdminRoute() {
                       ? "可以重新执行自动补齐后再检查。"
                       : describeAutoConfigSummary(autoConfigStatus || "apply_required")}
                   </div>
+                  {autoConfigPlan
+                    ? renderAutoConfigPlanRequirements(
+                        "必须补齐",
+                        autoConfigPlan.blockingRequirements || [],
+                        "danger",
+                      )
+                    : null}
+                  {autoConfigPlan
+                    ? renderAutoConfigPlanRequirements(
+                        "可稍后处理",
+                        autoConfigPlan.degradableRequirements || [],
+                        "warn",
+                      )
+                    : null}
                   <div className="button-row">
                     <button
                       className="primary-button"
@@ -1135,6 +1151,20 @@ export function AdminRoute() {
                   {describeAutoConfigSummary(autoConfigStatus)}
                 </div>
               ) : null}
+              {autoConfigPlan
+                ? renderAutoConfigPlanRequirements(
+                    "必须补齐",
+                    autoConfigPlan.blockingRequirements || [],
+                    "danger",
+                  )
+                : null}
+              {autoConfigPlan
+                ? renderAutoConfigPlanRequirements(
+                    "可稍后处理",
+                    autoConfigPlan.degradableRequirements || [],
+                    "warn",
+                  )
+                : null}
               {awaitingReview ? (
                 <div className="notice-banner warn">飞书正在审核发布</div>
               ) : null}
@@ -1648,6 +1678,37 @@ async function safeRequest<T>(path: string) {
       error: "暂时没有读取成功，请稍后重试。",
     };
   }
+}
+
+function renderAutoConfigPlanRequirements(
+  title: string,
+  requirements: FeishuAppAutoConfigRequirementStatus[],
+  tone: "warn" | "danger",
+) {
+  if (requirements.length === 0) {
+    return null;
+  }
+  const rows = groupAutoConfigRequirements(requirements);
+  return (
+    <div className="req-group">
+      <div className={`req-group-title ${tone}`}>{title}</div>
+      <ul className="requirement-list">
+        {rows.map((item) => (
+          <li className="requirement-row" key={item.key}>
+            <div className="requirement-main">
+              <span className={`badge ${tone === "danger" ? "danger" : "warn"}`}>
+                {item.meta}
+              </span>
+              <strong className="mono">{item.label}</strong>
+            </div>
+            <div className="requirement-impact">
+              {item.impacts.length > 0 ? item.impacts.join("、") : "基础配置"}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function noticeFromCompleteView(view?: FeishuAppAutoConfigCompleteView): DetailNotice | null {

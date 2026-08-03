@@ -779,6 +779,46 @@ a:hover {
   list-style: none;
 }
 
+.requirement-list {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.requirement-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(180px, 0.8fr);
+  gap: 16px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.requirement-main {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.requirement-main strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.requirement-main .badge {
+  justify-self: start;
+}
+
+.requirement-impact {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .ordered-checklist li,
 .req-item {
   display: flex;
@@ -838,6 +878,13 @@ a:hover {
 .req-item > .badge {
   flex: none;
   margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .requirement-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
 }
 
 .storage-row-action {

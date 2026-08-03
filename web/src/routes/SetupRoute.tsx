@@ -25,9 +25,9 @@ import {
   describeAutoConfigBlockingReason,
   describeAutoConfigActionFeedback,
   describeAutoConfigHeadline,
-  describeAutoConfigRequirementDisplay,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
+  groupAutoConfigRequirements,
   onboardingAutoConfigNoticeTone,
 } from "./shared/feishuAutoConfig";
 import {
@@ -1513,25 +1513,23 @@ function renderAutoConfigRequirementList(
   if (requirements.length === 0) {
     return null;
   }
+  const rows = groupAutoConfigRequirements(requirements);
   return (
     <div className="req-group">
       <div className={`req-group-title ${tone}`}>{title}</div>
-      <div className="section-heading">
-        <div>
-          <p>
-            {tone === "danger"
-              ? "这些问题会阻塞当前设置。"
-              : "这些问题不会阻塞设置，但会影响部分能力。"}
-          </p>
-        </div>
-      </div>
-      <ul className="ordered-checklist">
-        {requirements.map((item) => {
-          const display = describeAutoConfigRequirementDisplay(item);
+      <ul className="requirement-list">
+        {rows.map((item) => {
           return (
-            <li key={`${item.kind}-${item.key}`}>
-              <strong>{display.label}</strong>
-              {display.detail ? `：${display.detail}` : ""}
+            <li key={item.key} className="requirement-row">
+              <div className="requirement-main">
+                <span className={`badge ${tone === "danger" ? "danger" : "warn"}`}>
+                  {item.meta}
+                </span>
+                <strong className="mono">{item.label}</strong>
+              </div>
+              <div className="requirement-impact">
+                {item.impacts.length > 0 ? item.impacts.join("、") : "基础配置"}
+              </div>
             </li>
           );
         })}
