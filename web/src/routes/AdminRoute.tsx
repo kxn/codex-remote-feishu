@@ -1049,14 +1049,16 @@ export function AdminRoute() {
                     到飞书后台导入后，回到这里重新检查。
                   </p>
                   <div className="button-row">
-                    <button
-                      className="primary-button"
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => void applyRobotConfiguration()}
-                    >
-                      自动补齐
-                    </button>
+                    {canApply ? (
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => void applyRobotConfiguration()}
+                      >
+                        自动补齐
+                      </button>
+                    ) : null}
                     {canPublish ? (
                       <button
                         className="primary-button"

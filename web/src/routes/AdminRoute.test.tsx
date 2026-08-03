@@ -403,6 +403,109 @@ describe("AdminRoute", () => {
     expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(true);
   });
 
+  it("shows publish instead of auto apply when missing permissions only need release", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({
+      id: "bot-publish-permission",
+      name: "待发布机器人",
+      appId: "cli_publish_permission",
+    });
+    let published = false;
+
+    const { calls } = installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [app],
+        },
+      },
+      "/api/admin/feishu/apps/bot-publish-permission/permissions/check": {
+        body: {
+          app,
+          ready: false,
+          missingScopes: [
+            {
+              scope: "drive:drive",
+              scopeType: "tenant",
+            },
+          ],
+          grantJSON:
+            '{\n  "scopes": {\n    "tenant": [\n      "drive:drive"\n    ],\n    "user": []\n  }\n}',
+          lastCheckedAt: "2026-08-02T06:30:00Z",
+        },
+      },
+      "/api/admin/feishu/apps/bot-publish-permission/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(app, {
+          status: "publish_required",
+          summary: "自动补齐已完成，还需要提交发布。",
+          publish: {
+            needsPublish: true,
+            awaitingReview: false,
+          },
+        }),
+      },
+      "/api/admin/feishu/apps/bot-publish-permission/auto-config/publish": () => {
+        published = true;
+        return {
+          body: makeAutoConfigPublishResponse({
+            app,
+            result: {
+              status: "awaiting_review",
+              summary: "飞书正在审核发布。",
+              blockingReason: "",
+              actions: [],
+              plan: makeAutoConfigPlan({
+                status: "awaiting_review",
+                summary: "飞书正在审核发布。",
+                publish: {
+                  needsPublish: false,
+                  awaitingReview: true,
+                },
+              }),
+            },
+          }),
+        };
+      },
+      "/api/admin/autostart/detect": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "enabled",
+          configured: true,
+          enabled: true,
+          canApply: true,
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-publish-permission": {
+        body: makePreviewDriveStatus({
+          gatewayId: "bot-publish-permission",
+          name: "待发布机器人",
+        }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "提交发布" }));
+    expect(await screen.findByText("飞书正在审核发布。")).toBeInTheDocument();
+    expect(published).toBe(true);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(false);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(true);
+  });
+
   it("shows a ready permission check result", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
