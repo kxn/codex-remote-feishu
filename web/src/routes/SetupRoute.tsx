@@ -57,10 +57,10 @@ type ManualConnectForm = {
   appSecret: string;
 };
 
-const setupActs: Array<{ id: SetupActID; name: string; stepIDs: SetupStepID[] }> = [
-  { id: 1, name: "准备环境", stepIDs: ["runtime_requirements"] },
-  { id: 2, name: "连接飞书机器人", stepIDs: ["connect", "auto_config", "menu"] },
-  { id: 3, name: "本机集成", stepIDs: ["autostart", "vscode"] },
+const setupActs: Array<{ id: SetupActID; name: string }> = [
+  { id: 1, name: "准备环境" },
+  { id: 2, name: "连接飞书机器人" },
+  { id: 3, name: "本机集成" },
 ];
 
 const setupStepOrder: SetupStepID[] = [
@@ -90,7 +90,6 @@ export function SetupRoute() {
   });
   const [actionBusy, setActionBusy] = useState("");
   const [finishingSetup, setFinishingSetup] = useState(false);
-  const [expandedActs, setExpandedActs] = useState<Record<number, boolean>>({});
 
   const activeApp = useMemo(() => {
     if (workflow?.app?.app) {
@@ -530,17 +529,6 @@ export function SetupRoute() {
 
   function goToStep(stepID: SetupStepID) {
     setCurrentStep(stepID);
-  }
-
-  function goToAct(actID: SetupActID) {
-    setExpandedActs((current) => ({ ...current, [actID]: !current[actID] }));
-    if (actID === currentAct) {
-      return;
-    }
-    const firstOpenStep = setupActs
-      .find((act) => act.id === actID)
-      ?.stepIDs.find((stepID) => !stepDone[stepID]);
-    setCurrentStep(firstOpenStep || firstStepForAct(actID));
   }
 
   function goToNextStep(from: SetupStepID) {
@@ -1261,61 +1249,15 @@ export function SetupRoute() {
       {renderSetupProgress(currentAct, actDone)}
       <main className="column">
         {notice ? <Toast tone={notice.tone} message={notice.message} /> : null}
-        {renderWorkflowGuidance(workflow)}
         {currentStep === "done" ? (
           <section className="card done-card">{renderDoneStep()}</section>
         ) : (
-          setupActs.map((act) => {
-            if (act.id === currentAct) {
-              return (
-                <section key={act.id} className="card">
-                  {renderCurrentStep()}
-                </section>
-              );
-            }
-            return renderActSummaryRow(act.id);
-          })
+          <section className="card">{renderCurrentStep()}</section>
         )}
       </main>
 
     </div>
   );
-
-  function renderActSummaryRow(actID: SetupActID) {
-    const done = actDone[actID];
-    const future = !done && currentAct !== actID;
-    const open = Boolean(expandedActs[actID]);
-    const content = (
-      <>
-        <span className={`dot ${done ? "good" : "idle"}`} />
-        <span className="row-name">{actName(actID)}</span>
-        <span className="row-sum">{done ? collapsedActSummary(actID) : "未开始"}</span>
-      </>
-    );
-
-    if (future) {
-      return (
-        <div key={actID} className="act-row future">
-          {content}
-        </div>
-      );
-    }
-
-    return (
-      <div key={actID}>
-        <button className="act-row done" type="button" onClick={() => goToAct(actID)}>
-          {content}
-        </button>
-        {open ? (
-          <ul className="collapsed-detail">
-            {collapsedActDetail(actID).map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-    );
-  }
 }
 
 function renderSetupProgress(
@@ -1343,40 +1285,6 @@ function renderSetupProgress(
         ))}
       </div>
     </div>
-  );
-}
-
-function renderWorkflowGuidance(workflow: OnboardingWorkflowResponse | null) {
-  if (!workflow || workflow.completion.canComplete || workflow.currentStage === "done") {
-    return null;
-  }
-  const blockingReason = workflow.completion.blockingReason?.trim() || "";
-  const recommendedNextStep = describeRecommendedNextStep(
-    workflow.guide?.recommendedNextStep || workflow.currentStage,
-  );
-  const remainingManualActions = (workflow.guide?.remainingManualActions || [])
-    .map((item) => item.trim())
-    .filter(Boolean);
-  if (!blockingReason && !recommendedNextStep && remainingManualActions.length === 0) {
-    return null;
-  }
-  return (
-    <section className="notice warn">
-      <strong>当前还不能完成设置</strong>
-      {blockingReason ? <div>{blockingReason}</div> : null}
-      {recommendedNextStep ? <div className="sub">建议：{recommendedNextStep}</div> : null}
-      {remainingManualActions.length > 0 ? (
-        <div className="req-group">
-          <div className="req-group-title warn">还需要你手动处理</div>
-          {remainingManualActions.map((item) => (
-            <div key={item} className="req-item">
-              <span className="dot warn" />
-              <div className="detail">{item}</div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </section>
   );
 }
 
@@ -1501,63 +1409,5 @@ function setupActForStep(stepID: SetupStepID): SetupActID | 4 {
       return 3;
     case "done":
       return 4;
-  }
-}
-
-function firstStepForAct(actID: SetupActID): SetupStepID {
-  switch (actID) {
-    case 1:
-      return "runtime_requirements";
-    case 2:
-      return "connect";
-    case 3:
-      return "autostart";
-  }
-}
-
-function actName(actID: SetupActID): string {
-  return setupActs.find((act) => act.id === actID)?.name || "";
-}
-
-function collapsedActSummary(actID: SetupActID): string {
-  switch (actID) {
-    case 1:
-      return "环境正常";
-    case 2:
-      return "机器人已接入";
-    case 3:
-      return "本机集成已处理";
-  }
-}
-
-function collapsedActDetail(actID: SetupActID): string[] {
-  switch (actID) {
-    case 1:
-      return ["服务运行条件与对话后端都已就绪。"];
-    case 2:
-      return ["飞书机器人已经连接。", "自动配置与菜单确认已经完成。"];
-    case 3:
-      return ["自动运行和 VS Code 集成已完成或已记录稍后处理。"];
-  }
-}
-
-function describeRecommendedNextStep(value: string | undefined): string {
-  switch (value?.trim()) {
-    case "runtime_requirements":
-      return "先重新检查本机环境。";
-    case "connect":
-      return "先连接飞书机器人。";
-    case "auto_config":
-      return "先完成飞书自动配置。";
-    case "menu":
-      return "先确认机器人菜单。";
-    case "autostart":
-      return "选择是否启用自动运行。";
-    case "vscode":
-      return "选择如何处理 VS Code 集成。";
-    case "done":
-      return "进入管理页面。";
-    default:
-      return "";
   }
 }

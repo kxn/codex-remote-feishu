@@ -51,6 +51,9 @@ describe("SetupRoute", () => {
 
     expect(await screen.findByText("Codex Remote")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "连接飞书机器人" })).toBeInTheDocument();
+    expect(screen.queryByText("当前还不能完成设置")).not.toBeInTheDocument();
+    expect(screen.queryByText("环境正常")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "本机集成" })).not.toBeInTheDocument();
     expect(document.title).toBe("Codex Remote Feishu v1.7.0 安装程序");
     await waitFor(() => {
       expect(
@@ -59,6 +62,37 @@ describe("SetupRoute", () => {
     });
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
+  });
+
+  it("renders only the active setup stage instead of completed or future stage cards", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const app = makeApp({
+      id: "bot-manual",
+      name: "团队机器人",
+      appId: "cli_manual",
+      verifiedAt: "2026-04-25T08:10:00Z",
+    });
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": {
+        body: buildAutoConfigWorkflow(app, {
+          status: "apply_required",
+          summary: "存在待写入的飞书自动配置差异。",
+          stageStatus: "pending",
+          allowedActions: ["apply", "retry", "defer"],
+        }),
+      },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("heading", { name: "配置飞书机器人" })).toBeInTheDocument();
+    expect(screen.queryByText("当前还不能完成设置")).not.toBeInTheDocument();
+    expect(screen.queryByText("还需要你手动处理")).not.toBeInTheDocument();
+    expect(screen.queryByText("环境正常")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "准备环境" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "本机集成" })).not.toBeInTheDocument();
   });
 
   it("connects manually, completes auto-config changes, and stays in auto-config while review is pending", async () => {
