@@ -535,21 +535,23 @@ func (s *autoConfigService) buildConfigPatchRequest(diff AutoConfigDiff) v7Patch
 		req.Scope = scopeReq
 	}
 	if len(diff.MissingEvents) > 0 || len(diff.ExtraEvents) > 0 || diff.EventSubscriptionTypeMismatch || diff.EventRequestURLMismatch {
-		requestURL := s.policy.EventRequestURL
 		req.Event = &v7PatchConfigEvent{
 			SubscriptionType: s.policy.EventSubscriptionType,
-			RequestURL:       &requestURL,
 			AddEvents:        append([]string(nil), diff.MissingEvents...),
 			RemoveEvents:     append([]string(nil), diff.ExtraEvents...),
 		}
+		if requestURL := strings.TrimSpace(s.policy.EventRequestURL); requestURL != "" {
+			req.Event.RequestURL = &requestURL
+		}
 	}
 	if len(diff.MissingCallbacks) > 0 || len(diff.ExtraCallbacks) > 0 || diff.CallbackTypeMismatch || diff.CallbackRequestURLMismatch {
-		requestURL := s.policy.CallbackRequestURL
 		req.Callback = &v7PatchConfigCallback{
 			CallbackType:    s.policy.CallbackType,
-			RequestURL:      &requestURL,
 			AddCallbacks:    append([]string(nil), diff.MissingCallbacks...),
 			RemoveCallbacks: append([]string(nil), diff.ExtraCallbacks...),
+		}
+		if requestURL := strings.TrimSpace(s.policy.CallbackRequestURL); requestURL != "" {
+			req.Callback.RequestURL = &requestURL
 		}
 	}
 	return req

@@ -3,9 +3,12 @@ package feishu
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
@@ -66,6 +69,98 @@ func TestV6AppAutoConfigReadRequestsIncludeRequiredLang(t *testing.T) {
 	}
 	if len(paths) != 2 {
 		t.Fatalf("read request count = %d, want 2 paths=%#v", len(paths), paths)
+	}
+}
+
+func TestCompleteAppAutoConfigSendsDocumentedV7RequestBodies(t *testing.T) {
+	appID := "cli_complete_contract"
+	phase := 0
+	var calls []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"tenant-token"}`))
+		case "/open-apis/application/v6/applications/" + appID:
+			calls = append(calls, "get-app")
+			if got := r.URL.Query().Get("lang"); got != "zh_cn" {
+				t.Fatalf("application.get lang = %q, want zh_cn", got)
+			}
+			if phase == 0 {
+				_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app":{"app_id":"cli_complete_contract"}}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app":{"app_id":"cli_complete_contract","unaudit_version_id":"draft-1","scopes":[{"scope":"im:message","token_types":["tenant"]},{"scope":"drive:drive","token_types":["tenant"]}],"event":{"subscription_type":"websocket","subscribed_events":["im.message.receive_v1"]},"callback":{"callback_type":"websocket","subscribed_callbacks":["card.action.trigger"]}}}}`))
+		case "/open-apis/application/v6/scopes":
+			calls = append(calls, "list-scopes")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"scopes":[{"scope_name":"im:message","scope_type":"tenant","grant_status":1},{"scope_name":"drive:drive","scope_type":"tenant","grant_status":1}]}}`))
+		case "/open-apis/application/v6/applications/" + appID + "/app_versions/draft-1":
+			calls = append(calls, "get-version")
+			if got := r.URL.Query().Get("lang"); got != "zh_cn" {
+				t.Fatalf("application_app_version.get lang = %q, want zh_cn", got)
+			}
+			status := larkapplication.AppVersionStatusUnaudit
+			if phase >= 2 {
+				status = larkapplication.AppVersionStatusUnderAudit
+			}
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app_version":{"app_id":"cli_complete_contract","version_id":"draft-1","version":"1.0.1","status":` + strconv.Itoa(status) + `,"ability":{"bot":{}}}}}`))
+		case "/open-apis/application/v7/applications/" + appID + "/ability":
+			calls = append(calls, "patch-ability")
+			body := requireAutoConfigHTTPBody(t, r, http.MethodPatch)
+			requireBodyContains(t, body, `"bot":{"enable":true}`)
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok"}`))
+		case "/open-apis/application/v7/applications/" + appID + "/config":
+			calls = append(calls, "patch-config")
+			body := requireAutoConfigHTTPBody(t, r, http.MethodPatch)
+			requireBodyContains(t, body, `"scope_name":"im:message"`, `"scope_name":"drive:drive"`, `"subscription_type":"websocket"`, `"callback_type":"websocket"`)
+			if strings.Contains(body, `"request_url"`) {
+				t.Fatalf("websocket config patch should omit empty request_url, got %s", body)
+			}
+			phase = 1
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok"}`))
+		case "/open-apis/application/v7/applications/" + appID + "/publish":
+			calls = append(calls, "publish")
+			body := requireAutoConfigHTTPBody(t, r, http.MethodPost)
+			requireBodyContains(t, body, `"mobile_default_ability":"bot"`, `"pc_default_ability":"bot"`, `"remark":"同步 Codex Remote 的飞书应用配置"`, `"changelog":"更新飞书自动配置所需的权限、事件、回调与机器人能力。"`)
+			phase = 2
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"version_id":"draft-1","version":"1.0.1"}}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	result, err := CompleteAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: appID, AppSecret: "secret", Domain: server.URL},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+		AutoConfigPublishRequest{},
+	)
+	if err != nil {
+		t.Fatalf("CompleteAppAutoConfig: %v", err)
+	}
+	if result.Status != AutoConfigStatusAwaitingReview {
+		t.Fatalf("complete status = %q, want %q", result.Status, AutoConfigStatusAwaitingReview)
+	}
+	if !reflect.DeepEqual(result.Actions, []AutoConfigAction{
+		{Name: "ability_patch", Outcome: "applied"},
+		{Name: "config_patch", Outcome: "applied"},
+		{Name: "publish", Outcome: "submitted"},
+	}) {
+		t.Fatalf("complete actions = %#v", result.Actions)
+	}
+	wantCalls := []string{
+		"get-app", "list-scopes",
+		"get-app", "list-scopes",
+		"patch-ability", "patch-config",
+		"get-app", "list-scopes", "get-version",
+		"get-app", "list-scopes", "get-version",
+		"publish",
+		"get-app", "list-scopes", "get-version",
+	}
+	if !reflect.DeepEqual(calls, wantCalls) {
+		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
 	}
 }
 
@@ -471,4 +566,19 @@ func strp(value string) *string {
 
 func intp(value int) *int {
 	return &value
+}
+
+func requireAutoConfigHTTPBody(t *testing.T, r *http.Request, method string) string {
+	t.Helper()
+	if r.Method != method {
+		t.Fatalf("method = %s, want %s", r.Method, method)
+	}
+	if got := r.Header.Get("Authorization"); got != "Bearer tenant-token" {
+		t.Fatalf("Authorization = %q, want tenant token", got)
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		t.Fatalf("read request body: %v", err)
+	}
+	return string(body)
 }
