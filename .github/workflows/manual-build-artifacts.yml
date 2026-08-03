@@ -164,6 +164,7 @@ jobs:
         with:
           path: dist
           key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
 
   build-macos-packaged-installer:
     needs: build-base-assets
@@ -181,6 +182,7 @@ jobs:
           path: dist
           key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
           fail-on-cache-miss: true
+          enableCrossOsArchive: true
 
       - name: Build macOS packaged installer
         run: |
@@ -195,6 +197,7 @@ jobs:
         with:
           path: dist/codex-remote-feishu_*_darwin_universal_installer.dmg
           key: manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
 
   package-download:
     needs:
@@ -215,6 +218,7 @@ jobs:
           path: dist
           key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
           fail-on-cache-miss: true
+          enableCrossOsArchive: true
 
       - name: Restore macOS packaged installer
         uses: actions/cache/restore@v4
@@ -222,6 +226,7 @@ jobs:
           path: dist
           key: manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}
           fail-on-cache-miss: true
+          enableCrossOsArchive: true
 
       - name: Refresh checksums
         run: bash scripts/release/write-checksums.sh dist
