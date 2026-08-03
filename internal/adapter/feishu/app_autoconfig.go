@@ -156,12 +156,13 @@ func (s *autoConfigService) Apply(ctx context.Context) (AutoConfigApplyResult, e
 
 	refreshed, err := s.Plan(ctx)
 	if err != nil {
-		return AutoConfigApplyResult{}, err
+		return autoConfigApplyVerificationFailed(result, err), nil
 	}
 	result.Status = refreshed.Status
 	result.Summary = refreshed.Summary
 	result.BlockingReason = refreshed.BlockingReason
 	result.Plan = refreshed
+	result.VerificationStatus = AutoConfigVerificationStatusVerified
 	return result, nil
 }
 
@@ -223,17 +224,43 @@ func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRe
 	}
 	refreshed, err := s.Plan(ctx)
 	if err != nil {
-		return AutoConfigPublishResult{}, err
+		result.VersionID = versionID
+		result.Version = version
+		result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "submitted"})
+		return autoConfigPublishVerificationFailed(result, err), nil
 	}
 	return AutoConfigPublishResult{
-		Status:         refreshed.Status,
-		Summary:        refreshed.Summary,
-		BlockingReason: refreshed.BlockingReason,
-		VersionID:      versionID,
-		Version:        version,
-		Actions:        []AutoConfigAction{{Name: "publish", Outcome: "submitted"}},
-		Plan:           refreshed,
+		Status:             refreshed.Status,
+		Summary:            refreshed.Summary,
+		BlockingReason:     refreshed.BlockingReason,
+		VersionID:          versionID,
+		Version:            version,
+		Actions:            []AutoConfigAction{{Name: "publish", Outcome: "submitted"}},
+		Plan:               refreshed,
+		VerificationStatus: AutoConfigVerificationStatusVerified,
 	}, nil
+}
+
+func autoConfigApplyVerificationFailed(result AutoConfigApplyResult, err error) AutoConfigApplyResult {
+	result.Status = AutoConfigStatusVerificationFailed
+	result.Summary = "已执行飞书自动配置变更，但暂时无法确认最终状态。"
+	result.BlockingReason = "verification_failed"
+	result.VerificationStatus = AutoConfigVerificationStatusFailed
+	if err != nil {
+		result.VerificationError = err.Error()
+	}
+	return result
+}
+
+func autoConfigPublishVerificationFailed(result AutoConfigPublishResult, err error) AutoConfigPublishResult {
+	result.Status = AutoConfigStatusVerificationFailed
+	result.Summary = "已提交飞书应用发布，但暂时无法确认最终状态。"
+	result.BlockingReason = "verification_failed"
+	result.VerificationStatus = AutoConfigVerificationStatusFailed
+	if err != nil {
+		result.VerificationError = err.Error()
+	}
+	return result
 }
 
 func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapshot, error) {

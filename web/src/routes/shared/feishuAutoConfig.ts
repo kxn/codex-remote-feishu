@@ -21,6 +21,8 @@ export function describeAutoConfigTag(
       return { label: "待发布", warn: true };
     case "awaiting_review":
       return { label: "待审核", warn: true };
+    case "verification_failed":
+      return { label: "待确认", warn: true };
     case "blocked":
       return { label: "受阻", warn: true };
     case "runtime_pending":
@@ -46,6 +48,8 @@ export function describeAutoConfigHeadline(status: string): string {
       return "自动补齐已完成，还需要提交发布";
     case "awaiting_review":
       return "已提交发布，正在等待管理员处理";
+    case "verification_failed":
+      return "无法确认最终状态";
     case "blocked":
       return "当前还不能继续自动配置";
     default:
@@ -67,6 +71,8 @@ export function describeAutoConfigSummary(status: string): string {
       return "自动补齐后的配置已经写入，仍需提交飞书发布。";
     case "awaiting_review":
       return "飞书应用变更已经进入审核流程，当前只需等待结果。";
+    case "verification_failed":
+      return "系统已经尝试更新飞书配置，但暂时无法确认最终结果。请重新检查，或稍后再试。";
     case "blocked":
       return "当前阻塞项仍未解除，自动配置暂时不能继续。";
     default:
@@ -82,6 +88,8 @@ export function describeAutoConfigBlockingReason(reason: string): string {
       return "飞书开放平台上的应用版本仍在审核中。";
     case "apply_required_before_publish":
       return "还需要先完成自动补齐，之后才能提交发布。";
+    case "verification_failed":
+      return "飞书最终状态暂时没有确认成功。";
     default:
       return reason.trim() || "当前状态暂未给出更多说明。";
   }
@@ -140,6 +148,7 @@ export function autoConfigNoticeTone(status: string): "good" | "warn" | "danger"
     case "unsupported":
     case "publish_required":
     case "awaiting_review":
+    case "verification_failed":
       return "warn";
     default:
       return "danger";

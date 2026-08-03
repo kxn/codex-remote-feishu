@@ -13,6 +13,7 @@ import type {
   ClaudeProfileSummary,
   CodexProfilesResponse,
   CodexProfileSummary,
+  FeishuAppAutoConfigCompleteView,
   FeishuAppAutoConfigCompleteResponse,
   FeishuAppAutoConfigPlanResponse,
   FeishuAppPermissionCheckResponse,
@@ -41,6 +42,10 @@ import {
   saveAndVerifyFeishuApp,
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
+import {
+  describeAutoConfigSummary,
+  autoConfigNoticeTone,
+} from "./shared/feishuAutoConfig";
 import { runAdminStorageCleanup } from "./shared/adminStorage";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
 import { CodexProviderSection } from "./admin/CodexProviderSection";
@@ -55,7 +60,8 @@ type DetailNotice = {
 
 type AutoConfigState =
   | { status: "idle" }
-  | { status: "ready"; data: FeishuAppAutoConfigPlanResponse };
+  | { status: "ready"; data: FeishuAppAutoConfigPlanResponse; resultStatus?: string }
+  | { status: "error"; message: string };
 
 type PermissionCheckState =
   | { status: "idle" }
@@ -166,11 +172,15 @@ export function AdminRoute() {
     actionBusy,
     setActionBusy,
     sessionsPath: "/api/admin/feishu/onboarding/sessions",
-    onCompleteSuccess: async (appID) => {
+    onCompleteSuccess: async (appID, _session, response) => {
       await loadAdminPage({ preferredRobotID: appID });
+      syncAutoConfigView(response.app, response.autoConfig);
       setSelectedRobotID(appID);
       setActiveArea("bots");
-      setDetailNotice({ tone: "good", message: "已完成连接验证。" });
+      setDetailNotice(noticeFromCompleteView(response.autoConfig) || {
+        tone: "good",
+        message: "已完成连接验证。",
+      });
     },
     resetSessionOnSuccess: true,
   });
@@ -290,6 +300,7 @@ export function AdminRoute() {
 
     setActionBusy("create-robot");
     try {
+      let savedApp: FeishuAppSummary | null = null;
       const result = await saveAndVerifyFeishuApp({
         save: async () => {
           const saved = await sendJSON<FeishuAppResponse>("/api/admin/feishu/apps", "POST", {
@@ -298,7 +309,8 @@ export function AdminRoute() {
             appSecret: blankToUndefined(newRobotForm.appSecret),
             enabled: true,
           });
-          return saved.app.id;
+          savedApp = saved.app;
+          return { appID: saved.app.id, autoConfig: saved.autoConfig };
         },
         verifyPath: (appID) =>
           `/api/admin/feishu/apps/${encodeURIComponent(appID)}/verify`,
@@ -313,7 +325,13 @@ export function AdminRoute() {
         });
         return;
       }
-      setDetailNotice({ tone: "good", message: "已完成连接验证。" });
+      if (result.autoConfig && savedApp) {
+        syncAutoConfigView(savedApp, result.autoConfig);
+      }
+      setDetailNotice(noticeFromCompleteView(result.autoConfig) || {
+        tone: "good",
+        message: "已完成连接验证。",
+      });
       setNewRobotForm({ name: "", appId: "", appSecret: "" });
     } catch (error: unknown) {
       if (await maybeRecoverRuntimeApplyFailure(error)) {
@@ -349,17 +367,43 @@ export function AdminRoute() {
   function syncAutoConfigPlan(
     app: FeishuAppSummary,
     plan: FeishuAppAutoConfigPlanResponse["plan"],
+    resultStatus?: string,
   ) {
     syncAppSummary(app);
     setAutoConfigPlans((current) => ({
       ...current,
       [app.id]: {
         status: "ready",
+        resultStatus,
         data: {
           app,
           plan,
         },
       },
+    }));
+  }
+
+  function syncAutoConfigView(
+    app: FeishuAppSummary,
+    view?: FeishuAppAutoConfigCompleteView,
+  ) {
+    if (!view) {
+      return;
+    }
+    syncAppSummary(app);
+    if (view.result) {
+      syncAutoConfigPlan(app, view.result.plan, view.result.status);
+      return;
+    }
+    if (view.error) {
+      syncAutoConfigError(app.id, "已保存机器人，但暂时无法确认飞书配置结果。");
+    }
+  }
+
+  function syncAutoConfigError(appID: string, message: string) {
+    setAutoConfigPlans((current) => ({
+      ...current,
+      [appID]: { status: "error", message },
     }));
   }
 
@@ -386,7 +430,11 @@ export function AdminRoute() {
         setDetailNotice({ tone: "danger", message: result.message });
         return;
       }
-      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
+      syncAutoConfigPlan(
+        result.payload.app,
+        result.payload.result.plan,
+        result.payload.result.status,
+      );
       setDetailNotice(result.notice);
       await checkRobotPermissions({ appID, silent: true });
     } catch {
@@ -401,6 +449,7 @@ export function AdminRoute() {
       FeishuAppAutoConfigPlanResponse | APIErrorShape
     >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/plan`);
     if (!response.ok) {
+      syncAutoConfigError(appID, "暂时无法确认飞书自动配置状态。");
       return;
     }
     const payload = response.data as FeishuAppAutoConfigPlanResponse;
@@ -916,10 +965,16 @@ export function AdminRoute() {
     const disabled = Boolean(actionBusy);
     const autoConfigPlan =
       selectedAutoConfig.status === "ready" ? selectedAutoConfig.data.plan : null;
+    const autoConfigStatus =
+      selectedAutoConfig.status === "ready"
+        ? selectedAutoConfig.resultStatus || selectedAutoConfig.data.plan.status
+        : "";
     const canComplete =
+      selectedAutoConfig.status === "error" ||
       autoConfigPlan?.status === "apply_required" ||
-      autoConfigPlan?.status === "publish_required";
-    const awaitingReview = autoConfigPlan?.status === "awaiting_review";
+      autoConfigPlan?.status === "publish_required" ||
+      autoConfigStatus === "verification_failed";
+    const awaitingReview = autoConfigStatus === "awaiting_review";
     return (
       <section className="card">
         <div className="card-head">
@@ -957,9 +1012,16 @@ export function AdminRoute() {
           selectedPermissionCheck.data.ready ? (
             <div className="detail-stack">
               <div className="notice-banner good">权限已就绪</div>
+              {selectedAutoConfig.status === "error" ? (
+                <div className="notice-banner warn">{selectedAutoConfig.message}</div>
+              ) : null}
               {canComplete ? (
                 <>
-                  <div className="notice-banner warn">飞书配置还需要补齐</div>
+                  <div className="notice-banner warn">
+                    {selectedAutoConfig.status === "error"
+                      ? "可以重新执行自动补齐后再检查。"
+                      : describeAutoConfigSummary(autoConfigStatus || "apply_required")}
+                  </div>
                   <div className="button-row">
                     <button
                       className="primary-button"
@@ -981,6 +1043,14 @@ export function AdminRoute() {
               <div className="notice-banner warn">
                 还缺少 {selectedPermissionCheck.data.missingScopes?.length || 0} 项权限
               </div>
+              {selectedAutoConfig.status === "error" ? (
+                <div className="notice-banner warn">{selectedAutoConfig.message}</div>
+              ) : null}
+              {selectedAutoConfig.status === "ready" && autoConfigStatus ? (
+                <div className={`notice-banner ${autoConfigNoticeTone(autoConfigStatus)}`}>
+                  {describeAutoConfigSummary(autoConfigStatus)}
+                </div>
+              ) : null}
               {awaitingReview ? (
                 <div className="notice-banner warn">飞书正在审核发布</div>
               ) : null}
@@ -1481,6 +1551,25 @@ async function safeRequest<T>(path: string) {
       error: "暂时没有读取成功，请稍后重试。",
     };
   }
+}
+
+function noticeFromCompleteView(view?: FeishuAppAutoConfigCompleteView): DetailNotice | null {
+  if (!view) {
+    return null;
+  }
+  if (view.result) {
+    return {
+      tone: autoConfigNoticeTone(view.result.status),
+      message: view.result.summary?.trim() || describeAutoConfigSummary(view.result.status),
+    };
+  }
+  if (view.error) {
+    return {
+      tone: "warn",
+      message: "已保存机器人，但暂时无法确认飞书配置结果。",
+    };
+  }
+  return null;
 }
 
 function buildAdminPageTitle(bootstrap: BootstrapState | null): string {

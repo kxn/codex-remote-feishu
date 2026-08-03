@@ -3,6 +3,7 @@ import { APIRequestError, requestJSON, requestJSONAllowHTTPError, sendJSON } fro
 import type {
   FeishuAppAutoConfigApplyResponse,
   FeishuAppAutoConfigCompleteResponse,
+  FeishuAppAutoConfigCompleteView,
   FeishuAppAutoConfigPublishResponse,
   FeishuOnboardingCompleteResponse,
   FeishuOnboardingSession,
@@ -48,6 +49,7 @@ type UseQRCodeOnboardingFlowOptions = {
   onCompleteSuccess: (
     appID: string,
     session: FeishuOnboardingSession,
+    response: FeishuOnboardingCompleteResponse,
   ) => Promise<void> | void;
   resetSessionOnSuccess?: boolean;
   defaultPollIntervalSeconds?: number;
@@ -175,7 +177,7 @@ export function useQRCodeOnboardingFlow(options: UseQRCodeOnboardingFlowOptions)
         );
         return;
       }
-      await onCompleteSuccess(response.data.app.id, response.data.session);
+      await onCompleteSuccess(response.data.app.id, response.data.session, response.data);
       setConnectError("");
       if (resetSessionOnSuccess) {
         setOnboardingSession(null);
@@ -201,18 +203,19 @@ export function useQRCodeOnboardingFlow(options: UseQRCodeOnboardingFlowOptions)
 }
 
 export async function saveAndVerifyFeishuApp(options: {
-  save: () => Promise<string>;
+  save: () => Promise<{ appID: string; autoConfig?: FeishuAppAutoConfigCompleteView }>;
   verifyPath: (appID: string) => string;
   reload: (appID: string) => Promise<void>;
-}): Promise<{ verified: boolean; appID: string }> {
-  const appID = await options.save();
-  const verify = await requestJSONAllowHTTPError(options.verifyPath(appID), {
+}): Promise<{ verified: boolean; appID: string; autoConfig?: FeishuAppAutoConfigCompleteView }> {
+  const saved = await options.save();
+  const verify = await requestJSONAllowHTTPError(options.verifyPath(saved.appID), {
     method: "POST",
   });
-  await options.reload(appID);
+  await options.reload(saved.appID);
   return {
     verified: verify.ok,
-    appID,
+    appID: saved.appID,
+    autoConfig: saved.autoConfig,
   };
 }
 

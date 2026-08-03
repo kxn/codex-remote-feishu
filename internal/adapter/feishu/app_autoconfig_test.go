@@ -2,6 +2,7 @@ package feishu
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 
@@ -233,6 +234,109 @@ func TestCompleteAppAutoConfigAppliesThenPublishes(t *testing.T) {
 	}
 	if result.VersionID != "draft-1" || result.Version != "1.0.1" {
 		t.Fatalf("complete publish version = %q/%q", result.VersionID, result.Version)
+	}
+}
+
+func TestApplyAppAutoConfigKeepsActionEvidenceWhenFinalVerificationFails(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	phase := 0
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
+		return nil, nil
+	}
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		if phase > 0 {
+			return nil, errors.New("final plan read failed")
+		}
+		return &larkapplication.Application{}, nil
+	}
+	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
+		return nil, nil
+	}
+	autoConfigPatchAbility = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchAbilityRequest) error {
+		return nil
+	}
+	autoConfigPatchConfig = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchConfigRequest) error {
+		phase = 1
+		return nil
+	}
+
+	result, err := ApplyAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy())
+	if err != nil {
+		t.Fatalf("ApplyAppAutoConfig: %v", err)
+	}
+	if result.Status != AutoConfigStatusVerificationFailed {
+		t.Fatalf("apply status = %q, want %q", result.Status, AutoConfigStatusVerificationFailed)
+	}
+	if result.VerificationStatus != AutoConfigVerificationStatusFailed || result.VerificationError == "" {
+		t.Fatalf("expected verification failure details, got %#v", result)
+	}
+	if !reflect.DeepEqual(result.Actions, []AutoConfigAction{
+		{Name: "ability_patch", Outcome: "applied"},
+		{Name: "config_patch", Outcome: "applied"},
+	}) {
+		t.Fatalf("expected applied action evidence, got %#v", result.Actions)
+	}
+}
+
+func TestPublishAppAutoConfigKeepsSubmittedActionWhenFinalVerificationFails(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	phase := 0
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
+		return []AppScopeStatus{
+			{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1},
+			{ScopeName: "drive:drive", ScopeType: "tenant", GrantStatus: 1},
+		}, nil
+	}
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		if phase > 0 {
+			return nil, errors.New("final plan read failed")
+		}
+		return &larkapplication.Application{
+			Scopes: []*larkapplication.AppScope{
+				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
+				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
+			},
+			Event: &larkapplication.SubscribedEvent{
+				SubscriptionType: strp("websocket"),
+				SubscribedEvents: []string{"im.message.receive_v1"},
+			},
+			Callback: &larkapplication.Callback{
+				CallbackType:        strp("websocket"),
+				SubscribedCallbacks: []string{"card.action.trigger"},
+			},
+			UnauditVersionId: strp("draft-1"),
+		}, nil
+	}
+	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
+		return &larkapplication.ApplicationAppVersion{
+			VersionId: strp("draft-1"),
+			Version:   strp("1.0.1"),
+			Status:    intp(larkapplication.AppVersionStatusUnaudit),
+			Ability: &larkapplication.AppAbility{
+				Bot: &larkapplication.Bot{},
+			},
+		}, nil
+	}
+	autoConfigPublish = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PublishRequest) (string, string, error) {
+		phase = 1
+		return "draft-1", "1.0.1", nil
+	}
+
+	result, err := PublishAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy(), AutoConfigPublishRequest{})
+	if err != nil {
+		t.Fatalf("PublishAppAutoConfig: %v", err)
+	}
+	if result.Status != AutoConfigStatusVerificationFailed {
+		t.Fatalf("publish status = %q, want %q", result.Status, AutoConfigStatusVerificationFailed)
+	}
+	if result.VersionID != "draft-1" || result.Version != "1.0.1" {
+		t.Fatalf("expected publish version evidence, got %q/%q", result.VersionID, result.Version)
+	}
+	if result.VerificationStatus != AutoConfigVerificationStatusFailed || result.VerificationError == "" {
+		t.Fatalf("expected verification failure details, got %#v", result)
+	}
+	if !reflect.DeepEqual(result.Actions, []AutoConfigAction{{Name: "publish", Outcome: "submitted"}}) {
+		t.Fatalf("expected submitted action evidence, got %#v", result.Actions)
 	}
 }
 

@@ -39,8 +39,10 @@ func (s *autoConfigService) Complete(ctx context.Context, req AutoConfigPublishR
 		result.Summary = applyResult.Summary
 		result.BlockingReason = applyResult.BlockingReason
 		result.Plan = applyResult.Plan
+		result.VerificationStatus = applyResult.VerificationStatus
+		result.VerificationError = applyResult.VerificationError
 		plan = applyResult.Plan
-		if autoConfigCompleteTerminal(plan) {
+		if autoConfigCompleteTerminalStatus(result.Status) {
 			return result, nil
 		}
 	}
@@ -56,14 +58,20 @@ func (s *autoConfigService) Complete(ctx context.Context, req AutoConfigPublishR
 		result.VersionID = publishResult.VersionID
 		result.Version = publishResult.Version
 		result.Plan = publishResult.Plan
+		result.VerificationStatus = publishResult.VerificationStatus
+		result.VerificationError = publishResult.VerificationError
 		return result, nil
 	}
 	return result, nil
 }
 
 func autoConfigCompleteTerminal(plan AutoConfigPlan) bool {
-	switch plan.Status {
-	case AutoConfigStatusAwaitingReview, AutoConfigStatusBlocked, AutoConfigStatusUnsupported:
+	return autoConfigCompleteTerminalStatus(plan.Status)
+}
+
+func autoConfigCompleteTerminalStatus(status string) bool {
+	switch status {
+	case AutoConfigStatusAwaitingReview, AutoConfigStatusBlocked, AutoConfigStatusUnsupported, AutoConfigStatusVerificationFailed:
 		return true
 	default:
 		return false

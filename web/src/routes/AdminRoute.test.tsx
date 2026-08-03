@@ -506,6 +506,53 @@ describe("AdminRoute", () => {
     expect(screen.queryByText(/还缺少/)).not.toBeInTheDocument();
   });
 
+  it("shows an actionable auto-config read failure after permission check", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({
+      id: "bot-plan-error",
+      name: "状态待确认机器人",
+      appId: "cli_plan_error",
+    });
+
+    installMockFetch(makeSingleRobotAdminRoutes(app, {
+      "/api/admin/feishu/apps/bot-plan-error/permissions/check": {
+        body: {
+          app,
+          ready: false,
+          missingScopes: [
+            {
+              scope: "im:message.group_at_msg:readonly",
+              scopeType: "tenant",
+            },
+          ],
+          grantJSON:
+            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_at_msg:readonly"\n    ],\n    "user": []\n  }\n}',
+          lastCheckedAt: "2026-08-02T06:30:00Z",
+        },
+      },
+      "/api/admin/feishu/apps/bot-plan-error/auto-config/plan": {
+        status: 502,
+        body: {
+          error: {
+            code: "feishu_auto_config_plan_failed",
+            message: "raw backend verification error",
+          },
+        },
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+
+    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
+    expect(screen.getByText("暂时无法确认飞书自动配置状态。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "自动补齐" })).toBeInTheDocument();
+    expect(screen.queryByText("raw backend verification error")).not.toBeInTheDocument();
+  });
+
   it("shows a retryable permission check failure", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();

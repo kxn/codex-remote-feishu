@@ -102,18 +102,25 @@ func TestOnboardingAutoConfigCanContinueDegraded(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "publish required cannot continue degraded",
+			name: "publish required can continue degraded when no blocking diff remains",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Status = feishu.AutoConfigStatusPublishRequired
 			},
-			want: false,
+			want: true,
 		},
 		{
-			name: "awaiting review cannot continue degraded",
+			name: "awaiting review can continue degraded when no blocking diff remains",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Status = feishu.AutoConfigStatusAwaitingReview
 			},
-			want: false,
+			want: true,
+		},
+		{
+			name: "verification failure can continue degraded when no blocking diff remains",
+			mutate: func(plan *feishu.AutoConfigPlan) {
+				plan.Status = feishu.AutoConfigStatusVerificationFailed
+			},
+			want: true,
 		},
 		{
 			name: "ability mismatch blocks degraded continue",
@@ -165,11 +172,14 @@ func TestOnboardingAutoConfigCanContinueDegraded(t *testing.T) {
 	}
 }
 
-func TestSetupOnboardingWorkflowDoesNotHonorDeferredAutoConfigForBlockingStates(t *testing.T) {
+func TestSetupOnboardingWorkflowDeferredAutoConfigHonorsFinalBlockingState(t *testing.T) {
 	cases := []struct {
 		name           string
 		plan           feishu.AutoConfigPlan
 		wantAutoStatus string
+		wantMenuStatus string
+		wantStage      string
+		wantDefer      bool
 	}{
 		{
 			name: "required ability patch remains pending",
@@ -181,22 +191,28 @@ func TestSetupOnboardingWorkflowDoesNotHonorDeferredAutoConfigForBlockingStates(
 				},
 			},
 			wantAutoStatus: onboardingStageStatusPending,
+			wantMenuStatus: onboardingStageStatusBlocked,
+			wantStage:      onboardingStageAutoConfig,
 		},
 		{
-			name: "publish required remains pending",
+			name: "publish required honors deferred when no blocking diff remains",
 			plan: feishu.AutoConfigPlan{
 				Status:  feishu.AutoConfigStatusPublishRequired,
 				Summary: "自动补齐后的配置仍需提交飞书发布。",
 			},
-			wantAutoStatus: onboardingStageStatusPending,
+			wantAutoStatus: onboardingStageStatusDeferred,
+			wantMenuStatus: onboardingStageStatusPending,
+			wantStage:      onboardingStageMenu,
 		},
 		{
-			name: "awaiting review remains blocked",
+			name: "awaiting review honors deferred when no blocking diff remains",
 			plan: feishu.AutoConfigPlan{
 				Status:  feishu.AutoConfigStatusAwaitingReview,
 				Summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
 			},
-			wantAutoStatus: onboardingStageStatusBlocked,
+			wantAutoStatus: onboardingStageStatusDeferred,
+			wantMenuStatus: onboardingStageStatusPending,
+			wantStage:      onboardingStageMenu,
 		},
 	}
 
@@ -221,17 +237,17 @@ func TestSetupOnboardingWorkflowDoesNotHonorDeferredAutoConfigForBlockingStates(
 			if workflow.App.AutoConfig.Status != tc.wantAutoStatus {
 				t.Fatalf("auto-config status = %q, want %q", workflow.App.AutoConfig.Status, tc.wantAutoStatus)
 			}
-			if workflow.App.Menu.Status != onboardingStageStatusBlocked {
-				t.Fatalf("menu status = %q, want blocked", workflow.App.Menu.Status)
+			if workflow.App.Menu.Status != tc.wantMenuStatus {
+				t.Fatalf("menu status = %q, want %q", workflow.App.Menu.Status, tc.wantMenuStatus)
 			}
-			if workflow.CurrentStage != onboardingStageAutoConfig {
-				t.Fatalf("current stage = %q, want auto_config", workflow.CurrentStage)
+			if workflow.CurrentStage != tc.wantStage {
+				t.Fatalf("current stage = %q, want %q", workflow.CurrentStage, tc.wantStage)
 			}
 			if workflow.Completion.CanComplete {
 				t.Fatal("completion unexpectedly allowed")
 			}
-			if containsString(workflow.App.AutoConfig.AllowedActions, "defer") {
-				t.Fatalf("allowed actions = %#v, defer should not be exposed", workflow.App.AutoConfig.AllowedActions)
+			if got := containsString(workflow.App.AutoConfig.AllowedActions, "defer"); got != tc.wantDefer {
+				t.Fatalf("allowed actions = %#v, defer presence = %t, want %t", workflow.App.AutoConfig.AllowedActions, got, tc.wantDefer)
 			}
 		})
 	}

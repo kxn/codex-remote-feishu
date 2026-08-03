@@ -359,6 +359,8 @@ export interface FeishuAppAutoConfigApplyResult {
   blockingReason?: string;
   actions?: FeishuAppAutoConfigAction[];
   plan: FeishuAppAutoConfigPlan;
+  verificationStatus?: string;
+  verificationError?: string;
 }
 
 export interface FeishuAppAutoConfigApplyResponse {
@@ -374,6 +376,8 @@ export interface FeishuAppAutoConfigPublishResult {
   version?: string;
   actions?: FeishuAppAutoConfigAction[];
   plan: FeishuAppAutoConfigPlan;
+  verificationStatus?: string;
+  verificationError?: string;
 }
 
 export interface FeishuAppAutoConfigPublishResponse {
@@ -389,6 +393,8 @@ export interface FeishuAppAutoConfigCompleteResult {
   version?: string;
   actions?: FeishuAppAutoConfigAction[];
   plan: FeishuAppAutoConfigPlan;
+  verificationStatus?: string;
+  verificationError?: string;
 }
 
 export interface FeishuAppAutoConfigCompleteResponse {
@@ -552,6 +558,7 @@ export interface OnboardingWorkflowMachineStep extends OnboardingWorkflowStage {
 
 export interface OnboardingWorkflowAutoConfig extends OnboardingWorkflowStage {
   decision?: OnboardingWorkflowDecision;
+  resultStatus?: string;
   plan?: FeishuAppAutoConfigPlan;
   longConnection?: {
     onlineInstanceCount: number;

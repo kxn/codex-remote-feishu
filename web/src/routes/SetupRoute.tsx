@@ -10,9 +10,11 @@ import { navigateToLocalPath } from "../lib/navigation";
 import { relativeLocalPath } from "../lib/paths";
 import type {
   BootstrapState,
+  FeishuAppAutoConfigCompleteView,
   FeishuAppAutoConfigCompleteResponse,
   FeishuAppAutoConfigRequirementStatus,
   FeishuAppResponse,
+  OnboardingWorkflowAutoConfig,
   OnboardingWorkflowResponse,
   RuntimeRequirementsDetectResponse,
   SetupCompleteResponse,
@@ -57,6 +59,11 @@ type ManualConnectForm = {
   appSecret: string;
 };
 
+type ImmediateAutoConfig = {
+  appID: string;
+  view: FeishuAppAutoConfigCompleteView;
+};
+
 const setupActs: Array<{ id: SetupActID; name: string }> = [
   { id: 1, name: "准备环境" },
   { id: 2, name: "连接飞书机器人" },
@@ -90,6 +97,8 @@ export function SetupRoute() {
   });
   const [actionBusy, setActionBusy] = useState("");
   const [finishingSetup, setFinishingSetup] = useState(false);
+  const [immediateAutoConfig, setImmediateAutoConfig] =
+    useState<ImmediateAutoConfig | null>(null);
 
   const activeApp = useMemo(() => {
     if (workflow?.app?.app) {
@@ -98,7 +107,16 @@ export function SetupRoute() {
     return workflow?.apps.find((app) => app.id === selectedAppID) ?? null;
   }, [selectedAppID, workflow]);
   const runtimeRequirements = workflow?.runtimeRequirements || null;
-  const autoConfigStage = workflow?.app?.autoConfig;
+  const rawAutoConfigStage = workflow?.app?.autoConfig;
+  const autoConfigStage = useMemo(
+    () =>
+      mergeImmediateAutoConfigStage(
+        rawAutoConfigStage,
+        activeApp?.id,
+        immediateAutoConfig,
+      ),
+    [activeApp?.id, immediateAutoConfig, rawAutoConfigStage],
+  );
   const menuStage = workflow?.app?.menu;
   const autostartStage = workflow?.autostart || null;
   const vscodeStage = workflow?.vscode || null;
@@ -143,9 +161,14 @@ export function SetupRoute() {
     actionBusy,
     setActionBusy,
     sessionsPath: "/api/setup/feishu/onboarding/sessions",
-    onCompleteSuccess: async (appID) => {
+    onCompleteSuccess: async (appID, _session, response) => {
+      rememberImmediateAutoConfig(appID, response.autoConfig);
       await loadSetupPage({ preferredAppID: appID });
-      setNotice({ tone: "good", message: "连接验证成功。" });
+      setCurrentStep("auto_config");
+      setNotice(noticeFromAutoConfigView(response.autoConfig) || {
+        tone: "good",
+        message: "连接验证成功。",
+      });
     },
   });
 
@@ -223,6 +246,16 @@ export function SetupRoute() {
     });
   }
 
+  function rememberImmediateAutoConfig(
+    appID: string,
+    view?: FeishuAppAutoConfigCompleteView,
+  ) {
+    if (!view) {
+      return;
+    }
+    setImmediateAutoConfig({ appID, view });
+  }
+
   async function retryEnvironmentCheck() {
     await loadSetupPage({
       preferredAppID: activeApp?.id || selectedAppID,
@@ -249,7 +282,7 @@ export function SetupRoute() {
             if (!activeApp?.id) {
               throw new Error("missing active app");
             }
-            return activeApp.id;
+            return { appID: activeApp.id };
           }
           const payload = {
             name: blankToUndefined(manualForm.name),
@@ -264,7 +297,7 @@ export function SetupRoute() {
                 payload,
               )
             : await sendJSON<FeishuAppResponse>("/api/setup/feishu/apps", "POST", payload);
-          return saved.app.id;
+          return { appID: saved.app.id, autoConfig: saved.autoConfig };
         },
         verifyPath: (appID) =>
           `/api/setup/feishu/apps/${encodeURIComponent(appID)}/verify`,
@@ -277,7 +310,12 @@ export function SetupRoute() {
         });
         return;
       }
-      setNotice({ tone: "good", message: "连接验证成功。" });
+      rememberImmediateAutoConfig(result.appID, result.autoConfig);
+      setCurrentStep("auto_config");
+      setNotice(noticeFromAutoConfigView(result.autoConfig) || {
+        tone: "good",
+        message: "连接验证成功。",
+      });
     } catch (error: unknown) {
       if (await maybeRecoverRuntimeApplyFailure(error, activeApp?.id)) {
         return;
@@ -333,7 +371,9 @@ export function SetupRoute() {
         });
         return;
       }
+      rememberImmediateAutoConfig(result.payload.app.id, { result: result.payload.result });
       await loadSetupPage({ preferredAppID: result.payload.app.id });
+      setCurrentStep("auto_config");
       setNotice(result.notice);
     } catch {
       setNotice({
@@ -1007,6 +1047,7 @@ export function SetupRoute() {
     }
 
     const plan = autoConfigStage.plan;
+    const displayStatus = autoConfigStage.resultStatus || plan?.status || autoConfigStage.status;
     const busy =
       actionBusy === "auto-config-complete" ||
       actionBusy === "auto-config-defer" ||
@@ -1024,17 +1065,17 @@ export function SetupRoute() {
 
         <div className={`notice-banner ${onboardingAutoConfigNoticeTone(autoConfigStage.status)}`}>
           {autoConfigStage.summary?.trim() ||
-            (plan ? describeAutoConfigSummary(plan.status) : "当前还没有读取到自动配置状态。")}
+            (plan ? describeAutoConfigSummary(displayStatus) : "当前还没有读取到自动配置状态。")}
         </div>
 
         <div className="detail-stack">
           <div className="section-heading">
             <div>
-              <h4>{describeAutoConfigHeadline(plan?.status || autoConfigStage.status)}</h4>
+              <h4>{describeAutoConfigHeadline(displayStatus)}</h4>
               <p>
                 {plan?.summary?.trim() ||
                   autoConfigStage.summary?.trim() ||
-                  describeAutoConfigSummary(plan?.status || autoConfigStage.status)}
+                  describeAutoConfigSummary(displayStatus)}
               </p>
             </div>
           </div>
@@ -1312,6 +1353,97 @@ function normalizeSetupStepID(value: string | undefined): SetupStepID {
 
 function isResolvedStageStatus(status: string): boolean {
   return status === "complete" || status === "deferred" || status === "not_applicable";
+}
+
+function mergeImmediateAutoConfigStage(
+  stage: OnboardingWorkflowAutoConfig | undefined,
+  appID: string | undefined,
+  immediate: ImmediateAutoConfig | null,
+): OnboardingWorkflowAutoConfig | undefined {
+  if (!stage || !appID || !immediate || immediate.appID !== appID) {
+    return stage;
+  }
+  const result = immediate.view.result;
+  if (!result) {
+    if (!immediate.view.error) {
+      return stage;
+    }
+    return {
+      ...stage,
+      status: "pending",
+      resultStatus: "verification_failed",
+      summary: "已保存机器人，但暂时无法确认飞书配置结果。",
+      error: immediate.view.error,
+      allowedActions: mergeAllowedActions(stage.allowedActions, ["apply", "retry"]),
+    };
+  }
+  return {
+    ...stage,
+    status: onboardingStageStatusFromAutoConfigResult(result.status),
+    resultStatus: result.status,
+    summary: result.summary?.trim() || describeAutoConfigSummary(result.status),
+    plan: result.plan || stage.plan,
+    allowedActions: allowedActionsForImmediateAutoConfig(stage.allowedActions, result.status),
+  };
+}
+
+function onboardingStageStatusFromAutoConfigResult(status: string): string {
+  switch (status) {
+    case "clean":
+    case "degraded":
+      return "complete";
+    case "blocked":
+    case "unsupported":
+      return "blocked";
+    default:
+      return "pending";
+  }
+}
+
+function allowedActionsForImmediateAutoConfig(
+  existing: string[] | undefined,
+  status: string,
+): string[] {
+  switch (status) {
+    case "apply_required":
+    case "publish_required":
+    case "verification_failed":
+      return mergeAllowedActions(existing, ["apply", "retry"]);
+    case "awaiting_review":
+      return mergeAllowedActions(existing, ["retry"]);
+    default:
+      return mergeAllowedActions(existing, ["retry"]);
+  }
+}
+
+function mergeAllowedActions(
+  existing: string[] | undefined,
+  extra: string[],
+): string[] {
+  return Array.from(new Set([...(existing || []), ...extra]));
+}
+
+function noticeFromAutoConfigView(
+  view?: FeishuAppAutoConfigCompleteView,
+): Notice | null {
+  if (!view) {
+    return null;
+  }
+  if (view.result) {
+    return {
+      tone: onboardingAutoConfigNoticeTone(
+        onboardingStageStatusFromAutoConfigResult(view.result.status),
+      ),
+      message: view.result.summary?.trim() || describeAutoConfigSummary(view.result.status),
+    };
+  }
+  if (view.error) {
+    return {
+      tone: "warn",
+      message: "已保存机器人，但暂时无法确认飞书配置结果。",
+    };
+  }
+  return null;
 }
 
 function renderAutoConfigRequirementList(

@@ -327,6 +327,16 @@ describe("SetupRoute", () => {
           body: {
             app,
             result: { connected: true, duration: 1_000_000_000 },
+            autoConfig: {
+              result: {
+                status: "verification_failed",
+                summary: "系统已经尝试更新飞书配置，但暂时无法确认最终结果。",
+                verificationStatus: "failed",
+                verificationError: "raw backend verification error",
+                actions: [{ name: "publish", outcome: "submitted" }],
+                plan: workflowState.app?.autoConfig.plan,
+              },
+            },
             session: {
               id: "session-qr",
               status: "completed",
@@ -344,6 +354,8 @@ describe("SetupRoute", () => {
     expect(
       await screen.findByRole("heading", { name: "配置飞书机器人" }, { timeout: 7_000 }),
     ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "无法确认最终状态" })).toBeInTheDocument();
+    expect(screen.queryByText("raw backend verification error")).not.toBeInTheDocument();
   }, 10_000);
 
   it("summarizes blocking backend failures with user-facing setup actions", async () => {

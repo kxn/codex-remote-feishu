@@ -3,13 +3,19 @@ package feishu
 import "github.com/kxn/codex-remote-feishu/internal/feishuapp"
 
 const (
-	AutoConfigStatusClean           = "clean"
-	AutoConfigStatusApplyRequired   = "apply_required"
-	AutoConfigStatusPublishRequired = "publish_required"
-	AutoConfigStatusAwaitingReview  = "awaiting_review"
-	AutoConfigStatusDegraded        = "degraded"
-	AutoConfigStatusBlocked         = "blocked"
-	AutoConfigStatusUnsupported     = "unsupported"
+	AutoConfigStatusClean              = "clean"
+	AutoConfigStatusApplyRequired      = "apply_required"
+	AutoConfigStatusPublishRequired    = "publish_required"
+	AutoConfigStatusAwaitingReview     = "awaiting_review"
+	AutoConfigStatusDegraded           = "degraded"
+	AutoConfigStatusBlocked            = "blocked"
+	AutoConfigStatusUnsupported        = "unsupported"
+	AutoConfigStatusVerificationFailed = "verification_failed"
+)
+
+const (
+	AutoConfigVerificationStatusVerified = "verified"
+	AutoConfigVerificationStatusFailed   = "failed"
 )
 
 const (
@@ -117,11 +123,13 @@ type AutoConfigAction struct {
 }
 
 type AutoConfigApplyResult struct {
-	Status         string             `json:"status"`
-	Summary        string             `json:"summary,omitempty"`
-	BlockingReason string             `json:"blockingReason,omitempty"`
-	Actions        []AutoConfigAction `json:"actions,omitempty"`
-	Plan           AutoConfigPlan     `json:"plan"`
+	Status             string             `json:"status"`
+	Summary            string             `json:"summary,omitempty"`
+	BlockingReason     string             `json:"blockingReason,omitempty"`
+	Actions            []AutoConfigAction `json:"actions,omitempty"`
+	Plan               AutoConfigPlan     `json:"plan"`
+	VerificationStatus string             `json:"verificationStatus,omitempty"`
+	VerificationError  string             `json:"verificationError,omitempty"`
 }
 
 type AutoConfigPublishRequest struct {
@@ -131,21 +139,25 @@ type AutoConfigPublishRequest struct {
 }
 
 type AutoConfigPublishResult struct {
-	Status         string             `json:"status"`
-	Summary        string             `json:"summary,omitempty"`
-	BlockingReason string             `json:"blockingReason,omitempty"`
-	VersionID      string             `json:"versionId,omitempty"`
-	Version        string             `json:"version,omitempty"`
-	Actions        []AutoConfigAction `json:"actions,omitempty"`
-	Plan           AutoConfigPlan     `json:"plan"`
+	Status             string             `json:"status"`
+	Summary            string             `json:"summary,omitempty"`
+	BlockingReason     string             `json:"blockingReason,omitempty"`
+	VersionID          string             `json:"versionId,omitempty"`
+	Version            string             `json:"version,omitempty"`
+	Actions            []AutoConfigAction `json:"actions,omitempty"`
+	Plan               AutoConfigPlan     `json:"plan"`
+	VerificationStatus string             `json:"verificationStatus,omitempty"`
+	VerificationError  string             `json:"verificationError,omitempty"`
 }
 
 type AutoConfigCompleteResult struct {
-	Status         string             `json:"status"`
-	Summary        string             `json:"summary,omitempty"`
-	BlockingReason string             `json:"blockingReason,omitempty"`
-	VersionID      string             `json:"versionId,omitempty"`
-	Version        string             `json:"version,omitempty"`
-	Actions        []AutoConfigAction `json:"actions,omitempty"`
-	Plan           AutoConfigPlan     `json:"plan"`
+	Status             string             `json:"status"`
+	Summary            string             `json:"summary,omitempty"`
+	BlockingReason     string             `json:"blockingReason,omitempty"`
+	VersionID          string             `json:"versionId,omitempty"`
+	Version            string             `json:"version,omitempty"`
+	Actions            []AutoConfigAction `json:"actions,omitempty"`
+	Plan               AutoConfigPlan     `json:"plan"`
+	VerificationStatus string             `json:"verificationStatus,omitempty"`
+	VerificationError  string             `json:"verificationError,omitempty"`
 }
