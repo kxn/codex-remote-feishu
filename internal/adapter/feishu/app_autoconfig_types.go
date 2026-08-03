@@ -139,3 +139,13 @@ type AutoConfigPublishResult struct {
 	Actions        []AutoConfigAction `json:"actions,omitempty"`
 	Plan           AutoConfigPlan     `json:"plan"`
 }
+
+type AutoConfigCompleteResult struct {
+	Status         string             `json:"status"`
+	Summary        string             `json:"summary,omitempty"`
+	BlockingReason string             `json:"blockingReason,omitempty"`
+	VersionID      string             `json:"versionId,omitempty"`
+	Version        string             `json:"version,omitempty"`
+	Actions        []AutoConfigAction `json:"actions,omitempty"`
+	Plan           AutoConfigPlan     `json:"plan"`
+}

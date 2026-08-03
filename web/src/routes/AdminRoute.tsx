@@ -13,9 +13,8 @@ import type {
   ClaudeProfileSummary,
   CodexProfilesResponse,
   CodexProfileSummary,
-  FeishuAppAutoConfigApplyResponse,
+  FeishuAppAutoConfigCompleteResponse,
   FeishuAppAutoConfigPlanResponse,
-  FeishuAppAutoConfigPublishResponse,
   FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
@@ -364,16 +363,22 @@ export function AdminRoute() {
     }));
   }
 
-  async function applyRobotConfiguration() {
+  async function completeRobotConfiguration() {
     if (!selectedApp?.id) {
       return;
     }
     const appID = selectedApp.id;
-    setActionBusy("permission-apply");
+    setActionBusy("permission-complete");
     try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigApplyResponse>({
-        path: `/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/apply`,
-        init: { method: "POST" },
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigCompleteResponse>({
+        path: `/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/complete`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
         fallbackErrorMessage: "当前还不能自动补齐，请稍后重试。",
         fallbackSuccessMessage: "已自动补齐飞书配置。",
       });
@@ -400,39 +405,6 @@ export function AdminRoute() {
     }
     const payload = response.data as FeishuAppAutoConfigPlanResponse;
     syncAutoConfigPlan(payload.app, payload.plan);
-  }
-
-  async function publishRobotConfiguration() {
-    if (!selectedApp?.id) {
-      return;
-    }
-    const appID = selectedApp.id;
-    setActionBusy("permission-publish");
-    try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigPublishResponse>({
-        path: `/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/publish`,
-        init: {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-        fallbackErrorMessage: "当前还不能提交发布，请稍后重试。",
-        fallbackSuccessMessage: "已提交发布。",
-      });
-      if (!result.ok) {
-        setDetailNotice({ tone: "danger", message: result.message });
-        return;
-      }
-      syncAutoConfigPlan(result.payload.app, result.payload.result.plan);
-      setDetailNotice(result.notice);
-      await checkRobotPermissions({ appID, silent: true });
-    } catch {
-      setDetailNotice({ tone: "danger", message: "当前还不能提交发布，请稍后重试。" });
-    } finally {
-      setActionBusy("");
-    }
   }
 
   async function deleteRobot() {
@@ -944,8 +916,9 @@ export function AdminRoute() {
     const disabled = Boolean(actionBusy);
     const autoConfigPlan =
       selectedAutoConfig.status === "ready" ? selectedAutoConfig.data.plan : null;
-    const canApply = autoConfigPlan?.status === "apply_required";
-    const canPublish = autoConfigPlan?.status === "publish_required";
+    const canComplete =
+      autoConfigPlan?.status === "apply_required" ||
+      autoConfigPlan?.status === "publish_required";
     const awaitingReview = autoConfigPlan?.status === "awaiting_review";
     return (
       <section className="card">
@@ -984,7 +957,7 @@ export function AdminRoute() {
           selectedPermissionCheck.data.ready ? (
             <div className="detail-stack">
               <div className="notice-banner good">权限已就绪</div>
-              {canApply ? (
+              {canComplete ? (
                 <>
                   <div className="notice-banner warn">飞书配置还需要补齐</div>
                   <div className="button-row">
@@ -992,24 +965,12 @@ export function AdminRoute() {
                       className="primary-button"
                       type="button"
                       disabled={disabled}
-                      onClick={() => void applyRobotConfiguration()}
+                      onClick={() => void completeRobotConfiguration()}
                     >
                       自动补齐
                     </button>
                   </div>
                 </>
-              ) : null}
-              {canPublish ? (
-                <div className="button-row">
-                  <button
-                    className="primary-button"
-                    type="button"
-                    disabled={disabled}
-                    onClick={() => void publishRobotConfiguration()}
-                  >
-                    提交发布
-                  </button>
-                </div>
               ) : null}
               {awaitingReview ? (
                 <div className="notice-banner warn">飞书正在审核发布</div>
@@ -1049,24 +1010,14 @@ export function AdminRoute() {
                     到飞书后台导入后，回到这里重新检查。
                   </p>
                   <div className="button-row">
-                    {canApply ? (
+                    {canComplete ? (
                       <button
                         className="primary-button"
                         type="button"
                         disabled={disabled}
-                        onClick={() => void applyRobotConfiguration()}
+                        onClick={() => void completeRobotConfiguration()}
                       >
                         自动补齐
-                      </button>
-                    ) : null}
-                    {canPublish ? (
-                      <button
-                        className="primary-button"
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => void publishRobotConfiguration()}
-                      >
-                        提交发布
                       </button>
                     ) : null}
                     <button

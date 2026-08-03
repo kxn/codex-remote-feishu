@@ -46,6 +46,11 @@ type feishuAppAutoConfigPublishResponse struct {
 	Result feishu.AutoConfigPublishResult `json:"result"`
 }
 
+type feishuAppAutoConfigCompleteResponse struct {
+	App    adminFeishuAppSummary           `json:"app"`
+	Result feishu.AutoConfigCompleteResult `json:"result"`
+}
+
 type feishuRuntimeApplyErrorDetails struct {
 	GatewayID string                 `json:"gatewayId,omitempty"`
 	App       *adminFeishuAppSummary `json:"app,omitempty"`

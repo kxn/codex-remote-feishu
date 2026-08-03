@@ -78,10 +78,14 @@ type fakeFeishuSetupClient struct {
 	applyErr       error
 	publishResult  feishu.AutoConfigPublishResult
 	publishErr     error
+	completeResult feishu.AutoConfigCompleteResult
+	completeErr    error
 	planCfg        feishu.LiveGatewayConfig
 	applyCfg       feishu.LiveGatewayConfig
 	publishCfg     feishu.LiveGatewayConfig
+	completeCfg    feishu.LiveGatewayConfig
 	publishReq     feishu.AutoConfigPublishRequest
+	completeReq    feishu.AutoConfigPublishRequest
 	statusResult   feishu.LongConnectionStatus
 	statusErr      error
 }
@@ -107,6 +111,12 @@ func (f *fakeFeishuSetupClient) PublishAutoConfig(_ context.Context, cfg feishu.
 	return f.publishResult, f.publishErr
 }
 
+func (f *fakeFeishuSetupClient) CompleteAutoConfig(_ context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error) {
+	f.completeCfg = cfg
+	f.completeReq = req
+	return f.completeResult, f.completeErr
+}
+
 func (f *fakeFeishuSetupClient) LongConnectionStatus(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
 	return f.statusResult, f.statusErr
 }
@@ -124,6 +134,7 @@ type setupFacadeFunc struct {
 	plan     func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error)
 	apply    func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error)
 	publish  func(context.Context, feishu.LiveGatewayConfig, feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error)
+	complete func(context.Context, feishu.LiveGatewayConfig, feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error)
 	status   func(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error)
 	describe func(context.Context, string, string) (feishuAppIdentity, error)
 }
@@ -147,6 +158,13 @@ func (f setupFacadeFunc) PublishAutoConfig(ctx context.Context, cfg feishu.LiveG
 		return feishu.AutoConfigPublishResult{}, nil
 	}
 	return f.publish(ctx, cfg, req)
+}
+
+func (f setupFacadeFunc) CompleteAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error) {
+	if f.complete == nil {
+		return feishu.AutoConfigCompleteResult{}, nil
+	}
+	return f.complete(ctx, cfg, req)
 }
 
 func (f setupFacadeFunc) LongConnectionStatus(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
@@ -297,6 +315,47 @@ func TestAdminFeishuAutoConfigPublishRoute(t *testing.T) {
 	}
 	if setup.publishReq.Remark != "sync" || setup.publishReq.Changelog != "updated" || setup.publishReq.Version != "1.8.1" {
 		t.Fatalf("unexpected publish request: %#v", setup.publishReq)
+	}
+}
+
+func TestAdminFeishuAutoConfigCompleteRoute(t *testing.T) {
+	setup := &fakeFeishuSetupClient{completeResult: feishu.AutoConfigCompleteResult{
+		Status:    feishu.AutoConfigStatusAwaitingReview,
+		Summary:   "configuration submitted",
+		VersionID: "oav_2",
+		Version:   "1.8.2",
+		Actions: []feishu.AutoConfigAction{
+			{Name: "config_patch", Outcome: "applied"},
+			{Name: "publish", Outcome: "submitted"},
+		},
+	}}
+	stubFeishuSetupFacade(t, setup)
+
+	cfg := config.DefaultAppConfig()
+	cfg.Feishu.Apps = []config.FeishuAppConfig{{
+		ID:        "main",
+		Name:      "Main",
+		AppID:     "cli_xxx",
+		AppSecret: "secret_xxx",
+	}}
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/apps/main/auto-config/complete", `{"remark":"sync","changelog":"updated","version":"1.8.2"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("auto-config complete status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var resp feishuAppAutoConfigCompleteResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode auto-config complete: %v", err)
+	}
+	if resp.Result.Status != feishu.AutoConfigStatusAwaitingReview || resp.Result.VersionID != "oav_2" || resp.Result.Version != "1.8.2" {
+		t.Fatalf("unexpected complete payload: %#v", resp.Result)
+	}
+	if setup.completeCfg.AppID != "cli_xxx" || setup.completeCfg.GatewayID != "main" {
+		t.Fatalf("unexpected runtime cfg: %#v", setup.completeCfg)
+	}
+	if setup.completeReq.Remark != "sync" || setup.completeReq.Changelog != "updated" || setup.completeReq.Version != "1.8.2" {
+		t.Fatalf("unexpected complete request: %#v", setup.completeReq)
 	}
 }
 

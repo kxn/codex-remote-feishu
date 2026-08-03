@@ -4,10 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
-  makeAutoConfigApplyResponse,
+  makeAutoConfigCompleteResponse,
   makeAutoConfigPlan,
   makeAutoConfigPlanResponse,
-  makeAutoConfigPublishResponse,
   makeBootstrap,
   makeClaudeProfile,
   makeCodexProfile,
@@ -255,7 +254,7 @@ describe("AdminRoute", () => {
     });
   });
 
-  it("applies and publishes permission fixes from the permission card", async () => {
+  it("completes permission fixes from the permission card", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -264,8 +263,7 @@ describe("AdminRoute", () => {
       appId: "cli_permission",
     });
     let checkCount = 0;
-    let applied = false;
-    let published = false;
+    let completed = false;
 
     const { calls } = installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
@@ -298,51 +296,23 @@ describe("AdminRoute", () => {
       "/api/admin/feishu/apps/bot-permission/auto-config/plan": () => {
         return {
           body: makeAdminAutoConfigPlan(app, {
-            status: published
+            status: completed
               ? "awaiting_review"
-              : applied
-                ? "publish_required"
-                : "apply_required",
-            summary: published
+              : "apply_required",
+            summary: completed
               ? "飞书正在审核发布。"
-              : applied
-                ? "已自动补齐飞书配置。"
-                : "飞书配置还需要补齐。",
+              : "飞书配置还需要补齐。",
             publish: {
-              needsPublish: applied && !published,
-              awaitingReview: published,
+              needsPublish: !completed,
+              awaitingReview: completed,
             },
           }),
         };
       },
-      "/api/admin/feishu/apps/bot-permission/auto-config/apply": () => {
-        applied = true;
+      "/api/admin/feishu/apps/bot-permission/auto-config/complete": () => {
+        completed = true;
         return {
-          body: makeAutoConfigApplyResponse({
-            app,
-            result: {
-              status: "publish_required",
-              summary: "已自动补齐飞书配置。",
-              blockingReason: "",
-              actions: [],
-              plan: makeAutoConfigPlan({
-                status: "publish_required",
-                summary: "已自动补齐飞书配置。",
-                blockingRequirements: [],
-                degradableRequirements: [],
-                publish: {
-                  needsPublish: true,
-                  awaitingReview: false,
-                },
-              }),
-            },
-          }),
-        };
-      },
-      "/api/admin/feishu/apps/bot-permission/auto-config/publish": () => {
-        published = true;
-        return {
-          body: makeAutoConfigPublishResponse({
+          body: makeAutoConfigCompleteResponse({
             app,
             result: {
               status: "awaiting_review",
@@ -393,17 +363,14 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "自动补齐" }));
-    expect(await screen.findByText("已自动补齐飞书配置。")).toBeInTheDocument();
-    expect(await screen.findByText("权限已就绪")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "提交发布" }));
     expect(await screen.findByText("飞书正在审核发布。")).toBeInTheDocument();
     expect(await screen.findByText("飞书正在审核发布")).toBeInTheDocument();
-    expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(true);
-    expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(true);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/complete"))).toBe(true);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(false);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(false);
   });
 
-  it("shows publish instead of auto apply when missing permissions only need release", async () => {
+  it("uses automatic completion when missing permissions only need release", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -411,7 +378,7 @@ describe("AdminRoute", () => {
       name: "待发布机器人",
       appId: "cli_publish_permission",
     });
-    let published = false;
+    let completed = false;
 
     const { calls } = installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
@@ -445,10 +412,10 @@ describe("AdminRoute", () => {
           },
         }),
       },
-      "/api/admin/feishu/apps/bot-publish-permission/auto-config/publish": () => {
-        published = true;
+      "/api/admin/feishu/apps/bot-publish-permission/auto-config/complete": () => {
+        completed = true;
         return {
-          body: makeAutoConfigPublishResponse({
+          body: makeAutoConfigCompleteResponse({
             app,
             result: {
               status: "awaiting_review",
@@ -497,13 +464,13 @@ describe("AdminRoute", () => {
     await openAdminArea(user, "机器人");
     await user.click(await screen.findByRole("button", { name: "检查权限" }));
     expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "提交发布" }));
+    await user.click(screen.getByRole("button", { name: "自动补齐" }));
     expect(await screen.findByText("飞书正在审核发布。")).toBeInTheDocument();
-    expect(published).toBe(true);
+    expect(completed).toBe(true);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/complete"))).toBe(true);
     expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(false);
-    expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(true);
+    expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(false);
   });
 
   it("shows a ready permission check result", async () => {

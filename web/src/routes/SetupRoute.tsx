@@ -10,8 +10,7 @@ import { navigateToLocalPath } from "../lib/navigation";
 import { relativeLocalPath } from "../lib/paths";
 import type {
   BootstrapState,
-  FeishuAppAutoConfigApplyResponse,
-  FeishuAppAutoConfigPublishResponse,
+  FeishuAppAutoConfigCompleteResponse,
   FeishuAppAutoConfigRequirementStatus,
   FeishuAppResponse,
   OnboardingWorkflowResponse,
@@ -90,7 +89,6 @@ export function SetupRoute() {
     appSecret: "",
   });
   const [actionBusy, setActionBusy] = useState("");
-  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [finishingSetup, setFinishingSetup] = useState(false);
   const [expandedActs, setExpandedActs] = useState<Record<number, boolean>>({});
 
@@ -186,10 +184,6 @@ export function SetupRoute() {
       window.scrollTo({ top: 0, behavior: "auto" });
     }
   }, [currentStep]);
-
-  useEffect(() => {
-    setPublishConfirmOpen(false);
-  }, [selectedAppID]);
 
   async function loadSetupPage(options?: {
     preferredAppID?: string;
@@ -314,16 +308,22 @@ export function SetupRoute() {
     return true;
   }
 
-  async function applyAutoConfig() {
+  async function completeAutoConfig() {
     if (!activeApp?.id) {
       return;
     }
-    setActionBusy("auto-config-apply");
+    setActionBusy("auto-config-complete");
     setNotice(null);
     try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigApplyResponse>({
-        path: `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/apply`,
-        init: { method: "POST" },
+      const result = await runAutoConfigMutation<FeishuAppAutoConfigCompleteResponse>({
+        path: `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/complete`,
+        init: {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
         fallbackErrorMessage: "自动补齐没有完成，请稍后重试。",
         fallbackSuccessMessage: "自动配置状态已更新。",
       });
@@ -340,45 +340,6 @@ export function SetupRoute() {
       setNotice({
         tone: "danger",
         message: "自动补齐没有完成，请稍后重试。",
-      });
-    } finally {
-      setActionBusy("");
-    }
-  }
-
-  async function publishAutoConfig() {
-    if (!activeApp?.id) {
-      return;
-    }
-    setActionBusy("auto-config-publish");
-    setNotice(null);
-    try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigPublishResponse>({
-        path: `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/publish`,
-        init: {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-        fallbackErrorMessage: "提交发布没有成功，请稍后重试。",
-        fallbackSuccessMessage: "发布状态已更新。",
-      });
-      if (!result.ok) {
-        setNotice({
-          tone: "danger",
-          message: result.message,
-        });
-        return;
-      }
-      await loadSetupPage({ preferredAppID: result.payload.app.id });
-      setNotice(result.notice);
-      setPublishConfirmOpen(false);
-    } catch {
-      setNotice({
-        tone: "danger",
-        message: "提交发布没有成功，请稍后重试。",
       });
     } finally {
       setActionBusy("");
@@ -1059,10 +1020,12 @@ export function SetupRoute() {
 
     const plan = autoConfigStage.plan;
     const busy =
-      actionBusy === "auto-config-apply" ||
-      actionBusy === "auto-config-publish" ||
+      actionBusy === "auto-config-complete" ||
       actionBusy === "auto-config-defer" ||
       actionBusy === "auto-config-reset";
+    const canComplete =
+      autoConfigStage.allowedActions?.includes("apply") ||
+      autoConfigStage.allowedActions?.includes("publish");
 
     return (
       <section className="step-section">
@@ -1106,24 +1069,14 @@ export function SetupRoute() {
           )}
 
           <div className="button-row">
-            {autoConfigStage.allowedActions?.includes("apply") ? (
+            {canComplete ? (
               <button
                 className="primary-button"
                 type="button"
                 disabled={busy}
-                onClick={() => void applyAutoConfig()}
+                onClick={() => void completeAutoConfig()}
               >
                 自动补齐
-              </button>
-            ) : null}
-            {autoConfigStage.allowedActions?.includes("publish") ? (
-              <button
-                className="primary-button"
-                type="button"
-                disabled={busy}
-                onClick={() => setPublishConfirmOpen(true)}
-              >
-                继续发布
               </button>
             ) : null}
             {autoConfigStage.allowedActions?.includes("defer") ? (
@@ -1325,38 +1278,6 @@ export function SetupRoute() {
         )}
       </main>
 
-      {publishConfirmOpen ? (
-        <div className="modal-backdrop" role="presentation">
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="publish-app-title"
-          >
-            <h3 id="publish-app-title">确认提交发布</h3>
-            <p className="modal-copy">
-              这会把当前自动补齐后的飞书配置提交到发布流程。若飞书要求管理员审核，后续状态会显示为“等待管理员处理”。
-            </p>
-            <div className="modal-actions">
-              <button
-                className="secondary-button"
-                type="button"
-                onClick={() => setPublishConfirmOpen(false)}
-              >
-                取消
-              </button>
-              <button
-                className="primary-button"
-                type="button"
-                disabled={actionBusy === "auto-config-publish"}
-                onClick={() => void publishAutoConfig()}
-              >
-                确认提交
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 

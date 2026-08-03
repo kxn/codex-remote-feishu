@@ -380,6 +380,21 @@ export interface FeishuAppAutoConfigPublishResponse {
   result: FeishuAppAutoConfigPublishResult;
 }
 
+export interface FeishuAppAutoConfigCompleteResult {
+  status: string;
+  summary?: string;
+  blockingReason?: string;
+  versionId?: string;
+  version?: string;
+  actions?: FeishuAppAutoConfigAction[];
+  plan: FeishuAppAutoConfigPlan;
+}
+
+export interface FeishuAppAutoConfigCompleteResponse {
+  app: FeishuAppSummary;
+  result: FeishuAppAutoConfigCompleteResult;
+}
+
 export interface FeishuOnboardingSession {
   id: string;
   status: string;

@@ -162,6 +162,80 @@ func TestPublishAppAutoConfigBlocksUntilApplyCompletes(t *testing.T) {
 	}
 }
 
+func TestCompleteAppAutoConfigAppliesThenPublishes(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	phase := 0
+	var calls []string
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
+		return nil, nil
+	}
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		if phase == 0 {
+			return &larkapplication.Application{}, nil
+		}
+		return &larkapplication.Application{
+			Scopes: []*larkapplication.AppScope{
+				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
+				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
+			},
+			Event: &larkapplication.SubscribedEvent{
+				SubscriptionType: strp("websocket"),
+				SubscribedEvents: []string{"im.message.receive_v1"},
+			},
+			Callback: &larkapplication.Callback{
+				CallbackType:        strp("websocket"),
+				SubscribedCallbacks: []string{"card.action.trigger"},
+			},
+			UnauditVersionId: strp("draft-1"),
+		}, nil
+	}
+	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
+		if phase == 0 {
+			return nil, nil
+		}
+		status := larkapplication.AppVersionStatusUnaudit
+		if phase >= 2 {
+			status = larkapplication.AppVersionStatusUnderAudit
+		}
+		return &larkapplication.ApplicationAppVersion{
+			VersionId: strp("draft-1"),
+			Version:   strp("1.0.1"),
+			Status:    intp(status),
+			Ability: &larkapplication.AppAbility{
+				Bot: &larkapplication.Bot{},
+			},
+		}, nil
+	}
+	autoConfigPatchAbility = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchAbilityRequest) error {
+		calls = append(calls, "ability")
+		return nil
+	}
+	autoConfigPatchConfig = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchConfigRequest) error {
+		calls = append(calls, "config")
+		phase = 1
+		return nil
+	}
+	autoConfigPublish = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PublishRequest) (string, string, error) {
+		calls = append(calls, "publish")
+		phase = 2
+		return "draft-1", "1.0.1", nil
+	}
+
+	result, err := CompleteAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy(), AutoConfigPublishRequest{})
+	if err != nil {
+		t.Fatalf("CompleteAppAutoConfig: %v", err)
+	}
+	if !reflect.DeepEqual(calls, []string{"ability", "config", "publish"}) {
+		t.Fatalf("complete calls = %#v, want ability, config, publish", calls)
+	}
+	if result.Status != AutoConfigStatusAwaitingReview {
+		t.Fatalf("complete status = %q, want %q", result.Status, AutoConfigStatusAwaitingReview)
+	}
+	if result.VersionID != "draft-1" || result.Version != "1.0.1" {
+		t.Fatalf("complete publish version = %q/%q", result.VersionID, result.Version)
+	}
+}
+
 func TestPlanAppAutoConfigReturnsUnsupportedPlanInsteadOfError(t *testing.T) {
 	restoreAutoConfigHooks(t)
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {

@@ -61,7 +61,7 @@ describe("SetupRoute", () => {
     expect(calls.every((call) => call.rawURL.startsWith("./"))).toBe(true);
   });
 
-  it("connects manually, publishes auto-config changes, and stays in auto-config while review is pending", async () => {
+  it("connects manually, completes auto-config changes, and stays in auto-config while review is pending", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
 
@@ -112,27 +112,7 @@ describe("SetupRoute", () => {
           },
         };
       },
-      "/api/setup/feishu/apps/bot-manual/auto-config/apply": () => {
-        workflowState = buildAutoConfigWorkflow(app, {
-          status: "publish_required",
-          summary: "配置已收敛到待发布版本，仍需提交发布。",
-          stageStatus: "pending",
-          allowedActions: ["publish", "retry"],
-        });
-        return {
-          body: {
-            app,
-            result: {
-              status: "publish_required",
-              summary: "配置已收敛到待发布版本，仍需提交发布。",
-              blockingReason: "",
-              actions: [],
-              plan: workflowState.app?.autoConfig.plan,
-            },
-          },
-        };
-      },
-      "/api/setup/feishu/apps/bot-manual/auto-config/publish": () => {
+      "/api/setup/feishu/apps/bot-manual/auto-config/complete": () => {
         workflowState = buildAutoConfigWorkflow(app, {
           status: "awaiting_review",
           summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
@@ -171,14 +151,11 @@ describe("SetupRoute", () => {
 
     expect(await screen.findByRole("heading", { name: "配置飞书机器人" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "自动补齐" }));
-
-    expect(await screen.findByRole("button", { name: "继续发布" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "继续发布" }));
-    expect(await screen.findByRole("dialog", { name: "确认提交发布" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "确认提交" }));
     expect(
       await screen.findByRole("heading", { name: "已提交发布，正在等待管理员处理" }),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "继续发布" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "确认提交发布" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "先按降级继续" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "确认机器人菜单" })).not.toBeInTheDocument();
   });

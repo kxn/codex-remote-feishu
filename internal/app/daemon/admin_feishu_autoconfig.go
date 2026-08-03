@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	defaultFeishuAutoConfigPlanTimeout    = 20 * time.Second
-	defaultFeishuAutoConfigApplyTimeout   = 30 * time.Second
-	defaultFeishuAutoConfigPublishTimeout = 45 * time.Second
+	defaultFeishuAutoConfigPlanTimeout     = 20 * time.Second
+	defaultFeishuAutoConfigApplyTimeout    = 30 * time.Second
+	defaultFeishuAutoConfigPublishTimeout  = 45 * time.Second
+	defaultFeishuAutoConfigCompleteTimeout = 75 * time.Second
 )
 
 var (
@@ -24,6 +25,7 @@ type daemonFeishuSetupFacade interface {
 	PlanAutoConfig(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error)
 	ApplyAutoConfig(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error)
 	PublishAutoConfig(context.Context, feishu.LiveGatewayConfig, feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error)
+	CompleteAutoConfig(context.Context, feishu.LiveGatewayConfig, feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error)
 	LongConnectionStatus(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error)
 	DescribeApp(context.Context, string, string) (feishuAppIdentity, error)
 }
@@ -43,6 +45,11 @@ func (liveDaemonFeishuSetupFacade) ApplyAutoConfig(ctx context.Context, cfg feis
 func (liveDaemonFeishuSetupFacade) PublishAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error) {
 	client := feishu.NewSetupClient(feishu.SetupClientConfigFromLiveGatewayConfig(cfg))
 	return client.PublishAppAutoConfig(ctx, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy(), req)
+}
+
+func (liveDaemonFeishuSetupFacade) CompleteAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error) {
+	client := feishu.NewSetupClient(feishu.SetupClientConfigFromLiveGatewayConfig(cfg))
+	return client.CompleteAppAutoConfig(ctx, feishuapp.DefaultManifest(), feishuapp.DefaultFixedPolicy(), req)
 }
 
 func (liveDaemonFeishuSetupFacade) LongConnectionStatus(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
@@ -147,6 +154,46 @@ func (a *App) handleFeishuAppAutoConfigPublish(w http.ResponseWriter, r *http.Re
 		return
 	}
 	writeJSON(w, http.StatusOK, feishuAppAutoConfigPublishResponse{
+		App:    summary,
+		Result: result,
+	})
+}
+
+func (a *App) handleFeishuAppAutoConfigComplete(w http.ResponseWriter, r *http.Request) {
+	summary, runtimeCfg, err := a.loadFeishuLiveGatewayTarget(r.PathValue("id"))
+	if err != nil {
+		a.writeFeishuAppTargetError(w, err)
+		return
+	}
+	var req feishuAppAutoConfigPublishRequest
+	if err := decodeJSONBody(r, &req); err != nil {
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "invalid_request",
+			Message: "failed to decode feishu auto-config complete payload",
+			Details: err.Error(),
+		})
+		return
+	}
+	completeCtx, cancel := context.WithTimeout(r.Context(), defaultFeishuAutoConfigCompleteTimeout)
+	defer cancel()
+	result, err := feishuSetupFacade.CompleteAutoConfig(completeCtx, runtimeCfg, feishu.AutoConfigPublishRequest{
+		Remark:    strings.TrimSpace(req.Remark),
+		Changelog: strings.TrimSpace(req.Changelog),
+		Version:   strings.TrimSpace(req.Version),
+	})
+	if err != nil {
+		a.writeFeishuAutoConfigGatewayError(w, "failed to complete feishu auto-config", err)
+		return
+	}
+	if err := a.clearFeishuAppAutoConfigDecision(summary.ID); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiError{
+			Code:    "config_write_failed",
+			Message: "feishu auto-config completed but failed to reset onboarding decision",
+			Details: err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, feishuAppAutoConfigCompleteResponse{
 		App:    summary,
 		Result: result,
 	})

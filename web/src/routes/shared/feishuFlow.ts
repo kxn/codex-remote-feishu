@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { APIRequestError, requestJSON, requestJSONAllowHTTPError, sendJSON } from "../../lib/api";
 import type {
   FeishuAppAutoConfigApplyResponse,
+  FeishuAppAutoConfigCompleteResponse,
   FeishuAppAutoConfigPublishResponse,
   FeishuOnboardingCompleteResponse,
   FeishuOnboardingSession,
@@ -22,6 +23,7 @@ type RuntimeApplyFailureDetails = {
 
 type AutoConfigMutationResponse =
   | FeishuAppAutoConfigApplyResponse
+  | FeishuAppAutoConfigCompleteResponse
   | FeishuAppAutoConfigPublishResponse;
 
 type AutoConfigMutationResult<T extends AutoConfigMutationResponse> =
