@@ -513,7 +513,6 @@ export function makeAutoConfigPlan(
     current: {
       configuredScopes: [],
       configuredEvents: [],
-      configuredCallbacks: [],
       botEnabled: true,
       encryptionKeyConfigured: true,
       verificationTokenConfigured: true,
@@ -531,12 +530,6 @@ export function makeAutoConfigPlan(
       extraScopes: [],
       missingEvents: [],
       extraEvents: [],
-      missingCallbacks: [],
-      extraCallbacks: [],
-      eventSubscriptionTypeMismatch: false,
-      eventRequestUrlMismatch: false,
-      callbackTypeMismatch: false,
-      callbackRequestUrlMismatch: false,
       publishRequired: false,
     },
     publish: {

@@ -35,12 +35,7 @@ type AutoConfigRequirementStatus struct {
 
 type AutoConfigObservedState struct {
 	ConfiguredScopes            []AutoConfigScopeRef `json:"configuredScopes,omitempty"`
-	EventSubscriptionType       string               `json:"eventSubscriptionType,omitempty"`
-	EventRequestURL             string               `json:"eventRequestUrl,omitempty"`
 	ConfiguredEvents            []string             `json:"configuredEvents,omitempty"`
-	CallbackType                string               `json:"callbackType,omitempty"`
-	CallbackRequestURL          string               `json:"callbackRequestUrl,omitempty"`
-	ConfiguredCallbacks         []string             `json:"configuredCallbacks,omitempty"`
 	OnlineVersionID             string               `json:"onlineVersionId,omitempty"`
 	OnlineVersion               string               `json:"onlineVersion,omitempty"`
 	OnlineVersionStatus         string               `json:"onlineVersionStatus,omitempty"`
@@ -67,19 +62,13 @@ type AutoConfigTargetState struct {
 }
 
 type AutoConfigDiff struct {
-	ConfigPatchRequired           bool                 `json:"configPatchRequired"`
-	AbilityPatchRequired          bool                 `json:"abilityPatchRequired"`
-	MissingScopes                 []AutoConfigScopeRef `json:"missingScopes,omitempty"`
-	ExtraScopes                   []AutoConfigScopeRef `json:"extraScopes,omitempty"`
-	MissingEvents                 []string             `json:"missingEvents,omitempty"`
-	ExtraEvents                   []string             `json:"extraEvents,omitempty"`
-	MissingCallbacks              []string             `json:"missingCallbacks,omitempty"`
-	ExtraCallbacks                []string             `json:"extraCallbacks,omitempty"`
-	EventSubscriptionTypeMismatch bool                 `json:"eventSubscriptionTypeMismatch"`
-	EventRequestURLMismatch       bool                 `json:"eventRequestUrlMismatch"`
-	CallbackTypeMismatch          bool                 `json:"callbackTypeMismatch"`
-	CallbackRequestURLMismatch    bool                 `json:"callbackRequestUrlMismatch"`
-	PublishRequired               bool                 `json:"publishRequired"`
+	ConfigPatchRequired  bool                 `json:"configPatchRequired"`
+	AbilityPatchRequired bool                 `json:"abilityPatchRequired"`
+	MissingScopes        []AutoConfigScopeRef `json:"missingScopes,omitempty"`
+	ExtraScopes          []AutoConfigScopeRef `json:"extraScopes,omitempty"`
+	MissingEvents        []string             `json:"missingEvents,omitempty"`
+	ExtraEvents          []string             `json:"extraEvents,omitempty"`
+	PublishRequired      bool                 `json:"publishRequired"`
 }
 
 type AutoConfigPublishState struct {

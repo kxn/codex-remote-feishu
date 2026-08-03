@@ -105,16 +105,10 @@ func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	if !plan.Diff.ConfigPatchRequired || !plan.Diff.AbilityPatchRequired {
 		t.Fatalf("expected config+ability patch required, got %#v", plan.Diff)
 	}
-	if !plan.Diff.EventSubscriptionTypeMismatch || !plan.Diff.EventRequestURLMismatch {
-		t.Fatalf("expected event policy mismatch, got %#v", plan.Diff)
-	}
 	if !reflect.DeepEqual(plan.Diff.MissingEvents, []string{"im.message.receive_v1"}) {
 		t.Fatalf("missing events = %#v", plan.Diff.MissingEvents)
 	}
-	if !reflect.DeepEqual(plan.Diff.MissingCallbacks, []string{"card.action.trigger"}) {
-		t.Fatalf("missing callbacks = %#v", plan.Diff.MissingCallbacks)
-	}
-	if len(plan.BlockingRequirements) != 3 {
+	if len(plan.BlockingRequirements) != 2 {
 		t.Fatalf("blocking requirements = %#v", plan.BlockingRequirements)
 	}
 	if len(plan.DegradableRequirements) != 0 {
@@ -151,6 +145,7 @@ func TestPlanAppAutoConfigRequirementPresenceUsesConfiguredScopes(t *testing.T) 
 			Version:   strp("1.0.0"),
 			Status:    intp(larkapplication.AppVersionStatusAudited),
 			Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
+			Events:    []string{"im.message.receive_v1"},
 		}, nil
 	}
 
