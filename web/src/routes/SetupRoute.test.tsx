@@ -190,7 +190,7 @@ describe("SetupRoute", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "继续发布" })).not.toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: "确认提交发布" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "先按降级继续" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "先按降级继续" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "确认机器人菜单" })).not.toBeInTheDocument();
   });
 
@@ -291,7 +291,7 @@ describe("SetupRoute", () => {
       verifiedAt: "2026-04-25T08:20:00Z",
     });
 
-    installMockFetch({
+    const { calls } = installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
       "/api/setup/onboarding/workflow": () => ({ body: workflowState }),
       "/api/setup/onboarding/workflow?app=bot-qr": () => ({ body: workflowState }),
@@ -357,6 +357,14 @@ describe("SetupRoute", () => {
     expect(await screen.findByRole("heading", { name: "无法确认最终状态" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "先按降级继续" })).toBeInTheDocument();
     expect(screen.queryByText("raw backend verification error")).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "重新检查" }));
+    expect(
+      await screen.findByText("已重新检查，仍需要自动补齐配置。"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
+    expect(
+      calls.filter((call) => call.path.startsWith("/api/setup/onboarding/workflow")).length,
+    ).toBeGreaterThan(1);
   }, 10_000);
 
   it("summarizes blocking backend failures with user-facing setup actions", async () => {

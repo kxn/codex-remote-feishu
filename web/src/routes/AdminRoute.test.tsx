@@ -243,6 +243,7 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
     expect(screen.getByText("im:message.group_msg:readonly")).toBeInTheDocument();
     expect(screen.getByDisplayValue(/im:message\.group_msg:readonly/)).toBeInTheDocument();
+    expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "复制导入 JSON" }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("im:message.group_msg:readonly"));
@@ -363,7 +364,9 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "自动补齐" }));
-    expect(await screen.findByText("飞书正在审核发布。")).toBeInTheDocument();
+    expect(
+      await screen.findByText("飞书正在审核发布，等待完成后重新检查。"),
+    ).toBeInTheDocument();
     expect(await screen.findByText("飞书正在审核发布")).toBeInTheDocument();
     expect(calls.some((call) => call.path.endsWith("/auto-config/complete"))).toBe(true);
     expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(false);
@@ -421,7 +424,7 @@ describe("AdminRoute", () => {
     await user.click(await screen.findByRole("button", { name: "自动补齐" }));
 
     expect(
-      await screen.findByText("当前还不能自动补齐，请稍后重试。"),
+      await screen.findByText("当前还不能自动补齐，请稍后重试。 还没有提交到飞书。"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/application\.v6\.application\.get/)).not.toBeInTheDocument();
     expect(screen.queryByText(/99992402/)).not.toBeInTheDocument();
@@ -524,7 +527,9 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "自动补齐" }));
-    expect(await screen.findByText("飞书正在审核发布。")).toBeInTheDocument();
+    expect(
+      await screen.findByText("飞书正在审核发布，等待完成后重新检查。"),
+    ).toBeInTheDocument();
     expect(completed).toBe(true);
     expect(calls.some((call) => call.path.endsWith("/auto-config/complete"))).toBe(true);
     expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(false);

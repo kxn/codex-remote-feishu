@@ -9,7 +9,10 @@ import type {
   FeishuOnboardingSession,
   FeishuOnboardingSessionResponse,
 } from "../../lib/types";
-import { autoConfigNoticeTone } from "./feishuAutoConfig";
+import {
+  autoConfigNoticeTone,
+  describeAutoConfigActionFeedback,
+} from "./feishuAutoConfig";
 
 export type NoticeTone = "good" | "warn" | "danger";
 export type ConnectMode = "qr" | "manual";
@@ -240,7 +243,10 @@ export async function runAutoConfigMutation<T extends AutoConfigMutationResponse
     payload,
     notice: {
       tone: autoConfigNoticeTone(payload.result.status),
-      message: payload.result.summary?.trim() || options.fallbackSuccessMessage,
+      message:
+        describeAutoConfigActionFeedback(payload.result) ||
+        payload.result.summary?.trim() ||
+        options.fallbackSuccessMessage,
     },
   };
 }

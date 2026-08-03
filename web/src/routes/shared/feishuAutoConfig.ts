@@ -1,4 +1,8 @@
-import type { FeishuAppAutoConfigRequirementStatus } from "../../lib/types";
+import type {
+  FeishuAppAutoConfigAction,
+  FeishuAppAutoConfigCompleteResult,
+  FeishuAppAutoConfigRequirementStatus,
+} from "../../lib/types";
 
 export type AutoConfigRequirementDisplay = {
   label: string;
@@ -77,6 +81,67 @@ export function describeAutoConfigSummary(status: string): string {
       return "当前阻塞项仍未解除，自动配置暂时不能继续。";
     default:
       return "当前还没有读取到自动配置状态。";
+  }
+}
+
+export function describeAutoConfigActionFeedback(
+  result: FeishuAppAutoConfigCompleteResult,
+): string {
+  const actions = result.actions || [];
+  const publishAction = findAutoConfigAction(actions, "publish");
+  if (publishAction?.outcome === "submitted") {
+    if (result.status === "verification_failed") {
+      return "已提交飞书发布，但暂时无法确认最终状态。";
+    }
+    return "已提交飞书发布，等待飞书审核。";
+  }
+
+  const configApplied =
+    findAutoConfigAction(actions, "config_patch")?.outcome === "applied" ||
+    findAutoConfigAction(actions, "ability_patch")?.outcome === "applied";
+  if (configApplied) {
+    if (result.status === "verification_failed") {
+      return "已写入飞书配置，但暂时无法确认最终状态。";
+    }
+    if (result.status === "publish_required") {
+      return "已写入飞书配置，正在继续提交发布。";
+    }
+    return "已写入飞书配置，已重新检查当前状态。";
+  }
+
+  if (result.status === "awaiting_review") {
+    return "飞书正在审核发布，等待完成后重新检查。";
+  }
+  if (result.status === "clean" || result.status === "degraded") {
+    return describeAutoConfigSummary(result.status);
+  }
+  if (result.status === "verification_failed") {
+    return "暂时无法确认最终状态，还没有新的提交结果。";
+  }
+  if (result.blockingReason) {
+    return describeAutoConfigBlockingReason(result.blockingReason);
+  }
+  return result.summary?.trim() || describeAutoConfigSummary(result.status);
+}
+
+export function describeAutoConfigRefreshFeedback(status: string): string {
+  switch (status) {
+    case "clean":
+    case "degraded":
+      return "已重新检查，当前配置可以继续。";
+    case "awaiting_review":
+      return "已重新检查，飞书仍在审核发布。";
+    case "apply_required":
+      return "已重新检查，仍需要自动补齐配置。";
+    case "publish_required":
+      return "已重新检查，仍需要提交飞书发布。";
+    case "verification_failed":
+      return "已重新检查，但暂时仍无法确认最终状态。";
+    case "unsupported":
+    case "blocked":
+      return "已重新检查，仍有需要先处理的问题。";
+    default:
+      return "已重新检查当前状态。";
   }
 }
 
@@ -195,4 +260,11 @@ function describeAutoConfigFeature(feature: string): string {
     default:
       return "";
   }
+}
+
+function findAutoConfigAction(
+  actions: FeishuAppAutoConfigAction[],
+  name: string,
+): FeishuAppAutoConfigAction | undefined {
+  return actions.find((action) => action.name === name);
 }

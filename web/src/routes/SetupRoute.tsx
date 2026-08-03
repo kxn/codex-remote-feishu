@@ -23,8 +23,10 @@ import type {
 import { blankToUndefined, vscodeApplyModeForScenario, vscodeIsReady } from "./shared/helpers";
 import {
   describeAutoConfigBlockingReason,
+  describeAutoConfigActionFeedback,
   describeAutoConfigHeadline,
   describeAutoConfigRequirementDisplay,
+  describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
   onboardingAutoConfigNoticeTone,
 } from "./shared/feishuAutoConfig";
@@ -97,6 +99,7 @@ export function SetupRoute() {
   });
   const [actionBusy, setActionBusy] = useState("");
   const [finishingSetup, setFinishingSetup] = useState(false);
+  const [autoConfigLastCheckedAt, setAutoConfigLastCheckedAt] = useState("");
   const [immediateAutoConfig, setImmediateAutoConfig] =
     useState<ImmediateAutoConfig | null>(null);
 
@@ -237,6 +240,7 @@ export function SetupRoute() {
         setNotice({ tone: "good", message: "环境正常，已自动进入飞书连接。" });
       }
     }
+    return workflowState;
   }
 
   async function refreshWorkflow(options?: { preserveDisplayedStep?: boolean }) {
@@ -301,7 +305,9 @@ export function SetupRoute() {
         },
         verifyPath: (appID) =>
           `/api/setup/feishu/apps/${encodeURIComponent(appID)}/verify`,
-        reload: (appID) => loadSetupPage({ preferredAppID: appID }),
+        reload: async (appID) => {
+          await loadSetupPage({ preferredAppID: appID });
+        },
       });
       if (!result.verified) {
         setNotice({
@@ -367,7 +373,7 @@ export function SetupRoute() {
       if (!result.ok) {
         setNotice({
           tone: "danger",
-          message: result.message,
+          message: `${result.message} 还没有提交到飞书。`,
         });
         return;
       }
@@ -378,7 +384,36 @@ export function SetupRoute() {
     } catch {
       setNotice({
         tone: "danger",
-        message: "自动补齐没有完成，请稍后重试。",
+        message: "自动补齐没有完成，还没有提交到飞书。",
+      });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function refreshAutoConfigResult() {
+    if (!activeApp?.id) {
+      return;
+    }
+    setActionBusy("auto-config-refresh");
+    try {
+      setImmediateAutoConfig(null);
+      const workflowState = await loadSetupPage({
+        preferredAppID: activeApp.id,
+        preserveDisplayedStep: true,
+      });
+      setCurrentStep("auto_config");
+      const nextStage = workflowState.app?.autoConfig;
+      const status = autoConfigStageDisplayStatus(nextStage);
+      setAutoConfigLastCheckedAt(new Date().toISOString());
+      setNotice({
+        tone: onboardingAutoConfigNoticeTone(nextStage?.status || "pending"),
+        message: describeAutoConfigRefreshFeedback(status),
+      });
+    } catch {
+      setNotice({
+        tone: "warn",
+        message: "重新检查没有完成，暂时无法确认飞书配置状态。",
       });
     } finally {
       setActionBusy("");
@@ -1051,7 +1086,8 @@ export function SetupRoute() {
     const busy =
       actionBusy === "auto-config-complete" ||
       actionBusy === "auto-config-defer" ||
-      actionBusy === "auto-config-reset";
+      actionBusy === "auto-config-reset" ||
+      actionBusy === "auto-config-refresh";
     const canComplete =
       autoConfigStage.allowedActions?.includes("apply") ||
       autoConfigStage.allowedActions?.includes("publish");
@@ -1105,7 +1141,7 @@ export function SetupRoute() {
                 disabled={busy}
                 onClick={() => void completeAutoConfig()}
               >
-                自动补齐
+                {actionBusy === "auto-config-complete" ? "补齐中..." : "自动补齐"}
               </button>
             ) : null}
             {autoConfigStage.allowedActions?.includes("defer") ? (
@@ -1115,7 +1151,7 @@ export function SetupRoute() {
                 disabled={busy}
                 onClick={() => void deferAutoConfig()}
               >
-                先按降级继续
+                {actionBusy === "auto-config-defer" ? "继续中..." : "先按降级继续"}
               </button>
             ) : null}
             {autoConfigStage.status === "deferred" ? (
@@ -1125,16 +1161,16 @@ export function SetupRoute() {
                 disabled={busy}
                 onClick={() => void resetAutoConfigDecision()}
               >
-                重新检查自动配置
+                {actionBusy === "auto-config-reset" ? "检查中..." : "重新检查自动配置"}
               </button>
             ) : (
               <button
                 className="secondary-button"
                 type="button"
                 disabled={busy}
-                onClick={() => void refreshWorkflow({ preserveDisplayedStep: true })}
+                onClick={() => void refreshAutoConfigResult()}
               >
-                刷新结果
+                {actionBusy === "auto-config-refresh" ? "检查中..." : "重新检查"}
               </button>
             )}
             {activeConsoleLinks?.auth ? (
@@ -1148,6 +1184,11 @@ export function SetupRoute() {
               </a>
             ) : null}
           </div>
+          {autoConfigLastCheckedAt ? (
+            <p className="support-copy">
+              最近检查：{formatAutoConfigCheckedAt(autoConfigLastCheckedAt)}
+            </p>
+          ) : null}
         </div>
       </section>
     );
@@ -1410,7 +1451,7 @@ function allowedActionsForImmediateAutoConfig(
     case "verification_failed":
       return mergeAllowedActions(existing, ["apply", "retry", "defer"]);
     case "awaiting_review":
-      return mergeAllowedActions(existing, ["retry"]);
+      return mergeAllowedActions(existing, ["retry", "defer"]);
     default:
       return mergeAllowedActions(existing, ["retry"]);
   }
@@ -1434,7 +1475,7 @@ function noticeFromAutoConfigView(
       tone: onboardingAutoConfigNoticeTone(
         onboardingStageStatusFromAutoConfigResult(view.result.status),
       ),
-      message: view.result.summary?.trim() || describeAutoConfigSummary(view.result.status),
+      message: describeAutoConfigActionFeedback(view.result),
     };
   }
   if (view.error) {
@@ -1444,6 +1485,24 @@ function noticeFromAutoConfigView(
     };
   }
   return null;
+}
+
+function autoConfigStageDisplayStatus(
+  stage: OnboardingWorkflowAutoConfig | undefined,
+): string {
+  return stage?.resultStatus || stage?.plan?.status || stage?.status || "";
+}
+
+function formatAutoConfigCheckedAt(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "刚刚";
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
 }
 
 function renderAutoConfigRequirementList(

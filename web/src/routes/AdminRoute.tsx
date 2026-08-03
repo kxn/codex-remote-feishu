@@ -43,6 +43,8 @@ import {
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
 import {
+  describeAutoConfigActionFeedback,
+  describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
   autoConfigNoticeTone,
 } from "./shared/feishuAutoConfig";
@@ -103,6 +105,9 @@ export function AdminRoute() {
   const [apps, setApps] = useState<FeishuAppSummary[]>([]);
   const [selectedRobotID, setSelectedRobotID] = useState(newRobotID);
   const [autoConfigPlans, setAutoConfigPlans] = useState<Record<string, AutoConfigState>>(
+    {},
+  );
+  const [autoConfigCheckedAt, setAutoConfigCheckedAt] = useState<Record<string, string>>(
     {},
   );
   const [permissionChecks, setPermissionChecks] = useState<
@@ -201,6 +206,15 @@ export function AdminRoute() {
       const next: Record<string, AutoConfigState> = {};
       for (const app of apps) {
         next[app.id] = current[app.id] || { status: "idle" };
+      }
+      return next;
+    });
+    setAutoConfigCheckedAt((current) => {
+      const next: Record<string, string> = {};
+      for (const app of apps) {
+        if (current[app.id]) {
+          next[app.id] = current[app.id];
+        }
       }
       return next;
     });
@@ -427,7 +441,10 @@ export function AdminRoute() {
         fallbackSuccessMessage: "已自动补齐飞书配置。",
       });
       if (!result.ok) {
-        setDetailNotice({ tone: "danger", message: result.message });
+        setDetailNotice({
+          tone: "danger",
+          message: `${result.message} 还没有提交到飞书。`,
+        });
         return;
       }
       syncAutoConfigPlan(
@@ -450,10 +467,49 @@ export function AdminRoute() {
     >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/plan`);
     if (!response.ok) {
       syncAutoConfigError(appID, "暂时无法确认飞书自动配置状态。");
+      setAutoConfigCheckedAt((current) => ({
+        ...current,
+        [appID]: new Date().toISOString(),
+      }));
       return;
     }
     const payload = response.data as FeishuAppAutoConfigPlanResponse;
     syncAutoConfigPlan(payload.app, payload.plan);
+    setAutoConfigCheckedAt((current) => ({
+      ...current,
+      [appID]: new Date().toISOString(),
+    }));
+    return payload;
+  }
+
+  async function recheckRobotConfigurationPlan() {
+    if (!selectedApp?.id) {
+      return;
+    }
+    const appID = selectedApp.id;
+    setActionBusy("permission-auto-config-check");
+    try {
+      const payload = await loadRobotConfigurationPlan(appID);
+      if (!payload) {
+        setDetailNotice({
+          tone: "warn",
+          message: "重新检查没有完成，暂时无法确认飞书自动配置状态。",
+        });
+        return;
+      }
+      setDetailNotice({
+        tone: autoConfigNoticeTone(payload.plan.status),
+        message: describeAutoConfigRefreshFeedback(payload.plan.status),
+      });
+    } catch {
+      syncAutoConfigError(appID, "暂时无法确认飞书自动配置状态。");
+      setDetailNotice({
+        tone: "warn",
+        message: "重新检查没有完成，暂时无法确认飞书自动配置状态。",
+      });
+    } finally {
+      setActionBusy("");
+    }
   }
 
   async function deleteRobot() {
@@ -975,6 +1031,7 @@ export function AdminRoute() {
       autoConfigPlan?.status === "publish_required" ||
       autoConfigStatus === "verification_failed";
     const awaitingReview = autoConfigStatus === "awaiting_review";
+    const checkedAt = autoConfigCheckedAt[selectedApp.id] || "";
     return (
       <section className="card">
         <div className="card-head">
@@ -1029,13 +1086,40 @@ export function AdminRoute() {
                       disabled={disabled}
                       onClick={() => void completeRobotConfiguration()}
                     >
-                      自动补齐
+                      {actionBusy === "permission-complete" ? "补齐中..." : "自动补齐"}
+                    </button>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => void recheckRobotConfigurationPlan()}
+                    >
+                      {actionBusy === "permission-auto-config-check"
+                        ? "检查中..."
+                        : "重新检查配置"}
                     </button>
                   </div>
                 </>
               ) : null}
               {awaitingReview ? (
                 <div className="notice-banner warn">飞书正在审核发布</div>
+              ) : null}
+              {awaitingReview && !canComplete ? (
+                <div className="button-row">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => void recheckRobotConfigurationPlan()}
+                  >
+                    {actionBusy === "permission-auto-config-check"
+                      ? "检查中..."
+                      : "重新检查配置"}
+                  </button>
+                </div>
+              ) : null}
+              {checkedAt ? (
+                <p className="support-copy">最近检查：{formatTimestamp(checkedAt)}</p>
               ) : null}
             </div>
           ) : (
@@ -1087,9 +1171,19 @@ export function AdminRoute() {
                         disabled={disabled}
                         onClick={() => void completeRobotConfiguration()}
                       >
-                        自动补齐
+                        {actionBusy === "permission-complete" ? "补齐中..." : "自动补齐"}
                       </button>
                     ) : null}
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => void recheckRobotConfigurationPlan()}
+                    >
+                      {actionBusy === "permission-auto-config-check"
+                        ? "检查中..."
+                        : "重新检查配置"}
+                    </button>
                     <button
                       className="secondary-button"
                       type="button"
@@ -1102,6 +1196,9 @@ export function AdminRoute() {
                     </button>
                   </div>
                 </>
+              ) : null}
+              {checkedAt ? (
+                <p className="support-copy">最近检查：{formatTimestamp(checkedAt)}</p>
               ) : null}
             </div>
           )
@@ -1560,7 +1657,7 @@ function noticeFromCompleteView(view?: FeishuAppAutoConfigCompleteView): DetailN
   if (view.result) {
     return {
       tone: autoConfigNoticeTone(view.result.status),
-      message: view.result.summary?.trim() || describeAutoConfigSummary(view.result.status),
+      message: describeAutoConfigActionFeedback(view.result),
     };
   }
   if (view.error) {
