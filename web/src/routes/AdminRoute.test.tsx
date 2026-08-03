@@ -727,6 +727,61 @@ describe("AdminRoute", () => {
     expect(await screen.findByText("58 个文件，约 420 MB")).toBeInTheDocument();
   });
 
+  it("keeps system maintenance errors user-facing", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+
+    installMockFetch(withClaudeProfiles({
+      "/api/admin/bootstrap-state": { body: makeBootstrap() },
+      "/api/admin/feishu/apps": {
+        body: {
+          apps: [
+            makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+            makeApp({ id: "bot-2", name: "备用机器人", appId: "cli_backup" }),
+          ],
+        },
+      },
+      "/api/admin/autostart/detect": {
+        status: 500,
+        body: {
+          error: {
+            code: "autostart_detect_failed",
+            message: "failed to detect autostart state",
+            details: "query task scheduler task \\\\CodexRemoteFeishu\\\\stable: exit status 1: ����",
+          },
+        },
+      },
+      "/api/admin/vscode/detect": { body: makeVSCodeDetect() },
+      "/api/admin/storage/image-staging": {
+        body: makeImageStagingStatus(),
+      },
+      "/api/admin/storage/logs": {
+        body: makeLogsStorageStatus(),
+      },
+      "/api/admin/storage/preview-drive/bot-1": {
+        body: makePreviewDriveStatus({ gatewayId: "bot-1", name: "主机器人" }),
+      },
+      "/api/admin/storage/preview-drive/bot-2": {
+        status: 500,
+        body: {
+          error: {
+            code: "preview_drive_status_failed",
+            message: "failed to read preview drive status",
+          },
+        },
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "系统");
+    expect(await screen.findByText("自动运行状态暂时无法读取，请稍后重试。")).toBeInTheDocument();
+    expect(screen.getByText("部分机器人预览文件状态暂时无法读取，请稍后重试。")).toBeInTheDocument();
+    expect(screen.queryByText(/autostart_detect_failed/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/task scheduler/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/����/)).not.toBeInTheDocument();
+  });
+
   it("renders the Claude configuration panel on the v1.7.0 admin layout", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();

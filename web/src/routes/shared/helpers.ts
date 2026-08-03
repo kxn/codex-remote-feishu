@@ -39,10 +39,10 @@ export async function loadAutostartState(path: string): Promise<{ data: Autostar
       data: await requestJSON<AutostartDetectResponse>(path),
       error: "",
     };
-  } catch (err: unknown) {
+  } catch {
     return {
       data: null,
-      error: formatError(err),
+      error: "自动运行状态暂时无法读取，请稍后重试。",
     };
   }
 }

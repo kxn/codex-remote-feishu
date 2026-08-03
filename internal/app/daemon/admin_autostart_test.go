@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"testing"
@@ -66,6 +67,33 @@ func TestAdminAutostartEndpoints(t *testing.T) {
 	}
 	if applied.Status != "enabled" || !applied.Enabled {
 		t.Fatalf("unexpected apply payload: %#v", applied)
+	}
+}
+
+func TestAdminAutostartDetectHidesRawErrorDetails(t *testing.T) {
+	app, _, _ := newVSCodeAdminTestApp(t, t.TempDir(), seedBinaryForDaemonTest(t), false)
+
+	originalDetect := detectAutostart
+	defer func() {
+		detectAutostart = originalDetect
+	}()
+	detectAutostart = func(string) (install.AutostartStatus, error) {
+		return install.AutostartStatus{}, errors.New(`query task scheduler task \CodexRemoteFeishu\stable: exit status 1: ����`)
+	}
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/autostart/detect", "")
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("detect status = %d, want 500 body=%s", rec.Code, rec.Body.String())
+	}
+	var payload apiErrorPayload
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode error: %v", err)
+	}
+	if payload.Error.Message != "自动运行状态暂时无法读取，请稍后重试。" {
+		t.Fatalf("message = %q", payload.Error.Message)
+	}
+	if payload.Error.Details != nil {
+		t.Fatalf("details should be hidden, got %#v", payload.Error.Details)
 	}
 }
 

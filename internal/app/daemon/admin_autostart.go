@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -16,10 +17,10 @@ type autostartResponse = install.AutostartStatus
 func (a *App) handleAutostartDetect(w http.ResponseWriter, _ *http.Request) {
 	payload, err := detectAutostart(a.installStatePath())
 	if err != nil {
+		log.Printf("autostart detect failed: %v", err)
 		writeAPIError(w, http.StatusInternalServerError, apiError{
 			Code:    "autostart_detect_failed",
-			Message: "failed to detect autostart state",
-			Details: err.Error(),
+			Message: "自动运行状态暂时无法读取，请稍后重试。",
 		})
 		return
 	}

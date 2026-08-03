@@ -9,6 +9,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf16"
+
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 func withWindowsGOOS(t *testing.T) {
@@ -409,4 +412,61 @@ func TestTaskSchedulerDetectsDisabledFromSettingsXMLWhenTriggerStaysEnabled(t *t
 	if enabled {
 		t.Fatal("expected enabled=false")
 	}
+}
+
+func TestTaskSchedulerMissingLocalizedOutputIsDisabled(t *testing.T) {
+	withWindowsGOOS(t)
+	baseDir := t.TempDir()
+	state := InstallState{
+		InstanceID:      "stable",
+		BaseDir:         baseDir,
+		StatePath:       defaultInstallStatePath(baseDir),
+		ConfigPath:      defaultConfigPath(baseDir),
+		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		ServiceManager:  ServiceManagerTaskSchedulerLogon,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: state.ServiceManager,
+	})
+
+	withMockTaskScheduler(t, func(_ context.Context, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "/Query" {
+			return "错误: 系统找不到指定的文件。", fmt.Errorf("exit status 1: 错误: 系统找不到指定的文件。")
+		}
+		return "", fmt.Errorf("unexpected schtasks call: %v", args)
+	})
+
+	enabled, warning, err := detectTaskSchedulerLogonEnabled(context.Background(), state)
+	if err != nil {
+		t.Fatalf("detectTaskSchedulerLogonEnabled: %v", err)
+	}
+	if enabled || warning != "" {
+		t.Fatalf("enabled=%v warning=%q, want disabled without warning", enabled, warning)
+	}
+}
+
+func TestDecodeTaskSchedulerOutputHandlesLocalizedEncodings(t *testing.T) {
+	gbk, err := simplifiedchinese.GBK.NewEncoder().Bytes([]byte("错误: 系统找不到指定的文件。"))
+	if err != nil {
+		t.Fatalf("encode gbk: %v", err)
+	}
+	if got := decodeTaskSchedulerOutput(gbk); !strings.Contains(got, "系统找不到指定的文件") {
+		t.Fatalf("gbk decoded as %q", got)
+	}
+
+	utf16Raw := append([]byte{0xff, 0xfe}, utf16LETestBytes("错误: 系统找不到指定的文件。")...)
+	if got := decodeTaskSchedulerOutput(utf16Raw); !strings.Contains(got, "系统找不到指定的文件") {
+		t.Fatalf("utf16 decoded as %q", got)
+	}
+}
+
+func utf16LETestBytes(value string) []byte {
+	encoded := utf16.Encode([]rune(value))
+	out := make([]byte, 0, len(encoded)*2)
+	for _, item := range encoded {
+		out = append(out, byte(item), byte(item>>8))
+	}
+	return out
 }

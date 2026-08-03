@@ -9,8 +9,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"golang.org/x/text/encoding/simplifiedchinese"
 )
 
 var taskSchedulerRunner = runTaskScheduler
@@ -18,7 +20,7 @@ var taskSchedulerRunner = runTaskScheduler
 func runTaskScheduler(ctx context.Context, args ...string) (string, error) {
 	cmd := execlaunch.CommandContext(ctx, "schtasks", args...)
 	output, err := cmd.CombinedOutput()
-	trimmed := strings.TrimSpace(string(output))
+	trimmed := strings.TrimSpace(decodeTaskSchedulerOutput(output))
 	if err != nil {
 		if trimmed == "" {
 			return "", err
@@ -26,6 +28,43 @@ func runTaskScheduler(ctx context.Context, args ...string) (string, error) {
 		return trimmed, fmt.Errorf("%w: %s", err, trimmed)
 	}
 	return trimmed, nil
+}
+
+func decodeTaskSchedulerOutput(output []byte) string {
+	if len(output) == 0 {
+		return ""
+	}
+	if len(output) >= 2 {
+		switch {
+		case output[0] == 0xff && output[1] == 0xfe:
+			return string(utf16.Decode(utf16BytesLE(output[2:])))
+		case output[0] == 0xfe && output[1] == 0xff:
+			return string(utf16.Decode(utf16BytesBE(output[2:])))
+		}
+	}
+	if utf8.Valid(output) {
+		return string(output)
+	}
+	if decoded, err := simplifiedchinese.GBK.NewDecoder().Bytes(output); err == nil && utf8.Valid(decoded) {
+		return string(decoded)
+	}
+	return string(output)
+}
+
+func utf16BytesLE(output []byte) []uint16 {
+	values := make([]uint16, 0, len(output)/2)
+	for i := 0; i+1 < len(output); i += 2 {
+		values = append(values, uint16(output[i])|uint16(output[i+1])<<8)
+	}
+	return values
+}
+
+func utf16BytesBE(output []byte) []uint16 {
+	values := make([]uint16, 0, len(output)/2)
+	for i := 0; i+1 < len(output); i += 2 {
+		values = append(values, uint16(output[i])<<8|uint16(output[i+1]))
+	}
+	return values
 }
 
 func ensureWindowsTaskSchedulerSupport() error {
@@ -406,7 +445,9 @@ func isTaskSchedulerMissingErr(err error) bool {
 	text := strings.ToLower(strings.TrimSpace(err.Error()))
 	return strings.Contains(text, "cannot find") ||
 		strings.Contains(text, "not found") ||
-		strings.Contains(text, "does not exist")
+		strings.Contains(text, "does not exist") ||
+		strings.Contains(text, "找不到") ||
+		strings.Contains(text, "不存在")
 }
 
 func isTaskSchedulerNotRunningErr(err error) bool {

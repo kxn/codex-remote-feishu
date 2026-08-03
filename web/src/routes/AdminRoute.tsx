@@ -276,7 +276,7 @@ export function AdminRoute() {
     setLogsStorage(logsResult.data);
     setLogsStorageError(logsResult.error);
     setPreviewMap(previews);
-    setPreviewError(previewFailed ? "部分预览文件状态暂时没有读取成功。" : "");
+    setPreviewError(previewFailed ? "部分机器人预览文件状态暂时无法读取，请稍后重试。" : "");
     setLoading(false);
   }
 
