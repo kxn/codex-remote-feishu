@@ -75,3 +75,31 @@ func PatchBundleEntrypoint(opts PatchBundleEntrypointOptions) error {
 	}
 	return nil
 }
+
+// UninstallManagedShim reverses PatchBundleEntrypoint: it removes the shim
+// executable and sidecar, restores the original binary to the entrypoint path,
+// and points VS Code settings back at the restored binary.
+func UninstallManagedShim(entrypointPath, settingsPath string) error {
+	entrypointPath = strings.TrimSpace(entrypointPath)
+	if entrypointPath == "" {
+		return nil
+	}
+	realBinaryPath := ManagedShimRealBinaryPath(entrypointPath)
+	if _, err := os.Stat(realBinaryPath); err != nil {
+		if os.IsNotExist(err) {
+			// No renamed original binary, so nothing was installed to undo.
+			return nil
+		}
+		return err
+	}
+	if err := os.Remove(ManagedShimSidecarPath(entrypointPath)); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Remove(entrypointPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Rename(realBinaryPath, entrypointPath); err != nil {
+		return err
+	}
+	return SetVSCodeSettingsExecutable(settingsPath, entrypointPath)
+}

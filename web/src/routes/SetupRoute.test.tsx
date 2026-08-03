@@ -242,7 +242,7 @@ describe("SetupRoute", () => {
             },
           },
           autostart: {
-            allowedActions: ["defer"],
+            allowedActions: [],
             autostart: {
               canApply: false,
               warning: "自动启动状态暂时不可写。",
@@ -260,7 +260,94 @@ describe("SetupRoute", () => {
     expect(screen.getByText("自动启动状态暂时不可写。")).toBeInTheDocument();
     expect(screen.getByText("稍后可以在管理页重试。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "启用自动启动" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "稍后处理自动运行" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "跳过本机集成" })).toBeInTheDocument();
+  });
+
+  it("skips machine integrations with one button and advances to done", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+    let workflowState = makeOnboardingWorkflow({
+      currentStage: "autostart",
+      autostart: {
+        status: "pending",
+        summary: "当前还没有完成自动启动决策。",
+        allowedActions: ["apply"],
+      },
+      vscode: {
+        status: "pending",
+        summary: "当前还没有完成 VS Code 集成决策。",
+        allowedActions: ["apply"],
+      },
+    });
+
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": () => ({ body: workflowState }),
+      "/api/setup/onboarding/machine-decisions/autostart": () => {
+        workflowState = makeOnboardingWorkflow({
+          currentStage: "done",
+          autostart: { status: "deferred", summary: "你选择稍后再处理自动启动。" },
+          vscode: { status: "deferred", summary: "你选择稍后再处理 VS Code 集成。" },
+        });
+        return { status: 204, body: {} };
+      },
+      "/api/setup/onboarding/machine-decisions/vscode": () => {
+        return { status: 204, body: {} };
+      },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("heading", { name: "本机集成" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "稍后处理自动运行" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "留到 SSH 目标机处理" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "跳过本机集成" }));
+
+    expect(await screen.findByRole("heading", { name: "欢迎使用" })).toBeInTheDocument();
+    expect(
+      calls.filter((call) => call.path.endsWith("/onboarding/machine-decisions/autostart")).length,
+    ).toBe(1);
+    expect(
+      calls.filter((call) => call.path.endsWith("/onboarding/machine-decisions/vscode")).length,
+    ).toBe(1);
+  });
+
+  it("offers toggle-off actions for completed machine integrations", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+
+    const { calls } = installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": {
+        body: makeOnboardingWorkflow({
+          currentStage: "autostart",
+          autostart: {
+            status: "complete",
+            summary: "自动启动已经启用，并且当前决策已记录。",
+            allowedActions: ["disable"],
+            autostart: { supported: true, canApply: true, enabled: true },
+          },
+          vscode: {
+            status: "complete",
+            summary: "VS Code 集成已经完成，并且当前决策已记录。",
+            allowedActions: ["disable"],
+          },
+        }),
+      },
+      "/api/setup/autostart/disable": { status: 200, body: { supported: true, enabled: false } },
+      "/api/setup/vscode/disable": { status: 200, body: {} },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("button", { name: "取消自动启动" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "取消 VS Code 集成" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "取消自动启动" }));
+    expect(
+      calls.some((call) => call.path.endsWith("/api/setup/autostart/disable")),
+    ).toBe(true);
   });
 
   it("starts qr onboarding automatically, polls every 5 seconds, and advances to auto-config", async () => {

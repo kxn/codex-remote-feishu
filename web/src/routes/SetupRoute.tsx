@@ -515,6 +515,57 @@ export function SetupRoute() {
     }
   }
 
+  async function skipMachineIntegrations() {
+    setActionBusy("machine-skip");
+    setNotice(null);
+    try {
+      const headers = { "Content-Type": "application/json" };
+      await requestVoid("/api/setup/onboarding/machine-decisions/autostart", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ decision: "deferred" }),
+      });
+      await requestVoid("/api/setup/onboarding/machine-decisions/vscode", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ decision: "deferred" }),
+      });
+      await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
+      goToStep("done");
+      setNotice({ tone: "good", message: "已跳过本机集成，后续可在管理页处理。" });
+    } catch {
+      setNotice({ tone: "danger", message: "当前还不能跳过本机集成，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function disableAutostart() {
+    setActionBusy("autostart-disable");
+    try {
+      await sendJSON("/api/setup/autostart/disable", "POST");
+      await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
+      setNotice({ tone: "good", message: "已取消自动启动。" });
+    } catch {
+      setNotice({ tone: "danger", message: "当前还不能取消自动启动，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
+  async function disableVSCode() {
+    setActionBusy("vscode-disable");
+    try {
+      await sendJSON("/api/setup/vscode/disable", "POST");
+      await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
+      setNotice({ tone: "good", message: "已取消 VS Code 集成。" });
+    } catch {
+      setNotice({ tone: "danger", message: "当前还不能取消 VS Code 集成，请稍后重试。" });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   async function applyVSCodeAndContinue() {
     if (!vscodeStage?.vscode) {
       setNotice({ tone: "danger", message: "暂时还不能完成 VS Code 集成，请稍后重试。" });
@@ -658,7 +709,18 @@ export function SetupRoute() {
               完成设置
             </button>
           </div>
-        ) : null}
+        ) : (
+          <div className="button-row">
+            <button
+              className="primary-button"
+              type="button"
+              disabled={actionBusy === "machine-skip"}
+              onClick={() => void skipMachineIntegrations()}
+            >
+              {actionBusy === "machine-skip" ? "跳过中..." : "跳过本机集成"}
+            </button>
+          </div>
+        )}
       </section>
     );
   }
@@ -715,21 +777,14 @@ export function SetupRoute() {
               保持当前状态并继续
             </button>
           ) : null}
-          {autostartStage.allowedActions?.includes("defer") ? (
+          {autostartStage.allowedActions?.includes("disable") ? (
             <button
-              className="ghost-button"
+              className="secondary-button"
               type="button"
-              aria-label="稍后处理自动运行"
-              disabled={actionBusy === "autostart-deferred"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "autostart",
-                  "deferred",
-                  "已记录稍后处理自动启动。",
-                )
-              }
+              disabled={actionBusy === "autostart-disable"}
+              onClick={() => void disableAutostart()}
             >
-              稍后处理
+              取消自动启动
             </button>
           ) : null}
         </div>
@@ -785,37 +840,14 @@ export function SetupRoute() {
               保持当前状态并继续
             </button>
           ) : null}
-          {vscodeStage.allowedActions?.includes("remote_only") ? (
+          {vscodeStage.allowedActions?.includes("disable") ? (
             <button
-              className="ghost-button"
+              className="secondary-button"
               type="button"
-              disabled={actionBusy === "vscode-remote_only"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "vscode",
-                  "remote_only",
-                  "已记录稍后在目标 SSH 机器上处理 VS Code 集成。",
-                )
-              }
+              disabled={actionBusy === "vscode-disable"}
+              onClick={() => void disableVSCode()}
             >
-              留到 SSH 目标机处理
-            </button>
-          ) : null}
-          {vscodeStage.allowedActions?.includes("defer") ? (
-            <button
-              className="ghost-button"
-              type="button"
-              aria-label="稍后处理 VS Code 集成"
-              disabled={actionBusy === "vscode-deferred"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "vscode",
-                  "deferred",
-                  "已记录稍后处理 VS Code 集成。",
-                )
-              }
-            >
-              稍后处理
+              取消 VS Code 集成
             </button>
           ) : null}
         </div>

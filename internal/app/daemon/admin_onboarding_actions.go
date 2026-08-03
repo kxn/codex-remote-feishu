@@ -150,6 +150,24 @@ func (a *App) writeOnboardingMachineDecision(kind, decision string, decidedAt ti
 	})
 }
 
+func (a *App) clearOnboardingMachineDecision(kind string) error {
+	kind = strings.TrimSpace(kind)
+	switch kind {
+	case "autostart", "vscode":
+	default:
+		return invalidOnboardingDecisionError(kind, "")
+	}
+	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
+		switch kind {
+		case "autostart":
+			cfg.Admin.Onboarding.AutostartDecision = nil
+		case "vscode":
+			cfg.Admin.Onboarding.VSCodeDecision = nil
+		}
+		return nil
+	})
+}
+
 func (a *App) writeFeishuAppAutoConfigDecision(gatewayID, decision string, decidedAt time.Time) error {
 	gatewayID = canonicalGatewayID(gatewayID)
 	decision = strings.TrimSpace(decision)

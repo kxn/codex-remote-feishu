@@ -407,7 +407,7 @@ func (a *App) buildOnboardingAutostartStage(cfg config.AppConfig) onboardingWork
 	decision := onboardingDecisionViewFromConfig(cfg.Admin.Onboarding.AutostartDecision)
 	status, err := detectAutostart(a.installStatePath())
 	if err != nil {
-		stage := stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "暂时无法确认自动启动状态，你也可以先记录稍后处理。", false, true, []string{"defer"})
+		stage := stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "暂时无法确认自动启动状态，请稍后重试。", false, true, nil)
 		return onboardingWorkflowMachineStepView{
 			onboardingWorkflowStageView: stage,
 			Decision:                    decision,
@@ -422,27 +422,24 @@ func (a *App) buildOnboardingAutostartStage(cfg config.AppConfig) onboardingWork
 	case !status.Supported:
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusNotApplicable, "当前系统不支持自动启动。", false, true, nil)
 	case decision != nil && decision.Value == onboardingDecisionDeferred:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusDeferred, "你选择稍后再处理自动启动。", false, true, autostartStageActions(status, true))
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusDeferred, "你选择稍后再处理自动启动。", false, true, autostartStageActions(status))
 	case decision != nil && decision.Value == onboardingDecisionAutostartEnabled && status.Enabled:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusComplete, "自动启动已经启用，并且当前决策已记录。", false, true, []string{"defer"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusComplete, "自动启动已经启用，并且当前决策已记录。", false, true, []string{"disable"})
 	case status.Enabled:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前已经启用自动启动，但还没有记录这项机器决策。", false, true, []string{"record_enabled", "defer"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前已经启用自动启动，但还没有记录这项机器决策。", false, true, []string{"record_enabled"})
 	default:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前还没有完成自动启动决策。", false, true, autostartStageActions(status, true))
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前还没有完成自动启动决策。", false, true, autostartStageActions(status))
 	}
 	return view
 }
 
-func autostartStageActions(status install.AutostartStatus, includeDefer bool) []string {
+func autostartStageActions(status install.AutostartStatus) []string {
 	actions := []string{}
 	if status.CanApply && !status.Enabled {
 		actions = append(actions, "apply")
 	}
 	if status.Enabled {
 		actions = append(actions, "record_enabled")
-	}
-	if includeDefer {
-		actions = append(actions, "defer")
 	}
 	return actions
 }
@@ -451,7 +448,7 @@ func (a *App) buildOnboardingVSCodeStage(cfg config.AppConfig) onboardingWorkflo
 	decision := onboardingDecisionViewFromConfig(cfg.Admin.Onboarding.VSCodeDecision)
 	status, err := a.buildVSCodeDetectResponse()
 	if err != nil {
-		stage := stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "暂时无法确认 VS Code 集成状态，你也可以先记录稍后处理。", false, true, []string{"defer", "remote_only"})
+		stage := stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "暂时无法确认 VS Code 集成状态，请稍后重试。", false, true, nil)
 		return onboardingWorkflowMachineStepView{
 			onboardingWorkflowStageView: stage,
 			Decision:                    decision,
@@ -465,15 +462,15 @@ func (a *App) buildOnboardingVSCodeStage(cfg config.AppConfig) onboardingWorkflo
 	}
 	switch {
 	case decision != nil && decision.Value == onboardingDecisionDeferred:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusDeferred, "你选择稍后再处理 VS Code 集成。", false, true, []string{"apply", "record_managed_shim", "remote_only"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusDeferred, "你选择稍后再处理 VS Code 集成。", false, true, []string{"apply", "record_managed_shim"})
 	case decision != nil && decision.Value == onboardingDecisionVSCodeRemoteOnly:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusDeferred, "你选择留到目标 SSH 机器上处理 VS Code 集成。", false, true, []string{"apply", "record_managed_shim", "defer"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusDeferred, "你选择留到目标 SSH 机器上处理 VS Code 集成。", false, true, []string{"apply", "record_managed_shim"})
 	case decision != nil && decision.Value == onboardingDecisionVSCodeManaged && ready:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusComplete, "VS Code 集成已经完成，并且当前决策已记录。", false, true, []string{"apply", "defer", "remote_only"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusComplete, "VS Code 集成已经完成，并且当前决策已记录。", false, true, []string{"disable"})
 	case ready:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "当前已经检测到 VS Code 集成，但还没有记录你的处理决策。", false, true, []string{"record_managed_shim", "defer", "remote_only"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "当前已经检测到 VS Code 集成，但还没有记录你的处理决策。", false, true, []string{"record_managed_shim"})
 	default:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "当前还没有完成 VS Code 集成决策。", false, true, []string{"apply", "defer", "remote_only"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "当前还没有完成 VS Code 集成决策。", false, true, []string{"apply", "record_managed_shim"})
 	}
 	return view
 }

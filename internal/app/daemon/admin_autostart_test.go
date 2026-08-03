@@ -15,9 +15,11 @@ func TestAdminAutostartEndpoints(t *testing.T) {
 
 	originalDetect := detectAutostart
 	originalApply := applyAutostart
+	originalDisable := disableAutostart
 	defer func() {
 		detectAutostart = originalDetect
 		applyAutostart = originalApply
+		disableAutostart = originalDisable
 	}()
 
 	detectAutostart = func(statePath string) (install.AutostartStatus, error) {
@@ -44,6 +46,17 @@ func TestAdminAutostartEndpoints(t *testing.T) {
 			CanApply:         true,
 		}, nil
 	}
+	disableAutostart = func(statePath string) (install.AutostartStatus, error) {
+		return install.AutostartStatus{
+			Platform:         "linux",
+			Supported:        true,
+			Manager:          install.ServiceManagerSystemdUser,
+			CurrentManager:   install.ServiceManagerDetached,
+			Status:           "disabled",
+			InstallStatePath: statePath,
+			CanApply:         true,
+		}, nil
+	}
 
 	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/autostart/detect", "")
 	if rec.Code != http.StatusOK {
@@ -67,6 +80,18 @@ func TestAdminAutostartEndpoints(t *testing.T) {
 	}
 	if applied.Status != "enabled" || !applied.Enabled {
 		t.Fatalf("unexpected apply payload: %#v", applied)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/autostart/disable", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var disabled autostartResponse
+	if err := json.NewDecoder(rec.Body).Decode(&disabled); err != nil {
+		t.Fatalf("decode disable: %v", err)
+	}
+	if disabled.Status != "disabled" || disabled.Enabled {
+		t.Fatalf("unexpected disable payload: %#v", disabled)
 	}
 }
 

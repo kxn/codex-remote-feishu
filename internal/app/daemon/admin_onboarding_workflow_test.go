@@ -311,8 +311,8 @@ func TestSetupOnboardingAutostartDoesNotOfferApplyWhenCannotApply(t *testing.T) 
 	if containsString(workflow.Autostart.AllowedActions, "apply") {
 		t.Fatalf("autostart allowed actions = %#v, apply should not be exposed when canApply=false", workflow.Autostart.AllowedActions)
 	}
-	if !containsString(workflow.Autostart.AllowedActions, "defer") {
-		t.Fatalf("autostart allowed actions = %#v, want defer fallback", workflow.Autostart.AllowedActions)
+	if containsString(workflow.Autostart.AllowedActions, "defer") {
+		t.Fatalf("autostart allowed actions = %#v, per-item defer should not be exposed", workflow.Autostart.AllowedActions)
 	}
 	if workflow.Autostart.Autostart == nil || workflow.Autostart.Autostart.Warning == "" || workflow.Autostart.Autostart.LingerHint == "" {
 		t.Fatalf("autostart payload did not preserve warning/hint: %#v", workflow.Autostart.Autostart)

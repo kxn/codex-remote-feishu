@@ -92,6 +92,69 @@ func (a *App) handleVSCodeApply(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, payload)
 }
 
+func (a *App) handleVSCodeDisable(w http.ResponseWriter, r *http.Request) {
+	if err := a.uninstallVSCodeIntegration(); err != nil {
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "vscode_disable_failed",
+			Message: "failed to disable vscode integration",
+			Details: err.Error(),
+		})
+		return
+	}
+	if err := a.clearOnboardingMachineDecision("vscode"); err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiError{
+			Code:    "config_write_failed",
+			Message: "vscode integration disabled but failed to reset onboarding decision",
+			Details: err.Error(),
+		})
+		return
+	}
+	a.mu.Lock()
+	a.invalidateVSCodeCompatibilityCacheLocked()
+	a.mu.Unlock()
+	payload, err := a.buildVSCodeDetectResponse()
+	if err != nil {
+		writeAPIError(w, http.StatusInternalServerError, apiError{
+			Code:    "vscode_detect_failed",
+			Message: "vscode integration disabled, but detect failed afterwards",
+			Details: err.Error(),
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (a *App) uninstallVSCodeIntegration() error {
+	statePath := a.installStatePath()
+	state, err := loadInstallStateIfPresent(statePath)
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return nil
+	}
+	entrypoint := strings.TrimSpace(state.BundleEntrypoint)
+	if entrypoint == "" {
+		return nil
+	}
+	settingsPath := strings.TrimSpace(state.VSCodeSettingsPath)
+	if settingsPath == "" {
+		defaults, err := a.platformDefaults()
+		if err != nil {
+			return err
+		}
+		settingsPath = defaults.VSCodeSettingsPath
+	}
+	if err := editor.UninstallManagedShim(entrypoint, settingsPath); err != nil {
+		return err
+	}
+	state.BundleEntrypoint = ""
+	if err := install.WriteState(statePath, *state); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (a *App) handleVSCodeReinstallShim(w http.ResponseWriter, r *http.Request) {
 	var req vscodeApplyRequest
 	if err := decodeJSONBody(r, &req); err != nil {

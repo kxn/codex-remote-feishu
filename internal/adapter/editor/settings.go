@@ -3,9 +3,14 @@ package editor
 import (
 	"encoding/json"
 	"os"
+	"strings"
 )
 
 func ClearVSCodeSettingsExecutable(settingsPath string) error {
+	return SetVSCodeSettingsExecutable(settingsPath, "")
+}
+
+func SetVSCodeSettingsExecutable(settingsPath, executable string) error {
 	raw, err := os.ReadFile(settingsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -18,7 +23,12 @@ func ClearVSCodeSettingsExecutable(settingsPath string) error {
 	if err != nil {
 		return err
 	}
-	delete(settings, "chatgpt.cliExecutable")
+	executable = strings.TrimSpace(executable)
+	if executable == "" {
+		delete(settings, "chatgpt.cliExecutable")
+	} else {
+		settings["chatgpt.cliExecutable"] = executable
+	}
 
 	encoded, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {

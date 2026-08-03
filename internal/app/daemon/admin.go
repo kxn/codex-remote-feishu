@@ -200,8 +200,10 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/setup/runtime-requirements/detect", a.requireSetup(a.handleRuntimeRequirementsDetect))
 	mux.HandleFunc("GET /api/setup/autostart/detect", a.requireSetup(a.handleAutostartDetect))
 	mux.HandleFunc("POST /api/setup/autostart/apply", a.requireSetup(a.handleAutostartApply))
+	mux.HandleFunc("POST /api/setup/autostart/disable", a.requireSetup(a.handleAutostartDisable))
 	mux.HandleFunc("GET /api/setup/vscode/detect", a.requireSetup(a.handleVSCodeDetect))
 	mux.HandleFunc("POST /api/setup/vscode/apply", a.requireSetup(a.handleVSCodeApply))
+	mux.HandleFunc("POST /api/setup/vscode/disable", a.requireSetup(a.handleVSCodeDisable))
 	mux.HandleFunc("POST /api/setup/vscode/reinstall-shim", a.requireSetup(a.handleVSCodeReinstallShim))
 
 	mux.HandleFunc("GET /api/admin/bootstrap-state", a.requireAdmin(a.handleBootstrapState))
@@ -255,8 +257,10 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/runtime-requirements/detect", a.requireAdmin(a.handleRuntimeRequirementsDetect))
 	mux.HandleFunc("GET /api/admin/autostart/detect", a.requireAdmin(a.handleAutostartDetect))
 	mux.HandleFunc("POST /api/admin/autostart/apply", a.requireAdmin(a.handleAutostartApply))
+	mux.HandleFunc("POST /api/admin/autostart/disable", a.requireAdmin(a.handleAutostartDisable))
 	mux.HandleFunc("GET /api/admin/vscode/detect", a.requireAdmin(a.handleVSCodeDetect))
 	mux.HandleFunc("POST /api/admin/vscode/apply", a.requireAdmin(a.handleVSCodeApply))
+	mux.HandleFunc("POST /api/admin/vscode/disable", a.requireAdmin(a.handleVSCodeDisable))
 	mux.HandleFunc("POST /api/admin/vscode/reinstall-shim", a.requireAdmin(a.handleVSCodeReinstallShim))
 	mux.HandleFunc("GET /v1/status", a.requireAdmin(a.handleStatus))
 }
