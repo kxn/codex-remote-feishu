@@ -541,7 +541,7 @@ func TestDaemonTickChecksVSCodeCompatibilityOnlyOnceForRestoredVSCodeSurface(t *
 	if card.CardTitle == "" {
 		t.Fatalf("expected retry card for restored vscode surface")
 	}
-	if !strings.Contains(operationCardText(card), "已自动尝试把旧版 settings.json 覆盖迁到 managed shim") {
+	if !strings.Contains(operationCardText(card), "已自动尝试把旧版 settings.json 覆盖迁到 VS Code 集成") {
 		t.Fatalf("expected restored vscode surface prompt to keep auto-migrate failure reason, got %#v", card)
 	}
 }

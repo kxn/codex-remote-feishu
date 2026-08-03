@@ -69,6 +69,21 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 		t.Fatalf("expected shared codex path to stay unchanged, got %q", loaded.Config.Wrapper.CodexRealBinary)
 	}
 
+	writeExecutableFile(t, entrypointV1, "older-managed-entrypoint")
+	rec = performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect old managed entrypoint status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode old managed entrypoint detect: %v", err)
+	}
+	if detect.NeedsShimReinstall {
+		t.Fatalf("old but valid VS Code integration should not require repair, got %#v", detect)
+	}
+	if !detect.LatestShim.Installed || !detect.LatestShim.SidecarValid || detect.LatestShim.MatchesBinary {
+		t.Fatalf("expected old valid integration with hash mismatch, got %#v", detect.LatestShim)
+	}
+
 	entrypointV2 := testVSCodeBundleEntrypoint(home, ".vscode-server", "2")
 	windowsSiblingV2 := testNonCurrentPlatformBundleEntrypoint(home, ".vscode-server", "2")
 	writeExecutableFile(t, entrypointV2, "orig-v2")
@@ -89,7 +104,7 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 		t.Fatalf("latest bundle entrypoint after upgrade = %q, want %q", detect.LatestBundleEntrypoint, entrypointV2)
 	}
 	if !detect.NeedsShimReinstall {
-		t.Fatalf("expected shim reinstall to be required after extension upgrade, got %#v", detect)
+		t.Fatalf("expected repair to be required after extension overwrote the latest entrypoint, got %#v", detect)
 	}
 
 	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)

@@ -182,8 +182,13 @@ export function makeVSCodeDetect(
     latestShim: {
       entrypoint: "/tmp/codex-shim.js",
       exists: true,
+      kind: "tiny_shim",
+      repoManaged: true,
       realBinaryPath: "/usr/local/bin/codex",
       realBinaryExists: true,
+      sidecarPath: "/tmp/codex-shim.js.codex-remote.json",
+      sidecarExists: true,
+      sidecarValid: true,
       installed: true,
       matchesBinary: true,
     },

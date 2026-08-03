@@ -56,9 +56,6 @@ func computeShimReinstallNeed(currentMode string, installState *install.InstallS
 	if strings.TrimSpace(latestEntrypoint) != "" && shimEntryNeedsRepair(latestShim, true) {
 		return true
 	}
-	if installState != nil && strings.TrimSpace(latestEntrypoint) != "" && !samePlatformPath(latestEntrypoint, installState.BundleEntrypoint) {
-		return true
-	}
 
 	recordedEntrypoint := ""
 	if installState != nil {
@@ -137,7 +134,7 @@ func shimEntryNeedsRepair(status editor.ManagedShimStatus, requireTiny bool) boo
 		return true
 	}
 	if status.Kind == editor.ManagedShimKindTiny {
-		return !status.Installed || !status.SidecarValid || !status.MatchesBinary
+		return !status.Installed || !status.SidecarValid
 	}
 	return status.RepoManaged || requireTiny
 }

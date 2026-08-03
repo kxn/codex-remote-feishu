@@ -51,7 +51,13 @@ export function vscodeIsReady(vscode: VSCodeDetectResponse | null): boolean {
   if (!vscode) {
     return false;
   }
-  return vscode.latestShim.matchesBinary && !vscode.needsShimReinstall && !vscode.settings.matchesBinary;
+  return (
+    vscode.latestShim.kind === "tiny_shim" &&
+    vscode.latestShim.installed &&
+    vscode.latestShim.sidecarValid &&
+    !vscode.needsShimReinstall &&
+    !vscode.settings.matchesBinary
+  );
 }
 
 export function vscodeApplyModeForScenario(vscode: VSCodeDetectResponse | null, scenario: VSCodeUsageScenario | null): string | null {
@@ -77,9 +83,12 @@ export function currentVSCodeSummary(vscode: VSCodeDetectResponse | null): strin
     return "检测到旧版 settings.json 接入，需迁移到扩展入口";
   }
   if (vscode.needsShimReinstall) {
-    return "检测到扩展升级，需重新安装扩展入口";
+    return "VS Code 集成需要修复";
   }
-  if (vscode.latestShim.matchesBinary) {
+  if (vscodeIsReady(vscode)) {
+    if (!vscode.latestShim.matchesBinary) {
+      return "VS Code 集成可用，可稍后更新";
+    }
     if (vscode.sshSession) {
       return "已在这台远程机器上接入（扩展入口）";
     }

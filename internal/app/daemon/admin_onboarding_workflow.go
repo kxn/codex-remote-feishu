@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -469,7 +470,11 @@ func (a *App) buildOnboardingVSCodeStage(cfg config.AppConfig) onboardingWorkflo
 }
 
 func workflowVSCodeReady(status vscodeDetectResponse) bool {
-	return status.LatestShim.MatchesBinary && !status.NeedsShimReinstall && !status.Settings.MatchesBinary
+	return status.LatestShim.Kind == editor.ManagedShimKindTiny &&
+		status.LatestShim.Installed &&
+		status.LatestShim.SidecarValid &&
+		!status.NeedsShimReinstall &&
+		!status.Settings.MatchesBinary
 }
 
 func buildOnboardingGuide(

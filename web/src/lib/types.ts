@@ -456,8 +456,13 @@ export interface VSCodeSettingsStatus {
 export interface ManagedShimStatus {
   entrypoint: string;
   exists: boolean;
+  kind?: string;
+  repoManaged: boolean;
   realBinaryPath?: string;
   realBinaryExists: boolean;
+  sidecarPath?: string;
+  sidecarExists: boolean;
+  sidecarValid: boolean;
   installed: boolean;
   matchesBinary: boolean;
 }
