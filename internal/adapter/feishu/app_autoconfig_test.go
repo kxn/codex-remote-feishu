@@ -3,6 +3,8 @@ package feishu
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 
@@ -11,6 +13,61 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
+
+func TestV6AppAutoConfigReadRequestsIncludeRequiredLang(t *testing.T) {
+	appID := "cli_v6_lang"
+	versionID := "oav_v6_lang"
+	var paths []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"tenant-token"}`))
+		case "/open-apis/application/v6/applications/" + appID:
+			paths = append(paths, r.URL.String())
+			if got := r.URL.Query().Get("lang"); got != "zh_cn" {
+				t.Fatalf("application.get lang = %q, want zh_cn", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app":{"app_id":"cli_v6_lang","online_version_id":"oav_v6_lang"}}}`))
+		case "/open-apis/application/v6/applications/" + appID + "/app_versions/" + versionID:
+			paths = append(paths, r.URL.String())
+			if got := r.URL.Query().Get("lang"); got != "zh_cn" {
+				t.Fatalf("application_app_version.get lang = %q, want zh_cn", got)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app_version":{"app_id":"cli_v6_lang","version_id":"oav_v6_lang","version":"1.0.0","status":1}}}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	setup := NewSetupClient(SetupClientConfig{
+		GatewayID: "main",
+		AppID:     appID,
+		AppSecret: "secret",
+		Domain:    server.URL,
+	})
+	client, broker := setup.sdk()
+	app, err := getApplicationConfig(context.Background(), broker, client, appID)
+	if err != nil {
+		t.Fatalf("getApplicationConfig: %v", err)
+	}
+	if app == nil || stringValue(app.OnlineVersionId) != versionID {
+		t.Fatalf("unexpected app response: %#v", app)
+	}
+	version, err := getApplicationVersion(context.Background(), broker, client, appID, versionID)
+	if err != nil {
+		t.Fatalf("getApplicationVersion: %v", err)
+	}
+	if version == nil || stringValue(version.VersionId) != versionID {
+		t.Fatalf("unexpected version response: %#v", version)
+	}
+	if len(paths) != 2 {
+		t.Fatalf("read request count = %d, want 2 paths=%#v", len(paths), paths)
+	}
+}
 
 func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	restoreAutoConfigHooks(t)

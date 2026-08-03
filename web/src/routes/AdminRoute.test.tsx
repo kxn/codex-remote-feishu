@@ -370,6 +370,64 @@ describe("AdminRoute", () => {
     expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(false);
   });
 
+  it("shows a user-facing failure when automatic completion fails", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({
+      id: "bot-complete-error",
+      name: "补齐失败机器人",
+      appId: "cli_complete_error",
+    });
+
+    installMockFetch(makeSingleRobotAdminRoutes(app, {
+      "/api/admin/feishu/apps/bot-complete-error/permissions/check": {
+        body: {
+          app,
+          ready: false,
+          missingScopes: [
+            {
+              scope: "im:message.group_at_msg:readonly",
+              scopeType: "tenant",
+            },
+          ],
+          grantJSON:
+            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_at_msg:readonly"\n    ],\n    "user": []\n  }\n}',
+          lastCheckedAt: "2026-08-02T06:30:00Z",
+        },
+      },
+      "/api/admin/feishu/apps/bot-complete-error/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(app, {
+          status: "apply_required",
+          summary: "飞书配置还需要补齐。",
+        }),
+      },
+      "/api/admin/feishu/apps/bot-complete-error/auto-config/complete": {
+        status: 502,
+        body: {
+          error: {
+            code: "feishu_auto_config_failed",
+            message: "暂时无法完成飞书自动配置，请稍后重试。",
+            details:
+              "feishu api application.v6.application.get failed: code=99992402 msg=field validation failed",
+          },
+        },
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+    await user.click(await screen.findByRole("button", { name: "自动补齐" }));
+
+    expect(
+      await screen.findByText("当前还不能自动补齐，请稍后重试。"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/application\.v6\.application\.get/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/99992402/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/field validation failed/)).not.toBeInTheDocument();
+  });
+
   it("uses automatic completion when missing permissions only need release", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();

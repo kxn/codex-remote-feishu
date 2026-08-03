@@ -1374,7 +1374,7 @@ function mergeImmediateAutoConfigStage(
       resultStatus: "verification_failed",
       summary: "已保存机器人，但暂时无法确认飞书配置结果。",
       error: immediate.view.error,
-      allowedActions: mergeAllowedActions(stage.allowedActions, ["apply", "retry"]),
+      allowedActions: mergeAllowedActions(stage.allowedActions, ["apply", "retry", "defer"]),
     };
   }
   return {
@@ -1408,7 +1408,7 @@ function allowedActionsForImmediateAutoConfig(
     case "apply_required":
     case "publish_required":
     case "verification_failed":
-      return mergeAllowedActions(existing, ["apply", "retry"]);
+      return mergeAllowedActions(existing, ["apply", "retry", "defer"]);
     case "awaiting_review":
       return mergeAllowedActions(existing, ["retry"]);
     default:

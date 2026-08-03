@@ -594,7 +594,10 @@ func getApplicationConfig(ctx context.Context, broker *FeishuCallBroker, client 
 		Retry:      RetrySafe,
 		Permission: PermissionFailFast,
 	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkapplication.GetApplicationResp, error) {
-		req := larkapplication.NewGetApplicationReqBuilder().AppId(strings.TrimSpace(appID)).Build()
+		req := larkapplication.NewGetApplicationReqBuilder().
+			AppId(strings.TrimSpace(appID)).
+			Lang("zh_cn").
+			Build()
 		return sdkClient.Application.V6.Application.Get(callCtx, req)
 	})
 	if err != nil {
@@ -621,6 +624,7 @@ func getApplicationVersion(ctx context.Context, broker *FeishuCallBroker, client
 		req := larkapplication.NewGetApplicationAppVersionReqBuilder().
 			AppId(strings.TrimSpace(appID)).
 			VersionId(strings.TrimSpace(versionID)).
+			Lang("zh_cn").
 			Build()
 		return sdkClient.Application.V6.ApplicationAppVersion.Get(callCtx, req)
 	})

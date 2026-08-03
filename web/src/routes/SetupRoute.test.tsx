@@ -355,6 +355,7 @@ describe("SetupRoute", () => {
       await screen.findByRole("heading", { name: "配置飞书机器人" }, { timeout: 7_000 }),
     ).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "无法确认最终状态" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "先按降级继续" })).toBeInTheDocument();
     expect(screen.queryByText("raw backend verification error")).not.toBeInTheDocument();
   }, 10_000);
 

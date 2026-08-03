@@ -717,8 +717,11 @@ func TestFeishuAppCreatePreservesSavedAppWhenAutoConfigFails(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&createResp); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if createResp.AutoConfig == nil || !strings.Contains(createResp.AutoConfig.Error, "temporary auto-config failure") {
+	if createResp.AutoConfig == nil || createResp.AutoConfig.Error != feishuAutoConfigUserMessage() {
 		t.Fatalf("expected auto-config error in create response, got %#v", createResp.AutoConfig)
+	}
+	if strings.Contains(createResp.AutoConfig.Error, "temporary auto-config failure") {
+		t.Fatalf("auto-config error should not expose raw details: %q", createResp.AutoConfig.Error)
 	}
 	loaded, err := config.LoadAppConfigAtPath(configPath)
 	if err != nil {

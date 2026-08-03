@@ -10,7 +10,6 @@ import type {
   FeishuOnboardingSessionResponse,
 } from "../../lib/types";
 import { autoConfigNoticeTone } from "./feishuAutoConfig";
-import { readAPIError } from "./helpers";
 
 export type NoticeTone = "good" | "warn" | "danger";
 export type ConnectMode = "qr" | "manual";
@@ -230,13 +229,9 @@ export async function runAutoConfigMutation<T extends AutoConfigMutationResponse
     { method: "POST", ...(options.init || {}) },
   );
   if (!response.ok) {
-    const payload = readAPIError(response);
     return {
       ok: false,
-      message:
-        typeof payload?.details === "string" && payload.details.trim()
-          ? payload.details.trim()
-          : options.fallbackErrorMessage,
+      message: options.fallbackErrorMessage,
     };
   }
   const payload = response.data as T;

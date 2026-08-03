@@ -93,13 +93,13 @@ func TestOnboardingAutoConfigCanContinueDegraded(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "blocking requirements still block",
+			name: "blocking requirements can still continue with explicit degraded choice",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.BlockingRequirements = []feishu.AutoConfigRequirementStatus{
 					{Kind: feishu.AutoConfigRequirementKindScope, Key: "im:message:send_as_bot", Required: true},
 				}
 			},
-			want: false,
+			want: true,
 		},
 		{
 			name: "publish required can continue degraded when no blocking diff remains",
@@ -123,39 +123,39 @@ func TestOnboardingAutoConfigCanContinueDegraded(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "ability mismatch blocks degraded continue",
+			name: "ability mismatch can continue with explicit degraded choice",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Diff.AbilityPatchRequired = true
 			},
-			want: false,
+			want: true,
 		},
 		{
-			name: "event subscription type mismatch blocks degraded continue",
+			name: "event subscription type mismatch can continue with explicit degraded choice",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Diff.EventSubscriptionTypeMismatch = true
 			},
-			want: false,
+			want: true,
 		},
 		{
-			name: "event request url mismatch blocks degraded continue",
+			name: "event request url mismatch can continue with explicit degraded choice",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Diff.EventRequestURLMismatch = true
 			},
-			want: false,
+			want: true,
 		},
 		{
-			name: "callback type mismatch blocks degraded continue",
+			name: "callback type mismatch can continue with explicit degraded choice",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Diff.CallbackTypeMismatch = true
 			},
-			want: false,
+			want: true,
 		},
 		{
-			name: "callback request url mismatch blocks degraded continue",
+			name: "callback request url mismatch can continue with explicit degraded choice",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Diff.CallbackRequestURLMismatch = true
 			},
-			want: false,
+			want: true,
 		},
 	}
 
@@ -182,7 +182,7 @@ func TestSetupOnboardingWorkflowDeferredAutoConfigHonorsFinalBlockingState(t *te
 		wantDefer      bool
 	}{
 		{
-			name: "required ability patch remains pending",
+			name: "required ability patch honors deferred",
 			plan: feishu.AutoConfigPlan{
 				Status:  feishu.AutoConfigStatusApplyRequired,
 				Summary: "当前机器人能力还没有生效。",
@@ -190,9 +190,9 @@ func TestSetupOnboardingWorkflowDeferredAutoConfigHonorsFinalBlockingState(t *te
 					AbilityPatchRequired: true,
 				},
 			},
-			wantAutoStatus: onboardingStageStatusPending,
-			wantMenuStatus: onboardingStageStatusBlocked,
-			wantStage:      onboardingStageAutoConfig,
+			wantAutoStatus: onboardingStageStatusDeferred,
+			wantMenuStatus: onboardingStageStatusPending,
+			wantStage:      onboardingStageMenu,
 		},
 		{
 			name: "publish required honors deferred when no blocking diff remains",

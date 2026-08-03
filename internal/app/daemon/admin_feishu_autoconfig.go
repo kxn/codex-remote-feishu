@@ -84,7 +84,7 @@ func (a *App) handleFeishuAppAutoConfigPlan(w http.ResponseWriter, r *http.Reque
 	defer cancel()
 	plan, err := feishuSetupFacade.PlanAutoConfig(planCtx, runtimeCfg)
 	if err != nil {
-		a.writeFeishuAutoConfigGatewayError(w, "failed to build feishu auto-config plan", err)
+		a.writeFeishuAutoConfigGatewayError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, feishuAppAutoConfigPlanResponse{
@@ -103,7 +103,7 @@ func (a *App) handleFeishuAppAutoConfigApply(w http.ResponseWriter, r *http.Requ
 	defer cancel()
 	result, err := feishuSetupFacade.ApplyAutoConfig(applyCtx, runtimeCfg)
 	if err != nil {
-		a.writeFeishuAutoConfigGatewayError(w, "failed to apply feishu auto-config", err)
+		a.writeFeishuAutoConfigGatewayError(w, err)
 		return
 	}
 	if err := a.clearFeishuAppAutoConfigDecision(summary.ID); err != nil {
@@ -143,7 +143,7 @@ func (a *App) handleFeishuAppAutoConfigPublish(w http.ResponseWriter, r *http.Re
 		Version:   strings.TrimSpace(req.Version),
 	})
 	if err != nil {
-		a.writeFeishuAutoConfigGatewayError(w, "failed to publish feishu auto-config changes", err)
+		a.writeFeishuAutoConfigGatewayError(w, err)
 		return
 	}
 	if err := a.clearFeishuAppAutoConfigDecision(summary.ID); err != nil {
@@ -183,7 +183,7 @@ func (a *App) handleFeishuAppAutoConfigComplete(w http.ResponseWriter, r *http.R
 		Version:   strings.TrimSpace(req.Version),
 	})
 	if err != nil {
-		a.writeFeishuAutoConfigGatewayError(w, "failed to complete feishu auto-config", err)
+		a.writeFeishuAutoConfigGatewayError(w, err)
 		return
 	}
 	if err := a.clearFeishuAppAutoConfigDecision(summary.ID); err != nil {
@@ -209,10 +209,10 @@ func (a *App) completeSavedFeishuAppAutoConfig(parent context.Context, loaded co
 	defer cancel()
 	result, err := feishuSetupFacade.CompleteAutoConfig(completeCtx, liveGatewayConfigFromRuntime(runtimeCfg), feishu.AutoConfigPublishRequest{})
 	if err != nil {
-		return &feishuAppAutoConfigCompleteView{Error: err.Error()}
+		return &feishuAppAutoConfigCompleteView{Error: feishuAutoConfigUserMessage()}
 	}
 	if err := a.clearFeishuAppAutoConfigDecision(gatewayID); err != nil {
-		return &feishuAppAutoConfigCompleteView{Result: &result, Error: err.Error()}
+		return &feishuAppAutoConfigCompleteView{Result: &result, Error: feishuAutoConfigUserMessage()}
 	}
 	return &feishuAppAutoConfigCompleteView{Result: &result}
 }
@@ -270,10 +270,14 @@ func (a *App) writeFeishuAppTargetError(w http.ResponseWriter, err error) {
 	}
 }
 
-func (a *App) writeFeishuAutoConfigGatewayError(w http.ResponseWriter, message string, err error) {
+func (a *App) writeFeishuAutoConfigGatewayError(w http.ResponseWriter, err error) {
 	writeAPIError(w, http.StatusBadGateway, apiError{
 		Code:    "feishu_auto_config_failed",
-		Message: message,
+		Message: feishuAutoConfigUserMessage(),
 		Details: err.Error(),
 	})
+}
+
+func feishuAutoConfigUserMessage() string {
+	return "暂时无法完成飞书自动配置，请稍后重试。"
 }
