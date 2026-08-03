@@ -522,6 +522,102 @@ func TestPlanAppAutoConfigReturnsUnsupportedPlanInsteadOfError(t *testing.T) {
 	}
 }
 
+func TestPlanAppAutoConfigClassifiesReadAPIErrorWithoutRawUserText(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		return nil, &APIError{
+			API:        "application.v6.application.get",
+			Code:       99992402,
+			Msg:        "field validation failed",
+			StatusCode: http.StatusBadRequest,
+		}
+	}
+	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
+		return nil, nil
+	}
+
+	plan, err := PlanAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: "cli_invalid"},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+	)
+	if err != nil {
+		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
+	}
+	if plan.Status != AutoConfigStatusBlocked {
+		t.Fatalf("plan status = %q, want %q", plan.Status, AutoConfigStatusBlocked)
+	}
+	if plan.BlockingReason != autoConfigBlockingReadFailed {
+		t.Fatalf("blocking reason = %q, want %q", plan.BlockingReason, autoConfigBlockingReadFailed)
+	}
+	raw := plan.Summary + " " + plan.BlockingReason
+	for _, disallowed := range []string{"application.v6.application.get", "99992402", "field validation failed", "feishu_api_error"} {
+		if strings.Contains(raw, disallowed) {
+			t.Fatalf("plan leaked raw error token %q in %q", disallowed, raw)
+		}
+	}
+}
+
+func TestOverridePlanFromAPIErrorClassifiesStableFailureReasons(t *testing.T) {
+	tests := []struct {
+		name       string
+		err        error
+		phase      autoConfigFailurePhase
+		wantStatus string
+		wantReason string
+	}{
+		{
+			name:       "under review",
+			err:        &APIError{API: "application.v7.application.publish", Code: 210040, Msg: "under review"},
+			phase:      autoConfigFailurePublish,
+			wantStatus: AutoConfigStatusAwaitingReview,
+			wantReason: autoConfigBlockingUnderReview,
+		},
+		{
+			name:       "unsupported",
+			err:        &APIError{API: "application.v7.application.config.patch", Code: 210015, Msg: "unsupported"},
+			phase:      autoConfigFailureWrite,
+			wantStatus: AutoConfigStatusUnsupported,
+			wantReason: autoConfigBlockingUnsupported,
+		},
+		{
+			name:       "publish field validation",
+			err:        &APIError{API: "application.v7.application.publish", Code: 99992402, Msg: "field validation failed", StatusCode: http.StatusBadRequest},
+			phase:      autoConfigFailurePublish,
+			wantStatus: AutoConfigStatusBlocked,
+			wantReason: autoConfigBlockingInvalidPublish,
+		},
+		{
+			name:       "permission denied",
+			err:        &APIError{API: "application.v7.application.config.patch", Code: 99991663, Msg: "permission denied", StatusCode: http.StatusForbidden},
+			phase:      autoConfigFailureWrite,
+			wantStatus: AutoConfigStatusBlocked,
+			wantReason: autoConfigBlockingPermissionIssue,
+		},
+		{
+			name:       "unknown write error",
+			err:        errors.New("network read reset"),
+			phase:      autoConfigFailureWrite,
+			wantStatus: AutoConfigStatusBlocked,
+			wantReason: autoConfigBlockingWriteFailed,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := overridePlanFromAPIError(AutoConfigPlan{}, tt.err, tt.phase)
+			if plan.Status != tt.wantStatus || plan.BlockingReason != tt.wantReason {
+				t.Fatalf("overridePlanFromAPIError = status %q reason %q, want %q/%q", plan.Status, plan.BlockingReason, tt.wantStatus, tt.wantReason)
+			}
+			for _, disallowed := range []string{"application.v7", "field validation failed", "permission denied", "network read reset", "feishu_api_error"} {
+				if strings.Contains(plan.Summary, disallowed) || strings.Contains(plan.BlockingReason, disallowed) {
+					t.Fatalf("classified user text leaked %q in summary=%q reason=%q", disallowed, plan.Summary, plan.BlockingReason)
+				}
+			}
+		})
+	}
+}
+
 func restoreAutoConfigHooks(t *testing.T) {
 	t.Helper()
 	oldListScopes := autoConfigListScopes

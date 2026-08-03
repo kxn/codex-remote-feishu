@@ -1118,7 +1118,7 @@ export function SetupRoute() {
 
           {plan?.blockingReason ? (
             <p className="support-copy">
-              当前原因：{describeAutoConfigBlockingReason(plan.blockingReason)}
+              {describeAutoConfigBlockingReason(plan.blockingReason)}
             </p>
           ) : null}
 

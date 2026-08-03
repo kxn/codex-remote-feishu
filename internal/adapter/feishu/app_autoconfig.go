@@ -17,8 +17,21 @@ const (
 	autoConfigBlockingUnderReview     = "application_under_review"
 	autoConfigBlockingApplyRequired   = "apply_required_before_publish"
 	autoConfigBlockingInvalidPublish  = "invalid_publish_request"
+	autoConfigBlockingReadFailed      = "feishu_read_failed"
+	autoConfigBlockingWriteFailed     = "feishu_write_failed"
+	autoConfigBlockingPublishFailed   = "feishu_publish_failed"
+	autoConfigBlockingCredentialIssue = "credential_invalid"
+	autoConfigBlockingPermissionIssue = "permission_denied"
 	autoConfigDefaultPublishRemark    = "同步 Codex Remote 的飞书应用配置"
 	autoConfigDefaultPublishChangelog = "更新飞书自动配置所需的权限、事件、回调与机器人能力。"
+)
+
+type autoConfigFailurePhase string
+
+const (
+	autoConfigFailureRead    autoConfigFailurePhase = "read"
+	autoConfigFailureWrite   autoConfigFailurePhase = "write"
+	autoConfigFailurePublish autoConfigFailurePhase = "publish"
 )
 
 var (
@@ -120,7 +133,7 @@ func (s *autoConfigService) Apply(ctx context.Context) (AutoConfigApplyResult, e
 		if err := autoConfigPatchAbility(ctx, broker, sdkClient, cfg.AppID, v7PatchAbilityRequest{
 			Bot: &v7PatchAbilityBot{Enable: s.policy.BotEnabled},
 		}); err != nil {
-			updatedPlan := overridePlanFromAPIError(plan, err)
+			updatedPlan := overridePlanFromAPIError(plan, err, autoConfigFailureWrite)
 			return AutoConfigApplyResult{
 				Status:         updatedPlan.Status,
 				Summary:        updatedPlan.Summary,
@@ -136,7 +149,7 @@ func (s *autoConfigService) Apply(ctx context.Context) (AutoConfigApplyResult, e
 		sdkClient, broker := s.client.sdk()
 		cfg := s.client.liveGatewayConfig()
 		if err := autoConfigPatchConfig(ctx, broker, sdkClient, cfg.AppID, req); err != nil {
-			updatedPlan := overridePlanFromAPIError(plan, err)
+			updatedPlan := overridePlanFromAPIError(plan, err, autoConfigFailureWrite)
 			outcome := "blocked"
 			if updatedPlan.Status == AutoConfigStatusUnsupported {
 				outcome = "unsupported"
@@ -209,7 +222,7 @@ func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRe
 	cfg := s.client.liveGatewayConfig()
 	versionID, version, err := autoConfigPublish(ctx, broker, sdkClient, cfg.AppID, publishReq)
 	if err != nil {
-		updatedPlan := overridePlanFromAPIError(plan, err)
+		updatedPlan := overridePlanFromAPIError(plan, err, autoConfigFailurePublish)
 		outcome := "blocked"
 		if updatedPlan.Status == AutoConfigStatusUnsupported {
 			outcome = "unsupported"
@@ -380,6 +393,10 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 }
 
 func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) {
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr == nil {
+		return AutoConfigPlan{}, false
+	}
 	plan := AutoConfigPlan{
 		Target: AutoConfigTargetState{
 			ScopeRequirements: normalizeScopeRequirements(s.manifest),
@@ -388,9 +405,9 @@ func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) 
 			Policy:            s.policy,
 		},
 	}
-	plan = overridePlanFromAPIError(plan, err)
+	plan = overridePlanFromAPIError(plan, err, autoConfigFailureRead)
 	switch plan.Status {
-	case AutoConfigStatusUnsupported, AutoConfigStatusAwaitingReview:
+	case AutoConfigStatusUnsupported, AutoConfigStatusAwaitingReview, AutoConfigStatusBlocked:
 		return plan, true
 	default:
 		return AutoConfigPlan{}, false
@@ -555,36 +572,6 @@ func (s *autoConfigService) buildConfigPatchRequest(diff AutoConfigDiff) v7Patch
 		}
 	}
 	return req
-}
-
-func overridePlanFromAPIError(plan AutoConfigPlan, err error) AutoConfigPlan {
-	updated := plan
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) || apiErr == nil {
-		updated.Status = AutoConfigStatusBlocked
-		updated.Summary = "飞书自动配置调用失败。"
-		updated.BlockingReason = "feishu_api_error"
-		return updated
-	}
-	switch apiErr.Code {
-	case 210040, 210020, 210302:
-		updated.Status = AutoConfigStatusAwaitingReview
-		updated.Summary = "飞书应用正在审核中，暂时无法继续修改或发布。"
-		updated.BlockingReason = autoConfigBlockingUnderReview
-	case 210043, 210035, 210021, 210015, 210001, 210034, 210014:
-		updated.Status = AutoConfigStatusUnsupported
-		updated.Summary = "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。"
-		updated.BlockingReason = autoConfigBlockingUnsupported
-	case 210303, 210304:
-		updated.Status = AutoConfigStatusBlocked
-		updated.Summary = "飞书发布请求参数无效，当前发布未被接受。"
-		updated.BlockingReason = autoConfigBlockingInvalidPublish
-	default:
-		updated.Status = AutoConfigStatusBlocked
-		updated.Summary = "飞书自动配置调用失败。"
-		updated.BlockingReason = "feishu_api_error"
-	}
-	return updated
 }
 
 func getApplicationConfig(ctx context.Context, broker *FeishuCallBroker, client *lark.Client, appID string) (*larkapplication.Application, error) {

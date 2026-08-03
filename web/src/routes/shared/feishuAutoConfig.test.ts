@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeAutoConfigBlockingReason,
   describeAutoConfigRequirementDisplay,
   groupAutoConfigRequirements,
   onboardingAutoConfigNoticeTone,
@@ -85,5 +86,30 @@ describe("feishu auto-config shared helpers", () => {
     expect(onboardingAutoConfigNoticeTone("deferred")).toBe("warn");
     expect(onboardingAutoConfigNoticeTone("blocked")).toBe("danger");
     expect(onboardingAutoConfigNoticeTone("pending")).toBe("warn");
+  });
+
+  it("maps blocking reasons through a user-facing allowlist", () => {
+    expect(describeAutoConfigBlockingReason("feishu_read_failed")).toContain("读取飞书应用配置");
+    expect(describeAutoConfigBlockingReason("feishu_write_failed")).toContain("自动配置写入");
+    expect(describeAutoConfigBlockingReason("feishu_publish_failed")).toContain("发布提交");
+    expect(describeAutoConfigBlockingReason("invalid_publish_request")).toContain("发布提交");
+    expect(describeAutoConfigBlockingReason("permission_denied")).toContain("没有修改飞书应用配置的权限");
+    expect(describeAutoConfigBlockingReason("credential_invalid")).toContain("凭证已经失效");
+  });
+
+  it("does not echo unknown internal blocking reasons into visible copy", () => {
+    const rawReasons = [
+      "feishu_api_error",
+      "application.v6.application.get",
+      "99992402 field validation failed",
+    ];
+
+    for (const reason of rawReasons) {
+      const copy = describeAutoConfigBlockingReason(reason);
+      expect(copy).not.toContain(reason);
+      expect(copy).not.toContain("99992402");
+      expect(copy).not.toContain("field validation failed");
+      expect(copy).not.toContain("application.v6.application.get");
+    }
   });
 });

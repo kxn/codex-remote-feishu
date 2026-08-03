@@ -160,10 +160,22 @@ export function describeAutoConfigBlockingReason(reason: string): string {
       return "飞书开放平台上的应用版本仍在审核中。";
     case "apply_required_before_publish":
       return "还需要先完成自动补齐，之后才能提交发布。";
+    case "invalid_publish_request":
+      return "飞书没有接受发布提交，请稍后重试或到飞书后台发布。";
+    case "feishu_read_failed":
+      return "暂时无法读取飞书应用配置，请稍后重新检查。";
+    case "feishu_write_failed":
+      return "飞书没有接受自动配置写入，请稍后重试或到飞书后台处理。";
+    case "feishu_publish_failed":
+      return "飞书没有接受发布提交，请稍后重试或到飞书后台发布。";
+    case "credential_invalid":
+      return "当前飞书应用凭证已经失效，请重新连接飞书机器人。";
+    case "permission_denied":
+      return "当前账号没有修改飞书应用配置的权限，请使用有权限的管理员账号处理。";
     case "verification_failed":
       return "飞书最终状态暂时没有确认成功。";
     default:
-      return reason.trim() || "当前状态暂未给出更多说明。";
+      return "飞书返回的状态暂时无法处理，请稍后重新检查或到飞书后台处理。";
   }
 }
 
