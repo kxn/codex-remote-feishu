@@ -8,7 +8,6 @@ const (
 	AutoConfigStatusAwaitingReview     = "awaiting_review"
 	AutoConfigStatusDegraded           = "degraded"
 	AutoConfigStatusBlocked            = "blocked"
-	AutoConfigStatusUnsupported        = "unsupported"
 	AutoConfigStatusVerificationFailed = "verification_failed"
 )
 

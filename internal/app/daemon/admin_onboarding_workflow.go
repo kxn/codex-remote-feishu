@@ -339,8 +339,8 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 			actions = append(actions, "defer")
 		}
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "暂时无法确认飞书配置状态，请重新检查或稍后再试。"), false, canContinueDegraded, actions)
-	case feishu.AutoConfigStatusBlocked, feishu.AutoConfigStatusUnsupported:
-		if plan.Status == feishu.AutoConfigStatusBlocked && canContinueDegraded {
+	case feishu.AutoConfigStatusBlocked:
+		if canContinueDegraded {
 			if onboardingAutoConfigDeferred(state.AutoConfigDecision) {
 				view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里查看差异。", false, true, []string{"retry"})
 				break

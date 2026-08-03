@@ -13,11 +13,7 @@ import (
 )
 
 const (
-	autoConfigBlockingUnsupported     = "unsupported_application"
-	autoConfigBlockingUnderReview     = "application_under_review"
-	autoConfigBlockingInvalidPublish  = "invalid_publish_request"
 	autoConfigBlockingReadFailed      = "feishu_read_failed"
-	autoConfigBlockingPublishFailed   = "feishu_publish_failed"
 	autoConfigBlockingCredentialIssue = "credential_invalid"
 	autoConfigBlockingPermissionIssue = "permission_denied"
 )
@@ -197,7 +193,7 @@ func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) 
 	}
 	plan = overridePlanFromAPIError(plan, err)
 	switch plan.Status {
-	case AutoConfigStatusUnsupported, AutoConfigStatusAwaitingReview, AutoConfigStatusBlocked:
+	case AutoConfigStatusBlocked:
 		return plan, true
 	default:
 		return AutoConfigPlan{}, false
@@ -301,12 +297,6 @@ func buildPublishState(snapshot autoConfigSnapshot, diff AutoConfigDiff) AutoCon
 }
 
 func derivePlanState(plan AutoConfigPlan) (string, string) {
-	switch strings.TrimSpace(plan.BlockingReason) {
-	case autoConfigBlockingUnsupported:
-		return AutoConfigStatusUnsupported, "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。"
-	case autoConfigBlockingUnderReview:
-		return AutoConfigStatusAwaitingReview, "当前飞书应用正在审核中，暂时无法继续修改配置。"
-	}
 	switch {
 	case plan.Publish.AwaitingReview:
 		return AutoConfigStatusAwaitingReview, "飞书应用变更已进入审核流程，正在等待审核结果。"

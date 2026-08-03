@@ -1417,7 +1417,6 @@ function onboardingStageStatusFromAutoConfigResult(status: string): string {
     case "degraded":
       return "complete";
     case "blocked":
-    case "unsupported":
       return "blocked";
     default:
       return "pending";

@@ -21,8 +21,6 @@ export function describeAutoConfigSummary(status: string): string {
       return "当前飞书应用已经满足自动配置要求。";
     case "degraded":
       return "基础配置已完成，但仍有部分可选能力没有开通。";
-    case "unsupported":
-      return "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。";
     case "apply_required":
       return "当前还有飞书配置差异需要处理。";
     case "awaiting_review":
@@ -79,10 +77,6 @@ export function describeAutoConfigRefreshFeedback(status: string): string {
 
 export function describeAutoConfigBlockingReason(reason: string): string {
   switch (reason) {
-    case "unsupported_application":
-      return "当前飞书应用不支持自动配置，请在飞书后台手动维护。";
-    case "application_under_review":
-      return "飞书开放平台上的应用版本仍在审核中。";
     case "feishu_read_failed":
       return "暂时无法读取飞书应用配置，请稍后重新检查。";
     case "credential_invalid":
@@ -153,7 +147,6 @@ export function autoConfigNoticeTone(status: string): "good" | "warn" | "danger"
     case "clean":
       return "good";
     case "degraded":
-    case "unsupported":
     case "awaiting_review":
     case "verification_failed":
       return "warn";

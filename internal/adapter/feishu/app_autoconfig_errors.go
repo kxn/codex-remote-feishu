@@ -13,23 +13,8 @@ func overridePlanFromAPIError(plan AutoConfigPlan, err error) AutoConfigPlan {
 		updated.Summary, updated.BlockingReason = autoConfigReadFailureSummary()
 		return updated
 	}
-	switch apiErr.Code {
-	case 210040, 210020, 210302:
-		updated.Status = AutoConfigStatusAwaitingReview
-		updated.Summary = "飞书应用正在审核中，暂时无法继续修改或发布。"
-		updated.BlockingReason = autoConfigBlockingUnderReview
-	case 210043, 210035, 210021, 210015, 210001, 210034, 210014:
-		updated.Status = AutoConfigStatusUnsupported
-		updated.Summary = "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。"
-		updated.BlockingReason = autoConfigBlockingUnsupported
-	case 210303, 210304:
-		updated.Status = AutoConfigStatusBlocked
-		updated.Summary = "飞书发布请求参数无效，当前发布未被接受。"
-		updated.BlockingReason = autoConfigBlockingInvalidPublish
-	default:
-		updated.Status = AutoConfigStatusBlocked
-		updated.Summary, updated.BlockingReason = autoConfigReadAPIErrorSummary(apiErr)
-	}
+	updated.Status = AutoConfigStatusBlocked
+	updated.Summary, updated.BlockingReason = autoConfigReadAPIErrorSummary(apiErr)
 	return updated
 }
 
