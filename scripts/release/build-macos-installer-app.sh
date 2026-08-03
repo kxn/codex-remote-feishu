@@ -241,8 +241,6 @@ lipo -create \
 chmod +x "${macos_dir}/${app_exec_name}"
 cp "${archive_amd64}" "${payload_dir}/codex-remote-darwin-amd64.tar.gz"
 cp "${archive_arm64}" "${payload_dir}/codex-remote-darwin-arm64.tar.gz"
-printf '%s\n' "${version}" > "${resources_dir}/installer-version.txt"
-printf '%s\n' "${track}" > "${resources_dir}/installer-track.txt"
 
 bundle_version_output="$(bundle_versions_for_app "${version}")"
 app_short_version=""
@@ -259,7 +257,7 @@ if [[ -z "${app_short_version}" || -z "${app_bundle_version}" ]]; then
   exit 1
 fi
 
-python3 - <<'PY' "${plist_template}" "${contents_dir}/Info.plist" "${app_short_version}" "${app_bundle_version}" "${app_exec_name}"
+python3 - <<'PY' "${plist_template}" "${contents_dir}/Info.plist" "${app_short_version}" "${app_bundle_version}" "${app_exec_name}" "${version}" "${track}"
 import pathlib
 import sys
 
@@ -268,6 +266,8 @@ output = (
     template.replace("__APP_SHORT_VERSION__", sys.argv[3])
     .replace("__APP_BUNDLE_VERSION__", sys.argv[4])
     .replace("__EXECUTABLE_NAME__", sys.argv[5])
+    .replace("__INSTALLER_VERSION__", sys.argv[6])
+    .replace("__INSTALLER_TRACK__", sys.argv[7])
 )
 pathlib.Path(sys.argv[2]).write_text(output)
 PY

@@ -5,8 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT_DIR}"
 
 APP_FILE="deploy/macos/InstallerApp/Sources/InstallerApp.swift"
+BRIDGE_FILE="deploy/macos/InstallerApp/Sources/InstallerBridge.swift"
 MODELS_FILE="deploy/macos/InstallerApp/Sources/InstallerModels.swift"
 RESULT_MODEL_FILE="deploy/macos/InstallerApp/Sources/InstallerResultPageModel.swift"
+PLIST_TEMPLATE="deploy/macos/InstallerApp/Info.plist.template"
+BUILD_SCRIPT="scripts/release/build-macos-installer-app.sh"
 
 fail() {
   echo "smoke-macos-installer-result-model: $*" >&2
@@ -46,10 +49,25 @@ pick_swiftc() {
 
 run_structural_smoke() {
   require_file "${RESULT_MODEL_FILE}"
+  require_file "${BRIDGE_FILE}"
+  require_file "${PLIST_TEMPLATE}"
+  require_file "${BUILD_SCRIPT}"
   require_line 'enum InstallerResultPageKind' "${RESULT_MODEL_FILE}"
   require_line 'enum InstallerResultPageActionKind' "${RESULT_MODEL_FILE}"
   require_line 'struct InstallerResultPageAction' "${RESULT_MODEL_FILE}"
   require_line 'struct InstallerResultPageModel' "${RESULT_MODEL_FILE}"
+  require_line 'CodexRemoteInstallerVersion' "${PLIST_TEMPLATE}"
+  require_line 'CodexRemoteInstallerTrack' "${PLIST_TEMPLATE}"
+  require_line '__INSTALLER_VERSION__' "${PLIST_TEMPLATE}"
+  require_line '__INSTALLER_TRACK__' "${PLIST_TEMPLATE}"
+  require_line 'bundleInfoString\("CodexRemoteInstallerVersion"\)' "${BRIDGE_FILE}"
+  require_line 'bundleInfoStringOptional\("CodexRemoteInstallerTrack"\)' "${BRIDGE_FILE}"
+  require_line '__INSTALLER_VERSION__' "${BUILD_SCRIPT}"
+  require_line '__INSTALLER_TRACK__' "${BUILD_SCRIPT}"
+  forbid_line 'installer-version\.txt' "${BUILD_SCRIPT}"
+  forbid_line 'installer-track\.txt' "${BUILD_SCRIPT}"
+  forbid_line 'installer-version' "${BRIDGE_FILE}"
+  forbid_line 'installer-track' "${BRIDGE_FILE}"
   require_line 'case result\(InstallerResultPageModel\)' "${MODELS_FILE}"
   require_line 'case \.result\(let model\)' "${APP_FILE}"
   require_line 'auxiliaryActionsStack' "${APP_FILE}"

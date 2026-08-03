@@ -5,8 +5,8 @@ final class InstallerBridge {
     private var extractedPayloadURLs: [String: URL] = [:]
 
     func loadMetadata() throws -> InstallerMetadata {
-        let version = try readResourceText(named: "installer-version", extension: "txt")
-        let trackText = try? readResourceText(named: "installer-track", extension: "txt")
+        let version = try bundleInfoString("CodexRemoteInstallerVersion")
+        let trackText = bundleInfoStringOptional("CodexRemoteInstallerTrack")
         let track = trackText.flatMap { normalizedTrack(from: $0) } ?? inferTrack(from: version)
         return InstallerMetadata(version: version, track: track)
     }
@@ -298,11 +298,19 @@ final class InstallerBridge {
         return result
     }
 
-    private func readResourceText(named name: String, extension ext: String) throws -> String {
-        guard let url = Bundle.main.url(forResource: name, withExtension: ext) else {
-            throw InstallerRuntimeError.missingResource("\(name).\(ext)")
+    private func bundleInfoString(_ key: String) throws -> String {
+        guard let value = bundleInfoStringOptional(key) else {
+            throw InstallerRuntimeError.missingResource(key)
         }
-        return try String(contentsOf: url, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)
+        return value
+    }
+
+    private func bundleInfoStringOptional(_ key: String) -> String? {
+        guard let value = Bundle.main.infoDictionary?[key] as? String else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func inferTrack(from version: String) -> String {

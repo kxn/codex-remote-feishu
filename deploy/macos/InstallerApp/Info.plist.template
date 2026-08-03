@@ -20,6 +20,10 @@
   <string>__APP_SHORT_VERSION__</string>
   <key>CFBundleVersion</key>
   <string>__APP_BUNDLE_VERSION__</string>
+  <key>CodexRemoteInstallerTrack</key>
+  <string>__INSTALLER_TRACK__</string>
+  <key>CodexRemoteInstallerVersion</key>
+  <string>__INSTALLER_VERSION__</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
