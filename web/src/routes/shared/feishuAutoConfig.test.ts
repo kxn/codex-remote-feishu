@@ -134,9 +134,6 @@ describe("feishu auto-config shared helpers", () => {
 
   it("maps blocking reasons through a user-facing allowlist", () => {
     expect(describeAutoConfigBlockingReason("feishu_read_failed")).toContain("读取飞书应用配置");
-    expect(describeAutoConfigBlockingReason("feishu_write_failed")).toContain("自动配置写入");
-    expect(describeAutoConfigBlockingReason("feishu_publish_failed")).toContain("发布提交");
-    expect(describeAutoConfigBlockingReason("invalid_publish_request")).toContain("发布提交");
     expect(describeAutoConfigBlockingReason("permission_denied")).toContain("没有修改飞书应用配置的权限");
     expect(describeAutoConfigBlockingReason("credential_invalid")).toContain("凭证已经失效");
   });

@@ -15,10 +15,8 @@ import (
 const (
 	autoConfigBlockingUnsupported     = "unsupported_application"
 	autoConfigBlockingUnderReview     = "application_under_review"
-	autoConfigBlockingApplyRequired   = "apply_required_before_publish"
 	autoConfigBlockingInvalidPublish  = "invalid_publish_request"
 	autoConfigBlockingReadFailed      = "feishu_read_failed"
-	autoConfigBlockingWriteFailed     = "feishu_write_failed"
 	autoConfigBlockingPublishFailed   = "feishu_publish_failed"
 	autoConfigBlockingCredentialIssue = "credential_invalid"
 	autoConfigBlockingPermissionIssue = "permission_denied"
@@ -313,9 +311,7 @@ func derivePlanState(plan AutoConfigPlan) (string, string) {
 	case plan.Publish.AwaitingReview:
 		return AutoConfigStatusAwaitingReview, "飞书应用变更已进入审核流程，正在等待审核结果。"
 	case plan.Diff.ConfigPatchRequired || plan.Diff.AbilityPatchRequired:
-		return AutoConfigStatusApplyRequired, "存在待写入的飞书自动配置差异。"
-	case plan.Publish.NeedsPublish:
-		return AutoConfigStatusPublishRequired, "配置已收敛到待发布版本，仍需提交发布。"
+		return AutoConfigStatusApplyRequired, "存在尚未补齐的飞书配置差异。"
 	case len(plan.BlockingRequirements) > 0:
 		return AutoConfigStatusBlocked, "仍缺少阻塞性的飞书配置项，当前不能宣称机器人已可正常使用。"
 	case len(plan.DegradableRequirements) > 0:

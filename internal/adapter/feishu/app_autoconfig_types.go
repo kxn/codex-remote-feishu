@@ -5,7 +5,6 @@ import "github.com/kxn/codex-remote-feishu/internal/feishuapp"
 const (
 	AutoConfigStatusClean              = "clean"
 	AutoConfigStatusApplyRequired      = "apply_required"
-	AutoConfigStatusPublishRequired    = "publish_required"
 	AutoConfigStatusAwaitingReview     = "awaiting_review"
 	AutoConfigStatusDegraded           = "degraded"
 	AutoConfigStatusBlocked            = "blocked"

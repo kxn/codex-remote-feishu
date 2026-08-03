@@ -15,58 +15,6 @@ export type AutoConfigRequirementRow = {
   impacts: string[];
 };
 
-export function describeAutoConfigTag(
-  status: string,
-): { label: string; warn: boolean } | null {
-  switch (status) {
-    case "clean":
-      return { label: "已完成", warn: false };
-    case "degraded":
-      return { label: "有降级", warn: true };
-    case "unsupported":
-      return { label: "手动维护", warn: true };
-    case "apply_required":
-      return { label: "待补齐", warn: true };
-    case "publish_required":
-      return { label: "待发布", warn: true };
-    case "awaiting_review":
-      return { label: "待审核", warn: true };
-    case "verification_failed":
-      return { label: "待确认", warn: true };
-    case "blocked":
-      return { label: "受阻", warn: true };
-    case "runtime_pending":
-      return { label: "同步中", warn: true };
-    case "loading":
-      return { label: "检查中", warn: false };
-    default:
-      return null;
-  }
-}
-
-export function describeAutoConfigHeadline(status: string): string {
-  switch (status) {
-    case "clean":
-      return "已自动完成";
-    case "degraded":
-      return "已完成，但存在功能降级";
-    case "unsupported":
-      return "当前应用需要手动维护";
-    case "apply_required":
-      return "当前还需要自动补齐配置";
-    case "publish_required":
-      return "自动补齐已完成，还需要提交发布";
-    case "awaiting_review":
-      return "已提交发布，正在等待管理员处理";
-    case "verification_failed":
-      return "无法确认最终状态";
-    case "blocked":
-      return "当前还不能继续自动配置";
-    default:
-      return "自动配置状态暂不可用";
-  }
-}
-
 export function describeAutoConfigSummary(status: string): string {
   switch (status) {
     case "clean":
@@ -76,13 +24,11 @@ export function describeAutoConfigSummary(status: string): string {
     case "unsupported":
       return "当前飞书应用不能从这里自动修改，请在飞书后台手动维护配置。";
     case "apply_required":
-      return "当前检查到了仍需自动补齐的配置差异。";
-    case "publish_required":
-      return "自动补齐后的配置已经写入，仍需提交飞书发布。";
+      return "当前还有飞书配置差异需要处理。";
     case "awaiting_review":
       return "飞书应用变更已经进入审核流程，当前只需等待结果。";
     case "verification_failed":
-      return "系统已经尝试更新飞书配置，但暂时无法确认最终结果。请重新检查，或稍后再试。";
+      return "暂时无法确认飞书配置状态，请重新检查或稍后再试。";
     case "blocked":
       return "当前阻塞项仍未解除，自动配置暂时不能继续。";
     default:
@@ -120,9 +66,7 @@ export function describeAutoConfigRefreshFeedback(status: string): string {
     case "awaiting_review":
       return "已重新检查，飞书仍在审核发布。";
     case "apply_required":
-      return "已重新检查，仍需要自动补齐配置。";
-    case "publish_required":
-      return "已重新检查，仍需要提交飞书发布。";
+      return "已重新检查，仍有飞书配置差异需要处理。";
     case "verification_failed":
       return "已重新检查，但暂时仍无法确认最终状态。";
     case "unsupported":
@@ -139,22 +83,12 @@ export function describeAutoConfigBlockingReason(reason: string): string {
       return "当前飞书应用不支持自动配置，请在飞书后台手动维护。";
     case "application_under_review":
       return "飞书开放平台上的应用版本仍在审核中。";
-    case "apply_required_before_publish":
-      return "还需要先完成自动补齐，之后才能提交发布。";
-    case "invalid_publish_request":
-      return "飞书没有接受发布提交，请稍后重试或到飞书后台发布。";
     case "feishu_read_failed":
       return "暂时无法读取飞书应用配置，请稍后重新检查。";
-    case "feishu_write_failed":
-      return "飞书没有接受自动配置写入，请稍后重试或到飞书后台处理。";
-    case "feishu_publish_failed":
-      return "飞书没有接受发布提交，请稍后重试或到飞书后台发布。";
     case "credential_invalid":
       return "当前飞书应用凭证已经失效，请重新连接飞书机器人。";
     case "permission_denied":
       return "当前账号没有修改飞书应用配置的权限，请使用有权限的管理员账号处理。";
-    case "verification_failed":
-      return "飞书最终状态暂时没有确认成功。";
     default:
       return "飞书返回的状态暂时无法处理，请稍后重新检查或到飞书后台处理。";
   }
@@ -220,7 +154,6 @@ export function autoConfigNoticeTone(status: string): "good" | "warn" | "danger"
       return "good";
     case "degraded":
     case "unsupported":
-    case "publish_required":
     case "awaiting_review":
     case "verification_failed":
       return "warn";

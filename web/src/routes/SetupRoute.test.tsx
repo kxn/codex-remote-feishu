@@ -78,7 +78,7 @@ describe("SetupRoute", () => {
       "/api/setup/onboarding/workflow": {
         body: buildAutoConfigWorkflow(app, {
           status: "apply_required",
-          summary: "存在待写入的飞书自动配置差异。",
+          summary: "存在尚未补齐的飞书配置差异。",
           stageStatus: "pending",
           allowedActions: ["apply", "retry", "defer"],
         }),
@@ -139,7 +139,7 @@ describe("SetupRoute", () => {
       "/api/setup/feishu/apps/bot-manual/verify": () => {
         workflowState = buildAutoConfigWorkflow(app, {
           status: "apply_required",
-          summary: "存在待写入的飞书自动配置差异。",
+          summary: "存在尚未补齐的飞书配置差异。",
           stageStatus: "pending",
           allowedActions: ["apply", "retry", "defer"],
           missingScopes: [{ scope: "im:message", scopeType: "tenant" }],
@@ -188,7 +188,7 @@ describe("SetupRoute", () => {
     });
     let workflowState = buildAutoConfigWorkflow(app, {
       status: "apply_required",
-      summary: "存在待写入的飞书自动配置差异。",
+      summary: "存在尚未补齐的飞书配置差异。",
       stageStatus: "pending",
       allowedActions: ["apply", "retry", "defer"],
     });
@@ -301,7 +301,7 @@ describe("SetupRoute", () => {
       "/api/setup/feishu/onboarding/sessions/session-qr/complete": () => {
         workflowState = buildAutoConfigWorkflow(app, {
           status: "apply_required",
-          summary: "存在待写入的飞书自动配置差异。",
+          summary: "存在尚未补齐的飞书配置差异。",
           stageStatus: "pending",
           allowedActions: ["apply", "retry", "defer"],
           missingScopes: [{ scope: "im:message", scopeType: "tenant" }],
@@ -331,14 +331,14 @@ describe("SetupRoute", () => {
       await screen.findByRole("heading", { name: "配置飞书机器人" }, { timeout: 7_000 }),
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "当前还需要自动补齐配置" }),
+      await screen.findByText("存在尚未补齐的飞书配置差异。"),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "先按降级继续" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制导入 JSON" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "重新检查" }));
     expect(
-      await screen.findByText("已重新检查，仍需要自动补齐配置。"),
+      await screen.findByText("已重新检查，仍有飞书配置差异需要处理。"),
     ).toBeInTheDocument();
     expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
     expect(

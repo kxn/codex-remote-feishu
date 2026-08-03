@@ -316,14 +316,14 @@ export function makeOnboardingWorkflow(
       id: "auto_config",
       title: "飞书自动配置",
       status: "pending",
-      summary: "当前还需要自动补齐飞书配置。",
+      summary: "当前还有飞书配置差异需要处理。",
       optional: false,
       blocking: false,
       allowedActions: ["apply", "retry", "defer"],
     }),
     plan: makeAutoConfigPlan({
       status: "apply_required",
-      summary: "存在待写入的飞书自动配置差异。",
+      summary: "存在尚未补齐的飞书配置差异。",
       blockingRequirements: [],
       degradableRequirements: [
         {

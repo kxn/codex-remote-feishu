@@ -328,7 +328,7 @@ func TestSetupOnboardingAutoConfigDeferResetControlsMenuGate(t *testing.T) {
 	})
 	stubSetupAutoConfigPlan(t, feishu.AutoConfigPlan{
 		Status:  feishu.AutoConfigStatusApplyRequired,
-		Summary: "当前还需要自动补齐飞书配置。",
+		Summary: "当前还有飞书配置差异需要处理。",
 	})
 
 	home := t.TempDir()

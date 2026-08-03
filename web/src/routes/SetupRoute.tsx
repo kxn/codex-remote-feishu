@@ -24,7 +24,6 @@ import { blankToUndefined, vscodeApplyModeForScenario, vscodeIsReady } from "./s
 import {
   buildMissingScopesImportJSON,
   describeAutoConfigBlockingReason,
-  describeAutoConfigHeadline,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
   groupAutoConfigRequirements,
@@ -418,7 +417,7 @@ export function SetupRoute() {
       await loadSetupPage({ preferredAppID: activeApp.id });
       setNotice({
         tone: "warn",
-        message: "已按降级继续，你后续仍可回到这里重新补齐。",
+        message: "已按降级继续，后续仍可回到这里查看差异。",
       });
     } catch {
       setNotice({
@@ -1086,17 +1085,6 @@ export function SetupRoute() {
         </div>
 
         <div className="detail-stack">
-          <div className="section-heading">
-            <div>
-              <h4>{describeAutoConfigHeadline(displayStatus)}</h4>
-              <p>
-                {plan?.summary?.trim() ||
-                  autoConfigStage.summary?.trim() ||
-                  describeAutoConfigSummary(displayStatus)}
-              </p>
-            </div>
-          </div>
-
           {plan?.blockingReason ? (
             <p className="support-copy">
               {describeAutoConfigBlockingReason(plan.blockingReason)}
@@ -1442,7 +1430,6 @@ function allowedActionsForImmediateAutoConfig(
 ): string[] {
   switch (status) {
     case "apply_required":
-    case "publish_required":
     case "verification_failed":
       return mergeAllowedActions(existing, ["retry", "defer"]);
     case "awaiting_review":
@@ -1466,13 +1453,7 @@ function noticeFromAutoConfigView(
     return null;
   }
   if (view.plan) {
-    return {
-      tone: onboardingAutoConfigNoticeTone(
-        onboardingStageStatusFromAutoConfigResult(view.plan.status),
-      ),
-      message:
-        view.plan.summary?.trim() || describeAutoConfigSummary(view.plan.status),
-    };
+    return null;
   }
   if (view.error) {
     return {

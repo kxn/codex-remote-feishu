@@ -376,7 +376,7 @@ describe("AdminRoute", () => {
     expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
   });
 
-  it("shows a publish-required plan without offering auto-fill", async () => {
+  it("shows an awaiting-review plan without offering auto-fill", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -394,11 +394,11 @@ describe("AdminRoute", () => {
       },
       "/api/admin/feishu/apps/bot-publish-permission/auto-config/plan": {
         body: makeAdminAutoConfigPlan(app, {
-          status: "publish_required",
-          summary: "自动补齐已完成，还需要提交发布。",
+          status: "awaiting_review",
+          summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
           publish: {
-            needsPublish: true,
-            awaitingReview: false,
+            needsPublish: false,
+            awaitingReview: true,
           },
         }),
       },
@@ -431,7 +431,9 @@ describe("AdminRoute", () => {
 
     await openAdminArea(user, "机器人");
     await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
-    expect(await screen.findByText("自动补齐已完成，还需要提交发布。")).toBeInTheDocument();
+    expect(
+      await screen.findByText("飞书应用变更已进入审核流程，正在等待审核结果。"),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
     expect(
       calls.some((call) => call.path.endsWith("/auto-config/complete")),

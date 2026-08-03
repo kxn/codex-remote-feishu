@@ -1471,10 +1471,7 @@ function noticeFromAutoConfigView(view?: FeishuAppAutoConfigPlanView): DetailNot
     return null;
   }
   if (view.plan) {
-    return {
-      tone: autoConfigNoticeTone(view.plan.status),
-      message: view.plan.summary?.trim() || describeAutoConfigSummary(view.plan.status),
-    };
+    return null;
   }
   if (view.error) {
     return {

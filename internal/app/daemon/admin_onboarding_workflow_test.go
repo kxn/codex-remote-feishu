@@ -102,13 +102,6 @@ func TestOnboardingAutoConfigCanContinueDegraded(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "publish required can continue degraded when no blocking diff remains",
-			mutate: func(plan *feishu.AutoConfigPlan) {
-				plan.Status = feishu.AutoConfigStatusPublishRequired
-			},
-			want: true,
-		},
-		{
 			name: "awaiting review can continue degraded when no blocking diff remains",
 			mutate: func(plan *feishu.AutoConfigPlan) {
 				plan.Status = feishu.AutoConfigStatusAwaitingReview
@@ -189,16 +182,6 @@ func TestSetupOnboardingWorkflowDeferredAutoConfigHonorsFinalBlockingState(t *te
 				Diff: feishu.AutoConfigDiff{
 					AbilityPatchRequired: true,
 				},
-			},
-			wantAutoStatus: onboardingStageStatusDeferred,
-			wantMenuStatus: onboardingStageStatusPending,
-			wantStage:      onboardingStageMenu,
-		},
-		{
-			name: "publish required honors deferred when no blocking diff remains",
-			plan: feishu.AutoConfigPlan{
-				Status:  feishu.AutoConfigStatusPublishRequired,
-				Summary: "自动补齐后的配置仍需提交飞书发布。",
 			},
 			wantAutoStatus: onboardingStageStatusDeferred,
 			wantMenuStatus: onboardingStageStatusPending,
