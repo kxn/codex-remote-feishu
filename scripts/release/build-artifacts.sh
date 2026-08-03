@@ -138,9 +138,6 @@ build_platform_archive() {
     go build -trimpath -ldflags "-X main.version=${version} -X main.branch=${build_branch} -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=${build_flavor}" \
     -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
 
-  cp README.md QUICKSTART.md CHANGELOG.md "${staging_dir}/"
-  cp -R deploy "${staging_dir}/"
-
   if [[ "${goos}" == "windows" ]]; then
     archive_path="${output_dir}/${package_name}.zip"
     (
@@ -152,8 +149,53 @@ build_platform_archive() {
     tar -C "${work_dir}" -czf "${archive_path}" "${package_name}"
   fi
 
+  verify_platform_archive_contents "${archive_path}" "${package_name}" "codex-remote${extension}"
   rm -rf "${work_dir}"
   echo "finished ${goos}/${goarch}: ${archive_path}"
+}
+
+verify_platform_archive_contents() {
+  local archive_path="$1"
+  local package_name="$2"
+  local binary_name="$3"
+  local expected_dir="${package_name}/"
+  local expected_binary="${package_name}/${binary_name}"
+  local listing=""
+  local unexpected=""
+
+  case "${archive_path}" in
+    *.zip)
+      listing="$(python3 - "${archive_path}" <<'PY'
+import sys
+import zipfile
+
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    for name in sorted(archive.namelist()):
+        print(name)
+PY
+)"
+      ;;
+    *.tar.gz)
+      listing="$(tar -tzf "${archive_path}" | sort)"
+      ;;
+    *)
+      echo "unsupported archive format for content check: ${archive_path}" >&2
+      exit 1
+      ;;
+  esac
+
+  if ! grep -Fxq "${expected_binary}" <<<"${listing}"; then
+    echo "release archive is missing payload binary: ${expected_binary}" >&2
+    echo "${listing}" >&2
+    exit 1
+  fi
+
+  unexpected="$(grep -Fvx "${expected_dir}" <<<"${listing}" | grep -Fvx "${expected_binary}" || true)"
+  if [[ -n "${unexpected}" ]]; then
+    echo "release archive contains unexpected files:" >&2
+    echo "${unexpected}" >&2
+    exit 1
+  fi
 }
 
 flush_platform_batch() {
