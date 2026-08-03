@@ -39,6 +39,7 @@ on:
           - "30"
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -115,7 +116,7 @@ jobs:
             echo "package_label must contain only letters, numbers, dot, underscore, or dash: ${package_label}" >&2
             exit 1
           fi
-          artifact_name="manual-build-dist-${package_label}"
+          artifact_name="manual-build-release-assets-${package_label}"
           echo "commit=${commit}" >> "${GITHUB_OUTPUT}"
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
           echo "package_label=${package_label}" >> "${GITHUB_OUTPUT}"
@@ -158,25 +159,11 @@ jobs:
             --package-version-label "${{ steps.meta.outputs.package_label }}" \
             --dist-dir dist
 
-      - name: Upload base dist
-        uses: actions/upload-artifact@v4
+      - name: Save base dist for packaging
+        uses: actions/cache/save@v4
         with:
-          name: manual-build-base-dist
           path: dist
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: ${{ fromJSON(inputs.retention_days) }}
-
-      - name: Upload macOS packaging input
-        uses: actions/upload-artifact@v4
-        with:
-          name: manual-build-macos-input-dist
-          path: |
-            dist/codex-remote-feishu_*_darwin_amd64.tar.gz
-            dist/codex-remote-feishu_*_darwin_arm64.tar.gz
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: ${{ fromJSON(inputs.retention_days) }}
+          key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
 
   build-macos-packaged-installer:
     needs: build-base-assets
@@ -188,11 +175,12 @@ jobs:
         with:
           ref: ${{ needs.build-base-assets.outputs.source_ref }}
 
-      - name: Download macOS packaging input
-        uses: actions/download-artifact@v4
+      - name: Restore base dist
+        uses: actions/cache/restore@v4
         with:
-          name: manual-build-macos-input-dist
-          path: ${{ runner.temp }}/manual-build-macos-dist
+          path: dist
+          key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
 
       - name: Build macOS packaged installer
         run: |
@@ -200,16 +188,13 @@ jobs:
             --version "${{ needs.build-base-assets.outputs.version }}" \
             --track "${{ needs.build-base-assets.outputs.track }}" \
             --package-version-label "${{ needs.build-base-assets.outputs.package_label }}" \
-            --dist-dir "${RUNNER_TEMP}/manual-build-macos-dist"
+            --dist-dir dist
 
-      - name: Upload macOS packaged installer
-        uses: actions/upload-artifact@v4
+      - name: Save macOS packaged installer
+        uses: actions/cache/save@v4
         with:
-          name: manual-build-macos-packaged-installer
-          path: ${{ runner.temp }}/manual-build-macos-dist/codex-remote-feishu_*_darwin_universal_installer.dmg
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: ${{ fromJSON(inputs.retention_days) }}
+          path: dist/codex-remote-feishu_*_darwin_universal_installer.dmg
+          key: manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}
 
   package-download:
     needs:
@@ -224,17 +209,19 @@ jobs:
           fetch-depth: 0
           ref: ${{ needs.build-base-assets.outputs.source_ref }}
 
-      - name: Download base dist
-        uses: actions/download-artifact@v4
+      - name: Restore base dist
+        uses: actions/cache/restore@v4
         with:
-          name: manual-build-base-dist
           path: dist
+          key: manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
 
-      - name: Download macOS packaged installer
-        uses: actions/download-artifact@v4
+      - name: Restore macOS packaged installer
+        uses: actions/cache/restore@v4
         with:
-          name: manual-build-macos-packaged-installer
           path: dist
+          key: manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}
+          fail-on-cache-miss: true
 
       - name: Refresh checksums
         run: bash scripts/release/write-checksums.sh dist
@@ -260,7 +247,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ needs.build-base-assets.outputs.artifact_name }}
-          path: dist
+          path: dist/*
           if-no-files-found: error
           compression-level: 0
           retention-days: ${{ fromJSON(inputs.retention_days) }}
+
+      - name: Delete internal transfer caches
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh cache delete "manual-build-base-dist-${{ github.run_id }}-${{ github.run_attempt }}" || true
+          gh cache delete "manual-build-macos-packaged-installer-${{ github.run_id }}-${{ github.run_attempt }}" || true
