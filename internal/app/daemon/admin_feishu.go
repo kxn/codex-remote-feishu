@@ -16,8 +16,9 @@ type feishuAppsResponse struct {
 }
 
 type feishuAppResponse struct {
-	App      adminFeishuAppSummary  `json:"app"`
-	Mutation *feishuAppMutationView `json:"mutation,omitempty"`
+	App        adminFeishuAppSummary            `json:"app"`
+	Mutation   *feishuAppMutationView           `json:"mutation,omitempty"`
+	AutoConfig *feishuAppAutoConfigCompleteView `json:"autoConfig,omitempty"`
 }
 
 type feishuAppVerifyResponse struct {
@@ -49,6 +50,11 @@ type feishuAppAutoConfigPublishResponse struct {
 type feishuAppAutoConfigCompleteResponse struct {
 	App    adminFeishuAppSummary           `json:"app"`
 	Result feishu.AutoConfigCompleteResult `json:"result"`
+}
+
+type feishuAppAutoConfigCompleteView struct {
+	Result *feishu.AutoConfigCompleteResult `json:"result,omitempty"`
+	Error  string                           `json:"error,omitempty"`
 }
 
 type feishuRuntimeApplyErrorDetails struct {

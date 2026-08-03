@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
@@ -197,6 +198,23 @@ func (a *App) handleFeishuAppAutoConfigComplete(w http.ResponseWriter, r *http.R
 		App:    summary,
 		Result: result,
 	})
+}
+
+func (a *App) completeSavedFeishuAppAutoConfig(parent context.Context, loaded config.LoadedAppConfig, gatewayID string) *feishuAppAutoConfigCompleteView {
+	runtimeCfg, ok := a.runtimeGatewayConfigFor(loaded.Config, gatewayID)
+	if !ok {
+		return &feishuAppAutoConfigCompleteView{Error: "saved feishu app is not available for automatic configuration"}
+	}
+	completeCtx, cancel := context.WithTimeout(parent, defaultFeishuAutoConfigCompleteTimeout)
+	defer cancel()
+	result, err := feishuSetupFacade.CompleteAutoConfig(completeCtx, liveGatewayConfigFromRuntime(runtimeCfg), feishu.AutoConfigPublishRequest{})
+	if err != nil {
+		return &feishuAppAutoConfigCompleteView{Error: err.Error()}
+	}
+	if err := a.clearFeishuAppAutoConfigDecision(gatewayID); err != nil {
+		return &feishuAppAutoConfigCompleteView{Result: &result, Error: err.Error()}
+	}
+	return &feishuAppAutoConfigCompleteView{Result: &result}
 }
 
 func (a *App) loadFeishuLiveGatewayTarget(gatewayID string) (adminFeishuAppSummary, feishu.LiveGatewayConfig, error) {

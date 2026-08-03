@@ -193,6 +193,7 @@ export interface FeishuAppsResponse {
 export interface FeishuAppResponse {
   app: FeishuAppSummary;
   mutation?: FeishuAppMutation;
+  autoConfig?: FeishuAppAutoConfigCompleteView;
 }
 
 export interface FeishuRuntimeApplyFailureDetails {
@@ -395,6 +396,11 @@ export interface FeishuAppAutoConfigCompleteResponse {
   result: FeishuAppAutoConfigCompleteResult;
 }
 
+export interface FeishuAppAutoConfigCompleteView {
+  result?: FeishuAppAutoConfigCompleteResult;
+  error?: string;
+}
+
 export interface FeishuOnboardingSession {
   id: string;
   status: string;
@@ -424,6 +430,7 @@ export interface FeishuOnboardingCompleteResponse {
   result: VerifyResult;
   session: FeishuOnboardingSession;
   guide?: FeishuOnboardingGuide;
+  autoConfig?: FeishuAppAutoConfigCompleteView;
 }
 
 export interface FeishuManifestResponse {

@@ -68,11 +68,12 @@ type feishuOnboardingSessionResponse struct {
 }
 
 type feishuOnboardingCompleteResponse struct {
-	App      adminFeishuAppSummary       `json:"app"`
-	Mutation *feishuAppMutationView      `json:"mutation,omitempty"`
-	Result   feishu.VerifyResult         `json:"result"`
-	Session  feishuOnboardingSessionView `json:"session"`
-	Guide    feishuOnboardingGuideView   `json:"guide,omitempty"`
+	App        adminFeishuAppSummary            `json:"app"`
+	Mutation   *feishuAppMutationView           `json:"mutation,omitempty"`
+	Result     feishu.VerifyResult              `json:"result"`
+	Session    feishuOnboardingSessionView      `json:"session"`
+	Guide      feishuOnboardingGuideView        `json:"guide,omitempty"`
+	AutoConfig *feishuAppAutoConfigCompleteView `json:"autoConfig,omitempty"`
 }
 
 type feishuOnboardingGuideView struct {
@@ -431,6 +432,7 @@ func (a *App) handleFeishuOnboardingSessionComplete(w http.ResponseWriter, r *ht
 		return
 	}
 
+	response.AutoConfig = a.completeSavedFeishuAppAutoConfig(r.Context(), loaded, gatewayID)
 	response.Session = a.markOnboardingSessionCompleted(sessionID, gatewayID, summary, mutation, result)
 	log.Printf("feishu onboarding completed: session=%s gateway=%s app_id=%s", sessionID, gatewayID, summary.AppID)
 	writeJSON(w, http.StatusOK, response)
