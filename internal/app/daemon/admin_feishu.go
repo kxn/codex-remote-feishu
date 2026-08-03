@@ -16,9 +16,9 @@ type feishuAppsResponse struct {
 }
 
 type feishuAppResponse struct {
-	App        adminFeishuAppSummary            `json:"app"`
-	Mutation   *feishuAppMutationView           `json:"mutation,omitempty"`
-	AutoConfig *feishuAppAutoConfigCompleteView `json:"autoConfig,omitempty"`
+	App        adminFeishuAppSummary        `json:"app"`
+	Mutation   *feishuAppMutationView       `json:"mutation,omitempty"`
+	AutoConfig *feishuAppAutoConfigPlanView `json:"autoConfig,omitempty"`
 }
 
 type feishuAppVerifyResponse struct {
@@ -31,30 +31,9 @@ type feishuAppAutoConfigPlanResponse struct {
 	Plan feishu.AutoConfigPlan `json:"plan"`
 }
 
-type feishuAppAutoConfigApplyResponse struct {
-	App    adminFeishuAppSummary        `json:"app"`
-	Result feishu.AutoConfigApplyResult `json:"result"`
-}
-
-type feishuAppAutoConfigPublishRequest struct {
-	Remark    string `json:"remark,omitempty"`
-	Changelog string `json:"changelog,omitempty"`
-	Version   string `json:"version,omitempty"`
-}
-
-type feishuAppAutoConfigPublishResponse struct {
-	App    adminFeishuAppSummary          `json:"app"`
-	Result feishu.AutoConfigPublishResult `json:"result"`
-}
-
-type feishuAppAutoConfigCompleteResponse struct {
-	App    adminFeishuAppSummary           `json:"app"`
-	Result feishu.AutoConfigCompleteResult `json:"result"`
-}
-
-type feishuAppAutoConfigCompleteView struct {
-	Result *feishu.AutoConfigCompleteResult `json:"result,omitempty"`
-	Error  string                           `json:"error,omitempty"`
+type feishuAppAutoConfigPlanView struct {
+	Plan  feishu.AutoConfigPlan `json:"plan"`
+	Error string                `json:"error,omitempty"`
 }
 
 type feishuRuntimeApplyErrorDetails struct {

@@ -130,7 +130,7 @@ func (a *App) handleFeishuAppCreate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	autoConfig := a.completeSavedFeishuAppAutoConfig(r.Context(), persisted, gatewayID)
+	autoConfig := a.planSavedFeishuAppAutoConfig(r.Context(), persisted, gatewayID)
 	writeJSON(w, http.StatusCreated, feishuAppResponse{
 		App:        summary,
 		Mutation:   buildCreatedFeishuAppMutation(),
@@ -247,7 +247,7 @@ func (a *App) handleFeishuAppUpdate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	autoConfig := a.completeSavedFeishuAppAutoConfig(r.Context(), persisted, gatewayID)
+	autoConfig := a.planSavedFeishuAppAutoConfig(r.Context(), persisted, gatewayID)
 	writeJSON(w, http.StatusOK, feishuAppResponse{
 		App:        summary,
 		Mutation:   buildFeishuAppMutation(appIDChanged, secretChanged),

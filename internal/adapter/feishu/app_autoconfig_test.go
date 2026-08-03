@@ -3,11 +3,9 @@ package feishu
 import (
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -72,103 +70,8 @@ func TestV6AppAutoConfigReadRequestsIncludeRequiredLang(t *testing.T) {
 	}
 }
 
-func TestCompleteAppAutoConfigSendsDocumentedV7RequestBodies(t *testing.T) {
-	appID := "cli_complete_contract"
-	phase := 0
-	var calls []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		switch r.URL.Path {
-		case "/open-apis/auth/v3/tenant_access_token/internal":
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"tenant-token"}`))
-		case "/open-apis/application/v6/applications/" + appID:
-			calls = append(calls, "get-app")
-			if got := r.URL.Query().Get("lang"); got != "zh_cn" {
-				t.Fatalf("application.get lang = %q, want zh_cn", got)
-			}
-			if phase == 0 {
-				_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app":{"app_id":"cli_complete_contract"}}}`))
-				return
-			}
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app":{"app_id":"cli_complete_contract","unaudit_version_id":"draft-1","scopes":[{"scope":"im:message","token_types":["tenant"]},{"scope":"drive:drive","token_types":["tenant"]}],"event":{"subscription_type":"websocket","subscribed_events":["im.message.receive_v1"]},"callback":{"callback_type":"websocket","subscribed_callbacks":["card.action.trigger"]}}}}`))
-		case "/open-apis/application/v6/scopes":
-			calls = append(calls, "list-scopes")
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"scopes":[{"scope_name":"im:message","scope_type":"tenant","grant_status":1},{"scope_name":"drive:drive","scope_type":"tenant","grant_status":1}]}}`))
-		case "/open-apis/application/v6/applications/" + appID + "/app_versions/draft-1":
-			calls = append(calls, "get-version")
-			if got := r.URL.Query().Get("lang"); got != "zh_cn" {
-				t.Fatalf("application_app_version.get lang = %q, want zh_cn", got)
-			}
-			status := larkapplication.AppVersionStatusUnaudit
-			if phase >= 2 {
-				status = larkapplication.AppVersionStatusUnderAudit
-			}
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"app_version":{"app_id":"cli_complete_contract","version_id":"draft-1","version":"1.0.1","status":` + strconv.Itoa(status) + `,"ability":{"bot":{}}}}}`))
-		case "/open-apis/application/v7/applications/" + appID + "/ability":
-			calls = append(calls, "patch-ability")
-			body := requireAutoConfigHTTPBody(t, r, http.MethodPatch)
-			requireBodyContains(t, body, `"bot":{"enable":true}`)
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok"}`))
-		case "/open-apis/application/v7/applications/" + appID + "/config":
-			calls = append(calls, "patch-config")
-			body := requireAutoConfigHTTPBody(t, r, http.MethodPatch)
-			requireBodyContains(t, body, `"scope_name":"im:message"`, `"scope_name":"drive:drive"`, `"subscription_type":"websocket"`, `"callback_type":"websocket"`)
-			if strings.Contains(body, `"request_url"`) {
-				t.Fatalf("websocket config patch should omit empty request_url, got %s", body)
-			}
-			phase = 1
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok"}`))
-		case "/open-apis/application/v7/applications/" + appID + "/publish":
-			calls = append(calls, "publish")
-			body := requireAutoConfigHTTPBody(t, r, http.MethodPost)
-			requireBodyContains(t, body, `"mobile_default_ability":"bot"`, `"pc_default_ability":"bot"`, `"remark":"同步 Codex Remote 的飞书应用配置"`, `"changelog":"更新飞书自动配置所需的权限、事件、回调与机器人能力。"`)
-			phase = 2
-			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"version_id":"draft-1","version":"1.0.1"}}`))
-		default:
-			t.Fatalf("unexpected path: %s", r.URL.Path)
-		}
-	}))
-	defer server.Close()
-
-	result, err := CompleteAppAutoConfig(
-		context.Background(),
-		LiveGatewayConfig{GatewayID: "main", AppID: appID, AppSecret: "secret", Domain: server.URL},
-		testAutoConfigManifest(),
-		feishuapp.DefaultFixedPolicy(),
-		AutoConfigPublishRequest{},
-	)
-	if err != nil {
-		t.Fatalf("CompleteAppAutoConfig: %v", err)
-	}
-	if result.Status != AutoConfigStatusAwaitingReview {
-		t.Fatalf("complete status = %q, want %q", result.Status, AutoConfigStatusAwaitingReview)
-	}
-	if !reflect.DeepEqual(result.Actions, []AutoConfigAction{
-		{Name: "ability_patch", Outcome: "applied"},
-		{Name: "config_patch", Outcome: "applied"},
-		{Name: "publish", Outcome: "submitted"},
-	}) {
-		t.Fatalf("complete actions = %#v", result.Actions)
-	}
-	wantCalls := []string{
-		"get-app", "list-scopes",
-		"get-app", "list-scopes",
-		"patch-ability", "patch-config",
-		"get-app", "list-scopes", "get-version",
-		"get-app", "list-scopes", "get-version",
-		"publish",
-		"get-app", "list-scopes", "get-version",
-	}
-	if !reflect.DeepEqual(calls, wantCalls) {
-		t.Fatalf("calls = %#v, want %#v", calls, wantCalls)
-	}
-}
-
 func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	restoreAutoConfigHooks(t)
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return []AppScopeStatus{{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1}}, nil
-	}
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
 		return &larkapplication.Application{
 			Scopes: []*larkapplication.AppScope{
@@ -219,17 +122,12 @@ func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	}
 }
 
-func TestApplyAppAutoConfigEnablesBotBeforeConfigPatch(t *testing.T) {
+func TestPlanAppAutoConfigRequirementPresenceUsesConfiguredScopes(t *testing.T) {
 	restoreAutoConfigHooks(t)
-	phase := 0
-	var calls []string
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return nil, nil
-	}
+	// Presence of a scope must come from the app config (configured scopes),
+	// not from the tenant authorization query (scope.list). The plan read path
+	// must not consult scope.list at all.
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		if phase == 0 {
-			return &larkapplication.Application{}, nil
-		}
 		return &larkapplication.Application{
 			Scopes: []*larkapplication.AppScope{
 				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
@@ -242,253 +140,34 @@ func TestApplyAppAutoConfigEnablesBotBeforeConfigPatch(t *testing.T) {
 			},
 			Callback: &larkapplication.Callback{
 				CallbackType:        strp("websocket"),
-				RequestUrl:          strp(""),
 				SubscribedCallbacks: []string{"card.action.trigger"},
 			},
-			UnauditVersionId: strp("draft-1"),
-		}, nil
-	}
-	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
-		if phase == 0 {
-			return nil, nil
-		}
-		return &larkapplication.ApplicationAppVersion{
-			VersionId: strp("draft-1"),
-			Version:   strp("1.0.1"),
-			Status:    intp(larkapplication.AppVersionStatusUnaudit),
-			Ability: &larkapplication.AppAbility{
-				Bot: &larkapplication.Bot{},
-			},
-		}, nil
-	}
-	autoConfigPatchAbility = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchAbilityRequest) error {
-		calls = append(calls, "ability")
-		return nil
-	}
-	autoConfigPatchConfig = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchConfigRequest) error {
-		calls = append(calls, "config")
-		phase = 1
-		return nil
-	}
-
-	result, err := ApplyAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy())
-	if err != nil {
-		t.Fatalf("ApplyAppAutoConfig: %v", err)
-	}
-	if !reflect.DeepEqual(calls, []string{"ability", "config"}) {
-		t.Fatalf("patch order = %#v, want ability then config", calls)
-	}
-	if result.Status != AutoConfigStatusPublishRequired {
-		t.Fatalf("apply status = %q, want %q", result.Status, AutoConfigStatusPublishRequired)
-	}
-	if !result.Plan.Publish.NeedsPublish {
-		t.Fatalf("expected publish to be required after apply, got %#v", result.Plan.Publish)
-	}
-}
-
-func TestPublishAppAutoConfigBlocksUntilApplyCompletes(t *testing.T) {
-	restoreAutoConfigHooks(t)
-	calledPublish := false
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return nil, nil
-	}
-	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		return &larkapplication.Application{}, nil
-	}
-	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
-		return nil, nil
-	}
-	autoConfigPublish = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PublishRequest) (string, string, error) {
-		calledPublish = true
-		return "", "", nil
-	}
-
-	result, err := PublishAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy(), AutoConfigPublishRequest{})
-	if err != nil {
-		t.Fatalf("PublishAppAutoConfig: %v", err)
-	}
-	if calledPublish {
-		t.Fatal("publish call should not happen while apply is still required")
-	}
-	if result.Status != AutoConfigStatusBlocked || result.BlockingReason != autoConfigBlockingApplyRequired {
-		t.Fatalf("unexpected publish result: %#v", result)
-	}
-}
-
-func TestCompleteAppAutoConfigAppliesThenPublishes(t *testing.T) {
-	restoreAutoConfigHooks(t)
-	phase := 0
-	var calls []string
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return nil, nil
-	}
-	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		if phase == 0 {
-			return &larkapplication.Application{}, nil
-		}
-		return &larkapplication.Application{
-			Scopes: []*larkapplication.AppScope{
-				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
-				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
-			},
-			Event: &larkapplication.SubscribedEvent{
-				SubscriptionType: strp("websocket"),
-				SubscribedEvents: []string{"im.message.receive_v1"},
-			},
-			Callback: &larkapplication.Callback{
-				CallbackType:        strp("websocket"),
-				SubscribedCallbacks: []string{"card.action.trigger"},
-			},
-			UnauditVersionId: strp("draft-1"),
-		}, nil
-	}
-	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
-		if phase == 0 {
-			return nil, nil
-		}
-		status := larkapplication.AppVersionStatusUnaudit
-		if phase >= 2 {
-			status = larkapplication.AppVersionStatusUnderAudit
-		}
-		return &larkapplication.ApplicationAppVersion{
-			VersionId: strp("draft-1"),
-			Version:   strp("1.0.1"),
-			Status:    intp(status),
-			Ability: &larkapplication.AppAbility{
-				Bot: &larkapplication.Bot{},
-			},
-		}, nil
-	}
-	autoConfigPatchAbility = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchAbilityRequest) error {
-		calls = append(calls, "ability")
-		return nil
-	}
-	autoConfigPatchConfig = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchConfigRequest) error {
-		calls = append(calls, "config")
-		phase = 1
-		return nil
-	}
-	autoConfigPublish = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PublishRequest) (string, string, error) {
-		calls = append(calls, "publish")
-		phase = 2
-		return "draft-1", "1.0.1", nil
-	}
-
-	result, err := CompleteAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy(), AutoConfigPublishRequest{})
-	if err != nil {
-		t.Fatalf("CompleteAppAutoConfig: %v", err)
-	}
-	if !reflect.DeepEqual(calls, []string{"ability", "config", "publish"}) {
-		t.Fatalf("complete calls = %#v, want ability, config, publish", calls)
-	}
-	if result.Status != AutoConfigStatusAwaitingReview {
-		t.Fatalf("complete status = %q, want %q", result.Status, AutoConfigStatusAwaitingReview)
-	}
-	if result.VersionID != "draft-1" || result.Version != "1.0.1" {
-		t.Fatalf("complete publish version = %q/%q", result.VersionID, result.Version)
-	}
-}
-
-func TestApplyAppAutoConfigKeepsActionEvidenceWhenFinalVerificationFails(t *testing.T) {
-	restoreAutoConfigHooks(t)
-	phase := 0
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return nil, nil
-	}
-	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		if phase > 0 {
-			return nil, errors.New("final plan read failed")
-		}
-		return &larkapplication.Application{}, nil
-	}
-	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
-		return nil, nil
-	}
-	autoConfigPatchAbility = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchAbilityRequest) error {
-		return nil
-	}
-	autoConfigPatchConfig = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PatchConfigRequest) error {
-		phase = 1
-		return nil
-	}
-
-	result, err := ApplyAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy())
-	if err != nil {
-		t.Fatalf("ApplyAppAutoConfig: %v", err)
-	}
-	if result.Status != AutoConfigStatusVerificationFailed {
-		t.Fatalf("apply status = %q, want %q", result.Status, AutoConfigStatusVerificationFailed)
-	}
-	if result.VerificationStatus != AutoConfigVerificationStatusFailed || result.VerificationError == "" {
-		t.Fatalf("expected verification failure details, got %#v", result)
-	}
-	if !reflect.DeepEqual(result.Actions, []AutoConfigAction{
-		{Name: "ability_patch", Outcome: "applied"},
-		{Name: "config_patch", Outcome: "applied"},
-	}) {
-		t.Fatalf("expected applied action evidence, got %#v", result.Actions)
-	}
-}
-
-func TestPublishAppAutoConfigKeepsSubmittedActionWhenFinalVerificationFails(t *testing.T) {
-	restoreAutoConfigHooks(t)
-	phase := 0
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return []AppScopeStatus{
-			{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1},
-			{ScopeName: "drive:drive", ScopeType: "tenant", GrantStatus: 1},
-		}, nil
-	}
-	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		if phase > 0 {
-			return nil, errors.New("final plan read failed")
-		}
-		return &larkapplication.Application{
-			Scopes: []*larkapplication.AppScope{
-				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
-				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
-			},
-			Event: &larkapplication.SubscribedEvent{
-				SubscriptionType: strp("websocket"),
-				SubscribedEvents: []string{"im.message.receive_v1"},
-			},
-			Callback: &larkapplication.Callback{
-				CallbackType:        strp("websocket"),
-				SubscribedCallbacks: []string{"card.action.trigger"},
-			},
-			UnauditVersionId: strp("draft-1"),
+			OnlineVersionId: strp("online-1"),
 		}, nil
 	}
 	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
 		return &larkapplication.ApplicationAppVersion{
-			VersionId: strp("draft-1"),
-			Version:   strp("1.0.1"),
-			Status:    intp(larkapplication.AppVersionStatusUnaudit),
-			Ability: &larkapplication.AppAbility{
-				Bot: &larkapplication.Bot{},
-			},
+			VersionId: strp("online-1"),
+			Version:   strp("1.0.0"),
+			Status:    intp(larkapplication.AppVersionStatusAudited),
+			Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
 		}, nil
 	}
-	autoConfigPublish = func(context.Context, *FeishuCallBroker, *lark.Client, string, v7PublishRequest) (string, string, error) {
-		phase = 1
-		return "draft-1", "1.0.1", nil
-	}
 
-	result, err := PublishAppAutoConfig(context.Background(), LiveGatewayConfig{GatewayID: "main", AppID: "cli_xxx"}, testAutoConfigManifest(), feishuapp.DefaultFixedPolicy(), AutoConfigPublishRequest{})
+	plan, err := PlanAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: "cli_configured"},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+	)
 	if err != nil {
-		t.Fatalf("PublishAppAutoConfig: %v", err)
+		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
 	}
-	if result.Status != AutoConfigStatusVerificationFailed {
-		t.Fatalf("publish status = %q, want %q", result.Status, AutoConfigStatusVerificationFailed)
+	if plan.Status != AutoConfigStatusClean {
+		t.Fatalf("plan status = %q, want %q (diff=%#v blocking=%#v)", plan.Status, AutoConfigStatusClean, plan.Diff, plan.BlockingRequirements)
 	}
-	if result.VersionID != "draft-1" || result.Version != "1.0.1" {
-		t.Fatalf("expected publish version evidence, got %q/%q", result.VersionID, result.Version)
-	}
-	if result.VerificationStatus != AutoConfigVerificationStatusFailed || result.VerificationError == "" {
-		t.Fatalf("expected verification failure details, got %#v", result)
-	}
-	if !reflect.DeepEqual(result.Actions, []AutoConfigAction{{Name: "publish", Outcome: "submitted"}}) {
-		t.Fatalf("expected submitted action evidence, got %#v", result.Actions)
+	if len(plan.BlockingRequirements) != 0 || len(plan.DegradableRequirements) != 0 {
+		t.Fatalf("expected no missing requirements, got blocking=%#v degradable=%#v", plan.BlockingRequirements, plan.DegradableRequirements)
 	}
 }
 
@@ -500,9 +179,6 @@ func TestPlanAppAutoConfigReturnsUnsupportedPlanInsteadOfError(t *testing.T) {
 			Code: 210015,
 			Msg:  "unsupported application",
 		}
-	}
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return nil, nil
 	}
 
 	plan, err := PlanAppAutoConfig(
@@ -532,9 +208,6 @@ func TestPlanAppAutoConfigClassifiesReadAPIErrorWithoutRawUserText(t *testing.T)
 			StatusCode: http.StatusBadRequest,
 		}
 	}
-	autoConfigListScopes = func(*SetupClient, context.Context) ([]AppScopeStatus, error) {
-		return nil, nil
-	}
 
 	plan, err := PlanAppAutoConfig(
 		context.Background(),
@@ -563,53 +236,47 @@ func TestOverridePlanFromAPIErrorClassifiesStableFailureReasons(t *testing.T) {
 	tests := []struct {
 		name       string
 		err        error
-		phase      autoConfigFailurePhase
 		wantStatus string
 		wantReason string
 	}{
 		{
 			name:       "under review",
-			err:        &APIError{API: "application.v7.application.publish", Code: 210040, Msg: "under review"},
-			phase:      autoConfigFailurePublish,
+			err:        &APIError{API: "application.v6.application.get", Code: 210040, Msg: "under review"},
 			wantStatus: AutoConfigStatusAwaitingReview,
 			wantReason: autoConfigBlockingUnderReview,
 		},
 		{
 			name:       "unsupported",
-			err:        &APIError{API: "application.v7.application.config.patch", Code: 210015, Msg: "unsupported"},
-			phase:      autoConfigFailureWrite,
+			err:        &APIError{API: "application.v6.application.get", Code: 210015, Msg: "unsupported"},
 			wantStatus: AutoConfigStatusUnsupported,
 			wantReason: autoConfigBlockingUnsupported,
 		},
 		{
-			name:       "publish field validation",
-			err:        &APIError{API: "application.v7.application.publish", Code: 99992402, Msg: "field validation failed", StatusCode: http.StatusBadRequest},
-			phase:      autoConfigFailurePublish,
+			name:       "invalid publish params",
+			err:        &APIError{API: "application.v6.application.get", Code: 210303, Msg: "invalid version"},
 			wantStatus: AutoConfigStatusBlocked,
 			wantReason: autoConfigBlockingInvalidPublish,
 		},
 		{
 			name:       "permission denied",
-			err:        &APIError{API: "application.v7.application.config.patch", Code: 99991663, Msg: "permission denied", StatusCode: http.StatusForbidden},
-			phase:      autoConfigFailureWrite,
+			err:        &APIError{API: "application.v6.application.get", Code: 99991663, Msg: "permission denied", StatusCode: http.StatusForbidden},
 			wantStatus: AutoConfigStatusBlocked,
 			wantReason: autoConfigBlockingPermissionIssue,
 		},
 		{
-			name:       "unknown write error",
+			name:       "unknown read error",
 			err:        errors.New("network read reset"),
-			phase:      autoConfigFailureWrite,
 			wantStatus: AutoConfigStatusBlocked,
-			wantReason: autoConfigBlockingWriteFailed,
+			wantReason: autoConfigBlockingReadFailed,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			plan := overridePlanFromAPIError(AutoConfigPlan{}, tt.err, tt.phase)
+			plan := overridePlanFromAPIError(AutoConfigPlan{}, tt.err)
 			if plan.Status != tt.wantStatus || plan.BlockingReason != tt.wantReason {
 				t.Fatalf("overridePlanFromAPIError = status %q reason %q, want %q/%q", plan.Status, plan.BlockingReason, tt.wantStatus, tt.wantReason)
 			}
-			for _, disallowed := range []string{"application.v7", "field validation failed", "permission denied", "network read reset", "feishu_api_error"} {
+			for _, disallowed := range []string{"field validation failed", "permission denied", "network read reset", "feishu_api_error"} {
 				if strings.Contains(plan.Summary, disallowed) || strings.Contains(plan.BlockingReason, disallowed) {
 					t.Fatalf("classified user text leaked %q in summary=%q reason=%q", disallowed, plan.Summary, plan.BlockingReason)
 				}
@@ -620,19 +287,11 @@ func TestOverridePlanFromAPIErrorClassifiesStableFailureReasons(t *testing.T) {
 
 func restoreAutoConfigHooks(t *testing.T) {
 	t.Helper()
-	oldListScopes := autoConfigListScopes
 	oldGetApp := autoConfigGetApplication
 	oldGetVersion := autoConfigGetApplicationVersion
-	oldPatchConfig := autoConfigPatchConfig
-	oldPatchAbility := autoConfigPatchAbility
-	oldPublish := autoConfigPublish
 	t.Cleanup(func() {
-		autoConfigListScopes = oldListScopes
 		autoConfigGetApplication = oldGetApp
 		autoConfigGetApplicationVersion = oldGetVersion
-		autoConfigPatchConfig = oldPatchConfig
-		autoConfigPatchAbility = oldPatchAbility
-		autoConfigPublish = oldPublish
 	})
 }
 
@@ -662,19 +321,4 @@ func strp(value string) *string {
 
 func intp(value int) *int {
 	return &value
-}
-
-func requireAutoConfigHTTPBody(t *testing.T, r *http.Request, method string) string {
-	t.Helper()
-	if r.Method != method {
-		t.Fatalf("method = %s, want %s", r.Method, method)
-	}
-	if got := r.Header.Get("Authorization"); got != "Bearer tenant-token" {
-		t.Fatalf("Authorization = %q, want tenant token", got)
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		t.Fatalf("read request body: %v", err)
-	}
-	return string(body)
 }

@@ -14,11 +14,6 @@ const (
 )
 
 const (
-	AutoConfigVerificationStatusVerified = "verified"
-	AutoConfigVerificationStatusFailed   = "failed"
-)
-
-const (
 	AutoConfigRequirementKindScope    = "scope"
 	AutoConfigRequirementKindEvent    = "event"
 	AutoConfigRequirementKindCallback = "callback"
@@ -42,7 +37,6 @@ type AutoConfigRequirementStatus struct {
 
 type AutoConfigObservedState struct {
 	ConfiguredScopes            []AutoConfigScopeRef `json:"configuredScopes,omitempty"`
-	GrantedScopes               []AutoConfigScopeRef `json:"grantedScopes,omitempty"`
 	EventSubscriptionType       string               `json:"eventSubscriptionType,omitempty"`
 	EventRequestURL             string               `json:"eventRequestUrl,omitempty"`
 	ConfiguredEvents            []string             `json:"configuredEvents,omitempty"`
@@ -114,50 +108,4 @@ type AutoConfigPlan struct {
 	Target                 AutoConfigTargetState         `json:"target"`
 	Diff                   AutoConfigDiff                `json:"diff"`
 	Publish                AutoConfigPublishState        `json:"publish"`
-}
-
-type AutoConfigAction struct {
-	Name    string `json:"name"`
-	Outcome string `json:"outcome"`
-	Details string `json:"details,omitempty"`
-}
-
-type AutoConfigApplyResult struct {
-	Status             string             `json:"status"`
-	Summary            string             `json:"summary,omitempty"`
-	BlockingReason     string             `json:"blockingReason,omitempty"`
-	Actions            []AutoConfigAction `json:"actions,omitempty"`
-	Plan               AutoConfigPlan     `json:"plan"`
-	VerificationStatus string             `json:"verificationStatus,omitempty"`
-	VerificationError  string             `json:"verificationError,omitempty"`
-}
-
-type AutoConfigPublishRequest struct {
-	Remark    string `json:"remark,omitempty"`
-	Changelog string `json:"changelog,omitempty"`
-	Version   string `json:"version,omitempty"`
-}
-
-type AutoConfigPublishResult struct {
-	Status             string             `json:"status"`
-	Summary            string             `json:"summary,omitempty"`
-	BlockingReason     string             `json:"blockingReason,omitempty"`
-	VersionID          string             `json:"versionId,omitempty"`
-	Version            string             `json:"version,omitempty"`
-	Actions            []AutoConfigAction `json:"actions,omitempty"`
-	Plan               AutoConfigPlan     `json:"plan"`
-	VerificationStatus string             `json:"verificationStatus,omitempty"`
-	VerificationError  string             `json:"verificationError,omitempty"`
-}
-
-type AutoConfigCompleteResult struct {
-	Status             string             `json:"status"`
-	Summary            string             `json:"summary,omitempty"`
-	BlockingReason     string             `json:"blockingReason,omitempty"`
-	VersionID          string             `json:"versionId,omitempty"`
-	Version            string             `json:"version,omitempty"`
-	Actions            []AutoConfigAction `json:"actions,omitempty"`
-	Plan               AutoConfigPlan     `json:"plan"`
-	VerificationStatus string             `json:"verificationStatus,omitempty"`
-	VerificationError  string             `json:"verificationError,omitempty"`
 }

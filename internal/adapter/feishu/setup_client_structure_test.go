@@ -11,7 +11,6 @@ func TestSetupClientOwnsSetupAPIMethods(t *testing.T) {
 		"connection_status.go",
 		"scopes.go",
 		"app_autoconfig.go",
-		"app_autoconfig_complete.go",
 	}
 	source := readStructureTestFiles(t, files...)
 	for _, method := range []string{
@@ -19,9 +18,6 @@ func TestSetupClientOwnsSetupAPIMethods(t *testing.T) {
 		"GetBotInfo",
 		"ListAppScopes",
 		"PlanAppAutoConfig",
-		"ApplyAppAutoConfig",
-		"PublishAppAutoConfig",
-		"CompleteAppAutoConfig",
 	} {
 		if !strings.Contains(source, "func (c *SetupClient) "+method+"(") {
 			t.Fatalf("SetupClient.%s is missing; setup/admin API helpers should live behind the setup facade", method)
@@ -39,9 +35,6 @@ func TestLegacySetupFunctionsAreThinSetupClientBridges(t *testing.T) {
 		{"connection_status.go", "GetBotInfo", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).GetBotInfo(ctx)"},
 		{"scopes.go", "ListAppScopes", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ListAppScopes(ctx)"},
 		{"app_autoconfig.go", "PlanAppAutoConfig", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).PlanAppAutoConfig(ctx, manifest, policy)"},
-		{"app_autoconfig.go", "ApplyAppAutoConfig", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ApplyAppAutoConfig(ctx, manifest, policy)"},
-		{"app_autoconfig.go", "PublishAppAutoConfig", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).PublishAppAutoConfig(ctx, manifest, policy, req)"},
-		{"app_autoconfig_complete.go", "CompleteAppAutoConfig", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).CompleteAppAutoConfig(ctx, manifest, policy, req)"},
 	}
 	for _, tc := range cases {
 		data, err := os.ReadFile(tc.file)

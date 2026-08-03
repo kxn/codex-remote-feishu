@@ -5,12 +5,12 @@ import (
 	"net/http"
 )
 
-func overridePlanFromAPIError(plan AutoConfigPlan, err error, phase autoConfigFailurePhase) AutoConfigPlan {
+func overridePlanFromAPIError(plan AutoConfigPlan, err error) AutoConfigPlan {
 	updated := plan
 	var apiErr *APIError
 	if !errors.As(err, &apiErr) || apiErr == nil {
 		updated.Status = AutoConfigStatusBlocked
-		updated.Summary, updated.BlockingReason = autoConfigGenericFailureSummary(phase)
+		updated.Summary, updated.BlockingReason = autoConfigReadFailureSummary()
 		return updated
 	}
 	switch apiErr.Code {
@@ -28,14 +28,14 @@ func overridePlanFromAPIError(plan AutoConfigPlan, err error, phase autoConfigFa
 		updated.BlockingReason = autoConfigBlockingInvalidPublish
 	default:
 		updated.Status = AutoConfigStatusBlocked
-		updated.Summary, updated.BlockingReason = autoConfigGenericAPIErrorSummary(apiErr, phase)
+		updated.Summary, updated.BlockingReason = autoConfigReadAPIErrorSummary(apiErr)
 	}
 	return updated
 }
 
-func autoConfigGenericAPIErrorSummary(apiErr *APIError, phase autoConfigFailurePhase) (string, string) {
+func autoConfigReadAPIErrorSummary(apiErr *APIError) (string, string) {
 	if apiErr == nil {
-		return autoConfigGenericFailureSummary(phase)
+		return autoConfigReadFailureSummary()
 	}
 	if apiErr.StatusCode == http.StatusUnauthorized {
 		return "当前飞书应用凭证已经失效，请重新连接飞书机器人。", autoConfigBlockingCredentialIssue
@@ -46,19 +46,9 @@ func autoConfigGenericAPIErrorSummary(apiErr *APIError, phase autoConfigFailureP
 	if _, ok := ExtractPermissionGap(apiErr); ok {
 		return "当前凭证缺少修改飞书应用配置所需的权限，请在飞书后台处理。", autoConfigBlockingPermissionIssue
 	}
-	if phase == autoConfigFailurePublish && apiErr.Code == 99992402 {
-		return "飞书发布请求参数无效，当前发布未被接受。", autoConfigBlockingInvalidPublish
-	}
-	return autoConfigGenericFailureSummary(phase)
+	return autoConfigReadFailureSummary()
 }
 
-func autoConfigGenericFailureSummary(phase autoConfigFailurePhase) (string, string) {
-	switch phase {
-	case autoConfigFailureRead:
-		return "暂时无法读取飞书应用配置，请稍后重新检查。", autoConfigBlockingReadFailed
-	case autoConfigFailurePublish:
-		return "飞书没有接受发布提交，请稍后重试或到飞书后台发布。", autoConfigBlockingPublishFailed
-	default:
-		return "飞书没有接受自动配置写入，请稍后重试或到飞书后台处理。", autoConfigBlockingWriteFailed
-	}
+func autoConfigReadFailureSummary() (string, string) {
+	return "暂时无法读取飞书应用配置，请稍后重新检查。", autoConfigBlockingReadFailed
 }

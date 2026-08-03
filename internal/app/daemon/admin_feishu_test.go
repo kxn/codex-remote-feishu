@@ -74,19 +74,7 @@ type fakeFeishuSetupClient struct {
 	describeCalls  int
 	planResult     feishu.AutoConfigPlan
 	planErr        error
-	applyResult    feishu.AutoConfigApplyResult
-	applyErr       error
-	publishResult  feishu.AutoConfigPublishResult
-	publishErr     error
-	completeResult feishu.AutoConfigCompleteResult
-	completeErr    error
 	planCfg        feishu.LiveGatewayConfig
-	applyCfg       feishu.LiveGatewayConfig
-	publishCfg     feishu.LiveGatewayConfig
-	completeCfg    feishu.LiveGatewayConfig
-	publishReq     feishu.AutoConfigPublishRequest
-	completeReq    feishu.AutoConfigPublishRequest
-	completeCalls  int
 	statusResult   feishu.LongConnectionStatus
 	statusErr      error
 }
@@ -99,24 +87,6 @@ func (f *fakeFeishuSetupClient) DescribeApp(context.Context, string, string) (fe
 func (f *fakeFeishuSetupClient) PlanAutoConfig(_ context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
 	f.planCfg = cfg
 	return f.planResult, f.planErr
-}
-
-func (f *fakeFeishuSetupClient) ApplyAutoConfig(_ context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error) {
-	f.applyCfg = cfg
-	return f.applyResult, f.applyErr
-}
-
-func (f *fakeFeishuSetupClient) PublishAutoConfig(_ context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error) {
-	f.publishCfg = cfg
-	f.publishReq = req
-	return f.publishResult, f.publishErr
-}
-
-func (f *fakeFeishuSetupClient) CompleteAutoConfig(_ context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error) {
-	f.completeCalls++
-	f.completeCfg = cfg
-	f.completeReq = req
-	return f.completeResult, f.completeErr
 }
 
 func (f *fakeFeishuSetupClient) LongConnectionStatus(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
@@ -134,9 +104,6 @@ func stubFeishuSetupFacade(t *testing.T, facade daemonFeishuSetupFacade) {
 
 type setupFacadeFunc struct {
 	plan     func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error)
-	apply    func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error)
-	publish  func(context.Context, feishu.LiveGatewayConfig, feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error)
-	complete func(context.Context, feishu.LiveGatewayConfig, feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error)
 	status   func(context.Context, feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error)
 	describe func(context.Context, string, string) (feishuAppIdentity, error)
 }
@@ -146,27 +113,6 @@ func (f setupFacadeFunc) PlanAutoConfig(ctx context.Context, cfg feishu.LiveGate
 		return feishu.AutoConfigPlan{}, nil
 	}
 	return f.plan(ctx, cfg)
-}
-
-func (f setupFacadeFunc) ApplyAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.AutoConfigApplyResult, error) {
-	if f.apply == nil {
-		return feishu.AutoConfigApplyResult{}, nil
-	}
-	return f.apply(ctx, cfg)
-}
-
-func (f setupFacadeFunc) PublishAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigPublishResult, error) {
-	if f.publish == nil {
-		return feishu.AutoConfigPublishResult{}, nil
-	}
-	return f.publish(ctx, cfg, req)
-}
-
-func (f setupFacadeFunc) CompleteAutoConfig(ctx context.Context, cfg feishu.LiveGatewayConfig, req feishu.AutoConfigPublishRequest) (feishu.AutoConfigCompleteResult, error) {
-	if f.complete == nil {
-		return feishu.AutoConfigCompleteResult{}, nil
-	}
-	return f.complete(ctx, cfg, req)
 }
 
 func (f setupFacadeFunc) LongConnectionStatus(ctx context.Context, cfg feishu.LiveGatewayConfig) (feishu.LongConnectionStatus, error) {
@@ -251,116 +197,6 @@ func TestAdminFeishuAutoConfigPlanRoute(t *testing.T) {
 	}
 }
 
-func TestSetupFeishuAutoConfigApplyRoute(t *testing.T) {
-	setup := &fakeFeishuSetupClient{applyResult: feishu.AutoConfigApplyResult{
-		Status:  feishu.AutoConfigStatusPublishRequired,
-		Summary: "apply finished",
-	}}
-	stubFeishuSetupFacade(t, setup)
-
-	cfg := config.DefaultAppConfig()
-	cfg.Feishu.Apps = []config.FeishuAppConfig{{
-		ID:        "main",
-		Name:      "Main",
-		AppID:     "cli_xxx",
-		AppSecret: "secret_xxx",
-	}}
-	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
-
-	rec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/apps/main/auto-config/apply", "")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("auto-config apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
-	}
-	var resp feishuAppAutoConfigApplyResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode auto-config apply: %v", err)
-	}
-	if resp.Result.Status != feishu.AutoConfigStatusPublishRequired || resp.Result.Summary != "apply finished" {
-		t.Fatalf("unexpected apply payload: %#v", resp.Result)
-	}
-	if setup.applyCfg.AppID != "cli_xxx" || setup.applyCfg.GatewayID != "main" {
-		t.Fatalf("unexpected runtime cfg: %#v", setup.applyCfg)
-	}
-}
-
-func TestAdminFeishuAutoConfigPublishRoute(t *testing.T) {
-	setup := &fakeFeishuSetupClient{publishResult: feishu.AutoConfigPublishResult{
-		Status:    feishu.AutoConfigStatusAwaitingReview,
-		Summary:   "publish submitted",
-		VersionID: "oav_1",
-		Version:   "1.8.1",
-	}}
-	stubFeishuSetupFacade(t, setup)
-
-	cfg := config.DefaultAppConfig()
-	cfg.Feishu.Apps = []config.FeishuAppConfig{{
-		ID:        "main",
-		Name:      "Main",
-		AppID:     "cli_xxx",
-		AppSecret: "secret_xxx",
-	}}
-	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
-
-	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/apps/main/auto-config/publish", `{"remark":"sync","changelog":"updated","version":"1.8.1"}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("auto-config publish status = %d, want 200 body=%s", rec.Code, rec.Body.String())
-	}
-	var resp feishuAppAutoConfigPublishResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode auto-config publish: %v", err)
-	}
-	if resp.Result.Status != feishu.AutoConfigStatusAwaitingReview || resp.Result.VersionID != "oav_1" || resp.Result.Version != "1.8.1" {
-		t.Fatalf("unexpected publish payload: %#v", resp.Result)
-	}
-	if setup.publishCfg.AppID != "cli_xxx" || setup.publishCfg.GatewayID != "main" {
-		t.Fatalf("unexpected runtime cfg: %#v", setup.publishCfg)
-	}
-	if setup.publishReq.Remark != "sync" || setup.publishReq.Changelog != "updated" || setup.publishReq.Version != "1.8.1" {
-		t.Fatalf("unexpected publish request: %#v", setup.publishReq)
-	}
-}
-
-func TestAdminFeishuAutoConfigCompleteRoute(t *testing.T) {
-	setup := &fakeFeishuSetupClient{completeResult: feishu.AutoConfigCompleteResult{
-		Status:    feishu.AutoConfigStatusAwaitingReview,
-		Summary:   "configuration submitted",
-		VersionID: "oav_2",
-		Version:   "1.8.2",
-		Actions: []feishu.AutoConfigAction{
-			{Name: "config_patch", Outcome: "applied"},
-			{Name: "publish", Outcome: "submitted"},
-		},
-	}}
-	stubFeishuSetupFacade(t, setup)
-
-	cfg := config.DefaultAppConfig()
-	cfg.Feishu.Apps = []config.FeishuAppConfig{{
-		ID:        "main",
-		Name:      "Main",
-		AppID:     "cli_xxx",
-		AppSecret: "secret_xxx",
-	}}
-	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
-
-	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/feishu/apps/main/auto-config/complete", `{"remark":"sync","changelog":"updated","version":"1.8.2"}`)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("auto-config complete status = %d, want 200 body=%s", rec.Code, rec.Body.String())
-	}
-	var resp feishuAppAutoConfigCompleteResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode auto-config complete: %v", err)
-	}
-	if resp.Result.Status != feishu.AutoConfigStatusAwaitingReview || resp.Result.VersionID != "oav_2" || resp.Result.Version != "1.8.2" {
-		t.Fatalf("unexpected complete payload: %#v", resp.Result)
-	}
-	if setup.completeCfg.AppID != "cli_xxx" || setup.completeCfg.GatewayID != "main" {
-		t.Fatalf("unexpected runtime cfg: %#v", setup.completeCfg)
-	}
-	if setup.completeReq.Remark != "sync" || setup.completeReq.Changelog != "updated" || setup.completeReq.Version != "1.8.2" {
-		t.Fatalf("unexpected complete request: %#v", setup.completeReq)
-	}
-}
-
 func TestAdminLegacyFeishuInstallTestRoutesAreRemoved(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	cfg.Feishu.Apps = []config.FeishuAppConfig{{
@@ -376,6 +212,13 @@ func TestAdminLegacyFeishuInstallTestRoutesAreRemoved(t *testing.T) {
 		path   string
 	}{
 		{method: http.MethodGet, path: "/api/admin/feishu/apps/main/permission-check"},
+		{method: http.MethodGet, path: "/api/admin/feishu/apps/main/permissions/check"},
+		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/auto-config/apply"},
+		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/auto-config/publish"},
+		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/auto-config/complete"},
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/auto-config/apply"},
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/auto-config/publish"},
+		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/auto-config/complete"},
 		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/test-events"},
 		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/test-callback"},
 	}
@@ -401,7 +244,7 @@ func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	app, configPath := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
 	setup := &fakeFeishuSetupClient{
 		describeResult: feishuAppIdentity{DisplayName: "扫码 Bot"},
-		completeResult: feishu.AutoConfigCompleteResult{
+		planResult: feishu.AutoConfigPlan{
 			Status:  feishu.AutoConfigStatusAwaitingReview,
 			Summary: "飞书正在审核发布。",
 		},
@@ -461,11 +304,11 @@ func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	if completeResp.Session.Status != feishuOnboardingStatusCompleted {
 		t.Fatalf("expected completed onboarding session, got %#v", completeResp.Session)
 	}
-	if completeResp.AutoConfig == nil || completeResp.AutoConfig.Result == nil || completeResp.AutoConfig.Result.Status != feishu.AutoConfigStatusAwaitingReview {
+	if completeResp.AutoConfig == nil || completeResp.AutoConfig.Plan.Status != feishu.AutoConfigStatusAwaitingReview {
 		t.Fatalf("expected onboarding complete response to include auto-config result, got %#v", completeResp.AutoConfig)
 	}
-	if setup.completeCalls != 1 || setup.completeCfg.GatewayID == "" || setup.completeCfg.AppID != "cli_qr" {
-		t.Fatalf("unexpected complete call after onboarding: calls=%d cfg=%#v", setup.completeCalls, setup.completeCfg)
+	if setup.planCfg.GatewayID == "" || setup.planCfg.AppID != "cli_qr" {
+		t.Fatalf("expected plan-only auto-config read after onboarding, got cfg=%#v", setup.planCfg)
 	}
 
 	loaded, err := config.LoadAppConfigAtPath(configPath)
@@ -491,7 +334,7 @@ func TestAdminFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	app, configPath := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
 	setup := &fakeFeishuSetupClient{
 		describeResult: feishuAppIdentity{DisplayName: "Admin 扫码 Bot"},
-		completeResult: feishu.AutoConfigCompleteResult{
+		planResult: feishu.AutoConfigPlan{
 			Status:  feishu.AutoConfigStatusAwaitingReview,
 			Summary: "飞书正在审核发布。",
 		},
@@ -528,11 +371,11 @@ func TestAdminFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T
 	if err := json.NewDecoder(completeRec.Body).Decode(&completeResp); err != nil {
 		t.Fatalf("decode admin onboarding complete: %v", err)
 	}
-	if completeResp.AutoConfig == nil || completeResp.AutoConfig.Result == nil {
+	if completeResp.AutoConfig == nil || completeResp.AutoConfig.Plan.Status == "" {
 		t.Fatalf("expected admin onboarding complete response to include auto-config result, got %#v", completeResp.AutoConfig)
 	}
-	if setup.completeCalls != 1 || setup.completeCfg.AppID != "cli_admin_qr" {
-		t.Fatalf("unexpected complete call after admin onboarding: calls=%d cfg=%#v", setup.completeCalls, setup.completeCfg)
+	if setup.planCfg.AppID != "cli_admin_qr" {
+		t.Fatalf("expected plan-only auto-config read after admin onboarding, got cfg=%#v", setup.planCfg)
 	}
 
 	loaded, err := config.LoadAppConfigAtPath(configPath)
@@ -610,7 +453,7 @@ func TestFeishuAppsCreateUpdateVerifyAndDisable(t *testing.T) {
 	gateway := &fakeAdminGatewayController{
 		verifyResult: feishu.VerifyResult{Connected: true, Duration: time.Second},
 	}
-	setup := &fakeFeishuSetupClient{completeResult: feishu.AutoConfigCompleteResult{
+	setup := &fakeFeishuSetupClient{planResult: feishu.AutoConfigPlan{
 		Status:  feishu.AutoConfigStatusAwaitingReview,
 		Summary: "飞书正在审核发布。",
 	}}
@@ -631,11 +474,11 @@ func TestFeishuAppsCreateUpdateVerifyAndDisable(t *testing.T) {
 	if len(gateway.upserted) != 1 || gateway.upserted[0].GatewayID != "main" {
 		t.Fatalf("unexpected upserted configs: %#v", gateway.upserted)
 	}
-	if createResp.AutoConfig == nil || createResp.AutoConfig.Result == nil || createResp.AutoConfig.Result.Status != feishu.AutoConfigStatusAwaitingReview {
+	if createResp.AutoConfig == nil || createResp.AutoConfig.Plan.Status != feishu.AutoConfigStatusAwaitingReview {
 		t.Fatalf("expected create response to include auto-config result, got %#v", createResp.AutoConfig)
 	}
-	if setup.completeCalls != 1 || setup.completeCfg.GatewayID != "main" || setup.completeCfg.AppID != "cli_xxx" {
-		t.Fatalf("unexpected complete call after create: calls=%d cfg=%#v", setup.completeCalls, setup.completeCfg)
+	if setup.planCfg.GatewayID != "main" || setup.planCfg.AppID != "cli_xxx" {
+		t.Fatalf("expected plan-only auto-config read after create, got cfg=%#v", setup.planCfg)
 	}
 
 	loaded, err := config.LoadAppConfigAtPath(configPath)
@@ -657,11 +500,11 @@ func TestFeishuAppsCreateUpdateVerifyAndDisable(t *testing.T) {
 	if updateResp.Mutation == nil || updateResp.Mutation.Kind != "updated" {
 		t.Fatalf("unexpected update mutation: %#v", updateResp.Mutation)
 	}
-	if updateResp.AutoConfig == nil || updateResp.AutoConfig.Result == nil {
+	if updateResp.AutoConfig == nil || updateResp.AutoConfig.Plan.Status == "" {
 		t.Fatalf("expected update response to include auto-config result, got %#v", updateResp.AutoConfig)
 	}
-	if setup.completeCalls != 2 || setup.completeCfg.GatewayID != "main" {
-		t.Fatalf("unexpected complete call after update: calls=%d cfg=%#v", setup.completeCalls, setup.completeCfg)
+	if setup.planCfg.GatewayID != "main" {
+		t.Fatalf("expected plan-only auto-config read after update, got cfg=%#v", setup.planCfg)
 	}
 	loaded, err = config.LoadAppConfigAtPath(configPath)
 	if err != nil {
@@ -705,7 +548,7 @@ func TestFeishuAppsCreateUpdateVerifyAndDisable(t *testing.T) {
 func TestFeishuAppCreatePreservesSavedAppWhenAutoConfigFails(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	gateway := &fakeAdminGatewayController{}
-	setup := &fakeFeishuSetupClient{completeErr: errors.New("temporary auto-config failure")}
+	setup := &fakeFeishuSetupClient{planErr: errors.New("temporary auto-config failure")}
 	stubFeishuSetupFacade(t, setup)
 	app, configPath := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
 

@@ -315,20 +315,20 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusComplete, firstNonEmpty(strings.TrimSpace(plan.Summary), "飞书应用已可用，但仍有可降级缺失项。"), false, false, []string{"retry"})
 	case feishu.AutoConfigStatusApplyRequired:
 		if canContinueDegraded && onboardingAutoConfigDeferred(state.AutoConfigDecision) {
-			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新补齐。", false, true, []string{"apply", "retry"})
+			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新补齐。", false, true, []string{"retry"})
 			break
 		}
-		actions := []string{"apply", "retry"}
+		actions := []string{"retry"}
 		if canContinueDegraded {
 			actions = append(actions, "defer")
 		}
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前还需要自动补齐飞书配置。"), false, canContinueDegraded, actions)
 	case feishu.AutoConfigStatusPublishRequired:
 		if canContinueDegraded && onboardingAutoConfigDeferred(state.AutoConfigDecision) {
-			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新补齐。", false, true, []string{"apply", "retry"})
+			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新补齐。", false, true, []string{"retry"})
 			break
 		}
-		actions := []string{"apply", "retry"}
+		actions := []string{"retry"}
 		if canContinueDegraded {
 			actions = append(actions, "defer")
 		}
@@ -344,7 +344,7 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 		}
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前变更正在等待管理员处理。若只影响可选能力，你也可以先按降级继续。"), false, true, []string{"defer", "retry"})
 	case feishu.AutoConfigStatusVerificationFailed:
-		actions := []string{"apply", "retry"}
+		actions := []string{"retry"}
 		if canContinueDegraded {
 			actions = append(actions, "defer")
 		}
@@ -352,10 +352,10 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 	case feishu.AutoConfigStatusBlocked, feishu.AutoConfigStatusUnsupported:
 		if plan.Status == feishu.AutoConfigStatusBlocked && canContinueDegraded {
 			if onboardingAutoConfigDeferred(state.AutoConfigDecision) {
-				view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新补齐。", false, true, []string{"apply", "retry"})
+				view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里重新补齐。", false, true, []string{"retry"})
 				break
 			}
-			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前仍有飞书配置缺失，你可以先继续，后续再回来补齐。"), false, true, []string{"apply", "retry", "defer"})
+			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前仍有飞书配置缺失，你可以先继续，后续再回来补齐。"), false, true, []string{"retry", "defer"})
 			break
 		}
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusBlocked, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前飞书自动配置还不能继续。"), true, false, []string{"retry"})

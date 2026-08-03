@@ -22,25 +22,11 @@ const (
 	autoConfigBlockingPublishFailed   = "feishu_publish_failed"
 	autoConfigBlockingCredentialIssue = "credential_invalid"
 	autoConfigBlockingPermissionIssue = "permission_denied"
-	autoConfigDefaultPublishRemark    = "同步 Codex Remote 的飞书应用配置"
-	autoConfigDefaultPublishChangelog = "更新飞书自动配置所需的权限、事件、回调与机器人能力。"
-)
-
-type autoConfigFailurePhase string
-
-const (
-	autoConfigFailureRead    autoConfigFailurePhase = "read"
-	autoConfigFailureWrite   autoConfigFailurePhase = "write"
-	autoConfigFailurePublish autoConfigFailurePhase = "publish"
 )
 
 var (
-	autoConfigListScopes            = (*SetupClient).ListAppScopes
 	autoConfigGetApplication        = getApplicationConfig
 	autoConfigGetApplicationVersion = getApplicationVersion
-	autoConfigPatchConfig           = patchV7AppConfig
-	autoConfigPatchAbility          = patchV7AppAbility
-	autoConfigPublish               = publishV7App
 )
 
 type autoConfigService struct {
@@ -51,7 +37,6 @@ type autoConfigService struct {
 
 type autoConfigSnapshot struct {
 	app            *larkapplication.Application
-	grantedScopes  []AppScopeStatus
 	onlineVersion  *larkapplication.ApplicationAppVersion
 	unauditVersion *larkapplication.ApplicationAppVersion
 	activeVersion  *larkapplication.ApplicationAppVersion
@@ -61,24 +46,8 @@ func PlanAppAutoConfig(ctx context.Context, cfg LiveGatewayConfig, manifest feis
 	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).PlanAppAutoConfig(ctx, manifest, policy)
 }
 
-func ApplyAppAutoConfig(ctx context.Context, cfg LiveGatewayConfig, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigApplyResult, error) {
-	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ApplyAppAutoConfig(ctx, manifest, policy)
-}
-
-func PublishAppAutoConfig(ctx context.Context, cfg LiveGatewayConfig, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy, req AutoConfigPublishRequest) (AutoConfigPublishResult, error) {
-	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).PublishAppAutoConfig(ctx, manifest, policy, req)
-}
-
 func (c *SetupClient) PlanAppAutoConfig(ctx context.Context, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigPlan, error) {
 	return newAutoConfigService(c, manifest, policy).Plan(ctx)
-}
-
-func (c *SetupClient) ApplyAppAutoConfig(ctx context.Context, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigApplyResult, error) {
-	return newAutoConfigService(c, manifest, policy).Apply(ctx)
-}
-
-func (c *SetupClient) PublishAppAutoConfig(ctx context.Context, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy, req AutoConfigPublishRequest) (AutoConfigPublishResult, error) {
-	return newAutoConfigService(c, manifest, policy).Publish(ctx, req)
 }
 
 func newAutoConfigService(client *SetupClient, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) *autoConfigService {
@@ -106,176 +75,6 @@ func (s *autoConfigService) Plan(ctx context.Context) (AutoConfigPlan, error) {
 	return s.buildPlan(snapshot), nil
 }
 
-func (s *autoConfigService) Apply(ctx context.Context) (AutoConfigApplyResult, error) {
-	plan, err := s.Plan(ctx)
-	if err != nil {
-		return AutoConfigApplyResult{}, err
-	}
-	result := AutoConfigApplyResult{
-		Status:         plan.Status,
-		Summary:        plan.Summary,
-		BlockingReason: plan.BlockingReason,
-		Plan:           plan,
-	}
-	if plan.Publish.AwaitingReview {
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "apply", Outcome: "blocked", Details: "application is under review"})
-		return result, nil
-	}
-	if !plan.Diff.ConfigPatchRequired && !plan.Diff.AbilityPatchRequired {
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "apply", Outcome: "skipped", Details: "no config or ability changes required"})
-		return result, nil
-	}
-
-	// Some scope updates require bot ability to be enabled first.
-	if plan.Diff.AbilityPatchRequired {
-		sdkClient, broker := s.client.sdk()
-		cfg := s.client.liveGatewayConfig()
-		if err := autoConfigPatchAbility(ctx, broker, sdkClient, cfg.AppID, v7PatchAbilityRequest{
-			Bot: &v7PatchAbilityBot{Enable: s.policy.BotEnabled},
-		}); err != nil {
-			updatedPlan := overridePlanFromAPIError(plan, err, autoConfigFailureWrite)
-			return AutoConfigApplyResult{
-				Status:         updatedPlan.Status,
-				Summary:        updatedPlan.Summary,
-				BlockingReason: updatedPlan.BlockingReason,
-				Actions:        []AutoConfigAction{{Name: "ability_patch", Outcome: "blocked", Details: err.Error()}},
-				Plan:           updatedPlan,
-			}, nil
-		}
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "ability_patch", Outcome: "applied"})
-	}
-	if plan.Diff.ConfigPatchRequired {
-		req := s.buildConfigPatchRequest(plan.Diff)
-		sdkClient, broker := s.client.sdk()
-		cfg := s.client.liveGatewayConfig()
-		if err := autoConfigPatchConfig(ctx, broker, sdkClient, cfg.AppID, req); err != nil {
-			updatedPlan := overridePlanFromAPIError(plan, err, autoConfigFailureWrite)
-			outcome := "blocked"
-			if updatedPlan.Status == AutoConfigStatusUnsupported {
-				outcome = "unsupported"
-			}
-			actions := append([]AutoConfigAction(nil), result.Actions...)
-			actions = append(actions, AutoConfigAction{Name: "config_patch", Outcome: outcome, Details: err.Error()})
-			return AutoConfigApplyResult{
-				Status:         updatedPlan.Status,
-				Summary:        updatedPlan.Summary,
-				BlockingReason: updatedPlan.BlockingReason,
-				Actions:        actions,
-				Plan:           updatedPlan,
-			}, nil
-		}
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "config_patch", Outcome: "applied"})
-	}
-
-	refreshed, err := s.Plan(ctx)
-	if err != nil {
-		return autoConfigApplyVerificationFailed(result, err), nil
-	}
-	result.Status = refreshed.Status
-	result.Summary = refreshed.Summary
-	result.BlockingReason = refreshed.BlockingReason
-	result.Plan = refreshed
-	result.VerificationStatus = AutoConfigVerificationStatusVerified
-	return result, nil
-}
-
-func (s *autoConfigService) Publish(ctx context.Context, req AutoConfigPublishRequest) (AutoConfigPublishResult, error) {
-	plan, err := s.Plan(ctx)
-	if err != nil {
-		return AutoConfigPublishResult{}, err
-	}
-	result := AutoConfigPublishResult{
-		Status:         plan.Status,
-		Summary:        plan.Summary,
-		BlockingReason: plan.BlockingReason,
-		Plan:           plan,
-	}
-	if plan.Publish.AwaitingReview {
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "skipped", Details: "application is already under review"})
-		return result, nil
-	}
-	if plan.Diff.ConfigPatchRequired || plan.Diff.AbilityPatchRequired {
-		blocked := plan
-		blocked.Status = AutoConfigStatusBlocked
-		blocked.Summary = "仍有未写入的自动配置变更，发布前需要先执行 apply。"
-		blocked.BlockingReason = autoConfigBlockingApplyRequired
-		result.Status = blocked.Status
-		result.Summary = blocked.Summary
-		result.BlockingReason = blocked.BlockingReason
-		result.Plan = blocked
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "blocked", Details: "apply is required before publish"})
-		return result, nil
-	}
-	if !plan.Publish.NeedsPublish {
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "skipped", Details: "no publish is required"})
-		return result, nil
-	}
-
-	publishReq := v7PublishRequest{
-		MobileDefaultAbility: s.policy.MobileDefaultAbility,
-		PcDefaultAbility:     s.policy.PcDefaultAbility,
-		Remark:               firstNonEmpty(strings.TrimSpace(req.Remark), autoConfigDefaultPublishRemark),
-		Changelog:            firstNonEmpty(strings.TrimSpace(req.Changelog), autoConfigDefaultPublishChangelog),
-		Version:              strings.TrimSpace(req.Version),
-	}
-	sdkClient, broker := s.client.sdk()
-	cfg := s.client.liveGatewayConfig()
-	versionID, version, err := autoConfigPublish(ctx, broker, sdkClient, cfg.AppID, publishReq)
-	if err != nil {
-		updatedPlan := overridePlanFromAPIError(plan, err, autoConfigFailurePublish)
-		outcome := "blocked"
-		if updatedPlan.Status == AutoConfigStatusUnsupported {
-			outcome = "unsupported"
-		}
-		return AutoConfigPublishResult{
-			Status:         updatedPlan.Status,
-			Summary:        updatedPlan.Summary,
-			BlockingReason: updatedPlan.BlockingReason,
-			Actions:        []AutoConfigAction{{Name: "publish", Outcome: outcome, Details: err.Error()}},
-			Plan:           updatedPlan,
-		}, nil
-	}
-	refreshed, err := s.Plan(ctx)
-	if err != nil {
-		result.VersionID = versionID
-		result.Version = version
-		result.Actions = append(result.Actions, AutoConfigAction{Name: "publish", Outcome: "submitted"})
-		return autoConfigPublishVerificationFailed(result, err), nil
-	}
-	return AutoConfigPublishResult{
-		Status:             refreshed.Status,
-		Summary:            refreshed.Summary,
-		BlockingReason:     refreshed.BlockingReason,
-		VersionID:          versionID,
-		Version:            version,
-		Actions:            []AutoConfigAction{{Name: "publish", Outcome: "submitted"}},
-		Plan:               refreshed,
-		VerificationStatus: AutoConfigVerificationStatusVerified,
-	}, nil
-}
-
-func autoConfigApplyVerificationFailed(result AutoConfigApplyResult, err error) AutoConfigApplyResult {
-	result.Status = AutoConfigStatusVerificationFailed
-	result.Summary = "已执行飞书自动配置变更，但暂时无法确认最终状态。"
-	result.BlockingReason = "verification_failed"
-	result.VerificationStatus = AutoConfigVerificationStatusFailed
-	if err != nil {
-		result.VerificationError = err.Error()
-	}
-	return result
-}
-
-func autoConfigPublishVerificationFailed(result AutoConfigPublishResult, err error) AutoConfigPublishResult {
-	result.Status = AutoConfigStatusVerificationFailed
-	result.Summary = "已提交飞书应用发布，但暂时无法确认最终状态。"
-	result.BlockingReason = "verification_failed"
-	result.VerificationStatus = AutoConfigVerificationStatusFailed
-	if err != nil {
-		result.VerificationError = err.Error()
-	}
-	return result
-}
-
 func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapshot, error) {
 	sdkClient, broker := s.client.sdk()
 	cfg := s.client.liveGatewayConfig()
@@ -283,13 +82,8 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 	if err != nil {
 		return autoConfigSnapshot{}, err
 	}
-	scopes, err := autoConfigListScopes(s.client, ctx)
-	if err != nil {
-		return autoConfigSnapshot{}, err
-	}
 	snapshot := autoConfigSnapshot{
-		app:           app,
-		grantedScopes: scopes,
+		app: app,
 	}
 	if app == nil {
 		return snapshot, nil
@@ -316,7 +110,6 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 
 func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPlan {
 	configuredScopes := configuredScopeRefs(snapshot.app)
-	grantedScopes := grantedScopeRefs(snapshot.grantedScopes)
 	configuredEvents := sortUniqueStrings(appSubscribedEvents(snapshot.app))
 	configuredCallbacks := sortUniqueStrings(appSubscribedCallbacks(snapshot.app))
 	targetScopes := normalizeScopeRequirements(s.manifest)
@@ -354,7 +147,6 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 	plan := AutoConfigPlan{
 		Current: AutoConfigObservedState{
 			ConfiguredScopes:            configuredScopes,
-			GrantedScopes:               grantedScopes,
 			EventSubscriptionType:       strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "type"))),
 			EventRequestURL:             strings.TrimSpace(stringValue(subscribedEventField(snapshot.app, "url"))),
 			ConfiguredEvents:            configuredEvents,
@@ -387,7 +179,7 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		Diff:    diff,
 		Publish: publishState,
 	}
-	plan.BlockingRequirements, plan.DegradableRequirements = s.buildRequirementStatus(targetScopes, configuredEvents, configuredCallbacks, grantedScopes)
+	plan.BlockingRequirements, plan.DegradableRequirements = s.buildRequirementStatus(targetScopes, configuredEvents, configuredCallbacks, configuredScopes)
 	plan.Status, plan.Summary = derivePlanState(plan)
 	return plan
 }
@@ -405,7 +197,7 @@ func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) 
 			Policy:            s.policy,
 		},
 	}
-	plan = overridePlanFromAPIError(plan, err, autoConfigFailureRead)
+	plan = overridePlanFromAPIError(plan, err)
 	switch plan.Status {
 	case AutoConfigStatusUnsupported, AutoConfigStatusAwaitingReview, AutoConfigStatusBlocked:
 		return plan, true
@@ -414,8 +206,8 @@ func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) 
 	}
 }
 
-func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRequirement, configuredEvents []string, configuredCallbacks []string, grantedScopes []AutoConfigScopeRef) ([]AutoConfigRequirementStatus, []AutoConfigRequirementStatus) {
-	grantedKeys := scopeRefMap(grantedScopes)
+func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRequirement, configuredEvents []string, configuredCallbacks []string, configuredScopes []AutoConfigScopeRef) ([]AutoConfigRequirementStatus, []AutoConfigRequirementStatus) {
+	configuredScopeKeys := scopeRefMap(configuredScopes)
 	eventKeys := stringSet(configuredEvents)
 	callbackKeys := stringSet(configuredCallbacks)
 	var blocking []AutoConfigRequirementStatus
@@ -437,7 +229,7 @@ func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRe
 			Feature:        strings.TrimSpace(item.Feature),
 			Required:       item.Required,
 			DegradeMessage: strings.TrimSpace(item.DegradeMessage),
-			Present:        grantedKeys[scopeKey(item.Scope, item.ScopeType)],
+			Present:        configuredScopeKeys[scopeKey(item.Scope, item.ScopeType)],
 		}
 		if status.Present {
 			continue
@@ -531,47 +323,6 @@ func derivePlanState(plan AutoConfigPlan) (string, string) {
 	default:
 		return AutoConfigStatusClean, "飞书应用配置已收敛。"
 	}
-}
-
-func (s *autoConfigService) buildConfigPatchRequest(diff AutoConfigDiff) v7PatchConfigRequest {
-	var req v7PatchConfigRequest
-	if len(diff.MissingScopes) > 0 || len(diff.ExtraScopes) > 0 {
-		scopeReq := &v7PatchConfigScope{}
-		for _, item := range diff.MissingScopes {
-			scopeReq.AddScopes = append(scopeReq.AddScopes, v7PatchConfigScopeItem{
-				ScopeName: strings.TrimSpace(item.Scope),
-				TokenType: normalizeTokenType(item.ScopeType),
-			})
-		}
-		for _, item := range diff.ExtraScopes {
-			scopeReq.RemoveScopes = append(scopeReq.RemoveScopes, v7PatchConfigScopeItem{
-				ScopeName: strings.TrimSpace(item.Scope),
-				TokenType: normalizeTokenType(item.ScopeType),
-			})
-		}
-		req.Scope = scopeReq
-	}
-	if len(diff.MissingEvents) > 0 || len(diff.ExtraEvents) > 0 || diff.EventSubscriptionTypeMismatch || diff.EventRequestURLMismatch {
-		req.Event = &v7PatchConfigEvent{
-			SubscriptionType: s.policy.EventSubscriptionType,
-			AddEvents:        append([]string(nil), diff.MissingEvents...),
-			RemoveEvents:     append([]string(nil), diff.ExtraEvents...),
-		}
-		if requestURL := strings.TrimSpace(s.policy.EventRequestURL); requestURL != "" {
-			req.Event.RequestURL = &requestURL
-		}
-	}
-	if len(diff.MissingCallbacks) > 0 || len(diff.ExtraCallbacks) > 0 || diff.CallbackTypeMismatch || diff.CallbackRequestURLMismatch {
-		req.Callback = &v7PatchConfigCallback{
-			CallbackType:    s.policy.CallbackType,
-			AddCallbacks:    append([]string(nil), diff.MissingCallbacks...),
-			RemoveCallbacks: append([]string(nil), diff.ExtraCallbacks...),
-		}
-		if requestURL := strings.TrimSpace(s.policy.CallbackRequestURL); requestURL != "" {
-			req.Callback.RequestURL = &requestURL
-		}
-	}
-	return req
 }
 
 func getApplicationConfig(ctx context.Context, broker *FeishuCallBroker, client *lark.Client, appID string) (*larkapplication.Application, error) {
@@ -695,24 +446,6 @@ func configuredScopeRefs(app *larkapplication.Application) []AutoConfigScopeRef 
 				ScopeType: normalizeTokenType(tokenType),
 			})
 		}
-	}
-	return sortScopeRefs(out)
-}
-
-func grantedScopeRefs(values []AppScopeStatus) []AutoConfigScopeRef {
-	out := make([]AutoConfigScopeRef, 0, len(values))
-	for _, item := range values {
-		if !scopeGranted(item) {
-			continue
-		}
-		scope := strings.TrimSpace(item.ScopeName)
-		if scope == "" {
-			continue
-		}
-		out = append(out, AutoConfigScopeRef{
-			Scope:     scope,
-			ScopeType: normalizeTokenType(item.ScopeType),
-		})
 	}
 	return sortScopeRefs(out)
 }
