@@ -3,9 +3,6 @@ package feishu
 import (
 	"context"
 	"strings"
-
-	lark "github.com/larksuite/oapi-sdk-go/v3"
-	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 )
 
 type AppScopeStatus struct {
@@ -14,62 +11,47 @@ type AppScopeStatus struct {
 	GrantStatus int
 }
 
-func ListAppScopes(ctx context.Context, cfg LiveGatewayConfig) ([]AppScopeStatus, error) {
-	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ListAppScopes(ctx)
+// ListAppConfiguredScopes reads the app's configured scopes from the config
+// side (application.get -> app.scopes) and reports them as granted
+// (GrantStatus=1). For self-built / QR-registered apps, config-side presence
+// is the reliable availability signal, unlike scope.list whose grant_status
+// reflects tenant-authorization state and can report false negatives.
+func ListAppConfiguredScopes(ctx context.Context, cfg LiveGatewayConfig) ([]AppScopeStatus, error) {
+	return NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ListAppConfiguredScopes(ctx)
 }
 
-func (c *SetupClient) ListAppScopes(ctx context.Context) ([]AppScopeStatus, error) {
-	_, broker := c.sdk()
+func (c *SetupClient) ListAppConfiguredScopes(ctx context.Context) ([]AppScopeStatus, error) {
+	sdkClient, broker := c.sdk()
 	cfg := c.liveGatewayConfig()
-	resp, err := DoSDK(ctx, broker, CallSpec{
-		GatewayID:  cfg.GatewayID,
-		API:        "application.v6.scope.list",
-		Class:      CallClassMetaHTTP,
-		Priority:   CallPriorityBackground,
-		Retry:      RetrySafe,
-		Permission: PermissionFailFast,
-	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkapplication.ListScopeResp, error) {
-		resp, err := sdkClient.Application.V6.Scope.List(callCtx)
-		if err != nil {
-			return resp, err
-		}
-		return resp, nil
-	})
+	app, err := getApplicationConfig(ctx, broker, sdkClient, cfg.AppID)
 	if err != nil {
 		return nil, err
 	}
-	if !resp.Success() {
-		return nil, newAPIError("application.v6.scope.list", resp.ApiResp, resp.CodeError)
-	}
-	if resp.Data == nil {
+	if app == nil {
 		return nil, nil
 	}
-	values := make([]AppScopeStatus, 0, len(resp.Data.Scopes))
-	for _, item := range resp.Data.Scopes {
+	values := make([]AppScopeStatus, 0, len(app.Scopes))
+	for _, item := range app.Scopes {
 		if item == nil {
 			continue
 		}
-		values = append(values, AppScopeStatus{
-			ScopeName:   strings.TrimSpace(scopeStringValue(item.ScopeName)),
-			ScopeType:   normalizePermissionScopeType(scopeStringValue(item.ScopeType)),
-			GrantStatus: scopeIntValue(item.GrantStatus),
-		})
+		scope := strings.TrimSpace(stringValue(item.Scope))
+		if scope == "" {
+			continue
+		}
+		if len(item.TokenTypes) == 0 {
+			values = append(values, AppScopeStatus{ScopeName: scope, ScopeType: "tenant", GrantStatus: 1})
+			continue
+		}
+		for _, tokenType := range item.TokenTypes {
+			values = append(values, AppScopeStatus{
+				ScopeName:   scope,
+				ScopeType:   normalizePermissionScopeType(tokenType),
+				GrantStatus: 1,
+			})
+		}
 	}
 	return values, nil
-}
-
-func scopeStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func scopeIntValue(value *int) int {
-	if value == nil {
-		return 0
-	}
-	return *value
 }
 
 func scopeGranted(status AppScopeStatus) bool {

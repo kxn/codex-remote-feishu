@@ -15,7 +15,7 @@ import (
 const defaultFeishuPermissionRefreshEvery = 2 * time.Minute
 const feishuPrimaryPermissionCacheTTL = 2 * time.Minute
 
-var listFeishuAppScopes = feishu.ListAppScopes
+var listFeishuAppConfiguredScopes = feishu.ListAppConfiguredScopes
 
 type feishuPermissionGapRecord struct {
 	Scope           string
@@ -166,13 +166,13 @@ func (a *App) refreshFeishuPermissionGaps() {
 
 	for _, gatewayID := range gatewayIDs {
 		verifyCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		scopes, err := a.loadGrantedFeishuScopes(verifyCtx, gatewayID)
+		scopes, err := a.loadFeishuAppConfiguredScopes(verifyCtx, gatewayID)
 		cancel()
 		a.applyFeishuPermissionVerificationResult(gatewayID, scopes, err)
 	}
 }
 
-func (a *App) loadGrantedFeishuScopes(ctx context.Context, gatewayID string) ([]feishu.AppScopeStatus, error) {
+func (a *App) loadFeishuAppConfiguredScopes(ctx context.Context, gatewayID string) ([]feishu.AppScopeStatus, error) {
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return nil, err
@@ -181,7 +181,7 @@ func (a *App) loadGrantedFeishuScopes(ctx context.Context, gatewayID string) ([]
 	if !ok {
 		return nil, nil
 	}
-	return listFeishuAppScopes(ctx, feishu.LiveGatewayConfig{
+	return listFeishuAppConfiguredScopes(ctx, feishu.LiveGatewayConfig{
 		GatewayID: runtimeCfg.GatewayID,
 		AppID:     runtimeCfg.AppID,
 		AppSecret: runtimeCfg.AppSecret,
@@ -261,7 +261,7 @@ func (a *App) CheckPrimaryBotPermission(ctx context.Context, req orchestrator.Pr
 	}
 	checkCtx, cancel := context.WithTimeout(checkCtx, 20*time.Second)
 	defer cancel()
-	scopes, err := a.loadGrantedFeishuScopes(checkCtx, gatewayID)
+	scopes, err := a.loadFeishuAppConfiguredScopes(checkCtx, gatewayID)
 	decision := primaryPermissionDecisionFromScopes(scopes, err)
 	a.storePrimaryBotPermissionCache(gatewayID, decision, now, req.ForceRefresh)
 	return decision
@@ -312,7 +312,7 @@ func primaryPermissionDecisionFromCache(record feishuPrimaryPermissionCacheRecor
 
 func primaryPermissionDecisionFromScopes(scopes []feishu.AppScopeStatus, err error) orchestrator.PrimaryBotPermissionDecision {
 	if err != nil {
-		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "scope_list_failed", Err: err}
+		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "scope_read_failed", Err: err}
 	}
 	for _, item := range scopes {
 		if !feishuScopeStatusGranted(item) {

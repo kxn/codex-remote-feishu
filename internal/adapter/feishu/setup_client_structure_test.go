@@ -16,7 +16,7 @@ func TestSetupClientOwnsSetupAPIMethods(t *testing.T) {
 	for _, method := range []string{
 		"GetLongConnectionStatus",
 		"GetBotInfo",
-		"ListAppScopes",
+		"ListAppConfiguredScopes",
 		"PlanAppAutoConfig",
 	} {
 		if !strings.Contains(source, "func (c *SetupClient) "+method+"(") {
@@ -33,7 +33,7 @@ func TestLegacySetupFunctionsAreThinSetupClientBridges(t *testing.T) {
 	}{
 		{"connection_status.go", "GetLongConnectionStatus", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).GetLongConnectionStatus(ctx)"},
 		{"connection_status.go", "GetBotInfo", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).GetBotInfo(ctx)"},
-		{"scopes.go", "ListAppScopes", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ListAppScopes(ctx)"},
+		{"scopes.go", "ListAppConfiguredScopes", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).ListAppConfiguredScopes(ctx)"},
 		{"app_autoconfig.go", "PlanAppAutoConfig", "NewSetupClient(SetupClientConfigFromLiveGatewayConfig(cfg)).PlanAppAutoConfig(ctx, manifest, policy)"},
 	}
 	for _, tc := range cases {

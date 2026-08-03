@@ -101,7 +101,7 @@ func TestPrimaryPermissionDecisionRejectsMissingScopeAndErrors(t *testing.T) {
 	}, nil); decision.Allowed || decision.Reason != "missing_group_message_scope" {
 		t.Fatalf("missing scope decision = %#v, want missing", decision)
 	}
-	if decision := primaryPermissionDecisionFromScopes(nil, errors.New("boom")); decision.Allowed || decision.Reason != "scope_list_failed" || decision.Err == nil {
+	if decision := primaryPermissionDecisionFromScopes(nil, errors.New("boom")); decision.Allowed || decision.Reason != "scope_read_failed" || decision.Err == nil {
 		t.Fatalf("error decision = %#v, want failed with err", decision)
 	}
 }
