@@ -3,11 +3,8 @@ import type {
   BootstrapState,
   ClaudeProfileSummary,
   CodexProfileSummary,
-  FeishuAppAutoConfigApplyResponse,
-  FeishuAppAutoConfigCompleteResponse,
   FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigPlanResponse,
-  FeishuAppAutoConfigPublishResponse,
   FeishuAppSummary,
   GatewayStatus,
   ImageStagingStatusResponse,
@@ -515,7 +512,6 @@ export function makeAutoConfigPlan(
     degradableRequirements: [],
     current: {
       configuredScopes: [],
-      grantedScopes: [],
       configuredEvents: [],
       configuredCallbacks: [],
       botEnabled: true,
@@ -557,72 +553,6 @@ export function makeAutoConfigPlanResponse(
   return {
     app: makeApp(),
     plan: makeAutoConfigPlan(),
-    ...overrides,
-  };
-}
-
-export function makeAutoConfigApplyResponse(
-  overrides: Partial<FeishuAppAutoConfigApplyResponse> = {},
-): FeishuAppAutoConfigApplyResponse {
-  return {
-    app: makeApp(),
-    result: {
-      status: "clean",
-      summary: "当前自动配置已完成。",
-      blockingReason: "",
-      actions: [],
-      plan: makeAutoConfigPlan(),
-    },
-    ...overrides,
-  };
-}
-
-export function makeAutoConfigPublishResponse(
-  overrides: Partial<FeishuAppAutoConfigPublishResponse> = {},
-): FeishuAppAutoConfigPublishResponse {
-  return {
-    app: makeApp(),
-    result: {
-      status: "awaiting_review",
-      summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
-      blockingReason: "",
-      versionId: "oav_1",
-      version: "1.8.1",
-      actions: [],
-      plan: makeAutoConfigPlan({
-        status: "awaiting_review",
-        summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
-        publish: {
-          needsPublish: false,
-          awaitingReview: true,
-        },
-      }),
-    },
-    ...overrides,
-  };
-}
-
-export function makeAutoConfigCompleteResponse(
-  overrides: Partial<FeishuAppAutoConfigCompleteResponse> = {},
-): FeishuAppAutoConfigCompleteResponse {
-  return {
-    app: makeApp(),
-    result: {
-      status: "awaiting_review",
-      summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
-      blockingReason: "",
-      versionId: "oav_1",
-      version: "1.8.1",
-      actions: [],
-      plan: makeAutoConfigPlan({
-        status: "awaiting_review",
-        summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
-        publish: {
-          needsPublish: false,
-          awaitingReview: true,
-        },
-      }),
-    },
     ...overrides,
   };
 }

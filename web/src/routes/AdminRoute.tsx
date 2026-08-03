@@ -13,11 +13,10 @@ import type {
   ClaudeProfileSummary,
   CodexProfilesResponse,
   CodexProfileSummary,
-  FeishuAppAutoConfigCompleteView,
-  FeishuAppAutoConfigCompleteResponse,
+  FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigPlanResponse,
+  FeishuAppAutoConfigPlanView,
   FeishuAppAutoConfigRequirementStatus,
-  FeishuAppPermissionCheckResponse,
   FeishuAppResponse,
   FeishuAppSummary,
   FeishuAppsResponse,
@@ -39,12 +38,11 @@ import {
 } from "./shared/helpers";
 import {
   resolveRuntimeApplyFailureTarget,
-  runAutoConfigMutation,
   saveAndVerifyFeishuApp,
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
 import {
-  describeAutoConfigActionFeedback,
+  buildMissingScopesImportJSON,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
   groupAutoConfigRequirements,
@@ -65,12 +63,6 @@ type DetailNotice = {
 type AutoConfigState =
   | { status: "idle" }
   | { status: "ready"; data: FeishuAppAutoConfigPlanResponse; resultStatus?: string }
-  | { status: "error"; message: string };
-
-type PermissionCheckState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "ready"; data: FeishuAppPermissionCheckResponse }
   | { status: "error"; message: string };
 
 type NewRobotForm = {
@@ -112,9 +104,6 @@ export function AdminRoute() {
   const [autoConfigCheckedAt, setAutoConfigCheckedAt] = useState<Record<string, string>>(
     {},
   );
-  const [permissionChecks, setPermissionChecks] = useState<
-    Record<string, PermissionCheckState>
-  >({});
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
   const [codexProviders, setCodexProviders] = useState<CodexProfileSummary[]>([]);
   const [codexProvidersError, setCodexProvidersError] = useState("");
@@ -152,9 +141,6 @@ export function AdminRoute() {
   const selectedAutoConfig: AutoConfigState = selectedApp
     ? autoConfigPlans[selectedApp.id] || { status: "idle" }
     : { status: "idle" };
-  const selectedPermissionCheck: PermissionCheckState = selectedApp
-    ? permissionChecks[selectedApp.id] || { status: "idle" }
-    : { status: "idle" };
   const versionTitle = buildAdminPageTitle(bootstrap);
   const previewSummary = useMemo(() => {
     return Object.values(previewMap).reduce(
@@ -184,7 +170,7 @@ export function AdminRoute() {
       syncAutoConfigView(response.app, response.autoConfig);
       setSelectedRobotID(appID);
       setActiveArea("bots");
-      setDetailNotice(noticeFromCompleteView(response.autoConfig) || {
+      setDetailNotice(noticeFromAutoConfigView(response.autoConfig) || {
         tone: "good",
         message: "已完成连接验证。",
       });
@@ -217,13 +203,6 @@ export function AdminRoute() {
         if (current[app.id]) {
           next[app.id] = current[app.id];
         }
-      }
-      return next;
-    });
-    setPermissionChecks((current) => {
-      const next: Record<string, PermissionCheckState> = {};
-      for (const app of apps) {
-        next[app.id] = current[app.id] || { status: "idle" };
       }
       return next;
     });
@@ -344,7 +323,7 @@ export function AdminRoute() {
       if (result.autoConfig && savedApp) {
         syncAutoConfigView(savedApp, result.autoConfig);
       }
-      setDetailNotice(noticeFromCompleteView(result.autoConfig) || {
+      setDetailNotice(noticeFromAutoConfigView(result.autoConfig) || {
         tone: "good",
         message: "已完成连接验证。",
       });
@@ -401,14 +380,14 @@ export function AdminRoute() {
 
   function syncAutoConfigView(
     app: FeishuAppSummary,
-    view?: FeishuAppAutoConfigCompleteView,
+    view?: FeishuAppAutoConfigPlanView,
   ) {
     if (!view) {
       return;
     }
     syncAppSummary(app);
-    if (view.result) {
-      syncAutoConfigPlan(app, view.result.plan, view.result.status);
+    if (view.plan) {
+      syncAutoConfigPlan(app, view.plan, view.plan.status);
       return;
     }
     if (view.error) {
@@ -421,46 +400,6 @@ export function AdminRoute() {
       ...current,
       [appID]: { status: "error", message },
     }));
-  }
-
-  async function completeRobotConfiguration() {
-    if (!selectedApp?.id) {
-      return;
-    }
-    const appID = selectedApp.id;
-    setActionBusy("permission-complete");
-    try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigCompleteResponse>({
-        path: `/api/admin/feishu/apps/${encodeURIComponent(appID)}/auto-config/complete`,
-        init: {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-        fallbackErrorMessage: "当前还不能自动补齐，请稍后重试。",
-        fallbackSuccessMessage: "已自动补齐飞书配置。",
-      });
-      if (!result.ok) {
-        setDetailNotice({
-          tone: "danger",
-          message: `${result.message} 还没有提交到飞书。`,
-        });
-        return;
-      }
-      syncAutoConfigPlan(
-        result.payload.app,
-        result.payload.result.plan,
-        result.payload.result.status,
-      );
-      setDetailNotice(result.notice);
-      await checkRobotPermissions({ appID, silent: true });
-    } catch {
-      setDetailNotice({ tone: "danger", message: "当前还不能自动补齐，请稍后重试。" });
-    } finally {
-      setActionBusy("");
-    }
   }
 
   async function loadRobotConfigurationPlan(appID: string) {
@@ -692,62 +631,10 @@ export function AdminRoute() {
     });
   }
 
-  async function checkRobotPermissions(options?: { appID?: string; silent?: boolean }) {
-    const appID = options?.appID || selectedApp?.id;
-    if (!appID) {
-      return;
-    }
-    setPermissionChecks((current) => ({
-      ...current,
-      [appID]: { status: "loading" },
-    }));
-    if (!options?.silent) {
-      setActionBusy("permission-check");
-    }
-    try {
-      const response = await requestJSONAllowHTTPError<
-        FeishuAppPermissionCheckResponse | APIErrorShape
-      >(`/api/admin/feishu/apps/${encodeURIComponent(appID)}/permissions/check`);
-      if (!response.ok) {
-        setPermissionChecks((current) => ({
-          ...current,
-          [appID]: {
-            status: "error",
-            message: "当前还不能完成权限检查，请稍后重试。",
-          },
-        }));
-        if (!options?.silent) {
-          setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
-        }
-        return;
-      }
-      const data = response.data as FeishuAppPermissionCheckResponse;
-      syncAppSummary(data.app);
-      setPermissionChecks((current) => ({
-        ...current,
-        [appID]: { status: "ready", data },
-      }));
-      await loadRobotConfigurationPlan(appID);
-    } catch {
-      setPermissionChecks((current) => ({
-        ...current,
-        [appID]: {
-          status: "error",
-          message: "当前还不能完成权限检查，请稍后重试。",
-        },
-      }));
-      if (!options?.silent) {
-        setDetailNotice({ tone: "danger", message: "权限检查没有完成，请稍后重试。" });
-      }
-    } finally {
-      if (!options?.silent) {
-        setActionBusy("");
-      }
-    }
-  }
-
-  async function copyPermissionGrantJSON(data: FeishuAppPermissionCheckResponse) {
-    const content = data.grantJSON?.trim();
+  async function copyMissingScopesImportJSON(
+    plan: FeishuAppAutoConfigPlan | undefined | null,
+  ) {
+    const content = buildMissingScopesImportJSON(plan);
     if (!content || !navigator.clipboard?.writeText) {
       setDetailNotice({
         tone: "warn",
@@ -1023,16 +910,7 @@ export function AdminRoute() {
     const disabled = Boolean(actionBusy);
     const autoConfigPlan =
       selectedAutoConfig.status === "ready" ? selectedAutoConfig.data.plan : null;
-    const autoConfigStatus =
-      selectedAutoConfig.status === "ready"
-        ? selectedAutoConfig.resultStatus || selectedAutoConfig.data.plan.status
-        : "";
-    const canComplete =
-      selectedAutoConfig.status === "error" ||
-      autoConfigPlan?.status === "apply_required" ||
-      autoConfigPlan?.status === "publish_required" ||
-      autoConfigStatus === "verification_failed";
-    const awaitingReview = autoConfigStatus === "awaiting_review";
+    const missingScopes = autoConfigPlan?.diff?.missingScopes || [];
     const checkedAt = autoConfigCheckedAt[selectedApp.id] || "";
     return (
       <section className="card">
@@ -1044,194 +922,71 @@ export function AdminRoute() {
             className="secondary-button"
             type="button"
             disabled={disabled}
-            onClick={() => void checkRobotPermissions()}
+            onClick={() => void recheckRobotConfigurationPlan()}
           >
-            检查权限
+            {actionBusy === "permission-auto-config-check" ? "检查中..." : "重新检查配置"}
           </button>
         </div>
-        {selectedPermissionCheck.status === "loading" ? (
-          <div className="notice-banner warn">正在检查权限...</div>
+        {selectedAutoConfig.status === "idle" ? (
+          <div className="empty-state">需要确认权限时，可以在这里检查当前配置差异。</div>
         ) : null}
-        {selectedPermissionCheck.status === "error" ? (
+        {selectedAutoConfig.status === "error" ? (
           <div className="detail-stack">
-            <div className="notice-banner warn">{selectedPermissionCheck.message}</div>
+            <div className="notice-banner warn">{selectedAutoConfig.message}</div>
             <div className="button-row">
               <button
                 className="secondary-button"
                 type="button"
                 disabled={disabled}
-                onClick={() => void checkRobotPermissions()}
+                onClick={() => void recheckRobotConfigurationPlan()}
               >
                 重新检查
               </button>
             </div>
           </div>
         ) : null}
-        {selectedPermissionCheck.status === "ready" ? (
-          selectedPermissionCheck.data.ready ? (
-            <div className="detail-stack">
-              <div className="notice-banner good">权限已就绪</div>
-              {selectedAutoConfig.status === "error" ? (
-                <div className="notice-banner warn">{selectedAutoConfig.message}</div>
-              ) : null}
-              {canComplete ? (
-                <>
-                  <div className="notice-banner warn">
-                    {selectedAutoConfig.status === "error"
-                      ? "可以重新执行自动补齐后再检查。"
-                      : describeAutoConfigSummary(autoConfigStatus || "apply_required")}
-                  </div>
-                  {autoConfigPlan
-                    ? renderAutoConfigPlanRequirements(
-                        "必须补齐",
-                        autoConfigPlan.blockingRequirements || [],
-                        "danger",
-                      )
-                    : null}
-                  {autoConfigPlan
-                    ? renderAutoConfigPlanRequirements(
-                        "可稍后处理",
-                        autoConfigPlan.degradableRequirements || [],
-                        "warn",
-                      )
-                    : null}
-                  <div className="button-row">
-                    <button
-                      className="primary-button"
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => void completeRobotConfiguration()}
-                    >
-                      {actionBusy === "permission-complete" ? "补齐中..." : "自动补齐"}
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => void recheckRobotConfigurationPlan()}
-                    >
-                      {actionBusy === "permission-auto-config-check"
-                        ? "检查中..."
-                        : "重新检查配置"}
-                    </button>
-                  </div>
-                </>
-              ) : null}
-              {awaitingReview ? (
-                <div className="notice-banner warn">飞书正在审核发布</div>
-              ) : null}
-              {awaitingReview && !canComplete ? (
+        {selectedAutoConfig.status === "ready" && autoConfigPlan ? (
+          <div className="detail-stack">
+            <div className={`notice-banner ${autoConfigNoticeTone(autoConfigPlan.status)}`}>
+              {autoConfigPlan.summary?.trim() || describeAutoConfigSummary(autoConfigPlan.status)}
+            </div>
+            {renderAutoConfigPlanRequirements(
+              "必须补齐",
+              autoConfigPlan.blockingRequirements || [],
+              "danger",
+            )}
+            {renderAutoConfigPlanRequirements(
+              "可稍后处理",
+              autoConfigPlan.degradableRequirements || [],
+              "warn",
+            )}
+            {missingScopes.length > 0 ? (
+              <>
+                <textarea
+                  className="permission-json"
+                  readOnly
+                  value={buildMissingScopesImportJSON(autoConfigPlan)}
+                  aria-label="权限导入 JSON"
+                />
+                <p className="support-copy">
+                  到飞书后台导入后，回到这里重新检查。
+                </p>
                 <div className="button-row">
                   <button
                     className="secondary-button"
                     type="button"
                     disabled={disabled}
-                    onClick={() => void recheckRobotConfigurationPlan()}
+                    onClick={() => void copyMissingScopesImportJSON(autoConfigPlan)}
                   >
-                    {actionBusy === "permission-auto-config-check"
-                      ? "检查中..."
-                      : "重新检查配置"}
+                    复制导入 JSON
                   </button>
                 </div>
-              ) : null}
-              {checkedAt ? (
-                <p className="support-copy">最近检查：{formatTimestamp(checkedAt)}</p>
-              ) : null}
-            </div>
-          ) : (
-            <div className="detail-stack">
-              <div className="notice-banner warn">
-                还缺少 {selectedPermissionCheck.data.missingScopes?.length || 0} 项权限
-              </div>
-              {selectedAutoConfig.status === "error" ? (
-                <div className="notice-banner warn">{selectedAutoConfig.message}</div>
-              ) : null}
-              {selectedAutoConfig.status === "ready" && autoConfigStatus ? (
-                <div className={`notice-banner ${autoConfigNoticeTone(autoConfigStatus)}`}>
-                  {describeAutoConfigSummary(autoConfigStatus)}
-                </div>
-              ) : null}
-              {autoConfigPlan
-                ? renderAutoConfigPlanRequirements(
-                    "必须补齐",
-                    autoConfigPlan.blockingRequirements || [],
-                    "danger",
-                  )
-                : null}
-              {autoConfigPlan
-                ? renderAutoConfigPlanRequirements(
-                    "可稍后处理",
-                    autoConfigPlan.degradableRequirements || [],
-                    "warn",
-                  )
-                : null}
-              {awaitingReview ? (
-                <div className="notice-banner warn">飞书正在审核发布</div>
-              ) : null}
-              <div className="req-group">
-                {(selectedPermissionCheck.data.missingScopes || []).map((item) => (
-                  <div
-                    className="req-item"
-                    key={`${item.scopeType || "tenant"}:${item.scope}`}
-                  >
-                    <span className="dot warn" />
-                    <div>
-                      <div className="label mono">{item.scope}</div>
-                    </div>
-                    {item.scopeType ? <span className="badge neutral">{item.scopeType}</span> : null}
-                  </div>
-                ))}
-              </div>
-              {selectedPermissionCheck.data.grantJSON ? (
-                <>
-                  <textarea
-                    className="permission-json"
-                    readOnly
-                    value={selectedPermissionCheck.data.grantJSON}
-                    aria-label="权限导入 JSON"
-                  />
-                  <p className="support-copy">
-                    到飞书后台导入后，回到这里重新检查。
-                  </p>
-                  <div className="button-row">
-                    {canComplete ? (
-                      <button
-                        className="primary-button"
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => void completeRobotConfiguration()}
-                      >
-                        {actionBusy === "permission-complete" ? "补齐中..." : "自动补齐"}
-                      </button>
-                    ) : null}
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => void recheckRobotConfigurationPlan()}
-                    >
-                      {actionBusy === "permission-auto-config-check"
-                        ? "检查中..."
-                        : "重新检查配置"}
-                    </button>
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      disabled={disabled}
-                      onClick={() =>
-                        void copyPermissionGrantJSON(selectedPermissionCheck.data)
-                      }
-                    >
-                      复制导入 JSON
-                    </button>
-                  </div>
-                </>
-              ) : null}
-              {checkedAt ? (
-                <p className="support-copy">最近检查：{formatTimestamp(checkedAt)}</p>
-              ) : null}
-            </div>
-          )
+              </>
+            ) : null}
+            {checkedAt ? (
+              <p className="support-copy">最近检查：{formatTimestamp(checkedAt)}</p>
+            ) : null}
+          </div>
         ) : null}
       </section>
     );
@@ -1711,14 +1466,14 @@ function renderAutoConfigPlanRequirements(
   );
 }
 
-function noticeFromCompleteView(view?: FeishuAppAutoConfigCompleteView): DetailNotice | null {
+function noticeFromAutoConfigView(view?: FeishuAppAutoConfigPlanView): DetailNotice | null {
   if (!view) {
     return null;
   }
-  if (view.result) {
+  if (view.plan) {
     return {
-      tone: autoConfigNoticeTone(view.result.status),
-      message: describeAutoConfigActionFeedback(view.result),
+      tone: autoConfigNoticeTone(view.plan.status),
+      message: view.plan.summary?.trim() || describeAutoConfigSummary(view.plan.status),
     };
   }
   if (view.error) {

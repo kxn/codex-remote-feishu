@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminRoute } from "./AdminRoute";
 import {
   makeApp,
-  makeAutoConfigCompleteResponse,
   makeAutoConfigPlan,
   makeAutoConfigPlanResponse,
   makeBootstrap,
@@ -162,7 +161,7 @@ describe("AdminRoute", () => {
     );
   });
 
-  it("checks robot permissions through the admin route and displays backend-provided scopes", async () => {
+  it("checks the auto-config plan and displays missing scopes with a copyable import JSON", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const originalClipboard = navigator.clipboard;
@@ -185,31 +184,41 @@ describe("AdminRoute", () => {
           ],
         },
       },
-      "/api/admin/feishu/apps/bot-permission/permissions/check": {
-        body: {
-          app: makeApp({
-            id: "bot-permission",
-            name: "权限机器人",
-            appId: "cli_permission",
-          }),
-          ready: false,
-          missingScopes: [
-            {
-              scope: "im:message.group_msg:readonly",
-              scopeType: "tenant",
-            },
-          ],
-          grantJSON:
-            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_msg:readonly"\n    ],\n    "user": []\n  }\n}',
-          lastCheckedAt: "2026-08-02T06:30:00Z",
-        },
-      },
       "/api/admin/feishu/apps/bot-permission/auto-config/plan": {
         body: makeAdminAutoConfigPlan(makeApp({
           id: "bot-permission",
           name: "权限机器人",
           appId: "cli_permission",
         }), {
+          status: "apply_required",
+          summary: "飞书配置还需要补齐。",
+          blockingRequirements: [
+            {
+              kind: "scope",
+              key: "im:message.group_msg:readonly",
+              scopeType: "tenant",
+              feature: "room_admin",
+              required: true,
+              present: false,
+            },
+          ],
+          diff: {
+            configPatchRequired: true,
+            abilityPatchRequired: false,
+            missingScopes: [
+              { scope: "im:message.group_msg:readonly", scopeType: "tenant" },
+            ],
+            extraScopes: [],
+            missingEvents: [],
+            extraEvents: [],
+            missingCallbacks: [],
+            extraCallbacks: [],
+            eventSubscriptionTypeMismatch: false,
+            eventRequestUrlMismatch: false,
+            callbackTypeMismatch: false,
+            callbackRequestUrlMismatch: false,
+            publishRequired: false,
+          },
           degradableRequirements: [
             {
               kind: "event",
@@ -249,13 +258,14 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await openAdminArea(user, "机器人");
-    await user.click(await screen.findByRole("button", { name: "检查权限" }));
-    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
-    expect(screen.getByText("im:message.group_msg:readonly")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
+    expect(await screen.findByText("飞书配置还需要补齐。")).toBeInTheDocument();
+    expect(screen.getByText("权限 im:message.group_msg:readonly")).toBeInTheDocument();
     expect(screen.getByDisplayValue(/im:message\.group_msg:readonly/)).toBeInTheDocument();
     expect(screen.getByText("事件 im.message.receive_v1")).toBeInTheDocument();
     expect(screen.getByText("接收用户消息")).toBeInTheDocument();
     expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "复制导入 JSON" }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("im:message.group_msg:readonly"));
@@ -267,7 +277,7 @@ describe("AdminRoute", () => {
     });
   });
 
-  it("completes permission fixes from the permission card", async () => {
+  it("keeps the permission card read-only and never calls the auto-config write routes", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -275,8 +285,6 @@ describe("AdminRoute", () => {
       name: "权限机器人",
       appId: "cli_permission",
     });
-    let checkCount = 0;
-    let completed = false;
 
     const { calls } = installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
@@ -285,62 +293,11 @@ describe("AdminRoute", () => {
           apps: [app],
         },
       },
-      "/api/admin/feishu/apps/bot-permission/permissions/check": () => {
-        checkCount += 1;
-        return {
-          body: {
-            app,
-            ready: checkCount > 1,
-            missingScopes:
-              checkCount > 1
-                ? []
-                : [
-                    {
-                      scope: "im:message.group_at_msg:readonly",
-                      scopeType: "tenant",
-                    },
-                  ],
-            grantJSON:
-              '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_at_msg:readonly"\n    ],\n    "user": []\n  }\n}',
-            lastCheckedAt: "2026-08-02T06:30:00Z",
-          },
-        };
-      },
       "/api/admin/feishu/apps/bot-permission/auto-config/plan": () => {
         return {
           body: makeAdminAutoConfigPlan(app, {
-            status: completed
-              ? "awaiting_review"
-              : "apply_required",
-            summary: completed
-              ? "飞书正在审核发布。"
-              : "飞书配置还需要补齐。",
-            publish: {
-              needsPublish: !completed,
-              awaitingReview: completed,
-            },
-          }),
-        };
-      },
-      "/api/admin/feishu/apps/bot-permission/auto-config/complete": () => {
-        completed = true;
-        return {
-          body: makeAutoConfigCompleteResponse({
-            app,
-            result: {
-              status: "awaiting_review",
-              summary: "飞书正在审核发布。",
-              blockingReason: "",
-              actions: [],
-              plan: makeAutoConfigPlan({
-                status: "awaiting_review",
-                summary: "飞书正在审核发布。",
-                publish: {
-                  needsPublish: false,
-                  awaitingReview: true,
-                },
-              }),
-            },
+            status: "apply_required",
+            summary: "飞书配置还需要补齐。",
           }),
         };
       },
@@ -372,20 +329,17 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await openAdminArea(user, "机器人");
-    await user.click(await screen.findByRole("button", { name: "检查权限" }));
-    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "自动补齐" }));
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
+    expect(await screen.findByText("飞书配置还需要补齐。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
     expect(
-      await screen.findByText("飞书正在审核发布，等待完成后重新检查。"),
-    ).toBeInTheDocument();
-    expect(await screen.findByText("飞书正在审核发布")).toBeInTheDocument();
-    expect(calls.some((call) => call.path.endsWith("/auto-config/complete"))).toBe(true);
+      calls.some((call) => call.path.endsWith("/auto-config/complete")),
+    ).toBe(false);
     expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(false);
     expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(false);
   });
 
-  it("shows a user-facing failure when automatic completion fails", async () => {
+  it("shows a user-facing failure when the auto-config plan cannot be read", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -395,28 +349,7 @@ describe("AdminRoute", () => {
     });
 
     installMockFetch(makeSingleRobotAdminRoutes(app, {
-      "/api/admin/feishu/apps/bot-complete-error/permissions/check": {
-        body: {
-          app,
-          ready: false,
-          missingScopes: [
-            {
-              scope: "im:message.group_at_msg:readonly",
-              scopeType: "tenant",
-            },
-          ],
-          grantJSON:
-            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_at_msg:readonly"\n    ],\n    "user": []\n  }\n}',
-          lastCheckedAt: "2026-08-02T06:30:00Z",
-        },
-      },
       "/api/admin/feishu/apps/bot-complete-error/auto-config/plan": {
-        body: makeAdminAutoConfigPlan(app, {
-          status: "apply_required",
-          summary: "飞书配置还需要补齐。",
-        }),
-      },
-      "/api/admin/feishu/apps/bot-complete-error/auto-config/complete": {
         status: 502,
         body: {
           error: {
@@ -432,18 +365,18 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await openAdminArea(user, "机器人");
-    await user.click(await screen.findByRole("button", { name: "检查权限" }));
-    await user.click(await screen.findByRole("button", { name: "自动补齐" }));
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
 
     expect(
-      await screen.findByText("当前还不能自动补齐，请稍后重试。 还没有提交到飞书。"),
+      await screen.findByText("暂时无法确认飞书自动配置状态。"),
     ).toBeInTheDocument();
     expect(screen.queryByText(/application\.v6\.application\.get/)).not.toBeInTheDocument();
     expect(screen.queryByText(/99992402/)).not.toBeInTheDocument();
     expect(screen.queryByText(/field validation failed/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
   });
 
-  it("uses automatic completion when missing permissions only need release", async () => {
+  it("shows a publish-required plan without offering auto-fill", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -451,28 +384,12 @@ describe("AdminRoute", () => {
       name: "待发布机器人",
       appId: "cli_publish_permission",
     });
-    let completed = false;
 
     const { calls } = installMockFetch(withClaudeProfiles({
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
       "/api/admin/feishu/apps": {
         body: {
           apps: [app],
-        },
-      },
-      "/api/admin/feishu/apps/bot-publish-permission/permissions/check": {
-        body: {
-          app,
-          ready: false,
-          missingScopes: [
-            {
-              scope: "drive:drive",
-              scopeType: "tenant",
-            },
-          ],
-          grantJSON:
-            '{\n  "scopes": {\n    "tenant": [\n      "drive:drive"\n    ],\n    "user": []\n  }\n}',
-          lastCheckedAt: "2026-08-02T06:30:00Z",
         },
       },
       "/api/admin/feishu/apps/bot-publish-permission/auto-config/plan": {
@@ -484,28 +401,6 @@ describe("AdminRoute", () => {
             awaitingReview: false,
           },
         }),
-      },
-      "/api/admin/feishu/apps/bot-publish-permission/auto-config/complete": () => {
-        completed = true;
-        return {
-          body: makeAutoConfigCompleteResponse({
-            app,
-            result: {
-              status: "awaiting_review",
-              summary: "飞书正在审核发布。",
-              blockingReason: "",
-              actions: [],
-              plan: makeAutoConfigPlan({
-                status: "awaiting_review",
-                summary: "飞书正在审核发布。",
-                publish: {
-                  needsPublish: false,
-                  awaitingReview: true,
-                },
-              }),
-            },
-          }),
-        };
       },
       "/api/admin/autostart/detect": {
         body: {
@@ -535,20 +430,17 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await openAdminArea(user, "机器人");
-    await user.click(await screen.findByRole("button", { name: "检查权限" }));
-    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "自动补齐" }));
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
+    expect(await screen.findByText("自动补齐已完成，还需要提交发布。")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
     expect(
-      await screen.findByText("飞书正在审核发布，等待完成后重新检查。"),
-    ).toBeInTheDocument();
-    expect(completed).toBe(true);
-    expect(calls.some((call) => call.path.endsWith("/auto-config/complete"))).toBe(true);
+      calls.some((call) => call.path.endsWith("/auto-config/complete")),
+    ).toBe(false);
     expect(calls.some((call) => call.path.endsWith("/auto-config/apply"))).toBe(false);
     expect(calls.some((call) => call.path.endsWith("/auto-config/publish"))).toBe(false);
   });
 
-  it("shows a ready permission check result", async () => {
+  it("shows a ready auto-config result without missing scopes", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -558,15 +450,6 @@ describe("AdminRoute", () => {
     });
 
     installMockFetch(makeSingleRobotAdminRoutes(app, {
-      "/api/admin/feishu/apps/bot-ready/permissions/check": {
-        body: {
-          app,
-          ready: true,
-          missingScopes: [],
-          grantJSON: '{\n  "scopes": {\n    "tenant": [],\n    "user": []\n  }\n}',
-          lastCheckedAt: "2026-08-02T06:30:00Z",
-        },
-      },
       "/api/admin/feishu/apps/bot-ready/auto-config/plan": {
         body: makeAdminAutoConfigPlan(app),
       },
@@ -575,13 +458,14 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await openAdminArea(user, "机器人");
-    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
 
-    expect(await screen.findByText("权限已就绪")).toBeInTheDocument();
+    expect(await screen.findByText("飞书配置已就绪。")).toBeInTheDocument();
     expect(screen.queryByText(/还缺少/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("权限导入 JSON")).not.toBeInTheDocument();
   });
 
-  it("shows an actionable auto-config read failure after permission check", async () => {
+  it("shows an actionable auto-config read failure without raw backend text", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -591,21 +475,6 @@ describe("AdminRoute", () => {
     });
 
     installMockFetch(makeSingleRobotAdminRoutes(app, {
-      "/api/admin/feishu/apps/bot-plan-error/permissions/check": {
-        body: {
-          app,
-          ready: false,
-          missingScopes: [
-            {
-              scope: "im:message.group_at_msg:readonly",
-              scopeType: "tenant",
-            },
-          ],
-          grantJSON:
-            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_at_msg:readonly"\n    ],\n    "user": []\n  }\n}',
-          lastCheckedAt: "2026-08-02T06:30:00Z",
-        },
-      },
       "/api/admin/feishu/apps/bot-plan-error/auto-config/plan": {
         status: 502,
         body: {
@@ -620,15 +489,15 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await openAdminArea(user, "机器人");
-    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
 
-    expect(await screen.findByText("还缺少 1 项权限")).toBeInTheDocument();
-    expect(screen.getByText("暂时无法确认飞书自动配置状态。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "自动补齐" })).toBeInTheDocument();
+    expect(await screen.findByText("暂时无法确认飞书自动配置状态。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
     expect(screen.queryByText("raw backend verification error")).not.toBeInTheDocument();
   });
 
-  it("shows a retryable permission check failure", async () => {
+  it("shows a retryable auto-config read failure", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
     const app = makeApp({
@@ -638,12 +507,12 @@ describe("AdminRoute", () => {
     });
 
     installMockFetch(makeSingleRobotAdminRoutes(app, {
-      "/api/admin/feishu/apps/bot-failed/permissions/check": {
+      "/api/admin/feishu/apps/bot-failed/auto-config/plan": {
         status: 502,
         body: {
           error: {
             code: "feishu_permission_check_failed",
-            message: "failed to check feishu app permissions",
+            message: "failed to read feishu auto-config plan",
           },
         },
       },
@@ -652,10 +521,9 @@ describe("AdminRoute", () => {
     render(<AdminRoute />);
 
     await openAdminArea(user, "机器人");
-    await user.click(await screen.findByRole("button", { name: "检查权限" }));
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
 
-    expect(await screen.findByText("当前还不能完成权限检查，请稍后重试。")).toBeInTheDocument();
-    expect(screen.getByText("权限检查没有完成，请稍后重试。")).toBeInTheDocument();
+    expect(await screen.findByText("暂时无法确认飞书自动配置状态。")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "重新检查" }).length).toBeGreaterThan(0);
   });
 

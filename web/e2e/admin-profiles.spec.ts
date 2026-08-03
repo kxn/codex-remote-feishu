@@ -11,11 +11,19 @@ test("admin core flows work on desktop and mobile", async ({ page }) => {
   await openAdminArea(page, "机器人");
   await expect(page.getByRole("heading", { name: "机器人", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "权限机器人" })).toBeVisible();
-  await page.getByRole("button", { name: "检查权限" }).click();
-  await expect(page.getByText("还缺少 1 项权限")).toBeVisible();
+  await page.getByRole("button", { name: "重新检查配置" }).click();
+  await expect(page.getByText("飞书配置还需要补齐。")).toBeVisible();
   await expect(
-    page.locator(".req-item .label", { hasText: "im:message.group_msg:readonly" }),
+    page.getByText("权限 im:message.group_msg:readonly"),
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: "复制导入 JSON" })).toBeVisible();
+  await expect(page.getByLabel("权限导入 JSON")).toHaveValue(
+    JSON.stringify(
+      { scopes: { tenant: ["im:message.group_msg:readonly"], user: [] } },
+      null,
+      2,
+    ),
+  );
 
   await openAdminArea(page, "系统");
   await expect(page.getByRole("heading", { name: "系统", exact: true })).toBeVisible();
@@ -105,20 +113,59 @@ async function installAdminMocks(page: Page) {
       await route.fulfill({ json: { apps: adminApps() } });
       return;
     }
-    if (path.endsWith("/api/admin/feishu/apps/e2e-bot/permissions/check")) {
+    if (path.endsWith("/api/admin/feishu/apps/e2e-bot/auto-config/plan")) {
       await route.fulfill({
         json: {
           app: adminApps()[0],
-          ready: false,
-          missingScopes: [
-            {
-              scope: "im:message.group_msg:readonly",
-              scopeType: "tenant",
+          plan: {
+            status: "apply_required",
+            summary: "飞书配置还需要补齐。",
+            blockingReason: "",
+            blockingRequirements: [
+              {
+                kind: "scope",
+                key: "im:message.group_msg:readonly",
+                scopeType: "tenant",
+                feature: "room_admin",
+                required: true,
+                present: false,
+              },
+            ],
+            degradableRequirements: [],
+            current: {
+              configuredScopes: [],
+              configuredEvents: [],
+              configuredCallbacks: [],
+              botEnabled: true,
             },
-          ],
-          grantJSON:
-            '{\n  "scopes": {\n    "tenant": [\n      "im:message.group_msg:readonly"\n    ],\n    "user": []\n  }\n}',
-          lastCheckedAt: "2026-08-02T06:30:00Z",
+            target: {
+              scopeRequirements: [],
+              events: [],
+              callbacks: [],
+              policy: {},
+            },
+            diff: {
+              configPatchRequired: true,
+              abilityPatchRequired: false,
+              missingScopes: [
+                { scope: "im:message.group_msg:readonly", scopeType: "tenant" },
+              ],
+              extraScopes: [],
+              missingEvents: [],
+              extraEvents: [],
+              missingCallbacks: [],
+              extraCallbacks: [],
+              eventSubscriptionTypeMismatch: false,
+              eventRequestUrlMismatch: false,
+              callbackTypeMismatch: false,
+              callbackRequestUrlMismatch: false,
+              publishRequired: false,
+            },
+            publish: {
+              needsPublish: false,
+              awaitingReview: false,
+            },
+          },
         },
       });
       return;

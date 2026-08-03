@@ -99,7 +99,7 @@ describe("SetupRoute", () => {
     expect(screen.queryByText("需要在飞书开放平台补齐对应权限后才能继续。")).not.toBeInTheDocument();
   });
 
-  it("connects manually, completes auto-config changes, and stays in auto-config while review is pending", async () => {
+  it("connects manually and shows missing scopes with a copyable import JSON without auto-fill", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
 
@@ -142,37 +142,12 @@ describe("SetupRoute", () => {
           summary: "存在待写入的飞书自动配置差异。",
           stageStatus: "pending",
           allowedActions: ["apply", "retry", "defer"],
+          missingScopes: [{ scope: "im:message", scopeType: "tenant" }],
         });
         return {
           body: {
             app,
             result: { connected: true, duration: 1_000_000_000 },
-          },
-        };
-      },
-      "/api/setup/feishu/apps/bot-manual/auto-config/complete": () => {
-        workflowState = buildAutoConfigWorkflow(app, {
-          status: "awaiting_review",
-          summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
-          stageStatus: "blocked",
-          allowedActions: ["retry"],
-        });
-        return {
-          body: {
-            app,
-            result: {
-              status: "awaiting_review",
-              summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
-              blockingReason: "",
-              versionId: "oav_1",
-              version: "1.8.1",
-              actions: [],
-              plan: {
-                ...workflowState.app?.autoConfig.plan,
-                status: "awaiting_review",
-                summary: "飞书应用变更已进入审核流程，正在等待审核结果。",
-              },
-            },
           },
         };
       },
@@ -188,14 +163,17 @@ describe("SetupRoute", () => {
     await user.click(screen.getByRole("button", { name: "验证并继续" }));
 
     expect(await screen.findByRole("heading", { name: "配置飞书机器人" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "自动补齐" }));
-    expect(
-      await screen.findByRole("heading", { name: "已提交发布，正在等待管理员处理" }),
-    ).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "继续发布" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("dialog", { name: "确认提交发布" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "先按降级继续" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "确认机器人菜单" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
+    expect(screen.getByText("权限 im:message")).toBeInTheDocument();
+    expect(screen.getByLabelText("权限导入 JSON")).toHaveValue(
+      JSON.stringify(
+        { scopes: { tenant: ["im:message"], user: [] } },
+        null,
+        2,
+      ),
+    );
+    expect(screen.getByRole("button", { name: "复制导入 JSON" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重新检查" })).toBeInTheDocument();
   });
 
   it("allows deferring optional auto-config work and continues to menu", async () => {
@@ -326,20 +304,14 @@ describe("SetupRoute", () => {
           summary: "存在待写入的飞书自动配置差异。",
           stageStatus: "pending",
           allowedActions: ["apply", "retry", "defer"],
+          missingScopes: [{ scope: "im:message", scopeType: "tenant" }],
         });
         return {
           body: {
             app,
             result: { connected: true, duration: 1_000_000_000 },
             autoConfig: {
-              result: {
-                status: "verification_failed",
-                summary: "系统已经尝试更新飞书配置，但暂时无法确认最终结果。",
-                verificationStatus: "failed",
-                verificationError: "raw backend verification error",
-                actions: [{ name: "publish", outcome: "submitted" }],
-                plan: workflowState.app?.autoConfig.plan,
-              },
+              plan: workflowState.app?.autoConfig.plan,
             },
             session: {
               id: "session-qr",
@@ -358,9 +330,12 @@ describe("SetupRoute", () => {
     expect(
       await screen.findByRole("heading", { name: "配置飞书机器人" }, { timeout: 7_000 }),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("heading", { name: "无法确认最终状态" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "当前还需要自动补齐配置" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "先按降级继续" })).toBeInTheDocument();
-    expect(screen.queryByText("raw backend verification error")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制导入 JSON" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: "重新检查" }));
     expect(
       await screen.findByText("已重新检查，仍需要自动补齐配置。"),
@@ -624,6 +599,7 @@ function buildAutoConfigWorkflow(
     summary: string;
     stageStatus: string;
     allowedActions: string[];
+    missingScopes?: Array<{ scope: string; scopeType?: string }>;
   },
 ) {
   return makeOnboardingWorkflow({
@@ -643,7 +619,13 @@ function buildAutoConfigWorkflow(
           status: options.status,
           summary: options.summary,
           blockingReason: "",
-          blockingRequirements: [],
+          blockingRequirements: (options.missingScopes || []).map((item) => ({
+            kind: "scope",
+            key: item.scope,
+            scopeType: item.scopeType || "tenant",
+            required: true,
+            present: false,
+          })),
           degradableRequirements: [
             {
               kind: "scope",
@@ -675,7 +657,7 @@ function buildAutoConfigWorkflow(
           diff: {
             configPatchRequired: options.status === "apply_required",
             abilityPatchRequired: false,
-            missingScopes: [],
+            missingScopes: options.missingScopes || [],
             extraScopes: [],
             missingEvents: [],
             extraEvents: [],

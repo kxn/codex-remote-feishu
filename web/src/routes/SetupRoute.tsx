@@ -10,8 +10,8 @@ import { navigateToLocalPath } from "../lib/navigation";
 import { relativeLocalPath } from "../lib/paths";
 import type {
   BootstrapState,
-  FeishuAppAutoConfigCompleteView,
-  FeishuAppAutoConfigCompleteResponse,
+  FeishuAppAutoConfigPlan,
+  FeishuAppAutoConfigPlanView,
   FeishuAppAutoConfigRequirementStatus,
   FeishuAppResponse,
   OnboardingWorkflowAutoConfig,
@@ -22,8 +22,8 @@ import type {
 } from "../lib/types";
 import { blankToUndefined, vscodeApplyModeForScenario, vscodeIsReady } from "./shared/helpers";
 import {
+  buildMissingScopesImportJSON,
   describeAutoConfigBlockingReason,
-  describeAutoConfigActionFeedback,
   describeAutoConfigHeadline,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
@@ -32,7 +32,6 @@ import {
 } from "./shared/feishuAutoConfig";
 import {
   resolveRuntimeApplyFailureTarget,
-  runAutoConfigMutation,
   saveAndVerifyFeishuApp,
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
@@ -63,7 +62,7 @@ type ManualConnectForm = {
 
 type ImmediateAutoConfig = {
   appID: string;
-  view: FeishuAppAutoConfigCompleteView;
+  view: FeishuAppAutoConfigPlanView;
 };
 
 const setupActs: Array<{ id: SetupActID; name: string }> = [
@@ -252,7 +251,7 @@ export function SetupRoute() {
 
   function rememberImmediateAutoConfig(
     appID: string,
-    view?: FeishuAppAutoConfigCompleteView,
+    view?: FeishuAppAutoConfigPlanView,
   ) {
     if (!view) {
       return;
@@ -351,43 +350,28 @@ export function SetupRoute() {
     return true;
   }
 
-  async function completeAutoConfig() {
-    if (!activeApp?.id) {
+  async function copyMissingScopesImportJSON(
+    plan: FeishuAppAutoConfigPlan | undefined,
+  ) {
+    if (!plan) {
       return;
     }
-    setActionBusy("auto-config-complete");
-    setNotice(null);
-    try {
-      const result = await runAutoConfigMutation<FeishuAppAutoConfigCompleteResponse>({
-        path: `/api/setup/feishu/apps/${encodeURIComponent(activeApp.id)}/auto-config/complete`,
-        init: {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({}),
-        },
-        fallbackErrorMessage: "自动补齐没有完成，请稍后重试。",
-        fallbackSuccessMessage: "自动配置状态已更新。",
+    const content = buildMissingScopesImportJSON(plan);
+    if (!navigator.clipboard?.writeText) {
+      setNotice({
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
       });
-      if (!result.ok) {
-        setNotice({
-          tone: "danger",
-          message: `${result.message} 还没有提交到飞书。`,
-        });
-        return;
-      }
-      rememberImmediateAutoConfig(result.payload.app.id, { result: result.payload.result });
-      await loadSetupPage({ preferredAppID: result.payload.app.id });
-      setCurrentStep("auto_config");
-      setNotice(result.notice);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(content);
+      setNotice({ tone: "good", message: "导入 JSON 已复制。" });
     } catch {
       setNotice({
-        tone: "danger",
-        message: "自动补齐没有完成，还没有提交到飞书。",
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
       });
-    } finally {
-      setActionBusy("");
     }
   }
 
@@ -1084,13 +1068,10 @@ export function SetupRoute() {
     const plan = autoConfigStage.plan;
     const displayStatus = autoConfigStage.resultStatus || plan?.status || autoConfigStage.status;
     const busy =
-      actionBusy === "auto-config-complete" ||
       actionBusy === "auto-config-defer" ||
       actionBusy === "auto-config-reset" ||
       actionBusy === "auto-config-refresh";
-    const canComplete =
-      autoConfigStage.allowedActions?.includes("apply") ||
-      autoConfigStage.allowedActions?.includes("publish");
+    const missingScopes = plan?.diff?.missingScopes || [];
 
     return (
       <section className="step-section">
@@ -1133,17 +1114,31 @@ export function SetupRoute() {
             "warn",
           )}
 
+          {missingScopes.length > 0 ? (
+            <>
+              <textarea
+                className="permission-json"
+                readOnly
+                value={buildMissingScopesImportJSON(plan)}
+                aria-label="权限导入 JSON"
+              />
+              <p className="support-copy">
+                到飞书后台导入后，回到这里重新检查。
+              </p>
+              <div className="button-row">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void copyMissingScopesImportJSON(plan)}
+                >
+                  复制导入 JSON
+                </button>
+              </div>
+            </>
+          ) : null}
+
           <div className="button-row">
-            {canComplete ? (
-              <button
-                className="primary-button"
-                type="button"
-                disabled={busy}
-                onClick={() => void completeAutoConfig()}
-              >
-                {actionBusy === "auto-config-complete" ? "补齐中..." : "自动补齐"}
-              </button>
-            ) : null}
             {autoConfigStage.allowedActions?.includes("defer") ? (
               <button
                 className="secondary-button"
@@ -1404,8 +1399,8 @@ function mergeImmediateAutoConfigStage(
   if (!stage || !appID || !immediate || immediate.appID !== appID) {
     return stage;
   }
-  const result = immediate.view.result;
-  if (!result) {
+  const plan = immediate.view.plan;
+  if (!plan) {
     if (!immediate.view.error) {
       return stage;
     }
@@ -1415,16 +1410,16 @@ function mergeImmediateAutoConfigStage(
       resultStatus: "verification_failed",
       summary: "已保存机器人，但暂时无法确认飞书配置结果。",
       error: immediate.view.error,
-      allowedActions: mergeAllowedActions(stage.allowedActions, ["apply", "retry", "defer"]),
+      allowedActions: mergeAllowedActions(stage.allowedActions, ["retry", "defer"]),
     };
   }
   return {
     ...stage,
-    status: onboardingStageStatusFromAutoConfigResult(result.status),
-    resultStatus: result.status,
-    summary: result.summary?.trim() || describeAutoConfigSummary(result.status),
-    plan: result.plan || stage.plan,
-    allowedActions: allowedActionsForImmediateAutoConfig(stage.allowedActions, result.status),
+    status: onboardingStageStatusFromAutoConfigResult(plan.status),
+    resultStatus: plan.status,
+    summary: plan.summary?.trim() || describeAutoConfigSummary(plan.status),
+    plan,
+    allowedActions: allowedActionsForImmediateAutoConfig(stage.allowedActions, plan.status),
   };
 }
 
@@ -1449,7 +1444,7 @@ function allowedActionsForImmediateAutoConfig(
     case "apply_required":
     case "publish_required":
     case "verification_failed":
-      return mergeAllowedActions(existing, ["apply", "retry", "defer"]);
+      return mergeAllowedActions(existing, ["retry", "defer"]);
     case "awaiting_review":
       return mergeAllowedActions(existing, ["retry", "defer"]);
     default:
@@ -1465,17 +1460,18 @@ function mergeAllowedActions(
 }
 
 function noticeFromAutoConfigView(
-  view?: FeishuAppAutoConfigCompleteView,
+  view?: FeishuAppAutoConfigPlanView,
 ): Notice | null {
   if (!view) {
     return null;
   }
-  if (view.result) {
+  if (view.plan) {
     return {
       tone: onboardingAutoConfigNoticeTone(
-        onboardingStageStatusFromAutoConfigResult(view.result.status),
+        onboardingStageStatusFromAutoConfigResult(view.plan.status),
       ),
-      message: describeAutoConfigActionFeedback(view.result),
+      message:
+        view.plan.summary?.trim() || describeAutoConfigSummary(view.plan.status),
     };
   }
   if (view.error) {

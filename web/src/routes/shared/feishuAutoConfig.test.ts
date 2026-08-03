@@ -1,12 +1,56 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildMissingScopesImportJSON,
   describeAutoConfigBlockingReason,
   describeAutoConfigRequirementDisplay,
   groupAutoConfigRequirements,
   onboardingAutoConfigNoticeTone,
 } from "./feishuAutoConfig";
+import { makeAutoConfigPlan } from "../../test/fixtures";
 
 describe("feishu auto-config shared helpers", () => {
+  it("builds a missing-only scopes import JSON grouped by token type", () => {
+    const plan = makeAutoConfigPlan({
+      diff: {
+        configPatchRequired: true,
+        abilityPatchRequired: false,
+        missingScopes: [
+          { scope: "im:message", scopeType: "tenant" },
+          { scope: "calendar:calendar:read", scopeType: "user" },
+          { scope: "drive:drive", scopeType: "tenant" },
+        ],
+        extraScopes: [],
+        missingEvents: [],
+        extraEvents: [],
+        missingCallbacks: [],
+        extraCallbacks: [],
+        eventSubscriptionTypeMismatch: false,
+        eventRequestUrlMismatch: false,
+        callbackTypeMismatch: false,
+        callbackRequestUrlMismatch: false,
+        publishRequired: true,
+      },
+    });
+    expect(buildMissingScopesImportJSON(plan)).toBe(
+      JSON.stringify(
+        {
+          scopes: {
+            tenant: ["im:message", "drive:drive"],
+            user: ["calendar:calendar:read"],
+          },
+        },
+        null,
+        2,
+      ),
+    );
+  });
+
+  it("returns empty tenant/user groups when no scopes are missing", () => {
+    expect(buildMissingScopesImportJSON(makeAutoConfigPlan())).toBe(
+      JSON.stringify({ scopes: { tenant: [], user: [] } }, null, 2),
+    );
+  });
+
   it("builds requirement display rows from the shared label/detail rules", () => {
     expect(
       describeAutoConfigRequirementDisplay({

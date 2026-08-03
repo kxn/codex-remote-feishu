@@ -193,7 +193,7 @@ export interface FeishuAppsResponse {
 export interface FeishuAppResponse {
   app: FeishuAppSummary;
   mutation?: FeishuAppMutation;
-  autoConfig?: FeishuAppAutoConfigCompleteView;
+  autoConfig?: FeishuAppAutoConfigPlanView;
 }
 
 export interface FeishuRuntimeApplyFailureDetails {
@@ -211,19 +211,6 @@ export interface VerifyResult {
 export interface FeishuAppVerifyResponse {
   app: FeishuAppSummary;
   result: VerifyResult;
-}
-
-export interface FeishuAppPermissionCheckItem {
-  scope: string;
-  scopeType?: string;
-}
-
-export interface FeishuAppPermissionCheckResponse {
-  app: FeishuAppSummary;
-  ready: boolean;
-  missingScopes?: FeishuAppPermissionCheckItem[];
-  grantJSON?: string;
-  lastCheckedAt?: string;
 }
 
 export interface FeishuAppAutoConfigScopeRef {
@@ -244,7 +231,6 @@ export interface FeishuAppAutoConfigRequirementStatus {
 
 export interface FeishuAppAutoConfigObservedState {
   configuredScopes?: FeishuAppAutoConfigScopeRef[];
-  grantedScopes?: FeishuAppAutoConfigScopeRef[];
   eventSubscriptionType?: string;
   eventRequestUrl?: string;
   configuredEvents?: string[];
@@ -342,68 +328,13 @@ export interface FeishuAppAutoConfigPlan {
   publish: FeishuAppAutoConfigPublishState;
 }
 
-export interface FeishuAppAutoConfigAction {
-  name: string;
-  outcome: string;
-  details?: string;
-}
-
 export interface FeishuAppAutoConfigPlanResponse {
   app: FeishuAppSummary;
   plan: FeishuAppAutoConfigPlan;
 }
 
-export interface FeishuAppAutoConfigApplyResult {
-  status: string;
-  summary?: string;
-  blockingReason?: string;
-  actions?: FeishuAppAutoConfigAction[];
-  plan: FeishuAppAutoConfigPlan;
-  verificationStatus?: string;
-  verificationError?: string;
-}
-
-export interface FeishuAppAutoConfigApplyResponse {
-  app: FeishuAppSummary;
-  result: FeishuAppAutoConfigApplyResult;
-}
-
-export interface FeishuAppAutoConfigPublishResult {
-  status: string;
-  summary?: string;
-  blockingReason?: string;
-  versionId?: string;
-  version?: string;
-  actions?: FeishuAppAutoConfigAction[];
-  plan: FeishuAppAutoConfigPlan;
-  verificationStatus?: string;
-  verificationError?: string;
-}
-
-export interface FeishuAppAutoConfigPublishResponse {
-  app: FeishuAppSummary;
-  result: FeishuAppAutoConfigPublishResult;
-}
-
-export interface FeishuAppAutoConfigCompleteResult {
-  status: string;
-  summary?: string;
-  blockingReason?: string;
-  versionId?: string;
-  version?: string;
-  actions?: FeishuAppAutoConfigAction[];
-  plan: FeishuAppAutoConfigPlan;
-  verificationStatus?: string;
-  verificationError?: string;
-}
-
-export interface FeishuAppAutoConfigCompleteResponse {
-  app: FeishuAppSummary;
-  result: FeishuAppAutoConfigCompleteResult;
-}
-
-export interface FeishuAppAutoConfigCompleteView {
-  result?: FeishuAppAutoConfigCompleteResult;
+export interface FeishuAppAutoConfigPlanView {
+  plan?: FeishuAppAutoConfigPlan;
   error?: string;
 }
 
@@ -436,7 +367,7 @@ export interface FeishuOnboardingCompleteResponse {
   result: VerifyResult;
   session: FeishuOnboardingSession;
   guide?: FeishuOnboardingGuide;
-  autoConfig?: FeishuAppAutoConfigCompleteView;
+  autoConfig?: FeishuAppAutoConfigPlanView;
 }
 
 export interface FeishuManifestResponse {
@@ -541,12 +472,6 @@ export interface OnboardingWorkflowStage {
   blocking?: boolean;
   optional?: boolean;
   allowedActions?: string[];
-}
-
-export interface OnboardingWorkflowPermission extends OnboardingWorkflowStage {
-  missingScopes?: FeishuAppPermissionCheckItem[];
-  grantJSON?: string;
-  lastCheckedAt?: string;
 }
 
 export interface OnboardingWorkflowMachineStep extends OnboardingWorkflowStage {

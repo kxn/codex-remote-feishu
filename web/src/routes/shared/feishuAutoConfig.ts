@@ -1,6 +1,5 @@
 import type {
-  FeishuAppAutoConfigAction,
-  FeishuAppAutoConfigCompleteResult,
+  FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigRequirementStatus,
 } from "../../lib/types";
 
@@ -91,44 +90,26 @@ export function describeAutoConfigSummary(status: string): string {
   }
 }
 
-export function describeAutoConfigActionFeedback(
-  result: FeishuAppAutoConfigCompleteResult,
+export function buildMissingScopesImportJSON(
+  plan: FeishuAppAutoConfigPlan | undefined | null,
 ): string {
-  const actions = result.actions || [];
-  const publishAction = findAutoConfigAction(actions, "publish");
-  if (publishAction?.outcome === "submitted") {
-    if (result.status === "verification_failed") {
-      return "已提交飞书发布，但暂时无法确认最终状态。";
+  const missing = plan?.diff?.missingScopes || [];
+  const tenant: string[] = [];
+  const user: string[] = [];
+  const seen = new Set<string>();
+  for (const item of missing) {
+    const scope = item.scope?.trim();
+    if (!scope || seen.has(scope)) {
+      continue;
     }
-    return "已提交飞书发布，等待飞书审核。";
-  }
-
-  const configApplied =
-    findAutoConfigAction(actions, "config_patch")?.outcome === "applied" ||
-    findAutoConfigAction(actions, "ability_patch")?.outcome === "applied";
-  if (configApplied) {
-    if (result.status === "verification_failed") {
-      return "已写入飞书配置，但暂时无法确认最终状态。";
+    seen.add(scope);
+    if (item.scopeType === "user") {
+      user.push(scope);
+    } else {
+      tenant.push(scope);
     }
-    if (result.status === "publish_required") {
-      return "已写入飞书配置，正在继续提交发布。";
-    }
-    return "已写入飞书配置，已重新检查当前状态。";
   }
-
-  if (result.status === "awaiting_review") {
-    return "飞书正在审核发布，等待完成后重新检查。";
-  }
-  if (result.status === "clean" || result.status === "degraded") {
-    return describeAutoConfigSummary(result.status);
-  }
-  if (result.status === "verification_failed") {
-    return "暂时无法确认最终状态，还没有新的提交结果。";
-  }
-  if (result.blockingReason) {
-    return describeAutoConfigBlockingReason(result.blockingReason);
-  }
-  return result.summary?.trim() || describeAutoConfigSummary(result.status);
+  return JSON.stringify({ scopes: { tenant, user } }, null, 2);
 }
 
 export function describeAutoConfigRefreshFeedback(status: string): string {
@@ -335,11 +316,4 @@ function autoConfigRequirementGroupKey(
     requirement.scopeType || "",
     requirement.key,
   ].join(":");
-}
-
-function findAutoConfigAction(
-  actions: FeishuAppAutoConfigAction[],
-  name: string,
-): FeishuAppAutoConfigAction | undefined {
-  return actions.find((action) => action.name === name);
 }

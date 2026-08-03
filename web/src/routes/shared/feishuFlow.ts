@@ -1,18 +1,11 @@
 import { useEffect, useState } from "react";
 import { APIRequestError, requestJSON, requestJSONAllowHTTPError, sendJSON } from "../../lib/api";
 import type {
-  FeishuAppAutoConfigApplyResponse,
-  FeishuAppAutoConfigCompleteResponse,
-  FeishuAppAutoConfigCompleteView,
-  FeishuAppAutoConfigPublishResponse,
+  FeishuAppAutoConfigPlanView,
   FeishuOnboardingCompleteResponse,
   FeishuOnboardingSession,
   FeishuOnboardingSessionResponse,
 } from "../../lib/types";
-import {
-  autoConfigNoticeTone,
-  describeAutoConfigActionFeedback,
-} from "./feishuAutoConfig";
 
 export type NoticeTone = "good" | "warn" | "danger";
 export type ConnectMode = "qr" | "manual";
@@ -23,25 +16,6 @@ type RuntimeApplyFailureDetails = {
     id?: string;
   };
 };
-
-type AutoConfigMutationResponse =
-  | FeishuAppAutoConfigApplyResponse
-  | FeishuAppAutoConfigCompleteResponse
-  | FeishuAppAutoConfigPublishResponse;
-
-type AutoConfigMutationResult<T extends AutoConfigMutationResponse> =
-  | {
-      ok: true;
-      payload: T;
-      notice: {
-        tone: NoticeTone;
-        message: string;
-      };
-    }
-  | {
-      ok: false;
-      message: string;
-    };
 
 type UseQRCodeOnboardingFlowOptions = {
   enabled: boolean;
@@ -205,10 +179,10 @@ export function useQRCodeOnboardingFlow(options: UseQRCodeOnboardingFlowOptions)
 }
 
 export async function saveAndVerifyFeishuApp(options: {
-  save: () => Promise<{ appID: string; autoConfig?: FeishuAppAutoConfigCompleteView }>;
+  save: () => Promise<{ appID: string; autoConfig?: FeishuAppAutoConfigPlanView }>;
   verifyPath: (appID: string) => string;
   reload: (appID: string) => Promise<void>;
-}): Promise<{ verified: boolean; appID: string; autoConfig?: FeishuAppAutoConfigCompleteView }> {
+}): Promise<{ verified: boolean; appID: string; autoConfig?: FeishuAppAutoConfigPlanView }> {
   const saved = await options.save();
   const verify = await requestJSONAllowHTTPError(options.verifyPath(saved.appID), {
     method: "POST",
@@ -218,36 +192,6 @@ export async function saveAndVerifyFeishuApp(options: {
     verified: verify.ok,
     appID: saved.appID,
     autoConfig: saved.autoConfig,
-  };
-}
-
-export async function runAutoConfigMutation<T extends AutoConfigMutationResponse>(options: {
-  path: string;
-  init?: RequestInit;
-  fallbackErrorMessage: string;
-  fallbackSuccessMessage: string;
-}): Promise<AutoConfigMutationResult<T>> {
-  const response = await requestJSONAllowHTTPError<T>(
-    options.path,
-    { method: "POST", ...(options.init || {}) },
-  );
-  if (!response.ok) {
-    return {
-      ok: false,
-      message: options.fallbackErrorMessage,
-    };
-  }
-  const payload = response.data as T;
-  return {
-    ok: true,
-    payload,
-    notice: {
-      tone: autoConfigNoticeTone(payload.result.status),
-      message:
-        describeAutoConfigActionFeedback(payload.result) ||
-        payload.result.summary?.trim() ||
-        options.fallbackSuccessMessage,
-    },
   };
 }
 
