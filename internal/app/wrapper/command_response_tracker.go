@@ -108,7 +108,18 @@ func waitCommandResponse(ctx context.Context, ch <-chan *agentproto.ErrorInfo, t
 		}
 		return *problem
 	case <-ctx.Done():
-		return ctx.Err()
+		// A gate response that was already delivered wins over a simultaneous
+		// cancellation; the phase completes cleanly and cancellation takes
+		// effect at the next phase boundary (where the phase abort runs).
+		select {
+		case problem, ok := <-ch:
+			if !ok || problem == nil {
+				return nil
+			}
+			return *problem
+		default:
+			return ctx.Err()
+		}
 	case <-timer.C:
 		return timeoutProblem.Normalize()
 	}
