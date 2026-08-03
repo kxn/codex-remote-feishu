@@ -1,8 +1,16 @@
 # 飞书 Setup 自动配置改造设计（vNext）
 
 > Type: `draft`
-> Updated: `2026-07-17`
-> Summary: 基于 Feishu `application/v7` 自动配置能力重设计 setup 的飞书配置阶段，明确长连接与能力基线走后端固定值，删除脆弱的 events/callback 安装期测试，并将旧版页面基线引用切到历史归档。
+> Updated: `2026-08-03`
+> Summary: 基于 Feishu `application/v7` 自动配置能力重设计 setup 的飞书配置阶段；2026-08-03 起自动写路径（apply/publish）已移除，改为只读差异检查 + 缺失权限导入 JSON。
+
+## 0. 方向变更记录（2026-08-03）
+
+本设计原计划的“自动补齐 + 自动发布”写路径已废弃，不再实现。原因与替代方向见 issue #790：
+
+- 扫码注册应用拿不到 `application:application:patch` 权限，且飞书 v7 写接口仅支持开发者后台创建的自建应用，自动写必然失败。
+- 改为接入后只做只读 `plan` 检查：页面列出缺失项与影响说明，缺失权限生成只含缺失项的导入 JSON（`{"scopes":{"tenant":[...],"user":[]}}`），由用户粘贴到飞书后台“批量导入/导出权限”后重新检查。
+- 缺失判断使用配置侧 `application.get` 的 `app.scopes`，不再依赖 `scope.list` 的租户授权状态。
 
 ## 1. 文档定位
 
