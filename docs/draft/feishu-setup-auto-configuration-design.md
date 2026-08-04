@@ -11,7 +11,7 @@
 - 扫码注册应用拿不到 `application:application:patch` 权限，且飞书 v7 写接口仅支持开发者后台创建的自建应用，自动写必然失败。
 - 改为接入后只做只读 `plan` 检查：页面列出缺失项与影响说明，缺失权限生成只含缺失项的导入 JSON（`{"scopes":{"tenant":[...],"user":[]}}`），由用户粘贴到飞书后台“批量导入/导出权限”后重新检查。
 - 缺失判断使用配置侧 `application.get` 的 `app.scopes`，不再依赖 `scope.list` 的租户授权状态。
-- 事件检测改用版本接口（`application_app_version.get` 的 `events`/`event_infos`）；回调与订阅方式暂不参与缺失判定（飞书暂未开放只读接口）。
+- 事件检测改用版本接口（`application_app_version.get` 的 `events`/`event_infos`）；回调检测改用 `application.get` 响应中的 `callback_info.subscribed_callbacks`（官方文档页未列出该字段，但官方 lark-cli 的 appmeta 预检直接依赖它，SDK `Application.CallbackInfo` 已建模）；`callback_info` 为 nil 时回调项按无法确认处理，不参与缺失判定。
 
 ### 事件与权限检测补充（2026-08-04，issue #794）
 

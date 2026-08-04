@@ -211,6 +211,10 @@ describe("AdminRoute", () => {
             extraScopes: [],
             missingEvents: [],
             extraEvents: [],
+            missingCallbacks: [],
+            extraCallbacks: [],
+            callbackTypeMismatch: false,
+            callbackRequestUrlMismatch: false,
             publishRequired: false,
           },
           degradableRequirements: [

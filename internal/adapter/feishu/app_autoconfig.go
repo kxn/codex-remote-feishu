@@ -117,20 +117,25 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 
 func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPlan {
 	configuredScopes := configuredScopeRefs(snapshot.app)
-	// application.get does not return the event/callback config (official
-	// response body has no event/callback fields), so events are verified from
-	// the active version's subscribed-event list instead. Callbacks and the
-	// subscription mode have no public read API and do not participate in the
-	// missing diff until Feishu opens them up.
+	// The application.get docs page lists no event/callback fields, but the
+	// live response carries them. Events are verified from the active
+	// version's subscribed-event list (scan-created apps may not expose a
+	// readable v6 version otherwise); callbacks are read from
+	// application.get's callback_info (the official lark-cli appmeta precheck
+	// reads the same field). A nil callback_info means the callback state is
+	// unverifiable and callbacks stay out of the missing diff.
 	configuredEvents := activeVersionEvents(snapshot.activeVersion)
+	configuredCallbacks := sortUniqueStrings(appSubscribedCallbacks(snapshot.app))
 	// Events are verifiable only when a version reports a non-empty event
 	// list. An empty list gives no positive evidence of what is subscribed
 	// (scan-created agent apps can be configured without a readable v6
 	// version), so events must not be reported missing in that state.
 	eventsVerifiable := snapshot.activeVersion != nil && len(configuredEvents) > 0
+	callbacksVerifiable := snapshot.app != nil && snapshot.app.CallbackInfo != nil
 	targetScopes := normalizeScopeRequirements(s.manifest)
 	targetScopeRefs := scopeRefsFromRequirements(targetScopes)
 	targetEventKeys := eventKeys(s.manifest.Events)
+	targetCallbackKeys := callbackKeys(s.manifest.Callbacks)
 
 	diff := AutoConfigDiff{
 		MissingScopes: missingScopeRefs(targetScopeRefs, configuredScopes),
@@ -140,10 +145,20 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		diff.MissingEvents = subtractStrings(targetEventKeys, configuredEvents)
 		diff.ExtraEvents = subtractStrings(configuredEvents, targetEventKeys)
 	}
+	if callbacksVerifiable {
+		diff.MissingCallbacks = subtractStrings(targetCallbackKeys, configuredCallbacks)
+		diff.ExtraCallbacks = subtractStrings(configuredCallbacks, targetCallbackKeys)
+		diff.CallbackTypeMismatch = strings.TrimSpace(stringValue(callbackField(snapshot.app, "type"))) != s.policy.CallbackType
+		diff.CallbackRequestURLMismatch = strings.TrimSpace(stringValue(callbackField(snapshot.app, "url"))) != s.policy.CallbackRequestURL
+	}
 	diff.ConfigPatchRequired = len(diff.MissingScopes) > 0 ||
 		len(diff.ExtraScopes) > 0 ||
 		len(diff.MissingEvents) > 0 ||
-		len(diff.ExtraEvents) > 0
+		len(diff.ExtraEvents) > 0 ||
+		len(diff.MissingCallbacks) > 0 ||
+		len(diff.ExtraCallbacks) > 0 ||
+		diff.CallbackTypeMismatch ||
+		diff.CallbackRequestURLMismatch
 	diff.AbilityPatchRequired = observedBotEnabled(snapshot.activeVersion) != s.policy.BotEnabled
 
 	publishState := buildPublishState(snapshot, diff)
@@ -153,6 +168,9 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		Current: AutoConfigObservedState{
 			ConfiguredScopes:            configuredScopes,
 			ConfiguredEvents:            configuredEvents,
+			ConfiguredCallbacks:         configuredCallbacks,
+			CallbackType:                strings.TrimSpace(stringValue(callbackField(snapshot.app, "type"))),
+			CallbackRequestURL:          strings.TrimSpace(stringValue(callbackField(snapshot.app, "url"))),
 			OnlineVersionID:             versionID(snapshot.onlineVersion),
 			OnlineVersion:               versionString(snapshot.onlineVersion),
 			OnlineVersionStatus:         versionStatusLabel(snapshot.onlineVersion),
@@ -179,7 +197,7 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		Diff:    diff,
 		Publish: publishState,
 	}
-	plan.BlockingRequirements, plan.DegradableRequirements = s.buildRequirementStatus(targetScopes, configuredEvents, configuredScopes, eventsVerifiable)
+	plan.BlockingRequirements, plan.DegradableRequirements = s.buildRequirementStatus(targetScopes, configuredEvents, configuredCallbacks, configuredScopes, eventsVerifiable, callbacksVerifiable)
 	plan.Status, plan.Summary = derivePlanState(plan)
 	return plan
 }
@@ -206,9 +224,10 @@ func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) 
 	}
 }
 
-func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRequirement, configuredEvents []string, configuredScopes []AutoConfigScopeRef, eventsVerifiable bool) ([]AutoConfigRequirementStatus, []AutoConfigRequirementStatus) {
+func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRequirement, configuredEvents []string, configuredCallbacks []string, configuredScopes []AutoConfigScopeRef, eventsVerifiable bool, callbacksVerifiable bool) ([]AutoConfigRequirementStatus, []AutoConfigRequirementStatus) {
 	configuredScopeKeys := scopeRefMap(configuredScopes)
 	eventKeys := stringSet(configuredEvents)
+	callbackKeys := stringSet(configuredCallbacks)
 	var blocking []AutoConfigRequirementStatus
 	var degradable []AutoConfigRequirementStatus
 
@@ -245,6 +264,23 @@ func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRe
 				Required:       item.Required,
 				DegradeMessage: strings.TrimSpace(item.DegradeMessage),
 				Present:        eventKeys[strings.TrimSpace(item.Event)],
+			}
+			if status.Present {
+				continue
+			}
+			appendRequirement(status)
+		}
+	}
+	if callbacksVerifiable {
+		for _, item := range s.manifest.Callbacks {
+			status := AutoConfigRequirementStatus{
+				Kind:           AutoConfigRequirementKindCallback,
+				Key:            strings.TrimSpace(item.Callback),
+				Feature:        strings.TrimSpace(item.Feature),
+				Purpose:        strings.TrimSpace(item.Purpose),
+				Required:       item.Required,
+				DegradeMessage: strings.TrimSpace(item.DegradeMessage),
+				Present:        callbackKeys[strings.TrimSpace(item.Callback)],
 			}
 			if status.Present {
 				continue
@@ -473,6 +509,13 @@ func configuredScopeRefs(app *larkapplication.Application) []AutoConfigScopeRef 
 	return sortScopeRefs(out)
 }
 
+func appSubscribedCallbacks(app *larkapplication.Application) []string {
+	if app == nil || app.CallbackInfo == nil {
+		return nil
+	}
+	return append([]string(nil), app.CallbackInfo.SubscribedCallbacks...)
+}
+
 func activeVersionEvents(version *larkapplication.ApplicationAppVersion) []string {
 	if version == nil {
 		return nil
@@ -490,6 +533,20 @@ func activeVersionEvents(version *larkapplication.ApplicationAppVersion) []strin
 		}
 	}
 	return sortUniqueStrings(out)
+}
+
+func callbackField(app *larkapplication.Application, field string) *string {
+	if app == nil || app.CallbackInfo == nil {
+		return nil
+	}
+	switch field {
+	case "type":
+		return app.CallbackInfo.CallbackType
+	case "url":
+		return app.CallbackInfo.RequestUrl
+	default:
+		return nil
+	}
 }
 
 func observedBotEnabled(version *larkapplication.ApplicationAppVersion) bool {
@@ -567,6 +624,16 @@ func eventKeys(values []feishuapp.EventRequirement) []string {
 	out := make([]string, 0, len(values))
 	for _, item := range values {
 		if key := strings.TrimSpace(item.Event); key != "" {
+			out = append(out, key)
+		}
+	}
+	return sortUniqueStrings(out)
+}
+
+func callbackKeys(values []feishuapp.CallbackRequirement) []string {
+	out := make([]string, 0, len(values))
+	for _, item := range values {
+		if key := strings.TrimSpace(item.Callback); key != "" {
 			out = append(out, key)
 		}
 	}

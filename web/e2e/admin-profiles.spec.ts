@@ -135,6 +135,7 @@ async function installAdminMocks(page: Page) {
             current: {
               configuredScopes: [],
               configuredEvents: [],
+              configuredCallbacks: [],
               botEnabled: true,
             },
             target: {
@@ -152,6 +153,10 @@ async function installAdminMocks(page: Page) {
               extraScopes: [],
               missingEvents: [],
               extraEvents: [],
+              missingCallbacks: [],
+              extraCallbacks: [],
+              callbackTypeMismatch: false,
+              callbackRequestUrlMismatch: false,
               publishRequired: false,
             },
             publish: {

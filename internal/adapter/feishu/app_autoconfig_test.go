@@ -81,7 +81,7 @@ func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 				SubscriptionType: strp("webhook"),
 				RequestUrl:       strp("https://legacy.example.com"),
 			},
-			Callback: &larkapplication.Callback{
+			CallbackInfo: &larkapplication.CallbackInfo{
 				CallbackType: strp("websocket"),
 			},
 			OnlineVersionId: strp("online-1"),
@@ -109,7 +109,10 @@ func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	if !reflect.DeepEqual(plan.Diff.MissingEvents, []string{"im.message.receive_v1"}) {
 		t.Fatalf("missing events = %#v", plan.Diff.MissingEvents)
 	}
-	if len(plan.BlockingRequirements) != 2 {
+	if !reflect.DeepEqual(plan.Diff.MissingCallbacks, []string{"card.action.trigger"}) {
+		t.Fatalf("missing callbacks = %#v", plan.Diff.MissingCallbacks)
+	}
+	if len(plan.BlockingRequirements) != 3 {
 		t.Fatalf("blocking requirements = %#v", plan.BlockingRequirements)
 	}
 	if len(plan.DegradableRequirements) != 0 {
@@ -234,6 +237,103 @@ func TestPlanAppAutoConfigEmptyVersionEventsTreatedAsUnverifiable(t *testing.T) 
 	for _, item := range plan.BlockingRequirements {
 		if item.Kind == AutoConfigRequirementKindEvent {
 			t.Fatalf("event %q must not be blocking when version events are unverifiable", item.Key)
+		}
+	}
+}
+
+func TestPlanAppAutoConfigCallbacksUnverifiableWhenCallbackInfoNil(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	// application.get may omit callback_info for some app states. A nil
+	// callback_info gives no positive evidence of what callbacks are
+	// subscribed, so callbacks must not be reported missing in that state
+	// (same weak-dependency rule as events).
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		return &larkapplication.Application{
+			Scopes: []*larkapplication.AppScope{
+				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
+				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
+			},
+			OnlineVersionId: strp("online-1"),
+		}, nil
+	}
+	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
+		return &larkapplication.ApplicationAppVersion{
+			VersionId: strp("online-1"),
+			Version:   strp("1.0.0"),
+			Status:    intp(larkapplication.AppVersionStatusAudited),
+			Events:    []string{"im.message.receive_v1"},
+			Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
+		}, nil
+	}
+
+	plan, err := PlanAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: "cli_no_callback_info"},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+	)
+	if err != nil {
+		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
+	}
+	if len(plan.Diff.MissingCallbacks) != 0 {
+		t.Fatalf("missing callbacks = %#v, want none when callback_info is unverifiable", plan.Diff.MissingCallbacks)
+	}
+	for _, item := range plan.BlockingRequirements {
+		if item.Kind == AutoConfigRequirementKindCallback {
+			t.Fatalf("callback %q must not be a blocking requirement when callback_info is unverifiable", item.Key)
+		}
+	}
+}
+
+func TestPlanAppAutoConfigCallbackTypeMismatchFlagged(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	// The callback subscription mode comes from callback_info.callback_type.
+	// A non-websocket mode must be reported as a config difference even when
+	// the callback list itself is present.
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		return &larkapplication.Application{
+			Scopes: []*larkapplication.AppScope{
+				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
+				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
+			},
+			CallbackInfo: &larkapplication.CallbackInfo{
+				CallbackType:        strp("webhook"),
+				SubscribedCallbacks: []string{"card.action.trigger"},
+			},
+			OnlineVersionId: strp("online-1"),
+		}, nil
+	}
+	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
+		return &larkapplication.ApplicationAppVersion{
+			VersionId: strp("online-1"),
+			Version:   strp("1.0.0"),
+			Status:    intp(larkapplication.AppVersionStatusAudited),
+			Events:    []string{"im.message.receive_v1"},
+			Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
+		}, nil
+	}
+
+	plan, err := PlanAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: "cli_webhook_callback"},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+	)
+	if err != nil {
+		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
+	}
+	if len(plan.Diff.MissingCallbacks) != 0 {
+		t.Fatalf("missing callbacks = %#v, want none when card.action.trigger is subscribed", plan.Diff.MissingCallbacks)
+	}
+	if !plan.Diff.CallbackTypeMismatch {
+		t.Fatalf("callback type mismatch must be flagged for webhook, got %#v", plan.Diff)
+	}
+	if plan.Diff.CallbackRequestURLMismatch {
+		t.Fatalf("callback request url mismatch must not be flagged when no url is configured, got %#v", plan.Diff)
+	}
+	for _, item := range plan.BlockingRequirements {
+		if item.Kind == AutoConfigRequirementKindCallback {
+			t.Fatalf("callback %q must not be blocking when it is subscribed", item.Key)
 		}
 	}
 }
@@ -402,7 +502,7 @@ func TestPlanAppAutoConfigRequirementPresenceUsesConfiguredScopes(t *testing.T) 
 				RequestUrl:       strp(""),
 				SubscribedEvents: []string{"im.message.receive_v1"},
 			},
-			Callback: &larkapplication.Callback{
+			CallbackInfo: &larkapplication.CallbackInfo{
 				CallbackType:        strp("websocket"),
 				SubscribedCallbacks: []string{"card.action.trigger"},
 			},

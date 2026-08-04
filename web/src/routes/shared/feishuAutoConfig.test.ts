@@ -22,6 +22,10 @@ describe("feishu auto-config shared helpers", () => {
         extraScopes: [],
         missingEvents: [],
         extraEvents: [],
+        missingCallbacks: [],
+        extraCallbacks: [],
+        callbackTypeMismatch: false,
+        callbackRequestUrlMismatch: false,
         publishRequired: true,
       },
     });

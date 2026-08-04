@@ -122,6 +122,20 @@ func TestOnboardingAutoConfigCanContinueDegraded(t *testing.T) {
 			},
 			want: true,
 		},
+		{
+			name: "callback type mismatch can continue with explicit degraded choice",
+			mutate: func(plan *feishu.AutoConfigPlan) {
+				plan.Diff.CallbackTypeMismatch = true
+			},
+			want: true,
+		},
+		{
+			name: "callback request url mismatch can continue with explicit degraded choice",
+			mutate: func(plan *feishu.AutoConfigPlan) {
+				plan.Diff.CallbackRequestURLMismatch = true
+			},
+			want: true,
+		},
 	}
 
 	for _, tc := range cases {

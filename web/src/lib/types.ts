@@ -232,6 +232,9 @@ export interface FeishuAppAutoConfigRequirementStatus {
 export interface FeishuAppAutoConfigObservedState {
   configuredScopes?: FeishuAppAutoConfigScopeRef[];
   configuredEvents?: string[];
+  configuredCallbacks?: string[];
+  callbackType?: string;
+  callbackRequestUrl?: string;
   onlineVersionId?: string;
   onlineVersion?: string;
   onlineVersionStatus?: string;
@@ -288,6 +291,10 @@ export interface FeishuAppAutoConfigDiff {
   extraScopes?: FeishuAppAutoConfigScopeRef[];
   missingEvents?: string[];
   extraEvents?: string[];
+  missingCallbacks?: string[];
+  extraCallbacks?: string[];
+  callbackTypeMismatch?: boolean;
+  callbackRequestUrlMismatch?: boolean;
   publishRequired: boolean;
 }
 

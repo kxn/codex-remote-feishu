@@ -547,6 +547,10 @@ describe("SetupRoute", () => {
                   extraScopes: [],
                   missingEvents: [],
                   extraEvents: [],
+                  missingCallbacks: [],
+                  extraCallbacks: [],
+                  callbackTypeMismatch: false,
+                  callbackRequestUrlMismatch: false,
                   publishRequired: false,
                 },
                 publish: {
@@ -742,6 +746,10 @@ function buildAutoConfigWorkflow(
             extraScopes: [],
             missingEvents: [],
             extraEvents: [],
+            missingCallbacks: [],
+            extraCallbacks: [],
+            callbackTypeMismatch: false,
+            callbackRequestUrlMismatch: false,
             publishRequired: options.status === "publish_required",
           },
           publish: {
@@ -864,6 +872,10 @@ function buildMenuWorkflow(app: ReturnType<typeof makeApp>) {
             extraScopes: [],
             missingEvents: [],
             extraEvents: [],
+            missingCallbacks: [],
+            extraCallbacks: [],
+            callbackTypeMismatch: false,
+            callbackRequestUrlMismatch: false,
             publishRequired: false,
           },
           publish: {
