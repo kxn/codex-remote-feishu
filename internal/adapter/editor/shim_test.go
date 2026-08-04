@@ -1,10 +1,10 @@
 package editor
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
@@ -112,7 +112,11 @@ func TestUninstallManagedShimRestoresOriginalBinary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read settings: %v", err)
 	}
-	if !strings.Contains(string(settings), "\"chatgpt.cliExecutable\": \""+path+"\"") {
-		t.Fatalf("expected settings to point at restored binary, got %s", string(settings))
+	var decoded map[string]any
+	if err := json.Unmarshal(settings, &decoded); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if got, ok := decoded["chatgpt.cliExecutable"].(string); !ok || got != path {
+		t.Fatalf("expected settings to point at restored binary, got %q", got)
 	}
 }
