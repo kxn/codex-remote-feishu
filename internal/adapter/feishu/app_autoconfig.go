@@ -35,6 +35,7 @@ type autoConfigSnapshot struct {
 	onlineVersion  *larkapplication.ApplicationAppVersion
 	unauditVersion *larkapplication.ApplicationAppVersion
 	activeVersion  *larkapplication.ApplicationAppVersion
+	eventVersion   *larkapplication.ApplicationAppVersion
 }
 
 func PlanAppAutoConfig(ctx context.Context, cfg LiveGatewayConfig, manifest feishuapp.Manifest, policy feishuapp.FixedPolicy) (AutoConfigPlan, error) {
@@ -100,7 +101,13 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 	} else {
 		snapshot.activeVersion = snapshot.onlineVersion
 	}
-	if snapshot.activeVersion == nil {
+	// activeVersion intentionally preserves the existing publish/ability
+	// semantics, where an unaudited draft is the active editable version. Event
+	// verification is different: it must use the published configuration.
+	if len(activeVersionEvents(snapshot.onlineVersion)) > 0 {
+		snapshot.eventVersion = snapshot.onlineVersion
+	}
+	if snapshot.activeVersion == nil || snapshot.eventVersion == nil {
 		// Scan-created agent apps may not expose version IDs through
 		// application.get. The version list endpoint is the fallback source
 		// for the published version (status==1 with publish_time), matching
@@ -109,7 +116,13 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 		// whole plan.
 		versions, listErr := autoConfigListApplicationVersions(ctx, broker, sdkClient, cfg.AppID)
 		if listErr == nil {
-			snapshot.activeVersion = publishedVersion(versions)
+			published := publishedVersion(versions)
+			if snapshot.activeVersion == nil {
+				snapshot.activeVersion = published
+			}
+			if snapshot.eventVersion == nil {
+				snapshot.eventVersion = published
+			}
 		}
 	}
 	return snapshot, nil
@@ -118,19 +131,19 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPlan {
 	configuredScopes := configuredScopeRefs(snapshot.app)
 	// The application.get docs page lists no event/callback fields, but the
-	// live response carries them. Events are verified from the active
+	// live response carries them. Events are verified from the published
 	// version's subscribed-event list (scan-created apps may not expose a
 	// readable v6 version otherwise); callbacks are read from
 	// application.get's callback_info (the official lark-cli appmeta precheck
 	// reads the same field). A nil callback_info means the callback state is
 	// unverifiable and callbacks stay out of the missing diff.
-	configuredEvents := activeVersionEvents(snapshot.activeVersion)
+	configuredEvents := activeVersionEvents(snapshot.eventVersion)
 	configuredCallbacks := sortUniqueStrings(appSubscribedCallbacks(snapshot.app))
 	// Events are verifiable only when a version reports a non-empty event
 	// list. An empty list gives no positive evidence of what is subscribed
 	// (scan-created agent apps can be configured without a readable v6
 	// version), so events must not be reported missing in that state.
-	eventsVerifiable := snapshot.activeVersion != nil && len(configuredEvents) > 0
+	eventsVerifiable := snapshot.eventVersion != nil && len(configuredEvents) > 0
 	callbacksVerifiable := snapshot.app != nil && snapshot.app.CallbackInfo != nil
 	targetScopes := normalizeScopeRequirements(s.manifest)
 	targetScopeRefs := scopeRefsFromRequirements(targetScopes)
@@ -180,7 +193,7 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 			ActiveVersionID:             versionID(snapshot.activeVersion),
 			ActiveVersion:               versionString(snapshot.activeVersion),
 			ActiveVersionStatus:         versionStatusLabel(snapshot.activeVersion),
-			ActiveVersionEvents:         activeVersionEvents(snapshot.activeVersion),
+			ActiveVersionEvents:         append([]string(nil), configuredEvents...),
 			BotEnabled:                  observedBotEnabled(snapshot.activeVersion),
 			MessageCardCallbackURL:      strings.TrimSpace(observedCardCallbackURL(snapshot.activeVersion)),
 			MobileDefaultAbility:        appDefaultAbility(snapshot.app, "mobile"),

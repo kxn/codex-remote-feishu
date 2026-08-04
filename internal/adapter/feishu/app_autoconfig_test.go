@@ -175,8 +175,10 @@ func TestPlanAppAutoConfigEventsReadFromPublishedVersionListFallback(t *testing.
 				Version:     strp("1.0.0"),
 				Status:      intp(larkapplication.AppVersionStatusAudited),
 				PublishTime: strp("1700000000"),
-				Events:      []string{"im.message.receive_v1"},
-				Ability:     &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
+				EventInfos: []*larkapplication.Event{
+					{EventType: strp("im.message.receive_v1")},
+				},
+				Ability: &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
 			},
 		}, nil
 	}
@@ -196,6 +198,57 @@ func TestPlanAppAutoConfigEventsReadFromPublishedVersionListFallback(t *testing.
 	for _, item := range plan.BlockingRequirements {
 		if item.Kind == AutoConfigRequirementKindEvent {
 			t.Fatalf("event %q must not be blocking when published version lists it", item.Key)
+		}
+	}
+}
+
+func TestPlanAppAutoConfigEventsIgnoreUnauditedVersion(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		return &larkapplication.Application{
+			Scopes: []*larkapplication.AppScope{
+				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
+				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
+			},
+			OnlineVersionId:  strp("online-1"),
+			UnauditVersionId: strp("draft-2"),
+		}, nil
+	}
+	autoConfigGetApplicationVersion = func(_ context.Context, _ *FeishuCallBroker, _ *lark.Client, _ string, versionID string) (*larkapplication.ApplicationAppVersion, error) {
+		if versionID == "draft-2" {
+			return &larkapplication.ApplicationAppVersion{
+				VersionId: strp(versionID),
+				Status:    intp(larkapplication.AppVersionStatusUnaudit),
+			}, nil
+		}
+		return &larkapplication.ApplicationAppVersion{
+			VersionId:   strp(versionID),
+			Status:      intp(larkapplication.AppVersionStatusAudited),
+			PublishTime: strp("1700000000"),
+			EventInfos: []*larkapplication.Event{
+				{EventType: strp("im.message.receive_v1")},
+			},
+		}, nil
+	}
+
+	plan, err := PlanAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: "cli_unaudit_events"},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+	)
+	if err != nil {
+		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
+	}
+	if len(plan.Diff.MissingEvents) != 0 {
+		t.Fatalf("missing events = %#v, want none from the published version", plan.Diff.MissingEvents)
+	}
+	if !reflect.DeepEqual(plan.Current.ConfiguredEvents, []string{"im.message.receive_v1"}) {
+		t.Fatalf("configured events = %#v, want the published version events", plan.Current.ConfiguredEvents)
+	}
+	for _, item := range plan.BlockingRequirements {
+		if item.Kind == AutoConfigRequirementKindEvent {
+			t.Fatalf("event %q must not be blocking when the published version contains it", item.Key)
 		}
 	}
 }
@@ -220,6 +273,9 @@ func TestPlanAppAutoConfigEmptyVersionEventsTreatedAsUnverifiable(t *testing.T) 
 			Version:   strp("1.0.0"),
 			Status:    intp(larkapplication.AppVersionStatusAudited),
 		}, nil
+	}
+	autoConfigListApplicationVersions = func(context.Context, *FeishuCallBroker, *lark.Client, string) ([]*larkapplication.ApplicationAppVersion, error) {
+		return nil, nil
 	}
 
 	plan, err := PlanAppAutoConfig(
