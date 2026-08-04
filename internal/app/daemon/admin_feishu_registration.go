@@ -2,14 +2,17 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"sort"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"strings"
 	"time"
-
-	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
-	"github.com/larksuite/oapi-sdk-go/v3/scene/registration"
 )
+
+const feishuRegistrationAccountsBaseURL = "https://accounts.feishu.cn"
 
 type feishuRegistrationRunner interface {
 	Start(context.Context, feishuRegistrationOptions, feishuRegistrationCallbacks) feishuRegistrationRun
@@ -20,10 +23,6 @@ type feishuRegistrationRun interface {
 }
 
 type feishuRegistrationOptions struct {
-	Source     string
-	Addons     *registration.AppAddons
-	CreateOnly bool
-	AppID      string
 }
 
 type feishuRegistrationQRCode struct {
@@ -52,154 +51,304 @@ type feishuRegistrationCallbacks struct {
 
 const defaultFeishuRegistrationTimeout = 10 * time.Minute
 
-type sdkFeishuRegistrationRunner struct{}
-
-func newLiveFeishuRegistrationRunner() feishuRegistrationRunner {
-	return sdkFeishuRegistrationRunner{}
+type feishuRegistrationHTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
 }
 
-func (sdkFeishuRegistrationRunner) Start(ctx context.Context, options feishuRegistrationOptions, callbacks feishuRegistrationCallbacks) feishuRegistrationRun {
+type legacyFeishuRegistrationRunner struct {
+	httpClient      feishuRegistrationHTTPClient
+	registrationURL string
+	waitFn          func(context.Context, time.Duration) error
+}
+
+func newLiveFeishuRegistrationRunner() feishuRegistrationRunner {
+	return &legacyFeishuRegistrationRunner{
+		httpClient:      &http.Client{Timeout: 15 * time.Second},
+		registrationURL: feishuRegistrationAccountsBaseURL + "/oauth/v1/app/registration",
+		waitFn:          waitForFeishuRegistration,
+	}
+}
+
+func (r *legacyFeishuRegistrationRunner) Start(ctx context.Context, _ feishuRegistrationOptions, callbacks feishuRegistrationCallbacks) feishuRegistrationRun {
 	runCtx, cancel := context.WithCancel(ctx)
-	run := &sdkFeishuRegistrationRun{cancel: cancel}
-	go run.start(runCtx, options, callbacks)
+	run := &legacyFeishuRegistrationRun{cancel: cancel}
+	go func() {
+		defer cancel()
+		r.start(runCtx, callbacks)
+	}()
 	return run
 }
 
-type sdkFeishuRegistrationRun struct {
+type legacyFeishuRegistrationRun struct {
 	cancel context.CancelFunc
 }
 
-func (r *sdkFeishuRegistrationRun) Cancel() {
+func (r *legacyFeishuRegistrationRun) Cancel() {
 	if r != nil && r.cancel != nil {
 		r.cancel()
 	}
 }
 
-func (r *sdkFeishuRegistrationRun) start(ctx context.Context, options feishuRegistrationOptions, callbacks feishuRegistrationCallbacks) {
-	result, err := registration.RegisterApp(ctx, &registration.Options{
-		Source:     firstNonEmpty(strings.TrimSpace(options.Source), "codex-remote-feishu"),
-		Addons:     options.Addons,
-		CreateOnly: options.CreateOnly,
-		AppID:      strings.TrimSpace(options.AppID),
-		OnQRCode: func(info *registration.QRCodeInfo) {
-			if callbacks.OnQRCode == nil || info == nil {
+type feishuRegistrationInitResponse struct {
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+}
+
+type feishuRegistrationBeginResponse struct {
+	DeviceCode              string `json:"device_code"`
+	VerificationURIComplete string `json:"verification_uri_complete"`
+	Interval                int    `json:"interval"`
+	ExpireIn                int    `json:"expire_in"`
+	Error                   string `json:"error"`
+	ErrorDescription        string `json:"error_description"`
+}
+
+type feishuRegistrationPollResponse struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	OpenID       string `json:"open_id"`
+	UserOpenID   string `json:"user_open_id"`
+	UserInfo     struct {
+		OpenID string `json:"open_id"`
+	} `json:"user_info"`
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+}
+
+type legacyFeishuRegistrationStart struct {
+	deviceCode      string
+	verificationURL string
+	interval        time.Duration
+	expiresAt       time.Time
+}
+
+type legacyFeishuRegistrationPoll struct {
+	status       string
+	appID        string
+	appSecret    string
+	installerID  string
+	errorCode    string
+	errorMessage string
+	retryAfter   time.Duration
+}
+
+func (r *legacyFeishuRegistrationRunner) start(ctx context.Context, callbacks feishuRegistrationCallbacks) {
+	started, err := r.startRegistration(ctx)
+	if err != nil {
+		r.emitFailure(ctx, callbacks, feishuRegistrationFailure{Status: feishuOnboardingStatusFailed, ErrorCode: "feishu_onboarding_failed", ErrorMessage: err.Error()})
+		return
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	if callbacks.OnQRCode != nil {
+		callbacks.OnQRCode(feishuRegistrationQRCode{
+			URL:       started.verificationURL,
+			ExpiresAt: started.expiresAt,
+			Interval:  started.interval,
+		})
+	}
+
+	interval := started.interval
+	for {
+		if !started.expiresAt.IsZero() && !time.Now().UTC().Before(started.expiresAt) {
+			r.emitFailure(ctx, callbacks, feishuRegistrationFailure{
+				Status:       feishuOnboardingStatusExpired,
+				ErrorCode:    "expired_token",
+				ErrorMessage: "二维码已过期，请重新开始扫码。",
+			})
+			return
+		}
+		if err := r.waitFor(ctx, interval); err != nil {
+			return
+		}
+		if ctx.Err() != nil {
+			return
+		}
+
+		poll, err := r.pollRegistration(ctx, started.deviceCode)
+		if err != nil {
+			if ctx.Err() != nil {
 				return
 			}
-			expiresAt := time.Now().UTC().Add(time.Duration(info.ExpireIn) * time.Second)
-			callbacks.OnQRCode(feishuRegistrationQRCode{
-				URL:       strings.TrimSpace(info.URL),
-				ExpiresAt: expiresAt,
-				Interval:  5 * time.Second,
+			continue
+		}
+		if poll.retryAfter > 0 {
+			interval = poll.retryAfter
+		} else {
+			interval = started.interval
+		}
+		switch poll.status {
+		case feishuOnboardingStatusPending:
+			continue
+		case feishuOnboardingStatusReady:
+			if callbacks.OnComplete != nil {
+				callbacks.OnComplete(feishuRegistrationResult{
+					AppID:       poll.appID,
+					AppSecret:   poll.appSecret,
+					InstallerID: poll.installerID,
+				})
+			}
+			return
+		case feishuOnboardingStatusExpired, feishuOnboardingStatusFailed:
+			r.emitFailure(ctx, callbacks, feishuRegistrationFailure{
+				Status:       poll.status,
+				ErrorCode:    poll.errorCode,
+				ErrorMessage: poll.errorMessage,
 			})
-		},
-	})
+			return
+		default:
+			r.emitFailure(ctx, callbacks, feishuRegistrationFailure{
+				Status:       feishuOnboardingStatusFailed,
+				ErrorCode:    "feishu_onboarding_failed",
+				ErrorMessage: "飞书返回了未识别的扫码结果。",
+			})
+			return
+		}
+	}
+}
+
+func (r *legacyFeishuRegistrationRunner) startRegistration(ctx context.Context) (legacyFeishuRegistrationStart, error) {
+	var initResp feishuRegistrationInitResponse
+	if err := r.registrationCall(ctx, "init", nil, &initResp); err != nil {
+		return legacyFeishuRegistrationStart{}, err
+	}
+	if initResp.Error != "" {
+		return legacyFeishuRegistrationStart{}, registrationResponseError("init", initResp.Error, initResp.ErrorDescription)
+	}
+
+	var beginResp feishuRegistrationBeginResponse
+	if err := r.registrationCall(ctx, "begin", map[string]string{
+		"archetype":         "PersonalAgent",
+		"auth_method":       "client_secret",
+		"request_user_info": "open_id",
+	}, &beginResp); err != nil {
+		return legacyFeishuRegistrationStart{}, err
+	}
+	if beginResp.Error != "" {
+		return legacyFeishuRegistrationStart{}, registrationResponseError("begin", beginResp.Error, beginResp.ErrorDescription)
+	}
+	if strings.TrimSpace(beginResp.DeviceCode) == "" || strings.TrimSpace(beginResp.VerificationURIComplete) == "" {
+		return legacyFeishuRegistrationStart{}, errors.New("registration flow returned incomplete onboarding data")
+	}
+
+	interval := time.Duration(beginResp.Interval) * time.Second
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	expiresIn := time.Duration(beginResp.ExpireIn) * time.Second
+	if expiresIn <= 0 {
+		expiresIn = defaultFeishuRegistrationTimeout
+	}
+	return legacyFeishuRegistrationStart{
+		deviceCode:      strings.TrimSpace(beginResp.DeviceCode),
+		verificationURL: strings.TrimSpace(beginResp.VerificationURIComplete),
+		interval:        interval,
+		expiresAt:       time.Now().UTC().Add(expiresIn),
+	}, nil
+}
+
+func (r *legacyFeishuRegistrationRunner) pollRegistration(ctx context.Context, deviceCode string) (legacyFeishuRegistrationPoll, error) {
+	var pollResp feishuRegistrationPollResponse
+	if err := r.registrationCall(ctx, "poll", map[string]string{"device_code": strings.TrimSpace(deviceCode)}, &pollResp); err != nil {
+		return legacyFeishuRegistrationPoll{}, err
+	}
+	if strings.TrimSpace(pollResp.ClientID) != "" && strings.TrimSpace(pollResp.ClientSecret) != "" {
+		return legacyFeishuRegistrationPoll{
+			status:      feishuOnboardingStatusReady,
+			appID:       strings.TrimSpace(pollResp.ClientID),
+			appSecret:   strings.TrimSpace(pollResp.ClientSecret),
+			installerID: firstNonEmpty(strings.TrimSpace(pollResp.OpenID), strings.TrimSpace(pollResp.UserOpenID), strings.TrimSpace(pollResp.UserInfo.OpenID)),
+		}, nil
+	}
+
+	switch strings.TrimSpace(pollResp.Error) {
+	case "", "authorization_pending":
+		return legacyFeishuRegistrationPoll{status: feishuOnboardingStatusPending}, nil
+	case "slow_down":
+		return legacyFeishuRegistrationPoll{status: feishuOnboardingStatusPending, retryAfter: 5 * time.Second}, nil
+	case "expired_token":
+		return legacyFeishuRegistrationPoll{
+			status:       feishuOnboardingStatusExpired,
+			errorCode:    "expired_token",
+			errorMessage: "二维码已过期，请重新开始扫码。",
+		}, nil
+	case "access_denied":
+		return legacyFeishuRegistrationPoll{
+			status:       feishuOnboardingStatusFailed,
+			errorCode:    "access_denied",
+			errorMessage: "扫码授权已取消，请重新开始。",
+		}, nil
+	default:
+		if strings.TrimSpace(pollResp.Error) == "" {
+			return legacyFeishuRegistrationPoll{status: feishuOnboardingStatusPending}, nil
+		}
+		return legacyFeishuRegistrationPoll{
+			status:       feishuOnboardingStatusFailed,
+			errorCode:    strings.TrimSpace(pollResp.Error),
+			errorMessage: firstNonEmpty(strings.TrimSpace(pollResp.ErrorDescription), "飞书返回了未识别的扫码结果。"),
+		}, nil
+	}
+}
+
+func (r *legacyFeishuRegistrationRunner) registrationCall(ctx context.Context, action string, params map[string]string, out any) error {
+	form := url.Values{"action": []string{strings.TrimSpace(action)}}
+	for key, value := range params {
+		form.Set(key, value)
+	}
+	registrationURL := strings.TrimSpace(r.registrationURL)
+	if registrationURL == "" {
+		registrationURL = feishuRegistrationAccountsBaseURL + "/oauth/v1/app/registration"
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, registrationURL, strings.NewReader(form.Encode()))
 	if err != nil {
-		if callbacks.OnFailure != nil {
-			callbacks.OnFailure(registrationFailureFromError(err))
-		}
-		return
+		return err
 	}
-	if callbacks.OnComplete == nil || result == nil {
-		return
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	client := r.httpClient
+	if client == nil {
+		client = http.DefaultClient
 	}
-	installerID := ""
-	if result.UserInfo != nil {
-		installerID = strings.TrimSpace(result.UserInfo.OpenID)
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
 	}
-	callbacks.OnComplete(feishuRegistrationResult{
-		AppID:       strings.TrimSpace(result.ClientID),
-		AppSecret:   strings.TrimSpace(result.ClientSecret),
-		InstallerID: installerID,
-	})
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("registration %s failed: status=%d", strings.TrimSpace(action), resp.StatusCode)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(out); err != nil {
+		return err
+	}
+	return nil
 }
 
-func registrationFailureFromError(err error) feishuRegistrationFailure {
-	if err == nil {
-		return feishuRegistrationFailure{}
+func (r *legacyFeishuRegistrationRunner) waitFor(ctx context.Context, interval time.Duration) error {
+	if r.waitFn != nil {
+		return r.waitFn(ctx, interval)
 	}
-	var accessDenied *registration.AccessDeniedError
-	if errors.As(err, &accessDenied) {
-		return feishuRegistrationFailure{
-			Status:       feishuOnboardingStatusFailed,
-			ErrorCode:    "access_denied",
-			ErrorMessage: "扫码授权已取消，请重新开始。",
-		}
-	}
-	var expired *registration.ExpiredError
-	if errors.As(err, &expired) {
-		return feishuRegistrationFailure{
-			Status:       feishuOnboardingStatusExpired,
-			ErrorCode:    "expired_token",
-			ErrorMessage: "二维码已过期，请重新开始扫码。",
-		}
-	}
-	var registerErr *registration.RegisterAppError
-	if errors.As(err, &registerErr) {
-		return feishuRegistrationFailure{
-			Status:       feishuOnboardingStatusFailed,
-			ErrorCode:    strings.TrimSpace(registerErr.Code),
-			ErrorMessage: firstNonEmpty(strings.TrimSpace(registerErr.Description), "飞书返回了未识别的扫码结果。"),
-		}
-	}
-	return feishuRegistrationFailure{
-		Status:       feishuOnboardingStatusFailed,
-		ErrorCode:    "feishu_onboarding_failed",
-		ErrorMessage: err.Error(),
+	return waitForFeishuRegistration(ctx, interval)
+}
+
+func (r *legacyFeishuRegistrationRunner) emitFailure(ctx context.Context, callbacks feishuRegistrationCallbacks, failure feishuRegistrationFailure) {
+	if ctx.Err() == nil && callbacks.OnFailure != nil {
+		callbacks.OnFailure(failure)
 	}
 }
 
-func buildFeishuRegistrationAddons(manifest feishuapp.Manifest) *registration.AppAddons {
-	preset := false
-	addons := &registration.AppAddons{Preset: &preset}
-	addons.Scopes.Tenant = sortedUniqueNonEmpty(scopeRequirementsForType(manifest.ScopeRequirements, "tenant"))
-	addons.Scopes.User = sortedUniqueNonEmpty(scopeRequirementsForType(manifest.ScopeRequirements, "user"))
-	addons.Events.Items.Tenant = sortedUniqueNonEmpty(eventRequirements(manifest.Events))
-	addons.Callbacks.Items = sortedUniqueNonEmpty(callbackRequirements(manifest.Callbacks))
-	return addons
+func registrationResponseError(action, code, description string) error {
+	return fmt.Errorf("registration %s returned %s: %s", strings.TrimSpace(action), strings.TrimSpace(code), strings.TrimSpace(description))
 }
 
-func scopeRequirementsForType(requirements []feishuapp.ScopeRequirement, scopeType string) []string {
-	values := make([]string, 0, len(requirements))
-	for _, requirement := range requirements {
-		if strings.TrimSpace(requirement.Scope) == "" {
-			continue
-		}
-		if strings.EqualFold(strings.TrimSpace(requirement.ScopeType), scopeType) {
-			values = append(values, strings.TrimSpace(requirement.Scope))
-		}
+func waitForFeishuRegistration(ctx context.Context, interval time.Duration) error {
+	timer := time.NewTimer(interval)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return values
-}
-
-func eventRequirements(requirements []feishuapp.EventRequirement) []string {
-	values := make([]string, 0, len(requirements))
-	for _, requirement := range requirements {
-		values = append(values, strings.TrimSpace(requirement.Event))
-	}
-	return values
-}
-
-func callbackRequirements(requirements []feishuapp.CallbackRequirement) []string {
-	values := make([]string, 0, len(requirements))
-	for _, requirement := range requirements {
-		values = append(values, strings.TrimSpace(requirement.Callback))
-	}
-	return values
-}
-
-func sortedUniqueNonEmpty(values []string) []string {
-	seen := map[string]bool{}
-	result := make([]string, 0, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		result = append(result, value)
-	}
-	sort.Strings(result)
-	return result
 }
 
 func (a *App) createFeishuOnboardingSession(ctx context.Context) (feishuOnboardingSessionView, error) {
@@ -227,11 +376,7 @@ func (a *App) createFeishuOnboardingSession(ctx context.Context) (feishuOnboardi
 		runner = newLiveFeishuRegistrationRunner()
 	}
 	runCtx, cancel := context.WithTimeout(context.Background(), defaultFeishuRegistrationTimeout)
-	run := runner.Start(runCtx, feishuRegistrationOptions{
-		Source:     "codex-remote-feishu",
-		Addons:     buildFeishuRegistrationAddons(feishuapp.DefaultManifest()),
-		CreateOnly: true,
-	}, a.feishuRegistrationCallbacks(session.ID, cancel))
+	run := runner.Start(runCtx, feishuRegistrationOptions{}, a.feishuRegistrationCallbacks(session.ID, cancel))
 	run = feishuRegistrationRunWithCancel{
 		run:    run,
 		cancel: cancel,
