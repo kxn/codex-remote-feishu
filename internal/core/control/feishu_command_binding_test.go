@@ -48,6 +48,14 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantHasFollowup: true,
 		},
 		{
+			name:            "coworkers terminal command",
+			action:          Action{Kind: ActionCoworkersCommand, Text: "/coworkers status"},
+			wantFamily:      FeishuCommandCoworkers,
+			wantKind:        FeishuCommandBindingTerminalPage,
+			wantLauncher:    FeishuFrontstageLauncherEnterTerminal,
+			wantHasFollowup: true,
+		},
+		{
 			name:              "daemon command",
 			action:            Action{Kind: ActionUpgradeCommand, Text: "/upgrade"},
 			wantFamily:        FeishuCommandUpgrade,

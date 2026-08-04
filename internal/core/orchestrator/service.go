@@ -396,6 +396,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.openThreadHistory(surface, action.MessageID, action.IsCardAction())
 	case control.ActionPrimaryCommand:
 		events = s.handlePrimaryCommand(surface, action)
+	case control.ActionCoworkersCommand:
+		events = s.handleCoworkersCommand(surface, action)
 	case control.ActionUpgradeOwnerFlow:
 		ownerFlow := action.OwnerFlow
 		if ownerFlow == nil {

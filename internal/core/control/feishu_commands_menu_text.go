@@ -1,10 +1,21 @@
 package control
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/upgradecontract"
 )
+
+var nonNegativeIntegerMenuArgument = regexp.MustCompile(`^[0-9]+$`)
+
+func normalizeCoworkersMenuArgument(value string) (string, bool) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "status" || nonNegativeIntegerMenuArgument.MatchString(value) {
+		return value, true
+	}
+	return "", false
+}
 
 func normalizeModelMenuArgument(value string) (string, bool) {
 	model := strings.TrimSpace(value)

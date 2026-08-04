@@ -20,6 +20,13 @@ type feishuRoomWorkspaceCandidate struct {
 	sourceSurfaceID string
 }
 
+func sameOptionalInt(left, right *int) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
 func (a *App) configureFeishuRoomStateLocked(stateDir string) {
 	path := feishuroomstate.StatePath(stateDir)
 	a.feishuRoomState.persistedStoreRuntimeState = loadPersistedStore("Feishu room", path, feishuroomstate.LoadStore)
@@ -39,14 +46,19 @@ func (a *App) materializeFeishuRoomStateLocked() {
 	a.refreshFeishuPrimaryGatewaySnapshotLocked()
 }
 
-func (a *App) syncFeishuRoomStateLocked() {
+func (a *App) syncFeishuRoomStateLocked() error {
 	a.refreshFeishuPrimaryGatewaySnapshotLocked()
-	if !a.feishuRoomState.writable() || a.feishuRoomState.store == nil {
-		return
+	if a.feishuRoomState.store == nil {
+		return nil
+	}
+	if err := persistedStateWriteError("Feishu room", a.feishuRoomState.persistedStoreRuntimeState); err != nil {
+		return err
 	}
 	if err := a.feishuRoomState.store.ReplaceAll(a.service.FeishuRoomState()); err != nil {
 		log.Printf("persist feishu room state failed: err=%v", err)
+		return err
 	}
+	return nil
 }
 
 func (a *App) refreshFeishuPrimaryGatewaySnapshotLocked() {

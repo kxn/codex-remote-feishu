@@ -37,3 +37,31 @@ var feishuPrimaryCommandSpec = feishuCommandSpec{
 		{prefix: "primary-", kind: ActionPrimaryCommand, parseArgument: normalizePrimaryMenuArgument},
 	},
 }
+
+var feishuCoworkersCommandSpec = feishuCommandSpec{
+	definition: FeishuCommandDefinition{
+		ID:               FeishuCommandCoworkers,
+		GroupID:          FeishuCommandGroupCommonTools,
+		Title:            "群内并发上限",
+		CanonicalSlash:   "/coworkers",
+		CanonicalMenuKey: "coworkers",
+		ArgumentKind:     FeishuCommandArgumentText,
+		ArgumentFormHint: "2",
+		ArgumentFormNote: "输入非负整数设置并发上限，或输入 status 查看；0 表示不限制。",
+		ArgumentSubmit:   "设置",
+		Description:      "设置或查看当前群同时运行的机器人数量上限；0 表示不限制。",
+		Examples:         []string{"/coworkers 2", "/coworkers status"},
+		ShowInHelp:       true,
+		ShowInMenu:       true,
+	},
+	textPrefixes: []feishuCommandPrefixMatch{
+		{alias: "/coworkers", kind: ActionCoworkersCommand},
+	},
+	menuExact: []feishuCommandMatch{
+		{alias: "coworkers", action: Action{Kind: ActionCoworkersCommand, Text: "/coworkers status"}},
+	},
+	menuDynamic: []feishuCommandDynamicMenuMatch{
+		{prefix: "coworkers_", kind: ActionCoworkersCommand, parseArgument: normalizeCoworkersMenuArgument},
+		{prefix: "coworkers-", kind: ActionCoworkersCommand, parseArgument: normalizeCoworkersMenuArgument},
+	},
+}

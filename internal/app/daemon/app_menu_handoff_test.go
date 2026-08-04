@@ -525,6 +525,39 @@ func TestHandleGatewayActionReplacesMenuCardForHelpHandoff(t *testing.T) {
 	}
 }
 
+func TestHandleGatewayActionReplacesMenuCardForCoworkersStatusHandoff(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 4, 19, 9, 10, 30, 0, time.UTC),
+	})
+	app.service.MaterializeSurface("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user")
+
+	result := handleGatewayActionForTest(context.Background(), app, control.Action{
+		Kind:             control.ActionCoworkersCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_user",
+		MessageID:        "om-menu-coworkers-1",
+		Text:             "/coworkers status",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+
+	if result == nil || result.ReplaceCurrentCard == nil {
+		t.Fatalf("expected coworkers status to replace current card, got %#v", result)
+	}
+	cardText := operationCardText(*result.ReplaceCurrentCard)
+	if !strings.Contains(cardText, "本群机器人当前 active 数量：0") || !strings.Contains(cardText, "并发上限：1") {
+		t.Fatalf("unexpected coworkers status replacement text: %q", cardText)
+	}
+	if len(gateway.operations) != 0 {
+		t.Fatalf("expected no appended gateway operations, got %#v", gateway.operations)
+	}
+}
+
 func TestHandleGatewayActionUpdatesMenuCardForSteerAllNoopHandoff(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{

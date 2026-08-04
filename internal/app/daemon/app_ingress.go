@@ -285,7 +285,32 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 			return nil
 		}
 	}
+	previousCoworkersLimit := (*int)(nil)
+	if action.Kind == control.ActionCoworkersCommand {
+		previousCoworkersLimit = a.service.FeishuRoomConcurrencyLimit(action.SurfaceSessionID)
+	}
 	events := a.applyIngressActionLocked(action)
+	coworkersLimitChanged := false
+	if action.Kind == control.ActionCoworkersCommand {
+		coworkersLimitChanged = !sameOptionalInt(previousCoworkersLimit, a.service.FeishuRoomConcurrencyLimit(action.SurfaceSessionID))
+	}
+	if coworkersLimitChanged {
+		if err := a.syncFeishuRoomStateLocked(); err != nil {
+			a.service.RestoreFeishuRoomConcurrencyLimit(action.SurfaceSessionID, previousCoworkersLimit)
+			a.ensureSurfaceRouteForNotice(action)
+			events = []eventcontract.Event{{
+				Kind:             eventcontract.KindNotice,
+				GatewayID:        action.GatewayID,
+				SurfaceSessionID: action.SurfaceSessionID,
+				Notice: &control.Notice{
+					Code:     "coworkers_persist_failed",
+					Title:    "设置失败",
+					Text:     "本群并发上限未能保存，当前配置未改变，请稍后重试。",
+					ThemeKey: "error",
+				},
+			}}
+		}
+	}
 	contract := control.ResolveFeishuFrontstageActionContract(action)
 	inlineResult, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, events)
 	inlineNavigationReplace := inlineResult != nil && contract.CurrentCardMode == control.FeishuFrontstageCurrentCardInlineView
@@ -300,7 +325,9 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 	a.syncSurfaceResumeStateLocked(clearTargets)
 	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncBotCapabilitySettingsStateLocked()
-	a.syncFeishuRoomStateLocked()
+	if action.Kind != control.ActionCoworkersCommand || !coworkersLimitChanged {
+		a.syncFeishuRoomStateLocked()
+	}
 	a.syncWorkspaceSurfaceContextFilesLocked()
 	if action.Kind == control.ActionModeCommand {
 		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)

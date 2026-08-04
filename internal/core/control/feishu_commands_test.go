@@ -511,6 +511,7 @@ func TestFeishuCommandRegistryActionRoundTrip(t *testing.T) {
 		{commandID: FeishuCommandDetach, wantKind: ActionDetach, wantSlash: "/detach"},
 		{commandID: FeishuCommandFollow, wantKind: ActionFollowLocal, wantSlash: "/follow"},
 		{commandID: FeishuCommandPatch, wantKind: ActionTurnPatchCommand, wantSlash: "/bendtomywill"},
+		{commandID: FeishuCommandCoworkers, wantKind: ActionCoworkersCommand, wantSlash: "/coworkers"},
 		{commandID: FeishuCommandWorkspaceNewWorktree, wantKind: ActionWorkspaceNewWorktree, wantSlash: "/workspace new worktree"},
 	}
 
@@ -530,6 +531,57 @@ func TestFeishuCommandRegistryActionRoundTrip(t *testing.T) {
 				t.Fatalf("BuildFeishuActionText(%q) = %q, want %q", tt.wantKind, got, tt.wantSlash)
 			}
 		})
+	}
+}
+
+func TestParseCoworkersCommandUsesSharedTextAndMenuRoutes(t *testing.T) {
+	tests := []struct {
+		name  string
+		parse func() (Action, bool)
+		want  string
+	}{
+		{name: "set limit", parse: func() (Action, bool) {
+			return ParseFeishuTextActionWithoutCatalog("/coworkers 2")
+		}, want: "/coworkers 2"},
+		{name: "status", parse: func() (Action, bool) {
+			return ParseFeishuTextActionWithoutCatalog("/coworkers status")
+		}, want: "/coworkers status"},
+		{name: "menu limit", parse: func() (Action, bool) {
+			return ParseFeishuMenuActionWithoutCatalog("coworkers_2")
+		}, want: "/coworkers 2"},
+		{name: "menu status", parse: func() (Action, bool) {
+			return ParseFeishuMenuActionWithoutCatalog("coworkers_status")
+		}, want: "/coworkers status"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action, ok := tt.parse()
+			if !ok || action.Kind != ActionCoworkersCommand || action.CommandID != FeishuCommandCoworkers || action.Text != tt.want {
+				t.Fatalf("parsed action = %#v, ok=%v, want coworkers %q", action, ok, tt.want)
+			}
+		})
+	}
+}
+
+func TestCoworkersCommandIsVisibleInHelpAndMenuCatalogs(t *testing.T) {
+	for _, catalog := range []FeishuPageView{FeishuCommandHelpPageView(), FeishuCommandMenuPageView()} {
+		found := false
+		for _, section := range catalog.Sections {
+			for _, entry := range section.Entries {
+				for _, command := range entry.Commands {
+					if command == "/coworkers" {
+						found = true
+					}
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("catalog %q does not include /coworkers", catalog.Title)
+		}
+	}
+	def, ok := FeishuCommandDefinitionByID(FeishuCommandCoworkers)
+	if !ok || !def.ShowInHelp || !def.ShowInMenu || def.CanonicalSlash != "/coworkers" {
+		t.Fatalf("unexpected coworkers definition: %#v, ok=%v", def, ok)
 	}
 }
 

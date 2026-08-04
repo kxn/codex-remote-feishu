@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +77,33 @@ func TestSyncFeishuRoomStateDeletesClearedPrimary(t *testing.T) {
 	}
 	if _, ok := reloaded.Get("oc_room"); ok {
 		t.Fatal("expected cleared primary to be deleted from store")
+	}
+}
+
+func TestCoworkersSettingRejectsWhenRoomStateCannotBePersisted(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+	app.service.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{
+		{RoomID: "feishu:chat:oc_room", ChatID: "oc_room", PrimaryGatewayID: "app-1"},
+	})
+	app.feishuRoomState.store = feishuroomstate.NewStore(t.TempDir())
+	app.feishuRoomState.status = persistedStoreStatusWritable
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionCoworkersCommand,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_user",
+		Text:             "/coworkers 2",
+	})
+
+	room := app.service.FeishuRoomState()
+	if len(room) != 1 || state.FeishuRoomConcurrencyLimit(room[0].ConcurrencyLimit) != 1 {
+		t.Fatalf("failed durable setting changed runtime state: %#v", room)
+	}
+	if len(gateway.operations) != 1 || !strings.Contains(operationCardText(gateway.operations[0]), "当前配置未改变") {
+		t.Fatalf("failed durable setting should emit rejection notice, got %#v", gateway.operations)
 	}
 }
 

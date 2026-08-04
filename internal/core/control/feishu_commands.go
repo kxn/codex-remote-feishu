@@ -17,6 +17,7 @@ const (
 	FeishuCommandNew                  = "new"
 	FeishuCommandHistory              = "history"
 	FeishuCommandPrimary              = "primary"
+	FeishuCommandCoworkers            = "coworkers"
 	FeishuCommandReview               = "review"
 	FeishuCommandSendFile             = "sendfile"
 	FeishuCommandFollow               = "follow"
@@ -220,6 +221,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		},
 	},
 	feishuPrimaryCommandSpec,
+	feishuCoworkersCommandSpec,
 	reviewCommandSpec(),
 	sendFileCommandSpec(),
 	{
@@ -981,20 +983,5 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "debug", action: Action{Kind: ActionDebugCommand, Text: "/debug"}},
 		},
 	},
-	{
-		definition: FeishuCommandDefinition{
-			ID:               FeishuCommandVSCodeMigrate,
-			GroupID:          FeishuCommandGroupMaintenance,
-			Title:            "VS Code 迁移",
-			CanonicalSlash:   "/vscode-migrate",
-			CanonicalMenuKey: "vscode-migrate",
-			ArgumentKind:     FeishuCommandArgumentNone,
-			Description:      "打开 VS Code 迁移页，检查是否需要迁移到当前统一的 managed shim 接入方式。",
-			ShowInHelp:       true,
-			ShowInMenu:       false,
-		},
-		textExact: []feishuCommandMatch{
-			{alias: "/vscode-migrate", action: Action{Kind: ActionVSCodeMigrateCommand, Text: "/vscode-migrate"}},
-		},
-	},
+	vscodeMigrateCommandSpec(),
 }

@@ -169,7 +169,7 @@ func (s *Service) blockFeishuRoomActiveDispatch(surface *state.SurfaceConsoleRec
 	if room == nil {
 		return nil
 	}
-	if !s.feishuRoomActiveSlotAvailable(room) {
+	if !s.feishuRoomActiveSlotAvailableForSurface(room, surface) {
 		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
 	}
 	return nil
@@ -336,6 +336,21 @@ func (s *Service) feishuRoomActiveSlotAvailable(room *state.FeishuRoomContextRec
 	return limit == 0 || s.feishuRoomActiveReservationCount(room) < limit
 }
 
+func (s *Service) feishuRoomActiveSlotAvailableForSurface(room *state.FeishuRoomContextRecord, surface *state.SurfaceConsoleRecord) bool {
+	if room == nil || surface == nil {
+		return true
+	}
+	if s.feishuRoomActiveSlotAvailable(room) {
+		return true
+	}
+	for _, reservation := range room.ActiveReservations {
+		if reservation != nil && strings.TrimSpace(reservation.SurfaceSessionID) == strings.TrimSpace(surface.SurfaceSessionID) {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Service) reserveFeishuRoomActiveSlot(surface *state.SurfaceConsoleRecord, reason string) bool {
 	return s.reserveFeishuRoomActiveSlotForQueueItem(surface, activeQueueItem(surface), reason)
 }
@@ -482,6 +497,36 @@ func (s *Service) FeishuRoomActiveCount(surfaceID string) int {
 		return 0
 	}
 	return s.feishuRoomActiveReservationCount(room)
+}
+
+func (s *Service) FeishuRoomConcurrencyLimit(surfaceID string) *int {
+	if s == nil || s.root == nil {
+		return nil
+	}
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return nil
+	}
+	room := s.root.FeishuRoomContexts[surfaceFeishuRoomID(surface)]
+	if room == nil {
+		return nil
+	}
+	return state.CloneFeishuRoomConcurrencyLimit(room.ConcurrencyLimit)
+}
+
+func (s *Service) RestoreFeishuRoomConcurrencyLimit(surfaceID string, value *int) {
+	if s == nil || s.root == nil {
+		return
+	}
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return
+	}
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return
+	}
+	room.ConcurrencyLimit = state.CloneFeishuRoomConcurrencyLimit(value)
 }
 
 func (s *Service) ReleaseFeishuRoomGroupOnDemandReservation(surfaceID string) {

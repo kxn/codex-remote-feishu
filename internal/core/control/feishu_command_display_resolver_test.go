@@ -92,7 +92,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(commonTools), []string{"/history", "/sendfile"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(commonTools), []string{"/coworkers", "/history", "/sendfile"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude common_tools help commands = %#v, want %#v", got, want)
 	}
 
@@ -160,6 +160,7 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 		FeishuCommandPatch,
 		FeishuCommandAutoWhip,
 		FeishuCommandPrimary,
+		FeishuCommandCoworkers,
 		FeishuCommandHistory,
 		FeishuCommandCron,
 		FeishuCommandSendFile,

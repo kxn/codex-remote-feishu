@@ -181,6 +181,121 @@ func TestPrimaryCommandOffClearsOnlyCurrentGateway(t *testing.T) {
 	}
 }
 
+func TestCoworkersCommandRejectsSingleChat(t *testing.T) {
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCoworkersCommand,
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		GatewayID:        "app-1",
+		ChatID:           "ou_user",
+		ActorUserID:      "ou_user",
+		Text:             "/coworkers 2",
+	})
+	if noticeCode(events, "coworkers_group_required") == "" {
+		t.Fatalf("single chat should reject coworkers setting, got %#v", events)
+	}
+	if len(svc.root.FeishuRoomContexts) != 0 {
+		t.Fatalf("single chat should not create room state, got %#v", svc.root.FeishuRoomContexts)
+	}
+}
+
+func TestCoworkersCommandRequiresCurrentPrimaryForSetting(t *testing.T) {
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{
+		{RoomID: "feishu:chat:oc_room", ChatID: "oc_room", PrimaryGatewayID: "app-primary"},
+	})
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCoworkersCommand,
+		SurfaceSessionID: "feishu:app-other:chat:oc_room",
+		GatewayID:        "app-other",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_user",
+		Text:             "/coworkers 2",
+	})
+	if noticeCode(events, "coworkers_primary_required") == "" {
+		t.Fatalf("non-primary setting should be rejected, got %#v", events)
+	}
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	if room == nil || state.FeishuRoomConcurrencyLimit(room.ConcurrencyLimit) != 1 {
+		t.Fatalf("non-primary setting changed room limit: %#v", room)
+	}
+}
+
+func TestCoworkersStatusIsReadableFromAnyBotAndShowsActiveLimit(t *testing.T) {
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{
+		{RoomID: "feishu:chat:oc_room", ChatID: "oc_room", PrimaryGatewayID: "app-primary", ConcurrencyLimit: intPointer(2)},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionStatus,
+		SurfaceSessionID: "feishu:app-primary:chat:oc_room",
+		GatewayID:        "app-primary",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_primary",
+	})
+	activeSurface := svc.root.Surfaces["feishu:app-primary:chat:oc_room"]
+	activeSurface.QueueItems["queue-running"] = &state.QueueItemRecord{ID: "queue-running", Status: state.QueueItemRunning}
+	activeSurface.ActiveQueueItemID = "queue-running"
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCoworkersCommand,
+		SurfaceSessionID: "feishu:app-other:chat:oc_room",
+		GatewayID:        "app-other",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_user",
+		Text:             "/coworkers status",
+	})
+	if !noticeTextContains(events, "coworkers_status", "active 数量：1") || !noticeTextContains(events, "coworkers_status", "并发上限：2") {
+		t.Fatalf("coworkers status = %#v, want active/limit", events)
+	}
+}
+
+func TestCoworkersCommandAcceptsZeroAndNonNegativeIntegerButRejectsInvalid(t *testing.T) {
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{
+		{RoomID: "feishu:chat:oc_room", ChatID: "oc_room", PrimaryGatewayID: "app-primary"},
+	})
+	for _, tt := range []struct {
+		argument string
+		want     int
+	}{
+		{argument: "0", want: 0},
+		{argument: "12", want: 12},
+	} {
+		events := svc.ApplySurfaceAction(control.Action{
+			Kind:             control.ActionCoworkersCommand,
+			SurfaceSessionID: "feishu:app-primary:chat:oc_room",
+			GatewayID:        "app-primary",
+			ChatID:           "oc_room",
+			ActorUserID:      "ou_user",
+			Text:             "/coworkers " + tt.argument,
+		})
+		if noticeCode(events, "coworkers_updated") == "" {
+			t.Fatalf("setting %q should succeed, got %#v", tt.argument, events)
+		}
+		room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+		if state.FeishuRoomConcurrencyLimit(room.ConcurrencyLimit) != tt.want {
+			t.Fatalf("limit after %q = %#v, want %d", tt.argument, room.ConcurrencyLimit, tt.want)
+		}
+	}
+	for _, argument := range []string{"-1", "nope", "1 2"} {
+		events := svc.ApplySurfaceAction(control.Action{
+			Kind:             control.ActionCoworkersCommand,
+			SurfaceSessionID: "feishu:app-primary:chat:oc_room",
+			GatewayID:        "app-primary",
+			ChatID:           "oc_room",
+			ActorUserID:      "ou_user",
+			Text:             "/coworkers " + argument,
+		})
+		if noticeCode(events, "coworkers_invalid") == "" {
+			t.Fatalf("invalid argument %q should be rejected, got %#v", argument, events)
+		}
+	}
+}
+
 func noticeText(events []eventcontract.Event) string {
 	for _, event := range events {
 		if event.Notice != nil {
