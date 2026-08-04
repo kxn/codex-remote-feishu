@@ -73,8 +73,10 @@ func (s *Service) purgeGatewayIdentitySurface(surfaceID string) {
 			continue
 		}
 		delete(room.SurfaceSessionIDs, surfaceID)
-		if room.ActiveLock != nil && strings.TrimSpace(room.ActiveLock.SurfaceSessionID) == surfaceID {
-			room.ActiveLock = nil
+		for reservationID, reservation := range room.ActiveReservations {
+			if reservation != nil && strings.TrimSpace(reservation.SurfaceSessionID) == surfaceID {
+				delete(room.ActiveReservations, reservationID)
+			}
 		}
 	}
 }

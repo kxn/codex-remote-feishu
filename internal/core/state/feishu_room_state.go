@@ -2,6 +2,34 @@ package state
 
 import "strings"
 
+const DefaultFeishuRoomConcurrencyLimit = 1
+
+func FeishuRoomConcurrencyLimit(value *int) int {
+	if value == nil || *value < 0 {
+		return DefaultFeishuRoomConcurrencyLimit
+	}
+	return *value
+}
+
+func NormalizeFeishuRoomConcurrencyLimit(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	normalized := *value
+	if normalized < 0 {
+		normalized = DefaultFeishuRoomConcurrencyLimit
+	}
+	return &normalized
+}
+
+func CloneFeishuRoomConcurrencyLimit(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
 func FeishuRoomKey(roomOrChatID string) string {
 	value := strings.TrimSpace(roomOrChatID)
 	if value == "" {
@@ -27,6 +55,7 @@ func NormalizeFeishuRoomStateRecord(record FeishuRoomStateRecord) (FeishuRoomSta
 	}
 	record.PrimaryGatewayID = strings.TrimSpace(record.PrimaryGatewayID)
 	record.PrimaryUpdatedBy = strings.TrimSpace(record.PrimaryUpdatedBy)
+	record.ConcurrencyLimit = NormalizeFeishuRoomConcurrencyLimit(record.ConcurrencyLimit)
 	record.WorkspaceKey = ResolveWorkspaceClaimKey(record.WorkspaceKey)
 	record.WorkspaceUpdatedBy = strings.TrimSpace(record.WorkspaceUpdatedBy)
 	if record.WorkspaceResetGeneration < 0 {
@@ -55,5 +84,6 @@ func FeishuRoomStateRecordFromContext(room *FeishuRoomContextRecord) (FeishuRoom
 		PrimaryGatewayID:         room.PrimaryGatewayID,
 		PrimaryUpdatedBy:         room.PrimaryUpdatedBy,
 		PrimaryUpdatedAt:         room.PrimaryUpdatedAt,
+		ConcurrencyLimit:         CloneFeishuRoomConcurrencyLimit(room.ConcurrencyLimit),
 	})
 }

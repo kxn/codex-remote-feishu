@@ -349,7 +349,8 @@ type FeishuRoomContextRecord struct {
 	PrimaryGatewayID         string
 	PrimaryUpdatedBy         string
 	PrimaryUpdatedAt         time.Time
-	ActiveLock               *FeishuRoomActiveLockRecord
+	ConcurrencyLimit         *int
+	ActiveReservations       map[string]*FeishuRoomActiveReservationRecord
 	GatewayIDs               map[string]bool
 	SurfaceSessionIDs        map[string]bool
 }
@@ -364,9 +365,11 @@ type FeishuRoomStateRecord struct {
 	PrimaryGatewayID         string
 	PrimaryUpdatedBy         string
 	PrimaryUpdatedAt         time.Time
+	ConcurrencyLimit         *int
 }
 
-type FeishuRoomActiveLockRecord struct {
+type FeishuRoomActiveReservationRecord struct {
+	ReservationID    string
 	SurfaceSessionID string
 	InstanceID       string
 	ThreadID         string

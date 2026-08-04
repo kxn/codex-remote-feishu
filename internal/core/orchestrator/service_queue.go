@@ -77,6 +77,9 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 }
 
 func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, front bool) []eventcontract.Event {
+	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
+		return blocked
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(threadID)
 	if mode := agentproto.NormalizePromptExecutionMode(executionMode); mode != "" {
@@ -537,7 +540,7 @@ func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Even
 	}
 	item.Status = state.QueueItemRunning
 	if room := s.ensureFeishuRoomContextForSurface(surface); room != nil {
-		s.refreshFeishuRoomActiveLock(room, surface, "running")
+		s.reconcileFeishuRoomActiveReservations(room)
 	}
 	events := s.pendingInputEvents(surface, control.PendingInputState{
 		QueueItemID: item.ID,

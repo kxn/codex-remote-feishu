@@ -291,6 +291,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		s.restoreStagedInputs(surface, stagedMessageIDs)
 		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；headless 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
 	}
+	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
+		return blocked
+	}
 	if strings.TrimSpace(cwd) == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
 		if detour.Triggered {

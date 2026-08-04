@@ -28,6 +28,7 @@ func TestStoreRoundTrip(t *testing.T) {
 		PrimaryGatewayID:         " app-1 ",
 		PrimaryUpdatedBy:         " ou_user ",
 		PrimaryUpdatedAt:         updatedAt,
+		ConcurrencyLimit:         intPointer(0),
 	}); err != nil {
 		t.Fatalf("put record: %v", err)
 	}
@@ -48,6 +49,9 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if got.WorkspaceKey != "/data/projects/workspace" || got.WorkspaceUpdatedBy != "ou_workspace" || !got.WorkspaceUpdatedAt.Equal(updatedAt.UTC()) || got.WorkspaceResetGeneration != 2 {
 		t.Fatalf("workspace state = %#v, want normalized durable workspace metadata", got)
+	}
+	if got.ConcurrencyLimit == nil || *got.ConcurrencyLimit != 0 {
+		t.Fatalf("concurrency limit = %#v, want explicit unlimited", got.ConcurrencyLimit)
 	}
 }
 
@@ -70,6 +74,9 @@ func TestLoadStoreMigratesPrimaryOnlyVersionOneInPlace(t *testing.T) {
 	if record, ok := store.Get("oc_room"); !ok || record.PrimaryGatewayID != "app-1" || record.WorkspaceKey != "" {
 		t.Fatalf("migrated legacy record = %#v, present=%v", record, ok)
 	}
+	if record, _ := store.Get("oc_room"); record.ConcurrencyLimit != nil || state.FeishuRoomConcurrencyLimit(record.ConcurrencyLimit) != 1 {
+		t.Fatalf("legacy concurrency limit = %#v, want unset with runtime default 1", record.ConcurrencyLimit)
+	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("save migrated state: %v", err)
 	}
@@ -85,6 +92,8 @@ func TestLoadStoreMigratesPrimaryOnlyVersionOneInPlace(t *testing.T) {
 		t.Fatalf("migrated version = %d, want 2", persisted.Version)
 	}
 }
+
+func intPointer(value int) *int { return &value }
 
 func TestLoadStoreDropsInvalidRecords(t *testing.T) {
 	t.Parallel()

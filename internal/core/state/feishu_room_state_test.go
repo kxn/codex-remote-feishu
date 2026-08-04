@@ -27,6 +27,52 @@ func TestNormalizeFeishuRoomStateRecord(t *testing.T) {
 	}
 }
 
+func TestFeishuRoomConcurrencyLimitDefaultsToOneWhenUnset(t *testing.T) {
+	record, ok := NormalizeFeishuRoomStateRecord(FeishuRoomStateRecord{
+		RoomID: "feishu:chat:oc_room",
+		ChatID: "oc_room",
+	})
+	if !ok {
+		t.Fatal("expected valid room state record")
+	}
+	if got := FeishuRoomConcurrencyLimit(record.ConcurrencyLimit); got != 1 {
+		t.Fatalf("unset concurrency limit = %d, want default 1", got)
+	}
+}
+
+func TestNormalizeFeishuRoomStateRecordPreservesExplicitUnlimitedLimit(t *testing.T) {
+	limit := 0
+	record, ok := NormalizeFeishuRoomStateRecord(FeishuRoomStateRecord{
+		RoomID:           "feishu:chat:oc_room",
+		ChatID:           "oc_room",
+		ConcurrencyLimit: &limit,
+	})
+	if !ok {
+		t.Fatal("expected valid room state record")
+	}
+	if record.ConcurrencyLimit == nil || *record.ConcurrencyLimit != 0 {
+		t.Fatalf("explicit unlimited limit = %#v, want pointer to 0", record.ConcurrencyLimit)
+	}
+	if got := FeishuRoomConcurrencyLimit(record.ConcurrencyLimit); got != 0 {
+		t.Fatalf("explicit unlimited concurrency limit = %d, want 0", got)
+	}
+}
+
+func TestNormalizeFeishuRoomStateRecordFailsClosedOnNegativeLimit(t *testing.T) {
+	limit := -1
+	record, ok := NormalizeFeishuRoomStateRecord(FeishuRoomStateRecord{
+		RoomID:           "feishu:chat:oc_room",
+		ChatID:           "oc_room",
+		ConcurrencyLimit: &limit,
+	})
+	if !ok {
+		t.Fatal("expected valid room state record")
+	}
+	if record.ConcurrencyLimit == nil || *record.ConcurrencyLimit != 1 {
+		t.Fatalf("negative concurrency limit = %#v, want normalized default 1", record.ConcurrencyLimit)
+	}
+}
+
 func TestNormalizeFeishuRoomStateRecordResolvesWorkspaceClaimKey(t *testing.T) {
 	root := t.TempDir()
 	target := filepath.Join(root, "real")
@@ -69,10 +115,13 @@ func TestFeishuRoomStateRecordFromContextExcludesRuntimeEvidence(t *testing.T) {
 		PrimaryUpdatedBy:   "ou_user",
 		PrimaryUpdatedAt:   updatedAt,
 		WorkspaceKey:       "/data/dl/repo",
-		ActiveLock:         &FeishuRoomActiveLockRecord{SurfaceSessionID: "surface-1"},
 		GatewayIDs:         map[string]bool{"app-1": true, "app-2": true},
 		SurfaceSessionIDs:  map[string]bool{"surface-1": true},
 		WorkspaceUpdatedBy: "ou_workspace",
+		ConcurrencyLimit:   intPointer(3),
+		ActiveReservations: map[string]*FeishuRoomActiveReservationRecord{
+			"reservation-1": {ReservationID: "reservation-1"},
+		},
 	}
 	record, ok := FeishuRoomStateRecordFromContext(room)
 	if !ok {
@@ -81,4 +130,9 @@ func TestFeishuRoomStateRecordFromContextExcludesRuntimeEvidence(t *testing.T) {
 	if record.RoomID != "feishu:chat:oc_room" || record.ChatID != "oc_room" || record.PrimaryGatewayID != "app-1" {
 		t.Fatalf("durable primary record = %#v", record)
 	}
+	if record.ConcurrencyLimit == nil || *record.ConcurrencyLimit != 3 {
+		t.Fatalf("durable concurrency limit = %#v, want 3", record.ConcurrencyLimit)
+	}
 }
+
+func intPointer(value int) *int { return &value }

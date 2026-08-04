@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -42,10 +43,11 @@ func (s *Service) ensureFeishuRoomContextForSurface(surface *state.SurfaceConsol
 	room := s.root.FeishuRoomContexts[roomID]
 	if room == nil {
 		room = &state.FeishuRoomContextRecord{
-			RoomID:            roomID,
-			ChatID:            strings.TrimSpace(surface.ChatID),
-			GatewayIDs:        map[string]bool{},
-			SurfaceSessionIDs: map[string]bool{},
+			RoomID:             roomID,
+			ChatID:             strings.TrimSpace(surface.ChatID),
+			ActiveReservations: map[string]*state.FeishuRoomActiveReservationRecord{},
+			GatewayIDs:         map[string]bool{},
+			SurfaceSessionIDs:  map[string]bool{},
 		}
 		s.root.FeishuRoomContexts[roomID] = room
 	}
@@ -54,6 +56,9 @@ func (s *Service) ensureFeishuRoomContextForSurface(surface *state.SurfaceConsol
 	}
 	if room.SurfaceSessionIDs == nil {
 		room.SurfaceSessionIDs = map[string]bool{}
+	}
+	if room.ActiveReservations == nil {
+		room.ActiveReservations = map[string]*state.FeishuRoomActiveReservationRecord{}
 	}
 	if gatewayID := strings.TrimSpace(surface.GatewayID); gatewayID != "" {
 		room.GatewayIDs[gatewayID] = true
@@ -162,7 +167,7 @@ func (s *Service) blockFeishuRoomActiveDispatch(surface *state.SurfaceConsoleRec
 	if room == nil {
 		return nil
 	}
-	if holder := s.feishuRoomActiveLockHolder(room, surface); holder != nil {
+	if !s.feishuRoomActiveSlotAvailable(room) {
 		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
 	}
 	return nil
@@ -180,7 +185,7 @@ func (s *Service) sameRoomWorkspaceIndependentContextAllowed(surface *state.Surf
 	if workspaceKey == "" || normalizeWorkspaceClaimKey(room.WorkspaceKey) != workspaceKey {
 		return false
 	}
-	return s.feishuRoomActiveLockHolder(room, surface) == nil
+	return s.feishuRoomActiveSlotAvailable(room)
 }
 
 func (s *Service) instanceClaimedBySameRoomSibling(surface *state.SurfaceConsoleRecord, instanceID string) bool {
@@ -197,39 +202,13 @@ func (s *Service) blockFeishuRoomActiveAutoDispatch(surface *state.SurfaceConsol
 	if room == nil {
 		return nil
 	}
-	holder := s.feishuRoomActiveLockHolder(room, surface)
-	if holder == nil {
+	if s.feishuRoomActiveSlotAvailable(room) {
 		return nil
 	}
-	if !s.allowActiveNotice("room_workspace_active", surface.SurfaceSessionID, room.RoomID, holder.SurfaceSessionID, "", feishuRoomActiveAutoNoticeCooldown) {
+	if !s.allowActiveNotice("room_workspace_active", surface.SurfaceSessionID, room.RoomID, "", "", feishuRoomActiveAutoNoticeCooldown) {
 		return nil
 	}
 	return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
-}
-
-func (s *Service) feishuRoomActiveLockHolder(room *state.FeishuRoomContextRecord, current *state.SurfaceConsoleRecord) *state.SurfaceConsoleRecord {
-	if room == nil {
-		return nil
-	}
-	if room.ActiveLock != nil {
-		lockSurfaceID := strings.TrimSpace(room.ActiveLock.SurfaceSessionID)
-		if current == nil || lockSurfaceID != strings.TrimSpace(current.SurfaceSessionID) {
-			if holder := s.root.Surfaces[lockSurfaceID]; s.surfaceHasRoomActiveWork(holder) {
-				return holder
-			}
-			room.ActiveLock = nil
-		}
-	}
-	for _, candidate := range s.feishuRoomSurfaces(room.RoomID) {
-		if candidate == nil || current != nil && candidate.SurfaceSessionID == current.SurfaceSessionID {
-			continue
-		}
-		if s.surfaceHasRoomActiveWork(candidate) {
-			s.refreshFeishuRoomActiveLock(room, candidate, "observed_active")
-			return candidate
-		}
-	}
-	return nil
 }
 
 func (s *Service) surfaceHasRoomActiveWork(surface *state.SurfaceConsoleRecord) bool {
@@ -246,48 +225,143 @@ func (s *Service) surfaceHasRoomActiveWork(surface *state.SurfaceConsoleRecord) 
 	return inst != nil && strings.TrimSpace(inst.ActiveTurnID) != ""
 }
 
-func (s *Service) refreshFeishuRoomActiveLock(room *state.FeishuRoomContextRecord, surface *state.SurfaceConsoleRecord, reason string) {
-	if room == nil || surface == nil {
+func (s *Service) reconcileFeishuRoomActiveReservations(room *state.FeishuRoomContextRecord) {
+	if room == nil {
 		return
 	}
-	item := activeQueueItem(surface)
+	if room.ActiveReservations == nil {
+		room.ActiveReservations = map[string]*state.FeishuRoomActiveReservationRecord{}
+	}
+	observed := map[string]*state.FeishuRoomActiveReservationRecord{}
+	for _, surface := range s.feishuRoomSurfaces(room.RoomID) {
+		if surface == nil {
+			continue
+		}
+		item := activeQueueItem(surface)
+		if item != nil {
+			switch item.Status {
+			case state.QueueItemDispatching, state.QueueItemRunning:
+				reservationID := feishuRoomQueueReservationID(surface, item.ID)
+				reason := "dispatching"
+				if inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]; inst != nil && strings.TrimSpace(inst.ActiveTurnID) != "" {
+					reason = "running"
+				}
+				observed[reservationID] = s.feishuRoomReservationRecord(room.ActiveReservations[reservationID], reservationID, surface, item, reason)
+				continue
+			}
+		}
+		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+		if inst == nil || strings.TrimSpace(inst.ActiveTurnID) == "" {
+			continue
+		}
+		reservationID := feishuRoomTurnReservationID(surface, inst)
+		observed[reservationID] = s.feishuRoomReservationRecord(room.ActiveReservations[reservationID], reservationID, surface, item, "running")
+	}
+	for reservationID, reservation := range room.ActiveReservations {
+		if reservation == nil || reservationID == "" {
+			continue
+		}
+		if _, ok := observed[reservationID]; ok {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(reservation.Reason), "review_") || strings.HasPrefix(strings.TrimSpace(reservation.Reason), "headless_") {
+			observed[reservationID] = reservation
+		}
+	}
+	room.ActiveReservations = observed
+}
+
+func feishuRoomQueueReservationID(surface *state.SurfaceConsoleRecord, queueItemID string) string {
+	return "queue:" + strings.TrimSpace(surface.SurfaceSessionID) + ":" + strings.TrimSpace(queueItemID)
+}
+
+func feishuRoomTurnReservationID(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) string {
+	return "turn:" + strings.TrimSpace(surface.SurfaceSessionID) + ":" + strings.TrimSpace(inst.InstanceID) + ":" + strings.TrimSpace(inst.ActiveTurnID)
+}
+
+func (s *Service) feishuRoomReservationRecord(existing *state.FeishuRoomActiveReservationRecord, reservationID string, surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, reason string) *state.FeishuRoomActiveReservationRecord {
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	threadID := strings.TrimSpace(surface.SelectedThreadID)
+	turnID := ""
 	queueItemID := ""
 	if item != nil {
 		queueItemID = strings.TrimSpace(item.ID)
 	}
-	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
-	threadID := strings.TrimSpace(surface.SelectedThreadID)
-	turnID := ""
 	if inst != nil {
 		if threadID == "" {
 			threadID = strings.TrimSpace(inst.ActiveThreadID)
 		}
 		turnID = strings.TrimSpace(inst.ActiveTurnID)
 	}
-	room.ActiveLock = &state.FeishuRoomActiveLockRecord{
-		SurfaceSessionID: strings.TrimSpace(surface.SurfaceSessionID),
-		InstanceID:       strings.TrimSpace(surface.AttachedInstanceID),
-		ThreadID:         threadID,
-		TurnID:           turnID,
-		QueueItemID:      queueItemID,
-		Reason:           strings.TrimSpace(reason),
-		UpdatedAt:        s.now(),
+	if existing == nil {
+		existing = &state.FeishuRoomActiveReservationRecord{ReservationID: reservationID}
 	}
+	existing.ReservationID = reservationID
+	existing.SurfaceSessionID = strings.TrimSpace(surface.SurfaceSessionID)
+	existing.InstanceID = strings.TrimSpace(surface.AttachedInstanceID)
+	existing.ThreadID = threadID
+	existing.TurnID = turnID
+	existing.QueueItemID = queueItemID
+	existing.Reason = strings.TrimSpace(reason)
+	existing.UpdatedAt = s.now()
+	return existing
 }
 
-func (s *Service) releaseFeishuRoomActiveLock(surface *state.SurfaceConsoleRecord, queueItemID string) {
-	room := s.ensureFeishuRoomContextForSurface(surface)
-	if room == nil || room.ActiveLock == nil {
-		return
+func (s *Service) feishuRoomActiveReservationCount(room *state.FeishuRoomContextRecord) int {
+	s.reconcileFeishuRoomActiveReservations(room)
+	return len(room.ActiveReservations)
+}
+
+func (s *Service) feishuRoomActiveSlotAvailable(room *state.FeishuRoomContextRecord) bool {
+	if room == nil {
+		return true
 	}
-	if strings.TrimSpace(room.ActiveLock.SurfaceSessionID) != strings.TrimSpace(surface.SurfaceSessionID) {
+	limit := state.FeishuRoomConcurrencyLimit(room.ConcurrencyLimit)
+	return limit == 0 || s.feishuRoomActiveReservationCount(room) < limit
+}
+
+func (s *Service) reserveFeishuRoomActiveSlot(surface *state.SurfaceConsoleRecord, reason string) bool {
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return true
+	}
+	s.reconcileFeishuRoomActiveReservations(room)
+	item := activeQueueItem(surface)
+	reservationID := ""
+	if item != nil {
+		reservationID = feishuRoomQueueReservationID(surface, item.ID)
+	}
+	if reservationID != "" {
+		if _, ok := room.ActiveReservations[reservationID]; ok {
+			return true
+		}
+	}
+	limit := state.FeishuRoomConcurrencyLimit(room.ConcurrencyLimit)
+	if limit > 0 && len(room.ActiveReservations) >= limit {
+		return false
+	}
+	if reservationID == "" {
+		reservationID = fmt.Sprintf("dispatch:%s:%d", strings.TrimSpace(surface.SurfaceSessionID), s.now().UnixNano())
+	}
+	room.ActiveReservations[reservationID] = s.feishuRoomReservationRecord(nil, reservationID, surface, item, reason)
+	return true
+}
+
+func (s *Service) releaseFeishuRoomActiveReservation(surface *state.SurfaceConsoleRecord, queueItemID string) {
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
 		return
 	}
 	queueItemID = strings.TrimSpace(queueItemID)
-	if queueItemID != "" && strings.TrimSpace(room.ActiveLock.QueueItemID) != queueItemID {
-		return
+	for reservationID, reservation := range room.ActiveReservations {
+		if reservation == nil || strings.TrimSpace(reservation.SurfaceSessionID) != strings.TrimSpace(surface.SurfaceSessionID) {
+			continue
+		}
+		if queueItemID != "" && strings.TrimSpace(reservation.QueueItemID) != queueItemID {
+			continue
+		}
+		delete(room.ActiveReservations, reservationID)
 	}
-	room.ActiveLock = nil
 }
 
 func activeQueueItem(surface *state.SurfaceConsoleRecord) *state.QueueItemRecord {
@@ -299,7 +373,7 @@ func activeQueueItem(surface *state.SurfaceConsoleRecord) *state.QueueItemRecord
 
 func (s *Service) resetFeishuRoomWorkspaceSurfaces(room *state.FeishuRoomContextRecord, keep *state.SurfaceConsoleRecord) {
 	if room != nil {
-		room.ActiveLock = nil
+		room.ActiveReservations = map[string]*state.FeishuRoomActiveReservationRecord{}
 	}
 	for _, surface := range s.feishuRoomSurfaces(room.RoomID) {
 		if surface == nil || surface == keep {

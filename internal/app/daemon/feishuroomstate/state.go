@@ -195,7 +195,15 @@ func sameRecord(left, right state.FeishuRoomStateRecord) bool {
 		left.WorkspaceResetGeneration == right.WorkspaceResetGeneration &&
 		left.PrimaryGatewayID == right.PrimaryGatewayID &&
 		left.PrimaryUpdatedBy == right.PrimaryUpdatedBy &&
-		left.PrimaryUpdatedAt.Equal(right.PrimaryUpdatedAt)
+		left.PrimaryUpdatedAt.Equal(right.PrimaryUpdatedAt) &&
+		intPointerEqual(left.ConcurrencyLimit, right.ConcurrencyLimit)
+}
+
+func intPointerEqual(left, right *int) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }
 
 func (s *Store) Save() error {

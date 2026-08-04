@@ -775,8 +775,8 @@ func TestRoomActiveLockBlocksSecondSameRoomSurfaceDispatch(t *testing.T) {
 	if second.ActiveQueueItemID != "" {
 		t.Fatalf("blocked surface should not gain active queue item, got %q", second.ActiveQueueItemID)
 	}
-	if len(second.QueuedQueueItemIDs) != 1 {
-		t.Fatalf("blocked surface should keep queued item for later retry, got %#v", second.QueuedQueueItemIDs)
+	if len(second.QueuedQueueItemIDs) != 0 || len(second.QueueItems) != 0 {
+		t.Fatalf("over-limit surface should reject before queue creation, queued=%#v items=%#v", second.QueuedQueueItemIDs, second.QueueItems)
 	}
 }
 
@@ -814,6 +814,113 @@ func TestRoomActiveLockDoesNotBlockDifferentRoomDispatch(t *testing.T) {
 
 	if !hasAgentCommand(events) {
 		t.Fatalf("different room should dispatch normally, got %#v", events)
+	}
+}
+
+func TestRoomConcurrencyLimitTwoAllowsTwoActiveSurfaces(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	attachRoomConcurrencyTestSurfaces(svc)
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.ConcurrencyLimit = intPointer(2)
+	for _, surfaceID := range []string{"feishu:app-1:chat:oc_room", "feishu:app-2:chat:oc_room"} {
+		events := svc.ApplySurfaceAction(control.Action{
+			Kind:             control.ActionTextMessage,
+			SurfaceSessionID: surfaceID,
+			GatewayID:        strings.Split(strings.TrimPrefix(surfaceID, "feishu:"), ":")[0],
+			ChatID:           "oc_room",
+			ActorUserID:      "ou_user",
+			MessageID:        surfaceID + ":message",
+			Text:             "继续处理",
+		})
+		if !hasAgentCommand(events) {
+			t.Fatalf("limit 2 should dispatch surface %s, got %#v", surfaceID, events)
+		}
+	}
+	if got := svc.feishuRoomActiveReservationCount(room); got != 2 {
+		t.Fatalf("active reservations = %d, want 2", got)
+	}
+}
+
+func TestRoomConcurrencyLimitRejectsBeforeCreatingQueueItem(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	attachRoomConcurrencyTestSurfaces(svc)
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.ConcurrencyLimit = intPointer(1)
+	first := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		MessageID:        "msg-1",
+		Text:             "先处理",
+	})
+	if !hasAgentCommand(first) {
+		t.Fatalf("first surface should dispatch, got %#v", first)
+	}
+
+	second := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:app-2:chat:oc_room",
+		GatewayID:        "app-2",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_member",
+		MessageID:        "msg-2",
+		Text:             "超限消息",
+	})
+	if noticeCode(second, "room_workspace_active") == "" {
+		t.Fatalf("expected concurrency admission notice, got %#v", second)
+	}
+	blocked := svc.root.Surfaces["feishu:app-2:chat:oc_room"]
+	if len(blocked.QueuedQueueItemIDs) != 0 || len(blocked.QueueItems) != 0 {
+		t.Fatalf("over-limit message must not create queue item, queued=%#v items=%#v", blocked.QueuedQueueItemIDs, blocked.QueueItems)
+	}
+}
+
+func TestRoomConcurrencyLimitZeroAllowsUnlimitedActiveSurfaces(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	attachRoomConcurrencyTestSurfaces(svc)
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.ConcurrencyLimit = intPointer(0)
+	for _, surfaceID := range []string{"feishu:app-1:chat:oc_room", "feishu:app-2:chat:oc_room"} {
+		events := svc.ApplySurfaceAction(control.Action{
+			Kind:             control.ActionTextMessage,
+			SurfaceSessionID: surfaceID,
+			GatewayID:        strings.Split(strings.TrimPrefix(surfaceID, "feishu:"), ":")[0],
+			ChatID:           "oc_room",
+			ActorUserID:      "ou_user",
+			MessageID:        surfaceID + ":message",
+			Text:             "继续处理",
+		})
+		if !hasAgentCommand(events) {
+			t.Fatalf("unlimited room should dispatch surface %s, got %#v", surfaceID, events)
+		}
+	}
+	if got := svc.feishuRoomActiveReservationCount(room); got != 2 {
+		t.Fatalf("active reservations = %d, want 2 for unlimited room", got)
+	}
+}
+
+func attachRoomConcurrencyTestSurfaces(svc *Service) {
+	for _, action := range []control.Action{
+		{
+			Kind:             control.ActionAttachWorkspace,
+			SurfaceSessionID: "feishu:app-1:chat:oc_room",
+			GatewayID:        "app-1",
+			ChatID:           "oc_room",
+			ActorUserID:      "ou_owner",
+			WorkspaceKey:     "/data/dl/droid",
+		},
+		{
+			Kind:             control.ActionAttachWorkspace,
+			SurfaceSessionID: "feishu:app-2:chat:oc_room",
+			GatewayID:        "app-2",
+			ChatID:           "oc_room",
+			ActorUserID:      "ou_member",
+			WorkspaceKey:     "/data/dl/droid",
+		},
+	} {
+		svc.ApplySurfaceAction(action)
 	}
 }
 
@@ -1003,11 +1110,13 @@ func TestRoomActiveLockRefreshesOnTurnStarted(t *testing.T) {
 	})
 
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
-	if room == nil || room.ActiveLock == nil {
-		t.Fatalf("expected active lock, got %#v", room)
+	if room == nil || len(room.ActiveReservations) != 1 {
+		t.Fatalf("expected one active reservation, got %#v", room)
 	}
-	if room.ActiveLock.ThreadID != "thread-droid-a" || room.ActiveLock.TurnID != "turn-1" || room.ActiveLock.Reason != "running" {
-		t.Fatalf("active lock = %#v, want turn/thread running lock", room.ActiveLock)
+	for _, reservation := range room.ActiveReservations {
+		if reservation.ThreadID != "thread-droid-a" || reservation.TurnID != "turn-1" || reservation.Reason != "running" {
+			t.Fatalf("active reservation = %#v, want turn/thread running reservation", reservation)
+		}
 	}
 }
 
@@ -1030,12 +1139,15 @@ func TestRoomActiveLockStaleRecordDoesNotBlockDispatch(t *testing.T) {
 		WorkspaceKey:     "/data/dl/droid",
 	})
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
-	room.ActiveLock = &state.FeishuRoomActiveLockRecord{
-		SurfaceSessionID: "feishu:app-missing:chat:oc_room",
-		InstanceID:       "inst-missing",
-		QueueItemID:      "queue-missing",
-		Reason:           "running",
-		UpdatedAt:        svc.now(),
+	room.ActiveReservations = map[string]*state.FeishuRoomActiveReservationRecord{
+		"stale": {
+			ReservationID:    "stale",
+			SurfaceSessionID: "feishu:app-missing:chat:oc_room",
+			InstanceID:       "inst-missing",
+			QueueItemID:      "queue-missing",
+			Reason:           "running",
+			UpdatedAt:        svc.now(),
+		},
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -1051,8 +1163,13 @@ func TestRoomActiveLockStaleRecordDoesNotBlockDispatch(t *testing.T) {
 	if !hasAgentCommand(events) {
 		t.Fatalf("stale active lock should not block dispatch, got %#v", events)
 	}
-	if room.ActiveLock == nil || room.ActiveLock.SurfaceSessionID != "feishu:app-1:chat:oc_room" {
-		t.Fatalf("expected stale lock to be replaced by current dispatch lock, got %#v", room.ActiveLock)
+	if len(room.ActiveReservations) != 1 {
+		t.Fatalf("expected stale reservation to be replaced by current dispatch reservation, got %#v", room.ActiveReservations)
+	}
+	for _, reservation := range room.ActiveReservations {
+		if reservation.SurfaceSessionID != "feishu:app-1:chat:oc_room" {
+			t.Fatalf("expected stale reservation to be replaced by current dispatch reservation, got %#v", reservation)
+		}
 	}
 }
 
@@ -1068,12 +1185,15 @@ func TestRoomActiveLockRoomWorkspaceResetClearsStaleRecord(t *testing.T) {
 	})
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	room.PrimaryGatewayID = "app-1"
-	room.ActiveLock = &state.FeishuRoomActiveLockRecord{
-		SurfaceSessionID: "feishu:app-missing:chat:oc_room",
-		InstanceID:       "inst-missing",
-		QueueItemID:      "queue-missing",
-		Reason:           "running",
-		UpdatedAt:        svc.now(),
+	room.ActiveReservations = map[string]*state.FeishuRoomActiveReservationRecord{
+		"stale": {
+			ReservationID:    "stale",
+			SurfaceSessionID: "feishu:app-missing:chat:oc_room",
+			InstanceID:       "inst-missing",
+			QueueItemID:      "queue-missing",
+			Reason:           "running",
+			UpdatedAt:        svc.now(),
+		},
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -1088,8 +1208,8 @@ func TestRoomActiveLockRoomWorkspaceResetClearsStaleRecord(t *testing.T) {
 	if noticeCode(events, "workspace_switched") == "" {
 		t.Fatalf("expected workspace switch to complete, got %#v", events)
 	}
-	if room.ActiveLock != nil {
-		t.Fatalf("room workspace reset should clear stale active lock, got %#v", room.ActiveLock)
+	if len(room.ActiveReservations) != 0 {
+		t.Fatalf("room workspace reset should clear stale active reservations, got %#v", room.ActiveReservations)
 	}
 }
 

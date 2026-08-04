@@ -7,6 +7,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func intPointer(value int) *int { return &value }
+
 func TestMaterializeFeishuRoomState(t *testing.T) {
 	svc := NewService(nil, Config{}, nil)
 	updatedAt := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
@@ -21,6 +23,7 @@ func TestMaterializeFeishuRoomState(t *testing.T) {
 		PrimaryGatewayID:         "app-1",
 		PrimaryUpdatedBy:         "ou_user",
 		PrimaryUpdatedAt:         updatedAt,
+		ConcurrencyLimit:         intPointer(0),
 	}})
 
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
@@ -33,8 +36,11 @@ func TestMaterializeFeishuRoomState(t *testing.T) {
 	if room.WorkspaceKey != "/data/dl/workspace" || room.WorkspaceUpdatedBy != "ou_workspace" || !room.WorkspaceUpdatedAt.Equal(updatedAt) || room.WorkspaceResetGeneration != 3 {
 		t.Fatalf("workspace state = %#v, want durable workspace metadata", room)
 	}
-	if len(room.GatewayIDs) != 0 || len(room.SurfaceSessionIDs) != 0 || room.ActiveLock != nil {
+	if len(room.GatewayIDs) != 0 || len(room.SurfaceSessionIDs) != 0 || len(room.ActiveReservations) != 0 {
 		t.Fatalf("materialized durable primary state should not invent runtime evidence: %#v", room)
+	}
+	if room.ConcurrencyLimit == nil || *room.ConcurrencyLimit != 0 {
+		t.Fatalf("materialized concurrency limit = %#v, want explicit unlimited", room.ConcurrencyLimit)
 	}
 }
 

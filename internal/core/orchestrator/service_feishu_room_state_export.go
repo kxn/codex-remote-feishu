@@ -21,10 +21,11 @@ func (s *Service) MaterializeFeishuRoomState(records []state.FeishuRoomStateReco
 		room := s.root.FeishuRoomContexts[normalized.RoomID]
 		if room == nil {
 			room = &state.FeishuRoomContextRecord{
-				RoomID:            normalized.RoomID,
-				ChatID:            normalized.ChatID,
-				GatewayIDs:        map[string]bool{},
-				SurfaceSessionIDs: map[string]bool{},
+				RoomID:             normalized.RoomID,
+				ChatID:             normalized.ChatID,
+				GatewayIDs:         map[string]bool{},
+				SurfaceSessionIDs:  map[string]bool{},
+				ActiveReservations: map[string]*state.FeishuRoomActiveReservationRecord{},
 			}
 			s.root.FeishuRoomContexts[normalized.RoomID] = room
 		}
@@ -37,6 +38,10 @@ func (s *Service) MaterializeFeishuRoomState(records []state.FeishuRoomStateReco
 		room.WorkspaceUpdatedBy = normalized.WorkspaceUpdatedBy
 		room.WorkspaceUpdatedAt = normalized.WorkspaceUpdatedAt
 		room.WorkspaceResetGeneration = normalized.WorkspaceResetGeneration
+		room.ConcurrencyLimit = state.CloneFeishuRoomConcurrencyLimit(normalized.ConcurrencyLimit)
+		if room.ActiveReservations == nil {
+			room.ActiveReservations = map[string]*state.FeishuRoomActiveReservationRecord{}
+		}
 	}
 }
 
@@ -52,7 +57,7 @@ func (s *Service) FeishuRoomState() []state.FeishuRoomStateRecord {
 	records := make([]state.FeishuRoomStateRecord, 0, len(keys))
 	for _, key := range keys {
 		room := s.root.FeishuRoomContexts[key]
-		if room == nil || room.PrimaryGatewayID == "" && room.WorkspaceKey == "" && room.WorkspaceResetGeneration == 0 {
+		if room == nil || room.PrimaryGatewayID == "" && room.WorkspaceKey == "" && room.WorkspaceResetGeneration == 0 && room.ConcurrencyLimit == nil {
 			continue
 		}
 		record, ok := state.FeishuRoomStateRecordFromContext(room)
