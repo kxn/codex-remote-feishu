@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
@@ -303,6 +305,79 @@ func TestLegacyFeishuRegistrationRunnerCancellationStopsPolling(t *testing.T) {
 	case failure := <-failureCh:
 		t.Fatalf("canceled registration failed: %#v", failure)
 	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestLegacyFeishuRegistrationRunnerCompletesCurrentSetupSession(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	gateway := &fakeAdminGatewayController{
+		verifyResult: feishu.VerifyResult{Connected: true, Duration: time.Second},
+	}
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
+	stubFeishuSetupFacade(t, &fakeFeishuSetupClient{
+		describeResult: feishuAppIdentity{DisplayName: "Legacy QR Bot"},
+		planResult: feishu.AutoConfigPlan{
+			Status:  feishu.AutoConfigStatusAwaitingReview,
+			Summary: "飞书正在审核发布。",
+		},
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+			return
+		}
+		switch r.Form.Get("action") {
+		case "init":
+			_, _ = w.Write([]byte(`{}`))
+		case "begin":
+			_, _ = w.Write([]byte(`{"device_code":"device-setup","verification_uri_complete":"https://example.test/legacy-qr","interval":1,"expire_in":60}`))
+		case "poll":
+			_, _ = w.Write([]byte(`{"client_id":"cli_setup","client_secret":"secret_setup","open_id":"ou_setup"}`))
+		default:
+			http.Error(w, "unexpected action", http.StatusBadRequest)
+		}
+	}))
+	defer server.Close()
+	app.feishuRuntime.registration = &legacyFeishuRegistrationRunner{
+		httpClient:      server.Client(),
+		registrationURL: server.URL,
+		waitFn:          func(context.Context, time.Duration) error { return nil },
+	}
+
+	createRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions", "")
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create onboarding status = %d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var createResp feishuOnboardingSessionResponse
+	if err := json.NewDecoder(createRec.Body).Decode(&createResp); err != nil {
+		t.Fatalf("decode onboarding create: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var ready feishuOnboardingSessionView
+	for time.Now().Before(deadline) {
+		view, ok := app.snapshotFeishuOnboardingSession(createResp.Session.ID)
+		if ok && view.Status == feishuOnboardingStatusReady {
+			ready = view
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if ready.Status != feishuOnboardingStatusReady || ready.AppID != "cli_setup" {
+		t.Fatalf("legacy runner did not drive session ready: %#v", ready)
+	}
+
+	completeRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions/"+createResp.Session.ID+"/complete", "")
+	if completeRec.Code != http.StatusOK {
+		t.Fatalf("complete onboarding status = %d body=%s", completeRec.Code, completeRec.Body.String())
+	}
+	var completeResp feishuOnboardingCompleteResponse
+	if err := json.NewDecoder(completeRec.Body).Decode(&completeResp); err != nil {
+		t.Fatalf("decode onboarding complete: %v", err)
+	}
+	if completeResp.Session.Status != feishuOnboardingStatusCompleted || completeResp.AutoConfig == nil || completeResp.AutoConfig.Plan.Status != feishu.AutoConfigStatusAwaitingReview {
+		t.Fatalf("unexpected complete response: %#v", completeResp)
 	}
 }
 
