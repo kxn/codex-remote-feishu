@@ -11,11 +11,11 @@
 - 扫码注册应用拿不到 `application:application:patch` 权限，且飞书 v7 写接口仅支持开发者后台创建的自建应用，自动写必然失败。
 - 改为接入后只做只读 `plan` 检查：页面列出缺失项与影响说明，缺失权限生成只含缺失项的导入 JSON（`{"scopes":{"tenant":[...],"user":[]}}`），由用户粘贴到飞书后台“批量导入/导出权限”后重新检查。
 - 缺失判断使用配置侧 `application.get` 的 `app.scopes`，不再依赖 `scope.list` 的租户授权状态。
-- 事件检测改用版本接口（`application_app_version.get` 的 `events`/`event_infos`）；回调检测改用 `application.get` 响应中的 `callback_info.subscribed_callbacks`（官方文档页未列出该字段，但官方 lark-cli 的 appmeta 预检直接依赖它，SDK `Application.CallbackInfo` 已建模）；`callback_info` 为 nil 时回调项按无法确认处理，不参与缺失判定。
+- 事件检测对齐官方 lark-cli：从 `application/v6/applications/:app_id/app_versions` 选择首个 `status == 1` 且 `publish_time` 非空的已发布版本，只读取 `event_infos[].event_type`；不使用 `events` 展示名字段，也不使用未审核版本。回调检测改用 `application.get` 响应中的 `callback_info.subscribed_callbacks`（官方文档页未列出该字段，但官方 lark-cli 的 appmeta 预检直接依赖它，SDK `Application.CallbackInfo` 已建模）；`callback_info` 为 nil 时回调项按无法确认处理，不参与缺失判定。
 
 ### 事件与权限检测补充（2026-08-04，issue #794）
 
-- 事件只在“可验证”时参与缺失判定：版本存在且事件列表非空才计算缺失；`application.get` 无版本 ID 时用 `app_versions` 列表接口取已发布版本（`status==1` 且有 `publish_time`）兜底；不可验证（无版本或事件列表为空）时事件不报缺失、不进阻塞清单。
+- 事件只在“可验证”时参与缺失判定：存在已发布版本就按其 `event_infos[].event_type` 计算缺失，即使列表为空也与官方 CLI 一致地视为没有订阅；没有已发布版本或版本列表接口不可用时跳过事件检查。
 - 权限检测支持官方“任一即可”的替代关系（例如 `im:chat:read` 满足 `im:chat:readonly`，`im:resource` / `im:resource:upload`、`base:app:create` / `bitable:app` 等同理）：需求被自身或任一官方替代满足即视为已配置，替代 scope 不判为多余。manifest canonical scope 是否调整属 issue #774。
 
 ## 1. 文档定位

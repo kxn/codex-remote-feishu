@@ -103,10 +103,9 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 	}
 	// activeVersion intentionally preserves the existing publish/ability
 	// semantics, where an unaudited draft is the active editable version. Event
-	// verification is different: it must use the published configuration.
-	// The version list is authoritative for that purpose, matching the official
-	// lark-cli appmeta implementation. The per-version get response is only a
-	// fallback because it can contain an incomplete event projection.
+	// preflight is separate and follows the official lark-cli: read app_versions
+	// and use the first published version (status==1 with publish_time). The
+	// application.get online/unaudited pointers are not the event source of truth.
 	versions, listErr := autoConfigListApplicationVersions(ctx, broker, sdkClient, cfg.AppID)
 	if listErr == nil {
 		published := publishedVersion(versions)
@@ -115,28 +114,23 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 		}
 		snapshot.eventVersion = published
 	}
-	if snapshot.eventVersion == nil {
-		snapshot.eventVersion = snapshot.onlineVersion
-	}
 	return snapshot, nil
 }
 
 func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPlan {
 	configuredScopes := configuredScopeRefs(snapshot.app)
 	// The application.get docs page lists no event/callback fields, but the
-	// live response carries them. Events are verified from the published
-	// version's subscribed-event list (scan-created apps may not expose a
-	// readable v6 version otherwise); callbacks are read from
-	// application.get's callback_info (the official lark-cli appmeta precheck
-	// reads the same field). A nil callback_info means the callback state is
-	// unverifiable and callbacks stay out of the missing diff.
-	configuredEvents := activeVersionEvents(snapshot.eventVersion)
+	// live response carries callback_info. Events follow the official lark-cli
+	// preflight: use the published app_versions event_infos list; callbacks are
+	// read from application.get's callback_info (the official lark-cli appmeta
+	// precheck reads the same field). A nil callback_info means the callback
+	// state is unverifiable and callbacks stay out of the missing diff.
+	configuredEvents := versionEventTypes(snapshot.eventVersion)
 	configuredCallbacks := sortUniqueStrings(appSubscribedCallbacks(snapshot.app))
-	// Events are verifiable only when a version reports a non-empty event
-	// list. An empty list gives no positive evidence of what is subscribed
-	// (scan-created agent apps can be configured without a readable v6
-	// version), so events must not be reported missing in that state.
-	eventsVerifiable := snapshot.eventVersion != nil && len(configuredEvents) > 0
+	// Match lark-cli: a readable published version is definitive, including an
+	// empty event_infos list. Only an unavailable published version skips the
+	// event precheck.
+	eventsVerifiable := snapshot.eventVersion != nil
 	callbacksVerifiable := snapshot.app != nil && snapshot.app.CallbackInfo != nil
 	targetScopes := normalizeScopeRequirements(s.manifest)
 	targetScopeRefs := scopeRefsFromRequirements(targetScopes)
@@ -522,12 +516,9 @@ func appSubscribedCallbacks(app *larkapplication.Application) []string {
 	return append([]string(nil), app.CallbackInfo.SubscribedCallbacks...)
 }
 
-func activeVersionEvents(version *larkapplication.ApplicationAppVersion) []string {
+func versionEventTypes(version *larkapplication.ApplicationAppVersion) []string {
 	if version == nil {
 		return nil
-	}
-	if len(version.Events) > 0 {
-		return sortUniqueStrings(version.Events)
 	}
 	out := make([]string, 0, len(version.EventInfos))
 	for _, item := range version.EventInfos {
