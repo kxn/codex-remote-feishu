@@ -2,16 +2,11 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
+	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
@@ -32,6 +27,45 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 	if _, ok := run.Context.Deadline(); !ok {
 		t.Fatalf("expected bounded registration context")
 	}
+	if run.Options.Source != "codex-remote-feishu" {
+		t.Fatalf("registration source = %q, want codex-remote-feishu", run.Options.Source)
+	}
+	if !run.Options.CreateOnly {
+		t.Fatalf("expected createOnly registration option")
+	}
+	if run.Options.Addons == nil || run.Options.Addons.Preset == nil || *run.Options.Addons.Preset {
+		t.Fatalf("expected preset=false addons, got %#v", run.Options.Addons)
+	}
+	if got, want := run.Options.Addons.Events.Items.Tenant, []string{
+		"application.bot.menu_v6",
+		"im.message.reaction.created_v1",
+		"im.message.reaction.deleted_v1",
+		"im.message.recalled_v1",
+		"im.message.receive_v1",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("registration events = %#v, want %#v", got, want)
+	}
+	if got, want := run.Options.Addons.Callbacks.Items, []string{"card.action.trigger"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("registration callbacks = %#v, want %#v", got, want)
+	}
+	for _, want := range []string{
+		"application:application:self_manage",
+		"bitable:app",
+		"drive:drive",
+		"im:chat:readonly",
+		"im:message.group_at_msg.include_bot:readonly",
+		"im:message.group_at_msg:readonly",
+		"im:message.group_msg:readonly",
+		"im:message.p2p_msg:readonly",
+		"im:message.reactions:read",
+		"im:message.reactions:write_only",
+		"im:message:readonly",
+		"im:message:send_as_bot",
+		"im:resource:upload",
+	} {
+		assertStringContains(t, run.Options.Addons.Scopes.Tenant, want)
+	}
+	assertSortedUniqueNonEmpty(t, run.Options.Addons.Scopes.Tenant)
 
 	expiresAt := time.Now().UTC().Add(10 * time.Minute)
 	run.EmitQRCode(feishuRegistrationQRCode{
@@ -91,373 +125,6 @@ func TestFeishuOnboardingRegistrationQRCodeFailureMarksSessionFailed(t *testing.
 	}
 	if !runner.runs[0].Cancelled {
 		t.Fatalf("expected registration run to be canceled after QR render failure")
-	}
-}
-
-func TestLegacyFeishuRegistrationRunnerUsesHistoricalFlow(t *testing.T) {
-	var mu sync.Mutex
-	var requests []url.Values
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse form: %v", err)
-			return
-		}
-		mu.Lock()
-		requests = append(requests, r.Form)
-		mu.Unlock()
-		switch r.Form.Get("action") {
-		case "init":
-			_, _ = w.Write([]byte(`{"supported_auth_methods":["client_secret"]}`))
-		case "begin":
-			_, _ = w.Write([]byte(`{"device_code":"device-1","verification_uri_complete":"https://accounts.feishu.cn/qr?code=a%2Bb","interval":0,"expire_in":60}`))
-		case "poll":
-			_, _ = w.Write([]byte(`{"client_id":"cli_1","client_secret":"secret_1","user_info":{"open_id":"ou_1"}}`))
-		default:
-			http.Error(w, "unexpected action", http.StatusBadRequest)
-		}
-	}))
-	defer server.Close()
-
-	qrCh := make(chan feishuRegistrationQRCode, 1)
-	resultCh := make(chan feishuRegistrationResult, 1)
-	runner := &legacyFeishuRegistrationRunner{
-		httpClient:      server.Client(),
-		registrationURL: server.URL,
-		waitFn:          func(context.Context, time.Duration) error { return nil },
-	}
-	runner.Start(context.Background(), feishuRegistrationOptions{}, feishuRegistrationCallbacks{
-		OnQRCode:   func(info feishuRegistrationQRCode) { qrCh <- info },
-		OnComplete: func(result feishuRegistrationResult) { resultCh <- result },
-	})
-
-	select {
-	case qr := <-qrCh:
-		if qr.URL != "https://accounts.feishu.cn/qr?code=a%2Bb" {
-			t.Fatalf("QR URL = %q, want original verification_uri_complete", qr.URL)
-		}
-		if qr.Interval != 5*time.Second {
-			t.Fatalf("default interval = %s, want 5s", qr.Interval)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for QR callback")
-	}
-
-	select {
-	case result := <-resultCh:
-		if result.AppID != "cli_1" || result.AppSecret != "secret_1" || result.InstallerID != "ou_1" {
-			t.Fatalf("registration result = %#v", result)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for registration result")
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if len(requests) != 3 {
-		t.Fatalf("request count = %d, want init, begin, poll", len(requests))
-	}
-	if got := requests[0].Get("action"); got != "init" {
-		t.Fatalf("first action = %q, want init", got)
-	}
-	if got := requests[1].Get("action"); got != "begin" {
-		t.Fatalf("second action = %q, want begin", got)
-	}
-	for key, want := range map[string]string{
-		"archetype":         "PersonalAgent",
-		"auth_method":       "client_secret",
-		"request_user_info": "open_id",
-	} {
-		if got := requests[1].Get(key); got != want {
-			t.Fatalf("begin %s = %q, want %q", key, got, want)
-		}
-	}
-	if got := requests[2].Get("action"); got != "poll" {
-		t.Fatalf("third action = %q, want poll", got)
-	}
-	if got := requests[2].Get("device_code"); got != "device-1" {
-		t.Fatalf("poll device_code = %q, want device-1", got)
-	}
-}
-
-func TestLegacyFeishuRegistrationRunnerRetriesTransientPollErrors(t *testing.T) {
-	var mu sync.Mutex
-	pollCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse form: %v", err)
-			return
-		}
-		switch r.Form.Get("action") {
-		case "init":
-			_, _ = w.Write([]byte(`{}`))
-		case "begin":
-			_, _ = w.Write([]byte(`{"device_code":"device-2","verification_uri_complete":"https://example.test/qr","interval":1,"expire_in":60}`))
-		case "poll":
-			mu.Lock()
-			pollCount++
-			count := pollCount
-			mu.Unlock()
-			if count == 1 {
-				http.Error(w, "temporary outage", http.StatusBadGateway)
-				return
-			}
-			if count == 2 {
-				_, _ = w.Write([]byte(`{"error":"authorization_pending"}`))
-				return
-			}
-			_, _ = w.Write([]byte(`{"client_id":"cli_2","client_secret":"secret_2","open_id":"ou_2"}`))
-		}
-	}))
-	defer server.Close()
-
-	resultCh := make(chan feishuRegistrationResult, 1)
-	failureCh := make(chan feishuRegistrationFailure, 1)
-	runner := &legacyFeishuRegistrationRunner{
-		httpClient:      server.Client(),
-		registrationURL: server.URL,
-		waitFn:          func(context.Context, time.Duration) error { return nil },
-	}
-	runner.Start(context.Background(), feishuRegistrationOptions{}, feishuRegistrationCallbacks{
-		OnComplete: func(result feishuRegistrationResult) { resultCh <- result },
-		OnFailure:  func(failure feishuRegistrationFailure) { failureCh <- failure },
-	})
-
-	select {
-	case result := <-resultCh:
-		if result.AppID != "cli_2" || result.InstallerID != "ou_2" {
-			t.Fatalf("registration result = %#v", result)
-		}
-	case failure := <-failureCh:
-		t.Fatalf("transient poll error became terminal failure: %#v", failure)
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for retry result")
-	}
-}
-
-func TestLegacyFeishuRegistrationRunnerMapsTerminalPollErrors(t *testing.T) {
-	tests := []struct {
-		name      string
-		response  string
-		status    string
-		errorCode string
-	}{
-		{name: "expired", response: `{"error":"expired_token"}`, status: feishuOnboardingStatusExpired, errorCode: "expired_token"},
-		{name: "denied", response: `{"error":"access_denied"}`, status: feishuOnboardingStatusFailed, errorCode: "access_denied"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if err := r.ParseForm(); err != nil {
-					t.Errorf("parse form: %v", err)
-					return
-				}
-				switch r.Form.Get("action") {
-				case "init":
-					_, _ = w.Write([]byte(`{}`))
-				case "begin":
-					_, _ = w.Write([]byte(`{"device_code":"device-terminal","verification_uri_complete":"https://example.test/qr","interval":1,"expire_in":60}`))
-				case "poll":
-					_, _ = w.Write([]byte(tt.response))
-				}
-			}))
-			defer server.Close()
-
-			failureCh := make(chan feishuRegistrationFailure, 1)
-			runner := &legacyFeishuRegistrationRunner{
-				httpClient:      server.Client(),
-				registrationURL: server.URL,
-				waitFn:          func(context.Context, time.Duration) error { return nil },
-			}
-			runner.Start(context.Background(), feishuRegistrationOptions{}, feishuRegistrationCallbacks{
-				OnFailure: func(failure feishuRegistrationFailure) { failureCh <- failure },
-			})
-
-			select {
-			case failure := <-failureCh:
-				if failure.Status != tt.status || failure.ErrorCode != tt.errorCode {
-					t.Fatalf("failure = %#v, want status=%q code=%q", failure, tt.status, tt.errorCode)
-				}
-			case <-time.After(2 * time.Second):
-				t.Fatal("timed out waiting for terminal failure")
-			}
-		})
-	}
-}
-
-func TestLegacyFeishuRegistrationRunnerCancellationStopsPolling(t *testing.T) {
-	pollStarted := make(chan struct{})
-	pollCanceled := make(chan struct{})
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse form: %v", err)
-			return
-		}
-		switch r.Form.Get("action") {
-		case "init":
-			_, _ = w.Write([]byte(`{}`))
-		case "begin":
-			_, _ = w.Write([]byte(`{"device_code":"device-cancel","verification_uri_complete":"https://example.test/qr","interval":1,"expire_in":60}`))
-		case "poll":
-			close(pollStarted)
-			<-r.Context().Done()
-			close(pollCanceled)
-		}
-	}))
-	defer server.Close()
-
-	resultCh := make(chan feishuRegistrationResult, 1)
-	failureCh := make(chan feishuRegistrationFailure, 1)
-	runner := &legacyFeishuRegistrationRunner{
-		httpClient:      server.Client(),
-		registrationURL: server.URL,
-		waitFn:          func(context.Context, time.Duration) error { return nil },
-	}
-	run := runner.Start(context.Background(), feishuRegistrationOptions{}, feishuRegistrationCallbacks{
-		OnComplete: func(result feishuRegistrationResult) { resultCh <- result },
-		OnFailure:  func(failure feishuRegistrationFailure) { failureCh <- failure },
-	})
-
-	select {
-	case <-pollStarted:
-	case <-time.After(2 * time.Second):
-		t.Fatal("timed out waiting for poll request")
-	}
-	run.Cancel()
-	select {
-	case <-pollCanceled:
-	case <-time.After(2 * time.Second):
-		t.Fatal("poll request was not canceled")
-	}
-	select {
-	case result := <-resultCh:
-		t.Fatalf("canceled registration completed: %#v", result)
-	case failure := <-failureCh:
-		t.Fatalf("canceled registration failed: %#v", failure)
-	case <-time.After(100 * time.Millisecond):
-	}
-}
-
-func TestLegacyFeishuRegistrationRunnerDoesNotPollAfterQRExpiry(t *testing.T) {
-	pollCalls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse form: %v", err)
-			return
-		}
-		switch r.Form.Get("action") {
-		case "init":
-			_, _ = w.Write([]byte(`{}`))
-		case "begin":
-			_, _ = w.Write([]byte(`{"device_code":"device-expiry","verification_uri_complete":"https://example.test/qr","interval":1,"expire_in":1}`))
-		case "poll":
-			pollCalls++
-			_, _ = w.Write([]byte(`{"client_id":"cli_late","client_secret":"secret_late"}`))
-		}
-	}))
-	defer server.Close()
-
-	failureCh := make(chan feishuRegistrationFailure, 1)
-	runner := &legacyFeishuRegistrationRunner{
-		httpClient:      server.Client(),
-		registrationURL: server.URL,
-		waitFn: func(ctx context.Context, _ time.Duration) error {
-			timer := time.NewTimer(1100 * time.Millisecond)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		},
-	}
-	runner.Start(context.Background(), feishuRegistrationOptions{}, feishuRegistrationCallbacks{
-		OnFailure: func(failure feishuRegistrationFailure) { failureCh <- failure },
-	})
-
-	select {
-	case failure := <-failureCh:
-		if failure.Status != feishuOnboardingStatusExpired || failure.ErrorCode != "expired_token" {
-			t.Fatalf("failure = %#v, want expired token", failure)
-		}
-		if pollCalls != 0 {
-			t.Fatalf("poll calls = %d, want 0 after QR expiry", pollCalls)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for expiry failure")
-	}
-}
-
-func TestLegacyFeishuRegistrationRunnerCompletesCurrentSetupSession(t *testing.T) {
-	cfg := config.DefaultAppConfig()
-	gateway := &fakeAdminGatewayController{
-		verifyResult: feishu.VerifyResult{Connected: true, Duration: time.Second},
-	}
-	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), gateway, false, "")
-	stubFeishuSetupFacade(t, &fakeFeishuSetupClient{
-		describeResult: feishuAppIdentity{DisplayName: "Legacy QR Bot"},
-		planResult: feishu.AutoConfigPlan{
-			Status:  feishu.AutoConfigStatusAwaitingReview,
-			Summary: "飞书正在审核发布。",
-		},
-	})
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			t.Errorf("parse form: %v", err)
-			return
-		}
-		switch r.Form.Get("action") {
-		case "init":
-			_, _ = w.Write([]byte(`{}`))
-		case "begin":
-			_, _ = w.Write([]byte(`{"device_code":"device-setup","verification_uri_complete":"https://example.test/legacy-qr","interval":1,"expire_in":60}`))
-		case "poll":
-			_, _ = w.Write([]byte(`{"client_id":"cli_setup","client_secret":"secret_setup","open_id":"ou_setup"}`))
-		default:
-			http.Error(w, "unexpected action", http.StatusBadRequest)
-		}
-	}))
-	defer server.Close()
-	app.feishuRuntime.registration = &legacyFeishuRegistrationRunner{
-		httpClient:      server.Client(),
-		registrationURL: server.URL,
-		waitFn:          func(context.Context, time.Duration) error { return nil },
-	}
-
-	createRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions", "")
-	if createRec.Code != http.StatusCreated {
-		t.Fatalf("create onboarding status = %d body=%s", createRec.Code, createRec.Body.String())
-	}
-	var createResp feishuOnboardingSessionResponse
-	if err := json.NewDecoder(createRec.Body).Decode(&createResp); err != nil {
-		t.Fatalf("decode onboarding create: %v", err)
-	}
-
-	deadline := time.Now().Add(2 * time.Second)
-	var ready feishuOnboardingSessionView
-	for time.Now().Before(deadline) {
-		view, ok := app.snapshotFeishuOnboardingSession(createResp.Session.ID)
-		if ok && view.Status == feishuOnboardingStatusReady {
-			ready = view
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	if ready.Status != feishuOnboardingStatusReady || ready.AppID != "cli_setup" {
-		t.Fatalf("legacy runner did not drive session ready: %#v", ready)
-	}
-
-	completeRec := performAdminRequest(t, app, http.MethodPost, "/api/setup/feishu/onboarding/sessions/"+createResp.Session.ID+"/complete", "")
-	if completeRec.Code != http.StatusOK {
-		t.Fatalf("complete onboarding status = %d body=%s", completeRec.Code, completeRec.Body.String())
-	}
-	var completeResp feishuOnboardingCompleteResponse
-	if err := json.NewDecoder(completeRec.Body).Decode(&completeResp); err != nil {
-		t.Fatalf("decode onboarding complete: %v", err)
-	}
-	if completeResp.Session.Status != feishuOnboardingStatusCompleted || completeResp.AutoConfig == nil || completeResp.AutoConfig.Plan.Status != feishu.AutoConfigStatusAwaitingReview {
-		t.Fatalf("unexpected complete response: %#v", completeResp)
 	}
 }
 
@@ -579,4 +246,31 @@ func immediateRegistrationRunner(qrURL, appID, appSecret string) *fakeFeishuRegi
 
 func configForRegistrationTest() config.AppConfig {
 	return config.DefaultAppConfig()
+}
+
+func assertStringContains(t *testing.T, values []string, want string) {
+	t.Helper()
+	for _, value := range values {
+		if value == want {
+			return
+		}
+	}
+	t.Fatalf("expected %q in %#v", want, values)
+}
+
+func assertSortedUniqueNonEmpty(t *testing.T, values []string) {
+	t.Helper()
+	seen := map[string]bool{}
+	for i, value := range values {
+		if value == "" {
+			t.Fatalf("value[%d] is empty in %#v", i, values)
+		}
+		if seen[value] {
+			t.Fatalf("duplicate value %q in %#v", value, values)
+		}
+		seen[value] = true
+		if i > 0 && values[i-1] > value {
+			t.Fatalf("values are not sorted: %#v", values)
+		}
+	}
 }
