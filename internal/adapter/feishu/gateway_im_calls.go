@@ -12,42 +12,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
-	larkimv2 "github.com/larksuite/oapi-sdk-go/v3/service/im/v2"
 )
-
-func (g *LiveGateway) botTimeSensitive(ctx context.Context, userIDType string, timeSensitive bool, userIDs []string) (*larkimv2.BotTimeSentiveFeedCardResp, error) {
-	return DoSDK(ctx, g.broker, CallSpec{
-		GatewayID: g.config.GatewayID,
-		API:       "im.v2.feed_card.bot_time_sensitive",
-		Class:     CallClassIMSend,
-		Priority:  CallPriorityInteractive,
-		ResourceKey: FeishuResourceKey{
-			ReceiveTarget: joinReceiveTarget(userIDType, strings.Join(userIDs, ",")),
-		},
-		Retry:      RetryOff,
-		Permission: PermissionCooldownOnly,
-	}, func(callCtx context.Context, client *lark.Client) (*larkimv2.BotTimeSentiveFeedCardResp, error) {
-		resp, err := client.Im.V2.FeedCard.BotTimeSentive(
-			callCtx,
-			larkimv2.NewBotTimeSentiveFeedCardReqBuilder().
-				UserIdType(userIDType).
-				Body(
-					larkimv2.NewBotTimeSentiveFeedCardReqBodyBuilder().
-						TimeSensitive(timeSensitive).
-						UserIds(userIDs).
-						Build(),
-				).
-				Build(),
-		)
-		if err != nil {
-			return resp, err
-		}
-		if !resp.Success() {
-			return resp, newAPIError("im.v2.feed_card.bot_time_sensitive", resp.ApiResp, resp.CodeError)
-		}
-		return resp, nil
-	})
-}
 
 func (g *LiveGateway) uploadOperationImage(ctx context.Context, operation Operation) (string, error) {
 	path := strings.TrimSpace(operation.ImagePath)

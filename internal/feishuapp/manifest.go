@@ -72,7 +72,6 @@ func DefaultManifest() Manifest {
 					"application:application:self_manage",
 					"drive:drive",
 					"bitable:app",
-					"im:datasync.feed_card.time_sensitive:write",
 					"im:chat:readonly",
 					"im:message:readonly",
 					"im:message.group_at_msg:readonly",
@@ -104,12 +103,6 @@ func DefaultManifest() Manifest {
 				Scope:     "bitable:app",
 				ScopeType: "tenant",
 				Feature:   "cron_bitable",
-				Required:  true,
-			},
-			{
-				Scope:     "im:datasync.feed_card.time_sensitive:write",
-				ScopeType: "tenant",
-				Feature:   "time_sensitive_indicator",
 				Required:  true,
 			},
 			{

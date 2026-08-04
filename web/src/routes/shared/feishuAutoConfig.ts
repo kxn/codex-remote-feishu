@@ -180,8 +180,6 @@ function describeAutoConfigFeature(feature: string): string {
       return "Markdown 预览";
     case "cron_bitable":
       return "/cron 多维表格";
-    case "time_sensitive_indicator":
-      return "等待输入提醒";
     case "group_mentions":
       return "群聊 @ 消息";
     case "p2p_chat":

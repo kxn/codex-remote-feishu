@@ -367,33 +367,6 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		delete(g.reactions, reactionKey(operation.MessageID, operation.EmojiType))
 		g.mu.Unlock()
 		return nil
-	case OperationSetTimeSensitive:
-		userID := strings.TrimSpace(operation.ReceiveID)
-		userIDType := strings.TrimSpace(operation.ReceiveIDType)
-		if userID == "" || userIDType == "" {
-			return fmt.Errorf("set time sensitive failed: missing user target")
-		}
-		resp, err := g.botTimeSensitiveFn(ctx, userIDType, operation.TimeSensitive, []string{userID})
-		if err != nil {
-			return err
-		}
-		if !resp.Success() {
-			return newAPIError("im.v2.feed_card.bot_time_sensitive", resp.ApiResp, resp.CodeError)
-		}
-		if resp.Data != nil && len(resp.Data.FailedUserReasons) != 0 {
-			reason := resp.Data.FailedUserReasons[0]
-			code := 0
-			if reason.ErrorCode != nil {
-				code = *reason.ErrorCode
-			}
-			return fmt.Errorf(
-				"set time sensitive failed: user=%s code=%d msg=%s",
-				strings.TrimSpace(stringPtr(reason.UserId)),
-				code,
-				strings.TrimSpace(stringPtr(reason.ErrorMessage)),
-			)
-		}
-		return nil
 	default:
 		return nil
 	}

@@ -51,7 +51,6 @@
         "application:application:self_manage",
         "drive:drive",
         "bitable:app",
-        "im:datasync.feed_card.time_sensitive:write",
         "im:chat:readonly",
         "im:message:readonly",
         "im:message.group_at_msg:readonly",
@@ -126,8 +125,7 @@
     {
       "area": "单聊权限",
       "items": [
-        "开通 P2P 消息只读权限。",
-        "开通 im:datasync.feed_card.time_sensitive:write。"
+        "开通 P2P 消息只读权限。"
       ]
     },
     {

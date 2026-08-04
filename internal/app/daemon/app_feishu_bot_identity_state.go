@@ -248,12 +248,6 @@ func (a *App) purgeFeishuGatewayRuntimeStateLocked(gatewayID string, surfaceIDs 
 	for _, surfaceID := range surfaceIDs {
 		addSurface(surfaceID)
 	}
-	for surfaceID, target := range a.feishuRuntime.timeSensitive {
-		if surfaceSet[surfaceID] || canonicalGatewayID(target.GatewayID) == gatewayID {
-			delete(a.feishuRuntime.timeSensitive, surfaceID)
-			surfaceSet[surfaceID] = true
-		}
-	}
 	for surfaceID := range a.surfaceResumeRuntime.recovery {
 		addSurface(surfaceID)
 	}

@@ -65,7 +65,6 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	app.syncSurfaceResumeStateLocked(nil)
 	app.syncBotCapabilitySettingsStateLocked()
 	app.syncFeishuRoomStateLocked()
-	app.feishuRuntime.timeSensitive[privateSurfaceID] = feishuTimeSensitiveState{GatewayID: "main", ReceiveID: "ou_user", ReceiveIDType: "open_id"}
 	app.feishuRuntime.attentionRequests[privateSurfaceID+"::request-1::1"] = time.Now().UTC()
 	app.turnPatchRuntime.ActiveFlows["req-main"] = &turnpatchruntime.FlowRecord{
 		FlowID:           "flow-main",
@@ -155,9 +154,6 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	}
 	if got := app.gatewayRuntimeHooks().PrimaryGatewayForChat("oc_room"); got != "" {
 		t.Fatalf("primary snapshot after identity change = %q, want empty", got)
-	}
-	if _, ok := app.feishuRuntime.timeSensitive[privateSurfaceID]; ok {
-		t.Fatal("old time-sensitive cache survived identity change")
 	}
 	if _, ok := app.turnPatchRuntime.ActiveFlows["req-main"]; ok {
 		t.Fatal("old turn patch flow survived identity change")

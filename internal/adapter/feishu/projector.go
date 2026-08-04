@@ -15,14 +15,13 @@ import (
 type OperationKind string
 
 const (
-	OperationSendText         OperationKind = "send_text"
-	OperationSendCard         OperationKind = "send_card"
-	OperationUpdateCard       OperationKind = "update_card"
-	OperationSendImage        OperationKind = "send_image"
-	OperationDeleteMessage    OperationKind = "delete_message"
-	OperationAddReaction      OperationKind = "add_reaction"
-	OperationRemoveReaction   OperationKind = "remove_reaction"
-	OperationSetTimeSensitive OperationKind = "set_time_sensitive"
+	OperationSendText       OperationKind = "send_text"
+	OperationSendCard       OperationKind = "send_card"
+	OperationUpdateCard     OperationKind = "update_card"
+	OperationSendImage      OperationKind = "send_image"
+	OperationDeleteMessage  OperationKind = "delete_message"
+	OperationAddReaction    OperationKind = "add_reaction"
+	OperationRemoveReaction OperationKind = "remove_reaction"
 )
 
 type Operation struct {
@@ -35,7 +34,6 @@ type Operation struct {
 	MessageID            string
 	ReplyToMessageID     string
 	EmojiType            string
-	TimeSensitive        bool
 	Text                 string
 	AttentionText        string
 	AttentionUserID      string

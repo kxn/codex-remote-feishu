@@ -83,7 +83,6 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 - `application:application:self_manage`
 - `drive:drive`
 - `bitable:app`
-- `im:datasync.feed_card.time_sensitive:write`
 - `im:chat:readonly`
 - `im:message:readonly`
 - `im:message.group_at_msg:readonly`
@@ -151,10 +150,6 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 ### 4. 单聊额外权限
 
 如果你主要通过单聊与机器人交互，还需要额外开通 P2P 消息接收权限。
-
-如果你希望机器人在“等待你继续输入”时能在单聊列表里即时提示，还需要额外开通：
-
-- `im:datasync.feed_card.time_sensitive:write`
 
 ## 文档预览额外权限
 

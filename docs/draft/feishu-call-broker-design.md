@@ -86,7 +86,6 @@
 - `im.v1.file.create`
 - `im.v1.message_reaction.create`
 - `im.v1.message_reaction.delete`
-- `im.v2.feed_card.bot_time_sensitive`
 
 特点：
 

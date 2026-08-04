@@ -879,7 +879,6 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 		RunHeadlessRecovery:                true,
 		HandleEvents:                       true,
 	})
-	a.syncFeishuTimeSensitiveLocked(ctx)
 	a.maybeStartFeishuPermissionRefreshLocked(now)
 	a.maybeScheduleCronJobsLocked(now)
 	a.reapCronExitTargetsLocked(now)
