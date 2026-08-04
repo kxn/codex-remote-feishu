@@ -1210,6 +1210,71 @@ func TestRoomActiveLockRefreshesOnTurnStarted(t *testing.T) {
 	}
 }
 
+func TestRoomActiveLockAllowsCurrentSurfaceToQueueWhileTurnRuns(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		ThreadID:         "thread-droid-a",
+	})
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+
+	firstEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		MessageID:        "msg-1",
+		Text:             "先处理",
+	})
+	if !hasAgentCommand(firstEvents) {
+		t.Fatalf("expected initial dispatch, got %#v", firstEvents)
+	}
+
+	svc.ApplyAgentEvent("inst-droid-a", agentproto.Event{
+		Kind:     agentproto.EventTurnStarted,
+		ThreadID: "thread-droid-a",
+		TurnID:   "turn-1",
+		Initiator: agentproto.Initiator{
+			Kind:             agentproto.InitiatorRemoteSurface,
+			SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		},
+	})
+
+	secondEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		MessageID:        "msg-2",
+		Text:             "补充信息",
+	})
+
+	if noticeCode(secondEvents, "room_workspace_active") != "" {
+		t.Fatalf("current surface must not be blocked by its own active reservation, got %#v", secondEvents)
+	}
+	if len(surface.QueuedQueueItemIDs) != 1 {
+		t.Fatalf("expected one queued item behind the active turn, got queued=%#v", surface.QueuedQueueItemIDs)
+	}
+	queued := surface.QueueItems[surface.QueuedQueueItemIDs[0]]
+	if queued == nil || queued.SourceMessageID != "msg-2" || queued.Status != state.QueueItemQueued {
+		t.Fatalf("expected supplemental message to remain queued, got %#v", queued)
+	}
+}
+
 func TestRoomActiveLockStaleRecordDoesNotBlockDispatch(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
 	svc.ApplySurfaceAction(control.Action{
