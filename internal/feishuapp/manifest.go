@@ -69,34 +69,35 @@ func DefaultManifest() Manifest {
 		Scopes: ScopesImport{
 			Scopes: PermissionScopes{
 				Tenant: []string{
+					"application:application:self_manage",
 					"drive:drive",
-					"base:app:create",
 					"bitable:app",
 					"im:datasync.feed_card.time_sensitive:write",
 					"im:chat:readonly",
-					"im:message",
+					"im:message:readonly",
 					"im:message.group_at_msg:readonly",
+					"im:message.group_at_msg.include_bot:readonly",
 					"im:message.group_msg:readonly",
 					"im:message.p2p_msg:readonly",
 					"im:message.reactions:read",
 					"im:message.reactions:write_only",
 					"im:message:send_as_bot",
-					"im:resource",
+					"im:resource:upload",
 				},
 				User: []string{},
 			},
 		},
 		ScopeRequirements: []ScopeRequirement{
 			{
-				Scope:     "drive:drive",
+				Scope:     "application:application:self_manage",
 				ScopeType: "tenant",
-				Feature:   "markdown_preview",
+				Feature:   "setup_app_management",
 				Required:  true,
 			},
 			{
-				Scope:     "base:app:create",
+				Scope:     "drive:drive",
 				ScopeType: "tenant",
-				Feature:   "cron_bitable",
+				Feature:   "markdown_preview",
 				Required:  true,
 			},
 			{
@@ -118,13 +119,19 @@ func DefaultManifest() Manifest {
 				Required:  true,
 			},
 			{
-				Scope:     "im:message",
+				Scope:     "im:message:readonly",
 				ScopeType: "tenant",
 				Feature:   "core_message_flow",
 				Required:  true,
 			},
 			{
 				Scope:     "im:message.group_at_msg:readonly",
+				ScopeType: "tenant",
+				Feature:   "group_mentions",
+				Required:  true,
+			},
+			{
+				Scope:     "im:message.group_at_msg.include_bot:readonly",
 				ScopeType: "tenant",
 				Feature:   "group_mentions",
 				Required:  true,
@@ -160,7 +167,7 @@ func DefaultManifest() Manifest {
 				Required:  true,
 			},
 			{
-				Scope:     "im:resource",
+				Scope:     "im:resource:upload",
 				ScopeType: "tenant",
 				Feature:   "core_message_flow",
 				Required:  true,

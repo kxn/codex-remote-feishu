@@ -16,12 +16,28 @@ func TestBuildFeishuRegistrationAddonsFromDefaultManifest(t *testing.T) {
 		t.Fatalf("expected preset=false, got %#v", addons.Preset)
 	}
 	assertStringContains(t, addons.Scopes.Tenant, "im:message:send_as_bot")
-	assertStringContains(t, addons.Scopes.Tenant, "im:resource")
+	assertStringContains(t, addons.Scopes.Tenant, "im:resource:upload")
+	assertStringContains(t, addons.Scopes.Tenant, "im:message:readonly")
+	assertStringContains(t, addons.Scopes.Tenant, "im:message.group_at_msg.include_bot:readonly")
+	assertStringContains(t, addons.Scopes.Tenant, "application:application:self_manage")
 	assertStringContains(t, addons.Events.Items.Tenant, "im.message.receive_v1")
 	assertStringContains(t, addons.Callbacks.Items, "card.action.trigger")
 	assertSortedUniqueNonEmpty(t, addons.Scopes.Tenant)
 	assertSortedUniqueNonEmpty(t, addons.Events.Items.Tenant)
 	assertSortedUniqueNonEmpty(t, addons.Callbacks.Items)
+	for _, scope := range addons.Scopes.Tenant {
+		for _, disallowed := range []string{
+			"application:application:patch",
+			"base:app:create",
+			"im:message",
+			"im:resource",
+			"im:message.group_bot_msg:readonly",
+		} {
+			if scope == disallowed {
+				t.Fatalf("default manifest must not request %q, got %#v", disallowed, addons.Scopes.Tenant)
+			}
+		}
+	}
 	if len(addons.Scopes.User) != 0 {
 		t.Fatalf("expected default user scopes to be omitted, got %#v", addons.Scopes.User)
 	}

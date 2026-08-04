@@ -611,17 +611,21 @@ var scopeSatisfiers = map[string][]string{
 		"im:message.group_msg:readonly",
 		"im:message.group_msg",
 	},
+	"im:message:readonly": {
+		"im:message:readonly",
+		"im:message",
+	},
 	"im:message.reactions:read": {
 		"im:message.reactions:read",
 		"im:message:readonly",
 	},
-	"im:resource": {
-		"im:resource",
+	"im:resource:upload": {
 		"im:resource:upload",
+		"im:resource",
 	},
-	"base:app:create": {
-		"base:app:create",
-		"bitable:app",
+	"application:application:self_manage": {
+		"application:application:self_manage",
+		"admin:app.info:readonly",
 	},
 }
 

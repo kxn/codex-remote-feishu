@@ -80,19 +80,20 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 
 如果你的飞书控制台支持权限 JSON 导入，优先在这个入口里粘贴这段内容，再补手工确认：
 
-- `base:app:create`
-- `bitable:app`
+- `application:application:self_manage`
 - `drive:drive`
+- `bitable:app`
 - `im:datasync.feed_card.time_sensitive:write`
 - `im:chat:readonly`
-- `im:message`
+- `im:message:readonly`
 - `im:message.group_at_msg:readonly`
+- `im:message.group_at_msg.include_bot:readonly`
 - `im:message.group_msg:readonly`
 - `im:message.p2p_msg:readonly`
 - `im:message.reactions:read`
 - `im:message.reactions:write_only`
 - `im:message:send_as_bot`
-- `im:resource`
+- `im:resource:upload`
 
 ### 1. 基础机器人收发
 

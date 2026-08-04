@@ -48,19 +48,20 @@
   "scopes_import": {
     "scopes": {
       "tenant": [
+        "application:application:self_manage",
         "drive:drive",
-        "base:app:create",
         "bitable:app",
         "im:datasync.feed_card.time_sensitive:write",
         "im:chat:readonly",
-        "im:message",
+        "im:message:readonly",
         "im:message.group_at_msg:readonly",
+        "im:message.group_at_msg.include_bot:readonly",
         "im:message.group_msg:readonly",
         "im:message.p2p_msg:readonly",
         "im:message.reactions:read",
         "im:message.reactions:write_only",
         "im:message:send_as_bot",
-        "im:resource"
+        "im:resource:upload"
       ],
       "user": []
     }

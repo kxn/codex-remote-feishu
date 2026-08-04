@@ -338,6 +338,54 @@ func TestPlanAppAutoConfigAlternativeScopeStillMissingWithoutAnySatisfier(t *tes
 	}
 }
 
+func TestNarrowedManifestScopeSatisfiersHonorAlternatives(t *testing.T) {
+	// After the manifest narrows to the minimum requested scope, configured
+	// broader/legacy scopes that Feishu documents as "any one of" alternatives
+	// must still satisfy the requirement so existing installs are not flagged
+	// as missing.
+	cases := []struct {
+		requirement string
+		configured  string
+	}{
+		{requirement: "im:message:readonly", configured: "im:message"},
+		{requirement: "im:resource:upload", configured: "im:resource"},
+		{requirement: "application:application:self_manage", configured: "admin:app.info:readonly"},
+		{requirement: "im:chat:readonly", configured: "im:chat"},
+		{requirement: "im:message.group_at_msg.include_bot:readonly", configured: "im:message.group_at_msg.include_bot"},
+		{requirement: "im:message.group_msg:readonly", configured: "im:message.group_msg"},
+	}
+	for _, tc := range cases {
+		req := AutoConfigScopeRef{Scope: tc.requirement, ScopeType: "tenant"}
+		configured := map[string]bool{scopeKey(tc.configured, "tenant"): true}
+		if !scopeRequirementSatisfied(req, configured) {
+			t.Fatalf("%q must be satisfied by configured %q", tc.requirement, tc.configured)
+		}
+		if got := missingScopeRefs([]AutoConfigScopeRef{req}, []AutoConfigScopeRef{{Scope: tc.configured, ScopeType: "tenant"}}); len(got) != 0 {
+			t.Fatalf("%q reported missing with configured %q: %#v", tc.requirement, tc.configured, got)
+		}
+	}
+
+	// A configured alternative must not be reported as an extra scope.
+	extra := extraScopeRefs(
+		[]AutoConfigScopeRef{{Scope: "im:message", ScopeType: "tenant"}},
+		[]AutoConfigScopeRef{{Scope: "im:message:readonly", ScopeType: "tenant"}},
+	)
+	if len(extra) != 0 {
+		t.Fatalf("configured im:message must not be extra when im:message:readonly is required, got %#v", extra)
+	}
+}
+
+func TestNarrowedManifestScopeSatisfierExcludesPartialLegacyScope(t *testing.T) {
+	// im:message.history:readonly covers message.get per official docs but does
+	// not cover the recalled event; the manifest requirement im:message:readonly
+	// backs both, so the legacy history scope must not be treated as satisfied.
+	req := AutoConfigScopeRef{Scope: "im:message:readonly", ScopeType: "tenant"}
+	configured := map[string]bool{scopeKey("im:message.history:readonly", "tenant"): true}
+	if scopeRequirementSatisfied(req, configured) {
+		t.Fatal("im:message.history:readonly must not satisfy im:message:readonly: it does not cover the recalled event")
+	}
+}
+
 func TestPlanAppAutoConfigRequirementPresenceUsesConfiguredScopes(t *testing.T) {
 	restoreAutoConfigHooks(t)
 	// Presence of a scope must come from the app config (configured scopes),

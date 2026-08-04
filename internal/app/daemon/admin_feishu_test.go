@@ -150,7 +150,7 @@ func TestFeishuManifestRoute(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&manifestResp); err != nil {
 		t.Fatalf("decode manifest: %v", err)
 	}
-	if manifestResp.Manifest.Scopes.Scopes.Tenant[0] != "drive:drive" {
+	if manifestResp.Manifest.Scopes.Scopes.Tenant[0] != "application:application:self_manage" {
 		t.Fatalf("unexpected manifest scopes: %#v", manifestResp.Manifest.Scopes)
 	}
 	if len(manifestResp.Manifest.Menus) != 7 {
