@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
+	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
 const defaultFeishuPermissionRefreshEvery = 2 * time.Minute
@@ -314,15 +315,21 @@ func primaryPermissionDecisionFromScopes(scopes []feishu.AppScopeStatus, err err
 	if err != nil {
 		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "scope_read_failed", Err: err}
 	}
-	for _, item := range scopes {
-		if !feishuScopeStatusGranted(item) {
-			continue
-		}
-		scope := strings.TrimSpace(item.ScopeName)
-		switch scope {
-		case "im:message.group_msg", "im:message.group_msg:readonly":
-			return orchestrator.PrimaryBotPermissionDecision{Allowed: true, Scope: scope}
-		}
+	requirement, ok := primaryPermissionScopeRequirement()
+	if !ok {
+		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "primary_scope_requirement_missing"}
+	}
+	if scope, ok := feishu.MatchScopeRequirement(requirement.Scope, requirement.ScopeType, scopes); ok {
+		return orchestrator.PrimaryBotPermissionDecision{Allowed: true, Scope: scope}
 	}
 	return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "missing_group_message_scope"}
+}
+
+func primaryPermissionScopeRequirement() (feishuapp.ScopeRequirement, bool) {
+	for _, requirement := range feishuapp.DefaultManifest().ScopeRequirements {
+		if requirement.Required && strings.TrimSpace(requirement.Feature) == "primary_room_bot" {
+			return requirement, true
+		}
+	}
+	return feishuapp.ScopeRequirement{}, false
 }

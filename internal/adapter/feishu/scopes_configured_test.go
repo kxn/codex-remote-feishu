@@ -48,3 +48,39 @@ func TestListAppConfiguredScopesReadsConfigSideAndSkipsScopeList(t *testing.T) {
 		}
 	}
 }
+
+func TestListAppConfiguredScopesFallsBackToGrantedScopesWhenConfigSideIsUnavailable(t *testing.T) {
+	appID := "cli_legacy_scope_fallback"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/open-apis/auth/v3/tenant_access_token/internal":
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","tenant_access_token":"tenant-token"}`))
+		case "/open-apis/application/v6/applications/" + appID:
+			_, _ = w.Write([]byte(`{"code":99991672,"msg":"access denied"}`))
+		case "/open-apis/application/v6/scopes":
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{"scopes":[{"scope_name":"im:message.group_msg","scope_type":"tenant","grant_status":1}]}}`))
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	scopes, err := ListAppConfiguredScopes(context.Background(), LiveGatewayConfig{
+		GatewayID: "main",
+		AppID:     appID,
+		AppSecret: "secret",
+		Domain:    server.URL,
+	})
+	if err != nil {
+		t.Fatalf("ListAppConfiguredScopes: %v", err)
+	}
+	want := []AppScopeStatus{{
+		ScopeName:   "im:message.group_msg",
+		ScopeType:   "tenant",
+		GrantStatus: 1,
+	}}
+	if !reflect.DeepEqual(scopes, want) {
+		t.Fatalf("scopes = %#v, want %#v", scopes, want)
+	}
+}

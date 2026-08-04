@@ -95,6 +95,15 @@ func TestPrimaryPermissionDecisionAcceptsGroupMessageScopes(t *testing.T) {
 	}
 }
 
+func TestPrimaryPermissionDecisionRejectsUserGroupMessageScope(t *testing.T) {
+	decision := primaryPermissionDecisionFromScopes([]feishu.AppScopeStatus{
+		{ScopeName: "im:message.group_msg", ScopeType: "user", GrantStatus: 1},
+	}, nil)
+	if decision.Allowed || decision.Reason != "missing_group_message_scope" {
+		t.Fatalf("user-token scope decision = %#v, want missing tenant scope", decision)
+	}
+}
+
 func TestPrimaryPermissionDecisionRejectsMissingScopeAndErrors(t *testing.T) {
 	if decision := primaryPermissionDecisionFromScopes([]feishu.AppScopeStatus{
 		{ScopeName: "im:message", ScopeType: "tenant", GrantStatus: 1},

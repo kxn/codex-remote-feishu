@@ -649,69 +649,11 @@ func scopeRefMap(values []AutoConfigScopeRef) map[string]bool {
 	return out
 }
 
-// scopeSatisfiers maps a manifest-required scope to the scope names that
-// satisfy it (including itself), per Feishu's documented "any one of"
-// permission relationships. Only relationships confirmed by official API docs
-// are listed; token type (tenant/user) must still match independently.
-var scopeSatisfiers = map[string][]string{
-	"im:chat:readonly": {
-		"im:chat:readonly",
-		"im:chat:read",
-		"im:chat",
-	},
-	"im:message.p2p_msg:readonly": {
-		"im:message.p2p_msg:readonly",
-		"im:message.p2p_msg",
-	},
-	"im:message.group_at_msg:readonly": {
-		"im:message.group_at_msg:readonly",
-		"im:message.group_at_msg",
-	},
-	"im:message.group_at_msg.include_bot:readonly": {
-		"im:message.group_at_msg.include_bot:readonly",
-		"im:message.group_at_msg.include_bot",
-	},
-	"im:message.group_msg:readonly": {
-		"im:message.group_msg:readonly",
-		"im:message.group_msg",
-	},
-	"im:message:readonly": {
-		"im:message:readonly",
-		"im:message",
-	},
-	"im:message.reactions:read": {
-		"im:message.reactions:read",
-		"im:message:readonly",
-	},
-	"im:resource:upload": {
-		"im:resource:upload",
-		"im:resource",
-	},
-	"application:application:self_manage": {
-		"application:application:self_manage",
-		"admin:app.info:readonly",
-	},
-}
-
-// satisfierScopes returns the scope names that satisfy the given requirement
-// scope, always including the requirement itself.
-func satisfierScopes(scope string) []string {
-	scope = strings.TrimSpace(scope)
-	if values, ok := scopeSatisfiers[scope]; ok && len(values) > 0 {
-		return values
-	}
-	return []string{scope}
-}
-
 // scopeRequirementSatisfied reports whether any satisfier of the requirement
 // ref (same scope type) is present in the configured scope key set.
 func scopeRequirementSatisfied(requirement AutoConfigScopeRef, configuredKeys map[string]bool) bool {
-	for _, scope := range satisfierScopes(requirement.Scope) {
-		if configuredKeys[scopeKey(scope, requirement.ScopeType)] {
-			return true
-		}
-	}
-	return false
+	_, ok := matchScopeRequirement(requirement.Scope, requirement.ScopeType, configuredKeys)
+	return ok
 }
 
 // missingScopeRefs returns target requirements that no configured scope

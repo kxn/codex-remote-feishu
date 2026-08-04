@@ -1,18 +1,19 @@
 # 统一飞书调用入口设计
 
 > Type: `draft`
-> Updated: `2026-08-03`
+> Updated: `2026-08-04`
 > Summary: 初版统一飞书调用入口设计，整理当前调用面、限速风险、统一调度器分层、重试/backoff 策略与后续调研问题。
 
 ## 0. 变更记录（2026-08-03）
 
-本文所述“定期调用 `application.v6.scope.list` 判断权限已授予”的方案已废弃：该接口语义是租户授权状态，对扫码注册/自建应用不可靠（见 issue #790 / #791）。
+本文所述“定期仅调用 `application.v6.scope.list` 判断权限已授予”的方案已废弃：该接口语义是租户授权状态，对扫码注册/自建应用不可靠（见 issue #790 / #791）。
 
 现行为：
 
 - 权限缺口的记录与展示不变（`observeFeishuPermissionError` / 投影快照“已知缺权限”）。
-- 缺口复查与“已授予”判定改用配置侧信源：`application.get` 的 `app.scopes`（适配器 `ListAppConfiguredScopes`）。
-- 主机器人权限闸门（`/primary on|refresh`）与权限块自动解除均基于同一配置侧信源。
+- 缺口复查与“已授予”判定优先使用配置侧信源：`application.get` 的 `app.scopes`（适配器 `ListAppConfiguredScopes`）。
+- 对没有 `application:application:self_manage`、无法读取 `application.get` 的历史自建应用，`ListAppConfiguredScopes` 才 fallback 到 `application.v6.scope.list`，以兼容仍能读取租户授权状态的旧应用。
+- 主机器人权限闸门（`/primary on|refresh`）与权限块自动解除均使用同一适配器读取器和同一 scope satisfier；配置侧可读时不调用 fallback。
 
 ## 1. 背景
 
@@ -635,7 +636,7 @@ type FeishuResourceKey struct {
 它已经会：
 
 - 记录权限缺失
-- 定期调用 `application.v6.scope.list`
+- 定期调用配置侧 scope 读取器；仅在 `application.get` 不可读时 fallback 到 `application.v6.scope.list`
 - 在 scope 已授予后清理已知缺口
 
 因此 broker 更适合提供：
