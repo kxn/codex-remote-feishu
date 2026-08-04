@@ -442,6 +442,13 @@ func (a *App) Run(ctx context.Context) error {
 	a.listenMu.Unlock()
 
 	errCh := make(chan error, 4)
+	// The setup page is opened before Run reaches this point. Start the API
+	// server before startup probes so local setup does not wait for them.
+	go func() {
+		if err := a.apiServer.Serve(apiListener); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
 	a.ensureCodexRuntimeCapability(ctx)
 	a.ensureCodexNativeConnectionEvidence(ctx)
 	a.startIngressPump(ctx, errCh)
@@ -449,11 +456,6 @@ func (a *App) Run(ctx context.Context) error {
 
 	go func() {
 		if err := a.relayServer.Serve(relayListener); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		}
-	}()
-	go func() {
-		if err := a.apiServer.Serve(apiListener); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
 	}()

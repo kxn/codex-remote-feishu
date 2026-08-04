@@ -380,10 +380,6 @@ func (a *App) handleSetupPage(w http.ResponseWriter, r *http.Request) {
 		writePageUnauthorized(w, "setup access requires the startup token link or localhost access")
 		return
 	}
-	if _, err := a.bootstrapState(auth); err != nil {
-		writePageError(w, http.StatusInternalServerError, "load bootstrap state", err)
-		return
-	}
 	writeAdminAppShell(w)
 }
 

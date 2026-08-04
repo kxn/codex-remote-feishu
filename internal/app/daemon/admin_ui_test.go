@@ -67,8 +67,10 @@ func TestAdminPrefixServesEmbeddedShell(t *testing.T) {
 
 func TestSetupPageServesEmbeddedShell(t *testing.T) {
 	app := newAdminUITestApp(config.DefaultAppConfig())
+	loadCalls := 0
 	app.ConfigureAdmin(AdminRuntimeOptions{
 		LoadConfig: func() (config.LoadedAppConfig, error) {
+			loadCalls++
 			return config.LoadedAppConfig{Path: "/tmp/config.json", Config: config.DefaultAppConfig()}, nil
 		},
 		Services: config.ServicesConfig{
@@ -83,6 +85,7 @@ func TestSetupPageServesEmbeddedShell(t *testing.T) {
 		SetupURL:        "http://localhost:9501/setup",
 		SetupRequired:   true,
 	})
+	loadCalls = 0
 
 	req := httptest.NewRequest(http.MethodGet, "/setup", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -97,6 +100,9 @@ func TestSetupPageServesEmbeddedShell(t *testing.T) {
 	}
 	if strings.Contains(body, "setup token、状态接口和认证链路已经接通") {
 		t.Fatalf("expected placeholder page to be replaced, body=%s", body)
+	}
+	if loadCalls != 0 {
+		t.Fatalf("setup page loaded bootstrap state %d times before serving shell, want 0", loadCalls)
 	}
 }
 
