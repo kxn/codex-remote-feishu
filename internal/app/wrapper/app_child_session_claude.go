@@ -42,12 +42,14 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 	}()
 
 	return &childSession{
-		cmd:     cmd,
-		stdin:   childStdin,
-		stdout:  bootstrappedStdout,
-		stderr:  childStderr,
-		waitErr: waitErr,
-		cancel:  childCancel,
+		cmd:         cmd,
+		stdin:       childStdin,
+		stdout:      bootstrappedStdout,
+		stderr:      childStderr,
+		stdoutClose: childStdout,
+		stderrClose: childStderr,
+		waitErr:     waitErr,
+		cancel:      childCancel,
 	}, nil
 }
 

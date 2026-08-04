@@ -179,8 +179,8 @@ func TestRestartChildSessionStopsCurrentIOBeforeLaunchingReplacement(t *testing.
 	}
 	next := &childSession{
 		stdin:   nopWriteCloser{Writer: io.Discard},
-		stdout:  strings.NewReader(""),
-		stderr:  strings.NewReader(""),
+		stdout:  io.NopCloser(strings.NewReader("")),
+		stderr:  io.NopCloser(strings.NewReader("")),
 		waitErr: make(chan error, 1),
 	}
 	runtime := &restartOrderFakeRuntime{

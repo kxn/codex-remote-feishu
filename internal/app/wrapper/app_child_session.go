@@ -19,6 +19,8 @@ type childSession struct {
 	stdin       io.WriteCloser
 	stdout      io.Reader
 	stderr      io.Reader
+	stdoutClose io.Closer
+	stderrClose io.Closer
 	generation  int64
 	waitErr     chan error
 	cancel      context.CancelFunc
@@ -59,12 +61,14 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 	}()
 
 	return &childSession{
-		cmd:     cmd,
-		stdin:   childStdin,
-		stdout:  bootstrappedStdout,
-		stderr:  childStderr,
-		waitErr: waitErr,
-		cancel:  childCancel,
+		cmd:         cmd,
+		stdin:       childStdin,
+		stdout:      bootstrappedStdout,
+		stderr:      childStderr,
+		stdoutClose: childStdout,
+		stderrClose: childStderr,
+		waitErr:     waitErr,
+		cancel:      childCancel,
 	}, nil
 }
 
@@ -116,6 +120,22 @@ func stopChildSession(session *childSession, debugf func(string, ...any)) {
 	select {
 	case <-session.waitErr:
 	case <-time.After(wrapperChildWaitTimeout):
+	}
+	closeChildSessionPipes(session)
+}
+
+func closeChildSessionPipes(session *childSession) {
+	if session == nil {
+		return
+	}
+	if session.stdin != nil {
+		_ = session.stdin.Close()
+	}
+	if session.stdoutClose != nil {
+		_ = session.stdoutClose.Close()
+	}
+	if session.stderrClose != nil {
+		_ = session.stderrClose.Close()
 	}
 }
 
@@ -170,6 +190,7 @@ func (a *App) restartChildSession(ctx context.Context, request restartRequest, c
 	// child.
 	signalStopChildSession(current, a.debugf)
 	waitForSessionIOStopped(current, wrapperChildWaitTimeout)
+	closeChildSessionPipes(current)
 	next, err := a.runtime.Launch(ctx, a, rawLogger, reportProblem)
 	if err != nil {
 		return nil, agentproto.ErrorInfo{
