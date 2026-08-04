@@ -19,8 +19,9 @@ const (
 )
 
 var (
-	autoConfigGetApplication        = getApplicationConfig
-	autoConfigGetApplicationVersion = getApplicationVersion
+	autoConfigGetApplication          = getApplicationConfig
+	autoConfigGetApplicationVersion   = getApplicationVersion
+	autoConfigListApplicationVersions = listApplicationVersions
 )
 
 type autoConfigService struct {
@@ -99,6 +100,18 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 	} else {
 		snapshot.activeVersion = snapshot.onlineVersion
 	}
+	if snapshot.activeVersion == nil {
+		// Scan-created agent apps may not expose version IDs through
+		// application.get. The version list endpoint is the fallback source
+		// for the published version (status==1 with publish_time), matching
+		// the official lark-cli appmeta behavior. Failures are a weak
+		// dependency: events simply stay unverifiable instead of blocking the
+		// whole plan.
+		versions, listErr := autoConfigListApplicationVersions(ctx, broker, sdkClient, cfg.AppID)
+		if listErr == nil {
+			snapshot.activeVersion = publishedVersion(versions)
+		}
+	}
 	return snapshot, nil
 }
 
@@ -110,14 +123,18 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 	// subscription mode have no public read API and do not participate in the
 	// missing diff until Feishu opens them up.
 	configuredEvents := activeVersionEvents(snapshot.activeVersion)
-	eventsVerifiable := snapshot.activeVersion != nil
+	// Events are verifiable only when a version reports a non-empty event
+	// list. An empty list gives no positive evidence of what is subscribed
+	// (scan-created agent apps can be configured without a readable v6
+	// version), so events must not be reported missing in that state.
+	eventsVerifiable := snapshot.activeVersion != nil && len(configuredEvents) > 0
 	targetScopes := normalizeScopeRequirements(s.manifest)
 	targetScopeRefs := scopeRefsFromRequirements(targetScopes)
 	targetEventKeys := eventKeys(s.manifest.Events)
 
 	diff := AutoConfigDiff{
-		MissingScopes: subtractScopeRefs(targetScopeRefs, configuredScopes),
-		ExtraScopes:   subtractScopeRefs(configuredScopes, targetScopeRefs),
+		MissingScopes: missingScopeRefs(targetScopeRefs, configuredScopes),
+		ExtraScopes:   extraScopeRefs(configuredScopes, targetScopeRefs),
 	}
 	if eventsVerifiable {
 		diff.MissingEvents = subtractStrings(targetEventKeys, configuredEvents)
@@ -162,7 +179,7 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		Diff:    diff,
 		Publish: publishState,
 	}
-	plan.BlockingRequirements, plan.DegradableRequirements = s.buildRequirementStatus(targetScopes, configuredEvents, configuredScopes)
+	plan.BlockingRequirements, plan.DegradableRequirements = s.buildRequirementStatus(targetScopes, configuredEvents, configuredScopes, eventsVerifiable)
 	plan.Status, plan.Summary = derivePlanState(plan)
 	return plan
 }
@@ -189,7 +206,7 @@ func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) 
 	}
 }
 
-func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRequirement, configuredEvents []string, configuredScopes []AutoConfigScopeRef) ([]AutoConfigRequirementStatus, []AutoConfigRequirementStatus) {
+func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRequirement, configuredEvents []string, configuredScopes []AutoConfigScopeRef, eventsVerifiable bool) ([]AutoConfigRequirementStatus, []AutoConfigRequirementStatus) {
 	configuredScopeKeys := scopeRefMap(configuredScopes)
 	eventKeys := stringSet(configuredEvents)
 	var blocking []AutoConfigRequirementStatus
@@ -211,27 +228,29 @@ func (s *autoConfigService) buildRequirementStatus(scopeReqs []feishuapp.ScopeRe
 			Feature:        strings.TrimSpace(item.Feature),
 			Required:       item.Required,
 			DegradeMessage: strings.TrimSpace(item.DegradeMessage),
-			Present:        configuredScopeKeys[scopeKey(item.Scope, item.ScopeType)],
+			Present:        scopeRequirementSatisfied(AutoConfigScopeRef{Scope: item.Scope, ScopeType: item.ScopeType}, configuredScopeKeys),
 		}
 		if status.Present {
 			continue
 		}
 		appendRequirement(status)
 	}
-	for _, item := range s.manifest.Events {
-		status := AutoConfigRequirementStatus{
-			Kind:           AutoConfigRequirementKindEvent,
-			Key:            strings.TrimSpace(item.Event),
-			Feature:        strings.TrimSpace(item.Feature),
-			Purpose:        strings.TrimSpace(item.Purpose),
-			Required:       item.Required,
-			DegradeMessage: strings.TrimSpace(item.DegradeMessage),
-			Present:        eventKeys[strings.TrimSpace(item.Event)],
+	if eventsVerifiable {
+		for _, item := range s.manifest.Events {
+			status := AutoConfigRequirementStatus{
+				Kind:           AutoConfigRequirementKindEvent,
+				Key:            strings.TrimSpace(item.Event),
+				Feature:        strings.TrimSpace(item.Feature),
+				Purpose:        strings.TrimSpace(item.Purpose),
+				Required:       item.Required,
+				DegradeMessage: strings.TrimSpace(item.DegradeMessage),
+				Present:        eventKeys[strings.TrimSpace(item.Event)],
+			}
+			if status.Present {
+				continue
+			}
+			appendRequirement(status)
 		}
-		if status.Present {
-			continue
-		}
-		appendRequirement(status)
 	}
 	sort.Slice(blocking, func(i, j int) bool { return blocking[i].Kind+blocking[i].Key < blocking[j].Kind+blocking[j].Key })
 	sort.Slice(degradable, func(i, j int) bool {
@@ -337,6 +356,51 @@ func getApplicationVersion(ctx context.Context, broker *FeishuCallBroker, client
 		return nil, nil
 	}
 	return resp.Data.AppVersion, nil
+}
+
+func listApplicationVersions(ctx context.Context, broker *FeishuCallBroker, client *lark.Client, appID string) ([]*larkapplication.ApplicationAppVersion, error) {
+	resp, err := DoSDK(ctx, broker, CallSpec{
+		GatewayID:  broker.gatewayID,
+		API:        "application.v6.application_app_version.list",
+		Class:      CallClassMetaHTTP,
+		Priority:   CallPriorityReadAssist,
+		Retry:      RetrySafe,
+		Permission: PermissionFailFast,
+	}, func(callCtx context.Context, sdkClient *lark.Client) (*larkapplication.ListApplicationAppVersionResp, error) {
+		req := larkapplication.NewListApplicationAppVersionReqBuilder().
+			AppId(strings.TrimSpace(appID)).
+			Lang("zh_cn").
+			PageSize(2).
+			Build()
+		return sdkClient.Application.V6.ApplicationAppVersion.List(callCtx, req)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !resp.Success() {
+		return nil, newAPIError("application.v6.application_app_version.list", resp.ApiResp, resp.CodeError)
+	}
+	if resp.Data == nil {
+		return nil, nil
+	}
+	return resp.Data.Items, nil
+}
+
+// publishedVersion returns the most recently published version from a version
+// list: status==1 (approved) with a non-empty publish_time. This mirrors the
+// official lark-cli appmeta selection so event verification uses the same
+// reliable source.
+func publishedVersion(versions []*larkapplication.ApplicationAppVersion) *larkapplication.ApplicationAppVersion {
+	for _, item := range versions {
+		if item == nil {
+			continue
+		}
+		if intValue(item.Status) == larkapplication.AppVersionStatusAudited &&
+			strings.TrimSpace(stringValue(item.PublishTime)) != "" {
+			return item
+		}
+	}
+	return nil
 }
 
 func normalizeScopeRequirements(manifest feishuapp.Manifest) []feishuapp.ScopeRequirement {
@@ -521,14 +585,100 @@ func scopeRefMap(values []AutoConfigScopeRef) map[string]bool {
 	return out
 }
 
-func subtractScopeRefs(left, right []AutoConfigScopeRef) []AutoConfigScopeRef {
-	rightKeys := scopeRefMap(right)
+// scopeSatisfiers maps a manifest-required scope to the scope names that
+// satisfy it (including itself), per Feishu's documented "any one of"
+// permission relationships. Only relationships confirmed by official API docs
+// are listed; token type (tenant/user) must still match independently.
+var scopeSatisfiers = map[string][]string{
+	"im:chat:readonly": {
+		"im:chat:readonly",
+		"im:chat:read",
+		"im:chat",
+	},
+	"im:message.p2p_msg:readonly": {
+		"im:message.p2p_msg:readonly",
+		"im:message.p2p_msg",
+	},
+	"im:message.group_at_msg:readonly": {
+		"im:message.group_at_msg:readonly",
+		"im:message.group_at_msg",
+	},
+	"im:message.group_at_msg.include_bot:readonly": {
+		"im:message.group_at_msg.include_bot:readonly",
+		"im:message.group_at_msg.include_bot",
+	},
+	"im:message.group_msg:readonly": {
+		"im:message.group_msg:readonly",
+		"im:message.group_msg",
+	},
+	"im:message.reactions:read": {
+		"im:message.reactions:read",
+		"im:message:readonly",
+	},
+	"im:resource": {
+		"im:resource",
+		"im:resource:upload",
+	},
+	"base:app:create": {
+		"base:app:create",
+		"bitable:app",
+	},
+}
+
+// satisfierScopes returns the scope names that satisfy the given requirement
+// scope, always including the requirement itself.
+func satisfierScopes(scope string) []string {
+	scope = strings.TrimSpace(scope)
+	if values, ok := scopeSatisfiers[scope]; ok && len(values) > 0 {
+		return values
+	}
+	return []string{scope}
+}
+
+// scopeRequirementSatisfied reports whether any satisfier of the requirement
+// ref (same scope type) is present in the configured scope key set.
+func scopeRequirementSatisfied(requirement AutoConfigScopeRef, configuredKeys map[string]bool) bool {
+	for _, scope := range satisfierScopes(requirement.Scope) {
+		if configuredKeys[scopeKey(scope, requirement.ScopeType)] {
+			return true
+		}
+	}
+	return false
+}
+
+// missingScopeRefs returns target requirements that no configured scope
+// satisfies (exact name or a documented alternative).
+func missingScopeRefs(target, configured []AutoConfigScopeRef) []AutoConfigScopeRef {
+	configuredKeys := scopeRefMap(configured)
 	var out []AutoConfigScopeRef
-	for _, item := range left {
-		if rightKeys[scopeKey(item.Scope, item.ScopeType)] {
+	for _, item := range target {
+		if scopeRequirementSatisfied(item, configuredKeys) {
 			continue
 		}
 		out = append(out, item)
+	}
+	return sortScopeRefs(out)
+}
+
+// extraScopeRefs returns configured scopes that satisfy no target requirement.
+// A documented alternative of a requirement (for example im:chat:read for
+// im:chat:readonly) is therefore not reported as extra.
+func extraScopeRefs(configured, target []AutoConfigScopeRef) []AutoConfigScopeRef {
+	var out []AutoConfigScopeRef
+	for _, item := range configured {
+		// A configured scope satisfies a target requirement when the target's
+		// satisfier set contains this configured scope.
+		satisfiesAny := false
+		itemKey := scopeKey(item.Scope, item.ScopeType)
+		for _, req := range target {
+			if scopeRequirementSatisfied(req, map[string]bool{itemKey: true}) {
+				satisfiesAny = true
+				break
+			}
+		}
+		if !satisfiesAny {
+			out = append(out, item)
+		}
 	}
 	return sortScopeRefs(out)
 }
