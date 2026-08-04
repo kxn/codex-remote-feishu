@@ -104,26 +104,19 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 	// activeVersion intentionally preserves the existing publish/ability
 	// semantics, where an unaudited draft is the active editable version. Event
 	// verification is different: it must use the published configuration.
-	if len(activeVersionEvents(snapshot.onlineVersion)) > 0 {
-		snapshot.eventVersion = snapshot.onlineVersion
-	}
-	if snapshot.activeVersion == nil || snapshot.eventVersion == nil {
-		// Scan-created agent apps may not expose version IDs through
-		// application.get. The version list endpoint is the fallback source
-		// for the published version (status==1 with publish_time), matching
-		// the official lark-cli appmeta behavior. Failures are a weak
-		// dependency: events simply stay unverifiable instead of blocking the
-		// whole plan.
-		versions, listErr := autoConfigListApplicationVersions(ctx, broker, sdkClient, cfg.AppID)
-		if listErr == nil {
-			published := publishedVersion(versions)
-			if snapshot.activeVersion == nil {
-				snapshot.activeVersion = published
-			}
-			if snapshot.eventVersion == nil {
-				snapshot.eventVersion = published
-			}
+	// The version list is authoritative for that purpose, matching the official
+	// lark-cli appmeta implementation. The per-version get response is only a
+	// fallback because it can contain an incomplete event projection.
+	versions, listErr := autoConfigListApplicationVersions(ctx, broker, sdkClient, cfg.AppID)
+	if listErr == nil {
+		published := publishedVersion(versions)
+		if snapshot.activeVersion == nil {
+			snapshot.activeVersion = published
 		}
+		snapshot.eventVersion = published
+	}
+	if snapshot.eventVersion == nil {
+		snapshot.eventVersion = snapshot.onlineVersion
 	}
 	return snapshot, nil
 }
