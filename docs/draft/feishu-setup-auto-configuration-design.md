@@ -1,7 +1,7 @@
 # 飞书 Setup 自动配置改造设计（vNext）
 
 > Type: `draft`
-> Updated: `2026-08-03`
+> Updated: `2026-08-04`
 > Summary: 基于 Feishu `application/v7` 自动配置能力重设计 setup 的飞书配置阶段；2026-08-03 起自动写路径（apply/publish）已移除，改为只读差异检查 + 缺失权限导入 JSON。
 
 ## 0. 方向变更记录（2026-08-03）
@@ -12,6 +12,11 @@
 - 改为接入后只做只读 `plan` 检查：页面列出缺失项与影响说明，缺失权限生成只含缺失项的导入 JSON（`{"scopes":{"tenant":[...],"user":[]}}`），由用户粘贴到飞书后台“批量导入/导出权限”后重新检查。
 - 缺失判断使用配置侧 `application.get` 的 `app.scopes`，不再依赖 `scope.list` 的租户授权状态。
 - 事件检测改用版本接口（`application_app_version.get` 的 `events`/`event_infos`）；回调与订阅方式暂不参与缺失判定（飞书暂未开放只读接口）。
+
+### 事件与权限检测补充（2026-08-04，issue #794）
+
+- 事件只在“可验证”时参与缺失判定：版本存在且事件列表非空才计算缺失；`application.get` 无版本 ID 时用 `app_versions` 列表接口取已发布版本（`status==1` 且有 `publish_time`）兜底；不可验证（无版本或事件列表为空）时事件不报缺失、不进阻塞清单。
+- 权限检测支持官方“任一即可”的替代关系（例如 `im:chat:read` 满足 `im:chat:readonly`，`im:resource` / `im:resource:upload`、`base:app:create` / `bitable:app` 等同理）：需求被自身或任一官方替代满足即视为已配置，替代 scope 不判为多余。manifest canonical scope 是否调整属 issue #774。
 
 ## 1. 文档定位
 
