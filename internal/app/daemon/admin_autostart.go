@@ -3,7 +3,6 @@ package daemon
 import (
 	"log"
 	"net/http"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 )
@@ -50,14 +49,6 @@ func (a *App) handleAutostartApply(w http.ResponseWriter, _ *http.Request) {
 		})
 		return
 	}
-	if err := a.writeOnboardingMachineDecision("autostart", onboardingDecisionAutostartEnabled, time.Now().UTC()); err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_write_failed",
-			Message: "autostart enabled but failed to persist onboarding decision",
-			Details: err.Error(),
-		})
-		return
-	}
 	writeJSON(w, http.StatusOK, payload)
 }
 
@@ -67,14 +58,6 @@ func (a *App) handleAutostartDisable(w http.ResponseWriter, _ *http.Request) {
 		writeAPIError(w, http.StatusBadRequest, apiError{
 			Code:    "autostart_disable_failed",
 			Message: "failed to disable autostart",
-			Details: err.Error(),
-		})
-		return
-	}
-	if err := a.clearOnboardingMachineDecision("autostart"); err != nil {
-		writeAPIError(w, http.StatusInternalServerError, apiError{
-			Code:    "config_write_failed",
-			Message: "autostart disabled but failed to reset onboarding decision",
 			Details: err.Error(),
 		})
 		return

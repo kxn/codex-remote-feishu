@@ -151,6 +151,38 @@ func TestOnboardingAutoConfigCanContinueDegraded(t *testing.T) {
 	}
 }
 
+func TestOnboardingAutostartStageUsesDetectedStateWithoutMachineDecision(t *testing.T) {
+	oldDetectAutostart := detectAutostart
+	detectAutostart = func(statePath string) (install.AutostartStatus, error) {
+		return install.AutostartStatus{
+			Platform:  "linux",
+			Supported: true,
+			Enabled:   false,
+			CanApply:  true,
+		}, nil
+	}
+	t.Cleanup(func() { detectAutostart = oldDetectAutostart })
+
+	app, _ := newRemoteSetupTestApp(t, t.TempDir())
+	decidedAt := time.Now().UTC()
+	cfg := config.DefaultAppConfig()
+	cfg.Admin.Onboarding.AutostartDecision = &config.OnboardingDecision{
+		Value:     onboardingDecisionAutostartEnabled,
+		DecidedAt: &decidedAt,
+	}
+
+	stage := app.buildOnboardingAutostartStage(cfg)
+	if stage.Status != onboardingStageStatusComplete {
+		t.Fatalf("status = %q, want %q", stage.Status, onboardingStageStatusComplete)
+	}
+	if stage.Summary != "自动启动未启用。" {
+		t.Fatalf("summary = %q, want objective disabled summary", stage.Summary)
+	}
+	if !containsString(stage.AllowedActions, "apply") {
+		t.Fatalf("allowed actions = %#v, want apply", stage.AllowedActions)
+	}
+}
+
 func TestSetupOnboardingWorkflowDeferredAutoConfigHonorsFinalBlockingState(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -286,8 +318,8 @@ func TestSetupOnboardingWorkflowKeepsDeferredAutoConfigOnPlanError(t *testing.T)
 	if workflow.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu status = %q, want complete", workflow.App.Menu.Status)
 	}
-	if workflow.CurrentStage != onboardingStageAutostart {
-		t.Fatalf("current stage = %q, want autostart", workflow.CurrentStage)
+	if workflow.CurrentStage != onboardingStageDone {
+		t.Fatalf("current stage = %q, want done", workflow.CurrentStage)
 	}
 }
 
@@ -373,7 +405,7 @@ func TestSetupOnboardingWorkflowKeepsDeferredAutoConfigOnLoadError(t *testing.T)
 	if workflow.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu status = %q, want complete", workflow.App.Menu.Status)
 	}
-	if workflow.CurrentStage != onboardingStageAutostart {
-		t.Fatalf("current stage = %q, want autostart", workflow.CurrentStage)
+	if workflow.CurrentStage != onboardingStageDone {
+		t.Fatalf("current stage = %q, want done", workflow.CurrentStage)
 	}
 }

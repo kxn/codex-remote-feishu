@@ -157,26 +157,6 @@ func TestSetupCompleteRevokesRemoteSetupSession(t *testing.T) {
 		t.Fatalf("verify status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
 
-	req = httptest.NewRequest(http.MethodPost, "/api/setup/onboarding/machine-decisions/autostart", strings.NewReader(`{"decision":"deferred"}`))
-	req.RemoteAddr = "198.51.100.20:23456"
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(cookie)
-	rec = httptest.NewRecorder()
-	app.apiServer.Handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("autostart decision status = %d, want 204 body=%s", rec.Code, rec.Body.String())
-	}
-
-	req = httptest.NewRequest(http.MethodPost, "/api/setup/onboarding/machine-decisions/vscode", strings.NewReader(`{"decision":"remote_only"}`))
-	req.RemoteAddr = "198.51.100.20:23456"
-	req.Header.Set("Content-Type", "application/json")
-	req.AddCookie(cookie)
-	rec = httptest.NewRecorder()
-	app.apiServer.Handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("vscode decision status = %d, want 204 body=%s", rec.Code, rec.Body.String())
-	}
-
 	req = httptest.NewRequest(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-menu/confirm", nil)
 	req.RemoteAddr = "198.51.100.20:23456"
 	req.AddCookie(cookie)
@@ -256,18 +236,6 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 		t.Fatalf("verify status = %d, want 200 body=%s", rec.Code, rec.Body.String())
 	}
 
-	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/onboarding/machine-decisions/autostart", `{"decision":"deferred"}`, cookie)
-	rec = performSetupRequestRecorder(app, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("autostart decision status = %d, want 204 body=%s", rec.Code, rec.Body.String())
-	}
-
-	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/onboarding/machine-decisions/vscode", `{"decision":"remote_only"}`, cookie)
-	rec = performSetupRequestRecorder(app, req)
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("vscode decision status = %d, want 204 body=%s", rec.Code, rec.Body.String())
-	}
-
 	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-menu/confirm", "", cookie)
 	rec = performSetupRequestRecorder(app, req)
 	if rec.Code != http.StatusNoContent {
@@ -290,11 +258,11 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 	if !payload.Completion.CanComplete || payload.Completion.SetupRequired {
 		t.Fatalf("unexpected completion gate: %#v", payload.Completion)
 	}
-	if payload.Autostart.Status != onboardingStageStatusDeferred && payload.Autostart.Status != onboardingStageStatusNotApplicable {
-		t.Fatalf("autostart status = %q, want deferred or not_applicable", payload.Autostart.Status)
+	if payload.Autostart.Status != onboardingStageStatusComplete && payload.Autostart.Status != onboardingStageStatusNotApplicable {
+		t.Fatalf("autostart status = %q, want complete or not_applicable", payload.Autostart.Status)
 	}
-	if payload.VSCode.Status != onboardingStageStatusDeferred {
-		t.Fatalf("vscode status = %q, want deferred", payload.VSCode.Status)
+	if payload.VSCode.Status != onboardingStageStatusComplete {
+		t.Fatalf("vscode status = %q, want complete", payload.VSCode.Status)
 	}
 	if payload.App == nil {
 		t.Fatalf("expected selected app view, got %#v", payload)
@@ -410,8 +378,8 @@ func TestSetupOnboardingAutoConfigDeferResetControlsMenuGate(t *testing.T) {
 	if payload.App == nil || payload.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu after confirm = %#v, want complete", payload.App)
 	}
-	if payload.CurrentStage != onboardingStageAutostart {
-		t.Fatalf("current stage after menu confirm = %q, want autostart", payload.CurrentStage)
+	if payload.CurrentStage != onboardingStageDone {
+		t.Fatalf("current stage after menu confirm = %q, want done", payload.CurrentStage)
 	}
 
 	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-auto-config/reset", "", cookie)

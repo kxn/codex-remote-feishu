@@ -156,24 +156,6 @@ func hasSetupUsableApp(appConfig config.AppConfig, services config.ServicesConfi
 	return false
 }
 
-func adminOnboardingMachineDecisionsComplete(settings config.AdminOnboardingSettings) bool {
-	return onboardingDecisionPresent(settings.AutostartDecision, onboardingDecisionAutostartEnabled, onboardingDecisionDeferred) &&
-		onboardingDecisionPresent(settings.VSCodeDecision, onboardingDecisionVSCodeManaged, onboardingDecisionDeferred, onboardingDecisionVSCodeRemoteOnly)
-}
-
-func onboardingDecisionPresent(decision *config.OnboardingDecision, values ...string) bool {
-	if decision == nil {
-		return false
-	}
-	current := strings.TrimSpace(decision.Value)
-	for _, value := range values {
-		if current == strings.TrimSpace(value) {
-			return true
-		}
-	}
-	return false
-}
-
 func isSSHSession(env map[string]string) bool {
 	return strings.TrimSpace(env["SSH_CONNECTION"]) != "" ||
 		strings.TrimSpace(env["SSH_CLIENT"]) != "" ||

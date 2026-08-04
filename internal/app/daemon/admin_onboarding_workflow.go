@@ -159,10 +159,10 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 		connection.Status == onboardingStageStatusComplete &&
 		onboardingStageResolved(autoConfig.Status) &&
 		onboardingStageResolved(menu.Status) &&
-		machineDecisionSatisfied(autostartStage.Status) &&
-		machineDecisionSatisfied(vscodeStage.Status)
+		onboardingStageResolved(autostartStage.Status) &&
+		onboardingStageResolved(vscodeStage.Status)
 
-	machinePending := !machineDecisionSatisfied(autostartStage.Status) || !machineDecisionSatisfied(vscodeStage.Status)
+	machinePending := !onboardingStageResolved(autostartStage.Status) || !onboardingStageResolved(vscodeStage.Status)
 	machineState := onboardingMachineStateBlocked
 	switch {
 	case !runtimeReqs.Ready || connection.Status != onboardingStageStatusComplete || !onboardingStageResolved(autoConfig.Status) || !onboardingStageResolved(menu.Status):
@@ -404,31 +404,24 @@ func buildBlockedOnboardingMenuStage(summary string) onboardingWorkflowStageView
 }
 
 func (a *App) buildOnboardingAutostartStage(cfg config.AppConfig) onboardingWorkflowMachineStepView {
-	decision := onboardingDecisionViewFromConfig(cfg.Admin.Onboarding.AutostartDecision)
 	status, err := detectAutostart(a.installStatePath())
 	if err != nil {
 		stage := stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "暂时无法确认自动启动状态，请稍后重试。", false, true, nil)
 		return onboardingWorkflowMachineStepView{
 			onboardingWorkflowStageView: stage,
-			Decision:                    decision,
 			Error:                       err.Error(),
 		}
 	}
 	view := onboardingWorkflowMachineStepView{
 		Autostart: &status,
-		Decision:  decision,
 	}
 	switch {
 	case !status.Supported:
 		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusNotApplicable, "当前系统不支持自动启动。", false, true, nil)
-	case decision != nil && decision.Value == onboardingDecisionDeferred:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusDeferred, "你选择稍后再处理自动启动。", false, true, autostartStageActions(status))
-	case decision != nil && decision.Value == onboardingDecisionAutostartEnabled && status.Enabled:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusComplete, "自动启动已经启用，并且当前决策已记录。", false, true, []string{"disable"})
 	case status.Enabled:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前已经启用自动启动，但还没有记录这项机器决策。", false, true, []string{"record_enabled"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusComplete, "自动启动已启用。", false, true, autostartStageActions(status))
 	default:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusPending, "当前还没有完成自动启动决策。", false, true, autostartStageActions(status))
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutostart, "自动启动", onboardingStageStatusComplete, "自动启动未启用。", false, true, autostartStageActions(status))
 	}
 	return view
 }
@@ -439,38 +432,28 @@ func autostartStageActions(status install.AutostartStatus) []string {
 		actions = append(actions, "apply")
 	}
 	if status.Enabled {
-		actions = append(actions, "record_enabled")
+		actions = append(actions, "disable")
 	}
 	return actions
 }
 
 func (a *App) buildOnboardingVSCodeStage(cfg config.AppConfig) onboardingWorkflowMachineStepView {
-	decision := onboardingDecisionViewFromConfig(cfg.Admin.Onboarding.VSCodeDecision)
 	status, err := a.buildVSCodeDetectResponse()
 	if err != nil {
 		stage := stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "暂时无法确认 VS Code 集成状态，请稍后重试。", false, true, nil)
 		return onboardingWorkflowMachineStepView{
 			onboardingWorkflowStageView: stage,
-			Decision:                    decision,
 			Error:                       err.Error(),
 		}
 	}
 	ready := workflowVSCodeReady(status)
 	view := onboardingWorkflowMachineStepView{
-		VSCode:   &status,
-		Decision: decision,
+		VSCode: &status,
 	}
-	switch {
-	case decision != nil && decision.Value == onboardingDecisionDeferred:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusDeferred, "你选择稍后再处理 VS Code 集成。", false, true, []string{"apply", "record_managed_shim"})
-	case decision != nil && decision.Value == onboardingDecisionVSCodeRemoteOnly:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusDeferred, "你选择留到目标 SSH 机器上处理 VS Code 集成。", false, true, []string{"apply", "record_managed_shim"})
-	case decision != nil && decision.Value == onboardingDecisionVSCodeManaged && ready:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusComplete, "VS Code 集成已经完成，并且当前决策已记录。", false, true, []string{"disable"})
-	case ready:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "当前已经检测到 VS Code 集成，但还没有记录你的处理决策。", false, true, []string{"record_managed_shim"})
-	default:
-		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusPending, "当前还没有完成 VS Code 集成决策。", false, true, []string{"apply", "record_managed_shim"})
+	if ready {
+		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusComplete, "VS Code 集成已启用。", false, true, []string{"disable"})
+	} else {
+		view.onboardingWorkflowStageView = stageView(onboardingStageVSCode, "VS Code 集成", onboardingStageStatusComplete, "VS Code 集成未启用。", false, true, []string{"apply"})
 	}
 	return view
 }
@@ -572,21 +555,12 @@ func blockingReasonForCompletion(
 		return "飞书自动配置还没有完成。"
 	case !onboardingStageResolved(menu.Status):
 		return "还没有确认机器人菜单配置。"
-	case !machineDecisionSatisfied(autostart.Status):
-		return "还没有完成自动启动决策。"
-	case !machineDecisionSatisfied(vscode.Status):
-		return "还没有完成 VS Code 集成决策。"
+	case !onboardingStageResolved(autostart.Status):
+		return autostart.Summary
+	case !onboardingStageResolved(vscode.Status):
+		return vscode.Summary
 	default:
 		return ""
-	}
-}
-
-func machineDecisionSatisfied(status string) bool {
-	switch status {
-	case onboardingStageStatusComplete, onboardingStageStatusDeferred, onboardingStageStatusNotApplicable:
-		return true
-	default:
-		return false
 	}
 }
 

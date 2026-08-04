@@ -8,32 +8,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
-type onboardingDecisionRequest struct {
-	Decision string `json:"decision,omitempty"`
-}
-
-func (a *App) handleOnboardingMachineDecision(w http.ResponseWriter, r *http.Request) {
-	kind := strings.TrimSpace(r.PathValue("kind"))
-	var req onboardingDecisionRequest
-	if err := decodeJSONBody(r, &req); err != nil {
-		writeAPIError(w, http.StatusBadRequest, apiError{
-			Code:    "invalid_request",
-			Message: "failed to decode onboarding decision payload",
-			Details: err.Error(),
-		})
-		return
-	}
-	if err := a.writeOnboardingMachineDecision(kind, strings.TrimSpace(req.Decision), time.Now().UTC()); err != nil {
-		writeAPIError(w, http.StatusBadRequest, apiError{
-			Code:    "onboarding_decision_write_failed",
-			Message: "failed to persist onboarding machine decision",
-			Details: err.Error(),
-		})
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
-}
-
 func (a *App) handleFeishuAppAutoConfigDefer(w http.ResponseWriter, r *http.Request) {
 	gatewayID := canonicalGatewayID(r.PathValue("id"))
 	if err := a.writeFeishuAppAutoConfigDecision(gatewayID, onboardingDecisionDeferred, time.Now().UTC()); err != nil {
@@ -116,56 +90,6 @@ func (a *App) handleFeishuAppMenuReset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (a *App) writeOnboardingMachineDecision(kind, decision string, decidedAt time.Time) error {
-	kind = strings.TrimSpace(kind)
-	decision = strings.TrimSpace(decision)
-	switch kind {
-	case "autostart":
-		if decision != onboardingDecisionAutostartEnabled && decision != onboardingDecisionDeferred {
-			return invalidOnboardingDecisionError(kind, decision)
-		}
-	case "vscode":
-		switch decision {
-		case onboardingDecisionVSCodeManaged, onboardingDecisionDeferred, onboardingDecisionVSCodeRemoteOnly:
-		default:
-			return invalidOnboardingDecisionError(kind, decision)
-		}
-	default:
-		return invalidOnboardingDecisionError(kind, decision)
-	}
-	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
-		record := &config.OnboardingDecision{
-			Value:     decision,
-			DecidedAt: daemonTimePtr(decidedAt.UTC()),
-		}
-		switch kind {
-		case "autostart":
-			cfg.Admin.Onboarding.AutostartDecision = record
-		case "vscode":
-			cfg.Admin.Onboarding.VSCodeDecision = record
-		}
-		return nil
-	})
-}
-
-func (a *App) clearOnboardingMachineDecision(kind string) error {
-	kind = strings.TrimSpace(kind)
-	switch kind {
-	case "autostart", "vscode":
-	default:
-		return invalidOnboardingDecisionError(kind, "")
-	}
-	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
-		switch kind {
-		case "autostart":
-			cfg.Admin.Onboarding.AutostartDecision = nil
-		case "vscode":
-			cfg.Admin.Onboarding.VSCodeDecision = nil
-		}
-		return nil
-	})
 }
 
 func (a *App) writeFeishuAppAutoConfigDecision(gatewayID, decision string, decidedAt time.Time) error {

@@ -8,10 +8,17 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
 func TestAdminAutostartEndpoints(t *testing.T) {
 	app, _, _ := newVSCodeAdminTestApp(t, t.TempDir(), seedBinaryForDaemonTest(t), false)
+	if err := app.updateOnboardingConfig(func(cfg *config.AppConfig) error {
+		cfg.Admin.Onboarding.AutostartDecision = &config.OnboardingDecision{Value: onboardingDecisionDeferred}
+		return nil
+	}); err != nil {
+		t.Fatalf("seed onboarding decision: %v", err)
+	}
 
 	originalDetect := detectAutostart
 	originalApply := applyAutostart
@@ -92,6 +99,13 @@ func TestAdminAutostartEndpoints(t *testing.T) {
 	}
 	if disabled.Status != "disabled" || disabled.Enabled {
 		t.Fatalf("unexpected disable payload: %#v", disabled)
+	}
+	loaded, err := app.loadAdminConfig()
+	if err != nil {
+		t.Fatalf("load config after autostart operations: %v", err)
+	}
+	if loaded.Config.Admin.Onboarding.AutostartDecision == nil || loaded.Config.Admin.Onboarding.AutostartDecision.Value != onboardingDecisionDeferred {
+		t.Fatalf("autostart operations changed onboarding decision: %#v", loaded.Config.Admin.Onboarding.AutostartDecision)
 	}
 }
 

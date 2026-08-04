@@ -179,7 +179,6 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/setup/bootstrap-state", a.requireSetup(a.handleBootstrapState))
 	mux.HandleFunc("POST /api/setup/complete", a.requireSetup(a.handleSetupComplete))
 	mux.HandleFunc("GET /api/setup/onboarding/workflow", a.requireSetup(a.handleOnboardingWorkflow))
-	mux.HandleFunc("POST /api/setup/onboarding/machine-decisions/{kind}", a.requireSetup(a.handleOnboardingMachineDecision))
 	mux.HandleFunc("GET /api/setup/feishu/manifest", a.requireSetup(a.handleFeishuManifest))
 	mux.HandleFunc("GET /api/setup/feishu/apps", a.requireSetup(a.handleFeishuAppsList))
 	mux.HandleFunc("POST /api/setup/feishu/apps", a.requireSetup(a.handleFeishuAppCreate))
@@ -208,7 +207,6 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 
 	mux.HandleFunc("GET /api/admin/bootstrap-state", a.requireAdmin(a.handleBootstrapState))
 	mux.HandleFunc("GET /api/admin/onboarding/workflow", a.requireAdmin(a.handleOnboardingWorkflow))
-	mux.HandleFunc("POST /api/admin/onboarding/machine-decisions/{kind}", a.requireAdmin(a.handleOnboardingMachineDecision))
 	mux.HandleFunc("GET /api/admin/desktop-session/status", a.requireAdmin(a.handleDesktopSessionStatus))
 	mux.HandleFunc("POST /api/admin/desktop-session/quit", a.requireAdmin(a.handleDesktopSessionQuit))
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))

@@ -489,65 +489,14 @@ export function SetupRoute() {
     }
   }
 
-  async function saveMachineDecision(
-    kind: "autostart" | "vscode",
-    decision: string,
-    successMessage: string,
-  ) {
-    setActionBusy(`${kind}-${decision}`);
-    try {
-      await requestVoid(`/api/setup/onboarding/machine-decisions/${kind}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ decision }),
-      });
-      await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
-      setNotice({ tone: "good", message: successMessage });
-    } catch {
-      setNotice({
-        tone: "danger",
-        message: "当前还不能保存这一步的处理结果，请稍后重试。",
-      });
-    } finally {
-      setActionBusy("");
-    }
-  }
-
-  async function skipMachineIntegrations() {
-    setActionBusy("machine-skip");
-    setNotice(null);
-    try {
-      const headers = { "Content-Type": "application/json" };
-      await requestVoid("/api/setup/onboarding/machine-decisions/autostart", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ decision: "deferred" }),
-      });
-      await requestVoid("/api/setup/onboarding/machine-decisions/vscode", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ decision: "deferred" }),
-      });
-      await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
-      goToStep("done");
-      setNotice({ tone: "good", message: "已跳过本机集成，后续可在管理页处理。" });
-    } catch {
-      setNotice({ tone: "danger", message: "当前还不能跳过本机集成，请稍后重试。" });
-    } finally {
-      setActionBusy("");
-    }
-  }
-
   async function disableAutostart() {
     setActionBusy("autostart-disable");
     try {
       await sendJSON("/api/setup/autostart/disable", "POST");
       await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
-      setNotice({ tone: "good", message: "已取消自动启动。" });
+      setNotice({ tone: "good", message: "已关闭自动启动。" });
     } catch {
-      setNotice({ tone: "danger", message: "当前还不能取消自动启动，请稍后重试。" });
+      setNotice({ tone: "danger", message: "当前还不能关闭自动启动，请稍后重试。" });
     } finally {
       setActionBusy("");
     }
@@ -558,9 +507,9 @@ export function SetupRoute() {
     try {
       await sendJSON("/api/setup/vscode/disable", "POST");
       await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
-      setNotice({ tone: "good", message: "已取消 VS Code 集成。" });
+      setNotice({ tone: "good", message: "已关闭 VS Code 集成。" });
     } catch {
-      setNotice({ tone: "danger", message: "当前还不能取消 VS Code 集成，请稍后重试。" });
+      setNotice({ tone: "danger", message: "当前还不能关闭 VS Code 集成，请稍后重试。" });
     } finally {
       setActionBusy("");
     }
@@ -699,28 +648,15 @@ export function SetupRoute() {
           {renderAutostartCard()}
           {renderVSCodeCard()}
         </div>
-        {stepDone.autostart && stepDone.vscode ? (
-          <div className="button-row">
-            <button
-              className="primary-button"
-              type="button"
-              onClick={() => goToStep("done")}
-            >
-              完成设置
-            </button>
-          </div>
-        ) : (
-          <div className="button-row">
-            <button
-              className="primary-button"
-              type="button"
-              disabled={actionBusy === "machine-skip"}
-              onClick={() => void skipMachineIntegrations()}
-            >
-              {actionBusy === "machine-skip" ? "跳过中..." : "跳过本机集成"}
-            </button>
-          </div>
-        )}
+        <div className="button-row">
+          <button
+            className="primary-button"
+            type="button"
+            onClick={() => goToStep("done")}
+          >
+            完成本机集成
+          </button>
+        </div>
       </section>
     );
   }
@@ -745,7 +681,7 @@ export function SetupRoute() {
         <div className="status-line">
           <span className={`dot ${isComplete ? "good" : "idle"}`} />
           <span className={isComplete ? "txt good" : "txt idle"}>
-            {isComplete ? "已处理自动运行" : autostartStage.summary}
+            {autostartStage.summary}
           </span>
         </div>
         {autostartWarning ? <div className="notice warn">{autostartWarning}</div> : null}
@@ -761,22 +697,6 @@ export function SetupRoute() {
               启用自动启动
             </button>
           ) : null}
-          {autostartStage.allowedActions?.includes("record_enabled") ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={actionBusy === "autostart-enabled"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "autostart",
-                  "enabled",
-                  "已记录自动启动状态。",
-                )
-              }
-            >
-              保持当前状态并继续
-            </button>
-          ) : null}
           {autostartStage.allowedActions?.includes("disable") ? (
             <button
               className="secondary-button"
@@ -784,7 +704,7 @@ export function SetupRoute() {
               disabled={actionBusy === "autostart-disable"}
               onClick={() => void disableAutostart()}
             >
-              取消自动启动
+              关闭自动启动
             </button>
           ) : null}
         </div>
@@ -810,7 +730,7 @@ export function SetupRoute() {
         <div className="status-line">
           <span className={`dot ${isComplete ? "good" : "idle"}`} />
           <span className={isComplete ? "txt good" : "txt idle"}>
-            {isComplete ? "VS Code 集成已处理" : vscodeStage.summary}
+            {vscodeStage.summary}
           </span>
         </div>
         <div className="button-row">
@@ -821,23 +741,7 @@ export function SetupRoute() {
               disabled={actionBusy === "vscode-apply"}
               onClick={() => void applyVSCodeAndContinue()}
             >
-              完成当前机器集成
-            </button>
-          ) : null}
-          {vscodeStage.allowedActions?.includes("record_managed_shim") ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={actionBusy === "vscode-managed_shim"}
-              onClick={() =>
-                void saveMachineDecision(
-                  "vscode",
-                  "managed_shim",
-                  "已记录当前 VS Code 集成状态。",
-                )
-              }
-            >
-              保持当前状态并继续
+              启用 VS Code 集成
             </button>
           ) : null}
           {vscodeStage.allowedActions?.includes("disable") ? (
@@ -847,7 +751,7 @@ export function SetupRoute() {
               disabled={actionBusy === "vscode-disable"}
               onClick={() => void disableVSCode()}
             >
-              取消 VS Code 集成
+              关闭 VS Code 集成
             </button>
           ) : null}
         </div>
