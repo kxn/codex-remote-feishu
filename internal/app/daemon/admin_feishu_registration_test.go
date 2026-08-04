@@ -52,7 +52,6 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 		"application:application:self_manage",
 		"bitable:app",
 		"drive:drive",
-		"im:chat:readonly",
 		"im:message.group_at_msg.include_bot:readonly",
 		"im:message.group_at_msg:readonly",
 		"im:message.group_msg:readonly",

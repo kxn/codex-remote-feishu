@@ -122,9 +122,9 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
 6. 同一 room 下的多个群 surface 可以共享同一个 workspace claim；不同 room 或私聊 surface 对同一 workspace 仍会被判定 busy。
 7. room binding 是没有自身 workspace route 的 same-room surface 的最后一级 current-workspace fallback；因此第二个 bot 首次打开 `/use` / target picker 时会默认选中 room workspace，而不是回到全局列表第一项；若第二个 bot 在群里被 @ 并收到普通文本，文本入口也会先消费该 room workspace，并通过 workspace continuation 接管或启动当前 bot 自己的 headless context。若该 workspace 只有同 room sibling 已 claim 的实例，continuation 会走 fresh headless，而不是抢 sibling instance；后续文本按新会话首条消息派发，不继承其它 bot 的 selected thread。
 8. room binding 的写入点收口在真正改变 workspace claim 的入口：workspace attach、attach instance、跨 workspace thread attach、fresh workspace prepare 成功建立 `PendingHeadless` 后立即同步 room binding；target picker 只负责选择，confirm 后复用这些底层入口。fresh pending 后续启动失败不会自动清空 room binding，因为群 workspace 选择已经成立，用户可以继续在该 workspace 上重试或由同 room 其它 bot 启动自己的 context。
-9. room 已绑定且目标 workspace 不同时，切换前先确认当前 surface 可以安全离开，再检查同 room 是否存在 active/pending request、pending headless、active review、dispatching/running queue 或 instance active turn；命中 blocker 时拒绝，不调用管理员 API，也不 reset sibling surface。
-10. destructive room workspace change 必须通过注入的 Feishu chat admin authorizer；缺 authorizer、缺 actor、配置/API/权限失败或 actor 不是群主/用户管理员都会 fail closed，提示不能切换群 workspace。
-11. 管理员切换成功会 reset 同 room 其它 surface 的 context-bound runtime：attachment、selected thread、workspace claim、queue、staged image/file、pending request/capture、exec/reasoning progress、review session、plan proposal、target picker；触发切换的当前 surface 后续按目标 workspace 正常 attach/launch。
+9. room 已绑定且目标 workspace 不同时，切换前先确认当前 surface 可以安全离开，再检查同 room 是否存在 active/pending request、pending headless、active review、dispatching/running queue 或 instance active turn；命中 blocker 时拒绝，不 reset sibling surface，也不进入 primary gate。
+10. destructive room workspace change 必须通过 room primary gate：当前 surface 的 gateway 必须与 `FeishuRoomContextRecord.PrimaryGatewayID` 精确匹配；无 primary 或其他 bot 都 fail closed，提示先对目标 bot 执行 `/primary on`，不调用 Feishu chat info API。
+11. primary bot 切换成功会 reset 同 room 其它 surface 的 context-bound runtime：attachment、selected thread、workspace claim、queue、staged image/file、pending request/capture、exec/reasoning progress、review session、plan proposal、target picker；触发切换的当前 surface 后续按目标 workspace 正常 attach/launch。
 12. instance claim 与 thread claim 仍是 surface 级全局独占，同 room 不共享实例或会话。
 13. room context 的 `ActiveLock` 是同 room workspace 执行互斥的 SSOT：dispatching 时写入 surface / instance / thread / turn / queue item evidence，turn started 后用真实 thread/turn 刷新；普通 queue、未 attached 群 surface 的 room-workspace 文本自动接管、AutoContinue 与 AutoWhip 在派发前若发现其它 same-room surface 仍有 dispatching/running item 或 instance active turn，会保留当前 queued/pending 状态并返回 `room_workspace_active` notice；AutoContinue / AutoWhip 这类 tick 驱动入口会对该 notice 做短冷却，避免同一 active holder 持续刷屏。
 14. stale `ActiveLock` 不单独造成永久 busy：若锁指向的 surface 不存在或已无可证明 active work，下一次 same-room dispatch 检查会清掉并继续；room workspace reset 也会清掉 room active lock。
@@ -135,7 +135,7 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
 18. 启动顺序先装载 durable room state，再装载 surface resume。旧 schema v1 只含 primary 时会原位升级；某个 room 尚无 durable workspace 且所有 surface resume 候选一致时，只在启动事务内补录一次并立即写入 room state。room 一旦有 durable workspace，surface resume 不再反向覆盖它。
 19. room workspace 与 surface resume 候选比较使用 `state.ResolveWorkspaceClaimKey(...)` / `state.ResolveHeadlessResumeWorkspaceKey(...)` 的 claim-key 语义，而不是纯字符串 normalize；同一宿主目录的 symlink、macOS `/var` vs `/private/var`、Windows 短/长路径不应制造多个候选。
 20. 同 room 的 surface resume 候选彼此不一致，或与 durable room workspace 不一致时，daemon 记录排序后的冲突诊断并在统一 ingress 入口阻断普通文本、`/list`、`/use` 与菜单回调，返回 `room_workspace_recovery_conflict`；不得按最新时间或当前 bot 静默任选 workspace。修复持久化状态并重启后退出该 fail-closed 状态。
-21. surface resume 在当前 surface 暂时无法生成 target 时，只能回退上一份与当前 effective workspace 一致的 target。管理员把 room workspace 从 A 切到 B 后，sibling surface 的 effective workspace 已由 room SSOT 变成 B；daemon 必须在同一持久化事务中丢弃 sibling 的旧 A target，再写入 room=B，避免一次合法切换在下次启动时制造伪恢复冲突。当前 surface 仍有明确 target 时不走这条 fallback，真实不一致仍由启动 conflict gate fail closed。
+21. surface resume 在当前 surface 暂时无法生成 target 时，只能回退上一份与当前 effective workspace 一致的 target。primary bot 把 room workspace 从 A 切到 B 后，sibling surface 的 effective workspace 已由 room SSOT 变成 B；daemon 必须在同一持久化事务中丢弃 sibling 的旧 A target，再写入 room=B，避免一次合法切换在下次启动时制造伪恢复冲突。当前 surface 仍有明确 target 时不走这条 fallback，真实不一致仍由启动 conflict gate fail closed。
 22. `GatewayID` 只表示可复用配置槽位，committed AppID/generation 才表示当前 bot identity。AppID 替换或配置删除时，controller 会先关闭旧 gateway generation 的 action gate、取消事件源并等待已经进入的 action 排空；随后 daemon 在 identity store 写入 pending transition，并以可重放 identity transition 清掉该 gateway 的 surface、surface resume、bot capability、匹配的 room primary、claim/UI/turn/progress/permission、turn patch flow/transaction 等 bot-owned runtime。room workspace 继续保留；新 App 不会继承旧 surface、旧会话、旧 primary 或旧 `/bendtomywill` owner card。durable 清理或 identity commit 任一步失败时，新 runtime 不启动，后续 apply 继续重放同一 transition；即使配置改回旧 AppID 或同槽位重建同 AppID，也会先完成旧 generation 清理并提交新 generation。仅 AppSecret 变化不会触发该清理。
 
 ### 2.3 飞书私聊 surface identity 当前依赖 preferred actor id
@@ -1708,7 +1708,7 @@ transport degraded retained attachment
 | bare `/debug` `/upgrade` | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 |
 | 带参数 `/model` `/reasoning` `/access` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许 |
 
-Feishu 群聊 surface 对 bot 能力设置有额外覆盖规则：`/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 的 bare open、带参数 apply 与同卡 callback 都不修改群 surface 或 bot SSOT，并提示到私聊修改；`/autowhip`、`/autocontinue`、`/verbose` 仍按当前群 surface/context 生效。`/primary` 只改 room primary gateway，不改 workspace/session/thread route；`/primary on` 会先做 best-effort 群管理员校验，只有明确非管理员才拒绝，然后强制刷新当前 gateway 的群普通消息权限，缺权限 fail closed。
+Feishu 群聊 surface 对 bot 能力设置有额外覆盖规则：`/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 的 bare open、带参数 apply 与同卡 callback 都不修改群 surface 或 bot SSOT，并提示到私聊修改；`/autowhip`、`/autocontinue`、`/verbose` 仍按当前群 surface/context 生效。`/primary` 只改 room primary gateway，不改 workspace/session/thread route；`/primary on` 只强制刷新当前 gateway 的群普通消息权限并写入 `PrimaryGatewayID`，不查询飞书群管理员。已有 room workspace 时，只有当前 primary bot 能切换；无 primary 或其他 bot 必须先对目标 bot 执行 `/primary on`。
 
 ### 6.2 覆盖门禁
 
@@ -1929,7 +1929,7 @@ retained-offline overlay 额外规则：
 9. `/model` 打开触发的 `model.list` 是否仍保持后台能力刷新语义，没有错误进入 queue/dispatch/pendingRemote 或改变 route。
 10. `/reasoning` 是否仍只展示当前模型声明的 Codex reasoning options，unknown/catalog-unavailable 时是否保持自动 + 手输降级，而不是重新暴露全局硬编码列表。
 11. Codex dispatch guard 是否只丢弃“目录已知且明确不兼容”的 reasoning override，并且不误伤 unknown/manual model、Claude launch contract 或 model/access override。
-12. Feishu room workspace 切换是否仍只在真正 destructive workspace change 前触发，且当前 surface blocker、同 room unsafe blocker、管理员校验、sibling reset、最终 binding 写入保持同一顺序；普通同 workspace `/use` / session 选择不能调用管理员 API。
+12. Feishu room workspace 切换是否仍只在真正 destructive workspace change 前触发，且当前 surface blocker、同 room unsafe blocker、primary gate、sibling reset、最终 binding 写入保持同一顺序；普通同 workspace `/use` / session 选择不能调用 Feishu chat info API。
 13. room state v2 是否仍是 workspace/primary durable SSOT；surface resume 只能补录缺失 workspace 或提供冲突证据，不能覆盖已持久化 room workspace；冲突 room 的所有 ingress 入口必须继续 fail closed。
 14. room workspace 切换后，已 reset sibling 的旧 surface resume target 是否在同一次 sync 中被清掉；不得让 previous-target fallback 把旧 workspace 重新写回并在重启时制造伪冲突。
 15. GatewayID 槽位的 committed AppID 变化时，旧 gateway action generation 是否先关闭并排空，identity store 是否先写入 pending transition，旧 bot-owned state 是否在新 runtime upsert 前完成可重放清理；room workspace 必须保留，AppSecret-only 更新不得误清状态。清理失败后改回旧 AppID、删除失败后同槽位重建同 AppID，以及旧 turn patch flow/transaction 都必须覆盖在回归测试中。

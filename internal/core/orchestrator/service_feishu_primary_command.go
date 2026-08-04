@@ -9,8 +9,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const primaryChatAdminDecisionNotAdmin = "actor_not_chat_admin"
-
 func (s *Service) handlePrimaryCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	room := s.ensureFeishuRoomContextForSurface(surface)
 	if room == nil {
@@ -29,9 +27,6 @@ func (s *Service) handlePrimaryCommand(surface *state.SurfaceConsoleRecord, acti
 }
 
 func (s *Service) handlePrimaryOn(surface *state.SurfaceConsoleRecord, room *state.FeishuRoomContextRecord, action control.Action) []eventcontract.Event {
-	if s.primaryChatAdminExplicitlyDenied(surface, action) {
-		return notice(surface, "primary_admin_required", "只有群管理员可以设置本群主机器人。")
-	}
 	decision := s.checkPrimaryBotPermission(surface, action, true)
 	if !decision.Allowed {
 		return notice(surface, "primary_permission_missing", "当前机器人还不能接收群普通消息，请先给这个机器人应用开通群消息权限后再设置。")
@@ -55,18 +50,6 @@ func (s *Service) handlePrimaryOn(surface *state.SurfaceConsoleRecord, room *sta
 	default:
 		return notice(surface, "primary_replaced", "已将本群主机器人切换为当前机器人。之后未 @ 的普通消息将由当前机器人承接。")
 	}
-}
-
-func (s *Service) primaryChatAdminExplicitlyDenied(surface *state.SurfaceConsoleRecord, action control.Action) bool {
-	if s == nil || s.config.ChatAdminAuthorizer == nil || surface == nil {
-		return false
-	}
-	decision := s.config.ChatAdminAuthorizer.AuthorizeChatAdmin(context.Background(), ChatAdminAuthorizationRequest{
-		GatewayID:   strings.TrimSpace(surface.GatewayID),
-		ChatID:      strings.TrimSpace(surface.ChatID),
-		ActorOpenID: strings.TrimSpace(action.ActorUserID),
-	})
-	return !decision.Allowed && strings.TrimSpace(decision.Reason) == primaryChatAdminDecisionNotAdmin
 }
 
 func (s *Service) handlePrimaryOff(surface *state.SurfaceConsoleRecord, room *state.FeishuRoomContextRecord) []eventcontract.Event {

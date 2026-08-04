@@ -16,7 +16,7 @@
 ### 事件与权限检测补充（2026-08-04，issue #794）
 
 - 事件只在“可验证”时参与缺失判定：存在已发布版本就按其 `event_infos[].event_type` 计算缺失，即使列表为空也与官方 CLI 一致地视为没有订阅；没有已发布版本或版本列表接口不可用时跳过事件检查。
-- 权限检测支持官方“任一即可”的替代关系（例如 `im:chat:read` 满足 `im:chat:readonly`，`im:resource` / `im:resource:upload`、`base:app:create` / `bitable:app` 等同理）：需求被自身或任一官方替代满足即视为已配置，替代 scope 不判为多余。manifest canonical scope 是否调整属 issue #774。
+- 权限检测支持官方“任一即可”的替代关系（例如 `im:resource` / `im:resource:upload`、`base:app:create` / `bitable:app` 等）：需求被自身或任一官方替代满足即视为已配置，替代 scope 不判为多余。群 workspace 授权以 `/primary on` 写入的 primary bot 状态为准，不再要求 chat info scope。
 
 ## 1. 文档定位
 

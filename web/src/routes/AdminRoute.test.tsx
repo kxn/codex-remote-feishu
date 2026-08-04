@@ -197,7 +197,7 @@ describe("AdminRoute", () => {
               kind: "scope",
               key: "im:message.group_msg:readonly",
               scopeType: "tenant",
-              feature: "room_admin",
+              feature: "group_message",
               required: true,
               present: false,
             },

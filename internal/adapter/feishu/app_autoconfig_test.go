@@ -542,106 +542,6 @@ func TestPlanAppAutoConfigCallbackTypeMismatchFlagged(t *testing.T) {
 	}
 }
 
-func TestPlanAppAutoConfigAlternativeScopeSatisfiesRequirement(t *testing.T) {
-	restoreAutoConfigHooks(t)
-	// Feishu documents "any one of" permission relationships (for example
-	// im:chat / im:chat:read / im:chat:readonly all satisfy chat reads).
-	// A configured alternative must satisfy the manifest requirement and must
-	// not be reported as an extra scope.
-	manifest := feishuapp.Manifest{
-		ScopeRequirements: []feishuapp.ScopeRequirement{
-			{Scope: "im:chat:readonly", ScopeType: "tenant", Feature: "room_admin", Required: true},
-		},
-	}
-	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		return &larkapplication.Application{
-			Scopes: []*larkapplication.AppScope{
-				{Scope: strp("im:chat:read"), TokenTypes: []string{"tenant"}},
-			},
-			OnlineVersionId: strp("online-1"),
-		}, nil
-	}
-	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
-		return &larkapplication.ApplicationAppVersion{
-			VersionId: strp("online-1"),
-			Version:   strp("1.0.0"),
-			Status:    intp(larkapplication.AppVersionStatusAudited),
-			Events:    []string{"im.message.receive_v1"},
-			Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
-		}, nil
-	}
-
-	plan, err := PlanAppAutoConfig(
-		context.Background(),
-		LiveGatewayConfig{GatewayID: "main", AppID: "cli_alt_scope"},
-		manifest,
-		feishuapp.DefaultFixedPolicy(),
-	)
-	if err != nil {
-		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
-	}
-	for _, item := range plan.Diff.MissingScopes {
-		if item.Scope == "im:chat:readonly" {
-			t.Fatalf("im:chat:readonly must not be missing when im:chat:read is configured")
-		}
-	}
-	for _, item := range plan.Diff.ExtraScopes {
-		if item.Scope == "im:chat:read" {
-			t.Fatalf("im:chat:read must not be extra when it satisfies im:chat:readonly")
-		}
-	}
-	for _, item := range plan.BlockingRequirements {
-		if item.Kind == AutoConfigRequirementKindScope && item.Key == "im:chat:readonly" {
-			t.Fatalf("im:chat:readonly must not be a blocking requirement when im:chat:read is configured")
-		}
-	}
-}
-
-func TestPlanAppAutoConfigAlternativeScopeStillMissingWithoutAnySatisfier(t *testing.T) {
-	restoreAutoConfigHooks(t)
-	manifest := feishuapp.Manifest{
-		ScopeRequirements: []feishuapp.ScopeRequirement{
-			{Scope: "im:chat:readonly", ScopeType: "tenant", Feature: "room_admin", Required: true},
-		},
-	}
-	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		return &larkapplication.Application{
-			Scopes: []*larkapplication.AppScope{
-				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
-			},
-			OnlineVersionId: strp("online-1"),
-		}, nil
-	}
-	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
-		return &larkapplication.ApplicationAppVersion{
-			VersionId: strp("online-1"),
-			Version:   strp("1.0.0"),
-			Status:    intp(larkapplication.AppVersionStatusAudited),
-			Events:    []string{"im.message.receive_v1"},
-			Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
-		}, nil
-	}
-
-	plan, err := PlanAppAutoConfig(
-		context.Background(),
-		LiveGatewayConfig{GatewayID: "main", AppID: "cli_no_alt"},
-		manifest,
-		feishuapp.DefaultFixedPolicy(),
-	)
-	if err != nil {
-		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
-	}
-	found := false
-	for _, item := range plan.Diff.MissingScopes {
-		if item.Scope == "im:chat:readonly" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("im:chat:readonly must be missing when neither it nor an alternative is configured, got %#v", plan.Diff.MissingScopes)
-	}
-}
-
 func TestNarrowedManifestScopeSatisfiersHonorAlternatives(t *testing.T) {
 	// After the manifest narrows to the minimum requested scope, configured
 	// broader/legacy scopes that Feishu documents as "any one of" alternatives
@@ -654,7 +554,6 @@ func TestNarrowedManifestScopeSatisfiersHonorAlternatives(t *testing.T) {
 		{requirement: "im:message:readonly", configured: "im:message"},
 		{requirement: "im:resource:upload", configured: "im:resource"},
 		{requirement: "application:application:self_manage", configured: "admin:app.info:readonly"},
-		{requirement: "im:chat:readonly", configured: "im:chat"},
 		{requirement: "im:message.group_at_msg.include_bot:readonly", configured: "im:message.group_at_msg.include_bot"},
 		{requirement: "im:message.group_msg:readonly", configured: "im:message.group_msg"},
 	}

@@ -19,23 +19,7 @@ type Config struct {
 	LocalPauseMaxWait           time.Duration
 	DetachAbandonWait           time.Duration
 	GitAvailable                bool
-	ChatAdminAuthorizer         ChatAdminAuthorizer
 	PrimaryBotPermissionChecker PrimaryBotPermissionChecker
-}
-
-type ChatAdminAuthorizer interface {
-	AuthorizeChatAdmin(context.Context, ChatAdminAuthorizationRequest) ChatAdminAuthorizationDecision
-}
-
-type ChatAdminAuthorizationRequest struct {
-	GatewayID   string
-	ChatID      string
-	ActorOpenID string
-}
-
-type ChatAdminAuthorizationDecision struct {
-	Allowed bool
-	Reason  string
 }
 
 type PrimaryBotPermissionChecker interface {

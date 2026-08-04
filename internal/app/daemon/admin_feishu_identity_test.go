@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishubotidentity"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishuroomstate"
@@ -120,13 +119,6 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	app.gitWorkspaceWorktrees[groupSurfaceID+"::picker-old"] = &gitWorkspaceWorktreeRuntime{cancel: func() { close(worktreeCancelled) }}
 	app.gitWorkspaceWorktrees["feishu:other:chat:oc_other::picker-other"] = &gitWorkspaceWorktreeRuntime{}
 	app.mu.Unlock()
-	app.feishuChatAdmins.mu.Lock()
-	app.feishuChatAdmins.checkers = map[feishuChatAdminCheckerKey]*feishu.ChatAdminChecker{
-		{GatewayID: "main", AppID: "cli_old"}:    {},
-		{GatewayID: "other", AppID: "cli_other"}: {},
-	}
-	app.feishuChatAdmins.mu.Unlock()
-
 	rec = performAdminRequest(t, app, http.MethodPut, "/api/admin/feishu/apps/main", `{"appId":"cli_new"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update app id status = %d, want 200 body=%s", rec.Code, rec.Body.String())
@@ -207,16 +199,6 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	}
 	if _, ok := app.gitWorkspaceWorktrees["feishu:other:chat:oc_other::picker-other"]; !ok {
 		t.Fatal("other gateway worktree runtime was removed")
-	}
-	app.feishuChatAdmins.mu.Lock()
-	defer app.feishuChatAdmins.mu.Unlock()
-	for key := range app.feishuChatAdmins.checkers {
-		if canonicalGatewayID(key.GatewayID) == "main" {
-			t.Fatalf("old chat-admin checker survived identity change: %#v", key)
-		}
-	}
-	if len(app.feishuChatAdmins.checkers) != 1 {
-		t.Fatalf("chat-admin checkers after identity change = %#v", app.feishuChatAdmins.checkers)
 	}
 }
 

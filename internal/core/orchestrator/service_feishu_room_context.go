@@ -1,11 +1,11 @@
 package orchestrator
 
 import (
-	"context"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
@@ -102,17 +102,8 @@ func (s *Service) prepareFeishuRoomWorkspaceChange(surface *state.SurfaceConsole
 	if blocked := s.blockUnsafeFeishuRoomWorkspaceReset(room); blocked != "" {
 		return notice(surface, "room_workspace_busy", blocked)
 	}
-	authorizer := s.config.ChatAdminAuthorizer
-	if authorizer == nil {
-		return notice(surface, "room_workspace_admin_required", "无法确认群管理员身份，不能切换群 workspace。")
-	}
-	decision := authorizer.AuthorizeChatAdmin(context.Background(), ChatAdminAuthorizationRequest{
-		GatewayID:   strings.TrimSpace(surface.GatewayID),
-		ChatID:      strings.TrimSpace(room.ChatID),
-		ActorOpenID: strings.TrimSpace(surface.ActorUserID),
-	})
-	if !decision.Allowed {
-		return notice(surface, "room_workspace_admin_required", "只有群管理员可以切换群 workspace。")
+	if primaryBotStateForSurface(surface, room) != control.CatalogPrimaryBotStateCurrent {
+		return notice(surface, "room_workspace_primary_required", "请先对当前机器人执行 `/primary on`，再切换群 workspace。")
 	}
 	s.resetFeishuRoomWorkspaceSurfaces(room, surface)
 	room.WorkspaceResetGeneration++

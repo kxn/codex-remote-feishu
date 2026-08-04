@@ -20,11 +20,6 @@ type AppScopeStatus struct {
 // permission relationships. Only relationships confirmed by official API
 // docs are listed; token type must still match independently.
 var scopeSatisfiers = map[string][]string{
-	"im:chat:readonly": {
-		"im:chat:readonly",
-		"im:chat:read",
-		"im:chat",
-	},
 	"im:message.p2p_msg:readonly": {
 		"im:message.p2p_msg:readonly",
 		"im:message.p2p_msg",

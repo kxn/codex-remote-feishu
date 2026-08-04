@@ -72,7 +72,6 @@ func DefaultManifest() Manifest {
 					"application:application:self_manage",
 					"drive:drive",
 					"bitable:app",
-					"im:chat:readonly",
 					"im:message:readonly",
 					"im:message.group_at_msg:readonly",
 					"im:message.group_at_msg.include_bot:readonly",
@@ -103,12 +102,6 @@ func DefaultManifest() Manifest {
 				Scope:     "bitable:app",
 				ScopeType: "tenant",
 				Feature:   "cron_bitable",
-				Required:  true,
-			},
-			{
-				Scope:     "im:chat:readonly",
-				ScopeType: "tenant",
-				Feature:   "room_admin",
 				Required:  true,
 			},
 			{

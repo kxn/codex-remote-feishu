@@ -98,13 +98,11 @@ func TestPrimaryCommandOnRejectsMissingPermission(t *testing.T) {
 	}
 }
 
-func TestPrimaryCommandOnRejectsConfirmedNonAdminBeforePermissionCheck(t *testing.T) {
+func TestPrimaryCommandOnUsesPrimaryPermissionCheck(t *testing.T) {
 	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
 	checker := &fakePrimaryPermissionChecker{decision: PrimaryBotPermissionDecision{Allowed: true, Scope: "im:message.group_msg"}}
-	authorizer := &fakeChatAdminAuthorizer{allowed: false, reason: primaryChatAdminDecisionNotAdmin}
 	svc := newServiceForTest(&now)
 	svc.config.PrimaryBotPermissionChecker = checker
-	svc.config.ChatAdminAuthorizer = authorizer
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionPrimaryCommand,
@@ -115,50 +113,15 @@ func TestPrimaryCommandOnRejectsConfirmedNonAdminBeforePermissionCheck(t *testin
 		Text:             "/primary on",
 	})
 
-	if len(authorizer.calls) != 1 || authorizer.calls[0].ActorOpenID != "ou_member" {
-		t.Fatalf("admin authorizer calls = %#v, want one ou_member check", authorizer.calls)
-	}
-	if len(checker.requests) != 0 {
-		t.Fatalf("confirmed non-admin should fail before permission check: %#v", checker.requests)
-	}
-	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
-	if room != nil && room.PrimaryGatewayID != "" {
-		t.Fatalf("confirmed non-admin should not set primary: %#v", room)
-	}
-	if got := noticeText(events); !strings.Contains(got, "只有群管理员") {
-		t.Fatalf("non-admin notice = %q", got)
-	}
-}
-
-func TestPrimaryCommandOnAllowsUnconfirmedAdminCheck(t *testing.T) {
-	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
-	checker := &fakePrimaryPermissionChecker{decision: PrimaryBotPermissionDecision{Allowed: true, Scope: "im:message.group_msg"}}
-	authorizer := &fakeChatAdminAuthorizer{allowed: false, reason: "chat_info_unavailable"}
-	svc := newServiceForTest(&now)
-	svc.config.PrimaryBotPermissionChecker = checker
-	svc.config.ChatAdminAuthorizer = authorizer
-
-	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionPrimaryCommand,
-		SurfaceSessionID: "feishu:app-1:chat:oc_room",
-		GatewayID:        "app-1",
-		ChatID:           "oc_room",
-		ActorUserID:      "ou_user",
-		Text:             "/primary on",
-	})
-
-	if len(authorizer.calls) != 1 {
-		t.Fatalf("admin authorizer calls = %#v, want one best-effort check", authorizer.calls)
-	}
-	if len(checker.requests) != 1 || !checker.requests[0].ForceRefresh {
-		t.Fatalf("unconfirmed admin check should continue to forced permission check: %#v", checker.requests)
-	}
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	if room == nil || room.PrimaryGatewayID != "app-1" {
-		t.Fatalf("unconfirmed admin check should still allow primary set: %#v", room)
+		t.Fatalf("primary on should use the primary permission check without chat-admin gating: %#v", room)
 	}
-	if got := noticeText(events); !strings.Contains(got, "已将当前机器人设置为本群主机器人") {
-		t.Fatalf("primary on notice = %q", got)
+	if len(checker.requests) != 1 || !checker.requests[0].ForceRefresh {
+		t.Fatalf("primary permission requests = %#v, want one forced check", checker.requests)
+	}
+	if got := noticeText(events); strings.Contains(got, "群管理员") {
+		t.Fatalf("primary on should not mention chat admin authorization: %q", got)
 	}
 }
 

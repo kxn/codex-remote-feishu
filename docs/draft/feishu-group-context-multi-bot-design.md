@@ -16,7 +16,7 @@
 2. 群聊内只共享 workspace，不共享会话。
 3. `mode`、Codex provider、Claude profile、模型、推理强度等决定机器人能力的设置属于机器人本身，只能在私聊中修改。
 4. `AutoWhip`、`AutoContinue`、会话选择、暂存文件 / 图片、队列等辅助或运行态能力按群 context 隔离。
-5. 只有群管理员可以在群里通过 @ 任意机器人切换群 workspace。
+5. 只有已经通过 `/primary on` 成为 room primary 的 bot，可以在群里通过 @ 任意机器人切换群 workspace；没有 primary 时必须先对目标 bot 执行 `/primary on`。
 6. 群 workspace 切换会重置该群内所有机器人针对这个群 workspace 的上下文。
 7. 同一个 workspace 不能被多个私聊或多个群共享。
 8. 唯一例外是同一个群内的多个机器人可以共享这个群绑定的 workspace。
@@ -32,7 +32,7 @@
 
 机器人首次在群里被 @ 时，如果该群尚未绑定 workspace，应引导设置群 workspace。群 workspace 一旦绑定，该群内后续 @ 任意机器人都使用同一个 workspace 绑定。
 
-V1 建议默认不暴露轻量级随手切换入口。切换 workspace 应作为管理员级重置动作出现，并明确提示会重置该群内所有机器人在该群 workspace 下的上下文。
+V1 建议默认不暴露轻量级随手切换入口。切换 workspace 是 room primary bot 才能执行的重置动作，并明确提示会重置该群内所有机器人在该群 workspace 下的上下文。
 
 ### 3.3 群聊执行
 
@@ -66,7 +66,7 @@ V1 建议默认不暴露轻量级随手切换入口。切换 workspace 应作为
 3. 两个 bot 可以同时启动各自的 managed headless instance / thread / turn，当时没有 room active lock。
 4. 同一条 `@Codex Bleeding 你好` 群消息曾同时进入 `legacy-default` 与 `Codex-5` 两个 surface，说明当时入站入口缺少“群消息是否 @ 当前 bot”的 gate。
 
-因此，大方案可以收缩：不需要重新发明“不同群 context 隔离”，而是在现有 surface 隔离上新增 room workspace binding、room active lock、群管理员校验，以及 bot 设置 / 群设置边界。
+因此，大方案可以收缩：不需要重新发明“不同群 context 隔离”，而是在现有 surface 隔离上新增 room workspace binding、room active lock、primary bot 授权 gate，以及 bot 设置 / 群设置边界。
 
 这些差距已经拆入 #728、#730、#732、#733、#734 分阶段收口：入站 @ 当前 bot gate 已由 #728 承接；room context、workspace claim owner、room workspace binding/reset 与 room active lock 分别由后续子单落地。本文保留本节作为历史实测依据，不再表示当前 live 仍缺这些能力。
 
@@ -189,20 +189,15 @@ managed headless 启动时会为每个 `InstanceID` 启动独立进程，并通�
 
 当前 wrapper restart 逻辑也支持这个判断。Codex child restart 会在新 child 拉起后发送 `thread/resume` 恢复当前 thread；Claude child restart 会根据目标 session 构造 `--resume <session_id>`，并且重启前会先停止旧 child IO，避免新旧 child 交叉写入。这说明现有快速切换更接近“串行恢复 / 重启恢复”，不是“同一 child 内多 session 并发”。
 
-## 7. Feishu 群身份调研结论
+## 7. Feishu 群授权语义
 
-### 7.1 群管理员判断
+### 7.1 Primary bot 是群级授权 SSOT
 
-消息事件 `im.message.receive_v1` 的 event payload 提供 `sender.sender_id`、`sender_type`、`message.chat_id`、`message.chat_type`、mentions 等字段，但不直接提供“发送者是否群主 / 群管理员”。因此不能只靠入站事件 payload 判断群管理员。
+飞书事件不会把 bot 变成群管理员，机器人也不能依赖 Feishu 原生群管理员身份执行 workspace 切换。当前产品使用 room 的 `PrimaryGatewayID` 作为群级授权事实源：`/primary on` 先通过 `PrimaryBotPermissionChecker` 确认当前 bot 能接收群普通消息，再写入或替换该字段。
 
-可行路径是收到群内 workspace 切换类命令时，调用“获取群信息”接口 `GET /open-apis/im/v1/chats/:chat_id` 做补充校验：
+已有 room workspace 且目标 workspace 不同的时候，只有当前 surface 的 gateway 与 `PrimaryGatewayID` 精确匹配才允许切换，并继续经过 active / pending / review / running blocker 和 sibling reset。没有 primary、primary 状态无法证明或当前 bot 不是 primary 时，拒绝切换并提示先对目标 bot 执行 `/primary on`。
 
-1. 接口返回 `owner_id` / `owner_id_type`，可判断群主。
-2. 接口返回 `user_manager_id_list`，可判断用户管理员。
-3. 接口返回 `bot_manager_id_list`，可判断机器人管理员，但群 workspace 切换的操作者通常应是用户，不建议允许 bot 管理员代表用户执行。
-4. 查询参数 `user_id_type` 支持 `open_id`、`user_id`、`union_id`。V1 先支持 `open_id`，避免为了管理员校验额外扩大 contact 权限；接口封装保留 `user_id_type` 参数，后续如需跨 app 用户身份归一再引入 `user_id` / `union_id` 策略。
-
-接口限制也需要进入产品语义：调用接口的机器人或用户需要在群内，内部群要求同租户；外部群可能因权限不可用失败。失败时应 fail closed，提示“无法确认群管理员身份，不能切换群 workspace”，而不是放行。
+此 gate 不调用 `im.v1.chat.get`，也不要求 `im:chat:readonly`、`im:chat:read` 或 `im:chat`。`/primary off`、`status`、`refresh` 和 primary replacement 仍按现有 room primary 状态工作。
 
 ### 7.2 `OpenChatID` / `chat_id` 跨 app 稳定性
 
@@ -216,7 +211,7 @@ managed headless 启动时会为每个 `InstanceID` 启动独立进程，并通�
 
 1. room context record 必须保留 gateway / surface evidence，不能只留下不可审计的裸 `chatID`。
 2. workspace claim、reset、active lock 等后续动作都应通过 room helper 获取同 room surfaces，避免各处重复拼接 identity。
-3. 如果后续实测或官方文档证明某些跨 app 场景下 `chat_id` 不稳定，再额外设计显式 room linkage：由群管理员在同一群内分别对多个 app 完成绑定确认，系统记录 `tenant_key + app_id + chat_id` 到同一内部 `RoomContextID` 的映射，并在管理员身份、workspace claim、重置广播上全部按内部 room id 操作。
+3. 如果后续实测或官方文档证明某些跨 app 场景下 `chat_id` 不稳定，再额外设计显式 room linkage：由当前 primary bot 通过产品内授权流程完成绑定确认，系统记录 `tenant_key + app_id + chat_id` 到同一内部 `RoomContextID` 的映射，并在 workspace claim、重置广播上全部按内部 room id 操作。
 
 ## 8. 当前主要风险
 
@@ -227,8 +222,6 @@ managed headless 启动时会为每个 `InstanceID` 启动独立进程，并通�
 5. 群 workspace 切换会重置多 surface 状态，需要设计原子化 reset，不能只清当前触发切换的机器人 surface。
 6. 私聊设置改成机器人级后，当前 surface 级 `ProductMode`、`Backend`、provider/profile、prompt override 的持久化语义需要重新梳理。
 7. Codex 底层虽支持单实例多 active turn，但当前仓库单槽 active turn 模型会导致所有权、stop / steer、请求审批和飞书最终卡投递风险；不能半改。
-8. 飞书群管理员身份依赖补充 API，必须处理权限缺失、机器人不在群、外部群、接口限流和缓存过期。
-
 ## 9. 代码改造落点初稿
 
 ### 9.1 Claim 层
@@ -265,30 +258,25 @@ room context 至少需要支持：
 
 这部分不能只改菜单可见性，因为用户仍可直接发 slash command。
 
-### 9.4 Feishu 管理员校验层
+### 9.4 Feishu 群 primary 授权层
 
-新增 Feishu chat info client wrapper 或扩展现有 setup / gateway API facade，提供：
-
-1. `GetChatInfo(chatID, userIDType)`。
-2. `IsUserChatOwnerOrManager(chatID, actorID, actorIDType)`。
-3. 短 TTL 缓存，避免每次普通 @ 都查；只在 destructive admin 动作前强校验。
-4. fail closed 的错误分类和用户提示。
+workspace switch 不新增 Feishu chat info client，也不查询原生群管理员。授权只读取 room `PrimaryGatewayID` 与当前 surface gateway 的匹配关系；`/primary on` 负责通过 `PrimaryBotPermissionChecker` 确认群普通消息能力并写入 primary。
 
 ### 9.5 当前落地状态
 
 截至 2026-07-31，已完成五块底座：
 
 1. room identity/state：`state.Root.FeishuRoomContexts` 保存 `feishu:chat:<chatID>` room context；`ensureSurface` 在群聊 surface materialize/resume 时登记 gateway/surface evidence；私聊 surface 不进入 room context。该记录现在是 room workspace binding/reset 与 room active lock 的 SSOT。
-2. Feishu 群管理员校验：adapter 层提供 `ChatAdminChecker`，通过 `GET /open-apis/im/v1/chats/:chat_id` 获取 `owner_id` / `user_manager_id_list`，不把 `bot_manager_id_list` 当作用户权限；缺 chat、缺 actor、API 失败或权限缺失都 fail closed；查询结果有短 TTL cache，只供后续 destructive admin action 调用。
+2. Feishu 群 primary 授权：`/primary on` 通过 `PrimaryBotPermissionChecker` 强制刷新当前 bot 的群普通消息能力并写入 `PrimaryGatewayID`；workspace switch 只允许当前 primary bot，完全不依赖 Feishu 群管理员 API。
 3. workspace claim owner：`workspaceClaims` 已从单 `SurfaceSessionID` 扩展为 `surface` / `room` 结构化 owner；同 room 群 surface 可以共享 workspace claim，不同 room / 私聊 surface 仍互斥；instance/thread claim 仍保持 surface 独占。
-4. room workspace binding / switch / reset：`FeishuRoomContextRecord` 已保存 `WorkspaceKey`、绑定操作者、绑定更新时间与 reset generation。workspace attach、attach instance、跨 workspace thread attach、fresh workspace prepare 等真正改变 workspace claim 的入口统一经过 room binding helper；没有自身 workspace route 的 same-room surface 会把 room binding 作为当前 workspace 默认值，因此第二个 bot 首次打开 `/use` / target picker 时会默认看到群 workspace。room 已绑定且目标 workspace 不同时，先确认当前 surface 可以安全离开，再检查同 room 是否有 active/pending request/headless/review/running blocker，随后调用注入的 chat admin authorizer。校验失败或无法确认时拒绝；管理员切换成功会 reset 同 room 其它 surface 的 attachment、thread selection、queue、staged input、pending request/capture、exec/reasoning progress、review、plan proposal 和 target picker runtime。最终 room binding 只在 route/attach 成功或 fresh workspace 连接完成后写入新 workspace。
+4. room workspace binding / switch / reset：`FeishuRoomContextRecord` 已保存 `WorkspaceKey`、绑定操作者、绑定更新时间与 reset generation。workspace attach、attach instance、跨 workspace thread attach、fresh workspace prepare 等真正改变 workspace claim 的入口统一经过 room binding helper；没有自身 workspace route 的 same-room surface 会把 room binding 作为当前 workspace 默认值，因此第二个 bot 首次打开 `/use` / target picker 时会默认看到群 workspace。room 已绑定且目标 workspace 不同时，先确认当前 surface 可以安全离开，再检查同 room 是否有 active/pending request/headless/review/running blocker，随后要求当前 surface gateway 与 `PrimaryGatewayID` 匹配。primary gate 失败时拒绝；primary bot 切换成功会 reset 同 room 其它 surface 的 attachment、thread selection、queue、staged input、pending request/capture、exec/reasoning progress、review、plan proposal 和 target picker runtime。最终 room binding 只在 route/attach 成功或 fresh workspace 连接完成后写入新 workspace。
 5. room durable state：`FeishuRoomStateRecord` 通过原 `feishu-room-primary.json` 路径的 schema v2 持久化 workspace/update/reset 与 primary/update facts；旧 v1 primary-only 文件原位迁移。启动时仅允许从同 room 一致的 surface resume 候选补录缺失 workspace；候选冲突或与 durable room 不一致时，普通文本、`/list`、`/use` 和菜单回调统一 fail closed，避免 surface resume 重新成为 room workspace 的第二写源。
 
 ## 10. 已完成调研问题
 
 1. Codex app-server 是否允许单实例多 active session：底层协议 / SDK 支持多 active turn，当前仓库状态机未承接，V1 不直接依赖。
 2. Claude CLI / app-server 封装是否能单进程快速切换 session：Claude Code Remote Control 的多 session 是 bridge 多 child / 多 session handle 模型；当前仓库 Claude `--print --resume` 集成应按一 child 一 session / restart resume 处理。
-3. Feishu 群管理员身份是否可靠判断：事件 payload 不直接给；补充调用“获取群信息”可判断 owner / user_manager_id_list，但依赖权限、机器人在群、同租户等前置条件，失败必须拒绝。
+3. Feishu 群授权事实源：bot 不能成为群管理员，使用 `/primary on` 写入的 `PrimaryGatewayID` 作为 room 级授权 SSOT；workspace switch 不调用群信息 API。
 4. Feishu `OpenChatID` 是否跨不同 app / bot 稳定：未找到官方明确承诺；V1 仍采用本机实测可用的 `chatID` room key，并通过 evidence 字段保留未来迁移空间。
 
 “room active lock 应该拒绝第二个机器人输入，还是进入 room 级队列”不是调研问题，是产品决策。当前文档保留 V1 倾向：先拒绝或提示等待，不做跨机器人共享队列。
@@ -310,5 +298,5 @@ V1 不支持本仓库内的单实例并发多 session。推荐按以下顺序推
 3. 同一群 room 内多个机器人共享 workspace claim。
 4. 每个机器人 surface 保持独立 session / thread / instance route。
 5. 同一 room workspace 同时只允许一个 surface active running。
-6. 群 workspace 切换只允许群管理员执行，并重置整个 room 下的 surface context。
+6. 群 workspace 切换只允许当前 primary bot 执行，并重置整个 room 下的 surface context。
 7. 跨不同 Feishu app / gateway 但 `chatID` 相同的“同一群”在 V1 进入同一 room context；如后续发现 `chatID` 不稳定，再引入显式管理员绑定或迁移策略。

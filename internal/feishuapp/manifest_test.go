@@ -150,6 +150,20 @@ func TestDefaultManifestRequirementsMetadata(t *testing.T) {
 	}
 }
 
+func TestDefaultManifestOmitsChatInfoScope(t *testing.T) {
+	manifest := DefaultManifest()
+	for _, scope := range manifest.Scopes.Scopes.Tenant {
+		if strings.HasPrefix(strings.TrimSpace(scope), "im:chat") {
+			t.Fatalf("default manifest must not require chat info scope, got %q", scope)
+		}
+	}
+	for _, item := range manifest.ScopeRequirements {
+		if strings.HasPrefix(strings.TrimSpace(item.Scope), "im:chat") {
+			t.Fatalf("default manifest must not describe chat info requirement, got %#v", item)
+		}
+	}
+}
+
 func TestDefaultFixedPolicy(t *testing.T) {
 	policy := DefaultFixedPolicy()
 	if policy.EventSubscriptionType != FeishuEventSubscriptionTypeWebsocket {

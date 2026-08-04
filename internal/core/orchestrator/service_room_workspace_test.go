@@ -1,7 +1,6 @@
 package orchestrator
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -11,21 +10,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
-
-type fakeChatAdminAuthorizer struct {
-	allowed bool
-	reason  string
-	calls   []ChatAdminAuthorizationRequest
-}
-
-func (f *fakeChatAdminAuthorizer) AuthorizeChatAdmin(_ context.Context, req ChatAdminAuthorizationRequest) ChatAdminAuthorizationDecision {
-	f.calls = append(f.calls, req)
-	reason := f.reason
-	if reason == "" {
-		reason = "test"
-	}
-	return ChatAdminAuthorizationDecision{Allowed: f.allowed, Reason: reason}
-}
 
 func TestRoomWorkspaceBindingRecordsFirstGroupWorkspaceAttach(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
@@ -403,10 +387,8 @@ func TestRoomWorkspaceBindingRecordsGroupAttachInstance(t *testing.T) {
 	}
 }
 
-func TestRoomWorkspaceSwitchRejectsNonAdminWithoutReset(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: false}
+func TestRoomWorkspaceSwitchRejectsWithoutPrimaryWithoutReset(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-1:chat:oc_room",
@@ -425,29 +407,21 @@ func TestRoomWorkspaceSwitchRejectsNonAdminWithoutReset(t *testing.T) {
 		WorkspaceKey:     "/data/dl/web",
 	})
 
-	if len(authorizer.calls) != 1 {
-		t.Fatalf("admin authorizer calls = %d, want 1", len(authorizer.calls))
-	}
-	if authorizer.calls[0].GatewayID != "app-1" || authorizer.calls[0].ChatID != "oc_room" || authorizer.calls[0].ActorOpenID != "ou_member" {
-		t.Fatalf("unexpected admin check request: %#v", authorizer.calls[0])
-	}
-	if code := noticeCode(events, "room_workspace_admin_required"); code == "" {
-		t.Fatalf("expected admin-required notice, got %#v", events)
+	if code := noticeCode(events, "room_workspace_primary_required"); code == "" {
+		t.Fatalf("expected primary-required notice, got %#v", events)
 	}
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 0 {
-		t.Fatalf("non-admin switch should not mutate room binding, got %#v", room)
+		t.Fatalf("no-primary switch should not mutate room binding, got %#v", room)
 	}
 	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
 	if surface.ClaimedWorkspaceKey != "/data/dl/droid" || surface.AttachedInstanceID != "inst-droid-a" {
-		t.Fatalf("non-admin switch should keep surface route, got %#v", surface)
+		t.Fatalf("no-primary switch should keep surface route, got %#v", surface)
 	}
 }
 
-func TestRoomWorkspaceSwitchRejectsWhileSameRoomSurfaceRunning(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: true}
+func TestRoomWorkspaceSwitchRejectsNonPrimaryWithoutReset(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-1:chat:oc_room",
@@ -456,6 +430,37 @@ func TestRoomWorkspaceSwitchRejectsWhileSameRoomSurfaceRunning(t *testing.T) {
 		ActorUserID:      "ou_owner",
 		WorkspaceKey:     "/data/dl/droid",
 	})
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.PrimaryGatewayID = "app-2"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_member",
+		WorkspaceKey:     "/data/dl/web",
+	})
+
+	if code := noticeCode(events, "room_workspace_primary_required"); code == "" {
+		t.Fatalf("expected primary-required notice, got %#v", events)
+	}
+	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 0 {
+		t.Fatalf("non-primary switch should not mutate room binding, got %#v", room)
+	}
+}
+
+func TestRoomWorkspaceSwitchRejectsWhileSameRoomSurfaceRunning(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-1"
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-2:chat:oc_room",
@@ -477,9 +482,6 @@ func TestRoomWorkspaceSwitchRejectsWhileSameRoomSurfaceRunning(t *testing.T) {
 		WorkspaceKey:     "/data/dl/web",
 	})
 
-	if len(authorizer.calls) != 0 {
-		t.Fatalf("active-running switch should fail before admin API call, got %#v", authorizer.calls)
-	}
 	if noticeCode(events, "room_workspace_busy") == "" {
 		t.Fatalf("expected room workspace busy notice, got %#v", events)
 	}
@@ -490,9 +492,7 @@ func TestRoomWorkspaceSwitchRejectsWhileSameRoomSurfaceRunning(t *testing.T) {
 }
 
 func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenCurrentSurfaceCannotLeave(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: true}
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-1:chat:oc_room",
@@ -501,6 +501,7 @@ func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenCurrentSurfaceCannotLeave(t 
 		ActorUserID:      "ou_owner",
 		WorkspaceKey:     "/data/dl/droid",
 	})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-1"
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-2:chat:oc_room",
@@ -525,9 +526,6 @@ func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenCurrentSurfaceCannotLeave(t 
 	if noticeCode(events, "thread_switch_queued") == "" {
 		t.Fatalf("expected current-surface queue blocker, got %#v", events)
 	}
-	if len(authorizer.calls) != 0 {
-		t.Fatalf("current-surface blocker should fail before admin API call, got %#v", authorizer.calls)
-	}
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 0 {
 		t.Fatalf("current-surface blocker should not mutate room binding, got %#v", room)
@@ -539,9 +537,7 @@ func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenCurrentSurfaceCannotLeave(t 
 }
 
 func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenTargetWorkspaceBusy(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: true}
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-1:chat:oc_room",
@@ -550,6 +546,7 @@ func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenTargetWorkspaceBusy(t *testi
 		ActorUserID:      "ou_owner",
 		WorkspaceKey:     "/data/dl/droid",
 	})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-1"
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-2:chat:oc_room",
@@ -579,9 +576,6 @@ func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenTargetWorkspaceBusy(t *testi
 	if noticeCode(events, "workspace_busy") == "" {
 		t.Fatalf("expected target workspace busy notice, got %#v", events)
 	}
-	if len(authorizer.calls) != 0 {
-		t.Fatalf("target busy should fail before admin API call, got %#v", authorizer.calls)
-	}
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 0 {
 		t.Fatalf("target busy should not mutate room binding, got %#v", room)
@@ -592,10 +586,8 @@ func TestRoomWorkspaceSwitchDoesNotResetSiblingsWhenTargetWorkspaceBusy(t *testi
 	}
 }
 
-func TestRoomWorkspaceFreshWorkspaceCreateRejectsNonAdminBeforePendingHeadless(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: false}
+func TestRoomWorkspaceFreshWorkspaceCreateRejectsWithoutPrimaryBeforePendingHeadless(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-1:chat:oc_room",
@@ -609,14 +601,11 @@ func TestRoomWorkspaceFreshWorkspaceCreateRejectsNonAdminBeforePendingHeadless(t
 
 	events := svc.startFreshWorkspaceHeadless(surface, "/data/dl/new")
 
-	if len(authorizer.calls) != 1 {
-		t.Fatalf("admin authorizer calls = %d, want 1", len(authorizer.calls))
-	}
-	if noticeCode(events, "room_workspace_admin_required") == "" {
-		t.Fatalf("expected admin-required notice, got %#v", events)
+	if noticeCode(events, "room_workspace_primary_required") == "" {
+		t.Fatalf("expected primary-required notice, got %#v", events)
 	}
 	if surface.PendingHeadless != nil {
-		t.Fatalf("non-admin workspace create must not start pending headless, got %#v", surface.PendingHeadless)
+		t.Fatalf("no-primary workspace create must not start pending headless, got %#v", surface.PendingHeadless)
 	}
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 0 {
@@ -625,9 +614,7 @@ func TestRoomWorkspaceFreshWorkspaceCreateRejectsNonAdminBeforePendingHeadless(t
 }
 
 func TestRoomWorkspaceSwitchByAdminResetsSameRoomSurfaces(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: true}
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-1:chat:oc_room",
@@ -636,6 +623,7 @@ func TestRoomWorkspaceSwitchByAdminResetsSameRoomSurfaces(t *testing.T) {
 		ActorUserID:      "ou_owner",
 		WorkspaceKey:     "/data/dl/droid",
 	})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-1"
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-2:chat:oc_room",
@@ -678,10 +666,8 @@ func TestRoomWorkspaceSwitchByAdminResetsSameRoomSurfaces(t *testing.T) {
 	}
 }
 
-func TestRestoredRoomWorkspaceSwitchRejectsNonAdminWithoutReset(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: false}
+func TestRestoredRoomWorkspaceSwitchRejectsWithoutPrimaryWithoutReset(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{{
 		RoomID:                   "feishu:chat:oc_room",
 		ChatID:                   "oc_room",
@@ -698,8 +684,8 @@ func TestRestoredRoomWorkspaceSwitchRejectsNonAdminWithoutReset(t *testing.T) {
 		WorkspaceKey:     "/data/dl/web",
 	})
 
-	if len(authorizer.calls) != 1 || noticeCode(events, "room_workspace_admin_required") == "" {
-		t.Fatalf("restored workspace must preserve admin gate: calls=%#v events=%#v", authorizer.calls, events)
+	if noticeCode(events, "room_workspace_primary_required") == "" {
+		t.Fatalf("restored workspace must preserve primary gate: events=%#v", events)
 	}
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 4 {
@@ -708,15 +694,14 @@ func TestRestoredRoomWorkspaceSwitchRejectsNonAdminWithoutReset(t *testing.T) {
 }
 
 func TestRestoredRoomWorkspaceAdminSwitchResetsSibling(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: true}
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{{
 		RoomID:                   "feishu:chat:oc_room",
 		ChatID:                   "oc_room",
 		WorkspaceKey:             "/data/dl/droid",
 		WorkspaceResetGeneration: 4,
 	}})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-1"
 	for _, action := range []control.Action{
 		{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "feishu:app-1:chat:oc_room", GatewayID: "app-1", ChatID: "oc_room", ActorUserID: "ou_owner", WorkspaceKey: "/data/dl/droid"},
 		{Kind: control.ActionAttachWorkspace, SurfaceSessionID: "feishu:app-2:chat:oc_room", GatewayID: "app-2", ChatID: "oc_room", ActorUserID: "ou_member", WorkspaceKey: "/data/dl/droid"},
@@ -736,8 +721,8 @@ func TestRestoredRoomWorkspaceAdminSwitchResetsSibling(t *testing.T) {
 		WorkspaceKey:     "/data/dl/web",
 	})
 
-	if len(authorizer.calls) != 1 || noticeCode(events, "workspace_switched") == "" {
-		t.Fatalf("restored workspace admin switch failed: calls=%#v events=%#v", authorizer.calls, events)
+	if noticeCode(events, "workspace_switched") == "" {
+		t.Fatalf("restored workspace primary switch failed: events=%#v", events)
 	}
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
 	if room.WorkspaceKey != "/data/dl/web" || room.WorkspaceResetGeneration != 5 {
@@ -1072,9 +1057,7 @@ func TestRoomActiveLockStaleRecordDoesNotBlockDispatch(t *testing.T) {
 }
 
 func TestRoomActiveLockRoomWorkspaceResetClearsStaleRecord(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: true}
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
 		SurfaceSessionID: "feishu:app-1:chat:oc_room",
@@ -1084,6 +1067,7 @@ func TestRoomActiveLockRoomWorkspaceResetClearsStaleRecord(t *testing.T) {
 		WorkspaceKey:     "/data/dl/droid",
 	})
 	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.PrimaryGatewayID = "app-1"
 	room.ActiveLock = &state.FeishuRoomActiveLockRecord{
 		SurfaceSessionID: "feishu:app-missing:chat:oc_room",
 		InstanceID:       "inst-missing",
@@ -1109,10 +1093,8 @@ func TestRoomActiveLockRoomWorkspaceResetClearsStaleRecord(t *testing.T) {
 	}
 }
 
-func TestPrivateWorkspaceAttachDoesNotCreateRoomBindingOrAdminCheck(t *testing.T) {
-	authorizer := &fakeChatAdminAuthorizer{allowed: false}
+func TestPrivateWorkspaceAttachDoesNotCreateRoomBinding(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
-	svc.config.ChatAdminAuthorizer = authorizer
 
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionAttachWorkspace,
@@ -1123,9 +1105,6 @@ func TestPrivateWorkspaceAttachDoesNotCreateRoomBindingOrAdminCheck(t *testing.T
 		WorkspaceKey:     "/data/dl/droid",
 	})
 
-	if len(authorizer.calls) != 0 {
-		t.Fatalf("private attach should not call admin authorizer, got %#v", authorizer.calls)
-	}
 	if len(svc.root.FeishuRoomContexts) != 0 {
 		t.Fatalf("private attach should not create room binding, got %#v", svc.root.FeishuRoomContexts)
 	}

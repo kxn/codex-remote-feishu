@@ -83,7 +83,6 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 - `application:application:self_manage`
 - `drive:drive`
 - `bitable:app`
-- `im:chat:readonly`
 - `im:message:readonly`
 - `im:message.group_at_msg:readonly`
 - `im:message.group_at_msg.include_bot:readonly`

@@ -17,12 +17,6 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
-type allowingRoomWorkspaceAdminAuthorizer struct{}
-
-func (allowingRoomWorkspaceAdminAuthorizer) AuthorizeChatAdmin(context.Context, orchestrator.ChatAdminAuthorizationRequest) orchestrator.ChatAdminAuthorizationDecision {
-	return orchestrator.ChatAdminAuthorizationDecision{Allowed: true, Reason: "test"}
-}
-
 func TestConfigureFeishuRoomStateMaterializesStore(t *testing.T) {
 	stateDir := t.TempDir()
 	store, err := feishuroomstate.LoadStore(feishuroomstate.StatePath(stateDir))
@@ -373,9 +367,10 @@ func TestRoomWorkspaceSwitchClearsSiblingStaleResumeTargetBeforeRestart(t *testi
 		t.Fatalf("load room state: %v", err)
 	}
 	if err := roomStore.Put(state.FeishuRoomStateRecord{
-		RoomID:       "feishu:chat:oc_room",
-		ChatID:       "oc_room",
-		WorkspaceKey: workspaceA,
+		RoomID:           "feishu:chat:oc_room",
+		ChatID:           "oc_room",
+		WorkspaceKey:     workspaceA,
+		PrimaryGatewayID: "app-1",
 	}); err != nil {
 		t.Fatalf("put room state: %v", err)
 	}
@@ -412,9 +407,7 @@ func TestRoomWorkspaceSwitchClearsSiblingStaleResumeTargetBeforeRestart(t *testi
 
 	newTestApp := func() *App {
 		app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
-		app.service = orchestrator.NewService(time.Now, orchestrator.Config{
-			ChatAdminAuthorizer: allowingRoomWorkspaceAdminAuthorizer{},
-		}, renderer.NewPlanner())
+		app.service = orchestrator.NewService(time.Now, orchestrator.Config{}, renderer.NewPlanner())
 		return app
 	}
 	app := newTestApp()

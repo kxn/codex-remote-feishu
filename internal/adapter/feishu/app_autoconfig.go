@@ -671,8 +671,8 @@ func missingScopeRefs(target, configured []AutoConfigScopeRef) []AutoConfigScope
 }
 
 // extraScopeRefs returns configured scopes that satisfy no target requirement.
-// A documented alternative of a requirement (for example im:chat:read for
-// im:chat:readonly) is therefore not reported as extra.
+// A documented alternative of a requirement is therefore not reported as
+// extra.
 func extraScopeRefs(configured, target []AutoConfigScopeRef) []AutoConfigScopeRef {
 	var out []AutoConfigScopeRef
 	for _, item := range configured {
