@@ -155,6 +155,14 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 	}
 }
 
+func (s *Service) BindPendingReviewStartCommand(surfaceID, commandID string) {
+	if strings.TrimSpace(commandID) == "" {
+		return
+	}
+	surface := s.root.Surfaces[surfaceID]
+	s.bindPendingReviewStartCommand(surface, commandID)
+}
+
 func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err error) []eventcontract.Event {
 	surface := s.root.Surfaces[surfaceID]
 	if events := s.restorePendingCompactDispatch(surfaceID, commandID, "dispatch_failed", err); len(events) != 0 {
@@ -168,10 +176,13 @@ func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err 
 		Layer:            "daemon",
 		Stage:            "dispatch_command",
 		Message:          "消息未成功发送到本地 Codex。",
-		SurfaceSessionID: surface.SurfaceSessionID,
+		SurfaceSessionID: surfaceID,
 	})
 	notice := NoticeForProblem(problem)
 	notice.Code = "dispatch_failed"
+	if s.pendingReviewStartSurface(commandID) != nil {
+		return s.failPendingReviewStart(commandID, &notice)
+	}
 	if key, binding := s.pendingSteerForCommand("", commandID); binding != nil {
 		_ = binding
 		notice.Code = "steer_failed"
@@ -190,6 +201,9 @@ func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err 
 
 func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.CommandAck) []eventcontract.Event {
 	if ack.CommandID == "" {
+		return nil
+	}
+	if s.acknowledgePendingReviewStart(ack.CommandID) {
 		return nil
 	}
 	if surface, request := s.findPendingRequestByCommandID(ack.CommandID); surface != nil && request != nil {
@@ -235,6 +249,11 @@ func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.Comman
 func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.CommandAck) []eventcontract.Event {
 	if ack.CommandID == "" {
 		return nil
+	}
+	if surface := s.pendingReviewStartSurface(ack.CommandID); surface != nil {
+		notice := NoticeForProblem(commandAckProblem(surface.SurfaceSessionID, ack))
+		notice.Code = "command_rejected"
+		return s.failPendingReviewStart(ack.CommandID, &notice)
 	}
 	if events := s.restorePendingCompactCommand(instanceID, ack.CommandID, commandAckProblem("", ack)); len(events) != 0 {
 		return events
@@ -458,7 +477,9 @@ func (s *Service) HandleHeadlessLaunchFailed(surfaceID, instanceID string, err e
 	if pending == nil {
 		return nil
 	}
+	s.releaseFeishuRoomActiveReservationByReason(surface, feishuRoomGroupOnDemandReservationReason)
 	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+		s.releaseFeishuRoomActiveReservation(surface, "")
 		s.finishPromptDispatchRestartPendingRoute(surface, pending)
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
@@ -597,7 +618,9 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 		if pending == nil {
 			continue
 		}
+		s.releaseFeishuRoomActiveReservationByReason(surface, feishuRoomGroupOnDemandReservationReason)
 		if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+			s.releaseFeishuRoomActiveReservation(surface, "")
 			s.finishPromptDispatchRestartPendingRoute(surface, pending)
 		}
 		if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
@@ -682,6 +705,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 		surface.PromptOverride = state.ModelConfigRecord{}
 		s.resetSurfaceExecutionGates(surface)
+		s.releaseFeishuRoomReviewReservations(surface)
 
 		binding := s.remoteBindingForSurface(surface)
 		if binding != nil && surface.ActiveQueueItemID != "" {
@@ -753,7 +777,9 @@ func (s *Service) RemoveInstance(instanceID string) {
 		if surface == nil {
 			continue
 		}
-		s.consumeSurfacePendingHeadlessLaunch(surface, instanceID)
+		if pending := s.consumeSurfacePendingHeadlessLaunch(surface, instanceID); pending != nil {
+			s.releaseFeishuRoomActiveReservationByReason(surface, feishuRoomGroupOnDemandReservationReason)
+		}
 		if surface.AttachedInstanceID != instanceID {
 			continue
 		}

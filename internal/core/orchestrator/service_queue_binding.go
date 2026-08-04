@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -225,6 +227,67 @@ func (s *Service) bindPendingRemoteCommand(surface *state.SurfaceConsoleRecord, 
 	}
 	binding.CommandID = commandID
 	return true
+}
+
+func (s *Service) bindPendingReviewStartCommand(surface *state.SurfaceConsoleRecord, commandID string) bool {
+	if s == nil || s.turns == nil || surface == nil || surface.ReviewSession == nil {
+		return false
+	}
+	if surface.ReviewSession.Phase != state.ReviewSessionPhasePending {
+		return false
+	}
+	s.turns.bindPendingReview(commandID, surface.SurfaceSessionID)
+	return true
+}
+
+func (s *Service) pendingReviewStartSurface(commandID string) *state.SurfaceConsoleRecord {
+	if s == nil || s.turns == nil {
+		return nil
+	}
+	surfaceID := s.turns.pendingReviewSurface(commandID)
+	if surfaceID == "" {
+		return nil
+	}
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil || surface.ReviewSession == nil || surface.ReviewSession.Phase != state.ReviewSessionPhasePending {
+		s.turns.clearPendingReview(commandID)
+		return nil
+	}
+	return surface
+}
+
+func (s *Service) clearPendingReviewStart(surface *state.SurfaceConsoleRecord) {
+	if s == nil || s.turns == nil || surface == nil {
+		return
+	}
+	s.turns.clearPendingReviewsForSurface(surface.SurfaceSessionID)
+}
+
+func (s *Service) acknowledgePendingReviewStart(commandID string) bool {
+	surface := s.pendingReviewStartSurface(commandID)
+	if surface == nil {
+		return false
+	}
+	s.turns.clearPendingReview(commandID)
+	return true
+}
+
+func (s *Service) failPendingReviewStart(commandID string, reviewNotice *control.Notice) []eventcontract.Event {
+	surface := s.pendingReviewStartSurface(commandID)
+	if surface == nil {
+		return nil
+	}
+	s.turns.clearPendingReview(commandID)
+	s.releaseFeishuRoomReviewReservations(surface)
+	surface.ReviewSession = nil
+	if reviewNotice == nil {
+		return nil
+	}
+	return []eventcontract.Event{{
+		Kind:             eventcontract.KindNotice,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Notice:           reviewNotice,
+	}}
 }
 
 func (s *Service) pendingRemoteBindingByCommandForInstance(instanceID, commandID string) *remoteTurnBinding {

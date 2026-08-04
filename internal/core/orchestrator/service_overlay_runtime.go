@@ -95,9 +95,15 @@ func (s *Service) cleanupContextBoundSurfaceOverlays(surface *state.SurfaceConso
 	events = append(events, s.sealReviewCommitPickerForContextChange(surface, cause)...)
 	events = append(events, s.sealWorkspacePageForContextChange(surface, cause)...)
 	if options.ForceClearReviewState {
+		s.releaseFeishuRoomReviewReservations(surface)
+		s.clearPendingReviewStart(surface)
 		surface.ReviewSession = nil
 	} else {
 		clearIdleReviewSession(surface)
+		if surface.ReviewSession == nil {
+			s.releaseFeishuRoomReviewReservations(surface)
+			s.clearPendingReviewStart(surface)
+		}
 	}
 	return events
 }

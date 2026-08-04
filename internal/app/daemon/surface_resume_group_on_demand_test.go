@@ -63,6 +63,9 @@ func TestFeishuGroupOnDemandTextStartsHeadlessAndDefersMessage(t *testing.T) {
 	if len(app.service.PendingRemoteTurns()) != 0 {
 		t.Fatalf("expected original message to wait for recovery before dispatch, got %#v", app.service.PendingRemoteTurns())
 	}
+	if got := app.service.FeishuRoomActiveCount("feishu:app-1:chat:oc_room"); got != 1 {
+		t.Fatalf("active room reservations during on-demand launch = %d, want 1", got)
+	}
 }
 
 func TestFeishuGroupOnDemandLaunchFailureClearsContinuationAndRepliesOnce(t *testing.T) {
@@ -101,6 +104,9 @@ func TestFeishuGroupOnDemandLaunchFailureClearsContinuationAndRepliesOnce(t *tes
 
 	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
 		t.Fatalf("expected launch failure to clear continuation, got %#v", continuation)
+	}
+	if got := app.service.FeishuRoomActiveCount("feishu:app-1:chat:oc_room"); got != 0 {
+		t.Fatalf("active room reservations after launch failure = %d, want 0", got)
 	}
 	gateway := app.gateway.(*recordingGateway)
 	if len(gateway.operations) != 1 {
@@ -155,6 +161,9 @@ func TestFeishuGroupOnDemandTimeoutClearsContinuationAndRepliesOnce(t *testing.T
 
 	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
 		t.Fatalf("expected timeout to clear continuation, got %#v", continuation)
+	}
+	if got := app.service.FeishuRoomActiveCount("feishu:app-1:chat:oc_room"); got != 0 {
+		t.Fatalf("active room reservations after timeout = %d, want 0", got)
 	}
 	if len(gateway.operations) != 1 {
 		t.Fatalf("expected one timeout notice, got %#v", gateway.operations)
@@ -248,6 +257,9 @@ func TestFeishuGroupOnDemandReplayDispatchesOriginalTextAfterHeadlessConnect(t *
 	if pending.InstanceID == "" {
 		t.Fatalf("expected pending headless before replay")
 	}
+	if got := app.service.FeishuRoomActiveCount("feishu:app-1:chat:oc_room"); got != 1 {
+		t.Fatalf("active room reservations before replay = %d, want 1", got)
+	}
 
 	app.onHello(context.Background(), agentproto.Hello{
 		Instance: agentproto.InstanceHello{
@@ -276,6 +288,9 @@ func TestFeishuGroupOnDemandReplayDispatchesOriginalTextAfterHeadlessConnect(t *
 	}
 	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
 		t.Fatalf("expected replay to clear continuation, got %#v", continuation)
+	}
+	if got := app.service.FeishuRoomActiveCount("feishu:app-1:chat:oc_room"); got != 1 {
+		t.Fatalf("active room reservations after replayed prompt = %d, want 1", got)
 	}
 }
 

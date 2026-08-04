@@ -115,6 +115,45 @@ func TestDispatchNextRestartsClaudeHeadlessForQueuedReasoningMismatch(t *testing
 	}
 }
 
+func TestClaudePromptRestartHoldsRoomReservationUntilLaunchFailure(t *testing.T) {
+	svc, surface, _ := newClaudeHeadlessPreflightService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_claude"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_claude"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:                    "queue-1",
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       "msg-1",
+		SourceMessagePreview:  "继续处理",
+		ReplyToMessageID:      "msg-1",
+		ReplyToMessagePreview: "继续处理",
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride:        state.ModelConfigRecord{ReasoningEffort: "low", AccessMode: agentproto.AccessModeFullAccess},
+		FrozenPlanMode:        state.PlanModeSettingOff,
+		RouteModeAtEnqueue:    state.RouteModePinned,
+		Status:                state.QueueItemQueued,
+	}
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+
+	_ = svc.dispatchNext(surface)
+	if surface.PendingHeadless == nil || len(room.ActiveReservations) != 1 {
+		t.Fatalf("prompt restart must hold one room reservation, pending=%#v reservations=%#v", surface.PendingHeadless, room.ActiveReservations)
+	}
+
+	pending := surface.PendingHeadless
+	svc.HandleHeadlessLaunchFailed(surface.SurfaceSessionID, pending.InstanceID, errors.New("boom"))
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("room reservation after prompt restart failure = %d, want 0", got)
+	}
+}
+
 func TestDispatchNextClaudePromptRestartUsesRecoveryRouteBoundary(t *testing.T) {
 	svc, surface, _ := newClaudeHeadlessPreflightService(t)
 	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
@@ -438,5 +477,83 @@ func TestAutoContinueRestartsClaudeHeadlessForReasoningMismatch(t *testing.T) {
 	}
 	if surface.PendingHeadless.ClaudeReasoningEffort != "low" {
 		t.Fatalf("expected autocontinue restart to carry frozen reasoning, got %#v", surface.PendingHeadless)
+	}
+}
+
+func TestAutoContinueClaudePromptRestartHoldsRoomReservation(t *testing.T) {
+	svc, surface, inst := newClaudeHeadlessPreflightService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_claude"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_claude"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+	surface.AutoContinue.Enabled = true
+	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
+		EpisodeID:          "autocontinue-1",
+		InstanceID:         inst.InstanceID,
+		FrozenDispatchPlan: testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride: state.ModelConfigRecord{
+			ReasoningEffort: "low",
+			AccessMode:      agentproto.AccessModeFullAccess,
+		},
+		FrozenPlanMode:            state.PlanModeSettingOff,
+		FrozenRouteMode:           state.RouteModePinned,
+		RootReplyToMessageID:      "msg-1",
+		RootReplyToMessagePreview: "msg-1",
+		State:                     state.AutoContinueEpisodeScheduled,
+		PendingDueAt:              svc.now(),
+		TriggerKind:               state.AutoContinueTriggerKindEligibleFailure,
+	}
+
+	_ = svc.maybeDispatchPendingAutoContinue(surface, svc.now())
+
+	if got := svc.feishuRoomActiveReservationCount(room); got != 1 {
+		t.Fatalf("active reservations after autocontinue restart = %d, want 1", got)
+	}
+	pending := surface.PendingHeadless
+	if pending == nil {
+		t.Fatal("expected Claude prompt restart to remain pending")
+	}
+	svc.HandleHeadlessLaunchFailed(surface.SurfaceSessionID, pending.InstanceID, errors.New("boom"))
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("active reservations after autocontinue restart failure = %d, want 0", got)
+	}
+}
+
+func TestAutoContinueDispatchDoesNotDuplicateRoomReservation(t *testing.T) {
+	svc, surface, inst := newClaudeHeadlessPreflightService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_claude"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_claude"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+	surface.AutoContinue.Enabled = true
+	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
+		EpisodeID:          "autocontinue-1",
+		InstanceID:         inst.InstanceID,
+		FrozenDispatchPlan: testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride: state.ModelConfigRecord{
+			ReasoningEffort: "high",
+			AccessMode:      agentproto.AccessModeFullAccess,
+		},
+		FrozenPlanMode:            state.PlanModeSettingOff,
+		FrozenRouteMode:           state.RouteModePinned,
+		RootReplyToMessageID:      "msg-1",
+		RootReplyToMessagePreview: "msg-1",
+		State:                     state.AutoContinueEpisodeScheduled,
+		PendingDueAt:              svc.now(),
+		TriggerKind:               state.AutoContinueTriggerKindEligibleFailure,
+	}
+
+	events := svc.maybeDispatchPendingAutoContinue(surface, svc.now())
+	if !hasAgentCommand(events) {
+		t.Fatalf("expected autocontinue prompt dispatch, got %#v", events)
+	}
+	if got := svc.feishuRoomActiveReservationCount(room); got != 1 {
+		t.Fatalf("active reservations after autocontinue dispatch = %d, want 1", got)
 	}
 }

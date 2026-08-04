@@ -77,7 +77,7 @@ func (s *Service) clearSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecor
 	if queueItemID != "" && strings.TrimSpace(surface.ActiveQueueItemID) != queueItemID {
 		return
 	}
-	s.releaseFeishuRoomActiveReservation(surface, queueItemID)
+	s.releaseFeishuRoomQueueReservations(surface, queueItemID)
 	surface.ActiveQueueItemID = ""
 }
 

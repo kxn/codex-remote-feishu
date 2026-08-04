@@ -154,6 +154,7 @@ func (s *Service) activateReviewSessionRecord(surface *state.SurfaceConsoleRecor
 		session.StartedAt = s.now()
 	}
 	session.Phase = state.ReviewSessionPhaseActive
+	s.clearPendingReviewStart(surface)
 	if parentThreadID := reviewThreadParentThreadID(thread, session); parentThreadID != "" {
 		session.ParentThreadID = parentThreadID
 	}
@@ -218,7 +219,7 @@ func (s *Service) maybeActivateReviewSession(instanceID string, event agentproto
 }
 
 func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentproto.Event) {
-	_, session := s.reviewSessionSurface(instanceID, event.ThreadID)
+	surface, session := s.reviewSessionSurface(instanceID, event.ThreadID)
 	if session == nil {
 		return
 	}
@@ -226,6 +227,9 @@ func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentp
 		session.ActiveTurnID = ""
 	}
 	session.LastUpdatedAt = s.now()
+	if strings.TrimSpace(session.ActiveTurnID) == "" {
+		s.releaseFeishuRoomReviewReservations(surface)
+	}
 }
 
 func (s *Service) maybeApplyReviewLifecycleItem(instanceID string, event agentproto.Event) bool {

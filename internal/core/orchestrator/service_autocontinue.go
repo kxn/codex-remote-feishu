@@ -263,8 +263,14 @@ func (s *Service) maybeDispatchPendingAutoContinue(surface *state.SurfaceConsole
 	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) || surface.ActiveQueueItemID != "" {
 		return nil
 	}
-	if blocked := s.blockFeishuRoomActiveAutoDispatch(surface); blocked != nil {
-		return blocked
+	const reservationReason = "headless_autocontinue"
+	if !s.feishuRoomHasReservation(surface, reservationReason) {
+		if blocked := s.blockFeishuRoomActiveAutoDispatch(surface); blocked != nil {
+			return blocked
+		}
+	}
+	if !s.reserveFeishuRoomActiveSlot(surface, reservationReason) {
+		return s.blockFeishuRoomActiveAutoDispatch(surface)
 	}
 	return s.dispatchAutoContinueEpisode(surface, inst, episode)
 }

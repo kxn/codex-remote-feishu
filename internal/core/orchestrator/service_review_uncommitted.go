@@ -108,6 +108,12 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 	if !start.Ready {
 		return notice(surface, start.FailureCode, start.FailureText)
 	}
+	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
+		return blocked
+	}
+	if !s.reserveFeishuRoomActiveSlot(surface, "review_start") {
+		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
+	}
 	s.clearReviewCommitPickerRuntime(surface)
 	surface.ReviewSession = &state.ReviewSessionRecord{
 		Phase:           state.ReviewSessionPhasePending,

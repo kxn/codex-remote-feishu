@@ -99,6 +99,11 @@ func (s *Service) handleProblem(instanceID string, problem agentproto.ErrorInfo)
 		if surface == nil {
 			continue
 		}
+		if surface.ReviewSession != nil && surface.ReviewSession.Phase == state.ReviewSessionPhasePending {
+			s.clearPendingReviewStart(surface)
+			s.releaseFeishuRoomReviewReservations(surface)
+			surface.ReviewSession = nil
+		}
 		noticeCopy := notice
 		events = append(events, eventcontract.Event{
 			Kind:             eventcontract.KindNotice,

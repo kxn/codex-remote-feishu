@@ -16,6 +16,7 @@ type SurfaceResumeAttempt struct {
 	Backend          agentproto.Backend
 	PrepareNewThread bool
 	ResumeHeadless   bool
+	ReserveRoomSlot  bool
 }
 
 type SurfaceResumeStatus string
@@ -158,8 +159,10 @@ func (s *Service) expirePendingHeadless(surface *state.SurfaceConsoleRecord, pen
 	if current := s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID); current == nil {
 		return nil
 	}
+	s.releaseFeishuRoomActiveReservationByReason(surface, feishuRoomGroupOnDemandReservationReason)
 	events := []eventcontract.Event{}
 	if pending.Purpose == state.HeadlessLaunchPurposePromptDispatchRestart {
+		s.releaseFeishuRoomActiveReservation(surface, "")
 		s.finishPromptDispatchRestartPendingRoute(surface, pending)
 	} else if pending.Purpose == state.HeadlessLaunchPurposeWorkspaceRouteRestart {
 		s.finishWorkspaceRouteRestartPendingRoute(surface, pending)

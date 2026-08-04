@@ -245,6 +245,11 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		if autoSteer := s.maybeAutoSteerReply(surface, sanitizedAction); autoSteer != nil {
 			return append(s.maybeSealPlanProposalForInput(surface), autoSteer...)
 		}
+	}
+	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
+		return blocked
+	}
+	if !detour.Triggered {
 		if reviewSession == nil {
 			if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
 				return blocked
@@ -290,9 +295,6 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if !detour.Triggered && reviewSession == nil && !createThread && threadID == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
 		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；headless 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
-	}
-	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
-		return blocked
 	}
 	if strings.TrimSpace(cwd) == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
@@ -754,6 +756,7 @@ func (s *Service) cancelPendingHeadlessLaunch(surface *state.SurfaceConsoleRecor
 	if pending == nil {
 		return nil
 	}
+	s.releaseFeishuRoomActiveReservationByReason(surface, feishuRoomGroupOnDemandReservationReason)
 	events := s.discardDrafts(surface)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	events = append(events, eventcontract.Event{

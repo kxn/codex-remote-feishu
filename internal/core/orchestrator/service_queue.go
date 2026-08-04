@@ -319,15 +319,14 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 	if s.progress.instanceHasCompact(inst.InstanceID) {
 		return nil
 	}
-	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
-		return blocked
-	}
-
 	queueID := surface.QueuedQueueItemIDs[0]
 	item := surface.QueueItems[queueID]
 	if item == nil || item.Status != state.QueueItemQueued {
 		surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 		return nil
+	}
+	if !s.reserveFeishuRoomActiveSlotForQueueItem(surface, item, "headless_prompt_dispatch") {
+		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
 	}
 	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
 		return events

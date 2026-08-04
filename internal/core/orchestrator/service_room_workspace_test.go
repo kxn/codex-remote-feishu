@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -877,6 +878,55 @@ func TestRoomConcurrencyLimitRejectsBeforeCreatingQueueItem(t *testing.T) {
 	}
 }
 
+func TestRoomConcurrencyLimitRejectsBeforeBindingStagedFile(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	attachRoomConcurrencyTestSurfaces(svc)
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.ConcurrencyLimit = intPointer(1)
+	first := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		MessageID:        "msg-1",
+		Text:             "先处理",
+	})
+	if !hasAgentCommand(first) {
+		t.Fatalf("first surface should dispatch, got %#v", first)
+	}
+
+	second := svc.root.Surfaces["feishu:app-2:chat:oc_room"]
+	second.StagedFiles["file-1"] = &state.StagedFileRecord{
+		FileID:           "file-1",
+		SurfaceSessionID: second.SurfaceSessionID,
+		SourceMessageID:  "file-msg",
+		ActorUserID:      "ou_member",
+		LocalPath:        "/tmp/reference.txt",
+		FileName:         "reference.txt",
+		State:            state.FileStaged,
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: second.SurfaceSessionID,
+		GatewayID:        second.GatewayID,
+		ChatID:           second.ChatID,
+		ActorUserID:      second.ActorUserID,
+		MessageID:        "msg-2",
+		Text:             "超限消息",
+	})
+	if noticeCode(events, "room_workspace_active") == "" {
+		t.Fatalf("expected concurrency admission notice, got %#v", events)
+	}
+	if second.StagedFiles["file-1"].State != state.FileStaged {
+		t.Fatalf("over-limit dispatch must not bind staged file, got %#v", second.StagedFiles["file-1"])
+	}
+	if len(second.QueuedQueueItemIDs) != 0 || len(second.QueueItems) != 0 {
+		t.Fatalf("over-limit message must not create queue item, queued=%#v items=%#v", second.QueuedQueueItemIDs, second.QueueItems)
+	}
+}
+
 func TestRoomConcurrencyLimitZeroAllowsUnlimitedActiveSurfaces(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
 	attachRoomConcurrencyTestSurfaces(svc)
@@ -898,6 +948,46 @@ func TestRoomConcurrencyLimitZeroAllowsUnlimitedActiveSurfaces(t *testing.T) {
 	}
 	if got := svc.feishuRoomActiveReservationCount(room); got != 2 {
 		t.Fatalf("active reservations = %d, want 2 for unlimited room", got)
+	}
+}
+
+func TestGroupOnDemandHeadlessResumeReservesRoomSlotUntilLaunchFailure(t *testing.T) {
+	now := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResume(
+		"feishu:app-1:chat:oc_room",
+		"app-1",
+		"oc_room",
+		"ou_user",
+		state.ProductModeNormal,
+		agentproto.BackendCodex,
+		"",
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	surface := svc.Surface("feishu:app-1:chat:oc_room")
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+
+	workspaceKey := t.TempDir()
+	_, result := svc.TryAutoResumeHeadlessSurface(surface.SurfaceSessionID, SurfaceResumeAttempt{
+		WorkspaceKey:    workspaceKey,
+		Backend:         agentproto.BackendCodex,
+		ReserveRoomSlot: true,
+	}, true)
+	if result.Status != SurfaceResumeStatusStarting {
+		t.Fatalf("expected group on-demand resume to start, got %#v", result)
+	}
+	if got := svc.FeishuRoomActiveCount(surface.SurfaceSessionID); got != 1 {
+		t.Fatalf("active reservations during group on-demand launch = %d, want 1", got)
+	}
+	pending := surface.PendingHeadless
+	if pending == nil {
+		t.Fatal("expected pending headless launch")
+	}
+	svc.HandleHeadlessLaunchFailed(surface.SurfaceSessionID, pending.InstanceID, errors.New("boom"))
+	if got := svc.FeishuRoomActiveCount(surface.SurfaceSessionID); got != 0 {
+		t.Fatalf("active reservations after group on-demand launch failure = %d, want 0", got)
 	}
 }
 

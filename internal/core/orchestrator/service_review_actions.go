@@ -24,6 +24,8 @@ func (s *Service) discardReviewSession(surface *state.SurfaceConsoleRecord) []ev
 		return notice(surface, "review_session_inactive", "当前没有进行中的审阅会话。")
 	}
 	s.ensureReviewSessionParentSelection(surface, session)
+	s.releaseFeishuRoomReviewReservations(surface)
+	s.clearPendingReviewStart(surface)
 	surface.ReviewSession = nil
 	return []eventcontract.Event{{
 		Kind:             eventcontract.KindNotice,
@@ -58,9 +60,14 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 	if strings.TrimSpace(cwd) == "" {
 		return notice(surface, "review_parent_cwd_missing", "当前无法恢复原始会话的工作目录，请重新选择会话后再继续修改。")
 	}
+	if !s.feishuRoomActiveSlotAvailableAfterReviewRelease(surface) {
+		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
+	}
 	promptText := reviewApplyPromptPrefix + reviewText
 	sourceMessageID := firstNonEmpty(strings.TrimSpace(action.MessageID), strings.TrimSpace(session.SourceMessageID))
 	s.ensureReviewSessionParentSelection(surface, session)
+	s.releaseFeishuRoomReviewReservations(surface)
+	s.clearPendingReviewStart(surface)
 	surface.ReviewSession = nil
 	events := []eventcontract.Event{
 		{

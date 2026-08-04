@@ -467,10 +467,19 @@ func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt Surface
 			}
 			workspacePrepareNewThread := prepareNewThread || threadID != ""
 			continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, workspacePrepareNewThread)
-			return s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{
+			if attempt.ReserveRoomSlot {
+				if ok, events := s.reserveFeishuRoomGroupOnDemandSlot(surface); !ok {
+					return events, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "room_workspace_active"}
+				}
+			}
+			events := s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{
 				ResumeNotice:     !prepareNewThread,
 				PrepareNewThread: workspacePrepareNewThread,
-			}), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
+			})
+			if attempt.ReserveRoomSlot && surface.PendingHeadless == nil {
+				s.releaseFeishuRoomActiveReservationByReason(surface, feishuRoomGroupOnDemandReservationReason)
+			}
+			return events, SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
 		case contractResolutionUnavailable:
 			code := firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy")
 			if code == "workspace_not_found" && !allowMissingTargetFailure {
@@ -525,7 +534,16 @@ func (s *Service) tryAutoResumeManagedHeadlessTarget(surface *state.SurfaceConso
 	case threadAttachFreeVisible, threadAttachReuseHeadless:
 		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadHeadlessRestore), SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
 	case threadAttachCreateHeadless:
-		return s.startHeadlessForResolvedThreadWithMode(surface, target.View, startHeadlessModeHeadlessRestore), SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
+		if attempt.ReserveRoomSlot {
+			if ok, events := s.reserveFeishuRoomGroupOnDemandSlot(surface); !ok {
+				return events, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: "room_workspace_active"}
+			}
+		}
+		events := s.startHeadlessForResolvedThreadWithMode(surface, target.View, startHeadlessModeHeadlessRestore)
+		if attempt.ReserveRoomSlot && surface.PendingHeadless == nil {
+			s.releaseFeishuRoomActiveReservationByReason(surface, feishuRoomGroupOnDemandReservationReason)
+		}
+		return events, SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
 	case threadAttachUnavailable:
 		if target.NoticeCode == "thread_not_found" && !allowMissingTargetFailure {
 			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}

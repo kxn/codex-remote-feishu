@@ -90,6 +90,7 @@ func surfaceResumeAttemptFromEntry(entry surfaceresume.Entry) orchestrator.Surfa
 		Backend:          agentproto.Backend(entry.Backend),
 		PrepareNewThread: strings.TrimSpace(entry.ResumeRouteMode) == string(state.RouteModeNewThreadReady),
 		ResumeHeadless:   entry.ResumeHeadless,
+		ReserveRoomSlot:  true,
 	}
 }
 
@@ -128,6 +129,7 @@ func (a *App) replayGroupOnDemandResumeContinuationsLocked(ctx context.Context, 
 			continue
 		}
 		delete(a.surfaceResumeRuntime.groupOnDemandContinuations, surfaceID)
+		a.service.ReleaseFeishuRoomGroupOnDemandReservation(surfaceID)
 		replays = append(replays, cloneControlAction(continuation.Action))
 	}
 	for _, action := range replays {

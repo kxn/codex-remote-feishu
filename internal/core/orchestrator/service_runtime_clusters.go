@@ -253,6 +253,7 @@ func (r *serviceCatalogRuntime) loadPersistedWorkspacesForBackend(backend agentp
 type serviceTurnRuntime struct {
 	service       *Service
 	pendingRemote map[string]*remoteTurnBinding
+	pendingReview map[string]string
 	activeRemote  map[string]*remoteTurnBinding
 	pendingSteers map[string]*pendingSteerBinding
 	compactTurns  map[string]*compactTurnBinding
@@ -262,9 +263,48 @@ func newServiceTurnRuntime(service *Service) *serviceTurnRuntime {
 	return &serviceTurnRuntime{
 		service:       service,
 		pendingRemote: map[string]*remoteTurnBinding{},
+		pendingReview: map[string]string{},
 		activeRemote:  map[string]*remoteTurnBinding{},
 		pendingSteers: map[string]*pendingSteerBinding{},
 		compactTurns:  map[string]*compactTurnBinding{},
+	}
+}
+
+func (r *serviceTurnRuntime) bindPendingReview(commandID, surfaceID string) {
+	if r == nil {
+		return
+	}
+	commandID = strings.TrimSpace(commandID)
+	surfaceID = strings.TrimSpace(surfaceID)
+	if commandID == "" || surfaceID == "" {
+		return
+	}
+	r.pendingReview[commandID] = surfaceID
+}
+
+func (r *serviceTurnRuntime) pendingReviewSurface(commandID string) string {
+	if r == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.pendingReview[strings.TrimSpace(commandID)])
+}
+
+func (r *serviceTurnRuntime) clearPendingReview(commandID string) {
+	if r == nil {
+		return
+	}
+	delete(r.pendingReview, strings.TrimSpace(commandID))
+}
+
+func (r *serviceTurnRuntime) clearPendingReviewsForSurface(surfaceID string) {
+	if r == nil {
+		return
+	}
+	surfaceID = strings.TrimSpace(surfaceID)
+	for commandID, pendingSurfaceID := range r.pendingReview {
+		if strings.TrimSpace(pendingSurfaceID) == surfaceID {
+			delete(r.pendingReview, commandID)
+		}
 	}
 }
 

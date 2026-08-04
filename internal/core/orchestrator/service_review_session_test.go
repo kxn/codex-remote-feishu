@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -681,6 +682,353 @@ func TestStartReviewFromFinalCardBuildsDetachedReviewCommand(t *testing.T) {
 	}
 	if surface.ReviewSession == nil || surface.ReviewSession.Phase != state.ReviewSessionPhasePending || surface.ReviewSession.ParentThreadID != "thread-main" || surface.ReviewSession.SourceMessageID != "om-final-1" {
 		t.Fatalf("unexpected pending review session: %#v", surface.ReviewSession)
+	}
+}
+
+func TestStartReviewRespectsRoomConcurrencyBeforeCreatingPendingSession(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_review"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_review"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+	other := addActiveReviewSurfaceForTest(svc, room)
+	room.ActiveReservations["queue:other"] = &state.FeishuRoomActiveReservationRecord{
+		ReservationID:    "queue:other",
+		SurfaceSessionID: other.SurfaceSessionID,
+		Reason:           "review_running",
+	}
+
+	events := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       svc.root.Instances["inst-1"].WorkspaceRoot,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+	if noticeCode(events, "room_workspace_active") == "" {
+		t.Fatalf("expected review start to respect room admission, got %#v", events)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("room admission failure must not create pending review session: %#v", surface.ReviewSession)
+	}
+}
+
+func TestReviewStartReservationReleasesAfterReviewTurnCompletes(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_review"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_review"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+
+	startEvents := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       svc.root.Instances["inst-1"].WorkspaceRoot,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+	if len(startEvents) != 2 || len(room.ActiveReservations) != 1 {
+		t.Fatalf("expected review start reservation, events=%#v reservations=%#v", startEvents, room.ActiveReservations)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("review reservation count after terminal turn = %d, want 0", got)
+	}
+}
+
+func TestReviewStartDispatchFailureReleasesReservationAndPendingSession(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_review"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_review"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+
+	startEvents := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       svc.root.Instances["inst-1"].WorkspaceRoot,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+	if len(startEvents) != 2 || surface.ReviewSession == nil || len(room.ActiveReservations) != 1 {
+		t.Fatalf("expected pending review start, events=%#v session=%#v reservations=%#v", startEvents, surface.ReviewSession, room.ActiveReservations)
+	}
+
+	const commandID = "cmd-review-start-dispatch-failure"
+	svc.BindPendingReviewStartCommand(surface.SurfaceSessionID, commandID)
+	events := svc.HandleCommandDispatchFailure(surface.SurfaceSessionID, commandID, errors.New("relay unavailable"))
+	if noticeCode(events, "dispatch_failed") == "" {
+		t.Fatalf("expected review dispatch failure notice, got %#v", events)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("expected failed review start to clear pending session, got %#v", surface.ReviewSession)
+	}
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("expected failed review start to release reservation, got %d", got)
+	}
+}
+
+func TestReviewStartCommandRejectReleasesReservationAndPendingSession(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_review"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_review"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+
+	startEvents := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       svc.root.Instances["inst-1"].WorkspaceRoot,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+	if len(startEvents) != 2 || surface.ReviewSession == nil || len(room.ActiveReservations) != 1 {
+		t.Fatalf("expected pending review start, events=%#v session=%#v reservations=%#v", startEvents, surface.ReviewSession, room.ActiveReservations)
+	}
+
+	const commandID = "cmd-review-start-rejected"
+	svc.BindPendingReviewStartCommand(surface.SurfaceSessionID, commandID)
+	events := svc.HandleCommandRejected("inst-1", agentproto.CommandAck{
+		CommandID: commandID,
+		Problem: &agentproto.ErrorInfo{
+			Code:    "review_start_rejected",
+			Message: "review start rejected",
+		},
+	})
+	if noticeCode(events, "command_rejected") == "" {
+		t.Fatalf("expected review command rejection notice, got %#v", events)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("expected rejected review start to clear pending session, got %#v", surface.ReviewSession)
+	}
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("expected rejected review start to release reservation, got %d", got)
+	}
+}
+
+func feishuReviewRoomForTest(t *testing.T, svc *Service, surface *state.SurfaceConsoleRecord) *state.FeishuRoomContextRecord {
+	t.Helper()
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_review"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_review"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+	return room
+}
+
+func addActiveReviewSurfaceForTest(svc *Service, room *state.FeishuRoomContextRecord) *state.SurfaceConsoleRecord {
+	surface := &state.SurfaceConsoleRecord{
+		SurfaceSessionID: "feishu:app-2:chat:" + room.ChatID,
+		GatewayID:        "app-2",
+		ChatID:           room.ChatID,
+		ActorUserID:      "ou_other",
+		ReviewSession: &state.ReviewSessionRecord{
+			Phase: state.ReviewSessionPhaseActive,
+		},
+	}
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	svc.ensureFeishuRoomContextForSurface(surface)
+	return surface
+}
+
+func TestReviewReservationReconcileDropsReservationAfterSessionClears(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	room := feishuReviewRoomForTest(t, svc, surface)
+	room.ActiveReservations["review:stale"] = &state.FeishuRoomActiveReservationRecord{
+		ReservationID:    "review:stale",
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Reason:           "review_running",
+	}
+
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("expected stale review reservation to be reconciled away, got %d", got)
+	}
+}
+
+func TestReviewReservationReconcileDropsReservationAfterSurfaceIsRemoved(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	room := feishuReviewRoomForTest(t, svc, surface)
+	room.ActiveReservations["review:missing-surface"] = &state.FeishuRoomActiveReservationRecord{
+		ReservationID:    "review:missing-surface",
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Reason:           "review_running",
+	}
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("expected review reservation for removed surface to be reconciled away, got %d", got)
+	}
+}
+
+func TestPendingReviewProblemReleasesReservationAfterCommandAccepted(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	room := feishuReviewRoomForTest(t, svc, surface)
+	startEvents := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       svc.root.Instances["inst-1"].WorkspaceRoot,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+	if len(startEvents) != 2 {
+		t.Fatalf("expected review start events, got %#v", startEvents)
+	}
+	const commandID = "cmd-review-start-accepted"
+	svc.BindPendingReviewStartCommand(surface.SurfaceSessionID, commandID)
+	svc.HandleCommandAccepted("inst-1", agentproto.CommandAck{CommandID: commandID, Accepted: true})
+
+	events := svc.HandleProblem("inst-1", agentproto.ErrorInfo{
+		Code:             "review_start_failed",
+		Layer:            "codex",
+		Stage:            "review_start",
+		Message:          "review start failed",
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+	if len(events) == 0 {
+		t.Fatalf("expected review failure notice, got %#v", events)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("expected pending review session to clear after failure, got %#v", surface.ReviewSession)
+	}
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("expected review failure to release reservation, got %d", got)
+	}
+}
+
+func TestReviewReservationReleasesOnTransportDegraded(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	room := feishuReviewRoomForTest(t, svc, surface)
+	startEvents := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       svc.root.Instances["inst-1"].WorkspaceRoot,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+	if len(startEvents) != 2 {
+		t.Fatalf("expected review start events, got %#v", startEvents)
+	}
+
+	svc.ApplyInstanceTransportDegraded("inst-1", false)
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("expected transport degraded to release review reservation, got %d", got)
+	}
+}
+
+func TestReviewReservationReleasesOnDisconnect(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	room := feishuReviewRoomForTest(t, svc, surface)
+	startEvents := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       svc.root.Instances["inst-1"].WorkspaceRoot,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+	if len(startEvents) != 2 {
+		t.Fatalf("expected review start events, got %#v", startEvents)
+	}
+
+	svc.ApplyInstanceDisconnected("inst-1")
+	if got := svc.feishuRoomActiveReservationCount(room); got != 0 {
+		t.Fatalf("expected disconnect to release review reservation, got %d", got)
+	}
+}
+
+func TestReviewApplyKeepsSessionWhenRoomAdmissionIsFull(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_review"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_review"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:           state.ReviewSessionPhaseActive,
+		ParentThreadID:  "thread-main",
+		ReviewThreadID:  "thread-review",
+		LastReviewText:  "请继续修改",
+		SourceMessageID: "msg-review",
+	}
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+	other := addActiveReviewSurfaceForTest(svc, room)
+	room.ActiveReservations["review:other"] = &state.FeishuRoomActiveReservationRecord{
+		ReservationID:    "review:other",
+		SurfaceSessionID: other.SurfaceSessionID,
+		Reason:           "review_running",
+	}
+
+	events := svc.applyReviewSessionResult(surface, control.Action{MessageID: "msg-apply"})
+	if noticeCode(events, "room_workspace_active") == "" {
+		t.Fatalf("expected review apply admission notice, got %#v", events)
+	}
+	if surface.ReviewSession == nil || surface.ReviewSession.LastReviewText != "请继续修改" {
+		t.Fatalf("room admission failure must preserve review session: %#v", surface.ReviewSession)
+	}
+}
+
+func TestReviewApplyReplacesItsOwnReservationWithPromptDispatch(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	delete(svc.root.Surfaces, surface.SurfaceSessionID)
+	surface.SurfaceSessionID = "feishu:app-1:chat:oc_review"
+	surface.GatewayID = "app-1"
+	surface.ChatID = "oc_review"
+	svc.root.Surfaces[surface.SurfaceSessionID] = surface
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:           state.ReviewSessionPhaseActive,
+		ParentThreadID:  "thread-main",
+		ReviewThreadID:  "thread-review",
+		ThreadCWD:       "/data/dl/droid",
+		LastReviewText:  "请继续修改",
+		SourceMessageID: "msg-review",
+	}
+	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.ConcurrencyLimit = intPointer(1)
+	room.ActiveReservations["review:current"] = &state.FeishuRoomActiveReservationRecord{
+		ReservationID:    "review:current",
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Reason:           "review_running",
+	}
+
+	events := svc.applyReviewSessionResult(surface, control.Action{MessageID: "msg-apply"})
+	if noticeCode(events, "review_apply_requested") == "" {
+		t.Fatalf("expected review apply to proceed after replacing its own reservation, got %#v", events)
+	}
+	if surface.ReviewSession != nil {
+		t.Fatalf("expected review session to clear after apply, got %#v", surface.ReviewSession)
+	}
+	if !hasAgentCommand(events) {
+		t.Fatalf("expected review apply prompt dispatch, got %#v", events)
+	}
+	if got := svc.feishuRoomActiveReservationCount(room); got != 1 {
+		t.Fatalf("active reservations after review apply = %d, want 1", got)
 	}
 }
 
