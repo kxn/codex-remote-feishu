@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -62,6 +63,34 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 	}
 	if !run.Cancelled {
 		t.Fatalf("expected registration run to be cancelled after completion")
+	}
+}
+
+func TestFeishuOnboardingRegistrationQRCodeFailureMarksSessionFailed(t *testing.T) {
+	cfg := configForRegistrationTest()
+	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+	runner := &fakeFeishuRegistrationRunner{}
+	app.feishuRuntime.registration = runner
+
+	view, err := app.createFeishuOnboardingSession(context.Background())
+	if err != nil {
+		t.Fatalf("createFeishuOnboardingSession: %v", err)
+	}
+	runner.runs[0].EmitQRCode(feishuRegistrationQRCode{
+		URL:       strings.Repeat("x", 10000),
+		ExpiresAt: time.Now().UTC().Add(time.Minute),
+		Interval:  time.Second,
+	})
+
+	afterFailure, ok := app.snapshotFeishuOnboardingSession(view.ID)
+	if !ok {
+		t.Fatalf("session disappeared after QR failure")
+	}
+	if afterFailure.Status != feishuOnboardingStatusFailed || afterFailure.ErrorCode != "qr_code_render_failed" {
+		t.Fatalf("unexpected QR failure session: %#v", afterFailure)
+	}
+	if !runner.runs[0].Cancelled {
+		t.Fatalf("expected registration run to be canceled after QR render failure")
 	}
 }
 
