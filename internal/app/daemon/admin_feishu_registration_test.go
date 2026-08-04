@@ -308,6 +308,57 @@ func TestLegacyFeishuRegistrationRunnerCancellationStopsPolling(t *testing.T) {
 	}
 }
 
+func TestLegacyFeishuRegistrationRunnerDoesNotPollAfterQRExpiry(t *testing.T) {
+	pollCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("parse form: %v", err)
+			return
+		}
+		switch r.Form.Get("action") {
+		case "init":
+			_, _ = w.Write([]byte(`{}`))
+		case "begin":
+			_, _ = w.Write([]byte(`{"device_code":"device-expiry","verification_uri_complete":"https://example.test/qr","interval":1,"expire_in":1}`))
+		case "poll":
+			pollCalls++
+			_, _ = w.Write([]byte(`{"client_id":"cli_late","client_secret":"secret_late"}`))
+		}
+	}))
+	defer server.Close()
+
+	failureCh := make(chan feishuRegistrationFailure, 1)
+	runner := &legacyFeishuRegistrationRunner{
+		httpClient:      server.Client(),
+		registrationURL: server.URL,
+		waitFn: func(ctx context.Context, _ time.Duration) error {
+			timer := time.NewTimer(1100 * time.Millisecond)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	}
+	runner.Start(context.Background(), feishuRegistrationOptions{}, feishuRegistrationCallbacks{
+		OnFailure: func(failure feishuRegistrationFailure) { failureCh <- failure },
+	})
+
+	select {
+	case failure := <-failureCh:
+		if failure.Status != feishuOnboardingStatusExpired || failure.ErrorCode != "expired_token" {
+			t.Fatalf("failure = %#v, want expired token", failure)
+		}
+		if pollCalls != 0 {
+			t.Fatalf("poll calls = %d, want 0 after QR expiry", pollCalls)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for expiry failure")
+	}
+}
+
 func TestLegacyFeishuRegistrationRunnerCompletesCurrentSetupSession(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	gateway := &fakeAdminGatewayController{

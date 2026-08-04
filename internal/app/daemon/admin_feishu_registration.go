@@ -165,6 +165,14 @@ func (r *legacyFeishuRegistrationRunner) start(ctx context.Context, callbacks fe
 		if ctx.Err() != nil {
 			return
 		}
+		if !started.expiresAt.IsZero() && !time.Now().UTC().Before(started.expiresAt) {
+			r.emitFailure(ctx, callbacks, feishuRegistrationFailure{
+				Status:       feishuOnboardingStatusExpired,
+				ErrorCode:    "expired_token",
+				ErrorMessage: "二维码已过期，请重新开始扫码。",
+			})
+			return
+		}
 
 		poll, err := r.pollRegistration(ctx, started.deviceCode)
 		if err != nil {
