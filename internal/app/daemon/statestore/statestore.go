@@ -23,8 +23,8 @@ import (
 
 // StateFile is the persisted JSON shape shared by all domain state stores.
 type StateFile[T any] struct {
-	Version int            `json:"version"`
-	Entries map[string]T   `json:"entries,omitempty"`
+	Version int          `json:"version"`
+	Entries map[string]T `json:"entries,omitempty"`
 }
 
 // Options carries the per-domain behavior that used to live in each package's

@@ -144,10 +144,10 @@ func TestLoadMigratesLegacyVersion(t *testing.T) {
 	}
 	store, err := Load[testRecord](path, Options[testRecord]{
 		Version:        2,
-		Name:            "test",
-		Equal:           testEqual,
-		LoadKey:         testKey,
-		LegacyVersions:  []int{1},
+		Name:           "test",
+		Equal:          testEqual,
+		LoadKey:        testKey,
+		LegacyVersions: []int{1},
 	})
 	if err != nil {
 		t.Fatalf("load legacy: %v", err)

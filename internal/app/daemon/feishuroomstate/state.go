@@ -22,27 +22,27 @@ func StatePath(stateDir string) string {
 
 func NewStore(path string) *Store {
 	return &Store{Store: statestore.New[Record](path, statestore.Options[Record]{
-		Version:         StateVersion,
-		Name:            "feishu room state",
-		Equal:           sameRecord,
-		LoadNormalize:   func(record Record) (Record, bool) { return state.NormalizeFeishuRoomStateRecord(record) },
-		LoadKey:         func(record Record) string { return state.FeishuRoomKey(record.RoomID) },
-		LoadEqual:       sameRecord,
-		DefaultVersion:  legacyStateVersion,
-		LegacyVersions:  []int{legacyStateVersion},
+		Version:        StateVersion,
+		Name:           "feishu room state",
+		Equal:          sameRecord,
+		LoadNormalize:  func(record Record) (Record, bool) { return state.NormalizeFeishuRoomStateRecord(record) },
+		LoadKey:        func(record Record) string { return state.FeishuRoomKey(record.RoomID) },
+		LoadEqual:      sameRecord,
+		DefaultVersion: legacyStateVersion,
+		LegacyVersions: []int{legacyStateVersion},
 	})}
 }
 
 func LoadStore(path string) (*Store, error) {
 	store, err := statestore.Load[Record](path, statestore.Options[Record]{
-		Version:         StateVersion,
-		Name:            "feishu room state",
-		Equal:           sameRecord,
-		LoadNormalize:   func(record Record) (Record, bool) { return state.NormalizeFeishuRoomStateRecord(record) },
-		LoadKey:         func(record Record) string { return state.FeishuRoomKey(record.RoomID) },
-		LoadEqual:       sameRecord,
-		DefaultVersion:  legacyStateVersion,
-		LegacyVersions:  []int{legacyStateVersion},
+		Version:        StateVersion,
+		Name:           "feishu room state",
+		Equal:          sameRecord,
+		LoadNormalize:  func(record Record) (Record, bool) { return state.NormalizeFeishuRoomStateRecord(record) },
+		LoadKey:        func(record Record) string { return state.FeishuRoomKey(record.RoomID) },
+		LoadEqual:      sameRecord,
+		DefaultVersion: legacyStateVersion,
+		LegacyVersions: []int{legacyStateVersion},
 	})
 	if err != nil {
 		return nil, err
