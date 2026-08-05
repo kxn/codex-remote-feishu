@@ -43,6 +43,31 @@ const (
 	ExternalAccessProviderEnv     = "CODEX_REMOTE_EXTERNAL_ACCESS_PROVIDER"
 	TryCloudflareBinaryEnv        = "CODEX_REMOTE_TRYCLOUDFLARE_BINARY"
 	TryCloudflareLaunchTimeoutEnv = "CODEX_REMOTE_TRYCLOUDFLARE_LAUNCH_TIMEOUT"
+
+	RelayPortEnv              = "RELAY_PORT"
+	RelayServerURLEnv         = "RELAY_SERVER_URL"
+	RelayHostEnv              = "RELAY_HOST"
+	RelayAPIHostEnv           = "RELAY_API_HOST"
+	RelayAPIPortEnv           = "RELAY_API_PORT"
+	CodexRealBinaryEnv        = "CODEX_REAL_BINARY"
+	WrapperNameModeEnv        = "CODEX_REMOTE_WRAPPER_NAME_MODE"
+	WrapperIntegrationModeEnv = "CODEX_REMOTE_WRAPPER_INTEGRATION_MODE"
+	FeishuGatewayIDEnv        = "FEISHU_GATEWAY_ID"
+	FeishuAppIDEnv            = "FEISHU_APP_ID"
+	FeishuAppSecretEnv        = "FEISHU_APP_SECRET"
+	FeishuUseSystemProxyEnv   = "FEISHU_USE_SYSTEM_PROXY"
+	XDGConfigHomeEnv          = "XDG_CONFIG_HOME"
+
+	CodexRemoteRepoEnv             = "CODEX_REMOTE_REPO"
+	CodexRemoteReleasesAPIURLEnv   = "CODEX_REMOTE_RELEASES_API_URL"
+	CodexRemoteBaseURLEnv          = "CODEX_REMOTE_BASE_URL"
+	CodexRemoteDevManifestURLEnv   = "CODEX_REMOTE_DEV_MANIFEST_URL"
+	CodexRemoteInstanceIDEnv       = "CODEX_REMOTE_INSTANCE_ID"
+	CodexRemoteInstanceDisplayName = "CODEX_REMOTE_INSTANCE_DISPLAY_NAME"
+	CodexRemoteInstanceSourceEnv   = "CODEX_REMOTE_INSTANCE_SOURCE"
+	CodexRemoteLifetimeEnv         = "CODEX_REMOTE_LIFETIME"
+	CodexRemoteParentPIDEnv        = "CODEX_REMOTE_PARENT_PID"
+	CodexRemoteInstanceBackendEnv  = "CODEX_REMOTE_INSTANCE_BACKEND"
 )
 
 func LoadWrapperConfig() (WrapperConfig, error) {
@@ -50,25 +75,25 @@ func LoadWrapperConfig() (WrapperConfig, error) {
 	if err != nil {
 		return WrapperConfig{}, err
 	}
-	relayPort := chooseInt(os.Getenv("RELAY_PORT"), loaded.Config.Relay.ListenPort)
+	relayPort := chooseInt(os.Getenv(RelayPortEnv), loaded.Config.Relay.ListenPort)
 	cfg := WrapperConfig{
 		RelayServerURL: chooseNonEmpty(
-			os.Getenv("RELAY_SERVER_URL"),
+			os.Getenv(RelayServerURLEnv),
 			loaded.Config.Relay.ServerURL,
 			defaultRelayServerURL(relayPort),
 		),
 		CodexRealBinary: chooseNonEmpty(
-			os.Getenv("CODEX_REAL_BINARY"),
+			os.Getenv(CodexRealBinaryEnv),
 			loaded.Config.Wrapper.CodexRealBinary,
 			"codex",
 		),
 		NameMode: chooseNonEmpty(
-			os.Getenv("CODEX_REMOTE_WRAPPER_NAME_MODE"),
+			os.Getenv(WrapperNameModeEnv),
 			loaded.Config.Wrapper.NameMode,
 			"workspace_basename",
 		),
 		IntegrationMode: chooseNonEmpty(
-			os.Getenv("CODEX_REMOTE_WRAPPER_INTEGRATION_MODE"),
+			os.Getenv(WrapperIntegrationModeEnv),
 			loaded.Config.Wrapper.IntegrationMode,
 			"managed_shim",
 		),
@@ -94,24 +119,24 @@ func LoadServicesConfig() (ServicesConfig, error) {
 	}
 	selectedApp := SelectRuntimeFeishuApp(loaded.Config.Feishu.Apps)
 	cfg := ServicesConfig{
-		RelayHost:    chooseNonEmpty(os.Getenv("RELAY_HOST"), loaded.Config.Relay.ListenHost, defaultRelayListenHost),
-		RelayPort:    strconv.Itoa(chooseInt(os.Getenv("RELAY_PORT"), loaded.Config.Relay.ListenPort)),
-		RelayAPIHost: chooseNonEmpty(os.Getenv("RELAY_API_HOST"), loaded.Config.Admin.ListenHost, defaultAdminListenHost),
-		RelayAPIPort: strconv.Itoa(chooseInt(os.Getenv("RELAY_API_PORT"), loaded.Config.Admin.ListenPort)),
+		RelayHost:    chooseNonEmpty(os.Getenv(RelayHostEnv), loaded.Config.Relay.ListenHost, defaultRelayListenHost),
+		RelayPort:    strconv.Itoa(chooseInt(os.Getenv(RelayPortEnv), loaded.Config.Relay.ListenPort)),
+		RelayAPIHost: chooseNonEmpty(os.Getenv(RelayAPIHostEnv), loaded.Config.Admin.ListenHost, defaultAdminListenHost),
+		RelayAPIPort: strconv.Itoa(chooseInt(os.Getenv(RelayAPIPortEnv), loaded.Config.Admin.ListenPort)),
 		FeishuGatewayID: chooseNonEmpty(
-			os.Getenv("FEISHU_GATEWAY_ID"),
+			os.Getenv(FeishuGatewayIDEnv),
 			selectedApp.ID,
 		),
 		FeishuAppID: chooseNonEmpty(
-			os.Getenv("FEISHU_APP_ID"),
+			os.Getenv(FeishuAppIDEnv),
 			selectedApp.AppID,
 		),
 		FeishuAppSecret: chooseNonEmpty(
-			os.Getenv("FEISHU_APP_SECRET"),
+			os.Getenv(FeishuAppSecretEnv),
 			selectedApp.AppSecret,
 		),
 		FeishuUseSystemProxy: chooseBool(
-			os.Getenv("FEISHU_USE_SYSTEM_PROXY"),
+			os.Getenv(FeishuUseSystemProxyEnv),
 			boolString(loaded.Config.Feishu.UseSystemProxy),
 			loaded.Config.Feishu.UseSystemProxy,
 		),
@@ -151,7 +176,7 @@ func ResolveExternalAccessSettings(base ExternalAccessSettings) ExternalAccessSe
 }
 
 func xdgConfigPath(parts ...string) string {
-	base := os.Getenv("XDG_CONFIG_HOME")
+	base := os.Getenv(XDGConfigHomeEnv)
 	if base == "" {
 		home, err := pathscope.UserHomeDir()
 		if err != nil {

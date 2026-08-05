@@ -98,7 +98,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	instanceID := strings.TrimSpace(os.Getenv("CODEX_REMOTE_INSTANCE_ID"))
+	instanceID := strings.TrimSpace(os.Getenv(config.CodexRemoteInstanceIDEnv))
 	if instanceID == "" {
 		instanceID, err = generateInstanceID()
 		if err != nil {
@@ -110,10 +110,10 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	if displayName == "." || displayName == "/" {
 		displayName = workspaceRoot
 	}
-	if override := strings.TrimSpace(os.Getenv("CODEX_REMOTE_INSTANCE_DISPLAY_NAME")); override != "" {
+	if override := strings.TrimSpace(os.Getenv(config.CodexRemoteInstanceDisplayName)); override != "" {
 		displayName = override
 	}
-	source := strings.TrimSpace(os.Getenv("CODEX_REMOTE_INSTANCE_SOURCE"))
+	source := strings.TrimSpace(os.Getenv(config.CodexRemoteInstanceSourceEnv))
 	if source == "" {
 		source = "vscode"
 	}
@@ -121,8 +121,8 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	lifetime, parentPID, err := resolveInstanceLifetime(
 		source,
 		managed,
-		os.Getenv("CODEX_REMOTE_LIFETIME"),
-		os.Getenv("CODEX_REMOTE_PARENT_PID"),
+		os.Getenv(config.CodexRemoteLifetimeEnv),
+		os.Getenv(config.CodexRemoteParentPIDEnv),
 		os.Getppid(),
 	)
 	if err != nil {
@@ -147,7 +147,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		WorkspaceRoot:         workspaceRoot,
 		WorkspaceKey:          state.ResolveWorkspaceKey(workspaceRoot),
 		ShortName:             shortName,
-		Backend:               agentproto.NormalizeBackend(agentproto.Backend(os.Getenv("CODEX_REMOTE_INSTANCE_BACKEND"))),
+		Backend:               agentproto.NormalizeBackend(agentproto.Backend(os.Getenv(config.CodexRemoteInstanceBackendEnv))),
 		CodexProviderID:       state.NormalizeCodexProviderID(os.Getenv(config.CodexRuntimeProviderIDEnv)),
 		ClaudeProfileID:       state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
 		ClaudeReasoningEffort: state.NormalizeReasoningEffort(os.Getenv(config.ClaudeEffortLevelEnv)),

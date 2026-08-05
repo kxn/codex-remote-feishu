@@ -34,7 +34,7 @@ func resolveNormalCodexBinaryWithOptions(configPath, configured string, persist 
 	if configured == "" {
 		return configured, nil
 	}
-	if strings.TrimSpace(os.Getenv("CODEX_REAL_BINARY")) != "" {
+	if strings.TrimSpace(os.Getenv(config.CodexRealBinaryEnv)) != "" {
 		return configured, nil
 	}
 	if looksLikePATHCodexCommand(configured) {

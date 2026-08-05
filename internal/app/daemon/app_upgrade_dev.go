@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -22,8 +23,8 @@ type devUpgradeCheckRequest struct {
 
 func (a *App) defaultDevManifestLookup(ctx context.Context) (install.DevManifest, install.DevManifestAsset, error) {
 	return install.ResolveDevManifest(ctx, install.DevManifestLookupOptions{
-		Repository:  strings.TrimSpace(os.Getenv("CODEX_REMOTE_REPO")),
-		ManifestURL: strings.TrimSpace(os.Getenv("CODEX_REMOTE_DEV_MANIFEST_URL")),
+		Repository:  strings.TrimSpace(os.Getenv(config.CodexRemoteRepoEnv)),
+		ManifestURL: strings.TrimSpace(os.Getenv(config.CodexRemoteDevManifestURLEnv)),
 	})
 }
 

@@ -12,7 +12,6 @@ import (
 	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
 )
 
-const bitablePermissionDocType = "bitable"
 const bitableBatchRecordLimit = 500
 
 type BitableRecordUpdate struct {

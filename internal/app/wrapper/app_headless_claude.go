@@ -12,8 +12,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 )
 
-const relayClaudeBootstrapInitializeID = "relay-bootstrap-initialize"
-
 func (a *App) bootstrapClaude(childStdin io.Writer, childStdout io.Reader, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (io.Reader, error) {
 	frame, err := a.claudeBootstrapInitializeFrame()
 	if err != nil {
@@ -43,7 +41,7 @@ func (a *App) bootstrapClaude(childStdin io.Writer, childStdout io.Reader, rawLo
 			continue
 		}
 		if readErr == io.EOF {
-			return nil, fmt.Errorf("claude bootstrap: initialize response %q not received before stdout closed", relayClaudeBootstrapInitializeID)
+			return nil, fmt.Errorf("claude bootstrap: initialize response %q not received before stdout closed", relayBootstrapInitializeID)
 		}
 		return nil, readErr
 	}
@@ -52,7 +50,7 @@ func (a *App) bootstrapClaude(childStdin io.Writer, childStdout io.Reader, rawLo
 func (a *App) claudeBootstrapInitializeFrame() ([]byte, error) {
 	bytes, err := json.Marshal(map[string]any{
 		"type":       "control_request",
-		"request_id": relayClaudeBootstrapInitializeID,
+		"request_id": relayBootstrapInitializeID,
 		"request": map[string]any{
 			"subtype": "initialize",
 			"hooks":   map[string]any{},
@@ -73,7 +71,7 @@ func matchClaudeBootstrapInitializeResponse(line []byte) (bool, error) {
 		return false, nil
 	}
 	response, _ := message["response"].(map[string]any)
-	if strings.TrimSpace(lookupStringFromMap(response, "request_id")) != relayClaudeBootstrapInitializeID {
+	if strings.TrimSpace(lookupStringFromMap(response, "request_id")) != relayBootstrapInitializeID {
 		return false, nil
 	}
 	if subtype := strings.TrimSpace(lookupStringFromMap(response, "subtype")); subtype != "success" {

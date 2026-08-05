@@ -17,7 +17,7 @@ func unsetUnifiedConfigOverride(t *testing.T) {
 func TestLoadWrapperConfigRejectsLegacyEnvFiles(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdgHome)
+	t.Setenv(XDGConfigHomeEnv, xdgHome)
 
 	legacyPath := filepath.Join(xdgHome, "codex-remote", "config.env")
 	if err := os.MkdirAll(filepath.Dir(legacyPath), 0o755); err != nil {
@@ -57,7 +57,7 @@ func TestLoadServicesConfigUsesUnifiedConfigEnvOverride(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()
 	overrideDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdgHome)
+	t.Setenv(XDGConfigHomeEnv, xdgHome)
 
 	overridePath := filepath.Join(overrideDir, "custom.json")
 	cfg := DefaultAppConfig()
@@ -114,10 +114,10 @@ func TestLoadServicesConfigUsesUnifiedConfigEnvOverride(t *testing.T) {
 func TestLoadServicesConfigUsesExplicitFeishuGatewayIDEnvOverride(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdgHome)
-	t.Setenv("FEISHU_GATEWAY_ID", "ops")
-	t.Setenv("FEISHU_APP_ID", "cli_env")
-	t.Setenv("FEISHU_APP_SECRET", "secret_env")
+	t.Setenv(XDGConfigHomeEnv, xdgHome)
+	t.Setenv(FeishuGatewayIDEnv, "ops")
+	t.Setenv(FeishuAppIDEnv, "cli_env")
+	t.Setenv(FeishuAppSecretEnv, "secret_env")
 
 	cfg, err := LoadServicesConfig()
 	if err != nil {
@@ -134,9 +134,9 @@ func TestLoadServicesConfigUsesExplicitFeishuGatewayIDEnvOverride(t *testing.T) 
 func TestLoadServicesConfigAllowsHostEnvOverrides(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdgHome)
-	t.Setenv("RELAY_HOST", "0.0.0.0")
-	t.Setenv("RELAY_API_HOST", "0.0.0.0")
+	t.Setenv(XDGConfigHomeEnv, xdgHome)
+	t.Setenv(RelayHostEnv, "0.0.0.0")
+	t.Setenv(RelayAPIHostEnv, "0.0.0.0")
 
 	cfg, err := LoadServicesConfig()
 	if err != nil {
@@ -153,7 +153,7 @@ func TestLoadServicesConfigAllowsHostEnvOverrides(t *testing.T) {
 func TestLoadersPreferJSONOverLegacySplitFiles(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", xdgHome)
+	t.Setenv(XDGConfigHomeEnv, xdgHome)
 
 	configPath := filepath.Join(xdgHome, "codex-remote", "config.json")
 	cfg := DefaultAppConfig()
@@ -217,7 +217,7 @@ func TestLoadAppConfigAtPathRejectsLegacyEnvPath(t *testing.T) {
 func TestLoadersRejectLegacySplitFilesWhenJSONMissing(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	baseDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(baseDir, ".config"))
+	t.Setenv(XDGConfigHomeEnv, filepath.Join(baseDir, ".config"))
 
 	configDir := filepath.Join(baseDir, ".config", "codex-remote")
 	wrapperPath := filepath.Join(configDir, "wrapper.env")
@@ -247,7 +247,7 @@ func TestLoadersIgnoreWorkingDirectoryDotEnv(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	projectDir := t.TempDir()
 	t.Chdir(projectDir)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), ".config"))
+	t.Setenv(XDGConfigHomeEnv, filepath.Join(t.TempDir(), ".config"))
 
 	dotEnvPath := filepath.Join(projectDir, ".env")
 	if err := os.WriteFile(dotEnvPath, []byte("FEISHU_APP_ID=cli_dotenv\nFEISHU_APP_SECRET=secret_dotenv\n"), 0o600); err != nil {
