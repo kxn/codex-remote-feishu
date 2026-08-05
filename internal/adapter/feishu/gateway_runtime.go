@@ -15,6 +15,7 @@ import (
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -176,7 +177,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, msgType, content)
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
-					operation.MessageID = stringPtr(resp.Data.MessageId)
+					operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
@@ -198,7 +199,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
-			operation.MessageID = stringPtr(resp.Data.MessageId)
+			operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 			g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 		}
 		return nil
@@ -218,7 +219,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "interactive", string(card))
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
-					operation.MessageID = stringPtr(resp.Data.MessageId)
+					operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
@@ -240,7 +241,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
-			operation.MessageID = stringPtr(resp.Data.MessageId)
+			operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 			g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 		}
 		return nil
@@ -285,7 +286,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "image", string(body))
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
-					operation.MessageID = stringPtr(resp.Data.MessageId)
+					operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
@@ -307,7 +308,7 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			return newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
 		}
 		if resp.Data != nil {
-			operation.MessageID = stringPtr(resp.Data.MessageId)
+			operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 			g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 		}
 		return nil

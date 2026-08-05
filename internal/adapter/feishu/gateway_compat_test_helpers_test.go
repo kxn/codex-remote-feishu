@@ -10,6 +10,7 @@ import (
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type surfaceInboundLane struct {
@@ -126,7 +127,7 @@ func (g *LiveGateway) ensureTestGroupMessageMentionsCurrentBot(event *larkim.P2M
 		return
 	}
 	message := event.Event.Message
-	if strings.EqualFold(strings.TrimSpace(stringPtr(message.ChatType)), "p2p") {
+	if strings.EqualFold(strings.TrimSpace(xutil.StringValue(message.ChatType)), "p2p") {
 		return
 	}
 	if len(message.Mentions) != 0 {
@@ -152,7 +153,7 @@ func ensureTestMentionIDs(mentions []*larkim.MentionEvent) {
 			mention.Id = &larkim.UserId{OpenId: stringRef("ou_bot")}
 			continue
 		}
-		if strings.TrimSpace(stringPtr(mention.Id.OpenId)) == "" {
+		if strings.TrimSpace(xutil.StringValue(mention.Id.OpenId)) == "" {
 			mention.Id.OpenId = stringRef("ou_bot")
 		}
 	}
@@ -163,7 +164,7 @@ func firstTestMentionOpenID(mentions []*larkim.MentionEvent) string {
 		if mention == nil || mention.Id == nil {
 			continue
 		}
-		if openID := strings.TrimSpace(stringPtr(mention.Id.OpenId)); openID != "" {
+		if openID := strings.TrimSpace(xutil.StringValue(mention.Id.OpenId)); openID != "" {
 			return openID
 		}
 	}

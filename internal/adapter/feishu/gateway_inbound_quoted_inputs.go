@@ -129,9 +129,9 @@ func referencedMessageID(message *larkim.EventMessage) string {
 	if message == nil {
 		return ""
 	}
-	targetMessageID := strings.TrimSpace(stringPtr(message.ParentId))
+	targetMessageID := strings.TrimSpace(xutil.StringValue(message.ParentId))
 	if targetMessageID == "" {
-		targetMessageID = strings.TrimSpace(stringPtr(message.RootId))
+		targetMessageID = strings.TrimSpace(xutil.StringValue(message.RootId))
 	}
 	return targetMessageID
 }
@@ -357,18 +357,18 @@ func (g *LiveGateway) fetchMessage(ctx context.Context, messageID string) (*gate
 		}
 		content := ""
 		if item.Body != nil {
-			content = stringPtr(item.Body.Content)
+			content = xutil.StringValue(item.Body.Content)
 		}
 		msg := &gatewayMessage{
-			MessageID:      stringPtr(item.MessageId),
-			MessageType:    stringPtr(item.MsgType),
+			MessageID:      xutil.StringValue(item.MessageId),
+			MessageType:    xutil.StringValue(item.MsgType),
 			Content:        content,
 			Deleted:        xutil.BoolValue(item.Deleted),
-			UpperMessageID: stringPtr(item.UpperMessageId),
+			UpperMessageID: xutil.StringValue(item.UpperMessageId),
 		}
 		if item.Sender != nil {
-			msg.SenderID = stringPtr(item.Sender.Id)
-			msg.SenderType = stringPtr(item.Sender.SenderType)
+			msg.SenderID = xutil.StringValue(item.Sender.Id)
+			msg.SenderType = xutil.StringValue(item.Sender.SenderType)
 		}
 		items = append(items, msg)
 		if msg.MessageID != "" {

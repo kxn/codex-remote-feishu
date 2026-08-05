@@ -46,6 +46,23 @@ func TestBoolPtrBoolValue(t *testing.T) {
 	}
 }
 
+func TestStringPtrStringValue(t *testing.T) {
+	p := StringPtr("x")
+	if p == nil || *p != "x" {
+		t.Errorf("StringPtr(x) = %v, want non-nil x", p)
+	}
+	if got := StringValue(p); got != "x" {
+		t.Errorf("StringValue(StringPtr(x)) = %q, want x", got)
+	}
+	if got := StringValue(nil); got != "" {
+		t.Errorf("StringValue(nil) = %q, want empty", got)
+	}
+	s := "y"
+	if got := StringValue(&s); got != "y" {
+		t.Errorf("StringValue(&y) = %q, want y", got)
+	}
+}
+
 func TestContainsString(t *testing.T) {
 	values := []string{"a", "b", "c"}
 	if !ContainsString(values, "b") {

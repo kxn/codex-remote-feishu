@@ -13,6 +13,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const inboundEventDedupeWindow = 10 * time.Minute
@@ -448,8 +449,8 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 		return PlannedInboundMessage{}, false, nil
 	}
 	message := event.Event.Message
-	chatID := stringPtr(message.ChatId)
-	chatType := stringPtr(message.ChatType)
+	chatID := xutil.StringValue(message.ChatId)
+	chatType := xutil.StringValue(message.ChatType)
 	senderUserID := userIDFromMessage(event.Event.Sender)
 	gatewayID := strings.TrimSpace(env.GatewayID)
 	surfaceSessionID := SurfaceIDForInbound(gatewayID, chatID, chatType, senderUserID)
@@ -458,9 +459,9 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 		logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, reason)
 		return PlannedInboundMessage{}, false, nil
 	}
-	messageID := strings.TrimSpace(stringPtr(message.MessageId))
-	messageType := strings.ToLower(strings.TrimSpace(stringPtr(message.MessageType)))
-	content := stringPtr(message.Content)
+	messageID := strings.TrimSpace(xutil.StringValue(message.MessageId))
+	messageType := strings.ToLower(strings.TrimSpace(xutil.StringValue(message.MessageType)))
+	content := xutil.StringValue(message.Content)
 
 	baseAction := control.Action{
 		GatewayID:        gatewayID,
@@ -502,8 +503,8 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 				messageID:       messageID,
 				messageType:     messageType,
 				content:         content,
-				parentMessageID: strings.TrimSpace(stringPtr(message.ParentId)),
-				rootMessageID:   strings.TrimSpace(stringPtr(message.RootId)),
+				parentMessageID: strings.TrimSpace(xutil.StringValue(message.ParentId)),
+				rootMessageID:   strings.TrimSpace(xutil.StringValue(message.RootId)),
 				inbound:         cloneInboundMeta(inbound),
 				text:            text,
 			},
@@ -524,8 +525,8 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 				messageID:       messageID,
 				messageType:     messageType,
 				content:         content,
-				parentMessageID: strings.TrimSpace(stringPtr(message.ParentId)),
-				rootMessageID:   strings.TrimSpace(stringPtr(message.RootId)),
+				parentMessageID: strings.TrimSpace(xutil.StringValue(message.ParentId)),
+				rootMessageID:   strings.TrimSpace(xutil.StringValue(message.RootId)),
 				inbound:         cloneInboundMeta(inbound),
 			},
 		}, true, nil
@@ -545,8 +546,8 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 				messageID:       messageID,
 				messageType:     messageType,
 				content:         content,
-				parentMessageID: strings.TrimSpace(stringPtr(message.ParentId)),
-				rootMessageID:   strings.TrimSpace(stringPtr(message.RootId)),
+				parentMessageID: strings.TrimSpace(xutil.StringValue(message.ParentId)),
+				rootMessageID:   strings.TrimSpace(xutil.StringValue(message.RootId)),
 				inbound:         cloneInboundMeta(inbound),
 				imageKey:        imageKey,
 			},
@@ -567,8 +568,8 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 				messageID:       messageID,
 				messageType:     messageType,
 				content:         content,
-				parentMessageID: strings.TrimSpace(stringPtr(message.ParentId)),
-				rootMessageID:   strings.TrimSpace(stringPtr(message.RootId)),
+				parentMessageID: strings.TrimSpace(xutil.StringValue(message.ParentId)),
+				rootMessageID:   strings.TrimSpace(xutil.StringValue(message.RootId)),
 				inbound:         cloneInboundMeta(inbound),
 				fileKey:         fileKey,
 				fileName:        fileName,
@@ -585,8 +586,8 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 				messageID:       messageID,
 				messageType:     messageType,
 				content:         content,
-				parentMessageID: strings.TrimSpace(stringPtr(message.ParentId)),
-				rootMessageID:   strings.TrimSpace(stringPtr(message.RootId)),
+				parentMessageID: strings.TrimSpace(xutil.StringValue(message.ParentId)),
+				rootMessageID:   strings.TrimSpace(xutil.StringValue(message.RootId)),
 				inbound:         cloneInboundMeta(inbound),
 			},
 		}, true, nil

@@ -172,7 +172,7 @@ func (g *LiveGateway) ReadDriveFileComments(ctx context.Context, req DriveFileCo
 		return result, nil
 	}
 	result.HasMore = xutil.BoolValue(resp.Data.HasMore)
-	result.NextPageToken = strings.TrimSpace(stringPtr(resp.Data.PageToken))
+	result.NextPageToken = strings.TrimSpace(xutil.StringValue(resp.Data.PageToken))
 
 	comments, err := g.buildDriveFileCommentEntries(ctx, fileToken, fileType, resp.Data.Items)
 	if err != nil {
@@ -199,21 +199,21 @@ func (g *LiveGateway) buildDriveFileCommentEntries(ctx context.Context, fileToke
 		if item == nil {
 			continue
 		}
-		commentID := strings.TrimSpace(stringPtr(item.CommentId))
+		commentID := strings.TrimSpace(xutil.StringValue(item.CommentId))
 		replies, err := g.collectDriveFileCommentReplies(ctx, fileToken, fileType, commentID, item)
 		if err != nil {
 			return nil, err
 		}
 		comments = append(comments, DriveFileCommentEntry{
 			CommentID:    commentID,
-			UserID:       strings.TrimSpace(stringPtr(item.UserId)),
+			UserID:       strings.TrimSpace(xutil.StringValue(item.UserId)),
 			CreateTime:   intValue(item.CreateTime),
 			UpdateTime:   intValue(item.UpdateTime),
 			IsSolved:     xutil.BoolValue(item.IsSolved),
 			SolvedTime:   intValue(item.SolvedTime),
-			SolverUserID: strings.TrimSpace(stringPtr(item.SolverUserId)),
+			SolverUserID: strings.TrimSpace(xutil.StringValue(item.SolverUserId)),
 			IsWhole:      xutil.BoolValue(item.IsWhole),
-			Quote:        strings.TrimSpace(stringPtr(item.Quote)),
+			Quote:        strings.TrimSpace(xutil.StringValue(item.Quote)),
 			Replies:      replies,
 		})
 	}
@@ -225,7 +225,7 @@ func (g *LiveGateway) collectDriveFileCommentReplies(ctx context.Context, fileTo
 	if !xutil.BoolValue(item.HasMore) {
 		return replies, nil
 	}
-	extraReplies, err := g.listDriveFileCommentReplies(ctx, fileToken, fileType, commentID, strings.TrimSpace(stringPtr(item.PageToken)))
+	extraReplies, err := g.listDriveFileCommentReplies(ctx, fileToken, fileType, commentID, strings.TrimSpace(xutil.StringValue(item.PageToken)))
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +281,7 @@ func (g *LiveGateway) listDriveFileCommentReplies(ctx context.Context, fileToken
 		if !xutil.BoolValue(resp.Data.HasMore) {
 			return replies, nil
 		}
-		nextPageToken = strings.TrimSpace(stringPtr(resp.Data.PageToken))
+		nextPageToken = strings.TrimSpace(xutil.StringValue(resp.Data.PageToken))
 		if nextPageToken == "" {
 			return nil, &DriveFileCommentReadError{
 				Code: DriveFileCommentReadErrorReplyListFailed,
@@ -302,8 +302,8 @@ func flattenDriveFileCommentReplies(items []*larkdrive.FileCommentReply) []Drive
 		}
 		text, elements := flattenDriveReplyContent(item.Content)
 		reply := DriveFileCommentReplyItem{
-			ReplyID:    strings.TrimSpace(stringPtr(item.ReplyId)),
-			UserID:     strings.TrimSpace(stringPtr(item.UserId)),
+			ReplyID:    strings.TrimSpace(xutil.StringValue(item.ReplyId)),
+			UserID:     strings.TrimSpace(xutil.StringValue(item.UserId)),
 			CreateTime: intValue(item.CreateTime),
 			UpdateTime: intValue(item.UpdateTime),
 			Text:       text,
@@ -327,7 +327,7 @@ func flattenDriveReplyContent(content *larkdrive.ReplyContent) (string, []DriveF
 		if item == nil {
 			continue
 		}
-		element := DriveFileCommentReplyElement{Type: strings.TrimSpace(stringPtr(item.Type))}
+		element := DriveFileCommentReplyElement{Type: strings.TrimSpace(xutil.StringValue(item.Type))}
 		switch element.Type {
 		case "text_run":
 			element.Text = strings.TrimSpace(stringPtrFromTextRun(item.TextRun))
@@ -412,21 +412,21 @@ func stringPtrFromTextRun(run *larkdrive.TextRun) string {
 	if run == nil {
 		return ""
 	}
-	return stringPtr(run.Text)
+	return xutil.StringValue(run.Text)
 }
 
 func stringPtrFromDocsLink(link *larkdrive.DocsLink) string {
 	if link == nil {
 		return ""
 	}
-	return stringPtr(link.Url)
+	return xutil.StringValue(link.Url)
 }
 
 func stringPtrFromPerson(person *larkdrive.Person) string {
 	if person == nil {
 		return ""
 	}
-	return stringPtr(person.UserId)
+	return xutil.StringValue(person.UserId)
 }
 
 func intValue(value *int) int {

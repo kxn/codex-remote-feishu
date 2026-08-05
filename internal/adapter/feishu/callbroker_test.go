@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -62,7 +63,7 @@ func TestFeishuCallBrokerRetriesRateLimitedIMCall(t *testing.T) {
 	if attempts != 2 {
 		t.Fatalf("expected one retry after rate-limit, got %d attempts", attempts)
 	}
-	if resp == nil || resp.Data == nil || stringPtr(resp.Data.MessageId) != "om-1" {
+	if resp == nil || resp.Data == nil || xutil.StringValue(resp.Data.MessageId) != "om-1" {
 		t.Fatalf("unexpected retry result: %#v", resp)
 	}
 	if elapsed := current.Sub(start); elapsed < 200*time.Millisecond {

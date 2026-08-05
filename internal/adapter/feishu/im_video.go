@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type IMVideoSender interface {
@@ -110,7 +111,7 @@ func (g *LiveGateway) SendIMVideo(ctx context.Context, req IMVideoSendRequest) (
 
 	messageID := ""
 	if resp.Data != nil {
-		messageID = strings.TrimSpace(stringPtr(resp.Data.MessageId))
+		messageID = strings.TrimSpace(xutil.StringValue(resp.Data.MessageId))
 		g.recordSurfaceMessage(messageID, result.SurfaceSessionID)
 	}
 	result.ReceiveID = receiveID

@@ -73,7 +73,7 @@ func (g *LiveGateway) buildMergeForwardStructuredPayloadFromEvent(ctx context.Co
 		return mergeForwardStructuredPayload{}, fmt.Errorf("nil merge_forward message")
 	}
 	if g.fetchMessageFn != nil {
-		messageID := strings.TrimSpace(stringPtr(message.MessageId))
+		messageID := strings.TrimSpace(xutil.StringValue(message.MessageId))
 		if messageID != "" {
 			referenced, err := g.fetchMessageFn(ctx, messageID)
 			if err == nil && referenced != nil && strings.EqualFold(strings.TrimSpace(referenced.MessageType), "merge_forward") {
@@ -81,7 +81,7 @@ func (g *LiveGateway) buildMergeForwardStructuredPayloadFromEvent(ctx context.Co
 			}
 		}
 	}
-	return g.buildMergeForwardStructuredPayloadFromRawContent(strings.TrimSpace(stringPtr(message.Content)), false)
+	return g.buildMergeForwardStructuredPayloadFromRawContent(strings.TrimSpace(xutil.StringValue(message.Content)), false)
 }
 
 func (g *LiveGateway) buildMergeForwardStructuredPayloadFromGatewayMessage(ctx context.Context, message *gatewayMessage, quoted bool) (mergeForwardStructuredPayload, error) {

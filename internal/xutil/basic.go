@@ -36,6 +36,21 @@ func BoolValue(value *bool) bool {
 	return *value
 }
 
+// StringPtr returns a pointer to a copy of value.
+func StringPtr(value string) *string {
+	return &value
+}
+
+// StringValue dereferences a string pointer, returning "" for nil. It is the
+// inverse of StringPtr; the two were conflated under one stringPtr name in
+// the feishu adapters (deref) and daemon tests (ref).
+func StringValue(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
+}
+
 // ContainsString reports whether values contains target.
 func ContainsString(values []string, target string) bool {
 	for _, value := range values {
