@@ -716,14 +716,14 @@ export function SetupRoute() {
     }
     const autostartWarning = autostartStage.autostart?.warning?.trim() || "";
     const autostartLingerHint = autostartStage.autostart?.lingerHint?.trim() || "";
-    const isComplete = isResolvedStageStatus(autostartStage.status);
+    const autostartEnabled = autostartStage.autostart?.enabled === true;
     return (
       <article className="opt-card">
         <h3>自动运行</h3>
         <div className="opt-tag">可选</div>
         <div className="status-line">
-          <span className={`dot ${isComplete ? "good" : "idle"}`} />
-          <span className={isComplete ? "txt good" : "txt idle"}>
+          <span className={`dot ${autostartEnabled ? "good" : "idle"}`} />
+          <span className={autostartEnabled ? "txt good" : "txt idle"}>
             {autostartStage.summary}
           </span>
         </div>
@@ -765,14 +765,14 @@ export function SetupRoute() {
         </article>
       );
     }
-    const isComplete = isResolvedStageStatus(vscodeStage.status);
+    const vscodeReady = vscodeIsReady(vscodeStage.vscode ?? null);
     return (
       <article className="opt-card">
         <h3>VS Code 集成</h3>
         <div className="opt-tag">可选</div>
         <div className="status-line">
-          <span className={`dot ${isComplete ? "good" : "idle"}`} />
-          <span className={isComplete ? "txt good" : "txt idle"}>
+          <span className={`dot ${vscodeReady ? "good" : "idle"}`} />
+          <span className={vscodeReady ? "txt good" : "txt idle"}>
             {vscodeStage.summary}
           </span>
         </div>
@@ -832,7 +832,7 @@ export function SetupRoute() {
         {!runtimeRequirements?.ready ? (
           <div className="button-row">
             <button
-              className="secondary-button"
+              className="primary-button"
               type="button"
               onClick={() => void retryEnvironmentCheck()}
             >

@@ -842,6 +842,38 @@ describe("AdminRoute", () => {
     expect(screen.queryByText(/����/)).not.toBeInTheDocument();
   });
 
+  it("lets the user disable autostart from the system area when it is enabled", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" });
+
+    const { calls } = installMockFetch(makeSingleRobotAdminRoutes(app, {
+      "/api/admin/autostart/disable": {
+        body: {
+          platform: "linux",
+          supported: true,
+          status: "disabled",
+          configured: false,
+          enabled: false,
+          canApply: true,
+        },
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "系统");
+    expect(await screen.findByText("当前已启用。")).toBeInTheDocument();
+    const disableButton = screen.getByRole("button", { name: "关闭自动运行" });
+    expect(screen.queryByRole("button", { name: "启用自动运行" })).not.toBeInTheDocument();
+
+    await user.click(disableButton);
+
+    expect(await screen.findByText("当前未启用。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "启用自动运行" })).toBeInTheDocument();
+    expect(calls.some((call) => call.path.endsWith("/autostart/disable"))).toBe(true);
+  });
+
   it("renders the Claude configuration panel on the v1.7.0 admin layout", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();

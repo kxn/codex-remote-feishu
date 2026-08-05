@@ -502,6 +502,22 @@ export function AdminRoute() {
     }
   }
 
+  async function disableAutostart() {
+    setActionBusy("autostart");
+    try {
+      const response = await sendJSON<AutostartDetectResponse>(
+        "/api/admin/autostart/disable",
+        "POST",
+      );
+      setAutostart(response);
+      setAutostartError("");
+    } catch {
+      setAutostartError("自动运行设置暂时没有更新成功。");
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   async function repairVSCode() {
     setActionBusy("vscode");
     try {
@@ -829,7 +845,10 @@ export function AdminRoute() {
             </div>
             <div>
               <dt>启用状态</dt>
-              <dd>{selectedApp.enabled ? "已启用" : "未启用"}</dd>
+              <dd className="inline-status-row">
+                <span className={`dot ${selectedApp.enabled ? "good" : "idle"}`} />
+                {selectedApp.enabled ? "已启用" : "未启用"}
+              </dd>
             </div>
             <div>
               <dt>最近验证</dt>
@@ -1072,7 +1091,7 @@ export function AdminRoute() {
             <p>机器人</p>
             <strong>{apps.length}</strong>
             <span>
-              <span className={`dot ${connectedCount === apps.length ? "good" : "warn"}`} />
+              <span className={`dot ${apps.length === 0 ? "idle" : connectedCount === apps.length ? "good" : "warn"}`} />
               {connectedCount} 个连接正常
             </span>
           </article>
@@ -1089,8 +1108,16 @@ export function AdminRoute() {
                 自动运行{autostart?.enabled ? "已启用" : "未启用"}
               </span>
               <span className="status-line">
-                <span className={`dot ${vscode && vscodeIsReady(vscode) ? "good" : "warn"}`} />
-                VS Code{vscode && vscodeIsReady(vscode) ? "已接入" : "需要修复"}
+                <span
+                  className={`dot ${
+                    vscodeError
+                      ? "warn"
+                      : vscode && vscodeIsReady(vscode)
+                        ? "good"
+                        : "idle"
+                  }`}
+                />
+                VS Code{vscode && vscodeIsReady(vscode) ? "已接入" : "未接入"}
               </span>
             </div>
           </article>
@@ -1280,11 +1307,31 @@ export function AdminRoute() {
               </button>
             </div>
           ) : null}
+          {!autostartError && autostart?.supported && autostart.enabled ? (
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={actionBusy === "autostart"}
+                onClick={() => void disableAutostart()}
+              >
+                关闭自动运行
+              </button>
+            </div>
+          ) : null}
         </section>
         <section className="card">
           <h3>VS Code 集成</h3>
           <div className="status-line">
-            <span className={`dot ${vscode && vscodeIsReady(vscode) ? "good" : "warn"}`} />
+            <span
+              className={`dot ${
+                vscodeError
+                  ? "warn"
+                  : vscode && vscodeIsReady(vscode)
+                    ? "good"
+                    : "idle"
+              }`}
+            />
             <span>{describeVSCode(vscode, vscodeError)}</span>
           </div>
           {vscodeError ? (
@@ -1292,12 +1339,12 @@ export function AdminRoute() {
           ) : null}
           <div className="button-row">
             <button
-              className="primary-button"
+              className={vscode && vscodeIsReady(vscode) ? "secondary-button" : "primary-button"}
               type="button"
               disabled={actionBusy === "vscode"}
               onClick={() => void repairVSCode()}
             >
-              重新检查并修复
+              {vscode && vscodeIsReady(vscode) ? "重新检查" : "重新检查并修复"}
             </button>
           </div>
         </section>
