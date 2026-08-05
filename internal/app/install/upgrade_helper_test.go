@@ -256,12 +256,14 @@ func TestRunUpgradeHelperWithStatePathTaskSchedulerLogonStopsInstallsAndStartsTa
 
 	originalGOOS := serviceRuntimeGOOS
 	originalRunner := taskSchedulerRunner
+	originalPSRunner := taskSchedulerPowerShellRunner
 	originalObserve := upgradeHelperObserveFunc
 	originalSleep := upgradeHelperSleepFunc
 	serviceRuntimeGOOS = "windows"
 	defer func() {
 		serviceRuntimeGOOS = originalGOOS
 		taskSchedulerRunner = originalRunner
+		taskSchedulerPowerShellRunner = originalPSRunner
 		upgradeHelperObserveFunc = originalObserve
 		upgradeHelperSleepFunc = originalSleep
 	}()
@@ -303,6 +305,12 @@ func TestRunUpgradeHelperWithStatePathTaskSchedulerLogonStopsInstallsAndStartsTa
 		}
 		return "", nil
 	}
+
+	var psScript string
+	taskSchedulerPowerShellRunner = func(_ context.Context, script string) (string, error) {
+		psScript = script
+		return "", nil
+	}
 	upgradeHelperObserveFunc = func(context.Context, config.LoadedAppConfig) error { return nil }
 	upgradeHelperSleepFunc = func(time.Duration) {}
 
@@ -313,10 +321,12 @@ func TestRunUpgradeHelperWithStatePathTaskSchedulerLogonStopsInstallsAndStartsTa
 	if got, want := calls, []string{
 		"/End /TN " + taskName,
 		"/Query /TN " + taskName + " /FO LIST /V",
-		"/Create /TN " + taskName + " /XML " + stateValue.ServiceUnitPath + " /F",
 		"/Run /TN " + taskName,
 	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("task scheduler calls = %#v, want %#v", got, want)
+	}
+	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-AtLogOn") {
+		t.Fatalf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", psScript)
 	}
 	currentRaw, err := os.ReadFile(currentBinary)
 	if err != nil {

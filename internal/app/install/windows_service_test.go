@@ -28,6 +28,13 @@ func withMockTaskScheduler(t *testing.T, fn func(ctx context.Context, args ...st
 	t.Cleanup(func() { taskSchedulerRunner = originalRunner })
 }
 
+func withMockTaskSchedulerPowerShell(t *testing.T, fn func(ctx context.Context, script string) (string, error)) {
+	t.Helper()
+	originalRunner := taskSchedulerPowerShellRunner
+	taskSchedulerPowerShellRunner = fn
+	t.Cleanup(func() { taskSchedulerPowerShellRunner = originalRunner })
+}
+
 func TestTaskSchedulerTaskNameForInstance(t *testing.T) {
 	tests := []struct {
 		instanceID string
@@ -106,9 +113,9 @@ func TestInstallTaskSchedulerLogonRegistersXMLTask(t *testing.T) {
 		ServiceManager: state.ServiceManager,
 	})
 
-	var calls []string
-	withMockTaskScheduler(t, func(_ context.Context, args ...string) (string, error) {
-		calls = append(calls, strings.Join(args, " "))
+	var psScript string
+	withMockTaskSchedulerPowerShell(t, func(_ context.Context, script string) (string, error) {
+		psScript = script
 		return "", nil
 	})
 
@@ -129,9 +136,21 @@ func TestInstallTaskSchedulerLogonRegistersXMLTask(t *testing.T) {
 	if !bytes.HasPrefix(xmlBytes, []byte{0xff, 0xfe}) {
 		t.Fatalf("task XML should be UTF-16LE with BOM, got prefix % x", xmlBytes[:min(4, len(xmlBytes))])
 	}
-	wantCalls := []string{strings.Join([]string{"/Create", "/TN", taskSchedulerTaskNameForInstance("stable"), "/XML", updated.ServiceUnitPath, "/F"}, " ")}
-	if !reflect.DeepEqual(calls, wantCalls) {
-		t.Fatalf("task scheduler calls = %#v, want %#v", calls, wantCalls)
+	taskName := taskSchedulerTaskNameForInstance("stable")
+	mustContain := []string{
+		"Register-ScheduledTask",
+		"-AtLogOn",
+		taskName,
+		"codex-remote.exe",
+		"-config",
+		"-xdg-config-home",
+		"-xdg-data-home",
+		"-xdg-state-home",
+	}
+	for _, s := range mustContain {
+		if !strings.Contains(psScript, s) {
+			t.Fatalf("PowerShell script missing %q:\n%s", s, psScript)
+		}
 	}
 }
 
@@ -211,9 +230,9 @@ func TestRunServiceInstallUserWindowsWritesTaskState(t *testing.T) {
 		t.Fatalf("WriteState: %v", err)
 	}
 
-	var calls []string
-	withMockTaskScheduler(t, func(_ context.Context, args ...string) (string, error) {
-		calls = append(calls, strings.Join(args, " "))
+	var psScript string
+	withMockTaskSchedulerPowerShell(t, func(_ context.Context, script string) (string, error) {
+		psScript = script
 		return "", nil
 	})
 
@@ -231,8 +250,8 @@ func TestRunServiceInstallUserWindowsWritesTaskState(t *testing.T) {
 	if !strings.Contains(stdout.String(), "service manager: task_scheduler_logon") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
-	if len(calls) != 1 || !strings.HasPrefix(calls[0], "/Create /TN "+taskSchedulerTaskNameForInstance("stable")+" /XML ") {
-		t.Fatalf("task scheduler calls = %#v", calls)
+	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-AtLogOn") {
+		t.Fatalf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", psScript)
 	}
 }
 
@@ -265,6 +284,15 @@ func TestRunServiceWindowsLifecycleCommandsUseTaskScheduler(t *testing.T) {
 		return "", nil
 	})
 
+	var psCalls int
+	withMockTaskSchedulerPowerShell(t, func(_ context.Context, script string) (string, error) {
+		if !strings.Contains(script, "Register-ScheduledTask") || !strings.Contains(script, "-AtLogOn") {
+			t.Errorf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", script)
+		}
+		psCalls++
+		return "", nil
+	})
+
 	for _, subcommand := range []string{"enable", "disable", "start", "stop", "restart", "status"} {
 		var stdout bytes.Buffer
 		if err := RunService([]string{subcommand, "-state-path", statePath}, strings.NewReader(""), &stdout, &bytes.Buffer{}, "vtest"); err != nil {
@@ -274,19 +302,19 @@ func TestRunServiceWindowsLifecycleCommandsUseTaskScheduler(t *testing.T) {
 
 	taskName := taskSchedulerTaskNameForInstance("stable")
 	want := []string{
-		"/Create /TN " + taskName + " /XML " + state.ServiceUnitPath + " /F",
 		"/Change /TN " + taskName + " /ENABLE",
 		"/Change /TN " + taskName + " /DISABLE",
-		"/Create /TN " + taskName + " /XML " + state.ServiceUnitPath + " /F",
 		"/Run /TN " + taskName,
 		"/End /TN " + taskName,
-		"/Create /TN " + taskName + " /XML " + state.ServiceUnitPath + " /F",
 		"/End /TN " + taskName,
 		"/Run /TN " + taskName,
 		"/Query /TN " + taskName + " /FO LIST /V",
 	}
 	if !reflect.DeepEqual(calls, want) {
 		t.Fatalf("task scheduler calls = %#v, want %#v", calls, want)
+	}
+	if psCalls != 3 { // enable, start, restart each call installManagedService
+		t.Fatalf("PowerShell task registration calls = %d, want 3", psCalls)
 	}
 }
 
@@ -411,6 +439,42 @@ func TestTaskSchedulerDetectsDisabledFromSettingsXMLWhenTriggerStaysEnabled(t *t
 	}
 	if enabled {
 		t.Fatal("expected enabled=false")
+	}
+}
+
+func TestTaskSchedulerDetectsEnabledFromXMLWhenEnabledIsMissing(t *testing.T) {
+	withWindowsGOOS(t)
+	baseDir := t.TempDir()
+	state := InstallState{
+		InstanceID:      "stable",
+		BaseDir:         baseDir,
+		StatePath:       defaultInstallStatePath(baseDir),
+		ConfigPath:      defaultConfigPath(baseDir),
+		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		ServiceManager:  ServiceManagerTaskSchedulerLogon,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: state.ServiceManager,
+	})
+
+	withMockTaskScheduler(t, func(_ context.Context, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "/Query" {
+			return `<Task><Triggers><LogonTrigger></LogonTrigger></Triggers><Settings><DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries></Settings></Task>`, nil
+		}
+		return "", fmt.Errorf("unexpected schtasks call: %v", args)
+	})
+
+	enabled, warning, err := detectTaskSchedulerLogonEnabled(context.Background(), state)
+	if err != nil {
+		t.Fatalf("detectTaskSchedulerLogonEnabled: %v", err)
+	}
+	if warning != "" {
+		t.Fatalf("warning = %q, want empty", warning)
+	}
+	if !enabled {
+		t.Fatal("expected enabled=true when Enabled element is absent (default)")
 	}
 }
 

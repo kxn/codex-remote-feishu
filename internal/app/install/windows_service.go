@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,6 +18,8 @@ import (
 
 var taskSchedulerRunner = runTaskScheduler
 
+var taskSchedulerPowerShellRunner = runTaskSchedulerPowerShell
+
 func runTaskScheduler(ctx context.Context, args ...string) (string, error) {
 	cmd := execlaunch.CommandContext(ctx, "schtasks", args...)
 	output, err := cmd.CombinedOutput()
@@ -28,6 +31,76 @@ func runTaskScheduler(ctx context.Context, args ...string) (string, error) {
 		return trimmed, fmt.Errorf("%w: %s", err, trimmed)
 	}
 	return trimmed, nil
+}
+
+// runTaskSchedulerPowerShell runs a PowerShell script against the Task
+// Scheduler module. schtasks.exe refuses to register a logon-trigger task
+// (Access denied) for standard users, while the Task Scheduler COM API used
+// by PowerShell can register the current user's logon task without elevation.
+func runTaskSchedulerPowerShell(ctx context.Context, script string) (string, error) {
+	cmd := execlaunch.CommandContext(ctx, "powershell.exe",
+		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script)
+	output, err := cmd.CombinedOutput()
+	trimmed := strings.TrimSpace(decodeTaskSchedulerOutput(output))
+	if err != nil {
+		if trimmed == "" {
+			return "", err
+		}
+		return trimmed, fmt.Errorf("%w: %s", err, trimmed)
+	}
+	return trimmed, nil
+}
+
+// serviceCurrentUser resolves the current interactive user in DOMAIN\user form
+// for the logon trigger and task principal.
+func serviceCurrentUser() (string, error) {
+	if current, err := user.Current(); err == nil {
+		if name := strings.TrimSpace(current.Username); name != "" {
+			return name, nil
+		}
+	}
+	if name := strings.TrimSpace(os.Getenv("USERNAME")); name != "" {
+		return name, nil
+	}
+	return "", fmt.Errorf("unable to resolve current user for logon task")
+}
+
+// buildTaskSchedulerRegisterScript renders a PowerShell script that registers
+// the logon task via the Task Scheduler COM API. Values are embedded with
+// PowerShell single-quote quoting so paths with spaces, $, or backticks are
+// passed through literally.
+func buildTaskSchedulerRegisterScript(state InstallState) (string, error) {
+	binaryPath := normalizeServicePathValue(firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(state.CurrentBinaryPath)))
+	if binaryPath == "" {
+		return "", fmt.Errorf("installed binary path is missing")
+	}
+	arguments := windowsCommandLineArgs(windowsDaemonArgsForState(state)...)
+	workingDirectory := normalizeServicePathValue(state.BaseDir)
+	taskName := taskSchedulerTaskNameForInstance(state.InstanceID)
+	currentUser, err := serviceCurrentUser()
+	if err != nil {
+		return "", err
+	}
+	psSingleQuote := func(value string) string {
+		return "'" + strings.ReplaceAll(value, "'", "''") + "'"
+	}
+	script := fmt.Sprintf(
+		"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $ErrorActionPreference='Stop'; "+
+			"try { "+
+			"$action = New-ScheduledTaskAction -Execute %s -Argument %s -WorkingDirectory %s; "+
+			"$trigger = New-ScheduledTaskTrigger -AtLogOn -User %s; "+
+			"$principal = New-ScheduledTaskPrincipal -UserId %s -LogonType Interactive -RunLevel Limited; "+
+			"Register-ScheduledTask -TaskName %s -Action $action -Trigger $trigger -Principal $principal -Description %s -Force | Out-Null "+
+			"} catch { Write-Error ($_.Exception.Message); exit 1 }",
+		psSingleQuote(binaryPath),
+		psSingleQuote(arguments),
+		psSingleQuote(workingDirectory),
+		psSingleQuote(currentUser),
+		psSingleQuote(currentUser),
+		psSingleQuote(taskName),
+		psSingleQuote("codex-remote auto start at logon"),
+	)
+	return script, nil
 }
 
 func decodeTaskSchedulerOutput(output []byte) string {
@@ -229,7 +302,11 @@ func installTaskSchedulerLogonTask(ctx context.Context, state InstallState) (Ins
 	if err := serviceWriteFile(state.ServiceUnitPath, utf16LEWithBOM(xmlContent), 0o644); err != nil {
 		return InstallState{}, err
 	}
-	_, err = taskSchedulerRunner(ctx, "/Create", "/TN", taskSchedulerTaskNameForInstance(state.InstanceID), "/XML", state.ServiceUnitPath, "/F")
+	script, err := buildTaskSchedulerRegisterScript(state)
+	if err != nil {
+		return InstallState{}, err
+	}
+	_, err = taskSchedulerPowerShellRunner(ctx, script)
 	return state, err
 }
 
@@ -400,6 +477,10 @@ func parseTaskSchedulerEnabled(output string) (bool, bool) {
 		if enabled, ok := parseTaskSchedulerBool(doc.Triggers.LogonTrigger.Enabled); ok {
 			return enabled, true
 		}
+		// Task Scheduler omits the Enabled element when a task is enabled
+		// (the default). A well-formed task without an explicit Enabled is
+		// therefore treated as enabled.
+		return true, true
 	}
 	text := strings.ToLower(strings.TrimSpace(output))
 	if strings.Contains(text, "<settings>") {

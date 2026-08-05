@@ -501,8 +501,9 @@ export function SetupRoute() {
       await sendJSON("/api/setup/autostart/apply", "POST");
       await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
       setNotice({ tone: "good", message: "已启用自动启动。" });
-    } catch {
-      setNotice({ tone: "danger", message: "当前还不能启用自动启动，请稍后重试。" });
+    } catch (err) {
+      const detail = err instanceof APIRequestError ? (err.details || err.message) : String(err);
+      setNotice({ tone: "danger", message: `启用自动启动失败：${detail}` });
     } finally {
       setActionBusy("");
     }
@@ -514,8 +515,9 @@ export function SetupRoute() {
       await sendJSON("/api/setup/autostart/disable", "POST");
       await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
       setNotice({ tone: "good", message: "已关闭自动启动。" });
-    } catch {
-      setNotice({ tone: "danger", message: "当前还不能关闭自动启动，请稍后重试。" });
+    } catch (err) {
+      const detail = err instanceof APIRequestError ? (err.details || err.message) : String(err);
+      setNotice({ tone: "danger", message: `关闭自动启动失败：${detail}` });
     } finally {
       setActionBusy("");
     }

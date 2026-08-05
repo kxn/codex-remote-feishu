@@ -176,12 +176,14 @@ func TestApplyAutostartInstallsAndEnablesTaskSchedulerLogonService(t *testing.T)
 	originalGOOS := serviceRuntimeGOOS
 	originalHome := serviceUserHomeDir
 	originalRunner := taskSchedulerRunner
+	originalPSRunner := taskSchedulerPowerShellRunner
 	serviceRuntimeGOOS = "windows"
 	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
 	defer func() {
 		serviceRuntimeGOOS = originalGOOS
 		serviceUserHomeDir = originalHome
 		taskSchedulerRunner = originalRunner
+		taskSchedulerPowerShellRunner = originalPSRunner
 	}()
 
 	var calls []string
@@ -190,6 +192,12 @@ func TestApplyAutostartInstallsAndEnablesTaskSchedulerLogonService(t *testing.T)
 		if len(args) > 0 && args[0] == "/Query" {
 			return `<Task><Triggers><LogonTrigger><Enabled>true</Enabled></LogonTrigger></Triggers></Task>`, nil
 		}
+		return "", nil
+	}
+
+	var psScript string
+	taskSchedulerPowerShellRunner = func(_ context.Context, script string) (string, error) {
+		psScript = script
 		return "", nil
 	}
 
@@ -206,11 +214,13 @@ func TestApplyAutostartInstallsAndEnablesTaskSchedulerLogonService(t *testing.T)
 		t.Fatalf("unexpected autostart status: %#v", status)
 	}
 	taskName := taskSchedulerTaskNameForInstance("stable")
-	if len(calls) != 3 ||
-		!strings.HasPrefix(calls[0], "/Create /TN "+taskName+" /XML ") ||
-		calls[1] != "/Change /TN "+taskName+" /ENABLE" ||
-		calls[2] != "/Query /TN "+taskName+" /XML" {
+	if len(calls) != 2 ||
+		calls[0] != "/Change /TN "+taskName+" /ENABLE" ||
+		calls[1] != "/Query /TN "+taskName+" /XML" {
 		t.Fatalf("task scheduler calls = %#v", calls)
+	}
+	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-AtLogOn") {
+		t.Fatalf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", psScript)
 	}
 
 	loaded, err := LoadState(statePath)
