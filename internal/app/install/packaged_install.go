@@ -221,6 +221,23 @@ func runPackagedFirstInstall(ctx context.Context, opts packagedInstallOptions) (
 		result.Error = err.Error()
 		return result, err
 	}
+	// First install must create the managed service unit explicitly before
+	// readiness: ensureDaemonReady is probe-first (#808-D) and would treat an
+	// absent unit as detached, which is correct for an existing install but
+	// would skip managed-service creation on a fresh install. Installing the
+	// unit here also gives the readiness probe the on-disk state it expects.
+	if driver, ok := managedServiceDriverForManager(serviceManager); ok {
+		updated, installErr := driver.Install(ctx, state)
+		if installErr != nil {
+			result.Error = installErr.Error()
+			return result, installErr
+		}
+		state = updated
+		if err := WriteState(state.StatePath, state); err != nil {
+			result.Error = err.Error()
+			return result, err
+		}
+	}
 	status, readyErr := packagedInstallEnsureReadyFunc(ctx, state.StatePath, state.CurrentVersion)
 	result.applyDaemonReadyStatus(status)
 	if readyErr != nil {
