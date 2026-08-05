@@ -460,6 +460,39 @@ When corresponding logic carriers changed, do **not** commit until: guardrail sk
   - issue close when acceptance is satisfied
 - “I already implemented it locally” is not a sufficient reason to leave an issue open or leave commits unpublished.
 
+## Windows GitHub CLI (gh) 使用规范
+
+PowerShell 5.1 与 Unix shell 的引号 / 管道 / 编码语义不同，直接照抄 Unix 习惯的 gh 命令会反复翻车（实测踩坑记录，2026-08-05）。以下为验证过的正确姿势：
+
+### 命令分隔
+- PowerShell 5.1 不支持 `&&` / `||`，报错 `The token '&&' is not a valid statement separator`。多条命令用 `;` 分隔，或分多次工具调用。
+
+### 输出与 jq
+- 能不用 `--jq` 就不用：默认表格输出（`gh run list` / `gh issue list`）或 `--json` + PowerShell `ConvertFrom-Json` 最稳。
+- 必须用 `--jq` 时：
+  - 表达式内不要使用 `\"` 转义（如 `'.[] | "\(.number): \(.title)"'`）——PowerShell 会把 `\"` 原样传给 gh，报 `unknown argument`。
+  - 用 `@tsv` / `@csv` 平铺输出：`--jq '.[] | [.number, .title] | @tsv'`。
+  - 不要在表达式里用切片 `[0:8]`（实测报 `function not defined: a/0`）；需要截断时在 PowerShell 侧处理。
+- PowerShell 侧解析：`$t = gh api <url> | ConvertFrom-Json`，再用 `Where-Object` / `ForEach-Object` 过滤，避免复杂 jq。
+
+### 通过 API 发 JSON（评论 / 创建资源）
+- 不要 `$json | gh api --input -`：PS 5.1 管道编码 + `ConvertTo-Json` 对象包装会报 `Problems parsing JSON`。
+- 正确姿势（无 BOM UTF-8 临时文件，从文件读）：
+  ```powershell
+  $body = [string][System.IO.File]::ReadAllText("$env:TEMP\msg.md")
+  $json = @{ body = $body } | ConvertTo-Json
+  [System.IO.File]::WriteAllText("$env:TEMP\payload.json", $json, (New-Object System.Text.UTF8Encoding($false)))
+  gh api -X POST repos/o/r/issues/1/comments --input "$env:TEMP\payload.json"
+  ```
+- `Get-Content -Raw` 在 PS 5.1 返回的是对象而非纯字符串，`ConvertTo-Json` 会包一层 `{ "value": ... }`，务必用 `[string]` 强转或 `[System.IO.File]::ReadAllText`。
+
+### 版本差异
+- 先 `gh <cmd> --help` 确认本机版本支持的 flags，不要凭记忆。例如本机 `gh issue close` 只有 `--comment`，没有 `--comment-file`；长评论走上面的 API 方式（先发评论再关单）。
+
+### 其他
+- `gh run watch <run-id> --exit-status --interval 20` 可阻塞等待 CI 结果。
+- 引用 jq 输出时避免含空格的表达式；不确定时先跑 `gh ... --json fields` 看原始 JSON。
+
 ## Commit / Push / Branch Policy
 
 - If repository work is resolved and verified, do not end the turn with uncommitted changes unless the user explicitly wants local-only uncommitted state.
