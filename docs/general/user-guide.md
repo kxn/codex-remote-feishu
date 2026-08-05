@@ -1,8 +1,8 @@
 # 使用说明书
 
 > Type: `general`
-> Updated: `2026-08-03`
-> Summary: 更新首次配置里的飞书机器人接入说明：接入后只做只读配置检查，缺失权限通过可复制的导入 JSON 在飞书后台补齐。
+> Updated: `2026-08-05`
+> Summary: 更新安装方式与首次配置流程：补充 Windows / macOS 原生安装器，并同步 WebSetup 的“本机集成”阶段顺序。
 
 ## 1. 这是什么
 
@@ -132,7 +132,31 @@
 - VS Code Remote SSH 使用，就装在那台 SSH 目标机器上
 - 如果两边都会各自运行 Codex，两边都可以各装一套，但它们是两套独立环境
 
-### 5.2 一条命令安装
+### 5.2 原生安装器（Windows / macOS）
+
+如果你更习惯桌面安装器，可以直接从 [GitHub Releases](https://github.com/kxn/codex-remote-feishu/releases) 下载对应平台的 native installer。
+
+#### Windows
+
+下载并运行：
+
+```text
+codex-remote-feishu_<version>_windows_amd64_installer.exe
+```
+
+首次安装完成后，安装器结果页会出现 **Continue WebSetup**，点击后进入 WebSetup 完成飞书接入。已经安装过时再次运行，会按 repair / 升级处理，不会覆盖已有配置。
+
+#### macOS
+
+下载并打开：
+
+```text
+codex-remote-feishu_<version>_darwin_universal_installer.dmg
+```
+
+运行 DMG 里的 **Install Codex Remote.app**。首次安装可以选择安装目录；完成后在结果页打开 WebSetup。已经安装过时再次运行，会按 repair / 升级处理。
+
+### 5.3 一条命令安装
 
 macOS / Linux：
 
@@ -174,7 +198,7 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Version <version>
 ```
 
-### 5.3 手动安装 release 包
+### 5.4 手动安装 release 包
 
 macOS / Linux：
 
@@ -196,10 +220,11 @@ Windows PowerShell：
 
 推荐顺序：
 
-1. 先配置飞书应用
-2. 再看运行环境检查
-3. 按需处理自动启动
-4. 最后再决定是否接入 VS Code
+1. 连接飞书机器人（扫码新建或接入已有应用）
+2. 运行环境检查
+3. 飞书自动配置与菜单确认
+4. 本机集成（自动启动 + VS Code，均为可选，但页面会先展示这一阶段）
+5. 完成并进入本地管理页
 
 ### 6.1 配置飞书机器人
 

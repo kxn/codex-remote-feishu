@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-05-31`
-> Summary: 同步当前安装、配置与部署模型，并补记 shared packaged-install contract 的跨平台启动语义：packaged installer 不再直接决定底层 `service-manager`；first-install 走平台默认登录后自动启动，repair 保持现有启动方式；Windows NSIS 包装层现已固定为 `probe + install + 结果页` 模型。
+> Updated: `2026-08-05`
+> Summary: 同步当前安装、配置与部署模型；macOS packaged installer 已并入正式 GitHub Release workflow，Windows NSIS 包装层固定为 `probe + install + 结果页` 模型。
 
 ## 1. 范围
 
@@ -252,7 +252,7 @@ codex-remote packaged-install [flags]
 现阶段边界：
 
 - macOS installer 的 GUI shell 与本地打包脚本已经存在
-- 这套产物 contract 还没有并入正式 GitHub Release workflow；后续由 `#652` 收口
+- 这套产物 contract 已并入正式 GitHub Release workflow：`release.yml` 在 `macos-latest` runner 上调用 `scripts/release/build-macos-packaged-installer.sh` 生成 `codex-remote-feishu_<version>_darwin_universal_installer.dmg`，并刷新 `checksums.txt` 后随 release 发布
 - 当前非 macOS runner 只能做静态检查，不能在 Linux runner 上直接编译 AppKit GUI
 
 ### 3.4 build flavor 与能力边界
