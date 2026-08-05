@@ -1,7 +1,7 @@
 # Feishu Group On-Demand Resume Design
 
 > Type: `draft`
-> Updated: `2026-07-31`
+> Updated: `2026-08-05`
 > Summary: 记录 Feishu 群聊重启后不刷屏、但被 @ 时按群上下文恢复的产品边界；room workspace durable SSOT 已与单 surface 恢复目标拆开。
 
 ## 背景
@@ -57,6 +57,7 @@ daemon 重启后，历史群里不会出现恢复失败刷屏。
 7. `TryAutoResumeHeadlessSurface()` 已经是可复用的恢复核心：它能按 persisted target attach visible instance、reuse/restart managed headless、fresh start headless 或返回 failed/waiting。
 8. `applyIngressActionLocked()` 当前在 `ActionTextMessage` 进入 orchestrator 前会先 `prepareInboundTextFilesActionLocked()`；这个文件暂存路径依赖已 attached workspace。群聊 lazy recovery 的 V1 主链不要把“首条 @ 同时带文件并自动暂存”放进同一个阶段。
 9. `#751` 已把 room durable state 从 primary-only 演进为 v2：原 `feishu-room-primary.json` 路径原位保存 workspace/reset/primary facts；旧 surface resume 只在候选一致时一次性补录缺失 room workspace，冲突时在统一 ingress 前 fail closed。
+10. `#800` 已修复群聊 on-demand 恢复目标被全局 `threads.snapshot` 拷贝污染的问题：具体 thread 解析现在按线程真实 `CWD` 判断实例归属，忽略被改写 `WorkspaceKey` 的跨实例副本；旧实例离线后会按 resume entry 的真实 workspace 启动 headless，不再被其它实例的 WorkspaceKey 带偏并误报 busy。
 
 当前 live code 已有 `surfaceResumeEntryAllowsBackgroundRecovery`、`surfaceAllowsDaemonLifecycleNotice` 和 `maybeStartFeishuGroupOnDemandResumeLocked`，A/B/C 已完成；下文计划保留为实现与回归索引。执行前结论是：不重新实现 room context，也不新造恢复解析，改动集中在两个 SSOT：
 

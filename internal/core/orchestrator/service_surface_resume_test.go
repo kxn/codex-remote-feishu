@@ -377,3 +377,89 @@ func TestSurfaceResumeFailureNoticeWorkspaceBusyUsesGenericRestoreText(t *testin
 		t.Fatalf("expected generic restore failure text, got %q", notice.Text)
 	}
 }
+
+func TestTryAutoResumeHeadlessSurfaceIgnoresPollutedThreadCopyOnUnrelatedInstance(t *testing.T) {
+	now := time.Date(2026, 4, 30, 2, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"surface-1",
+		"app-1",
+		"chat-1",
+		"user-1",
+		state.ProductModeNormal,
+		agentproto.BackendCodex,
+		"provider-a",
+		"",
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"surface-2",
+		"app-2",
+		"chat-2",
+		"user-2",
+		state.ProductModeNormal,
+		agentproto.BackendCodex,
+		"other-provider",
+		"",
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-unrelated",
+		DisplayName:     "other",
+		WorkspaceRoot:   "/data/dl/other",
+		WorkspaceKey:    "/data/dl/other",
+		ShortName:       "other",
+		Backend:         agentproto.BackendCodex,
+		CodexProviderID: "other-provider",
+		Managed:         true,
+		Source:          "headless",
+		Online:          true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-target": {
+				ThreadID:     "thread-target",
+				Name:         "旧会话",
+				Preview:      "旧会话",
+				CWD:          "/data/dl/repo",
+				WorkspaceKey: "/data/dl/other",
+				Loaded:       true,
+				LastUsedAt:   now.Add(-time.Minute),
+			},
+		},
+	})
+	if !svc.claimWorkspace(svc.root.Surfaces["surface-2"], "/data/dl/other") {
+		t.Fatal("expected competing surface to claim the polluted instance workspace")
+	}
+
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
+		ThreadID:       "thread-target",
+		ThreadTitle:    "旧会话",
+		ThreadCWD:      "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		Backend:        agentproto.BackendCodex,
+		ResumeHeadless: true,
+	}, true)
+
+	if result.Status != SurfaceResumeStatusStarting {
+		t.Fatalf("expected resume to start a headless for the real workspace, got result=%#v events=%#v", result, events)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if strings.TrimSpace(surface.AttachedInstanceID) == "inst-unrelated" {
+		t.Fatalf("expected not to attach unrelated instance carrying a polluted thread copy, got %#v", surface)
+	}
+	if surface.PendingHeadless == nil {
+		t.Fatalf("expected pending headless launch, got %#v", surface)
+	}
+	for _, event := range events {
+		if event.Notice != nil && (event.Notice.Code == "headless_restore_workspace_busy" || event.Notice.Code == "headless_restore_thread_busy") {
+			t.Fatalf("expected restore not to report busy from polluted workspace, got %#v", events)
+		}
+	}
+	if !strings.EqualFold(surface.PendingHeadless.ThreadCWD, "/data/dl/repo") {
+		t.Fatalf("expected pending launch cwd /data/dl/repo, got %#v", surface.PendingHeadless)
+	}
+	if !strings.EqualFold(surface.PendingHeadless.WorkspaceKey, "/data/dl/repo") {
+		t.Fatalf("expected pending launch workspace /data/dl/repo, got %#v", surface.PendingHeadless)
+	}
+}

@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-04`
+> Updated: `2026-08-05`
 > Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、headless lazy recovery、DeepSeek catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话与 typed Codex resume policy；详细历史补充保留在正文各日期段落。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
@@ -1892,6 +1892,8 @@ retained-offline overlay 额外规则：
 47. **OAuth Profile 启动前 fresh auth probe 释放 daemon 锁后，旧 start 命令可能在 `/detach`、shutdown 或重复 start 后继续启动孤儿 headless 进程**：已修复。带 `SurfaceSessionID + InstanceID` 的 managed headless start 必须在捕获授权时看到原 surface 仍持有 exact pending launch；如果 pending 已被 `/detach` 等操作提前消费，start 命令会静默放弃且不会再执行 probe。对于仍被授权的启动，真正调用 `startHeadless` 前还会重新检查 daemon 未 shutdown、原 pending 仍指向同一 `InstanceID`，且同一 managed instance 尚未登记进程。若授权已失效，启动静默放弃，不再生成无法 kill 的孤儿进程或重复进程。
 
 48. **已迁移 profile catalog 的 context preference state 缺少后续新增/历史遗漏的 Claude profile，导致升级后 Claude session 恢复被误判为“Claude 配置不可用”**：已修复。当前 startup 在 `ProfileCatalogMigrationVersion>=1` 且 durable stores 可读写时，会从 committed config 幂等补齐缺失的 Codex/Claude context preference，再执行 catalog verify 与 materialize；因此 `mimo`、`glm` 这类已存在于 config 的 Claude profile 不会因为 preference state 缺项而阻断 headless restore。真正损坏或不可写的 preference store 仍保持 fail-closed degraded。
+
+49. **群聊 on-demand / detached headless restore 在启动前仍可能被全局 `threads.snapshot` 拷贝到其它实例的同名 thread 误导，把恢复目标 workspace 解析成无关实例的工作区并误报 `workspace_busy` / `thread_busy`**：已修复。`mergedThreadViewForBackend` / `resolveSurfaceResumeVisibleInstance` 现在按线程真实 `CWD` 判断实例归属，忽略被快照合并改写 `WorkspaceKey` 的跨实例副本；旧实例离线后恢复会回落到 resume entry / persisted thread 的真实 workspace，再启动新的 managed headless，而不是在启动前被占用检查拦截。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

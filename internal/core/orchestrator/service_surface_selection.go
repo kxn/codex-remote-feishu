@@ -449,6 +449,18 @@ func threadBelongsToInstanceWorkspace(inst *state.InstanceRecord, thread *state.
 	return cwdBelongsToInstanceWorkspace(inst, firstNonEmpty(threadWorkspaceKeyFromRecord(thread), thread.CWD))
 }
 
+// threadBelongsToInstanceWorkspaceForTarget judges instance ownership from the
+// thread's real CWD first. Persisted snapshots may copy the same thread id into
+// unrelated instances with a WorkspaceKey rewritten to that instance's root;
+// using the rewritten WorkspaceKey would make restore/selection attach to the
+// wrong workspace.
+func threadBelongsToInstanceWorkspaceForTarget(inst *state.InstanceRecord, thread *state.ThreadRecord) bool {
+	if inst == nil || thread == nil {
+		return false
+	}
+	return cwdBelongsToInstanceWorkspace(inst, firstNonEmpty(thread.CWD, threadWorkspaceKeyFromRecord(thread)))
+}
+
 func cwdBelongsToInstanceWorkspace(inst *state.InstanceRecord, cwd string) bool {
 	if inst == nil {
 		return false

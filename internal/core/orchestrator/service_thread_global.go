@@ -205,7 +205,7 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 			continue
 		}
 		thread := inst.Threads[threadID]
-		if !ordinaryThreadVisible(thread) || !threadBelongsToInstanceWorkspace(inst, thread) {
+		if !ordinaryThreadVisible(thread) || !threadBelongsToInstanceWorkspaceForTarget(inst, thread) {
 			continue
 		}
 		found = true
@@ -771,7 +771,7 @@ func (s *Service) resolveSurfaceResumeVisibleInstance(surface *state.SurfaceCons
 	if preferredInstanceID != "" {
 		if inst := s.root.Instances[preferredInstanceID]; inst != nil && inst.Online &&
 			state.EffectiveInstanceBackend(inst) == backend &&
-			threadVisible(inst.Threads[view.ThreadID]) && threadBelongsToInstanceWorkspace(inst, inst.Threads[view.ThreadID]) &&
+			threadVisible(inst.Threads[view.ThreadID]) && threadBelongsToInstanceWorkspaceForTarget(inst, inst.Threads[view.ThreadID]) &&
 			s.surfaceInstanceCompatibleForAttach(surface, inst) {
 			if owner := s.threadClaimSurface(view.ThreadID); owner != nil && owner.SurfaceSessionID != surface.SurfaceSessionID {
 				return nil, "thread_busy"
