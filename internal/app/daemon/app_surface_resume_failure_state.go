@@ -3,6 +3,8 @@ package daemon
 import (
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func surfaceResumeFailureSpecificity(code string) int {
@@ -83,7 +85,7 @@ func (a *App) recordSurfaceResumeFailureLocked(surfaceID, code string, now time.
 	if shouldUpgradeSurfaceResumeStickyFailure(recovery.StickyFailureCode, code) {
 		recovery.StickyFailureCode = code
 	}
-	displayCode := strings.TrimSpace(firstNonEmpty(recovery.StickyFailureCode, code))
+	displayCode := strings.TrimSpace(xutil.FirstNonEmpty(recovery.StickyFailureCode, code))
 	if displayCode == "" {
 		return "", false
 	}

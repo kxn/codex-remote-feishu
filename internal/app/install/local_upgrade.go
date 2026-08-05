@@ -10,6 +10,7 @@ import (
 	"time"
 
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type LocalBinaryUpgradeOptions struct {
@@ -43,7 +44,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 	if err != nil {
 		return "", err
 	}
-	stateValue.StatePath = firstNonEmpty(strings.TrimSpace(stateValue.StatePath), statePath)
+	stateValue.StatePath = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.StatePath), statePath)
 	ApplyStateMetadata(&stateValue, StateMetadataOptions{
 		InstanceID:      stateValue.InstanceID,
 		StatePath:       stateValue.StatePath,
@@ -86,7 +87,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		Phase:            PendingUpgradePhasePrepared,
 		Source:           UpgradeSourceLocal,
 		TargetTrack:      stateValue.CurrentTrack,
-		TargetVersion:    firstNonEmpty(strings.TrimSpace(targetIdentity.Version), resolvedSlot),
+		TargetVersion:    xutil.FirstNonEmpty(strings.TrimSpace(targetIdentity.Version), resolvedSlot),
 		TargetSlot:       resolvedSlot,
 		TargetBinaryPath: filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), resolvedSlot, executableName(runtime.GOOS)),
 		RequestedAt:      &now,

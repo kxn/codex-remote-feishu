@@ -13,6 +13,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"github.com/skip2/go-qrcode"
 )
 
@@ -145,7 +146,7 @@ func (a *App) suggestFeishuAppName(ctx context.Context, requestedName, appID, ap
 	if err == nil && strings.TrimSpace(identity.DisplayName) != "" {
 		return strings.TrimSpace(identity.DisplayName)
 	}
-	return firstNonEmpty(strings.TrimSpace(appID), strings.TrimSpace(fallback))
+	return xutil.FirstNonEmpty(strings.TrimSpace(appID), strings.TrimSpace(fallback))
 }
 
 func (a *App) resolveFeishuAppIdentity(ctx context.Context, appID, appSecret string) (feishuAppIdentity, error) {
@@ -300,14 +301,14 @@ func (a *App) handleFeishuOnboardingSessionComplete(w http.ResponseWriter, r *ht
 		return
 	case feishuOnboardingStatusExpired:
 		writeAPIError(w, http.StatusConflict, apiError{
-			Code:    firstNonEmpty(sessionView.ErrorCode, "expired_token"),
+			Code:    xutil.FirstNonEmpty(sessionView.ErrorCode, "expired_token"),
 			Message: "the current QR code session has expired",
 			Details: sessionView.ErrorMessage,
 		})
 		return
 	case feishuOnboardingStatusFailed:
 		writeAPIError(w, http.StatusConflict, apiError{
-			Code:    firstNonEmpty(sessionView.ErrorCode, "feishu_onboarding_failed"),
+			Code:    xutil.FirstNonEmpty(sessionView.ErrorCode, "feishu_onboarding_failed"),
 			Message: "the current QR onboarding session cannot be completed",
 			Details: sessionView.ErrorMessage,
 		})
@@ -454,7 +455,7 @@ func (a *App) createFeishuOnboardedApp(name, appID, appSecret string) (adminFeis
 	gatewayID := nextGatewayID(loaded.Config.Feishu.Apps, admin, req)
 	app := config.FeishuAppConfig{
 		ID:        gatewayID,
-		Name:      firstNonEmpty(strings.TrimSpace(name), strings.TrimSpace(appID), gatewayID),
+		Name:      xutil.FirstNonEmpty(strings.TrimSpace(name), strings.TrimSpace(appID), gatewayID),
 		AppID:     strings.TrimSpace(appID),
 		AppSecret: strings.TrimSpace(appSecret),
 		Enabled:   daemonBoolPtr(true),

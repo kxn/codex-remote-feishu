@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type contractResolutionMode string
@@ -69,8 +70,8 @@ func (s *Service) resolveHeadlessContract(surface *state.SurfaceConsoleRecord, c
 	if ctx.BusyOwnerPresent {
 		return contractResolution{
 			Mode:       contractResolutionUnavailable,
-			NoticeCode: firstNonEmpty(ctx.BusyCode, "thread_busy"),
-			NoticeText: firstNonEmpty(ctx.BusyText, "目标当前已被其他飞书会话占用。"),
+			NoticeCode: xutil.FirstNonEmpty(ctx.BusyCode, "thread_busy"),
+			NoticeText: xutil.FirstNonEmpty(ctx.BusyText, "目标当前已被其他飞书会话占用。"),
 		}
 	}
 	incompatibleSeen := false
@@ -120,8 +121,8 @@ func (s *Service) resolveHeadlessContract(surface *state.SurfaceConsoleRecord, c
 	if strings.TrimSpace(ctx.CWD) == "" {
 		return contractResolution{
 			Mode:       contractResolutionUnavailable,
-			NoticeCode: firstNonEmpty(ctx.CWDMissingCode, "thread_cwd_missing"),
-			NoticeText: firstNonEmpty(ctx.CWDMissingText, "目标缺少可恢复的工作目录，当前无法直接接管。"),
+			NoticeCode: xutil.FirstNonEmpty(ctx.CWDMissingCode, "thread_cwd_missing"),
+			NoticeText: xutil.FirstNonEmpty(ctx.CWDMissingText, "目标缺少可恢复的工作目录，当前无法直接接管。"),
 		}
 	}
 	return contractResolution{

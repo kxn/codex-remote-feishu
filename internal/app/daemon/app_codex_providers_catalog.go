@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func materializeCodexProviderRecords(cfg config.AppConfig) []state.CodexProviderRecord {
@@ -70,7 +71,7 @@ func codexOAuthProfileSummary(oauth state.CodexOAuthProfileState, preference sta
 		Revision:          oauth.Revision,
 		Kind:              state.CodexProfileKindOAuth,
 		Name:              "ChatGPT 登录",
-		StatusCode:        strings.TrimSpace(firstNonEmpty(oauth.AvailabilityCode, oauth.LastProbeErrorCode, oauth.Status)),
+		StatusCode:        strings.TrimSpace(xutil.FirstNonEmpty(oauth.AvailabilityCode, oauth.LastProbeErrorCode, oauth.Status)),
 		Available:         strings.TrimSpace(oauth.Status) == "detected" && strings.TrimSpace(oauth.AvailabilityCode) == "",
 		ContextEditable:   true,
 		ContextPreference: preference,

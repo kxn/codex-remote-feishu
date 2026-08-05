@@ -7,16 +7,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func stringValue(value *string) string {
 	if value == nil {
 		return ""

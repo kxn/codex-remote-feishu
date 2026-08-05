@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/upgradecontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func parseDebugCommandText(text string) (parsedDebugCommand, error) {
@@ -55,7 +56,7 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuP
 	description := "继续升级到当前 track 的最新版本。"
 	summarySections := []control.FeishuCardTextSection{}
 	if stateValue.PendingUpgrade != nil {
-		targetVersion = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
+		targetVersion = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
 		if stateValue.PendingUpgrade.Source == install.UpgradeSourceDev {
 			title = "发现开发版更新"
 			confirmCommand = "/upgrade dev"
@@ -64,8 +65,8 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuP
 				commandCatalogTextSection(
 					"",
 					"检测到新的 dev 构建可用。",
-					fmt.Sprintf("当前版本：%s", firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
-					fmt.Sprintf("目标版本：%s", firstNonEmpty(targetVersion, "unknown")),
+					fmt.Sprintf("当前版本：%s", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
+					fmt.Sprintf("目标版本：%s", xutil.FirstNonEmpty(targetVersion, "unknown")),
 				),
 				commandCatalogTextSection("下一步", "再次发送 /upgrade dev 继续升级流程。"),
 			}
@@ -75,9 +76,9 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuP
 		summarySections = []control.FeishuCardTextSection{
 			commandCatalogTextSection(
 				"",
-				fmt.Sprintf("检测到 %s track 有新版本可用。", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
-				fmt.Sprintf("当前版本：%s", firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
-				fmt.Sprintf("目标版本：%s", firstNonEmpty(targetVersion, "unknown")),
+				fmt.Sprintf("检测到 %s track 有新版本可用。", xutil.FirstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
+				fmt.Sprintf("当前版本：%s", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
+				fmt.Sprintf("目标版本：%s", xutil.FirstNonEmpty(targetVersion, "unknown")),
 			),
 			commandCatalogTextSection("下一步", "再次发送 /upgrade latest 继续升级流程。"),
 		}
@@ -156,12 +157,12 @@ func clearStalePendingCandidateOnLiveVersion(stateValue *install.InstallState, l
 	if liveVersion == "" {
 		return false
 	}
-	targetVersion := firstNonEmpty(strings.TrimSpace(pending.TargetVersion), strings.TrimSpace(pending.TargetSlot))
+	targetVersion := xutil.FirstNonEmpty(strings.TrimSpace(pending.TargetVersion), strings.TrimSpace(pending.TargetSlot))
 	if targetVersion == "" || targetVersion != liveVersion {
 		return false
 	}
 	stateValue.CurrentVersion = liveVersion
-	stateValue.CurrentSlot = firstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion), liveVersion)
+	stateValue.CurrentSlot = xutil.FirstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion), liveVersion)
 	if stateValue.CurrentTrack == "" && pending.Source == install.UpgradeSourceRelease {
 		stateValue.CurrentTrack = firstNonEmptyTrack(pending.TargetTrack, install.ParseReleaseTrack(liveVersion))
 	}

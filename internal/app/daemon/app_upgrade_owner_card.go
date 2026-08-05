@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -192,9 +193,9 @@ func flowTrackingKey(flow *upgraderuntime.OwnerCardFlowRecord) string {
 }
 
 func upgradeOwnerCheckingEvent(surfaceID string, flow *upgraderuntime.OwnerCardFlowRecord, stateValue install.InstallState) eventcontract.Event {
-	track := firstNonEmpty(strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown")
+	track := xutil.FirstNonEmpty(strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown")
 	bodySections := upgradeOwnerContextSections(
-		firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
+		xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"),
 		"",
 		track,
 	)
@@ -203,9 +204,9 @@ func upgradeOwnerCheckingEvent(surfaceID string, flow *upgraderuntime.OwnerCardF
 }
 
 func upgradeOwnerConfirmEvent(surfaceID string, flow *upgraderuntime.OwnerCardFlowRecord, stateValue install.InstallState) eventcontract.Event {
-	targetVersion := firstNonEmpty(strings.TrimSpace(flow.TargetVersion), pendingTargetVersion(stateValue.PendingUpgrade), strings.TrimSpace(stateValue.LastKnownLatestVersion), "unknown")
-	currentVersion := firstNonEmpty(strings.TrimSpace(flow.CurrentVersion), strings.TrimSpace(stateValue.CurrentVersion), "unknown")
-	track := firstNonEmpty(strings.TrimSpace(string(flow.Track)), strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown")
+	targetVersion := xutil.FirstNonEmpty(strings.TrimSpace(flow.TargetVersion), pendingTargetVersion(stateValue.PendingUpgrade), strings.TrimSpace(stateValue.LastKnownLatestVersion), "unknown")
+	currentVersion := xutil.FirstNonEmpty(strings.TrimSpace(flow.CurrentVersion), strings.TrimSpace(stateValue.CurrentVersion), "unknown")
+	track := xutil.FirstNonEmpty(strings.TrimSpace(string(flow.Track)), strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown")
 	bodySections := upgradeOwnerContextSections(currentVersion, targetVersion, track)
 	noticeSections := upgradeOwnerNoticeSections("确认后会开始下载并准备升级。执行期间普通输入会暂停，直到完成或取消。")
 	return upgradeOwnerCardEvent(surfaceID, flow, "发现可升级版本", "approval", bodySections, noticeSections, []control.CommandCatalogButton{
@@ -215,7 +216,7 @@ func upgradeOwnerConfirmEvent(surfaceID string, flow *upgraderuntime.OwnerCardFl
 }
 
 func upgradeOwnerRunningEvent(surfaceID string, flow *upgraderuntime.OwnerCardFlowRecord, title, detail string, canCancel bool) eventcontract.Event {
-	targetVersion := firstNonEmpty(strings.TrimSpace(flow.TargetVersion), "unknown")
+	targetVersion := xutil.FirstNonEmpty(strings.TrimSpace(flow.TargetVersion), "unknown")
 	bodySections := upgradeOwnerContextSections(strings.TrimSpace(flow.CurrentVersion), targetVersion, strings.TrimSpace(string(flow.Track)))
 	noticeSections := upgradeOwnerNoticeSections(strings.TrimSpace(detail), "普通输入已暂停，请等待完成。")
 	var buttons []control.CommandCatalogButton
@@ -235,7 +236,7 @@ func pendingTargetVersion(pending *install.PendingUpgrade) string {
 	if pending == nil {
 		return ""
 	}
-	return firstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion))
+	return xutil.FirstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion))
 }
 
 func (a *App) activeUpgradeOwnerFlowMatchesPendingLocked(pending *install.PendingUpgrade) bool {
@@ -246,7 +247,7 @@ func (a *App) activeUpgradeOwnerFlowMatchesPendingLocked(pending *install.Pendin
 	if flow.Source != pending.Source {
 		return false
 	}
-	return firstNonEmpty(strings.TrimSpace(flow.TargetVersion), "") == pendingTargetVersion(pending)
+	return xutil.FirstNonEmpty(strings.TrimSpace(flow.TargetVersion), "") == pendingTargetVersion(pending)
 }
 
 func (a *App) startUpgradeLatestOwnerCheckLocked(command control.DaemonCommand, stateValue install.InstallState) []eventcontract.Event {
@@ -361,11 +362,11 @@ func (a *App) confirmUpgradeOwnerFlowLocked(command control.DaemonCommand) []eve
 		return a.finishUpgradeOwnerFlowFailureLocked(command.SurfaceSessionID, flow.FlowID, "当前没有可继续的 release 升级候选，请重新发送 `/upgrade latest`。")
 	}
 	now := time.Now().UTC()
-	stateValue.PendingUpgrade.GatewayID = firstNonEmpty(strings.TrimSpace(command.GatewayID), a.service.SurfaceGatewayID(command.SurfaceSessionID))
+	stateValue.PendingUpgrade.GatewayID = xutil.FirstNonEmpty(strings.TrimSpace(command.GatewayID), a.service.SurfaceGatewayID(command.SurfaceSessionID))
 	stateValue.PendingUpgrade.SurfaceSessionID = command.SurfaceSessionID
 	stateValue.PendingUpgrade.ChatID = a.service.SurfaceChatID(command.SurfaceSessionID)
 	stateValue.PendingUpgrade.ActorUserID = a.service.SurfaceActorUserID(command.SurfaceSessionID)
-	stateValue.PendingUpgrade.SourceMessageID = firstNonEmpty(strings.TrimSpace(flow.MessageID), strings.TrimSpace(command.SourceMessageID))
+	stateValue.PendingUpgrade.SourceMessageID = xutil.FirstNonEmpty(strings.TrimSpace(flow.MessageID), strings.TrimSpace(command.SourceMessageID))
 	if stateValue.PendingUpgrade.RequestedAt == nil {
 		stateValue.PendingUpgrade.RequestedAt = &now
 	}
@@ -450,8 +451,8 @@ func (a *App) finishUpgradeOwnerFlowLatestLocked(surfaceID, flowID string, state
 		return nil
 	}
 	a.refreshUpgradeOwnerFlowLocked(flow, upgraderuntime.OwnerFlowStageCompleted)
-	bodySections := upgradeOwnerContextSections(strings.TrimSpace(stateValue.CurrentVersion), "", firstNonEmpty(strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown"))
-	noticeSections := upgradeOwnerNoticeSections(fmt.Sprintf("当前已经是 %s track 的最新版本 %s。", firstNonEmpty(strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown"), firstNonEmpty(strings.TrimSpace(latestVersion), "unknown")))
+	bodySections := upgradeOwnerContextSections(strings.TrimSpace(stateValue.CurrentVersion), "", xutil.FirstNonEmpty(strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown"))
+	noticeSections := upgradeOwnerNoticeSections(fmt.Sprintf("当前已经是 %s track 的最新版本 %s。", xutil.FirstNonEmpty(strings.TrimSpace(string(stateValue.CurrentTrack)), "unknown"), xutil.FirstNonEmpty(strings.TrimSpace(latestVersion), "unknown")))
 	event := upgradeOwnerTerminalEvent(surfaceID, flow, "已是最新版本", "success", bodySections, noticeSections)
 	a.clearUpgradeOwnerFlowLocked()
 	return []eventcontract.Event{event}

@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -101,10 +102,10 @@ func buildPlanProposalPageView(flow *activeOwnerCardFlowRecord, proposal *active
 	view := control.FeishuPageView{
 		CommandID:                     control.FeishuCommandPlan,
 		Title:                         "提案计划",
-		TemporarySessionLabel:         strings.TrimSpace(firstNonEmpty(proposalTemporarySessionLabel(proposal))),
+		TemporarySessionLabel:         strings.TrimSpace(xutil.FirstNonEmpty(proposalTemporarySessionLabel(proposal))),
 		MessageID:                     planProposalMessageID(flow, inlineMessageID),
 		TrackingKey:                   planProposalTrackingKey(flow),
-		ThemeKey:                      firstNonEmpty(strings.TrimSpace(theme), "plan"),
+		ThemeKey:                      xutil.FirstNonEmpty(strings.TrimSpace(theme), "plan"),
 		Patchable:                     true,
 		BodySections:                  bodySections,
 		NoticeSections:                planProposalNoticeSections(statusText, theme),
@@ -205,7 +206,7 @@ func (s *Service) maybeSealPlanProposalForRouteChange(surface *state.SurfaceCons
 	if record == nil {
 		return nil
 	}
-	return s.sealPlanProposal(surface, "", firstNonEmpty(strings.TrimSpace(reason), "当前工作目标已变化，当前提案计划已失效。"), "info", false)
+	return s.sealPlanProposal(surface, "", xutil.FirstNonEmpty(strings.TrimSpace(reason), "当前工作目标已变化，当前提案计划已失效。"), "info", false)
 }
 
 func (s *Service) maybeSealPlanProposalForTurnStart(instanceID, threadID, turnID string) []eventcontract.Event {
@@ -290,10 +291,10 @@ func (s *Service) maybePresentCompletedPlanProposal(instanceID, threadID, turnID
 		return nil
 	}
 	thread := inst.Threads[threadID]
-	threadCWD := strings.TrimSpace(firstNonEmpty(threadCWDFromRecord(thread), inst.WorkspaceRoot))
+	threadCWD := strings.TrimSpace(xutil.FirstNonEmpty(threadCWDFromRecord(thread), inst.WorkspaceRoot))
 	now := s.now()
 	events := s.maybeSealPlanProposalForRouteChange(surface, "新的提案计划已生成，上一张提案计划卡片已失效。")
-	flow := newOwnerCardFlowRecord(ownerCardFlowKindPlanProposal, s.pickers.nextPlanProposalToken(), firstNonEmpty(surface.ActorUserID), now, defaultPlanProposalTTL, ownerCardFlowPhaseResolved)
+	flow := newOwnerCardFlowRecord(ownerCardFlowKindPlanProposal, s.pickers.nextPlanProposalToken(), xutil.FirstNonEmpty(surface.ActorUserID), now, defaultPlanProposalTTL, ownerCardFlowPhaseResolved)
 	record := newPlanProposalRecord(
 		flow.FlowID,
 		instanceID,
@@ -301,7 +302,7 @@ func (s *Service) maybePresentCompletedPlanProposal(instanceID, threadID, turnID
 		turnID,
 		threadCWD,
 		pending.Text,
-		firstNonEmpty(s.temporarySessionLabel(surface, instanceID, threadID, turnID), remoteBindingDetourLabel(binding)),
+		xutil.FirstNonEmpty(s.temporarySessionLabel(surface, instanceID, threadID, turnID), remoteBindingDetourLabel(binding)),
 		now,
 		defaultPlanProposalTTL,
 	)

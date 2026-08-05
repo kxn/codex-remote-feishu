@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -76,10 +77,10 @@ func (g *LiveGateway) uploadImagePath(ctx context.Context, path string) (string,
 	if err != nil {
 		return "", err
 	}
-	if resp.Data == nil || strings.TrimSpace(stringPtr(resp.Data.ImageKey)) == "" {
+	if resp.Data == nil || strings.TrimSpace(xutil.StringValue(resp.Data.ImageKey)) == "" {
 		return "", fmt.Errorf("upload image failed: missing image key")
 	}
-	return strings.TrimSpace(stringPtr(resp.Data.ImageKey)), nil
+	return strings.TrimSpace(xutil.StringValue(resp.Data.ImageKey)), nil
 }
 
 func (g *LiveGateway) uploadImageBytes(ctx context.Context, data []byte) (string, error) {
@@ -108,10 +109,10 @@ func (g *LiveGateway) uploadImageBytes(ctx context.Context, data []byte) (string
 	if err != nil {
 		return "", err
 	}
-	if resp.Data == nil || strings.TrimSpace(stringPtr(resp.Data.ImageKey)) == "" {
+	if resp.Data == nil || strings.TrimSpace(xutil.StringValue(resp.Data.ImageKey)) == "" {
 		return "", fmt.Errorf("upload image failed: missing image key")
 	}
-	return strings.TrimSpace(stringPtr(resp.Data.ImageKey)), nil
+	return strings.TrimSpace(xutil.StringValue(resp.Data.ImageKey)), nil
 }
 
 func decodeBase64Image(value string) ([]byte, error) {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func selectionPromptElements(prompt selectionRenderModel, daemonLifecycleID string) []map[string]any {
@@ -149,7 +150,7 @@ func appendAttachSelectionSection(
 		if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
 			elements = append(elements, button)
 		}
-		if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+		if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
 			if block := cardPlainTextBlockElement(meta); len(block) != 0 {
 				elements = append(elements, block)
 			}
@@ -345,20 +346,20 @@ func selectionOptionButtonText(prompt selectionRenderModel, option control.Selec
 	text := strings.TrimSpace(option.ButtonLabel)
 	switch strings.TrimSpace(option.ActionKind) {
 	case cardActionKindShowAllWorkspaces:
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
 		return "查看全部 · " + base
 	case cardActionKindShowRecentWorkspaces:
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
 		return "返回 · " + base
 	case cardActionKindShowAllThreadWorkspaces:
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部工作区")
 		return "查看全部 · " + base
 	case cardActionKindShowRecentThreadWorkspaces:
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近工作区")
 		return "返回 · " + base
 	}
 	if prompt.Kind == control.SelectionPromptAttachInstance {
-		summary := firstNonEmpty(strings.TrimSpace(option.Label), text, "实例")
+		summary := xutil.FirstNonEmpty(strings.TrimSpace(option.Label), text, "实例")
 		switch {
 		case option.IsCurrent:
 			return "当前 · " + summary
@@ -371,7 +372,7 @@ func selectionOptionButtonText(prompt selectionRenderModel, option control.Selec
 		}
 	}
 	if prompt.Kind == control.SelectionPromptAttachWorkspace {
-		summary := firstNonEmpty(strings.TrimSpace(option.Label), text, "工作区")
+		summary := xutil.FirstNonEmpty(strings.TrimSpace(option.Label), text, "工作区")
 		if strings.TrimSpace(option.ActionKind) == cardActionKindShowWorkspaceThreads {
 			switch {
 			case option.IsCurrent:
@@ -400,22 +401,22 @@ func selectionOptionButtonText(prompt selectionRenderModel, option control.Selec
 		return text
 	}
 	if strings.TrimSpace(option.ActionKind) == cardActionKindShowScopedThreads {
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部会话")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部会话")
 		return "查看全部 · " + base
 	}
 	if strings.TrimSpace(option.ActionKind) == cardActionKindShowThreads {
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近会话")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "最近会话")
 		return "返回 · " + base
 	}
 	if strings.TrimSpace(option.ActionKind) == cardActionKindShowAllThreads {
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部会话")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "全部会话")
 		return "返回 · " + base
 	}
 	if strings.TrimSpace(option.ActionKind) == cardActionKindShowWorkspaceThreads {
-		base := firstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "工作区全部会话")
+		base := xutil.FirstNonEmpty(strings.TrimSpace(option.ButtonLabel), strings.TrimSpace(option.Label), "工作区全部会话")
 		return "查看全部 · " + base
 	}
-	summary := firstNonEmpty(strings.TrimSpace(option.Label), strings.TrimSpace(option.ButtonLabel), "未命名会话")
+	summary := xutil.FirstNonEmpty(strings.TrimSpace(option.Label), strings.TrimSpace(option.ButtonLabel), "未命名会话")
 	switch {
 	case option.IsCurrent:
 		return "当前 · " + summary

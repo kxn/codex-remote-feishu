@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func configObservedEvents(threadID, cwd string, params map[string]any, treatAsDefault bool) []agentproto.Event {
@@ -30,18 +31,18 @@ func configObservedEvents(threadID, cwd string, params map[string]any, treatAsDe
 func extractObservedConfig(params map[string]any) (model, effort, access, planMode string) {
 	model = choose(
 		lookupString(params, "collaborationMode", "settings", "model"),
-		lookupStringFromAny(params["model"]),
+		xutil.LookupStringFromAny(params["model"]),
 		lookupString(params, "config", "model"),
 	)
 	effort = choose(
 		lookupString(params, "collaborationMode", "settings", "reasoning_effort"),
 		lookupString(params, "config", "model_reasoning_effort"),
 		lookupString(params, "config", "reasoning_effort"),
-		lookupStringFromAny(params["effort"]),
+		xutil.LookupStringFromAny(params["effort"]),
 	)
 	access = chooseObservedAccessMode(
-		lookupStringFromAny(params["approvalPolicy"]),
-		lookupStringFromAny(params["sandbox"]),
+		xutil.LookupStringFromAny(params["approvalPolicy"]),
+		xutil.LookupStringFromAny(params["sandbox"]),
 		lookupString(params, "sandboxPolicy", "type"),
 		lookupString(params, "config", "approval_policy"),
 		lookupString(params, "config", "sandbox"),
@@ -136,11 +137,11 @@ func applyPromptOverridesToTurnStart(template map[string]any, overrides agentpro
 		}
 		collaborationMode["mode"] = planMode
 	}
-	if overrides.Model != "" || lookupStringFromAny(settings["model"]) != "" {
+	if overrides.Model != "" || xutil.LookupStringFromAny(settings["model"]) != "" {
 		if len(collaborationMode) == 0 {
 			collaborationMode = map[string]any{}
 		}
-		if lookupStringFromAny(collaborationMode["mode"]) == "" {
+		if xutil.LookupStringFromAny(collaborationMode["mode"]) == "" {
 			collaborationMode["mode"] = "custom"
 		}
 		if overrides.Model != "" {
@@ -190,7 +191,7 @@ func applyCodexResumePolicyToTurnStart(template map[string]any, policy *agentpro
 		if len(collaborationMode) == 0 {
 			collaborationMode = map[string]any{}
 		}
-		if lookupStringFromAny(collaborationMode["mode"]) == "" {
+		if xutil.LookupStringFromAny(collaborationMode["mode"]) == "" {
 			collaborationMode["mode"] = "custom"
 		}
 		collaborationMode["settings"] = settings
@@ -224,7 +225,7 @@ func normalizeOverridePlanMode(value string) string {
 }
 
 func normalizeThreadStartParams(params map[string]any) map[string]any {
-	normalized := cloneMap(params)
+	normalized := xutil.CloneMap(params)
 	delete(normalized, "ephemeral")
 	delete(normalized, "persistExtendedHistory")
 	setDefault(normalized, "cwd", nil)
@@ -264,7 +265,7 @@ func normalizeTurnStartTemplate(params map[string]any) map[string]any {
 }
 
 func isInternalLocalThreadStart(params map[string]any) bool {
-	if lookupBoolFromAny(params["ephemeral"]) {
+	if xutil.LookupBoolFromAny(params["ephemeral"]) {
 		return true
 	}
 	value, ok := params["persistExtendedHistory"].(bool)

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestClaudeTranslatorToolApprovalMainChain(t *testing.T) {
@@ -84,11 +85,11 @@ func TestClaudeTranslatorToolApprovalMainChain(t *testing.T) {
 		t.Fatalf("unexpected top-level request_id in control_response: %#v", payload)
 	}
 	response := testMapValue(payload["response"])
-	if lookupStringFromAny(response["request_id"]) != "req-tool-1" {
+	if xutil.LookupStringFromAny(response["request_id"]) != "req-tool-1" {
 		t.Fatalf("unexpected response payload: %#v", payload)
 	}
 	body := testMapValue(response["response"])
-	if lookupStringFromAny(body["behavior"]) != "allow" {
+	if xutil.LookupStringFromAny(body["behavior"]) != "allow" {
 		t.Fatalf("unexpected allow body: %#v", body)
 	}
 
@@ -122,10 +123,10 @@ func TestClaudeTranslatorToolApprovalMainChain(t *testing.T) {
 	if resolved.Kind != agentproto.EventRequestResolved || resolved.ThreadID != threadID || resolved.TurnID != turnID || resolved.RequestID != "req-tool-1" {
 		t.Fatalf("unexpected request resolved event: %#v", resolved)
 	}
-	if lookupStringFromAny(resolved.Metadata["requestType"]) != string(agentproto.RequestTypeApproval) ||
-		lookupStringFromAny(resolved.Metadata["tool"]) != "Bash" ||
-		lookupStringFromAny(resolved.Metadata["decision"]) != "accept" ||
-		lookupStringFromAny(resolved.Metadata["stdout"]) != "BLACKBOX_TOOL_OK" {
+	if xutil.LookupStringFromAny(resolved.Metadata["requestType"]) != string(agentproto.RequestTypeApproval) ||
+		xutil.LookupStringFromAny(resolved.Metadata["tool"]) != "Bash" ||
+		xutil.LookupStringFromAny(resolved.Metadata["decision"]) != "accept" ||
+		xutil.LookupStringFromAny(resolved.Metadata["stdout"]) != "BLACKBOX_TOOL_OK" {
 		t.Fatalf("unexpected request resolved metadata: %#v", resolved.Metadata)
 	}
 	if len(tr.pendingRequests) != 0 {
@@ -205,12 +206,12 @@ func TestClaudeTranslatorAskUserQuestionRoundTrip(t *testing.T) {
 		t.Fatalf("translate ask response: %v", err)
 	}
 	body := testMapValue(testMapValue(decodeFrame(t, payloads[0])["response"])["response"])
-	if lookupStringFromAny(body["behavior"]) != "allow" {
+	if xutil.LookupStringFromAny(body["behavior"]) != "allow" {
 		t.Fatalf("unexpected ask response body: %#v", body)
 	}
 	updatedInput := testMapValue(body["updatedInput"])
 	answers := testMapValue(updatedInput["answers"])
-	if lookupStringFromAny(answers["Which approach should I take?"]) != "Fast" {
+	if xutil.LookupStringFromAny(answers["Which approach should I take?"]) != "Fast" {
 		t.Fatalf("unexpected AskUserQuestion updated answers: %#v", answers)
 	}
 
@@ -261,7 +262,7 @@ func TestClaudeTranslatorTurnSteerAcceptsTextOnlyWithinActiveTurn(t *testing.T) 
 		t.Fatalf("unexpected steer payload: %#v", payload)
 	}
 	message := testMapValue(payload["message"])
-	if lookupStringFromAny(message["role"]) != "user" || lookupStringFromAny(message["content"]) != "补充一下最后一段" {
+	if xutil.LookupStringFromAny(message["role"]) != "user" || xutil.LookupStringFromAny(message["content"]) != "补充一下最后一段" {
 		t.Fatalf("unexpected steer message payload: %#v", message)
 	}
 	if tr.activeTurn == nil || tr.activeTurn.ThreadID != threadID || tr.activeTurn.TurnID != turnID {
@@ -338,10 +339,10 @@ func TestClaudeTranslatorPromptSendAcceptsLocalImageAndTrailingText(t *testing.T
 		t.Fatalf("unexpected first block: %#v", content[0])
 	}
 	source := testMapValue(content[0]["source"])
-	if source["type"] != "base64" || lookupStringFromAny(source["media_type"]) != "image/png" || lookupStringFromAny(source["data"]) != base64.StdEncoding.EncodeToString([]byte("prompt-image")) {
+	if source["type"] != "base64" || xutil.LookupStringFromAny(source["media_type"]) != "image/png" || xutil.LookupStringFromAny(source["data"]) != base64.StdEncoding.EncodeToString([]byte("prompt-image")) {
 		t.Fatalf("unexpected image block source: %#v", source)
 	}
-	if content[1]["type"] != "text" || lookupStringFromAny(content[1]["text"]) != "请描述这张图" {
+	if content[1]["type"] != "text" || xutil.LookupStringFromAny(content[1]["text"]) != "请描述这张图" {
 		t.Fatalf("unexpected trailing text block: %#v", content[1])
 	}
 	if len(tr.pendingTurns) != 1 || tr.pendingTurns[0].ThreadID != "thread-fresh" {
@@ -391,10 +392,10 @@ func TestClaudeTranslatorPromptSendPreservesFileBridgeTextOrderOnResumedSession(
 	if content[0]["type"] != "image" {
 		t.Fatalf("unexpected first block: %#v", content[0])
 	}
-	if content[1]["type"] != "text" || lookupStringFromAny(content[1]["text"]) != filePrompt {
+	if content[1]["type"] != "text" || xutil.LookupStringFromAny(content[1]["text"]) != filePrompt {
 		t.Fatalf("unexpected file prompt block: %#v", content[1])
 	}
-	if content[2]["type"] != "text" || lookupStringFromAny(content[2]["text"]) != "请结合文件继续处理" {
+	if content[2]["type"] != "text" || xutil.LookupStringFromAny(content[2]["text"]) != "请结合文件继续处理" {
 		t.Fatalf("unexpected trailing user text block: %#v", content[2])
 	}
 	if len(tr.pendingTurns) != 1 || tr.pendingTurns[0].ThreadID != "session-resume-1" {
@@ -472,7 +473,7 @@ func TestClaudeTranslatorDirectFailureWithoutMessageStartStillReconcilesTurn(t *
 	if threadID != "session-claude-auth" {
 		t.Fatalf("expected session thread ID to be used, got %q", threadID)
 	}
-	if got := lookupStringFromAny(assistant.Events[2].Metadata["text"]); got != "Not logged in · Please run /login" {
+	if got := xutil.LookupStringFromAny(assistant.Events[2].Metadata["text"]); got != "Not logged in · Please run /login" {
 		t.Fatalf("unexpected assistant text %q", got)
 	}
 
@@ -682,7 +683,7 @@ func TestClaudeTranslatorPlanDeclineInterruptsTurn(t *testing.T) {
 		t.Fatalf("translate plan decline: %v", err)
 	}
 	body := testMapValue(testMapValue(decodeFrame(t, payloads[0])["response"])["response"])
-	if lookupStringFromAny(body["behavior"]) != "deny" || body["interrupt"] != true {
+	if xutil.LookupStringFromAny(body["behavior"]) != "deny" || body["interrupt"] != true {
 		t.Fatalf("unexpected deny body: %#v", body)
 	}
 
@@ -704,7 +705,7 @@ func TestClaudeTranslatorPlanDeclineInterruptsTurn(t *testing.T) {
 	if len(resolved.Events) != 1 || resolved.Events[0].Kind != agentproto.EventRequestResolved {
 		t.Fatalf("expected request.resolved on plan denial, got %#v", resolved.Events)
 	}
-	if lookupStringFromAny(resolved.Events[0].Metadata["decision"]) != "decline" {
+	if xutil.LookupStringFromAny(resolved.Events[0].Metadata["decision"]) != "decline" {
 		t.Fatalf("unexpected resolved plan metadata: %#v", resolved.Events[0].Metadata)
 	}
 
@@ -794,7 +795,7 @@ func TestClaudeTranslatorPlanRequestUsesControlRequestPlan(t *testing.T) {
 	if event.RequestPrompt == nil || event.RequestPrompt.Body != planText {
 		t.Fatalf("expected control_request plan body, got %#v", event.RequestPrompt)
 	}
-	if lookupStringFromAny(event.Metadata["planBodySource"]) != "request.input.plan" {
+	if xutil.LookupStringFromAny(event.Metadata["planBodySource"]) != "request.input.plan" {
 		t.Fatalf("expected request.input.plan source, got %#v", event.Metadata)
 	}
 }
@@ -937,7 +938,7 @@ func TestClaudeTranslatorMaterializesFinalTextOnErrorResult(t *testing.T) {
 	if result.Events[0].Kind != agentproto.EventItemStarted || result.Events[1].Kind != agentproto.EventItemCompleted {
 		t.Fatalf("expected fallback item lifecycle from result text, got %#v", result.Events)
 	}
-	if result.Events[1].ItemKind != "agent_message" || lookupStringFromAny(result.Events[1].Metadata["text"]) != "final fallback answer" {
+	if result.Events[1].ItemKind != "agent_message" || xutil.LookupStringFromAny(result.Events[1].Metadata["text"]) != "final fallback answer" {
 		t.Fatalf("unexpected fallback final text event: %#v", result.Events[1])
 	}
 	last := result.Events[len(result.Events)-1]
@@ -1413,7 +1414,7 @@ func TestClaudeTranslatorTaskProjectsToDelegatedTask(t *testing.T) {
 	if assistant.Events[0].Kind != agentproto.EventItemStarted || assistant.Events[0].ItemKind != "delegated_task" {
 		t.Fatalf("unexpected Task start projection: %#v", assistant.Events[0])
 	}
-	if got := lookupStringFromAny(assistant.Events[0].Metadata["description"]); got != "Audit the repository" {
+	if got := xutil.LookupStringFromAny(assistant.Events[0].Metadata["description"]); got != "Audit the repository" {
 		t.Fatalf("expected delegated task description metadata, got %#v", assistant.Events[0].Metadata)
 	}
 }
@@ -1493,7 +1494,7 @@ func TestClaudeTranslatorTaskStopCompletesDelegatedTaskViaParentToolUseID(t *tes
 	if event.ItemID != itemID {
 		t.Fatalf("expected delegated task to reuse parent item id %q, got %#v", itemID, event)
 	}
-	if got := lookupStringFromAny(event.Metadata["description"]); got != "Audit the repository" {
+	if got := xutil.LookupStringFromAny(event.Metadata["description"]); got != "Audit the repository" {
 		t.Fatalf("expected parent task metadata to survive completion, got %#v", event.Metadata)
 	}
 }
@@ -1570,7 +1571,7 @@ func TestClaudeTranslatorTaskStopFailureProjectsToDelegatedTaskFailure(t *testin
 	if event.Kind != agentproto.EventItemCompleted || event.ItemKind != "delegated_task" || event.Status != "failed" {
 		t.Fatalf("unexpected delegated task failed projection: %#v", event)
 	}
-	if got := lookupStringFromAny(event.Metadata["errorMessage"]); got != "subtask exploded" {
+	if got := xutil.LookupStringFromAny(event.Metadata["errorMessage"]); got != "subtask exploded" {
 		t.Fatalf("expected failed delegated task to keep error metadata, got %#v", event.Metadata)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) maybeRestartClaudeHeadlessForPrompt(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, override state.ModelConfigRecord, workspaceHint string) ([]eventcontract.Event, bool) {
@@ -25,7 +26,7 @@ func (s *Service) maybeRestartClaudeHeadlessForPrompt(surface *state.SurfaceCons
 	if current == desired {
 		return nil, false
 	}
-	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(s.surfaceCurrentWorkspaceKey(surface), inst.WorkspaceKey, inst.WorkspaceRoot), workspaceHint)
+	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(s.surfaceCurrentWorkspaceKey(surface), inst.WorkspaceKey, inst.WorkspaceRoot), workspaceHint)
 	attempt := s.buildCurrentHeadlessResumeAttempt(surface, workspaceKey, desired.Backend)
 	if normalizeWorkspaceClaimKey(attempt.WorkspaceKey) == "" {
 		return notice(surface, "claude_reasoning_restart_workspace_missing", "当前无法确定 Claude headless 的工作区，暂时不能自动切换推理强度。"), true
@@ -45,7 +46,7 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 	if workspaceKey == "" {
 		return nil
 	}
-	threadCWD := strings.TrimSpace(firstNonEmpty(attempt.ThreadCWD, workspaceKey))
+	threadCWD := strings.TrimSpace(xutil.FirstNonEmpty(attempt.ThreadCWD, workspaceKey))
 
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	s.nextHeadlessID++

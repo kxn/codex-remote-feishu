@@ -5,70 +5,8 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
-
-func mergeClaudeFileChangeMetadata(metadata map[string]any, toolName string, input map[string]any) {
-	if metadata == nil {
-		return
-	}
-	metadata["semanticKind"] = "file_change_request"
-	metadata["suppressFinalText"] = true
-	mergeClaudeFileChangeMetadataPayload(metadata, toolName, input)
-}
-
-func mergeClaudeFileChangeMetadataPayload(metadata map[string]any, toolName string, payload map[string]any) {
-	if metadata == nil || len(payload) == 0 {
-		return
-	}
-	toolName = strings.TrimSpace(toolName)
-	if toolName != "" {
-		metadata["tool"] = toolName
-	}
-	if path := firstNonEmptyString(
-		lookupStringFromAny(payload["filePath"]),
-		lookupStringFromAny(payload["file_path"]),
-		lookupStringFromAny(payload["path"]),
-		lookupStringFromAny(payload["notebook_path"]),
-	); path != "" {
-		metadata["filePath"] = path
-	}
-	if oldString := firstNonEmptyString(
-		lookupStringFromAny(payload["oldString"]),
-		lookupStringFromAny(payload["old_string"]),
-		lookupStringFromAny(payload["originalFile"]),
-	); oldString != "" {
-		metadata["oldString"] = oldString
-	}
-	if newString := firstNonEmptyString(
-		lookupStringFromAny(payload["newString"]),
-		lookupStringFromAny(payload["new_string"]),
-		lookupStringFromAny(payload["content"]),
-		lookupStringFromAny(payload["new_source"]),
-	); newString != "" {
-		metadata["newString"] = newString
-	}
-	if replaceAll, ok := claudeLookupBool(payload, "replaceAll", "replace_all"); ok {
-		metadata["replaceAll"] = replaceAll
-	}
-	if changeType := strings.TrimSpace(lookupStringFromAny(payload["type"])); changeType != "" {
-		metadata["changeType"] = changeType
-	}
-	if editMode := strings.TrimSpace(lookupStringFromAny(payload["edit_mode"])); editMode != "" {
-		metadata["editMode"] = editMode
-	}
-	if cellID := strings.TrimSpace(lookupStringFromAny(payload["cell_id"])); cellID != "" {
-		metadata["cellID"] = cellID
-	}
-	if cellType := strings.TrimSpace(lookupStringFromAny(payload["cell_type"])); cellType != "" {
-		metadata["cellType"] = cellType
-	}
-	if records := mapsFromAny(payload["structuredPatch"]); len(records) != 0 {
-		metadata["structuredPatchRecords"] = records
-	}
-	if textPatch := strings.TrimSpace(lookupStringFromAny(payload["structuredPatch"])); textPatch != "" {
-		metadata["structuredPatch"] = textPatch
-	}
-}
 
 func claudeToolFileChanges(metadata map[string]any) []agentproto.FileChangeRecord {
 	if len(metadata) == 0 {
@@ -77,21 +15,21 @@ func claudeToolFileChanges(metadata map[string]any) []agentproto.FileChangeRecor
 	if records := claudeStructuredPatchFileChanges(metadata); len(records) != 0 {
 		return records
 	}
-	path := strings.TrimSpace(firstNonEmptyString(
-		lookupStringFromAny(metadata["filePath"]),
-		lookupStringFromAny(metadata["file_path"]),
-		lookupStringFromAny(metadata["path"]),
+	path := strings.TrimSpace(xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(metadata["filePath"]),
+		xutil.LookupStringFromAny(metadata["file_path"]),
+		xutil.LookupStringFromAny(metadata["path"]),
 	))
 	if path == "" {
 		return nil
 	}
-	oldString := firstNonEmptyString(
-		lookupStringFromAny(metadata["oldString"]),
-		lookupStringFromAny(metadata["old_string"]),
+	oldString := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(metadata["oldString"]),
+		xutil.LookupStringFromAny(metadata["old_string"]),
 	)
-	newString := firstNonEmptyString(
-		lookupStringFromAny(metadata["newString"]),
-		lookupStringFromAny(metadata["new_string"]),
+	newString := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(metadata["newString"]),
+		xutil.LookupStringFromAny(metadata["new_string"]),
 	)
 	record := agentproto.FileChangeRecord{
 		Path: path,
@@ -102,22 +40,22 @@ func claudeToolFileChanges(metadata map[string]any) []agentproto.FileChangeRecor
 }
 
 func claudeStructuredPatchFileChanges(metadata map[string]any) []agentproto.FileChangeRecord {
-	records := mapsFromAny(metadata["structuredPatchRecords"])
+	records := xutil.MapsFromAny(metadata["structuredPatchRecords"])
 	if len(records) == 0 {
 		return nil
 	}
-	path := strings.TrimSpace(firstNonEmptyString(
-		lookupStringFromAny(metadata["filePath"]),
-		lookupStringFromAny(metadata["file_path"]),
-		lookupStringFromAny(metadata["path"]),
+	path := strings.TrimSpace(xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(metadata["filePath"]),
+		xutil.LookupStringFromAny(metadata["file_path"]),
+		xutil.LookupStringFromAny(metadata["path"]),
 	))
 	if path == "" {
 		return nil
 	}
 	out := make([]agentproto.FileChangeRecord, 0, len(records))
 	for _, record := range records {
-		newLines := lookupIntFromAny(record["newLines"])
-		oldLines := lookupIntFromAny(record["oldLines"])
+		newLines := xutil.LookupIntFromAny(record["newLines"])
+		oldLines := xutil.LookupIntFromAny(record["oldLines"])
 		kind := agentproto.FileChangeUpdate
 		switch {
 		case oldLines == 0 && newLines > 0:
@@ -136,7 +74,7 @@ func claudeStructuredPatchFileChanges(metadata map[string]any) []agentproto.File
 }
 
 func claudeFileChangeKindFromMetadata(metadata map[string]any, oldString, newString string) agentproto.FileChangeKind {
-	editMode := strings.ToLower(strings.TrimSpace(lookupStringFromAny(metadata["editMode"])))
+	editMode := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(metadata["editMode"])))
 	switch editMode {
 	case "insert":
 		return agentproto.FileChangeAdd
@@ -145,7 +83,7 @@ func claudeFileChangeKindFromMetadata(metadata map[string]any, oldString, newStr
 	case "replace":
 		return agentproto.FileChangeUpdate
 	}
-	changeType := strings.ToLower(strings.TrimSpace(lookupStringFromAny(metadata["changeType"])))
+	changeType := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(metadata["changeType"])))
 	switch changeType {
 	case "create":
 		return agentproto.FileChangeAdd
@@ -174,7 +112,7 @@ func buildClaudeFileChangeDiff(metadata map[string]any, path, oldString, newStri
 	if diff := buildClaudeStructuredPatchDiff(metadata, path); diff != "" {
 		return diff
 	}
-	if diff := strings.TrimSpace(lookupStringFromAny(metadata["structuredPatch"])); diff != "" {
+	if diff := strings.TrimSpace(xutil.LookupStringFromAny(metadata["structuredPatch"])); diff != "" {
 		return diff
 	}
 	path = strings.TrimSpace(path)
@@ -244,10 +182,10 @@ func buildClaudeStructuredPatchText(path string, record map[string]any) string {
 	if path == "" {
 		path = "file"
 	}
-	oldStart := lookupIntFromAny(record["oldStart"])
-	oldLines := lookupIntFromAny(record["oldLines"])
-	newStart := lookupIntFromAny(record["newStart"])
-	newLines := lookupIntFromAny(record["newLines"])
+	oldStart := xutil.LookupIntFromAny(record["oldStart"])
+	oldLines := xutil.LookupIntFromAny(record["oldLines"])
+	newStart := xutil.LookupIntFromAny(record["newStart"])
+	newLines := xutil.LookupIntFromAny(record["newLines"])
 	if oldStart <= 0 {
 		oldStart = 1
 	}
@@ -284,7 +222,7 @@ func stringSliceFromAny(value any) []string {
 	case []any:
 		out := make([]string, 0, len(typed))
 		for _, item := range typed {
-			text := lookupStringFromAny(item)
+			text := xutil.LookupStringFromAny(item)
 			if text == "" {
 				continue
 			}
@@ -307,18 +245,4 @@ func splitClaudeDiffLines(body string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
-}
-
-func claudeLookupBool(values map[string]any, keys ...string) (bool, bool) {
-	for _, key := range keys {
-		value, ok := values[key]
-		if !ok {
-			continue
-		}
-		current, ok := value.(bool)
-		if ok {
-			return current, true
-		}
-	}
-	return false, false
 }

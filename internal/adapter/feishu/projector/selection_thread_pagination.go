@@ -6,6 +6,7 @@ import (
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func paginatedThreadSelectionDropdownElements(
@@ -26,7 +27,7 @@ func paginatedThreadSelectionDropdownElements(
 			continue
 		}
 		value := strings.TrimSpace(entry.ThreadID)
-		label := strings.TrimSpace(firstNonEmpty(entry.Summary, entry.ThreadID))
+		label := strings.TrimSpace(xutil.FirstNonEmpty(entry.Summary, entry.ThreadID))
 		if value == "" || label == "" {
 			continue
 		}
@@ -53,7 +54,7 @@ func paginatedThreadSelectionDropdownElements(
 
 	hiddenHint := ""
 	if hiddenCount != 0 {
-		hiddenHint = firstNonEmpty(strings.TrimSpace(semantics.HiddenEntriesNotice), "已省略当前不可切换的会话。")
+		hiddenHint = xutil.FirstNonEmpty(strings.TrimSpace(semantics.HiddenEntriesNotice), "已省略当前不可切换的会话。")
 	}
 	lane := threadSelectionLane(selectionView, view.Mode, view.Cursor, selectedValue, options, allowCrossWorkspace)
 	plan := planPaginatedSelectLane(
@@ -121,7 +122,7 @@ func threadSelectionDropdownElementsWithPage(
 
 func threadSelectionCardSize(semantics control.FeishuSelectionSemantics, elements []map[string]any) (int, error) {
 	return cardtransport.InteractiveMessageCardSize(
-		firstNonEmpty(strings.TrimSpace(semantics.Title), "选择会话"),
+		xutil.FirstNonEmpty(strings.TrimSpace(semantics.Title), "选择会话"),
 		"",
 		cardThemeInfo,
 		cloneCardElementSlice(elements),

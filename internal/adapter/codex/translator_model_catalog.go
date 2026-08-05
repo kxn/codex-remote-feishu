@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) translateModelList(command agentproto.Command) ([][]byte, error) {
@@ -127,9 +128,9 @@ func parseModelCatalogSnapshot(result map[string]any, includeHidden bool) agentp
 	snapshot := agentproto.ModelCatalogSnapshot{
 		IncludeHidden: includeHidden,
 		RefreshedAt:   time.Now().UTC(),
-		NextCursor: firstNonEmptyString(
-			lookupStringFromAny(result["nextCursor"]),
-			lookupStringFromAny(result["next_cursor"]),
+		NextCursor: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(result["nextCursor"]),
+			xutil.LookupStringFromAny(result["next_cursor"]),
 		),
 	}
 	for _, raw := range lookupSliceAny(result, "data") {
@@ -148,38 +149,38 @@ func parseModelCatalogEntry(raw any) (agentproto.ModelCatalogEntry, bool) {
 		return agentproto.ModelCatalogEntry{}, false
 	}
 	entry := agentproto.ModelCatalogEntry{
-		ID: firstNonEmptyString(
-			lookupStringFromAny(item["id"]),
-			lookupStringFromAny(item["ID"]),
+		ID: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["id"]),
+			xutil.LookupStringFromAny(item["ID"]),
 		),
-		Model: firstNonEmptyString(
-			lookupStringFromAny(item["model"]),
-			lookupStringFromAny(item["name"]),
+		Model: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["model"]),
+			xutil.LookupStringFromAny(item["name"]),
 		),
-		DisplayName: firstNonEmptyString(
-			lookupStringFromAny(item["displayName"]),
-			lookupStringFromAny(item["display_name"]),
+		DisplayName: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["displayName"]),
+			xutil.LookupStringFromAny(item["display_name"]),
 		),
-		Description: firstNonEmptyString(
-			lookupStringFromAny(item["description"]),
-			lookupStringFromAny(item["summary"]),
+		Description: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["description"]),
+			xutil.LookupStringFromAny(item["summary"]),
 		),
-		Hidden: lookupBoolFromAny(firstNonNil(item["hidden"], item["isHidden"], item["is_hidden"])),
-		DefaultReasoningEffort: firstNonEmptyString(
-			lookupStringFromAny(item["defaultReasoningEffort"]),
-			lookupStringFromAny(item["default_reasoning_effort"]),
+		Hidden: xutil.LookupBoolFromAny(firstNonNil(item["hidden"], item["isHidden"], item["is_hidden"])),
+		DefaultReasoningEffort: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["defaultReasoningEffort"]),
+			xutil.LookupStringFromAny(item["default_reasoning_effort"]),
 		),
-		DefaultServiceTier: firstNonEmptyString(
-			lookupStringFromAny(item["defaultServiceTier"]),
-			lookupStringFromAny(item["default_service_tier"]),
+		DefaultServiceTier: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["defaultServiceTier"]),
+			xutil.LookupStringFromAny(item["default_service_tier"]),
 		),
-		Upgrade: firstNonEmptyString(
-			lookupStringFromAny(item["upgrade"]),
-			lookupStringFromAny(item["upgradeStatus"]),
-			lookupStringFromAny(item["upgrade_status"]),
+		Upgrade: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["upgrade"]),
+			xutil.LookupStringFromAny(item["upgradeStatus"]),
+			xutil.LookupStringFromAny(item["upgrade_status"]),
 		),
 		AvailabilityMessage: parseAvailabilityMessage(firstNonNil(item["availabilityNux"], item["availability_nux"])),
-		IsDefault:           lookupBoolFromAny(firstNonNil(item["isDefault"], item["is_default"])),
+		IsDefault:           xutil.LookupBoolFromAny(firstNonNil(item["isDefault"], item["is_default"])),
 	}
 	entry.SupportedReasoningEfforts = parseReasoningEffortOptions(firstNonNil(item["supportedReasoningEfforts"], item["supported_reasoning_efforts"]))
 	entry.ServiceTiers = parseModelServiceTiers(firstNonNil(item["serviceTiers"], item["service_tiers"]))
@@ -201,20 +202,20 @@ func parseReasoningEffortOptions(raw any) []agentproto.ReasoningEffortOption {
 				options = append(options, agentproto.ReasoningEffortOption{ReasoningEffort: effort})
 			}
 		case map[string]any:
-			effort := firstNonEmptyString(
-				lookupStringFromAny(value["reasoningEffort"]),
-				lookupStringFromAny(value["reasoning_effort"]),
-				lookupStringFromAny(value["id"]),
-				lookupStringFromAny(value["value"]),
+			effort := xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(value["reasoningEffort"]),
+				xutil.LookupStringFromAny(value["reasoning_effort"]),
+				xutil.LookupStringFromAny(value["id"]),
+				xutil.LookupStringFromAny(value["value"]),
 			)
 			if effort == "" {
 				continue
 			}
 			options = append(options, agentproto.ReasoningEffortOption{
 				ReasoningEffort: effort,
-				Description: firstNonEmptyString(
-					lookupStringFromAny(value["description"]),
-					lookupStringFromAny(value["label"]),
+				Description: xutil.FirstNonEmpty(
+					xutil.LookupStringFromAny(value["description"]),
+					xutil.LookupStringFromAny(value["label"]),
 				),
 			})
 		}
@@ -234,15 +235,15 @@ func parseModelServiceTiers(raw any) []agentproto.ModelServiceTier {
 			}
 		case map[string]any:
 			tier := agentproto.ModelServiceTier{
-				ID: firstNonEmptyString(
-					lookupStringFromAny(value["id"]),
-					lookupStringFromAny(value["value"]),
+				ID: xutil.FirstNonEmpty(
+					xutil.LookupStringFromAny(value["id"]),
+					xutil.LookupStringFromAny(value["value"]),
 				),
-				Name: firstNonEmptyString(
-					lookupStringFromAny(value["name"]),
-					lookupStringFromAny(value["label"]),
+				Name: xutil.FirstNonEmpty(
+					xutil.LookupStringFromAny(value["name"]),
+					xutil.LookupStringFromAny(value["label"]),
 				),
-				Description: lookupStringFromAny(value["description"]),
+				Description: xutil.LookupStringFromAny(value["description"]),
 			}
 			if tier.ID != "" || tier.Name != "" {
 				tiers = append(tiers, tier)
@@ -258,22 +259,22 @@ func parseModelUpgradeInfo(raw any) *agentproto.ModelUpgradeInfo {
 		return nil
 	}
 	info := &agentproto.ModelUpgradeInfo{
-		Model: firstNonEmptyString(
-			lookupStringFromAny(item["model"]),
-			lookupStringFromAny(item["targetModel"]),
-			lookupStringFromAny(item["target_model"]),
+		Model: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["model"]),
+			xutil.LookupStringFromAny(item["targetModel"]),
+			xutil.LookupStringFromAny(item["target_model"]),
 		),
-		UpgradeCopy: firstNonEmptyString(
-			lookupStringFromAny(item["upgradeCopy"]),
-			lookupStringFromAny(item["upgrade_copy"]),
+		UpgradeCopy: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["upgradeCopy"]),
+			xutil.LookupStringFromAny(item["upgrade_copy"]),
 		),
-		ModelLink: firstNonEmptyString(
-			lookupStringFromAny(item["modelLink"]),
-			lookupStringFromAny(item["model_link"]),
+		ModelLink: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["modelLink"]),
+			xutil.LookupStringFromAny(item["model_link"]),
 		),
-		MigrationMarkdown: firstNonEmptyString(
-			lookupStringFromAny(item["migrationMarkdown"]),
-			lookupStringFromAny(item["migration_markdown"]),
+		MigrationMarkdown: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["migrationMarkdown"]),
+			xutil.LookupStringFromAny(item["migration_markdown"]),
 		),
 	}
 	if info.Model == "" && info.UpgradeCopy == "" && info.ModelLink == "" && info.MigrationMarkdown == "" {
@@ -287,10 +288,10 @@ func parseAvailabilityMessage(raw any) string {
 	case string:
 		return strings.TrimSpace(value)
 	case map[string]any:
-		return firstNonEmptyString(
-			lookupStringFromAny(value["message"]),
-			lookupStringFromAny(value["title"]),
-			lookupStringFromAny(value["description"]),
+		return xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(value["message"]),
+			xutil.LookupStringFromAny(value["title"]),
+			xutil.LookupStringFromAny(value["description"]),
 		)
 	default:
 		return ""

@@ -5,19 +5,21 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
+	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) observeSystemMessage(message map[string]any) Result {
-	subtype := strings.TrimSpace(lookupStringFromAny(message["subtype"]))
+	subtype := strings.TrimSpace(xutil.LookupStringFromAny(message["subtype"]))
 	previousModel := strings.TrimSpace(t.model)
 	previousCWD := strings.TrimSpace(t.cwd)
 	previousPermissionMode := strings.TrimSpace(t.permissionMode)
 	switch subtype {
 	case "init":
 		t.awaitingInit = false
-		if sessionID := strings.TrimSpace(lookupStringFromAny(message["session_id"])); sessionID != "" {
+		if sessionID := strings.TrimSpace(xutil.LookupStringFromAny(message["session_id"])); sessionID != "" {
 			previousSessionID := strings.TrimSpace(t.sessionID)
 			t.sessionID = sessionID
 			if t.activeTurn != nil && shouldRefreshTurnThreadIDOnInit(t.activeTurn, previousSessionID) {
@@ -29,14 +31,14 @@ func (t *Translator) observeSystemMessage(message map[string]any) Result {
 				}
 			}
 		}
-		t.model = strings.TrimSpace(lookupStringFromAny(message["model"]))
-		t.cwd = strings.TrimSpace(lookupStringFromAny(message["cwd"]))
-		t.permissionMode = firstNonEmptyString(
-			lookupStringFromAny(message["permissionMode"]),
+		t.model = strings.TrimSpace(xutil.LookupStringFromAny(message["model"]))
+		t.cwd = strings.TrimSpace(xutil.LookupStringFromAny(message["cwd"]))
+		t.permissionMode = xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(message["permissionMode"]),
 			t.permissionMode,
 		)
 	case "status":
-		if mode := strings.TrimSpace(lookupStringFromAny(message["permissionMode"])); mode != "" {
+		if mode := strings.TrimSpace(xutil.LookupStringFromAny(message["permissionMode"])); mode != "" {
 			t.permissionMode = mode
 		}
 	}
@@ -88,7 +90,7 @@ func shouldRefreshTurnThreadIDOnInit(turn *turnState, previousSessionID string) 
 
 func (t *Translator) observeStreamMessage(message map[string]any) Result {
 	event := lookupMap(message, "event")
-	switch strings.TrimSpace(lookupStringFromAny(event["type"])) {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(event["type"])) {
 	case "message_start":
 		return t.observeMessageStart(event)
 	case "content_block_start":
@@ -105,8 +107,8 @@ func (t *Translator) observeStreamMessage(message map[string]any) Result {
 func (t *Translator) observeMessageStart(event map[string]any) Result {
 	message := lookupMap(event, "message")
 	t.currentMessage = &messageState{
-		ID:              strings.TrimSpace(lookupStringFromAny(message["id"])),
-		ParentToolUseID: strings.TrimSpace(lookupStringFromAny(event["parent_tool_use_id"])),
+		ID:              strings.TrimSpace(xutil.LookupStringFromAny(message["id"])),
+		ParentToolUseID: strings.TrimSpace(xutil.LookupStringFromAny(event["parent_tool_use_id"])),
 		Blocks:          map[int]*blockState{},
 	}
 	events := t.startActiveTurnIfNeeded()
@@ -120,14 +122,14 @@ func (t *Translator) observeContentBlockStart(event map[string]any) Result {
 	if t.currentMessage == nil {
 		t.currentMessage = &messageState{Blocks: map[int]*blockState{}}
 	}
-	index := lookupIntFromAny(event["index"])
+	index := xutil.LookupIntFromAny(event["index"])
 	block := lookupMap(event, "content_block")
-	kind := strings.TrimSpace(lookupStringFromAny(block["type"]))
+	kind := strings.TrimSpace(xutil.LookupStringFromAny(block["type"]))
 	state := &blockState{
 		Index:     index,
 		Kind:      kind,
-		ToolUseID: strings.TrimSpace(lookupStringFromAny(block["id"])),
-		ToolName:  strings.TrimSpace(lookupStringFromAny(block["name"])),
+		ToolUseID: strings.TrimSpace(xutil.LookupStringFromAny(block["id"])),
+		ToolName:  strings.TrimSpace(xutil.LookupStringFromAny(block["name"])),
 	}
 	var events []agentproto.Event
 	if kind == "text" && t.activeTurn != nil {
@@ -162,7 +164,7 @@ func (t *Translator) observeContentBlockStart(event map[string]any) Result {
 			ItemID:          t.nextItemID(),
 			Name:            state.ToolName,
 			Input:           map[string]any{},
-			Internal:        isInternalInteractionTool(state.ToolName),
+			Internal:        claudeutil.IsInternalInteractionTool(state.ToolName),
 		}
 		if t.activeTurn != nil {
 			tool.TurnID = t.activeTurn.TurnID
@@ -177,18 +179,18 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) Result {
 	if t.currentMessage == nil {
 		return Result{}
 	}
-	index := lookupIntFromAny(event["index"])
+	index := xutil.LookupIntFromAny(event["index"])
 	state := t.currentMessage.Blocks[index]
 	if state == nil {
 		return Result{}
 	}
 	delta := lookupMap(event, "delta")
-	switch strings.TrimSpace(lookupStringFromAny(delta["type"])) {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(delta["type"])) {
 	case "text_delta":
 		if t.activeTurn == nil || state.ItemID == "" {
 			return Result{}
 		}
-		text := lookupStringFromAny(delta["text"])
+		text := xutil.LookupStringFromAny(delta["text"])
 		state.TextBuffer += text
 		return Result{
 			Events: []agentproto.Event{{
@@ -205,7 +207,7 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) Result {
 		if t.activeTurn == nil || state.ItemID == "" {
 			return Result{}
 		}
-		thinking := lookupStringFromAny(delta["thinking"])
+		thinking := xutil.LookupStringFromAny(delta["thinking"])
 		if thinking == "" {
 			return Result{}
 		}
@@ -220,7 +222,7 @@ func (t *Translator) observeContentBlockDelta(event map[string]any) Result {
 	case "signature_delta":
 		return Result{}
 	case "input_json_delta":
-		state.ToolInputDelta += lookupStringFromAny(delta["partial_json"])
+		state.ToolInputDelta += xutil.LookupStringFromAny(delta["partial_json"])
 	}
 	return Result{}
 }
@@ -229,7 +231,7 @@ func (t *Translator) observeContentBlockStop(event map[string]any) Result {
 	if t.currentMessage == nil || t.activeTurn == nil {
 		return Result{}
 	}
-	index := lookupIntFromAny(event["index"])
+	index := xutil.LookupIntFromAny(event["index"])
 	state := t.currentMessage.Blocks[index]
 	if state == nil || state.Completed || state.ItemID == "" {
 		return Result{}
@@ -275,22 +277,22 @@ func (t *Translator) observeAssistantMessage(message map[string]any) Result {
 		return Result{Events: events}
 	}
 	t.syncObservedMessageParent(message)
-	content := mapsFromAny(lookupMap(message, "message")["content"])
+	content := xutil.MapsFromAny(lookupMap(message, "message")["content"])
 	if len(content) == 0 {
 		return Result{Events: events}
 	}
 	textBlockCount := 0
 	for _, block := range content {
-		if strings.TrimSpace(lookupStringFromAny(block["type"])) == "text" {
+		if strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) == "text" {
 			textBlockCount++
 		}
 	}
 	textOrdinal := 0
 	claimedTextBlocks := map[*blockState]bool{}
 	for index, block := range content {
-		switch strings.TrimSpace(lookupStringFromAny(block["type"])) {
+		switch strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) {
 		case "text":
-			text := lookupStringFromAny(block["text"])
+			text := xutil.LookupStringFromAny(block["text"])
 			events = append(events, t.completeAssistantText(index, textOrdinal, textBlockCount, text, claimedTextBlocks)...)
 			textOrdinal++
 		case "tool_use":
@@ -471,16 +473,16 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 	if t.activeTurn == nil {
 		return nil
 	}
-	toolUseID := strings.TrimSpace(lookupStringFromAny(block["id"]))
+	toolUseID := strings.TrimSpace(xutil.LookupStringFromAny(block["id"]))
 	tool := t.toolStates[toolUseID]
 	if tool == nil {
 		tool = &toolState{
 			ToolUseID:       toolUseID,
 			ParentToolUseID: t.currentParentToolUseID(),
 			ItemID:          t.nextItemID(),
-			Name:            strings.TrimSpace(lookupStringFromAny(block["name"])),
+			Name:            strings.TrimSpace(xutil.LookupStringFromAny(block["name"])),
 			Input:           map[string]any{},
-			Internal:        isInternalInteractionTool(lookupStringFromAny(block["name"])),
+			Internal:        claudeutil.IsInternalInteractionTool(xutil.LookupStringFromAny(block["name"])),
 			TurnID:          t.activeTurn.TurnID,
 		}
 		t.toolStates[toolUseID] = tool
@@ -488,8 +490,8 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 	if strings.TrimSpace(tool.ParentToolUseID) == "" {
 		tool.ParentToolUseID = t.currentParentToolUseID()
 	}
-	tool.Name = firstNonEmptyString(lookupStringFromAny(block["name"]), tool.Name)
-	tool.Input = cloneMap(lookupMap(block, "input"))
+	tool.Name = xutil.FirstNonEmpty(xutil.LookupStringFromAny(block["name"]), tool.Name)
+	tool.Input = xutil.CloneMap(lookupMap(block, "input"))
 	if strings.TrimSpace(tool.Name) == "TodoWrite" {
 		tool.StartedEmitted = true
 		return nil
@@ -498,8 +500,8 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 		return nil
 	}
 	tool.StartedEmitted = true
-	itemKind := claudeToolItemKind(tool.Name)
-	metadata := claudeToolMetadata(tool.Name, tool.Input)
+	itemKind := claudeutil.ClaudeToolItemKind(tool.Name)
+	metadata := claudeutil.ClaudeToolMetadata(tool.Name, tool.Input)
 	event := agentproto.Event{
 		Kind:      agentproto.EventItemStarted,
 		CommandID: t.activeTurn.CommandID,
@@ -520,12 +522,12 @@ func (t *Translator) observeUserMessage(message map[string]any) Result {
 		return Result{}
 	}
 	t.syncObservedMessageParent(message)
-	blocks := mapsFromAny(lookupMap(message, "message")["content"])
+	blocks := xutil.MapsFromAny(lookupMap(message, "message")["content"])
 	if toolResult := firstToolResultBlock(blocks); toolResult != nil {
 		return t.observeToolResult(message, toolResult)
 	}
 	if textBlock := firstTextBlock(blocks); textBlock != nil {
-		text := strings.TrimSpace(lookupStringFromAny(textBlock["text"]))
+		text := strings.TrimSpace(xutil.LookupStringFromAny(textBlock["text"]))
 		if strings.HasPrefix(text, "[Request interrupted by user") {
 			t.activeTurn.InterruptRequested = true
 		}
@@ -534,7 +536,7 @@ func (t *Translator) observeUserMessage(message map[string]any) Result {
 }
 
 func (t *Translator) observeToolResult(message, block map[string]any) Result {
-	toolUseID := strings.TrimSpace(lookupStringFromAny(block["tool_use_id"]))
+	toolUseID := strings.TrimSpace(xutil.LookupStringFromAny(block["tool_use_id"]))
 	tool := t.toolStates[toolUseID]
 	if tool != nil && tool.Internal {
 		return t.observeInternalToolResult(message, block, tool)
@@ -548,7 +550,7 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 	}
 	if tool == nil {
 		tool = &toolState{
-			ToolUseID:       strings.TrimSpace(lookupStringFromAny(block["tool_use_id"])),
+			ToolUseID:       strings.TrimSpace(xutil.LookupStringFromAny(block["tool_use_id"])),
 			ParentToolUseID: t.currentParentToolUseID(),
 			ItemID:          t.nextItemID(),
 			Name:            "tool",
@@ -561,8 +563,8 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 		tool.ParentToolUseID = t.currentParentToolUseID()
 	}
 	events := make([]agentproto.Event, 0, 2)
-	itemKind := claudeToolItemKind(tool.Name)
-	startMetadata := claudeToolMetadata(tool.Name, tool.Input)
+	itemKind := claudeutil.ClaudeToolItemKind(tool.Name)
+	startMetadata := claudeutil.ClaudeToolMetadata(tool.Name, tool.Input)
 	if !tool.StartedEmitted && claudeToolVisibleLifecycle(tool.Name) {
 		tool.StartedEmitted = true
 		event := agentproto.Event{
@@ -579,24 +581,24 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 		}
 		events = append(events, event)
 	}
-	metadata := claudeToolMetadata(tool.Name, tool.Input)
+	metadata := claudeutil.ClaudeToolMetadata(tool.Name, tool.Input)
 	if text := stringifyTextContent(block["content"]); strings.TrimSpace(text) != "" {
 		metadata["text"] = text
 	}
 	switch rawToolResult := message["tool_use_result"].(type) {
 	case map[string]any:
 		for key, value := range rawToolResult {
-			metadata[key] = cloneJSONValue(value)
+			metadata[key] = xutil.CloneJSONValue(value)
 		}
 		if itemKind == "file_change" {
-			mergeClaudeFileChangeMetadataPayload(metadata, tool.Name, rawToolResult)
+			claudeutil.MergeClaudeFileChangeMetadataPayload(metadata, tool.Name, rawToolResult)
 		}
 	case string:
 		if strings.TrimSpace(rawToolResult) != "" {
 			metadata["toolUseResult"] = strings.TrimSpace(rawToolResult)
 		}
 	}
-	isError := lookupBoolFromAny(block["is_error"])
+	isError := xutil.LookupBoolFromAny(block["is_error"])
 	if completionEvent, ok := t.hiddenClaudeToolLifecycleEvent(tool, itemKind, isError, metadata); ok {
 		events = append(events, completionEvent)
 	} else if claudeToolVisibleLifecycle(tool.Name) && itemKind != "" {
@@ -639,14 +641,14 @@ func (t *Translator) observeControlRequest(message map[string]any) Result {
 	if t.activeTurn == nil {
 		return Result{Events: startEvents}
 	}
-	requestID := strings.TrimSpace(lookupStringFromAny(message["request_id"]))
+	requestID := strings.TrimSpace(xutil.LookupStringFromAny(message["request_id"]))
 	request := lookupMap(message, "request")
-	if strings.TrimSpace(lookupStringFromAny(request["subtype"])) != "can_use_tool" {
+	if strings.TrimSpace(xutil.LookupStringFromAny(request["subtype"])) != "can_use_tool" {
 		return Result{Events: startEvents}
 	}
-	toolName := strings.TrimSpace(lookupStringFromAny(request["tool_name"]))
-	toolUseID := strings.TrimSpace(lookupStringFromAny(request["tool_use_id"]))
-	input := cloneMap(lookupMap(request, "input"))
+	toolName := strings.TrimSpace(xutil.LookupStringFromAny(request["tool_name"]))
+	toolUseID := strings.TrimSpace(xutil.LookupStringFromAny(request["tool_use_id"]))
+	input := xutil.CloneMap(lookupMap(request, "input"))
 	itemID := ""
 	if tool := t.toolStates[toolUseID]; tool != nil {
 		itemID = tool.ItemID
@@ -669,18 +671,18 @@ func (t *Translator) observeControlRequest(message map[string]any) Result {
 func (t *Translator) observeAskUserQuestionRequest(requestID, toolName, toolUseID, itemID string, input map[string]any) Result {
 	questions := make([]agentproto.RequestQuestion, 0)
 	pendingQuestions := make([]pendingQuestion, 0)
-	for index, record := range mapsFromAny(input["questions"]) {
+	for index, record := range xutil.MapsFromAny(input["questions"]) {
 		question := agentproto.RequestQuestion{
-			ID:         sanitizeQuestionID(lookupStringFromAny(record["id"]), index),
-			Header:     strings.TrimSpace(lookupStringFromAny(record["header"])),
-			Question:   strings.TrimSpace(lookupStringFromAny(record["question"])),
-			AllowOther: lookupBoolFromAny(record["allowOther"]),
-			Secret:     lookupBoolFromAny(record["secret"]),
+			ID:         sanitizeQuestionID(xutil.LookupStringFromAny(record["id"]), index),
+			Header:     strings.TrimSpace(xutil.LookupStringFromAny(record["header"])),
+			Question:   strings.TrimSpace(xutil.LookupStringFromAny(record["question"])),
+			AllowOther: xutil.LookupBoolFromAny(record["allowOther"]),
+			Secret:     xutil.LookupBoolFromAny(record["secret"]),
 		}
-		for _, option := range mapsFromAny(record["options"]) {
+		for _, option := range xutil.MapsFromAny(record["options"]) {
 			question.Options = append(question.Options, agentproto.RequestQuestionOption{
-				Label:       strings.TrimSpace(lookupStringFromAny(option["label"])),
-				Description: strings.TrimSpace(lookupStringFromAny(option["description"])),
+				Label:       strings.TrimSpace(xutil.LookupStringFromAny(option["label"])),
+				Description: strings.TrimSpace(xutil.LookupStringFromAny(option["description"])),
 			})
 		}
 		questions = append(questions, question)
@@ -737,7 +739,7 @@ func (t *Translator) observeAskUserQuestionRequest(requestID, toolName, toolUseI
 }
 
 func (t *Translator) observePlanConfirmationRequest(requestID, toolName, toolUseID string, input map[string]any) Result {
-	planBody := strings.TrimSpace(lookupStringFromAny(input["plan"]))
+	planBody := strings.TrimSpace(xutil.LookupStringFromAny(input["plan"]))
 	planBodySource := ""
 	if planBody != "" {
 		planBodySource = "request.input.plan"
@@ -808,12 +810,12 @@ func (t *Translator) observeToolApprovalRequest(requestID, toolName, toolUseID, 
 		"requestMethod":         "control_request/can_use_tool",
 		"toolName":              toolName,
 		"body":                  prompt.Body,
-		"permissionSuggestions": encodeMetadataMapList(mapsFromAny(rawRequest["permission_suggestions"])),
+		"permissionSuggestions": encodeMetadataMapList(xutil.MapsFromAny(rawRequest["permission_suggestions"])),
 	}
 	if itemID != "" {
 		metadata["itemId"] = itemID
 	}
-	if blockedPath := strings.TrimSpace(lookupStringFromAny(rawRequest["blocked_path"])); blockedPath != "" {
+	if blockedPath := strings.TrimSpace(xutil.LookupStringFromAny(rawRequest["blocked_path"])); blockedPath != "" {
 		metadata["blockedPath"] = blockedPath
 	}
 	if sourceContextLabel := t.requestSourceContextLabel(toolUseID); sourceContextLabel != "" {
@@ -828,7 +830,7 @@ func (t *Translator) observeToolApprovalRequest(requestID, toolName, toolUseID, 
 		ToolName:              toolName,
 		ToolUseID:             toolUseID,
 		Input:                 input,
-		PermissionSuggestions: mapsFromAny(rawRequest["permission_suggestions"]),
+		PermissionSuggestions: xutil.MapsFromAny(rawRequest["permission_suggestions"]),
 		ItemID:                itemID,
 	}
 	t.pendingRequests[requestID] = request
@@ -847,7 +849,7 @@ func (t *Translator) observeToolApprovalRequest(requestID, toolName, toolUseID, 
 
 func (t *Translator) observeControlResponse(message map[string]any) Result {
 	response := lookupMap(message, "response")
-	requestID := strings.TrimSpace(lookupStringFromAny(response["request_id"]))
+	requestID := strings.TrimSpace(xutil.LookupStringFromAny(response["request_id"]))
 	if requestID == "" {
 		return Result{}
 	}
@@ -857,11 +859,11 @@ func (t *Translator) observeControlResponse(message map[string]any) Result {
 	}
 	delete(t.pendingControlReplies, requestID)
 	resolved := ResolvedCommandResponse{RequestID: requestID}
-	if subtype := strings.ToLower(strings.TrimSpace(lookupStringFromAny(response["subtype"]))); subtype != "" && subtype != "success" {
-		resolved.RejectMessage = firstNonEmptyString(
-			lookupStringFromAny(response["error"]),
-			lookupStringFromAny(response["message"]),
-			lookupStringFromAny(lookupMap(response, "response")["message"]),
+	if subtype := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(response["subtype"]))); subtype != "" && subtype != "success" {
+		resolved.RejectMessage = xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(response["error"]),
+			xutil.LookupStringFromAny(response["message"]),
+			xutil.LookupStringFromAny(lookupMap(response, "response")["message"]),
 			"Claude control request failed.",
 		)
 		return Result{
@@ -888,7 +890,7 @@ func (t *Translator) observeResultMessage(message map[string]any) Result {
 		return Result{Events: events}
 	}
 	if !t.activeTurn.AgentMessageCompleted {
-		if text := strings.TrimSpace(lookupStringFromAny(message["result"])); text != "" {
+		if text := strings.TrimSpace(xutil.LookupStringFromAny(message["result"])); text != "" {
 			itemID := t.nextItemID()
 			t.activeTurn.AgentMessageCompleted = true
 			t.activeTurn.LastAssistantText = text
@@ -955,19 +957,19 @@ func (t *Translator) observeResultMessage(message map[string]any) Result {
 }
 
 func (t *Translator) resultCompletion(message map[string]any) (string, string, *agentproto.ErrorInfo) {
-	subtype := strings.TrimSpace(lookupStringFromAny(message["subtype"]))
-	resultText := strings.TrimSpace(lookupStringFromAny(message["result"]))
+	subtype := strings.TrimSpace(xutil.LookupStringFromAny(message["subtype"]))
+	resultText := strings.TrimSpace(xutil.LookupStringFromAny(message["result"]))
 	if t.activeTurn != nil && t.activeTurn.InterruptRequested && subtype == "error_during_execution" {
 		return "interrupted", "", nil
 	}
 	if subtype == "success" {
 		return "completed", "", nil
 	}
-	errorMessage := firstNonEmptyString(resultText, "Claude turn failed.")
+	errorMessage := xutil.FirstNonEmpty(resultText, "Claude turn failed.")
 	return "failed", errorMessage, buildFailureProblem(
 		"claude_turn_failed",
 		errorMessage,
-		compactJSON(message["errors"]),
+		xutil.CompactJSON(message["errors"]),
 		t.activeTurn.ThreadID,
 		t.activeTurn.TurnID,
 	)

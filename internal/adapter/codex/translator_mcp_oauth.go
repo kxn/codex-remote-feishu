@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func mcpOAuthLoginFlowKey(serverName, threadID string) string {
@@ -33,7 +34,7 @@ func (t *Translator) observeMCPOAuthLoginResponse(requestID string, message map[
 			})},
 		}, true
 	}
-	authorizationURL := strings.TrimSpace(firstNonEmptyString(
+	authorizationURL := strings.TrimSpace(xutil.FirstNonEmpty(
 		lookupString(message, "result", "authorization_url"),
 		lookupString(message, "result", "authorizationUrl"),
 	))
@@ -82,8 +83,8 @@ func (t *Translator) observeMCPOAuthLoginResponse(requestID string, message map[
 
 func (t *Translator) observeMCPOAuthLoginCompleted(message map[string]any) (Result, bool) {
 	params := lookupMap(message, "params")
-	serverName := strings.TrimSpace(lookupStringFromAny(params["name"]))
-	threadID := strings.TrimSpace(lookupStringFromAny(params["threadId"]))
+	serverName := strings.TrimSpace(xutil.LookupStringFromAny(params["name"]))
+	threadID := strings.TrimSpace(xutil.LookupStringFromAny(params["threadId"]))
 	if serverName == "" {
 		return Result{}, true
 	}
@@ -94,8 +95,8 @@ func (t *Translator) observeMCPOAuthLoginCompleted(message map[string]any) (Resu
 	}
 	pending := t.pendingMCPOAuthLogins[requestID]
 	t.clearPendingMCPOAuthLogin(requestID, pending)
-	success := lookupBoolFromAny(params["success"])
-	errorText := strings.TrimSpace(lookupStringFromAny(params["error"]))
+	success := xutil.LookupBoolFromAny(params["success"])
+	errorText := strings.TrimSpace(xutil.LookupStringFromAny(params["error"]))
 	status := "failed"
 	if success {
 		status = "completed"

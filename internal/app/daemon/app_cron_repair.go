@@ -8,6 +8,7 @@ import (
 
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) repairCronBitableForResolution(command control.DaemonCommand, resolution cronrt.OwnerResolution) (string, error) {
@@ -115,7 +116,7 @@ func (a *App) repairCronBitableWithBinding(command control.DaemonCommand, resolu
 	}
 	var summary string
 	if takeover {
-		summary = fmt.Sprintf("已由当前 bot `%s` 接管 Cron 配置，并同步 %d 个工作区。旧表数据未自动迁移；如需保留旧配置或历史，请先恢复原 owner 环境。编辑表格后发送 `/cron reload` 生效。", firstNonEmpty(resolution.Gateway.GatewayID, stateValue.OwnerGatewayID), len(workspaces))
+		summary = fmt.Sprintf("已由当前 bot `%s` 接管 Cron 配置，并同步 %d 个工作区。旧表数据未自动迁移；如需保留旧配置或历史，请先恢复原 owner 环境。编辑表格后发送 `/cron reload` 生效。", xutil.FirstNonEmpty(resolution.Gateway.GatewayID, stateValue.OwnerGatewayID), len(workspaces))
 	} else {
 		summary = fmt.Sprintf("已同步 %d 个工作区。编辑表格后发送 `/cron reload` 生效。", len(workspaces))
 	}

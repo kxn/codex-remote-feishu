@@ -4,6 +4,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -52,7 +53,7 @@ func claudePermissionSelectionFromOverrides(accessMode, planMode string) claudeP
 func claudePermissionSelectionFromNative(mode string) claudePermissionSelection {
 	observed := claudesessionstore.CompileObservedPermissionStateFromClaudeNative(mode)
 	return claudePermissionSelection{
-		NativeMode: firstNonEmptyString(observed.NativeMode, claudePermissionModeDefault),
+		NativeMode: xutil.FirstNonEmpty(observed.NativeMode, claudePermissionModeDefault),
 		AccessMode: agentproto.NormalizeAccessMode(observed.ProjectedAccessMode),
 		PlanMode:   observed.ProjectedPlanMode,
 	}

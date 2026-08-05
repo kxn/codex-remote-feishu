@@ -15,6 +15,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type upgradeStartRequest struct {
@@ -31,7 +32,7 @@ func (a *App) beginPendingUpgradeLocked(command control.DaemonCommand, stateValu
 		return []eventcontract.Event{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_missing_candidate", "当前没有可继续的升级候选，请先发送 /upgrade latest 检查最新版本。")}
 	}
 	now := time.Now().UTC()
-	stateValue.PendingUpgrade.GatewayID = firstNonEmpty(strings.TrimSpace(command.GatewayID), a.service.SurfaceGatewayID(command.SurfaceSessionID))
+	stateValue.PendingUpgrade.GatewayID = xutil.FirstNonEmpty(strings.TrimSpace(command.GatewayID), a.service.SurfaceGatewayID(command.SurfaceSessionID))
 	stateValue.PendingUpgrade.SurfaceSessionID = command.SurfaceSessionID
 	stateValue.PendingUpgrade.ChatID = a.service.SurfaceChatID(command.SurfaceSessionID)
 	stateValue.PendingUpgrade.ActorUserID = a.service.SurfaceActorUserID(command.SurfaceSessionID)
@@ -49,7 +50,7 @@ func (a *App) beginPendingUpgradeLocked(command control.DaemonCommand, stateValu
 		SurfaceSessionID: stateValue.PendingUpgrade.SurfaceSessionID,
 		SourceMessageID:  stateValue.PendingUpgrade.SourceMessageID,
 	})
-	return []eventcontract.Event{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_prepare_started", fmt.Sprintf("正在准备升级到 %s，服务会短暂重启。", firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))))}
+	return []eventcontract.Event{upgradeNoticeEvent(command.SurfaceSessionID, "upgrade_prepare_started", fmt.Sprintf("正在准备升级到 %s，服务会短暂重启。", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))))}
 }
 
 func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
@@ -130,7 +131,7 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	rollbackCandidate.Fingerprint = identity.BuildFingerprint
 	stateValue.RollbackCandidate = rollbackCandidate
 	stateValue.PendingUpgrade.Phase = install.PendingUpgradePhasePrepared
-	stateValue.PendingUpgrade.TargetSlot = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), targetVersion)
+	stateValue.PendingUpgrade.TargetSlot = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), targetVersion)
 	stateValue.PendingUpgrade.TargetBinaryPath = targetBinary
 
 	a.mu.Lock()
@@ -261,9 +262,9 @@ func buildUpgradeResultText(stateValue install.InstallState) string {
 	}
 	switch pending.Phase {
 	case install.PendingUpgradePhaseCommitted:
-		return fmt.Sprintf("已升级到 %s。", firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion)))
+		return fmt.Sprintf("已升级到 %s。", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion)))
 	case install.PendingUpgradePhaseRolledBack:
-		return fmt.Sprintf("升级到 %s 失败，已自动回滚到 %s。", firstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion), "unknown"), firstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"))
+		return fmt.Sprintf("升级到 %s 失败，已自动回滚到 %s。", xutil.FirstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion), "unknown"), xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown"))
 	default:
 		return "升级失败。"
 	}

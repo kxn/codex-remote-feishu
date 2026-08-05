@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func workspacePageParentPayloadForCommand(commandID string) map[string]any {
@@ -75,7 +76,7 @@ func (s *Service) workspacePageEvent(surface *state.SurfaceConsoleRecord, comman
 	}
 	ownerUserID := ""
 	if surface != nil {
-		ownerUserID = firstNonEmpty(surface.ActorUserID)
+		ownerUserID = xutil.FirstNonEmpty(surface.ActorUserID)
 	}
 	flowID := s.pickers.nextLauncherFlowToken()
 	flow := newOwnerCardFlowRecord(ownerCardFlowKindWorkspacePage, flowID, ownerUserID, s.now(), defaultTargetPickerTTL, ownerCardFlowPhaseEditing)

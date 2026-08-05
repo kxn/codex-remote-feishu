@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestClaudeTranslatorRequestInsideTaskCarriesSourceContextLabel(t *testing.T) {
@@ -79,7 +80,7 @@ func TestClaudeTranslatorRequestInsideTaskCarriesSourceContextLabel(t *testing.T
 	if event.Kind != agentproto.EventRequestStarted || event.ThreadID != threadID || event.TurnID != turnID {
 		t.Fatalf("unexpected request.started event: %#v", event)
 	}
-	if got := lookupStringFromAny(event.Metadata["sourceContextLabel"]); got != "来自 Task (Explore)" {
+	if got := xutil.LookupStringFromAny(event.Metadata["sourceContextLabel"]); got != "来自 Task (Explore)" {
 		t.Fatalf("expected request source context label from parent task, got %#v", event.Metadata)
 	}
 }

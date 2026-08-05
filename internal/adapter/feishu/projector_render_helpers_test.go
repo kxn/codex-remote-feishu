@@ -56,15 +56,6 @@ func containsAll(body string, parts ...string) bool {
 	return true
 }
 
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
 func cardElementButtons(t *testing.T, element map[string]any) []map[string]any {
 	t.Helper()
 	switch element["tag"] {

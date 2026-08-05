@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) projectCapabilityStateUpdate(instanceID string, update agentproto.CapabilityStateUpdate) []eventcontract.Event {
@@ -30,8 +31,8 @@ func (s *Service) projectMCPServerStartupStatus(instanceID string, update agentp
 	}
 	statusValue := strings.ToLower(strings.TrimSpace(status.Status))
 	failureReason := strings.TrimSpace(status.FailureReason)
-	threadID := firstNonEmpty(status.ThreadID, update.ThreadID)
-	serverName := firstNonEmpty(status.Name, "MCP server")
+	threadID := xutil.FirstNonEmpty(status.ThreadID, update.ThreadID)
+	serverName := xutil.FirstNonEmpty(status.Name, "MCP server")
 	if statusValue == "running" || statusValue == "ready" || statusValue == "started" {
 		s.clearActiveNoticePrefix("mcp_startup", surfaceIDForThread(s, instanceID, threadID), instanceID, threadID, serverName)
 		return nil
@@ -87,12 +88,12 @@ func (s *Service) projectMCPOAuthLoginCompleted(instanceID string, update agentp
 	if completed == nil || completed.Success || strings.TrimSpace(completed.Error) == "" {
 		return nil
 	}
-	threadID := firstNonEmpty(completed.ThreadID, update.ThreadID)
+	threadID := xutil.FirstNonEmpty(completed.ThreadID, update.ThreadID)
 	surface := s.turnSurface(instanceID, threadID, "")
 	if surface == nil {
 		return nil
 	}
-	serverName := firstNonEmpty(completed.Name, "MCP server")
+	serverName := xutil.FirstNonEmpty(completed.Name, "MCP server")
 	if !s.allowActiveNotice("mcp_oauth_failed", surface.SurfaceSessionID, instanceID, threadID, serverName+" "+completed.Error, 30*time.Minute) {
 		return nil
 	}
@@ -119,7 +120,7 @@ func (s *Service) projectAccountLoginCompleted(instanceID string, update agentpr
 	if surface == nil {
 		return nil
 	}
-	loginKey := firstNonEmpty(completed.LoginID, "account")
+	loginKey := xutil.FirstNonEmpty(completed.LoginID, "account")
 	if !s.allowActiveNotice("account_login_failed", surface.SurfaceSessionID, instanceID, threadID, loginKey+" "+completed.Error, 30*time.Minute) {
 		return nil
 	}

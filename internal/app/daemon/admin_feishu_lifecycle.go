@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type feishuVerificationPersistMode string
@@ -26,7 +27,7 @@ func findConfigFeishuApp(cfg config.AppConfig, gatewayID string) (config.FeishuA
 func fallbackPersistedFeishuAppSummary(gatewayID string, app config.FeishuAppConfig) adminFeishuAppSummary {
 	return adminFeishuAppSummary{
 		ID:        gatewayID,
-		Name:      firstNonEmpty(trimmedString(daemonStringPtr(app.Name)), gatewayID),
+		Name:      xutil.FirstNonEmpty(trimmedString(daemonStringPtr(app.Name)), gatewayID),
 		AppID:     app.AppID,
 		HasSecret: trimmedString(daemonStringPtr(app.AppSecret)) != "",
 		Enabled:   app.Enabled == nil || *app.Enabled,

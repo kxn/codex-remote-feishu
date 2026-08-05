@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type Result struct {
@@ -175,7 +177,7 @@ func (t *Translator) ObserveServer(line []byte) (Result, error) {
 		return Result{}, err
 	}
 	var result Result
-	switch strings.TrimSpace(lookupStringFromAny(message["type"])) {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(message["type"])) {
 	case "system":
 		result = t.observeSystemMessage(message)
 	case "stream_event":
@@ -373,26 +375,17 @@ func resolveRequestDecision(response map[string]any) string {
 	if len(response) == 0 {
 		return ""
 	}
-	switch strings.TrimSpace(lookupStringFromAny(response["decision"])) {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(response["decision"])) {
 	case "accept", "acceptForSession", "decline", "cancel", "revise":
-		return strings.TrimSpace(lookupStringFromAny(response["decision"]))
+		return strings.TrimSpace(xutil.LookupStringFromAny(response["decision"]))
 	default:
 		return ""
 	}
 }
 
-func isInternalInteractionTool(toolName string) bool {
-	switch strings.TrimSpace(toolName) {
-	case "AskUserQuestion", "ExitPlanMode":
-		return true
-	default:
-		return false
-	}
-}
-
 func firstToolResultBlock(blocks []map[string]any) map[string]any {
 	for _, block := range blocks {
-		if strings.TrimSpace(lookupStringFromAny(block["type"])) == "tool_result" {
+		if strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) == "tool_result" {
 			return block
 		}
 	}
@@ -401,31 +394,15 @@ func firstToolResultBlock(blocks []map[string]any) map[string]any {
 
 func firstTextBlock(blocks []map[string]any) map[string]any {
 	for _, block := range blocks {
-		if strings.TrimSpace(lookupStringFromAny(block["type"])) == "text" {
+		if strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) == "text" {
 			return block
 		}
 	}
 	return nil
 }
 
-func toolUseSummary(toolName string, input map[string]any) string {
-	if command := strings.TrimSpace(lookupStringFromAny(input["command"])); command != "" {
-		return command
-	}
-	if description := strings.TrimSpace(lookupStringFromAny(input["description"])); description != "" {
-		return description
-	}
-	if len(input) != 0 {
-		return compactJSON(input)
-	}
-	if strings.TrimSpace(toolName) != "" {
-		return toolName
-	}
-	return ""
-}
-
 func approvalRequestBody(toolName string, input map[string]any) string {
-	summary := strings.TrimSpace(toolUseSummary(toolName, input))
+	summary := strings.TrimSpace(claudeutil.ToolUseSummary(toolName, input))
 	if summary == "" {
 		return "Claude 请求调用工具后继续执行。"
 	}

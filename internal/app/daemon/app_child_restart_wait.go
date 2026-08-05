@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const childRestartOutcomeTimeout = 30 * time.Second
@@ -159,7 +160,7 @@ func childRestartOutcomeProblem(event agentproto.Event) error {
 		Layer:     "wrapper",
 		Stage:     "restart_child_restore_response",
 		Operation: string(agentproto.CommandProcessChildRestart),
-		Message:   firstNonEmpty(strings.TrimSpace(event.ErrorMessage), "重启后的 Codex 子进程未能恢复先前 thread 上下文。"),
+		Message:   xutil.FirstNonEmpty(strings.TrimSpace(event.ErrorMessage), "重启后的 Codex 子进程未能恢复先前 thread 上下文。"),
 		CommandID: event.CommandID,
 		ThreadID:  event.ThreadID,
 	}

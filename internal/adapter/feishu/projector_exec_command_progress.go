@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (p *Projector) projectExecCommandProgress(chatID string, event eventcontract.Event, progress control.ExecCommandProgress) []Operation {
@@ -262,10 +263,10 @@ func renderExecProgressEntityItem(item control.ExecCommandProgressTimelineItem, 
 
 func renderExecProgressFileChangeItem(item control.ExecCommandProgressTimelineItem, verbose bool, fileLabels map[string]string) string {
 	if item.FileChange == nil {
-		return execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(item.Label), "修改"), renderExecProgressEntitySummary(item.Summary, 40))
+		return execProgressPrefixedMarkdown(xutil.FirstNonEmpty(strings.TrimSpace(item.Label), "修改"), renderExecProgressEntitySummary(item.Summary, 40))
 	}
 	file := execProgressFileChangeSummaryEntry(*item.FileChange)
-	line := execProgressPrefixedMarkdown(firstNonEmpty(strings.TrimSpace(item.Label), "修改"), renderExecProgressFileChangePathMarkdown(file, fileLabels)+"  "+formatFileChangeCountsMarkdown(file.AddedLines, file.RemovedLines))
+	line := execProgressPrefixedMarkdown(xutil.FirstNonEmpty(strings.TrimSpace(item.Label), "修改"), renderExecProgressFileChangePathMarkdown(file, fileLabels)+"  "+formatFileChangeCountsMarkdown(file.AddedLines, file.RemovedLines))
 	if !verbose {
 		return line
 	}

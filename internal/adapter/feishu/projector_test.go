@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestProjectSelectionPromptAsCard(t *testing.T) {
@@ -376,7 +377,7 @@ func TestProjectUseAllSelectionViewGroupsByWorkspace(t *testing.T) {
 		"接管 · 别的会话",
 		"接管 · 另一个会话",
 	} {
-		if !containsString(buttonLabels, want) {
+		if !xutil.ContainsString(buttonLabels, want) {
 			t.Fatalf("expected view-projected grouped button %q, got %#v", want, buttonLabels)
 		}
 	}
@@ -391,7 +392,7 @@ func TestProjectUseAllSelectionViewGroupsByWorkspace(t *testing.T) {
 		"droid · 5分前\n同工作区内切换请直接用 /use",
 		"web · 2分前",
 	} {
-		if !containsString(rendered, fragment) {
+		if !xutil.ContainsString(rendered, fragment) {
 			t.Fatalf("expected view-projected grouped content to include %q, got %#v", fragment, rendered)
 		}
 	}

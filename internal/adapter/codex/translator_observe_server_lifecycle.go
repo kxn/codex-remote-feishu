@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) observeThreadStarted(message map[string]any) Result {
@@ -91,11 +92,11 @@ func mergeEventMetadata(left, right map[string]any) map[string]any {
 	case len(left) == 0 && len(right) == 0:
 		return nil
 	case len(left) == 0:
-		return cloneMap(right)
+		return xutil.CloneMap(right)
 	case len(right) == 0:
 		return left
 	default:
-		merged := cloneMap(left)
+		merged := xutil.CloneMap(left)
 		for key, value := range right {
 			merged[key] = value
 		}
@@ -220,7 +221,7 @@ func (t *Translator) codexEffectiveThreadFromObserved(threadID, turnID string, p
 	} else if policy.ReasoningMode == agentproto.CodexThreadValueDefault {
 		effective.ReasoningMode = agentproto.CodexThreadValueDefault
 	}
-	if contextWindow := lookupIntFromAny(params["modelContextWindow"]); contextWindow > 0 {
+	if contextWindow := xutil.LookupIntFromAny(params["modelContextWindow"]); contextWindow > 0 {
 		effective.EffectiveContextWindow = int64(contextWindow)
 		if effective.RequestedContextWindow > 0 && int64(contextWindow) < effective.RequestedContextWindow {
 			effective.ContextStatus = agentproto.CodexContextPreferenceClamped

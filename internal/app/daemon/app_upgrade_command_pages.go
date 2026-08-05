@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func buildDebugRootPageView(stateValue install.InstallState, checkInFlight bool, formDefault, statusKind, statusText string) control.FeishuPageView {
@@ -88,7 +89,7 @@ func buildUpgradeTrackPageView(stateValue install.InstallState) control.FeishuPa
 
 func buildTrackSummaryLines(stateValue install.InstallState) []string {
 	return []string{
-		fmt.Sprintf("当前 Track：%s", firstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
+		fmt.Sprintf("当前 Track：%s", xutil.FirstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
 	}
 }
 

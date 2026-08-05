@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type servicePickerRuntime struct {
@@ -468,12 +469,12 @@ func (r *serviceTurnRuntime) runtimeInstancesForSurface(surfaceID string) map[st
 	}
 	for instanceID, binding := range r.pendingRemote {
 		if binding != nil {
-			collect(firstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
+			collect(xutil.FirstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
 		}
 	}
 	for instanceID, binding := range r.activeRemote {
 		if binding != nil {
-			collect(firstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
+			collect(xutil.FirstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
 		}
 	}
 	for _, binding := range r.pendingSteers {
@@ -483,7 +484,7 @@ func (r *serviceTurnRuntime) runtimeInstancesForSurface(surfaceID string) map[st
 	}
 	for instanceID, binding := range r.compactTurns {
 		if binding != nil {
-			collect(firstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
+			collect(xutil.FirstNonEmpty(binding.InstanceID, instanceID), binding.SurfaceSessionID)
 		}
 	}
 	return instances

@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func ThreadHistoryTheme(view control.FeishuThreadHistoryView) string {
@@ -48,7 +49,7 @@ func ThreadHistoryListElements(view control.FeishuThreadHistoryView, daemonLifec
 	if len(view.TurnOptions) == 0 {
 		elements = append(elements, map[string]any{
 			"tag":     "markdown",
-			"content": firstNonEmpty(strings.TrimSpace(view.Hint), "这个会话暂时还没有可展示的历史。"),
+			"content": xutil.FirstNonEmpty(strings.TrimSpace(view.Hint), "这个会话暂时还没有可展示的历史。"),
 		})
 		return elements
 	}
@@ -91,7 +92,7 @@ func ThreadHistoryDetailElements(view control.FeishuThreadHistoryView, daemonLif
 	}
 	lines := []string{
 		fmt.Sprintf("**第 %d 轮**", detail.Ordinal),
-		"**状态**\n" + texttags.FormatNeutralTextTag(firstNonEmpty(strings.TrimSpace(detail.Status), "-")),
+		"**状态**\n" + texttags.FormatNeutralTextTag(xutil.FirstNonEmpty(strings.TrimSpace(detail.Status), "-")),
 	}
 	if turnID := strings.TrimSpace(detail.TurnID); turnID != "" {
 		lines = append(lines, "**turn_id**\n"+texttags.FormatInlineCodeTextTag(turnID))
@@ -220,7 +221,7 @@ func threadHistoryNoticeSections(view control.FeishuThreadHistoryView) []control
 		})
 	}
 	if view.Loading {
-		text := firstNonEmpty(strings.TrimSpace(view.LoadingText), "正在读取历史，请稍候...")
+		text := xutil.FirstNonEmpty(strings.TrimSpace(view.LoadingText), "正在读取历史，请稍候...")
 		sections = append(sections, control.FeishuCardTextSection{
 			Label: "当前状态",
 			Lines: []string{text},

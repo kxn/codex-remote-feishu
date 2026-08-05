@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) decorateReviewOperationsLocked(event eventcontract.Event, operations []feishu.Operation) []feishu.Operation {
@@ -110,7 +111,7 @@ func reviewCommitButtons(commits []gitmeta.CommitSummary, daemonLifecycleID stri
 			continue
 		}
 		buttons = append(buttons, localCurrentCardActionButton(
-			fmt.Sprintf("审阅 %s", reviewCommitButtonSHA(firstNonEmpty(commit.ShortSHA, commit.SHA))),
+			fmt.Sprintf("审阅 %s", reviewCommitButtonSHA(xutil.FirstNonEmpty(commit.ShortSHA, commit.SHA))),
 			"default",
 			daemonLifecycleID,
 			control.ActionReviewCommand,

@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func Snapshot(progress *state.ExecCommandProgressRecord) *control.ExecCommandProgress {
@@ -142,30 +143,6 @@ func reasoningPlaceholderItemID(record *state.ExecCommandProgressReasoningRecord
 	return strings.TrimSpace(record.ItemID) + "::placeholder"
 }
 
-func mapsFromAny(value any) []map[string]any {
-	switch typed := value.(type) {
-	case []map[string]any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			if item != nil {
-				out = append(out, item)
-			}
-		}
-		return out
-	case []any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			record, _ := item.(map[string]any)
-			if record != nil {
-				out = append(out, record)
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
 func CommandMetadata(event agentproto.Event) (string, string) {
 	if event.Metadata == nil {
 		return "", ""
@@ -240,28 +217,28 @@ func WebSearchEntry(metadata map[string]any, final bool) state.ExecCommandProgre
 	url := strings.TrimSpace(metadataString(metadata, "url"))
 	pattern := strings.TrimSpace(metadataString(metadata, "pattern"))
 	queries := metadataStringSlice(metadata, "queries")
-	fallbackQuery := firstNonEmpty(query, firstNonEmptySlice(queries...))
+	fallbackQuery := xutil.FirstNonEmpty(query, xutil.FirstNonEmpty(queries...))
 	status := NormalizeStatus("", final)
 	switch actionType {
 	case "open_page":
 		return state.ExecCommandProgressEntryRecord{
 			Kind:    "web_search",
 			Label:   "打开网页",
-			Summary: firstNonEmpty(url, fallbackWebSearchSummary(final)),
+			Summary: xutil.FirstNonEmpty(url, fallbackWebSearchSummary(final)),
 			Status:  status,
 		}
 	case "find_in_page":
 		return state.ExecCommandProgressEntryRecord{
 			Kind:    "web_search",
 			Label:   "页内查找",
-			Summary: firstNonEmpty(formatFindInPageSummary(pattern, url), fallbackWebSearchSummary(final)),
+			Summary: xutil.FirstNonEmpty(formatFindInPageSummary(pattern, url), fallbackWebSearchSummary(final)),
 			Status:  status,
 		}
 	case "search":
 		return state.ExecCommandProgressEntryRecord{
 			Kind:    "web_search",
 			Label:   "搜索",
-			Summary: firstNonEmpty(fallbackQuery, fallbackWebSearchSummary(final)),
+			Summary: xutil.FirstNonEmpty(fallbackQuery, fallbackWebSearchSummary(final)),
 			Status:  status,
 		}
 	default:
@@ -269,14 +246,14 @@ func WebSearchEntry(metadata map[string]any, final bool) state.ExecCommandProgre
 			return state.ExecCommandProgressEntryRecord{
 				Kind:    "web_search",
 				Label:   "搜索",
-				Summary: firstNonEmpty(fallbackQuery, formatFindInPageSummary(pattern, url), url, "搜索完成"),
+				Summary: xutil.FirstNonEmpty(fallbackQuery, formatFindInPageSummary(pattern, url), url, "搜索完成"),
 				Status:  status,
 			}
 		}
 		return state.ExecCommandProgressEntryRecord{
 			Kind:    "web_search",
 			Label:   "搜索",
-			Summary: firstNonEmpty(fallbackQuery, "正在搜索网络"),
+			Summary: xutil.FirstNonEmpty(fallbackQuery, "正在搜索网络"),
 			Status:  status,
 		}
 	}
@@ -335,7 +312,7 @@ func UpsertDynamicToolProgressEntry(progress *state.ExecCommandProgressRecord, e
 	entry := state.ExecCommandProgressEntryRecord{
 		ItemID:  groupKey,
 		Kind:    "dynamic_tool_call",
-		Label:   firstNonEmpty(group.Label, "工具"),
+		Label:   xutil.FirstNonEmpty(group.Label, "工具"),
 		Summary: buildDynamicToolProgressSummary(group),
 		Status:  group.Status,
 	}
@@ -427,7 +404,7 @@ func metadataStringSlice(metadata map[string]any, key string) []string {
 	case []any:
 		out := make([]string, 0, len(typed))
 		for _, current := range typed {
-			if text := lookupStringFromAny(current); text != "" {
+			if text := xutil.Stringify(current); text != "" {
 				out = append(out, text)
 			}
 		}
@@ -438,38 +415,6 @@ func metadataStringSlice(metadata map[string]any, key string) []string {
 	default:
 		return nil
 	}
-}
-
-func lookupStringFromAny(value any) string {
-	if value == nil {
-		return ""
-	}
-	switch typed := value.(type) {
-	case string:
-		return strings.TrimSpace(typed)
-	case fmt.Stringer:
-		return strings.TrimSpace(typed.String())
-	default:
-		return strings.TrimSpace(fmt.Sprint(value))
-	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
-func firstNonEmptySlice(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func dynamicToolGroupKey(progress *state.ExecCommandProgressRecord, itemID, tool string) string {

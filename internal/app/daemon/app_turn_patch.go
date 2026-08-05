@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -146,7 +147,7 @@ func (a *App) handleTurnPatchRollbackCommandLocked(action control.Action, patchI
 		RequestID:        a.nextTurnPatchRequestIDLocked(),
 		InstanceID:       strings.TrimSpace(target.Instance.InstanceID),
 		SurfaceSessionID: strings.TrimSpace(target.Surface.SurfaceSessionID),
-		OwnerUserID:      strings.TrimSpace(firstNonEmpty(action.ActorUserID, target.Surface.ActorUserID)),
+		OwnerUserID:      strings.TrimSpace(xutil.FirstNonEmpty(action.ActorUserID, target.Surface.ActorUserID)),
 		ThreadID:         strings.TrimSpace(target.ThreadID),
 		ThreadTitle:      strings.TrimSpace(target.ThreadTitle),
 		MessageID:        strings.TrimSpace(action.MessageID),
@@ -348,10 +349,10 @@ func (a *App) beginTurnPatchRollbackLocked(action control.Action, flow *turnpatc
 	flow.InstanceID = strings.TrimSpace(target.Instance.InstanceID)
 	flow.ThreadID = strings.TrimSpace(target.ThreadID)
 	flow.ThreadTitle = strings.TrimSpace(target.ThreadTitle)
-	flow.OwnerUserID = strings.TrimSpace(firstNonEmpty(flow.OwnerUserID, action.ActorUserID))
-	flow.SurfaceSessionID = strings.TrimSpace(firstNonEmpty(flow.SurfaceSessionID, action.SurfaceSessionID))
-	flow.PatchID = strings.TrimSpace(firstNonEmpty(patchID, flow.PatchID))
-	flow.MessageID = strings.TrimSpace(firstNonEmpty(action.MessageID, flow.MessageID))
+	flow.OwnerUserID = strings.TrimSpace(xutil.FirstNonEmpty(flow.OwnerUserID, action.ActorUserID))
+	flow.SurfaceSessionID = strings.TrimSpace(xutil.FirstNonEmpty(flow.SurfaceSessionID, action.SurfaceSessionID))
+	flow.PatchID = strings.TrimSpace(xutil.FirstNonEmpty(patchID, flow.PatchID))
+	flow.MessageID = strings.TrimSpace(xutil.FirstNonEmpty(action.MessageID, flow.MessageID))
 	a.refreshTurnPatchFlowLocked(flow, turnpatchruntime.FlowStageRollbackRunning)
 	tx := a.newTurnPatchTransactionLocked(flow, turnpatchruntime.TransactionKindRollback)
 	go a.runTurnPatchRollbackTransaction(tx.ID)
@@ -552,7 +553,7 @@ func (a *App) turnPatchThreadTitleLocked(surface *state.SurfaceConsoleRecord, in
 	if thread == nil {
 		return threadID
 	}
-	return firstNonEmpty(
+	return xutil.FirstNonEmpty(
 		strings.TrimSpace(thread.Name),
 		strings.TrimSpace(thread.FirstUserMessage),
 		strings.TrimSpace(thread.LastUserMessage),

@@ -16,6 +16,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -97,7 +98,7 @@ func RunUpgradeHelperWithStatePath(ctx context.Context, statePath string) error 
 	}
 
 	stateValue.CurrentVersion = stateValue.PendingUpgrade.TargetVersion
-	stateValue.CurrentSlot = firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
+	stateValue.CurrentSlot = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
 	if stateValue.PendingUpgrade.Source != UpgradeSourceLocal {
 		stateValue.InstallSource = InstallSourceRelease
 	}
@@ -226,7 +227,7 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 	}
 	targetBinary := strings.TrimSpace(stateValue.PendingUpgrade.TargetBinaryPath)
 	if targetBinary == "" {
-		targetSlot := firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
+		targetSlot := xutil.FirstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
 		targetBinary = filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), targetSlot, executableName(runtime.GOOS))
 	}
 	if _, err := os.Stat(targetBinary); err != nil {
@@ -236,7 +237,7 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 		return fmt.Errorf("copy upgrade binary %s -> %s: %w", targetBinary, stateValue.CurrentBinaryPath, err)
 	}
 	if stateValue.PendingUpgrade.Source != UpgradeSourceLocal {
-		_ = updateCurrentReleaseLink(stateValue.VersionsRoot, firstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion)))
+		_ = updateCurrentReleaseLink(stateValue.VersionsRoot, xutil.FirstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion)))
 	}
 	return nil
 }
@@ -276,7 +277,7 @@ func startUpgradeDaemon(ctx context.Context, cfg config.LoadedAppConfig, stateVa
 	env = config.SupplementDetachedPATH(env)
 	return upgradeHelperStartDetachedDaemonFunc(relayruntime.LaunchOptions{
 		BinaryPath: stateValue.CurrentBinaryPath,
-		ConfigPath: firstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), cfg.Path),
+		ConfigPath: xutil.FirstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), cfg.Path),
 		Env:        env,
 		Paths:      paths,
 	})

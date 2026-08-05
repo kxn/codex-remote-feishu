@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -73,7 +75,7 @@ func applyFeishuRuntimePending(summary adminFeishuAppSummary, pending feishuRunt
 }
 
 func pendingFeishuAppSummary(gatewayID string, pending feishuRuntimeApplyPendingState) adminFeishuAppSummary {
-	gatewayID = canonicalGatewayID(firstNonEmpty(gatewayID, pending.GatewayID))
+	gatewayID = canonicalGatewayID(xutil.FirstNonEmpty(gatewayID, pending.GatewayID))
 	return adminFeishuAppSummary{
 		ID:      gatewayID,
 		Name:    gatewayID,

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func PathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
@@ -184,7 +185,7 @@ func pathPickerSelectStaticOptions(view control.FeishuPathPickerView, kind contr
 }
 
 func pathPickerSelectStaticLabel(entry control.FeishuPathPickerEntry) string {
-	label := strings.TrimSpace(firstNonEmpty(entry.Label, entry.Name))
+	label := strings.TrimSpace(xutil.FirstNonEmpty(entry.Label, entry.Name))
 	if entry.Kind == control.PathPickerEntryDirectory {
 		return label + "/"
 	}

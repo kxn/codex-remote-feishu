@@ -3,12 +3,14 @@ package preview
 import (
 	"net/http"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func buildWebPreviewPage(current, previous *webPreviewArtifact, downloadHref string, location PreviewLocation) webPreviewPage {
 	record := current.Record
 	page := webPreviewPage{
-		Title:        firstNonEmpty(strings.TrimSpace(record.DisplayName), "文件预览"),
+		Title:        xutil.FirstNonEmpty(strings.TrimSpace(record.DisplayName), "文件预览"),
 		Status:       http.StatusOK,
 		DownloadHref: strings.TrimSpace(downloadHref),
 		Layout:       webPreviewLayoutDocument,

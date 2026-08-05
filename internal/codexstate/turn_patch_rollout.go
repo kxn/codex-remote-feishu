@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type rolloutLine struct {
@@ -170,7 +172,7 @@ func locateLatestCompletedTurn(lines []rolloutLine) (*rolloutTurnSnapshot, error
 				continue
 			}
 			lastCompleted = &rolloutTurnSnapshot{
-				turnID:     firstNonEmpty(turnID, current.turnID),
+				turnID:     xutil.FirstNonEmpty(turnID, current.turnID),
 				startIndex: current.start,
 				endIndex:   index,
 			}
@@ -458,15 +460,6 @@ func isAssistantResponseMessage(line map[string]any) bool {
 	return topLevelType(line) == "response_item" &&
 		strings.TrimSpace(stringField(payload, "type")) == "message" &&
 		strings.TrimSpace(stringField(payload, "role")) == "assistant"
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func sha256Hex(raw []byte) string {

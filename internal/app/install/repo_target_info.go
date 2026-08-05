@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type RepoInstallTargetOptions struct {
@@ -230,7 +231,7 @@ func defaultRepoInstallTargetConfig(instanceID string) config.AppConfig {
 	if cfg.Debug.Pprof == nil {
 		cfg.Debug.Pprof = &config.PprofSettings{}
 	}
-	cfg.Debug.Pprof.ListenHost = firstNonEmpty(cfg.Debug.Pprof.ListenHost, "127.0.0.1")
+	cfg.Debug.Pprof.ListenHost = xutil.FirstNonEmpty(cfg.Debug.Pprof.ListenHost, "127.0.0.1")
 	cfg.Debug.Pprof.ListenPort = ports.Pprof
 	applyBuildFlavorDebugDefaults(&cfg)
 	return cfg
@@ -280,7 +281,7 @@ func applyRepoInstallTargetConfig(info *RepoInstallTargetInfo, cfg config.AppCon
 }
 
 func normalizeRepoTargetListenHost(value string) string {
-	return firstNonEmpty(strings.TrimSpace(value), "127.0.0.1")
+	return xutil.FirstNonEmpty(strings.TrimSpace(value), "127.0.0.1")
 }
 
 func repoTargetHTTPURL(host string, port int, suffix string) string {

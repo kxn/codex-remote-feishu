@@ -10,6 +10,7 @@ import (
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) handleCronDaemonCommand(command control.DaemonCommand) []eventcontract.Event {
@@ -178,7 +179,7 @@ func (a *App) triggerCronJob(command control.DaemonCommand, jobRecordID string) 
 	activeCount := a.cronActiveRunCountLocked(job.RecordID, job.Name)
 	maxConcurrency := cronrt.DefaultMaxConcurrency(job.MaxConcurrency)
 	if activeCount >= maxConcurrency {
-		return nil, fmt.Errorf("任务 `%s` 当前运行中实例数已达到并发上限（%d），请稍后再试", firstNonEmpty(strings.TrimSpace(job.Name), job.RecordID), maxConcurrency)
+		return nil, fmt.Errorf("任务 `%s` 当前运行中实例数已达到并发上限（%d），请稍后再试", xutil.FirstNonEmpty(strings.TrimSpace(job.Name), job.RecordID), maxConcurrency)
 	}
 	triggeredAt := time.Now().UTC()
 	request := a.newCronLaunchRequestLocked(*job, triggeredAt)
@@ -192,7 +193,7 @@ func (a *App) triggerCronJob(command control.DaemonCommand, jobRecordID string) 
 		Notice: &control.Notice{
 			Code:  "cron_run_ready",
 			Title: "Cron",
-			Text:  fmt.Sprintf("已立即触发 `%s`；本次不会改动原有下次调度时间。", firstNonEmpty(strings.TrimSpace(job.Name), job.RecordID)),
+			Text:  fmt.Sprintf("已立即触发 `%s`；本次不会改动原有下次调度时间。", xutil.FirstNonEmpty(strings.TrimSpace(job.Name), job.RecordID)),
 		},
 	}, nil
 }

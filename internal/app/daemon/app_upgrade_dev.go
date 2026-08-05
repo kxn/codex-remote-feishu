@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type devUpgradeCheckRequest struct {
@@ -130,7 +131,7 @@ func (a *App) applyDevUpgradeCheckResultLocked(request devUpgradeCheckRequest, m
 	}
 
 	pending := stateValue.PendingUpgrade
-	pending.GatewayID = firstNonEmpty(strings.TrimSpace(request.GatewayID), a.service.SurfaceGatewayID(request.SurfaceSessionID))
+	pending.GatewayID = xutil.FirstNonEmpty(strings.TrimSpace(request.GatewayID), a.service.SurfaceGatewayID(request.SurfaceSessionID))
 	pending.SurfaceSessionID = request.SurfaceSessionID
 	pending.ChatID = a.service.SurfaceChatID(request.SurfaceSessionID)
 	pending.ActorUserID = a.service.SurfaceActorUserID(request.SurfaceSessionID)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func BuildRootPageView(stateValue *StateFile, ownerView OwnerView, extraSummary string, configReady bool, formDefault, statusKind, statusText string) control.FeishuPageView {
@@ -53,7 +54,7 @@ func BuildStatusPageView(stateValue *StateFile, ownerView OwnerView, extraSummar
 	if stateValue == nil || !StateHasBinding(stateValue) {
 		summaryLines = append(summaryLines, "当前实例还没有初始化 Cron 配置表。执行 /cron repair 后会创建配置表。")
 	} else {
-		summaryLines = append(summaryLines, fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")))
+		summaryLines = append(summaryLines, fmt.Sprintf("实例：%s", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")))
 		summaryLines = append(summaryLines, BindingSummaryLines(stateValue, configReady)...)
 		if line := LoadedJobCountLine(stateValue, ownerView); line != "" {
 			summaryLines = append(summaryLines, line)
@@ -145,7 +146,7 @@ func BuildEditPageView(stateValue *StateFile, ownerView OwnerView, extraSummary 
 	if stateValue == nil || !StateHasBinding(stateValue) {
 		summaryLines = append(summaryLines, "当前还没有可编辑的 Cron 配置表。执行 /cron repair 后会创建配置表。")
 	} else {
-		summaryLines = append(summaryLines, fmt.Sprintf("实例：%s", firstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")))
+		summaryLines = append(summaryLines, fmt.Sprintf("实例：%s", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.InstanceLabel), "unknown")))
 		summaryLines = append(summaryLines, ConfigSummaryLine(stateValue, configReady))
 		if configReady {
 			summaryLines = append(summaryLines, "编辑任务配置或工作区清单后，执行 /cron reload 生效。")

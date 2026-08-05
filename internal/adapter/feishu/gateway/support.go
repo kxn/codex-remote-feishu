@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
@@ -48,22 +49,13 @@ func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (con
 	return context.WithTimeout(base, timeout)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func referencedMessageID(message *larkim.EventMessage) string {
 	if message == nil {
 		return ""
 	}
-	targetMessageID := strings.TrimSpace(stringPtr(message.ParentId))
+	targetMessageID := strings.TrimSpace(xutil.StringValue(message.ParentId))
 	if targetMessageID == "" {
-		targetMessageID = strings.TrimSpace(stringPtr(message.RootId))
+		targetMessageID = strings.TrimSpace(xutil.StringValue(message.RootId))
 	}
 	return targetMessageID
 }
@@ -80,7 +72,7 @@ func groupMessageMentionGateReason(env InboundEnv, message *larkim.EventMessage,
 	if message == nil {
 		return ""
 	}
-	if strings.EqualFold(strings.TrimSpace(stringPtr(message.ChatType)), "p2p") {
+	if strings.EqualFold(strings.TrimSpace(xutil.StringValue(message.ChatType)), "p2p") {
 		return ""
 	}
 	botOpenID := strings.TrimSpace(env.BotOpenID)
@@ -94,7 +86,7 @@ func groupMessageMentionGateReason(env InboundEnv, message *larkim.EventMessage,
 		if mention == nil || mention.Id == nil {
 			continue
 		}
-		if strings.TrimSpace(stringPtr(mention.Id.OpenId)) == botOpenID {
+		if strings.TrimSpace(xutil.StringValue(mention.Id.OpenId)) == botOpenID {
 			return ""
 		}
 	}
@@ -108,7 +100,7 @@ func unmentionedGroupMessageGateReason(env InboundEnv, message *larkim.EventMess
 	if env.PrimaryGatewayForChat == nil {
 		return "ignored_no_primary_gateway_lookup"
 	}
-	chatID := strings.TrimSpace(stringPtr(message.ChatId))
+	chatID := strings.TrimSpace(xutil.StringValue(message.ChatId))
 	primaryGatewayID := strings.TrimSpace(env.PrimaryGatewayForChat(chatID))
 	if primaryGatewayID == "" {
 		return "ignored_no_primary_gateway"
@@ -217,7 +209,7 @@ func feishuMentionReplacements(mentions []*larkim.MentionEvent) []feishuMentionR
 		if mention == nil {
 			continue
 		}
-		key := strings.TrimSpace(stringPtr(mention.Key))
+		key := strings.TrimSpace(xutil.StringValue(mention.Key))
 		if key == "" {
 			continue
 		}
@@ -240,7 +232,7 @@ func feishuMentionDisplayLabel(mention *larkim.MentionEvent, fallback string) st
 	if mention == nil {
 		return fallback
 	}
-	name := strings.TrimSpace(stringPtr(mention.Name))
+	name := strings.TrimSpace(xutil.StringValue(mention.Name))
 	if name == "" {
 		return fallback
 	}

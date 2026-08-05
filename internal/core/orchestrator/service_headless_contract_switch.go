@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type headlessContractSwitchContinuation struct {
@@ -157,8 +158,8 @@ func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceCon
 		return append(events, s.restartHeadlessContractContinuationWithOverlayCleanup(surface, continuation, options.OverlayCleanup)...)
 	case contractResolutionUnavailable:
 		return notice(surface,
-			firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"),
-			firstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标工作区当前暂时不可接管，请稍后重试。"),
+			xutil.FirstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"),
+			xutil.FirstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标工作区当前暂时不可接管，请稍后重试。"),
 		)
 	default:
 		return nil

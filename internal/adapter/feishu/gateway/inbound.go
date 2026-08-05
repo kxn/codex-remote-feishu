@@ -11,6 +11,7 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func quotedMessageInputs(ctx context.Context, env InboundEnv, message *larkim.EventMessage) QuotedMessageInputs {
@@ -28,13 +29,13 @@ func logInboundMessageIgnored(gatewayID, surfaceSessionID string, inbound *contr
 		"feishu inbound message ignored: gateway=%s surface=%s message=%s type=%s chat=%s chat_type=%s thread=%s root=%s parent=%s event=%s request=%s reason=%s preview=%q",
 		strings.TrimSpace(gatewayID),
 		strings.TrimSpace(surfaceSessionID),
-		strings.TrimSpace(stringPtr(message.MessageId)),
-		strings.ToLower(strings.TrimSpace(stringPtr(message.MessageType))),
-		strings.TrimSpace(stringPtr(message.ChatId)),
-		strings.TrimSpace(stringPtr(message.ChatType)),
-		strings.TrimSpace(stringPtr(message.ThreadId)),
-		strings.TrimSpace(stringPtr(message.RootId)),
-		strings.TrimSpace(stringPtr(message.ParentId)),
+		strings.TrimSpace(xutil.StringValue(message.MessageId)),
+		strings.ToLower(strings.TrimSpace(xutil.StringValue(message.MessageType))),
+		strings.TrimSpace(xutil.StringValue(message.ChatId)),
+		strings.TrimSpace(xutil.StringValue(message.ChatType)),
+		strings.TrimSpace(xutil.StringValue(message.ThreadId)),
+		strings.TrimSpace(xutil.StringValue(message.RootId)),
+		strings.TrimSpace(xutil.StringValue(message.ParentId)),
 		inboundMetaValue(inbound, func(meta *control.ActionInboundMeta) string { return meta.EventID }),
 		inboundMetaValue(inbound, func(meta *control.ActionInboundMeta) string { return meta.RequestID }),
 		strings.TrimSpace(reason),
@@ -47,13 +48,13 @@ func logInboundMessageParseFailed(gatewayID, surfaceSessionID string, inbound *c
 		"feishu inbound message parse failed: gateway=%s surface=%s message=%s type=%s chat=%s chat_type=%s thread=%s root=%s parent=%s event=%s request=%s reason=%s err=%v preview=%q",
 		strings.TrimSpace(gatewayID),
 		strings.TrimSpace(surfaceSessionID),
-		strings.TrimSpace(stringPtr(message.MessageId)),
-		strings.ToLower(strings.TrimSpace(stringPtr(message.MessageType))),
-		strings.TrimSpace(stringPtr(message.ChatId)),
-		strings.TrimSpace(stringPtr(message.ChatType)),
-		strings.TrimSpace(stringPtr(message.ThreadId)),
-		strings.TrimSpace(stringPtr(message.RootId)),
-		strings.TrimSpace(stringPtr(message.ParentId)),
+		strings.TrimSpace(xutil.StringValue(message.MessageId)),
+		strings.ToLower(strings.TrimSpace(xutil.StringValue(message.MessageType))),
+		strings.TrimSpace(xutil.StringValue(message.ChatId)),
+		strings.TrimSpace(xutil.StringValue(message.ChatType)),
+		strings.TrimSpace(xutil.StringValue(message.ThreadId)),
+		strings.TrimSpace(xutil.StringValue(message.RootId)),
+		strings.TrimSpace(xutil.StringValue(message.ParentId)),
 		inboundMetaValue(inbound, func(meta *control.ActionInboundMeta) string { return meta.EventID }),
 		inboundMetaValue(inbound, func(meta *control.ActionInboundMeta) string { return meta.RequestID }),
 		strings.TrimSpace(reason),
@@ -73,8 +74,8 @@ func inboundMessagePreview(message *larkim.EventMessage) string {
 	if message == nil {
 		return ""
 	}
-	messageType := strings.ToLower(strings.TrimSpace(stringPtr(message.MessageType)))
-	rawContent := strings.TrimSpace(stringPtr(message.Content))
+	messageType := strings.ToLower(strings.TrimSpace(xutil.StringValue(message.MessageType)))
+	rawContent := strings.TrimSpace(xutil.StringValue(message.Content))
 	switch messageType {
 	case "text":
 		text, _, err := parseFeishuEventText(rawContent, message.Mentions)
@@ -161,7 +162,7 @@ func ParseMessageRecalledEvent(env InboundEnv, event *larkim.P2MessageRecalledV1
 		Kind:             control.ActionMessageRecalled,
 		GatewayID:        strings.TrimSpace(env.GatewayID),
 		SurfaceSessionID: surfaceSessionID,
-		ChatID:           strings.TrimSpace(stringPtr(event.Event.ChatId)),
+		ChatID:           strings.TrimSpace(xutil.StringValue(event.Event.ChatId)),
 		TargetMessageID:  messageID,
 		Inbound:          InboundMetaFromMessageRecalledEvent(event),
 	}, true
@@ -175,7 +176,7 @@ func ParseMessageReactionCreatedEvent(env InboundEnv, event *larkim.P2MessageRea
 	if messageID == "" {
 		return control.Action{}, false
 	}
-	reactionType := strings.TrimSpace(stringPtr(event.Event.ReactionType.EmojiType))
+	reactionType := strings.TrimSpace(xutil.StringValue(event.Event.ReactionType.EmojiType))
 	if reactionType == "" {
 		return control.Action{}, false
 	}

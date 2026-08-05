@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type InstallSource string
@@ -106,7 +108,7 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	state.InstanceID = normalizeInstanceID(state.InstanceID)
 
 	if strings.TrimSpace(state.BaseDir) == "" {
-		state.BaseDir = firstNonEmpty(
+		state.BaseDir = xutil.FirstNonEmpty(
 			strings.TrimSpace(opts.BaseDir),
 			inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath)),
 			inferBaseDir(strings.TrimSpace(opts.StatePath), strings.TrimSpace(opts.StatePath)),
@@ -125,7 +127,7 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	}
 	if driver, ok := managedServiceDriverForManager(effectiveServiceManager(*state)); ok {
 		state.ServiceUnitPath = driver.ServiceUnitPath(
-			firstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
+			xutil.FirstNonEmpty(strings.TrimSpace(state.BaseDir), inferBaseDir(strings.TrimSpace(state.ConfigPath), strings.TrimSpace(state.StatePath))),
 			state.InstanceID,
 		)
 	} else {
@@ -133,20 +135,20 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	}
 
 	if strings.TrimSpace(state.CurrentBinaryPath) == "" {
-		state.CurrentBinaryPath = firstNonEmpty(
+		state.CurrentBinaryPath = xutil.FirstNonEmpty(
 			strings.TrimSpace(opts.InstalledBinary),
 			strings.TrimSpace(opts.SourceBinary),
 		)
 	}
 
 	if strings.TrimSpace(state.VersionsRoot) == "" {
-		state.VersionsRoot = firstNonEmpty(
+		state.VersionsRoot = xutil.FirstNonEmpty(
 			strings.TrimSpace(opts.VersionsRoot),
 			defaultVersionsRootForStatePath(state.StatePath),
 		)
 	}
 
-	currentVersion := firstNonEmpty(strings.TrimSpace(opts.CurrentVersion), strings.TrimSpace(state.CurrentVersion))
+	currentVersion := xutil.FirstNonEmpty(strings.TrimSpace(opts.CurrentVersion), strings.TrimSpace(state.CurrentVersion))
 	source := normalizeInstallSource(opts.InstallSource)
 	if source == "" {
 		source = inferInstallSource(strings.TrimSpace(opts.SourceBinary), strings.TrimSpace(state.VersionsRoot), currentVersion)
@@ -164,12 +166,12 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	}
 
 	if strings.TrimSpace(state.CurrentVersion) == "" {
-		state.CurrentVersion = firstNonEmpty(currentVersion, slot)
+		state.CurrentVersion = xutil.FirstNonEmpty(currentVersion, slot)
 	}
 
 	track := normalizeReleaseTrack(opts.CurrentTrack)
 	if track == "" {
-		track = inferReleaseTrack(firstNonEmpty(strings.TrimSpace(state.CurrentVersion), currentVersion), firstNonEmpty(string(state.InstallSource), string(source)))
+		track = inferReleaseTrack(xutil.FirstNonEmpty(strings.TrimSpace(state.CurrentVersion), currentVersion), xutil.FirstNonEmpty(string(state.InstallSource), string(source)))
 	}
 	if state.CurrentTrack == "" {
 		state.CurrentTrack = track

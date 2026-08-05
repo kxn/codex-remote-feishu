@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (r *serviceProgressRuntime) applyThreadTokenUsageUpdate(instanceID string, event agentproto.Event) []eventcontract.Event {
@@ -41,7 +42,7 @@ func (r *serviceProgressRuntime) captureRemoteTurnStartTotalUsage(instanceID str
 	if inst == nil {
 		return
 	}
-	threadID = strings.TrimSpace(firstNonEmpty(threadID, binding.ThreadID))
+	threadID = strings.TrimSpace(xutil.FirstNonEmpty(threadID, binding.ThreadID))
 	if threadID == "" {
 		return
 	}

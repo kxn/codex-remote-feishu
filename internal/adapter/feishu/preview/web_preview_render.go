@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"github.com/pmezard/go-difflib/difflib"
 )
 
@@ -200,7 +201,7 @@ func serveWebPreviewDownloadHTTP(w http.ResponseWriter, r *http.Request, artifac
 		return
 	}
 	record := artifact.Record
-	mediaType := firstNonEmpty(strings.TrimSpace(record.MIMEType), detectContentType(artifact.Content))
+	mediaType := xutil.FirstNonEmpty(strings.TrimSpace(record.MIMEType), detectContentType(artifact.Content))
 	disposition := "attachment"
 	if strings.TrimSpace(r.URL.Query().Get("inline")) == "1" && allowsInlinePreviewDownload(record.RendererKind) {
 		disposition = "inline"

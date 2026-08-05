@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) ObserveServer(raw []byte) (Result, error) {
@@ -611,7 +612,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		threadID := lookupString(message, "params", "threadId")
 		turnID := lookupString(message, "params", "turnId")
 		itemID := lookupString(message, "params", "itemId")
-		progressMessage := firstNonEmptyString(
+		progressMessage := xutil.FirstNonEmpty(
 			lookupString(message, "params", "message"),
 			lookupString(message, "params", "progress", "message"),
 		)
@@ -637,8 +638,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		threadID := lookupString(message, "params", "threadId")
 		turnID := lookupString(message, "params", "turnId")
 		targetItemID := lookupString(message, "params", "targetItemId")
-		action := cloneMap(lookupMap(message, "params", "action"))
-		review := cloneMap(lookupMap(message, "params", "review"))
+		action := xutil.CloneMap(lookupMap(message, "params", "action"))
+		review := xutil.CloneMap(lookupMap(message, "params", "review"))
 		metadata := map[string]any{}
 		if targetItemID != "" {
 			metadata["targetItemId"] = targetItemID
@@ -649,8 +650,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if len(review) != 0 {
 			metadata["review"] = review
 		}
-		actionType := firstNonEmptyString(
-			lookupStringFromAny(action["type"]),
+		actionType := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(action["type"]),
 			lookupString(message, "params", "action", "type"),
 		)
 		if actionType != "" {
@@ -694,9 +695,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		delete(t.pendingRequestTypes, requestID)
 		metadata := extractResolvedRequestMetadata(requestType, request, params)
-		status := firstNonEmptyString(
-			lookupStringFromAny(params["status"]),
-			lookupStringFromAny(request["status"]),
+		status := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(params["status"]),
+			xutil.LookupStringFromAny(request["status"]),
 			"resolved",
 		)
 		return Result{Events: []agentproto.Event{{
@@ -714,11 +715,11 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		turnID := lookupString(message, "params", "turnId")
 		item := lookupMap(message, "params", "item")
 		itemID := choose(
-			lookupStringFromAny(item["id"]),
+			xutil.LookupStringFromAny(item["id"]),
 			lookupString(message, "params", "itemId"),
 		)
 		itemKind := normalizeItemKind(choose(
-			lookupStringFromAny(item["type"]),
+			xutil.LookupStringFromAny(item["type"]),
 			lookupString(message, "params", "itemType"),
 		))
 		metadata := extractItemMetadata(itemKind, item)
@@ -739,11 +740,11 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		turnID := lookupString(message, "params", "turnId")
 		item := lookupMap(message, "params", "item")
 		itemID := choose(
-			lookupStringFromAny(item["id"]),
+			xutil.LookupStringFromAny(item["id"]),
 			lookupString(message, "params", "itemId"),
 		)
 		itemKind := normalizeItemKind(choose(
-			lookupStringFromAny(item["type"]),
+			xutil.LookupStringFromAny(item["type"]),
 			lookupString(message, "params", "itemType"),
 		))
 		return Result{Events: []agentproto.Event{{
@@ -796,7 +797,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			Delta:        lookupString(message, "params", "delta"),
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
-			Metadata:     map[string]any{"summaryIndex": lookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
+			Metadata:     map[string]any{"summaryIndex": xutil.LookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
 		}}}, nil
 	case "item/reasoning/textDelta":
 		threadID := lookupString(message, "params", "threadId")
@@ -810,7 +811,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			Delta:        lookupString(message, "params", "delta"),
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
-			Metadata:     map[string]any{"contentIndex": lookupIntFromAny(lookupAny(message, "params", "contentIndex"))},
+			Metadata:     map[string]any{"contentIndex": xutil.LookupIntFromAny(lookupAny(message, "params", "contentIndex"))},
 		}}}, nil
 	case "item/commandExecution/outputDelta":
 		threadID := lookupString(message, "params", "threadId")
@@ -830,10 +831,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		threadID := lookupString(message, "params", "threadId")
 		turnID := lookupString(message, "params", "turnId")
 		metadata := map[string]any{}
-		if processID := lookupStringFromAny(params["processId"]); processID != "" {
+		if processID := xutil.LookupStringFromAny(params["processId"]); processID != "" {
 			metadata["processId"] = processID
 		}
-		if stdin := lookupStringFromAny(params["stdin"]); stdin != "" {
+		if stdin := xutil.LookupStringFromAny(params["stdin"]); stdin != "" {
 			metadata["stdin"] = stdin
 		}
 		return Result{Events: []agentproto.Event{{
@@ -884,7 +885,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			ItemKind:     "reasoning_summary",
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
-			Metadata:     map[string]any{"summaryIndex": lookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
+			Metadata:     map[string]any{"summaryIndex": xutil.LookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
 		}}}, nil
 	default:
 		return Result{}, nil
@@ -909,18 +910,18 @@ func parseCodexProblemEvent(message map[string]any) *agentproto.ErrorInfo {
 	if len(errPayload) == 0 {
 		return nil
 	}
-	messageText := strings.TrimSpace(lookupStringFromAny(errPayload["message"]))
-	detailsText := strings.TrimSpace(lookupStringFromAny(errPayload["additionalDetails"]))
+	messageText := strings.TrimSpace(xutil.LookupStringFromAny(errPayload["message"]))
+	detailsText := strings.TrimSpace(xutil.LookupStringFromAny(errPayload["additionalDetails"]))
 	retryable := lookupBool(message, "params", "willRetry")
 	if retryable && detailsText != "" && strings.HasPrefix(strings.ToLower(messageText), "reconnecting") {
 		messageText = detailsText
 	}
 	problem := agentproto.ErrorInfo{
-		Code:      firstNonEmptyString(codexErrorCode(errPayload["codexErrorInfo"]), "codex_runtime_error"),
+		Code:      xutil.FirstNonEmpty(codexErrorCode(errPayload["codexErrorInfo"]), "codex_runtime_error"),
 		Layer:     "codex",
 		Stage:     "runtime_error",
-		Message:   firstNonEmptyString(messageText, detailsText),
-		Details:   firstNonEmptyString(detailsText, messageText),
+		Message:   xutil.FirstNonEmpty(messageText, detailsText),
+		Details:   xutil.FirstNonEmpty(detailsText, messageText),
 		ThreadID:  lookupString(message, "params", "threadId"),
 		TurnID:    lookupString(message, "params", "turnId"),
 		Retryable: retryable,
@@ -950,7 +951,7 @@ func extractTurnPlanSnapshot(message map[string]any) *agentproto.TurnPlanSnapsho
 		return nil
 	}
 	snapshot := &agentproto.TurnPlanSnapshot{
-		Explanation: strings.TrimSpace(lookupStringFromAny(params["explanation"])),
+		Explanation: strings.TrimSpace(xutil.LookupStringFromAny(params["explanation"])),
 	}
 	rawPlan, _ := params["plan"].([]any)
 	for _, raw := range rawPlan {
@@ -958,8 +959,8 @@ func extractTurnPlanSnapshot(message map[string]any) *agentproto.TurnPlanSnapsho
 		if !ok {
 			continue
 		}
-		step := strings.TrimSpace(lookupStringFromAny(entry["step"]))
-		status := agentproto.NormalizeTurnPlanStepStatus(lookupStringFromAny(entry["status"]))
+		step := strings.TrimSpace(xutil.LookupStringFromAny(entry["step"]))
+		status := agentproto.NormalizeTurnPlanStepStatus(xutil.LookupStringFromAny(entry["status"]))
 		if step == "" && status == "" {
 			continue
 		}

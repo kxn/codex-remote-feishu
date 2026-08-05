@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -286,7 +287,7 @@ func vscodeMigrationNoticeEvent(surfaceID string, flow *vscodeMigrationFlowRecor
 		surfaceID,
 		flow,
 		inlineReplace,
-		firstNonEmpty(strings.TrimSpace(notice.Title), "VS Code 迁移"),
+		xutil.FirstNonEmpty(strings.TrimSpace(notice.Title), "VS Code 迁移"),
 		nil,
 		strings.TrimSpace(notice.Text),
 		vscodeMigrationThemeForNotice(notice),
@@ -312,7 +313,7 @@ func (a *App) routeVSCodeMigrationFlowNoticeLocked(event eventcontract.Event) ev
 	}
 	a.refreshVSCodeMigrationFlowLocked(flow, "")
 	updated := vscodeMigrationNoticeEvent(event.SurfaceSessionID, flow, false, event.Notice)
-	updated.GatewayID = firstNonEmpty(strings.TrimSpace(event.GatewayID), strings.TrimSpace(updated.GatewayID))
+	updated.GatewayID = xutil.FirstNonEmpty(strings.TrimSpace(event.GatewayID), strings.TrimSpace(updated.GatewayID))
 	updated.SourceMessageID = strings.TrimSpace(event.SourceMessageID)
 	updated.SourceMessagePreview = strings.TrimSpace(event.SourceMessagePreview)
 	return updated

@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func normalizeUnspecifiedInitiator(initiator agentproto.Initiator) agentproto.Initiator {
@@ -495,7 +496,7 @@ func (s *Service) interruptibleSurfaceTurn(surface *state.SurfaceConsoleRecord) 
 			if inst != nil {
 				activeThreadID = inst.ActiveThreadID
 			}
-			return strings.TrimSpace(firstNonEmpty(remoteBindingExecutionThreadID(binding), activeThreadID)), turnID, true
+			return strings.TrimSpace(xutil.FirstNonEmpty(remoteBindingExecutionThreadID(binding), activeThreadID)), turnID, true
 		}
 	}
 	if inst == nil {

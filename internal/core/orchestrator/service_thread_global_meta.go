@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) threadSelectionMetaText(surface *state.SurfaceConsoleRecord, view *mergedThreadView, status string) string {
@@ -33,7 +34,7 @@ func (s *Service) threadSelectionMetaText(surface *state.SurfaceConsoleRecord, v
 	if age != "" {
 		return age
 	}
-	return firstNonEmpty(status, "时间未知")
+	return xutil.FirstNonEmpty(status, "时间未知")
 }
 
 func (s *Service) vscodeThreadSelectionMetaText(surface *state.SurfaceConsoleRecord, view *mergedThreadView, status string) string {
@@ -41,7 +42,7 @@ func (s *Service) vscodeThreadSelectionMetaText(surface *state.SurfaceConsoleRec
 	age := humanizeRelativeTime(s.now(), threadLastUsedAt(view))
 	isCurrent := surface != nil && surface.SelectedThreadID == view.ThreadID && s.surfaceOwnsThread(surface, view.ThreadID)
 	if isCurrent {
-		parts := []string{firstNonEmpty(status, "已接管")}
+		parts := []string{xutil.FirstNonEmpty(status, "已接管")}
 		if age != "" {
 			parts = append(parts, age)
 		}

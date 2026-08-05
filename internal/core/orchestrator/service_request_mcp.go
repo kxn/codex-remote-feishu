@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const mcpElicitationJSONFieldID = "__mcp_elicitation_json"
@@ -24,14 +25,14 @@ const (
 )
 
 func buildPermissionsRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
-	body := strings.TrimSpace(firstNonEmpty(
+	body := strings.TrimSpace(xutil.FirstNonEmpty(
 		promptBody(prompt),
 		metadataString(metadata, "body"),
 		metadataString(metadata, "reason"),
 		requestLocalBackendDisplayName(backend)+" 正在等待授予附加权限。",
 	))
 	sections := appendRequestPromptSection(nil, "", body)
-	if reason := strings.TrimSpace(firstNonEmpty(metadataString(metadata, "reason"), promptPermissionsReason(prompt))); reason != "" && !strings.Contains(body, reason) {
+	if reason := strings.TrimSpace(xutil.FirstNonEmpty(metadataString(metadata, "reason"), promptPermissionsReason(prompt))); reason != "" && !strings.Contains(body, reason) {
 		sections = appendRequestPromptSection(sections, "", "原因："+reason)
 	}
 	permissions := promptPermissionsList(prompt, metadata)
@@ -58,12 +59,12 @@ func buildPermissionsRequestResponse(request *state.RequestPromptRecord, action 
 	switch optionID {
 	case "accept":
 		return map[string]any{
-			"permissions": cloneJSONValue(promptPermissionsList(request.Prompt, nil)),
+			"permissions": xutil.CloneJSONValue(promptPermissionsList(request.Prompt, nil)),
 			"scope":       "turn",
 		}, true, nil
 	case "acceptForSession":
 		return map[string]any{
-			"permissions": cloneJSONValue(promptPermissionsList(request.Prompt, nil)),
+			"permissions": xutil.CloneJSONValue(promptPermissionsList(request.Prompt, nil)),
 			"scope":       "session",
 		}, true, nil
 	case "decline":
@@ -79,11 +80,11 @@ func buildPermissionsRequestResponse(request *state.RequestPromptRecord, action 
 func buildMCPElicitationApprovalSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	sections := []state.RequestPromptTextSectionRecord(nil)
 	lines := []string{}
-	if body := strings.TrimSpace(firstNonEmpty(promptBody(prompt), metadataString(metadata, "body"), promptMCPElicitationMessage(prompt), metadataString(metadata, "elicitationMessage"))); body != "" {
+	if body := strings.TrimSpace(xutil.FirstNonEmpty(promptBody(prompt), metadataString(metadata, "body"), promptMCPElicitationMessage(prompt), metadataString(metadata, "elicitationMessage"))); body != "" {
 		lines = append(lines, body)
 	}
 	meta := promptMCPElicitationMeta(prompt, metadata)
-	if serverName := strings.TrimSpace(firstNonEmpty(promptMCPElicitationServerName(prompt), metadataString(metadata, "serverName"))); serverName != "" {
+	if serverName := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationServerName(prompt), metadataString(metadata, "serverName"))); serverName != "" {
 		lines = append(lines, "MCP 服务："+serverName)
 	}
 	if toolTitle := strings.TrimSpace(mcpElicitationApprovalMetaString(meta, "tool_title", "toolTitle")); toolTitle != "" {
@@ -140,15 +141,15 @@ func buildMCPElicitationSections(backend agentproto.Backend, prompt *agentproto.
 	mode := mcpElicitationMode(prompt, metadata)
 	sections := []state.RequestPromptTextSectionRecord(nil)
 	lines := []string{}
-	if body := strings.TrimSpace(firstNonEmpty(promptBody(prompt), metadataString(metadata, "body"))); body != "" {
+	if body := strings.TrimSpace(xutil.FirstNonEmpty(promptBody(prompt), metadataString(metadata, "body"))); body != "" {
 		lines = append(lines, body)
 	}
-	if serverName := strings.TrimSpace(firstNonEmpty(promptMCPElicitationServerName(prompt), metadataString(metadata, "serverName"))); serverName != "" {
+	if serverName := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationServerName(prompt), metadataString(metadata, "serverName"))); serverName != "" {
 		lines = append(lines, "MCP 服务："+serverName)
 	}
 	switch mode {
 	case "url":
-		url := strings.TrimSpace(firstNonEmpty(promptMCPElicitationURL(prompt), metadataString(metadata, "url")))
+		url := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationURL(prompt), metadataString(metadata, "url")))
 		if url != "" {
 			lines = append(lines, "授权页面："+url)
 			lines = append(lines, "完成外部授权后，再点击“继续”。")
@@ -202,7 +203,7 @@ func buildMCPElicitationOptions(prompt *agentproto.RequestPrompt, metadata map[s
 		}
 	}
 	continueLabel := "继续"
-	if strings.TrimSpace(firstNonEmpty(promptMCPElicitationURL(prompt), metadataString(metadata, "url"))) != "" {
+	if strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationURL(prompt), metadataString(metadata, "url"))) != "" {
 		continueLabel = "我已完成，继续"
 	}
 	return []state.RequestPromptOptionRecord{
@@ -273,9 +274,9 @@ func (s *Service) buildMCPElicitationResponse(surface *state.SurfaceConsoleRecor
 func buildMCPElicitationPayload(action string, content any, meta map[string]any) map[string]any {
 	payload := map[string]any{
 		"action":  strings.TrimSpace(action),
-		"content": cloneJSONValue(content),
+		"content": xutil.CloneJSONValue(content),
 	}
-	payload["_meta"] = cloneJSONValue(meta)
+	payload["_meta"] = xutil.CloneJSONValue(meta)
 	if payload["_meta"] == nil {
 		payload["_meta"] = map[string]any{}
 	}
@@ -292,7 +293,7 @@ func mcpElicitationApprovalMetaString(meta map[string]any, keys ...string) strin
 		return ""
 	}
 	for _, key := range keys {
-		if value := strings.TrimSpace(lookupStringFromAny(meta[key])); value != "" {
+		if value := strings.TrimSpace(xutil.Stringify(meta[key])); value != "" {
 			return value
 		}
 	}
@@ -323,10 +324,10 @@ func mcpElicitationPersistValues(meta map[string]any) []string {
 		}
 	case []any:
 		for _, item := range typed {
-			add(lookupStringFromAny(item))
+			add(xutil.Stringify(item))
 		}
 	default:
-		add(lookupStringFromAny(raw))
+		add(xutil.Stringify(raw))
 	}
 	return values
 }
@@ -347,7 +348,7 @@ func mcpElicitationAdvertisesPersist(meta map[string]any, target string) bool {
 func mcpElicitationApprovalResponseMeta(meta map[string]any, persist string) map[string]any {
 	cloned := map[string]any{}
 	if len(meta) != 0 {
-		if value, ok := cloneJSONValue(meta).(map[string]any); ok && value != nil {
+		if value, ok := xutil.CloneJSONValue(meta).(map[string]any); ok && value != nil {
 			cloned = value
 		}
 	}
@@ -382,15 +383,15 @@ func mcpElicitationApprovalDisplayParamLines(meta map[string]any) []string {
 		if len(record) == 0 {
 			continue
 		}
-		name := strings.TrimSpace(firstNonEmpty(
-			lookupStringFromAny(record["name"]),
-			lookupStringFromAny(record["label"]),
-			lookupStringFromAny(record["key"]),
+		name := strings.TrimSpace(xutil.FirstNonEmpty(
+			xutil.Stringify(record["name"]),
+			xutil.Stringify(record["label"]),
+			xutil.Stringify(record["key"]),
 		))
-		value := strings.TrimSpace(firstNonEmpty(
-			lookupStringFromAny(record["value"]),
-			lookupStringFromAny(record["displayValue"]),
-			lookupStringFromAny(record["display_value"]),
+		value := strings.TrimSpace(xutil.FirstNonEmpty(
+			xutil.Stringify(record["value"]),
+			xutil.Stringify(record["displayValue"]),
+			xutil.Stringify(record["display_value"]),
 		))
 		switch {
 		case name != "" && value != "":
@@ -455,16 +456,16 @@ func buildMCPElicitationContent(request *state.RequestPromptRecord, rawAnswers m
 		answer := strings.TrimSpace(request.DraftAnswers[name])
 		if answer == "" {
 			if requiredSet[name] {
-				missing = append(missing, firstNonEmpty(
-					lookupStringFromAny(property["title"]),
-					lookupStringFromAny(property["description"]),
+				missing = append(missing, xutil.FirstNonEmpty(
+					xutil.Stringify(property["title"]),
+					xutil.Stringify(property["description"]),
 					name,
 				))
 				complete = false
 			} else if !request.SkippedQuestionIDs[name] {
-				missing = append(missing, firstNonEmpty(
-					lookupStringFromAny(property["title"]),
-					lookupStringFromAny(property["description"]),
+				missing = append(missing, xutil.FirstNonEmpty(
+					xutil.Stringify(property["title"]),
+					xutil.Stringify(property["description"]),
 					name,
 				))
 				complete = false
@@ -473,7 +474,7 @@ func buildMCPElicitationContent(request *state.RequestPromptRecord, rawAnswers m
 		}
 		value, err := coerceMCPElicitationAnswer(property, answer)
 		if err != nil {
-			return nil, false, nil, fmt.Sprintf("字段“%s”无效：%v", firstNonEmpty(lookupStringFromAny(property["title"]), name), err)
+			return nil, false, nil, fmt.Sprintf("字段“%s”无效：%v", xutil.FirstNonEmpty(xutil.Stringify(property["title"]), name), err)
 		}
 		content[name] = value
 	}
@@ -499,7 +500,7 @@ func buildMCPElicitationFlatQuestions(schema map[string]any) []state.RequestProm
 		property := properties[name]
 		options := mcpElicitationQuestionOptions(property)
 		placeholder := strings.TrimSpace(mcpElicitationPlaceholder(property))
-		questionText := strings.TrimSpace(lookupStringFromAny(property["description"]))
+		questionText := strings.TrimSpace(xutil.Stringify(property["description"]))
 		if questionText == "" {
 			questionText = "请填写该字段"
 		}
@@ -509,11 +510,11 @@ func buildMCPElicitationFlatQuestions(schema map[string]any) []state.RequestProm
 		directResponse := len(options) != 0 && len(options) <= 4
 		questions = append(questions, state.RequestPromptQuestionRecord{
 			ID:             name,
-			Header:         firstNonEmpty(lookupStringFromAny(property["title"]), name),
+			Header:         xutil.FirstNonEmpty(xutil.Stringify(property["title"]), name),
 			Question:       questionText,
 			Optional:       !requiredSet[name],
 			AllowOther:     !directResponse,
-			Secret:         lookupBoolFromAny(property["secret"]) || strings.EqualFold(strings.TrimSpace(lookupStringFromAny(property["format"])), "password"),
+			Secret:         xutil.LookupBoolFromAny(property["secret"]) || strings.EqualFold(strings.TrimSpace(xutil.Stringify(property["format"])), "password"),
 			Options:        options,
 			Placeholder:    placeholder,
 			DirectResponse: directResponse,
@@ -526,7 +527,7 @@ func mcpElicitationFlatProperties(schema map[string]any) (map[string]map[string]
 	if len(schema) == 0 {
 		return nil, nil, false
 	}
-	schemaType := strings.TrimSpace(lookupStringFromAny(schema["type"]))
+	schemaType := strings.TrimSpace(xutil.Stringify(schema["type"]))
 	if schemaType != "" && schemaType != "object" {
 		return nil, nil, false
 	}
@@ -540,7 +541,7 @@ func mcpElicitationFlatProperties(schema map[string]any) (map[string]map[string]
 		if !ok {
 			return nil, nil, false
 		}
-		if propertyType := strings.TrimSpace(lookupStringFromAny(property["type"])); propertyType == "object" {
+		if propertyType := strings.TrimSpace(xutil.Stringify(property["type"])); propertyType == "object" {
 			return nil, nil, false
 		}
 		properties[strings.TrimSpace(name)] = property
@@ -549,7 +550,7 @@ func mcpElicitationFlatProperties(schema map[string]any) (map[string]map[string]
 	switch typed := schema["required"].(type) {
 	case []any:
 		for _, item := range typed {
-			if name := strings.TrimSpace(lookupStringFromAny(item)); name != "" {
+			if name := strings.TrimSpace(xutil.Stringify(item)); name != "" {
 				required = append(required, name)
 			}
 		}
@@ -570,7 +571,7 @@ func mcpElicitationQuestionOptions(property map[string]any) []state.RequestPromp
 	}
 	options := make([]state.RequestPromptQuestionOptionRecord, 0, len(rawOptions))
 	for _, raw := range rawOptions {
-		label := strings.TrimSpace(lookupStringFromAny(raw))
+		label := strings.TrimSpace(xutil.Stringify(raw))
 		if label == "" {
 			continue
 		}
@@ -580,10 +581,10 @@ func mcpElicitationQuestionOptions(property map[string]any) []state.RequestPromp
 }
 
 func mcpElicitationPlaceholder(property map[string]any) string {
-	if placeholder := strings.TrimSpace(lookupStringFromAny(property["placeholder"])); placeholder != "" {
+	if placeholder := strings.TrimSpace(xutil.Stringify(property["placeholder"])); placeholder != "" {
 		return placeholder
 	}
-	switch strings.TrimSpace(lookupStringFromAny(property["type"])) {
+	switch strings.TrimSpace(xutil.Stringify(property["type"])) {
 	case "boolean":
 		return "填写 true / false"
 	case "integer":
@@ -615,7 +616,7 @@ func coerceMCPElicitationAnswer(property map[string]any, answer string) (any, er
 			return nil, fmt.Errorf("不在可选项中")
 		}
 	}
-	switch strings.TrimSpace(lookupStringFromAny(property["type"])) {
+	switch strings.TrimSpace(xutil.Stringify(property["type"])) {
 	case "boolean":
 		switch strings.ToLower(answer) {
 		case "true", "yes", "y", "1":
@@ -665,7 +666,7 @@ func coerceMCPElicitationAnswer(property map[string]any, answer string) (any, er
 }
 
 func mcpElicitationMode(prompt *agentproto.RequestPrompt, metadata map[string]any) string {
-	mode := strings.TrimSpace(firstNonEmpty(
+	mode := strings.TrimSpace(xutil.FirstNonEmpty(
 		promptMCPElicitationMode(prompt),
 		metadataString(metadata, "elicitationMode"),
 	))
@@ -693,13 +694,13 @@ func promptPermissionsReason(prompt *agentproto.RequestPrompt) string {
 
 func promptPermissionsList(prompt *agentproto.RequestPrompt, metadata map[string]any) []map[string]any {
 	if prompt != nil && prompt.Permissions != nil && len(prompt.Permissions.Permissions) != 0 {
-		cloned, _ := cloneJSONValue(prompt.Permissions.Permissions).([]map[string]any)
+		cloned, _ := xutil.CloneJSONValue(prompt.Permissions.Permissions).([]map[string]any)
 		if cloned != nil {
 			return cloned
 		}
 		items := make([]map[string]any, 0, len(prompt.Permissions.Permissions))
 		for _, item := range prompt.Permissions.Permissions {
-			record, _ := cloneJSONValue(item).(map[string]any)
+			record, _ := xutil.CloneJSONValue(item).(map[string]any)
 			if record != nil {
 				items = append(items, record)
 			}
@@ -754,7 +755,7 @@ func promptMCPElicitationServerName(prompt *agentproto.RequestPrompt) string {
 
 func promptMCPElicitationSchema(prompt *agentproto.RequestPrompt, metadata map[string]any) map[string]any {
 	if prompt != nil && prompt.MCPElicitation != nil && len(prompt.MCPElicitation.RequestedSchema) != 0 {
-		cloned, _ := cloneJSONValue(prompt.MCPElicitation.RequestedSchema).(map[string]any)
+		cloned, _ := xutil.CloneJSONValue(prompt.MCPElicitation.RequestedSchema).(map[string]any)
 		return cloned
 	}
 	if len(metadata) == 0 {
@@ -766,7 +767,7 @@ func promptMCPElicitationSchema(prompt *agentproto.RequestPrompt, metadata map[s
 
 func promptMCPElicitationMeta(prompt *agentproto.RequestPrompt, metadata map[string]any) map[string]any {
 	if prompt != nil && prompt.MCPElicitation != nil && len(prompt.MCPElicitation.Meta) != 0 {
-		cloned, _ := cloneJSONValue(prompt.MCPElicitation.Meta).(map[string]any)
+		cloned, _ := xutil.CloneJSONValue(prompt.MCPElicitation.Meta).(map[string]any)
 		return cloned
 	}
 	if len(metadata) == 0 {
@@ -774,32 +775,4 @@ func promptMCPElicitationMeta(prompt *agentproto.RequestPrompt, metadata map[str
 	}
 	record, _ := metadata["meta"].(map[string]any)
 	return record
-}
-
-func cloneJSONValue(value any) any {
-	switch typed := value.(type) {
-	case nil:
-		return nil
-	case map[string]any:
-		cloned := make(map[string]any, len(typed))
-		for key, item := range typed {
-			cloned[key] = cloneJSONValue(item)
-		}
-		return cloned
-	case []any:
-		cloned := make([]any, 0, len(typed))
-		for _, item := range typed {
-			cloned = append(cloned, cloneJSONValue(item))
-		}
-		return cloned
-	case []map[string]any:
-		cloned := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			record, _ := cloneJSONValue(item).(map[string]any)
-			cloned = append(cloned, record)
-		}
-		return cloned
-	default:
-		return typed
-	}
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func newRemoteTurnBindingForQueueItem(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, item *state.QueueItemRecord) *remoteTurnBinding {
@@ -20,8 +21,8 @@ func newRemoteTurnBindingForQueueItem(surface *state.SurfaceConsoleRecord, inst 
 		QueueItemID:           item.ID,
 		SourceMessageID:       item.SourceMessageID,
 		SourceMessagePreview:  item.SourceMessagePreview,
-		ReplyToMessageID:      firstNonEmpty(item.ReplyToMessageID, item.SourceMessageID),
-		ReplyToMessagePreview: firstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview),
+		ReplyToMessageID:      xutil.FirstNonEmpty(item.ReplyToMessageID, item.SourceMessageID),
+		ReplyToMessagePreview: xutil.FirstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview),
 		DispatchPlan:          dispatchPlan,
 		BootstrapNewThread:    item.RouteModeAtEnqueue == state.RouteModeNewThreadReady,
 		ThreadID:              dispatchPlan.ExecutionThreadID,

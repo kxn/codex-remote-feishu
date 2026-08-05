@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) attachWorkspace(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
@@ -39,7 +40,7 @@ func (s *Service) attachWorkspaceWithOptions(surface *state.SurfaceConsoleRecord
 	case contractResolutionAttachVisible, contractResolutionReuseManaged:
 		inst = resolution.Instance
 	case contractResolutionUnavailable:
-		return notice(surface, firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"), firstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标工作区当前暂时不可接管，请稍后重试。"))
+		return notice(surface, xutil.FirstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy"), xutil.FirstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标工作区当前暂时不可接管，请稍后重试。"))
 	default:
 		if len(s.workspaceOnlineInstances(workspaceKey)) == 0 {
 			return notice(surface, "workspace_not_found", "目标工作区已失效，请重新发送 /list。")
@@ -316,7 +317,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		} else {
 			s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
 		}
-		workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
+		workspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
 		if pending.PrepareNewThread {
 			return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{
 				PrepareNewThread: true,
@@ -338,7 +339,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		// This connection belongs to a concrete managed instance. A global
 		// merged view can pick the same thread ID from another instance and
 		// leak that instance's workspace into this restore attempt.
-		thread.WorkspaceKey = normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
+		thread.WorkspaceKey = normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
 		thread.CWD = strings.TrimSpace(pending.ThreadCWD)
 		view := &mergedThreadView{
 			ThreadID: pending.ThreadID,
@@ -384,7 +385,7 @@ func (s *Service) attachHeadlessWorkspaceRouteRestart(surface *state.SurfaceCons
 	}
 	workspaceKey := normalizeWorkspaceClaimKey(pending.WorkspaceKey)
 	if workspaceKey == "" {
-		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot), pending.ThreadCWD)
+		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot), pending.ThreadCWD)
 	}
 	if workspaceKey == "" {
 		s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
@@ -459,7 +460,7 @@ func (s *Service) finishFailedAutoRestoreThreadConnect(surface *state.SurfaceCon
 	if s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID) == nil {
 		return events
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD, surface.ClaimedWorkspaceKey))
+	workspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD, surface.ClaimedWorkspaceKey))
 	if surface.AttachedInstanceID == pending.InstanceID {
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 	} else {
@@ -499,7 +500,7 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 		return nil
 	}
 	s.applyPendingHeadlessRuntimeToInstance(surface, inst, pending)
-	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot, pending.WorkspaceKey), pending.ThreadCWD)
+	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot, pending.WorkspaceKey), pending.ThreadCWD)
 	next := promptDispatchRestartRouteState(inst.InstanceID, workspaceKey, pending)
 	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
 		AttachedInstanceID:   next.AttachedInstanceID,
@@ -532,7 +533,7 @@ func promptDispatchRestartRouteState(instanceID, workspaceKey string, pending *s
 	}
 	if pending.PrepareNewThread {
 		next.RouteMode = state.RouteModeNewThreadReady
-		next.PreparedThreadCWD = strings.TrimSpace(firstNonEmpty(pending.ThreadCWD, next.WorkspaceKey))
+		next.PreparedThreadCWD = strings.TrimSpace(xutil.FirstNonEmpty(pending.ThreadCWD, next.WorkspaceKey))
 		next.PreparedFromThreadID = strings.TrimSpace(pending.ThreadID)
 		return next
 	}

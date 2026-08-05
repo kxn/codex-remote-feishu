@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type JobSourceType string
@@ -96,7 +97,7 @@ func JobDisplaySource(job JobState) string {
 		if strings.TrimSpace(spec.RepoURL) != "" {
 			return spec.SourceLabel()
 		}
-		return firstNonEmpty(job.GitRepoSourceInput, "repo: unknown")
+		return xutil.FirstNonEmpty(job.GitRepoSourceInput, "repo: unknown")
 	}
 	return strings.TrimSpace(job.WorkspaceKey)
 }

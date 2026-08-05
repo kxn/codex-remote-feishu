@@ -10,6 +10,7 @@ import (
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
@@ -69,7 +70,7 @@ func TestCronMenuCatalogUsesSteadyStateActions(t *testing.T) {
 	if buttons["/cron repair"].Style == "primary" {
 		t.Fatalf("repair must not be primary in steady state: %#v", buttons["/cron repair"])
 	}
-	if containsString(catalogCommands(catalog), "/cron migrate-owner") {
+	if xutil.ContainsString(catalogCommands(catalog), "/cron migrate-owner") {
 		t.Fatalf("manual commands must not expose migrate-owner: %#v", catalogCommands(catalog))
 	}
 }
@@ -382,13 +383,4 @@ func catalogCommands(catalog *control.FeishuPageView) []string {
 		}
 	}
 	return values
-}
-
-func containsString(values []string, needle string) bool {
-	for _, value := range values {
-		if value == needle {
-			return true
-		}
-	}
-	return false
 }

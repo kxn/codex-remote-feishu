@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestClaudeTranslatorToolApprovalAcceptForSessionUsesNativePermissionSuggestions(t *testing.T) {
@@ -58,7 +59,7 @@ func TestClaudeTranslatorToolApprovalAcceptForSessionUsesNativePermissionSuggest
 		t.Fatalf("translate tool approval session grant: %v", err)
 	}
 	body := testMapValue(testMapValue(decodeFrame(t, payloads[0])["response"])["response"])
-	if lookupStringFromAny(body["behavior"]) != "allow" {
+	if xutil.LookupStringFromAny(body["behavior"]) != "allow" {
 		t.Fatalf("unexpected allow body: %#v", body)
 	}
 	updates := testSliceMapValue(body["updatedPermissions"])
@@ -66,18 +67,18 @@ func TestClaudeTranslatorToolApprovalAcceptForSessionUsesNativePermissionSuggest
 		t.Fatalf("expected native suggestions to be forwarded as updatedPermissions, got %#v", body)
 	}
 	rules := permissionUpdateByType(t, updates, "addRules")
-	if lookupStringFromAny(rules["behavior"]) != "allow" || lookupStringFromAny(rules["destination"]) != "session" {
+	if xutil.LookupStringFromAny(rules["behavior"]) != "allow" || xutil.LookupStringFromAny(rules["destination"]) != "session" {
 		t.Fatalf("unexpected addRules session grant payload: %#v", rules)
 	}
 	addDirs := permissionUpdateByType(t, updates, "addDirectories")
-	if lookupStringFromAny(addDirs["destination"]) != "session" {
+	if xutil.LookupStringFromAny(addDirs["destination"]) != "session" {
 		t.Fatalf("unexpected addDirectories session grant payload: %#v", addDirs)
 	}
 	if got := testStringList(addDirs["directories"]); len(got) != 1 || got[0] != "/data/dl/droid/internal" {
 		t.Fatalf("unexpected addDirectories payload: %#v", addDirs)
 	}
 	updatedInput := testMapValue(body["updatedInput"])
-	if lookupStringFromAny(updatedInput["command"]) != "git status --short" {
+	if xutil.LookupStringFromAny(updatedInput["command"]) != "git status --short" {
 		t.Fatalf("expected updatedInput to stay unchanged on session grant, got %#v", updatedInput)
 	}
 }

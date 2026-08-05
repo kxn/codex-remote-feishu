@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) useThread(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) []eventcontract.Event {
@@ -43,8 +44,8 @@ func (s *Service) executeResolvedThreadTargetWithOverlayCleanup(surface *state.S
 		}
 		return s.startHeadlessForResolvedThreadWithOverlayCleanup(surface, target.View, cleanup)
 	default:
-		code := firstNonEmpty(target.NoticeCode, "thread_not_found")
-		text := firstNonEmpty(target.NoticeText, "目标会话不存在或当前不可见。")
+		code := xutil.FirstNonEmpty(target.NoticeCode, "thread_not_found")
+		text := xutil.FirstNonEmpty(target.NoticeText, "目标会话不存在或当前不可见。")
 		return notice(surface, code, text)
 	}
 }

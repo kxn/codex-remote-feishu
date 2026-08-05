@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestProjectInstanceSelectionViewUsesStructuredButtons(t *testing.T) {
@@ -78,7 +79,7 @@ func TestProjectInstanceSelectionViewUsesStructuredButtons(t *testing.T) {
 			}
 		}
 	}
-	if !containsString(buttonLabels, "切换 · web") || !containsString(buttonLabels, "不可接管 · ops") {
+	if !xutil.ContainsString(buttonLabels, "切换 · web") || !xutil.ContainsString(buttonLabels, "不可接管 · ops") {
 		t.Fatalf("unexpected structured instance button labels: %#v", buttonLabels)
 	}
 }

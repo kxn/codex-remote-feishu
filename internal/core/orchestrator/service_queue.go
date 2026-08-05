@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) maybeBindSurfaceForRemoteTurn(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, instanceID, threadID, turnID string) []eventcontract.Event {
@@ -54,8 +55,8 @@ func (s *Service) replyAnchorForTurn(instanceID, threadID, turnID string) (strin
 		}
 		return "", ""
 	}
-	return strings.TrimSpace(firstNonEmpty(binding.ReplyToMessageID, binding.SourceMessageID)),
-		strings.TrimSpace(firstNonEmpty(binding.ReplyToMessagePreview, binding.SourceMessagePreview))
+	return strings.TrimSpace(xutil.FirstNonEmpty(binding.ReplyToMessageID, binding.SourceMessageID)),
+		strings.TrimSpace(xutil.FirstNonEmpty(binding.ReplyToMessagePreview, binding.SourceMessagePreview))
 }
 
 func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
@@ -333,7 +334,7 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 	}
 	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 	s.activateSurfaceQueueItemDispatch(surface, inst, item)
-	originMessageID := firstNonEmpty(item.SourceMessageID, item.ReplyToMessageID)
+	originMessageID := xutil.FirstNonEmpty(item.SourceMessageID, item.ReplyToMessageID)
 
 	events := appendPendingInputTyping(s.pendingInputEvents(surface, control.PendingInputState{
 		QueueItemID: item.ID,
@@ -529,7 +530,7 @@ func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Even
 	}
 	inst := s.root.Instances[instanceID]
 	if inst != nil {
-		targetThreadID := strings.TrimSpace(firstNonEmpty(queuedItemExecutionThreadID(item), threadID))
+		targetThreadID := strings.TrimSpace(xutil.FirstNonEmpty(queuedItemExecutionThreadID(item), threadID))
 		s.materializeRemoteTurnThread(inst, targetThreadID, event.CWD, binding, item)
 		s.recordThreadUserMessage(inst, targetThreadID, item.SourceMessagePreview)
 	}
@@ -552,7 +553,7 @@ func (s *Service) maybeCommitBootstrapSurfaceBinding(surface *state.SurfaceConso
 	if surface == nil || inst == nil || item == nil || binding == nil || remoteBindingKeepsSurfaceSelection(binding) {
 		return nil
 	}
-	targetThreadID := strings.TrimSpace(firstNonEmpty(threadID, binding.ThreadID, queuedItemExecutionThreadID(item)))
+	targetThreadID := strings.TrimSpace(xutil.FirstNonEmpty(threadID, binding.ThreadID, queuedItemExecutionThreadID(item)))
 	if targetThreadID == "" {
 		return nil
 	}
@@ -623,7 +624,7 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	}
 
 	if !remoteBindingKeepsSurfaceSelection(binding) && !binding.ThreadCommitted {
-		targetThreadID := strings.TrimSpace(firstNonEmpty(binding.ThreadID, outcome.ThreadID, queuedItemExecutionThreadID(item)))
+		targetThreadID := strings.TrimSpace(xutil.FirstNonEmpty(binding.ThreadID, outcome.ThreadID, queuedItemExecutionThreadID(item)))
 		if targetThreadID != "" && (outcome.Cause == terminalCauseCompleted || binding.DurableThreadReady) {
 			events = append(events, s.maybeCommitBootstrapSurfaceBinding(surface, inst, item, binding, targetThreadID)...)
 		}

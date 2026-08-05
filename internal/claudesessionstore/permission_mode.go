@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -21,7 +22,7 @@ type claudePermissionSelection struct {
 }
 
 func CompileObservedPermissionStateFromClaudeNative(mode string) *agentproto.ObservedPermissionState {
-	nativeMode := firstNonEmptyString(strings.TrimSpace(mode), claudePermissionModeDefault)
+	nativeMode := xutil.FirstNonEmpty(strings.TrimSpace(mode), claudePermissionModeDefault)
 	switch nativeMode {
 	case claudePermissionModeDefault:
 		return &agentproto.ObservedPermissionState{

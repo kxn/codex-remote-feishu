@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
@@ -92,7 +93,7 @@ func (g *LiveGateway) uploadFilePathForSemantic(ctx context.Context, path string
 			Err:  fmt.Errorf("upload file failed: missing file key"),
 		}
 	}
-	fileKey := strings.TrimSpace(stringPtr(resp.Data.FileKey))
+	fileKey := strings.TrimSpace(xutil.StringValue(resp.Data.FileKey))
 	if fileKey == "" {
 		return "", "", &IMFileSendError{
 			Code: IMFileSendErrorUploadFailed,

@@ -11,6 +11,7 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func InboundMetaFromMessageEvent(event *larkim.P2MessageReceiveV1) *control.ActionInboundMeta {
@@ -19,8 +20,8 @@ func InboundMetaFromMessageEvent(event *larkim.P2MessageReceiveV1) *control.Acti
 	}
 	meta := newInboundMeta(headerFromMessageEvent(event), requestIDFromEventReq(event.EventReq))
 	if event.Event != nil && event.Event.Message != nil {
-		meta.MessageCreateTime = parseEpochString(stringPtr(event.Event.Message.CreateTime))
-		meta.OpenMessageID = strings.TrimSpace(stringPtr(event.Event.Message.MessageId))
+		meta.MessageCreateTime = parseEpochString(xutil.StringValue(event.Event.Message.CreateTime))
+		meta.OpenMessageID = strings.TrimSpace(xutil.StringValue(event.Event.Message.MessageId))
 	}
 	return meta
 }
@@ -31,7 +32,7 @@ func InboundMetaFromMessageRecalledEvent(event *larkim.P2MessageRecalledV1) *con
 	}
 	meta := newInboundMeta(headerFromMessageRecalledEvent(event), requestIDFromEventReq(event.EventReq))
 	if event.Event != nil {
-		meta.OpenMessageID = strings.TrimSpace(stringPtr(event.Event.MessageId))
+		meta.OpenMessageID = strings.TrimSpace(xutil.StringValue(event.Event.MessageId))
 	}
 	return meta
 }
@@ -42,7 +43,7 @@ func InboundMetaFromMessageReactionCreatedEvent(event *larkim.P2MessageReactionC
 	}
 	meta := newInboundMeta(headerFromMessageReactionCreatedEvent(event), requestIDFromEventReq(event.EventReq))
 	if event.Event != nil {
-		meta.OpenMessageID = strings.TrimSpace(stringPtr(event.Event.MessageId))
+		meta.OpenMessageID = strings.TrimSpace(xutil.StringValue(event.Event.MessageId))
 	}
 	return meta
 }

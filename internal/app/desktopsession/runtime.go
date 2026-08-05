@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/browseropen"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 var (
@@ -163,7 +164,7 @@ func targetFromCurrentDaemonInfo(info install.CurrentDaemonTargetInfo) Target {
 		StatePath:  info.StatePath,
 	}
 	return Target{
-		ResolverSource:   firstNonEmpty(strings.TrimSpace(info.ResolverSource), "runtime_env"),
+		ResolverSource:   xutil.FirstNonEmpty(strings.TrimSpace(info.ResolverSource), "runtime_env"),
 		InstanceID:       strings.TrimSpace(info.InstanceID),
 		BaseDir:          strings.TrimSpace(info.BaseDir),
 		ConfigPath:       strings.TrimSpace(info.ConfigPath),
@@ -182,7 +183,7 @@ func targetFromRepoInstallTargetInfo(info install.RepoInstallTargetInfo) Target 
 		StatePath:  info.StatePath,
 	}
 	return Target{
-		ResolverSource:   firstNonEmpty(strings.TrimSpace(info.BindingSource), "repo_target"),
+		ResolverSource:   xutil.FirstNonEmpty(strings.TrimSpace(info.BindingSource), "repo_target"),
 		InstanceID:       strings.TrimSpace(info.InstanceID),
 		BaseDir:          strings.TrimSpace(info.BaseDir),
 		ConfigPath:       strings.TrimSpace(info.ConfigPath),
@@ -240,13 +241,4 @@ func stateRank(state State) int {
 	default:
 		return 1
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }

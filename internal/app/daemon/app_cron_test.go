@@ -20,6 +20,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type fakeCronBitableAPI struct {
@@ -141,7 +142,7 @@ func (f *fakeCronBitableAPI) CreateRecord(_ context.Context, appToken, tableID s
 		TableID:  tableID,
 		Fields:   cloneAnyMap(fields),
 	})
-	return &larkbitable.AppTableRecord{RecordId: stringPtr("rec-created")}, nil
+	return &larkbitable.AppTableRecord{RecordId: xutil.StringPtr("rec-created")}, nil
 }
 
 func (f *fakeCronBitableAPI) UpdateRecord(_ context.Context, appToken, tableID, recordID string, fields map[string]any) (*larkbitable.AppTableRecord, error) {
@@ -153,7 +154,7 @@ func (f *fakeCronBitableAPI) UpdateRecord(_ context.Context, appToken, tableID, 
 		RecordID: recordID,
 		Fields:   cloneAnyMap(fields),
 	})
-	return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
+	return &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)}, nil
 }
 
 func (f *fakeCronBitableAPI) BatchCreateRecords(_ context.Context, appToken, tableID string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
@@ -172,7 +173,7 @@ func (f *fakeCronBitableAPI) BatchCreateRecords(_ context.Context, appToken, tab
 			RecordID: recordID,
 			Fields:   cloneAnyMap(fields),
 		})
-		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
+		records = append(records, &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)})
 	}
 	return records, nil
 }
@@ -192,7 +193,7 @@ func (f *fakeCronBitableAPI) BatchUpdateRecords(_ context.Context, appToken, tab
 			RecordID: recordID,
 			Fields:   cloneAnyMap(update.Fields),
 		})
-		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
+		records = append(records, &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)})
 	}
 	return records, nil
 }
@@ -621,7 +622,7 @@ func TestCronReloadUsesResolvedOwnerGateway(t *testing.T) {
 	api := &fakeCronBitableAPI{
 		recordsByTable: map[string][]*larkbitable.AppTableRecord{
 			"tbl-workspaces": {{
-				RecordId: stringPtr("rec-workspace-1"),
+				RecordId: xutil.StringPtr("rec-workspace-1"),
 				Fields: map[string]any{
 					"工作区名称": "project",
 					"工作区键":  "/tmp/project",
@@ -629,7 +630,7 @@ func TestCronReloadUsesResolvedOwnerGateway(t *testing.T) {
 				},
 			}},
 			"tbl-tasks": {{
-				RecordId: stringPtr("rec-task-1"),
+				RecordId: xutil.StringPtr("rec-task-1"),
 				Fields: map[string]any{
 					"任务名":    "Nightly",
 					"启用":     true,
@@ -687,7 +688,7 @@ func TestCronReloadParsesGitRepoSourceInput(t *testing.T) {
 		recordsByTable: map[string][]*larkbitable.AppTableRecord{
 			"tbl-workspaces": {},
 			"tbl-tasks": {{
-				RecordId: stringPtr("rec-task-git"),
+				RecordId: xutil.StringPtr("rec-task-git"),
 				Fields: map[string]any{
 					"任务名":                        "Git Nightly",
 					"启用":                         true,
@@ -858,7 +859,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 	api := &fakeCronBitableAPI{
 		recordsByTable: map[string][]*larkbitable.AppTableRecord{
 			"tbl-workspaces": {{
-				RecordId: stringPtr("rec-workspace-1"),
+				RecordId: xutil.StringPtr("rec-workspace-1"),
 				Fields: map[string]any{
 					"工作区名称": "project",
 					"工作区键":  "/tmp/project",
@@ -867,7 +868,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 			}},
 			"tbl-tasks": {
 				{
-					RecordId: stringPtr("rec-keep"),
+					RecordId: xutil.StringPtr("rec-keep"),
 					Fields: map[string]any{
 						"任务名":    "Keep",
 						"启用":     true,
@@ -879,7 +880,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 					},
 				},
 				{
-					RecordId: stringPtr("rec-add"),
+					RecordId: xutil.StringPtr("rec-add"),
 					Fields: map[string]any{
 						"任务名":  "Add",
 						"启用":   true,
@@ -890,7 +891,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 					},
 				},
 				{
-					RecordId: stringPtr("rec-disable"),
+					RecordId: xutil.StringPtr("rec-disable"),
 					Fields: map[string]any{
 						"任务名":  "Disable",
 						"启用":   false,
@@ -901,7 +902,7 @@ func TestCronReloadResultTracksLoadedDisabledStoppedAndErrors(t *testing.T) {
 					},
 				},
 				{
-					RecordId: stringPtr("rec-error"),
+					RecordId: xutil.StringPtr("rec-error"),
 					Fields: map[string]any{
 						"任务名":  "Broken",
 						"启用":   true,
@@ -991,7 +992,7 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 	api := &fakeCronBitableAPI{
 		recordsByTable: map[string][]*larkbitable.AppTableRecord{
 			"tbl-workspaces": {{
-				RecordId: stringPtr("rec-workspace-1"),
+				RecordId: xutil.StringPtr("rec-workspace-1"),
 				Fields: map[string]any{
 					"工作区名称": "project",
 					"工作区键":  "/tmp/project",
@@ -1000,7 +1001,7 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 			}},
 			"tbl-tasks": {
 				{
-					RecordId: stringPtr("rec-keep"),
+					RecordId: xutil.StringPtr("rec-keep"),
 					Fields: map[string]any{
 						"任务名":  "Keep",
 						"启用":   true,
@@ -1011,7 +1012,7 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 					},
 				},
 				{
-					RecordId: stringPtr("rec-disable"),
+					RecordId: xutil.StringPtr("rec-disable"),
 					Fields: map[string]any{
 						"任务名":  "Disable",
 						"启用":   false,
@@ -1022,7 +1023,7 @@ func TestCronReloadNoticeShowsStructuredSections(t *testing.T) {
 					},
 				},
 				{
-					RecordId: stringPtr("rec-error"),
+					RecordId: xutil.StringPtr("rec-error"),
 					Fields: map[string]any{
 						"任务名":  "Broken",
 						"启用":   true,
@@ -1173,7 +1174,7 @@ func TestCronCompletionUsesFrozenWritebackTargetAfterOwnerChange(t *testing.T) {
 func TestCronJobFromRecordParsesLinkedWorkspaceValues(t *testing.T) {
 	now := time.Now()
 	record := &larkbitable.AppTableRecord{
-		RecordId: stringPtr("rec-task-1"),
+		RecordId: xutil.StringPtr("rec-task-1"),
 		Fields: map[string]any{
 			"任务名":  "Nightly",
 			"启用":   true,
@@ -1208,7 +1209,7 @@ func TestCronJobFromRecordParsesLinkedWorkspaceValues(t *testing.T) {
 func TestCronJobFromRecordParsesDailyClockField(t *testing.T) {
 	now := time.Now()
 	record := &larkbitable.AppTableRecord{
-		RecordId: stringPtr("rec-task-daily"),
+		RecordId: xutil.StringPtr("rec-task-daily"),
 		Fields: map[string]any{
 			"任务名":  "Morning",
 			"启用":   true,
@@ -1235,7 +1236,7 @@ func TestCronJobFromRecordParsesDailyClockField(t *testing.T) {
 func TestCronJobFromRecordSupportsLegacyDailyHourMinuteFields(t *testing.T) {
 	now := time.Now()
 	record := &larkbitable.AppTableRecord{
-		RecordId: stringPtr("rec-task-daily-legacy"),
+		RecordId: xutil.StringPtr("rec-task-daily-legacy"),
 		Fields: map[string]any{
 			"任务名":  "Legacy Daily",
 			"启用":   true,
@@ -1263,7 +1264,7 @@ func TestCronJobFromRecordSupportsLegacyDailyHourMinuteFields(t *testing.T) {
 func TestCronJobFromRecordSupportsLegacySelectEnabledValue(t *testing.T) {
 	now := time.Now()
 	record := &larkbitable.AppTableRecord{
-		RecordId: stringPtr("rec-task-legacy"),
+		RecordId: xutil.StringPtr("rec-task-legacy"),
 		Fields: map[string]any{
 			"任务名":  "Legacy",
 			"启用":   "启用",
@@ -1345,10 +1346,6 @@ func cloneAnyMap(fields map[string]any) map[string]any {
 	return cloned
 }
 
-func stringPtr(value string) *string {
-	return &value
-}
-
 type flakyCronBootstrapBitableAPI struct {
 	mu               sync.Mutex
 	createAppCalls   int
@@ -1366,16 +1363,16 @@ func newFlakyCronBootstrapBitableAPI() *flakyCronBootstrapBitableAPI {
 		failCreateField: true,
 		tables: map[string]*larkbitable.AppTable{
 			"tbl-default": {
-				TableId: stringPtr("tbl-default"),
-				Name:    stringPtr("未命名表格"),
+				TableId: xutil.StringPtr("tbl-default"),
+				Name:    xutil.StringPtr("未命名表格"),
 			},
 		},
 		fieldsByTable: map[string][]*larkbitable.AppTableField{
 			"tbl-default": {{
-				FieldId:   stringPtr("fld-default-primary"),
-				FieldName: stringPtr("默认列"),
+				FieldId:   xutil.StringPtr("fld-default-primary"),
+				FieldName: xutil.StringPtr("默认列"),
 				Type:      intPtr(1),
-				IsPrimary: boolPtr(true),
+				IsPrimary: xutil.BoolPtr(true),
 			}},
 		},
 		recordsByTable: map[string][]*larkbitable.AppTableRecord{},
@@ -1387,8 +1384,8 @@ func (f *flakyCronBootstrapBitableAPI) GetApp(context.Context, string) (*larkbit
 	defer f.mu.Unlock()
 	f.getAppCalls++
 	return &larkbitable.App{
-		AppToken: stringPtr("app-cron"),
-		Url:      stringPtr("https://example.feishu.cn/base/app-cron"),
+		AppToken: xutil.StringPtr("app-cron"),
+		Url:      xutil.StringPtr("https://example.feishu.cn/base/app-cron"),
 	}, nil
 }
 
@@ -1397,9 +1394,9 @@ func (f *flakyCronBootstrapBitableAPI) CreateApp(context.Context, string, string
 	defer f.mu.Unlock()
 	f.createAppCalls++
 	return &larkbitable.App{
-		AppToken:       stringPtr("app-cron"),
-		Url:            stringPtr("https://example.feishu.cn/base/app-cron"),
-		DefaultTableId: stringPtr("tbl-default"),
+		AppToken:       xutil.StringPtr("app-cron"),
+		Url:            xutil.StringPtr("https://example.feishu.cn/base/app-cron"),
+		DefaultTableId: xutil.StringPtr("tbl-default"),
 	}, nil
 }
 
@@ -1420,7 +1417,7 @@ func (f *flakyCronBootstrapBitableAPI) CreateTable(_ context.Context, _ string, 
 	f.createTableCalls++
 	tableID := "tbl-created-" + strings.ReplaceAll(strings.TrimSpace(stringValue(table.Name)), " ", "-")
 	created := &larkbitable.AppTable{
-		TableId: stringPtr(tableID),
+		TableId: xutil.StringPtr(tableID),
 		Name:    table.Name,
 	}
 	f.tables[tableID] = created
@@ -1429,10 +1426,10 @@ func (f *flakyCronBootstrapBitableAPI) CreateTable(_ context.Context, _ string, 
 		primaryName = strings.TrimSpace(stringValue(table.Fields[0].FieldName))
 	}
 	f.fieldsByTable[tableID] = []*larkbitable.AppTableField{{
-		FieldId:   stringPtr("fld-" + tableID + "-primary"),
-		FieldName: stringPtr(primaryName),
+		FieldId:   xutil.StringPtr("fld-" + tableID + "-primary"),
+		FieldName: xutil.StringPtr(primaryName),
 		Type:      intPtr(1),
-		IsPrimary: boolPtr(true),
+		IsPrimary: xutil.BoolPtr(true),
 	}}
 	return created, nil
 }
@@ -1441,7 +1438,7 @@ func (f *flakyCronBootstrapBitableAPI) RenameTable(_ context.Context, _ string, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if table := f.tables[tableID]; table != nil {
-		table.Name = stringPtr(name)
+		table.Name = xutil.StringPtr(name)
 	}
 	return nil
 }
@@ -1465,11 +1462,11 @@ func (f *flakyCronBootstrapBitableAPI) CreateField(_ context.Context, _ string, 
 		return nil, context.DeadlineExceeded
 	}
 	cloned := &larkbitable.AppTableField{
-		FieldId:   stringPtr("fld-" + tableID + "-" + strings.TrimSpace(stringValue(field.FieldName))),
+		FieldId:   xutil.StringPtr("fld-" + tableID + "-" + strings.TrimSpace(stringValue(field.FieldName))),
 		FieldName: field.FieldName,
 		Type:      field.Type,
 		Property:  field.Property,
-		IsPrimary: boolPtr(false),
+		IsPrimary: xutil.BoolPtr(false),
 	}
 	f.fieldsByTable[tableID] = append(f.fieldsByTable[tableID], cloned)
 	return cloned, nil
@@ -1513,9 +1510,9 @@ func (f *flakyCronBootstrapBitableAPI) CreateRecord(_ context.Context, _ string,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	recordID := fmt.Sprintf("%s-rec-%d", tableID, len(f.recordsByTable[tableID])+1)
-	record := &larkbitable.AppTableRecord{RecordId: stringPtr(recordID), Fields: cloneAnyMap(fields)}
+	record := &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID), Fields: cloneAnyMap(fields)}
 	f.recordsByTable[tableID] = append(f.recordsByTable[tableID], record)
-	return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
+	return &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)}, nil
 }
 
 func (f *flakyCronBootstrapBitableAPI) UpdateRecord(_ context.Context, _ string, tableID, recordID string, fields map[string]any) (*larkbitable.AppTableRecord, error) {
@@ -1526,11 +1523,11 @@ func (f *flakyCronBootstrapBitableAPI) UpdateRecord(_ context.Context, _ string,
 			continue
 		}
 		record.Fields = cloneAnyMap(fields)
-		return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
+		return &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)}, nil
 	}
-	record := &larkbitable.AppTableRecord{RecordId: stringPtr(recordID), Fields: cloneAnyMap(fields)}
+	record := &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID), Fields: cloneAnyMap(fields)}
 	f.recordsByTable[tableID] = append(f.recordsByTable[tableID], record)
-	return &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)}, nil
+	return &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)}, nil
 }
 
 func (f *flakyCronBootstrapBitableAPI) BatchCreateRecords(_ context.Context, _ string, tableID string, values []map[string]any) ([]*larkbitable.AppTableRecord, error) {
@@ -1539,9 +1536,9 @@ func (f *flakyCronBootstrapBitableAPI) BatchCreateRecords(_ context.Context, _ s
 	records := make([]*larkbitable.AppTableRecord, 0, len(values))
 	for _, fields := range values {
 		recordID := fmt.Sprintf("rec-%d", len(f.recordsByTable[tableID])+1)
-		record := &larkbitable.AppTableRecord{RecordId: stringPtr(recordID), Fields: cloneAnyMap(fields)}
+		record := &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID), Fields: cloneAnyMap(fields)}
 		f.recordsByTable[tableID] = append(f.recordsByTable[tableID], record)
-		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
+		records = append(records, &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)})
 	}
 	return records, nil
 }
@@ -1566,11 +1563,11 @@ func (f *flakyCronBootstrapBitableAPI) BatchUpdateRecords(_ context.Context, _ s
 		}
 		if !found {
 			f.recordsByTable[tableID] = append(f.recordsByTable[tableID], &larkbitable.AppTableRecord{
-				RecordId: stringPtr(recordID),
+				RecordId: xutil.StringPtr(recordID),
 				Fields:   cloneAnyMap(update.Fields),
 			})
 		}
-		records = append(records, &larkbitable.AppTableRecord{RecordId: stringPtr(recordID)})
+		records = append(records, &larkbitable.AppTableRecord{RecordId: xutil.StringPtr(recordID)})
 	}
 	return records, nil
 }
@@ -1609,10 +1606,6 @@ func (f *flakyCronBootstrapBitableAPI) UpdatePermission(_ context.Context, token
 }
 
 func intPtr(value int) *int {
-	return &value
-}
-
-func boolPtr(value bool) *bool {
 	return &value
 }
 
@@ -1716,9 +1709,9 @@ func TestEnsureCronBitableDoesNotLeakDefaultTemplateColumnsIntoTasksTable(t *tes
 	api := newFlakyCronBootstrapBitableAPI()
 	api.failCreateField = false
 	api.fieldsByTable["tbl-default"] = append(api.fieldsByTable["tbl-default"],
-		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-single"), FieldName: stringPtr("单选"), Type: intPtr(3), IsPrimary: boolPtr(false)},
-		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-date"), FieldName: stringPtr("日期"), Type: intPtr(5), IsPrimary: boolPtr(false)},
-		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-attachment"), FieldName: stringPtr("附件"), Type: intPtr(17), IsPrimary: boolPtr(false)},
+		&larkbitable.AppTableField{FieldId: xutil.StringPtr("fld-default-single"), FieldName: xutil.StringPtr("单选"), Type: intPtr(3), IsPrimary: xutil.BoolPtr(false)},
+		&larkbitable.AppTableField{FieldId: xutil.StringPtr("fld-default-date"), FieldName: xutil.StringPtr("日期"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
+		&larkbitable.AppTableField{FieldId: xutil.StringPtr("fld-default-attachment"), FieldName: xutil.StringPtr("附件"), Type: intPtr(17), IsPrimary: xutil.BoolPtr(false)},
 	)
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})

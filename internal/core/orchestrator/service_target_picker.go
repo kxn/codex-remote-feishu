@@ -11,6 +11,7 @@ import (
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -80,7 +81,7 @@ func (s *Service) openTargetPickerWithOptions(surface *state.SurfaceConsoleRecor
 			if err != nil {
 				return err
 			}
-			flow := newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, next.PickerID, firstNonEmpty(surface.ActorUserID), s.now(), defaultTargetPickerTTL, ownerCardFlowPhaseEditing)
+			flow := newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, next.PickerID, xutil.FirstNonEmpty(surface.ActorUserID), s.now(), defaultTargetPickerTTL, ownerCardFlowPhaseEditing)
 			if opts.Inline {
 				flow.MessageID = strings.TrimSpace(opts.SourceMessageID)
 			}
@@ -128,7 +129,7 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 	if surface == nil {
 		return nil, fmt.Errorf("目标选择器不可用")
 	}
-	preferredWorkspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(opts.PreferredWorkspaceKey, s.surfaceCurrentWorkspaceKey(surface)))
+	preferredWorkspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(opts.PreferredWorkspaceKey, s.surfaceCurrentWorkspaceKey(surface)))
 	lockedWorkspaceKey := normalizeWorkspaceClaimKey(opts.LockedWorkspaceKey)
 	if source == control.TargetPickerRequestSourceWorkspace && lockedWorkspaceKey == "" {
 		lockedWorkspaceKey = preferredWorkspaceKey
@@ -144,7 +145,7 @@ func (s *Service) newTargetPickerRecord(surface *state.SurfaceConsoleRecord, sou
 	expiresAt := s.now().Add(defaultTargetPickerTTL)
 	return &activeTargetPickerRecord{
 		PickerID:             s.pickers.nextTargetPickerToken(),
-		OwnerUserID:          strings.TrimSpace(firstNonEmpty(surface.ActorUserID)),
+		OwnerUserID:          strings.TrimSpace(xutil.FirstNonEmpty(surface.ActorUserID)),
 		Source:               source,
 		CatalogFamilyID:      strings.TrimSpace(opts.CatalogFamilyID),
 		CatalogVariantID:     strings.TrimSpace(opts.CatalogVariantID),
@@ -427,7 +428,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		return append(processing, filtered...)
 	}
 	if kind == control.FeishuTargetPickerSessionNewThread && surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
+		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
 		filtered := targetPickerFilteredFollowupEvents(events)
 		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, "新会话")
 		processing := s.startTargetPickerProcessingWithSections(
@@ -445,7 +446,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		return append(processing, filtered...)
 	}
 	filtered := targetPickerFilteredFollowupEvents(events)
-	failureText := strings.TrimSpace(firstNonEmpty(targetPickerFirstNoticeText(events), "当前工作目标切换失败，请重新发送 /list、/use 或 /useall 再试一次。"))
+	failureText := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), "当前工作目标切换失败，请重新发送 /list、/use 或 /useall 再试一次。"))
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "切换失败", failureText, false, filtered)
 }
 
@@ -475,7 +476,7 @@ func targetPickerNewThreadSucceeded(surface *state.SurfaceConsoleRecord, workspa
 		return false
 	}
 	return (surface.RouteMode == state.RouteModeNewThreadReady && normalizeWorkspaceClaimKey(surface.PreparedThreadCWD) == workspaceKey) ||
-		(surface.PendingHeadless != nil && normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey && surface.PendingHeadless.PrepareNewThread)
+		(surface.PendingHeadless != nil && normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey && surface.PendingHeadless.PrepareNewThread)
 }
 
 func (s *Service) requireActiveTargetPicker(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) (*activeTargetPickerRecord, []eventcontract.Event) {
@@ -630,14 +631,14 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		if strings.TrimSpace(gitState.ParentDir) != "" {
 			gitParentDir = strings.TrimSpace(gitState.ParentDir)
 		}
-		gitFinalPath = strings.TrimSpace(firstNonEmpty(record.GitFinalPath, gitState.FinalPath))
+		gitFinalPath = strings.TrimSpace(xutil.FirstNonEmpty(record.GitFinalPath, gitState.FinalPath))
 		sourceMessages = append(sourceMessages, gitState.Messages...)
 		confirmValidatesOnSubmit = true
 		canConfirm = gitState.CanConfirm
 		confirmLabel = "克隆并继续"
 	case control.FeishuTargetPickerPageWorktree:
 		worktreeState := s.buildTargetPickerWorktreeState(record)
-		worktreeFinalPath := strings.TrimSpace(firstNonEmpty(record.WorktreeFinalPath, worktreeState.FinalPath))
+		worktreeFinalPath := strings.TrimSpace(xutil.FirstNonEmpty(record.WorktreeFinalPath, worktreeState.FinalPath))
 		sourceMessages = append(sourceMessages, worktreeState.Messages...)
 		confirmValidatesOnSubmit = true
 		canConfirm = worktreeState.CanConfirm

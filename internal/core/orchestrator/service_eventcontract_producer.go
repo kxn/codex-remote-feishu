@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func surfaceEventFromPayload(
@@ -14,10 +15,10 @@ func surfaceEventFromPayload(
 ) eventcontract.Event {
 	target := meta.Target.Normalized()
 	if target.GatewayID == "" {
-		target.GatewayID = strings.TrimSpace(firstNonEmpty(surfaceGatewayID(surface)))
+		target.GatewayID = strings.TrimSpace(xutil.FirstNonEmpty(surfaceGatewayID(surface)))
 	}
 	if target.SurfaceSessionID == "" {
-		target.SurfaceSessionID = strings.TrimSpace(firstNonEmpty(surfaceSessionID(surface)))
+		target.SurfaceSessionID = strings.TrimSpace(xutil.FirstNonEmpty(surfaceSessionID(surface)))
 	}
 	meta.Target = target
 	return eventcontract.NewEventFromPayload(

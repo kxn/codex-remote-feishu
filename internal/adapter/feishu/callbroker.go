@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 )
 
@@ -215,7 +216,7 @@ func (b *FeishuCallBroker) do(ctx context.Context, spec CallSpec, fn func(contex
 }
 
 func (b *FeishuCallBroker) normalizeSpec(spec CallSpec) CallSpec {
-	spec.GatewayID = normalizeGatewayID(firstNonEmpty(spec.GatewayID, b.gatewayID))
+	spec.GatewayID = normalizeGatewayID(xutil.FirstNonEmpty(spec.GatewayID, b.gatewayID))
 	spec.API = strings.TrimSpace(spec.API)
 	if spec.Retry == "" {
 		spec.Retry = RetryOff

@@ -15,6 +15,7 @@ import (
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const cronBitablePermissionDocType = "bitable"
@@ -119,7 +120,7 @@ func (a *App) reloadCronJobsNow(command control.DaemonCommand) (string, error) {
 
 func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI, previous cronrt.BitableState, scopeKey, label string, owner *cronrt.OwnerBinding, persist func(cronrt.BitableState) error) (cronrt.BitableState, error) {
 	binding := previous
-	desiredTimeZone := firstNonEmpty(cronrt.NormalizeTimeZone(binding.TimeZone), cronrt.SystemTimeZone())
+	desiredTimeZone := xutil.FirstNonEmpty(cronrt.NormalizeTimeZone(binding.TimeZone), cronrt.SystemTimeZone())
 	var app *larkbitable.App
 	var err error
 	if strings.TrimSpace(binding.AppToken) != "" {
@@ -137,12 +138,12 @@ func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI
 		return cronrt.BitableState{}, fmt.Errorf("缺少 Cron 多维表格 app token")
 	}
 	binding.AppToken = stringValue(app.AppToken)
-	binding.AppURL = firstNonEmpty(strings.TrimSpace(binding.AppURL), strings.TrimSpace(stringValue(app.Url)))
-	binding.TimeZone = firstNonEmpty(
+	binding.AppURL = xutil.FirstNonEmpty(strings.TrimSpace(binding.AppURL), strings.TrimSpace(stringValue(app.Url)))
+	binding.TimeZone = xutil.FirstNonEmpty(
 		cronrt.NormalizeTimeZone(stringValue(app.TimeZone)),
 		desiredTimeZone,
 	)
-	binding.DefaultTable = firstNonEmpty(strings.TrimSpace(binding.DefaultTable), strings.TrimSpace(stringValue(app.DefaultTableId)))
+	binding.DefaultTable = xutil.FirstNonEmpty(strings.TrimSpace(binding.DefaultTable), strings.TrimSpace(stringValue(app.DefaultTableId)))
 	if binding.CreatedAt.IsZero() {
 		binding.CreatedAt = time.Now().UTC()
 	}
@@ -600,7 +601,7 @@ func (a *App) cronWorkspaceRowsLocked() []cronrt.WorkspaceRow {
 			continue
 		}
 		recency[workspaceKey] = time.Now().UTC()
-		liveNames[workspaceKey] = firstNonEmpty(strings.TrimSpace(inst.ShortName), cronWorkspaceDisplayName(workspaceKey))
+		liveNames[workspaceKey] = xutil.FirstNonEmpty(strings.TrimSpace(inst.ShortName), cronWorkspaceDisplayName(workspaceKey))
 	}
 	keys := make([]string, 0, len(recency))
 	for key := range recency {
@@ -621,7 +622,7 @@ func (a *App) cronWorkspaceRowsLocked() []cronrt.WorkspaceRow {
 			continue
 		}
 		values = append(values, cronrt.WorkspaceRow{
-			Name:   firstNonEmpty(liveNames[key], cronWorkspaceDisplayName(key)),
+			Name:   xutil.FirstNonEmpty(liveNames[key], cronWorkspaceDisplayName(key)),
 			Key:    key,
 			Status: "可用",
 		})

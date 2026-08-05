@@ -1,14 +1,17 @@
 package codex
 
-import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+import (
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
+)
 
 func extractThreadTokenUsageNotification(message map[string]any) (string, string, *agentproto.ThreadTokenUsage) {
 	params := lookupMap(message, "params")
 	if len(params) == 0 {
 		return "", "", nil
 	}
-	threadID := lookupStringFromAny(params["threadId"])
-	turnID := lookupStringFromAny(params["turnId"])
+	threadID := xutil.LookupStringFromAny(params["threadId"])
+	turnID := xutil.LookupStringFromAny(params["turnId"])
 	usageMap := lookupMapFromAny(params["tokenUsage"])
 	if len(usageMap) == 0 {
 		return threadID, turnID, nil
@@ -18,7 +21,7 @@ func extractThreadTokenUsageNotification(message map[string]any) (string, string
 		Last:  extractTokenUsageBreakdown(lookupMapFromAny(usageMap["last"])),
 	}
 	if windowRaw := usageMap["modelContextWindow"]; windowRaw != nil {
-		value := lookupIntFromAny(windowRaw)
+		value := xutil.LookupIntFromAny(windowRaw)
 		usage.ModelContextWindow = &value
 	}
 	return threadID, turnID, usage
@@ -29,10 +32,10 @@ func extractTokenUsageBreakdown(value map[string]any) agentproto.TokenUsageBreak
 		return agentproto.TokenUsageBreakdown{}
 	}
 	return agentproto.TokenUsageBreakdown{
-		InputTokens:           lookupIntFromAny(value["inputTokens"]),
-		CachedInputTokens:     lookupIntFromAny(value["cachedInputTokens"]),
-		OutputTokens:          lookupIntFromAny(value["outputTokens"]),
-		ReasoningOutputTokens: lookupIntFromAny(value["reasoningOutputTokens"]),
-		TotalTokens:           lookupIntFromAny(value["totalTokens"]),
+		InputTokens:           xutil.LookupIntFromAny(value["inputTokens"]),
+		CachedInputTokens:     xutil.LookupIntFromAny(value["cachedInputTokens"]),
+		OutputTokens:          xutil.LookupIntFromAny(value["outputTokens"]),
+		ReasoningOutputTokens: xutil.LookupIntFromAny(value["reasoningOutputTokens"]),
+		TotalTokens:           xutil.LookupIntFromAny(value["totalTokens"]),
 	}
 }

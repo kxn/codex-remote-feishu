@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type AutostartStatus struct {
@@ -142,9 +144,9 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 		CurrentVersion:  strings.TrimSpace(opts.CurrentVersion),
 		ServiceManager:  targetManager,
 	})
-	state.BaseDir = firstNonEmpty(strings.TrimSpace(state.BaseDir), baseDir)
+	state.BaseDir = xutil.FirstNonEmpty(strings.TrimSpace(state.BaseDir), baseDir)
 	state.ServiceManager = targetManager
-	state.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(opts.InstalledBinary))
+	state.CurrentBinaryPath = xutil.FirstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(opts.InstalledBinary))
 	if strings.TrimSpace(state.CurrentBinaryPath) == "" {
 		return AutostartStatus{}, fmt.Errorf("current binary path is missing")
 	}

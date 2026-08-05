@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) projectProtocolNotice(instanceID string, notice agentproto.ProtocolNotice) []eventcontract.Event {
@@ -57,7 +58,7 @@ func (s *Service) projectConfigWarning(instanceID string, notice agentproto.Prot
 	if summary == "" {
 		summary = "Codex 配置存在会影响运行的问题，请检查配置。"
 	}
-	if !s.allowActiveNotice("config", surface.SurfaceSessionID, instanceID, notice.ThreadID, firstNonEmpty(notice.Path, summary), 30*time.Minute) {
+	if !s.allowActiveNotice("config", surface.SurfaceSessionID, instanceID, notice.ThreadID, xutil.FirstNonEmpty(notice.Path, summary), 30*time.Minute) {
 		return nil
 	}
 	payload := control.Notice{

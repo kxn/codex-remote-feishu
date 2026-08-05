@@ -8,7 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type parsedHistoryTurn struct {
@@ -27,7 +29,7 @@ func readThreadHistory(workspaceRoot, threadID string, runtime RuntimeStateSnaps
 		meta = &claudeSessionMeta{ID: threadID, CWD: strings.TrimSpace(workspaceRoot)}
 	}
 	thread := buildSessionThreadSnapshot(*meta, runtime)
-	thread.ThreadID = firstNonEmptyString(thread.ThreadID, threadID)
+	thread.ThreadID = xutil.FirstNonEmpty(thread.ThreadID, threadID)
 	if filePath == "" {
 		return &agentproto.ThreadHistoryRecord{Thread: thread}, nil
 	}
@@ -38,7 +40,7 @@ func readThreadHistory(workspaceRoot, threadID string, runtime RuntimeStateSnaps
 	if len(turns) != 0 && strings.TrimSpace(threadID) == strings.TrimSpace(runtime.SessionID) && strings.TrimSpace(runtime.ActiveTurnID) != "" {
 		last := &turns[len(turns)-1]
 		last.Status = "running"
-		last.TurnID = firstNonEmptyString(runtime.ActiveTurnID, last.TurnID)
+		last.TurnID = xutil.FirstNonEmpty(runtime.ActiveTurnID, last.TurnID)
 		last.CompletedAt = time.Time{}
 	}
 	return &agentproto.ThreadHistoryRecord{
@@ -133,11 +135,11 @@ func readHistoryTurns(filePath, sessionID string, runtime RuntimeStateSnapshot) 
 		if !ok {
 			continue
 		}
-		if lookupBoolFromAny(entry["isSidechain"]) {
+		if xutil.LookupBoolFromAny(entry["isSidechain"]) {
 			continue
 		}
-		recordType := strings.TrimSpace(lookupStringFromAny(entry["type"]))
-		promptID := strings.TrimSpace(lookupStringFromAny(entry["promptId"]))
+		recordType := strings.TrimSpace(xutil.LookupStringFromAny(entry["type"]))
+		promptID := strings.TrimSpace(xutil.LookupStringFromAny(entry["promptId"]))
 		if historyStartsTurn(entry) && (current == nil || promptID != "" && promptID != current.promptID) {
 			flushCurrent()
 			current = newParsedHistoryTurn(promptID)
@@ -170,7 +172,7 @@ func readHistoryTurns(filePath, sessionID string, runtime RuntimeStateSnapshot) 
 	if len(turns) != 0 && strings.TrimSpace(runtime.SessionID) == strings.TrimSpace(sessionID) && strings.TrimSpace(runtime.ActiveTurnID) != "" {
 		last := &turns[len(turns)-1]
 		last.Status = "running"
-		last.TurnID = firstNonEmptyString(runtime.ActiveTurnID, last.TurnID)
+		last.TurnID = xutil.FirstNonEmpty(runtime.ActiveTurnID, last.TurnID)
 		last.CompletedAt = time.Time{}
 	}
 	return turns, nil
@@ -204,7 +206,7 @@ func (t *parsedHistoryTurn) appendItem(item agentproto.ThreadHistoryItemRecord) 
 		return -1
 	}
 	if strings.TrimSpace(item.ItemID) == "" {
-		item.ItemID = fmt.Sprintf("%s-item-%d", firstNonEmptyString(t.record.TurnID, t.promptID, "claude-history"), len(t.record.Items)+1)
+		item.ItemID = fmt.Sprintf("%s-item-%d", xutil.FirstNonEmpty(t.record.TurnID, t.promptID, "claude-history"), len(t.record.Items)+1)
 	}
 	t.record.Items = append(t.record.Items, item)
 	return len(t.record.Items) - 1
@@ -222,11 +224,11 @@ func appendHistoryUserEntry(turn *parsedHistoryTurn, entry map[string]any) {
 			Text: text,
 		})
 	}
-	for _, block := range mapsFromAny(content) {
-		if strings.TrimSpace(lookupStringFromAny(block["type"])) != "tool_result" {
+	for _, block := range xutil.MapsFromAny(content) {
+		if strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) != "tool_result" {
 			continue
 		}
-		toolUseID := strings.TrimSpace(lookupStringFromAny(block["tool_use_id"]))
+		toolUseID := strings.TrimSpace(xutil.LookupStringFromAny(block["tool_use_id"]))
 		exitCode := historyExitCode(block, entry["tool_use_result"])
 		if itemIndex, ok := turn.toolUseItemID[toolUseID]; ok && itemIndex >= 0 && itemIndex < len(turn.record.Items) {
 			turn.record.Items[itemIndex].ExitCode = exitCode
@@ -239,20 +241,20 @@ func appendHistoryAssistantEntry(turn *parsedHistoryTurn, entry map[string]any) 
 		return
 	}
 	message, _ := entry["message"].(map[string]any)
-	blocks := mapsFromAny(message["content"])
+	blocks := xutil.MapsFromAny(message["content"])
 	textParts := make([]string, 0, len(blocks))
 	for _, block := range blocks {
-		switch strings.TrimSpace(lookupStringFromAny(block["type"])) {
+		switch strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) {
 		case "text":
-			text := strings.TrimSpace(lookupStringFromAny(block["text"]))
+			text := strings.TrimSpace(xutil.LookupStringFromAny(block["text"]))
 			if text != "" {
 				textParts = append(textParts, text)
 			}
 		case "thinking":
 			continue
 		case "tool_use":
-			toolName := strings.TrimSpace(lookupStringFromAny(block["name"]))
-			if isInternalInteractionTool(toolName) {
+			toolName := strings.TrimSpace(xutil.LookupStringFromAny(block["name"]))
+			if claudeutil.IsInternalInteractionTool(toolName) {
 				continue
 			}
 			input, _ := block["input"].(map[string]any)
@@ -261,7 +263,7 @@ func appendHistoryAssistantEntry(turn *parsedHistoryTurn, entry map[string]any) 
 				continue
 			}
 			itemIndex := turn.appendItem(item)
-			toolUseID := strings.TrimSpace(lookupStringFromAny(block["id"]))
+			toolUseID := strings.TrimSpace(xutil.LookupStringFromAny(block["id"]))
 			if toolUseID != "" {
 				turn.toolUseItemID[toolUseID] = itemIndex
 			}
@@ -276,13 +278,13 @@ func appendHistoryAssistantEntry(turn *parsedHistoryTurn, entry map[string]any) 
 }
 
 func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.ThreadHistoryItemRecord, bool) {
-	itemKind := claudeToolItemKind(toolName)
-	metadata := claudeToolMetadata(toolName, input)
+	itemKind := claudeutil.ClaudeToolItemKind(toolName)
+	metadata := claudeutil.ClaudeToolMetadata(toolName, input)
 	switch itemKind {
 	case "command_execution":
-		command := strings.TrimSpace(lookupStringFromAny(metadata["command"]))
+		command := strings.TrimSpace(xutil.LookupStringFromAny(metadata["command"]))
 		if command == "" {
-			command = strings.TrimSpace(toolUseSummary(toolName, input))
+			command = strings.TrimSpace(claudeutil.ToolUseSummary(toolName, input))
 		}
 		if command == "" {
 			return agentproto.ThreadHistoryItemRecord{}, false
@@ -296,7 +298,7 @@ func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.Th
 	case "web_search":
 		text := strings.TrimSpace(webHistoryText(metadata))
 		if text == "" {
-			text = strings.TrimSpace(toolUseSummary(toolName, input))
+			text = strings.TrimSpace(claudeutil.ToolUseSummary(toolName, input))
 		}
 		if text == "" {
 			return agentproto.ThreadHistoryItemRecord{}, false
@@ -307,7 +309,7 @@ func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.Th
 			Metadata: metadata,
 		}, true
 	case "delegated_task":
-		text := buildClaudeDelegatedTaskText(metadata)
+		text := claudeutil.BuildClaudeDelegatedTaskText(metadata)
 		return agentproto.ThreadHistoryItemRecord{
 			Kind:     "delegated_task",
 			Text:     text,
@@ -316,7 +318,7 @@ func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.Th
 	case "file_change":
 		text := buildClaudeFileChangeHistoryText(metadata)
 		if text == "" {
-			text = strings.TrimSpace(toolUseSummary(toolName, input))
+			text = strings.TrimSpace(claudeutil.ToolUseSummary(toolName, input))
 		}
 		if text == "" {
 			return agentproto.ThreadHistoryItemRecord{}, false
@@ -327,9 +329,9 @@ func claudeHistoryToolItem(toolName string, input map[string]any) (agentproto.Th
 			Metadata: metadata,
 		}, true
 	case "dynamic_tool_call":
-		text := strings.TrimSpace(toolUseSummary(toolName, input))
+		text := strings.TrimSpace(claudeutil.ToolUseSummary(toolName, input))
 		if text == "" {
-			text = strings.TrimSpace(lookupStringFromAny(metadata["tool"]))
+			text = strings.TrimSpace(xutil.LookupStringFromAny(metadata["tool"]))
 		}
 		if text == "" {
 			return agentproto.ThreadHistoryItemRecord{}, false
@@ -348,7 +350,7 @@ func buildClaudeFileChangeHistoryText(metadata map[string]any) string {
 	if len(metadata) == 0 {
 		return ""
 	}
-	path := strings.TrimSpace(lookupStringFromAny(metadata["filePath"]))
+	path := strings.TrimSpace(xutil.LookupStringFromAny(metadata["filePath"]))
 	if path == "" {
 		return ""
 	}
@@ -356,14 +358,14 @@ func buildClaudeFileChangeHistoryText(metadata map[string]any) string {
 }
 
 func webHistoryText(metadata map[string]any) string {
-	switch strings.TrimSpace(lookupStringFromAny(metadata["actionType"])) {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(metadata["actionType"])) {
 	case "search":
-		return strings.TrimSpace(lookupStringFromAny(metadata["query"]))
+		return strings.TrimSpace(xutil.LookupStringFromAny(metadata["query"]))
 	case "open_page":
-		return strings.TrimSpace(lookupStringFromAny(metadata["url"]))
+		return strings.TrimSpace(xutil.LookupStringFromAny(metadata["url"]))
 	case "find_in_page":
-		pattern := strings.TrimSpace(lookupStringFromAny(metadata["pattern"]))
-		url := strings.TrimSpace(lookupStringFromAny(metadata["url"]))
+		pattern := strings.TrimSpace(xutil.LookupStringFromAny(metadata["pattern"]))
+		url := strings.TrimSpace(xutil.LookupStringFromAny(metadata["url"]))
 		switch {
 		case pattern != "" && url != "":
 			return pattern + " @ " + url
@@ -378,7 +380,7 @@ func webHistoryText(metadata map[string]any) string {
 }
 
 func historyStartsTurn(entry map[string]any) bool {
-	if strings.TrimSpace(lookupStringFromAny(entry["type"])) != "user" {
+	if strings.TrimSpace(xutil.LookupStringFromAny(entry["type"])) != "user" {
 		return false
 	}
 	message, _ := entry["message"].(map[string]any)
@@ -392,7 +394,7 @@ func historyHasPromptContent(content any) bool {
 	case []any:
 		for _, blockValue := range value {
 			block, _ := blockValue.(map[string]any)
-			switch strings.TrimSpace(lookupStringFromAny(block["type"])) {
+			switch strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) {
 			case "text", "image":
 				return true
 			}
@@ -402,7 +404,7 @@ func historyHasPromptContent(content any) bool {
 }
 
 func parseHistoryTimestamp(entry map[string]any) time.Time {
-	raw := strings.TrimSpace(lookupStringFromAny(entry["timestamp"]))
+	raw := strings.TrimSpace(xutil.LookupStringFromAny(entry["timestamp"]))
 	if raw == "" {
 		return time.Time{}
 	}

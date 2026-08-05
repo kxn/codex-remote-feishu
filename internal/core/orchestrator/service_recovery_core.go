@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) clearSurfaceDispatchWaits(surface *state.SurfaceConsoleRecord) {
@@ -48,7 +49,7 @@ func (s *Service) finishPromptDispatchRestartPendingRoute(surface *state.Surface
 	if surface == nil || pending == nil || pending.Purpose != state.HeadlessLaunchPurposePromptDispatchRestart {
 		return
 	}
-	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(firstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey), pending.ThreadCWD)
+	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey), pending.ThreadCWD)
 	if workspaceKey == "" {
 		workspaceKey = normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey)
 	}
@@ -63,7 +64,7 @@ func (s *Service) finishWorkspaceRouteRestartPendingRoute(surface *state.Surface
 	if surface == nil || pending == nil || pending.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart {
 		return
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(firstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey))
+	workspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey))
 	if workspaceKey == "" {
 		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey("", pending.ThreadCWD)
 	}

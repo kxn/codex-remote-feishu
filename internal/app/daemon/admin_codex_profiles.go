@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type codexProfilesResponse struct {
@@ -435,7 +436,7 @@ func (a *App) codexProfileReferencesLocked(profileID string) []codexProfileRefer
 			references = append(references, codexProfileReference{Kind: "surface_actual", Name: surface.SurfaceSessionID, Reason: "active route admission"})
 		}
 		if pending := surface.PendingHeadless; pending != nil && codexAdmissionRefProfileID(pending.CodexAdmissionRef) == profileID {
-			references = append(references, codexProfileReference{Kind: "pending_headless", Name: firstNonEmpty(pending.InstanceID, surface.SurfaceSessionID), Reason: "pending headless launch"})
+			references = append(references, codexProfileReference{Kind: "pending_headless", Name: xutil.FirstNonEmpty(pending.InstanceID, surface.SurfaceSessionID), Reason: "pending headless launch"})
 		}
 		for _, item := range surface.QueueItems {
 			if item == nil || codexAdmissionRefProfileID(item.CodexAdmissionRef) != profileID {
@@ -445,7 +446,7 @@ func (a *App) codexProfileReferencesLocked(profileID string) []codexProfileRefer
 			if item.ID == surface.ActiveQueueItemID {
 				kind = "active_queue_item"
 			}
-			references = append(references, codexProfileReference{Kind: kind, Name: firstNonEmpty(item.ID, surface.SurfaceSessionID), Reason: "queued prompt admission"})
+			references = append(references, codexProfileReference{Kind: kind, Name: xutil.FirstNonEmpty(item.ID, surface.SurfaceSessionID), Reason: "queued prompt admission"})
 		}
 	}
 	for _, inst := range a.service.Instances() {

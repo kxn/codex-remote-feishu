@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func stubSetupAutoConfigPlanner(t *testing.T, planner func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error)) {
@@ -178,7 +179,7 @@ func TestOnboardingAutostartStageUsesDetectedStateWithoutMachineDecision(t *test
 	if stage.Summary != "自动启动未启用。" {
 		t.Fatalf("summary = %q, want objective disabled summary", stage.Summary)
 	}
-	if !containsString(stage.AllowedActions, "apply") {
+	if !xutil.ContainsString(stage.AllowedActions, "apply") {
 		t.Fatalf("allowed actions = %#v, want apply", stage.AllowedActions)
 	}
 }
@@ -247,7 +248,7 @@ func TestSetupOnboardingWorkflowDeferredAutoConfigHonorsFinalBlockingState(t *te
 			if workflow.Completion.CanComplete {
 				t.Fatal("completion unexpectedly allowed")
 			}
-			if got := containsString(workflow.App.AutoConfig.AllowedActions, "defer"); got != tc.wantDefer {
+			if got := xutil.ContainsString(workflow.App.AutoConfig.AllowedActions, "defer"); got != tc.wantDefer {
 				t.Fatalf("allowed actions = %#v, defer presence = %t, want %t", workflow.App.AutoConfig.AllowedActions, got, tc.wantDefer)
 			}
 		})
@@ -354,10 +355,10 @@ func TestSetupOnboardingAutostartDoesNotOfferApplyWhenCannotApply(t *testing.T) 
 	if err != nil {
 		t.Fatalf("buildOnboardingWorkflow: %v", err)
 	}
-	if containsString(workflow.Autostart.AllowedActions, "apply") {
+	if xutil.ContainsString(workflow.Autostart.AllowedActions, "apply") {
 		t.Fatalf("autostart allowed actions = %#v, apply should not be exposed when canApply=false", workflow.Autostart.AllowedActions)
 	}
-	if containsString(workflow.Autostart.AllowedActions, "defer") {
+	if xutil.ContainsString(workflow.Autostart.AllowedActions, "defer") {
 		t.Fatalf("autostart allowed actions = %#v, per-item defer should not be exposed", workflow.Autostart.AllowedActions)
 	}
 	if workflow.Autostart.Autostart == nil || workflow.Autostart.Autostart.Warning == "" || workflow.Autostart.Autostart.LingerHint == "" {

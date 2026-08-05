@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func extractRequestMapList(source any) []map[string]any {
@@ -29,7 +30,7 @@ func extractRequestMapList(source any) []map[string]any {
 		if !ok {
 			continue
 		}
-		items = append(items, cloneMap(record))
+		items = append(items, xutil.CloneMap(record))
 	}
 	return items
 }
@@ -40,17 +41,17 @@ func requestOptionsFromMaps(source []map[string]any) []agentproto.RequestOption 
 	}
 	options := make([]agentproto.RequestOption, 0, len(source))
 	for _, option := range source {
-		optionID := strings.TrimSpace(firstNonEmptyString(
-			lookupStringFromAny(option["id"]),
-			lookupStringFromAny(option["optionId"]),
+		optionID := strings.TrimSpace(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(option["id"]),
+			xutil.LookupStringFromAny(option["optionId"]),
 		))
 		if optionID == "" {
 			continue
 		}
 		options = append(options, agentproto.RequestOption{
 			OptionID: optionID,
-			Label:    strings.TrimSpace(lookupStringFromAny(option["label"])),
-			Style:    strings.TrimSpace(lookupStringFromAny(option["style"])),
+			Label:    strings.TrimSpace(xutil.LookupStringFromAny(option["label"])),
+			Style:    strings.TrimSpace(xutil.LookupStringFromAny(option["style"])),
 		})
 	}
 	return options
@@ -80,23 +81,23 @@ func requestQuestionsFromMaps(source []map[string]any) []agentproto.RequestQuest
 	}
 	questions := make([]agentproto.RequestQuestion, 0, len(source))
 	for _, question := range source {
-		questionID := strings.TrimSpace(firstNonEmptyString(
-			lookupStringFromAny(question["id"]),
-			lookupStringFromAny(question["questionId"]),
+		questionID := strings.TrimSpace(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(question["id"]),
+			xutil.LookupStringFromAny(question["questionId"]),
 		))
 		if questionID == "" {
 			continue
 		}
 		questions = append(questions, agentproto.RequestQuestion{
 			ID:             questionID,
-			Header:         strings.TrimSpace(lookupStringFromAny(question["header"])),
-			Question:       strings.TrimSpace(lookupStringFromAny(question["question"])),
-			AllowOther:     lookupBoolFromAny(question["isOther"]),
-			Secret:         lookupBoolFromAny(question["isSecret"]),
+			Header:         strings.TrimSpace(xutil.LookupStringFromAny(question["header"])),
+			Question:       strings.TrimSpace(xutil.LookupStringFromAny(question["question"])),
+			AllowOther:     xutil.LookupBoolFromAny(question["isOther"]),
+			Secret:         xutil.LookupBoolFromAny(question["isSecret"]),
 			Options:        requestQuestionOptionsFromMaps(extractRequestUserInputQuestionOptions(question)),
-			Placeholder:    strings.TrimSpace(lookupStringFromAny(question["placeholder"])),
-			DefaultValue:   strings.TrimSpace(lookupStringFromAny(question["defaultValue"])),
-			DirectResponse: lookupBoolFromAny(question["directResponse"]),
+			Placeholder:    strings.TrimSpace(xutil.LookupStringFromAny(question["placeholder"])),
+			DefaultValue:   strings.TrimSpace(xutil.LookupStringFromAny(question["defaultValue"])),
+			DirectResponse: xutil.LookupBoolFromAny(question["directResponse"]),
 		})
 	}
 	return questions
@@ -144,13 +145,13 @@ func requestQuestionOptionsFromMaps(source []map[string]any) []agentproto.Reques
 	}
 	options := make([]agentproto.RequestQuestionOption, 0, len(source))
 	for _, option := range source {
-		label := strings.TrimSpace(lookupStringFromAny(option["label"]))
+		label := strings.TrimSpace(xutil.LookupStringFromAny(option["label"]))
 		if label == "" {
 			continue
 		}
 		options = append(options, agentproto.RequestQuestionOption{
 			Label:       label,
-			Description: strings.TrimSpace(lookupStringFromAny(option["description"])),
+			Description: strings.TrimSpace(xutil.LookupStringFromAny(option["description"])),
 		})
 	}
 	return options
@@ -199,43 +200,43 @@ func extractRequestUserInputQuestions(request, params map[string]any) []map[stri
 		if !ok {
 			continue
 		}
-		questionID := firstNonEmptyString(
-			lookupStringFromAny(record["id"]),
-			lookupStringFromAny(record["questionId"]),
+		questionID := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["id"]),
+			xutil.LookupStringFromAny(record["questionId"]),
 		)
 		if questionID == "" {
 			continue
 		}
 		question := map[string]any{"id": questionID}
-		if header := firstNonEmptyString(
-			lookupStringFromAny(record["header"]),
-			lookupStringFromAny(record["title"]),
+		if header := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["header"]),
+			xutil.LookupStringFromAny(record["title"]),
 		); header != "" {
 			question["header"] = header
 		}
-		if prompt := firstNonEmptyString(
-			lookupStringFromAny(record["question"]),
-			lookupStringFromAny(record["label"]),
-			lookupStringFromAny(record["prompt"]),
+		if prompt := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["question"]),
+			xutil.LookupStringFromAny(record["label"]),
+			xutil.LookupStringFromAny(record["prompt"]),
 		); prompt != "" {
 			question["question"] = prompt
 		}
-		if lookupBoolFromAny(record["isOther"]) {
+		if xutil.LookupBoolFromAny(record["isOther"]) {
 			question["isOther"] = true
 		}
-		if lookupBoolFromAny(record["isSecret"]) {
+		if xutil.LookupBoolFromAny(record["isSecret"]) {
 			question["isSecret"] = true
 		}
-		if placeholder := firstNonEmptyString(
-			lookupStringFromAny(record["placeholder"]),
-			lookupStringFromAny(record["inputPlaceholder"]),
+		if placeholder := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["placeholder"]),
+			xutil.LookupStringFromAny(record["inputPlaceholder"]),
 		); placeholder != "" {
 			question["placeholder"] = placeholder
 		}
-		if defaultValue := firstNonEmptyString(lookupStringFromAny(record["defaultValue"])); defaultValue != "" {
+		if defaultValue := xutil.FirstNonEmpty(xutil.LookupStringFromAny(record["defaultValue"])); defaultValue != "" {
 			question["defaultValue"] = defaultValue
 		}
-		if lookupBoolFromAny(record["directResponse"]) {
+		if xutil.LookupBoolFromAny(record["directResponse"]) {
 			question["directResponse"] = true
 		}
 		if options := extractRequestUserInputQuestionOptions(record); len(options) != 0 {
@@ -269,18 +270,18 @@ func extractRequestUserInputQuestionOptions(question map[string]any) []map[strin
 		if !ok {
 			continue
 		}
-		label := firstNonEmptyString(
-			lookupStringFromAny(record["label"]),
-			lookupStringFromAny(record["title"]),
-			lookupStringFromAny(record["text"]),
+		label := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["label"]),
+			xutil.LookupStringFromAny(record["title"]),
+			xutil.LookupStringFromAny(record["text"]),
 		)
 		if label == "" {
 			continue
 		}
 		option := map[string]any{"label": label}
-		if description := firstNonEmptyString(
-			lookupStringFromAny(record["description"]),
-			lookupStringFromAny(record["subtitle"]),
+		if description := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["description"]),
+			xutil.LookupStringFromAny(record["subtitle"]),
 		); description != "" {
 			option["description"] = description
 		}
@@ -332,12 +333,12 @@ func extractRequestOptions(request, params map[string]any) []map[string]any {
 		default:
 			continue
 		}
-		optionID := control.NormalizeRequestOptionID(firstNonEmptyString(
-			lookupStringFromAny(record["id"]),
-			lookupStringFromAny(record["optionId"]),
-			lookupStringFromAny(record["decision"]),
-			lookupStringFromAny(record["value"]),
-			lookupStringFromAny(record["action"]),
+		optionID := control.NormalizeRequestOptionID(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["id"]),
+			xutil.LookupStringFromAny(record["optionId"]),
+			xutil.LookupStringFromAny(record["decision"]),
+			xutil.LookupStringFromAny(record["value"]),
+			xutil.LookupStringFromAny(record["action"]),
 		))
 		if optionID == "" && len(record) == 1 {
 			for key := range record {
@@ -348,19 +349,19 @@ func extractRequestOptions(request, params map[string]any) []map[string]any {
 			continue
 		}
 		option := map[string]any{"id": optionID}
-		label := firstNonEmptyString(
-			lookupStringFromAny(record["label"]),
-			lookupStringFromAny(record["title"]),
-			lookupStringFromAny(record["text"]),
-			lookupStringFromAny(record["name"]),
+		label := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["label"]),
+			xutil.LookupStringFromAny(record["title"]),
+			xutil.LookupStringFromAny(record["text"]),
+			xutil.LookupStringFromAny(record["name"]),
 		)
 		if label != "" {
 			option["label"] = label
 		}
-		style := firstNonEmptyString(
-			lookupStringFromAny(record["style"]),
-			lookupStringFromAny(record["appearance"]),
-			lookupStringFromAny(record["variant"]),
+		style := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["style"]),
+			xutil.LookupStringFromAny(record["appearance"]),
+			xutil.LookupStringFromAny(record["variant"]),
 		)
 		if style != "" {
 			option["style"] = style

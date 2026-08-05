@@ -9,6 +9,7 @@ import (
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit(t *testing.T) {
@@ -94,7 +95,7 @@ func TestCronJobFromRecordParsesAndNormalizesConcurrency(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			record := &larkbitable.AppTableRecord{
-				RecordId: stringPtr("rec-task-1"),
+				RecordId: xutil.StringPtr("rec-task-1"),
 				Fields: map[string]any{
 					"任务名":                       "Nightly",
 					"启用":                        true,

@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -23,7 +24,7 @@ func normalizeRequestType(value string) string {
 	normalized := strings.ToLower(strings.TrimSpace(value))
 	switch {
 	case normalized == "", normalized == "approval", normalized == "confirm", normalized == "confirmation":
-		return strings.ToLower(strings.TrimSpace(firstNonEmpty(value, "approval")))
+		return strings.ToLower(strings.TrimSpace(xutil.FirstNonEmpty(value, "approval")))
 	case strings.HasPrefix(normalized, "approval"):
 		return "approval"
 	case strings.HasPrefix(normalized, "confirm"):
@@ -437,7 +438,7 @@ func requestPromptQuestionsToControl(questions []state.RequestPromptQuestionReco
 		answered := draftAnswer != ""
 		defaultValue := strings.TrimSpace(question.DefaultValue)
 		if !question.Secret {
-			defaultValue = firstNonEmpty(draftAnswer, defaultValue)
+			defaultValue = xutil.FirstNonEmpty(draftAnswer, defaultValue)
 		}
 		out = append(out, control.RequestPromptQuestion{
 			ID:             questionID,
@@ -581,11 +582,11 @@ func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string
 		add(option.OptionID, option.Label, option.Style)
 	}
 	if len(upstreamOptions) == 0 {
-		add("accept", firstNonEmpty(metadataString(metadata, "acceptLabel"), "允许一次"), "primary")
+		add("accept", xutil.FirstNonEmpty(metadataString(metadata, "acceptLabel"), "允许一次"), "primary")
 		if approvalRequestSupportsSessionGrant(semanticKind, metadata) {
 			add("acceptForSession", "本会话允许", "default")
 		}
-		add("decline", firstNonEmpty(metadataString(metadata, "declineLabel"), "拒绝"), "default")
+		add("decline", xutil.FirstNonEmpty(metadataString(metadata, "declineLabel"), "拒绝"), "default")
 		if approvalRequestSupportsCancel(semanticKind) {
 			add("cancel", "取消", "default")
 		}
@@ -628,9 +629,9 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 		if !ok {
 			continue
 		}
-		questionID := firstNonEmpty(
-			lookupStringFromAny(record["id"]),
-			lookupStringFromAny(record["questionId"]),
+		questionID := xutil.FirstNonEmpty(
+			xutil.Stringify(record["id"]),
+			xutil.Stringify(record["questionId"]),
 		)
 		if questionID == "" {
 			continue
@@ -647,49 +648,49 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 				if !ok {
 					continue
 				}
-				label := firstNonEmpty(
-					lookupStringFromAny(option["label"]),
-					lookupStringFromAny(option["title"]),
-					lookupStringFromAny(option["text"]),
+				label := xutil.FirstNonEmpty(
+					xutil.Stringify(option["label"]),
+					xutil.Stringify(option["title"]),
+					xutil.Stringify(option["text"]),
 				)
 				if label == "" {
 					continue
 				}
 				options = append(options, state.RequestPromptQuestionOptionRecord{
 					Label:       label,
-					Description: firstNonEmpty(lookupStringFromAny(option["description"]), lookupStringFromAny(option["subtitle"])),
+					Description: xutil.FirstNonEmpty(xutil.Stringify(option["description"]), xutil.Stringify(option["subtitle"])),
 				})
 			}
 		case []map[string]any:
 			for _, option := range typed {
-				label := firstNonEmpty(
-					lookupStringFromAny(option["label"]),
-					lookupStringFromAny(option["title"]),
-					lookupStringFromAny(option["text"]),
+				label := xutil.FirstNonEmpty(
+					xutil.Stringify(option["label"]),
+					xutil.Stringify(option["title"]),
+					xutil.Stringify(option["text"]),
 				)
 				if label == "" {
 					continue
 				}
 				options = append(options, state.RequestPromptQuestionOptionRecord{
 					Label:       label,
-					Description: firstNonEmpty(lookupStringFromAny(option["description"]), lookupStringFromAny(option["subtitle"])),
+					Description: xutil.FirstNonEmpty(xutil.Stringify(option["description"]), xutil.Stringify(option["subtitle"])),
 				})
 			}
 		}
-		header := firstNonEmpty(
-			lookupStringFromAny(record["header"]),
-			lookupStringFromAny(record["title"]),
+		header := xutil.FirstNonEmpty(
+			xutil.Stringify(record["header"]),
+			xutil.Stringify(record["title"]),
 		)
-		questionText := firstNonEmpty(
-			lookupStringFromAny(record["question"]),
-			lookupStringFromAny(record["label"]),
-			lookupStringFromAny(record["prompt"]),
+		questionText := xutil.FirstNonEmpty(
+			xutil.Stringify(record["question"]),
+			xutil.Stringify(record["label"]),
+			xutil.Stringify(record["prompt"]),
 		)
-		placeholder := firstNonEmpty(
-			lookupStringFromAny(record["placeholder"]),
-			lookupStringFromAny(record["inputPlaceholder"]),
+		placeholder := xutil.FirstNonEmpty(
+			xutil.Stringify(record["placeholder"]),
+			xutil.Stringify(record["inputPlaceholder"]),
 		)
-		directResponse := lookupBoolFromAny(record["directResponse"])
+		directResponse := xutil.LookupBoolFromAny(record["directResponse"])
 		if !directResponse && record["directResponse"] == nil {
 			directResponse = len(options) != 0
 		}
@@ -704,12 +705,12 @@ func metadataRequestQuestions(metadata map[string]any) []state.RequestPromptQues
 			ID:             questionID,
 			Header:         header,
 			Question:       questionText,
-			Optional:       lookupBoolFromAny(record["optional"]) || (record["required"] != nil && !lookupBoolFromAny(record["required"])),
-			AllowOther:     lookupBoolFromAny(record["isOther"]),
-			Secret:         lookupBoolFromAny(record["isSecret"]),
+			Optional:       xutil.LookupBoolFromAny(record["optional"]) || (record["required"] != nil && !xutil.LookupBoolFromAny(record["required"])),
+			AllowOther:     xutil.LookupBoolFromAny(record["isOther"]),
+			Secret:         xutil.LookupBoolFromAny(record["isSecret"]),
 			Options:        options,
 			Placeholder:    placeholder,
-			DefaultValue:   strings.TrimSpace(lookupStringFromAny(record["defaultValue"])),
+			DefaultValue:   strings.TrimSpace(xutil.Stringify(record["defaultValue"])),
 			DirectResponse: directResponse,
 		})
 	}
@@ -780,27 +781,27 @@ func metadataRequestOptions(metadata map[string]any) []state.RequestPromptOption
 		if !ok {
 			continue
 		}
-		optionID := firstNonEmpty(
-			lookupStringFromAny(record["id"]),
-			lookupStringFromAny(record["optionId"]),
-			lookupStringFromAny(record["decision"]),
-			lookupStringFromAny(record["value"]),
-			lookupStringFromAny(record["action"]),
+		optionID := xutil.FirstNonEmpty(
+			xutil.Stringify(record["id"]),
+			xutil.Stringify(record["optionId"]),
+			xutil.Stringify(record["decision"]),
+			xutil.Stringify(record["value"]),
+			xutil.Stringify(record["action"]),
 		)
 		optionID = control.NormalizeRequestOptionID(optionID)
 		if optionID == "" {
 			continue
 		}
-		label := firstNonEmpty(
-			lookupStringFromAny(record["label"]),
-			lookupStringFromAny(record["title"]),
-			lookupStringFromAny(record["text"]),
-			lookupStringFromAny(record["name"]),
+		label := xutil.FirstNonEmpty(
+			xutil.Stringify(record["label"]),
+			xutil.Stringify(record["title"]),
+			xutil.Stringify(record["text"]),
+			xutil.Stringify(record["name"]),
 		)
-		style := firstNonEmpty(
-			lookupStringFromAny(record["style"]),
-			lookupStringFromAny(record["appearance"]),
-			lookupStringFromAny(record["variant"]),
+		style := xutil.FirstNonEmpty(
+			xutil.Stringify(record["style"]),
+			xutil.Stringify(record["appearance"]),
+			xutil.Stringify(record["variant"]),
 		)
 		options = append(options, state.RequestPromptOptionRecord{
 			OptionID: optionID,

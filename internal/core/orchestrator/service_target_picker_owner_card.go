@@ -6,6 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type targetPickerPendingKind string
@@ -257,7 +258,7 @@ func targetPickerPendingStillRunning(surface *state.SurfaceConsoleRecord, record
 		fallthrough
 	case targetPickerPendingWorktreeCreate:
 		return surface.PendingHeadless.PrepareNewThread &&
-			normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
+			normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
 	default:
 		return false
 	}
@@ -301,7 +302,7 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 		}
 	}
-	failureText := strings.TrimSpace(firstNonEmpty(fallbackFailureText, targetPickerFirstNoticeText(events)))
+	failureText := strings.TrimSpace(xutil.FirstNonEmpty(fallbackFailureText, targetPickerFirstNoticeText(events)))
 	if failureText == "" && targetPickerPendingStillRunning(surface, record) {
 		return filtered
 	}

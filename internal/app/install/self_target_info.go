@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -110,10 +111,10 @@ func ResolveCurrentDaemonTargetInfo() (CurrentDaemonTargetInfo, error) {
 	}
 	if stateExists {
 		stateValue = loadedState
-		stateValue.StatePath = firstNonEmpty(strings.TrimSpace(stateValue.StatePath), statePath)
-		stateValue.ConfigPath = firstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), configPath)
-		stateValue.BaseDir = firstNonEmpty(strings.TrimSpace(stateValue.BaseDir), baseDir)
-		stateValue.InstanceID = firstNonEmpty(strings.TrimSpace(stateValue.InstanceID), instanceID)
+		stateValue.StatePath = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.StatePath), statePath)
+		stateValue.ConfigPath = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), configPath)
+		stateValue.BaseDir = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.BaseDir), baseDir)
+		stateValue.InstanceID = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.InstanceID), instanceID)
 		baseDir = stateValue.BaseDir
 		instanceID = stateValue.InstanceID
 		configPath = stateValue.ConfigPath

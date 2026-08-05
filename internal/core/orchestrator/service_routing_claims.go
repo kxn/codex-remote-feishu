@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) defaultAttachThread(inst *state.InstanceRecord) string {
@@ -89,7 +90,7 @@ func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord
 		return key
 	}
 	if pending := surface.PendingHeadless; pending != nil {
-		if key := normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)); key != "" {
+		if key := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)); key != "" {
 			surface.ClaimedWorkspaceKey = key
 			return key
 		}

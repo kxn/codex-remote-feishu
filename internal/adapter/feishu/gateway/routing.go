@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionTriggerEvent) (control.Action, bool) {
@@ -694,14 +695,14 @@ func senderTypeFromMessageSender(sender *larkim.EventSender) string {
 	if sender == nil {
 		return ""
 	}
-	return strings.TrimSpace(stringPtr(sender.SenderType))
+	return strings.TrimSpace(xutil.StringValue(sender.SenderType))
 }
 
 func userIDFromLarkUserID(userID *larkim.UserId) string {
 	if userID == nil {
 		return ""
 	}
-	return preferredFeishuUserID(stringPtr(userID.OpenId), stringPtr(userID.UserId), stringPtr(userID.UnionId))
+	return preferredFeishuUserID(xutil.StringValue(userID.OpenId), xutil.StringValue(userID.UserId), xutil.StringValue(userID.UnionId))
 }
 
 func operatorUserID(operator *larkapplication.Operator) string {
@@ -709,9 +710,9 @@ func operatorUserID(operator *larkapplication.Operator) string {
 		return ""
 	}
 	return preferredFeishuUserID(
-		stringPtr(operator.OperatorId.OpenId),
-		stringPtr(operator.OperatorId.UserId),
-		stringPtr(operator.OperatorId.UnionId),
+		xutil.StringValue(operator.OperatorId.OpenId),
+		xutil.StringValue(operator.OperatorId.UserId),
+		xutil.StringValue(operator.OperatorId.UnionId),
 	)
 }
 
@@ -719,7 +720,7 @@ func operatorUserIDFromCard(operator *larkcallback.Operator) string {
 	if operator == nil {
 		return ""
 	}
-	return preferredFeishuUserID(strings.TrimSpace(operator.OpenID), stringPtr(operator.UserID), "")
+	return preferredFeishuUserID(strings.TrimSpace(operator.OpenID), xutil.StringValue(operator.UserID), "")
 }
 
 func reactionKey(messageID, emojiType string) string {
@@ -739,13 +740,6 @@ func mimeExtension(mimeType string) string {
 	default:
 		return ""
 	}
-}
-
-func stringPtr(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
 
 func chooseFirst(values ...string) string {

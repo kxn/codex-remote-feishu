@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func queueItemSteerInputs(item *state.QueueItemRecord) []agentproto.Input {
@@ -46,7 +47,7 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 	queueItemID := "queue-" + strconv.Itoa(s.nextQueueItemID)
 	queueIndex := len(surface.QueuedQueueItemIDs)
 	thread := inst.Threads[activeThreadID]
-	cwd := strings.TrimSpace(firstNonEmpty(threadCWDFromRecord(thread), inst.WorkspaceRoot))
+	cwd := strings.TrimSpace(xutil.FirstNonEmpty(threadCWDFromRecord(thread), inst.WorkspaceRoot))
 	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(activeThreadID)
 	dispatchPlan.CWD = cwd
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)

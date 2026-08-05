@@ -4,62 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
-
-func claudeHomeDir() string {
-	if home := strings.TrimSpace(os.Getenv("HOME")); home != "" {
-		return home
-	}
-	if home := strings.TrimSpace(os.Getenv("USERPROFILE")); home != "" {
-		return home
-	}
-	drive := strings.TrimSpace(os.Getenv("HOMEDRIVE"))
-	path := strings.TrimSpace(os.Getenv("HOMEPATH"))
-	if drive != "" && path != "" {
-		return filepath.Clean(drive + path)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	return home
-}
-
-func cloneMap(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return map[string]any{}
-	}
-	output := make(map[string]any, len(input))
-	for key, value := range input {
-		output[key] = cloneJSONValue(value)
-	}
-	return output
-}
-
-func cloneJSONValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		cloned := make(map[string]any, len(typed))
-		for key, item := range typed {
-			cloned[key] = cloneJSONValue(item)
-		}
-		return cloned
-	case []any:
-		cloned := make([]any, 0, len(typed))
-		for _, item := range typed {
-			cloned = append(cloned, cloneJSONValue(item))
-		}
-		return cloned
-	default:
-		return value
-	}
-}
 
 func lookupMap(value map[string]any, path ...string) map[string]any {
 	current := any(value)
@@ -86,56 +37,7 @@ func lookupSliceMaps(value map[string]any, path ...string) []map[string]any {
 		}
 		current = object[part]
 	}
-	return mapsFromAny(current)
-}
-
-func mapsFromAny(value any) []map[string]any {
-	switch typed := value.(type) {
-	case []map[string]any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneMap(item))
-		}
-		return out
-	case []any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			object, _ := item.(map[string]any)
-			if object != nil {
-				out = append(out, cloneMap(object))
-			}
-		}
-		return out
-	default:
-		return nil
-	}
-}
-
-func lookupStringFromAny(value any) string {
-	switch typed := value.(type) {
-	case string:
-		return typed
-	default:
-		return ""
-	}
-}
-
-func lookupBoolFromAny(value any) bool {
-	current, _ := value.(bool)
-	return current
-}
-
-func lookupIntFromAny(value any) int {
-	switch typed := value.(type) {
-	case int:
-		return typed
-	case int64:
-		return int(typed)
-	case float64:
-		return int(typed)
-	default:
-		return 0
-	}
+	return xutil.MapsFromAny(current)
 }
 
 func lookupStringList(value any) []string {
@@ -145,7 +47,7 @@ func lookupStringList(value any) []string {
 	case []any:
 		out := make([]string, 0, len(typed))
 		for _, item := range typed {
-			if current := strings.TrimSpace(lookupStringFromAny(item)); current != "" {
+			if current := strings.TrimSpace(xutil.LookupStringFromAny(item)); current != "" {
 				out = append(out, current)
 			}
 		}
@@ -153,17 +55,6 @@ func lookupStringList(value any) []string {
 	default:
 		return nil
 	}
-}
-
-func compactJSON(value any) string {
-	if value == nil {
-		return ""
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return fmt.Sprintf("%v", value)
-	}
-	return string(data)
 }
 
 func marshalNDJSON(value any) ([]byte, error) {
@@ -188,11 +79,11 @@ func stringifyTextContent(value any) string {
 			case string:
 				buffer.WriteString(entry)
 			case map[string]any:
-				if text := strings.TrimSpace(lookupStringFromAny(entry["text"])); text != "" {
+				if text := strings.TrimSpace(xutil.LookupStringFromAny(entry["text"])); text != "" {
 					buffer.WriteString(text)
 					continue
 				}
-				if text := strings.TrimSpace(lookupStringFromAny(entry["content"])); text != "" {
+				if text := strings.TrimSpace(xutil.LookupStringFromAny(entry["content"])); text != "" {
 					buffer.WriteString(text)
 				}
 			}
@@ -352,117 +243,17 @@ func (t *Translator) newReasoningSummaryCompletedEvent(itemID string) agentproto
 	}
 }
 
-func claudeToolItemKind(toolName string) string {
-	switch strings.TrimSpace(toolName) {
-	case "Bash":
-		return "command_execution"
-	case "WebSearch", "WebFetch", "ToolSearch":
-		return "web_search"
-	case "TodoWrite":
-		return ""
-	case "Task":
-		return "delegated_task"
-	case "TaskOutput", "TaskStop":
-		return ""
-	case "Edit", "Write", "NotebookEdit":
-		return "file_change"
-	case "Read", "Glob", "Grep", "Skill":
-		return "dynamic_tool_call"
-	default:
-		return "dynamic_tool_call"
-	}
-}
-
 func claudeToolVisibleLifecycle(toolName string) bool {
 	switch strings.TrimSpace(toolName) {
 	case "TaskOutput", "TaskStop":
 		return false
 	default:
-		return strings.TrimSpace(claudeToolItemKind(toolName)) != ""
-	}
-}
-
-func claudeToolMetadata(toolName string, input map[string]any) map[string]any {
-	metadata := map[string]any{
-		"tool":      strings.TrimSpace(toolName),
-		"arguments": cloneMap(input),
-	}
-	switch claudeToolItemKind(toolName) {
-	case "command_execution":
-		if command := strings.TrimSpace(lookupStringFromAny(input["command"])); command != "" {
-			metadata["command"] = command
-		}
-		if cwd := strings.TrimSpace(lookupStringFromAny(input["cwd"])); cwd != "" {
-			metadata["cwd"] = cwd
-		}
-	case "web_search":
-		mergeClaudeWebToolMetadata(metadata, toolName, input)
-	case "delegated_task":
-		metadata["subagentType"] = strings.TrimSpace(lookupStringFromAny(input["subagent_type"]))
-		metadata["description"] = strings.TrimSpace(lookupStringFromAny(input["description"]))
-		if prompt := strings.TrimSpace(lookupStringFromAny(input["prompt"])); prompt != "" {
-			metadata["prompt"] = prompt
-		}
-	case "file_change":
-		mergeClaudeFileChangeMetadata(metadata, toolName, input)
-	case "dynamic_tool_call":
-		metadata["semanticKind"] = claudeDynamicToolSemanticKind(toolName)
-		metadata["suppressFinalText"] = true
-	}
-	return metadata
-}
-
-func claudeDynamicToolSemanticKind(toolName string) string {
-	switch strings.TrimSpace(toolName) {
-	case "Read", "Glob", "Grep":
-		return "exploration"
-	case "Skill":
-		return "skill"
-	case "Edit", "Write", "NotebookEdit":
-		return "file_change_request"
-	default:
-		return "generic_tool"
-	}
-}
-
-func mergeClaudeWebToolMetadata(metadata map[string]any, toolName string, input map[string]any) {
-	switch strings.TrimSpace(toolName) {
-	case "WebSearch":
-		metadata["actionType"] = "search"
-		if query := firstNonEmptyString(
-			lookupStringFromAny(input["query"]),
-			lookupStringFromAny(input["q"]),
-		); query != "" {
-			metadata["query"] = query
-		}
-	case "WebFetch":
-		metadata["actionType"] = "open_page"
-		if url := firstNonEmptyString(
-			lookupStringFromAny(input["url"]),
-			lookupStringFromAny(input["href"]),
-		); url != "" {
-			metadata["url"] = url
-		}
-	case "ToolSearch":
-		metadata["actionType"] = "find_in_page"
-		if pattern := firstNonEmptyString(
-			lookupStringFromAny(input["pattern"]),
-			lookupStringFromAny(input["query"]),
-			lookupStringFromAny(input["text"]),
-		); pattern != "" {
-			metadata["pattern"] = pattern
-		}
-		if url := firstNonEmptyString(
-			lookupStringFromAny(input["url"]),
-			lookupStringFromAny(input["page_url"]),
-		); url != "" {
-			metadata["url"] = url
-		}
+		return strings.TrimSpace(claudeutil.ClaudeToolItemKind(toolName)) != ""
 	}
 }
 
 func buildClaudeTodoPlanSnapshot(input map[string]any) *agentproto.TurnPlanSnapshot {
-	records := mapsFromAny(input["todos"])
+	records := xutil.MapsFromAny(input["todos"])
 	if len(records) == 0 {
 		return nil
 	}
@@ -471,14 +262,14 @@ func buildClaudeTodoPlanSnapshot(input map[string]any) *agentproto.TurnPlanSnaps
 	}
 	activeForms := make([]string, 0, len(records))
 	for _, record := range records {
-		step := strings.TrimSpace(lookupStringFromAny(record["content"]))
+		step := strings.TrimSpace(xutil.LookupStringFromAny(record["content"]))
 		if step == "" {
-			step = strings.TrimSpace(lookupStringFromAny(record["activeForm"]))
+			step = strings.TrimSpace(xutil.LookupStringFromAny(record["activeForm"]))
 		}
 		if step == "" {
 			continue
 		}
-		status := agentproto.NormalizeTurnPlanStepStatus(lookupStringFromAny(record["status"]))
+		status := agentproto.NormalizeTurnPlanStepStatus(xutil.LookupStringFromAny(record["status"]))
 		if status == "" {
 			status = agentproto.TurnPlanStepStatusPending
 		}
@@ -486,7 +277,7 @@ func buildClaudeTodoPlanSnapshot(input map[string]any) *agentproto.TurnPlanSnaps
 			Step:   step,
 			Status: status,
 		})
-		if active := strings.TrimSpace(lookupStringFromAny(record["activeForm"])); active != "" && status == agentproto.TurnPlanStepStatusInProgress {
+		if active := strings.TrimSpace(xutil.LookupStringFromAny(record["activeForm"])); active != "" && status == agentproto.TurnPlanStepStatusInProgress {
 			activeForms = append(activeForms, active)
 		}
 	}
@@ -517,26 +308,8 @@ func buildClaudePlanSummary(snapshot *agentproto.TurnPlanSnapshot) string {
 	return ""
 }
 
-func buildClaudeDelegatedTaskText(metadata map[string]any) string {
-	if len(metadata) == 0 {
-		return ""
-	}
-	description := strings.TrimSpace(lookupStringFromAny(metadata["description"]))
-	subagentType := strings.TrimSpace(lookupStringFromAny(metadata["subagentType"]))
-	switch {
-	case description != "" && subagentType != "":
-		return fmt.Sprintf("Task (%s): %s", subagentType, description)
-	case description != "":
-		return "Task: " + description
-	case subagentType != "":
-		return "Task (" + subagentType + ")"
-	default:
-		return "Task"
-	}
-}
-
 func buildClaudeDelegatedTaskSourceContextLabel(metadata map[string]any) string {
-	subagentType := strings.TrimSpace(lookupStringFromAny(metadata["subagentType"]))
+	subagentType := strings.TrimSpace(xutil.LookupStringFromAny(metadata["subagentType"]))
 	switch {
 	case subagentType != "":
 		return fmt.Sprintf("来自 Task (%s)", subagentType)
@@ -553,7 +326,7 @@ func cloneMetadata(metadata map[string]any) map[string]any {
 	}
 	out := make(map[string]any, len(metadata))
 	for key, value := range metadata {
-		out[key] = cloneJSONValue(value)
+		out[key] = xutil.CloneJSONValue(value)
 	}
 	return out
 }
@@ -620,10 +393,10 @@ func buildClaudeTokenUsage(result map[string]any, previous *agentproto.ThreadTok
 	if len(usageMap) == 0 {
 		return nil
 	}
-	inputTokens := lookupIntFromAny(usageMap["input_tokens"])
-	cacheReadTokens := lookupIntFromAny(usageMap["cache_read_input_tokens"])
-	cacheCreateTokens := lookupIntFromAny(usageMap["cache_creation_input_tokens"])
-	outputTokens := lookupIntFromAny(usageMap["output_tokens"])
+	inputTokens := xutil.LookupIntFromAny(usageMap["input_tokens"])
+	cacheReadTokens := xutil.LookupIntFromAny(usageMap["cache_read_input_tokens"])
+	cacheCreateTokens := xutil.LookupIntFromAny(usageMap["cache_creation_input_tokens"])
+	outputTokens := xutil.LookupIntFromAny(usageMap["output_tokens"])
 	totalInputTokens := inputTokens + cacheReadTokens + cacheCreateTokens
 	totalTokens := totalInputTokens + outputTokens
 	last := agentproto.TokenUsageBreakdown{
@@ -650,7 +423,7 @@ func buildClaudeTokenUsage(result map[string]any, previous *agentproto.ThreadTok
 		if !ok {
 			continue
 		}
-		if current := lookupIntFromAny(record["contextWindow"]); current > bestWindow {
+		if current := xutil.LookupIntFromAny(record["contextWindow"]); current > bestWindow {
 			bestWindow = current
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type OperationKind string
@@ -141,7 +142,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			ApplyReplyLane:        true,
 		})}
 	case eventcontract.SelectionPayload:
-		title, elements, ok := projectorpkg.SelectionViewStructuredProjection(payload.View, payload.Context, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		title, elements, ok := projectorpkg.SelectionViewStructuredProjection(payload.View, payload.Context, xutil.FirstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		if !ok {
 			return nil
 		}
@@ -160,10 +161,10 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		body := projectorpkg.PageBody(pageView)
 		elements := projectorpkg.PageElementsWithOptions(
 			pageView,
-			firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID),
+			xutil.FirstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID),
 			projectorpkg.PageRenderOptions{MenuHomeVersion: p.menuHomeVersion},
 		)
-		theme := firstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
+		theme := xutil.FirstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
 		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
 			Title:                 title,
 			Body:                  body,
@@ -180,7 +181,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		if title == "" {
 			title = "需要确认"
 		}
-		elements := projectorpkg.RequestPromptElements(requestView, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		elements := projectorpkg.RequestPromptElements(requestView, xutil.FirstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
 			Title:                 title,
 			ThemeKey:              cardThemeApproval,
@@ -194,7 +195,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		if text == "" {
 			return nil
 		}
-		replyToMessageID := strings.TrimSpace(firstNonEmpty(payload.TimelineText.ReplyToMessageID, event.SourceMessageID, event.Meta.SourceMessageID))
+		replyToMessageID := strings.TrimSpace(xutil.FirstNonEmpty(payload.TimelineText.ReplyToMessageID, event.SourceMessageID, event.Meta.SourceMessageID))
 		return []Operation{{
 			Kind:             OperationSendText,
 			GatewayID:        event.GatewayID,
@@ -209,7 +210,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		if title == "" {
 			title = "选择路径"
 		}
-		elements := projectorpkg.PathPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		elements := projectorpkg.PathPickerElements(view, xutil.FirstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
 			Title:          title,
 			ThemeKey:       cardThemeInfo,
@@ -224,7 +225,7 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		if title == "" {
 			title = "选择工作区与会话"
 		}
-		elements := projectorpkg.TargetPickerElements(view, firstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
+		elements := projectorpkg.TargetPickerElements(view, xutil.FirstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID))
 		theme := projectorpkg.TargetPickerTheme(view)
 		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
 			Title:          title,
@@ -304,8 +305,8 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 			event.GatewayID,
 			event.SurfaceSessionID,
 			chatID,
-			firstNonEmpty(event.SourceMessageID, event.Meta.SourceMessageID),
-			firstNonEmpty(event.SourceMessagePreview, event.Meta.SourceMessagePreview),
+			xutil.FirstNonEmpty(event.SourceMessageID, event.Meta.SourceMessageID),
+			xutil.FirstNonEmpty(event.SourceMessagePreview, event.Meta.SourceMessagePreview),
 			payload.Block,
 			payload.FileChangeSummary,
 			payload.TurnDiffPreview,
@@ -409,7 +410,7 @@ func projectFinalReplyCards(gatewayID, surfaceSessionID, chatID, sourceMessageID
 }
 
 func replyToMessageIDForEvent(event eventcontract.Event) string {
-	return strings.TrimSpace(firstNonEmpty(
+	return strings.TrimSpace(xutil.FirstNonEmpty(
 		event.SourceMessageID,
 		event.Meta.SourceMessageID,
 	))

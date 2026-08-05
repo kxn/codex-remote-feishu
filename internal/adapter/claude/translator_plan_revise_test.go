@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestClaudeTranslatorPlanReviseDoesNotInterrupt(t *testing.T) {
@@ -52,13 +53,13 @@ func TestClaudeTranslatorPlanReviseDoesNotInterrupt(t *testing.T) {
 		t.Fatalf("translate plan revise: %v", err)
 	}
 	body := testMapValue(testMapValue(decodeFrame(t, payloads[0])["response"])["response"])
-	if lookupStringFromAny(body["behavior"]) != "deny" {
+	if xutil.LookupStringFromAny(body["behavior"]) != "deny" {
 		t.Fatalf("unexpected revise body: %#v", body)
 	}
 	if _, ok := body["interrupt"]; ok {
 		t.Fatalf("expected revise deny body not to interrupt, got %#v", body)
 	}
-	if lookupStringFromAny(body["message"]) != "Add a rollback step before execution." {
+	if xutil.LookupStringFromAny(body["message"]) != "Add a rollback step before execution." {
 		t.Fatalf("unexpected revise message: %#v", body)
 	}
 
@@ -83,7 +84,7 @@ func TestClaudeTranslatorPlanReviseDoesNotInterrupt(t *testing.T) {
 	if resolved.Events[0].ThreadID != threadID || resolved.Events[0].TurnID != turnID {
 		t.Fatalf("unexpected resolved event ids: %#v", resolved.Events[0])
 	}
-	if lookupStringFromAny(resolved.Events[0].Metadata["decision"]) != "revise" {
+	if xutil.LookupStringFromAny(resolved.Events[0].Metadata["decision"]) != "revise" {
 		t.Fatalf("unexpected resolved revise metadata: %#v", resolved.Events[0].Metadata)
 	}
 }

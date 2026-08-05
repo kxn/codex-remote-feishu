@@ -16,15 +16,6 @@ func (a *App) nextCommandID() string {
 	return "cmd-" + strconv.FormatUint(atomic.AddUint64(&a.commandSeq, 1), 10)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func formatStatusSnapshotBinary(identity agentproto.ServerIdentity) string {
 	branch := strings.TrimSpace(identity.Branch)
 	version := strings.TrimSpace(identity.Version)

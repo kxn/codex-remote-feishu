@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -115,7 +116,7 @@ func pageFormElements(form control.CommandCatalogForm, pageBackend controlBacken
 		}
 	}
 	submitValue = stampActionValue(submitValue, daemonLifecycleID)
-	submitButton := cardFormSubmitButtonElement(firstNonEmpty(strings.TrimSpace(form.SubmitLabel), "执行"), submitValue)
+	submitButton := cardFormSubmitButtonElement(xutil.FirstNonEmpty(strings.TrimSpace(form.SubmitLabel), "执行"), submitValue)
 	if len(submitButton) != 0 {
 		submitButton["name"] = commandCatalogSubmitButtonName(formName)
 	}
@@ -158,7 +159,7 @@ func commandCatalogFormPaginationButtons(form control.CommandCatalogForm, pageBa
 	cursor := normalizeCommandCatalogFormCursor(form.Cursor, len(form.Field.Options))
 	buttons := make([]map[string]any, 0, 2)
 	if cursor > 0 {
-		buttons = append(buttons, commandCatalogFormPageButton("上一页", form, actionKind, pageBackend, daemonLifecycleID, maxInt(cursor-commandCatalogPaginatedSelectPageSize, 0)))
+		buttons = append(buttons, commandCatalogFormPageButton("上一页", form, actionKind, pageBackend, daemonLifecycleID, xutil.MaxInt(cursor-commandCatalogPaginatedSelectPageSize, 0)))
 	}
 	if next := cursor + commandCatalogPaginatedSelectPageSize; next < len(form.Field.Options) {
 		buttons = append(buttons, commandCatalogFormPageButton("下一页", form, actionKind, pageBackend, daemonLifecycleID, next))
@@ -190,7 +191,7 @@ func normalizeCommandCatalogFormCursor(cursor, total int) int {
 		return cursor
 	}
 	lastPage := (total - 1) / commandCatalogPaginatedSelectPageSize * commandCatalogPaginatedSelectPageSize
-	return maxInt(lastPage, 0)
+	return xutil.MaxInt(lastPage, 0)
 }
 
 type controlBackend = agentproto.Backend
@@ -224,9 +225,9 @@ func pageButtons(buttons []control.CommandCatalogButton, pageBackend controlBack
 				if enriched, ok := resolveCatalogActionForPage(control.Action{
 					Kind:             resolved.Action.Kind,
 					Text:             resolved.Action.Text,
-					CommandID:        firstNonEmpty(strings.TrimSpace(button.CommandID), strings.TrimSpace(resolved.Action.CommandID)),
-					CatalogFamilyID:  firstNonEmpty(strings.TrimSpace(button.CatalogFamilyID), strings.TrimSpace(resolved.FamilyID)),
-					CatalogVariantID: firstNonEmpty(strings.TrimSpace(button.CatalogVariantID), strings.TrimSpace(resolved.VariantID)),
+					CommandID:        xutil.FirstNonEmpty(strings.TrimSpace(button.CommandID), strings.TrimSpace(resolved.Action.CommandID)),
+					CatalogFamilyID:  xutil.FirstNonEmpty(strings.TrimSpace(button.CatalogFamilyID), strings.TrimSpace(resolved.FamilyID)),
+					CatalogVariantID: xutil.FirstNonEmpty(strings.TrimSpace(button.CatalogVariantID), strings.TrimSpace(resolved.VariantID)),
 					CatalogBackend:   pageCatalogBackend(pageBackend, button.CatalogBackend),
 				}, pageCatalogBackend(pageBackend, button.CatalogBackend)); ok {
 					payload = actionPayloadWithCatalog(payload, enriched.FamilyID, enriched.VariantID, string(enriched.Backend))

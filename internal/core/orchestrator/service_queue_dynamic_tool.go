@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) renderDynamicToolCallItem(instanceID string, event agentproto.Event) []eventcontract.Event {
@@ -51,10 +52,10 @@ func dynamicToolImageItemsFromMetadata(metadata map[string]any) []string {
 		if !ok {
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(lookupStringFromAny(record["type"])), "image") {
+		if !strings.EqualFold(strings.TrimSpace(xutil.Stringify(record["type"])), "image") {
 			continue
 		}
-		image := firstNonEmpty(lookupStringFromAny(record["imageBase64"]))
+		image := xutil.FirstNonEmpty(xutil.Stringify(record["imageBase64"]))
 		if image == "" {
 			continue
 		}
@@ -89,13 +90,13 @@ func dynamicToolImageLinksFromMetadata(metadata map[string]any) []string {
 		if !ok {
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(lookupStringFromAny(record["type"])), "image") {
+		if !strings.EqualFold(strings.TrimSpace(xutil.Stringify(record["type"])), "image") {
 			continue
 		}
-		if strings.TrimSpace(lookupStringFromAny(record["imageBase64"])) != "" {
+		if strings.TrimSpace(xutil.Stringify(record["imageBase64"])) != "" {
 			continue
 		}
-		link := strings.TrimSpace(lookupStringFromAny(record["url"]))
+		link := strings.TrimSpace(xutil.Stringify(record["url"]))
 		if link == "" {
 			continue
 		}

@@ -6,6 +6,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -104,7 +105,7 @@ func (s *Service) ensureCommandLauncherFlow(surface *state.SurfaceConsoleRecord,
 		flow = newOwnerCardFlowRecord(
 			ownerCardFlowKindCommandMenu,
 			s.pickers.nextLauncherFlowToken(),
-			firstNonEmpty(surface.ActorUserID),
+			xutil.FirstNonEmpty(surface.ActorUserID),
 			now,
 			defaultTargetPickerTTL,
 			ownerCardFlowPhaseEditing,

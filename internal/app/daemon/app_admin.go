@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) handleAdminDaemonCommand(command control.DaemonCommand) []eventcontract.Event {
@@ -122,7 +123,7 @@ func buildAdminLocalWebPageView(localURL string) control.FeishuPageView {
 	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:       control.FeishuCommandAdmin,
 		Title:           "本地管理页",
-		SummarySections: commandCatalogSummarySections("请在当前 daemon 所在机器的浏览器里打开本地管理页。", fmt.Sprintf("地址：%s", firstNonEmpty(strings.TrimSpace(localURL), "未解析"))),
+		SummarySections: commandCatalogSummarySections("请在当前 daemon 所在机器的浏览器里打开本地管理页。", fmt.Sprintf("地址：%s", xutil.FirstNonEmpty(strings.TrimSpace(localURL), "未解析"))),
 		Interactive:     true,
 		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{{
@@ -173,11 +174,11 @@ func buildAdminAutostartPageView(status install.AutostartStatus, statusKind, sta
 
 func adminAutostartSummaryLines(status install.AutostartStatus) []string {
 	lines := []string{
-		fmt.Sprintf("平台：%s", firstNonEmpty(strings.TrimSpace(status.Platform), "unknown")),
+		fmt.Sprintf("平台：%s", xutil.FirstNonEmpty(strings.TrimSpace(status.Platform), "unknown")),
 		fmt.Sprintf("状态：%s", adminAutostartStatusLabel(status)),
 	}
 	if status.Supported {
-		lines = append(lines, fmt.Sprintf("管理方式：%s", firstNonEmpty(string(status.Manager), string(status.CurrentManager), "unknown")))
+		lines = append(lines, fmt.Sprintf("管理方式：%s", xutil.FirstNonEmpty(string(status.Manager), string(status.CurrentManager), "unknown")))
 	}
 	if path := strings.TrimSpace(status.ServiceUnitPath); path != "" {
 		lines = append(lines, fmt.Sprintf("服务定义：%s", path))

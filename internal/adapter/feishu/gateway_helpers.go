@@ -76,13 +76,6 @@ func mimeExtension(mimeType string) string {
 	}
 }
 
-func stringPtr(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
 func stringMapValue(values map[string]interface{}, key string) string {
 	if len(values) == 0 {
 		return ""

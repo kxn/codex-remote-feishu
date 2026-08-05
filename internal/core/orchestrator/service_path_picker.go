@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const defaultPathPickerTTL = 10 * time.Minute
@@ -92,10 +93,10 @@ func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, owner
 	return &activePathPickerRecord{
 		PickerID:        s.pickers.nextPathPickerToken(),
 		MessageID:       strings.TrimSpace(req.SourceMessageID),
-		OwnerUserID:     strings.TrimSpace(firstNonEmpty(ownerUserID, surface.ActorUserID)),
+		OwnerUserID:     strings.TrimSpace(xutil.FirstNonEmpty(ownerUserID, surface.ActorUserID)),
 		OwnerFlowID:     strings.TrimSpace(req.OwnerFlowID),
 		Mode:            mode,
-		Title:           strings.TrimSpace(firstNonEmpty(req.Title, defaultPathPickerTitle(mode))),
+		Title:           strings.TrimSpace(xutil.FirstNonEmpty(req.Title, defaultPathPickerTitle(mode))),
 		StageLabel:      strings.TrimSpace(req.StageLabel),
 		Question:        strings.TrimSpace(req.Question),
 		RootPath:        rootPath,
@@ -104,8 +105,8 @@ func (s *Service) newPathPickerRecord(surface *state.SurfaceConsoleRecord, owner
 		DirectoryCursor: -1,
 		FileCursor:      -1,
 		Hint:            strings.TrimSpace(req.Hint),
-		ConfirmLabel:    strings.TrimSpace(firstNonEmpty(req.ConfirmLabel, "确认")),
-		CancelLabel:     strings.TrimSpace(firstNonEmpty(req.CancelLabel, "取消")),
+		ConfirmLabel:    strings.TrimSpace(xutil.FirstNonEmpty(req.ConfirmLabel, "确认")),
+		CancelLabel:     strings.TrimSpace(xutil.FirstNonEmpty(req.CancelLabel, "取消")),
 		CreatedAt:       s.now(),
 		ExpiresAt:       expiresAt,
 		ConsumerKind:    strings.TrimSpace(req.ConsumerKind),
@@ -360,8 +361,8 @@ func (s *Service) buildPathPickerView(surface *state.SurfaceConsoleRecord, recor
 		SelectedPath:   currentSelectedPath(record),
 		BodySections:   pathPickerBodySections(record.RootPath, current.path, currentSelectedPath(record)),
 		NoticeSections: pathPickerStatusNoticeSections(record.StatusTitle, record.StatusText, record.StatusSections, record.StatusFooter),
-		ConfirmLabel:   strings.TrimSpace(firstNonEmpty(record.ConfirmLabel, "确认")),
-		CancelLabel:    strings.TrimSpace(firstNonEmpty(record.CancelLabel, "取消")),
+		ConfirmLabel:   strings.TrimSpace(xutil.FirstNonEmpty(record.ConfirmLabel, "确认")),
+		CancelLabel:    strings.TrimSpace(xutil.FirstNonEmpty(record.CancelLabel, "取消")),
 		CanGoUp:        !samePath(current.path, record.RootPath),
 		CanConfirm:     canConfirmPathPicker(record),
 	}
@@ -388,7 +389,7 @@ func (s *Service) buildPathPickerView(surface *state.SurfaceConsoleRecord, recor
 		view.Hint = "当前目录为空。"
 	}
 	if record.Mode == pathPickerModeFile && view.SelectedPath == "" {
-		view.Hint = strings.TrimSpace(firstNonEmpty(view.Hint, "请选择一个文件后再确认。"))
+		view.Hint = strings.TrimSpace(xutil.FirstNonEmpty(view.Hint, "请选择一个文件后再确认。"))
 	}
 	if extraHint := strings.TrimSpace(record.Hint); extraHint != "" {
 		if strings.TrimSpace(view.Hint) == "" {
@@ -436,8 +437,8 @@ func (s *Service) buildPathPickerEntries(surface *state.SurfaceConsoleRecord, re
 				return leftBucket < rightBucket
 			}
 		}
-		leftLabel := strings.ToLower(strings.TrimSpace(firstNonEmpty(items[i].Label, items[i].Name)))
-		rightLabel := strings.ToLower(strings.TrimSpace(firstNonEmpty(items[j].Label, items[j].Name)))
+		leftLabel := strings.ToLower(strings.TrimSpace(xutil.FirstNonEmpty(items[i].Label, items[i].Name)))
+		rightLabel := strings.ToLower(strings.TrimSpace(xutil.FirstNonEmpty(items[j].Label, items[j].Name)))
 		if leftLabel != rightLabel {
 			return leftLabel < rightLabel
 		}
@@ -505,7 +506,7 @@ func pathPickerDirectorySortBucket(entry control.FeishuPathPickerEntry) int {
 	if entry.Kind != control.PathPickerEntryDirectory {
 		return 0
 	}
-	name := strings.TrimSpace(firstNonEmpty(entry.Label, entry.Name))
+	name := strings.TrimSpace(xutil.FirstNonEmpty(entry.Label, entry.Name))
 	if strings.HasPrefix(name, ".") {
 		return 1
 	}
@@ -591,7 +592,7 @@ func (s *Service) dispatchPathPickerConfirmed(surface *state.SurfaceConsoleRecor
 				s.clearSurfacePathPicker(surface)
 				return events
 			}
-			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseSucceeded, "已确认路径", firstNonEmpty(pathPickerFirstNoticeText(events), fmt.Sprintf("已确认路径：`%s`。", result.SelectedPath)), nil, "", false, nil)
+			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseSucceeded, "已确认路径", xutil.FirstNonEmpty(pathPickerFirstNoticeText(events), fmt.Sprintf("已确认路径：`%s`。", result.SelectedPath)), nil, "", false, nil)
 		}
 	}
 	if strings.TrimSpace(result.ConsumerKind) != "" && !ok {
@@ -609,7 +610,7 @@ func (s *Service) dispatchPathPickerCancelled(surface *state.SurfaceConsoleRecor
 				s.clearSurfacePathPicker(surface)
 				return events
 			}
-			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseCancelled, "已取消路径选择", firstNonEmpty(pathPickerFirstNoticeText(events), "已取消路径选择。"), nil, "", false, nil)
+			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseCancelled, "已取消路径选择", xutil.FirstNonEmpty(pathPickerFirstNoticeText(events), "已取消路径选择。"), nil, "", false, nil)
 		}
 	}
 	if strings.TrimSpace(result.ConsumerKind) != "" && !ok {

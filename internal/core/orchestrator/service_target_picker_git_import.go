@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const targetPickerGitImportOutputTailLines = 3
@@ -43,12 +44,12 @@ func (s *Service) CompleteTargetPickerGitImport(surfaceSessionID, pickerID, work
 		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
+		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
 		status := targetPickerGitImportPostCloneProcessingStatus(strings.TrimSpace(record.GitRepoURL), workspaceKey)
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingGitImport, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)
 		return append(processing, filtered...)
 	}
-	reason := strings.TrimSpace(firstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("仓库已拉取到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“添加工作区 / 本地目录”继续接入。", workspaceKey)))
+	reason := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("仓库已拉取到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“添加工作区 / 本地目录”继续接入。", workspaceKey)))
 	status := targetPickerGitImportPostCloneFailureStatus(workspaceKey, reason)
 	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", "", status.Sections, status.Footer, false, filtered)
 }
@@ -87,7 +88,7 @@ func (s *Service) cancelTargetPickerGitImport(surface *state.SurfaceConsoleRecor
 		},
 	}}
 	pending := surface.PendingHeadless
-	if pending == nil || !pending.PrepareNewThread || normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
+	if pending == nil || !pending.PrepareNewThread || normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
 		return events
 	}
 	events = append(events, s.finalizeDetachedSurface(surface)...)
@@ -169,7 +170,7 @@ func targetPickerGitImportCloneFailureStatus(importErr *workspaceimport.ImportEr
 
 func targetPickerGitImportPostCloneFailureStatus(workspaceKey, reason string) feishuCardStatusPayload {
 	sections := targetPickerGitImportObjectSections("", workspaceKey)
-	reason = strings.TrimSpace(firstNonEmpty(reason, "仓库已拉取完成，但后续工作区接入失败。"))
+	reason = strings.TrimSpace(xutil.FirstNonEmpty(reason, "仓库已拉取完成，但后续工作区接入失败。"))
 	if workspaceKey != "" && !strings.Contains(reason, "目录已保留") {
 		reason += " 目录已保留。"
 	}

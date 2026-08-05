@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 )
 
@@ -162,7 +163,7 @@ func ExtractRateLimit(err error) (RateLimitEvidence, bool) {
 		API:                 strings.TrimSpace(apiErr.API),
 		ErrorCode:           apiErr.Code,
 		StatusCode:          apiErr.StatusCode,
-		RequestID:           firstNonEmpty(strings.TrimSpace(apiErr.RequestID), strings.TrimSpace(apiErr.LogID)),
+		RequestID:           xutil.FirstNonEmpty(strings.TrimSpace(apiErr.RequestID), strings.TrimSpace(apiErr.LogID)),
 		RetryAfter:          apiErr.RetryAfter,
 		RateLimitResetAfter: apiErr.RateLimitResetAfter,
 	}, true
@@ -176,7 +177,7 @@ func permissionGapFromAPIError(err *APIError) (PermissionGapEvidence, bool) {
 		ErrorCode:    err.Code,
 		ErrorMessage: strings.TrimSpace(err.Msg),
 		SourceAPI:    strings.TrimSpace(err.API),
-		RequestID:    firstNonEmpty(strings.TrimSpace(err.RequestID), strings.TrimSpace(err.LogID)),
+		RequestID:    xutil.FirstNonEmpty(strings.TrimSpace(err.RequestID), strings.TrimSpace(err.LogID)),
 	}
 	for _, item := range err.PermissionViolations {
 		if scope := normalizePermissionScope(item.Subject); scope != "" {
@@ -225,8 +226,8 @@ func permissionGapFromDriveAPIError(err *driveAPIError) (PermissionGapEvidence, 
 		ApplyURL:     "",
 		ErrorCode:    err.Code,
 		ErrorMessage: strings.TrimSpace(err.Msg),
-		SourceAPI:    firstNonEmpty(strings.TrimSpace(err.API), "drive.v1"),
-		RequestID:    firstNonEmpty(strings.TrimSpace(err.RequestID), strings.TrimSpace(err.LogID)),
+		SourceAPI:    xutil.FirstNonEmpty(strings.TrimSpace(err.API), "drive.v1"),
+		RequestID:    xutil.FirstNonEmpty(strings.TrimSpace(err.RequestID), strings.TrimSpace(err.LogID)),
 	}, true
 }
 

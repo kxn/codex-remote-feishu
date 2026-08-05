@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type mcpToolCallProgressRecord struct {
@@ -104,7 +105,7 @@ func mcpToolCallProgressRecordFromEvent(surfaceID, instanceID string, event agen
 	}
 	durationMS := 0
 	if event.Metadata != nil {
-		durationMS = lookupIntFromAny(event.Metadata["durationMs"])
+		durationMS = xutil.LookupIntFromAny(event.Metadata["durationMs"])
 	}
 	return &mcpToolCallProgressRecord{
 		SurfaceSessionID: surfaceID,

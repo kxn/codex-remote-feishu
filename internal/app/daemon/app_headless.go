@@ -17,6 +17,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) handleDaemonCommand(command control.DaemonCommand) []eventcontract.Event {
@@ -206,7 +207,7 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
 	}
 
-	workDir := strings.TrimSpace(firstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
+	workDir := strings.TrimSpace(xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
 	if workDir == "" {
 		workDir = strings.TrimSpace(cfg.Paths.StateDir)
 	}
@@ -245,7 +246,7 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 			command.SurfaceSessionID,
 			command.InstanceID,
 			command.ThreadID,
-			firstNonEmpty(command.WorkspaceKey, command.ThreadCWD),
+			xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD),
 			err,
 		)
 		return a.handleManagedHeadlessLaunchFailure(command, err, now)
