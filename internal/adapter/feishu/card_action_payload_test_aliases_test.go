@@ -82,10 +82,10 @@ const (
 )
 
 var (
-	actionPayloadWithLifecycle          = frontstagecontract.ActionPayloadWithLifecycle
-	actionPayloadNavigation             = frontstagecontract.ActionPayloadNavigation
-	actionPayloadPageLocalAction        = frontstagecontract.ActionPayloadPageLocalAction
-	actionPayloadUpgradeOwnerFlow       = frontstagecontract.ActionPayloadUpgradeOwnerFlow
-	actionPayloadPageSubmit             = frontstagecontract.ActionPayloadPageSubmit
-	actionPayloadSubmitRequestForm      = frontstagecontract.ActionPayloadSubmitRequestForm
+	actionPayloadWithLifecycle     = frontstagecontract.ActionPayloadWithLifecycle
+	actionPayloadNavigation        = frontstagecontract.ActionPayloadNavigation
+	actionPayloadPageLocalAction   = frontstagecontract.ActionPayloadPageLocalAction
+	actionPayloadUpgradeOwnerFlow  = frontstagecontract.ActionPayloadUpgradeOwnerFlow
+	actionPayloadPageSubmit        = frontstagecontract.ActionPayloadPageSubmit
+	actionPayloadSubmitRequestForm = frontstagecontract.ActionPayloadSubmitRequestForm
 )
