@@ -87,7 +87,7 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 		InstallSource:      InstallSourceRelease,
 		CurrentTrack:       ReleaseTrackBeta,
 		CurrentVersion:     "v1.4.0-beta.1",
-		CurrentBinaryPath:    existingBinary,
+		CurrentBinaryPath:  existingBinary,
 		VersionsRoot:       filepath.Join(baseDir, "releases-cache"),
 		CurrentSlot:        "v1.4.0-beta.1",
 		VSCodeSettingsPath: filepath.Join(baseDir, "vscode", "settings.json"),

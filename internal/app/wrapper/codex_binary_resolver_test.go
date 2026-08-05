@@ -11,7 +11,7 @@ import (
 
 func TestResolveNormalCodexBinaryHealsVSCodePathToPATHCodex(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	pathDir := filepath.Join(home, "bin")
 	writeResolverExecutable(t, filepath.Join(pathDir, "codex"))
 	t.Setenv("PATH", pathDir)
@@ -37,7 +37,7 @@ func TestResolveNormalCodexBinaryHealsVSCodePathToPATHCodex(t *testing.T) {
 
 func TestResolveNormalCodexBinaryFallsBackToUsableVSCodeBundle(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
 	vscodeRoot := filepath.Join(home, ".vscode-server", "extensions")
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", vscodeRoot)
@@ -69,7 +69,7 @@ func TestResolveNormalCodexBinaryFallsBackToUsableVSCodeBundle(t *testing.T) {
 
 func TestResolveNormalCodexBinaryFallsBackToSiblingBundleAcrossPlatformDirs(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
 
 	vscodeRoot := filepath.Join(home, ".vscode-server", "extensions")
@@ -92,7 +92,7 @@ func TestResolveNormalCodexBinaryFallsBackToSiblingBundleAcrossPlatformDirs(t *t
 
 func TestResolveNormalCodexBinaryErrorsWithoutPATHOrVSCodeFallback(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
 
 	stale := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex.real")
@@ -105,7 +105,7 @@ func TestResolveNormalCodexBinaryErrorsWithoutPATHOrVSCodeFallback(t *testing.T)
 
 func TestResolveNormalCodexBinaryFallsBackWhenConfiguredPATHCodexMissing(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
 
 	vscodeRoot := filepath.Join(home, ".vscode-server", "extensions")
@@ -135,7 +135,7 @@ func TestResolveNormalCodexBinaryFallsBackWhenConfiguredPATHCodexMissing(t *test
 
 func TestResolveNormalCodexBinaryErrorsWhenConfiguredPATHCodexMissingWithoutFallback(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "empty-bin"))
 
 	configPath := writeResolverConfig(t, home, "codex")
@@ -147,7 +147,7 @@ func TestResolveNormalCodexBinaryErrorsWhenConfiguredPATHCodexMissingWithoutFall
 
 func TestResolveNormalCodexBinarySkipsHealingForExplicitOverride(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("CODEX_REAL_BINARY", filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex.real"))
 
 	configured := filepath.Join(home, ".vscode-server", "extensions", "openai.chatgpt-1", "bin", "linux-x86_64", "codex.real")
@@ -238,4 +238,14 @@ func resolverRuntimeBundleDirForArch(goos, goarch string) string {
 			return "linux-x86_64"
 		}
 	}
+}
+
+// setTestHome points both HOME and USERPROFILE at the throwaway dir. Windows
+// os.UserHomeDir() reads USERPROFILE, not HOME, so tests that only set HOME
+// would silently resolve the real user's VS Code extension bundles and patch
+// or read the real machine's codex installation.
+func setTestHome(t *testing.T, home string) {
+	t.Helper()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 }

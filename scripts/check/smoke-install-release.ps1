@@ -472,8 +472,8 @@ try {
   if ($statePayload.currentVersion -ne $Version) {
     throw "currentVersion=$($statePayload.currentVersion) want $Version"
   }
-  if ($statePayload.installedBinary -ne $binaryPath) {
-    throw "installedBinary=$($statePayload.installedBinary) want $binaryPath"
+  if ($statePayload.currentBinaryPath -ne $binaryPath) {
+    throw "currentBinaryPath=$($statePayload.currentBinaryPath) want $binaryPath"
   }
   if ([string]$configPayload.admin.listenPort -ne [string]$adminPort) {
     throw "admin.listenPort=$($configPayload.admin.listenPort) want $adminPort"

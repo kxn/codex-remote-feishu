@@ -120,9 +120,9 @@ func TestRenderLaunchdUserPlistContainsKeyElements(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 
 	state := InstallState{
-		InstanceID:      "stable",
-		BaseDir:         baseDir,
-		StatePath:       defaultInstallStatePath(baseDir),
+		InstanceID:        "stable",
+		BaseDir:           baseDir,
+		StatePath:         defaultInstallStatePath(baseDir),
 		CurrentBinaryPath: binaryPath,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -169,9 +169,9 @@ func TestRenderLaunchdUserPlistEscapesXMLSpecialChars(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 
 	state := InstallState{
-		InstanceID:      "stable",
-		BaseDir:         filepath.Join(baseDir, "xml & <tag>"),
-		StatePath:       defaultInstallStatePath(baseDir),
+		InstanceID:        "stable",
+		BaseDir:           filepath.Join(baseDir, "xml & <tag>"),
+		StatePath:         defaultInstallStatePath(baseDir),
 		CurrentBinaryPath: filepath.Join(baseDir, "xml-escape-test", "codex-remote"),
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -217,9 +217,9 @@ func TestInstallLaunchdUserPlistWritesPlistOnly(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 
 	state := InstallState{
-		InstanceID:      "stable",
-		BaseDir:         baseDir,
-		StatePath:       defaultInstallStatePath(baseDir),
+		InstanceID:        "stable",
+		BaseDir:           baseDir,
+		StatePath:         defaultInstallStatePath(baseDir),
 		CurrentBinaryPath: binaryPath,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -268,9 +268,9 @@ func TestUninstallLaunchdUserPlistBootsOutAndRemovesPlist(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 
 	state := InstallState{
-		InstanceID:      "stable",
-		BaseDir:         baseDir,
-		StatePath:       defaultInstallStatePath(baseDir),
+		InstanceID:        "stable",
+		BaseDir:           baseDir,
+		StatePath:         defaultInstallStatePath(baseDir),
 		CurrentBinaryPath: binaryPath,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -319,9 +319,9 @@ func TestRunServiceInstallUserDarwinWritesLaunchdPlist(t *testing.T) {
 
 	statePath := defaultInstallStatePath(baseDir)
 	state := InstallState{
-		BaseDir:         baseDir,
-		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
-		StatePath:       statePath,
+		BaseDir:           baseDir,
+		ConfigPath:        filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		StatePath:         statePath,
 		CurrentBinaryPath: binaryPath,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{StatePath: statePath})
@@ -434,9 +434,9 @@ func TestLaunchdUserEnableBootstrapsAfterWriteOnlyInstall(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin")
 
 	state := InstallState{
-		InstanceID:      "stable",
-		BaseDir:         baseDir,
-		StatePath:       defaultInstallStatePath(baseDir),
+		InstanceID:        "stable",
+		BaseDir:           baseDir,
+		StatePath:         defaultInstallStatePath(baseDir),
 		CurrentBinaryPath: binaryPath,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -595,10 +595,10 @@ func TestDetectAutostartDarwinShowsEnabledWhenPlistConfigured(t *testing.T) {
 	// Create a configured state
 	statePath := defaultInstallStatePath(baseDir)
 	state := InstallState{
-		InstanceID:      "stable",
-		BaseDir:         baseDir,
-		StatePath:       statePath,
-		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		InstanceID:        "stable",
+		BaseDir:           baseDir,
+		StatePath:         statePath,
+		ConfigPath:        filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
 		CurrentBinaryPath: binaryPath,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{

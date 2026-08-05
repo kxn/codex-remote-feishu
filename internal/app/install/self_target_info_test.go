@@ -99,13 +99,13 @@ func TestResolveCurrentDaemonTargetInfoNamedInstance(t *testing.T) {
 		t.Fatalf("WriteAppConfig: %v", err)
 	}
 	state := InstallState{
-		InstanceID:      instanceID,
-		BaseDir:         baseDir,
-		ConfigPath:      configPath,
-		StatePath:       statePath,
-		VersionsRoot:    filepath.Join(baseDir, "versions-beta"),
-		ServiceManager:  ServiceManagerSystemdUser,
-		CurrentVersion:  "beta-v1",
+		InstanceID:        instanceID,
+		BaseDir:           baseDir,
+		ConfigPath:        configPath,
+		StatePath:         statePath,
+		VersionsRoot:      filepath.Join(baseDir, "versions-beta"),
+		ServiceManager:    ServiceManagerSystemdUser,
+		CurrentVersion:    "beta-v1",
 		CurrentBinaryPath: filepath.Join(baseDir, "bin", "codex-remote"),
 	}
 	if err := WriteState(statePath, state); err != nil {

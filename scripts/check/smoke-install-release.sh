@@ -344,7 +344,7 @@ state_payload = json.loads(state_path.read_text())
 
 assert config_payload["wrapper"]["integrationMode"] == "none", config_payload
 assert state_payload.get("integrations", []) == [], state_payload
-assert state_payload["installedBinary"].endswith("/codex-remote"), state_payload
+assert state_payload["currentBinaryPath"].endswith("/codex-remote"), state_payload
 PY
 
 for _ in $(seq 1 60); do
