@@ -318,8 +318,8 @@ func TestSetupOnboardingWorkflowKeepsDeferredAutoConfigOnPlanError(t *testing.T)
 	if workflow.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu status = %q, want complete", workflow.App.Menu.Status)
 	}
-	if workflow.CurrentStage != onboardingStageDone {
-		t.Fatalf("current stage = %q, want done", workflow.CurrentStage)
+	if workflow.CurrentStage != onboardingStageAutostart {
+		t.Fatalf("current stage = %q, want autostart before machine integration is reviewed", workflow.CurrentStage)
 	}
 }
 
@@ -405,7 +405,33 @@ func TestSetupOnboardingWorkflowKeepsDeferredAutoConfigOnLoadError(t *testing.T)
 	if workflow.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu status = %q, want complete", workflow.App.Menu.Status)
 	}
+	if workflow.CurrentStage != onboardingStageAutostart {
+		t.Fatalf("current stage = %q, want autostart before machine integration is reviewed", workflow.CurrentStage)
+	}
+}
+
+func TestSetupOnboardingWorkflowMachineIntegrationReviewedAdvancesToDone(t *testing.T) {
+	stubSetupAutostartStatus(t)
+	app := newVerifiedSetupWorkflowApp(t)
+	stubSetupAutoConfigPlanner(t, func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
+		return feishu.AutoConfigPlan{
+			Status:  feishu.AutoConfigStatusClean,
+			Summary: "飞书应用配置已收敛。",
+		}, nil
+	})
+
+	if err := app.writeFeishuAppMenuDecision("main", onboardingDecisionMenuConfirmed, time.Now().UTC()); err != nil {
+		t.Fatalf("writeFeishuAppMenuDecision: %v", err)
+	}
+	if err := app.writeOnboardingMachineIntegrationReviewed(); err != nil {
+		t.Fatalf("writeOnboardingMachineIntegrationReviewed: %v", err)
+	}
+
+	workflow, err := app.buildOnboardingWorkflow("main")
+	if err != nil {
+		t.Fatalf("buildOnboardingWorkflow: %v", err)
+	}
 	if workflow.CurrentStage != onboardingStageDone {
-		t.Fatalf("current stage = %q, want done", workflow.CurrentStage)
+		t.Fatalf("current stage = %q, want done after machine integration is reviewed", workflow.CurrentStage)
 	}
 }

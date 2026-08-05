@@ -273,8 +273,8 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 	if payload.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu status = %q, want %q", payload.App.Menu.Status, onboardingStageStatusComplete)
 	}
-	if payload.CurrentStage != onboardingStageDone {
-		t.Fatalf("current stage = %q, want %q", payload.CurrentStage, onboardingStageDone)
+	if payload.CurrentStage != onboardingStageAutostart {
+		t.Fatalf("current stage = %q, want %q before machine integration is reviewed", payload.CurrentStage, onboardingStageAutostart)
 	}
 }
 
@@ -378,8 +378,8 @@ func TestSetupOnboardingAutoConfigDeferResetControlsMenuGate(t *testing.T) {
 	if payload.App == nil || payload.App.Menu.Status != onboardingStageStatusComplete {
 		t.Fatalf("menu after confirm = %#v, want complete", payload.App)
 	}
-	if payload.CurrentStage != onboardingStageDone {
-		t.Fatalf("current stage after menu confirm = %q, want done", payload.CurrentStage)
+	if payload.CurrentStage != onboardingStageAutostart {
+		t.Fatalf("current stage after menu confirm = %q, want autostart before machine integration is reviewed", payload.CurrentStage)
 	}
 
 	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-auto-config/reset", "", cookie)
@@ -537,4 +537,69 @@ func performSetupRequestRecorder(app *App, req *http.Request) *httptest.Response
 	rec := httptest.NewRecorder()
 	app.apiServer.Handler.ServeHTTP(rec, req)
 	return rec
+}
+
+func TestSetupOnboardingMachineIntegrationCompleteAdvancesToDone(t *testing.T) {
+	stubSetupAutostartStatus(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	stubSetupAutoConfigPlanner(t, func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
+		return feishu.AutoConfigPlan{
+			Status:  feishu.AutoConfigStatusClean,
+			Summary: "飞书应用配置已收敛。",
+		}, nil
+	})
+
+	app, token := newRemoteSetupTestApp(t, home)
+	cookie := exchangeSetupSessionCookie(t, app, token)
+
+	req := performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps", `{"id":"main","name":"Main Bot","appId":"cli_xxx","appSecret":"secret_xxx"}`, cookie)
+	rec := performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/verify", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("verify status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps/main/onboarding-menu/confirm", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("menu confirm status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var before onboardingWorkflowResponse
+	if err := json.NewDecoder(rec.Body).Decode(&before); err != nil {
+		t.Fatalf("decode workflow: %v", err)
+	}
+	if before.CurrentStage != onboardingStageAutostart {
+		t.Fatalf("current stage before machine review = %q, want autostart", before.CurrentStage)
+	}
+
+	req = performSetupRequestWithCookie(http.MethodPost, "/api/setup/onboarding/machine-integration/complete", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("machine integration complete status = %d, want 204 body=%s", rec.Code, rec.Body.String())
+	}
+
+	req = performSetupRequestWithCookie(http.MethodGet, "/api/setup/onboarding/workflow?app=main", "", cookie)
+	rec = performSetupRequestRecorder(app, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("workflow status after review = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var after onboardingWorkflowResponse
+	if err := json.NewDecoder(rec.Body).Decode(&after); err != nil {
+		t.Fatalf("decode workflow after review: %v", err)
+	}
+	if after.CurrentStage != onboardingStageDone {
+		t.Fatalf("current stage after machine review = %q, want done", after.CurrentStage)
+	}
 }

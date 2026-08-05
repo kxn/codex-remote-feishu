@@ -264,7 +264,7 @@ describe("SetupRoute", () => {
     expect(screen.getByRole("button", { name: "完成本机集成" })).toBeInTheDocument();
   });
 
-  it("completes machine integration with one button without recording decisions", async () => {
+  it("completes machine integration with one button after marking reviewed", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
     const workflowState = makeOnboardingWorkflow({
@@ -284,6 +284,10 @@ describe("SetupRoute", () => {
     const { calls } = installMockFetch({
       "/api/setup/bootstrap-state": { body: makeBootstrap() },
       "/api/setup/onboarding/workflow": () => ({ body: workflowState }),
+      "/api/setup/onboarding/machine-integration/complete": {
+        status: 204,
+        body: {},
+      },
     });
 
     render(<SetupRoute />);
@@ -296,8 +300,8 @@ describe("SetupRoute", () => {
 
     expect(await screen.findByRole("heading", { name: "欢迎使用" })).toBeInTheDocument();
     expect(
-      calls.some((call) => call.path.includes("/api/setup/onboarding/machine-decisions/")),
-    ).toBe(false);
+      calls.some((call) => call.path.endsWith("/api/setup/onboarding/machine-integration/complete")),
+    ).toBe(true);
   });
 
   it("offers toggle-off actions for completed machine integrations", async () => {
@@ -393,7 +397,7 @@ describe("SetupRoute", () => {
     ).toBe(false);
   });
 
-  it("completes machine integration without writing deferred decisions", async () => {
+  it("completes machine integration after marking reviewed", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
 
@@ -415,6 +419,10 @@ describe("SetupRoute", () => {
           },
         }),
       },
+      "/api/setup/onboarding/machine-integration/complete": {
+        status: 204,
+        body: {},
+      },
     });
 
     render(<SetupRoute />);
@@ -423,8 +431,45 @@ describe("SetupRoute", () => {
 
     expect(await screen.findByRole("heading", { name: "欢迎使用" })).toBeInTheDocument();
     expect(
-      calls.some((call) => call.path.includes("/api/setup/onboarding/machine-decisions/")),
-    ).toBe(false);
+      calls.some((call) => call.path.endsWith("/api/setup/onboarding/machine-integration/complete")),
+    ).toBe(true);
+  });
+
+  it("keeps machine integration open when complete call fails", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": {
+        body: makeOnboardingWorkflow({
+          currentStage: "autostart",
+          autostart: {
+            status: "complete",
+            summary: "自动启动未启用。",
+            allowedActions: ["apply"],
+            autostart: { supported: true, enabled: false, canApply: true },
+          },
+          vscode: {
+            status: "complete",
+            summary: "VS Code 集成未启用。",
+            allowedActions: ["apply"],
+          },
+        }),
+      },
+      "/api/setup/onboarding/machine-integration/complete": {
+        status: 500,
+        body: {},
+      },
+    });
+
+    render(<SetupRoute />);
+
+    await user.click(await screen.findByRole("button", { name: "完成本机集成" }));
+
+    expect(await screen.findByRole("heading", { name: "本机集成" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "欢迎使用" })).not.toBeInTheDocument();
+    expect(screen.getByText("当前还不能完成本机集成，请稍后重试。")).toBeInTheDocument();
   });
 
   it("starts qr onboarding automatically, polls every 5 seconds, and advances to auto-config", async () => {

@@ -192,6 +192,7 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-auto-config/reset", a.requireSetup(a.handleFeishuAppAutoConfigReset))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-menu/confirm", a.requireSetup(a.handleFeishuAppMenuConfirm))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/onboarding-menu/reset", a.requireSetup(a.handleFeishuAppMenuReset))
+	mux.HandleFunc("POST /api/setup/onboarding/machine-integration/complete", a.requireSetup(a.handleOnboardingMachineIntegrationComplete))
 	mux.HandleFunc("GET /api/setup/feishu/apps/{id}/auto-config/plan", a.requireSetup(a.handleFeishuAppAutoConfigPlan))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/reconnect", a.requireSetup(a.handleFeishuAppReconnect))
 	mux.HandleFunc("POST /api/setup/feishu/apps/{id}/enable", a.requireSetup(a.handleFeishuAppEnable))

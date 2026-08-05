@@ -92,6 +92,25 @@ func (a *App) handleFeishuAppMenuReset(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *App) handleOnboardingMachineIntegrationComplete(w http.ResponseWriter, r *http.Request) {
+	if err := a.writeOnboardingMachineIntegrationReviewed(); err != nil {
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "onboarding_machine_reviewed_write_failed",
+			Message: "failed to persist machine integration reviewed state",
+			Details: err.Error(),
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *App) writeOnboardingMachineIntegrationReviewed() error {
+	return a.updateOnboardingConfig(func(cfg *config.AppConfig) error {
+		cfg.Admin.Onboarding.MachineIntegrationReviewed = true
+		return nil
+	})
+}
+
 func (a *App) writeFeishuAppAutoConfigDecision(gatewayID, decision string, decidedAt time.Time) error {
 	gatewayID = canonicalGatewayID(gatewayID)
 	decision = strings.TrimSpace(decision)

@@ -60,9 +60,10 @@ type AdminSettings struct {
 }
 
 type AdminOnboardingSettings struct {
-	Apps              map[string]FeishuAppOnboardingState `json:"apps,omitempty"`
-	AutostartDecision *OnboardingDecision                 `json:"autostartDecision,omitempty"`
-	VSCodeDecision    *OnboardingDecision                 `json:"vscodeDecision,omitempty"`
+	Apps                       map[string]FeishuAppOnboardingState `json:"apps,omitempty"`
+	AutostartDecision          *OnboardingDecision                 `json:"autostartDecision,omitempty"`
+	VSCodeDecision             *OnboardingDecision                 `json:"vscodeDecision,omitempty"`
+	MachineIntegrationReviewed bool                                `json:"machineIntegrationReviewed,omitempty"`
 }
 
 type OnboardingDecision struct {

@@ -176,6 +176,9 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 	}
 
 	currentStage := firstPendingStageID(stages)
+	if currentStage == "" && !loaded.Config.Admin.Onboarding.MachineIntegrationReviewed {
+		currentStage = onboardingStageAutostart
+	}
 	if currentStage == "" {
 		currentStage = onboardingStageDone
 	}

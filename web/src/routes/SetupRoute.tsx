@@ -585,6 +585,27 @@ export function SetupRoute() {
     }
   }
 
+  async function completeMachineIntegration() {
+    setActionBusy("machine-complete");
+    setNotice(null);
+    try {
+      await requestVoid("/api/setup/onboarding/machine-integration/complete", {
+        method: "POST",
+      });
+      await loadSetupPage({
+        preferredAppID: activeApp?.id || selectedAppID,
+      });
+      goToStep("done");
+    } catch {
+      setNotice({
+        tone: "danger",
+        message: "当前还不能完成本机集成，请稍后重试。",
+      });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   function goToStep(stepID: SetupStepID) {
     setCurrentStep(stepID);
   }
@@ -652,9 +673,10 @@ export function SetupRoute() {
           <button
             className="primary-button"
             type="button"
-            onClick={() => goToStep("done")}
+            disabled={actionBusy === "machine-complete"}
+            onClick={() => void completeMachineIntegration()}
           >
-            完成本机集成
+            {actionBusy === "machine-complete" ? "完成中..." : "完成本机集成"}
           </button>
         </div>
       </section>
