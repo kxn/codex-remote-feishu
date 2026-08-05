@@ -36,6 +36,33 @@ func currentExecutablePathOrEmpty() string {
 	return strings.TrimSpace(path)
 }
 
+// probeServiceManagerForState reports the service manager that is actually
+// configured on disk for the platform's managed service driver, probe-first
+// per #808-D. The boolean result reports whether the probe ran to completion:
+// when it did, a configured unit selects that driver and an absent unit
+// selects detached; when the probe itself failed (e.g. systemctl missing),
+// callers fall back to the state-recorded manager.
+func probeServiceManagerForState(ctx context.Context, state InstallState) (ServiceManager, bool) {
+	driver, ok := managedServiceDriverForGOOS(serviceRuntimeGOOS)
+	if !ok {
+		return "", false
+	}
+	probeState := InstallState{
+		InstanceID:      state.InstanceID,
+		BaseDir:         state.BaseDir,
+		ServiceUnitPath: driver.ServiceUnitPath(state.BaseDir, state.InstanceID),
+		ServiceManager:  driver.Manager,
+	}
+	configured, _, _, err := driver.AutostartProbe(ctx, probeState)
+	if err != nil {
+		return "", false
+	}
+	if configured {
+		return driver.Manager, true
+	}
+	return ServiceManagerDetached, true
+}
+
 func ensureDaemonReady(ctx context.Context, state InstallState, version string) (DaemonReadyStatus, error) {
 	paths := RuntimePathsForState(state)
 	loaded, err := config.LoadAppConfigAtPath(state.ConfigPath)
@@ -55,6 +82,14 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 		return DaemonReadyStatus{}, err
 	}
 
+	// The managed-service driver is chosen probe-first (what is actually
+	// configured on disk), with the state-recorded manager only as a fallback
+	// when the probe cannot run. This keeps a stale state value from reviving
+	// a service the user has already disabled or removed (see #808-D).
+	serviceManager := effectiveServiceManager(state)
+	if probed, ok := probeServiceManagerForState(ctx, state); ok {
+		serviceManager = probed
+	}
 	manager := relayruntime.NewManager(relayruntime.ManagerConfig{
 		RelayServerURL:       strings.TrimSpace(loaded.Config.Relay.ServerURL),
 		Identity:             identity,
@@ -64,7 +99,7 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 		DaemonUseSystemProxy: loaded.Config.Feishu.UseSystemProxy,
 		CapturedProxyEnv:     config.CaptureProxyEnv(),
 	})
-	if driver, ok := managedServiceDriverForManager(effectiveServiceManager(state)); ok {
+	if driver, ok := managedServiceDriverForManager(serviceManager); ok {
 		manager = relayruntime.NewManager(relayruntime.ManagerConfig{
 			RelayServerURL: strings.TrimSpace(loaded.Config.Relay.ServerURL),
 			Identity:       identity,
@@ -97,12 +132,12 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 		})
 	}
 	if err := manager.EnsureReady(ctx); err != nil {
-		if isManagedServiceManager(state) {
+		if _, ok := managedServiceDriverForManager(serviceManager); ok {
 			return fallbackDaemonStatus(loaded.Config), err
 		}
 		return DaemonReadyStatus{LogPath: paths.DaemonLogFile}, err
 	}
-	if isManagedServiceManager(state) {
+	if _, ok := managedServiceDriverForManager(serviceManager); ok {
 		return fallbackDaemonStatus(loaded.Config), nil
 	}
 	return discoverDaemonStatus(paths, loaded.Config), nil

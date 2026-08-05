@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -55,7 +56,23 @@ func WriteState(path string, state InstallState) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	raw, err := json.MarshalIndent(state, "", "  ")
+	// Layout facts (baseDir / configPath / statePath / versionsRoot) are
+	// derived from the state file location at load time (LoadState +
+	// ApplyStateMetadata). Persisting snapshots of them is the stale-fact
+	// source #808-C removes: if the install moves or the files are edited, the
+	// snapshot lies while the derivation stays correct. currentSlot is kept:
+	// it identifies the active version slot and cannot be derived from the
+	// state path alone (the live binary lives in the install bin dir, not
+	// under versionsRoot). Write only what cannot be derived; the caller's
+	// in-memory state is left untouched.
+	persisted := state
+	persisted.BaseDir = ""
+	persisted.StatePath = ""
+	persisted.VersionsRoot = ""
+	if pathcompare.SameCleanPlatformPath(persisted.ConfigPath, defaultConfigPathForState(path)) {
+		persisted.ConfigPath = ""
+	}
+	raw, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -65,6 +82,17 @@ func WriteState(path string, state InstallState) error {
 		return err
 	}
 	return os.Rename(tempPath, path)
+}
+
+// defaultConfigPathForState derives the default config.json path for the
+// install whose state file lives at statePath. It returns "" when the layout
+// cannot be derived from the path alone.
+func defaultConfigPathForState(statePath string) string {
+	baseDir, instanceID, ok := inferBaseDirAndInstanceFromStatePath(statePath)
+	if !ok {
+		return ""
+	}
+	return defaultConfigPathForInstance(baseDir, instanceID)
 }
 
 func normalizeInstallStateConfigPath(configPath, wrapperConfigPath, servicesConfigPath, statePath, baseDir, instanceID string) string {

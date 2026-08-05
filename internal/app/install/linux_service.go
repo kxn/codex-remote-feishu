@@ -80,9 +80,10 @@ func managedServiceState(state InstallState, manager ServiceManager, unitPath fu
 		updated.BaseDir = homeDir
 	}
 	updated.ServiceManager = manager
-	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
-		updated.ServiceUnitPath = unitPath(updated.BaseDir, updated.InstanceID)
-	}
+	// Always derive the unit path from the current layout (probe-first, per
+	// #808-D): a stale state-recorded path must not be carried forward when
+	// the install moved, and ApplyStateMetadata already rewrites it on load.
+	updated.ServiceUnitPath = unitPath(updated.BaseDir, updated.InstanceID)
 	if strings.TrimSpace(updated.ServiceUnitPath) == "" {
 		return InstallState{}, fmt.Errorf("unable to resolve %s", unitDescription)
 	}

@@ -142,6 +142,10 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 	var stdout bytes.Buffer
 	if err := RunPackagedInstall([]string{
 		"-state-path", statePath,
+		// #808-C: versionsRoot is no longer persisted in install-state.json,
+		// so the caller must supply it when it differs from the derived
+		// default (the test uses a custom releases root).
+		"-versions-root", versionsRoot,
 		"-binary", sourceBinary,
 		"-current-version", "v1.2.0-beta.1",
 		"-format", "json",

@@ -62,26 +62,14 @@ func detectManagedAutostart(status AutostartStatus, trimmedStatePath string, dri
 	status.CurrentManager = ServiceManagerDetached
 	status.Status = "disabled"
 	status.CanApply = true
+	// ServiceUnitPath is always derived from the install layout (probe-first,
+	// per #808-D): a stale state-recorded path must not steer detection, and
+	// the probe below decides what is actually configured on disk. The state
+	// file is deliberately not consulted here so a lost or stale state can
+	// never make detect disagree with the real machine state.
 	status.ServiceUnitPath = driver.ServiceUnitPath(baseDir, instanceID)
 	if driver.Manager == ServiceManagerSystemdUser {
 		status.LingerHint = `如希望机器重启后在用户未登录前也恢复，需要额外手工执行 loginctl enable-linger "$USER"。`
-	}
-
-	state, err := loadAutostartStateIfPresent(trimmedStatePath)
-	if err != nil {
-		return AutostartStatus{}, err
-	}
-	if state != nil {
-		ApplyStateMetadata(state, StateMetadataOptions{
-			InstanceID:     state.InstanceID,
-			StatePath:      trimmedStatePath,
-			BaseDir:        baseDir,
-			ServiceManager: state.ServiceManager,
-		})
-		status.CurrentManager = effectiveServiceManager(*state)
-		if effectiveServiceManager(*state) == driver.Manager && strings.TrimSpace(state.ServiceUnitPath) != "" {
-			status.ServiceUnitPath = state.ServiceUnitPath
-		}
 	}
 
 	probeState := InstallState{

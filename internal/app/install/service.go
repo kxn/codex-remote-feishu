@@ -44,7 +44,7 @@ type InstallState struct {
 	InstanceID             string                   `json:"instanceId,omitempty"`
 	BaseDir                string                   `json:"baseDir,omitempty"`
 	ConfigPath             string                   `json:"configPath,omitempty"`
-	StatePath              string                   `json:"statePath"`
+	StatePath              string                   `json:"statePath,omitempty"`
 	ServiceManager         ServiceManager           `json:"serviceManager,omitempty"`
 	ServiceUnitPath        string                   `json:"serviceUnitPath,omitempty"`
 	InstallSource          InstallSource            `json:"installSource,omitempty"`

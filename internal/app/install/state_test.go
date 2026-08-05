@@ -279,3 +279,127 @@ func TestUpgradeTransactionSurvivesWriteReload(t *testing.T) {
 		t.Fatalf("CurrentTrack = %q, want %q", loaded.CurrentTrack, ReleaseTrackProduction)
 	}
 }
+
+// TestWriteStateOmitsDerivedLayoutFields is the #808-C write-path guard:
+// layout facts that are derived from the state file location at load time
+// (baseDir / configPath / statePath / versionsRoot) must not be persisted, so
+// a moved install never inherits stale snapshots. currentSlot stays because
+// it identifies the active version slot and is not derivable from the path.
+func TestWriteStateOmitsDerivedLayoutFields(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := filepath.Join(baseDir, ".local", "share", "codex-remote", "install-state.json")
+	state := InstallState{
+		InstanceID:        "stable",
+		BaseDir:           baseDir,
+		ConfigPath:        filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		StatePath:         statePath,
+		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote", "releases"),
+		CurrentSlot:       "v1.2.3",
+		CurrentBinaryPath: filepath.Join(baseDir, ".local", "share", "codex-remote", "releases", "v1.2.3", "codex-remote"),
+		CurrentTrack:      ReleaseTrackProduction,
+	}
+	if err := WriteState(statePath, state); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	for _, field := range []string{"baseDir", "configPath", "statePath", "versionsRoot"} {
+		if strings.Contains(string(raw), field) {
+			t.Fatalf("did not expect %q in written state: %s", field, raw)
+		}
+	}
+	for _, field := range []string{"instanceId", "currentBinaryPath", "currentTrack", "currentSlot"} {
+		if !strings.Contains(string(raw), field) {
+			t.Fatalf("expected %q in written state: %s", field, raw)
+		}
+	}
+
+	// A reload must restore the derived layout from the path alone.
+	loaded, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState after slim write: %v", err)
+	}
+	if loaded.BaseDir != baseDir {
+		t.Fatalf("BaseDir after reload = %q, want %q", loaded.BaseDir, baseDir)
+	}
+	if loaded.ConfigPath != state.ConfigPath {
+		t.Fatalf("ConfigPath after reload = %q, want %q", loaded.ConfigPath, state.ConfigPath)
+	}
+	if loaded.VersionsRoot != state.VersionsRoot {
+		t.Fatalf("VersionsRoot after reload = %q, want %q", loaded.VersionsRoot, state.VersionsRoot)
+	}
+	if loaded.CurrentSlot != state.CurrentSlot {
+		t.Fatalf("CurrentSlot after reload = %q, want %q", loaded.CurrentSlot, state.CurrentSlot)
+	}
+	if loaded.StatePath != statePath {
+		t.Fatalf("StatePath after reload = %q, want %q", loaded.StatePath, statePath)
+	}
+}
+
+// TestWriteStateKeepsCustomConfigPath guards the user-customized config path:
+// only the default derived config path is omitted on write; a non-default path
+// is a user preference that must be persisted.
+func TestWriteStateKeepsCustomConfigPath(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := filepath.Join(baseDir, ".local", "share", "codex-remote", "install-state.json")
+	customConfig := filepath.Join(t.TempDir(), "my-config.json")
+	state := InstallState{
+		InstanceID: "stable",
+		BaseDir:    baseDir,
+		ConfigPath: customConfig,
+		StatePath:  statePath,
+	}
+	if err := WriteState(statePath, state); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	raw, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatalf("read state: %v", err)
+	}
+	var disk struct {
+		ConfigPath string `json:"configPath"`
+	}
+	if err := json.Unmarshal(raw, &disk); err != nil {
+		t.Fatalf("decode state: %v", err)
+	}
+	if disk.ConfigPath != customConfig {
+		t.Fatalf("ConfigPath in written state = %q, want %q", disk.ConfigPath, customConfig)
+	}
+}
+
+// TestLoadStateDerivesLayoutFromPathOnly is the #808-C read-path guard: a
+// state file that contains none of the layout fields (the new slim format)
+// must load with every layout fact derived from the file location.
+func TestLoadStateDerivesLayoutFromPathOnly(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := filepath.Join(baseDir, ".local", "share", "codex-remote", "install-state.json")
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	if err := os.WriteFile(statePath, []byte(`{"instanceId":"stable","currentBinaryPath":"/x/codex-remote"}`), 0o644); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	loaded, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if loaded.StatePath != statePath {
+		t.Fatalf("StatePath = %q, want %q", loaded.StatePath, statePath)
+	}
+	if loaded.BaseDir != baseDir {
+		t.Fatalf("BaseDir = %q, want %q", loaded.BaseDir, baseDir)
+	}
+	wantConfig := filepath.Join(baseDir, ".config", "codex-remote", "config.json")
+	if loaded.ConfigPath != wantConfig {
+		t.Fatalf("ConfigPath = %q, want %q", loaded.ConfigPath, wantConfig)
+	}
+	wantVersions := filepath.Join(baseDir, ".local", "share", "codex-remote", "releases")
+	if loaded.VersionsRoot != wantVersions {
+		t.Fatalf("VersionsRoot = %q, want %q", loaded.VersionsRoot, wantVersions)
+	}
+}

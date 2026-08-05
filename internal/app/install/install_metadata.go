@@ -161,6 +161,11 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	if slot == "" {
 		slot = inferCurrentSlot(strings.TrimSpace(opts.SourceBinary), strings.TrimSpace(state.VersionsRoot))
 	}
+	// LoadState does not know the install-time source binary, so also try the
+	// live binary path: release installs place it under versionsRoot/<slot>.
+	if slot == "" {
+		slot = inferCurrentSlot(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(state.VersionsRoot))
+	}
 	if strings.TrimSpace(state.CurrentSlot) == "" {
 		state.CurrentSlot = slot
 	}

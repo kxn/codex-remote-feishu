@@ -124,8 +124,13 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 	if updated.CurrentTrack != ReleaseTrackBeta {
 		t.Fatalf("CurrentTrack = %q, want %q", updated.CurrentTrack, ReleaseTrackBeta)
 	}
-	if updated.VersionsRoot != filepath.Join(baseDir, "releases-cache") {
-		t.Fatalf("VersionsRoot = %q, want preserved value", updated.VersionsRoot)
+	// #808-C: layout facts (versionsRoot) are no longer persisted; they are
+	// derived from the state file location at load time. currentSlot stays:
+	// it identifies the active version slot and cannot be derived from the
+	// state path alone.
+	wantVersions := defaultVersionsRootForStatePath(statePath)
+	if updated.VersionsRoot != wantVersions {
+		t.Fatalf("VersionsRoot = %q, want derived %q", updated.VersionsRoot, wantVersions)
 	}
 	if updated.CurrentSlot != "v1.4.0-beta.1" {
 		t.Fatalf("CurrentSlot = %q, want preserved value", updated.CurrentSlot)

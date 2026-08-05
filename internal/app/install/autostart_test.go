@@ -424,3 +424,146 @@ func TestApplyAutostartDebugInstanceUsesDebugUnit(t *testing.T) {
 		t.Fatalf("InstanceID = %q, want %q", loaded.InstanceID, debugInstanceID)
 	}
 }
+
+// TestDetectAutostartIgnoresStaleSystemdState is the #808-D probe-first guard
+// for systemd: a state file that still claims systemd_user must not make
+// detect report a configured service when no unit exists on disk.
+func TestDetectAutostartIgnoresStaleSystemdState(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePath(baseDir)
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := systemctlUserRunner
+	serviceRuntimeGOOS = "linux"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		systemctlUserRunner = originalRunner
+	}()
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		return "", nil
+	}
+
+	// State claims systemd_user with a unit path, but no unit file exists.
+	state := InstallState{
+		BaseDir:           baseDir,
+		ConfigPath:        filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		StatePath:         statePath,
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		ServiceManager:    ServiceManagerSystemdUser,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      statePath,
+		BaseDir:        baseDir,
+		ServiceManager: state.ServiceManager,
+	})
+	if err := WriteState(statePath, state); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	status, err := DetectAutostart(statePath)
+	if err != nil {
+		t.Fatalf("DetectAutostart: %v", err)
+	}
+	if status.Configured {
+		t.Fatalf("expected not configured, got %#v", status)
+	}
+	if status.Enabled {
+		t.Fatalf("expected disabled, got %#v", status)
+	}
+	if status.CurrentManager != ServiceManagerDetached {
+		t.Fatalf("CurrentManager = %q, want %q (state must not revive a removed service)", status.CurrentManager, ServiceManagerDetached)
+	}
+	if status.ServiceUnitPath != filepath.Join(baseDir, ".config", "systemd", "user", "codex-remote.service") {
+		t.Fatalf("ServiceUnitPath = %q, want derived path", status.ServiceUnitPath)
+	}
+}
+
+// TestDetectAutostartLaunchdStateMissing covers the launchd probe-first path
+// with no state file at all: detect must still report a clean disabled status.
+func TestDetectAutostartLaunchdStateMissing(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePath(baseDir)
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := launchctlUserRunner
+	serviceRuntimeGOOS = "darwin"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		launchctlUserRunner = originalRunner
+	}()
+	launchctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		return "", nil
+	}
+
+	status, err := DetectAutostart(statePath)
+	if err != nil {
+		t.Fatalf("DetectAutostart: %v", err)
+	}
+	if !status.Supported {
+		t.Fatalf("expected supported, got %#v", status)
+	}
+	if status.Manager != ServiceManagerLaunchdUser {
+		t.Fatalf("Manager = %q, want %q", status.Manager, ServiceManagerLaunchdUser)
+	}
+	if status.Configured || status.Enabled {
+		t.Fatalf("expected not configured/disabled without state, got %#v", status)
+	}
+	if status.CurrentManager != ServiceManagerDetached {
+		t.Fatalf("CurrentManager = %q, want %q", status.CurrentManager, ServiceManagerDetached)
+	}
+}
+
+// TestDetectAutostartTaskSchedulerIgnoresStaleState is the #808-D probe-first
+// guard for Windows: a state file that claims task_scheduler must not make
+// detect report a configured task when the task is missing on disk.
+func TestDetectAutostartTaskSchedulerIgnoresStaleState(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePath(baseDir)
+
+	originalGOOS := serviceRuntimeGOOS
+	originalHome := serviceUserHomeDir
+	originalRunner := taskSchedulerRunner
+	serviceRuntimeGOOS = "windows"
+	serviceUserHomeDir = func() (string, error) { return baseDir, nil }
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		serviceUserHomeDir = originalHome
+		taskSchedulerRunner = originalRunner
+	}()
+	taskSchedulerRunner = func(_ context.Context, args ...string) (string, error) {
+		return "", os.ErrNotExist
+	}
+
+	state := InstallState{
+		BaseDir:           baseDir,
+		ConfigPath:        filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		StatePath:         statePath,
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		ServiceManager:    ServiceManagerTaskSchedulerLogon,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      statePath,
+		BaseDir:        baseDir,
+		ServiceManager: state.ServiceManager,
+	})
+	if err := WriteState(statePath, state); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	status, err := DetectAutostart(statePath)
+	if err != nil {
+		t.Fatalf("DetectAutostart: %v", err)
+	}
+	if status.Configured || status.Enabled {
+		t.Fatalf("expected not configured/disabled, got %#v", status)
+	}
+	if status.CurrentManager != ServiceManagerDetached {
+		t.Fatalf("CurrentManager = %q, want %q (state must not revive a removed task)", status.CurrentManager, ServiceManagerDetached)
+	}
+}
