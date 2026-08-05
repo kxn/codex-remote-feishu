@@ -250,38 +250,6 @@ func (s *Service) autoPromptUseThread(surface *state.SurfaceConsoleRecord, inst 
 	return s.presentThreadSelection(surface, false)
 }
 
-func (s *Service) threadSelectionSubtitle(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, thread *state.ThreadRecord) string {
-	subtitle := threadSelectionSubtitle(thread, thread.ThreadID)
-	status := ""
-	owner := s.threadClaimSurface(thread.ThreadID)
-	switch {
-	case surface != nil && s.surfaceOwnsThread(surface, thread.ThreadID):
-		if surface.RouteMode == state.RouteModeFollowLocal {
-			status = "当前跟随"
-		} else {
-			status = "当前会话"
-		}
-	case owner != nil:
-		switch s.threadKickStatus(inst, owner, thread.ThreadID) {
-		case threadKickIdle:
-			status = "已被其他飞书会话占用，可强踢"
-		case threadKickQueued:
-			status = "已被其他飞书会话占用，对方队列未空"
-		case threadKickRunning:
-			status = "已被其他飞书会话占用，对方正在执行"
-		}
-	default:
-		status = "可切换"
-	}
-	if status == "" {
-		return subtitle
-	}
-	if subtitle == "" {
-		return status
-	}
-	return subtitle + "\n" + status
-}
-
 func (s *Service) restoreStagedInputs(surface *state.SurfaceConsoleRecord, sourceMessageIDs []string) {
 	if surface == nil || len(sourceMessageIDs) == 0 {
 		return

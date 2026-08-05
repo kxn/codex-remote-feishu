@@ -213,20 +213,6 @@ func (s *Service) blockFeishuRoomActiveAutoDispatch(surface *state.SurfaceConsol
 	return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
 }
 
-func (s *Service) surfaceHasRoomActiveWork(surface *state.SurfaceConsoleRecord) bool {
-	if surface == nil {
-		return false
-	}
-	if item := activeQueueItem(surface); item != nil {
-		switch item.Status {
-		case state.QueueItemDispatching, state.QueueItemRunning:
-			return true
-		}
-	}
-	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
-	return inst != nil && strings.TrimSpace(inst.ActiveTurnID) != ""
-}
-
 func (s *Service) reconcileFeishuRoomActiveReservations(room *state.FeishuRoomContextRecord) {
 	if room == nil {
 		return

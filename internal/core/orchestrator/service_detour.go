@@ -130,13 +130,6 @@ func detourLabelForExecutionMode(mode agentproto.PromptExecutionMode) string {
 	}
 }
 
-func queuedItemDetourLabel(item *state.QueueItemRecord) string {
-	if item == nil {
-		return ""
-	}
-	return detourLabelForExecutionMode(queuedItemPromptDispatchPlan(item).ExecutionMode)
-}
-
 func remoteBindingDetourLabel(binding *remoteTurnBinding) string {
 	if binding == nil {
 		return ""

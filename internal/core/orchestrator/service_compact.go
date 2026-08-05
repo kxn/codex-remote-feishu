@@ -105,10 +105,6 @@ func (s *Service) bindPendingCompactCommand(surface *state.SurfaceConsoleRecord,
 	return true
 }
 
-func (s *Service) compactBindingMatchesTurn(instanceID, turnID string) bool {
-	return s.compactBindingForTurn(instanceID, "", turnID) != nil
-}
-
 func (s *Service) compactBindingForTurn(instanceID, threadID, turnID string) *compactTurnBinding {
 	if s == nil || s.turns == nil {
 		return nil

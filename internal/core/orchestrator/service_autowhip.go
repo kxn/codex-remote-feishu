@@ -48,15 +48,6 @@ func formatAutoRetryDelay(value time.Duration) string {
 	return fmt.Sprintf("%d分%d秒", minutes, seconds)
 }
 
-func autoWhipRetryScheduledNotice(surface *state.SurfaceConsoleRecord, count, max int, delay time.Duration) []eventcontract.Event {
-	return autoWhipNotice(
-		surface,
-		"autowhip_retry_scheduled",
-		"AutoWhip",
-		fmt.Sprintf("上游不稳定，第 %d/%d 次，%s后重试", count, max, formatAutoRetryDelay(delay)),
-	)
-}
-
 func autoWhipStartedNotice(surface *state.SurfaceConsoleRecord, count int) []eventcontract.Event {
 	return autoWhipNotice(
 		surface,

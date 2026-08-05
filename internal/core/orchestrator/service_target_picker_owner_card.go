@@ -95,16 +95,6 @@ func setTargetPickerMessages(record *activeTargetPickerRecord, messages ...contr
 	record.PendingThreadID = ""
 }
 
-func (s *Service) startTargetPickerProcessing(
-	surface *state.SurfaceConsoleRecord,
-	flow *activeOwnerCardFlowRecord,
-	record *activeTargetPickerRecord,
-	pendingKind targetPickerPendingKind,
-	workspaceKey, threadID, title, text string,
-) []eventcontract.Event {
-	return s.startTargetPickerProcessingWithSections(surface, flow, record, pendingKind, workspaceKey, threadID, title, text, nil, "")
-}
-
 func (s *Service) startTargetPickerProcessingWithSections(
 	surface *state.SurfaceConsoleRecord,
 	flow *activeOwnerCardFlowRecord,

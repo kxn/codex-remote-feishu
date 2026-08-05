@@ -19,10 +19,6 @@ func (s *Service) threadFocusEvents(instanceID, threadID string) []eventcontract
 	return events
 }
 
-func (s *Service) bindSurfaceToThread(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string) []eventcontract.Event {
-	return s.bindSurfaceToThreadMode(surface, inst, threadID, state.RouteModePinned)
-}
-
 func (s *Service) bindSurfaceToThreadMode(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, threadID string, routeMode state.RouteMode) []eventcontract.Event {
 	if surface == nil || inst == nil || threadID == "" {
 		return nil

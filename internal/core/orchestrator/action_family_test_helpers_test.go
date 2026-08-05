@@ -12,16 +12,6 @@ func testRequestAction(requestID, requestType, optionID string, answers map[stri
 	}
 }
 
-func testRequestControl(requestID, requestType, controlName, questionID string, revision int) *control.ActionRequestControl {
-	return &control.ActionRequestControl{
-		RequestID:       requestID,
-		RequestType:     requestType,
-		Control:         controlName,
-		QuestionID:      questionID,
-		RequestRevision: revision,
-	}
-}
-
 func testOwnerFlow(flowID, optionID string) *control.ActionOwnerCardFlow {
 	return &control.ActionOwnerCardFlow{FlowID: flowID, OptionID: optionID}
 }

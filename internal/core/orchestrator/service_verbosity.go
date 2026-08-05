@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -105,24 +104,5 @@ func classifySurfaceVisibleEvent(event eventcontract.Event) surfaceVisibilityCla
 		return surfaceVisibilityUINavigation
 	default:
 		return surfaceVisibilityUINavigation
-	}
-}
-
-func noticeIsAlwaysVisible(notice control.Notice) bool {
-	theme := strings.ToLower(strings.TrimSpace(notice.ThemeKey))
-	code := strings.ToLower(strings.TrimSpace(notice.Code))
-	title := strings.TrimSpace(notice.Title)
-	text := strings.TrimSpace(notice.Text)
-	switch {
-	case theme == "error" || strings.Contains(theme, "error") || strings.Contains(theme, "fail"):
-		return true
-	case strings.Contains(code, "error"), strings.Contains(code, "failed"), strings.Contains(code, "rejected"), strings.Contains(code, "offline"), strings.Contains(code, "expired"), strings.Contains(code, "invalid"):
-		return true
-	case strings.Contains(title, "错误"), strings.Contains(title, "失败"), strings.Contains(title, "无法"), strings.Contains(title, "拒绝"), strings.Contains(title, "离线"), strings.Contains(title, "过期"), strings.Contains(title, "失效"):
-		return true
-	case strings.Contains(text, "链路错误"), strings.Contains(text, "创建失败"), strings.Contains(text, "连接失败"):
-		return true
-	default:
-		return false
 	}
 }

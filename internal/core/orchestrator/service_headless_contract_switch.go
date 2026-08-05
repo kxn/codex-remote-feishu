@@ -166,10 +166,6 @@ func (s *Service) executeResolvedWorkspaceContinuation(surface *state.SurfaceCon
 	}
 }
 
-func (s *Service) startHeadlessForContractSwitch(surface *state.SurfaceConsoleRecord, attempt SurfaceResumeAttempt) []eventcontract.Event {
-	return s.startHeadlessForContractSwitchWithOverlayCleanup(surface, headlessContractSwitchContinuation{Attempt: attempt}, surfaceOverlayRouteCleanupOptions{})
-}
-
 func (s *Service) startHeadlessForContractSwitchWithOverlayCleanup(surface *state.SurfaceConsoleRecord, continuation headlessContractSwitchContinuation, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if surface == nil {
 		return nil

@@ -56,10 +56,6 @@ func codexConnectionContractID(contract *state.CodexConnectionContract) string {
 	return strings.TrimSpace(contract.ConnectionContractID)
 }
 
-func (s *Service) surfaceInstanceVisibleForSelection(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {
-	return s.surfaceInstanceCompatibility(surface, inst).Visible
-}
-
 func (s *Service) surfaceInstanceCompatibleForAttach(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) bool {
 	return s.surfaceInstanceCompatibility(surface, inst).Compatible
 }

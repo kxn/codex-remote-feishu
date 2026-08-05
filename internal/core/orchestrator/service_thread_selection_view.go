@@ -156,21 +156,3 @@ func (s *Service) threadSelectionStatus(surface *state.SurfaceConsoleRecord, vie
 		return "当前不可接管", true
 	}
 }
-
-func (s *Service) threadSelectionOptionSubtitle(surface *state.SurfaceConsoleRecord, view *mergedThreadView, includeWorkspaceLine, allowCrossWorkspace bool) string {
-	if view == nil {
-		return ""
-	}
-	lines := []string{}
-	if includeWorkspaceLine {
-		if workspaceKey := mergedThreadWorkspaceClaimKey(view); workspaceKey != "" {
-			lines = append(lines, workspaceKey)
-		} else if fallback := threadSelectionSubtitle(view.Thread, view.ThreadID); fallback != "" {
-			lines = append(lines, fallback)
-		}
-	}
-	if status, _ := s.threadSelectionStatus(surface, view, allowCrossWorkspace); status != "" {
-		lines = append(lines, status)
-	}
-	return strings.Join(lines, "\n")
-}

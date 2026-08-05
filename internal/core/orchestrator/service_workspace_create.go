@@ -9,7 +9,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const targetPickerWorkspaceCreatePathPickerConsumerKind = "target_picker_workspace_create"
@@ -38,30 +37,6 @@ func (targetPickerWorkspaceCreatePathPickerConsumer) PathPickerCancelled(_ *Serv
 	return notice(surface, "workspace_create_cancelled", "已取消添加工作区。当前工作目标保持不变。")
 }
 
-func (s *Service) openTargetPickerWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.openWorkspaceCreatePicker(surface, targetPickerWorkspaceCreatePathPickerConsumerKind, "接入并准备新会话", "未确认前不会切换当前工作目标。")
-}
-
-func (s *Service) openWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord, consumerKind, confirmLabel, hint string) []eventcontract.Event {
-	if surface == nil {
-		return nil
-	}
-	if !s.surfaceIsHeadless(surface) {
-		return notice(surface, "workspace_create_normal_only", "当前处于 vscode 模式，不能从目录直接添加工作区。请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
-	}
-	rootPath, initialPath := workspacePickerPaths(s.surfaceCurrentWorkspaceKey(surface))
-	return s.openPathPicker(surface, surface.ActorUserID, control.PathPickerRequest{
-		Mode:         control.PathPickerModeDirectory,
-		Title:        "选择要接入的目录",
-		RootPath:     rootPath,
-		InitialPath:  initialPath,
-		Hint:         strings.TrimSpace(hint),
-		ConfirmLabel: strings.TrimSpace(xutil.FirstNonEmpty(confirmLabel, "接入为工作区")),
-		CancelLabel:  "取消",
-		ConsumerKind: strings.TrimSpace(consumerKind),
-	})
-}
-
 func workspacePickerPaths(initialPath string) (string, string) {
 	return workspacePickerPathsForGOOS(runtime.GOOS, initialPath, windowsWorkspaceCreateFallbackPath())
 }
@@ -73,10 +48,6 @@ func workspacePickerPathsForGOOS(goos, initialPath, windowsFallbackPath string) 
 		initialPath = rootPath
 	}
 	return rootPath, initialPath
-}
-
-func workspaceCreatePickerRoot(initialPath string) string {
-	return workspaceCreatePickerRootForGOOS(runtime.GOOS, initialPath)
 }
 
 func workspaceCreatePickerRootForGOOS(goos, initialPath string) string {

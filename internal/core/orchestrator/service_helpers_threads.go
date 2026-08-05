@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -282,33 +281,8 @@ func uniqueStrings(values []string) []string {
 	return out
 }
 
-func isDigits(value string) bool {
-	_, err := strconv.Atoi(value)
-	return err == nil
-}
-
 func displayThreadTitle(inst *state.InstanceRecord, thread *state.ThreadRecord) string {
 	return threadtitle.DisplayTitle(inst, thread, threadtitle.DefaultDisplayLimit)
-}
-
-func duplicateThreadTitle(inst *state.InstanceRecord, title string) bool {
-	if inst == nil || title == "" {
-		return false
-	}
-	count := 0
-	for _, thread := range inst.Threads {
-		if !threadVisible(thread) {
-			continue
-		}
-		if displayThreadTitle(inst, thread) != title {
-			continue
-		}
-		count++
-		if count > 1 {
-			return true
-		}
-	}
-	return false
 }
 
 func threadPreview(thread *state.ThreadRecord) string {
@@ -358,14 +332,6 @@ func threadNeedsRefresh(thread *state.ThreadRecord) bool {
 		return false
 	}
 	return !thread.Loaded || (strings.TrimSpace(thread.Name) == "" && strings.TrimSpace(thread.Preview) == "")
-}
-
-func threadSelectionSubtitle(thread *state.ThreadRecord, threadID string) string {
-	_ = threadID
-	if thread != nil && thread.CWD != "" {
-		return thread.CWD
-	}
-	return ""
 }
 
 func threadFirstUserSnippet(thread *state.ThreadRecord, limit int) string {
@@ -516,23 +482,6 @@ func displayConfigValue(value, source string) string {
 		return "未知"
 	}
 	return value
-}
-
-func configSourceLabel(value string) string {
-	switch value {
-	case "thread":
-		return "会话配置"
-	case "workspace_default":
-		return "工作区默认配置"
-	case "cwd_default":
-		return "工作目录默认配置"
-	case "surface_override":
-		return "飞书临时覆盖"
-	case "surface_default":
-		return "飞书默认"
-	default:
-		return "未知"
-	}
 }
 
 func previewOfText(text string) string {

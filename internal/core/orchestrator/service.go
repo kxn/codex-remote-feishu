@@ -48,9 +48,7 @@ type Service struct {
 	nextQueueItemID           int
 	nextImageID               int
 	nextFileID                int
-	nextPromptID              int
 	nextRequestCommandID      int
-	nextLocalRequestID        int
 	nextHeadlessID            int
 	nextAutoContinueEpisodeID int
 	handoffUntil              map[string]time.Time

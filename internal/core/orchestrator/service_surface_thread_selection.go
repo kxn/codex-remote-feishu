@@ -19,22 +19,6 @@ func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, sh
 	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, mode, 1, 0)
 }
 
-func (s *Service) presentAllThreadWorkspaces(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, threadSelectionDisplayAllExpanded, 1, 0)
-}
-
-func (s *Service) presentScopedThreadSelection(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, threadSelectionDisplayScopedAll, 1, 0)
-}
-
-func (s *Service) presentWorkspaceThreadSelection(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
-	return s.presentWorkspaceThreadSelectionPageWithAction(surface, control.Action{}, workspaceKey, 1, 1)
-}
-
-func (s *Service) presentWorkspaceThreadSelectionPage(surface *state.SurfaceConsoleRecord, workspaceKey string, page, returnPage int) []eventcontract.Event {
-	return s.presentWorkspaceThreadSelectionPageWithAction(surface, control.Action{}, workspaceKey, page, returnPage)
-}
-
 func (s *Service) presentWorkspaceThreadSelectionPageWithAction(surface *state.SurfaceConsoleRecord, action control.Action, workspaceKey string, page, returnPage int) []eventcontract.Event {
 	model, events := s.buildWorkspaceThreadSelectionModel(surface, workspaceKey, page, returnPage)
 	if len(events) != 0 {
@@ -94,14 +78,6 @@ func (s *Service) buildWorkspaceThreadSelectionModel(surface *state.SurfaceConso
 		model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, true))
 	}
 	return model, nil
-}
-
-func (s *Service) presentThreadSelectionMode(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode, page int) []eventcontract.Event {
-	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, mode, page, 0)
-}
-
-func (s *Service) presentThreadSelectionModeAtCursor(surface *state.SurfaceConsoleRecord, mode threadSelectionDisplayMode, page, cursor int) []eventcontract.Event {
-	return s.presentThreadSelectionModeAtCursorWithAction(surface, control.Action{}, mode, page, cursor)
 }
 
 func (s *Service) presentThreadSelectionModeAtCursorWithAction(surface *state.SurfaceConsoleRecord, action control.Action, mode threadSelectionDisplayMode, page, cursor int) []eventcontract.Event {
@@ -229,10 +205,6 @@ func (s *Service) buildThreadSelectionModelAtCursor(surface *state.SurfaceConsol
 		return nil, notice(surface, "no_visible_threads", "当前还没有可恢复会话。")
 	}
 	return model, nil
-}
-
-func (s *Service) handleThreadSelectionPage(surface *state.SurfaceConsoleRecord, viewMode string, cursor int) []eventcontract.Event {
-	return s.handleThreadSelectionPageWithAction(surface, control.Action{}, viewMode, cursor)
 }
 
 func (s *Service) handleThreadSelectionPageWithAction(surface *state.SurfaceConsoleRecord, action control.Action, viewMode string, cursor int) []eventcontract.Event {
@@ -388,22 +360,6 @@ func (s *Service) vscodeInstanceSurfaceStatus(surface *state.SurfaceConsoleRecor
 		return "当前焦点可跟随"
 	}
 	return "等待 VS Code 焦点"
-}
-
-func (s *Service) vscodeThreadSelectionContextText(surface *state.SurfaceConsoleRecord) string {
-	if surface == nil {
-		return ""
-	}
-	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
-	if inst == nil {
-		return ""
-	}
-	label := instanceSelectionLabel(inst)
-	status := s.vscodeInstanceSurfaceStatus(surface, inst)
-	if status == "" {
-		return label
-	}
-	return label + " · " + status
 }
 
 func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt SurfaceResumeAttempt, allowMissingTargetFailure bool) ([]eventcontract.Event, SurfaceResumeResult) {

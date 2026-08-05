@@ -13,10 +13,6 @@ func requestPromptBackend(record *state.RequestPromptRecord) agentproto.Backend 
 	return agentproto.NormalizeBackend(record.Backend)
 }
 
-func requestBackendDisplayName(backend agentproto.Backend) string {
-	return control.RequestBackendDisplayName(backend)
-}
-
 func requestLocalBackendDisplayName(backend agentproto.Backend) string {
 	return control.RequestLocalBackendDisplayName(backend)
 }
