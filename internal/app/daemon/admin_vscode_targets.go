@@ -40,16 +40,8 @@ func lookupManagedShimStatus(statuses map[string]editor.ManagedShimStatus, entry
 	return status, nil
 }
 
-func computeShimReinstallNeed(currentMode string, installState *install.InstallState, latestEntrypoint string, latestShim editor.ManagedShimStatus, statuses map[string]editor.ManagedShimStatus, currentConfigPath, currentStatePath string) bool {
+func computeShimReinstallNeed(currentMode, recordedEntrypoint, latestEntrypoint string, latestShim editor.ManagedShimStatus, statuses map[string]editor.ManagedShimStatus, currentConfigPath, currentStatePath string) bool {
 	managedActive := modeIncludes(currentMode, install.IntegrationManagedShim)
-	if !managedActive && installState != nil {
-		for _, integration := range installState.Integrations {
-			if integration == install.IntegrationManagedShim {
-				managedActive = true
-				break
-			}
-		}
-	}
 	if !managedActive {
 		return false
 	}
@@ -57,10 +49,7 @@ func computeShimReinstallNeed(currentMode string, installState *install.InstallS
 		return true
 	}
 
-	recordedEntrypoint := ""
-	if installState != nil {
-		recordedEntrypoint = strings.TrimSpace(installState.BundleEntrypoint)
-	}
+	recordedEntrypoint = strings.TrimSpace(recordedEntrypoint)
 	for _, entrypoint := range historicalManagedShimTargets(recordedEntrypoint, statuses, currentConfigPath, currentStatePath) {
 		if samePlatformPath(entrypoint, latestEntrypoint) {
 			continue
@@ -82,11 +71,24 @@ func historicalManagedShimTargets(recordedEntrypoint string, statuses map[string
 		}
 	}
 	for entrypoint, status := range statuses {
-		if !status.Exists || status.Kind != editor.ManagedShimKindTiny || !status.SidecarValid {
+		if !status.Exists {
 			continue
 		}
-		if samePlatformPath(status.SidecarConfigPath, currentConfigPath) || samePlatformPath(status.SidecarInstallStatePath, currentStatePath) {
-			targets[entrypoint] = true
+		switch status.Kind {
+		case editor.ManagedShimKindTiny:
+			if !status.SidecarValid {
+				continue
+			}
+			if samePlatformPath(status.SidecarConfigPath, currentConfigPath) || samePlatformPath(status.SidecarInstallStatePath, currentStatePath) {
+				targets[entrypoint] = true
+			}
+		case editor.ManagedShimKindLegacy:
+			// A legacy copied-binary shim has no sidecar to confirm
+			// ownership; require a content match against the current
+			// wrapper binary so unrelated bundle binaries are left alone.
+			if status.RepoManaged && status.MatchesBinary {
+				targets[entrypoint] = true
+			}
 		}
 	}
 	ordered := make([]string, 0, len(targets))

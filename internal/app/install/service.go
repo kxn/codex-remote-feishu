@@ -59,7 +59,7 @@ type InstallState struct {
 	InstalledBinary        string                   `json:"installedBinary,omitempty"`
 	InstalledWrapperBinary string                   `json:"installedWrapperBinary,omitempty"`
 	InstalledRelaydBinary  string                   `json:"installedRelaydBinary,omitempty"`
-	Integrations           []WrapperIntegrationMode `json:"integrations"`
+	Integrations           []WrapperIntegrationMode `json:"integrations,omitempty"`
 	VSCodeSettingsPath     string                   `json:"vscodeSettingsPath,omitempty"`
 	BundleEntrypoint       string                   `json:"bundleEntrypoint,omitempty"`
 }

@@ -311,11 +311,14 @@ func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
 	if detect.LatestBundleEntrypoint != windowsEntrypoint {
 		t.Fatalf("latest bundle entrypoint = %q, want %q", detect.LatestBundleEntrypoint, windowsEntrypoint)
 	}
-	if detect.RecordedBundleEntrypoint != linuxEntrypoint {
-		t.Fatalf("recorded bundle entrypoint = %q, want %q", detect.RecordedBundleEntrypoint, linuxEntrypoint)
+	// Recorded entrypoint comes from disk now: no candidate entrypoint carries
+	// a shim yet, so recorded must be empty even though install state still
+	// records the linux entrypoint from an earlier cross-platform run.
+	if detect.RecordedBundleEntrypoint != "" {
+		t.Fatalf("recorded bundle entrypoint = %q, want empty (disk has no candidate shim)", detect.RecordedBundleEntrypoint)
 	}
 	if !detect.NeedsShimReinstall {
-		t.Fatalf("expected detect to require reinstall when recorded linux entrypoint differs, got %#v", detect)
+		t.Fatalf("expected detect to require reinstall when latest candidate entrypoint is not shimmed, got %#v", detect)
 	}
 
 	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
@@ -329,6 +332,8 @@ func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
 	if readFileString(t, windowsEntrypoint) == "wrapper-binary" {
 		t.Fatalf("expected windows entrypoint to be tiny shim, not copied main binary")
 	}
+	// The recorded linux entrypoint is still used as a migration target by
+	// apply (it is the "last chosen" hint), so it must become a tiny shim.
 	if readFileString(t, linuxEntrypoint) == "wrapper-binary" {
 		t.Fatalf("expected recorded linux entrypoint to be migrated to tiny shim")
 	}
@@ -508,6 +513,114 @@ func TestVSCodeDetectAndReinstallMigrateRecordedHistoricalManagedShim(t *testing
 	}
 	if statusV1.Kind != editor.ManagedShimKindTiny || !statusV1.SidecarValid || !statusV1.MatchesBinary {
 		t.Fatalf("expected recorded historical shim to migrate back to tiny shim, got %#v", statusV1)
+	}
+}
+
+func TestVSCodeDetectWithoutInstallStateDerivesRecordedFromDisk(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, entrypoint, "orig")
+
+	app, _, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
+
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	// Simulate the reported Windows bug: the managed shim stays on disk but
+	// install-state.json is lost. Detect must derive the recorded entrypoint
+	// from disk and still report the integration as ready.
+	if err := os.Remove(installStatePath); err != nil {
+		t.Fatalf("remove install-state.json: %v", err)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var detect vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if detect.RecordedBundleEntrypoint != entrypoint {
+		t.Fatalf("recorded bundle entrypoint = %q, want %q (derived from disk)", detect.RecordedBundleEntrypoint, entrypoint)
+	}
+	if detect.RecordedShim == nil || !detect.RecordedShim.Installed || !detect.RecordedShim.SidecarValid {
+		t.Fatalf("expected recorded shim from disk, got %#v", detect.RecordedShim)
+	}
+	if !workflowVSCodeReady(detect) {
+		t.Fatalf("expected workflow to report vscode ready from disk state, got %#v", detect)
+	}
+}
+
+func TestVSCodeDetectIgnoresStaleInstallState(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, entrypoint, "orig")
+
+	app, _, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
+
+	// Stale state claims the integration is enabled, but no shim is on disk.
+	if err := install.WriteState(installStatePath, install.InstallState{
+		StatePath:        installStatePath,
+		BundleEntrypoint: entrypoint,
+		Integrations:     []install.WrapperIntegrationMode{install.IntegrationManagedShim},
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var detect vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if detect.RecordedBundleEntrypoint != "" {
+		t.Fatalf("recorded bundle entrypoint = %q, want empty (no shim on disk)", detect.RecordedBundleEntrypoint)
+	}
+	if workflowVSCodeReady(detect) {
+		t.Fatalf("expected workflow to report vscode not ready with stale state and no shim on disk, got %#v", detect)
+	}
+
+	// Now install the shim for real, then wipe the recorded entrypoint from
+	// state (state says disabled). Detect must still report ready because the
+	// disk carries the shim.
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if err := install.WriteState(installStatePath, install.InstallState{StatePath: installStatePath}); err != nil {
+		t.Fatalf("WriteState(cleared): %v", err)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if detect.RecordedBundleEntrypoint != entrypoint {
+		t.Fatalf("recorded bundle entrypoint = %q, want %q (derived from disk)", detect.RecordedBundleEntrypoint, entrypoint)
+	}
+	if !workflowVSCodeReady(detect) {
+		t.Fatalf("expected workflow to report vscode ready with shim on disk despite cleared state, got %#v", detect)
 	}
 }
 

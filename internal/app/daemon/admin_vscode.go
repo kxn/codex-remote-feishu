@@ -281,16 +281,19 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 		return vscodeDetectResponse{}, err
 	}
 
+	// The "recorded" entrypoint is derived from disk, not from install state:
+	// the first candidate entrypoint that actually carries a managed shim from
+	// this product. This keeps detect correct when install-state.json is
+	// missing or stale (see the disable-empty-run bug fixed in d66a2430).
 	recordedEntrypoint := ""
 	var recordedShim *editor.ManagedShimStatus
-	if installState != nil && strings.TrimSpace(installState.BundleEntrypoint) != "" {
-		recordedEntrypoint = installState.BundleEntrypoint
-		status, err := lookupManagedShimStatus(candidateStatuses, recordedEntrypoint, currentBinary)
-		if err != nil {
-			return vscodeDetectResponse{}, err
+	for _, entrypoint := range defaults.CandidateBundleEntrypoints {
+		status := candidateStatuses[entrypoint]
+		if status.Kind != "" && status.Exists {
+			recordedEntrypoint = entrypoint
+			recordedShim = &status
+			break
 		}
-		candidateStatuses[recordedEntrypoint] = status
-		recordedShim = &status
 	}
 
 	currentMode := strings.TrimSpace(loaded.Config.Wrapper.IntegrationMode)
@@ -299,7 +302,7 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 	}
 	recommendedMode := string(install.IntegrationManagedShim)
 	_ = admin
-	needsReinstall := computeShimReinstallNeed(currentMode, installState, latestEntrypoint, latestShim, candidateStatuses, loaded.Path, installStatePath)
+	needsReinstall := computeShimReinstallNeed(currentMode, recordedEntrypoint, latestEntrypoint, latestShim, candidateStatuses, loaded.Path, installStatePath)
 
 	return vscodeDetectResponse{
 		SSHSession:                 admin.sshSession,
@@ -347,8 +350,10 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 		InstalledBinary: currentBinary,
 		CurrentVersion:  a.currentBinaryVersion(),
 	})
-	if strings.TrimSpace(state.VSCodeSettingsPath) == "" {
-		state.VSCodeSettingsPath = firstNonEmpty(strings.TrimSpace(req.SettingsPath), defaults.VSCodeSettingsPath)
+	if reqSettings := strings.TrimSpace(req.SettingsPath); reqSettings != "" {
+		state.VSCodeSettingsPath = normalizeVSCodeSettingsPathForState(reqSettings, defaults.VSCodeSettingsPath)
+	} else {
+		state.VSCodeSettingsPath = normalizeVSCodeSettingsPathForState(state.VSCodeSettingsPath, defaults.VSCodeSettingsPath)
 	}
 	bundleEntrypoint := strings.TrimSpace(req.BundleEntrypoint)
 	if bundleEntrypoint == "" && len(defaults.CandidateBundleEntrypoints) > 0 {
@@ -383,7 +388,7 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 				return err
 			}
 		}
-		if err := editor.ClearVSCodeSettingsExecutable(state.VSCodeSettingsPath); err != nil {
+		if err := editor.ClearVSCodeSettingsExecutable(firstNonEmpty(strings.TrimSpace(state.VSCodeSettingsPath), defaults.VSCodeSettingsPath)); err != nil {
 			return err
 		}
 		state.BundleEntrypoint = bundleEntrypoint
@@ -405,7 +410,6 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 	state.InstalledRelaydBinary = currentBinary
 	state.CurrentBinaryPath = currentBinary
 	state.StatePath = statePath
-	state.Integrations = integrationModesFor(mode)
 	if err := install.WriteState(statePath, *state); err != nil {
 		return err
 	}
@@ -470,7 +474,7 @@ func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
 	if err := editor.ClearVSCodeSettingsExecutable(settingsPath); err != nil {
 		return err
 	}
-	state.VSCodeSettingsPath = settingsPath
+	state.VSCodeSettingsPath = normalizeVSCodeSettingsPathForState(settingsPath, defaults.VSCodeSettingsPath)
 	if err := a.updateVSCodeConfig(string(install.IntegrationManagedShim), target); err != nil {
 		return err
 	}
@@ -560,8 +564,15 @@ func displayVSCodeMode(mode string) string {
 	return strings.TrimSpace(mode)
 }
 
-func integrationModesFor(mode string) []install.WrapperIntegrationMode {
-	return []install.WrapperIntegrationMode{install.IntegrationManagedShim}
+func normalizeVSCodeSettingsPathForState(path, defaultPath string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if samePlatformPath(path, defaultPath) {
+		return ""
+	}
+	return path
 }
 
 func modeIncludes(mode string, target install.WrapperIntegrationMode) bool {
