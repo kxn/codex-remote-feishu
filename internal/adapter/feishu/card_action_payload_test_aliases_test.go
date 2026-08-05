@@ -82,31 +82,10 @@ const (
 )
 
 var (
-	actionPayloadKind                   = frontstagecontract.ActionPayloadKind
 	actionPayloadWithLifecycle          = frontstagecontract.ActionPayloadWithLifecycle
 	actionPayloadNavigation             = frontstagecontract.ActionPayloadNavigation
-	actionPayloadNavigationPage         = frontstagecontract.ActionPayloadNavigationPage
-	actionPayloadThreadNavigation       = frontstagecontract.ActionPayloadThreadNavigation
-	actionPayloadWorkspaceThreads       = frontstagecontract.ActionPayloadWorkspaceThreads
-	actionPayloadAttachInstance         = frontstagecontract.ActionPayloadAttachInstance
-	actionPayloadAttachWorkspace        = frontstagecontract.ActionPayloadAttachWorkspace
-	actionPayloadUseThread              = frontstagecontract.ActionPayloadUseThread
-	actionPayloadUseThreadField         = frontstagecontract.ActionPayloadUseThreadField
-	actionPayloadKickThreadConfirm      = frontstagecontract.ActionPayloadKickThreadConfirm
-	actionPayloadPageAction             = frontstagecontract.ActionPayloadPageAction
 	actionPayloadPageLocalAction        = frontstagecontract.ActionPayloadPageLocalAction
-	actionPayloadWithCatalog            = frontstagecontract.ActionPayloadWithCatalog
 	actionPayloadUpgradeOwnerFlow       = frontstagecontract.ActionPayloadUpgradeOwnerFlow
-	actionPayloadVSCodeMigrateOwnerFlow = frontstagecontract.ActionPayloadVSCodeMigrateOwnerFlow
 	actionPayloadPageSubmit             = frontstagecontract.ActionPayloadPageSubmit
-	actionPayloadPageLocalSubmit        = frontstagecontract.ActionPayloadPageLocalSubmit
-	actionPayloadRequestRespond         = frontstagecontract.ActionPayloadRequestRespond
-	actionPayloadRequestControl         = frontstagecontract.ActionPayloadRequestControl
 	actionPayloadSubmitRequestForm      = frontstagecontract.ActionPayloadSubmitRequestForm
-	actionPayloadPathPicker             = frontstagecontract.ActionPayloadPathPicker
-	actionPayloadPathPickerCursor       = frontstagecontract.ActionPayloadPathPickerCursor
-	actionPayloadTargetPicker           = frontstagecontract.ActionPayloadTargetPicker
-	actionPayloadTargetPickerCursor     = frontstagecontract.ActionPayloadTargetPickerCursor
-	actionPayloadTargetPickerValue      = frontstagecontract.ActionPayloadTargetPickerValue
-	actionPayloadThreadHistory          = frontstagecontract.ActionPayloadThreadHistory
 )

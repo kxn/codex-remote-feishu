@@ -91,7 +91,6 @@ var (
 	actionPayloadPageLocalAction       = frontstagecontract.ActionPayloadPageLocalAction
 	actionPayloadWithCatalog           = frontstagecontract.ActionPayloadWithCatalog
 	actionPayloadPageSubmit            = frontstagecontract.ActionPayloadPageSubmit
-	actionPayloadPageLocalSubmit       = frontstagecontract.ActionPayloadPageLocalSubmit
 	actionPayloadRequestRespond        = frontstagecontract.ActionPayloadRequestRespond
 	actionPayloadRequestControl        = frontstagecontract.ActionPayloadRequestControl
 	actionPayloadPathPicker            = frontstagecontract.ActionPayloadPathPicker

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
@@ -26,18 +25,6 @@ func lookupMap(value map[string]any, path ...string) map[string]any {
 		return map[string]any{}
 	}
 	return object
-}
-
-func lookupSliceMaps(value map[string]any, path ...string) []map[string]any {
-	current := any(value)
-	for _, part := range path {
-		object, ok := current.(map[string]any)
-		if !ok {
-			return nil
-		}
-		current = object[part]
-	}
-	return xutil.MapsFromAny(current)
 }
 
 func lookupStringList(value any) []string {
@@ -89,15 +76,6 @@ func stringifyTextContent(value any) string {
 			}
 		}
 		return buffer.String()
-	default:
-		return ""
-	}
-}
-
-func normalizeClaudeSemanticItemKind(raw string) string {
-	switch strings.TrimSpace(raw) {
-	case "command_execution", "web_search", "dynamic_tool_call", "reasoning_summary", "delegated_task", "file_change":
-		return strings.TrimSpace(raw)
 	default:
 		return ""
 	}
@@ -193,16 +171,6 @@ func earliestThinkingSideChannelOpenTag(value string) (int, string, string) {
 	return bestIndex, bestTag, bestName
 }
 
-func claudeThinkingSideChannelMaxOpenTagLen() int {
-	maxLen := 0
-	for _, name := range claudeThinkingSideChannelTags {
-		if current := len("<" + name + ">"); current > maxLen {
-			maxLen = current
-		}
-	}
-	return maxLen
-}
-
 func partialThinkingOpenTagStart(value string) int {
 	for i := len(value) - 1; i >= 0; i-- {
 		if value[i] != '<' {
@@ -290,24 +258,6 @@ func buildClaudeTodoPlanSnapshot(input map[string]any) *agentproto.TurnPlanSnaps
 	return snapshot
 }
 
-func buildClaudePlanSummary(snapshot *agentproto.TurnPlanSnapshot) string {
-	if snapshot == nil {
-		return ""
-	}
-	if explanation := strings.TrimSpace(snapshot.Explanation); explanation != "" {
-		return explanation
-	}
-	for _, step := range snapshot.Steps {
-		if step.Status == agentproto.TurnPlanStepStatusInProgress {
-			return strings.TrimSpace(step.Step)
-		}
-	}
-	if len(snapshot.Steps) != 0 {
-		return strings.TrimSpace(snapshot.Steps[0].Step)
-	}
-	return ""
-}
-
 func buildClaudeDelegatedTaskSourceContextLabel(metadata map[string]any) string {
 	subagentType := strings.TrimSpace(xutil.LookupStringFromAny(metadata["subagentType"]))
 	switch {
@@ -318,29 +268,6 @@ func buildClaudeDelegatedTaskSourceContextLabel(metadata map[string]any) string 
 	default:
 		return ""
 	}
-}
-
-func cloneMetadata(metadata map[string]any) map[string]any {
-	if len(metadata) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(metadata))
-	for key, value := range metadata {
-		out[key] = xutil.CloneJSONValue(value)
-	}
-	return out
-}
-
-func sortedMetadataKeys(metadata map[string]any) []string {
-	if len(metadata) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(metadata))
-	for key := range metadata {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func sanitizeQuestionID(value string, index int) string {

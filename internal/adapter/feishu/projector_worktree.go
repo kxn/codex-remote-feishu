@@ -65,20 +65,6 @@ func inspectGitWorktreeSummary(cwd string) *gitWorktreeSummary {
 	return worktreeSummaryFromInfo(info)
 }
 
-func parseGitStatusPaths(output string) []string {
-	return gitmeta.ParseStatusPaths(output)
-}
-
-func parseGitWorktreeSummary(output string) *gitWorktreeSummary {
-	status := gitmeta.ParseStatusSummary(output)
-	return &gitWorktreeSummary{
-		Dirty:          status.Dirty,
-		Files:          status.Files,
-		ModifiedCount:  status.ModifiedCount,
-		UntrackedCount: status.UntrackedCount,
-	}
-}
-
 func worktreeSummaryFromInfo(info gitmeta.WorkspaceInfo) *gitWorktreeSummary {
 	if !info.InRepo() {
 		return nil

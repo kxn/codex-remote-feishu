@@ -104,15 +104,6 @@ func containsCardTextExact(elements []map[string]any, want string) bool {
 	return false
 }
 
-func lastMarkdownWithPrefix(elements []map[string]any, prefix string) string {
-	for i := len(elements) - 1; i >= 0; i-- {
-		if content := markdownContent(elements[i]); strings.HasPrefix(content, prefix) {
-			return content
-		}
-	}
-	return ""
-}
-
 func parseWorkspaceIndexFromLabel(t *testing.T, label string) int {
 	t.Helper()
 	var index int

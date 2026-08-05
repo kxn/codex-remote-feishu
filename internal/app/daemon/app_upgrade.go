@@ -287,70 +287,6 @@ func (a *App) applyUpgradeCheckResultLocked(request upgradeCheckRequest, release
 	return events
 }
 
-func (a *App) maybeStartAutoUpgradeCheckLocked(now time.Time) {
-	if a.upgradeRuntime.CheckInFlight || a.upgradeRuntime.StartInFlight || a.upgradeRuntime.CheckInterval <= 0 {
-		return
-	}
-	if a.upgradeRuntime.NextCheckAt.IsZero() {
-		nextAt := a.daemonStartedAt.Add(a.upgradeRuntime.StartupDelay)
-		stateValue, ok, err := a.loadUpgradeStateLocked(true)
-		if err != nil {
-			log.Printf("upgrade schedule load state failed: %v", err)
-		} else if ok && stateValue.LastCheckAt != nil {
-			candidate := stateValue.LastCheckAt.Add(a.upgradeRuntime.CheckInterval)
-			if candidate.After(nextAt) {
-				nextAt = candidate
-			}
-		}
-		a.upgradeRuntime.NextCheckAt = nextAt
-	}
-	if now.Before(a.upgradeRuntime.NextCheckAt) {
-		return
-	}
-
-	stateValue, ok, err := a.loadUpgradeStateLocked(true)
-	if err != nil {
-		log.Printf("upgrade auto-check load state failed: %v", err)
-		a.upgradeRuntime.NextCheckAt = now.Add(a.upgradeRuntime.CheckInterval)
-		return
-	}
-	if !ok || stateValue.CurrentTrack == "" || stateValue.CurrentVersion == "" {
-		a.upgradeRuntime.NextCheckAt = now.Add(a.upgradeRuntime.CheckInterval)
-		return
-	}
-	if stateValue.PendingUpgrade != nil {
-		a.upgradeRuntime.NextCheckAt = now.Add(a.upgradeRuntime.CheckInterval)
-		return
-	}
-
-	a.upgradeRuntime.CheckInFlight = true
-	a.upgradeRuntime.NextCheckAt = now.Add(a.upgradeRuntime.CheckInterval)
-	go a.runUpgradeCheck(upgradeCheckRequest{Track: stateValue.CurrentTrack})
-}
-
-func (a *App) maybePromptPendingUpgradeLocked(now time.Time) []eventcontract.Event {
-	if a.upgradeRuntime.PromptScanEvery <= 0 {
-		return nil
-	}
-	if !a.upgradeRuntime.NextPromptScan.IsZero() && now.Before(a.upgradeRuntime.NextPromptScan) {
-		return nil
-	}
-	a.upgradeRuntime.NextPromptScan = now.Add(a.upgradeRuntime.PromptScanEvery)
-
-	stateValue, ok, err := a.loadUpgradeStateLocked(false)
-	if err != nil {
-		log.Printf("upgrade prompt scan load state failed: %v", err)
-		return nil
-	}
-	if !ok || stateValue.PendingUpgrade == nil || !pendingUpgradeCandidate(stateValue.PendingUpgrade) {
-		return nil
-	}
-	if a.activeUpgradeOwnerFlowMatchesPendingLocked(stateValue.PendingUpgrade) {
-		return nil
-	}
-	return a.promptPendingUpgradeOnBestSurfaceLocked(stateValue, now)
-}
-
 func (a *App) promptPendingUpgradeOnBestSurfaceLocked(stateValue install.InstallState, now time.Time) []eventcontract.Event {
 	surface := a.selectIdleSurfaceLocked("")
 	if surface == nil {
@@ -495,11 +431,6 @@ func (a *App) surfaceByIDLocked(surfaceID string) *state.SurfaceConsoleRecord {
 		}
 	}
 	return nil
-}
-
-func (a *App) surfaceIsIdleForUpgradeLocked(surfaceID string) bool {
-	surface := a.surfaceByIDLocked(surfaceID)
-	return a.surfaceIsIdleForUpgrade(surface)
 }
 
 func (a *App) surfaceAllowsManualUpgradePromptLocked(surfaceID string) bool {

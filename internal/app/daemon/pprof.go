@@ -16,10 +16,6 @@ const (
 	defaultPprofListenPort = 17501
 )
 
-func defaultPprofBindAddr() string {
-	return pprofBindAddrFromConfig(config.PprofSettings{Enabled: true})
-}
-
 func pprofBindAddrForDebugSettings(settings config.DebugSettings) string {
 	if settings.Pprof == nil {
 		return ""

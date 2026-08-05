@@ -161,12 +161,6 @@ func (t *Translator) SetDebugLogger(debugLog func(string, ...any)) {
 	t.debugLog = debugLog
 }
 
-func (t *Translator) debugf(format string, args ...any) {
-	if t.debugLog != nil {
-		t.debugLog(format, args...)
-	}
-}
-
 func (t *Translator) ObserveClient(_ []byte) (Result, error) {
 	return Result{}, nil
 }

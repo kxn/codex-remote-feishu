@@ -23,10 +23,6 @@ type feishuPostContent struct {
 	Content [][]feishuPostNode `json:"content"`
 }
 
-type feishuLocalizedPostContent struct {
-	ZhCN feishuPostContent `json:"zh_cn"`
-}
-
 type feishuPostNode struct {
 	Tag       string `json:"tag"`
 	Text      string `json:"text"`

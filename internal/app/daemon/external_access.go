@@ -3,11 +3,9 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -302,25 +300,4 @@ func debugAdminIssueRequest(adminURL string) externalaccess.IssueRequest {
 		TargetBasePath: "/",
 		AllowWebsocket: true,
 	}
-}
-
-func (a *App) issueDebugAdminURL(ctx context.Context) (externalaccess.IssuedURL, error) {
-	a.mu.Lock()
-	adminURL := a.admin.adminURL
-	a.mu.Unlock()
-	return a.IssueExternalAccessURL(ctx, debugAdminIssueRequest(adminURL))
-}
-
-func normalizeExternalAccessTargetURL(raw string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return "", err
-	}
-	if parsed.Scheme == "" {
-		parsed.Scheme = "http"
-	}
-	if parsed.Host == "" {
-		return "", fmt.Errorf("target url host is required")
-	}
-	return parsed.String(), nil
 }

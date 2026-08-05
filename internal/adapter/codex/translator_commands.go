@@ -422,26 +422,6 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) ([][]by
 	return [][]byte{append(bytes, '\n')}, nil
 }
 
-func (t *Translator) buildThreadStartParams(cwd string, overrides agentproto.PromptOverrides) map[string]any {
-	params := xutil.CloneMap(t.latestThreadStartParams)
-	if len(params) == 0 {
-		params = map[string]any{}
-	}
-	params["cwd"] = choose(cwd, xutil.LookupStringFromAny(params["cwd"]))
-	setDefault(params, "model", nil)
-	setDefault(params, "modelProvider", nil)
-	setDefault(params, "config", map[string]any{})
-	setDefault(params, "approvalPolicy", "on-request")
-	setDefault(params, "baseInstructions", nil)
-	setDefault(params, "developerInstructions", nil)
-	setDefault(params, "sandbox", "read-only")
-	setDefault(params, "personality", nil)
-	setDefault(params, "experimentalRawEvents", false)
-	setDefault(params, "dynamicTools", nil)
-	applyPromptOverridesToThreadStart(params, overrides)
-	return params
-}
-
 func (t *Translator) buildThreadStartParamsWithPolicy(cwd string, overrides agentproto.PromptOverrides, policy *agentproto.CodexResumePolicy) map[string]any {
 	params := map[string]any{}
 	if agentproto.NormalizeCodexResumePolicy(policy) == nil {

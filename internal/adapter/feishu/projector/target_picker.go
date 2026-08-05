@@ -362,18 +362,6 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 	}
 }
 
-func targetPickerInlineGitFormTerminalButtons(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
-	return []map[string]any{
-		cardCallbackButtonElement(
-			"取消",
-			"default",
-			stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID)), daemonLifecycleID),
-			false,
-			"",
-		),
-	}
-}
-
 func targetPickerPayload(view control.FeishuTargetPickerView, payload map[string]any) map[string]any {
 	return actionPayloadWithCatalog(payload, view.CatalogFamilyID, view.CatalogVariantID, string(view.CatalogBackend))
 }

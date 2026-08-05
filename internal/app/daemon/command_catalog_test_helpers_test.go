@@ -176,25 +176,6 @@ func appendOperationElementText(parts *[]string, element map[string]any) {
 	}
 }
 
-func operationHasOpenURLButton(operation feishu.Operation, label, openURL string) bool {
-	for _, button := range operationCardButtons(operation) {
-		textNode, _ := button["text"].(map[string]any)
-		if strings.TrimSpace(stringAnyValue(textNode["content"])) != label {
-			continue
-		}
-		behaviors, _ := button["behaviors"].([]map[string]any)
-		for _, behavior := range behaviors {
-			if strings.TrimSpace(stringAnyValue(behavior["type"])) != "open_url" {
-				continue
-			}
-			if strings.TrimSpace(stringAnyValue(behavior["default_url"])) == openURL {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 func stringAnyValue(value any) string {
 	text, _ := value.(string)
 	return text

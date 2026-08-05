@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -434,12 +433,4 @@ func encodeMetadataMapList(values []map[string]any) []any {
 		out = append(out, xutil.CloneMap(value))
 	}
 	return out
-}
-
-func debugJSON(value any) string {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return ""
-	}
-	return string(data)
 }

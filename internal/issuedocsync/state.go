@@ -93,10 +93,6 @@ func NewState(repo string) StateFile {
 	}
 }
 
-type sortedRecord struct {
-	IssueRecord
-}
-
 func sortedIssues(input map[string]IssueRecord) []IssueRecord {
 	keys := make([]int, 0, len(input))
 	for key := range input {

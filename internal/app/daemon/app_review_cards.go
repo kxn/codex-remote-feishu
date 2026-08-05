@@ -10,7 +10,6 @@ import (
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
-	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -255,8 +254,4 @@ func cardButtonGroupElement(buttons []map[string]any) map[string]any {
 			"columns":            columns,
 		}
 	}
-}
-
-func (a *App) reviewSessionState(surfaceID string) *state.ReviewSessionRecord {
-	return a.service.ReviewSession(surfaceID)
 }
