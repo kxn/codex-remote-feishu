@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) observeThreadLifecycle(message map[string]any, action agentproto.ThreadLifecycleAction) Result {
@@ -29,13 +30,13 @@ func (t *Translator) observeThreadGoalUpdated(message map[string]any) Result {
 		goal = params
 	}
 	update := agentproto.NormalizeThreadGoalUpdate(&agentproto.ThreadGoalUpdate{
-		ThreadID:        lookupStringFromAny(params["threadId"]),
-		TurnID:          lookupStringFromAny(params["turnId"]),
-		Objective:       firstNonEmptyString(lookupStringFromAny(goal["objective"]), lookupStringFromAny(goal["goal"])),
-		Status:          lookupStringFromAny(goal["status"]),
-		TokenBudget:     lookupIntFromAny(goal["tokenBudget"]),
-		TokensUsed:      lookupIntFromAny(goal["tokensUsed"]),
-		TimeUsedSeconds: lookupIntFromAny(goal["timeUsedSeconds"]),
+		ThreadID:        xutil.LookupStringFromAny(params["threadId"]),
+		TurnID:          xutil.LookupStringFromAny(params["turnId"]),
+		Objective:       xutil.FirstNonEmpty(xutil.LookupStringFromAny(goal["objective"]), xutil.LookupStringFromAny(goal["goal"])),
+		Status:          xutil.LookupStringFromAny(goal["status"]),
+		TokenBudget:     xutil.LookupIntFromAny(goal["tokenBudget"]),
+		TokensUsed:      xutil.LookupIntFromAny(goal["tokensUsed"]),
+		TimeUsedSeconds: xutil.LookupIntFromAny(goal["timeUsedSeconds"]),
 	})
 	if update == nil {
 		return Result{}
@@ -70,12 +71,12 @@ func (t *Translator) observeThreadSettingsUpdated(message map[string]any) Result
 		settings = params
 	}
 	update := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
-		ThreadID:        lookupStringFromAny(params["threadId"]),
-		ModelProviderID: firstNonEmptyString(lookupStringFromAny(settings["modelProvider"]), lookupStringFromAny(settings["modelProviderId"])),
-		Model:           firstNonEmptyString(lookupStringFromAny(settings["model"]), lookupStringFromAny(settings["modelId"])),
-		ReasoningEffort: firstNonEmptyString(lookupStringFromAny(settings["reasoningEffort"]), lookupStringFromAny(settings["reasoning_effort"])),
-		ApprovalPolicy:  lookupStringFromAny(settings["approvalPolicy"]),
-		Sandbox:         firstNonEmptyString(lookupStringFromAny(settings["sandbox"]), lookupString(settings, "sandboxPolicy", "type")),
+		ThreadID:        xutil.LookupStringFromAny(params["threadId"]),
+		ModelProviderID: xutil.FirstNonEmpty(xutil.LookupStringFromAny(settings["modelProvider"]), xutil.LookupStringFromAny(settings["modelProviderId"])),
+		Model:           xutil.FirstNonEmpty(xutil.LookupStringFromAny(settings["model"]), xutil.LookupStringFromAny(settings["modelId"])),
+		ReasoningEffort: xutil.FirstNonEmpty(xutil.LookupStringFromAny(settings["reasoningEffort"]), xutil.LookupStringFromAny(settings["reasoning_effort"])),
+		ApprovalPolicy:  xutil.LookupStringFromAny(settings["approvalPolicy"]),
+		Sandbox:         xutil.FirstNonEmpty(xutil.LookupStringFromAny(settings["sandbox"]), lookupString(settings, "sandboxPolicy", "type")),
 	})
 	if update == nil {
 		return Result{}

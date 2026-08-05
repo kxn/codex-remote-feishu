@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) observeModelRerouted(message map[string]any) Result {
@@ -62,8 +63,8 @@ func (t *Translator) observeModelSafetyBuffering(message map[string]any) Result 
 func extractTurnModelVerification(message map[string]any) *agentproto.TurnModelVerification {
 	params := lookupMap(message, "params")
 	verification := &agentproto.TurnModelVerification{
-		ThreadID: strings.TrimSpace(lookupStringFromAny(params["threadId"])),
-		TurnID:   strings.TrimSpace(lookupStringFromAny(params["turnId"])),
+		ThreadID: strings.TrimSpace(xutil.LookupStringFromAny(params["threadId"])),
+		TurnID:   strings.TrimSpace(xutil.LookupStringFromAny(params["turnId"])),
 	}
 	for _, raw := range sliceAnyFromAny(params["verifications"]) {
 		record, _ := raw.(map[string]any)
@@ -71,10 +72,10 @@ func extractTurnModelVerification(message map[string]any) *agentproto.TurnModelV
 			continue
 		}
 		verification.Verifications = append(verification.Verifications, agentproto.ModelVerificationRecord{
-			ID:      lookupStringFromAny(record["id"]),
-			Type:    lookupStringFromAny(record["type"]),
-			Message: firstNonEmptyString(lookupStringFromAny(record["message"]), lookupStringFromAny(record["description"])),
-			Reason:  lookupStringFromAny(record["reason"]),
+			ID:      xutil.LookupStringFromAny(record["id"]),
+			Type:    xutil.LookupStringFromAny(record["type"]),
+			Message: xutil.FirstNonEmpty(xutil.LookupStringFromAny(record["message"]), xutil.LookupStringFromAny(record["description"])),
+			Reason:  xutil.LookupStringFromAny(record["reason"]),
 		})
 	}
 	return agentproto.NormalizeTurnModelVerification(verification)
@@ -83,13 +84,13 @@ func extractTurnModelVerification(message map[string]any) *agentproto.TurnModelV
 func extractTurnModelSafetyBuffering(message map[string]any) *agentproto.TurnModelSafetyBuffering {
 	params := lookupMap(message, "params")
 	return agentproto.NormalizeTurnModelSafetyBuffering(&agentproto.TurnModelSafetyBuffering{
-		ThreadID:        lookupStringFromAny(params["threadId"]),
-		TurnID:          lookupStringFromAny(params["turnId"]),
-		Model:           lookupStringFromAny(params["model"]),
+		ThreadID:        xutil.LookupStringFromAny(params["threadId"]),
+		TurnID:          xutil.LookupStringFromAny(params["turnId"]),
+		Model:           xutil.LookupStringFromAny(params["model"]),
 		UseCases:        stringListFromAny(params["useCases"]),
 		Reasons:         stringListFromAny(params["reasons"]),
-		ShowBufferingUI: lookupBoolFromAny(params["showBufferingUi"]),
-		FasterModel:     lookupStringFromAny(params["fasterModel"]),
+		ShowBufferingUI: xutil.LookupBoolFromAny(params["showBufferingUi"]),
+		FasterModel:     xutil.LookupStringFromAny(params["fasterModel"]),
 	})
 }
 
@@ -100,7 +101,7 @@ func stringListFromAny(raw any) []string {
 	}
 	result := make([]string, 0, len(values))
 	for _, value := range values {
-		if item := strings.TrimSpace(lookupStringFromAny(value)); item != "" {
+		if item := strings.TrimSpace(xutil.LookupStringFromAny(value)); item != "" {
 			result = append(result, item)
 		}
 	}

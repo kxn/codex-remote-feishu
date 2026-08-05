@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type threadListQuery struct {
@@ -70,20 +72,20 @@ func normalizeThreadListQuery(params map[string]any) threadListQuery {
 	if params == nil {
 		return query
 	}
-	if limit := lookupIntFromAny(params["limit"]); limit > 0 {
+	if limit := xutil.LookupIntFromAny(params["limit"]); limit > 0 {
 		query.Limit = limit
 	}
-	if cursor := strings.TrimSpace(lookupStringFromAny(firstNonNil(params["cursor"], params["pageToken"], params["page_token"]))); cursor != "" {
+	if cursor := strings.TrimSpace(xutil.LookupStringFromAny(firstNonNil(params["cursor"], params["pageToken"], params["page_token"]))); cursor != "" {
 		query.Cursor = cursor
 	}
-	if sortKey := firstNonEmptyString(
-		lookupStringFromAny(params["sortKey"]),
-		lookupStringFromAny(params["sort_key"]),
+	if sortKey := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(params["sortKey"]),
+		xutil.LookupStringFromAny(params["sort_key"]),
 	); sortKey != "" {
 		query.SortKey = sortKey
 	}
 	if archived, ok := params["archived"]; ok {
-		query.Archived = lookupBoolFromAny(archived)
+		query.Archived = xutil.LookupBoolFromAny(archived)
 	}
 	query.ModelProviders = normalizeThreadListStringSlice(firstNonNil(params["modelProviders"], params["model_providers"]))
 	query.SourceKinds = normalizeThreadListStringSlice(firstNonNil(params["sourceKinds"], params["source_kinds"]))
@@ -110,7 +112,7 @@ func normalizeThreadListStringSlice(source any) []string {
 	values := make([]string, 0, len(raw))
 	seen := map[string]bool{}
 	for _, current := range raw {
-		value := strings.TrimSpace(lookupStringFromAny(current))
+		value := strings.TrimSpace(xutil.LookupStringFromAny(current))
 		if value == "" || seen[value] {
 			continue
 		}

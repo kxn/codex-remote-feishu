@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func chooseAny(values ...any) any {
@@ -15,42 +16,6 @@ func chooseAny(values ...any) any {
 		}
 	}
 	return nil
-}
-
-func cloneMap(input map[string]any) map[string]any {
-	if len(input) == 0 {
-		return map[string]any{}
-	}
-	output := make(map[string]any, len(input))
-	for key, value := range input {
-		output[key] = value
-	}
-	return output
-}
-
-func cloneJSONValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		cloned := make(map[string]any, len(typed))
-		for key, item := range typed {
-			cloned[key] = cloneJSONValue(item)
-		}
-		return cloned
-	case []any:
-		cloned := make([]any, 0, len(typed))
-		for _, item := range typed {
-			cloned = append(cloned, cloneJSONValue(item))
-		}
-		return cloned
-	case []map[string]any:
-		cloned := make([]any, 0, len(typed))
-		for _, item := range typed {
-			cloned = append(cloned, cloneJSONValue(item))
-		}
-		return cloned
-	default:
-		return value
-	}
 }
 
 func setDefault(target map[string]any, key string, value any) {
@@ -72,7 +37,7 @@ func lookupString(value map[string]any, path ...string) string {
 		}
 		current = object[part]
 	}
-	return lookupStringFromAny(current)
+	return xutil.LookupStringFromAny(current)
 }
 
 func lookupAny(value map[string]any, path ...string) any {
@@ -97,45 +62,7 @@ func lookupMapFromAny(value any) map[string]any {
 	if current == nil {
 		return map[string]any{}
 	}
-	return cloneMap(current)
-}
-
-func lookupStringFromAny(value any) string {
-	switch current := value.(type) {
-	case string:
-		return current
-	default:
-		return ""
-	}
-}
-
-func lookupIntFromAny(value any) int {
-	switch current := value.(type) {
-	case int:
-		return current
-	case int32:
-		return int(current)
-	case int64:
-		return int(current)
-	case float64:
-		return int(current)
-	default:
-		return 0
-	}
-}
-
-func lookupBoolFromAny(value any) bool {
-	current, _ := value.(bool)
-	return current
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
+	return xutil.CloneMap(current)
 }
 
 func extractJSONRPCErrorMessage(message map[string]any) string {
@@ -196,8 +123,8 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 	}
 	switch itemKind {
 	case "entered_review_mode", "exited_review_mode":
-		if review := firstNonEmptyString(
-			lookupStringFromAny(item["review"]),
+		if review := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["review"]),
 			lookupString(item, "result", "review"),
 		); review != "" {
 			metadata["review"] = review
@@ -210,20 +137,20 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 			metadata["content"] = content
 		}
 	case "image_generation":
-		if revisedPrompt := firstNonEmptyString(
-			lookupStringFromAny(item["revised_prompt"]),
-			lookupStringFromAny(item["revisedPrompt"]),
+		if revisedPrompt := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["revised_prompt"]),
+			xutil.LookupStringFromAny(item["revisedPrompt"]),
 		); revisedPrompt != "" {
 			metadata["revisedPrompt"] = revisedPrompt
 		}
-		if savedPath := firstNonEmptyString(
-			lookupStringFromAny(item["saved_path"]),
-			lookupStringFromAny(item["savedPath"]),
+		if savedPath := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["saved_path"]),
+			xutil.LookupStringFromAny(item["savedPath"]),
 		); savedPath != "" {
 			metadata["savedPath"] = savedPath
 		}
-		if imageBase64 := firstNonEmptyString(
-			lookupStringFromAny(item["result"]),
+		if imageBase64 := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["result"]),
 			lookupString(item, "result", "data"),
 			lookupString(item, "result", "b64_json"),
 			lookupString(item, "result", "base64"),
@@ -231,13 +158,13 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 			metadata["imageBase64"] = imageBase64
 		}
 	case "dynamic_tool_call":
-		if tool := firstNonEmptyString(
-			lookupStringFromAny(item["tool"]),
-			lookupStringFromAny(item["name"]),
+		if tool := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["tool"]),
+			xutil.LookupStringFromAny(item["name"]),
 		); tool != "" {
 			metadata["tool"] = tool
 		}
-		if arguments := cloneJSONValue(firstNonNil(
+		if arguments := xutil.CloneJSONValue(firstNonNil(
 			item["arguments"],
 			item["args"],
 			lookupAny(item, "invocation", "arguments"),
@@ -258,11 +185,11 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 			}
 		}
 	case "delegated_task":
-		if subagentType := firstNonEmptyString(
-			lookupStringFromAny(item["subagentType"]),
-			lookupStringFromAny(item["subagent_type"]),
-			lookupStringFromAny(item["agentType"]),
-			lookupStringFromAny(item["agent_type"]),
+		if subagentType := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["subagentType"]),
+			xutil.LookupStringFromAny(item["subagent_type"]),
+			xutil.LookupStringFromAny(item["agentType"]),
+			xutil.LookupStringFromAny(item["agent_type"]),
 			lookupString(item, "input", "subagentType"),
 			lookupString(item, "input", "subagent_type"),
 			lookupString(item, "input", "agentType"),
@@ -276,16 +203,16 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 		); subagentType != "" {
 			metadata["subagentType"] = subagentType
 		}
-		if description := firstNonEmptyString(
-			lookupStringFromAny(item["description"]),
+		if description := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["description"]),
 			lookupString(item, "input", "description"),
 			lookupString(item, "invocation", "description"),
 			lookupString(item, "task", "description"),
 		); description != "" {
 			metadata["description"] = description
 		}
-		if prompt := firstNonEmptyString(
-			lookupStringFromAny(item["prompt"]),
+		if prompt := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["prompt"]),
 			lookupString(item, "input", "prompt"),
 			lookupString(item, "invocation", "prompt"),
 			lookupString(item, "task", "prompt"),
@@ -298,83 +225,83 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 			}
 		}
 	case "mcp_tool_call":
-		if server := firstNonEmptyString(
-			lookupStringFromAny(item["server"]),
+		if server := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["server"]),
 			lookupString(item, "invocation", "server"),
 		); server != "" {
 			metadata["server"] = server
 		}
-		if tool := firstNonEmptyString(
-			lookupStringFromAny(item["tool"]),
-			lookupStringFromAny(item["name"]),
+		if tool := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["tool"]),
+			xutil.LookupStringFromAny(item["name"]),
 			lookupString(item, "invocation", "tool"),
 		); tool != "" {
 			metadata["tool"] = tool
 		}
-		if errorMessage := firstNonEmptyString(
+		if errorMessage := xutil.FirstNonEmpty(
 			lookupString(item, "error", "message"),
-			lookupStringFromAny(item["errorMessage"]),
-			lookupStringFromAny(item["error_message"]),
-			lookupStringFromAny(item["error"]),
+			xutil.LookupStringFromAny(item["errorMessage"]),
+			xutil.LookupStringFromAny(item["error_message"]),
+			xutil.LookupStringFromAny(item["error"]),
 		); errorMessage != "" {
 			metadata["errorMessage"] = errorMessage
 		}
-		if arguments := cloneJSONValue(firstNonNil(
+		if arguments := xutil.CloneJSONValue(firstNonNil(
 			item["arguments"],
 			lookupAny(item, "invocation", "arguments"),
 		)); arguments != nil {
 			metadata["arguments"] = arguments
 		}
-		if result := cloneJSONValue(item["result"]); result != nil {
+		if result := xutil.CloneJSONValue(item["result"]); result != nil {
 			metadata["result"] = result
 		}
 		if result := lookupMap(item, "result"); len(result) != 0 {
-			if content := cloneJSONValue(result["content"]); content != nil {
+			if content := xutil.CloneJSONValue(result["content"]); content != nil {
 				metadata["resultContent"] = content
 			}
-			if structuredContent := cloneJSONValue(result["structuredContent"]); structuredContent != nil {
+			if structuredContent := xutil.CloneJSONValue(result["structuredContent"]); structuredContent != nil {
 				metadata["resultStructuredContent"] = structuredContent
 			}
 			if meta := lookupMap(result, "_meta"); len(meta) != 0 {
 				metadata["resultMeta"] = meta
 			}
 		}
-		if durationMs := lookupIntFromAny(item["durationMs"]); durationMs != 0 || item["durationMs"] != nil {
+		if durationMs := xutil.LookupIntFromAny(item["durationMs"]); durationMs != 0 || item["durationMs"] != nil {
 			metadata["durationMs"] = durationMs
-		} else if durationMs := lookupIntFromAny(item["duration_ms"]); durationMs != 0 || item["duration_ms"] != nil {
+		} else if durationMs := xutil.LookupIntFromAny(item["duration_ms"]); durationMs != 0 || item["duration_ms"] != nil {
 			metadata["durationMs"] = durationMs
 		}
 	case "command_execution":
-		if command := firstNonEmptyString(
-			lookupStringFromAny(item["command"]),
-			lookupStringFromAny(item["cmd"]),
+		if command := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["command"]),
+			xutil.LookupStringFromAny(item["cmd"]),
 		); command != "" {
 			metadata["command"] = command
 		}
-		if cwd := firstNonEmptyString(
-			lookupStringFromAny(item["cwd"]),
-			lookupStringFromAny(item["workdir"]),
-			lookupStringFromAny(item["workingDirectory"]),
+		if cwd := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["cwd"]),
+			xutil.LookupStringFromAny(item["workdir"]),
+			xutil.LookupStringFromAny(item["workingDirectory"]),
 		); cwd != "" {
 			metadata["cwd"] = cwd
 		}
-		if exitCode := lookupIntFromAny(item["exitCode"]); exitCode != 0 || item["exitCode"] != nil {
+		if exitCode := xutil.LookupIntFromAny(item["exitCode"]); exitCode != 0 || item["exitCode"] != nil {
 			metadata["exitCode"] = exitCode
-		} else if exitCode := lookupIntFromAny(item["exit_code"]); exitCode != 0 || item["exit_code"] != nil {
+		} else if exitCode := xutil.LookupIntFromAny(item["exit_code"]); exitCode != 0 || item["exit_code"] != nil {
 			metadata["exitCode"] = exitCode
 		}
 	case "web_search":
-		if query := firstNonEmptyString(
-			lookupStringFromAny(item["query"]),
+		if query := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["query"]),
 			lookupString(item, "action", "query"),
 		); query != "" {
 			metadata["query"] = query
 		}
 		action := lookupMap(item, "action")
-		if actionType := normalizeWebSearchActionType(firstNonEmptyString(
-			lookupStringFromAny(action["type"]),
-			lookupStringFromAny(item["actionType"]),
-			lookupStringFromAny(item["action_type"]),
+		if actionType := normalizeWebSearchActionType(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(action["type"]),
+			xutil.LookupStringFromAny(item["actionType"]),
+			xutil.LookupStringFromAny(item["action_type"]),
 		)); actionType != "" {
 			metadata["actionType"] = actionType
 		}
@@ -384,15 +311,15 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 		)); len(queries) > 0 {
 			metadata["queries"] = queries
 		}
-		if url := firstNonEmptyString(
-			lookupStringFromAny(action["url"]),
-			lookupStringFromAny(item["url"]),
+		if url := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(action["url"]),
+			xutil.LookupStringFromAny(item["url"]),
 		); url != "" {
 			metadata["url"] = url
 		}
-		if pattern := firstNonEmptyString(
-			lookupStringFromAny(action["pattern"]),
-			lookupStringFromAny(item["pattern"]),
+		if pattern := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(action["pattern"]),
+			xutil.LookupStringFromAny(item["pattern"]),
 		); pattern != "" {
 			metadata["pattern"] = pattern
 		}
@@ -404,8 +331,8 @@ func extractItemStatus(item map[string]any) string {
 	if item == nil {
 		return ""
 	}
-	return firstNonEmptyString(
-		lookupStringFromAny(item["status"]),
+	return xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(item["status"]),
 		lookupString(item, "item", "status"),
 	)
 }
@@ -442,21 +369,21 @@ func extractFileChangeRecords(itemKind string, item map[string]any) []agentproto
 		if !ok {
 			continue
 		}
-		path := firstNonEmptyString(
-			lookupStringFromAny(record["path"]),
+		path := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["path"]),
 			lookupString(record, "file", "path"),
-			lookupStringFromAny(record["new_path"]),
+			xutil.LookupStringFromAny(record["new_path"]),
 		)
 		kind, movePath := extractPatchChangeKind(record["kind"])
 		if movePath == "" {
-			movePath = firstNonEmptyString(
-				lookupStringFromAny(record["move_path"]),
-				lookupStringFromAny(record["movePath"]),
+			movePath = xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(record["move_path"]),
+				xutil.LookupStringFromAny(record["movePath"]),
 			)
 		}
-		diff := firstNonEmptyString(
-			lookupStringFromAny(record["diff"]),
-			lookupStringFromAny(record["patch"]),
+		diff := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(record["diff"]),
+			xutil.LookupStringFromAny(record["patch"]),
 		)
 		if path == "" && movePath == "" && diff == "" && kind == "" {
 			continue
@@ -488,9 +415,9 @@ func extractPatchChangeKind(value any) (agentproto.FileChangeKind, string) {
 	case map[string]any:
 		kind, movePath := extractPatchChangeKind(typed["type"])
 		if movePath == "" {
-			movePath = firstNonEmptyString(
-				lookupStringFromAny(typed["move_path"]),
-				lookupStringFromAny(typed["movePath"]),
+			movePath = xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(typed["move_path"]),
+				xutil.LookupStringFromAny(typed["movePath"]),
 			)
 		}
 		return kind, movePath
@@ -499,7 +426,7 @@ func extractPatchChangeKind(value any) (agentproto.FileChangeKind, string) {
 }
 
 func extractItemText(item map[string]any) string {
-	if text := lookupStringFromAny(item["text"]); text != "" {
+	if text := xutil.LookupStringFromAny(item["text"]); text != "" {
 		return text
 	}
 	return extractTextFromContentArray(
@@ -523,7 +450,7 @@ func extractStringList(value any) []string {
 	}
 	out := make([]string, 0, len(raw))
 	for _, current := range raw {
-		if text := lookupStringFromAny(current); text != "" {
+		if text := xutil.LookupStringFromAny(current); text != "" {
 			out = append(out, text)
 		}
 	}
@@ -569,11 +496,11 @@ func extractDynamicToolContentItems(item map[string]any) []map[string]any {
 		if entry == nil {
 			continue
 		}
-		switch normalizeStructuredContentType(lookupStringFromAny(entry["type"])) {
+		switch normalizeStructuredContentType(xutil.LookupStringFromAny(entry["type"])) {
 		case "text":
-			text := firstNonEmptyString(
-				lookupStringFromAny(entry["text"]),
-				lookupStringFromAny(entry["value"]),
+			text := xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(entry["text"]),
+				xutil.LookupStringFromAny(entry["value"]),
 			)
 			if text == "" {
 				continue
@@ -583,10 +510,10 @@ func extractDynamicToolContentItems(item map[string]any) []map[string]any {
 				"text": text,
 			})
 		case "image":
-			imageURL := firstNonEmptyString(
-				lookupStringFromAny(entry["image_url"]),
-				lookupStringFromAny(entry["imageUrl"]),
-				lookupStringFromAny(entry["url"]),
+			imageURL := xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(entry["image_url"]),
+				xutil.LookupStringFromAny(entry["imageUrl"]),
+				xutil.LookupStringFromAny(entry["url"]),
 			)
 			if imageURL == "" {
 				continue
@@ -633,8 +560,8 @@ func buildDelegatedTaskText(metadata map[string]any) string {
 	if len(metadata) == 0 {
 		return ""
 	}
-	description := strings.TrimSpace(lookupStringFromAny(metadata["description"]))
-	subagentType := strings.TrimSpace(lookupStringFromAny(metadata["subagentType"]))
+	description := strings.TrimSpace(xutil.LookupStringFromAny(metadata["description"]))
+	subagentType := strings.TrimSpace(xutil.LookupStringFromAny(metadata["subagentType"]))
 	switch {
 	case description != "" && subagentType != "":
 		return "Task (" + subagentType + "): " + description
@@ -658,11 +585,11 @@ func extractTextFromContentArray(source any) string {
 		if entry == nil {
 			continue
 		}
-		switch normalizeStructuredContentType(lookupStringFromAny(entry["type"])) {
+		switch normalizeStructuredContentType(xutil.LookupStringFromAny(entry["type"])) {
 		case "text":
-			if text := firstNonEmptyString(
-				lookupStringFromAny(entry["text"]),
-				lookupStringFromAny(entry["value"]),
+			if text := xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(entry["text"]),
+				xutil.LookupStringFromAny(entry["value"]),
 			); text != "" {
 				parts = append(parts, text)
 			}

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, error) {
@@ -73,7 +74,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 				"turnId":   command.Target.TurnID,
 			},
 		}
-		t.pendingSuppressedResponse[lookupStringFromAny(payload["id"])] = suppressedResponseContext{Action: "turn/interrupt"}
+		t.pendingSuppressedResponse[xutil.LookupStringFromAny(payload["id"])] = suppressedResponseContext{Action: "turn/interrupt"}
 		bytes, err := json.Marshal(payload)
 		if err != nil {
 			return nil, err
@@ -422,11 +423,11 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) ([][]by
 }
 
 func (t *Translator) buildThreadStartParams(cwd string, overrides agentproto.PromptOverrides) map[string]any {
-	params := cloneMap(t.latestThreadStartParams)
+	params := xutil.CloneMap(t.latestThreadStartParams)
 	if len(params) == 0 {
 		params = map[string]any{}
 	}
-	params["cwd"] = choose(cwd, lookupStringFromAny(params["cwd"]))
+	params["cwd"] = choose(cwd, xutil.LookupStringFromAny(params["cwd"]))
 	setDefault(params, "model", nil)
 	setDefault(params, "modelProvider", nil)
 	setDefault(params, "config", map[string]any{})
@@ -444,12 +445,12 @@ func (t *Translator) buildThreadStartParams(cwd string, overrides agentproto.Pro
 func (t *Translator) buildThreadStartParamsWithPolicy(cwd string, overrides agentproto.PromptOverrides, policy *agentproto.CodexResumePolicy) map[string]any {
 	params := map[string]any{}
 	if agentproto.NormalizeCodexResumePolicy(policy) == nil {
-		params = cloneMap(t.latestThreadStartParams)
+		params = xutil.CloneMap(t.latestThreadStartParams)
 	}
 	if len(params) == 0 {
 		params = map[string]any{}
 	}
-	params["cwd"] = choose(cwd, lookupStringFromAny(params["cwd"]))
+	params["cwd"] = choose(cwd, xutil.LookupStringFromAny(params["cwd"]))
 	setDefault(params, "model", nil)
 	setDefault(params, "modelProvider", nil)
 	setDefault(params, "config", map[string]any{})
@@ -471,7 +472,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	template := t.selectTurnTemplate(threadID, newThread)
 	template["threadId"] = threadID
 	template["input"] = t.buildInputs(command.Prompt.Inputs)
-	template["cwd"] = choose(command.Target.CWD, choose(lookupStringFromAny(template["cwd"]), t.knownThreadCWD[threadID]))
+	template["cwd"] = choose(command.Target.CWD, choose(xutil.LookupStringFromAny(template["cwd"]), t.knownThreadCWD[threadID]))
 	setDefault(template, "approvalPolicy", nil)
 	setDefault(template, "sandboxPolicy", nil)
 	setDefault(template, "model", nil)
@@ -489,7 +490,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 		"method": "turn/start",
 		"params": template,
 	}
-	t.pendingSuppressedResponse[lookupStringFromAny(payload["id"])] = suppressedResponseContext{
+	t.pendingSuppressedResponse[xutil.LookupStringFromAny(payload["id"])] = suppressedResponseContext{
 		Action:           "turn/start",
 		ThreadID:         threadID,
 		SurfaceSessionID: choose(command.Origin.Surface, command.Origin.ChatID),
@@ -540,11 +541,11 @@ func (t *Translator) directCompactStart(command agentproto.Command) ([]byte, str
 func (t *Translator) selectTurnTemplate(threadID string, newThread bool) map[string]any {
 	switch {
 	case newThread && len(t.newThreadTurnTemplate) > 0:
-		return cloneMap(t.newThreadTurnTemplate)
+		return xutil.CloneMap(t.newThreadTurnTemplate)
 	case len(t.turnStartByThread[threadID]) > 0:
-		return cloneMap(t.turnStartByThread[threadID])
+		return xutil.CloneMap(t.turnStartByThread[threadID])
 	case len(t.latestTurnStartTemplate) > 0:
-		return cloneMap(t.latestTurnStartTemplate)
+		return xutil.CloneMap(t.latestTurnStartTemplate)
 	default:
 		return map[string]any{}
 	}

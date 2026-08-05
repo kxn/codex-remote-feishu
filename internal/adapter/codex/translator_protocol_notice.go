@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) observeProtocolNotice(method string, message map[string]any) Result {
@@ -35,18 +36,18 @@ func extractProtocolNotice(method string, message map[string]any) *agentproto.Pr
 		Method:   strings.TrimSpace(method),
 		Kind:     protocolNoticeKind(method),
 		Severity: protocolNoticeSeverity(method),
-		ThreadID: firstNonEmptyString(
+		ThreadID: xutil.FirstNonEmpty(
 			lookupString(message, "params", "threadId"),
 			lookupString(message, "params", "thread", "id"),
 		),
-		TurnID: firstNonEmptyString(
+		TurnID: xutil.FirstNonEmpty(
 			lookupString(message, "params", "turnId"),
 			lookupString(message, "params", "turn", "id"),
 		),
 		Summary: protocolNoticeSummary(method, params),
-		Details: lookupStringFromAny(params["details"]),
-		Path: firstNonEmptyString(
-			lookupStringFromAny(params["path"]),
+		Details: xutil.LookupStringFromAny(params["details"]),
+		Path: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(params["path"]),
 			lookupString(message, "params", "location", "path"),
 		),
 		Range: protocolNoticeRange(params),
@@ -79,20 +80,20 @@ func protocolNoticeSeverity(method string) string {
 func protocolNoticeSummary(method string, params map[string]any) string {
 	switch strings.TrimSpace(method) {
 	case "warning", "guardianWarning":
-		return firstNonEmptyString(
-			lookupStringFromAny(params["message"]),
-			lookupStringFromAny(params["summary"]),
+		return xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(params["message"]),
+			xutil.LookupStringFromAny(params["summary"]),
 		)
 	default:
-		return firstNonEmptyString(
-			lookupStringFromAny(params["summary"]),
-			lookupStringFromAny(params["message"]),
+		return xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(params["summary"]),
+			xutil.LookupStringFromAny(params["message"]),
 		)
 	}
 }
 
 func protocolNoticeRange(params map[string]any) string {
-	if value := strings.TrimSpace(lookupStringFromAny(params["range"])); value != "" {
+	if value := strings.TrimSpace(xutil.LookupStringFromAny(params["range"])); value != "" {
 		return value
 	}
 	rangeMap := lookupMap(params, "range")
@@ -102,10 +103,10 @@ func protocolNoticeRange(params map[string]any) string {
 	if len(rangeMap) == 0 {
 		return ""
 	}
-	startLine := lookupIntFromAny(firstNonNil(rangeMap["startLine"], rangeMap["start_line"]))
-	startColumn := lookupIntFromAny(firstNonNil(rangeMap["startColumn"], rangeMap["start_column"]))
-	endLine := lookupIntFromAny(firstNonNil(rangeMap["endLine"], rangeMap["end_line"]))
-	endColumn := lookupIntFromAny(firstNonNil(rangeMap["endColumn"], rangeMap["end_column"]))
+	startLine := xutil.LookupIntFromAny(firstNonNil(rangeMap["startLine"], rangeMap["start_line"]))
+	startColumn := xutil.LookupIntFromAny(firstNonNil(rangeMap["startColumn"], rangeMap["start_column"]))
+	endLine := xutil.LookupIntFromAny(firstNonNil(rangeMap["endLine"], rangeMap["end_line"]))
+	endColumn := xutil.LookupIntFromAny(firstNonNil(rangeMap["endColumn"], rangeMap["end_column"]))
 	if startLine == 0 && startColumn == 0 && endLine == 0 && endColumn == 0 {
 		return ""
 	}

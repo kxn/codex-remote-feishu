@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func parseThreadList(result any) []agentproto.ThreadSnapshotRecord {
@@ -59,62 +60,62 @@ func parseThreadRecord(result any) agentproto.ThreadSnapshotRecord {
 		object["runtimeStatus"],
 		object["state"],
 	))
-	stateValue := strings.TrimSpace(lookupStringFromAny(object["state"]))
+	stateValue := strings.TrimSpace(xutil.LookupStringFromAny(object["state"]))
 	if stateValue == "" && runtimeStatus != nil {
 		stateValue = runtimeStatus.LegacyState()
 	}
-	loaded := lookupBoolFromAny(object["loaded"])
+	loaded := xutil.LookupBoolFromAny(object["loaded"])
 	if runtimeStatus != nil {
 		loaded = runtimeStatus.IsLoaded()
 	}
 	return agentproto.ThreadSnapshotRecord{
 		ThreadID: choose(
-			lookupStringFromAny(object["id"]),
-			lookupStringFromAny(object["threadId"]),
+			xutil.LookupStringFromAny(object["id"]),
+			xutil.LookupStringFromAny(object["threadId"]),
 		),
 		ForkedFromID: choose(
-			lookupStringFromAny(object["forkedFromId"]),
-			lookupStringFromAny(object["forked_from_id"]),
+			xutil.LookupStringFromAny(object["forkedFromId"]),
+			xutil.LookupStringFromAny(object["forked_from_id"]),
 		),
 		Source: parseThreadSource(firstNonNil(object["source"], object["sessionSource"])),
 		Name: choose(
-			lookupStringFromAny(object["name"]),
-			lookupStringFromAny(object["title"]),
+			xutil.LookupStringFromAny(object["name"]),
+			xutil.LookupStringFromAny(object["title"]),
 		),
 		Preview: choose(
-			lookupStringFromAny(object["preview"]),
-			lookupStringFromAny(object["summary"]),
+			xutil.LookupStringFromAny(object["preview"]),
+			xutil.LookupStringFromAny(object["summary"]),
 		),
 		CWD: choose(
-			lookupStringFromAny(object["cwd"]),
-			lookupStringFromAny(object["path"]),
+			xutil.LookupStringFromAny(object["cwd"]),
+			xutil.LookupStringFromAny(object["path"]),
 		),
 		ModelProviderID: choose(
-			lookupStringFromAny(object["modelProvider"]),
-			lookupStringFromAny(object["modelProviderId"]),
-			lookupStringFromAny(object["model_provider"]),
-			lookupStringFromAny(object["model_provider_id"]),
+			xutil.LookupStringFromAny(object["modelProvider"]),
+			xutil.LookupStringFromAny(object["modelProviderId"]),
+			xutil.LookupStringFromAny(object["model_provider"]),
+			xutil.LookupStringFromAny(object["model_provider_id"]),
 		),
 		Model: choose(
 			lookupString(object, "latestCollaborationMode", "settings", "model"),
 			lookupString(object, "collaborationMode", "settings", "model"),
-			lookupStringFromAny(object["model"]),
+			xutil.LookupStringFromAny(object["model"]),
 		),
 		ReasoningEffort: choose(
 			lookupString(object, "latestCollaborationMode", "settings", "reasoning_effort"),
 			lookupString(object, "collaborationMode", "settings", "reasoning_effort"),
 			lookupString(object, "config", "model_reasoning_effort"),
 			lookupString(object, "config", "reasoning_effort"),
-			lookupStringFromAny(object["effort"]),
+			xutil.LookupStringFromAny(object["effort"]),
 		),
 		PlanMode: choose(
 			normalizeObservedPlanMode(lookupString(object, "latestCollaborationMode", "mode")),
 			normalizeObservedPlanMode(lookupString(object, "collaborationMode", "mode")),
 		),
 		Loaded:   loaded,
-		Archived: lookupBoolFromAny(object["archived"]),
+		Archived: xutil.LookupBoolFromAny(object["archived"]),
 		State:    stateValue,
-		ListOrder: lookupIntFromAny(chooseAny(
+		ListOrder: xutil.LookupIntFromAny(chooseAny(
 			object["listOrder"],
 			object["list_order"],
 		)),
@@ -131,10 +132,10 @@ func parseThreadRuntimeStatus(source any) *agentproto.ThreadRuntimeStatus {
 		}
 		return &agentproto.ThreadRuntimeStatus{Type: statusType}
 	case map[string]any:
-		statusType := agentproto.NormalizeThreadRuntimeStatusType(firstNonEmptyString(
-			lookupStringFromAny(typed["type"]),
-			lookupStringFromAny(typed["status"]),
-			lookupStringFromAny(typed["state"]),
+		statusType := agentproto.NormalizeThreadRuntimeStatusType(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(typed["type"]),
+			xutil.LookupStringFromAny(typed["status"]),
+			xutil.LookupStringFromAny(typed["state"]),
 		))
 		if statusType == "" {
 			return nil
@@ -157,7 +158,7 @@ func parseThreadActiveFlags(source any) []agentproto.ThreadActiveFlag {
 	flags := make([]agentproto.ThreadActiveFlag, 0, len(raw))
 	seen := map[agentproto.ThreadActiveFlag]bool{}
 	for _, current := range raw {
-		flag := agentproto.NormalizeThreadActiveFlag(lookupStringFromAny(current))
+		flag := agentproto.NormalizeThreadActiveFlag(xutil.LookupStringFromAny(current))
 		if flag == "" || seen[flag] {
 			continue
 		}
@@ -201,16 +202,16 @@ func parseThreadHistoryTurns(source any) []agentproto.ThreadHistoryTurnRecord {
 		}
 		record := agentproto.ThreadHistoryTurnRecord{
 			TurnID: choose(
-				lookupStringFromAny(turnMap["id"]),
-				lookupStringFromAny(turnMap["turnId"]),
+				xutil.LookupStringFromAny(turnMap["id"]),
+				xutil.LookupStringFromAny(turnMap["turnId"]),
 			),
 			Status: choose(
-				lookupStringFromAny(turnMap["status"]),
-				lookupStringFromAny(turnMap["state"]),
+				xutil.LookupStringFromAny(turnMap["status"]),
+				xutil.LookupStringFromAny(turnMap["state"]),
 			),
 			StartedAt:    parseProtocolTime(firstNonNil(turnMap["startedAt"], turnMap["started_at"], turnMap["createdAt"], turnMap["created_at"])),
 			CompletedAt:  parseProtocolTime(firstNonNil(turnMap["completedAt"], turnMap["completed_at"], turnMap["finishedAt"], turnMap["finished_at"])),
-			ErrorMessage: choose(lookupStringFromAny(turnMap["errorMessage"]), lookupString(turnMap, "error", "message")),
+			ErrorMessage: choose(xutil.LookupStringFromAny(turnMap["errorMessage"]), lookupString(turnMap, "error", "message")),
 			RequestID: choose(
 				canonicalRequestID(turnMap["requestId"]),
 				canonicalRequestID(turnMap["request_id"]),
@@ -240,13 +241,13 @@ func parseThreadHistoryItems(source any) []agentproto.ThreadHistoryItemRecord {
 			continue
 		}
 		itemKind := normalizeItemKind(choose(
-			lookupStringFromAny(itemMap["type"]),
+			xutil.LookupStringFromAny(itemMap["type"]),
 			lookupString(itemMap, "item", "type"),
 		))
 		record := agentproto.ThreadHistoryItemRecord{
 			ItemID: choose(
-				lookupStringFromAny(itemMap["id"]),
-				lookupStringFromAny(itemMap["itemId"]),
+				xutil.LookupStringFromAny(itemMap["id"]),
+				xutil.LookupStringFromAny(itemMap["itemId"]),
 			),
 			Kind:   itemKind,
 			Status: extractItemStatus(itemMap),
@@ -285,7 +286,7 @@ func parseThreadHistoryItems(source any) []agentproto.ThreadHistoryItemRecord {
 }
 
 func parseProtocolTime(value any) time.Time {
-	text := strings.TrimSpace(lookupStringFromAny(value))
+	text := strings.TrimSpace(xutil.LookupStringFromAny(value))
 	if text == "" {
 		return time.Time{}
 	}

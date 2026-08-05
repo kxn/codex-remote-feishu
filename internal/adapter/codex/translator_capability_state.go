@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) observeCapabilityState(method string, message map[string]any) Result {
@@ -22,40 +23,40 @@ func extractCapabilityStateUpdate(method string, message map[string]any) *agentp
 	params := lookupMap(message, "params")
 	update := &agentproto.CapabilityStateUpdate{
 		Method:   strings.TrimSpace(method),
-		ThreadID: lookupStringFromAny(params["threadId"]),
+		ThreadID: xutil.LookupStringFromAny(params["threadId"]),
 	}
 	switch method {
 	case "skills/changed":
 		update.SkillsChanged = true
 	case "mcpServer/startupStatus/updated":
 		update.MCPServerStartupStatus = &agentproto.MCPServerStartupStatus{
-			ThreadID:      lookupStringFromAny(params["threadId"]),
-			Name:          lookupStringFromAny(params["name"]),
-			Status:        lookupStringFromAny(params["status"]),
-			Error:         lookupStringFromAny(params["error"]),
-			FailureReason: lookupStringFromAny(params["failureReason"]),
+			ThreadID:      xutil.LookupStringFromAny(params["threadId"]),
+			Name:          xutil.LookupStringFromAny(params["name"]),
+			Status:        xutil.LookupStringFromAny(params["status"]),
+			Error:         xutil.LookupStringFromAny(params["error"]),
+			FailureReason: xutil.LookupStringFromAny(params["failureReason"]),
 		}
 	case "mcpServer/oauthLogin/completed":
 		update.MCPOAuthLoginCompleted = &agentproto.MCPOAuthLoginCompletionState{
-			Name:     lookupStringFromAny(params["name"]),
-			ThreadID: lookupStringFromAny(params["threadId"]),
-			Success:  lookupBoolFromAny(params["success"]),
-			Error:    lookupStringFromAny(params["error"]),
+			Name:     xutil.LookupStringFromAny(params["name"]),
+			ThreadID: xutil.LookupStringFromAny(params["threadId"]),
+			Success:  xutil.LookupBoolFromAny(params["success"]),
+			Error:    xutil.LookupStringFromAny(params["error"]),
 		}
 	case "app/list/updated":
 		update.Apps = extractAppStateRecords(params)
 	case "account/updated":
 		update.Account = &agentproto.AccountState{
-			AuthMode: lookupStringFromAny(params["authMode"]),
-			PlanType: lookupStringFromAny(params["planType"]),
+			AuthMode: xutil.LookupStringFromAny(params["authMode"]),
+			PlanType: xutil.LookupStringFromAny(params["planType"]),
 		}
 	case "account/rateLimits/updated":
 		update.RateLimits = extractSparseRateLimits(params["rateLimits"])
 	case "account/login/completed", "accountLoginCompleted":
 		update.AccountLoginCompleted = &agentproto.AccountLoginCompletionState{
-			LoginID: lookupStringFromAny(params["loginId"]),
-			Success: lookupBoolFromAny(params["success"]),
-			Error:   lookupStringFromAny(params["error"]),
+			LoginID: xutil.LookupStringFromAny(params["loginId"]),
+			Success: xutil.LookupBoolFromAny(params["success"]),
+			Error:   xutil.LookupStringFromAny(params["error"]),
 		}
 	}
 	return agentproto.NormalizeCapabilityStateUpdate(update)
@@ -74,9 +75,9 @@ func extractAppStateRecords(params map[string]any) []agentproto.AppStateRecord {
 			continue
 		}
 		apps = append(apps, agentproto.AppStateRecord{
-			ID:          firstNonEmptyString(lookupStringFromAny(record["id"]), lookupStringFromAny(record["appId"])),
-			Name:        firstNonEmptyString(lookupStringFromAny(record["name"]), lookupStringFromAny(record["title"])),
-			Description: lookupStringFromAny(record["description"]),
+			ID:          xutil.FirstNonEmpty(xutil.LookupStringFromAny(record["id"]), xutil.LookupStringFromAny(record["appId"])),
+			Name:        xutil.FirstNonEmpty(xutil.LookupStringFromAny(record["name"]), xutil.LookupStringFromAny(record["title"])),
+			Description: xutil.LookupStringFromAny(record["description"]),
 		})
 	}
 	return apps
@@ -93,7 +94,7 @@ func extractSparseRateLimits(raw any) map[string]map[string]any {
 		if strings.TrimSpace(name) == "" || len(record) == 0 {
 			continue
 		}
-		result[name] = cloneMap(record)
+		result[name] = xutil.CloneMap(record)
 	}
 	if len(result) == 0 {
 		return nil

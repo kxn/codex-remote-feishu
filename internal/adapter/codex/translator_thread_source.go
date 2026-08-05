@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func parseThreadSource(source any) *agentproto.ThreadSourceRecord {
@@ -23,7 +24,7 @@ func parseThreadSource(source any) *agentproto.ThreadSourceRecord {
 			return &agentproto.ThreadSourceRecord{Kind: agentproto.ThreadSourceKindCustom, Name: strings.TrimSpace(typed)}
 		}
 	case map[string]any:
-		if custom := strings.TrimSpace(lookupStringFromAny(typed["custom"])); custom != "" {
+		if custom := strings.TrimSpace(xutil.LookupStringFromAny(typed["custom"])); custom != "" {
 			return &agentproto.ThreadSourceRecord{Kind: agentproto.ThreadSourceKindCustom, Name: custom}
 		}
 		if sub := firstNonNil(typed["subAgent"], typed["sub_agent"]); sub != nil {
@@ -53,19 +54,19 @@ func parseSubAgentThreadSource(source any) *agentproto.ThreadSourceRecord {
 		if spawn := lookupMapFromAny(firstNonNil(typed["thread_spawn"], typed["threadSpawn"])); len(spawn) != 0 {
 			return &agentproto.ThreadSourceRecord{
 				Kind: agentproto.ThreadSourceKindThreadSpawn,
-				Name: firstNonEmptyString(
-					lookupStringFromAny(spawn["agent_role"]),
-					lookupStringFromAny(spawn["agentRole"]),
-					lookupStringFromAny(spawn["agent_nickname"]),
-					lookupStringFromAny(spawn["agentNickname"]),
+				Name: xutil.FirstNonEmpty(
+					xutil.LookupStringFromAny(spawn["agent_role"]),
+					xutil.LookupStringFromAny(spawn["agentRole"]),
+					xutil.LookupStringFromAny(spawn["agent_nickname"]),
+					xutil.LookupStringFromAny(spawn["agentNickname"]),
 				),
-				ParentThreadID: firstNonEmptyString(
-					lookupStringFromAny(spawn["parent_thread_id"]),
-					lookupStringFromAny(spawn["parentThreadId"]),
+				ParentThreadID: xutil.FirstNonEmpty(
+					xutil.LookupStringFromAny(spawn["parent_thread_id"]),
+					xutil.LookupStringFromAny(spawn["parentThreadId"]),
 				),
 			}
 		}
-		if other := strings.TrimSpace(lookupStringFromAny(typed["other"])); other != "" {
+		if other := strings.TrimSpace(xutil.LookupStringFromAny(typed["other"])); other != "" {
 			return &agentproto.ThreadSourceRecord{Kind: agentproto.ThreadSourceKindSubAgentOther, Name: other}
 		}
 	}

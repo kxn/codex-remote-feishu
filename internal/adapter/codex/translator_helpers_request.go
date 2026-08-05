@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const nativeRequestIDPrefix = "__native_request_id_json__:"
@@ -83,20 +84,20 @@ func decodeNativeRequestID(requestID string) any {
 }
 
 func extractRequestThreadID(message map[string]any, request map[string]any) string {
-	return firstNonEmptyString(
+	return xutil.FirstNonEmpty(
 		lookupString(message, "params", "thread", "id"),
 		lookupString(message, "params", "threadId"),
 		lookupString(request, "thread", "id"),
-		lookupStringFromAny(request["threadId"]),
+		xutil.LookupStringFromAny(request["threadId"]),
 	)
 }
 
 func extractRequestTurnID(message map[string]any, request map[string]any) string {
-	return firstNonEmptyString(
+	return xutil.FirstNonEmpty(
 		lookupString(message, "params", "turn", "id"),
 		lookupString(message, "params", "turnId"),
 		lookupString(request, "turn", "id"),
-		lookupStringFromAny(request["turnId"]),
+		xutil.LookupStringFromAny(request["turnId"]),
 	)
 }
 
@@ -182,13 +183,13 @@ func defaultRequestRawType(method string, params map[string]any) string {
 }
 
 func extractRawRequestType(request, params map[string]any) string {
-	return strings.TrimSpace(firstNonEmptyString(
-		lookupStringFromAny(request["type"]),
-		lookupStringFromAny(request["requestType"]),
-		lookupStringFromAny(request["kind"]),
-		lookupStringFromAny(params["type"]),
-		lookupStringFromAny(params["requestType"]),
-		lookupStringFromAny(params["kind"]),
+	return strings.TrimSpace(xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["type"]),
+		xutil.LookupStringFromAny(request["requestType"]),
+		xutil.LookupStringFromAny(request["kind"]),
+		xutil.LookupStringFromAny(params["type"]),
+		xutil.LookupStringFromAny(params["requestType"]),
+		xutil.LookupStringFromAny(params["kind"]),
 	))
 }
 
@@ -249,7 +250,7 @@ func extractGenericRequestPrompt(method string, message map[string]any) *agentpr
 		Type:           requestType,
 		RawType:        normalizeRawRequestType(rawType),
 		ItemID:         extractRequestItemID(request, params),
-		Title:          firstNonEmptyString(lookupStringFromAny(request["title"]), lookupStringFromAny(request["name"]), lookupStringFromAny(params["title"])),
+		Title:          xutil.FirstNonEmpty(xutil.LookupStringFromAny(request["title"]), xutil.LookupStringFromAny(request["name"]), xutil.LookupStringFromAny(params["title"])),
 		Body:           extractRequestBody(request, params),
 		AcceptLabel:    extractRequestAcceptLabel(request, params),
 		DeclineLabel:   extractRequestDeclineLabel(request, params),
@@ -269,32 +270,32 @@ func extractToolCallbackPrompt(message map[string]any) *agentproto.RequestPrompt
 }
 
 func extractToolCallbackPromptFromPayload(request, params map[string]any) *agentproto.RequestPrompt {
-	rawPayload := cloneMap(params)
+	rawPayload := xutil.CloneMap(params)
 	if len(rawPayload) == 0 {
-		rawPayload = cloneMap(request)
+		rawPayload = xutil.CloneMap(request)
 	}
 	prompt := &agentproto.RequestPrompt{
 		Type:    agentproto.RequestTypeToolCallback,
 		RawType: "tool_callback",
 		ItemID:  extractRequestItemID(request, params),
-		Title: firstNonEmptyString(
-			lookupStringFromAny(request["title"]),
-			lookupStringFromAny(params["title"]),
+		Title: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(request["title"]),
+			xutil.LookupStringFromAny(params["title"]),
 		),
 		ToolCallback: &agentproto.ToolCallbackPrompt{
-			CallID: firstNonEmptyString(
-				lookupStringFromAny(params["callId"]),
-				lookupStringFromAny(request["callId"]),
+			CallID: xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(params["callId"]),
+				xutil.LookupStringFromAny(request["callId"]),
 			),
-			ToolName: firstNonEmptyString(
-				lookupStringFromAny(params["tool"]),
-				lookupStringFromAny(request["tool"]),
+			ToolName: xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(params["tool"]),
+				xutil.LookupStringFromAny(request["tool"]),
 			),
-			Arguments: cloneJSONValue(firstNonNil(
+			Arguments: xutil.CloneJSONValue(firstNonNil(
 				params["arguments"],
 				request["arguments"],
 			)),
-			RawPayload: cloneMap(rawPayload),
+			RawPayload: xutil.CloneMap(rawPayload),
 		},
 	}
 	if prompt.Title == "" {
@@ -318,14 +319,14 @@ func extractCommandExecutionRequestApprovalPrompt(message map[string]any) *agent
 		if prompt.Title == "" || prompt.Title == "需要确认" {
 			prompt.Title = "需要确认网络访问"
 		}
-		host := firstNonEmptyString(
-			lookupStringFromAny(network["host"]),
-			lookupStringFromAny(network["hostname"]),
+		host := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(network["host"]),
+			xutil.LookupStringFromAny(network["hostname"]),
 		)
-		protocol := lookupStringFromAny(network["protocol"])
-		port := firstNonEmptyString(
-			lookupStringFromAny(network["port"]),
-			lookupStringFromAny(network["destinationPort"]),
+		protocol := xutil.LookupStringFromAny(network["protocol"])
+		port := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(network["port"]),
+			xutil.LookupStringFromAny(network["destinationPort"]),
 		)
 		if len(bodyLines) == 0 {
 			bodyLines = append(bodyLines, "本地 Codex 正在等待你确认一次受管网络访问。")
@@ -345,7 +346,7 @@ func extractCommandExecutionRequestApprovalPrompt(message map[string]any) *agent
 	if prompt.Title == "" || prompt.Title == "需要确认" {
 		prompt.Title = "需要确认执行命令"
 	}
-	if cwd := strings.TrimSpace(lookupStringFromAny(params["cwd"])); cwd != "" && !strings.Contains(prompt.Body, cwd) {
+	if cwd := strings.TrimSpace(xutil.LookupStringFromAny(params["cwd"])); cwd != "" && !strings.Contains(prompt.Body, cwd) {
 		if len(bodyLines) > 0 {
 			bodyLines = append(bodyLines, "")
 		}
@@ -364,8 +365,8 @@ func extractFileChangeRequestApprovalPrompt(message map[string]any) *agentproto.
 	if prompt.Title == "" || prompt.Title == "需要确认" {
 		prompt.Title = "需要确认修改文件"
 	}
-	grantRoot := strings.TrimSpace(firstNonEmptyString(
-		lookupStringFromAny(params["grantRoot"]),
+	grantRoot := strings.TrimSpace(xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(params["grantRoot"]),
 		lookupString(params, "request", "grantRoot"),
 	))
 	if grantRoot == "" {
@@ -384,9 +385,9 @@ func extractRequestUserInputPrompt(message map[string]any) *agentproto.RequestPr
 	params := lookupMap(message, "params")
 	prompt := &agentproto.RequestPrompt{
 		Type:      agentproto.RequestTypeRequestUserInput,
-		Title:     firstNonEmptyString(lookupStringFromAny(params["title"]), lookupStringFromAny(params["header"])),
+		Title:     xutil.FirstNonEmpty(xutil.LookupStringFromAny(params["title"]), xutil.LookupStringFromAny(params["header"])),
 		RawType:   "request_user_input",
-		Body:      firstNonEmptyString(lookupStringFromAny(params["message"]), lookupStringFromAny(params["body"]), lookupStringFromAny(params["description"])),
+		Body:      xutil.FirstNonEmpty(xutil.LookupStringFromAny(params["message"]), xutil.LookupStringFromAny(params["body"]), xutil.LookupStringFromAny(params["description"])),
 		ItemID:    extractRequestItemID(nil, params),
 		Questions: requestQuestionsFromMaps(extractRequestUserInputQuestions(nil, params)),
 	}
@@ -398,22 +399,22 @@ func extractRequestUserInputPrompt(message map[string]any) *agentproto.RequestPr
 
 func extractPermissionsRequestPrompt(message map[string]any) *agentproto.RequestPrompt {
 	params := lookupMap(message, "params")
-	reason := firstNonEmptyString(
-		lookupStringFromAny(params["reason"]),
+	reason := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(params["reason"]),
 		lookupString(params, "request", "reason"),
 	)
-	body := firstNonEmptyString(
-		lookupStringFromAny(params["message"]),
-		lookupStringFromAny(params["body"]),
+	body := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(params["message"]),
+		xutil.LookupStringFromAny(params["body"]),
 		reason,
 	)
 	prompt := &agentproto.RequestPrompt{
 		Type:    agentproto.RequestTypePermissionsRequestApproval,
 		RawType: "permissions_request_approval",
-		Title:   firstNonEmptyString(lookupStringFromAny(params["title"]), "需要授予权限"),
+		Title:   xutil.FirstNonEmpty(xutil.LookupStringFromAny(params["title"]), "需要授予权限"),
 		Body:    body,
-		ItemID: firstNonEmptyString(
-			lookupStringFromAny(params["itemId"]),
+		ItemID: xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(params["itemId"]),
 			lookupString(params, "request", "itemId"),
 		),
 		Permissions: &agentproto.PermissionsRequestPrompt{
@@ -430,17 +431,17 @@ func extractPermissionsRequestPrompt(message map[string]any) *agentproto.Request
 func extractMCPElicitationPrompt(message map[string]any) *agentproto.RequestPrompt {
 	params := lookupMap(message, "params")
 	request := lookupMap(message, "params", "request")
-	mode := strings.TrimSpace(firstNonEmptyString(
-		lookupStringFromAny(request["mode"]),
-		lookupStringFromAny(params["mode"]),
+	mode := strings.TrimSpace(xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["mode"]),
+		xutil.LookupStringFromAny(params["mode"]),
 	))
-	body := firstNonEmptyString(
-		lookupStringFromAny(request["message"]),
-		lookupStringFromAny(params["message"]),
+	body := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["message"]),
+		xutil.LookupStringFromAny(params["message"]),
 	)
-	url := firstNonEmptyString(
-		lookupStringFromAny(request["url"]),
-		lookupStringFromAny(params["url"]),
+	url := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["url"]),
+		xutil.LookupStringFromAny(params["url"]),
 	)
 	if mode == "url" && url != "" && !strings.Contains(body, url) {
 		if body != "" {
@@ -451,22 +452,22 @@ func extractMCPElicitationPrompt(message map[string]any) *agentproto.RequestProm
 	prompt := &agentproto.RequestPrompt{
 		Type:    agentproto.RequestTypeMCPServerElicitation,
 		RawType: "mcp_server_elicitation",
-		Title:   firstNonEmptyString(lookupStringFromAny(params["title"]), "需要处理 MCP 请求"),
+		Title:   xutil.FirstNonEmpty(xutil.LookupStringFromAny(params["title"]), "需要处理 MCP 请求"),
 		Body:    body,
 		MCPElicitation: &agentproto.MCPElicitationPrompt{
-			ServerName: firstNonEmptyString(
-				lookupStringFromAny(params["serverName"]),
-				lookupStringFromAny(request["serverName"]),
+			ServerName: xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(params["serverName"]),
+				xutil.LookupStringFromAny(request["serverName"]),
 			),
 			Mode:          mode,
-			Message:       firstNonEmptyString(lookupStringFromAny(request["message"]), lookupStringFromAny(params["message"])),
+			Message:       xutil.FirstNonEmpty(xutil.LookupStringFromAny(request["message"]), xutil.LookupStringFromAny(params["message"])),
 			URL:           url,
-			ElicitationID: firstNonEmptyString(lookupStringFromAny(request["elicitationId"]), lookupStringFromAny(params["elicitationId"])),
-			RequestedSchema: cloneMap(lookupMapFromAny(firstNonNil(
+			ElicitationID: xutil.FirstNonEmpty(xutil.LookupStringFromAny(request["elicitationId"]), xutil.LookupStringFromAny(params["elicitationId"])),
+			RequestedSchema: xutil.CloneMap(lookupMapFromAny(firstNonNil(
 				request["requestedSchema"],
 				params["requestedSchema"],
 			))),
-			Meta: cloneMap(lookupMapFromAny(firstNonNil(
+			Meta: xutil.CloneMap(lookupMapFromAny(firstNonNil(
 				request["_meta"],
 				params["_meta"],
 			))),
@@ -515,7 +516,7 @@ func extractRequestMetadata(method string, message map[string]any, prompt *agent
 			metadata["reason"] = prompt.Permissions.Reason
 		}
 		if len(prompt.Permissions.Permissions) != 0 {
-			metadata["permissions"] = cloneJSONValue(prompt.Permissions.Permissions)
+			metadata["permissions"] = xutil.CloneJSONValue(prompt.Permissions.Permissions)
 		}
 	}
 	if prompt.MCPElicitation != nil {
@@ -535,10 +536,10 @@ func extractRequestMetadata(method string, message map[string]any, prompt *agent
 			metadata["elicitationId"] = prompt.MCPElicitation.ElicitationID
 		}
 		if len(prompt.MCPElicitation.RequestedSchema) != 0 {
-			metadata["requestedSchema"] = cloneMap(prompt.MCPElicitation.RequestedSchema)
+			metadata["requestedSchema"] = xutil.CloneMap(prompt.MCPElicitation.RequestedSchema)
 		}
 		if len(prompt.MCPElicitation.Meta) != 0 {
-			metadata["meta"] = cloneMap(prompt.MCPElicitation.Meta)
+			metadata["meta"] = xutil.CloneMap(prompt.MCPElicitation.Meta)
 		}
 	}
 	if prompt.ToolCallback != nil {
@@ -549,32 +550,32 @@ func extractRequestMetadata(method string, message map[string]any, prompt *agent
 			metadata["tool"] = prompt.ToolCallback.ToolName
 		}
 		if prompt.ToolCallback.Arguments != nil {
-			metadata["arguments"] = cloneJSONValue(prompt.ToolCallback.Arguments)
+			metadata["arguments"] = xutil.CloneJSONValue(prompt.ToolCallback.Arguments)
 		}
 		if len(prompt.ToolCallback.RawPayload) != 0 {
-			metadata["toolCallbackPayload"] = cloneMap(prompt.ToolCallback.RawPayload)
+			metadata["toolCallbackPayload"] = xutil.CloneMap(prompt.ToolCallback.RawPayload)
 		}
 	}
 	params := lookupMap(message, "params")
-	if value := strings.TrimSpace(lookupStringFromAny(params["cwd"])); value != "" {
+	if value := strings.TrimSpace(xutil.LookupStringFromAny(params["cwd"])); value != "" {
 		metadata["cwd"] = value
 	}
-	if value := strings.TrimSpace(firstNonEmptyString(lookupStringFromAny(params["grantRoot"]), lookupString(params, "request", "grantRoot"))); value != "" {
+	if value := strings.TrimSpace(xutil.FirstNonEmpty(xutil.LookupStringFromAny(params["grantRoot"]), lookupString(params, "request", "grantRoot"))); value != "" {
 		metadata["grantRoot"] = value
 	}
 	if actions := extractRequestMapList(params["commandActions"]); len(actions) != 0 {
-		metadata["commandActions"] = cloneJSONValue(actions)
+		metadata["commandActions"] = xutil.CloneJSONValue(actions)
 	}
-	if network := cloneMap(lookupMap(params, "networkApprovalContext")); len(network) != 0 {
+	if network := xutil.CloneMap(lookupMap(params, "networkApprovalContext")); len(network) != 0 {
 		metadata["networkApprovalContext"] = network
 	}
-	if amendment := cloneMap(lookupMap(params, "proposedExecpolicyAmendment")); len(amendment) != 0 {
+	if amendment := xutil.CloneMap(lookupMap(params, "proposedExecpolicyAmendment")); len(amendment) != 0 {
 		metadata["proposedExecpolicyAmendment"] = amendment
 	}
 	if permissions := extractRequestMapList(params["additionalPermissions"]); len(permissions) != 0 {
-		metadata["additionalPermissions"] = cloneJSONValue(permissions)
+		metadata["additionalPermissions"] = xutil.CloneJSONValue(permissions)
 	}
-	if decisions := cloneJSONValue(firstNonNil(params["availableDecisions"], lookupAny(message, "params", "request", "availableDecisions"))); decisions != nil {
+	if decisions := xutil.CloneJSONValue(firstNonNil(params["availableDecisions"], lookupAny(message, "params", "request", "availableDecisions"))); decisions != nil {
 		metadata["availableDecisions"] = decisions
 	}
 	if requestMethod := strings.TrimSpace(method); requestMethod != "" {
@@ -594,30 +595,30 @@ func extractResolvedRequestMetadata(requestType string, request, params map[stri
 		request["result"],
 		request["response"],
 	))
-	decision := firstNonEmptyString(
-		lookupStringFromAny(result["decision"]),
+	decision := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(result["decision"]),
 		lookupString(params, "result", "decision"),
 		lookupString(params, "response", "decision"),
-		lookupStringFromAny(params["decision"]),
+		xutil.LookupStringFromAny(params["decision"]),
 		lookupString(request, "result", "decision"),
 		lookupString(request, "response", "decision"),
-		lookupStringFromAny(request["decision"]),
+		xutil.LookupStringFromAny(request["decision"]),
 	)
 	if decision != "" {
 		metadata["decision"] = decision
 	}
-	action := firstNonEmptyString(
-		lookupStringFromAny(result["action"]),
-		lookupStringFromAny(params["action"]),
-		lookupStringFromAny(request["action"]),
+	action := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(result["action"]),
+		xutil.LookupStringFromAny(params["action"]),
+		xutil.LookupStringFromAny(request["action"]),
 	)
 	if action != "" {
 		metadata["action"] = action
 	}
-	scope := firstNonEmptyString(
-		lookupStringFromAny(result["scope"]),
-		lookupStringFromAny(params["scope"]),
-		lookupStringFromAny(request["scope"]),
+	scope := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(result["scope"]),
+		xutil.LookupStringFromAny(params["scope"]),
+		xutil.LookupStringFromAny(request["scope"]),
 	)
 	if scope != "" {
 		metadata["scope"] = scope
@@ -625,7 +626,7 @@ func extractResolvedRequestMetadata(requestType string, request, params map[stri
 	if permissions := extractRequestMapList(firstNonNil(result["permissions"], params["permissions"], request["permissions"])); len(permissions) != 0 {
 		metadata["permissions"] = permissions
 	}
-	if content := cloneJSONValue(result["content"]); content != nil {
+	if content := xutil.CloneJSONValue(result["content"]); content != nil {
 		metadata["content"] = content
 	}
 	if meta := lookupMap(result, "_meta"); len(meta) != 0 {
@@ -635,11 +636,11 @@ func extractResolvedRequestMetadata(requestType string, request, params map[stri
 }
 
 func extractRequestCommand(request, params map[string]any) string {
-	command := firstNonEmptyString(
-		lookupStringFromAny(request["command"]),
+	command := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["command"]),
 		lookupString(request, "command", "command"),
 		lookupString(request, "command", "text"),
-		lookupStringFromAny(params["command"]),
+		xutil.LookupStringFromAny(params["command"]),
 		lookupString(params, "command", "command"),
 		lookupString(params, "command", "text"),
 	)
@@ -647,15 +648,15 @@ func extractRequestCommand(request, params map[string]any) string {
 }
 
 func extractRequestBody(request, params map[string]any) string {
-	body := firstNonEmptyString(
-		lookupStringFromAny(request["message"]),
-		lookupStringFromAny(request["description"]),
-		lookupStringFromAny(request["body"]),
-		lookupStringFromAny(request["prompt"]),
-		lookupStringFromAny(request["reason"]),
-		lookupStringFromAny(params["message"]),
-		lookupStringFromAny(params["description"]),
-		lookupStringFromAny(params["body"]),
+	body := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["message"]),
+		xutil.LookupStringFromAny(request["description"]),
+		xutil.LookupStringFromAny(request["body"]),
+		xutil.LookupStringFromAny(request["prompt"]),
+		xutil.LookupStringFromAny(request["reason"]),
+		xutil.LookupStringFromAny(params["message"]),
+		xutil.LookupStringFromAny(params["description"]),
+		xutil.LookupStringFromAny(params["body"]),
 	)
 	command := extractRequestCommand(request, params)
 	if command != "" {
@@ -668,29 +669,29 @@ func extractRequestBody(request, params map[string]any) string {
 }
 
 func extractRequestAcceptLabel(request, params map[string]any) string {
-	return firstNonEmptyString(
-		lookupStringFromAny(request["acceptLabel"]),
-		lookupStringFromAny(request["approveLabel"]),
-		lookupStringFromAny(request["allowLabel"]),
-		lookupStringFromAny(request["confirmLabel"]),
-		lookupStringFromAny(params["acceptLabel"]),
+	return xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["acceptLabel"]),
+		xutil.LookupStringFromAny(request["approveLabel"]),
+		xutil.LookupStringFromAny(request["allowLabel"]),
+		xutil.LookupStringFromAny(request["confirmLabel"]),
+		xutil.LookupStringFromAny(params["acceptLabel"]),
 	)
 }
 
 func extractRequestDeclineLabel(request, params map[string]any) string {
-	return firstNonEmptyString(
-		lookupStringFromAny(request["declineLabel"]),
-		lookupStringFromAny(request["denyLabel"]),
-		lookupStringFromAny(request["rejectLabel"]),
-		lookupStringFromAny(params["declineLabel"]),
+	return xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["declineLabel"]),
+		xutil.LookupStringFromAny(request["denyLabel"]),
+		xutil.LookupStringFromAny(request["rejectLabel"]),
+		xutil.LookupStringFromAny(params["declineLabel"]),
 	)
 }
 
 func extractRequestItemID(request, params map[string]any) string {
-	return firstNonEmptyString(
-		lookupStringFromAny(request["itemId"]),
+	return xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(request["itemId"]),
 		lookupString(request, "item", "id"),
-		lookupStringFromAny(params["itemId"]),
+		xutil.LookupStringFromAny(params["itemId"]),
 		lookupString(params, "item", "id"),
 	)
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) ObserveClient(raw []byte) (Result, error) {
@@ -59,7 +60,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			return Result{}, nil
 		}
 		t.latestThreadStartParams = normalizeThreadStartParams(params)
-		return Result{Events: configObservedEvents("", lookupStringFromAny(params["cwd"]), params, true)}, nil
+		return Result{Events: configObservedEvents("", xutil.LookupStringFromAny(params["cwd"]), params, true)}, nil
 	case "turn/start":
 		threadID, _ := params["threadId"].(string)
 		cwd, _ := params["cwd"].(string)
@@ -90,7 +91,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			t.pendingLocalNewThreadTurn = true
 		}
 		if !isNull(template["approvalPolicy"]) || !isNull(template["sandboxPolicy"]) {
-			t.newThreadTurnTemplate = cloneMap(template)
+			t.newThreadTurnTemplate = xutil.CloneMap(template)
 		}
 		t.debugf("observe client turn/start: thread=%s cwd=%s newThread=%t", threadID, cwd, threadID == "")
 		events := configObservedEvents(threadID, cwd, params, threadID == "")
@@ -133,8 +134,8 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 	case "thread/name/set":
 		if requestID, ok := message["id"]; ok {
 			t.pendingThreadNameSet[fmt.Sprint(requestID)] = pendingThreadNameSet{
-				ThreadID: lookupStringFromAny(params["threadId"]),
-				Name:     lookupStringFromAny(params["name"]),
+				ThreadID: xutil.LookupStringFromAny(params["threadId"]),
+				Name:     xutil.LookupStringFromAny(params["name"]),
 			}
 		}
 		return Result{}, nil
