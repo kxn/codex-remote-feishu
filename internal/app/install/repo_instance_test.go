@@ -25,7 +25,7 @@ func TestApplyStateMetadataInfersCustomInstancePaths(t *testing.T) {
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote-repo-1234", "codex-remote", "config.json"),
 		StatePath:       filepath.Join(baseDir, ".local", "share", "codex-remote-repo-1234", "codex-remote", "install-state.json"),
 		ServiceManager:  ServiceManagerSystemdUser,
-		InstalledBinary: filepath.Join(baseDir, ".local", "share", "codex-remote-repo-1234", "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(baseDir, ".local", "share", "codex-remote-repo-1234", "bin", "codex-remote"),
 	}
 
 	ApplyStateMetadata(&state, StateMetadataOptions{

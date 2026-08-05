@@ -87,8 +87,7 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 		InstallSource:      InstallSourceRelease,
 		CurrentTrack:       ReleaseTrackBeta,
 		CurrentVersion:     "v1.4.0-beta.1",
-		InstalledBinary:    existingBinary,
-		CurrentBinaryPath:  existingBinary,
+		CurrentBinaryPath:    existingBinary,
 		VersionsRoot:       filepath.Join(baseDir, "releases-cache"),
 		CurrentSlot:        "v1.4.0-beta.1",
 		VSCodeSettingsPath: filepath.Join(baseDir, "vscode", "settings.json"),
@@ -256,7 +255,6 @@ func TestRunMainReusesExistingInstalledBinaryDirWhenInstallBinDirOmitted(t *test
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
 		StatePath:         statePath,
-		InstalledBinary:   existingBinaryPath,
 		CurrentBinaryPath: existingBinaryPath,
 	}); err != nil {
 		t.Fatalf("WriteState: %v", err)
@@ -278,8 +276,8 @@ func TestRunMainReusesExistingInstalledBinaryDirWhenInstallBinDirOmitted(t *test
 	if err != nil {
 		t.Fatalf("LoadState: %v", err)
 	}
-	if updated.InstalledBinary != existingBinaryPath {
-		t.Fatalf("InstalledBinary = %q, want %q", updated.InstalledBinary, existingBinaryPath)
+	if updated.CurrentBinaryPath != existingBinaryPath {
+		t.Fatalf("CurrentBinaryPath = %q, want %q", updated.CurrentBinaryPath, existingBinaryPath)
 	}
 	raw, err := os.ReadFile(existingBinaryPath)
 	if err != nil {

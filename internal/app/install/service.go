@@ -56,9 +56,6 @@ type InstallState struct {
 	LastCheckAt            *time.Time               `json:"lastCheckAt,omitempty"`
 	LastKnownLatestVersion string                   `json:"lastKnownLatestVersion,omitempty"`
 	PendingUpgrade         *PendingUpgrade          `json:"pendingUpgrade,omitempty"`
-	InstalledBinary        string                   `json:"installedBinary,omitempty"`
-	InstalledWrapperBinary string                   `json:"installedWrapperBinary,omitempty"`
-	InstalledRelaydBinary  string                   `json:"installedRelaydBinary,omitempty"`
 	Integrations           []WrapperIntegrationMode `json:"integrations,omitempty"`
 	VSCodeSettingsPath     string                   `json:"vscodeSettingsPath,omitempty"`
 	BundleEntrypoint       string                   `json:"bundleEntrypoint,omitempty"`
@@ -154,17 +151,15 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	}
 
 	state := InstallState{
-		InstanceID:             instanceID,
-		BaseDir:                opts.BaseDir,
-		ConfigPath:             configPath,
-		StatePath:              statePath,
-		ServiceManager:         opts.ServiceManager,
-		InstalledBinary:        installedBinary,
-		InstalledWrapperBinary: installedBinary,
-		InstalledRelaydBinary:  installedBinary,
-		Integrations:           integrations,
-		VSCodeSettingsPath:     opts.VSCodeSettingsPath,
-		BundleEntrypoint:       opts.BundleEntrypoint,
+		InstanceID:         instanceID,
+		BaseDir:            opts.BaseDir,
+		ConfigPath:         configPath,
+		StatePath:          statePath,
+		ServiceManager:     opts.ServiceManager,
+		CurrentBinaryPath:  installedBinary,
+		Integrations:       integrations,
+		VSCodeSettingsPath: opts.VSCodeSettingsPath,
+		BundleEntrypoint:   opts.BundleEntrypoint,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		InstanceID:      instanceID,

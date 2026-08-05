@@ -61,7 +61,7 @@ func TestRenderTaskSchedulerLogonXMLContainsLogonTriggerAndDaemonArgs(t *testing
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePathForInstance(baseDir, "debug"),
 		ConfigPath:      defaultConfigPathForInstance(baseDir, "debug"),
-		InstalledBinary: binaryPath,
+		CurrentBinaryPath: binaryPath,
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -103,7 +103,7 @@ func TestInstallTaskSchedulerLogonRegistersXMLTask(t *testing.T) {
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePathForInstance(baseDir, "stable"),
 		ConfigPath:      defaultConfigPathForInstance(baseDir, "stable"),
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -162,7 +162,7 @@ func TestTaskSchedulerLifecycleCommands(t *testing.T) {
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePathForInstance(baseDir, "debug"),
 		ConfigPath:      defaultConfigPathForInstance(baseDir, "debug"),
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -223,7 +223,7 @@ func TestRunServiceInstallUserWindowsWritesTaskState(t *testing.T) {
 		BaseDir:         baseDir,
 		ConfigPath:      defaultConfigPath(baseDir),
 		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{StatePath: statePath})
 	if err := WriteState(statePath, state); err != nil {
@@ -263,7 +263,7 @@ func TestRunServiceWindowsLifecycleCommandsUseTaskScheduler(t *testing.T) {
 		BaseDir:         baseDir,
 		ConfigPath:      defaultConfigPath(baseDir),
 		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -326,7 +326,7 @@ func TestRunServiceUninstallUserWindowsDeletesTaskAndDetachesState(t *testing.T)
 		BaseDir:         baseDir,
 		ConfigPath:      defaultConfigPath(baseDir),
 		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -378,7 +378,7 @@ func TestTaskSchedulerDetectsEnabledFromXML(t *testing.T) {
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePath(baseDir),
 		ConfigPath:      defaultConfigPath(baseDir),
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -414,7 +414,7 @@ func TestTaskSchedulerDetectsDisabledFromSettingsXMLWhenTriggerStaysEnabled(t *t
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePath(baseDir),
 		ConfigPath:      defaultConfigPath(baseDir),
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -450,7 +450,7 @@ func TestTaskSchedulerDetectsEnabledFromXMLWhenEnabledIsMissing(t *testing.T) {
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePath(baseDir),
 		ConfigPath:      defaultConfigPath(baseDir),
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -486,7 +486,7 @@ func TestTaskSchedulerDetectsEnabledFromPSRegisteredXMLWithUTF16Declaration(t *t
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePath(baseDir),
 		ConfigPath:      defaultConfigPath(baseDir),
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -587,7 +587,7 @@ func TestTaskSchedulerMissingLocalizedOutputIsDisabled(t *testing.T) {
 		BaseDir:         baseDir,
 		StatePath:       defaultInstallStatePath(baseDir),
 		ConfigPath:      defaultConfigPath(baseDir),
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
 		ServiceManager:  ServiceManagerTaskSchedulerLogon,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{

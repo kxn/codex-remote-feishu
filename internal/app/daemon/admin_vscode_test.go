@@ -289,13 +289,11 @@ func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
 		}, nil
 	}
 	if err := install.WriteState(installStatePath, install.InstallState{
-		StatePath:              installStatePath,
-		VSCodeSettingsPath:     settingsPath,
-		BundleEntrypoint:       linuxEntrypoint,
-		Integrations:           []install.WrapperIntegrationMode{install.IntegrationManagedShim},
-		InstalledBinary:        binaryPath,
-		CurrentBinaryPath:      binaryPath,
-		InstalledWrapperBinary: binaryPath,
+		StatePath:          installStatePath,
+		VSCodeSettingsPath: settingsPath,
+		BundleEntrypoint:   linuxEntrypoint,
+		Integrations:       []install.WrapperIntegrationMode{install.IntegrationManagedShim},
+		CurrentBinaryPath:  binaryPath,
 	}); err != nil {
 		t.Fatalf("WriteState: %v", err)
 	}

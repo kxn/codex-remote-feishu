@@ -70,7 +70,7 @@ func serviceCurrentUser() (string, error) {
 // PowerShell single-quote quoting so paths with spaces, $, or backticks are
 // passed through literally.
 func buildTaskSchedulerRegisterScript(state InstallState) (string, error) {
-	binaryPath := normalizeServicePathValue(firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(state.CurrentBinaryPath)))
+	binaryPath := normalizeServicePathValue(strings.TrimSpace(state.CurrentBinaryPath))
 	if binaryPath == "" {
 		return "", fmt.Errorf("installed binary path is missing")
 	}
@@ -176,7 +176,7 @@ func renderTaskSchedulerLogonXML(state InstallState) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	binaryPath := normalizeServicePathValue(firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(state.CurrentBinaryPath)))
+	binaryPath := normalizeServicePathValue(strings.TrimSpace(state.CurrentBinaryPath))
 	if binaryPath == "" {
 		return "", fmt.Errorf("installed binary path is missing")
 	}

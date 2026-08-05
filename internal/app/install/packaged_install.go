@@ -243,14 +243,13 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 		}
 	}
 
-	liveBinaryPath := firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(state.InstalledBinary))
+	liveBinaryPath := strings.TrimSpace(state.CurrentBinaryPath)
 	if liveBinaryPath == "" {
 		err := fmt.Errorf("current binary path is missing from install state")
 		result.Error = err.Error()
 		return result, err
 	}
 	state.CurrentBinaryPath = liveBinaryPath
-	state.InstalledBinary = liveBinaryPath
 	state.VersionsRoot = firstNonEmpty(strings.TrimSpace(opts.VersionsRoot), strings.TrimSpace(state.VersionsRoot), defaultVersionsRootForStatePath(state.StatePath))
 
 	targetSlot, err := importLocalBinaryForUpgrade(state, opts.SourceBinary, opts.CurrentSlot)
@@ -283,7 +282,6 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 	} else {
 		state.CurrentTrack = inferReleaseTrack(state.CurrentVersion, string(state.InstallSource))
 	}
-	state.InstalledBinary = liveBinaryPath
 	state.CurrentBinaryPath = liveBinaryPath
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		InstanceID:      state.InstanceID,
@@ -426,7 +424,7 @@ func packagedInstallResultForState(mode packagedInstallMode, state InstallState)
 		Mode:            string(mode),
 		StatePath:       state.StatePath,
 		ConfigPath:      state.ConfigPath,
-		InstalledBinary: firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(state.CurrentBinaryPath)),
+		InstalledBinary: strings.TrimSpace(state.CurrentBinaryPath),
 		ServiceManager:  string(effectiveServiceManager(state)),
 		StartupMode:     string(packagedInstallStartupModeForManager(effectiveServiceManager(state))),
 		CurrentVersion:  state.CurrentVersion,

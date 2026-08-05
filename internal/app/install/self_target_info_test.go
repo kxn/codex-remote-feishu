@@ -43,7 +43,6 @@ func TestResolveCurrentDaemonTargetInfoDefaultInstance(t *testing.T) {
 		StatePath:         statePath,
 		CurrentVersion:    "vtest",
 		CurrentBinaryPath: filepath.Join(baseDir, "bin", "codex-remote"),
-		InstalledBinary:   filepath.Join(baseDir, "bin", "codex-remote"),
 		VersionsRoot:      filepath.Join(baseDir, "versions"),
 		ServiceManager:    ServiceManagerSystemdUser,
 	}
@@ -107,7 +106,7 @@ func TestResolveCurrentDaemonTargetInfoNamedInstance(t *testing.T) {
 		VersionsRoot:    filepath.Join(baseDir, "versions-beta"),
 		ServiceManager:  ServiceManagerSystemdUser,
 		CurrentVersion:  "beta-v1",
-		InstalledBinary: filepath.Join(baseDir, "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(baseDir, "bin", "codex-remote"),
 	}
 	if err := WriteState(statePath, state); err != nil {
 		t.Fatalf("WriteState: %v", err)

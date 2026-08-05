@@ -53,11 +53,7 @@ func resolveLaunchPlan(entrypointPath string, baseEnv []string) (launchPlan, err
 	if err == nil && managedshim.SidecarValid(sidecar) {
 		state, loadErr := loadInstallState(sidecar.InstallStatePath)
 		if loadErr == nil {
-			targetBinary := firstNonEmpty(
-				state.CurrentBinaryPath,
-				state.InstalledBinary,
-				state.InstalledWrapperBinary,
-			)
+			targetBinary := strings.TrimSpace(state.CurrentBinaryPath)
 			configPath := firstNonEmpty(sidecar.ConfigPath, state.ConfigPath)
 			if usableConfigPath(configPath) && usableLaunchTarget(targetBinary, entrypointPath, realBinaryPath) {
 				env := withManagedShimEnv(baseEnv, configPath, realBinaryPath)
@@ -89,9 +85,15 @@ func loadInstallState(path string) (installState, error) {
 		return installState{}, err
 	}
 	state.ConfigPath = cleanNonEmpty(state.ConfigPath)
-	state.CurrentBinaryPath = cleanNonEmpty(state.CurrentBinaryPath)
 	state.InstalledBinary = cleanNonEmpty(state.InstalledBinary)
 	state.InstalledWrapperBinary = cleanNonEmpty(state.InstalledWrapperBinary)
+	// Legacy states recorded the installed binary under installedBinary /
+	// installedWrapperBinary; promote to the canonical current-binary path.
+	state.CurrentBinaryPath = firstNonEmpty(
+		cleanNonEmpty(state.CurrentBinaryPath),
+		state.InstalledBinary,
+		state.InstalledWrapperBinary,
+	)
 	return state, nil
 }
 

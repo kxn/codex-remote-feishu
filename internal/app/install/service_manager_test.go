@@ -51,7 +51,7 @@ func TestApplyStateMetadataInfersLinuxServicePaths(t *testing.T) {
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
 		StatePath:       filepath.Join(baseDir, ".local", "share", "codex-remote", "install-state.json"),
 		ServiceManager:  ServiceManagerSystemdUser,
-		InstalledBinary: filepath.Join(baseDir, ".local", "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(baseDir, ".local", "bin", "codex-remote"),
 	}
 
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -74,7 +74,7 @@ func TestApplyStateMetadataInfersDebugInstancePaths(t *testing.T) {
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote-debug", "codex-remote", "config.json"),
 		StatePath:       filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "install-state.json"),
 		ServiceManager:  ServiceManagerSystemdUser,
-		InstalledBinary: filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "bin", "codex-remote"),
 	}
 
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -125,7 +125,7 @@ func TestRunServiceStatusReportsDetachedManagerWithoutSystemd(t *testing.T) {
 		BaseDir:         baseDir,
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
 		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{StatePath: statePath})
 	if err := WriteState(statePath, state); err != nil {

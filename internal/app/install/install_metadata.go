@@ -135,7 +135,6 @@ func ApplyStateMetadata(state *InstallState, opts StateMetadataOptions) {
 	if strings.TrimSpace(state.CurrentBinaryPath) == "" {
 		state.CurrentBinaryPath = firstNonEmpty(
 			strings.TrimSpace(opts.InstalledBinary),
-			strings.TrimSpace(state.InstalledBinary),
 			strings.TrimSpace(opts.SourceBinary),
 		)
 	}

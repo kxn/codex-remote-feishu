@@ -25,7 +25,6 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 		CurrentTrack:      ReleaseTrackAlpha,
 		CurrentVersion:    "dev-old",
 		CurrentBinaryPath: currentBinary,
-		InstalledBinary:   currentBinary,
 		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote", "releases"),
 	}
 	if err := WriteState(statePath, stateValue); err != nil {
@@ -120,7 +119,6 @@ func TestRunLocalBinaryUpgradeWithStatePathRejectsBusyPendingUpgrade(t *testing.
 		StatePath:         statePath,
 		CurrentVersion:    "dev-old",
 		CurrentBinaryPath: currentBinary,
-		InstalledBinary:   currentBinary,
 		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote", "releases"),
 		PendingUpgrade: &PendingUpgrade{
 			Phase:         PendingUpgradePhaseObserving,
@@ -154,7 +152,6 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 		CurrentTrack:      ReleaseTrackAlpha,
 		CurrentVersion:    "dev-old",
 		CurrentBinaryPath: currentBinary,
-		InstalledBinary:   currentBinary,
 		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote", "releases"),
 	}
 	if err := WriteState(statePath, stateValue); err != nil {
@@ -218,7 +215,6 @@ func TestRunLocalUpgradeDebugInstanceUsesDebugStatePath(t *testing.T) {
 		CurrentTrack:      ReleaseTrackAlpha,
 		CurrentVersion:    "dev-old",
 		CurrentBinaryPath: currentBinary,
-		InstalledBinary:   currentBinary,
 		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "releases"),
 	}
 	if err := WriteState(statePath, stateValue); err != nil {
@@ -275,7 +271,6 @@ func TestRunLocalUpgradeUsesWorkspaceBindingWhenFlagsOmitted(t *testing.T) {
 		CurrentTrack:      ReleaseTrackAlpha,
 		CurrentVersion:    "dev-old",
 		CurrentBinaryPath: currentBinary,
-		InstalledBinary:   currentBinary,
 		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote-master", "codex-remote", "releases"),
 	}
 	if err := WriteState(statePath, stateValue); err != nil {

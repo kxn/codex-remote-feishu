@@ -18,12 +18,18 @@ func LoadState(path string) (InstallState, error) {
 		InstallState
 		WrapperConfigPath  string `json:"wrapperConfigPath"`
 		ServicesConfigPath string `json:"servicesConfigPath"`
+		InstalledBinary    string `json:"installedBinary"`
 	}
 	if err := json.Unmarshal(raw, &disk); err != nil {
 		return InstallState{}, err
 	}
 	state := disk.InstallState
 	state.StatePath = firstNonEmpty(strings.TrimSpace(state.StatePath), strings.TrimSpace(path))
+	// Legacy states recorded the installed binary under "installedBinary"
+	// (and once under three per-role fields). Promote it to the canonical
+	// CurrentBinaryPath so readers that only know the canonical field keep
+	// working with old files.
+	state.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(disk.InstalledBinary))
 	state.ConfigPath = normalizeInstallStateConfigPath(
 		state.ConfigPath,
 		disk.WrapperConfigPath,

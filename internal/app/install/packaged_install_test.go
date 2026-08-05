@@ -115,7 +115,6 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 		CurrentTrack:      ReleaseTrackProduction,
 		CurrentVersion:    "v1.0.0",
 		CurrentBinaryPath: liveBinary,
-		InstalledBinary:   liveBinary,
 		VersionsRoot:      versionsRoot,
 		CurrentSlot:       "v1.0.0",
 		PendingUpgrade: &PendingUpgrade{
@@ -229,7 +228,6 @@ func TestRunPackagedInstallWritesResultFileOnRepairFailure(t *testing.T) {
 		CurrentTrack:      ReleaseTrackProduction,
 		CurrentVersion:    "v1.0.0",
 		CurrentBinaryPath: liveBinary,
-		InstalledBinary:   liveBinary,
 		VersionsRoot:      filepath.Join(baseDir, "releases"),
 		CurrentSlot:       "v1.0.0",
 	}); err != nil {

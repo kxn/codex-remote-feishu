@@ -149,7 +149,7 @@ func ResolveCurrentDaemonTargetInfo() (CurrentDaemonTargetInfo, error) {
 	}
 	if stateExists {
 		info.CurrentVersion = strings.TrimSpace(loadedState.CurrentVersion)
-		info.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(loadedState.CurrentBinaryPath), strings.TrimSpace(loadedState.InstalledBinary))
+		info.CurrentBinaryPath = strings.TrimSpace(loadedState.CurrentBinaryPath)
 		if loadedState.PendingUpgrade != nil {
 			info.PendingUpgradePhase = strings.TrimSpace(loadedState.PendingUpgrade.Phase)
 		}

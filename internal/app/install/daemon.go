@@ -27,13 +27,25 @@ func EnsureDaemonReadyFromStatePath(ctx context.Context, statePath, version stri
 	return ensureDaemonReady(ctx, state, version)
 }
 
+func currentExecutablePathOrEmpty() string {
+	path, err := executablePath()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(path)
+}
+
 func ensureDaemonReady(ctx context.Context, state InstallState, version string) (DaemonReadyStatus, error) {
 	paths := RuntimePathsForState(state)
 	loaded, err := config.LoadAppConfigAtPath(state.ConfigPath)
 	if err != nil {
 		return DaemonReadyStatus{}, err
 	}
-	identity, err := relayruntime.BinaryIdentityForPath(state.InstalledBinary, version)
+	// Prefer probing the running process executable; fall back to the
+	// canonical current-binary path recorded in state (LoadState promotes
+	// legacy installedBinary values into CurrentBinaryPath).
+	binaryPath := firstNonEmpty(currentExecutablePathOrEmpty(), strings.TrimSpace(state.CurrentBinaryPath))
+	identity, err := relayruntime.BinaryIdentityForPath(binaryPath, version)
 	if err != nil {
 		return DaemonReadyStatus{}, err
 	}
@@ -43,7 +55,7 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 		Identity:             identity,
 		ConfigPath:           state.ConfigPath,
 		Paths:                paths,
-		DaemonBinaryPath:     state.InstalledBinary,
+		DaemonBinaryPath:     binaryPath,
 		DaemonUseSystemProxy: loaded.Config.Feishu.UseSystemProxy,
 		CapturedProxyEnv:     config.CaptureProxyEnv(),
 	})

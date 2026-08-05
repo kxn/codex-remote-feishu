@@ -431,9 +431,6 @@ func (a *App) loadUpgradeStateLocked(create bool) (install.InstallState, bool, e
 	})
 	stateValue.ConfigPath = firstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), configPath)
 	stateValue.StatePath = path
-	stateValue.InstalledBinary = firstNonEmpty(strings.TrimSpace(stateValue.InstalledBinary), currentBinary)
-	stateValue.InstalledWrapperBinary = firstNonEmpty(strings.TrimSpace(stateValue.InstalledWrapperBinary), currentBinary)
-	stateValue.InstalledRelaydBinary = firstNonEmpty(strings.TrimSpace(stateValue.InstalledRelaydBinary), currentBinary)
 	stateValue.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(stateValue.CurrentBinaryPath), currentBinary)
 	return stateValue, true, nil
 }

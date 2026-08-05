@@ -132,7 +132,7 @@ func ResolveRepoInstallTargetInfo(opts RepoInstallTargetOptions) (RepoInstallTar
 			state.ConfigPath = loadedState.ConfigPath
 		}
 		info.CurrentVersion = strings.TrimSpace(loadedState.CurrentVersion)
-		info.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(loadedState.CurrentBinaryPath), strings.TrimSpace(loadedState.InstalledBinary))
+		info.CurrentBinaryPath = strings.TrimSpace(loadedState.CurrentBinaryPath)
 		if loadedState.PendingUpgrade != nil {
 			info.PendingUpgradePhase = string(loadedState.PendingUpgrade.Phase)
 		}
@@ -155,7 +155,7 @@ func ResolveRepoInstallTargetInfoFromStatePath(statePath string) (RepoInstallTar
 		return RepoInstallTargetInfo{}, err
 	}
 	installBinDir := ""
-	if installedBinary := strings.TrimSpace(state.InstalledBinary); installedBinary != "" {
+	if installedBinary := strings.TrimSpace(state.CurrentBinaryPath); installedBinary != "" {
 		installBinDir = filepath.Dir(installedBinary)
 	}
 	paths := RuntimePathsForState(state)
@@ -175,7 +175,7 @@ func ResolveRepoInstallTargetInfoFromStatePath(statePath string) (RepoInstallTar
 		PIDPath:                  paths.PIDFile,
 		LocalUpgradeArtifactPath: LocalUpgradeArtifactPath(state),
 		CurrentVersion:           strings.TrimSpace(state.CurrentVersion),
-		CurrentBinaryPath:        firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(state.InstalledBinary)),
+		CurrentBinaryPath:        strings.TrimSpace(state.CurrentBinaryPath),
 	}
 	if state.PendingUpgrade != nil {
 		info.PendingUpgradePhase = strings.TrimSpace(state.PendingUpgrade.Phase)

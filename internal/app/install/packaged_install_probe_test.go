@@ -69,7 +69,6 @@ func TestRunPackagedInstallProbeRepairReturnsLockedDirAndSameVersion(t *testing.
 		CurrentTrack:      ReleaseTrackBeta,
 		CurrentVersion:    "v2.0.0-beta.1",
 		CurrentBinaryPath: liveBinary,
-		InstalledBinary:   liveBinary,
 		VersionsRoot:      filepath.Join(baseDir, "releases"),
 		CurrentSlot:       "v2.0.0-beta.1",
 	}); err != nil {
@@ -163,7 +162,6 @@ func TestRunPackagedInstallProbeWritesResultFileForRepair(t *testing.T) {
 		CurrentTrack:      ReleaseTrackBeta,
 		CurrentVersion:    "v2.0.0-beta.1",
 		CurrentBinaryPath: liveBinary,
-		InstalledBinary:   liveBinary,
 		VersionsRoot:      filepath.Join(baseDir, "releases"),
 		CurrentSlot:       "v2.0.0-beta.1",
 	}); err != nil {

@@ -102,7 +102,7 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 		return "", err
 	}
 	baseDir := normalizeServicePathValue(state.BaseDir)
-	binaryPath := normalizeServicePathValue(firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(state.CurrentBinaryPath)))
+	binaryPath := normalizeServicePathValue(strings.TrimSpace(state.CurrentBinaryPath))
 	if binaryPath == "" {
 		return "", fmt.Errorf("installed binary path is missing")
 	}

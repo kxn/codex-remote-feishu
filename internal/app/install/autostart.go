@@ -144,10 +144,7 @@ func ApplyAutostart(opts AutostartApplyOptions) (AutostartStatus, error) {
 	})
 	state.BaseDir = firstNonEmpty(strings.TrimSpace(state.BaseDir), baseDir)
 	state.ServiceManager = targetManager
-	state.InstalledBinary = firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(opts.InstalledBinary))
-	state.InstalledWrapperBinary = firstNonEmpty(strings.TrimSpace(state.InstalledWrapperBinary), strings.TrimSpace(opts.InstalledBinary))
-	state.InstalledRelaydBinary = firstNonEmpty(strings.TrimSpace(state.InstalledRelaydBinary), strings.TrimSpace(opts.InstalledBinary))
-	state.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(opts.InstalledBinary), strings.TrimSpace(state.InstalledBinary))
+	state.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(opts.InstalledBinary))
 	if strings.TrimSpace(state.CurrentBinaryPath) == "" {
 		return AutostartStatus{}, fmt.Errorf("current binary path is missing")
 	}

@@ -47,11 +47,10 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 	ApplyStateMetadata(&stateValue, StateMetadataOptions{
 		InstanceID:      stateValue.InstanceID,
 		StatePath:       stateValue.StatePath,
-		InstalledBinary: firstNonEmpty(strings.TrimSpace(stateValue.InstalledBinary), strings.TrimSpace(stateValue.CurrentBinaryPath)),
+		InstalledBinary: strings.TrimSpace(stateValue.CurrentBinaryPath),
 		CurrentVersion:  stateValue.CurrentVersion,
 		ServiceManager:  stateValue.ServiceManager,
 	})
-	stateValue.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(stateValue.CurrentBinaryPath), strings.TrimSpace(stateValue.InstalledBinary))
 	if strings.TrimSpace(stateValue.CurrentBinaryPath) == "" {
 		return "", fmt.Errorf("current binary path is missing from install state")
 	}

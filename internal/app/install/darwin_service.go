@@ -83,7 +83,7 @@ func renderLaunchdUserPlist(state InstallState) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	binaryPath := normalizeServicePathValue(firstNonEmpty(strings.TrimSpace(state.InstalledBinary), strings.TrimSpace(state.CurrentBinaryPath)))
+	binaryPath := normalizeServicePathValue(strings.TrimSpace(state.CurrentBinaryPath))
 	if binaryPath == "" {
 		return "", fmt.Errorf("installed binary path is missing")
 	}

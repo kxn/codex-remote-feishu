@@ -405,9 +405,6 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 		InstanceID:      state.InstanceID,
 	})
 	state.ConfigPath = loadedConfigPath(a)
-	state.InstalledBinary = currentBinary
-	state.InstalledWrapperBinary = currentBinary
-	state.InstalledRelaydBinary = currentBinary
 	state.CurrentBinaryPath = currentBinary
 	state.StatePath = statePath
 	if err := install.WriteState(statePath, *state); err != nil {
@@ -485,9 +482,6 @@ func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
 		InstanceID:      state.InstanceID,
 	})
 	state.BundleEntrypoint = target
-	state.InstalledBinary = currentBinary
-	state.InstalledWrapperBinary = currentBinary
-	state.InstalledRelaydBinary = currentBinary
 	state.CurrentBinaryPath = currentBinary
 	state.StatePath = statePath
 	if err := install.WriteState(statePath, *state); err != nil {

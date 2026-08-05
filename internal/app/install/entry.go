@@ -148,7 +148,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 		"installed config: %s\nstate: %s\nbinary: %s\nintegrations: %v\n",
 		state.ConfigPath,
 		state.StatePath,
-		state.InstalledBinary,
+		state.CurrentBinaryPath,
 		state.Integrations,
 	)
 	if err != nil {
@@ -218,16 +218,14 @@ func resolveUpgradeHelperBinary(statePath string) (string, error) {
 	}
 	stateValue, err := LoadState(statePath)
 	if err == nil {
-		helperBinary = firstNonEmpty(
-			strings.TrimSpace(stateValue.CurrentBinaryPath),
-			strings.TrimSpace(stateValue.InstalledBinary),
-		)
+		helperBinary = strings.TrimSpace(stateValue.CurrentBinaryPath)
 		if helperBinary != "" {
 			return helperBinary, nil
 		}
 	}
 	return "", execErr
 }
+
 func defaultBinaryPath(goos string) string {
 	name := executableName(goos)
 	path, err := executablePath()
@@ -269,13 +267,8 @@ func resolveTargetInstallBinDir(selection installInstanceSelection, explicitValu
 		return trimmed
 	}
 	if state, err := LoadState(selection.StatePath); err == nil {
-		for _, candidate := range []string{
-			strings.TrimSpace(state.InstalledBinary),
-			strings.TrimSpace(state.CurrentBinaryPath),
-		} {
-			if candidate != "" {
-				return filepath.Dir(candidate)
-			}
+		if candidate := strings.TrimSpace(state.CurrentBinaryPath); candidate != "" {
+			return filepath.Dir(candidate)
 		}
 	}
 	return selection.InstallBinDir

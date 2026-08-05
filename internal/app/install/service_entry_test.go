@@ -19,7 +19,7 @@ func TestRunServiceInstallUserWritesUnitAndState(t *testing.T) {
 		BaseDir:         baseDir,
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
 		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{StatePath: statePath})
 	if err := WriteState(statePath, state); err != nil {
@@ -114,7 +114,7 @@ func TestRunServiceStartRejectsDetachedManager(t *testing.T) {
 		BaseDir:         baseDir,
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
 		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{StatePath: statePath})
 	if err := WriteState(statePath, state); err != nil {
@@ -144,7 +144,7 @@ func TestRenderSystemdUserUnitEscapesPathsWithoutQuotedAssignments(t *testing.T)
 		BaseDir:         filepath.Join(string(filepath.Separator), "tmp", "codex remote"),
 		StatePath:       filepath.Join(string(filepath.Separator), "tmp", "codex remote", ".local", "share", "codex-remote", "install-state.json"),
 		ConfigPath:      filepath.Join(string(filepath.Separator), "tmp", "codex remote", ".config", "codex-remote", "config.json"),
-		InstalledBinary: filepath.Join(string(filepath.Separator), "tmp", "codex remote", "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(string(filepath.Separator), "tmp", "codex remote", "bin", "codex-remote"),
 		ServiceManager:  ServiceManagerSystemdUser,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -163,7 +163,7 @@ func TestRenderSystemdUserUnitEscapesPathsWithoutQuotedAssignments(t *testing.T)
 	if !strings.Contains(unitText, "WorkingDirectory="+systemdEscapeValue(normalizeServicePathValue(state.BaseDir))) {
 		t.Fatalf("unit missing escaped WorkingDirectory: %s", unitText)
 	}
-	if !strings.Contains(unitText, "ExecStart="+systemdEscapeExecWord(normalizeServicePathValue(state.InstalledBinary))+" daemon") {
+	if !strings.Contains(unitText, "ExecStart="+systemdEscapeExecWord(normalizeServicePathValue(state.CurrentBinaryPath))+" daemon") {
 		t.Fatalf("unit missing escaped ExecStart path: %s", unitText)
 	}
 }
@@ -186,7 +186,7 @@ func TestRenderSystemdUserUnitFallsBackToDefaultPATHWhenEnvironmentEmpty(t *test
 		BaseDir:         filepath.Join(string(filepath.Separator), "tmp", "codex-remote"),
 		StatePath:       filepath.Join(string(filepath.Separator), "tmp", "codex-remote", ".local", "share", "codex-remote", "install-state.json"),
 		ConfigPath:      filepath.Join(string(filepath.Separator), "tmp", "codex-remote", ".config", "codex-remote", "config.json"),
-		InstalledBinary: filepath.Join(string(filepath.Separator), "tmp", "codex-remote", "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(string(filepath.Separator), "tmp", "codex-remote", "bin", "codex-remote"),
 		ServiceManager:  ServiceManagerSystemdUser,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -231,7 +231,7 @@ func TestRenderSystemdUserUnitPrefersInteractiveShellPATH(t *testing.T) {
 		BaseDir:         filepath.Join(string(filepath.Separator), "tmp", "codex-remote"),
 		StatePath:       filepath.Join(string(filepath.Separator), "tmp", "codex-remote", ".local", "share", "codex-remote", "install-state.json"),
 		ConfigPath:      filepath.Join(string(filepath.Separator), "tmp", "codex-remote", ".config", "codex-remote", "config.json"),
-		InstalledBinary: filepath.Join(string(filepath.Separator), "tmp", "codex-remote", "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(string(filepath.Separator), "tmp", "codex-remote", "bin", "codex-remote"),
 		ServiceManager:  ServiceManagerSystemdUser,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -259,7 +259,7 @@ func TestRenderSystemdUserUnitIncludesStandardOutputConfig(t *testing.T) {
 		BaseDir:         baseDir,
 		StatePath:       filepath.Join(baseDir, ".local", "share", "codex-remote", "install-state.json"),
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
-		InstalledBinary: filepath.Join(baseDir, "bin", "codex-remote"),
+		CurrentBinaryPath: filepath.Join(baseDir, "bin", "codex-remote"),
 		ServiceManager:  ServiceManagerSystemdUser,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
@@ -295,7 +295,7 @@ func TestRunServiceStatusUsesWorkspaceBindingWhenStatePathOmitted(t *testing.T) 
 		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote-master", "codex-remote", "config.json"),
 		StatePath:       statePath,
 		ServiceManager:  ServiceManagerSystemdUser,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		StatePath:      statePath,

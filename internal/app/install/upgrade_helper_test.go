@@ -178,7 +178,6 @@ func TestRunUpgradeHelperWithStatePathLaunchdUserRebootstrapsBeforeStart(t *test
 		ServiceManager:    ServiceManagerLaunchdUser,
 		CurrentVersion:    "v1.0.0",
 		CurrentBinaryPath: currentBinary,
-		InstalledBinary:   currentBinary,
 		VersionsRoot:      filepath.Join(dir, "releases"),
 		PendingUpgrade: &PendingUpgrade{
 			Phase:         PendingUpgradePhasePrepared,
@@ -275,7 +274,6 @@ func TestRunUpgradeHelperWithStatePathTaskSchedulerLogonStopsInstallsAndStartsTa
 		ServiceManager:    ServiceManagerTaskSchedulerLogon,
 		CurrentVersion:    "v1.0.0",
 		CurrentBinaryPath: currentBinary,
-		InstalledBinary:   currentBinary,
 		VersionsRoot:      filepath.Join(dir, "releases"),
 		PendingUpgrade: &PendingUpgrade{
 			Phase:            PendingUpgradePhasePrepared,

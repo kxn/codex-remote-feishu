@@ -240,10 +240,10 @@ func TestDisableAutostartDisablesSystemdUserService(t *testing.T) {
 	statePath := defaultInstallStatePath(baseDir)
 	stubServiceUserHome(t, baseDir)
 	state := InstallState{
-		BaseDir:         baseDir,
-		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
-		ServiceManager:  ServiceManagerSystemdUser,
+		BaseDir:          baseDir,
+		StatePath:        statePath,
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		ServiceManager:   ServiceManagerSystemdUser,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		StatePath:      statePath,
@@ -317,11 +317,11 @@ func TestDetectAutostartReportsConfiguredDisabledState(t *testing.T) {
 	statePath := defaultInstallStatePath(baseDir)
 	stubServiceUserHome(t, baseDir)
 	state := InstallState{
-		BaseDir:         baseDir,
-		ConfigPath:      filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
-		StatePath:       statePath,
-		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
-		ServiceManager:  ServiceManagerSystemdUser,
+		BaseDir:          baseDir,
+		ConfigPath:       filepath.Join(baseDir, ".config", "codex-remote", "config.json"),
+		StatePath:        statePath,
+		CurrentBinaryPath: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary"),
+		ServiceManager:   ServiceManagerSystemdUser,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		StatePath:      statePath,

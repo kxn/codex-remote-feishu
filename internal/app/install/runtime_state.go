@@ -25,18 +25,6 @@ func RepairRuntimeState(state *InstallState, opts RuntimeStateRepairOptions) boo
 			state.CurrentBinaryPath = currentBinary
 			changed = true
 		}
-		if strings.TrimSpace(state.InstalledBinary) != currentBinary {
-			state.InstalledBinary = currentBinary
-			changed = true
-		}
-		if strings.TrimSpace(state.InstalledWrapperBinary) != currentBinary {
-			state.InstalledWrapperBinary = currentBinary
-			changed = true
-		}
-		if strings.TrimSpace(state.InstalledRelaydBinary) != currentBinary {
-			state.InstalledRelaydBinary = currentBinary
-			changed = true
-		}
 	}
 	if currentVersion := strings.TrimSpace(opts.CurrentVersion); currentVersion != "" && strings.TrimSpace(state.CurrentVersion) != currentVersion {
 		state.CurrentVersion = currentVersion

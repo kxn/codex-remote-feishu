@@ -26,16 +26,13 @@ func TestRepairRuntimeStateUpdatesBinaryVersionAndPromotesLiveSystemdUnit(t *tes
 	defer func() { systemctlUserRunner = originalRunner }()
 
 	state := InstallState{
-		InstanceID:             "beta",
-		BaseDir:                baseDir,
-		StatePath:              defaultInstallStatePathForInstance(baseDir, "beta"),
-		ServiceManager:         ServiceManagerDetached,
-		CurrentBinaryPath:      "/old/bin/codex-remote",
-		InstalledBinary:        "/old/bin/codex-remote",
-		InstalledWrapperBinary: "/old/bin/codex-remote",
-		InstalledRelaydBinary:  "/old/bin/codex-remote",
-		CurrentVersion:         "v1.0.0",
-		ConfigPath:             "/old/config.json",
+		InstanceID:        "beta",
+		BaseDir:           baseDir,
+		StatePath:         defaultInstallStatePathForInstance(baseDir, "beta"),
+		ServiceManager:    ServiceManagerDetached,
+		CurrentBinaryPath: "/old/bin/codex-remote",
+		CurrentVersion:    "v1.0.0",
+		ConfigPath:        "/old/config.json",
 	}
 
 	changed := RepairRuntimeState(&state, RuntimeStateRepairOptions{
@@ -55,15 +52,6 @@ func TestRepairRuntimeStateUpdatesBinaryVersionAndPromotesLiveSystemdUnit(t *tes
 	}
 	if state.CurrentBinaryPath != "/new/bin/codex-remote" {
 		t.Fatalf("CurrentBinaryPath = %q", state.CurrentBinaryPath)
-	}
-	if state.InstalledBinary != "/new/bin/codex-remote" {
-		t.Fatalf("InstalledBinary = %q", state.InstalledBinary)
-	}
-	if state.InstalledWrapperBinary != "/new/bin/codex-remote" {
-		t.Fatalf("InstalledWrapperBinary = %q", state.InstalledWrapperBinary)
-	}
-	if state.InstalledRelaydBinary != "/new/bin/codex-remote" {
-		t.Fatalf("InstalledRelaydBinary = %q", state.InstalledRelaydBinary)
 	}
 	if state.CurrentVersion != "v1.5.0-beta.9" {
 		t.Fatalf("CurrentVersion = %q", state.CurrentVersion)

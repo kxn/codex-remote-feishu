@@ -67,14 +67,8 @@ func TestBootstrapWritesConfigsAndStateWithoutLegacySettingsPatch(t *testing.T) 
 		t.Fatalf("expected legacy settings patch to stay disabled, stat err=%v", err)
 	}
 	wantBinary := filepath.Join(installBinDir, filepath.Base(binaryPath))
-	if state.InstalledBinary != wantBinary {
-		t.Fatalf("unexpected installed binary path: %s", state.InstalledBinary)
-	}
-	if state.InstalledWrapperBinary != wantBinary {
-		t.Fatalf("unexpected installed wrapper alias path: %s", state.InstalledWrapperBinary)
-	}
-	if state.InstalledRelaydBinary != wantBinary {
-		t.Fatalf("unexpected installed relayd alias path: %s", state.InstalledRelaydBinary)
+	if state.CurrentBinaryPath != wantBinary {
+		t.Fatalf("unexpected current binary path: %s", state.CurrentBinaryPath)
 	}
 	if state.InstallSource != InstallSourceRepo {
 		t.Fatalf("install source = %q, want repo", state.InstallSource)
@@ -173,8 +167,8 @@ func TestBootstrapDebugInstanceUsesIsolatedPathsAndPorts(t *testing.T) {
 	if state.ServiceUnitPath != "" {
 		t.Fatalf("ServiceUnitPath = %q, want empty for detached bootstrap", state.ServiceUnitPath)
 	}
-	if state.InstalledBinary != filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "bin", "codex-remote") {
-		t.Fatalf("InstalledBinary = %q", state.InstalledBinary)
+	if state.CurrentBinaryPath != filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "bin", "codex-remote") {
+		t.Fatalf("CurrentBinaryPath = %q", state.CurrentBinaryPath)
 	}
 
 	cfg := loadAppConfigForTest(t, state.ConfigPath)
@@ -501,8 +495,8 @@ func TestBootstrapAcceptsMatchingDeprecatedBinaryFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("bootstrap with deprecated flags: %v", err)
 	}
-	if state.InstalledBinary != sourceBinary {
-		t.Fatalf("InstalledBinary = %q, want %q", state.InstalledBinary, sourceBinary)
+	if state.CurrentBinaryPath != sourceBinary {
+		t.Fatalf("CurrentBinaryPath = %q, want %q", state.CurrentBinaryPath, sourceBinary)
 	}
 }
 

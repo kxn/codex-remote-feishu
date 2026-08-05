@@ -147,7 +147,7 @@ func runPackagedInstallProbe(opts packagedInstallProbeOptions) (PackagedInstallP
 }
 
 func packagedInstallProbeResultForState(state InstallState, opts packagedInstallProbeOptions) PackagedInstallProbeResult {
-	currentBinary := firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(state.InstalledBinary))
+	currentBinary := strings.TrimSpace(state.CurrentBinaryPath)
 	currentInstallBinDir := ""
 	if currentBinary != "" {
 		currentInstallBinDir = filepath.Dir(currentBinary)
