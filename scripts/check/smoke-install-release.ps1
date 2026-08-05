@@ -555,7 +555,7 @@ try {
   if ($null -ne $serverProcess -and -not $serverProcess.HasExited) {
     Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
   }
-  Stop-CodexRemoteProcesses $localAppData
+  Stop-CodexRemoteProcesses $workDir
   if (Test-Path -LiteralPath $workDir) {
     $removed = $false
     for ($attempt = 0; $attempt -lt 5 -and -not $removed; $attempt++) {

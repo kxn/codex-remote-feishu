@@ -41,10 +41,14 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 	if err != nil {
 		return DaemonReadyStatus{}, err
 	}
-	// Prefer probing the running process executable; fall back to the
-	// canonical current-binary path recorded in state (LoadState promotes
-	// legacy installedBinary values into CurrentBinaryPath).
-	binaryPath := firstNonEmpty(currentExecutablePathOrEmpty(), strings.TrimSpace(state.CurrentBinaryPath))
+	// Prefer the canonical current-binary path recorded in state (LoadState
+	// promotes legacy installedBinary values into CurrentBinaryPath). The
+	// running process executable is only a fallback: ensureDaemonReady is also
+	// called from install flows whose process runs from the release/dist
+	// directory, and using that path as the daemon binary would start the
+	// daemon outside the installed entry point (and pin the release directory
+	// while it is running).
+	binaryPath := firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), currentExecutablePathOrEmpty())
 	identity, err := relayruntime.BinaryIdentityForPath(binaryPath, version)
 	if err != nil {
 		return DaemonReadyStatus{}, err
