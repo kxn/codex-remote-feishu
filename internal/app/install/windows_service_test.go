@@ -478,6 +478,107 @@ func TestTaskSchedulerDetectsEnabledFromXMLWhenEnabledIsMissing(t *testing.T) {
 	}
 }
 
+func TestTaskSchedulerDetectsEnabledFromPSRegisteredXMLWithUTF16Declaration(t *testing.T) {
+	withWindowsGOOS(t)
+	baseDir := t.TempDir()
+	state := InstallState{
+		InstanceID:      "stable",
+		BaseDir:         baseDir,
+		StatePath:       defaultInstallStatePath(baseDir),
+		ConfigPath:      defaultConfigPath(baseDir),
+		InstalledBinary: seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote.exe"), "binary"),
+		ServiceManager:  ServiceManagerTaskSchedulerLogon,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: state.ServiceManager,
+	})
+
+	// Real-world output of `schtasks /Query /TN \CodexRemoteFeishu\stable /XML`
+	// for a task registered via PowerShell Register-ScheduledTask: the XML
+	// declaration advertises UTF-16 (which Go's xml.Unmarshal rejects without a
+	// CharsetReader) and the Task Scheduler omits the <Enabled> element because
+	// the task is enabled by default.
+	withMockTaskScheduler(t, func(_ context.Context, args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "/Query" {
+			return `<?xml version="1.0" encoding="UTF-16"?>
+
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+
+  <RegistrationInfo>
+
+    <Description>codex-remote auto start at logon</Description>
+
+    <URI>\CodexRemoteFeishu\stable</URI>
+
+  </RegistrationInfo>
+
+  <Principals>
+
+    <Principal id="Author">
+
+      <UserId>S-1-5-21-2141574936-2934653207-2305175561-1001</UserId>
+
+      <LogonType>InteractiveToken</LogonType>
+
+    </Principal>
+
+  </Principals>
+
+  <Settings>
+
+    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>
+
+    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>
+
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+
+  </Settings>
+
+  <Triggers>
+
+    <LogonTrigger>
+
+      <UserId>KXN-PC\kxn</UserId>
+
+    </LogonTrigger>
+
+  </Triggers>
+
+  <Actions Context="Author">
+
+    <Exec>
+
+      <Command>E:\Downloads\codex-remote.exe</Command>
+
+      <Arguments>daemon -config C:\Users\kxn\.config\codex-remote\config.json</Arguments>
+
+      <WorkingDirectory>C:\Users\kxn</WorkingDirectory>
+
+    </Exec>
+
+  </Actions>
+
+</Task>`, nil
+		}
+		return "", fmt.Errorf("unexpected schtasks call: %v", args)
+	})
+
+	enabled, warning, err := detectTaskSchedulerLogonEnabled(context.Background(), state)
+	if err != nil {
+		t.Fatalf("detectTaskSchedulerLogonEnabled: %v", err)
+	}
+	if warning != "" {
+		t.Fatalf("warning = %q, want empty", warning)
+	}
+	if !enabled {
+		t.Fatal("expected enabled=true for PowerShell-registered task XML with UTF-16 declaration")
+	}
+}
+
 func TestTaskSchedulerMissingLocalizedOutputIsDisabled(t *testing.T) {
 	withWindowsGOOS(t)
 	baseDir := t.TempDir()

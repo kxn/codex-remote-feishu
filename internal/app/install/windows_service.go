@@ -460,6 +460,12 @@ func taskSchedulerLogonIsRunning(ctx context.Context, state InstallState) (bool,
 }
 
 func parseTaskSchedulerEnabled(output string) (bool, bool) {
+	text := strings.TrimSpace(output)
+	if strings.HasPrefix(text, "<?xml") {
+		if idx := strings.Index(text, "?>"); idx >= 0 {
+			text = strings.TrimSpace(text[idx+2:])
+		}
+	}
 	var doc struct {
 		Triggers struct {
 			LogonTrigger struct {
@@ -470,7 +476,7 @@ func parseTaskSchedulerEnabled(output string) (bool, bool) {
 			Enabled string `xml:"Enabled"`
 		} `xml:"Settings"`
 	}
-	if err := xml.Unmarshal([]byte(strings.TrimSpace(output)), &doc); err == nil {
+	if err := xml.Unmarshal([]byte(text), &doc); err == nil {
 		if enabled, ok := parseTaskSchedulerBool(doc.Settings.Enabled); ok {
 			return enabled, true
 		}
@@ -482,7 +488,7 @@ func parseTaskSchedulerEnabled(output string) (bool, bool) {
 		// therefore treated as enabled.
 		return true, true
 	}
-	text := strings.ToLower(strings.TrimSpace(output))
+	text = strings.ToLower(text)
 	if strings.Contains(text, "<settings>") {
 		settings := text[strings.Index(text, "<settings>"):]
 		if idx := strings.Index(settings, "</settings>"); idx >= 0 {
