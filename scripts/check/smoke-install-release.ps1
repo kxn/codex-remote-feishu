@@ -258,8 +258,14 @@ function Stop-CodexRemoteProcesses([string]$ExecutableRoot) {
   $escapedRoot = [Regex]::Escape($ExecutableRoot)
   $stopped = @()
   Get-CimInstance Win32_Process -Filter "Name = 'codex-remote.exe'" | ForEach-Object {
-    if ($_.ExecutablePath -and $_.ExecutablePath -match "^${escapedRoot}") {
-      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    $execPath = $_.ExecutablePath
+    $cmdLine = $_.CommandLine
+    $inRoot = ($execPath -and $execPath -match "^${escapedRoot}") -or ($cmdLine -and $cmdLine -match [Regex]::Escape($ExecutableRoot))
+    Write-Host "smoke cleanup: codex-remote.exe pid=$($_.ProcessId) path=$execPath inRoot=$inRoot"
+    if ($inRoot) {
+      # /T kills the whole tree (daemon may have headless/relay children that
+      # hold log handles) and /F handles processes that ignore Stop-Process.
+      & taskkill /PID $_.ProcessId /T /F 2>&1 | Out-Null
       $stopped += $_.ProcessId
     }
   }
@@ -268,6 +274,7 @@ function Stop-CodexRemoteProcesses([string]$ExecutableRoot) {
   foreach ($procId in $stopped) {
     Wait-Process -Id $procId -Timeout 10 -ErrorAction SilentlyContinue
   }
+  Start-Sleep -Milliseconds 500
 }
 
 function Set-TestEnv([hashtable]$Values) {
