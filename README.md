@@ -30,10 +30,7 @@
 
 - GitHub Releases 的平台包内只放最终用户需要的运行资产
   - `codex-remote` / `codex-remote.exe`
-  - `README.md`
-  - `QUICKSTART.md`
-  - `CHANGELOG.md`
-  - `deploy/`
+- 平台包是 binary-only 归档，不包含仓库文档、安装脚本或 `deploy/`
 - 在线安装脚本 `install-release.sh` / `install-release.ps1` 单独作为 release 资产和仓库入口提供
 - Windows release 额外提供 `codex-remote-feishu_<version>_windows_amd64_installer.exe`，作为 native packaged installer
 - macOS release 额外提供 `codex-remote-feishu_<version>_darwin_universal_installer.dmg`，作为 native packaged installer

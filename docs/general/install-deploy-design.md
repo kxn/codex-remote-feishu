@@ -543,11 +543,8 @@ detect/apply/reinstall 的当前规则也同步收紧：
 
 当前 `scripts/release/build-artifacts.sh` 为每个平台构建：
 
-- 一个带版本号的 `codex-remote`
-- `README.md`
-- `QUICKSTART.md`
-- `CHANGELOG.md`
-- `deploy/`
+- 一个带版本号的 `codex-remote` / `codex-remote.exe`
+- 平台归档是 binary-only，只包含归档目录和对应平台二进制
 
 另外单独生成：
 

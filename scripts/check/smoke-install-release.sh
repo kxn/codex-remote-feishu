@@ -289,13 +289,19 @@ bash ./install-release.sh
 expected_dir="${install_root}/${version}"
 [[ -d "${expected_dir}" ]]
 [[ -x "${expected_dir}/codex-remote" ]]
-[[ -f "${expected_dir}/README.md" ]]
-[[ -f "${expected_dir}/QUICKSTART.md" ]]
-[[ -d "${expected_dir}/deploy" ]]
 [[ ! -e "${expected_dir}/setup.sh" ]]
 [[ ! -e "${expected_dir}/setup.ps1" ]]
 [[ ! -e "${expected_dir}/install.sh" ]]
 [[ -L "${install_root}/current" ]]
+
+python3 - "${expected_dir}" <<'PY'
+import sys
+from pathlib import Path
+
+release_dir = Path(sys.argv[1])
+entries = sorted(path.name for path in release_dir.iterdir())
+assert entries == ["codex-remote"], entries
+PY
 
 installed_version="$("${expected_dir}/codex-remote" version)"
 [[ "${installed_version}" == "${version}" ]]
@@ -313,6 +319,15 @@ beta_expected_dir="${track_install_root}/${beta_version}"
 [[ -d "${beta_expected_dir}" ]]
 [[ -x "${beta_expected_dir}/codex-remote" ]]
 [[ -L "${track_install_root}/current" ]]
+
+python3 - "${beta_expected_dir}" <<'PY'
+import sys
+from pathlib import Path
+
+release_dir = Path(sys.argv[1])
+entries = sorted(path.name for path in release_dir.iterdir())
+assert entries == ["codex-remote"], entries
+PY
 
 beta_installed_version="$("${beta_expected_dir}/codex-remote" version)"
 [[ "${beta_installed_version}" == "${beta_version}" ]]

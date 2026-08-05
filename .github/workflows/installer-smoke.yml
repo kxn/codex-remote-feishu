@@ -26,8 +26,6 @@ on:
       - "internal/app/install/**"
       - "internal/app/launcher/**"
       - "internal/config/**"
-      - "QUICKSTART.md"
-      - "CHANGELOG.md"
   pull_request:
     paths:
       - ".github/workflows/installer-smoke.yml"
@@ -53,8 +51,6 @@ on:
       - "internal/app/install/**"
       - "internal/app/launcher/**"
       - "internal/config/**"
-      - "QUICKSTART.md"
-      - "CHANGELOG.md"
   workflow_dispatch:
 
 permissions:

@@ -157,9 +157,6 @@ function Build-WindowsReleaseFixture([string]$VersionValue, [string]$TargetDir) 
       Pop-Location
     }
 
-    Copy-Item -LiteralPath (Join-Path $RootDir "QUICKSTART.md") -Destination (Join-Path $stagingDir "QUICKSTART.md")
-    Copy-Item -LiteralPath (Join-Path $RootDir "CHANGELOG.md") -Destination (Join-Path $stagingDir "CHANGELOG.md")
-
     Push-Location $buildRoot
     try {
       Compress-Archive -Path $packageName -DestinationPath $archivePath -Force
@@ -456,11 +453,9 @@ try {
   if (-not (Test-Path -LiteralPath $binaryPath -PathType Leaf)) {
     throw "installed binary missing: $binaryPath"
   }
-  if (-not (Test-Path -LiteralPath (Join-Path $expectedDir "QUICKSTART.md") -PathType Leaf)) {
-    throw "QUICKSTART.md missing from release directory"
-  }
-  if (-not (Test-Path -LiteralPath (Join-Path $expectedDir "CHANGELOG.md") -PathType Leaf)) {
-    throw "CHANGELOG.md missing from release directory"
+  $releaseEntries = @(Get-ChildItem -LiteralPath $expectedDir -Force | Select-Object -ExpandProperty Name | Sort-Object)
+  if (($releaseEntries -join "|") -ne "codex-remote.exe") {
+    throw "release directory must contain only codex-remote.exe: $($releaseEntries -join ', ')"
   }
   if (-not (Test-Path -LiteralPath (Join-Path $installRoot "current"))) {
     throw "current release link missing"
@@ -519,6 +514,10 @@ try {
   }
   if (-not (Test-Path -LiteralPath $betaBinaryPath -PathType Leaf)) {
     throw "beta binary missing: $betaBinaryPath"
+  }
+  $betaReleaseEntries = @(Get-ChildItem -LiteralPath $betaExpectedDir -Force | Select-Object -ExpandProperty Name | Sort-Object)
+  if (($betaReleaseEntries -join "|") -ne "codex-remote.exe") {
+    throw "beta release directory must contain only codex-remote.exe: $($betaReleaseEntries -join ', ')"
   }
   if (-not (Test-Path -LiteralPath (Join-Path $trackInstallRoot "current"))) {
     throw "beta current release link missing"
