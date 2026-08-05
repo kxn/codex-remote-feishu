@@ -23,6 +23,10 @@ func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
 	sourceBinaryValidator = func(string) error { return nil }
 	defer func() { sourceBinaryValidator = originalValidator }()
 
+	originalSystemctl := systemctlUserRunner
+	systemctlUserRunner = func(_ context.Context, _ ...string) (string, error) { return "", nil }
+	defer func() { systemctlUserRunner = originalSystemctl }()
+
 	originalEnsureReady := packagedInstallEnsureReadyFunc
 	packagedInstallEnsureReadyFunc = func(_ context.Context, _ string, _ string) (DaemonReadyStatus, error) {
 		return DaemonReadyStatus{
@@ -94,6 +98,106 @@ func TestRunPackagedInstallFirstInstallWritesStateAndJSONResult(t *testing.T) {
 	}
 	if state.ServiceManager != wantManager {
 		t.Fatalf("ServiceManager = %q, want %q", state.ServiceManager, wantManager)
+	}
+}
+
+func TestRunPackagedFirstInstallWritesManagedServiceUnitBeforeEnsureReady(t *testing.T) {
+	tests := []struct {
+		name        string
+		goos        string
+		binaryName  string
+		unitExists  func(baseDir, instanceID string) bool
+		stubRunner  func(t *testing.T)
+		wantManager ServiceManager
+	}{
+		{
+			name:       "windows task scheduler",
+			goos:       "windows",
+			binaryName: "codex-remote.exe",
+			unitExists: func(baseDir, instanceID string) bool {
+				_, err := os.Stat(taskSchedulerXMLPathForInstance(baseDir, instanceID))
+				return err == nil
+			},
+			stubRunner: func(t *testing.T) {
+				originalPSRunner := taskSchedulerPowerShellRunner
+				taskSchedulerPowerShellRunner = func(_ context.Context, _ string) (string, error) { return "", nil }
+				t.Cleanup(func() { taskSchedulerPowerShellRunner = originalPSRunner })
+			},
+			wantManager: ServiceManagerTaskSchedulerLogon,
+		},
+		{
+			name:       "darwin launchd",
+			goos:       "darwin",
+			binaryName: "codex-remote",
+			unitExists: func(baseDir, instanceID string) bool {
+				_, err := os.Stat(launchdUserPlistPathForInstance(baseDir, instanceID))
+				return err == nil
+			},
+			stubRunner:  func(t *testing.T) {},
+			wantManager: ServiceManagerLaunchdUser,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(repoRootEnvVar, t.TempDir())
+			baseDir := t.TempDir()
+			sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", tc.binaryName), "package-binary")
+			selection, err := resolveInstallInstanceSelection("", "", baseDir, tc.goos)
+			if err != nil {
+				t.Fatalf("resolve selection: %v", err)
+			}
+
+			originalGOOS := serviceRuntimeGOOS
+			serviceRuntimeGOOS = tc.goos
+			t.Cleanup(func() { serviceRuntimeGOOS = originalGOOS })
+			tc.stubRunner(t)
+
+			originalEnsureReady := packagedInstallEnsureReadyFunc
+			unitPresentAtReady := false
+			packagedInstallEnsureReadyFunc = func(_ context.Context, statePath, _ string) (DaemonReadyStatus, error) {
+				state, loadErr := LoadState(statePath)
+				if loadErr != nil {
+					t.Fatalf("LoadState at ensure-ready: %v", loadErr)
+				}
+				unitPresentAtReady = tc.unitExists(state.BaseDir, state.InstanceID)
+				if !unitPresentAtReady {
+					t.Fatalf("managed service unit missing when EnsureReady invoked (goos=%s)", tc.goos)
+				}
+				return DaemonReadyStatus{
+					AdminURL:      "http://localhost:9501/admin/",
+					SetupURL:      "http://localhost:9501/setup",
+					SetupRequired: true,
+				}, nil
+			}
+			t.Cleanup(func() { packagedInstallEnsureReadyFunc = originalEnsureReady })
+
+			result, err := runPackagedFirstInstall(context.Background(), packagedInstallOptions{
+				Selection:      &selection,
+				StatePath:      selection.StatePath,
+				InstallBinDir:  selection.InstallBinDir,
+				SourceBinary:   sourceBinary,
+				CurrentVersion: "v1.0.0",
+				InstallSource:  InstallSourceRelease,
+				CurrentTrack:   ReleaseTrackProduction,
+				GOOS:           tc.goos,
+			})
+			if err != nil {
+				t.Fatalf("runPackagedFirstInstall: %v", err)
+			}
+			if !result.OK {
+				t.Fatalf("result.OK = false, want true: %#v", result)
+			}
+			if !unitPresentAtReady {
+				t.Fatal("EnsureReady was not invoked")
+			}
+			if result.ServiceManager != string(tc.wantManager) {
+				t.Fatalf("result.ServiceManager = %q, want %q", result.ServiceManager, tc.wantManager)
+			}
+			if !tc.unitExists(baseDir, selection.InstanceID) {
+				t.Fatalf("managed service unit missing after first install (goos=%s)", tc.goos)
+			}
+		})
 	}
 }
 
