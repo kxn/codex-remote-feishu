@@ -1,0 +1,8 @@
+# Force LF line endings for shell scripts so they work on any host
+# (Windows checkouts otherwise get CRLF and bash fails with e.g.
+# `set: pipefail\r: invalid option name`).
+*.sh text eol=lf
+
+# Force LF for Go sources: gofmt requires LF and rejects CRLF worktrees
+# (safe-push go-format check fails on Windows autocrlf checkouts otherwise).
+*.go text eol=lf
