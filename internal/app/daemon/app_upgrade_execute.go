@@ -12,6 +12,7 @@ import (
 
 	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
@@ -73,8 +74,8 @@ func (a *App) runPendingUpgradeStart(request upgradeStartRequest) {
 	switch stateValue.PendingUpgrade.Source {
 	case install.UpgradeSourceRelease:
 		targetBinary, err = install.EnsureReleaseBinary(ctx, install.ReleaseBinaryOptions{
-			Repository:   strings.TrimSpace(os.Getenv("CODEX_REMOTE_REPO")),
-			BaseURL:      strings.TrimSpace(os.Getenv("CODEX_REMOTE_BASE_URL")),
+			Repository:   strings.TrimSpace(os.Getenv(config.CodexRemoteRepoEnv)),
+			BaseURL:      strings.TrimSpace(os.Getenv(config.CodexRemoteBaseURLEnv)),
 			Version:      targetVersion,
 			VersionsRoot: stateValue.VersionsRoot,
 		})

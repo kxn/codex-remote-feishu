@@ -11,6 +11,7 @@ import (
 
 	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -56,8 +57,8 @@ type upgradeCheckRequest struct {
 
 func (a *App) defaultReleaseLookup(ctx context.Context, track install.ReleaseTrack) (install.ReleaseInfo, error) {
 	return install.ResolveLatestRelease(ctx, install.ReleaseLookupOptions{
-		Repository:     strings.TrimSpace(os.Getenv("CODEX_REMOTE_REPO")),
-		ReleasesAPIURL: strings.TrimSpace(os.Getenv("CODEX_REMOTE_RELEASES_API_URL")),
+		Repository:     strings.TrimSpace(os.Getenv(config.CodexRemoteRepoEnv)),
+		ReleasesAPIURL: strings.TrimSpace(os.Getenv(config.CodexRemoteReleasesAPIURLEnv)),
 		Track:          track,
 	})
 }

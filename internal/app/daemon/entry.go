@@ -96,7 +96,7 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 
 	env := envMap(os.Environ())
 	startup := buildStartupAccessPlan(loadedConfig, cfg, identity.BinaryPath, env)
-	envOverrideActive := (strings.TrimSpace(os.Getenv("FEISHU_APP_ID")) != "" || strings.TrimSpace(os.Getenv("FEISHU_APP_SECRET")) != "") &&
+	envOverrideActive := (strings.TrimSpace(os.Getenv(config.FeishuAppIDEnv)) != "" || strings.TrimSpace(os.Getenv(config.FeishuAppSecretEnv)) != "") &&
 		strings.TrimSpace(cfg.FeishuGatewayID) != ""
 
 	app := New(
@@ -296,7 +296,7 @@ func repairInstallStateOnStartup(paths relayruntime.Paths, identity agentproto.S
 }
 
 func resolveDesktopSessionInstanceID() string {
-	if value := strings.TrimSpace(os.Getenv("CODEX_REMOTE_INSTANCE_ID")); value != "" {
+	if value := strings.TrimSpace(os.Getenv(config.CodexRemoteInstanceIDEnv)); value != "" {
 		return value
 	}
 	info, err := install.ResolveCurrentDaemonTargetInfo()

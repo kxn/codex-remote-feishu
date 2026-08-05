@@ -239,7 +239,7 @@ func errorDetail(err error) string {
 }
 
 func resolvedCodexRealBinarySetting(loaded config.LoadedAppConfig) (string, string) {
-	if value := strings.TrimSpace(os.Getenv("CODEX_REAL_BINARY")); value != "" {
+	if value := strings.TrimSpace(os.Getenv(config.CodexRealBinaryEnv)); value != "" {
 		return value, "env_override"
 	}
 	if value := strings.TrimSpace(loaded.Config.Wrapper.CodexRealBinary); value != "" {
