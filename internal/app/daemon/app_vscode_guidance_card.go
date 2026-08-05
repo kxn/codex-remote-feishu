@@ -80,10 +80,6 @@ func (a *App) refreshVSCodeMigrationFlowLocked(flow *vscodeMigrationFlowRecord, 
 	flow.ExpiresAt = now.Add(vscodeMigrationFlowTTL)
 }
 
-func (a *App) clearVSCodeMigrationFlowLocked(surfaceID string) {
-	delete(a.surfaceResumeRuntime.vscodeMigrationFlows, strings.TrimSpace(surfaceID))
-}
-
 func (a *App) recordVSCodeMigrationFlowMessageLocked(trackingKey, messageID string) {
 	trackingKey = strings.TrimSpace(trackingKey)
 	messageID = strings.TrimSpace(messageID)

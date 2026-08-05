@@ -55,14 +55,6 @@ func activeExecCommandProgressSegmentMessageID(progress control.ExecCommandProgr
 	return strings.TrimSpace(progress.Segments[len(progress.Segments)-1].MessageID)
 }
 
-func execCommandProgressBody(progress control.ExecCommandProgress) string {
-	lines := execCommandProgressLines(progress)
-	if len(lines) == 0 {
-		return "（暂无可显示过程）"
-	}
-	return strings.Join(lines, "\n")
-}
-
 func execCommandProgressElements(lines []string) []map[string]any {
 	elements := make([]map[string]any, 0, len(lines))
 	for _, line := range lines {
@@ -80,15 +72,6 @@ func execCommandProgressElements(lines []string) []map[string]any {
 
 func execCommandProgressMarkdownLine(line string) string {
 	return strings.TrimSpace(strings.TrimRight(line, " "))
-}
-
-func execCommandProgressLines(progress control.ExecCommandProgress) []string {
-	rendered := execCommandProgressRenderedLines(progress)
-	lines := make([]string, 0, len(rendered))
-	for _, line := range rendered {
-		lines = append(lines, line.Content)
-	}
-	return lines
 }
 
 func normalizedExecProgressTimeline(progress control.ExecCommandProgress) []control.ExecCommandProgressTimelineItem {

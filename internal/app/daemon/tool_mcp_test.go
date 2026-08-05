@@ -81,10 +81,6 @@ func performToolMCPRequest(t *testing.T, handler http.Handler, opts toolMCPReque
 	return rec
 }
 
-func initializeToolMCPSession(t *testing.T, handler http.Handler, token string) (string, string) {
-	return initializeToolMCPSessionWithCaller(t, handler, token, "")
-}
-
 func initializeToolMCPSessionWithCaller(t *testing.T, handler http.Handler, token, callerInstanceID string) (string, string) {
 	t.Helper()
 	rec := performToolMCPRequest(t, handler, toolMCPRequestOptions{

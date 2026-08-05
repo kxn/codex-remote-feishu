@@ -504,15 +504,6 @@ func adminPersistedClaudeSettingsView(cfg config.AppConfig) adminClaudeSettingsV
 	return view
 }
 
-func adminClaudeProfilesView(cfg config.AppConfig) []adminClaudeProfileView {
-	profiles := config.ListClaudeProfiles(cfg)
-	view := make([]adminClaudeProfileView, 0, len(profiles))
-	for _, profile := range profiles {
-		view = append(view, adminClaudeProfileViewFromConfig(profile))
-	}
-	return view
-}
-
 func adminClaudeProfileViewFromConfig(profile config.ClaudeProfile) adminClaudeProfileView {
 	return adminClaudeProfileView{
 		ID:              strings.TrimSpace(profile.ID),

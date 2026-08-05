@@ -211,21 +211,6 @@ func preserveInstallOptionsFromExistingState(flagSet *flag.FlagSet, statePath st
 	}
 }
 
-func resolveUpgradeHelperBinary(statePath string) (string, error) {
-	helperBinary, execErr := executablePath()
-	if strings.TrimSpace(helperBinary) != "" {
-		return helperBinary, nil
-	}
-	stateValue, err := LoadState(statePath)
-	if err == nil {
-		helperBinary = strings.TrimSpace(stateValue.CurrentBinaryPath)
-		if helperBinary != "" {
-			return helperBinary, nil
-		}
-	}
-	return "", execErr
-}
-
 func defaultBinaryPath(goos string) string {
 	name := executableName(goos)
 	path, err := executablePath()

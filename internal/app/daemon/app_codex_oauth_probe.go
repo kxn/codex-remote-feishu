@@ -56,12 +56,6 @@ func (a *App) requestCodexOAuthProbe(ctx context.Context, forceAuthGeneration bo
 	return true
 }
 
-func (a *App) ensureCodexOAuthProfileForLaunch(ctx context.Context) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.ensureCodexOAuthProfileForLaunchLocked(ctx)
-}
-
 func (a *App) ensureCodexOAuthProfileForLaunchLocked(ctx context.Context) error {
 	for {
 		if a.codexOAuthProfileState.probeInFlight {

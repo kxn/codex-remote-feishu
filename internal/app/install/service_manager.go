@@ -70,10 +70,6 @@ func effectiveServiceManager(state InstallState) ServiceManager {
 	return ServiceManagerDetached
 }
 
-func installLayoutForBaseDir(baseDir string) installLayout {
-	return installLayoutForInstance(baseDir, defaultInstanceID)
-}
-
 func installLayoutForInstance(baseDir, instanceID string) installLayout {
 	baseDir = filepath.Clean(strings.TrimSpace(baseDir))
 	paths := instancePathsForBaseDir(baseDir, instanceID)
@@ -123,10 +119,6 @@ func inferBaseDir(configPath, statePath string) string {
 		return baseDir
 	}
 	return ""
-}
-
-func systemdUserUnitPath(baseDir string) string {
-	return systemdUserUnitPathForInstance(baseDir, defaultInstanceID)
 }
 
 func systemdUserUnitPathForInstance(baseDir, instanceID string) string {

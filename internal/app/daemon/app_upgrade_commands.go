@@ -227,14 +227,6 @@ func unsupportedTrackMessage(track install.ReleaseTrack) string {
 	return fmt.Sprintf("当前构建不支持 %s track。可用 track：%s。", track, strings.Join(currentBuildTrackNames(), "、"))
 }
 
-func upgradeSubcommandUsageSummary() string {
-	return upgradecontract.UsageSummary(currentUpgradeCapabilityPolicy())
-}
-
-func upgradeCommandUsageSyntax() string {
-	return upgradecontract.UsageSyntax(currentUpgradeCapabilityPolicy())
-}
-
 func currentUpgradeCapabilityPolicy() upgradecontract.CapabilityPolicy {
 	values := install.CurrentBuildAllowedReleaseTracks()
 	tracks := make([]string, 0, len(values))

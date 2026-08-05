@@ -47,13 +47,6 @@ func (l *surfaceInboundLane) enqueue(work inboundWork) bool {
 	return work.enqueue(l)
 }
 
-func (l *surfaceInboundLane) markActionDuplicate(action control.Action) bool {
-	if l == nil || l.inner == nil {
-		return false
-	}
-	return l.inner.MarkActionDuplicate(action)
-}
-
 func (w *queuedMessageWork) enqueue(l *surfaceInboundLane) bool {
 	if l == nil || l.inner == nil || w == nil || w.inner == nil {
 		return false
@@ -99,14 +92,6 @@ func (g *LiveGateway) parseMenuEvent(event *larkapplication.P2BotMenuV6) (contro
 func (g *LiveGateway) handleInboundMessageEvent(ctx context.Context, event *larkim.P2MessageReceiveV1, handler ActionHandler, lane *surfaceInboundLane) error {
 	g.ensureTestGroupMessageMentionsCurrentBot(event)
 	return gatewaypkg.HandleInboundMessageEvent(ctx, g.inboundEnv(), event, surfaceLaneInner(lane), gatewayDispatcher(handler))
-}
-
-func (g *LiveGateway) handleInboundMessageRecalledEvent(ctx context.Context, event *larkim.P2MessageRecalledV1, handler ActionHandler, lane *surfaceInboundLane) error {
-	return gatewaypkg.HandleInboundMessageRecalledEvent(ctx, g.inboundEnv(), event, surfaceLaneInner(lane), gatewayDispatcher(handler))
-}
-
-func (g *LiveGateway) handleInboundMessageReactionCreatedEvent(ctx context.Context, event *larkim.P2MessageReactionCreatedV1, handler ActionHandler, lane *surfaceInboundLane) error {
-	return gatewaypkg.HandleInboundMessageReactionCreatedEvent(ctx, g.inboundEnv(), event, surfaceLaneInner(lane), gatewayDispatcher(handler))
 }
 
 func (g *LiveGateway) planInboundMessageEvent(event *larkim.P2MessageReceiveV1) (plannedInboundMessage, bool, error) {
@@ -196,20 +181,4 @@ func normalizeMenuEventKey(value string) string {
 
 func parseTextAction(text string) (control.Action, bool) {
 	return control.ParseFeishuTextActionWithoutCatalog(text)
-}
-
-func parseTextContent(rawContent string) (string, error) {
-	return gatewaypkg.ParseTextContent(rawContent)
-}
-
-func parseImageKey(rawContent string) (string, error) {
-	return gatewaypkg.ParseImageKey(rawContent)
-}
-
-func parseFileContent(rawContent string) (string, string, error) {
-	return gatewaypkg.ParseFileContent(rawContent)
-}
-
-func parseMergeForwardContent(rawContent string) (string, error) {
-	return gatewaypkg.ParseMergeForwardContent(rawContent)
 }

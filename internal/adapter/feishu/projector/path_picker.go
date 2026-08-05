@@ -59,38 +59,6 @@ func ownerSubpageDirectoryModePathPickerElements(view control.FeishuPathPickerVi
 	return paginatedOwnerSubpageDirectoryModePathPickerElements(view, daemonLifecycleID)
 }
 
-func fileModeDirectoryOptions(view control.FeishuPathPickerView) pathPickerDirectorySelectModel {
-	return pathPickerDirectoryOptions(view)
-}
-
-func directoryModeDirectoryOptions(view control.FeishuPathPickerView) pathPickerDirectorySelectModel {
-	return pathPickerDirectoryOptions(view)
-}
-
-type pathPickerDirectorySelectModel struct {
-	Options             []map[string]any
-	InitialOption       string
-	HasChildDirectories bool
-}
-
-func pathPickerDirectoryOptions(view control.FeishuPathPickerView) pathPickerDirectorySelectModel {
-	childOptions, _ := pathPickerSelectStaticOptions(view, control.PathPickerEntryDirectory)
-	options := make([]map[string]any, 0, len(childOptions)+2)
-	options = append(options, currentDirectoryPathPickerOption(view.CurrentPath))
-	if view.CanGoUp {
-		options = append(options, map[string]any{
-			"text":  cardPlainText(".."),
-			"value": "..",
-		})
-	}
-	options = append(options, childOptions...)
-	return pathPickerDirectorySelectModel{
-		Options:             options,
-		InitialOption:       ".",
-		HasChildDirectories: len(childOptions) != 0,
-	}
-}
-
 func pathPickerBodySectionsForView(view control.FeishuPathPickerView) []control.FeishuCardTextSection {
 	if len(view.BodySections) != 0 {
 		return view.BodySections

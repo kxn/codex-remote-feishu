@@ -286,15 +286,6 @@ func normalizedCommandFields(text string) []string {
 	return fields
 }
 
-func isReleaseTrackToken(value string) bool {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "alpha", "beta", "production":
-		return true
-	default:
-		return false
-	}
-}
-
 func isSingleTokenSlashCommand(text string) bool {
 	fields := strings.Fields(strings.TrimSpace(text))
 	return len(fields) == 1 && strings.HasPrefix(fields[0], "/")

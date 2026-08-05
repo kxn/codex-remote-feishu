@@ -196,10 +196,6 @@ func buildFeishuRecoveryEntry(commandID string) CommandCatalogEntry {
 	return buildFeishuCommandCatalogEntryWithCatalog(def, def.ID, defaultFeishuCommandDisplayVariantID(def.ID), "", feishuCommandMenuButtonLabel(def))
 }
 
-func buildFeishuCommandMenuEntry(def FeishuCommandDefinition) CommandCatalogEntry {
-	return buildFeishuCommandCatalogEntryWithCatalog(def, def.ID, defaultFeishuCommandDisplayVariantID(def.ID), agentproto.BackendCodex, feishuCommandMenuButtonLabel(def))
-}
-
 func buildFeishuCommandMenuEntryFromResolution(resolution FeishuCommandDisplayResolution, ctx CatalogContext) CommandCatalogEntry {
 	ctx = NormalizeCatalogContext(ctx)
 	if resolution.FamilyID == FeishuCommandPrimary {

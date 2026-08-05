@@ -25,25 +25,6 @@ func previewRecordScopeKey(fileKey string) string {
 	return strings.TrimSpace(parts[0])
 }
 
-func previewPermissionDrift(ctx context.Context, api previewDriveAPI, token, docType string, expected map[string]bool) (bool, error) {
-	if api == nil || len(expected) == 0 {
-		return false, nil
-	}
-	actual, err := api.ListPermissionMembers(ctx, token, docType)
-	if err != nil {
-		return false, err
-	}
-	for key, wanted := range expected {
-		if !wanted {
-			continue
-		}
-		if !actual[key] {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func clearPreviewScope(state *previewState, scopeKey string) {
 	if state == nil {
 		return

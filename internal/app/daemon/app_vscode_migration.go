@@ -90,14 +90,6 @@ func (a *App) surfaceRunsVSCodeModeLocked(surfaceID string) bool {
 	return state.NormalizeProductMode(state.ProductMode(snapshot.ProductMode)) == state.ProductModeVSCode
 }
 
-func (a *App) maybePromptVSCodeCompatibilityLocked(surfaceFilter string) ([]eventcontract.Event, bool) {
-	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, time.Now().UTC(), false, "")
-}
-
-func (a *App) maybePromptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time) ([]eventcontract.Event, bool) {
-	return a.promptVSCodeCompatibilityAtLocked(surfaceFilter, now, false, "")
-}
-
 func (a *App) promptVSCodeCompatibilityAtLocked(surfaceFilter string, now time.Time, forceSync bool, inlineSourceMessageID string) ([]eventcontract.Event, bool) {
 	if now.IsZero() {
 		now = time.Now().UTC()

@@ -427,10 +427,6 @@ func fastModeRequiresFullWorkflow(structure issueStructure, sections documentSec
 		sections.Present["恢复步骤"]
 }
 
-func scanSections(body string) map[string]bool {
-	return scanDocumentSections(body).Present
-}
-
 func scanDocumentSections(body string) documentSections {
 	sections := documentSections{
 		Present: map[string]bool{},

@@ -652,14 +652,6 @@ func NormalizeMenuEventKey(value string) string {
 	return control.NormalizeFeishuMenuEventKey(value)
 }
 
-func menuActionKind(eventKey string) (control.ActionKind, bool) {
-	action, ok := menuAction(eventKey)
-	if !ok {
-		return "", false
-	}
-	return action.Kind, true
-}
-
 func surfaceID(gatewayID, chatID, fallbackUserID string) string {
 	if chatID != "" {
 		return feishuidentity.SurfaceRef{
@@ -721,25 +713,6 @@ func operatorUserIDFromCard(operator *larkcallback.Operator) string {
 		return ""
 	}
 	return preferredFeishuUserID(strings.TrimSpace(operator.OpenID), xutil.StringValue(operator.UserID), "")
-}
-
-func reactionKey(messageID, emojiType string) string {
-	return messageID + "|" + emojiType
-}
-
-func mimeExtension(mimeType string) string {
-	switch mimeType {
-	case "image/png":
-		return ".png"
-	case "image/jpeg":
-		return ".jpg"
-	case "image/gif":
-		return ".gif"
-	case "image/webp":
-		return ".webp"
-	default:
-		return ""
-	}
 }
 
 func chooseFirst(values ...string) string {

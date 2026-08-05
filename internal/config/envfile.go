@@ -187,14 +187,6 @@ func xdgConfigPath(parts ...string) string {
 	return filepath.Join(append([]string{base}, parts...)...)
 }
 
-func mustGetwd() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	return wd
-}
-
 func chooseNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {

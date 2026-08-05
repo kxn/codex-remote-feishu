@@ -239,17 +239,6 @@ func pendingTargetVersion(pending *install.PendingUpgrade) string {
 	return xutil.FirstNonEmpty(strings.TrimSpace(pending.TargetSlot), strings.TrimSpace(pending.TargetVersion))
 }
 
-func (a *App) activeUpgradeOwnerFlowMatchesPendingLocked(pending *install.PendingUpgrade) bool {
-	flow := a.activeUpgradeOwnerFlowLocked()
-	if flow == nil || pending == nil {
-		return false
-	}
-	if flow.Source != pending.Source {
-		return false
-	}
-	return xutil.FirstNonEmpty(strings.TrimSpace(flow.TargetVersion), "") == pendingTargetVersion(pending)
-}
-
 func (a *App) startUpgradeLatestOwnerCheckLocked(command control.DaemonCommand, stateValue install.InstallState) []eventcontract.Event {
 	track := stateValue.CurrentTrack
 	if track == "" {

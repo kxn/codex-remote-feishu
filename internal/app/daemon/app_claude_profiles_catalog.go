@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"log"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -32,20 +31,6 @@ func (a *App) syncClaudeProfilesCatalogLocked(cfg config.AppConfig) {
 		return
 	}
 	a.service.MaterializeClaudeProfiles(materializeClaudeProfileRecords(cfg, claudeSystemReasoningEffortFromEnv(a.headlessRuntime.BaseEnv)))
-}
-
-func (a *App) syncClaudeProfilesCatalogFromConfig() {
-	if a == nil {
-		return
-	}
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		log.Printf("load claude profiles catalog failed: err=%v", err)
-		return
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.syncClaudeProfilesCatalogLocked(loaded.Config)
 }
 
 func claudeSystemReasoningEffortFromEnv(env []string) string {

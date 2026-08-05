@@ -789,16 +789,6 @@ func (a *App) clearSurfaceResumeAttemptProgressLocked(surfaceID string) {
 	recovery.LastFailureCode = ""
 }
 
-func (a *App) setSurfaceResumeBackoffLocked(surfaceID, code string, now time.Time) {
-	recovery := a.surfaceResumeRuntime.recovery[strings.TrimSpace(surfaceID)]
-	if recovery == nil {
-		return
-	}
-	recovery.LastAttemptAt = now
-	recovery.NextAttemptAt = now.Add(surfaceResumeRetryBackoff)
-	recovery.LastFailureCode = strings.TrimSpace(code)
-}
-
 func rewriteHeadlessRestoreFailureEvents(events []eventcontract.Event, displayCode string, emit bool) []eventcontract.Event {
 	if !emit {
 		return nil
@@ -896,23 +886,6 @@ func (a *App) shouldDeferHeadlessResumeUntilInitialRefreshLocked(entry surfacere
 	// Give a connected visible-instance resume one startup refresh round before
 	// falling back to a managed headless restart for the same persisted target.
 	return strings.TrimSpace(inst.Source) != "headless"
-}
-
-func (a *App) recordManagedHeadlessResumeOutcomeEventsLocked(events []eventcontract.Event, now time.Time) {
-	for _, event := range events {
-		if event.Notice == nil {
-			continue
-		}
-		switch strings.TrimSpace(event.Notice.Code) {
-		case "headless_restore_attached":
-			a.clearSurfaceResumeBackoffLocked(event.SurfaceSessionID)
-		default:
-			if !isHeadlessRestoreFailureNoticeCode(event.Notice.Code) {
-				continue
-			}
-			a.recordSurfaceResumeFailureLocked(event.SurfaceSessionID, event.Notice.Code, now)
-		}
-	}
 }
 
 func (a *App) markStartupThreadsRefreshRequestedLocked(instanceID string) {

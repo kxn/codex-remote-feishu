@@ -8,10 +8,8 @@ import (
 	"log"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
-	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
@@ -252,17 +250,6 @@ func replyRespMsg(resp *larkim.ReplyMessageResp) string {
 	return resp.Msg
 }
 
-func replyRespError(resp *larkim.ReplyMessageResp) error {
-	if resp == nil || resp.Success() {
-		return nil
-	}
-	return newAPIError("im.v1.message.reply", resp.ApiResp, larkcore.CodeError{
-		Code: resp.Code,
-		Msg:  resp.Msg,
-		Err:  resp.CodeError.Err,
-	})
-}
-
 func ignoredMissingReactionCreateError(_ int, msg string) bool {
 	msg = strings.ToLower(strings.TrimSpace(msg))
 	if msg == "" {
@@ -333,8 +320,6 @@ func ignoredMissingMessageDeleteError(_ int, msg string) bool {
 	}
 	return false
 }
-
-func cardTemplate(themeKey, fallback string) string { return cardtheme.Template(themeKey, fallback) }
 
 func (g *LiveGateway) recordSurfaceMessage(messageID, surfaceSessionID string) {
 	if messageID == "" || surfaceSessionID == "" {

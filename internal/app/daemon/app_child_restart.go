@@ -56,14 +56,3 @@ func (a *App) sendRelayChildRestartCommand(instanceID string, command agentproto
 	}
 	return a.sendAgentCommand(instanceID, command)
 }
-
-func (a *App) restartRelayChildCodexWithCommandID(instanceID string) (string, error) {
-	command, err := a.newRelayChildCodexRestartCommand(instanceID)
-	if err != nil {
-		return "", err
-	}
-	if err := a.sendRelayChildRestartCommand(instanceID, command); err != nil {
-		return "", err
-	}
-	return command.CommandID, nil
-}

@@ -37,10 +37,6 @@ type cardRawComponent struct {
 	data map[string]any
 }
 
-func newCardDocument(title, themeKey string, components ...cardComponent) *cardDocument {
-	return newCardDocumentWithHeader(title, cardTextTagPlainText, "", "", themeKey, components...)
-}
-
 func newCardDocumentWithHeader(title, titleTag, subtitle, subtitleTag, themeKey string, components ...cardComponent) *cardDocument {
 	doc := &cardDocument{
 		Title:       strings.TrimSpace(title),
@@ -254,117 +250,6 @@ func cardPlainText(content string) map[string]any {
 	}
 }
 
-func cardCallbackButtonElement(label, buttonType string, value map[string]any, disabled bool, width string) map[string]any {
-	label = strings.TrimSpace(label)
-	if label == "" {
-		return nil
-	}
-	buttonType = strings.TrimSpace(buttonType)
-	if buttonType == "" {
-		buttonType = "default"
-	}
-	button := map[string]any{
-		"tag":      "button",
-		"type":     buttonType,
-		"text":     cardPlainText(label),
-		"disabled": disabled,
-	}
-	if strings.TrimSpace(width) != "" {
-		button["width"] = strings.TrimSpace(width)
-	}
-	if len(value) != 0 {
-		button["behaviors"] = []map[string]any{{
-			"type":  "callback",
-			"value": cloneCardMap(value),
-		}}
-	}
-	return button
-}
-
-func cardOpenURLButtonElement(label, buttonType, openURL string, disabled bool, width string) map[string]any {
-	openURL = strings.TrimSpace(openURL)
-	if openURL == "" {
-		return nil
-	}
-	button := cardCallbackButtonElement(label, buttonType, nil, disabled, width)
-	if len(button) == 0 {
-		return nil
-	}
-	button["behaviors"] = []map[string]any{{
-		"type":        "open_url",
-		"default_url": openURL,
-	}}
-	return button
-}
-
-func cardFormSubmitButtonElement(label string, value map[string]any) map[string]any {
-	button := cardFormActionButtonElement(label, "primary", value, false, "")
-	if len(button) == 0 {
-		return nil
-	}
-	return button
-}
-
-func cardFormActionButtonElement(label, buttonType string, value map[string]any, disabled bool, width string) map[string]any {
-	button := cardCallbackButtonElement(label, buttonType, value, disabled, width)
-	if len(button) == 0 {
-		return nil
-	}
-	button["name"] = "submit"
-	button["form_action_type"] = "submit"
-	return button
-}
-
-func cardButtonGroupElement(buttons []map[string]any) map[string]any {
-	filtered := make([]map[string]any, 0, len(buttons))
-	for _, button := range buttons {
-		if len(button) == 0 {
-			continue
-		}
-		filtered = append(filtered, cloneCardMap(button))
-	}
-	switch len(filtered) {
-	case 0:
-		return nil
-	case 1:
-		return filtered[0]
-	default:
-		columns := make([]map[string]any, 0, len(filtered))
-		for _, button := range filtered {
-			columns = append(columns, map[string]any{
-				"tag":            "column",
-				"width":          "auto",
-				"vertical_align": "top",
-				"elements":       []map[string]any{button},
-			})
-		}
-		return map[string]any{
-			"tag":                "column_set",
-			"flex_mode":          "flow",
-			"horizontal_spacing": "small",
-			"columns":            columns,
-		}
-	}
-}
-
-func cardDividerElement() map[string]any {
-	return map[string]any{
-		"tag": "hr",
-	}
-}
-
-func appendCardFooterButtonGroup(elements []map[string]any, buttons []map[string]any) []map[string]any {
-	group := cardButtonGroupElement(buttons)
-	if len(group) == 0 {
-		return elements
-	}
-	if len(elements) != 0 {
-		elements = append(elements, cardDividerElement())
-	}
-	elements = append(elements, group)
-	return elements
-}
-
 func withAttentionCardDocument(doc *cardDocument, attentionText, mentionUserID string) *cardDocument {
 	if doc == nil {
 		return nil
@@ -426,15 +311,4 @@ func cloneCardAny(value any) any {
 	default:
 		return typed
 	}
-}
-
-func cloneCardMaps(values []map[string]any) []map[string]any {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make([]map[string]any, 0, len(values))
-	for _, value := range values {
-		out = append(out, cloneCardMap(value))
-	}
-	return out
 }

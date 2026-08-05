@@ -571,14 +571,6 @@ func mustLine(payload any) []byte {
 	return append(raw, '\n')
 }
 
-func compactJSON(value any) string {
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return "{}"
-	}
-	return string(raw)
-}
-
 func cloneMap(input map[string]any) map[string]any {
 	if len(input) == 0 {
 		return map[string]any{}

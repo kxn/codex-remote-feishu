@@ -229,16 +229,6 @@ func (a *App) adminManagedInstanceSummaryLocked(instanceID string) (adminInstanc
 	return adminInstanceSummary{}, false
 }
 
-func (a *App) managedInstancePIDLocked(instanceID string) int {
-	if managed := a.managedHeadlessRuntime.Processes[instanceID]; managed != nil && managed.PID > 0 {
-		return managed.PID
-	}
-	if inst := a.service.Instance(instanceID); inst != nil && inst.Managed && strings.EqualFold(strings.TrimSpace(inst.Source), "headless") {
-		return inst.PID
-	}
-	return 0
-}
-
 func (a *App) noteManagedHeadlessDisconnectedLocked(instanceID string) {
 	if managed := a.managedHeadlessRuntime.Processes[instanceID]; managed != nil {
 		managed.Status = headlessruntime.StatusOffline

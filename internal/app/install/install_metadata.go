@@ -299,16 +299,3 @@ func normalizeReleaseTrack(track ReleaseTrack) ReleaseTrack {
 func ParseReleaseTrack(value string) ReleaseTrack {
 	return normalizeReleaseTrack(ReleaseTrack(value))
 }
-
-func normalizeUpgradeSource(source UpgradeSource) UpgradeSource {
-	switch strings.ToLower(strings.TrimSpace(string(source))) {
-	case string(UpgradeSourceRelease):
-		return UpgradeSourceRelease
-	case string(UpgradeSourceDev):
-		return UpgradeSourceDev
-	case string(UpgradeSourceLocal):
-		return UpgradeSourceLocal
-	default:
-		return ""
-	}
-}

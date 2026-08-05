@@ -206,10 +206,6 @@ func (a *App) shutdownDrainPollValue() time.Duration {
 	return a.shutdownDrainPoll
 }
 
-func (a *App) shutdownRelayInstances() (map[string]struct{}, error) {
-	return a.shutdownRelayInstancesWithTimeout(a.shutdownDrainTimeoutValue(), a.shutdownDrainPollValue())
-}
-
 func (a *App) shutdownRelayInstancesWithTimeout(drainTimeout, poll time.Duration) (map[string]struct{}, error) {
 	targets := a.collectRelayShutdownTargets()
 	if len(targets) == 0 {
@@ -308,10 +304,6 @@ func (a *App) snapshotRelayInstancesForShutdown() map[string]relayShutdownObserv
 		}
 	}
 	return snapshot
-}
-
-func (a *App) waitForRelayShutdownTargets(targets []relayShutdownTarget) []relayShutdownTarget {
-	return a.waitForRelayShutdownTargetsWithTimeout(targets, a.shutdownDrainTimeoutValue(), a.shutdownDrainPollValue())
 }
 
 func (a *App) waitForRelayShutdownTargetsWithTimeout(targets []relayShutdownTarget, drainTimeout, poll time.Duration) []relayShutdownTarget {

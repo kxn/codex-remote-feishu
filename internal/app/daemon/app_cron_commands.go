@@ -362,16 +362,6 @@ func (a *App) reloadCronJobs(command control.DaemonCommand) (*eventcontract.Even
 	}, nil
 }
 
-func intervalMinutesForLabel(label string) (int, bool) {
-	label = strings.TrimSpace(label)
-	for _, item := range cronrt.IntervalChoices {
-		if item.Label == label {
-			return item.Minutes, true
-		}
-	}
-	return 0, false
-}
-
 func nextCronScheduleScan(now time.Time) time.Time {
 	if now.IsZero() {
 		now = time.Now().UTC()

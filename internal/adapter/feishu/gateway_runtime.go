@@ -599,11 +599,3 @@ func setCardPayloadElements(payload map[string]any, path string, elements []map[
 		payload["elements"] = cloned
 	}
 }
-
-func jsonSize(value any) (int, error) {
-	data, err := json.Marshal(value)
-	if err != nil {
-		return 0, err
-	}
-	return len(data), nil
-}

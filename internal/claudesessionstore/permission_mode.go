@@ -69,7 +69,3 @@ func claudePermissionSelectionFromObservedPermission(observed *agentproto.Observ
 		PlanMode:   strings.TrimSpace(observed.ProjectedPlanMode),
 	}
 }
-
-func claudePermissionSelectionFromNative(mode string) claudePermissionSelection {
-	return claudePermissionSelectionFromObservedPermission(CompileObservedPermissionStateFromClaudeNative(mode))
-}
