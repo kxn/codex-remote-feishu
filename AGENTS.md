@@ -460,6 +460,18 @@ When corresponding logic carriers changed, do **not** commit until: guardrail sk
   - issue close when acceptance is satisfied
 - “I already implemented it locally” is not a sufficient reason to leave an issue open or leave commits unpublished.
 
+## Windows Shell / bash 使用规范（禁用 WSL）
+
+- **禁止在仓库操作中使用任何 WSL 命令**：wsl / wsl.exe / C:\Windows\system32\bash.exe（WSL bash）。
+- 原因（实测踩坑，2026-08-05）：WSL 内的 git 与 Windows git 对行尾（CRLF/LF）、配置、路径的视角不一致。同一干净工作区，WSL git 会误报 200+ 个文件"每行都变"（206 个假 modified），并打印 wsl: Processing /etc/fstab with mount -a failed. 噪音，导致 safe-push / status 检查不可信。
+- 需要 bash 时**统一用 Git Bash**：C:\Program Files\Git\bin\bash.exe（或 C:\Program Files\Git\usr\bin\bash.exe）。它使用 Windows git，视角一致。
+- PowerShell 中调用示例：
+  ```powershell
+  & "C:\Program Files\Git\bin\bash.exe" -c 'cd /e/temp/codex-remote-feishu && ./safe-push.sh'
+  ```
+- 执行前先确认 bash 来源：`Get-Command bash | Select-Object Source`。若指向 `C:\Windows\system32\bash.exe` 就是 WSL，必须改用 Git Bash 完整路径。
+- 不要用裸 `bash` / `git` 让系统解析到 WSL；仓库操作一律走 Windows git（`C:\Program Files\Git\cmd\git.exe`）。
+- WSL 仅允许用于与仓库无关、且用户明确要求 WSL 的操作。
 ## Windows GitHub CLI (gh) 使用规范
 
 PowerShell 5.1 与 Unix shell 的引号 / 管道 / 编码语义不同，直接照抄 Unix 习惯的 gh 命令会反复翻车（实测踩坑记录，2026-08-05）。以下为验证过的正确姿势：
