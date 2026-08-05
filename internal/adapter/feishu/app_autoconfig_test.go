@@ -651,6 +651,72 @@ func TestPlanAppAutoConfigRequirementPresenceUsesConfiguredScopes(t *testing.T) 
 	}
 }
 
+func TestPlanAppAutoConfigIgnoresExtraConfiguredItemsWhenRequirementsAreSatisfied(t *testing.T) {
+	restoreAutoConfigHooks(t)
+	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+		return &larkapplication.Application{
+			Scopes: []*larkapplication.AppScope{
+				{Scope: strp("im:message"), TokenTypes: []string{"tenant"}},
+				{Scope: strp("drive:drive"), TokenTypes: []string{"tenant"}},
+				{Scope: strp("calendar:calendar"), TokenTypes: []string{"tenant"}},
+			},
+			CallbackInfo: &larkapplication.CallbackInfo{
+				CallbackType:        strp("websocket"),
+				SubscribedCallbacks: []string{"card.action.trigger", "card.action.extra"},
+			},
+			OnlineVersionId: strp("online-1"),
+		}, nil
+	}
+	autoConfigGetApplicationVersion = func(context.Context, *FeishuCallBroker, *lark.Client, string, string) (*larkapplication.ApplicationAppVersion, error) {
+		return &larkapplication.ApplicationAppVersion{
+			VersionId: strp("online-1"),
+			Version:   strp("1.0.0"),
+			Status:    intp(larkapplication.AppVersionStatusAudited),
+			Ability:   &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
+		}, nil
+	}
+	autoConfigListApplicationVersions = func(context.Context, *FeishuCallBroker, *lark.Client, string) ([]*larkapplication.ApplicationAppVersion, error) {
+		return []*larkapplication.ApplicationAppVersion{
+			{
+				VersionId:   strp("published-1"),
+				Version:     strp("1.0.0"),
+				Status:      intp(larkapplication.AppVersionStatusAudited),
+				PublishTime: strp("1700000000"),
+				EventInfos: []*larkapplication.Event{
+					{EventType: strp("im.message.receive_v1")},
+					{EventType: strp("im.message.extra_v1")},
+				},
+				Ability: &larkapplication.AppAbility{Bot: &larkapplication.Bot{}},
+			},
+		}, nil
+	}
+
+	plan, err := PlanAppAutoConfig(
+		context.Background(),
+		LiveGatewayConfig{GatewayID: "main", AppID: "cli_extra_configured"},
+		testAutoConfigManifest(),
+		feishuapp.DefaultFixedPolicy(),
+	)
+	if err != nil {
+		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
+	}
+	if plan.Status != AutoConfigStatusClean {
+		t.Fatalf("plan status = %q, want %q (diff=%#v)", plan.Status, AutoConfigStatusClean, plan.Diff)
+	}
+	if plan.Diff.ConfigPatchRequired {
+		t.Fatalf("extra configured items must not require a config patch: %#v", plan.Diff)
+	}
+	if !reflect.DeepEqual(plan.Diff.ExtraScopes, []AutoConfigScopeRef{{Scope: "calendar:calendar", ScopeType: "tenant"}}) {
+		t.Fatalf("extra scopes = %#v, want diagnostic-only extra scope", plan.Diff.ExtraScopes)
+	}
+	if !reflect.DeepEqual(plan.Diff.ExtraEvents, []string{"im.message.extra_v1"}) {
+		t.Fatalf("extra events = %#v, want diagnostic-only extra event", plan.Diff.ExtraEvents)
+	}
+	if !reflect.DeepEqual(plan.Diff.ExtraCallbacks, []string{"card.action.extra"}) {
+		t.Fatalf("extra callbacks = %#v, want diagnostic-only extra callback", plan.Diff.ExtraCallbacks)
+	}
+}
+
 func TestPlanAppAutoConfigClassifiesReadAPIErrorWithoutRawUserText(t *testing.T) {
 	restoreAutoConfigHooks(t)
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {

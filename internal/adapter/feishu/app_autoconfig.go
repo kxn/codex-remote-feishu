@@ -152,11 +152,8 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 		diff.CallbackRequestURLMismatch = strings.TrimSpace(stringValue(callbackField(snapshot.app, "url"))) != s.policy.CallbackRequestURL
 	}
 	diff.ConfigPatchRequired = len(diff.MissingScopes) > 0 ||
-		len(diff.ExtraScopes) > 0 ||
 		len(diff.MissingEvents) > 0 ||
-		len(diff.ExtraEvents) > 0 ||
 		len(diff.MissingCallbacks) > 0 ||
-		len(diff.ExtraCallbacks) > 0 ||
 		diff.CallbackTypeMismatch ||
 		diff.CallbackRequestURLMismatch
 	diff.AbilityPatchRequired = observedBotEnabled(snapshot.activeVersion) != s.policy.BotEnabled

@@ -100,6 +100,35 @@ describe("SetupRoute", () => {
     expect(screen.queryByText("需要在飞书开放平台补齐对应权限后才能继续。")).not.toBeInTheDocument();
   });
 
+  it("shows the existing continue action when auto configuration is complete", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+    const app = makeApp({
+      id: "bot-configured",
+      name: "团队机器人",
+      appId: "cli_configured",
+      verifiedAt: "2026-04-25T08:10:00Z",
+    });
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": {
+        body: buildAutoConfigWorkflow(app, {
+          status: "clean",
+          summary: "飞书应用配置已收敛。",
+          stageStatus: "complete",
+          allowedActions: ["retry"],
+        }),
+      },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByText("飞书应用配置已收敛。")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "继续" }));
+    expect(await screen.findByRole("heading", { name: "确认机器人菜单" })).toBeInTheDocument();
+  });
+
   it("connects manually and shows missing scopes with a copyable import JSON without auto-fill", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();

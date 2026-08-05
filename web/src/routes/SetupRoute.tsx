@@ -1085,6 +1085,15 @@ export function SetupRoute() {
           ) : null}
 
           <div className="button-row">
+            {autoConfigStage.status === "complete" ? (
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => goToNextStep("auto_config")}
+              >
+                继续
+              </button>
+            ) : null}
             {autoConfigStage.allowedActions?.includes("defer") ? (
               <button
                 className="secondary-button"
