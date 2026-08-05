@@ -11,6 +11,7 @@ export type AutoConfigRequirementDisplay = {
 export type AutoConfigRequirementRow = {
   key: string;
   label: string;
+  copyValue: string;
   meta: string;
   impacts: string[];
 };
@@ -129,6 +130,7 @@ export function groupAutoConfigRequirements(
       {
         key,
         label: describeAutoConfigRequirementLabel(requirement),
+        copyValue: requirement.key.trim(),
         meta: describeAutoConfigRequirementMeta(requirement),
         impacts: [],
       };

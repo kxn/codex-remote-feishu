@@ -374,6 +374,25 @@ export function SetupRoute() {
     }
   }
 
+  async function copyAutoConfigRequirement(row: { label: string; copyValue: string }) {
+    if (!navigator.clipboard?.writeText) {
+      setNotice({
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(row.copyValue);
+      setNotice({ tone: "good", message: `${row.label} 已复制。` });
+    } catch {
+      setNotice({
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+      });
+    }
+  }
+
   async function refreshAutoConfigResult() {
     if (!activeApp?.id) {
       return;
@@ -1053,11 +1072,13 @@ export function SetupRoute() {
             "需要先解决的问题",
             plan?.blockingRequirements || [],
             "danger",
+            (row) => void copyAutoConfigRequirement(row),
           )}
           {renderAutoConfigRequirementList(
             "可按降级继续的能力",
             plan?.degradableRequirements || [],
             "warn",
+            (row) => void copyAutoConfigRequirement(row),
           )}
 
           {missingScopes.length > 0 ? (
@@ -1452,6 +1473,7 @@ function renderAutoConfigRequirementList(
   title: string,
   requirements: FeishuAppAutoConfigRequirementStatus[],
   tone: "warn" | "danger",
+  onCopy: (row: { label: string; copyValue: string }) => void,
 ) {
   if (requirements.length === 0) {
     return null;
@@ -1468,7 +1490,18 @@ function renderAutoConfigRequirementList(
                 <span className={`badge ${tone === "danger" ? "danger" : "warn"}`}>
                   {item.meta}
                 </span>
-                <strong className="mono">{item.label}</strong>
+                <div className="requirement-name-row">
+                  <strong className="mono">{item.label}</strong>
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    aria-label={`复制${item.label}`}
+                    title={`复制${item.label}`}
+                    onClick={() => onCopy(item)}
+                  >
+                    <span aria-hidden="true">⧉</span>
+                  </button>
+                </div>
               </div>
               <div className="requirement-impact">
                 {item.impacts.length > 0 ? item.impacts.join("、") : "基础配置"}

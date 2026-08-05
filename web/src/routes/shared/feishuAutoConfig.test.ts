@@ -111,12 +111,14 @@ describe("feishu auto-config shared helpers", () => {
       {
         key: "scope:tenant:bitable:app",
         label: "权限 bitable:app",
+        copyValue: "bitable:app",
         meta: "权限 · tenant",
         impacts: ["/cron 多维表格"],
       },
       {
         key: "scope:tenant:im:message.group_msg",
         label: "权限 im:message.group_msg",
+        copyValue: "im:message.group_msg",
         meta: "权限 · tenant",
         impacts: ["机器人基础消息能力"],
       },

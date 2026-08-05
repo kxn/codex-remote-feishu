@@ -129,6 +129,75 @@ describe("SetupRoute", () => {
     expect(await screen.findByRole("heading", { name: "确认机器人菜单" })).toBeInTheDocument();
   });
 
+  it("copies the raw name for missing scopes, events, and callbacks", async () => {
+    window.history.replaceState({}, "", "/setup");
+    const user = userEvent.setup();
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    const app = makeApp({
+      id: "bot-missing-items",
+      name: "团队机器人",
+      appId: "cli_missing_items",
+      verifiedAt: "2026-04-25T08:10:00Z",
+    });
+    const workflow = buildAutoConfigWorkflow(app, {
+      status: "apply_required",
+      summary: "存在尚未补齐的飞书配置差异。",
+      stageStatus: "pending",
+      allowedActions: ["retry"],
+    });
+    workflow.app!.autoConfig.plan!.blockingRequirements = [
+      {
+        kind: "scope",
+        key: "im:message.group_msg",
+        scopeType: "tenant",
+        required: true,
+        present: false,
+      },
+      {
+        kind: "event",
+        key: "im.message.receive_v1",
+        required: true,
+        present: false,
+      },
+      {
+        kind: "callback",
+        key: "card.action.trigger",
+        required: true,
+        present: false,
+      },
+    ];
+
+    installMockFetch({
+      "/api/setup/bootstrap-state": { body: makeBootstrap() },
+      "/api/setup/onboarding/workflow": { body: workflow },
+    });
+
+    render(<SetupRoute />);
+
+    expect(await screen.findByRole("button", { name: "复制权限 im:message.group_msg" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制事件 im.message.receive_v1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制回调 card.action.trigger" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "复制权限 im:message.group_msg" }));
+    expect(writeText).toHaveBeenCalledWith("im:message.group_msg");
+    expect(await screen.findByText("权限 im:message.group_msg 已复制。")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "复制事件 im.message.receive_v1" }));
+    await user.click(screen.getByRole("button", { name: "复制回调 card.action.trigger" }));
+    expect(writeText).toHaveBeenNthCalledWith(2, "im.message.receive_v1");
+    expect(writeText).toHaveBeenNthCalledWith(3, "card.action.trigger");
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
   it("connects manually and shows missing scopes with a copyable import JSON without auto-fill", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
