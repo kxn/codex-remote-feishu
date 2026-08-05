@@ -120,3 +120,59 @@ func TestUninstallManagedShimRestoresOriginalBinary(t *testing.T) {
 		t.Fatalf("expected settings to point at restored binary, got %q", got)
 	}
 }
+
+func TestUninstallManagedShimRemovesOrphanedShimWithoutBackup(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bin", "linux-x86_64", "codex")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir entrypoint dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("original-codex"), 0o755); err != nil {
+		t.Fatalf("seed bundle entrypoint: %v", err)
+	}
+	if err := PatchBundleEntrypoint(PatchBundleEntrypointOptions{
+		EntrypointPath:   path,
+		InstallStatePath: filepath.Join(dir, "install-state.json"),
+		ConfigPath:       filepath.Join(dir, "config.json"),
+		InstanceID:       "stable",
+	}); err != nil {
+		t.Fatalf("patch bundle entrypoint: %v", err)
+	}
+
+	// Simulate a lost original-binary backup (e.g. install-state.json and the
+	// .real backup both gone). Uninstall must still remove the orphaned shim.
+	if err := os.Remove(ManagedShimRealBinaryPath(path)); err != nil {
+		t.Fatalf("remove real binary backup: %v", err)
+	}
+	if err := UninstallManagedShim(path, filepath.Join(dir, "settings.json")); err != nil {
+		t.Fatalf("uninstall orphaned shim: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected orphaned shim entrypoint to be removed, err=%v", err)
+	}
+	if _, err := os.Stat(ManagedShimSidecarPath(path)); !os.IsNotExist(err) {
+		t.Fatalf("expected orphaned sidecar to be removed, err=%v", err)
+	}
+}
+
+func TestUninstallManagedShimLeavesPlainBinaryAlone(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "bin", "codex")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir entrypoint dir: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("plain-binary"), 0o755); err != nil {
+		t.Fatalf("seed plain binary: %v", err)
+	}
+	// A plain binary with no sidecar and no .real backup must be left untouched.
+	if err := UninstallManagedShim(path, filepath.Join(dir, "settings.json")); err != nil {
+		t.Fatalf("uninstall on plain binary: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read plain binary: %v", err)
+	}
+	if string(raw) != "plain-binary" {
+		t.Fatalf("expected plain binary untouched, got %q", string(raw))
+	}
+}

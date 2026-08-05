@@ -78,19 +78,39 @@ func PatchBundleEntrypoint(opts PatchBundleEntrypointOptions) error {
 
 // UninstallManagedShim reverses PatchBundleEntrypoint: it removes the shim
 // executable and sidecar, restores the original binary to the entrypoint path,
-// and points VS Code settings back at the restored binary.
+// and points VS Code settings back at the restored binary. If the original
+// binary backup is missing, it still removes any leftover shim executable and
+// sidecar so a disable never leaves an orphaned managed shim behind.
 func UninstallManagedShim(entrypointPath, settingsPath string) error {
 	entrypointPath = strings.TrimSpace(entrypointPath)
 	if entrypointPath == "" {
 		return nil
 	}
 	realBinaryPath := ManagedShimRealBinaryPath(entrypointPath)
-	if _, err := os.Stat(realBinaryPath); err != nil {
-		if os.IsNotExist(err) {
-			// No renamed original binary, so nothing was installed to undo.
-			return nil
-		}
+	realExists := false
+	if _, err := os.Stat(realBinaryPath); err == nil {
+		realExists = true
+	} else if !os.IsNotExist(err) {
 		return err
+	}
+	if !realExists {
+		// No renamed original binary backup. Only remove shim files when this
+		// entrypoint actually carries a managed shim (sidecar present);
+		// otherwise there is nothing installed to undo.
+		sidecarPath := ManagedShimSidecarPath(entrypointPath)
+		if _, err := os.Stat(sidecarPath); err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if err := os.Remove(sidecarPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Remove(entrypointPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
 	}
 	if err := os.Remove(ManagedShimSidecarPath(entrypointPath)); err != nil && !os.IsNotExist(err) {
 		return err

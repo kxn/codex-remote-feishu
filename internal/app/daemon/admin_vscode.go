@@ -113,29 +113,88 @@ func (a *App) uninstallVSCodeIntegration() error {
 	if err != nil {
 		return err
 	}
-	if state == nil {
-		return nil
+
+	defaults, err := a.platformDefaults()
+	if err != nil {
+		return err
 	}
-	entrypoint := strings.TrimSpace(state.BundleEntrypoint)
-	if entrypoint == "" {
-		return nil
+	currentBinary, err := a.currentBinaryPath()
+	if err != nil {
+		return err
 	}
-	settingsPath := strings.TrimSpace(state.VSCodeSettingsPath)
+
+	settingsPath := ""
+	if state != nil {
+		settingsPath = strings.TrimSpace(state.VSCodeSettingsPath)
+	}
 	if settingsPath == "" {
-		defaults, err := a.platformDefaults()
-		if err != nil {
-			return err
-		}
 		settingsPath = defaults.VSCodeSettingsPath
 	}
-	if err := editor.UninstallManagedShim(entrypoint, settingsPath); err != nil {
+
+	// Collect every entrypoint that actually carries a managed shim installed
+	// by this product. This must not depend on install-state.json existing:
+	// when the state file was lost or cleared, the shim still lives on disk and
+	// disable would otherwise report success without removing anything.
+	recordedEntrypoint := ""
+	if state != nil {
+		recordedEntrypoint = strings.TrimSpace(state.BundleEntrypoint)
+	}
+	statuses, err := detectManagedShimStatuses(defaults.CandidateBundleEntrypoints, currentBinary)
+	if err != nil {
 		return err
 	}
-	state.BundleEntrypoint = ""
-	if err := install.WriteState(statePath, *state); err != nil {
+	targets, err := managedShimUninstallTargets(recordedEntrypoint, statuses, loadedConfigPath(a), statePath, currentBinary)
+	if err != nil {
 		return err
+	}
+	for _, entrypoint := range targets {
+		if err := editor.UninstallManagedShim(entrypoint, settingsPath); err != nil {
+			return err
+		}
+	}
+
+	if state != nil {
+		state.BundleEntrypoint = ""
+		state.Integrations = nil
+		if err := install.WriteState(statePath, *state); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+// managedShimUninstallTargets returns every entrypoint that currently carries a
+// managed shim installed by this product: the entrypoint recorded in install
+// state (when present) plus every entrypoint whose sidecar points back at this
+// install's config/state paths. Entrypoints that are not actually shimmed
+// (status.Kind empty) are skipped, so unrelated bundle binaries are left alone.
+func managedShimUninstallTargets(recordedEntrypoint string, statuses map[string]editor.ManagedShimStatus, configPath, statePath, currentBinary string) ([]string, error) {
+	targets := []string{}
+	seen := map[string]bool{}
+	add := func(entrypoint string) {
+		entrypoint = strings.TrimSpace(entrypoint)
+		if entrypoint == "" || seen[entrypoint] {
+			return
+		}
+		seen[entrypoint] = true
+		targets = append(targets, entrypoint)
+	}
+	add(recordedEntrypoint)
+	for _, entrypoint := range historicalManagedShimTargets(recordedEntrypoint, statuses, configPath, statePath) {
+		add(entrypoint)
+	}
+	filtered := make([]string, 0, len(targets))
+	for _, entrypoint := range targets {
+		status, err := lookupManagedShimStatus(statuses, entrypoint, currentBinary)
+		if err != nil {
+			return nil, err
+		}
+		if status.Kind == "" {
+			continue
+		}
+		filtered = append(filtered, entrypoint)
+	}
+	return filtered, nil
 }
 
 func (a *App) handleVSCodeReinstallShim(w http.ResponseWriter, r *http.Request) {

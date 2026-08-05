@@ -149,6 +149,120 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	}
 }
 
+func TestVSCodeDisableUninstallsManagedShim(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, entrypoint, "orig")
+
+	app, _, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
+
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(editor.ManagedShimSidecarPath(entrypoint)); err != nil {
+		t.Fatalf("expected sidecar after apply: %v", err)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/disable", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	if readFileString(t, entrypoint) != "orig" {
+		t.Fatalf("expected original binary restored after disable, got %q", readFileString(t, entrypoint))
+	}
+	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(entrypoint)); !os.IsNotExist(err) {
+		t.Fatalf("expected .real backup removed after disable, err=%v", err)
+	}
+	if _, err := os.Stat(editor.ManagedShimSidecarPath(entrypoint)); !os.IsNotExist(err) {
+		t.Fatalf("expected sidecar removed after disable, err=%v", err)
+	}
+
+	var detect vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode disable detect: %v", err)
+	}
+	if workflowVSCodeReady(detect) {
+		t.Fatalf("expected workflow to report vscode not ready after disable, got %#v", detect)
+	}
+	if detect.LatestShim.Kind != "" || detect.LatestShim.Installed {
+		t.Fatalf("expected latest shim gone after disable, got %#v", detect.LatestShim)
+	}
+
+	state, err := install.LoadState(installStatePath)
+	if err != nil {
+		t.Fatalf("LoadState after disable: %v", err)
+	}
+	if state.BundleEntrypoint != "" {
+		t.Fatalf("expected state bundle entrypoint cleared, got %q", state.BundleEntrypoint)
+	}
+	if len(state.Integrations) != 0 {
+		t.Fatalf("expected state integrations cleared, got %#v", state.Integrations)
+	}
+}
+
+func TestVSCodeDisableWithoutInstallStateUninstallsManagedShim(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, entrypoint, "orig")
+
+	app, _, installStatePath := newVSCodeAdminTestApp(t, home, binaryPath, true)
+
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("apply status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(editor.ManagedShimSidecarPath(entrypoint)); err != nil {
+		t.Fatalf("expected sidecar after apply: %v", err)
+	}
+
+	// Simulate the reported Windows bug: the managed shim is installed on disk
+	// but install-state.json is missing. Disable must still uninstall the shim
+	// instead of silently reporting success.
+	if err := os.Remove(installStatePath); err != nil {
+		t.Fatalf("remove install-state.json: %v", err)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/disable", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+
+	if readFileString(t, entrypoint) != "orig" {
+		t.Fatalf("expected original binary restored after disable, got %q", readFileString(t, entrypoint))
+	}
+	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(entrypoint)); !os.IsNotExist(err) {
+		t.Fatalf("expected .real backup removed after disable, err=%v", err)
+	}
+	if _, err := os.Stat(editor.ManagedShimSidecarPath(entrypoint)); !os.IsNotExist(err) {
+		t.Fatalf("expected sidecar removed after disable, err=%v", err)
+	}
+
+	var detect vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode disable detect: %v", err)
+	}
+	if workflowVSCodeReady(detect) {
+		t.Fatalf("expected workflow to report vscode not ready after disable, got %#v", detect)
+	}
+	if detect.LatestShim.Kind != "" || detect.LatestShim.Installed {
+		t.Fatalf("expected latest shim gone after disable, got %#v", detect.LatestShim)
+	}
+}
+
 func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
