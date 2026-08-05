@@ -14,12 +14,12 @@ test("admin core flows work on desktop and mobile", async ({ page }) => {
   await page.getByRole("button", { name: "重新检查配置" }).click();
   await expect(page.getByText("飞书配置还需要补齐。")).toBeVisible();
   await expect(
-    page.getByText("权限 im:message.group_msg:readonly"),
+    page.getByText("权限 im:message.group_msg"),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "复制导入 JSON" })).toBeVisible();
   await expect(page.getByLabel("权限导入 JSON")).toHaveValue(
     JSON.stringify(
-      { scopes: { tenant: ["im:message.group_msg:readonly"], user: [] } },
+      { scopes: { tenant: ["im:message.group_msg"], user: [] } },
       null,
       2,
     ),
@@ -124,7 +124,7 @@ async function installAdminMocks(page: Page) {
             blockingRequirements: [
               {
                 kind: "scope",
-                key: "im:message.group_msg:readonly",
+                key: "im:message.group_msg",
                 scopeType: "tenant",
                 feature: "group_message",
                 required: true,
@@ -148,7 +148,7 @@ async function installAdminMocks(page: Page) {
               configPatchRequired: true,
               abilityPatchRequired: false,
               missingScopes: [
-                { scope: "im:message.group_msg:readonly", scopeType: "tenant" },
+                { scope: "im:message.group_msg", scopeType: "tenant" },
               ],
               extraScopes: [],
               missingEvents: [],

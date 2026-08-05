@@ -195,7 +195,7 @@ describe("AdminRoute", () => {
           blockingRequirements: [
             {
               kind: "scope",
-              key: "im:message.group_msg:readonly",
+              key: "im:message.group_msg",
               scopeType: "tenant",
               feature: "group_message",
               required: true,
@@ -206,7 +206,7 @@ describe("AdminRoute", () => {
             configPatchRequired: true,
             abilityPatchRequired: false,
             missingScopes: [
-              { scope: "im:message.group_msg:readonly", scopeType: "tenant" },
+              { scope: "im:message.group_msg", scopeType: "tenant" },
             ],
             extraScopes: [],
             missingEvents: [],
@@ -258,15 +258,15 @@ describe("AdminRoute", () => {
     await openAdminArea(user, "机器人");
     await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
     expect(await screen.findByText("飞书配置还需要补齐。")).toBeInTheDocument();
-    expect(screen.getByText("权限 im:message.group_msg:readonly")).toBeInTheDocument();
-    expect(screen.getByDisplayValue(/im:message\.group_msg:readonly/)).toBeInTheDocument();
+    expect(screen.getByText("权限 im:message.group_msg")).toBeInTheDocument();
+    expect(screen.getByDisplayValue(/im:message\.group_msg/)).toBeInTheDocument();
     expect(screen.getByText("事件 im.message.receive_v1")).toBeInTheDocument();
     expect(screen.getByText("接收用户消息")).toBeInTheDocument();
     expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "复制导入 JSON" }));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("im:message.group_msg:readonly"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"im:message.group_msg"'));
     expect(await screen.findByText("导入 JSON 已复制。")).toBeInTheDocument();
 
     Object.defineProperty(navigator, "clipboard", {

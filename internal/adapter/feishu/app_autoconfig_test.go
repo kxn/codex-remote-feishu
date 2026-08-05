@@ -543,10 +543,9 @@ func TestPlanAppAutoConfigCallbackTypeMismatchFlagged(t *testing.T) {
 }
 
 func TestNarrowedManifestScopeSatisfiersHonorAlternatives(t *testing.T) {
-	// After the manifest narrows to the minimum requested scope, configured
-	// broader/legacy scopes that Feishu documents as "any one of" alternatives
-	// must still satisfy the requirement so existing installs are not flagged
-	// as missing.
+	// Configured broader/legacy scopes that Feishu documents as "any one of"
+	// alternatives must still satisfy the current requirement so existing
+	// installs are not flagged as missing.
 	cases := []struct {
 		requirement string
 		configured  string
@@ -555,7 +554,7 @@ func TestNarrowedManifestScopeSatisfiersHonorAlternatives(t *testing.T) {
 		{requirement: "im:resource:upload", configured: "im:resource"},
 		{requirement: "application:application:self_manage", configured: "admin:app.info:readonly"},
 		{requirement: "im:message.group_at_msg.include_bot:readonly", configured: "im:message.group_at_msg.include_bot"},
-		{requirement: "im:message.group_msg:readonly", configured: "im:message.group_msg"},
+		{requirement: "im:message.group_msg", configured: "im:message.group_msg:readonly"},
 	}
 	for _, tc := range cases {
 		req := AutoConfigScopeRef{Scope: tc.requirement, ScopeType: "tenant"}
@@ -568,13 +567,13 @@ func TestNarrowedManifestScopeSatisfiersHonorAlternatives(t *testing.T) {
 		}
 	}
 
-	// A configured alternative must not be reported as an extra scope.
+	// A configured historical alternative must not be reported as an extra scope.
 	extra := extraScopeRefs(
-		[]AutoConfigScopeRef{{Scope: "im:message", ScopeType: "tenant"}},
-		[]AutoConfigScopeRef{{Scope: "im:message:readonly", ScopeType: "tenant"}},
+		[]AutoConfigScopeRef{{Scope: "im:message.group_msg:readonly", ScopeType: "tenant"}},
+		[]AutoConfigScopeRef{{Scope: "im:message.group_msg", ScopeType: "tenant"}},
 	)
 	if len(extra) != 0 {
-		t.Fatalf("configured im:message must not be extra when im:message:readonly is required, got %#v", extra)
+		t.Fatalf("configured im:message.group_msg:readonly must not be extra when im:message.group_msg is required, got %#v", extra)
 	}
 }
 

@@ -32,9 +32,9 @@ var scopeSatisfiers = map[string][]string{
 		"im:message.group_at_msg.include_bot:readonly",
 		"im:message.group_at_msg.include_bot",
 	},
-	"im:message.group_msg:readonly": {
-		"im:message.group_msg:readonly",
+	"im:message.group_msg": {
 		"im:message.group_msg",
+		"im:message.group_msg:readonly",
 	},
 	"im:message:readonly": {
 		"im:message:readonly",

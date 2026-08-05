@@ -100,7 +100,7 @@ describe("feishu auto-config shared helpers", () => {
         },
         {
           kind: "scope",
-          key: "im:message.group_msg:readonly",
+          key: "im:message.group_msg",
           scopeType: "tenant",
           feature: "core_message_flow",
           required: true,
@@ -115,8 +115,8 @@ describe("feishu auto-config shared helpers", () => {
         impacts: ["/cron 多维表格"],
       },
       {
-        key: "scope:tenant:im:message.group_msg:readonly",
-        label: "权限 im:message.group_msg:readonly",
+        key: "scope:tenant:im:message.group_msg",
+        label: "权限 im:message.group_msg",
         meta: "权限 · tenant",
         impacts: ["机器人基础消息能力"],
       },

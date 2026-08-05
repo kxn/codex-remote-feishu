@@ -164,6 +164,27 @@ func TestDefaultManifestOmitsChatInfoScope(t *testing.T) {
 	}
 }
 
+func TestDefaultManifestUsesCurrentGroupMessageScope(t *testing.T) {
+	manifest := DefaultManifest()
+	foundCurrentScope := false
+	for _, scope := range manifest.Scopes.Scopes.Tenant {
+		if scope == "im:message.group_msg:readonly" {
+			t.Fatal("default manifest must use current im:message.group_msg scope")
+		}
+		if scope == "im:message.group_msg" {
+			foundCurrentScope = true
+		}
+	}
+	if !foundCurrentScope {
+		t.Fatal("default manifest must export im:message.group_msg")
+	}
+	for _, item := range manifest.ScopeRequirements {
+		if item.Feature == "primary_room_bot" && item.Scope != "im:message.group_msg" {
+			t.Fatalf("primary room bot scope = %q, want im:message.group_msg", item.Scope)
+		}
+	}
+}
+
 func TestDefaultFixedPolicy(t *testing.T) {
 	policy := DefaultFixedPolicy()
 	if policy.EventSubscriptionType != FeishuEventSubscriptionTypeWebsocket {

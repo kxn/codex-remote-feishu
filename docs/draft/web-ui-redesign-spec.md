@@ -314,7 +314,7 @@ Codex Remote 是一个跑在用户自己机器上的守护进程（Go 后端 + �
 | 详情 · 状态 | （app.status / runtimeApply） | 连接（正常/已停用/需要处理/待确认）、启用状态（只读）、最近验证时间；`runtimeApply.pending` 时 warn 横幅并禁用 auto-config 按钮 | 文案映射原样迁移 |
 | 详情 · 自动配置 | `GET .../auto-config/plan`、`POST .../apply`、`POST .../publish` | 同 Setup 子步 B 的展示与按钮（apply_required→「自动补齐配置」；publish_required→「提交发布」+ 确认对话框；任意状态→「重新检查」）；plan 加载失败特判 `feishu_app_runtime_unavailable` | 确认对话框、错误 details 直出策略保留 |
 | 详情 · 连接信息 | — | App ID、飞书后台外链（`consoleLinks.auth` / `consoleLinks.bot`） | 折叠进详情块，不平铺 |
-| 详情 · 权限检查 | 新端点，见第 9.1 章 | 「检查权限」按钮 → 卡片内「检查中…」→ 三态结果：① 全部就绪（成功色一行「权限已就绪」）；② 有缺失（缺失 scope 逐条列出 + 「复制导入 JSON」按钮 + 指引一行「到飞书后台导入后，回到这里重新检查」）；③ 检查失败（toast + 卡片内可重试） | 缺失清单与导入 JSON 原样来自后端响应，前端禁止自行推断或拼接权限内容；scope 原文（如 `im:message.group_msg:readonly`）允许在此区块显示——它与飞书开放平台后台用词一致，属用户可操作信息，是 4.5 的登记例外；复制成功走 toast |
+| 详情 · 权限检查 | 新端点，见第 9.1 章 | 「检查权限」按钮 → 卡片内「检查中…」→ 三态结果：① 全部就绪（成功色一行「权限已就绪」）；② 有缺失（缺失 scope 逐条列出 + 「复制导入 JSON」按钮 + 指引一行「到飞书后台导入后，回到这里重新检查」）；③ 检查失败（toast + 卡片内可重试） | 缺失清单与导入 JSON 原样来自后端响应，前端禁止自行推断或拼接权限内容；scope 原文（如 `im:message.group_msg`）允许在此区块显示——它与飞书开放平台后台用词一致，属用户可操作信息，是 4.5 的登记例外；复制成功走 toast |
 | 详情 · 危险区 | `DELETE /api/admin/feishu/apps/{id}` | 删除按钮 + 确认对话框（显示机器人名、「此操作不可恢复」）；`readOnly` 禁用并说明「当前机器人由运行环境提供，不能在这里删除」 | 保留 |
 
 ### 6.5 区 3 · 对话后端

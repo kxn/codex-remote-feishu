@@ -108,7 +108,7 @@ Feishu 群聊消息在进入 surface 状态机前还有一层 gateway 入站前�
 1. 私聊消息不要求 mention，继续按 `feishu:<gatewayID>:user:<preferredActorId>` 进入 surface。
 2. 群聊消息若 `mentions` 命中当前 gateway 缓存的 bot `open_id`，允许 materialize / reuse `feishu:<gatewayID>:chat:<chatID>` surface。
 3. 群聊消息若 `mentions` 存在但未命中当前 bot，fail closed 忽略，不记录 `messageID -> surfaceID`，不进入 queue / dispatch。
-4. 群聊无 mention 的用户消息只在 daemon 当前 primary snapshot 记录 `chatID -> current gateway`，且 daemon 短 TTL 权限缓存确认该 gateway 具备 `im:message.group_msg` 或 `im:message.group_msg:readonly` 时放行；否则在 record / parse / image-file download / queue 前忽略。该 snapshot 由 room durable state 复制生成，gateway callback 热路径不读取 orchestrator mutable root。
+4. 群聊无 mention 的用户消息只在 daemon 当前 primary snapshot 记录 `chatID -> current gateway`，且 daemon 短 TTL 权限缓存确认该 gateway 具备当前权限 `im:message.group_msg` 或历史兼容权限 `im:message.group_msg:readonly` 时放行；否则在 record / parse / image-file download / queue 前忽略。该 snapshot 由 room durable state 复制生成，gateway callback 热路径不读取 orchestrator mutable root。
 5. 群聊无 mention 且 sender 是 bot 的消息默认忽略，避免 bot 之间互相触发。
 6. 当前 bot `open_id` 在 gateway 启动时通过 bot info API 获取并缓存；主机器人权限热路径只读 daemon 缓存，不逐条调用飞书 API。
 

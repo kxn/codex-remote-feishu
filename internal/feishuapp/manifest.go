@@ -75,7 +75,7 @@ func DefaultManifest() Manifest {
 					"im:message:readonly",
 					"im:message.group_at_msg:readonly",
 					"im:message.group_at_msg.include_bot:readonly",
-					"im:message.group_msg:readonly",
+					"im:message.group_msg",
 					"im:message.p2p_msg:readonly",
 					"im:message.reactions:read",
 					"im:message.reactions:write_only",
@@ -123,7 +123,7 @@ func DefaultManifest() Manifest {
 				Required:  true,
 			},
 			{
-				Scope:     "im:message.group_msg:readonly",
+				Scope:     "im:message.group_msg",
 				ScopeType: "tenant",
 				Feature:   "primary_room_bot",
 				Required:  true,
