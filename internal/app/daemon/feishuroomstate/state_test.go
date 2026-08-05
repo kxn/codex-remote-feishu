@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/statestore"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -84,7 +85,7 @@ func TestLoadStoreMigratesPrimaryOnlyVersionOneInPlace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read migrated state: %v", err)
 	}
-	var persisted StateFile
+	var persisted statestore.StateFile[state.FeishuRoomStateRecord]
 	if err := json.Unmarshal(raw, &persisted); err != nil {
 		t.Fatalf("decode migrated state: %v", err)
 	}
