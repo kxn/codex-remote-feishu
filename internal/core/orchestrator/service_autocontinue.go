@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const autoContinuePromptText = "上一次响应因上游推理中断，请从中断处继续完成当前任务；如果其实已经完成，请直接说明结果。"
@@ -172,8 +173,8 @@ func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutco
 			CodexAdmissionRef:         state.NormalizeCodexAdmissionRef(outcome.Item.CodexAdmissionRef),
 			CodexConnectionContract:   state.CloneCodexConnectionContract(outcome.Item.CodexConnectionContract),
 			CodexThreadPolicy:         state.CloneCodexThreadPolicy(outcome.Item.CodexThreadPolicy),
-			RootReplyToMessageID:      strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
-			RootReplyToMessagePreview: strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
+			RootReplyToMessageID:      strings.TrimSpace(xutil.FirstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
+			RootReplyToMessagePreview: strings.TrimSpace(xutil.FirstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
 			TriggerKind:               state.AutoContinueTriggerKindEligibleFailure,
 		}
 		surface.AutoContinue.Episode = episode

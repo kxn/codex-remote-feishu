@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) presentThreadSelection(surface *state.SurfaceConsoleRecord, showAll bool) []eventcontract.Event {
@@ -87,7 +88,7 @@ func (s *Service) buildWorkspaceThreadSelectionModel(surface *state.SurfaceConso
 			WorkspaceKey:   workspaceKey,
 			WorkspaceLabel: workspaceSelectionLabel(workspaceKey),
 		},
-		Entries: make([]control.FeishuThreadSelectionEntry, 0, maxInt(end-start, 0)),
+		Entries: make([]control.FeishuThreadSelectionEntry, 0, xutil.MaxInt(end-start, 0)),
 	}
 	for _, view := range filtered[start:end] {
 		model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, true))
@@ -160,7 +161,7 @@ func (s *Service) buildThreadSelectionModelAtCursor(surface *state.SurfaceConsol
 		default:
 			model.RecentLimit = vscodeRecentThreadSelectionLimit
 		}
-		model.Cursor = maxInt(cursor, 0)
+		model.Cursor = xutil.MaxInt(cursor, 0)
 		model.PageSize = len(selectedViews)
 		for _, view := range selectedViews {
 			model.Entries = append(model.Entries, s.threadSelectionViewEntry(surface, view, false))
@@ -342,13 +343,6 @@ func paginatePage(page, total, pageSize int) (int, int) {
 	return page, totalPages
 }
 
-func maxInt(left, right int) int {
-	if left > right {
-		return left
-	}
-	return right
-}
-
 func (s *Service) threadSelectionViewEntry(surface *state.SurfaceConsoleRecord, view *mergedThreadView, allowCrossWorkspace bool) control.FeishuThreadSelectionEntry {
 	status, disabled := s.threadSelectionStatus(surface, view, allowCrossWorkspace)
 	workspaceKey := mergedThreadWorkspaceClaimKey(view)
@@ -481,7 +475,7 @@ func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt Surface
 			}
 			return events, SurfaceResumeResult{Status: SurfaceResumeStatusStarting}
 		case contractResolutionUnavailable:
-			code := firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy")
+			code := xutil.FirstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "workspace_instance_busy")
 			if code == "workspace_not_found" && !allowMissingTargetFailure {
 				return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 			}
@@ -548,7 +542,7 @@ func (s *Service) tryAutoResumeManagedHeadlessTarget(surface *state.SurfaceConso
 		if target.NoticeCode == "thread_not_found" && !allowMissingTargetFailure {
 			return nil, SurfaceResumeResult{Status: SurfaceResumeStatusWaiting}
 		}
-		failureCode := firstNonEmpty(strings.TrimSpace(target.NoticeCode), "thread_not_found")
+		failureCode := xutil.FirstNonEmpty(strings.TrimSpace(target.NoticeCode), "thread_not_found")
 		return []eventcontract.Event{{
 			Kind:             eventcontract.KindNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,
@@ -612,7 +606,7 @@ func (s *Service) headlessRestoreView(surface *state.SurfaceConsoleRecord, attem
 		thread.WorkspaceKey = attemptWorkspaceKey
 	}
 	if strings.TrimSpace(thread.CWD) == "" {
-		thread.CWD = strings.TrimSpace(firstNonEmpty(attempt.ThreadCWD, attemptWorkspaceKey))
+		thread.CWD = strings.TrimSpace(xutil.FirstNonEmpty(attempt.ThreadCWD, attemptWorkspaceKey))
 	}
 	cloned.Thread = thread
 	return &cloned
@@ -633,8 +627,8 @@ func (s *Service) syntheticHeadlessRestoreView(threadID, threadTitle, workspaceK
 		Thread: &state.ThreadRecord{
 			ThreadID:     threadID,
 			Name:         threadTitle,
-			WorkspaceKey: firstNonEmpty(workspaceKey, threadCWD),
-			CWD:          firstNonEmpty(threadCWD, workspaceKey),
+			WorkspaceKey: xutil.FirstNonEmpty(workspaceKey, threadCWD),
+			CWD:          xutil.FirstNonEmpty(threadCWD, workspaceKey),
 			Loaded:       true,
 		},
 	}

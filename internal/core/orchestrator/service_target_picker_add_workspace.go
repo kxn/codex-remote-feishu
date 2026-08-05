@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -468,7 +469,7 @@ func (s *Service) buildTargetPickerGitImportState(record *activeTargetPickerReco
 	}
 	switch importErr.Code {
 	case workspaceimport.ImportErrorDestinationExists:
-		destinationPath := strings.TrimSpace(firstNonEmpty(gitState.FinalPath, state.NormalizeWorkspaceKey(importErr.DestinationPath)))
+		destinationPath := strings.TrimSpace(xutil.FirstNonEmpty(gitState.FinalPath, state.NormalizeWorkspaceKey(importErr.DestinationPath)))
 		gitState.Messages = append(gitState.Messages, control.FeishuTargetPickerMessage{
 			Level: control.FeishuTargetPickerMessageDanger,
 			Text:  fmt.Sprintf("目标目录已存在：%s。请更换落地目录或本地目录名。", destinationPath),
@@ -560,7 +561,7 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "工作区已经准备完成，下一条文本会直接开启新会话。", false, filtered)
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == normalizeWorkspaceClaimKey(finalPath) {
+		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == normalizeWorkspaceClaimKey(finalPath) {
 		status := targetPickerLocalDirectoryProcessingStatus(finalPath)
 		processing := s.startTargetPickerProcessingWithSections(
 			surface,
@@ -576,7 +577,7 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 		)
 		return append(processing, filtered...)
 	}
-	failureText := strings.TrimSpace(firstNonEmpty(targetPickerFirstNoticeText(events), "当前目录暂时无法接入为工作区，请重新选择后再试。"))
+	failureText := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), "当前目录暂时无法接入为工作区，请重新选择后再试。"))
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "接入失败", failureText, false, filtered)
 }
 
@@ -595,7 +596,7 @@ func (s *Service) confirmTargetPickerGitImport(surface *state.SurfaceConsoleReco
 		}
 		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
 	}
-	finalPath := strings.TrimSpace(firstNonEmpty(gitState.FinalPath, gitState.ParentDir))
+	finalPath := strings.TrimSpace(xutil.FirstNonEmpty(gitState.FinalPath, gitState.ParentDir))
 	record.GitFinalPath = finalPath
 	status := targetPickerGitImportCloneProcessingStatus(strings.TrimSpace(record.GitRepoURL), finalPath)
 	processing := s.startTargetPickerProcessingWithSections(

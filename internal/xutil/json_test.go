@@ -17,6 +17,27 @@ func TestLookupStringFromAny(t *testing.T) {
 	}
 }
 
+func TestStringify(t *testing.T) {
+	if got := Stringify("  x  "); got != "x" {
+		t.Errorf("string = %q, want trimmed x", got)
+	}
+	if got := Stringify(123); got != "123" {
+		t.Errorf("int = %q, want 123", got)
+	}
+	if got := Stringify(1.5); got != "1.5" {
+		t.Errorf("float = %q, want 1.5", got)
+	}
+	if got := Stringify(true); got != "true" {
+		t.Errorf("bool = %q, want true", got)
+	}
+	if got := Stringify(nil); got != "" {
+		t.Errorf("nil = %q, want empty", got)
+	}
+	if got := Stringify(map[string]any{"a": 1}); got != "map[a:1]" {
+		t.Errorf("map = %q, want map[a:1]", got)
+	}
+}
+
 func TestLookupBoolFromAny(t *testing.T) {
 	if got := LookupBoolFromAny(true); !got {
 		t.Errorf("true case = %v, want true", got)

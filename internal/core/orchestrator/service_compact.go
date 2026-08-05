@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) handleCompactCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
@@ -50,7 +51,7 @@ func (s *Service) handleCompactCommand(surface *state.SurfaceConsoleRecord, acti
 	flow := newOwnerCardFlowRecord(
 		ownerCardFlowKindCompact,
 		s.pickers.nextCompactFlowToken(),
-		firstNonEmpty(surface.ActorUserID),
+		xutil.FirstNonEmpty(surface.ActorUserID),
 		s.now(),
 		defaultCompactOwnerTTL,
 		ownerCardFlowPhaseLoading,
@@ -140,7 +141,7 @@ func (s *Service) promoteCompactTurn(instanceID string, event agentproto.Event) 
 	if binding.ThreadID != "" && strings.TrimSpace(event.ThreadID) != "" && binding.ThreadID != event.ThreadID {
 		return nil
 	}
-	binding.ThreadID = firstNonEmpty(binding.ThreadID, strings.TrimSpace(event.ThreadID))
+	binding.ThreadID = xutil.FirstNonEmpty(binding.ThreadID, strings.TrimSpace(event.ThreadID))
 	binding.TurnID = strings.TrimSpace(event.TurnID)
 	binding.Status = compactTurnStatusRunning
 	surface := s.root.Surfaces[binding.SurfaceSessionID]

@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const autoWhipPromptText = "你看还有没有别的任务需要完成，有就继续做，没有就说\"老板不要再打我了，真的没有事情干了\""
@@ -185,8 +186,8 @@ func (s *Service) scheduleAutoWhip(surface *state.SurfaceConsoleRecord, item *st
 	surface.AutoWhip.PendingDueAt = s.now().Add(delay)
 	surface.AutoWhip.ConsecutiveCount = count
 	surface.AutoWhip.LastTriggeredTurnID = turnID
-	surface.AutoWhip.PendingReplyToMessageID = firstNonEmpty(item.ReplyToMessageID, item.SourceMessageID)
-	surface.AutoWhip.PendingReplyToMessagePreview = firstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview)
+	surface.AutoWhip.PendingReplyToMessageID = xutil.FirstNonEmpty(item.ReplyToMessageID, item.SourceMessageID)
+	surface.AutoWhip.PendingReplyToMessagePreview = xutil.FirstNonEmpty(item.ReplyToMessagePreview, item.SourceMessagePreview)
 	if count == max {
 		// The final scheduled retry is still allowed; the next attempt will emit the stop notice.
 	}

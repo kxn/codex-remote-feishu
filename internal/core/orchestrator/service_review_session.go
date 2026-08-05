@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func threadIsReview(thread *state.ThreadRecord) bool {
@@ -132,7 +133,7 @@ func threadSourceParentThreadID(source *agentproto.ThreadSourceRecord) string {
 
 func reviewThreadParentThreadID(thread *state.ThreadRecord, session *state.ReviewSessionRecord) string {
 	if thread != nil {
-		if parentThreadID := strings.TrimSpace(firstNonEmpty(thread.ForkedFromID, threadSourceParentThreadID(thread.Source))); parentThreadID != "" {
+		if parentThreadID := strings.TrimSpace(xutil.FirstNonEmpty(thread.ForkedFromID, threadSourceParentThreadID(thread.Source))); parentThreadID != "" {
 			return parentThreadID
 		}
 	}
@@ -165,7 +166,7 @@ func (s *Service) activateReviewSessionRecord(surface *state.SurfaceConsoleRecor
 		session.ActiveTurnID = turnID
 	}
 	if thread != nil {
-		session.ThreadCWD = firstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(session.ThreadCWD))
+		session.ThreadCWD = xutil.FirstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(session.ThreadCWD))
 	}
 	session.LastUpdatedAt = s.now()
 	return session

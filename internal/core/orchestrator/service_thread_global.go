@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type threadAttachMode string
@@ -706,8 +707,8 @@ func (s *Service) resolveThreadTargetFromView(surface *state.SurfaceConsoleRecor
 		return resolvedThreadTarget{
 			Mode:       threadAttachUnavailable,
 			View:       view,
-			NoticeCode: firstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "thread_not_found"),
-			NoticeText: firstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标会话不存在或当前不可见。"),
+			NoticeCode: xutil.FirstNonEmpty(strings.TrimSpace(resolution.NoticeCode), "thread_not_found"),
+			NoticeText: xutil.FirstNonEmpty(strings.TrimSpace(resolution.NoticeText), "目标会话不存在或当前不可见。"),
 		}
 	}
 }
@@ -798,7 +799,7 @@ func threadWorkspaceKeyFromRecord(thread *state.ThreadRecord) string {
 	if thread == nil {
 		return ""
 	}
-	return normalizeWorkspaceClaimKey(firstNonEmpty(strings.TrimSpace(thread.WorkspaceKey), strings.TrimSpace(thread.CWD)))
+	return normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(strings.TrimSpace(thread.WorkspaceKey), strings.TrimSpace(thread.CWD)))
 }
 
 func threadWorkspaceKey(view *mergedThreadView) string {
@@ -815,7 +816,7 @@ func threadCWD(view *mergedThreadView) string {
 	if view == nil || view.Thread == nil {
 		return ""
 	}
-	return strings.TrimSpace(firstNonEmpty(view.Thread.CWD, threadWorkspaceKey(view)))
+	return strings.TrimSpace(xutil.FirstNonEmpty(view.Thread.CWD, threadWorkspaceKey(view)))
 }
 
 func (s *Service) currentVisibleThreadEligible(surface *state.SurfaceConsoleRecord, threadID string) bool {

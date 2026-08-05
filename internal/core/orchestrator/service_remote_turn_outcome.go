@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type terminalCause string
@@ -151,7 +152,7 @@ func (s *Service) remoteTurnFailureEvent(outcome *remoteTurnOutcome) eventcontra
 	notice := &control.Notice{
 		Code:                  "turn_failed",
 		TemporarySessionLabel: s.temporarySessionLabel(outcome.Surface, outcome.InstanceID, outcome.ThreadID, outcome.TurnID),
-		Text:                  firstNonEmpty(strings.TrimSpace(outcome.ErrorMessage), "当前 turn 失败。"),
+		Text:                  xutil.FirstNonEmpty(strings.TrimSpace(outcome.ErrorMessage), "当前 turn 失败。"),
 	}
 	if outcome.Problem != nil {
 		problemNotice := NoticeForProblem(*outcome.Problem)
@@ -162,7 +163,7 @@ func (s *Service) remoteTurnFailureEvent(outcome *remoteTurnOutcome) eventcontra
 	event := eventcontract.Event{
 		Kind:             eventcontract.KindNotice,
 		SurfaceSessionID: outcome.Surface.SurfaceSessionID,
-		SourceMessageID:  strings.TrimSpace(firstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
+		SourceMessageID:  strings.TrimSpace(xutil.FirstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
 		Notice:           notice,
 	}
 	if strings.TrimSpace(event.SourceMessageID) != "" {

@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type requestPromptPresentationDefinition struct {
@@ -20,7 +21,7 @@ type requestPromptPresentationDefinition struct {
 }
 
 func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) (requestPromptPresentationDefinition, string) {
-	requestType := normalizeRequestType(firstNonEmpty(promptRequestType(prompt), metadataString(metadata, "requestType")))
+	requestType := normalizeRequestType(xutil.FirstNonEmpty(promptRequestType(prompt), metadataString(metadata, "requestType")))
 	if requestType == "" {
 		requestType = "approval"
 	}
@@ -31,62 +32,62 @@ func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt
 	}
 	switch semanticKind {
 	case control.RequestSemanticApprovalCommand:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认执行命令", "需要处理请求", "需要确认")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认执行命令", "需要处理请求", "需要确认")
 		definition.Sections = buildApprovalCommandRequestSections(backend, prompt, metadata)
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticApprovalFileChange:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认修改文件", "需要处理请求", "需要确认")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认修改文件", "需要处理请求", "需要确认")
 		definition.Sections = buildApprovalFileChangeRequestSections(backend, prompt, metadata)
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticApprovalNetwork:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认网络访问", "需要处理请求", "需要确认")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认网络访问", "需要处理请求", "需要确认")
 		definition.Sections = buildApprovalNetworkRequestSections(backend, prompt, metadata)
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticApprovalCanUseTool:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认工具调用", "需要处理请求", "需要确认")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认工具调用", "需要处理请求", "需要确认")
 		definition.Sections = buildApprovalCanUseToolRequestSections(backend, prompt, metadata)
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticPlanConfirmation:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认计划", "需要处理请求", "需要确认")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认计划", "需要处理请求", "需要确认")
 		definition.Sections = buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), "当前计划需要你确认后才能继续。")
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
 	case control.RequestSemanticRequestUserInput:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要补充输入", "需要处理请求")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要补充输入", "需要处理请求")
 		definition.Sections = buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你补充参数或说明。")
 		definition.Questions = metadataRequestQuestions(metadata)
 		if len(definition.Questions) == 0 {
 			return definition, "收到缺少问题定义的 request_user_input 请求，当前无法在飞书端处理。"
 		}
 	case control.RequestSemanticPermissionsRequestApproval:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要授予权限", "需要处理请求")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要授予权限", "需要处理请求")
 		definition.Sections = buildPermissionsRequestSections(backend, prompt, metadata)
 		definition.Options = buildPermissionsRequestOptions()
 		definition.HintText = "你可以选择仅授权当前这一次，或在当前会话内持续授权。"
 	case control.RequestSemanticMCPServerElicitationForm:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要处理 MCP 请求", "需要处理请求")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要处理 MCP 请求", "需要处理请求")
 		definition.Sections = buildMCPElicitationSections(backend, prompt, metadata)
 		definition.Questions = buildMCPElicitationQuestions(prompt, metadata)
 		definition.Options = buildMCPElicitationOptions(prompt, metadata, definition.Questions)
 	case control.RequestSemanticMCPServerElicitationURL:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要处理 MCP 请求", "需要处理请求")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要处理 MCP 请求", "需要处理请求")
 		definition.Sections = buildMCPElicitationSections(backend, prompt, metadata)
 		definition.Options = buildMCPElicitationOptions(prompt, metadata, nil)
 		definition.HintText = "如果需要先完成外部页面操作，请完成后再点击“继续”；如果不打算继续，可直接拒绝或取消。"
 	case control.RequestSemanticMCPServerElicitationApproval:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认 MCP 工具调用", "需要处理 MCP 请求", "需要处理请求")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认 MCP 工具调用", "需要处理 MCP 请求", "需要处理请求")
 		definition.Sections = buildMCPElicitationApprovalSections(backend, prompt, metadata)
 		definition.Options = buildMCPElicitationApprovalOptions(prompt, metadata)
 		definition.HintText = mcpElicitationApprovalHintText(prompt, metadata)
 	case control.RequestSemanticToolCallback:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "工具回调暂不支持", "收到工具回调", "需要处理请求")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "工具回调暂不支持", "收到工具回调", "需要处理请求")
 		definition.Sections = buildToolCallbackRequestSections(prompt, metadata)
 	default:
-		definition.Title = requestPromptTitle(firstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认", "需要处理请求")
+		definition.Title = requestPromptTitle(xutil.FirstNonEmpty(metadataString(metadata, "title"), promptTitle(prompt)), "需要确认", "需要处理请求")
 		definition.Sections = buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你的确认。")
 		definition.Options = buildApprovalRequestOptions(backend, semanticKind, metadata)
 		definition.HintText = approvalRequestHintText(backend, semanticKind, definition.Options)
@@ -95,7 +96,7 @@ func buildRequestPromptPresentationDefinition(backend agentproto.Backend, prompt
 }
 
 func deriveRequestPromptSemanticKind(requestType string, prompt *agentproto.RequestPrompt, metadata map[string]any) string {
-	rawKind := firstNonEmpty(strings.TrimSpace(metadataString(metadata, "requestKind")), promptRawType(prompt))
+	rawKind := xutil.FirstNonEmpty(strings.TrimSpace(metadataString(metadata, "requestKind")), promptRawType(prompt))
 	switch control.NormalizeRequestSemanticKind(rawKind, requestType) {
 	case control.RequestSemanticApprovalCommand:
 		return control.RequestSemanticApprovalCommand
@@ -120,7 +121,7 @@ func deriveRequestPromptSemanticKind(requestType string, prompt *agentproto.Requ
 	}
 	switch requestType {
 	case "approval":
-		switch normalizeRequestSemanticToken(firstNonEmpty(
+		switch normalizeRequestSemanticToken(xutil.FirstNonEmpty(
 			rawKind,
 			metadataString(metadata, "requestMethod"),
 		)) {
@@ -153,7 +154,7 @@ func deriveRequestPromptSemanticKind(requestType string, prompt *agentproto.Requ
 		if isMCPToolApprovalElicitation(prompt, metadata) {
 			return control.RequestSemanticMCPServerElicitationApproval
 		}
-		switch strings.ToLower(strings.TrimSpace(firstNonEmpty(promptMCPElicitationMode(prompt), metadataString(metadata, "elicitationMode")))) {
+		switch strings.ToLower(strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationMode(prompt), metadataString(metadata, "elicitationMode")))) {
 		case "form":
 			return control.RequestSemanticMCPServerElicitationForm
 		case "url":
@@ -203,13 +204,13 @@ func buildApprovalNetworkRequestSections(backend agentproto.Backend, prompt *age
 	sections := buildRequestPromptBodySections(promptBodyOrMetadata(prompt, metadata), requestLocalBackendDisplayName(backend)+" 正在等待你确认网络访问。")
 	network := requestMetadataMap(metadata["networkApprovalContext"])
 	lines := make([]string, 0, 3)
-	if host := strings.TrimSpace(firstNonEmpty(lookupStringFromAny(network["host"]), lookupStringFromAny(network["hostname"]))); host != "" {
+	if host := strings.TrimSpace(xutil.FirstNonEmpty(xutil.Stringify(network["host"]), xutil.Stringify(network["hostname"]))); host != "" {
 		lines = append(lines, "目标主机："+host)
 	}
-	if protocol := strings.TrimSpace(lookupStringFromAny(network["protocol"])); protocol != "" {
+	if protocol := strings.TrimSpace(xutil.Stringify(network["protocol"])); protocol != "" {
 		lines = append(lines, "协议："+protocol)
 	}
-	if port := strings.TrimSpace(firstNonEmpty(lookupStringFromAny(network["port"]), lookupStringFromAny(network["destinationPort"]))); port != "" {
+	if port := strings.TrimSpace(xutil.FirstNonEmpty(xutil.Stringify(network["port"]), xutil.Stringify(network["destinationPort"]))); port != "" {
 		lines = append(lines, "端口："+port)
 	}
 	if len(lines) != 0 {
@@ -220,10 +221,10 @@ func buildApprovalNetworkRequestSections(backend agentproto.Backend, prompt *age
 
 func buildApprovalCanUseToolRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	sections := buildApprovalCommandRequestSections(backend, prompt, metadata)
-	if toolName := strings.TrimSpace(firstNonEmpty(metadataString(metadata, "toolName"), metadataString(metadata, "tool_name"))); toolName != "" {
+	if toolName := strings.TrimSpace(xutil.FirstNonEmpty(metadataString(metadata, "toolName"), metadataString(metadata, "tool_name"))); toolName != "" {
 		sections = appendRequestPromptSection(sections, "工具", toolName)
 	}
-	if blockedPath := strings.TrimSpace(firstNonEmpty(metadataString(metadata, "blockedPath"), metadataString(metadata, "blocked_path"))); blockedPath != "" {
+	if blockedPath := strings.TrimSpace(xutil.FirstNonEmpty(metadataString(metadata, "blockedPath"), metadataString(metadata, "blocked_path"))); blockedPath != "" {
 		sections = appendRequestPromptSection(sections, "受限路径", blockedPath)
 	}
 	if suggestions := requestPermissionLines(metadataRequestMapList(metadata["permissionSuggestions"])); len(suggestions) != 0 {
@@ -261,7 +262,7 @@ func promptTitle(prompt *agentproto.RequestPrompt) string {
 }
 
 func promptBodyOrMetadata(prompt *agentproto.RequestPrompt, metadata map[string]any) string {
-	return strings.TrimSpace(firstNonEmpty(promptBody(prompt), metadataString(metadata, "body")))
+	return strings.TrimSpace(xutil.FirstNonEmpty(promptBody(prompt), metadataString(metadata, "body")))
 }
 
 func requestPromptTitle(current, fallback string, genericTitles ...string) string {
@@ -387,7 +388,7 @@ func requestPermissionRuleLine(rule map[string]any, fallbackTool string) string 
 	if len(rule) == 0 {
 		return ""
 	}
-	toolName := firstNonEmpty(requestPermissionStringValue(rule, "toolName", "tool_name", "tool"), fallbackTool)
+	toolName := xutil.FirstNonEmpty(requestPermissionStringValue(rule, "toolName", "tool_name", "tool"), fallbackTool)
 	ruleContent := requestPermissionStringValue(rule, "ruleContent", "rule_content", "rule", "pattern")
 	if toolName != "" && ruleContent != "" {
 		return toolName + ": " + ruleContent

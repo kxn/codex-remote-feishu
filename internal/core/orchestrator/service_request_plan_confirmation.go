@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -106,7 +107,7 @@ func (s *Service) planConfirmationWorkspaceRoot(request *state.RequestPromptReco
 	if thread := inst.Threads[request.ThreadID]; threadVisible(thread) && strings.TrimSpace(thread.CWD) != "" {
 		return strings.TrimSpace(thread.CWD)
 	}
-	return strings.TrimSpace(firstNonEmpty(inst.WorkspaceRoot, inst.WorkspaceKey))
+	return strings.TrimSpace(xutil.FirstNonEmpty(inst.WorkspaceRoot, inst.WorkspaceKey))
 }
 
 func buildPlanConfirmationStructuredForm(request *state.RequestPromptRecord, workspaceRoot string) *state.RequestPromptStructuredFormRecord {
@@ -175,7 +176,7 @@ func buildPlanConfirmationPermissionSelectionResponse(request *state.RequestProm
 			values = []string{strings.TrimSpace(field.DefaultValue)}
 		}
 		if len(values) == 0 {
-			return nil, false, fmt.Sprintf("“%s”还没有配置完成。", firstNonEmpty(strings.TrimSpace(field.Label), name))
+			return nil, false, fmt.Sprintf("“%s”还没有配置完成。", xutil.FirstNonEmpty(strings.TrimSpace(field.Label), name))
 		}
 		allowed := map[string]bool{}
 		for _, option := range field.Options {
@@ -183,11 +184,11 @@ func buildPlanConfirmationPermissionSelectionResponse(request *state.RequestProm
 		}
 		for _, value := range values {
 			if len(allowed) != 0 && !allowed[value] {
-				return nil, false, fmt.Sprintf("“%s”的选择项无效。", firstNonEmpty(strings.TrimSpace(field.Label), name))
+				return nil, false, fmt.Sprintf("“%s”的选择项无效。", xutil.FirstNonEmpty(strings.TrimSpace(field.Label), name))
 			}
 		}
 		if field.Kind == state.RequestPromptFormFieldSelectStatic && len(values) > 1 {
-			return nil, false, fmt.Sprintf("“%s”只能选择一项。", firstNonEmpty(strings.TrimSpace(field.Label), name))
+			return nil, false, fmt.Sprintf("“%s”只能选择一项。", xutil.FirstNonEmpty(strings.TrimSpace(field.Label), name))
 		}
 		answers[name] = values
 	}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func targetPickerTitle(source control.TargetPickerRequestSource) string {
@@ -38,7 +39,7 @@ func targetPickerLockedWorkspaceSummary(entries []workspaceSelectionEntry, works
 		if normalizeWorkspaceClaimKey(entry.workspaceKey) != workspaceKey {
 			continue
 		}
-		label := strings.TrimSpace(firstNonEmpty(entry.label, workspaceSelectionLabel(workspaceKey)))
+		label := strings.TrimSpace(xutil.FirstNonEmpty(entry.label, workspaceSelectionLabel(workspaceKey)))
 		return label, targetPickerWorkspaceMetaText(entry, metaByKey)
 	}
 	return workspaceSelectionLabel(workspaceKey), ""

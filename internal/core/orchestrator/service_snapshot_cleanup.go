@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope, model, effort, access, planMode string, observedPermission *agentproto.ObservedPermissionState) {
@@ -16,7 +17,7 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 	}
 	cwd = state.NormalizeWorkspaceKey(cwd)
 	workspaceKey := state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot, cwd)
-	cwdDefaultKey := firstNonEmpty(cwd, workspaceKey)
+	cwdDefaultKey := xutil.FirstNonEmpty(cwd, workspaceKey)
 	access = agentproto.NormalizeAccessMode(access)
 	backend := state.EffectiveInstanceBackend(inst)
 	vscode := isVSCodeInstance(inst)

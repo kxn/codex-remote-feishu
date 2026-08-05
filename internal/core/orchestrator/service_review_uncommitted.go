@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type reviewEntryContext struct {
@@ -213,7 +214,7 @@ func (s *Service) resolveReviewEntryFromFinalCard(surface *state.SurfaceConsoleR
 	return s.resolveReviewEntryFromThread(
 		strings.TrimSpace(surface.AttachedInstanceID),
 		parentThreadID,
-		firstNonEmpty(strings.TrimSpace(parentThread.CWD), strings.TrimSpace(inst.WorkspaceRoot)),
+		xutil.FirstNonEmpty(strings.TrimSpace(parentThread.CWD), strings.TrimSpace(inst.WorkspaceRoot)),
 		strings.TrimSpace(action.MessageID),
 	)
 }
@@ -252,7 +253,7 @@ func (s *Service) resolveReviewEntryFromCurrentContext(surface *state.SurfaceCon
 	return s.resolveReviewEntryFromThread(
 		strings.TrimSpace(surface.AttachedInstanceID),
 		threadID,
-		firstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(inst.WorkspaceRoot)),
+		xutil.FirstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(inst.WorkspaceRoot)),
 		strings.TrimSpace(action.MessageID),
 	)
 }
@@ -284,7 +285,7 @@ func (s *Service) resolveReviewEntryForBlock(surfaceID string, block render.Bloc
 	return s.resolveReviewEntryFromThread(
 		instanceID,
 		threadID,
-		firstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(inst.WorkspaceRoot)),
+		xutil.FirstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(inst.WorkspaceRoot)),
 		"",
 	)
 }

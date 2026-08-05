@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const sendFilePathPickerConsumerKind = "send_file"
@@ -192,7 +193,7 @@ func (s *Service) HandleSendFileStarted(surfaceID, pickerID, selectedPath string
 		PickerID:       strings.TrimSpace(record.PickerID),
 		MessageID:      strings.TrimSpace(record.MessageID),
 		Mode:           control.PathPickerModeFile,
-		Title:          strings.TrimSpace(firstNonEmpty(record.Title, "发送文件")),
+		Title:          strings.TrimSpace(xutil.FirstNonEmpty(record.Title, "发送文件")),
 		SelectedPath:   strings.TrimSpace(selectedPath),
 		Phase:          frontstagecontract.PhaseSucceeded,
 		StatusTitle:    "已开始发送，可继续其他操作",

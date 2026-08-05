@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadtitle"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func threadSelectionEvent(surface *state.SurfaceConsoleRecord, threadID, routeMode, title string) eventcontract.Event {
@@ -69,7 +70,7 @@ func (s *Service) materializeRemoteTurnThread(inst *state.InstanceRecord, thread
 	thread := s.ensureThread(inst, threadID)
 	thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 	if strings.TrimSpace(thread.CWD) == "" {
-		thread.CWD = firstNonEmpty(
+		thread.CWD = xutil.FirstNonEmpty(
 			strings.TrimSpace(eventCWD),
 			strings.TrimSpace(thread.CWD),
 			strings.TrimSpace(bindingThreadCWD(binding)),

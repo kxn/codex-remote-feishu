@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto.Event, backend agentproto.Backend, now time.Time) bool {
@@ -20,7 +21,7 @@ func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto
 	if itemID == "" {
 		itemID = "reasoning_summary"
 	}
-	summaryIndex := lookupIntFromAny(event.Metadata["summaryIndex"])
+	summaryIndex := xutil.LookupIntFromAny(event.Metadata["summaryIndex"])
 	entryItemID := reasoningEntryItemID(itemID, summaryIndex)
 	record := progress.Reasoning
 	if record == nil || strings.TrimSpace(record.ItemID) != entryItemID {
@@ -96,21 +97,4 @@ func extractReasoningSummaryText(value string, backend agentproto.Backend) strin
 
 func normalizeReasoningText(text string) string {
 	return strings.TrimSpace(text)
-}
-
-func lookupIntFromAny(value any) int {
-	switch typed := value.(type) {
-	case int:
-		return typed
-	case int32:
-		return int(typed)
-	case int64:
-		return int(typed)
-	case float32:
-		return int(typed)
-	case float64:
-		return int(typed)
-	default:
-		return 0
-	}
 }

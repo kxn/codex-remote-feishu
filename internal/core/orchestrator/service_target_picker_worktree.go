@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type targetPickerWorktreeState struct {
@@ -196,12 +197,12 @@ func (s *Service) CompleteTargetPickerWorktreeCreate(surfaceSessionID, pickerID,
 		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(firstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
+		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
 		status := targetPickerWorktreeCreatePostCreateProcessingStatus(strings.TrimSpace(record.WorktreeBranchName), workspaceKey)
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingWorktreeCreate, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)
 		return append(processing, filtered...)
 	}
-	reason := strings.TrimSpace(firstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("worktree 已创建到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“从目录新建”继续接入。", workspaceKey)))
+	reason := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("worktree 已创建到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“从目录新建”继续接入。", workspaceKey)))
 	status := targetPickerWorktreeCreatePostCreateFailureStatus(workspaceKey, reason)
 	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "创建失败", "", status.Sections, status.Footer, false, filtered)
 }
@@ -240,7 +241,7 @@ func (s *Service) cancelTargetPickerWorktreeCreate(surface *state.SurfaceConsole
 		},
 	}}
 	pending := surface.PendingHeadless
-	if pending == nil || !pending.PrepareNewThread || normalizeWorkspaceClaimKey(firstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
+	if pending == nil || !pending.PrepareNewThread || normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
 		return events
 	}
 	events = append(events, s.finalizeDetachedSurface(surface)...)
@@ -367,7 +368,7 @@ func targetPickerWorktreeCreatePostCreateProcessingStatus(branchName, workspaceK
 
 func targetPickerWorktreeCreatePostCreateFailureStatus(workspaceKey, reason string) feishuCardStatusPayload {
 	sections := targetPickerGitImportObjectSections("", workspaceKey)
-	reason = strings.TrimSpace(firstNonEmpty(reason, "worktree 已创建完成，但后续工作区接入失败。"))
+	reason = strings.TrimSpace(xutil.FirstNonEmpty(reason, "worktree 已创建完成，但后续工作区接入失败。"))
 	if workspaceKey != "" && !strings.Contains(reason, "目录已保留") {
 		reason += " 目录已保留。"
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
@@ -29,7 +30,7 @@ func (s *Service) respondRequest(surface *state.SurfaceConsoleRecord, action con
 	if strings.TrimSpace(request.LocalKind) != "" {
 		return s.respondLocalRequest(surface, request, action)
 	}
-	requestType := normalizeRequestType(firstNonEmpty(requestAction.RequestType, request.RequestType))
+	requestType := normalizeRequestType(xutil.FirstNonEmpty(requestAction.RequestType, request.RequestType))
 	if requestType == "" {
 		requestType = "approval"
 	}
@@ -56,12 +57,12 @@ func (s *Service) controlRequest(surface *state.SurfaceConsoleRecord, action con
 	case normalizedRequestControl(frontstagecontract.RequestControlSkipOptional):
 		return s.skipOptionalRequestQuestion(surface, request, action, requestControl)
 	case normalizedRequestControl(frontstagecontract.RequestControlCancelTurn):
-		if normalizeRequestType(firstNonEmpty(requestControl.RequestType, request.RequestType)) != "request_user_input" {
+		if normalizeRequestType(xutil.FirstNonEmpty(requestControl.RequestType, request.RequestType)) != "request_user_input" {
 			return notice(surface, "request_invalid", "当前请求不支持中断 turn。")
 		}
 		return s.cancelRequestUserInputTurn(surface, request, action)
 	case normalizedRequestControl(frontstagecontract.RequestControlCancelRequest):
-		requestType := normalizeRequestType(firstNonEmpty(requestControl.RequestType, request.RequestType))
+		requestType := normalizeRequestType(xutil.FirstNonEmpty(requestControl.RequestType, request.RequestType))
 		if requestType != "mcp_server_elicitation" || len(request.Questions) == 0 {
 			return notice(surface, "request_invalid", "当前请求不支持直接取消。")
 		}
@@ -114,7 +115,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	}
 	backend := s.surfaceBackend(surface)
 	definition, unsupportedText := buildRequestPromptPresentationDefinition(backend, event.RequestPrompt, event.Metadata)
-	requestType := normalizeRequestType(firstNonEmpty(definition.RequestType, promptType, metadataString(event.Metadata, "requestType")))
+	requestType := normalizeRequestType(xutil.FirstNonEmpty(definition.RequestType, promptType, metadataString(event.Metadata, "requestType")))
 	if requestType == "" {
 		requestType = "approval"
 	}
@@ -374,7 +375,7 @@ func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswer
 		if canonical, ok := canonicalQuestionOptionAnswer(question, answerText); ok {
 			answerText = canonical
 		} else if len(question.Options) != 0 && !question.AllowOther {
-			label := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID)
+			label := xutil.FirstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID)
 			return nil, false, fmt.Sprintf("问题“%s”的答案不在可选项中。", label)
 		}
 		request.DraftAnswers[questionID] = answerText
@@ -398,7 +399,7 @@ func buildRequestUserInputResponse(request *state.RequestPromptRecord, rawAnswer
 		if canonical, ok := canonicalQuestionOptionAnswer(question, answerText); ok {
 			answerText = canonical
 		} else if len(question.Options) != 0 && !question.AllowOther {
-			label := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID)
+			label := xutil.FirstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), questionID)
 			return nil, false, fmt.Sprintf("问题“%s”的答案不在可选项中。", label)
 		}
 		answers[questionID] = map[string]any{"answers": []string{answerText}}
@@ -523,7 +524,7 @@ func requestCurrentQuestionPendingText(request *state.RequestPromptRecord) strin
 	if !ok {
 		return "当前没有可提交的答案。"
 	}
-	label := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), strings.TrimSpace(question.ID))
+	label := xutil.FirstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), strings.TrimSpace(question.ID))
 	if question.Optional {
 		return fmt.Sprintf("问题“%s”还没有处理。你可以先填写答案，或直接跳过。", label)
 	}
@@ -570,7 +571,7 @@ func (s *Service) requestPromptView(record *state.RequestPromptRecord, threadTit
 		Backend:               requestPromptBackend(record),
 		RequestRevision:       record.CardRevision,
 		Title:                 record.Title,
-		TemporarySessionLabel: firstNonEmpty(strings.TrimSpace(record.SourceContextLabel), s.requestTemporarySessionLabel(record)),
+		TemporarySessionLabel: xutil.FirstNonEmpty(strings.TrimSpace(record.SourceContextLabel), s.requestTemporarySessionLabel(record)),
 		ThreadID:              record.ThreadID,
 		ThreadTitle:           threadTitle,
 		Sections:              requestPromptSectionsToControl(record.Sections),
@@ -824,7 +825,7 @@ func (s *Service) dispatchRequestResponse(surface *state.SurfaceConsoleRecord, r
 	bumpRequestCardRevision(request)
 	events := make([]eventcontract.Event, 0, 2)
 	if requestPromptRenderable(request.RequestType) {
-		events = append(events, s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseWaitingDispatch, firstNonEmpty(strings.TrimSpace(statusText), requestPromptPendingDispatchStatusText(request))))
+		events = append(events, s.requestPromptInlinePhaseEvent(surface, request, "", frontstagecontract.PhaseWaitingDispatch, xutil.FirstNonEmpty(strings.TrimSpace(statusText), requestPromptPendingDispatchStatusText(request))))
 	}
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindAgentCommand,
@@ -870,7 +871,7 @@ func (s *Service) skipOptionalRequestQuestion(surface *state.SurfaceConsoleRecor
 		return notice(surface, "request_card_expired", "当前题目已变化，请使用最新卡片继续。")
 	}
 	markRequestQuestionSkipped(request, question.ID)
-	requestType := normalizeRequestType(firstNonEmpty(requestControl.RequestType, request.RequestType))
+	requestType := normalizeRequestType(xutil.FirstNonEmpty(requestControl.RequestType, request.RequestType))
 	switch requestType {
 	case "request_user_input":
 		response, complete, errText := buildRequestUserInputResponse(request, nil)

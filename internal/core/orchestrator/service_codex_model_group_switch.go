@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type codexPromptRouteAdjustment struct {
@@ -219,7 +220,7 @@ func (s *Service) codexProfileSwitchNewThreadContinuation(surface *state.Surface
 	next.RestartManagedNow = previous.RestartManagedNow
 	next.RestartInstanceID = previous.RestartInstanceID
 	if next.Attempt.ThreadCWD == "" {
-		next.Attempt.ThreadCWD = strings.TrimSpace(firstNonEmpty(previous.Attempt.ThreadCWD, next.Attempt.WorkspaceKey))
+		next.Attempt.ThreadCWD = strings.TrimSpace(xutil.FirstNonEmpty(previous.Attempt.ThreadCWD, next.Attempt.WorkspaceKey))
 	}
 	return next
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -35,7 +36,7 @@ func (s *Service) openThreadHistory(surface *state.SurfaceConsoleRecord, sourceM
 	}
 	s.clearTargetPickerRuntime(surface)
 	now := s.now()
-	flow := newOwnerCardFlowRecord(ownerCardFlowKindThreadHistory, s.pickers.nextThreadHistoryToken(), firstNonEmpty(surface.ActorUserID), now, defaultThreadHistoryTTL, ownerCardFlowPhaseLoading)
+	flow := newOwnerCardFlowRecord(ownerCardFlowKindThreadHistory, s.pickers.nextThreadHistoryToken(), xutil.FirstNonEmpty(surface.ActorUserID), now, defaultThreadHistoryTTL, ownerCardFlowPhaseLoading)
 	if inline {
 		flow.MessageID = strings.TrimSpace(sourceMessageID)
 	}
@@ -57,7 +58,7 @@ func (s *Service) handleThreadHistoryPage(surface *state.SurfaceConsoleRecord, p
 	inst, threadID, noticeCode, noticeText := s.currentThreadHistoryTarget(surface)
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
 		s.clearThreadHistoryRuntime(surface)
-		return notice(surface, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
+		return notice(surface, xutil.FirstNonEmpty(noticeCode, "history_expired"), xutil.FirstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
 	}
 	record.ViewMode = control.FeishuThreadHistoryViewList
 	if page < 0 {
@@ -84,7 +85,7 @@ func (s *Service) handleThreadHistoryDetail(surface *state.SurfaceConsoleRecord,
 	inst, threadID, noticeCode, noticeText := s.currentThreadHistoryTarget(surface)
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
 		s.clearThreadHistoryRuntime(surface)
-		return notice(surface, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
+		return notice(surface, xutil.FirstNonEmpty(noticeCode, "history_expired"), xutil.FirstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
 	}
 	record.ViewMode = control.FeishuThreadHistoryViewDetail
 	record.TurnID = turnID
@@ -180,7 +181,7 @@ func (s *Service) HandleSurfaceThreadHistoryLoaded(surfaceID string) []eventcont
 	}
 	inst, threadID, noticeCode, noticeText := s.currentThreadHistoryTarget(surface)
 	if inst == nil || threadID == "" || threadID != record.ThreadID {
-		view := s.buildThreadHistoryErrorView(surface, nil, flow, record, firstNonEmpty(noticeCode, "history_expired"), firstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
+		view := s.buildThreadHistoryErrorView(surface, nil, flow, record, xutil.FirstNonEmpty(noticeCode, "history_expired"), xutil.FirstNonEmpty(noticeText, "这张历史卡片已经失效，请重新发送 /history。"))
 		s.clearThreadHistoryRuntime(surface)
 		return []eventcontract.Event{s.threadHistoryViewEvent(surface, view, false, "")}
 	}
@@ -241,7 +242,7 @@ func (s *Service) buildThreadHistoryResolvedView(surface *state.SurfaceConsoleRe
 		MessageID:        strings.TrimSpace(flow.MessageID),
 		Mode:             record.ViewMode,
 		Title:            "历史记录",
-		ThreadID:         firstNonEmpty(strings.TrimSpace(history.Thread.ThreadID), strings.TrimSpace(record.ThreadID)),
+		ThreadID:         xutil.FirstNonEmpty(strings.TrimSpace(history.Thread.ThreadID), strings.TrimSpace(record.ThreadID)),
 		ThreadLabel:      s.threadHistoryResolvedLabel(inst, history),
 		TurnCount:        len(summaries),
 		SelectedTurnID:   strings.TrimSpace(record.TurnID),
@@ -466,7 +467,7 @@ func threadHistoryInputPreview(inputs []string) string {
 }
 
 func threadHistoryTurnOptionLabel(summary threadHistoryTurnSummary) string {
-	label := fmt.Sprintf("#%d | %s | %s", summary.Ordinal, firstNonEmpty(strings.TrimSpace(summary.Status), "-"), firstNonEmpty(strings.TrimSpace(summary.InputPreview), "-"))
+	label := fmt.Sprintf("#%d | %s | %s", summary.Ordinal, xutil.FirstNonEmpty(strings.TrimSpace(summary.Status), "-"), xutil.FirstNonEmpty(strings.TrimSpace(summary.InputPreview), "-"))
 	if summary.IsCurrent {
 		return "当前 · " + label
 	}

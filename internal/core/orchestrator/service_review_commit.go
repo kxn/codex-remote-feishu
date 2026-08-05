@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -42,7 +43,7 @@ func (s *Service) openReviewCommitPicker(surface *state.SurfaceConsoleRecord, ac
 	flow := newOwnerCardFlowRecord(
 		ownerCardFlowKindReviewPicker,
 		s.pickers.nextReviewPickerToken(),
-		firstNonEmpty(surface.ActorUserID, action.ActorUserID),
+		xutil.FirstNonEmpty(surface.ActorUserID, action.ActorUserID),
 		now,
 		defaultReviewCommitPickerTTL,
 		ownerCardFlowPhaseEditing,
@@ -108,7 +109,7 @@ func (s *Service) resolveCommitReviewStartFromActivePicker(surface *state.Surfac
 	entry := s.resolveReviewEntryFromThread(
 		record.InstanceID,
 		record.ParentThreadID,
-		firstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(record.ThreadCWD), strings.TrimSpace(inst.WorkspaceRoot)),
+		xutil.FirstNonEmpty(strings.TrimSpace(thread.CWD), strings.TrimSpace(record.ThreadCWD), strings.TrimSpace(inst.WorkspaceRoot)),
 		strings.TrimSpace(action.MessageID),
 	)
 	return s.resolveCommitReviewStartFromEntry(entry, commitSHA), true
@@ -187,7 +188,7 @@ func reviewShortCommitSHA(value string) string {
 
 func reviewCommitOptionLabel(commit gitmeta.CommitSummary) string {
 	commit = commit.Normalized()
-	label := reviewShortCommitSHA(firstNonEmpty(commit.ShortSHA, commit.SHA))
+	label := reviewShortCommitSHA(xutil.FirstNonEmpty(commit.ShortSHA, commit.SHA))
 	subject := strings.TrimSpace(commit.Subject)
 	if subject == "" {
 		return label

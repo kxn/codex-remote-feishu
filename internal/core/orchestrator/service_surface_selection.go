@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
@@ -317,7 +318,7 @@ func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleReco
 		PageSize:   workspaceSelectionPageSize,
 		TotalPages: totalPages,
 		Current:    current,
-		Entries:    make([]control.FeishuWorkspaceSelectionEntry, 0, maxInt(end-start, 0)),
+		Entries:    make([]control.FeishuWorkspaceSelectionEntry, 0, xutil.MaxInt(end-start, 0)),
 	}
 	for _, entry := range entries[start:end] {
 		model.Entries = append(model.Entries, control.FeishuWorkspaceSelectionEntry{
@@ -446,7 +447,7 @@ func threadBelongsToInstanceWorkspace(inst *state.InstanceRecord, thread *state.
 	if inst == nil || thread == nil {
 		return false
 	}
-	return cwdBelongsToInstanceWorkspace(inst, firstNonEmpty(threadWorkspaceKeyFromRecord(thread), thread.CWD))
+	return cwdBelongsToInstanceWorkspace(inst, xutil.FirstNonEmpty(threadWorkspaceKeyFromRecord(thread), thread.CWD))
 }
 
 // threadBelongsToInstanceWorkspaceForTarget judges instance ownership from the
@@ -458,7 +459,7 @@ func threadBelongsToInstanceWorkspaceForTarget(inst *state.InstanceRecord, threa
 	if inst == nil || thread == nil {
 		return false
 	}
-	return cwdBelongsToInstanceWorkspace(inst, firstNonEmpty(thread.CWD, threadWorkspaceKeyFromRecord(thread)))
+	return cwdBelongsToInstanceWorkspace(inst, xutil.FirstNonEmpty(thread.CWD, threadWorkspaceKeyFromRecord(thread)))
 }
 
 func cwdBelongsToInstanceWorkspace(inst *state.InstanceRecord, cwd string) bool {

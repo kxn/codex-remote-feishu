@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const reviewApplyPromptPrefix = "请根据以下审阅意见继续修改：\n\n"
@@ -64,7 +65,7 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
 	}
 	promptText := reviewApplyPromptPrefix + reviewText
-	sourceMessageID := firstNonEmpty(strings.TrimSpace(action.MessageID), strings.TrimSpace(session.SourceMessageID))
+	sourceMessageID := xutil.FirstNonEmpty(strings.TrimSpace(action.MessageID), strings.TrimSpace(session.SourceMessageID))
 	s.ensureReviewSessionParentSelection(surface, session)
 	s.releaseFeishuRoomReviewReservations(surface)
 	s.clearPendingReviewStart(surface)

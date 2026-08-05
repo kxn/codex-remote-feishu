@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func compactCompletionNotice() control.Notice {
@@ -71,7 +72,7 @@ func (r *serviceProgressRuntime) renderCompactNotice(instanceID string, event ag
 		return nil
 	}
 	progress := r.service.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
-	progress.ItemID = firstNonEmpty(strings.TrimSpace(event.ItemID), progress.ItemID)
+	progress.ItemID = xutil.FirstNonEmpty(strings.TrimSpace(event.ItemID), progress.ItemID)
 	execprogress.UpsertEntry(progress, compactCompletionProgressEntryRecord(event.ItemID))
 	return r.service.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }

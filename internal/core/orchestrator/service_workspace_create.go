@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const targetPickerWorkspaceCreatePathPickerConsumerKind = "target_picker_workspace_create"
@@ -55,7 +56,7 @@ func (s *Service) openWorkspaceCreatePicker(surface *state.SurfaceConsoleRecord,
 		RootPath:     rootPath,
 		InitialPath:  initialPath,
 		Hint:         strings.TrimSpace(hint),
-		ConfirmLabel: strings.TrimSpace(firstNonEmpty(confirmLabel, "接入为工作区")),
+		ConfirmLabel: strings.TrimSpace(xutil.FirstNonEmpty(confirmLabel, "接入为工作区")),
 		CancelLabel:  "取消",
 		ConsumerKind: strings.TrimSpace(consumerKind),
 	})

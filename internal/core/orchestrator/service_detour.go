@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -150,7 +151,7 @@ func (s *Service) detourReturnNoticeEvent(outcome *remoteTurnOutcome) []eventcon
 	if remoteBindingDetourLabel(outcome.Binding) == "" {
 		return nil
 	}
-	sourceMessageID := strings.TrimSpace(firstNonEmpty(
+	sourceMessageID := strings.TrimSpace(xutil.FirstNonEmpty(
 		outcome.Binding.ReplyToMessageID,
 		outcome.Item.ReplyToMessageID,
 		outcome.Item.SourceMessageID,
@@ -158,7 +159,7 @@ func (s *Service) detourReturnNoticeEvent(outcome *remoteTurnOutcome) []eventcon
 	meta := eventcontract.EventMeta{}
 	if sourceMessageID != "" {
 		meta.SourceMessageID = sourceMessageID
-		meta.SourceMessagePreview = strings.TrimSpace(firstNonEmpty(
+		meta.SourceMessagePreview = strings.TrimSpace(xutil.FirstNonEmpty(
 			outcome.Binding.ReplyToMessagePreview,
 			outcome.Item.ReplyToMessagePreview,
 			outcome.Item.SourceMessagePreview,

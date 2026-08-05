@@ -11,6 +11,7 @@ package xutil
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // LookupStringFromAny returns value as a string when it is one, or "" otherwise.
@@ -20,6 +21,25 @@ func LookupStringFromAny(value any) string {
 		return typed
 	default:
 		return ""
+	}
+}
+
+// Stringify converts a JSON value into a trimmed string. It handles nil, real
+// strings, fmt.Stringer, and falls back to fmt.Sprint for every other value.
+// This is the permissive variant that used to be copy-pasted in
+// core/orchestrator and execprogress/snapshot.go; it intentionally differs
+// from LookupStringFromAny, which only accepts real strings.
+func Stringify(value any) string {
+	if value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(value))
 	}
 }
 

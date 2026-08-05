@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) findAttachedSurface(instanceID string) *state.SurfaceConsoleRecord {
@@ -451,7 +452,7 @@ func (s *Service) restorePendingSteerAsStagedImage(surface *state.SurfaceConsole
 		ImageID:          "img-" + strconv.Itoa(s.nextImageID),
 		SurfaceSessionID: surface.SurfaceSessionID,
 		SourceMessageID:  item.SourceMessageID,
-		ActorUserID:      strings.TrimSpace(firstNonEmpty(item.ActorUserID, surface.ActorUserID)),
+		ActorUserID:      strings.TrimSpace(xutil.FirstNonEmpty(item.ActorUserID, surface.ActorUserID)),
 		LocalPath:        item.Inputs[0].Path,
 		MIMEType:         item.Inputs[0].MIMEType,
 		State:            state.ImageStaged,
