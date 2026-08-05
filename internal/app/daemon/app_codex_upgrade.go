@@ -11,6 +11,7 @@ import (
 	codexupgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/codexupgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type codexUpgradeBusyReason struct {
@@ -104,12 +105,12 @@ func (a *App) startStandaloneCodexUpgrade(ctx context.Context, req codexUpgradeS
 		}
 		return fmt.Errorf("current codex binary is not upgradeable")
 	}
-	targetVersion := firstNonEmpty(strings.TrimSpace(req.TargetVersion), strings.TrimSpace(check.LatestVersion))
+	targetVersion := xutil.FirstNonEmpty(strings.TrimSpace(req.TargetVersion), strings.TrimSpace(check.LatestVersion))
 	if targetVersion == "" {
 		return fmt.Errorf("missing target version for codex upgrade")
 	}
 	if !check.HasUpdate || targetVersion == check.CurrentVersion {
-		return fmt.Errorf("current codex is already on %s", firstNonEmpty(check.CurrentVersion, "the latest version"))
+		return fmt.Errorf("current codex is already on %s", xutil.FirstNonEmpty(check.CurrentVersion, "the latest version"))
 	}
 
 	a.mu.Lock()
@@ -171,7 +172,7 @@ func (a *App) runStandaloneCodexUpgrade(tx *codexupgraderuntime.Transaction, onC
 		} else if !verified.Upgradeable() {
 			runErr = fmt.Errorf("codex upgrade finished but runtime binary is no longer upgradeable")
 		} else if verified.CurrentVersion() != tx.TargetVersion {
-			runErr = fmt.Errorf("codex upgrade finished with version %s, want %s", firstNonEmpty(verified.CurrentVersion(), "unknown"), tx.TargetVersion)
+			runErr = fmt.Errorf("codex upgrade finished with version %s, want %s", xutil.FirstNonEmpty(verified.CurrentVersion(), "unknown"), tx.TargetVersion)
 		}
 	}
 	if runErr == nil {

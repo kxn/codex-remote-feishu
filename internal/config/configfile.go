@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -158,7 +159,7 @@ func DefaultAppConfig() AppConfig {
 		Admin: AdminSettings{
 			ListenHost:      defaultAdminListenHost,
 			ListenPort:      defaultAdminListenPort,
-			AutoOpenBrowser: boolPtr(true),
+			AutoOpenBrowser: xutil.BoolPtr(true),
 		},
 		Tool: ToolSettings{
 			ListenHost: defaultToolListenHost,
@@ -171,7 +172,7 @@ func DefaultAppConfig() AppConfig {
 			DefaultSessionTTLSeconds: 1800,
 			Provider: ExternalAccessProviderSettings{
 				Kind:      "trycloudflare",
-				LazyStart: boolPtr(true),
+				LazyStart: xutil.BoolPtr(true),
 				TryCloudflare: TryCloudflareSettings{
 					LaunchTimeoutSeconds: defaultTryCloudflareLaunchTimeoutSeconds,
 				},
@@ -356,10 +357,6 @@ func feishuAppEnabled(app FeishuAppConfig) bool {
 	return app.Enabled == nil || *app.Enabled
 }
 
-func boolPtr(value bool) *bool {
-	return &value
-}
-
 func (cfg AppConfig) normalized() AppConfig {
 	defaults := DefaultAppConfig()
 
@@ -384,7 +381,7 @@ func (cfg AppConfig) normalized() AppConfig {
 		cfg.Admin.ListenPort = defaults.Admin.ListenPort
 	}
 	if cfg.Admin.AutoOpenBrowser == nil {
-		cfg.Admin.AutoOpenBrowser = boolPtr(*defaults.Admin.AutoOpenBrowser)
+		cfg.Admin.AutoOpenBrowser = xutil.BoolPtr(*defaults.Admin.AutoOpenBrowser)
 	}
 
 	if strings.TrimSpace(cfg.Tool.ListenHost) == "" {
@@ -410,7 +407,7 @@ func (cfg AppConfig) normalized() AppConfig {
 		cfg.ExternalAccess.Provider.Kind = defaults.ExternalAccess.Provider.Kind
 	}
 	if cfg.ExternalAccess.Provider.LazyStart == nil {
-		cfg.ExternalAccess.Provider.LazyStart = boolPtr(*defaults.ExternalAccess.Provider.LazyStart)
+		cfg.ExternalAccess.Provider.LazyStart = xutil.BoolPtr(*defaults.ExternalAccess.Provider.LazyStart)
 	}
 	if cfg.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds <= 0 {
 		cfg.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds = defaults.ExternalAccess.Provider.TryCloudflare.LaunchTimeoutSeconds

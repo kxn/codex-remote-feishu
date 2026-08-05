@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func resetFeishuVerification(app *config.FeishuAppConfig) {
@@ -42,7 +43,7 @@ func indexOfConfigFeishuApp(apps []config.FeishuAppConfig, gatewayID string) int
 }
 
 func nextGatewayID(apps []config.FeishuAppConfig, admin adminRuntimeState, req feishuAppWriteRequest) string {
-	base := sanitizeGatewayPath(firstNonEmpty(trimmedString(req.Name), trimmedString(req.AppID), "app"))
+	base := sanitizeGatewayPath(xutil.FirstNonEmpty(trimmedString(req.Name), trimmedString(req.AppID), "app"))
 	if base == "" {
 		base = "app"
 	}

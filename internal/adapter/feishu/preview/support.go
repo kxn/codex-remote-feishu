@@ -27,15 +27,6 @@ func normalizeGatewayID(gatewayID string) string {
 	return strings.TrimSpace(gatewayID)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
 func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	base := context.Background()
 	if parent != nil {

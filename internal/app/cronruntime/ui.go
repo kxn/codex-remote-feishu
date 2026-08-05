@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/bitablevalue"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -380,7 +381,7 @@ func SortedJobs(jobs []JobState) []JobState {
 		right := items[j].NextRunAt
 		switch {
 		case left.IsZero() && right.IsZero():
-			return firstNonEmpty(items[i].Name, items[i].RecordID) < firstNonEmpty(items[j].Name, items[j].RecordID)
+			return xutil.FirstNonEmpty(items[i].Name, items[i].RecordID) < xutil.FirstNonEmpty(items[j].Name, items[j].RecordID)
 		case left.IsZero():
 			return false
 		case right.IsZero():
@@ -388,7 +389,7 @@ func SortedJobs(jobs []JobState) []JobState {
 		case !left.Equal(right):
 			return left.Before(right)
 		default:
-			return firstNonEmpty(items[i].Name, items[i].RecordID) < firstNonEmpty(items[j].Name, items[j].RecordID)
+			return xutil.FirstNonEmpty(items[i].Name, items[i].RecordID) < xutil.FirstNonEmpty(items[j].Name, items[j].RecordID)
 		}
 	})
 	return items
@@ -411,7 +412,7 @@ func LoadedJobEntries(jobs []JobState, timeZone string) []control.CommandCatalog
 			segments = append(segments, "来源："+source)
 		}
 		entry := control.CommandCatalogEntry{
-			Title:       firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID), "unnamed"),
+			Title:       xutil.FirstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID), "unnamed"),
 			Description: strings.Join(segments, "｜"),
 		}
 		if button, ok := RunActionButton(job.RecordID); ok {

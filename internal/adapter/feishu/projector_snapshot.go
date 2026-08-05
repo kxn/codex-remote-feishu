@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -143,7 +144,7 @@ func snapshotGitProbeCWD(snapshot control.Snapshot) string {
 }
 
 func snapshotCurrentDirectory(snapshot control.Snapshot) string {
-	return firstNonEmpty(
+	return xutil.FirstNonEmpty(
 		strings.TrimSpace(snapshot.NextPrompt.CWD),
 		strings.TrimSpace(snapshot.PendingHeadless.ThreadCWD),
 		strings.TrimSpace(snapshot.WorkspaceKey),

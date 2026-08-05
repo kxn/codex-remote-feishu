@@ -6,6 +6,7 @@ import (
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func targetPickerEditingElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
@@ -98,7 +99,7 @@ func targetPickerWorkspaceLane(view control.FeishuTargetPickerView) paginatedSel
 	return targetPickerWorkspaceLaneWithLabel(
 		view,
 		"工作区",
-		firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
+		xutil.FirstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择工作区"),
 	)
 }
 
@@ -106,7 +107,7 @@ func targetPickerWorktreeWorkspaceLane(view control.FeishuTargetPickerView) pagi
 	return targetPickerWorkspaceLaneWithLabel(
 		view,
 		"基准工作区",
-		firstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择基准工作区"),
+		xutil.FirstNonEmpty(strings.TrimSpace(view.WorkspacePlaceholder), "选择基准工作区"),
 	)
 }
 
@@ -129,7 +130,7 @@ func targetPickerSessionLane(view control.FeishuTargetPickerView) paginatedSelec
 	return paginatedSelectFlowLane{
 		Flow:          selectflow.TargetPickerSessionFlow,
 		Label:         "会话",
-		Placeholder:   firstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
+		Placeholder:   xutil.FirstNonEmpty(strings.TrimSpace(view.SessionPlaceholder), "选择会话"),
 		Cursor:        view.SessionCursor,
 		SelectedValue: strings.TrimSpace(view.SelectedSessionValue),
 		Options:       targetPickerSessionOptions(view.SessionOptions),
@@ -231,7 +232,7 @@ func targetPickerLaneFit(
 			if err != nil {
 				return 0, err
 			}
-			return maxInt(size-baseSize, 0), nil
+			return xutil.MaxInt(size-baseSize, 0), nil
 		})
 	}
 }
@@ -247,7 +248,7 @@ func targetPickerEditingCardSize(view control.FeishuTargetPickerView, daemonLife
 }
 
 func targetPickerCardTitle(view control.FeishuTargetPickerView) string {
-	return firstNonEmpty(strings.TrimSpace(view.Title), "选择工作区与会话")
+	return xutil.FirstNonEmpty(strings.TrimSpace(view.Title), "选择工作区与会话")
 }
 
 func targetPickerCombinePageElements(parts ...[]map[string]any) []map[string]any {

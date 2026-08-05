@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestBootstrapHeadlessCodexCompletesInitializeHandshake(t *testing.T) {
@@ -156,7 +158,7 @@ func TestHeadlessNotificationOptOutMethods(t *testing.T) {
 		"warning",
 		"error",
 	} {
-		if containsString(got, disallowed) {
+		if xutil.ContainsString(got, disallowed) {
 			t.Fatalf("headless opt-out allowlist must not include %q: %#v", disallowed, got)
 		}
 	}
@@ -221,15 +223,6 @@ func sameStringSlice(got, want []string) bool {
 }
 
 func containsAnyString(values []any, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
 			return true

@@ -8,6 +8,7 @@ import (
 
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func isCronInstanceID(instanceID string) bool {
@@ -40,7 +41,7 @@ func (a *App) handleCronHelloLocked(_ context.Context, hello agentproto.Hello) b
 			SurfaceBindingPolicy:  agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
 			CreateThreadIfMissing: true,
 			InternalHelper:        true,
-			CWD:                   firstNonEmpty(strings.TrimSpace(run.RunDirectory), strings.TrimSpace(run.WorkspaceKey)),
+			CWD:                   xutil.FirstNonEmpty(strings.TrimSpace(run.RunDirectory), strings.TrimSpace(run.WorkspaceKey)),
 		},
 		Prompt: agentproto.Prompt{
 			Inputs: []agentproto.Input{{
@@ -122,9 +123,9 @@ func (a *App) handleCronEventsLocked(_ context.Context, instanceID string, event
 		case agentproto.EventSystemError:
 			message := strings.TrimSpace(event.ErrorMessage)
 			if event.Problem != nil {
-				message = firstNonEmpty(strings.TrimSpace(event.Problem.Message), message, event.Problem.Error())
+				message = xutil.FirstNonEmpty(strings.TrimSpace(event.Problem.Message), message, event.Problem.Error())
 			}
-			a.completeCronRunLocked(instanceID, "failed", firstNonEmpty(message, "cron 隐藏执行遇到系统错误"), now, true)
+			a.completeCronRunLocked(instanceID, "failed", xutil.FirstNonEmpty(message, "cron 隐藏执行遇到系统错误"), now, true)
 			return true
 		case agentproto.EventTurnCompleted:
 			if strings.TrimSpace(event.ThreadID) != "" {
@@ -138,11 +139,11 @@ func (a *App) handleCronEventsLocked(_ context.Context, instanceID string, event
 			case "", "completed":
 				a.completeCronRunLocked(instanceID, "completed", "", now, true)
 			case "failed":
-				a.completeCronRunLocked(instanceID, "failed", firstNonEmpty(strings.TrimSpace(event.ErrorMessage), "cron 隐藏执行失败"), now, true)
+				a.completeCronRunLocked(instanceID, "failed", xutil.FirstNonEmpty(strings.TrimSpace(event.ErrorMessage), "cron 隐藏执行失败"), now, true)
 			case "cancelled", "canceled", "interrupted":
-				a.completeCronRunLocked(instanceID, "failed", firstNonEmpty(strings.TrimSpace(event.ErrorMessage), "cron 隐藏执行被中断"), now, true)
+				a.completeCronRunLocked(instanceID, "failed", xutil.FirstNonEmpty(strings.TrimSpace(event.ErrorMessage), "cron 隐藏执行被中断"), now, true)
 			default:
-				a.completeCronRunLocked(instanceID, "failed", firstNonEmpty(strings.TrimSpace(event.ErrorMessage), "cron 隐藏执行状态异常："+status), now, true)
+				a.completeCronRunLocked(instanceID, "failed", xutil.FirstNonEmpty(strings.TrimSpace(event.ErrorMessage), "cron 隐藏执行状态异常："+status), now, true)
 			}
 			return true
 		}
@@ -164,9 +165,9 @@ func (a *App) handleCronCommandAckLocked(_ context.Context, instanceID string, a
 	if strings.TrimSpace(run.CommandID) != "" && strings.TrimSpace(ack.CommandID) != "" && strings.TrimSpace(run.CommandID) != strings.TrimSpace(ack.CommandID) {
 		return true
 	}
-	message := firstNonEmpty(strings.TrimSpace(ack.Error), "cron 隐藏执行命令未被接受")
+	message := xutil.FirstNonEmpty(strings.TrimSpace(ack.Error), "cron 隐藏执行命令未被接受")
 	if ack.Problem != nil {
-		message = firstNonEmpty(strings.TrimSpace(ack.Problem.Message), message, ack.Problem.Error())
+		message = xutil.FirstNonEmpty(strings.TrimSpace(ack.Problem.Message), message, ack.Problem.Error())
 	}
 	a.completeCronRunLocked(instanceID, "failed", message, time.Now().UTC(), true)
 	return true
@@ -340,8 +341,8 @@ func (a *App) writeCronRunResultAsync(target cronrt.WritebackTarget, run cronrt.
 	}
 
 	statusText := cronrt.StatusText(run.Status)
-	summary := cronrt.RunSummary(firstNonEmpty(run.FinalMessage, run.ErrorMessage, statusText))
-	taskName := firstNonEmpty(strings.TrimSpace(run.JobName), strings.TrimSpace(run.JobRecordID), strings.TrimSpace(run.InstanceID))
+	summary := cronrt.RunSummary(xutil.FirstNonEmpty(run.FinalMessage, run.ErrorMessage, statusText))
+	taskName := xutil.FirstNonEmpty(strings.TrimSpace(run.JobName), strings.TrimSpace(run.JobRecordID), strings.TrimSpace(run.InstanceID))
 	runFields := map[string]any{
 		"任务名":   taskName,
 		"触发时间":  cronrt.Milliseconds(run.TriggeredAt),
@@ -349,7 +350,7 @@ func (a *App) writeCronRunResultAsync(target cronrt.WritebackTarget, run cronrt.
 		"结束时间":  cronrt.Milliseconds(run.CompletedAt),
 		"状态":    statusText,
 		"耗时（秒）": cronrt.ElapsedSeconds(run.StartedAt, run.CompletedAt),
-		"工作区":   firstNonEmpty(strings.TrimSpace(run.SourceLabel), strings.TrimSpace(run.WorkspaceKey)),
+		"工作区":   xutil.FirstNonEmpty(strings.TrimSpace(run.SourceLabel), strings.TrimSpace(run.WorkspaceKey)),
 		"结果摘要":  summary,
 		"最终回复":  strings.TrimSpace(run.FinalMessage),
 		"错误信息":  strings.TrimSpace(run.ErrorMessage),

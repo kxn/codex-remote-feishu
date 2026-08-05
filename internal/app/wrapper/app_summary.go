@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func summarizeFrames(lines [][]byte) string {
@@ -52,14 +53,14 @@ func summarizeFrame(line []byte) string {
 	if method := lookupStringFromMap(message, "method"); method != "" {
 		parts = append(parts, "method="+method)
 	}
-	if threadID := firstNonEmpty(
+	if threadID := xutil.FirstNonEmpty(
 		lookupNestedString(message, "params", "threadId"),
 		lookupNestedString(message, "params", "thread", "id"),
 		lookupNestedString(message, "result", "thread", "id"),
 	); threadID != "" {
 		parts = append(parts, "thread="+threadID)
 	}
-	if turnID := firstNonEmpty(
+	if turnID := xutil.FirstNonEmpty(
 		lookupNestedString(message, "params", "turnId"),
 		lookupNestedString(message, "params", "expectedTurnId"),
 		lookupNestedString(message, "params", "turn", "id"),

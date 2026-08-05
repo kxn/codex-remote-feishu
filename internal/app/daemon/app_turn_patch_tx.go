@@ -10,6 +10,7 @@ import (
 	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) newTurnPatchTransactionLocked(flow *turnpatchruntime.FlowRecord, kind turnpatchruntime.TransactionKind) *turnpatchruntime.Transaction {
@@ -265,7 +266,7 @@ func (a *App) startTurnPatchApplyRecoveryLocked(tx *turnpatchruntime.Transaction
 	}
 	tx.Stage = turnpatchruntime.TransactionStageApplyRecoveryRollback
 	tx.UpdatedAt = time.Now().UTC()
-	go a.runTurnPatchApplyRecoveryTransaction(tx.ID, strings.TrimSpace(firstNonEmpty(reason, "child restart 失败。")))
+	go a.runTurnPatchApplyRecoveryTransaction(tx.ID, strings.TrimSpace(xutil.FirstNonEmpty(reason, "child restart 失败。")))
 }
 
 func (a *App) finishTurnPatchApplySuccessLocked(tx *turnpatchruntime.Transaction) []eventcontract.Event {
@@ -346,9 +347,9 @@ func turnPatchRollbackRequest(tx *turnpatchruntime.Transaction, flow *turnpatchr
 	req.PatchID = strings.TrimSpace(tx.PatchID)
 	req.ActorUserID = strings.TrimSpace(tx.InitiatorUserID)
 	if flow != nil {
-		req.ThreadID = strings.TrimSpace(firstNonEmpty(req.ThreadID, flow.ThreadID))
-		req.PatchID = strings.TrimSpace(firstNonEmpty(req.PatchID, flow.PatchID))
-		req.ActorUserID = strings.TrimSpace(firstNonEmpty(req.ActorUserID, flow.OwnerUserID))
+		req.ThreadID = strings.TrimSpace(xutil.FirstNonEmpty(req.ThreadID, flow.ThreadID))
+		req.PatchID = strings.TrimSpace(xutil.FirstNonEmpty(req.PatchID, flow.PatchID))
+		req.ActorUserID = strings.TrimSpace(xutil.FirstNonEmpty(req.ActorUserID, flow.OwnerUserID))
 	}
 	return req
 }

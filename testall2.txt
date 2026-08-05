@@ -1,0 +1,1682 @@
+﻿?   	github.com/kxn/codex-remote-feishu/cmd/codex-remote	[no test files]
+?   	github.com/kxn/codex-remote-feishu/cmd/issue-doc-sync	[no test files]
+?   	github.com/kxn/codex-remote-feishu/cmd/issue-workflow	[no test files]
+?   	github.com/kxn/codex-remote-feishu/cmd/relay-install	[no test files]
+?   	github.com/kxn/codex-remote-feishu/cmd/relay-wrapper	[no test files]
+?   	github.com/kxn/codex-remote-feishu/cmd/relayd	[no test files]
+?   	github.com/kxn/codex-remote-feishu/cmd/upgrade-shim	[no test files]
+?   	github.com/kxn/codex-remote-feishu/cmd/vscode-shim	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/claude	0.511s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/codex	0.482s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/editor	0.609s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu	4.323s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme	0.045s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport	0.051s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway	0.105s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview	1.442s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector	0.206s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow	0.051s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags	0.498s
+ok  	github.com/kxn/codex-remote-feishu/internal/adapter/relayws	0.937s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/adminauth	0.394s
+?   	github.com/kxn/codex-remote-feishu/internal/app/appserverargs	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/app/bitablevalue	0.336s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/codexprofile	0.598s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/codexupgrade	0.108s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/cronrepo	4.650s
+?   	github.com/kxn/codex-remote-feishu/internal/app/cronruntime	[no test files]
+2026/08/05 13:13:28 autostart detect failed: query task scheduler task \CodexRemoteFeishu\stable: exit status 1: ����
+2026/08/05 13:13:29 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:30 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:30 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:30 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:31 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:31 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:31 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 [Info] [client ready]
+2026/08/05 13:13:32 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:32 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:32 feishu onboarding completed: session=f6b21b26e1d6d4221d7fe14b gateway=扫码-Bot app_id=cli_qr
+2026/08/05 13:13:32 feishu onboarding completed: session=6cfe73023fc8ceb49d05a2f3 gateway=Admin-扫码-Bot app_id=cli_admin_qr
+2026/08/05 13:13:32 feishu onboarding verify failed: session=c6f7f525bbcf4efed6c49ea8 gateway=Retry-Bot err=bot ability missing
+2026/08/05 13:13:32 feishu onboarding completed: session=c6f7f525bbcf4efed6c49ea8 gateway=Retry-Bot app_id=cli_retry
+2026/08/05 13:13:33 [Info] [client ready]
+2026/08/05 13:13:33 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:33 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:33 [Info] [client ready]
+2026/08/05 13:13:33 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:33 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:33 [Info] [client ready]
+2026/08/05 13:13:33 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:33 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:33 [Info] [client ready]
+2026/08/05 13:13:33 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:33 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:33 [Info] [client ready]
+2026/08/05 13:13:33 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:33 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:33 [Info] [client ready]
+2026/08/05 13:13:33 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:33 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:33 [Info] [client ready]
+2026/08/05 13:13:33 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:33 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:34 [Info] [client ready]
+2026/08/05 13:13:34 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:34 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:34 [Info] [client ready]
+2026/08/05 13:13:34 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:34 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:34 [Info] [client ready]
+2026/08/05 13:13:34 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:34 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:34 [Info] [client ready]
+2026/08/05 13:13:34 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:34 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:34 [Info] [client ready]
+2026/08/05 13:13:35 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:35 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:35 [Info] [client ready]
+2026/08/05 13:13:35 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:35 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:35 [Info] [client ready]
+2026/08/05 13:13:35 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:35 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:36 wrapper: PATH codex binary "codex" is unavailable; temporarily using vscode bundle codex "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestAdminRuntimeRequirementsAcceptManagedShimBundleFallback3227449875\\001\\.vscode\\extensions\\openai.chatgpt-26.422.30944\\bin\\windows-x86_64\\codex.exe"
+2026/08/05 13:13:36 wrapper: PATH codex binary "codex" is unavailable; temporarily using vscode bundle codex "C:\\Users\\kxn\\.vscode\\extensions\\openai.chatgpt-26.727.40816-win32-x64\\bin\\windows-x86_64\\codex.real.exe"
+--- FAIL: TestAdminRuntimeRequirementsReadyWhenClaudeIsAvailableWithoutCodex (0.05s)
+    admin_runtime_requirements_test.go:211: real_codex_binary status = "pass", want fail
+2026/08/05 13:13:36 wrapper: PATH codex binary "codex" is unavailable; temporarily using vscode bundle codex "C:\\Users\\kxn\\.vscode\\extensions\\openai.chatgpt-26.727.40816-win32-x64\\bin\\windows-x86_64\\codex.real.exe"
+--- FAIL: TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvailable (0.03s)
+    admin_runtime_requirements_test.go:242: expected runtime requirements to fail without any backend, got daemon.runtimeRequirementsResponse{Ready:true, Summary:"当前机器已满足基础运行条件，但仍有需要注意的配置风险。", CurrentBinary:"C:\\Users\\kxn\\AppData\\Local\\Temp\\TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvail3106549674\\001\\codex-remote.exe", CodexRealBinary:"codex", CodexRealBinarySource:"config", ResolvedCodexRealBinary:"C:\\Users\\kxn\\.vscode\\extensions\\openai.chatgpt-26.727.40816-win32-x64\\bin\\windows-x86_64\\codex.real.exe", LookupMode:"path_search", Checks:[]daemon.runtimeRequirementCheck{daemon.runtimeRequirementCheck{ID:"headless_launcher", Title:"服务启动器", Status:"pass", Summary:"当前服务已经有可用的 codex-remote 启动器。", Detail:"C:\\Users\\kxn\\AppData\\Local\\Temp\\TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvail3106549674\\001\\codex-remote.exe"}, daemon.runtimeRequirementCheck{ID:"real_codex_binary", Title:"Codex 可执行文件", Status:"pass", Summary:"当前服务环境下可以解析 Codex 可执行文件。", Detail:"C:\\Users\\kxn\\.vscode\\extensions\\openai.chatgpt-26.727.40816-win32-x64\\bin\\windows-x86_64\\codex.real.exe"}, daemon.runtimeRequirementCheck{ID:"binary_loop", Title:"Wrapper 启动目标", Status:"pass", Summary:"wrapper 会启动独立的真实 codex，不会回指当前 codex-remote。", Detail:""}, daemon.runtimeRequirementCheck{ID:"claude_binary", Title:"Claude 可执行文件", Status:"fail", Summary:"当前服务环境下无法解析 Claude 可执行文件。", Detail:"claude executable not found"}, daemon.runtimeRequirementCheck{ID:"lookup_mode", Title:"二进制定位方式", Status:"warn", Summary:"当前通过 PATH 解析真实 codex。现在可用，但服务环境的 PATH 变化可能让它失效。", Detail:"codex"}}, Notes:[]string{"这里只检查基础运行条件，不检查登录状态、账号配置或 provider 凭据。"}}
+2026/08/05 13:13:36 [Info] [client ready]
+2026/08/05 13:13:37 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:37 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:38 [Info] [client ready]
+2026/08/05 13:13:38 [Warn] [custom app tenantAccessToken cache, err:{
+  CodeError: {
+    Code: 10003,
+    Msg: "invalid param"
+  },
+  Expire: 0,
+  TenantAccessToken: ""
+}]
+2026/08/05 13:13:38 [Warn] [translate request failed, err:msg:invalid param,code:10003]
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 relay instance connected: id=inst-1 workspace=/tmp/demo display=Demo Workspace backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:38 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:13:38 pprof disabled: bind 127.0.0.1:13880 failed: listen tcp 127.0.0.1:13880: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=request.prompt
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=request.prompt
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=request.prompt
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=request.prompt
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=request.prompt
+2026/08/05 13:13:39 gateway apply failed: chat=chat-1 event=request.prompt err=lark temporarily unavailable
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=request.prompt
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=block.committed
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=page.view
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=block.committed
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=page.view
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=block.committed
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=notice
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=notice
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=notice
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=ou-user-1 kind=notice
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor= kind=request.prompt
+2026/08/05 13:13:39 agent event: instance=inst-1 kind=request.resolved thread=thread-1 turn=turn-1 item= initiator= traffic= status=
+2026/08/05 13:13:39 relay command ack: instance=inst-1 command=cmd-1 accepted=true error=
+2026/08/05 13:13:39 agent event: instance=inst-1 kind=process.child.restart.updated thread=thread-1 turn= item= initiator= traffic= status=succeeded
+2026/08/05 13:13:39 relay command ack: instance=inst-1 command=cmd-1 accepted=false error=restart rejected
+2026/08/05 13:13:39 relay command ack: instance=inst-1 command=cmd-1 accepted=true error=
+2026/08/05 13:13:39 agent event: instance=inst-1 kind=process.child.restart.updated thread=thread-1 turn= item= initiator= traffic= status=failed
+2026/08/05 13:13:39 relay command ack: instance=inst-1 command=cmd-1 accepted=true error=
+2026/08/05 13:13:39 headless start requested: surface= instance=inst-oauth pid=4321 thread= cwd=C:\Users\kxn\AppData\Local\Temp\TestDetectedOAuthProfileLaunchUsesIsolatedBuiltInOpenAI2932741722\001
+2026/08/05 13:13:39 headless start requested: surface=surface-oauth instance=inst-oauth pid=4321 thread= cwd=C:\Users\kxn\AppData\Local\Temp\TestOAuthProfileFreshProbeDoesNotStartDuplicateLaunches3636310091\001
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade codex"
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade codex"
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade codex"
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade codex"
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade codex"
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:39 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:39 surface action: surface=surface-init chat=chat-init actor=user-init kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade codex"
+2026/08/05 13:13:39 ui event: surface=surface-init chat=chat-init actor=user-init kind=page.view
+2026/08/05 13:13:39 workspace surface context conflict: workspace=/tmp/workspace existing=surface-init ignored=surface-other
+2026/08/05 13:13:39 surface action: surface=surface-init chat=chat-init actor=user-init kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:39 ui event: surface=surface-init chat=chat-init actor=user-init kind=page.view
+2026/08/05 13:13:39 workspace surface context conflict: workspace=/tmp/workspace existing=surface-init ignored=surface-other
+2026/08/05 13:13:39 ui event: surface=surface-init chat=chat-init actor=user-init kind=page.view
+2026/08/05 13:13:39 surface action: surface=surface-init chat=chat-init actor=user-init kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:39 ui event: surface=surface-init chat=chat-init actor=user-init kind=page.view
+2026/08/05 13:13:39 workspace surface context conflict: workspace=/tmp/workspace existing=surface-init ignored=surface-other
+2026/08/05 13:13:39 ui event: surface=surface-init chat=chat-init actor=user-init kind=page.view
+2026/08/05 13:13:40 relay command ack: instance=inst-1 command=cmd-1 accepted=true error=
+2026/08/05 13:13:40 agent event: instance=inst-1 kind=process.child.restart.updated thread= turn= item= initiator= traffic= status=succeeded
+2026/08/05 13:13:40 ui event: surface=surface-init chat=chat-init actor=user-init kind=page.view
+2026/08/05 13:13:40 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.compact message=msg-compact-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/compact"
+2026/08/05 13:13:40 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:40 ui command: surface=surface-1 instance=inst-1 kind=thread.compact.start thread=thread-1 turn= sourceMessage=
+2026/08/05 13:13:40 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:40 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:40 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="你好"
+2026/08/05 13:13:40 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:40 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-active instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="先开始"
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-active
+2026/08/05 13:13:40 agent event: instance=inst-1 kind=turn.started thread=thread-1 turn=turn-1 item= initiator=unknown traffic= status=
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-queued instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="补充信息"
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.reaction.created message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:40 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=turn.steer thread=thread-1 turn=turn-1 sourceMessage=msg-queued
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:40 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:40 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="处理一下"
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-1
+2026/08/05 13:13:40 agent event: instance=inst-1 kind=turn.started thread=thread-1 turn=turn-1 item= initiator=unknown traffic= status=
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 agent event: instance=inst-1 kind=turn.completed thread=thread-1 turn=turn-1 item= initiator=unknown traffic= status=completed
+2026/08/05 13:13:40 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:40 cron hidden run requested: instance=inst-cron-rec-task-1-20260805T051340 job=Nightly source=C:\Users\kxn\AppData\Local\Temp\TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit1212646482\001 cwd=C:/Users/kxn/AppData/Local/Temp/TestCronSchedulerAllowsSecondRunWithinConcurrencyLimit1212646482/001 pid=4321
+2026/08/05 13:13:40 cron forced stop: instance=inst-cron-1 pid=4321
+2026/08/05 13:13:40 cron forced stop failed: instance=inst-cron-1 pid=4321 err=boom
+2026/08/05 13:13:40 cron forced stop: instance=inst-cron-1 pid=4321
+2026/08/05 13:13:40 cron hidden run requested: instance=inst-cron-rec-task-1-20260805T051340 job=Nightly source=C:\Users\kxn\AppData\Local\Temp\TestCronSchedulerLaunchesFreshHiddenRun2522190151\001 cwd=C:/Users/kxn/AppData/Local/Temp/TestCronSchedulerLaunchesFreshHiddenRun2522190151/001 pid=4321
+2026/08/05 13:13:40 cron hidden prompt sent: instance=inst-cron-rec-task-1-20260805T051340 command=cmd-1 source= cwd=C:\Users\kxn\AppData\Local\Temp\TestCronHelloAndCompletionStayHiddenAndWriteBackFinalMessage4079189687\001
+2026/08/05 13:13:42 cron hidden run requested: instance=inst-cron-rec-task-git-20260805T051341 job=Git Nightly source=repo: C:/Users/kxn/AppData/Local/Temp/TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel1446354628/001/repo @ main cwd=C:\Users\kxn\AppData\Local\Temp\TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel1446354628\002\cron-repos\runs\inst-cron-rec-task-git-20260805T051341\worktree pid=4321
+2026/08/05 13:13:42 cron hidden prompt sent: instance=inst-cron-rec-task-git-20260805T051341 command=cmd-1 source=repo: C:/Users/kxn/AppData/Local/Temp/TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel1446354628/001/repo @ main cwd=C:\Users\kxn\AppData\Local\Temp\TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel1446354628\002\cron-repos\runs\inst-cron-rec-task-git-20260805T051341\worktree
+2026/08/05 13:13:42 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.cron message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/cron"
+2026/08/05 13:13:42 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:42 cron hidden run requested: instance=inst-cron-rec-task-1-20260805T051342 job=Nightly source=C:\Users\kxn\AppData\Local\Temp\TestTriggerCronJobLaunchesImmediatelyWithoutChangingNextRun1838022868\001 cwd=C:/Users/kxn/AppData/Local/Temp/TestTriggerCronJobLaunchesImmediatelyWithoutChangingNextRun1838022868/001 pid=4321
+2026/08/05 13:13:42 cron run cleanup failed: root=C:\Users\kxn\AppData\Local\Temp\TestCronSchedulerMaterializesGitRepoSourceAndWritesSourceLabel1446354628\002\cron-repos\runs\inst-cron-rec-task-git-20260805T051341 err=git repository url is invalid
+2026/08/05 13:13:42 feishu permission verification failed: gateway=app-1 err=scope list failed
+2026/08/05 13:13:42 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.command.coworkers message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/coworkers 2"
+2026/08/05 13:13:42 persist feishu room state failed: err=rename C:\Users\kxn\AppData\Local\Temp\TestCoworkersSettingRejectsWhenRoomStateCannotBePersisted391956389\001.tmp-3460042691 C:\Users\kxn\AppData\Local\Temp\TestCoworkersSettingRejectsWhenRoomStateCannotBePersisted391956389\001: Access is denied.
+2026/08/05 13:13:42 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:13:43 feishu room workspace recovery conflict: room=feishu:chat:oc_room workspaces=["C:/Users/kxn/AppData/Local/Temp/TestConflictingSurfaceResumeWorkspacesFailClosedBeforeGroupIngre802639830/002" "C:/Users/kxn/AppData/Local/Temp/TestConflictingSurfaceResumeWorkspacesFailClosedBeforeGroupIngre802639830/003"]
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-conflict-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续任务"
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:43.085405Z text="/list"
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:43.085405Z text="/use thread-1"
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.target_picker.confirm message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:43.085405Z text=""
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.target_picker.confirm message= instance= thread= verdict=old_card reason=card_lifecycle_mismatch event= request= message_time= menu_time= card_lifecycle=old-daemon-lifecycle text=""
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:13:43 feishu room workspace recovery conflict: room=feishu:chat:oc_room workspaces=["C:/Users/kxn/AppData/Local/Temp/TestDurableRoomWorkspaceRejectsMismatchedSurfaceResumeTarget3572949600/003"]
+2026/08/05 13:13:43 drop stale surface resume fallback: surface=feishu:app-1:chat:oc_room previous_workspace=C:/Users/kxn/AppData/Local/Temp/TestDurableRoomWorkspaceRejectsMismatchedSurfaceResumeTarget3572949600/003 effective_workspace=C:/Users/kxn/AppData/Local/Temp/TestDurableRoomWorkspaceRejectsMismatchedSurfaceResumeTarget3572949600/002
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/list"
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_owner kind=surface.button.attach_workspace message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_owner kind=notice
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_owner kind=target.picker
+2026/08/05 13:13:43 surface action: surface=feishu:app-2:chat:oc_room chat=oc_room actor=ou_member kind=surface.button.attach_workspace message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:43 ui event: surface=feishu:app-2:chat:oc_room chat=oc_room actor=ou_member kind=notice
+2026/08/05 13:13:43 ui event: surface=feishu:app-2:chat:oc_room chat=oc_room actor=ou_member kind=target.picker
+2026/08/05 13:13:43 workspace surface context conflict: workspace=C:/Users/kxn/AppData/Local/Temp/TestRoomWorkspaceSwitchClearsSiblingStaleResumeTargetBeforeResta1531953122/002 existing=feishu:app-1:chat:oc_room ignored=feishu:app-2:chat:oc_room
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_owner kind=surface.button.attach_workspace message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_owner kind=notice
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_owner kind=target.picker
+2026/08/05 13:13:43 drop stale surface resume fallback: surface=feishu:app-2:chat:oc_room previous_workspace=C:/Users/kxn/AppData/Local/Temp/TestRoomWorkspaceSwitchClearsSiblingStaleResumeTargetBeforeResta1531953122/002 effective_workspace=C:/Users/kxn/AppData/Local/Temp/TestRoomWorkspaceSwitchClearsSiblingStaleResumeTargetBeforeResta1531953122/003
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:43 final block preview rewrite failed (continuing without preview rewrite): surface=feishu:app-1:chat:1 instance=inst-1 thread=thread-1 item=item-1 err=context deadline exceeded
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:43 final block preview rewrite failed (continuing without preview rewrite): surface=feishu:app-1:chat:1 instance=inst-1 thread=thread-1 item=item-1 err=context deadline exceeded
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:43 final block preview rewrite failed (continuing without preview rewrite): surface=feishu:app-1:chat:1 instance=inst-1 thread=thread-1 item=item-1 err=context deadline exceeded
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:43 final block preview rewrite failed (continuing without preview rewrite): surface=feishu:app-1:chat:1 instance=inst-1 thread=thread-1 item=item-1 err=context deadline exceeded
+2026/08/05 13:13:43 surface action: surface=feishu:app-1:chat:1 chat= actor= kind=surface.button.detach message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=notice
+2026/08/05 13:13:43 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:43 final block preview rewrite failed (continuing without preview rewrite): surface=feishu:app-1:chat:1 instance=inst-1 thread=thread-1 item=item-1 err=context deadline exceeded
+2026/08/05 13:13:44 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:44 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:44 gateway apply failed: chat=chat-1 event=target.picker err=lark temporarily unavailable
+2026/08/05 13:13:44 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:44 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:44 git import failed: surface=surface-1 picker=picker-1 repo= parent= dest= code=git_import_auth_failed err=<nil> stderr=
+2026/08/05 13:13:44 git worktree create failed: surface=surface-1 picker=picker-1 base= branch= dir= dest= code=git_worktree_branch_exists err=<nil> stderr=
+2026/08/05 13:13:44 headless start requested: surface=surface-1 instance=inst-claude-profile pid=4322 thread=thread-claude cwd=/data/dl/repo
+2026/08/05 13:13:44 headless start requested: surface=surface-1 instance=inst-claude-profile-low pid=4322 thread=thread-claude cwd=/data/dl/repo
+2026/08/05 13:13:44 headless start requested: surface=surface-1 instance=inst-claude-default pid=4323 thread=thread-claude cwd=/data/dl/repo
+2026/08/05 13:13:44 headless start requested: surface=surface-1 instance=inst-codex-provider pid=4324 thread= cwd=/data/dl/repo
+2026/08/05 13:13:44 headless start requested: surface=surface-1 instance=inst-deepseek-profile pid=4330 thread= cwd=C:\Users\kxn\AppData\Local\Temp\TestDaemonStartsDeepSeekCodexHeadlessWithManagedModelCatalog3200514028\001
+2026/08/05 13:13:44 headless start requested: surface= instance=inst-canonical-profile pid=4326 thread= cwd=C:\Users\kxn\AppData\Local\Temp\TestDaemonStartsCodexHeadlessWithCanonicalProfileID2691431819\001
+2026/08/05 13:13:44 headless start requested: surface= instance=inst-frozen-profile pid=4327 thread= cwd=C:\Users\kxn\AppData\Local\Temp\TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision3771455710\001
+2026/08/05 13:13:44 headless start requested: surface= instance=inst-codex-default pid=4325 thread= cwd=/data/dl/repo
+2026/08/05 13:13:44 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 headless start requested: surface=surface-1 instance=inst-headless-1785906824453619000-1 pid=4321 thread=thread-1 cwd=/data/dl/droid
+2026/08/05 13:13:44 relay instance connected: id=inst-headless-1785906824453619000-1 workspace=/data/dl/droid display=headless backend=codex source=headless managed=true pid=4321
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 ui command: surface=surface-1 instance=inst-headless-1785906824453619000-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:13:44 relay send command failed: instance=inst-headless-1785906824453619000-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:44 relay send command failed: instance=inst-headless-1785906824453619000-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-claude verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 headless start requested: surface=surface-1 instance=inst-headless-1785906824469942300-1 pid=4322 thread=thread-claude cwd=/data/dl/repo
+2026/08/05 13:13:44 surface action: surface=surface-1 chat= actor= kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.detach message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:44 relay instance connected: id=inst-headless-2 workspace=/data/dl/droid display=droid backend=codex source=headless managed=true pid=2468
+2026/08/05 13:13:44 headless idle cleanup: instance=inst-headless-2 pid=2468 idle_since=2026-08-05T05:13:44Z
+2026/08/05 13:13:44 relay instance connected: id=inst-headless-2 workspace=/data/dl/droid display=droid backend=codex source=headless managed=true pid=2468
+2026/08/05 13:13:44 agent event: instance=inst-headless-2 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:44 managed headless refresh requested: instance=inst-headless-2 command=cmd-2 reason=idle_pool_maintenance
+2026/08/05 13:13:44 managed headless shutdown cleanup: instance=inst-headless-1 pid=4321
+2026/08/05 13:13:44 daemon shutdown: requested wrapper exit: instance=inst-headless-live pid=3456
+2026/08/05 13:13:44 managed headless shutdown cleanup: instance=inst-headless-live handled by relay drain
+2026/08/05 13:13:44 managed headless shutdown cleanup failed: instance=inst-headless-1 pid=1111 err=terminate failed
+2026/08/05 13:13:44 managed headless shutdown cleanup: instance=inst-headless-2 pid=2222
+2026/08/05 13:13:44 managed headless prewarm start requested: instance=inst-headless-pool-1785906824531270800-1 pid=5001
+2026/08/05 13:13:44 relay instance connected: id=inst-headless-old workspace=C:/Users/kxn/AppData/Local/Temp/TestDaemonPrewarmsReplacementWhenOfflineManagedHeadlessDoesNotCo3845587011/001 display=old backend=codex source=headless managed=true pid=2468
+2026/08/05 13:13:44 relay instance disconnected: id=inst-headless-old workspace=C:/Users/kxn/AppData/Local/Temp/TestDaemonPrewarmsReplacementWhenOfflineManagedHeadlessDoesNotCo3845587011/001 display=old source=headless managed=true pid=2468
+2026/08/05 13:13:44 managed headless prewarm start requested: instance=inst-headless-pool-1785906824541680600-1 pid=6001
+2026/08/05 13:13:44 managed headless prewarm failed: err=boom
+2026/08/05 13:13:44 managed headless prewarm start requested: instance=inst-headless-pool-1785906884551918100-1 pid=7002
+2026/08/05 13:13:44 managed headless prewarm start requested: instance=inst-headless-pool-1785906824563864100-1 pid=8001
+2026/08/05 13:13:44 headless idle cleanup: instance=inst-headless-2 pid=2468 idle_since=2026-08-05T05:13:44Z
+2026/08/05 13:13:44 headless idle cleanup failed: instance=inst-headless-2 pid=2468 err=boom
+2026/08/05 13:13:44 headless idle cleanup: instance=inst-headless-2 pid=2468 idle_since=2026-08-05T05:13:44Z
+2026/08/05 13:13:44 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.history message=om-card-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-14T12:00:00Z|pid:42 text="/history"
+2026/08/05 13:13:44 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.message.file message=msg-file-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:44 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-text-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="请读取我回复的文件"
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 ui command: surface=surface-1 instance=inst-1 kind=prompt.send thread= turn= sourceMessage=msg-text-1
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=prompt.send err=instance offline
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.message.file message=msg-file-2 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-old instance= thread= verdict=old reason=message_before_start_window event= request= message_time=2026-04-08T11:57:00Z menu_time= card_lifecycle= text="这是一条重启前的旧消息"
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.detach message= instance= thread= verdict=old reason=message_before_start_window event= request= message_time=2026-04-08T11:57:00Z menu_time= card_lifecycle= text="/detach"
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.detach message= instance= thread= verdict=old_card reason=card_lifecycle_mismatch event= request= message_time= menu_time= card_lifecycle=older-life text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.command.menu message=om-card-1 instance= thread= verdict=old_card reason=card_callback_missing_lifecycle event= request= message_time= menu_time= card_lifecycle= text="/menu send_settings"
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/tmp/workspace display=workspace backend=codex source=headless managed=true pid=1234
+2026/08/05 13:13:45 relay instance connected: id=inst-claude workspace=/tmp/workspace display=workspace backend=claude source=headless managed=true pid=1234
+2026/08/05 13:13:45 relay instance connected: id=inst-new workspace=/tmp/workspace display=workspace backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay instance connected: id=inst-legacy workspace=/tmp/workspace display=workspace backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay instance connected: id=inst-claude workspace=/tmp/workspace display=workspace backend=claude source=headless managed=false pid=0
+2026/08/05 13:13:45 relay instance connected: id=inst-claude-explicit workspace=/tmp/workspace display=workspace backend=claude source=headless managed=true pid=1234
+2026/08/05 13:13:45 cron hidden prompt sent: instance=inst-cron-job-1 command=cmd-1 source= cwd=/tmp/workspace
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:45 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:45 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message=om-menu-root-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T10:00:00Z|pid:42 text="/menu"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace message=om-menu-root-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T10:00:00Z|pid:42 text="/workspace"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.new_dir message=om-menu-root-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T10:00:00Z|pid:42 text="/workspace new dir"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message=om-menu-settings-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T10:05:00Z|pid:42 text="/menu send_settings"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.auto_whip message=om-menu-settings-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T10:05:00Z|pid:42 text="/autowhip"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.auto_whip message=om-menu-settings-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T10:05:00Z|pid:42 text="/autowhip on"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message=om-menu-list-empty-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.show_threads message=om-menu-use-detached-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:01:00Z|pid:42 text="/use"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.show_all_threads message=om-menu-useall-detached-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:01:00Z|pid:42 text="/useall"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message=om-vscode-list-1 instance=inst-vscode-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:02:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message=om-vscode-use-1 instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:03:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.help message=om-menu-help-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:10:00Z|pid:42 text="/help"
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.command.coworkers message=om-menu-coworkers-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:10:30Z|pid:42 text="/coworkers status"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.steer_all message=om-menu-steer-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:11:00Z|pid:42 text="/steerall"
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.stop message=om-menu-stop-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:12:00Z|pid:42 text=""
+2026/08/05 13:13:45 ui command: surface=surface-1 instance=inst-1 kind=turn.interrupt thread=thread-1 turn=turn-1 sourceMessage=
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.new_thread message=om-menu-new-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:14:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.follow_local message=om-menu-follow-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:16:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.detach message=om-menu-detach-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:18:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.detach message=om-menu-workspace-detach-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:18:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.compact message=om-menu-compact-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:00:00Z|pid:42 text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:45 ui command: surface=surface-1 instance=inst-1 kind=thread.compact.start thread=thread-1 turn= sourceMessage=
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message=om-menu-review-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-30T10:00:00Z|pid:42 text="/menu common_tools"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.review message=om-menu-review-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-30T10:00:00Z|pid:42 text="/review"
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message=om-menu-sendfile-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T09:05:00Z|pid:42 text=""
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/menu"
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:45 feishu permission gap observed during ui delivery: gateway=app-1 surface=feishu:app-1:chat:1 event=target.picker err=feishu api im.v1.message.create failed: code=99990001 msg=permission denied
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=notice
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:45 ui command: surface=surface-1 instance=inst-1 kind=prompt.send thread= turn= sourceMessage=
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-active instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="先开始"
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-active
+2026/08/05 13:13:45 agent event: instance=inst-1 kind=turn.started thread=thread-1 turn=turn-1 item= initiator=unknown traffic= status=
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-reply instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="请重点看最后一段"
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=turn.steer thread=thread-1 turn=turn-1 sourceMessage=msg-reply
+2026/08/05 13:13:45 relay command ack: instance=inst-1 command=cmd-3 accepted=true error=
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=timeline.text
+2026/08/05 13:13:45 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=request.prompt
+2026/08/05 13:13:45 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.follow_local message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:45 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=request.prompt
+2026/08/05 13:13:46 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:47 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:48 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:48 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:49 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:50 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:50 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:51 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:51 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:52 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:53 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.review_start message=om-final-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T08:00:00Z|pid:7 text=""
+2026/08/05 13:13:53 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:53 ui command: surface=surface-1 instance=inst-1 kind=review.start thread=thread-main turn= sourceMessage=om-final-1
+2026/08/05 13:13:53 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.review message=msg-review-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/review uncommitted"
+2026/08/05 13:13:54 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:54 ui command: surface=surface-1 instance=inst-1 kind=review.start thread=thread-main turn= sourceMessage=msg-review-1
+2026/08/05 13:13:54 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.review message=msg-review-append-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T08:00:00Z|pid:7 text="/review"
+2026/08/05 13:13:55 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.review message=om-final-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T08:00:00Z|pid:7 text="/review commit 3debabf"
+2026/08/05 13:13:55 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:55 ui command: surface=surface-1 instance=inst-1 kind=review.start thread=thread-main turn= sourceMessage=om-final-1
+2026/08/05 13:13:56 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.review message=om-final-old-commit-1 instance= thread= verdict=old_card reason=card_lifecycle_mismatch event= request= message_time= menu_time= card_lifecycle=old-daemon text="/review commit abc1234"
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:56 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.review_apply message=om-review-final-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-27T08:00:00Z|pid:7 text=""
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:56 ui command: surface=surface-1 instance=inst-1 kind=prompt.send thread=thread-main turn= sourceMessage=om-review-final-1
+2026/08/05 13:13:56 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.review_start message=om-final-old-1 instance= thread= verdict=old_card reason=card_lifecycle_mismatch event= request= message_time= menu_time= card_lifecycle=old-daemon text=""
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:56 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:56 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:56 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:56 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:56 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.select message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.confirm message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.select message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.confirm message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.select message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.confirm message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message=om-menu-sendfile-2 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:57.339006Z text=""
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.cancel message=om-menu-sendfile-2 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:57.339006Z text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message=om-menu-sendfile-3 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:57.3778377Z text=""
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.select message=om-menu-sendfile-3 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:57.3778377Z text=""
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.confirm message=om-menu-sendfile-3 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:57.3778377Z text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.send_file message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.select message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.confirm message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=path.picker
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message=om-card-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/status"
+2026/08/05 13:13:57 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:13:57 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/upgrade"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.cron message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/cron"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.target_picker.cancel message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.new_dir message=om-target-picker-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:58.2230302Z text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.target_picker.open_path_picker message=om-target-picker-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:58.2230302Z text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.cancel message=om-target-picker-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:58.2230302Z text=""
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.new_dir message=om-target-picker-2 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:58.259219Z text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.target_picker.open_path_picker message=om-target-picker-2 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:58.259219Z text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.confirm message=om-target-picker-2 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:58.259219Z text=""
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/menu send_settings"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/menu maintenance"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/menu"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=old_card reason=card_lifecycle_mismatch event= request= message_time= menu_time= card_lifecycle=older-life text="/menu send_settings"
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.path_picker.up message= instance= thread= verdict=old_card reason=card_lifecycle_mismatch event= request= message_time= menu_time= card_lifecycle=older-life text=""
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/menu send_settings"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/mode"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:00:00Z|pid:42 text="/menu send_settings"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.model message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:00:00Z|pid:42 text="/model"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.auto_whip message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/autowhip on"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.model message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-19T10:01:00Z|pid:42 text="/model gpt-5.5-mini"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.auto_whip message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/autowhip on"
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.help message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/help"
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.menu message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text="/menu current_work"
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.show_scoped_threads message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.show_workspace_threads message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.show_all_workspaces message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.show_all_thread_workspaces message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-10T10:00:00Z|pid:42 text=""
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="你好"
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-1
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=prompt.send err=instance offline
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.started thread=thread-1 turn=turn-1 item= initiator=remote_surface traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=item.completed thread=thread-1 turn=turn-1 item=item-1 initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.completed thread=thread-1 turn=turn-1 item= initiator=remote_surface traffic= status=completed
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=block.committed
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.new_thread message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 daemon shutdown: final notice failed: surface=surface-1 err=context deadline exceeded
+2026/08/05 13:13:58 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action ignored during shutdown: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message=
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=surface.message.text message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="你好"
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=pending.input.state
+2026/08/05 13:13:58 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-1
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=prompt.send err=instance offline
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=notice
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.started thread=thread-1 turn=turn-1 item= initiator=remote_surface traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=item.completed thread=thread-1 turn=turn-1 item=item-1 initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.completed thread=thread-1 turn=turn-1 item= initiator=remote_surface traffic= status=completed
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=surface.message.text message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="你好"
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=pending.input.state
+2026/08/05 13:13:58 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-1
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=prompt.send err=instance offline
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=notice
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.started thread=thread-1 turn=turn-1 item= initiator=remote_surface traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=item.completed thread=thread-1 turn=turn-1 item=item-1 initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.completed thread=thread-1 turn=turn-1 item= initiator=remote_surface traffic= status=completed
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=ou_user kind=block.committed
+2026/08/05 13:13:58 final block preview rewrite failed (continuing without preview rewrite): surface=feishu:app-1:chat:1 instance=inst-1 thread=thread-1 item=item-1 err=context deadline exceeded
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:user:ou_1 chat= actor=ou_1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:user:ou_1 chat= actor=ou_1 kind=target.picker
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.list_instances message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 relay instance disconnected: id=inst-1 workspace=/data/dl/droid display=droid source=vscode managed=false pid=0
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=local.interaction.observed thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-queued instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="列一下目录"
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.completed thread=thread-1 turn=turn-1 item= initiator=local_ui traffic= status=completed
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-queued
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=prompt.send err=instance offline
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=local.interaction.observed thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-queued instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="先排队"
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.recalled message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.use_thread message= instance= thread=thread-1 verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-active instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="先开始"
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=prompt.send thread=thread-1 turn= sourceMessage=msg-active
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=turn.started thread=thread-1 turn=turn-1 item= initiator=unknown traffic= status=
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.image message=msg-img instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-queued instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="补充信息"
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.message.reaction.created message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui command: surface=feishu:app-1:chat:1 instance=inst-1 kind=turn.steer thread=thread-1 turn=turn-1 sourceMessage=msg-queued
+2026/08/05 13:13:58 relay command ack: instance=inst-1 command=cmd-3 accepted=true error=
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=timeline.text
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:13:58 relay instance connected: id=inst-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:58 relay send command failed: instance=inst-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=thread.focused thread=thread-1 turn= item= initiator= traffic= status=
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.stop message= instance= thread= verdict=old reason=menu_before_start_window event= request= message_time= menu_time=2026-04-08T11:57:00Z card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:app-1:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 relay command ack: instance=inst-1 command=cmd-history-1 accepted=false error=
+2026/08/05 13:13:58 relay command ack: instance=inst-1 command=cmd-history-1 accepted=true error=
+2026/08/05 13:13:58 relay command ack: instance=inst-1 command=cmd-1 accepted=true error=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=process.child.restart.updated thread=thread-1 turn= item= initiator= traffic= status=succeeded
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 relay command ack: instance=inst-1 command=cmd-1 accepted=true error=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=process.child.restart.updated thread=thread-1 turn= item= initiator= traffic= status=succeeded
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 relay command ack: instance=inst-1 command=cmd-1 accepted=false error=restore failed
+2026/08/05 13:13:58 relay command ack: instance=inst-1 command=cmd-2 accepted=true error=
+2026/08/05 13:13:58 agent event: instance=inst-1 kind=process.child.restart.updated thread=thread-1 turn= item= initiator= traffic= status=succeeded
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade dev"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade latest"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade dev"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade latest"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message=om-card-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:58.7049072Z text="/upgrade latest"
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade latest"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade_owner_flow message=om-life-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.message.text message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续处理一下"
+2026/08/05 13:13:58 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade track alpha"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade local"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade dev"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade local"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade latest"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:13:58 second-chance final patch preview rewrite failed: surface=feishu:app-1:chat:1 thread=thread-1 turn=turn-1 item=item-1 err=context deadline exceeded
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade track beta"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:2 chat=chat-2 actor=user-2 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:2 chat=chat-2 actor=user-2 kind=snapshot.updated
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:13:58 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message=msg-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade latest"
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:58 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.upgrade message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/upgrade latest"
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:9 chat=chat-9 actor=user-9 kind=notice
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:9 chat=chat-9 actor=user-9 kind=notice
+2026/08/05 13:13:59 gateway apply failed: chat=chat-9 event=notice err=lark temporarily unavailable
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:9 chat=chat-9 actor=user-9 kind=notice
+2026/08/05 13:13:59 feishu permission gap observed during ui delivery: gateway=main surface=feishu:main:chat:9 event=notice err=feishu api im.v1.message.create failed: code=99990001 msg=permission denied
+2026/08/05 13:13:59 gateway apply failed: chat=chat-9 event=notice err=feishu api im.v1.message.create failed: code=99990001 msg=permission denied
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:9 chat=chat-9 actor=user-9 kind=notice
+2026/08/05 13:13:59 gateway apply failed: chat=chat-9 event=notice err=lark temporarily unavailable
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:9 chat=chat-9 actor=user-9 kind=notice
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:3 chat=chat-3 actor=user-3 kind=notice
+2026/08/05 13:13:59 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.admin.subcommand message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/admin web"
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:59 surface action: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=surface.command.admin.subcommand message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/admin web"
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:59 ui event: surface=feishu:main:chat:1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 detect vscode compatibility issue failed: err=boom
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.vscode_migrate message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/vscode-migrate"
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message=om-mode-vscode-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:59.566594Z text="/mode vscode"
+2026/08/05 13:13:59 relay instance connected: id=inst-vscode-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:13:59 relay send command failed: instance=inst-vscode-1 kind=threads.refresh err=instance offline
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.vscode_migrate message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/vscode-migrate"
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.vscode_migrate message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:59.7247515Z text=""
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message=om-mode-vscode-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:59.8150573Z text="/mode vscode"
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.vscode_migrate message=om-vscode-migrate-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:59.8916499Z text="/vscode-migrate"
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.vscode_migrate message=om-vscode-migrate-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-08-05T05:13:59.8916499Z text=""
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:13:59 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:13:59 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:00 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+--- FAIL: TestDaemonTickChecksVSCodeCompatibilityOnlyOnceForRestoredVSCodeSurface (2.06s)
+    app_vscode_migration_test.go:539: condition not satisfied before timeout
+2026/08/05 13:14:02 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace message=om-workspace-nav-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/workspace"
+2026/08/05 13:14:02 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.new message=om-workspace-nav-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/workspace new"
+2026/08/05 13:14:02 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.list message=om-workspace-nav-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/workspace list"
+2026/08/05 13:14:02 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.new_dir message=om-workspace-nav-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/workspace new dir"
+2026/08/05 13:14:02 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.new_git message=om-workspace-nav-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/workspace new git"
+2026/08/05 13:14:02 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.workspace.new_worktree message=om-workspace-nav-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle=2026-04-22T10:00:00Z|pid:42 text="/workspace new worktree"
+2026/08/05 13:14:02 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:02 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:02 external access idle timeout reached; deactivating listener and clearing grants
+2026/08/05 13:14:14 external access idle timeout reached; deactivating listener and clearing grants
+2026/08/05 13:14:14 agent event: instance=inst-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:14:14 daemon ingress overload: instance=inst-1 connection=7 depth=0 peak=0 overloads=0
+2026/08/05 13:14:14 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=pending.input.state
+2026/08/05 13:14:14 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:14 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:14 persisted state entered read-only degraded mode: kind=profile context preferences path=C:\Users\kxn\AppData\Local\Temp\TestProfileCatalogMigrationFailsClosedWhenPreferenceStateIsCorru3153303843\001\state\profile-context-preferences.json err=load: parse profile context preference state: unexpected end of JSON input
+2026/08/05 13:14:14 profile catalog migration entered read-only degraded mode: err=profile context preference store is degraded: load: parse profile context preference state: unexpected end of JSON input
+2026/08/05 13:14:14 persisted state entered read-only degraded mode: kind=bot capability settings path=C:\Users\kxn\AppData\Local\Temp\TestProfileCatalogMigrationFailsClosedWhenSelectionStateIsCorrup3960964987\001\state\bot-capability-settings.json err=load: unexpected end of JSON input
+2026/08/05 13:14:14 profile catalog migration entered read-only degraded mode: err=bot capability settings store is unavailable for profile migration
+2026/08/05 13:14:14 persisted state entered read-only degraded mode: kind=surface resume path=C:\Users\kxn\AppData\Local\Temp\TestProfileCatalogMigrationFailsClosedWhenSelectionStateIsCorrup2647507208\001\state\surface-resume-state.json err=load: unexpected end of JSON input
+2026/08/05 13:14:14 profile catalog migration entered read-only degraded mode: err=surface resume store is unavailable for profile migration
+2026/08/05 13:14:14 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:14 headless start requested: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906854703998400-1 pid=4321 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandReplayRechecksUpgradeOwnerGate1553829408/002
+2026/08/05 13:14:14 relay instance connected: id=inst-headless-1785906854703998400-1 workspace=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandReplayRechecksUpgradeOwnerGate1553829408/002 display=headless backend=codex source=headless managed=true pid=4321
+2026/08/05 13:14:14 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:14 ui command: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906854703998400-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:14:14 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:14 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:14 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:14 headless start requested: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906854799062200-1 pid=4321 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandReplayRechecksTurnPatchTransactionGate1226592356/002
+2026/08/05 13:14:14 relay instance connected: id=inst-headless-1785906854799062200-1 workspace=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandReplayRechecksTurnPatchTransactionGate1226592356/002 display=headless backend=codex source=headless managed=true pid=4321
+2026/08/05 13:14:14 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:14 ui command: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906854799062200-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:14:14 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:14 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:14 surface action: surface=surface-normal chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:14 ui event: surface=surface-normal chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:14 ui event: surface=surface-normal chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:14 tool call: tool=feishu_send_im_file surface=surface-normal path=C:\Users\kxn\AppData\Local\Temp\TestToolMCPListAndCallTools3461145320\003\report.txt status=ok message=msg-file
+2026/08/05 13:14:14 tool call: tool=feishu_send_im_image surface=surface-normal path=C:\Users\kxn\AppData\Local\Temp\TestToolMCPListAndCallTools3461145320\004\preview.png status=ok message=msg-image
+2026/08/05 13:14:14 tool call: tool=feishu_send_im_video surface=surface-normal path=C:\Users\kxn\AppData\Local\Temp\TestToolMCPListAndCallTools3461145320\005\demo.mp4 status=ok message=msg-video
+2026/08/05 13:14:14 ui event: surface=surface-normal chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:14 tool call: tool=feishu_send_im_file status=error code=current_turn_surface_unavailable message=current Feishu remote turn surface is unavailable; this tool can only be used while handling a Feishu-triggered remote turn
+2026/08/05 13:14:14 surface action: surface=surface-current chat=chat-current actor=user-current kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:14 ui event: surface=surface-current chat=chat-current actor=user-current kind=notice
+2026/08/05 13:14:14 ui event: surface=surface-current chat=chat-current actor=user-current kind=target.picker
+2026/08/05 13:14:14 tool call: tool=feishu_send_im_file surface=surface-current path=C:\Users\kxn\AppData\Local\Temp\TestToolMCPCallUsesSessionCallerInstanceFromInitializeRequest3463113750\003\report.txt status=ok message=msg-file
+2026/08/05 13:14:15 ui event: surface=surface-current chat=chat-current actor=user-current kind=notice
+2026/08/05 13:14:15 tool call: tool=feishu_send_im_file surface=surface-group path=C:\Users\kxn\AppData\Local\Temp\TestToolMCPCallRoutesToCurrentTurnSurfaceAndIgnoresLegacySurface2472500619\003\report.txt status=ok message=msg-file
+2026/08/05 13:14:15 ui event: surface=surface-group chat=chat-group actor=user-group kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-single chat=chat-single actor=user-single kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-pending chat=chat-pending actor=user-pending kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-pending chat=chat-pending actor=user-pending kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-pending chat=chat-pending actor=user-pending kind=target.picker
+2026/08/05 13:14:15 tool call: tool=feishu_send_im_file surface=surface-pending path=C:\Users\kxn\AppData\Local\Temp\TestToolMCPCallCanResolvePendingRemoteTurnBeforeTurnStarted2534061341\003\report.txt status=ok message=msg-file
+2026/08/05 13:14:15 ui event: surface=surface-pending chat=chat-pending actor=user-pending kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-normal chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-normal chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-normal chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 tool call: tool=feishu_resolve_surface_context surface=surface-normal status=ok
+2026/08/05 13:14:15 surface action: surface=surface-vscode chat=chat-2 actor=user-2 kind=surface.command.mode message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/mode vscode"
+2026/08/05 13:14:15 ui event: surface=surface-vscode chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-vscode chat=chat-2 actor=user-2 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-vscode chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-normal chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-vscode chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.button.attach_instance message= instance=inst-2 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=target.picker
+2026/08/05 13:14:15 tool call: tool=feishu_send_im_file surface=surface-2 path=C:\Users\kxn\AppData\Local\Temp\TestSendIMFileToolRoutesByResolvedSurface4294956188\004\report.txt status=ok message=msg-file
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.button.attach_instance message= instance=inst-2 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=target.picker
+2026/08/05 13:14:15 tool call: tool=feishu_send_im_image surface=surface-2 path=C:\Users\kxn\AppData\Local\Temp\TestSendIMImageToolRoutesByResolvedSurface4276931500\004\preview.png status=ok message=msg-image
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.button.attach_instance message= instance=inst-2 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.button.attach_instance message= instance=inst-2 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=target.picker
+2026/08/05 13:14:15 tool call: tool=feishu_send_im_video surface=surface-2 path=C:\Users\kxn\AppData\Local\Temp\TestSendIMVideoToolRoutesByResolvedSurface2495436878\004\demo.mp4 status=ok message=msg-video
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:15 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:15 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:15 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:15 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:15 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:15 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:15 external access idle timeout reached; deactivating listener and clearing grants
+2026/08/05 13:14:15 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:16 external access idle timeout reached; deactivating listener and clearing grants
+2026/08/05 13:14:16 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:16 profile catalog migration entered read-only degraded mode: err=profile context preference store is unavailable
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.detach message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/mode vscode"
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu bot identity path=C:\Users\kxn\AppData\Local\Temp\TestFeishuBotIdentityIOErrorIsExplicitlyDegraded2647696153\001\feishu-bot-identities.json err=load: read C:\Users\kxn\AppData\Local\Temp\TestFeishuBotIdentityIOErrorIsExplicitlyDegraded2647696153\001\feishu-bot-identities.json: Incorrect function.
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=surface resume path=C:\Users\kxn\AppData\Local\Temp\TestSurfaceResumeLoadFailurePreservesExistingRecoveryRuntime2120204043\001\surface-resume-state.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu bot identity path=C:\Users\kxn\AppData\Local\Temp\TestFeishuBotIdentityReloadRecoversAfterFileRepair306203290\001\feishu-bot-identities.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.button.attach_instance message= instance=inst-2 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-missing-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-2 chat=chat-2 actor=user-2 kind=surface.button.attach_instance message= instance=inst-2 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-2 chat=chat-2 actor=user-2 kind=notice
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-vscode-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:14:16 relay instance connected: id=inst-vscode-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 headless start requested: surface=surface-1 instance=inst-headless-1785906856413902400-1 pid=4321 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestDaemonPendingHeadlessRestoreTimeoutSuppressesRepeatedNotice3540934340/002
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 relay instance connected: id=inst-other-1 workspace=/data/dl/other display=other backend=codex source=vscode managed=false pid=0
+2026/08/05 13:14:16 agent event: instance=inst-other-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-file-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="看这个文件"
+2026/08/05 13:14:16 relay instance connected: id=inst-headless-pool workspace=/data/dl/.local/state/codex-remote display=headless backend=codex source=headless managed=true pid=4321
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:16 headless kill requested: surface=surface-1 instance=inst-headless-1785906856413902400-1 pid=4321
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 agent event: instance=inst-headless-pool kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:14:16 relay instance connected: id=inst-vscode-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:14:16 agent event: instance=inst-vscode-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:16 headless start requested: surface=surface-1 instance=inst-headless-workspace-1785906856429256800-1 pid=23624 thread= cwd=/data/dl/droid
+2026/08/05 13:14:16 relay instance connected: id=inst-vscode-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:14:16 agent event: instance=inst-vscode-1 kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+--- FAIL: TestDaemonNormalResumeFailureEmitsNoticeAfterFirstRefresh (0.02s)
+    surface_resume_state_test.go:1505: expected workspace prepare start + failure notices after first refresh, got []feishu.Operation{feishu.Operation{Kind:"send_card", GatewayID:"app-1", SurfaceSessionID:"surface-1", ReceiveID:"chat-1", ReceiveIDType:"chat_id", ChatID:"chat-1", MessageID:"", ReplyToMessageID:"", EmojiType:"", Text:"", AttentionText:"", AttentionUserID:"", ImagePath:"", ImageBase64:"", CardTitle:"正在接入工作区", CardTitleTag:"", CardSubtitle:"", CardSubtitleTag:"", CardBody:"正在把 `/data/dl/droid` 接入为可用工作区，完成后会直接进入新会话待命。", CardThemeKey:"info", CardElements:[]map[string]interface {}(nil), CardUpdateMulti:false, ProgressCardStartSeq:0, ProgressCardEndSeq:0, cardEnvelope:"v2", card:(*feishu.cardDocument)(0xc000754460), finalSourceBody:""}}
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 headless start requested: surface=surface-1 instance=inst-headless-workspace-1785906856446668000-1 pid=4321 thread= cwd=/data/dl/repo
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=test path=/state.json err=load: permission denied
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=test path=/state.json err=persist sanitized state: permission denied
+2026/08/05 13:14:16 relay instance connected: id=inst-headless-pool workspace=/data/dl/.local/state/codex-remote display=headless backend=codex source=headless managed=true pid=4321
+2026/08/05 13:14:16 relay send command failed: instance=inst-headless-pool kind=threads.refresh err=instance offline
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 agent event: instance=inst-headless-pool kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 headless start requested: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906856445523800-1 pid=4321 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandReplayDispatchesOriginalTextAfterHeadless2836924748/002
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/mode vscode"
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 relay instance connected: id=inst-headless-pool workspace=/data/dl/.local/state/codex-remote display=headless backend=codex source=headless managed=true pid=4321
+2026/08/05 13:14:16 relay send command failed: instance=inst-headless-pool kind=threads.refresh err=instance offline
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/mode vscode"
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 relay instance connected: id=inst-headless-1785906856445523800-1 workspace=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandReplayDispatchesOriginalTextAfterHeadless2836924748/002 display=headless backend=codex source=headless managed=true pid=4321
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-vscode-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-codex thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=target.picker
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/mode claude"
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 headless start requested: surface=surface-1 instance=inst-headless-workspace-1785906856470006600-1 pid=4321 thread= cwd=/data/dl/repo
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.button.attach_instance message= instance=inst-headless-1 thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 relay instance connected: id=inst-vscode-1 workspace=/data/dl/droid display=droid backend=codex source=vscode managed=false pid=0
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:14:16 relay instance connected: id=inst-other-1 workspace=/data/dl/other display=other backend=codex source=vscode managed=false pid=0
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.verbose message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/verbose quiet"
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.menu.status message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text=""
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=snapshot.updated
+2026/08/05 13:14:16 surface action: surface=surface-1 chat=chat-1 actor=user-1 kind=surface.command.mode message= instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="/mode claude"
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 headless start requested: surface=surface-1 instance=inst-headless-1785906856470539600-1 pid=4321 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestDaemonHeadlessResumePassesStableWorkspaceRootToLaunch4021658785/002/repo
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=page.view
+2026/08/05 13:14:16 ui event: surface=surface-1 chat=chat-1 actor=user-1 kind=notice
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:16 ui command: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906856445523800-1 kind=threads.refresh thread= turn= sourceMessage=
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=pending.input.state
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=pending.input.state
+2026/08/05 13:14:16 ui command: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906856445523800-1 kind=prompt.send thread=thread-1 turn= sourceMessage=om-on-demand-1
+2026/08/05 13:14:16 agent event: instance=inst-headless-pool kind=threads.snapshot thread= turn= item= initiator= traffic= status=
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu bot identity path=C:\Users\kxn\AppData\Local\Temp\TestFeishuBotIdentityLoadFailureBlocksTransitionAndPreservesOrig3991282660\001\feishu-bot-identities.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu bot identity path=C:\Users\kxn\AppData\Local\Temp\TestFeishuBotIdentityLoadFailureBlocksTransitionAndPreservesOrig3435785660\001\feishu-bot-identities.json err=load: unsupported feishu bot identity state version: 999
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=surface resume path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateReloadRecoversAfterFileRepairsurface_resume3051956366\001\surface-resume-state.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Claude workspace profile path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateReloadRecoversAfterFileRepairClaude_workspace2907288629\001\claude-workspace-profile-state.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu room path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateReloadRecoversAfterFileRepairFeishu_room3001514148\001\feishu-room-primary.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=bot capability settings path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateReloadRecoversAfterFileRepairbot_capability_s2662194572\001\bot-capability-settings.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=surface resume path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedsurface_resume677020136\001\surface-resume-state.json err=load: read C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedsurface_resume677020136\001\surface-resume-state.json: Incorrect function.
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Claude workspace profile path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedClaude_workspace_p3139915013\001\claude-workspace-profile-state.json err=load: read C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedClaude_workspace_p3139915013\001\claude-workspace-profile-state.json: Incorrect function.
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu room path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedFeishu_room2984284584\001\feishu-room-primary.json err=load: read C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedFeishu_room2984284584\001\feishu-room-primary.json: Incorrect function.
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=bot capability settings path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedbot_capability_set2320025631\001\bot-capability-settings.json err=load: read C:\Users\kxn\AppData\Local\Temp\TestPersistedStateIOErrorIsExplicitlyDegradedbot_capability_set2320025631\001\bot-capability-settings.json: Incorrect function.
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Claude workspace profile path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncClaude_1985521671\001\claude-workspace-profile-state.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=surface resume path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncsurface3310970850\001\surface-resume-state.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu room path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncFeishu_2438957727\001\feishu-room-primary.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=bot capability settings path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncbot_cap2268919064\001\bot-capability-settings.json err=load: invalid character 'b' looking for beginning of object key string
+2026/08/05 13:14:16 surface action: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=surface.message.text message=om-on-demand-1 instance= thread= verdict=current reason= event= request= message_time= menu_time= card_lifecycle= text="继续刚才的任务"
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=surface resume path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncsurface855852710\001\surface-resume-state.json err=load: unsupported surface resume state version: 999
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Claude workspace profile path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncClaude_797466406\001\claude-workspace-profile-state.json err=load: unsupported claude workspace profile state version: 999
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=Feishu room path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncFeishu_280624171\001\feishu-room-primary.json err=load: unsupported feishu room state version: 999
+2026/08/05 13:14:16 persisted state entered read-only degraded mode: kind=bot capability settings path=C:\Users\kxn\AppData\Local\Temp\TestPersistedStateLoadFailurePreservesOriginalAcrossSyncbot_cap3786301170\001\bot-capability-settings.json err=load: unsupported bot capability settings state version: 999
+2026/08/05 13:14:16 headless start failed: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906856542670100-1 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandLaunchFailureClearsContinuationAndReplies2136687754/002 err=boom
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+2026/08/05 13:14:16 headless start requested: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906856543179800-1 pid=4321 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandTextStartsHeadlessAndDefersMessage3158547945/002
+2026/08/05 13:14:16 headless start requested: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906856544710200-1 pid=4321 thread=thread-1 cwd=C:/Users/kxn/AppData/Local/Temp/TestFeishuGroupOnDemandTimeoutClearsContinuationAndRepliesOnce1788973409/002
+2026/08/05 13:14:16 headless kill requested: surface=feishu:app-1:chat:oc_room instance=inst-headless-1785906856544710200-1 pid=4321
+2026/08/05 13:14:16 ui event: surface=feishu:app-1:chat:oc_room chat=oc_room actor=ou_user kind=notice
+FAIL
+FAIL	github.com/kxn/codex-remote-feishu/internal/app/daemon	53.842s
+?   	github.com/kxn/codex-remote-feishu/internal/app/daemon/adminui	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings	0.057s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/daemon/claudeworkspaceprofile	0.057s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/daemon/codexoauthstate	0.133s
+?   	github.com/kxn/codex-remote-feishu/internal/app/daemon/codexupgraderuntime	[no test files]
+fork/exec C:\Users\kxn\AppData\Local\Temp\go-build767472376\b635\feishubotidentity.test.exe: Access is denied.
+FAIL	github.com/kxn/codex-remote-feishu/internal/app/daemon/feishubotidentity	5.187s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/daemon/feishuroomstate	5.076s
+?   	github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime	[no test files]
+fork/exec C:\Users\kxn\AppData\Local\Temp\go-build767472376\b642\profilecontextstate.test.exe: Access is denied.
+FAIL	github.com/kxn/codex-remote-feishu/internal/app/daemon/profilecontextstate	4.972s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume	0.105s
+?   	github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime	[no test files]
+?   	github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime	[no test files]
+?   	github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/app/desktopsession	0.540s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/gitworkspace	0.470s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/install	7.515s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/launcher	0.161s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/upgradeshim	0.218s
+ok  	github.com/kxn/codex-remote-feishu/internal/app/vscodeshim	0.158s
+2026/08/05 13:13:31 relay steady reconnect failed: url=ws://127.0.0.1:13747 err=read tcp 127.0.0.1:13753->127.0.0.1:13747: use of closed network connection
+2026/08/05 13:13:31 relay steady reconnect failed: url=ws://127.0.0.1:13754 err=read tcp 127.0.0.1:13757->127.0.0.1:13754: use of closed network connection
+2026/08/05 13:13:31 relay steady reconnect failed: url=ws://127.0.0.1:13758 err=websocket: close 1006 (abnormal closure): unexpected EOF
+2026/08/05 13:13:32 relay steady reconnect failed: url=ws://127.0.0.1:13762 err=read tcp 127.0.0.1:13765->127.0.0.1:13762: use of closed network connection
+2026/08/05 13:13:32 relay steady reconnect failed: url=ws://127.0.0.1:13766 err=read tcp 127.0.0.1:13769->127.0.0.1:13766: use of closed network connection
+2026/08/05 13:13:33 relay steady reconnect failed: url=ws://127.0.0.1:13774 err=read tcp 127.0.0.1:13777->127.0.0.1:13774: use of closed network connection
+2026/08/05 13:13:33 relay steady reconnect failed: url=ws://127.0.0.1:13782 err=read tcp 127.0.0.1:13785->127.0.0.1:13782: use of closed network connection
+2026/08/05 13:13:33 relay steady reconnect failed: url=ws://127.0.0.1:13786 err=read tcp 127.0.0.1:13789->127.0.0.1:13786: use of closed network connection
+2026/08/05 13:13:33 relay steady reconnect failed: url=ws://127.0.0.1:13790 err=read tcp 127.0.0.1:13793->127.0.0.1:13790: use of closed network connection
+2026/08/05 13:13:33 relay steady reconnect failed: url=ws://127.0.0.1:13794 err=read tcp 127.0.0.1:13797->127.0.0.1:13794: use of closed network connection
+2026/08/05 13:13:33 relay steady reconnect failed: url=ws://127.0.0.1:13798 err=read tcp 127.0.0.1:13801->127.0.0.1:13798: use of closed network connection
+2026/08/05 13:13:34 relay steady reconnect failed: url=ws://127.0.0.1:13802 err=read tcp 127.0.0.1:13805->127.0.0.1:13802: use of closed network connection
+2026/08/05 13:13:34 relay steady reconnect failed: url=ws://127.0.0.1:13806 err=read tcp 127.0.0.1:13809->127.0.0.1:13806: use of closed network connection
+2026/08/05 13:13:35 relay steady reconnect failed: url=ws://127.0.0.1:13810 err=read tcp 127.0.0.1:13826->127.0.0.1:13810: use of closed network connection
+2026/08/05 13:13:35 relay steady reconnect failed: url=ws://127.0.0.1:13827 err=read tcp 127.0.0.1:13830->127.0.0.1:13827: use of closed network connection
+2026/08/05 13:13:36 relay steady reconnect failed: url=ws://127.0.0.1:13833 err=read tcp 127.0.0.1:13836->127.0.0.1:13833: use of closed network connection
+2026/08/05 13:13:37 relay steady reconnect failed: url=ws://127.0.0.1:13841 err=read tcp 127.0.0.1:13844->127.0.0.1:13841: use of closed network connection
+2026/08/05 13:13:37 relay steady reconnect failed: url=ws://127.0.0.1:13847 err=read tcp 127.0.0.1:13850->127.0.0.1:13847: use of closed network connection
+2026/08/05 13:13:38 relay steady reconnect failed: url=ws://127.0.0.1:13851 err=read tcp 127.0.0.1:13854->127.0.0.1:13851: use of closed network connection
+2026/08/05 13:13:38 relay steady reconnect failed: url=ws://127.0.0.1:13870 err=read tcp 127.0.0.1:13873->127.0.0.1:13870: use of closed network connection
+2026/08/05 13:13:38 wrapper: shared normal codex binary self-healed from vscode bundle path "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestResolveNormalCodexBinaryHealsVSCodePathToPATHCodex1679624103\\001\\.vscode-server\\extensions\\openai.chatgpt-1\\bin\\linux-x86_64\\codex.real" to PATH codex
+2026/08/05 13:13:38 wrapper: shared normal codex binary points to vscode bundle path "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestResolveNormalCodexBinaryFallsBackToUsableVSCodeBundle3448363261\\001\\.vscode-server\\extensions\\openai.chatgpt-1\\bin\\linux-x86_64\\codex.real"; PATH codex unavailable, temporarily using vscode bundle codex "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestResolveNormalCodexBinaryFallsBackToUsableVSCodeBundle3448363261\\001\\.vscode-server\\extensions\\openai.chatgpt-2\\bin\\linux-x86_64\\codex.real"
+2026/08/05 13:13:38 wrapper: shared normal codex binary points to vscode bundle path "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestResolveNormalCodexBinaryFallsBackToSiblingBundleAcrossPlatfo3660725019\\001\\.vscode-server\\extensions\\openai.chatgpt-1\\bin\\linux-x86_64\\codex.real"; PATH codex unavailable, temporarily using vscode bundle codex "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestResolveNormalCodexBinaryFallsBackToSiblingBundleAcrossPlatfo3660725019\\001\\.vscode-server\\extensions\\openai.chatgpt-2\\bin\\windows-x64\\codex.real.exe"
+2026/08/05 13:13:38 wrapper: shared normal codex binary points to vscode bundle path "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestResolveNormalCodexBinaryErrorsWithoutPATHOrVSCodeFallback2285048227\\001\\.vscode-server\\extensions\\openai.chatgpt-1\\bin\\linux-x86_64\\codex.real"; PATH codex unavailable, temporarily using vscode bundle codex "C:\\Users\\kxn\\.vscode\\extensions\\openai.chatgpt-26.727.40816-win32-x64\\bin\\windows-x86_64\\codex.real.exe"
+--- FAIL: TestResolveNormalCodexBinaryErrorsWithoutPATHOrVSCodeFallback (0.01s)
+    codex_binary_resolver_test.go:102: expected resolveNormalCodexBinary to fail
+2026/08/05 13:13:38 wrapper: PATH codex binary "codex" is unavailable; temporarily using vscode bundle codex "C:\\Users\\kxn\\AppData\\Local\\Temp\\TestResolveNormalCodexBinaryFallsBackWhenConfiguredPATHCodexMiss4138114228\\001\\.vscode-server\\extensions\\openai.chatgpt-2\\bin\\windows-x64\\codex.real.exe"
+2026/08/05 13:13:38 wrapper: PATH codex binary "codex" is unavailable; temporarily using vscode bundle codex "C:\\Users\\kxn\\.vscode\\extensions\\openai.chatgpt-26.727.40816-win32-x64\\bin\\windows-x86_64\\codex.real.exe"
+--- FAIL: TestResolveNormalCodexBinaryErrorsWhenConfiguredPATHCodexMissingWithoutFallback (0.01s)
+    codex_binary_resolver_test.go:144: expected resolveNormalCodexBinary to fail
+2026/08/05 13:13:38 wrapper problem reporter suppressed duplicate: code=relay_send_server_events_failed layer=wrapper stage=forward_server_events operation=codex.stdout suppressed=1
+2026/08/05 13:13:38 wrapper problem reporter suppressed duplicate: code=relay_send_server_events_failed layer=wrapper stage=forward_server_events operation=codex.stdout suppressed=1
+2026/08/05 13:13:38 wrapper problem reporter evicted old record: key="relay_send_server_events_failed\x00wrapper\x00forward_server_events\x00codex.stdout\x00relay client outbox full" limit=2
+FAIL
+FAIL	github.com/kxn/codex-remote-feishu/internal/app/wrapper	9.758s
+?   	github.com/kxn/codex-remote-feishu/internal/branding	[no test files]
+?   	github.com/kxn/codex-remote-feishu/internal/browseropen	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/buildinfo	0.483s
+ok  	github.com/kxn/codex-remote-feishu/internal/claudesessionstore	0.475s
+ok  	github.com/kxn/codex-remote-feishu/internal/claudestate	0.495s
+ok  	github.com/kxn/codex-remote-feishu/internal/claudeutil	0.547s
+ok  	github.com/kxn/codex-remote-feishu/internal/codexcatalog	0.475s
+ok  	github.com/kxn/codex-remote-feishu/internal/codexstate	0.541s
+ok  	github.com/kxn/codex-remote-feishu/internal/config	1.220s
+ok  	github.com/kxn/codex-remote-feishu/internal/conversationtrace	0.997s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/agentproto	0.750s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/control	0.654s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/eventcontract	0.044s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract	0.510s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/gitmeta	17.281s
+?   	github.com/kxn/codex-remote-feishu/internal/core/handoffcontract	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil	0.392s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/orchestrator	31.744s
+?   	github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/core/owneridentity	0.491s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/relayurl	0.437s
+?   	github.com/kxn/codex-remote-feishu/internal/core/render	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/core/renderer	0.185s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/state	0.511s
+?   	github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/core/threadtitle	0.446s
+ok  	github.com/kxn/codex-remote-feishu/internal/core/upgradecontract	0.245s
+?   	github.com/kxn/codex-remote-feishu/internal/core/workspaceimport	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/debuglog	0.513s
+ok  	github.com/kxn/codex-remote-feishu/internal/displaypath	0.501s
+ok  	github.com/kxn/codex-remote-feishu/internal/execlaunch	0.693s
+ok  	github.com/kxn/codex-remote-feishu/internal/externalaccess	2.121s
+ok  	github.com/kxn/codex-remote-feishu/internal/externalaccess/cloudflaredembed	0.055s
+ok  	github.com/kxn/codex-remote-feishu/internal/feishuapp	0.558s
+ok  	github.com/kxn/codex-remote-feishu/internal/feishuidentity	0.352s
+ok  	github.com/kxn/codex-remote-feishu/internal/issuedocsync	0.628s
+ok  	github.com/kxn/codex-remote-feishu/internal/issueworkflow	0.611s
+ok  	github.com/kxn/codex-remote-feishu/internal/managedshim	0.288s
+ok  	github.com/kxn/codex-remote-feishu/internal/managedshim/embed	0.064s
+ok  	github.com/kxn/codex-remote-feishu/internal/pathcompare	0.462s
+ok  	github.com/kxn/codex-remote-feishu/internal/pathscope	0.458s
+ok  	github.com/kxn/codex-remote-feishu/internal/runtime	0.490s
+?   	github.com/kxn/codex-remote-feishu/internal/shutdownctx	[no test files]
+?   	github.com/kxn/codex-remote-feishu/internal/testutil	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/internal/upgradeshim	0.046s
+ok  	github.com/kxn/codex-remote-feishu/internal/upgradeshim/embed	0.073s
+ok  	github.com/kxn/codex-remote-feishu/internal/xutil	0.053s
+?   	github.com/kxn/codex-remote-feishu/scripts/check	[no test files]
+?   	github.com/kxn/codex-remote-feishu/scripts/install/repo-install-target	[no test files]
+?   	github.com/kxn/codex-remote-feishu/scripts/install/self-install-target	[no test files]
+ok  	github.com/kxn/codex-remote-feishu/testkit/harness	0.059s
+?   	github.com/kxn/codex-remote-feishu/testkit/mockclaude	[no test files]
+?   	github.com/kxn/codex-remote-feishu/testkit/mockclaude/cmd/mockclaude	[no test files]
+?   	github.com/kxn/codex-remote-feishu/testkit/mockcodex	[no test files]
+?   	github.com/kxn/codex-remote-feishu/testkit/mockcodex/cmd/mockcodex	[no test files]
+?   	github.com/kxn/codex-remote-feishu/testkit/mockfeishu	[no test files]
+FAIL

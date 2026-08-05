@@ -10,6 +10,7 @@ import (
 	headlessruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type adminInstanceSummary struct {
@@ -220,7 +221,7 @@ func (a *App) adminManagedInstanceSummaryLocked(instanceID string) (adminInstanc
 			Source:        "headless",
 			Managed:       true,
 			PID:           managed.PID,
-			Status:        firstNonEmpty(strings.TrimSpace(managed.Status), headlessruntime.StatusStarting),
+			Status:        xutil.FirstNonEmpty(strings.TrimSpace(managed.Status), headlessruntime.StatusStarting),
 		}
 		overlayManagedSummary(&summary, managed)
 		return summary, true

@@ -10,12 +10,13 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func Inspect(ctx context.Context, opts InspectOptions) Installation {
 	info := Installation{
 		ConfiguredBinary: strings.TrimSpace(opts.ConfiguredBinary),
-		NPMCommand:       firstNonEmpty(strings.TrimSpace(opts.NPMCommand), defaultNPMCommand),
+		NPMCommand:       xutil.FirstNonEmpty(strings.TrimSpace(opts.NPMCommand), defaultNPMCommand),
 		PackageName:      defaultPackageName,
 		SourceKind:       SourceUnknown,
 	}
@@ -211,13 +212,4 @@ func pathWithinRoot(path, root string) bool {
 	}
 	rel = filepath.Clean(rel)
 	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) handleUIEvents(ctx context.Context, events []eventcontract.Event) {
@@ -174,7 +175,7 @@ func (a *App) deliverUIEventWithContextMode(ctx context.Context, event eventcont
 	event = a.enrichTemporarySessionEventLocked(event)
 	chatID := a.service.SurfaceChatID(event.SurfaceSessionID)
 	actorUserID := a.service.SurfaceActorUserID(event.SurfaceSessionID)
-	gatewayID := firstNonEmpty(event.GatewayID, a.service.SurfaceGatewayID(event.SurfaceSessionID))
+	gatewayID := xutil.FirstNonEmpty(event.GatewayID, a.service.SurfaceGatewayID(event.SurfaceSessionID))
 	receiveID, receiveIDType := feishu.ResolveReceiveTarget(chatID, actorUserID)
 	if receiveID == "" || receiveIDType == "" {
 		return nil

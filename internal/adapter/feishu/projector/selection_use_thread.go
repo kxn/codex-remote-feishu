@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const useThreadWorkspacePreviewLimit = 2
@@ -114,7 +115,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 		})
 		for _, option := range current {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
 				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}
@@ -130,7 +131,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 			})
 		}
 		for index, option := range remaining {
-			meta := strings.TrimSpace(firstNonEmpty(option.MetaText, "时间未知"))
+			meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, "时间未知"))
 			if block := cardPlainTextBlockElement(fmt.Sprintf("%d. %s", index+1, meta)); len(block) != 0 {
 				elements = append(elements, block)
 			}
@@ -144,7 +145,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 			})
 			for _, option := range available {
 				elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
-				if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+				if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
 					if block := cardPlainTextBlockElement(meta); len(block) != 0 {
 						elements = append(elements, block)
 					}
@@ -158,7 +159,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 			})
 			for _, option := range unavailable {
 				elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
-				if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+				if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
 					if block := cardPlainTextBlockElement(meta); len(block) != 0 {
 						elements = append(elements, block)
 					}
@@ -174,7 +175,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 		})
 		for _, option := range more {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
 				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}
@@ -241,7 +242,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 			groupIndex[groupKey] = position
 			groups = append(groups, useThreadWorkspaceGroup{
 				Key:     groupKey,
-				Label:   firstNonEmpty(strings.TrimSpace(option.GroupLabel), groupKey),
+				Label:   xutil.FirstNonEmpty(strings.TrimSpace(option.GroupLabel), groupKey),
 				AgeText: strings.TrimSpace(option.AgeText),
 				Options: []control.SelectionOption{},
 			})
@@ -260,7 +261,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 		})
 		for _, option := range currentOptions {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
 				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}
@@ -306,7 +307,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 		for _, option := range group.Options {
 			if option.Disabled {
 				if unavailableReason == "" {
-					unavailableReason = strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option)))
+					unavailableReason = strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option)))
 				}
 				continue
 			}
@@ -325,14 +326,14 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 			visible = visible[:useThreadWorkspacePreviewLimit]
 		}
 		for index, option := range visible {
-			meta := strings.TrimSpace(firstNonEmpty(option.MetaText, "时间未知"))
+			meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, "时间未知"))
 			if block := cardPlainTextBlockElement(fmt.Sprintf("%d. %s", index+1, meta)); len(block) != 0 {
 				elements = append(elements, block)
 			}
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 		}
 		if !singleWorkspaceView && len(available) > useThreadWorkspacePreviewLimit {
-			label := "展开 " + firstNonEmpty(strings.TrimSpace(group.Label), strings.TrimSpace(group.Key))
+			label := "展开 " + xutil.FirstNonEmpty(strings.TrimSpace(group.Label), strings.TrimSpace(group.Key))
 			if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton(label, group.Key, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
 				elements = append(elements, button)
 			}
@@ -346,7 +347,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 		})
 		for _, option := range moreOptions {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
-			if meta := strings.TrimSpace(firstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
+			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
 				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkbitable "github.com/larksuite/oapi-sdk-go/v3/service/bitable/v1"
 	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
@@ -63,7 +64,7 @@ func NewLiveBitableAPI(gatewayID, appID, appSecret string) BitableAPI {
 
 func bitableResourceKey(appToken, tableID string) FeishuResourceKey {
 	return FeishuResourceKey{
-		TableID: firstNonEmpty(strings.TrimSpace(tableID), strings.TrimSpace(appToken)),
+		TableID: xutil.FirstNonEmpty(strings.TrimSpace(tableID), strings.TrimSpace(appToken)),
 	}
 }
 

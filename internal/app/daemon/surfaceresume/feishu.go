@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type feishuP2PSurfaceResumeCandidate struct {
@@ -69,7 +70,7 @@ func feishuP2PSurfaceResumeGroup(entry Entry) (string, feishuP2PSurfaceResumeCan
 	if chatID == "" {
 		return "", feishuP2PSurfaceResumeCandidate{}, false
 	}
-	gatewayID := strings.TrimSpace(firstNonEmpty(entry.GatewayID, ref.GatewayID))
+	gatewayID := strings.TrimSpace(xutil.FirstNonEmpty(entry.GatewayID, ref.GatewayID))
 	if gatewayID == "" {
 		return "", feishuP2PSurfaceResumeCandidate{}, false
 	}
@@ -87,7 +88,7 @@ func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCa
 	for _, candidate := range candidates {
 		entry := candidate.entry
 		if gatewayID == "" {
-			gatewayID = strings.TrimSpace(firstNonEmpty(entry.GatewayID, candidate.ref.GatewayID))
+			gatewayID = strings.TrimSpace(xutil.FirstNonEmpty(entry.GatewayID, candidate.ref.GatewayID))
 		}
 		if chatID == "" {
 			chatID = strings.TrimSpace(entry.ChatID)
@@ -107,9 +108,9 @@ func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCa
 	}
 
 	merged := latest.entry
-	merged.GatewayID = strings.TrimSpace(firstNonEmpty(gatewayID, merged.GatewayID))
-	merged.ChatID = strings.TrimSpace(firstNonEmpty(chatID, merged.ChatID))
-	merged.ActorUserID = strings.TrimSpace(firstNonEmpty(bestIdentity, merged.ActorUserID))
+	merged.GatewayID = strings.TrimSpace(xutil.FirstNonEmpty(gatewayID, merged.GatewayID))
+	merged.ChatID = strings.TrimSpace(xutil.FirstNonEmpty(chatID, merged.ChatID))
+	merged.ActorUserID = strings.TrimSpace(xutil.FirstNonEmpty(bestIdentity, merged.ActorUserID))
 	merged.SurfaceSessionID = feishuidentity.SurfaceRef{
 		Platform:  feishuidentity.PlatformFeishu,
 		GatewayID: merged.GatewayID,
@@ -222,13 +223,4 @@ func resumeStatePayloadScore(entry Entry) int {
 		score++
 	}
 	return score
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }

@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 var ProxyEnvKeys = []string{
@@ -39,19 +41,10 @@ func FilterEnvWithoutProxy(env []string) []string {
 	filtered := env[:0]
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")
-		if containsString(ProxyEnvKeys, key) {
+		if xutil.ContainsString(ProxyEnvKeys, key) {
 			continue
 		}
 		filtered = append(filtered, entry)
 	}
 	return filtered
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }

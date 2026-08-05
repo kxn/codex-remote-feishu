@@ -20,6 +20,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type fakeCronBitableAPI struct {
@@ -1375,7 +1376,7 @@ func newFlakyCronBootstrapBitableAPI() *flakyCronBootstrapBitableAPI {
 				FieldId:   stringPtr("fld-default-primary"),
 				FieldName: stringPtr("默认列"),
 				Type:      intPtr(1),
-				IsPrimary: boolPtr(true),
+				IsPrimary: xutil.BoolPtr(true),
 			}},
 		},
 		recordsByTable: map[string][]*larkbitable.AppTableRecord{},
@@ -1432,7 +1433,7 @@ func (f *flakyCronBootstrapBitableAPI) CreateTable(_ context.Context, _ string, 
 		FieldId:   stringPtr("fld-" + tableID + "-primary"),
 		FieldName: stringPtr(primaryName),
 		Type:      intPtr(1),
-		IsPrimary: boolPtr(true),
+		IsPrimary: xutil.BoolPtr(true),
 	}}
 	return created, nil
 }
@@ -1469,7 +1470,7 @@ func (f *flakyCronBootstrapBitableAPI) CreateField(_ context.Context, _ string, 
 		FieldName: field.FieldName,
 		Type:      field.Type,
 		Property:  field.Property,
-		IsPrimary: boolPtr(false),
+		IsPrimary: xutil.BoolPtr(false),
 	}
 	f.fieldsByTable[tableID] = append(f.fieldsByTable[tableID], cloned)
 	return cloned, nil
@@ -1612,10 +1613,6 @@ func intPtr(value int) *int {
 	return &value
 }
 
-func boolPtr(value bool) *bool {
-	return &value
-}
-
 func TestEnsureCronBitablePersistsProgressAndReusesRemoteObjectsAfterTimeout(t *testing.T) {
 	api := newFlakyCronBootstrapBitableAPI()
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
@@ -1716,9 +1713,9 @@ func TestEnsureCronBitableDoesNotLeakDefaultTemplateColumnsIntoTasksTable(t *tes
 	api := newFlakyCronBootstrapBitableAPI()
 	api.failCreateField = false
 	api.fieldsByTable["tbl-default"] = append(api.fieldsByTable["tbl-default"],
-		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-single"), FieldName: stringPtr("单选"), Type: intPtr(3), IsPrimary: boolPtr(false)},
-		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-date"), FieldName: stringPtr("日期"), Type: intPtr(5), IsPrimary: boolPtr(false)},
-		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-attachment"), FieldName: stringPtr("附件"), Type: intPtr(17), IsPrimary: boolPtr(false)},
+		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-single"), FieldName: stringPtr("单选"), Type: intPtr(3), IsPrimary: xutil.BoolPtr(false)},
+		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-date"), FieldName: stringPtr("日期"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
+		&larkbitable.AppTableField{FieldId: stringPtr("fld-default-attachment"), FieldName: stringPtr("附件"), Type: intPtr(17), IsPrimary: xutil.BoolPtr(false)},
 	)
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})

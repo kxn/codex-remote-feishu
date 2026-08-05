@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func paginatedFileModePathPickerElements(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
@@ -134,7 +135,7 @@ func pathPickerPlanFileModeDualLanes(
 			if err != nil {
 				return 0, err
 			}
-			return maxInt(size-baseSize, 0), nil
+			return xutil.MaxInt(size-baseSize, 0), nil
 		})
 	}
 	rightFit := func(maxBytes int) paginatedSelectPlan {
@@ -143,7 +144,7 @@ func pathPickerPlanFileModeDualLanes(
 			if err != nil {
 				return 0, err
 			}
-			return maxInt(size-baseSize, 0), nil
+			return xutil.MaxInt(size-baseSize, 0), nil
 		})
 	}
 
@@ -225,7 +226,7 @@ func pathPickerDirectoryModeElementsWithPage(
 		"**允许范围**\n" + texttags.FormatNeutralTextTag(view.RootPath),
 		"**当前目录**\n" + texttags.FormatNeutralTextTag(view.CurrentPath),
 	}
-	selectedPath := strings.TrimSpace(firstNonEmpty(view.SelectedPath, view.CurrentPath))
+	selectedPath := strings.TrimSpace(xutil.FirstNonEmpty(view.SelectedPath, view.CurrentPath))
 	if selectedPath != "" {
 		summaryLines = append(summaryLines, "**当前选择**\n"+texttags.FormatNeutralTextTag(selectedPath))
 	}
@@ -303,15 +304,15 @@ func pathPickerOwnerSubpageDirectoryModeElementsWithPage(
 
 func pathPickerDefaultFooterButtons(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	return []map[string]any{
-		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
-		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
+		cardCallbackButtonElement(strings.TrimSpace(xutil.FirstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
+		cardCallbackButtonElement(strings.TrimSpace(xutil.FirstNonEmpty(view.CancelLabel, "取消")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
 	}
 }
 
 func pathPickerOwnerSubpageFooterButtons(view control.FeishuPathPickerView, daemonLifecycleID string) []map[string]any {
 	return []map[string]any{
-		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.CancelLabel, "返回")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
-		cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "使用这个目录")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
+		cardCallbackButtonElement(strings.TrimSpace(xutil.FirstNonEmpty(view.CancelLabel, "返回")), "default", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerCancel, view.PickerID, ""), daemonLifecycleID), false, ""),
+		cardCallbackButtonElement(strings.TrimSpace(xutil.FirstNonEmpty(view.ConfirmLabel, "使用这个目录")), "primary", stampActionValue(actionPayloadPathPicker(cardActionKindPathPickerConfirm, view.PickerID, ""), daemonLifecycleID), !view.CanConfirm, ""),
 	}
 }
 
@@ -326,5 +327,5 @@ func pathPickerCardSize(view control.FeishuPathPickerView, elements []map[string
 }
 
 func pathPickerCardTitle(view control.FeishuPathPickerView) string {
-	return firstNonEmpty(strings.TrimSpace(view.Title), "选择路径")
+	return xutil.FirstNonEmpty(strings.TrimSpace(view.Title), "选择路径")
 }

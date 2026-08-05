@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -123,7 +124,7 @@ func (s *Store) ApplyProbe(observation codexprofile.OAuthProbeObservation, check
 	next.Status = status
 	next.LastCheckedAt = checkedAt
 	if status == string(codexprofile.OAuthProbeStatusUnknown) {
-		next.LastProbeErrorCode = firstNonEmpty(observation.Result.LastProbeErrorCode, codexprofile.ErrorOAuthProbeUnknown)
+		next.LastProbeErrorCode = xutil.FirstNonEmpty(observation.Result.LastProbeErrorCode, codexprofile.ErrorOAuthProbeUnknown)
 	} else {
 		next.LastProbeErrorCode = ""
 		next.AccountHint = strings.TrimSpace(observation.Result.AccountHint)
@@ -221,15 +222,6 @@ func normalizeKnownStatus(value string) string {
 	value = strings.TrimSpace(value)
 	if value == string(codexprofile.OAuthProbeStatusDetected) || value == string(codexprofile.OAuthProbeStatusMissing) {
 		return value
-	}
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
 	}
 	return ""
 }

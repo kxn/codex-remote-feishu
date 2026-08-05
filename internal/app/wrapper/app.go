@@ -17,6 +17,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type App struct {
@@ -140,7 +141,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		CodexRealBinary:       loaded.CodexRealBinary,
 		NameMode:              loaded.NameMode,
 		Args:                  args,
-		ConfigPath:            firstNonEmpty(services.ConfigPath, loaded.ConfigPath, paths.ConfigFile),
+		ConfigPath:            xutil.FirstNonEmpty(services.ConfigPath, loaded.ConfigPath, paths.ConfigFile),
 		InstanceID:            instanceID,
 		DisplayName:           displayName,
 		WorkspaceRoot:         workspaceRoot,
@@ -155,8 +156,8 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		Managed:               managed,
 		Lifetime:              string(lifetime),
 		ParentPID:             parentPID,
-		Version:               firstNonEmpty(strings.TrimSpace(version), "dev"),
-		Branch:                firstNonEmpty(strings.TrimSpace(branch), "dev"),
+		Version:               xutil.FirstNonEmpty(strings.TrimSpace(version), "dev"),
+		Branch:                xutil.FirstNonEmpty(strings.TrimSpace(branch), "dev"),
 		BuildFingerprint:      binaryIdentity.BuildFingerprint,
 		BinaryPath:            binaryIdentity.BinaryPath,
 		ChildProxyEnv:         config.CaptureAndClearProxyEnv(),
@@ -208,7 +209,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		},
 		ConfigPath:           a.config.ConfigPath,
 		Paths:                a.config.RuntimePaths,
-		DaemonBinaryPath:     firstNonEmpty(a.config.DaemonBinaryPath, a.config.BinaryPath),
+		DaemonBinaryPath:     xutil.FirstNonEmpty(a.config.DaemonBinaryPath, a.config.BinaryPath),
 		DaemonUseSystemProxy: a.config.DaemonUseSystemProxy,
 		CapturedProxyEnv:     a.config.ChildProxyEnv,
 		MismatchAction:       relayruntime.ProbeMismatchRefuseReplace,
@@ -329,7 +330,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 				command.Target.ThreadID,
 				command.Target.TurnID,
 				command.Target.CWD,
-				firstNonEmpty(command.Origin.Surface, command.Origin.ChatID),
+				xutil.FirstNonEmpty(command.Origin.Surface, command.Origin.ChatID),
 				len(command.Prompt.Inputs),
 			)
 			result, err := a.runtime.TranslateCommand(command)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type selectionRenderModel struct {
@@ -103,7 +104,7 @@ func workspaceSelectionRenderModelFromView(view control.FeishuWorkspaceSelection
 		}
 		option := control.SelectionOption{
 			OptionID:    strings.TrimSpace(entry.WorkspaceKey),
-			Label:       firstNonEmpty(strings.TrimSpace(entry.WorkspaceLabel), strings.TrimSpace(entry.WorkspaceKey)),
+			Label:       xutil.FirstNonEmpty(strings.TrimSpace(entry.WorkspaceLabel), strings.TrimSpace(entry.WorkspaceKey)),
 			ButtonLabel: buttonLabel,
 			AgeText:     strings.TrimSpace(entry.AgeText),
 			MetaText:    control.FormatFeishuWorkspaceSelectionMetaText(strings.TrimSpace(entry.AgeText), entry.HasVSCodeActivity, entry.Busy, !entry.Attachable && !entry.RecoverableOnly, entry.RecoverableOnly),
@@ -254,14 +255,14 @@ func kickThreadSelectionRenderModelFromView(view control.FeishuKickThreadSelecti
 				Index:       1,
 				OptionID:    "cancel",
 				Label:       "保留当前状态，不执行强踢。",
-				ButtonLabel: firstNonEmpty(strings.TrimSpace(view.CancelLabel), "取消"),
+				ButtonLabel: xutil.FirstNonEmpty(strings.TrimSpace(view.CancelLabel), "取消"),
 			},
 			{
 				Index:       2,
 				OptionID:    threadID,
 				Label:       strings.TrimSpace(view.ThreadLabel),
 				Subtitle:    strings.TrimSpace(view.ThreadSubtitle),
-				ButtonLabel: firstNonEmpty(strings.TrimSpace(view.ConfirmLabel), "强踢并占用"),
+				ButtonLabel: xutil.FirstNonEmpty(strings.TrimSpace(view.ConfirmLabel), "强踢并占用"),
 			},
 		},
 	}
@@ -269,7 +270,7 @@ func kickThreadSelectionRenderModelFromView(view control.FeishuKickThreadSelecti
 
 func vscodeThreadSelectionOption(entry control.FeishuThreadSelectionEntry) control.SelectionOption {
 	option := threadSelectionOption(entry, false)
-	label := firstNonEmpty(strings.TrimSpace(entry.Summary), strings.TrimSpace(entry.ThreadID))
+	label := xutil.FirstNonEmpty(strings.TrimSpace(entry.Summary), strings.TrimSpace(entry.ThreadID))
 	option.Label = label
 	option.ButtonLabel = label
 	return option
@@ -287,11 +288,11 @@ func threadSelectionOption(entry control.FeishuThreadSelectionEntry, includeWork
 	}
 	return control.SelectionOption{
 		OptionID:            entry.ThreadID,
-		Label:               firstNonEmpty(strings.TrimSpace(entry.Summary), strings.TrimSpace(entry.ThreadID)),
+		Label:               xutil.FirstNonEmpty(strings.TrimSpace(entry.Summary), strings.TrimSpace(entry.ThreadID)),
 		Subtitle:            strings.Join(lines, "\n"),
-		ButtonLabel:         firstNonEmpty(strings.TrimSpace(entry.Summary), strings.TrimSpace(entry.ThreadID)),
+		ButtonLabel:         xutil.FirstNonEmpty(strings.TrimSpace(entry.Summary), strings.TrimSpace(entry.ThreadID)),
 		GroupKey:            strings.TrimSpace(entry.WorkspaceKey),
-		GroupLabel:          firstNonEmpty(strings.TrimSpace(entry.WorkspaceLabel), strings.TrimSpace(entry.WorkspaceKey)),
+		GroupLabel:          xutil.FirstNonEmpty(strings.TrimSpace(entry.WorkspaceLabel), strings.TrimSpace(entry.WorkspaceKey)),
 		AgeText:             strings.TrimSpace(entry.AgeText),
 		MetaText:            threadSelectionMetaText(entry),
 		IsCurrent:           entry.Current,
@@ -304,7 +305,7 @@ func threadSelectionMetaText(entry control.FeishuThreadSelectionEntry) string {
 	base := ""
 	status := strings.TrimSpace(entry.Status)
 	if entry.Current {
-		parts := []string{firstNonEmpty(status, "已接管")}
+		parts := []string{xutil.FirstNonEmpty(status, "已接管")}
 		if age := strings.TrimSpace(entry.AgeText); age != "" {
 			parts = append(parts, age)
 		}
@@ -322,7 +323,7 @@ func threadSelectionMetaText(entry control.FeishuThreadSelectionEntry) string {
 		if len(parts) != 0 {
 			base = strings.Join(parts, " · ")
 		} else {
-			base = firstNonEmpty(status, strings.TrimSpace(entry.AgeText), "时间未知")
+			base = xutil.FirstNonEmpty(status, strings.TrimSpace(entry.AgeText), "时间未知")
 		}
 	}
 	return base

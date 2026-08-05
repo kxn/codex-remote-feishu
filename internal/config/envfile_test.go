@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func unsetUnifiedConfigOverride(t *testing.T) {
@@ -70,7 +72,7 @@ func TestLoadServicesConfigUsesUnifiedConfigEnvOverride(t *testing.T) {
 		Name:      "Main",
 		AppID:     "cli_override",
 		AppSecret: "secret_override",
-		Enabled:   boolPtr(true),
+		Enabled:   xutil.BoolPtr(true),
 	}}
 	cfg.Debug.RelayFlow = true
 	cfg.Debug.RelayRaw = true
@@ -164,7 +166,7 @@ func TestLoadersPreferJSONOverLegacySplitFiles(t *testing.T) {
 		Name:      "JSON",
 		AppID:     "cli_json",
 		AppSecret: "secret_json",
-		Enabled:   boolPtr(true),
+		Enabled:   xutil.BoolPtr(true),
 	}}
 	if err := WriteAppConfig(configPath, cfg); err != nil {
 		t.Fatalf("write config.json: %v", err)

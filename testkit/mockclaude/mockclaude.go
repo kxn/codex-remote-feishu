@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type Scenario string
@@ -199,7 +201,7 @@ func (m *MockClaude) handleControlRequest(message map[string]any) ([][]byte, err
 
 func (m *MockClaude) handleControlResponse(message map[string]any) ([][]byte, error) {
 	response := mapValue(message["response"])
-	requestID := strings.TrimSpace(firstNonEmpty(
+	requestID := strings.TrimSpace(xutil.FirstNonEmpty(
 		stringValue(message["request_id"]),
 		stringValue(response["request_id"]),
 	))
@@ -333,7 +335,7 @@ func (m *MockClaude) startToolScenario(scenario Scenario, toolName string, input
 func (m *MockClaude) finishToolApproval(pending *pendingApproval, body map[string]any, behavior string) [][]byte {
 	if behavior != "allow" {
 		return [][]byte{
-			m.userToolResultFrame(pending.ToolUseID, firstNonEmpty(stringValue(body["message"]), "tool request denied"), true, "Error: tool request denied"),
+			m.userToolResultFrame(pending.ToolUseID, xutil.FirstNonEmpty(stringValue(body["message"]), "tool request denied"), true, "Error: tool request denied"),
 			m.resultFrame("error_during_execution", "", false),
 		}
 	}
@@ -366,14 +368,14 @@ func (m *MockClaude) finishAskUserQuestion(pending *pendingApproval, body map[st
 			"answers":   cloneMap(answers),
 		}),
 	}
-	finalText := "Got it — I'll use the " + firstNonEmpty(answer, "Fast") + " approach."
+	finalText := "Got it — I'll use the " + xutil.FirstNonEmpty(answer, "Fast") + " approach."
 	frames = append(frames, m.textMessageFrames(finalText)...)
 	return append(frames, m.resultFrame("success", finalText, false))
 }
 
 func (m *MockClaude) finishPlanConfirmation(pending *pendingApproval, body map[string]any, behavior string) [][]byte {
 	if behavior != "allow" {
-		message := firstNonEmpty(stringValue(body["message"]), "plan rejected")
+		message := xutil.FirstNonEmpty(stringValue(body["message"]), "plan rejected")
 		return [][]byte{
 			m.userToolResultFrame(pending.ToolUseID, message, true, "Error: "+message),
 			m.userInterruptFrame("[Request interrupted by user for tool use]"),
@@ -381,7 +383,7 @@ func (m *MockClaude) finishPlanConfirmation(pending *pendingApproval, body map[s
 		}
 	}
 	updatedInput := mapValue(body["updatedInput"])
-	feedback := firstNonEmpty(stringValue(updatedInput["feedback"]), "Approved. Execute the plan.")
+	feedback := xutil.FirstNonEmpty(stringValue(updatedInput["feedback"]), "Approved. Execute the plan.")
 	frames := [][]byte{
 		m.userToolResultFrame(pending.ToolUseID, "Plan approved", false, map[string]any{
 			"feedback": feedback,
@@ -614,15 +616,6 @@ func mapValue(value any) map[string]any {
 func stringValue(value any) string {
 	current, _ := value.(string)
 	return current
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func firstAnswerValue(answers map[string]any) string {

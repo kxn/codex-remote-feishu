@@ -16,6 +16,7 @@ import (
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (g *LiveGateway) quotedInputs(ctx context.Context, message *larkim.EventMessage) []agentproto.Input {
@@ -362,7 +363,7 @@ func (g *LiveGateway) fetchMessage(ctx context.Context, messageID string) (*gate
 			MessageID:      stringPtr(item.MessageId),
 			MessageType:    stringPtr(item.MsgType),
 			Content:        content,
-			Deleted:        boolPtr(item.Deleted),
+			Deleted:        xutil.BoolValue(item.Deleted),
 			UpperMessageID: stringPtr(item.UpperMessageId),
 		}
 		if item.Sender != nil {
@@ -512,11 +513,4 @@ func (g *LiveGateway) downloadFile(ctx context.Context, messageID, fileKey, file
 		return "", err
 	}
 	return file.Name(), nil
-}
-
-func boolPtr(value *bool) bool {
-	if value == nil {
-		return false
-	}
-	return *value
 }

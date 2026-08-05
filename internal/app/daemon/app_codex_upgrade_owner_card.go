@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -224,7 +225,7 @@ func codexUpgradeOwnerStableEvent(surfaceID string, flow *codexupgraderuntime.Ow
 	case !flow.HasUpdate:
 		title = "Codex 已是最新版本"
 		theme = "success"
-		lines = append(lines, fmt.Sprintf("当前已经是最新版本 %s。", firstNonEmpty(strings.TrimSpace(flow.CurrentVersion), strings.TrimSpace(flow.LatestVersion), "unknown")))
+		lines = append(lines, fmt.Sprintf("当前已经是最新版本 %s。", xutil.FirstNonEmpty(strings.TrimSpace(flow.CurrentVersion), strings.TrimSpace(flow.LatestVersion), "unknown")))
 		lines = append(lines, "如果还想再确认一次，可以继续点“再次检查”。")
 	case flow.CanUpgrade:
 		title = "发现可升级版本"
@@ -355,7 +356,7 @@ func (a *App) finishCodexUpgradeOwnerCheckLocked(surfaceID, flowID string, check
 	}
 	a.refreshCodexUpgradeOwnerFlowLocked(flow, codexupgraderuntime.OwnerFlowStageReady)
 	if check.Installation.Upgradeable() {
-		flow.CurrentVersion = firstNonEmpty(strings.TrimSpace(check.CurrentVersion), strings.TrimSpace(check.Installation.CurrentVersion()))
+		flow.CurrentVersion = xutil.FirstNonEmpty(strings.TrimSpace(check.CurrentVersion), strings.TrimSpace(check.Installation.CurrentVersion()))
 	}
 	flow.LatestVersion = strings.TrimSpace(check.LatestVersion)
 	flow.TargetVersion = strings.TrimSpace(check.LatestVersion)
@@ -492,14 +493,14 @@ func (a *App) finishCodexUpgradeOwnerRunLocked(surfaceID, flowID string, runErr 
 		a.clearCodexUpgradeOwnerFlowLocked()
 		return []eventcontract.Event{event}
 	}
-	flow.CurrentVersion = firstNonEmpty(strings.TrimSpace(flow.TargetVersion), strings.TrimSpace(flow.LatestVersion), strings.TrimSpace(flow.CurrentVersion))
+	flow.CurrentVersion = xutil.FirstNonEmpty(strings.TrimSpace(flow.TargetVersion), strings.TrimSpace(flow.LatestVersion), strings.TrimSpace(flow.CurrentVersion))
 	a.refreshCodexUpgradeOwnerFlowLocked(flow, codexupgraderuntime.OwnerFlowStageSucceeded)
 	event := codexUpgradeOwnerTerminalEvent(
 		surfaceID,
 		flow,
 		"Codex 升级完成",
 		"success",
-		fmt.Sprintf("已升级到 %s。", firstNonEmpty(strings.TrimSpace(flow.TargetVersion), strings.TrimSpace(flow.CurrentVersion), "unknown")),
+		fmt.Sprintf("已升级到 %s。", xutil.FirstNonEmpty(strings.TrimSpace(flow.TargetVersion), strings.TrimSpace(flow.CurrentVersion), "unknown")),
 	)
 	a.clearCodexUpgradeOwnerFlowLocked()
 	return []eventcontract.Event{event}

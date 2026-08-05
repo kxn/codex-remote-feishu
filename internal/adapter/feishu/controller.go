@@ -206,12 +206,3 @@ func gatewayIDFromSurface(surfaceID string) string {
 	}
 	return ref.GatewayID
 }
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}

@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type paginatedSelectPageSpec struct {
@@ -79,9 +80,9 @@ func planPaginatedSelectPage(spec paginatedSelectPageSpec, maxBytes int, measure
 }
 
 func planBorrowedDualSelectPages(totalBudget, leftWeight, rightWeight int, leftFit, rightFit paginatedSelectFit) (paginatedSelectPlan, paginatedSelectPlan) {
-	totalBudget = maxInt(totalBudget, 0)
-	leftWeight = maxInt(leftWeight, 1)
-	rightWeight = maxInt(rightWeight, 1)
+	totalBudget = xutil.MaxInt(totalBudget, 0)
+	leftWeight = xutil.MaxInt(leftWeight, 1)
+	rightWeight = xutil.MaxInt(rightWeight, 1)
 	sum := leftWeight + rightWeight
 	leftBudget := totalBudget * leftWeight / sum
 	rightBudget := totalBudget - leftBudget
@@ -420,11 +421,4 @@ func selectStaticElement(name, placeholder string, payload map[string]any, optio
 
 func selectOptionValue(option map[string]any) string {
 	return strings.TrimSpace(cardStringValue(option["value"]))
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

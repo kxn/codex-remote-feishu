@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type vscodeDetectResponse struct {
@@ -400,7 +401,7 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 				return err
 			}
 		}
-		if err := editor.ClearVSCodeSettingsExecutable(firstNonEmpty(strings.TrimSpace(state.VSCodeSettingsPath), defaults.VSCodeSettingsPath)); err != nil {
+		if err := editor.ClearVSCodeSettingsExecutable(xutil.FirstNonEmpty(strings.TrimSpace(state.VSCodeSettingsPath), defaults.VSCodeSettingsPath)); err != nil {
 			return err
 		}
 		state.BundleEntrypoint = bundleEntrypoint
@@ -479,7 +480,7 @@ func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
 			return err
 		}
 	}
-	settingsPath := firstNonEmpty(strings.TrimSpace(state.VSCodeSettingsPath), defaults.VSCodeSettingsPath)
+	settingsPath := xutil.FirstNonEmpty(strings.TrimSpace(state.VSCodeSettingsPath), defaults.VSCodeSettingsPath)
 	if err := editor.ClearVSCodeSettingsExecutable(settingsPath); err != nil {
 		return err
 	}

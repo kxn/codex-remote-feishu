@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -193,10 +195,10 @@ func (p *DriveMarkdownPreviewer) publishWebPreviewArtifact(ctx context.Context, 
 			PreviewID:    previewID,
 			LineageKey:   lineageKey,
 			SourcePath:   artifact.SourcePath,
-			DisplayName:  firstNonEmpty(strings.TrimSpace(artifact.DisplayName), filepath.Base(artifact.SourcePath)),
+			DisplayName:  xutil.FirstNonEmpty(strings.TrimSpace(artifact.DisplayName), filepath.Base(artifact.SourcePath)),
 			ArtifactKind: strings.TrimSpace(artifact.ArtifactKind),
 			MIMEType:     strings.TrimSpace(artifact.MIMEType),
-			RendererKind: firstNonEmpty(strings.TrimSpace(artifact.RendererKind), previewRendererKind(artifact.SourcePath, artifact.ArtifactKind, artifact.MIMEType)),
+			RendererKind: xutil.FirstNonEmpty(strings.TrimSpace(artifact.RendererKind), previewRendererKind(artifact.SourcePath, artifact.ArtifactKind, artifact.MIMEType)),
 			ContentHash:  strings.TrimSpace(artifact.ContentHash),
 			BlobKey:      strings.TrimSpace(artifact.ContentHash),
 			SizeBytes:    int64(len(artifact.Bytes)),

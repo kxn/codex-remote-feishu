@@ -4,13 +4,14 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func standaloneCodexUpgradeAffectsInstance(inst *state.InstanceRecord) bool {
 	if inst == nil {
 		return false
 	}
-	return !strings.EqualFold(firstNonEmpty(inst.Source, "vscode"), "vscode")
+	return !strings.EqualFold(xutil.FirstNonEmpty(inst.Source, "vscode"), "vscode")
 }
 
 func (a *App) standaloneCodexUpgradeAffectsInstanceIDLocked(instanceID string) bool {

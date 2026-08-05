@@ -11,6 +11,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) adminFeishuApps(loaded config.LoadedAppConfig) ([]adminFeishuAppSummary, error) {
@@ -65,7 +66,7 @@ func (a *App) adminFeishuApps(loaded config.LoadedAppConfig) ([]adminFeishuAppSu
 		summary := pendingFeishuAppSummary(gatewayID, pending)
 		if status, ok := statuses[gatewayID]; ok && status.GatewayID != "" {
 			statusCopy := status
-			summary.Name = firstNonEmpty(strings.TrimSpace(status.Name), summary.Name)
+			summary.Name = xutil.FirstNonEmpty(strings.TrimSpace(status.Name), summary.Name)
 			summary.Enabled = !status.Disabled
 			summary.Status = &statusCopy
 		}
@@ -90,10 +91,10 @@ func (a *App) adminFeishuAppSummary(loaded config.LoadedAppConfig, gatewayID str
 func buildFeishuAppSummary(gatewayID string, persisted config.FeishuAppConfig, runtime config.FeishuAppConfig, status feishu.GatewayStatus, persistedConfig bool, runtimeOnly bool, readOnly bool, reason string) adminFeishuAppSummary {
 	summary := adminFeishuAppSummary{
 		ID:              gatewayID,
-		Name:            firstNonEmpty(strings.TrimSpace(runtime.Name), strings.TrimSpace(persisted.Name), gatewayID),
-		AppID:           firstNonEmpty(strings.TrimSpace(runtime.AppID), strings.TrimSpace(persisted.AppID)),
-		ConsoleLinks:    buildFeishuAppConsoleLinks(firstNonEmpty(strings.TrimSpace(runtime.AppID), strings.TrimSpace(persisted.AppID))),
-		HasSecret:       strings.TrimSpace(firstNonEmpty(strings.TrimSpace(runtime.AppSecret), strings.TrimSpace(persisted.AppSecret))) != "",
+		Name:            xutil.FirstNonEmpty(strings.TrimSpace(runtime.Name), strings.TrimSpace(persisted.Name), gatewayID),
+		AppID:           xutil.FirstNonEmpty(strings.TrimSpace(runtime.AppID), strings.TrimSpace(persisted.AppID)),
+		ConsoleLinks:    buildFeishuAppConsoleLinks(xutil.FirstNonEmpty(strings.TrimSpace(runtime.AppID), strings.TrimSpace(persisted.AppID))),
+		HasSecret:       strings.TrimSpace(xutil.FirstNonEmpty(strings.TrimSpace(runtime.AppSecret), strings.TrimSpace(persisted.AppSecret))) != "",
 		Enabled:         runtime.Enabled == nil || *runtime.Enabled,
 		VerifiedAt:      persisted.VerifiedAt,
 		Persisted:       persistedConfig,

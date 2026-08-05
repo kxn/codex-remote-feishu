@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) startIngressPump(parent context.Context, errCh chan<- error) {
@@ -557,7 +558,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		inst.ClaudeProfileID = ""
 		inst.ClaudeReasoningEffort = ""
 	}
-	inst.Source = firstNonEmpty(strings.TrimSpace(hello.Instance.Source), "vscode")
+	inst.Source = xutil.FirstNonEmpty(strings.TrimSpace(hello.Instance.Source), "vscode")
 	inst.Capabilities = capabilities
 	inst.CapabilitiesDeclared = hello.CapabilitiesDeclared
 	inst.Managed = hello.Instance.Managed

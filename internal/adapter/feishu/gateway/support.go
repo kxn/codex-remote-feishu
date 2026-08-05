@@ -48,15 +48,6 @@ func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (con
 	return context.WithTimeout(base, timeout)
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func referencedMessageID(message *larkim.EventMessage) string {
 	if message == nil {
 		return ""

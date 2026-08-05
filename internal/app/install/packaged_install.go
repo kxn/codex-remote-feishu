@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -176,7 +178,7 @@ func runPackagedFirstInstall(ctx context.Context, opts packagedInstallOptions) (
 		return PackagedInstallResult{StatePath: opts.StatePath}, fmt.Errorf("install selection is required for first install")
 	}
 	resolvedInstallBinDir := resolveTargetInstallBinDir(*opts.Selection, opts.InstallBinDir)
-	versionsRoot := firstNonEmpty(strings.TrimSpace(opts.VersionsRoot), defaultVersionsRootForStatePath(opts.Selection.StatePath))
+	versionsRoot := xutil.FirstNonEmpty(strings.TrimSpace(opts.VersionsRoot), defaultVersionsRootForStatePath(opts.Selection.StatePath))
 	stageState := InstallState{
 		InstanceID:   opts.Selection.InstanceID,
 		BaseDir:      opts.Selection.BaseDir,
@@ -250,7 +252,7 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 		return result, err
 	}
 	state.CurrentBinaryPath = liveBinaryPath
-	state.VersionsRoot = firstNonEmpty(strings.TrimSpace(opts.VersionsRoot), strings.TrimSpace(state.VersionsRoot), defaultVersionsRootForStatePath(state.StatePath))
+	state.VersionsRoot = xutil.FirstNonEmpty(strings.TrimSpace(opts.VersionsRoot), strings.TrimSpace(state.VersionsRoot), defaultVersionsRootForStatePath(state.StatePath))
 
 	targetSlot, err := importLocalBinaryForUpgrade(state, opts.SourceBinary, opts.CurrentSlot)
 	if err != nil {
@@ -273,8 +275,8 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 
 	state.PendingUpgrade = nil
 	state.RollbackCandidate = nil
-	state.LastKnownLatestVersion = firstNonEmpty(strings.TrimSpace(opts.CurrentVersion), strings.TrimSpace(state.LastKnownLatestVersion))
-	state.CurrentVersion = firstNonEmpty(strings.TrimSpace(opts.CurrentVersion), strings.TrimSpace(state.CurrentVersion), targetSlot)
+	state.LastKnownLatestVersion = xutil.FirstNonEmpty(strings.TrimSpace(opts.CurrentVersion), strings.TrimSpace(state.LastKnownLatestVersion))
+	state.CurrentVersion = xutil.FirstNonEmpty(strings.TrimSpace(opts.CurrentVersion), strings.TrimSpace(state.CurrentVersion), targetSlot)
 	state.CurrentSlot = targetSlot
 	state.InstallSource = opts.InstallSource
 	if opts.CurrentTrack != "" {

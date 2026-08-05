@@ -5,6 +5,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type cardEnvelopeVersion string
@@ -101,9 +102,9 @@ func renderOperationCard(operation Operation, version cardEnvelopeVersion) map[s
 	if doc == nil {
 		doc = rawCardDocumentWithHeader(
 			operation.CardTitle,
-			firstNonEmpty(strings.TrimSpace(operation.CardTitleTag), cardTextTagPlainText),
+			xutil.FirstNonEmpty(strings.TrimSpace(operation.CardTitleTag), cardTextTagPlainText),
 			operation.CardSubtitle,
-			firstNonEmpty(strings.TrimSpace(operation.CardSubtitleTag), cardTextTagLarkMarkdown),
+			xutil.FirstNonEmpty(strings.TrimSpace(operation.CardSubtitleTag), cardTextTagLarkMarkdown),
 			operation.CardBody,
 			operation.CardThemeKey,
 			operation.CardElements,

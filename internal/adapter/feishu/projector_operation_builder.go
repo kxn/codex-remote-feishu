@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type eventCardOperationSpec struct {
@@ -52,9 +53,9 @@ func newEventCardOperation(chatID string, event eventcontract.Event, spec eventC
 		cardEnvelope:         cardEnvelopeV2,
 		card: rawCardDocumentWithHeader(
 			title,
-			firstNonEmpty(strings.TrimSpace(spec.TitleTag), cardTextTagPlainText),
+			xutil.FirstNonEmpty(strings.TrimSpace(spec.TitleTag), cardTextTagPlainText),
 			spec.Subtitle,
-			firstNonEmpty(strings.TrimSpace(spec.SubtitleTag), cardTextTagLarkMarkdown),
+			xutil.FirstNonEmpty(strings.TrimSpace(spec.SubtitleTag), cardTextTagLarkMarkdown),
 			documentBody,
 			theme,
 			elements,

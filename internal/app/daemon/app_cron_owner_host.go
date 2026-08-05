@@ -7,6 +7,7 @@ import (
 
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) defaultCronGatewayIdentityLookup(gatewayID string) (cronrt.GatewayIdentity, bool, error) {
@@ -100,7 +101,7 @@ func (a *App) resolveCronOwnerFromState(stateValue *cronrt.StateFile, command co
 }
 
 func (a *App) resolveCronBootstrapOwner(result cronrt.OwnerResolution, command control.DaemonCommand) (cronrt.OwnerResolution, error) {
-	candidateGatewayID := firstNonEmpty(strings.TrimSpace(command.GatewayID), a.service.SurfaceGatewayID(command.SurfaceSessionID))
+	candidateGatewayID := xutil.FirstNonEmpty(strings.TrimSpace(command.GatewayID), a.service.SurfaceGatewayID(command.SurfaceSessionID))
 	if strings.TrimSpace(candidateGatewayID) == "" {
 		result.Status = cronrt.OwnerStatusUnresolved
 		result.Message = "当前无法确定用于创建 Cron 配置表的 bot。"

@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func requestPromptSections(prompt control.FeishuRequestView) []control.FeishuCardTextSection {
@@ -208,7 +209,7 @@ func requestPromptContainsOption(options []control.RequestPromptOption, optionID
 
 func requestPromptQuestionSection(index, total int, question control.RequestPromptQuestion) (control.FeishuCardTextSection, bool) {
 	lines := make([]string, 0, 12)
-	title := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question))
+	title := xutil.FirstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question))
 	if title != "" {
 		lines = append(lines, "标题："+title)
 	}
@@ -326,7 +327,7 @@ func requestPromptFormElement(prompt control.FeishuRequestView, daemonLifecycleI
 		"tag":  "input",
 		"name": name,
 	}
-	label := firstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), name)
+	label := xutil.FirstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), name)
 	input["label"] = cardPlainText(label)
 	input["label_position"] = "left"
 	if placeholder := strings.TrimSpace(question.Placeholder); placeholder != "" {
@@ -381,7 +382,7 @@ func requestPromptStructuredFormElement(prompt control.FeishuRequestView, daemon
 			elements = append(elements, element)
 		}
 	}
-	submit := cardFormActionButtonElement(firstNonEmpty(strings.TrimSpace(prompt.StructuredForm.SubmitLabel), "提交"), "primary", stampActionValue(map[string]any{
+	submit := cardFormActionButtonElement(xutil.FirstNonEmpty(strings.TrimSpace(prompt.StructuredForm.SubmitLabel), "提交"), "primary", stampActionValue(map[string]any{
 		cardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
 		cardActionPayloadKeyRequestID:       prompt.RequestID,
 		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
@@ -411,7 +412,7 @@ func requestStructuredFormFieldElement(field control.RequestPromptFormField) map
 		element := map[string]any{
 			"tag":         "select_static",
 			"name":        name,
-			"placeholder": cardPlainText(firstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
+			"placeholder": cardPlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
 		}
 		if options := requestStructuredFormOptions(field.Options); len(options) != 0 {
 			element["options"] = options
@@ -424,7 +425,7 @@ func requestStructuredFormFieldElement(field control.RequestPromptFormField) map
 		element := map[string]any{
 			"tag":         "multi_select_static",
 			"name":        name,
-			"placeholder": cardPlainText(firstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
+			"placeholder": cardPlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
 		}
 		if options := requestStructuredFormOptions(field.Options); len(options) != 0 {
 			element["options"] = options

@@ -10,6 +10,7 @@ import (
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -281,7 +282,7 @@ func (b *mergeForwardBuilder) buildNodeFromGatewayMessage(ctx context.Context, m
 			MessageID:   strings.TrimSpace(message.MessageID),
 			Sender:      sender,
 			MessageType: "unsupported",
-			DisplayText: firstNonEmpty(strings.TrimSpace(message.MessageType), "unsupported"),
+			DisplayText: xutil.FirstNonEmpty(strings.TrimSpace(message.MessageType), "unsupported"),
 			State:       "unavailable",
 		}, nil
 	}
@@ -490,7 +491,7 @@ func unavailableForwardedChatNode(message *gatewayMessage, err error) forwardedC
 		case "image":
 			displayText = "[图片不可用]"
 		case "file":
-			displayText = firstNonEmpty(strings.TrimSpace(gatewaypkg.ParseFileName(message.Content)), "[文件不可用]")
+			displayText = xutil.FirstNonEmpty(strings.TrimSpace(gatewaypkg.ParseFileName(message.Content)), "[文件不可用]")
 		case "merge_forward":
 			displayText = "[转发聊天记录不可用]"
 		case "post":
@@ -508,7 +509,7 @@ func unavailableForwardedChatNode(message *gatewayMessage, err error) forwardedC
 		node.Sender = forwardedChatSenderFromGatewayMessage(message)
 	}
 	if err != nil && strings.TrimSpace(err.Error()) != "" {
-		node.DisplayText = firstNonEmpty(node.DisplayText, "[内容不可用]")
+		node.DisplayText = xutil.FirstNonEmpty(node.DisplayText, "[内容不可用]")
 	}
 	return node
 }
@@ -590,7 +591,7 @@ func collectForwardedChatSummaryLines(node forwardedChatNode, lines *[]string) {
 		}
 		label := ""
 		if node.Sender != nil {
-			label = strings.TrimSpace(firstNonEmpty(node.Sender.Label, node.Sender.ID))
+			label = strings.TrimSpace(xutil.FirstNonEmpty(node.Sender.Label, node.Sender.ID))
 		}
 		if label != "" && text != "" {
 			*lines = append(*lines, label+": "+text)

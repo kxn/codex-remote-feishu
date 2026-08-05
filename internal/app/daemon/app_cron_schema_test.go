@@ -11,6 +11,7 @@ import (
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
@@ -93,22 +94,22 @@ func TestEnsureCronBitableRepairsExistingDateFieldFormatter(t *testing.T) {
 		FieldId:   stringPtr("fld-workspaces-primary"),
 		FieldName: stringPtr("工作区名称"),
 		Type:      intPtr(1),
-		IsPrimary: boolPtr(true),
+		IsPrimary: xutil.BoolPtr(true),
 	}}
 	api.fieldsByTable["tbl-tasks"] = []*larkbitable.AppTableField{
-		{FieldId: stringPtr("fld-tasks-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
-		{FieldId: stringPtr("fld-tasks-recent"), FieldName: stringPtr("最近运行时间"), Type: intPtr(5), IsPrimary: boolPtr(false)},
+		{FieldId: stringPtr("fld-tasks-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: xutil.BoolPtr(true)},
+		{FieldId: stringPtr("fld-tasks-recent"), FieldName: stringPtr("最近运行时间"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
 	}
 	api.fieldsByTable["tbl-runs"] = []*larkbitable.AppTableField{
-		{FieldId: stringPtr("fld-runs-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
-		{FieldId: stringPtr("fld-runs-triggered"), FieldName: stringPtr("触发时间"), Type: intPtr(5), IsPrimary: boolPtr(false)},
-		{FieldId: stringPtr("fld-runs-started"), FieldName: stringPtr("开始时间"), Type: intPtr(5), IsPrimary: boolPtr(false)},
-		{FieldId: stringPtr("fld-runs-finished"), FieldName: stringPtr("结束时间"), Type: intPtr(5), IsPrimary: boolPtr(false)},
+		{FieldId: stringPtr("fld-runs-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: xutil.BoolPtr(true)},
+		{FieldId: stringPtr("fld-runs-triggered"), FieldName: stringPtr("触发时间"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
+		{FieldId: stringPtr("fld-runs-started"), FieldName: stringPtr("开始时间"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
+		{FieldId: stringPtr("fld-runs-finished"), FieldName: stringPtr("结束时间"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
 	}
 	api.fieldsByTable["tbl-meta"] = []*larkbitable.AppTableField{
-		{FieldId: stringPtr("fld-meta-primary"), FieldName: stringPtr("名称"), Type: intPtr(1), IsPrimary: boolPtr(true)},
-		{FieldId: stringPtr("fld-meta-created"), FieldName: stringPtr("created_at"), Type: intPtr(5), IsPrimary: boolPtr(false)},
-		{FieldId: stringPtr("fld-meta-owner-bound"), FieldName: stringPtr("owner_bound_at"), Type: intPtr(5), IsPrimary: boolPtr(false)},
+		{FieldId: stringPtr("fld-meta-primary"), FieldName: stringPtr("名称"), Type: intPtr(1), IsPrimary: xutil.BoolPtr(true)},
+		{FieldId: stringPtr("fld-meta-created"), FieldName: stringPtr("created_at"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
+		{FieldId: stringPtr("fld-meta-owner-bound"), FieldName: stringPtr("owner_bound_at"), Type: intPtr(5), IsPrimary: xutil.BoolPtr(false)},
 	}
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
@@ -177,17 +178,17 @@ func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 		FieldId:   stringPtr("fld-workspaces-primary"),
 		FieldName: stringPtr("工作区名称"),
 		Type:      intPtr(1),
-		IsPrimary: boolPtr(true),
+		IsPrimary: xutil.BoolPtr(true),
 	}}
 	api.fieldsByTable["tbl-tasks"] = []*larkbitable.AppTableField{
-		{FieldId: stringPtr("fld-tasks-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
-		{FieldId: stringPtr("fld-tasks-git"), FieldName: stringPtr(cronrt.TaskGitRepoInputField), Type: intPtr(15), IsPrimary: boolPtr(false)},
+		{FieldId: stringPtr("fld-tasks-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: xutil.BoolPtr(true)},
+		{FieldId: stringPtr("fld-tasks-git"), FieldName: stringPtr(cronrt.TaskGitRepoInputField), Type: intPtr(15), IsPrimary: xutil.BoolPtr(false)},
 	}
 	api.fieldsByTable["tbl-runs"] = []*larkbitable.AppTableField{
-		{FieldId: stringPtr("fld-runs-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: boolPtr(true)},
+		{FieldId: stringPtr("fld-runs-primary"), FieldName: stringPtr("任务名"), Type: intPtr(1), IsPrimary: xutil.BoolPtr(true)},
 	}
 	api.fieldsByTable["tbl-meta"] = []*larkbitable.AppTableField{
-		{FieldId: stringPtr("fld-meta-primary"), FieldName: stringPtr("名称"), Type: intPtr(1), IsPrimary: boolPtr(true)},
+		{FieldId: stringPtr("fld-meta-primary"), FieldName: stringPtr("名称"), Type: intPtr(1), IsPrimary: xutil.BoolPtr(true)},
 	}
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})

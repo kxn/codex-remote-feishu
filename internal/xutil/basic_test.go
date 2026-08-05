@@ -28,3 +28,33 @@ func TestMaxInt(t *testing.T) {
 		t.Errorf("MaxInt(-1,-2) = %d, want -1", got)
 	}
 }
+
+func TestBoolPtrBoolValue(t *testing.T) {
+	p := BoolPtr(true)
+	if p == nil || *p != true {
+		t.Errorf("BoolPtr(true) = %v, want non-nil true", p)
+	}
+	if !BoolValue(p) {
+		t.Errorf("BoolValue(BoolPtr(true)) = false, want true")
+	}
+	if BoolValue(nil) {
+		t.Errorf("BoolValue(nil) = true, want false")
+	}
+	f := false
+	if BoolValue(&f) {
+		t.Errorf("BoolValue(&false) = true, want false")
+	}
+}
+
+func TestContainsString(t *testing.T) {
+	values := []string{"a", "b", "c"}
+	if !ContainsString(values, "b") {
+		t.Errorf("ContainsString(values, b) = false, want true")
+	}
+	if ContainsString(values, "z") {
+		t.Errorf("ContainsString(values, z) = true, want false")
+	}
+	if ContainsString(nil, "a") {
+		t.Errorf("ContainsString(nil, a) = true, want false")
+	}
+}

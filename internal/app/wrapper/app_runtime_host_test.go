@@ -16,6 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestWrapperClaudeHelloAndShutdown(t *testing.T) {
@@ -661,14 +662,14 @@ func startWrapperRuntimeTestApp(t *testing.T, cfg Config) (*relayws.Server, <-ch
 	var stdout testBuffer
 	var stderr testBuffer
 	cfg.RelayServerURL = "ws" + strings.TrimPrefix(httpServer.URL, "http")
-	cfg.DisplayName = firstNonEmpty(cfg.DisplayName, "codex-remote")
-	cfg.WorkspaceRoot = firstNonEmpty(cfg.WorkspaceRoot, repoRoot)
-	cfg.WorkspaceKey = firstNonEmpty(cfg.WorkspaceKey, repoRoot)
-	cfg.ShortName = firstNonEmpty(cfg.ShortName, filepath.Base(repoRoot))
-	cfg.Version = firstNonEmpty(cfg.Version, "test")
-	cfg.BuildFingerprint = firstNonEmpty(cfg.BuildFingerprint, "fp-test")
-	cfg.BinaryPath = firstNonEmpty(cfg.BinaryPath, "/test/codex-remote")
-	cfg.DaemonBinaryPath = firstNonEmpty(cfg.DaemonBinaryPath, "/test/codex-remote")
+	cfg.DisplayName = xutil.FirstNonEmpty(cfg.DisplayName, "codex-remote")
+	cfg.WorkspaceRoot = xutil.FirstNonEmpty(cfg.WorkspaceRoot, repoRoot)
+	cfg.WorkspaceKey = xutil.FirstNonEmpty(cfg.WorkspaceKey, repoRoot)
+	cfg.ShortName = xutil.FirstNonEmpty(cfg.ShortName, filepath.Base(repoRoot))
+	cfg.Version = xutil.FirstNonEmpty(cfg.Version, "test")
+	cfg.BuildFingerprint = xutil.FirstNonEmpty(cfg.BuildFingerprint, "fp-test")
+	cfg.BinaryPath = xutil.FirstNonEmpty(cfg.BinaryPath, "/test/codex-remote")
+	cfg.DaemonBinaryPath = xutil.FirstNonEmpty(cfg.DaemonBinaryPath, "/test/codex-remote")
 
 	app := New(cfg)
 	ctx, cancel := context.WithCancel(context.Background())

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func RunService(args []string, _ io.Reader, stdout, _ io.Writer, _ string) error {
@@ -68,7 +70,7 @@ func loadServiceState(statePath string) (InstallState, error) {
 	if err != nil {
 		return InstallState{}, err
 	}
-	state.StatePath = firstNonEmpty(strings.TrimSpace(state.StatePath), strings.TrimSpace(statePath))
+	state.StatePath = xutil.FirstNonEmpty(strings.TrimSpace(state.StatePath), strings.TrimSpace(statePath))
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		InstanceID:     state.InstanceID,
 		StatePath:      state.StatePath,

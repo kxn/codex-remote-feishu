@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type DaemonReadyStatus struct {
@@ -48,7 +49,7 @@ func ensureDaemonReady(ctx context.Context, state InstallState, version string) 
 	// directory, and using that path as the daemon binary would start the
 	// daemon outside the installed entry point (and pin the release directory
 	// while it is running).
-	binaryPath := firstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), currentExecutablePathOrEmpty())
+	binaryPath := xutil.FirstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), currentExecutablePathOrEmpty())
 	identity, err := relayruntime.BinaryIdentityForPath(binaryPath, version)
 	if err != nil {
 		return DaemonReadyStatus{}, err

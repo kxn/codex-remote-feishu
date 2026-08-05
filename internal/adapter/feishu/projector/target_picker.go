@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TargetPickerElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
@@ -35,7 +36,7 @@ func targetPickerStageElements(view control.FeishuTargetPickerView, daemonLifecy
 	}
 	return appendCardFooterButtonGroup(elements, []map[string]any{
 		cardCallbackButtonElement(
-			strings.TrimSpace(firstNonEmpty(view.ProcessingCancelLabel, "取消")),
+			strings.TrimSpace(xutil.FirstNonEmpty(view.ProcessingCancelLabel, "取消")),
 			"default",
 			stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerCancel, view.PickerID)), daemonLifecycleID),
 			false,
@@ -113,7 +114,7 @@ func targetPickerEditingFooterButtons(view control.FeishuTargetPickerView, daemo
 			buttons = append(buttons, back)
 		}
 	}
-	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID), targetPickerConfirmDisabled(view), "fill"))
+	buttons = append(buttons, cardCallbackButtonElement(strings.TrimSpace(xutil.FirstNonEmpty(view.ConfirmLabel, "确认")), "primary", stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID), targetPickerConfirmDisabled(view), "fill"))
 	return buttons
 }
 
@@ -122,7 +123,7 @@ func targetPickerBackButtonElement(view control.FeishuTargetPickerView, daemonLi
 	if len(payload) == 0 {
 		return nil
 	}
-	label := strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步"))
+	label := strings.TrimSpace(xutil.FirstNonEmpty(view.BackLabel, "上一步"))
 	return cardCallbackButtonElement(
 		label,
 		"default",
@@ -328,7 +329,7 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 	if view.CanGoBack {
 		if payload := targetPickerBackActionPayload(view); len(payload) != 0 {
 			backButton := cardFormActionButtonElement(
-				strings.TrimSpace(firstNonEmpty(view.BackLabel, "上一步")),
+				strings.TrimSpace(xutil.FirstNonEmpty(view.BackLabel, "上一步")),
 				"default",
 				stampActionValue(payload, daemonLifecycleID),
 				false,
@@ -341,7 +342,7 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 		}
 	}
 	confirmButton := cardFormActionButtonElement(
-		strings.TrimSpace(firstNonEmpty(view.ConfirmLabel, defaultConfirmLabel)),
+		strings.TrimSpace(xutil.FirstNonEmpty(view.ConfirmLabel, defaultConfirmLabel)),
 		"primary",
 		stampActionValue(targetPickerPayload(view, actionPayloadTargetPicker(cardActionKindTargetPickerConfirm, view.PickerID)), daemonLifecycleID),
 		targetPickerConfirmDisabled(view),
@@ -416,7 +417,7 @@ func targetPickerGitParentDirMarkdown(view control.FeishuTargetPickerView) strin
 
 func targetPickerFieldMarkdown(label, value, placeholder string) string {
 	if strings.TrimSpace(value) == "" {
-		value = strings.TrimSpace(firstNonEmpty(placeholder, "未填写"))
+		value = strings.TrimSpace(xutil.FirstNonEmpty(placeholder, "未填写"))
 	}
 	return fmt.Sprintf("**%s**\n%s", strings.TrimSpace(label), texttags.FormatNeutralTextTag(value))
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const relayBootstrapInitializeID = "relay-bootstrap-initialize"
@@ -95,7 +96,7 @@ func (a *App) syntheticInitializeFrame() ([]byte, error) {
 			"clientInfo": map[string]any{
 				"name":    "Codex Remote Headless",
 				"title":   "Codex Remote Headless",
-				"version": firstNonEmpty(a.config.Version, "dev"),
+				"version": xutil.FirstNonEmpty(a.config.Version, "dev"),
 			},
 			"capabilities": map[string]any{
 				"experimentalApi":           true,

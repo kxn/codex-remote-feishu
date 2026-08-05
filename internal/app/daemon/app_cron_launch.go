@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type cronLaunchRequest struct {
@@ -35,7 +36,7 @@ func (a *App) newCronLaunchRequestLocked(job cronrt.JobState, now time.Time) cro
 		Job:             cronrt.NormalizeJobState(job),
 		TriggeredAt:     now,
 		InstanceID:      cronrt.InstanceIDForRun(job.RecordID, now),
-		DisplayName:     firstNonEmpty(strings.TrimSpace(job.Name), "cron"),
+		DisplayName:     xutil.FirstNonEmpty(strings.TrimSpace(job.Name), "cron"),
 		WritebackTarget: a.snapshotCronWritebackLocked(),
 		Runtime:         runtimeSnapshot,
 		RepoManager:     a.cronRepoManagerLocked(),
@@ -131,7 +132,7 @@ func (a *App) prepareCronRunLaunch(request cronLaunchRequest) (cronPreparedRun, 
 			return cronPreparedRun{}, fmt.Errorf("工作区不可用：%w", err)
 		}
 		runDirectory = workspaceRoot
-		sourceLabel = firstNonEmpty(sourceLabel, workspaceRoot)
+		sourceLabel = xutil.FirstNonEmpty(sourceLabel, workspaceRoot)
 	}
 
 	env := append([]string{}, cfg.BaseEnv...)
@@ -148,7 +149,7 @@ func (a *App) prepareCronRunLaunch(request cronLaunchRequest) (cronPreparedRun, 
 			GatewayID:       strings.TrimSpace(request.WritebackTarget.GatewayID),
 			WritebackTarget: request.WritebackTarget,
 			JobRecordID:     strings.TrimSpace(job.RecordID),
-			JobName:         firstNonEmpty(strings.TrimSpace(job.Name), request.DisplayName),
+			JobName:         xutil.FirstNonEmpty(strings.TrimSpace(job.Name), request.DisplayName),
 			SourceType:      job.SourceType,
 			SourceLabel:     sourceLabel,
 			WorkspaceKey:    strings.TrimSpace(job.WorkspaceKey),
@@ -179,7 +180,7 @@ func (a *App) recordCronImmediateResultWithTargetLocked(target cronrt.WritebackT
 		GatewayID:       target.GatewayID,
 		WritebackTarget: target,
 		JobRecordID:     strings.TrimSpace(job.RecordID),
-		JobName:         firstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID)),
+		JobName:         xutil.FirstNonEmpty(strings.TrimSpace(job.Name), strings.TrimSpace(job.RecordID)),
 		SourceType:      job.SourceType,
 		SourceLabel:     cronrt.JobDisplaySource(job),
 		WorkspaceKey:    strings.TrimSpace(job.WorkspaceKey),

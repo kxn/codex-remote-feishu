@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type instancePortSet struct {
@@ -95,7 +96,7 @@ func applyInstanceConfigDefaults(cfg *config.AppConfig, instanceID string, newCo
 	if cfg.Debug.Pprof == nil {
 		cfg.Debug.Pprof = &config.PprofSettings{}
 	}
-	cfg.Debug.Pprof.ListenHost = firstNonEmpty(cfg.Debug.Pprof.ListenHost, "127.0.0.1")
+	cfg.Debug.Pprof.ListenHost = xutil.FirstNonEmpty(cfg.Debug.Pprof.ListenHost, "127.0.0.1")
 	cfg.Debug.Pprof.ListenPort = ports.Pprof
 	applyBuildFlavorDebugDefaults(cfg)
 	return nil

@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type commandResponseTracker struct {
@@ -86,7 +87,7 @@ func (t *commandResponseTracker) resolve(requestID, rejectMessage string) (bool,
 	var problem *agentproto.ErrorInfo
 	if errMsg := strings.TrimSpace(rejectMessage); errMsg != "" {
 		value := pending.problem
-		value.Details = firstNonEmpty(errMsg, value.Details)
+		value.Details = xutil.FirstNonEmpty(errMsg, value.Details)
 		problem = &value
 	}
 	pending.ch <- problem

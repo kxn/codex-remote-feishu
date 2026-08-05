@@ -20,3 +20,28 @@ func MaxInt(a, b int) int {
 	}
 	return b
 }
+
+// BoolPtr returns a pointer to a copy of value.
+func BoolPtr(value bool) *bool {
+	return &value
+}
+
+// BoolValue dereferences a bool pointer, returning false for nil. It is the
+// inverse of BoolPtr; the two were conflated under one boolPtr name in
+// config/install (ref) and the feishu adapter (deref).
+func BoolValue(value *bool) bool {
+	if value == nil {
+		return false
+	}
+	return *value
+}
+
+// ContainsString reports whether values contains target.
+func ContainsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}

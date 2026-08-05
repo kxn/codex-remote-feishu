@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func SelectionViewStructuredProjection(
@@ -14,7 +15,7 @@ func SelectionViewStructuredProjection(
 	semantics := control.DeriveFeishuSelectionSemantics(view)
 	switch {
 	case view.Thread != nil && view.PromptKind == control.SelectionPromptUseThread && selectionViewUsesDirectThreadPicker(view.Thread.Mode):
-		return firstNonEmpty(strings.TrimSpace(semantics.Title), "选择会话"),
+		return xutil.FirstNonEmpty(strings.TrimSpace(semantics.Title), "选择会话"),
 			threadSelectionDropdownElements(view, semantics, daemonLifecycleID),
 			true
 	default:

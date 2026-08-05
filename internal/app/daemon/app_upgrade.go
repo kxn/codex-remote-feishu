@@ -15,6 +15,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/upgradecontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type debugCommandMode string
@@ -249,7 +250,7 @@ func (a *App) applyUpgradeCheckResultLocked(request upgradeCheckRequest, release
 	if request.Manual {
 		pending := stateValue.PendingUpgrade
 		if pending != nil {
-			pending.GatewayID = firstNonEmpty(strings.TrimSpace(request.GatewayID), a.service.SurfaceGatewayID(request.SurfaceSessionID))
+			pending.GatewayID = xutil.FirstNonEmpty(strings.TrimSpace(request.GatewayID), a.service.SurfaceGatewayID(request.SurfaceSessionID))
 			pending.SurfaceSessionID = request.SurfaceSessionID
 			pending.ChatID = a.service.SurfaceChatID(request.SurfaceSessionID)
 			pending.ActorUserID = a.service.SurfaceActorUserID(request.SurfaceSessionID)
@@ -429,9 +430,9 @@ func (a *App) loadUpgradeStateLocked(create bool) (install.InstallState, bool, e
 		InstalledBinary: currentBinary,
 		CurrentVersion:  a.currentBinaryVersion(),
 	})
-	stateValue.ConfigPath = firstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), configPath)
+	stateValue.ConfigPath = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), configPath)
 	stateValue.StatePath = path
-	stateValue.CurrentBinaryPath = firstNonEmpty(strings.TrimSpace(stateValue.CurrentBinaryPath), currentBinary)
+	stateValue.CurrentBinaryPath = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentBinaryPath), currentBinary)
 	return stateValue, true, nil
 }
 

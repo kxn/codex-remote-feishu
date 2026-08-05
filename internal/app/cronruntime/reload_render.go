@@ -3,6 +3,8 @@ package cronruntime
 import (
 	"fmt"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (r ReloadResult) DetailedText() string {
@@ -69,7 +71,7 @@ func ReloadTaskScheduleText(item ReloadTaskItem) string {
 		}
 		return ScheduleTypeInterval
 	default:
-		return firstNonEmpty(strings.TrimSpace(item.ScheduleType), "调度方式未识别")
+		return xutil.FirstNonEmpty(strings.TrimSpace(item.ScheduleType), "调度方式未识别")
 	}
 }
 
@@ -77,7 +79,7 @@ func ReloadTaskNextRunText(item ReloadTaskItem, label, timeZone string) string {
 	if item.NextRunAt.IsZero() {
 		return ""
 	}
-	label = firstNonEmpty(strings.TrimSpace(label), "下次")
+	label = xutil.FirstNonEmpty(strings.TrimSpace(label), "下次")
 	return fmt.Sprintf("%s %s", label, SchedulerTimeIn(item.NextRunAt, timeZone).Format("01-02 15:04"))
 }
 
@@ -89,7 +91,7 @@ func ReloadErrorNoticeLine(item ReloadError) string {
 	}
 	location := ReloadTableLabel(item.TableName)
 	if item.RowNumber > 0 {
-		location = fmt.Sprintf("%s 第 %d 行", firstNonEmpty(location, "任务配置表"), item.RowNumber)
+		location = fmt.Sprintf("%s 第 %d 行", xutil.FirstNonEmpty(location, "任务配置表"), item.RowNumber)
 	}
 	if location != "" {
 		parts = append(parts, location)

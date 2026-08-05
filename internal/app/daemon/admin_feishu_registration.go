@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"github.com/larksuite/oapi-sdk-go/v3/scene/registration"
 )
 
@@ -77,7 +78,7 @@ func (r *sdkFeishuRegistrationRun) Cancel() {
 
 func (r *sdkFeishuRegistrationRun) start(ctx context.Context, options feishuRegistrationOptions, callbacks feishuRegistrationCallbacks) {
 	result, err := registration.RegisterApp(ctx, &registration.Options{
-		Source:     firstNonEmpty(strings.TrimSpace(options.Source), "codex-remote-feishu"),
+		Source:     xutil.FirstNonEmpty(strings.TrimSpace(options.Source), "codex-remote-feishu"),
 		Addons:     options.Addons,
 		CreateOnly: options.CreateOnly,
 		AppID:      strings.TrimSpace(options.AppID),
@@ -137,7 +138,7 @@ func registrationFailureFromError(err error) feishuRegistrationFailure {
 		return feishuRegistrationFailure{
 			Status:       feishuOnboardingStatusFailed,
 			ErrorCode:    strings.TrimSpace(registerErr.Code),
-			ErrorMessage: firstNonEmpty(strings.TrimSpace(registerErr.Description), "飞书返回了未识别的扫码结果。"),
+			ErrorMessage: xutil.FirstNonEmpty(strings.TrimSpace(registerErr.Description), "飞书返回了未识别的扫码结果。"),
 		}
 	}
 	return feishuRegistrationFailure{
@@ -307,7 +308,7 @@ func (a *App) applyFeishuRegistrationResult(sessionID string, result feishuRegis
 	session.AppID = strings.TrimSpace(result.AppID)
 	session.AppSecret = strings.TrimSpace(result.AppSecret)
 	session.InstallerID = strings.TrimSpace(result.InstallerID)
-	session.DisplayName = firstNonEmpty(displayName, session.AppID)
+	session.DisplayName = xutil.FirstNonEmpty(displayName, session.AppID)
 	session.ErrorCode = ""
 	session.ErrorMessage = ""
 	cancelFeishuRegistrationRunLocked(session)

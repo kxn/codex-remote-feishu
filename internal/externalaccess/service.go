@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const defaultCookieName = "codex_remote_external_access"
@@ -387,7 +389,7 @@ func (s *Service) handleExchange(w http.ResponseWriter, r *http.Request, grantID
 		SameSite: http.SameSiteLaxMode,
 		Secure:   requestIsSecure(r),
 		Expires:  expiresAt,
-		MaxAge:   maxInt(0, int(time.Until(expiresAt).Seconds())),
+		MaxAge:   xutil.MaxInt(0, int(time.Until(expiresAt).Seconds())),
 	})
 	redirectURL := &url.URL{Path: r.URL.Path}
 	query := r.URL.Query()
@@ -798,13 +800,6 @@ func trailingSlashFor(value string) string {
 }
 
 func maxDuration(left, right time.Duration) time.Duration {
-	if left > right {
-		return left
-	}
-	return right
-}
-
-func maxInt(left, right int) int {
 	if left > right {
 		return left
 	}

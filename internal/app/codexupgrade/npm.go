@@ -11,11 +11,12 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func LookupLatestVersion(ctx context.Context, opts LatestVersionOptions) (string, error) {
-	packageName := firstNonEmpty(strings.TrimSpace(opts.PackageName), defaultPackageName)
-	registryURL := firstNonEmpty(strings.TrimSpace(opts.RegistryURL), "https://registry.npmjs.org")
+	packageName := xutil.FirstNonEmpty(strings.TrimSpace(opts.PackageName), defaultPackageName)
+	registryURL := xutil.FirstNonEmpty(strings.TrimSpace(opts.RegistryURL), "https://registry.npmjs.org")
 	client := opts.HTTPClient
 	if client == nil {
 		client = &http.Client{}
@@ -53,8 +54,8 @@ func InstallGlobal(ctx context.Context, version string, opts InstallOptions) err
 	if version == "" {
 		return fmt.Errorf("missing target version")
 	}
-	npmCommand := firstNonEmpty(strings.TrimSpace(opts.NPMCommand), defaultNPMCommand)
-	packageName := firstNonEmpty(strings.TrimSpace(opts.PackageName), defaultPackageName)
+	npmCommand := xutil.FirstNonEmpty(strings.TrimSpace(opts.NPMCommand), defaultNPMCommand)
+	packageName := xutil.FirstNonEmpty(strings.TrimSpace(opts.PackageName), defaultPackageName)
 	packageSpec := packageName + "@" + version
 	if _, err := runCommand(ctx, npmCommand, "install", "-g", packageSpec); err != nil {
 		return fmt.Errorf("npm install %s failed: %w", packageSpec, err)

@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -313,9 +314,9 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 	canContinueDegraded := onboardingAutoConfigCanContinueDegraded(plan)
 	switch plan.Status {
 	case feishu.AutoConfigStatusClean:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusComplete, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前飞书应用配置已收敛。"), false, false, []string{"retry"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusComplete, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "当前飞书应用配置已收敛。"), false, false, []string{"retry"})
 	case feishu.AutoConfigStatusDegraded:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusComplete, firstNonEmpty(strings.TrimSpace(plan.Summary), "飞书应用已可用，但仍有可降级缺失项。"), false, false, []string{"retry"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusComplete, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "飞书应用已可用，但仍有可降级缺失项。"), false, false, []string{"retry"})
 	case feishu.AutoConfigStatusApplyRequired:
 		if canContinueDegraded && onboardingAutoConfigDeferred(state.AutoConfigDecision) {
 			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里查看差异。", false, true, []string{"retry"})
@@ -325,35 +326,35 @@ func (a *App) buildOnboardingAutoConfigStage(gatewayID string, state config.Feis
 		if canContinueDegraded {
 			actions = append(actions, "defer")
 		}
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前还有飞书配置差异需要处理。"), false, canContinueDegraded, actions)
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "当前还有飞书配置差异需要处理。"), false, canContinueDegraded, actions)
 	case feishu.AutoConfigStatusAwaitingReview:
 		if !canContinueDegraded {
-			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusBlocked, firstNonEmpty(strings.TrimSpace(plan.Summary), "飞书应用变更正在等待管理员处理，当前还不能继续。"), true, false, []string{"retry"})
+			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusBlocked, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "飞书应用变更正在等待管理员处理，当前还不能继续。"), true, false, []string{"retry"})
 			break
 		}
 		if onboardingAutoConfigDeferred(state.AutoConfigDecision) {
 			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里查看审核结果。", false, true, []string{"retry"})
 			break
 		}
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前变更正在等待管理员处理。若只影响可选能力，你也可以先按降级继续。"), false, true, []string{"defer", "retry"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "当前变更正在等待管理员处理。若只影响可选能力，你也可以先按降级继续。"), false, true, []string{"defer", "retry"})
 	case feishu.AutoConfigStatusVerificationFailed:
 		actions := []string{"retry"}
 		if canContinueDegraded {
 			actions = append(actions, "defer")
 		}
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "暂时无法确认飞书配置状态，请重新检查或稍后再试。"), false, canContinueDegraded, actions)
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "暂时无法确认飞书配置状态，请重新检查或稍后再试。"), false, canContinueDegraded, actions)
 	case feishu.AutoConfigStatusBlocked:
 		if canContinueDegraded {
 			if onboardingAutoConfigDeferred(state.AutoConfigDecision) {
 				view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusDeferred, "你已选择先按降级继续，后续仍可回到这里查看差异。", false, true, []string{"retry"})
 				break
 			}
-			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前仍有飞书配置缺失，你可以先继续，后续再回来处理。"), false, true, []string{"retry", "defer"})
+			view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "当前仍有飞书配置缺失，你可以先继续，后续再回来处理。"), false, true, []string{"retry", "defer"})
 			break
 		}
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusBlocked, firstNonEmpty(strings.TrimSpace(plan.Summary), "当前飞书自动配置还不能继续。"), true, false, []string{"retry"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusBlocked, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "当前飞书自动配置还不能继续。"), true, false, []string{"retry"})
 	default:
-		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, firstNonEmpty(strings.TrimSpace(plan.Summary), "暂时无法读取飞书自动配置状态，请稍后重试。"), false, false, []string{"retry"})
+		view.onboardingWorkflowStageView = stageView(onboardingStageAutoConfig, "飞书自动配置", onboardingStageStatusPending, xutil.FirstNonEmpty(strings.TrimSpace(plan.Summary), "暂时无法读取飞书自动配置状态，请稍后重试。"), false, false, []string{"retry"})
 	}
 	view.onboardingWorkflowStageView.Summary = appendLongConnectionSummary(view.onboardingWorkflowStageView.Summary, longConnection, longConnectionErr)
 	return view
@@ -375,9 +376,9 @@ func appendLongConnectionSummary(summary string, status *feishu.LongConnectionSt
 	case status != nil && status.OnlineInstanceCount > 0:
 		return summary
 	case status != nil && status.OnlineInstanceCount == 0:
-		return firstNonEmpty(summary, "飞书应用配置已收敛。") + " 暂未确认本机长连接在线。"
+		return xutil.FirstNonEmpty(summary, "飞书应用配置已收敛。") + " 暂未确认本机长连接在线。"
 	case err != nil:
-		return firstNonEmpty(summary, "飞书应用配置已收敛。") + " 暂未确认长连接在线状态。"
+		return xutil.FirstNonEmpty(summary, "飞书应用配置已收敛。") + " 暂未确认长连接在线状态。"
 	default:
 		return summary
 	}

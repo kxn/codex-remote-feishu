@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
 )
@@ -170,7 +171,7 @@ func (g *LiveGateway) ReadDriveFileComments(ctx context.Context, req DriveFileCo
 	if resp.Data == nil {
 		return result, nil
 	}
-	result.HasMore = boolPtr(resp.Data.HasMore)
+	result.HasMore = xutil.BoolValue(resp.Data.HasMore)
 	result.NextPageToken = strings.TrimSpace(stringPtr(resp.Data.PageToken))
 
 	comments, err := g.buildDriveFileCommentEntries(ctx, fileToken, fileType, resp.Data.Items)
@@ -208,10 +209,10 @@ func (g *LiveGateway) buildDriveFileCommentEntries(ctx context.Context, fileToke
 			UserID:       strings.TrimSpace(stringPtr(item.UserId)),
 			CreateTime:   intValue(item.CreateTime),
 			UpdateTime:   intValue(item.UpdateTime),
-			IsSolved:     boolPtr(item.IsSolved),
+			IsSolved:     xutil.BoolValue(item.IsSolved),
 			SolvedTime:   intValue(item.SolvedTime),
 			SolverUserID: strings.TrimSpace(stringPtr(item.SolverUserId)),
-			IsWhole:      boolPtr(item.IsWhole),
+			IsWhole:      xutil.BoolValue(item.IsWhole),
 			Quote:        strings.TrimSpace(stringPtr(item.Quote)),
 			Replies:      replies,
 		})
@@ -221,7 +222,7 @@ func (g *LiveGateway) buildDriveFileCommentEntries(ctx context.Context, fileToke
 
 func (g *LiveGateway) collectDriveFileCommentReplies(ctx context.Context, fileToken, fileType, commentID string, item *larkdrive.FileComment) ([]DriveFileCommentReplyItem, error) {
 	replies := flattenDriveFileCommentReplies(replyListReplies(item))
-	if !boolPtr(item.HasMore) {
+	if !xutil.BoolValue(item.HasMore) {
 		return replies, nil
 	}
 	extraReplies, err := g.listDriveFileCommentReplies(ctx, fileToken, fileType, commentID, strings.TrimSpace(stringPtr(item.PageToken)))
@@ -277,7 +278,7 @@ func (g *LiveGateway) listDriveFileCommentReplies(ctx context.Context, fileToken
 			return replies, nil
 		}
 		replies = append(replies, flattenDriveFileCommentReplies(resp.Data.Items)...)
-		if !boolPtr(resp.Data.HasMore) {
+		if !xutil.BoolValue(resp.Data.HasMore) {
 			return replies, nil
 		}
 		nextPageToken = strings.TrimSpace(stringPtr(resp.Data.PageToken))

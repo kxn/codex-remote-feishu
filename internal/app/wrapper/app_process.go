@@ -13,15 +13,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
-}
-
 func parseBoolEnv(key string) bool {
 	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
 	switch value {

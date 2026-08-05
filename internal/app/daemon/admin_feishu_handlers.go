@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) handleFeishuManifest(w http.ResponseWriter, _ *http.Request) {
@@ -89,7 +90,7 @@ func (a *App) handleFeishuAppCreate(w http.ResponseWriter, r *http.Request) {
 	resolvedName := a.suggestFeishuAppName(r.Context(), trimmedString(req.Name), trimmedString(req.AppID), trimmedString(req.AppSecret), gatewayID)
 	app := config.FeishuAppConfig{
 		ID:      gatewayID,
-		Name:    firstNonEmpty(resolvedName, trimmedString(req.AppID), gatewayID),
+		Name:    xutil.FirstNonEmpty(resolvedName, trimmedString(req.AppID), gatewayID),
 		AppID:   trimmedString(req.AppID),
 		Enabled: daemonBoolPtr(enabled),
 	}
@@ -294,7 +295,7 @@ func (a *App) handleFeishuAppDelete(w http.ResponseWriter, r *http.Request) {
 	if summaryErr != nil {
 		deletedSummary = adminFeishuAppSummary{
 			ID:        gatewayID,
-			Name:      firstNonEmpty(strings.TrimSpace(updated.Feishu.Apps[index].Name), gatewayID),
+			Name:      xutil.FirstNonEmpty(strings.TrimSpace(updated.Feishu.Apps[index].Name), gatewayID),
 			AppID:     strings.TrimSpace(updated.Feishu.Apps[index].AppID),
 			HasSecret: strings.TrimSpace(updated.Feishu.Apps[index].AppSecret) != "",
 			Enabled:   updated.Feishu.Apps[index].Enabled == nil || *updated.Feishu.Apps[index].Enabled,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type Options struct {
@@ -125,9 +126,9 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	if err := applyInstanceConfigDefaults(&cfg, instanceID, !configExists); err != nil {
 		return InstallState{}, err
 	}
-	cfg.Relay.ServerURL = firstNonEmpty(opts.RelayServerURL, cfg.Relay.ServerURL)
+	cfg.Relay.ServerURL = xutil.FirstNonEmpty(opts.RelayServerURL, cfg.Relay.ServerURL)
 	cfg.Wrapper.CodexRealBinary = choosePreservedValue(codexRealBinary, cfg.Wrapper.CodexRealBinary)
-	cfg.Wrapper.NameMode = firstNonEmpty(cfg.Wrapper.NameMode, "workspace_basename")
+	cfg.Wrapper.NameMode = xutil.FirstNonEmpty(cfg.Wrapper.NameMode, "workspace_basename")
 	cfg.Wrapper.IntegrationMode = integrationsConfigValueOr(integrations, emptyIntegrationMode)
 	cfg.Feishu.UseSystemProxy = opts.UseSystemProxy
 	cfg.Feishu.Apps, err = mergePrimaryFeishuApp(cfg.Feishu.Apps, opts.FeishuGatewayID, opts.FeishuAppID, opts.FeishuAppSecret)
@@ -322,7 +323,7 @@ func mergePrimaryFeishuApp(apps []config.FeishuAppConfig, incomingGatewayID, inc
 		merged = append(merged, config.FeishuAppConfig{
 			ID:      gatewayID,
 			Name:    gatewayID,
-			Enabled: boolPtr(true),
+			Enabled: xutil.BoolPtr(true),
 		})
 		index = len(merged) - 1
 	}
@@ -333,23 +334,10 @@ func mergePrimaryFeishuApp(apps []config.FeishuAppConfig, incomingGatewayID, inc
 		app.Name = gatewayID
 	}
 	if app.Enabled == nil {
-		app.Enabled = boolPtr(true)
+		app.Enabled = xutil.BoolPtr(true)
 	}
 	app.AppID = choosePreservedValue(incomingAppID, app.AppID)
 	app.AppSecret = choosePreservedValue(incomingSecret, app.AppSecret)
 	merged[index] = app
 	return merged, nil
-}
-
-func boolPtr(value bool) *bool {
-	return &value
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return value
-		}
-	}
-	return ""
 }
