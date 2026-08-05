@@ -58,7 +58,7 @@ func newVerifiedSetupWorkflowApp(t *testing.T) *App {
 	t.Helper()
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)

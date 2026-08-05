@@ -24,7 +24,7 @@ func withRuntimeRequirementsClaudeResolver(t *testing.T, fn func(env []string) (
 
 func TestAdminRuntimeRequirementsDetectWithAbsoluteCodexPath(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, executableName("codex-remote"))
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -71,7 +71,7 @@ func TestAdminRuntimeRequirementsDetectWithAbsoluteCodexPath(t *testing.T) {
 
 func TestAdminRuntimeRequirementsWarnWhenCodexComesFromPATH(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, executableName("codex-remote"))
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -106,7 +106,7 @@ func TestAdminRuntimeRequirementsWarnWhenCodexComesFromPATH(t *testing.T) {
 
 func TestAdminRuntimeRequirementsAcceptManagedShimBundleFallback(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, testRuntimeBundleExtensionRoot(), "extensions"))
 
@@ -144,7 +144,7 @@ func TestAdminRuntimeRequirementsAcceptManagedShimBundleFallback(t *testing.T) {
 
 func TestAdminRuntimeRequirementsFailWhenCodexPointsBackToCurrentBinary(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv(config.ClaudeBinaryEnv, "")
 	withRuntimeRequirementsClaudeResolver(t, func(env []string) (string, error) {
 		_ = env
@@ -185,7 +185,7 @@ func TestAdminRuntimeRequirementsFailWhenCodexPointsBackToCurrentBinary(t *testi
 
 func TestAdminRuntimeRequirementsReadyWhenClaudeIsAvailableWithoutCodex(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
 
 	binaryPath := filepath.Join(home, executableName("codex-remote"))
@@ -217,7 +217,7 @@ func TestAdminRuntimeRequirementsReadyWhenClaudeIsAvailableWithoutCodex(t *testi
 
 func TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvailable(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
 	t.Setenv(config.ClaudeBinaryEnv, "")
 	withRuntimeRequirementsClaudeResolver(t, func(env []string) (string, error) {
@@ -251,7 +251,7 @@ func TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvailable(t *tes
 
 func TestSetupRuntimeRequirementsEndpointRemainAvailableAfterCredentialsSaved(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	pathDir := filepath.Join(home, "bin")
 	codexPath := filepath.Join(pathDir, executableName("codex"))

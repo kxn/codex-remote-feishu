@@ -280,16 +280,28 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 	if err != nil {
 		return vscodeDetectResponse{}, err
 	}
+	if latestShim.Kind == editor.ManagedShimKindTiny && !managedShimOwnedByInstall(latestShim, loaded.Path, installStatePath) {
+		// The latest entrypoint carries a managed shim, but its sidecar does
+		// not point back at this install (stale data dir, another instance, or
+		// a foreign tool). Treat it as fully absent: detect must never report
+		// the integration as enabled for a shim that disable cannot manage, and
+		// must not nag about repairing a shim that is not ours. An entrypoint
+		// with no sidecar at all keeps its raw status so an extension upgrade
+		// that moved the entrypoint still triggers the reinstall/repair path.
+		latestShim = editor.ManagedShimStatus{}
+	}
 
 	// The "recorded" entrypoint is derived from disk, not from install state:
 	// the first candidate entrypoint that actually carries a managed shim from
 	// this product. This keeps detect correct when install-state.json is
-	// missing or stale (see the disable-empty-run bug fixed in d66a2430).
+	// missing or stale (see the disable-empty-run bug fixed in d66a2430). The
+	// same ownership rule as disable is applied so a shim that does not point
+	// back at this install is never claimed as recorded.
 	recordedEntrypoint := ""
 	var recordedShim *editor.ManagedShimStatus
 	for _, entrypoint := range defaults.CandidateBundleEntrypoints {
 		status := candidateStatuses[entrypoint]
-		if status.Kind != "" && status.Exists {
+		if status.Kind != "" && status.Exists && managedShimOwnedByInstall(status, loaded.Path, installStatePath) {
 			recordedEntrypoint = entrypoint
 			recordedShim = &status
 			break

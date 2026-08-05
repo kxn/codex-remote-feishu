@@ -138,7 +138,7 @@ func TestAdminAutostartDetectHidesRawErrorDetails(t *testing.T) {
 
 func TestSetupAutostartEndpointsRemainAvailableAfterCredentialsSaved(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)

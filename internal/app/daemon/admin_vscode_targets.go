@@ -25,6 +25,21 @@ func detectManagedShimStatuses(entrypoints []string, currentBinary string) (map[
 	return statuses, nil
 }
 
+// managedShimOwnedByInstall reports whether a tiny managed shim's sidecar
+// points back at this install's config or install-state paths. Detect and
+// disable must agree on this ownership rule: a shim left behind by an older
+// data directory, another instance, or a foreign tool is not "ours", so detect
+// must not report it as enabled and disable must not silently claim to remove
+// it. Same-install shims always match because apply writes the sidecar with the
+// daemon's own config/state paths.
+func managedShimOwnedByInstall(status editor.ManagedShimStatus, configPath, statePath string) bool {
+	if status.Kind != editor.ManagedShimKindTiny || !status.SidecarValid {
+		return false
+	}
+	return samePlatformPath(status.SidecarConfigPath, configPath) ||
+		samePlatformPath(status.SidecarInstallStatePath, statePath)
+}
+
 func lookupManagedShimStatus(statuses map[string]editor.ManagedShimStatus, entrypoint, currentBinary string) (editor.ManagedShimStatus, error) {
 	entrypoint = strings.TrimSpace(entrypoint)
 	if entrypoint == "" {
@@ -76,10 +91,7 @@ func historicalManagedShimTargets(recordedEntrypoint string, statuses map[string
 		}
 		switch status.Kind {
 		case editor.ManagedShimKindTiny:
-			if !status.SidecarValid {
-				continue
-			}
-			if samePlatformPath(status.SidecarConfigPath, currentConfigPath) || samePlatformPath(status.SidecarInstallStatePath, currentStatePath) {
+			if managedShimOwnedByInstall(status, currentConfigPath, currentStatePath) {
 				targets[entrypoint] = true
 			}
 		case editor.ManagedShimKindLegacy:

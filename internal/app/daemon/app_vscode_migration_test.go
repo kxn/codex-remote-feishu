@@ -22,7 +22,7 @@ import (
 
 func TestVSCodeApplyManagedShimClearsLegacySettingsOverride(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -63,7 +63,7 @@ func TestVSCodeApplyManagedShimClearsLegacySettingsOverride(t *testing.T) {
 
 func TestDaemonVSCodeMigrateCommandRejectsNormalMode(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -106,7 +106,7 @@ func TestDaemonVSCodeMigrateCommandRejectsNormalMode(t *testing.T) {
 
 func TestHandleGatewayActionModeSwitchAvoidsExplicitMigrationPrompt(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -166,7 +166,7 @@ func TestHandleGatewayActionModeSwitchAvoidsExplicitMigrationPrompt(t *testing.T
 
 func TestDaemonVSCodeCompatibilityBlocksAutoResumeUntilMigrationApplied(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -226,7 +226,7 @@ func TestDaemonVSCodeCompatibilityBlocksAutoResumeUntilMigrationApplied(t *testi
 
 func TestDaemonVSCodeMigrateCommandOpensOwnerFlowAndAppliesManagedShim(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -342,7 +342,7 @@ func TestBuildVSCodeMigrationPageViewUsesBodyNoticeAndSealedContract(t *testing.
 
 func TestHandleGatewayActionStampedModeSwitchAutoMigratesLegacySettings(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -401,7 +401,7 @@ func TestHandleGatewayActionStampedModeSwitchAutoMigratesLegacySettings(t *testi
 
 func TestHandleGatewayActionKeepsLaterVSCodeGuidanceOnSameCard(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -479,7 +479,7 @@ func TestHandleGatewayActionKeepsLaterVSCodeGuidanceOnSameCard(t *testing.T) {
 
 func TestDaemonTickSkipsVSCodeCompatibilityDetectWithoutVSCodeSurface(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -509,7 +509,7 @@ func TestDaemonTickSkipsVSCodeCompatibilityDetectWithoutVSCodeSurface(t *testing
 
 func TestDaemonTickChecksVSCodeCompatibilityOnlyOnceForRestoredVSCodeSurface(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")

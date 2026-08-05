@@ -17,7 +17,7 @@ import (
 
 func TestDaemonTickRunsVSCodeCompatibilityDetectInBackgroundAndAvoidsDuplicateLaunch(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -74,7 +74,7 @@ func TestDaemonTickRunsVSCodeCompatibilityDetectInBackgroundAndAvoidsDuplicateLa
 
 func TestDaemonTickRetriesVSCodeCompatibilityDetectAfterBackoff(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -125,7 +125,7 @@ func TestDaemonTickRetriesVSCodeCompatibilityDetectAfterBackoff(t *testing.T) {
 
 func TestDaemonTickVSCodeFollowupGuidancePatchesAsyncCompatibilityCard(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")

@@ -31,7 +31,7 @@ func stubSetupAutoConfigPlan(t *testing.T, plan feishu.AutoConfigPlan) {
 
 func TestSetupOnboardingWorkflowAlwaysSerializesAppsArray(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)
@@ -65,7 +65,7 @@ func TestSetupOnboardingWorkflowAlwaysSerializesAppsArray(t *testing.T) {
 
 func TestSetupSessionCanUseFeishuAndVSCodeSetupAPIsAfterCredentialsSaved(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)
@@ -120,7 +120,7 @@ func TestSetupSessionCanUseFeishuAndVSCodeSetupAPIsAfterCredentialsSaved(t *test
 
 func TestSetupCompleteRevokesRemoteSetupSession(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	stubSetupAutoConfigPlan(t, feishu.AutoConfigPlan{
 		Status:  feishu.AutoConfigStatusClean,
 		Summary: "飞书应用配置已收敛。",
@@ -215,7 +215,7 @@ func TestSetupCompleteRevokesRemoteSetupSession(t *testing.T) {
 
 func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersistence(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	stubSetupAutoConfigPlan(t, feishu.AutoConfigPlan{
 		Status:  feishu.AutoConfigStatusClean,
 		Summary: "飞书应用配置已收敛。",
@@ -300,7 +300,7 @@ func TestSetupOnboardingAutoConfigDeferResetControlsMenuGate(t *testing.T) {
 	})
 
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)
@@ -409,7 +409,7 @@ func TestSetupOnboardingAutoConfigDeferResetControlsMenuGate(t *testing.T) {
 
 func TestSetupLegacyFeishuInstallTestRoutesAreRemoved(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	app, token := newRemoteSetupTestApp(t, home)
 	cookie := exchangeSetupSessionCookie(t, app, token)
@@ -542,7 +542,7 @@ func performSetupRequestRecorder(app *App, req *http.Request) *httptest.Response
 func TestSetupOnboardingMachineIntegrationCompleteAdvancesToDone(t *testing.T) {
 	stubSetupAutostartStatus(t)
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	stubSetupAutoConfigPlanner(t, func(context.Context, feishu.LiveGatewayConfig) (feishu.AutoConfigPlan, error) {
 		return feishu.AutoConfigPlan{
 			Status:  feishu.AutoConfigStatusClean,

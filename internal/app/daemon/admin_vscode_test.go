@@ -19,7 +19,7 @@ import (
 
 func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -151,7 +151,7 @@ func TestVSCodeDetectApplyAndReinstallManagedShim(t *testing.T) {
 
 func TestVSCodeDisableUninstallsManagedShim(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -210,7 +210,7 @@ func TestVSCodeDisableUninstallsManagedShim(t *testing.T) {
 
 func TestVSCodeDisableWithoutInstallStateUninstallsManagedShim(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -265,7 +265,7 @@ func TestVSCodeDisableWithoutInstallStateUninstallsManagedShim(t *testing.T) {
 
 func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote.exe")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -355,7 +355,7 @@ func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
 
 func TestVSCodeApplyEditorSettingsRejected(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
@@ -369,7 +369,7 @@ func TestVSCodeApplyEditorSettingsRejected(t *testing.T) {
 
 func TestVSCodeDetectRecommendsManagedShimOutsideSSH(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
@@ -390,7 +390,7 @@ func TestVSCodeDetectRecommendsManagedShimOutsideSSH(t *testing.T) {
 
 func TestVSCodeApplyAllAliasRejected(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
@@ -408,7 +408,7 @@ func TestVSCodeApplyAllAliasRejected(t *testing.T) {
 
 func TestVSCodeDetectSupportsJSONCSettings(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 
@@ -449,7 +449,7 @@ func TestVSCodeDetectSupportsJSONCSettings(t *testing.T) {
 
 func TestVSCodeDetectAndReinstallMigrateRecordedHistoricalManagedShim(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -516,8 +516,7 @@ func TestVSCodeDetectAndReinstallMigrateRecordedHistoricalManagedShim(t *testing
 
 func TestVSCodeDetectWithoutInstallStateDerivesRecordedFromDisk(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
@@ -558,10 +557,83 @@ func TestVSCodeDetectWithoutInstallStateDerivesRecordedFromDisk(t *testing.T) {
 	}
 }
 
-func TestVSCodeDetectIgnoresStaleInstallState(t *testing.T) {
+func TestVSCodeDetectDoesNotClaimForeignShimAsEnabled(t *testing.T) {
 	home := t.TempDir()
+	setTestHome(t, home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+
+	binaryPath := filepath.Join(home, "bin", "codex-remote")
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, entrypoint, "orig")
+
+	app, _, _ := newVSCodeAdminTestApp(t, home, binaryPath, true)
+
+	// Simulate the reported Windows bug: a managed shim is on disk, but its
+	// sidecar points at a DIFFERENT install (stale data dir from an old
+	// version, another instance, or leftover test state), and install-state.json
+	// is missing so nothing records the entrypoint. Detect must not claim the
+	// integration is enabled for a shim that disable cannot manage.
+	if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+		EntrypointPath:   entrypoint,
+		InstallStatePath: filepath.Join(home, "stale", "install-state.json"),
+		ConfigPath:       filepath.Join(home, "stale", "config.json"),
+		InstanceID:       "stable",
+	}); err != nil {
+		t.Fatalf("PatchBundleEntrypoint: %v", err)
+	}
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var detect vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detect); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if detect.RecordedBundleEntrypoint != "" {
+		t.Fatalf("recorded bundle entrypoint = %q, want empty (foreign shim is not this install's)", detect.RecordedBundleEntrypoint)
+	}
+	if detect.RecordedShim != nil {
+		t.Fatalf("recorded shim = %#v, want nil for foreign shim", detect.RecordedShim)
+	}
+	if detect.LatestShim.Kind != "" || detect.LatestShim.Installed || detect.LatestShim.SidecarValid {
+		t.Fatalf("expected foreign shim not to look like this install's managed shim, got %#v", detect.LatestShim)
+	}
+	if workflowVSCodeReady(detect) {
+		t.Fatalf("expected workflow to report vscode not ready for foreign shim, got %#v", detect)
+	}
+
+	// Disable must stay consistent with detect: it reports success without
+	// touching a shim that was never claimed as this install's.
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/disable", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("disable status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	if _, err := os.Stat(editor.ManagedShimSidecarPath(entrypoint)); err != nil {
+		t.Fatalf("expected foreign sidecar untouched by disable, stat err=%v", err)
+	}
+	if _, err := os.Stat(editor.ManagedShimRealBinaryPath(entrypoint)); err != nil {
+		t.Fatalf("expected foreign real binary untouched by disable, stat err=%v", err)
+	}
+}
+
+// setTestHome isolates the user home for tests on every platform. Go's
+// os.UserHomeDir reads %USERPROFILE% on Windows (not $HOME), so tests that only
+// set HOME silently ran against the real user home on Windows: vscode apply /
+// migration flows would discover the real ~/.vscode/extensions and patch the
+// real extension bundle with a test sidecar. This helper makes both variables
+// point at the throwaway dir.
+func setTestHome(t *testing.T, home string) {
+	t.Helper()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+}
+
+func TestVSCodeDetectIgnoresStaleInstallState(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
 	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
 
 	binaryPath := filepath.Join(home, "bin", "codex-remote")
