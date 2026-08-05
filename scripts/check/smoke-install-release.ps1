@@ -256,10 +256,17 @@ function Invoke-BootstrapState([string]$AdminUrl) {
 
 function Stop-CodexRemoteProcesses([string]$ExecutableRoot) {
   $escapedRoot = [Regex]::Escape($ExecutableRoot)
+  $stopped = @()
   Get-CimInstance Win32_Process -Filter "Name = 'codex-remote.exe'" | ForEach-Object {
     if ($_.ExecutablePath -and $_.ExecutablePath -match "^${escapedRoot}") {
       Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+      $stopped += $_.ProcessId
     }
+  }
+  # Termination is async on Windows; wait for handles to be released so the
+  # cleanup Remove-Item below does not hit an in-use log file.
+  foreach ($procId in $stopped) {
+    Wait-Process -Id $procId -Timeout 10 -ErrorAction SilentlyContinue
   }
 }
 
@@ -543,6 +550,17 @@ try {
   }
   Stop-CodexRemoteProcesses $localAppData
   if (Test-Path -LiteralPath $workDir) {
-    Remove-Item -LiteralPath $workDir -Force -Recurse
+    $removed = $false
+    for ($attempt = 0; $attempt -lt 5 -and -not $removed; $attempt++) {
+      try {
+        Remove-Item -LiteralPath $workDir -Force -Recurse -ErrorAction Stop
+        $removed = $true
+      } catch {
+        Start-Sleep -Seconds 1
+      }
+    }
+    if (-not $removed) {
+      throw "failed to remove smoke work dir: $workDir"
+    }
   }
 }
