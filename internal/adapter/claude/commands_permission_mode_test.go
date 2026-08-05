@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestTranslatePromptSendUsesClaudePermissionModeMapping(t *testing.T) {
@@ -157,7 +158,7 @@ func TestClaudePermissionControlResponseRefreshesObservedConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TranslateCommand: %v", err)
 	}
-	requestID := lookupStringFromAny(decodeFrame(t, payloads[0])["request_id"])
+	requestID := xutil.LookupStringFromAny(decodeFrame(t, payloads[0])["request_id"])
 
 	response := observeClaude(t, tr, map[string]any{
 		"type": "control_response",
@@ -205,7 +206,7 @@ func TestClaudeAbortCommandClearsPendingTurnAndControlReply(t *testing.T) {
 		t.Fatalf("expected staged pending turn + control reply, turns=%#v replies=%#v", tr.pendingTurns, tr.pendingControlReplies)
 	}
 
-	failedRequestID := lookupStringFromAny(decodeFrame(t, payloads[0])["request_id"])
+	failedRequestID := xutil.LookupStringFromAny(decodeFrame(t, payloads[0])["request_id"])
 	tr.AbortCommand("cmd-failed")
 
 	if len(tr.pendingTurns) != 0 || len(tr.pendingControlReplies) != 0 {

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -55,8 +57,8 @@ func (t *Translator) planConfirmationUpdatedPermissions(request *pendingRequest,
 
 func parsePlanPermissionSelection(raw map[string]any) (planPermissionSelection, error) {
 	selection := planPermissionSelection{
-		Scope:       strings.TrimSpace(lookupStringFromAny(raw["scope"])),
-		GrantLevel:  strings.TrimSpace(lookupStringFromAny(raw["grant_level"])),
+		Scope:       strings.TrimSpace(xutil.LookupStringFromAny(raw["scope"])),
+		GrantLevel:  strings.TrimSpace(xutil.LookupStringFromAny(raw["grant_level"])),
 		Directories: normalizedPlanPermissionValues(lookupStringList(raw["directories"])),
 		RuleClasses: normalizedPlanPermissionValues(lookupStringList(raw["rule_classes"])),
 	}
@@ -280,7 +282,7 @@ func dedupePlanPermissionRules(rules []any) []any {
 		if len(rule) == 0 {
 			continue
 		}
-		key := lookupStringFromAny(rule["toolName"]) + "\x00" + lookupStringFromAny(rule["ruleContent"])
+		key := xutil.LookupStringFromAny(rule["toolName"]) + "\x00" + xutil.LookupStringFromAny(rule["ruleContent"])
 		if seen[key] {
 			continue
 		}

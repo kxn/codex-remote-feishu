@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -190,15 +192,15 @@ func buildSessionThreadSnapshot(meta claudeSessionMeta, runtime RuntimeStateSnap
 			loaded = current.IsLoaded()
 			state = string(current.LegacyState())
 		}
-		model = firstNonEmptyString(strings.TrimSpace(runtime.Model), model)
+		model = xutil.FirstNonEmpty(strings.TrimSpace(runtime.Model), model)
 		if current := agentproto.CloneObservedPermissionState(runtime.ObservedPermission); current != nil {
 			observedPermission = current
 		}
-		accessMode = firstNonEmptyString(
-			agentproto.NormalizeAccessMode(firstNonEmptyString(observedPermissionProjectedAccessMode(observedPermission), strings.TrimSpace(runtime.AccessMode))),
+		accessMode = xutil.FirstNonEmpty(
+			agentproto.NormalizeAccessMode(xutil.FirstNonEmpty(observedPermissionProjectedAccessMode(observedPermission), strings.TrimSpace(runtime.AccessMode))),
 			accessMode,
 		)
-		planMode = firstNonEmptyString(strings.TrimSpace(observedPermissionProjectedPlanMode(observedPermission)), strings.TrimSpace(runtime.PlanMode), planMode)
+		planMode = xutil.FirstNonEmpty(strings.TrimSpace(observedPermissionProjectedPlanMode(observedPermission)), strings.TrimSpace(runtime.PlanMode), planMode)
 	}
 	return agentproto.ThreadSnapshotRecord{
 		ThreadID:           threadID,
@@ -257,7 +259,7 @@ func sessionProjectDirs(workspaceRoot string, includeAll bool) ([]string, bool, 
 func claudeProjectsDir() string {
 	configDir := strings.TrimSpace(os.Getenv("CLAUDE_CONFIG_DIR"))
 	if configDir == "" {
-		home := claudeHomeDir()
+		home := claudeutil.ClaudeHomeDir()
 		if home == "" {
 			return ""
 		}
@@ -324,12 +326,12 @@ func readSessionListMeta(filePath string) (claudeSessionMeta, error) {
 		populateSessionHeadMeta(&meta, entry)
 		return sessionHeadMetaComplete(meta)
 	})
-	meta.WorkspaceKey = firstNonEmptyString(meta.WorkspaceKey, meta.CWD)
+	meta.WorkspaceKey = xutil.FirstNonEmpty(meta.WorkspaceKey, meta.CWD)
 	meta.ObservedPermission = CompileObservedPermissionStateFromClaudeNative(meta.NativePermissionMode)
 	selection := claudePermissionSelectionFromObservedPermission(meta.ObservedPermission)
 	meta.AccessMode = selection.AccessMode
 	meta.PlanMode = selection.PlanMode
-	meta.Title = normalizeSessionSnippet(firstNonEmptyString(meta.Title, meta.Preview, meta.ID), claudeSessionTitleLimit)
+	meta.Title = normalizeSessionSnippet(xutil.FirstNonEmpty(meta.Title, meta.Preview, meta.ID), claudeSessionTitleLimit)
 	meta.Preview = normalizeSessionSnippet(meta.Preview, claudeSessionPreviewLimit)
 	if meta.Preview == meta.Title {
 		meta.Preview = ""
@@ -356,7 +358,7 @@ func populateSessionTailMeta(meta *claudeSessionMeta, entry map[string]any) {
 		return
 	}
 	if meta.CWD == "" {
-		meta.CWD = strings.TrimSpace(lookupStringFromAny(entry["cwd"]))
+		meta.CWD = strings.TrimSpace(xutil.LookupStringFromAny(entry["cwd"]))
 	}
 	if meta.Title == "" {
 		meta.Title = sessionEntryTitle(entry)
@@ -365,10 +367,10 @@ func populateSessionTailMeta(meta *claudeSessionMeta, entry map[string]any) {
 		meta.Preview = sessionEntryPreview(entry)
 	}
 	if meta.Model == "" {
-		meta.Model = strings.TrimSpace(lookupStringFromAny(entry["model"]))
+		meta.Model = strings.TrimSpace(xutil.LookupStringFromAny(entry["model"]))
 	}
 	if meta.NativePermissionMode == "" {
-		meta.NativePermissionMode = strings.TrimSpace(lookupStringFromAny(entry["permissionMode"]))
+		meta.NativePermissionMode = strings.TrimSpace(xutil.LookupStringFromAny(entry["permissionMode"]))
 	}
 }
 
@@ -377,7 +379,7 @@ func populateSessionHeadMeta(meta *claudeSessionMeta, entry map[string]any) {
 		return
 	}
 	if meta.WorkspaceKey == "" {
-		meta.WorkspaceKey = strings.TrimSpace(lookupStringFromAny(entry["cwd"]))
+		meta.WorkspaceKey = strings.TrimSpace(xutil.LookupStringFromAny(entry["cwd"]))
 	}
 	if meta.Title == "" {
 		meta.Title = sessionEntryTitle(entry)
@@ -386,10 +388,10 @@ func populateSessionHeadMeta(meta *claudeSessionMeta, entry map[string]any) {
 		meta.Preview = sessionEntryPreview(entry)
 	}
 	if meta.Model == "" {
-		meta.Model = strings.TrimSpace(lookupStringFromAny(entry["model"]))
+		meta.Model = strings.TrimSpace(xutil.LookupStringFromAny(entry["model"]))
 	}
 	if meta.NativePermissionMode == "" {
-		meta.NativePermissionMode = strings.TrimSpace(lookupStringFromAny(entry["permissionMode"]))
+		meta.NativePermissionMode = strings.TrimSpace(xutil.LookupStringFromAny(entry["permissionMode"]))
 	}
 }
 
@@ -475,24 +477,24 @@ func parseSessionLine(line string) (map[string]any, bool) {
 }
 
 func sessionEntryTitle(entry map[string]any) string {
-	switch strings.TrimSpace(lookupStringFromAny(entry["type"])) {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(entry["type"])) {
 	case "custom-title":
-		return normalizeSessionSnippet(lookupStringFromAny(entry["customTitle"]), claudeSessionTitleLimit)
+		return normalizeSessionSnippet(xutil.LookupStringFromAny(entry["customTitle"]), claudeSessionTitleLimit)
 	case "session-title":
-		return normalizeSessionSnippet(firstNonEmptyString(lookupStringFromAny(entry["title"]), lookupStringFromAny(entry["name"])), claudeSessionTitleLimit)
+		return normalizeSessionSnippet(xutil.FirstNonEmpty(xutil.LookupStringFromAny(entry["title"]), xutil.LookupStringFromAny(entry["name"])), claudeSessionTitleLimit)
 	case "ai-title":
-		return normalizeSessionSnippet(lookupStringFromAny(entry["aiTitle"]), claudeSessionTitleLimit)
+		return normalizeSessionSnippet(xutil.LookupStringFromAny(entry["aiTitle"]), claudeSessionTitleLimit)
 	case "summary":
-		return normalizeSessionSnippet(lookupStringFromAny(entry["summary"]), claudeSessionTitleLimit)
+		return normalizeSessionSnippet(xutil.LookupStringFromAny(entry["summary"]), claudeSessionTitleLimit)
 	default:
 		return ""
 	}
 }
 
 func sessionEntryPreview(entry map[string]any) string {
-	switch strings.TrimSpace(lookupStringFromAny(entry["type"])) {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(entry["type"])) {
 	case "last-prompt":
-		return normalizeSessionSnippet(lookupStringFromAny(entry["lastPrompt"]), claudeSessionPreviewLimit)
+		return normalizeSessionSnippet(xutil.LookupStringFromAny(entry["lastPrompt"]), claudeSessionPreviewLimit)
 	case "user":
 		message, _ := entry["message"].(map[string]any)
 		return normalizeSessionSnippet(sessionMessageText(message["content"]), claudeSessionPreviewLimit)
@@ -509,10 +511,10 @@ func sessionMessageText(content any) string {
 		parts := make([]string, 0, len(value))
 		for _, blockValue := range value {
 			block, _ := blockValue.(map[string]any)
-			if strings.TrimSpace(lookupStringFromAny(block["type"])) != "text" {
+			if strings.TrimSpace(xutil.LookupStringFromAny(block["type"])) != "text" {
 				continue
 			}
-			text := strings.TrimSpace(lookupStringFromAny(block["text"]))
+			text := strings.TrimSpace(xutil.LookupStringFromAny(block["text"]))
 			if text == "" {
 				continue
 			}

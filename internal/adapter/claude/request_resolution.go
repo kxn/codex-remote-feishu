@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func buildAgentQuestions(questions []pendingQuestion) []agentproto.RequestQuestion {
@@ -26,7 +27,7 @@ func requestResultMetadata(request *pendingRequest, message, block map[string]an
 	switch rawToolResult := message["tool_use_result"].(type) {
 	case map[string]any:
 		for key, value := range rawToolResult {
-			metadata[key] = cloneJSONValue(value)
+			metadata[key] = xutil.CloneJSONValue(value)
 		}
 	case string:
 		if strings.TrimSpace(rawToolResult) != "" {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestClaudeTranslatorPlanConfirmationScopedSessionSelectionBuildsSessionRules(t *testing.T) {
@@ -66,7 +67,7 @@ func TestClaudeTranslatorPlanConfirmationScopedSessionSelectionBuildsSessionRule
 		t.Fatalf("translate plan scoped permissions: %v", err)
 	}
 	body := testMapValue(testMapValue(decodeFrame(t, payloads[0])["response"])["response"])
-	if lookupStringFromAny(body["behavior"]) != "allow" {
+	if xutil.LookupStringFromAny(body["behavior"]) != "allow" {
 		t.Fatalf("unexpected response body: %#v", body)
 	}
 	updates := testSliceMapValue(body["updatedPermissions"])
@@ -75,7 +76,7 @@ func TestClaudeTranslatorPlanConfirmationScopedSessionSelectionBuildsSessionRule
 	}
 
 	rulesUpdate := permissionUpdateByType(t, updates, "addRules")
-	if lookupStringFromAny(rulesUpdate["destination"]) != "session" || lookupStringFromAny(rulesUpdate["behavior"]) != "allow" {
+	if xutil.LookupStringFromAny(rulesUpdate["destination"]) != "session" || xutil.LookupStringFromAny(rulesUpdate["behavior"]) != "allow" {
 		t.Fatalf("unexpected addRules update: %#v", rulesUpdate)
 	}
 	assertPermissionRule(t, testSliceMapValue(rulesUpdate["rules"]), "Edit", "./internal/adapter/claude/**")
@@ -84,7 +85,7 @@ func TestClaudeTranslatorPlanConfirmationScopedSessionSelectionBuildsSessionRule
 	assertPermissionRule(t, testSliceMapValue(rulesUpdate["rules"]), "Write", "//data/dl/shared-specs/**")
 
 	dirsUpdate := permissionUpdateByType(t, updates, "addDirectories")
-	if lookupStringFromAny(dirsUpdate["destination"]) != "session" {
+	if xutil.LookupStringFromAny(dirsUpdate["destination"]) != "session" {
 		t.Fatalf("unexpected addDirectories update: %#v", dirsUpdate)
 	}
 	if got := testStringList(dirsUpdate["directories"]); len(got) != 1 || got[0] != "/data/dl/shared-specs" {
@@ -175,7 +176,7 @@ func TestClaudeTranslatorPlanConfirmationAggressiveWorkspaceSelectionUsesSession
 		t.Fatalf("expected single setMode update, got %#v", updates)
 	}
 	update := permissionUpdateByType(t, updates, "setMode")
-	if lookupStringFromAny(update["mode"]) != "acceptEdits" || lookupStringFromAny(update["destination"]) != "session" {
+	if xutil.LookupStringFromAny(update["mode"]) != "acceptEdits" || xutil.LookupStringFromAny(update["destination"]) != "session" {
 		t.Fatalf("unexpected acceptEdits update: %#v", update)
 	}
 }
@@ -247,7 +248,7 @@ func TestClaudeTranslatorPlanConfirmationNarrowScopeAvoidsAcceptEditsAndExplains
 		t.Fatalf("expected narrow directory selection to avoid acceptEdits, got %#v", updates)
 	}
 	updatedInput := testMapValue(body["updatedInput"])
-	feedback := lookupStringFromAny(updatedInput["feedback"])
+	feedback := xutil.LookupStringFromAny(updatedInput["feedback"])
 	if !strings.Contains(feedback, "still require approval") {
 		t.Fatalf("expected fallback feedback note, got %q", feedback)
 	}
@@ -265,7 +266,7 @@ func TestPlanPermissionPathIsAbsoluteTreatsLeadingSlashAsAbsolute(t *testing.T) 
 func permissionUpdateByType(t *testing.T, updates []map[string]any, want string) map[string]any {
 	t.Helper()
 	for _, update := range updates {
-		if lookupStringFromAny(update["type"]) == want {
+		if xutil.LookupStringFromAny(update["type"]) == want {
 			return update
 		}
 	}
@@ -275,7 +276,7 @@ func permissionUpdateByType(t *testing.T, updates []map[string]any, want string)
 
 func hasPermissionUpdateType(updates []map[string]any, want string) bool {
 	for _, update := range updates {
-		if lookupStringFromAny(update["type"]) == want {
+		if xutil.LookupStringFromAny(update["type"]) == want {
 			return true
 		}
 	}
@@ -285,7 +286,7 @@ func hasPermissionUpdateType(updates []map[string]any, want string) bool {
 func assertPermissionRule(t *testing.T, rules []map[string]any, toolName, ruleContent string) {
 	t.Helper()
 	for _, rule := range rules {
-		if lookupStringFromAny(rule["toolName"]) == toolName && lookupStringFromAny(rule["ruleContent"]) == ruleContent {
+		if xutil.LookupStringFromAny(rule["toolName"]) == toolName && xutil.LookupStringFromAny(rule["ruleContent"]) == ruleContent {
 			return
 		}
 	}

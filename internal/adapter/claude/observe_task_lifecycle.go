@@ -3,7 +3,9 @@ package claude
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) currentParentToolUseID() string {
@@ -14,7 +16,7 @@ func (t *Translator) currentParentToolUseID() string {
 }
 
 func (t *Translator) syncObservedMessageParent(message map[string]any) {
-	parentToolUseID := strings.TrimSpace(lookupStringFromAny(message["parent_tool_use_id"]))
+	parentToolUseID := strings.TrimSpace(xutil.LookupStringFromAny(message["parent_tool_use_id"]))
 	if t.currentMessage == nil {
 		t.currentMessage = &messageState{
 			ParentToolUseID: parentToolUseID,
@@ -47,14 +49,14 @@ func (t *Translator) hiddenClaudeToolLifecycleEvent(tool *toolState, itemKind st
 		if parent == nil {
 			return agentproto.Event{}, false
 		}
-		delta := strings.TrimSpace(firstNonEmptyString(
+		delta := strings.TrimSpace(xutil.FirstNonEmpty(
 			stringifyTextContent(metadata["text"]),
 			stringifyTextContent(metadata["toolUseResult"]),
 		))
 		if delta == "" {
-			delta = strings.TrimSpace(firstNonEmptyString(
-				lookupStringFromAny(metadata["text"]),
-				lookupStringFromAny(metadata["toolUseResult"]),
+			delta = strings.TrimSpace(xutil.FirstNonEmpty(
+				xutil.LookupStringFromAny(metadata["text"]),
+				xutil.LookupStringFromAny(metadata["toolUseResult"]),
 			))
 		}
 		if delta == "" {
@@ -68,22 +70,22 @@ func (t *Translator) hiddenClaudeToolLifecycleEvent(tool *toolState, itemKind st
 			ItemID:    parent.ItemID,
 			ItemKind:  "delegated_task",
 			Delta:     delta,
-			Metadata:  claudeToolMetadata(parent.Name, parent.Input),
+			Metadata:  claudeutil.ClaudeToolMetadata(parent.Name, parent.Input),
 		}, true
 	case "TaskStop":
 		parent := t.delegatedTaskParent(tool)
 		if parent == nil {
 			return agentproto.Event{}, false
 		}
-		eventMetadata := claudeToolMetadata(parent.Name, parent.Input)
-		if text := strings.TrimSpace(lookupStringFromAny(metadata["text"])); text != "" {
+		eventMetadata := claudeutil.ClaudeToolMetadata(parent.Name, parent.Input)
+		if text := strings.TrimSpace(xutil.LookupStringFromAny(metadata["text"])); text != "" {
 			eventMetadata["text"] = text
 		}
-		if errorMessage := strings.TrimSpace(firstNonEmptyString(
-			lookupStringFromAny(metadata["error"]),
-			lookupStringFromAny(metadata["errorMessage"]),
-			lookupStringFromAny(metadata["message"]),
-			lookupStringFromAny(metadata["text"]),
+		if errorMessage := strings.TrimSpace(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(metadata["error"]),
+			xutil.LookupStringFromAny(metadata["errorMessage"]),
+			xutil.LookupStringFromAny(metadata["message"]),
+			xutil.LookupStringFromAny(metadata["text"]),
 		)); errorMessage != "" && isError {
 			eventMetadata["errorMessage"] = errorMessage
 		}
@@ -138,7 +140,7 @@ func (t *Translator) requestSourceContextLabel(toolUseID string) string {
 			return ""
 		}
 		if strings.TrimSpace(tool.Name) == "Task" {
-			return buildClaudeDelegatedTaskSourceContextLabel(claudeToolMetadata(tool.Name, tool.Input))
+			return buildClaudeDelegatedTaskSourceContextLabel(claudeutil.ClaudeToolMetadata(tool.Name, tool.Input))
 		}
 		currentID = strings.TrimSpace(tool.ParentToolUseID)
 	}

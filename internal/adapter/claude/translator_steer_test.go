@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestClaudeTranslatorTurnSteerAcceptsImageOnlyWithinActiveTurn(t *testing.T) {
@@ -40,7 +41,7 @@ func TestClaudeTranslatorTurnSteerAcceptsImageOnlyWithinActiveTurn(t *testing.T)
 		t.Fatalf("expected one image block in steer payload, got %#v", message["content"])
 	}
 	source := testMapValue(content[0]["source"])
-	if source["type"] != "base64" || lookupStringFromAny(source["media_type"]) != "image/png" || lookupStringFromAny(source["data"]) != base64.StdEncoding.EncodeToString([]byte("steer-image")) {
+	if source["type"] != "base64" || xutil.LookupStringFromAny(source["media_type"]) != "image/png" || xutil.LookupStringFromAny(source["data"]) != base64.StdEncoding.EncodeToString([]byte("steer-image")) {
 		t.Fatalf("unexpected image block source: %#v", source)
 	}
 	if tr.activeTurn == nil || tr.activeTurn.ThreadID != threadID || tr.activeTurn.TurnID != turnID {
@@ -82,17 +83,17 @@ func TestClaudeTranslatorTurnSteerPreservesMixedInputOrderWithinActiveTurn(t *te
 	if len(content) != 3 {
 		t.Fatalf("expected text + image + text blocks, got %#v", message["content"])
 	}
-	if content[0]["type"] != "text" || lookupStringFromAny(content[0]["text"]) != "附带参考文件：/tmp/notes.txt" {
+	if content[0]["type"] != "text" || xutil.LookupStringFromAny(content[0]["text"]) != "附带参考文件：/tmp/notes.txt" {
 		t.Fatalf("unexpected leading text block: %#v", content[0])
 	}
 	if content[1]["type"] != "image" {
 		t.Fatalf("unexpected image block: %#v", content[1])
 	}
 	source := testMapValue(content[1]["source"])
-	if source["type"] != "base64" || lookupStringFromAny(source["media_type"]) != "image/png" || lookupStringFromAny(source["data"]) != base64.StdEncoding.EncodeToString([]byte("steer-mixed-image")) {
+	if source["type"] != "base64" || xutil.LookupStringFromAny(source["media_type"]) != "image/png" || xutil.LookupStringFromAny(source["data"]) != base64.StdEncoding.EncodeToString([]byte("steer-mixed-image")) {
 		t.Fatalf("unexpected image block source: %#v", source)
 	}
-	if content[2]["type"] != "text" || lookupStringFromAny(content[2]["text"]) != "请结合图片继续处理" {
+	if content[2]["type"] != "text" || xutil.LookupStringFromAny(content[2]["text"]) != "请结合图片继续处理" {
 		t.Fatalf("unexpected trailing text block: %#v", content[2])
 	}
 }

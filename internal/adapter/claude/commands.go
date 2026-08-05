@@ -7,13 +7,14 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func commandInitiator(command agentproto.Command) agentproto.Initiator {
 	if command.Target.InternalHelper {
 		return agentproto.Initiator{Kind: agentproto.InitiatorInternalHelper}
 	}
-	surfaceID := strings.TrimSpace(firstNonEmptyString(command.Origin.Surface, command.Origin.ChatID))
+	surfaceID := strings.TrimSpace(xutil.FirstNonEmpty(command.Origin.Surface, command.Origin.ChatID))
 	if surfaceID == "" {
 		return agentproto.Initiator{Kind: agentproto.InitiatorUnknown}
 	}
@@ -212,7 +213,7 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) ([][]by
 	if err != nil {
 		return nil, err
 	}
-	request.Response = cloneMap(command.Request.Response)
+	request.Response = xutil.CloneMap(command.Request.Response)
 	request.Decision = t.resolveStoredRequestDecision(request, command.Request.Response)
 	if command.Request.InterruptOnDecline && request.Decision == "decline" && t.activeTurn != nil {
 		t.activeTurn.InterruptRequested = true
@@ -255,29 +256,29 @@ func (t *Translator) buildRequestResponsePayload(request *pendingRequest, respon
 		body["updatedPermissions"] = updatedPermissions
 		switch request.RequestType {
 		case agentproto.RequestTypeRequestUserInput:
-			updatedInput := cloneMap(request.Input)
+			updatedInput := xutil.CloneMap(request.Input)
 			updatedInput["answers"] = requestResponseAnswers(request, response.Response)
 			body["updatedInput"] = updatedInput
 		case agentproto.RequestTypeApproval:
-			updatedInput := cloneMap(request.Input)
+			updatedInput := xutil.CloneMap(request.Input)
 			if request.SemanticKind == control.RequestSemanticPlanConfirmation {
-				updatedInput["feedback"] = firstNonEmptyString(
-					lookupStringFromAny(response.Response["feedback"]),
+				updatedInput["feedback"] = xutil.FirstNonEmpty(
+					xutil.LookupStringFromAny(response.Response["feedback"]),
 					"Approved. Execute the plan.",
 				)
 				if strings.TrimSpace(planFeedbackSuffix) != "" {
-					updatedInput["feedback"] = strings.TrimSpace(lookupStringFromAny(updatedInput["feedback"]) + " " + strings.TrimSpace(planFeedbackSuffix))
+					updatedInput["feedback"] = strings.TrimSpace(xutil.LookupStringFromAny(updatedInput["feedback"]) + " " + strings.TrimSpace(planFeedbackSuffix))
 				}
 			}
 			body["updatedInput"] = updatedInput
 		default:
-			body["updatedInput"] = cloneMap(request.Input)
+			body["updatedInput"] = xutil.CloneMap(request.Input)
 		}
 	} else {
 		body["behavior"] = "deny"
-		body["message"] = firstNonEmptyString(
-			lookupStringFromAny(response.Response["message"]),
-			lookupStringFromAny(response.Response["reason"]),
+		body["message"] = xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(response.Response["message"]),
+			xutil.LookupStringFromAny(response.Response["reason"]),
 			"Request declined by user",
 		)
 		if interrupt {
@@ -424,22 +425,13 @@ func marshalUserPromptFrame(content any) ([]byte, error) {
 	})
 }
 
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
 func encodeMetadataMapList(values []map[string]any) []any {
 	if len(values) == 0 {
 		return nil
 	}
 	out := make([]any, 0, len(values))
 	for _, value := range values {
-		out = append(out, cloneMap(value))
+		out = append(out, xutil.CloneMap(value))
 	}
 	return out
 }
