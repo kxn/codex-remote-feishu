@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-05`
-> Summary: 刷新面向用户文档：README 与使用说明书补齐 Windows / macOS 原生安装器，并同步 WebSetup 本机集成阶段与安装部署事实。
+> Summary: 刷新面向用户文档：README 与使用说明书补齐 Windows / macOS 原生安装器、WebSetup 本机集成阶段，以及 Codex / Claude Code 双后端与独立 Profile 模型配置说明。
 
 ## 1. 适用范围
 

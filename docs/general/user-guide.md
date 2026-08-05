@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-05`
-> Summary: 更新安装方式与首次配置流程：补充 Windows / macOS 原生安装器，并同步 WebSetup 的“本机集成”阶段顺序。
+> Summary: 更新安装方式与首次配置流程，并补充模型后端说明：默认使用机器现有 Codex / Claude Code 配置，可通过独立 Profile 并行使用多套模型参数。
 
 ## 1. 这是什么
 
@@ -419,6 +419,31 @@ Windows PowerShell：
 
 如果你只是想在当前已接管的 VS Code 实例里手动挑一个会话，也可以继续使用 `/use` 或 `/useall`。
 
+### 7.3 模型配置：默认与自定义 Profile
+
+两个 headless 后端默认都直接使用机器上已经配好的环境：
+
+- `codex`：使用本机 `~/.codex` 已有的登录状态、模型和配置
+- `claude`：使用本机 `~/.claude` 已有的 Claude Code 登录状态和配置
+
+默认不需要额外配置任何模型参数，开箱就用机器现有环境。
+
+如果你希望在不影响现有配置的前提下，并行使用多套模型参数，可以在 Admin UI 中添加：
+
+- **Codex API Profile**：独立设置 base URL、API key、模型、review model、推理强度等
+- **Claude Profile**：独立设置认证方式、base URL、auth token、模型、small model、推理强度等
+
+这些 profile 保存在 codex-remote 自己的 `config.json` 里，不会写回 `~/.codex` 或 `~/.claude` 的原有配置。Claude 自定义 profile 通过临时 `--settings` overlay 注入，不改动用户自己的 Claude 配置。
+
+在飞书里查看或切换：
+
+```text
+/codexprofile
+/claudeprofile
+```
+
+bare 命令会返回可切换的 Profile 卡片；也可以直接带名字切换，例如 `/codexprofile team-proxy`、`/claudeprofile devseek`。
+
 ## 8. 日常使用技巧
 
 ### 8.1 运行过程中还能继续发消息
@@ -625,6 +650,10 @@ Windows PowerShell：
   - 切到 headless Claude 模式
 - `/mode normal`
   - 兼容旧写法，等价于 `/mode codex`
+- `/codexprofile`
+  - 查看或切换 Codex Profile；bare 命令返回可切换卡片
+- `/claudeprofile`
+  - 查看或切换 Claude Profile；bare 命令返回可切换卡片
 - `/follow`
   - 在 `vscode` 模式下重新跟随当前 VS Code 焦点
 - `/sendfile`

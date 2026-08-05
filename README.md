@@ -122,6 +122,29 @@ Windows PowerShell：
 
 daemon 不会在后台自动弹升级提示；升级只通过这条手动入口触发。
 
+## 模型后端与配置
+
+项目同时支持 **Codex** 和 **Claude Code** 两个后端：
+
+- `/mode codex`（默认）：使用机器上已有的 Codex CLI、登录状态和配置
+- `/mode claude`：使用机器上已有的 Claude Code（`claude` CLI）登录状态和配置
+
+默认不需要你做任何额外模型配置，开箱就用机器上已经配好的环境。
+
+如果你想在不影响现有配置的前提下，并行使用多套模型参数，也可以在管理页（Admin UI）中添加：
+
+- **Codex API Profile**：独立设置 base URL、API key、模型、推理强度等
+- **Claude Profile**：独立设置认证方式、base URL、模型、推理强度等
+
+这些 profile 保存在 codex-remote 自己的 `config.json` 里，不会改写 `~/.codex` 或 `~/.claude` 的原有配置，可以随时切换、并行使用。
+
+在飞书里切换：
+
+```text
+/codexprofile
+/claudeprofile
+```
+
 ## 开始使用
 
 最常用的入口：
@@ -136,6 +159,9 @@ daemon 不会在后台自动弹升级提示；升级只通过这条手动入口�
 - `/detach`：断开当前接管
 - `/sendfile`：把当前工作区里的文件发回飞书
 - `/cron`：配置当前 daemon 的定时任务
+- `/mode claude`：切换到 Claude Code 后端
+- `/codexprofile`：查看或切换 Codex Profile
+- `/claudeprofile`：查看或切换 Claude Profile
 - `/help`：查看当前可用命令
 - `/menu`：打开命令菜单首页
 
