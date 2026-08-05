@@ -41,14 +41,6 @@ func queuedItemMatchesTurn(item *state.QueueItemRecord, threadID string) bool {
 	return threadID == ""
 }
 
-func queuedItemSourceThreadID(item *state.QueueItemRecord) string {
-	return queuedItemPromptDispatchPlan(item).EffectiveSourceThreadID()
-}
-
-func queuedItemSurfaceBindingPolicy(item *state.QueueItemRecord) agentproto.SurfaceBindingPolicy {
-	return queuedItemPromptDispatchPlan(item).SurfaceBindingPolicy
-}
-
 func queuedItemExecutionThreadID(item *state.QueueItemRecord) string {
 	return queuedItemPromptDispatchPlan(item).ExecutionThreadID
 }

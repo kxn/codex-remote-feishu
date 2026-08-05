@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -33,20 +32,6 @@ func (s *Service) surfaceThreadPickRouteMode(surface *state.SurfaceConsoleRecord
 
 func normalizeWorkspaceClaimKey(value string) string {
 	return state.ResolveWorkspaceClaimKey(value)
-}
-
-func looksLikeWorkspacePath(value string) bool {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return false
-	}
-	if filepath.IsAbs(value) {
-		return true
-	}
-	if state.IsWindowsVolumePath(value) {
-		return true
-	}
-	return strings.Contains(value, "/") || strings.Contains(value, `\`)
 }
 
 func instanceWorkspaceClaimKey(inst *state.InstanceRecord) string {
@@ -310,31 +295,6 @@ func (s *Service) workspaceClaimOwnerForSurface(surface *state.SurfaceConsoleRec
 	}
 }
 
-func (s *Service) workspaceClaimSurfaceRaw(workspaceKey string) *state.SurfaceConsoleRecord {
-	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
-	if workspaceKey == "" {
-		return nil
-	}
-	if surface := s.workspaceClaimSurfaceFromRecordRaw(workspaceKey); surface != nil {
-		return surface
-	}
-	var owner *state.SurfaceConsoleRecord
-	for _, surface := range s.root.Surfaces {
-		if surface == nil || !surfaceUsesWorkspaceClaimsRaw(surface) {
-			continue
-		}
-		if s.surfaceCurrentWorkspaceKeyRaw(surface) != workspaceKey {
-			continue
-		}
-		if owner == nil ||
-			surface.LastInboundAt.After(owner.LastInboundAt) ||
-			(surface.LastInboundAt.Equal(owner.LastInboundAt) && surface.SurfaceSessionID < owner.SurfaceSessionID) {
-			owner = surface
-		}
-	}
-	return owner
-}
-
 func (s *Service) workspaceClaimSurface(workspaceKey string) *state.SurfaceConsoleRecord {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if workspaceKey == "" {
@@ -363,18 +323,6 @@ func (s *Service) workspaceClaimSurface(workspaceKey string) *state.SurfaceConso
 	return owner
 }
 
-func (s *Service) workspaceClaimSurfaceFromRecordRaw(workspaceKey string) *state.SurfaceConsoleRecord {
-	claim := s.workspaceClaims[workspaceKey]
-	if claim == nil {
-		return nil
-	}
-	if surface := s.workspaceClaimDisplaySurfaceRaw(claim); surface != nil {
-		return surface
-	}
-	delete(s.workspaceClaims, workspaceKey)
-	return nil
-}
-
 func (s *Service) workspaceClaimSurfaceFromRecord(workspaceKey string) *state.SurfaceConsoleRecord {
 	claim := s.workspaceClaims[workspaceKey]
 	if claim == nil {
@@ -385,21 +333,6 @@ func (s *Service) workspaceClaimSurfaceFromRecord(workspaceKey string) *state.Su
 	}
 	delete(s.workspaceClaims, workspaceKey)
 	return nil
-}
-
-func (s *Service) workspaceClaimDisplaySurfaceRaw(claim *workspaceClaimRecord) *state.SurfaceConsoleRecord {
-	if claim == nil {
-		return nil
-	}
-	workspaceKey := normalizeWorkspaceClaimKey(claim.WorkspaceKey)
-	claimOwner := s.workspaceClaimOwnerFromRecord(claim)
-	if !claimOwner.valid() {
-		return nil
-	}
-	if surface := s.root.Surfaces[claimOwner.DisplaySurfaceSessionID]; s.surfaceMatchesWorkspaceClaimOwnerRaw(surface, workspaceKey, claimOwner) {
-		return surface
-	}
-	return s.findWorkspaceClaimSurfaceRaw(workspaceKey, claimOwner)
 }
 
 func (s *Service) workspaceClaimDisplaySurface(claim *workspaceClaimRecord) *state.SurfaceConsoleRecord {
@@ -435,33 +368,11 @@ func (s *Service) workspaceClaimOwnerFromRecord(claim *workspaceClaimRecord) wor
 	return workspaceClaimOwner{}
 }
 
-func (s *Service) surfaceMatchesWorkspaceClaimOwnerRaw(surface *state.SurfaceConsoleRecord, workspaceKey string, owner workspaceClaimOwner) bool {
-	return surface != nil &&
-		surfaceUsesWorkspaceClaimsRaw(surface) &&
-		s.surfaceCurrentWorkspaceKeyRaw(surface) == workspaceKey &&
-		s.workspaceClaimOwnerForSurface(surface).same(owner)
-}
-
 func (s *Service) surfaceMatchesWorkspaceClaimOwner(surface *state.SurfaceConsoleRecord, workspaceKey string, owner workspaceClaimOwner) bool {
 	return surface != nil &&
 		s.surfaceUsesWorkspaceClaims(surface) &&
 		s.surfaceCurrentWorkspaceKey(surface) == workspaceKey &&
 		s.workspaceClaimOwnerForSurface(surface).same(owner)
-}
-
-func (s *Service) findWorkspaceClaimSurfaceRaw(workspaceKey string, owner workspaceClaimOwner) *state.SurfaceConsoleRecord {
-	var display *state.SurfaceConsoleRecord
-	for _, surface := range s.root.Surfaces {
-		if !s.surfaceMatchesWorkspaceClaimOwnerRaw(surface, workspaceKey, owner) {
-			continue
-		}
-		if display == nil ||
-			surface.LastInboundAt.After(display.LastInboundAt) ||
-			(surface.LastInboundAt.Equal(display.LastInboundAt) && surface.SurfaceSessionID < display.SurfaceSessionID) {
-			display = surface
-		}
-	}
-	return display
 }
 
 func (s *Service) findWorkspaceClaimSurface(workspaceKey string, owner workspaceClaimOwner) *state.SurfaceConsoleRecord {

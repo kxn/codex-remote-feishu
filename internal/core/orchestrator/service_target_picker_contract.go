@@ -80,15 +80,6 @@ func targetPickerStatusNoticeSections(record *activeTargetPickerRecord) []contro
 	return cloneFeishuCardSections(sections)
 }
 
-func targetPickerStageSealed(stage control.FeishuTargetPickerStage) bool {
-	switch stage {
-	case control.FeishuTargetPickerStageSucceeded, control.FeishuTargetPickerStageFailed, control.FeishuTargetPickerStageCancelled:
-		return true
-	default:
-		return false
-	}
-}
-
 func targetPickerSummarySection(label, primary, secondary string) (control.FeishuCardTextSection, bool) {
 	lines := make([]string, 0, 2)
 	if primary = strings.TrimSpace(primary); primary != "" {

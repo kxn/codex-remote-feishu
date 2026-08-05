@@ -116,14 +116,6 @@ func (s *Service) allowActiveNotice(kind, surfaceID, instanceID, threadID, dedup
 	return true
 }
 
-func (s *Service) clearActiveNotice(kind, surfaceID, instanceID, threadID, dedupeKey string) {
-	key := activeNoticeCooldownKey(kind, surfaceID, instanceID, threadID, dedupeKey)
-	if key == "" {
-		return
-	}
-	delete(s.activeNoticeCooldowns, key)
-}
-
 func (s *Service) clearActiveNoticePrefix(kind, surfaceID, instanceID, threadID, dedupePrefix string) {
 	prefix := activeNoticeCooldownKey(kind, surfaceID, instanceID, threadID, dedupePrefix)
 	if prefix == "" {

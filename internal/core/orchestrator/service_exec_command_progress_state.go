@@ -116,14 +116,6 @@ func activeExecCommandProgressSegmentMessageID(progress *state.ExecCommandProgre
 	return strings.TrimSpace(segment.MessageID)
 }
 
-func activeExecCommandProgressSegmentStartSeq(progress *state.ExecCommandProgressRecord) int {
-	segment := ensureExecCommandProgressActiveSegment(progress)
-	if segment == nil {
-		return 0
-	}
-	return segment.StartSeq
-}
-
 func appendExecCommandProgressSegment(progress *state.ExecCommandProgressRecord, startSeq int) *state.ExecCommandProgressSegmentRecord {
 	if progress == nil {
 		return nil

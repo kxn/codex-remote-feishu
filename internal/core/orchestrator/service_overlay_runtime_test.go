@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
-	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -127,13 +126,4 @@ func TestUseThreadBlockedWhileReviewTurnRunning(t *testing.T) {
 	if surface.ReviewSession == nil || surface.ReviewSession.ActiveTurnID != "turn-review-1" {
 		t.Fatalf("expected running review session to remain active, got %#v", surface.ReviewSession)
 	}
-}
-
-func findEventByKind(events []eventcontract.Event, predicate func(eventcontract.Event) bool) *eventcontract.Event {
-	for i := range events {
-		if predicate(events[i]) {
-			return &events[i]
-		}
-	}
-	return nil
 }

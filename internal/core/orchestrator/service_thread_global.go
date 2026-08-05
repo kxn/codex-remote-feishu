@@ -139,10 +139,6 @@ func (s *Service) threadViewsVisibleInNormalList(surface *state.SurfaceConsoleRe
 	return filtered
 }
 
-func (s *Service) normalModeListWorkspaceSet(surface *state.SurfaceConsoleRecord) map[string]struct{} {
-	return s.normalModeListWorkspaceSetWithViews(surface, s.mergedThreadViews(surface))
-}
-
 func (s *Service) normalModeListWorkspaceSetWithViews(surface *state.SurfaceConsoleRecord, views []*mergedThreadView) map[string]struct{} {
 	workspaces := map[string]struct{}{}
 	targetBackend, filterByBackend := s.normalModeThreadBackend(surface)
@@ -602,10 +598,6 @@ func workspaceAffinityScore(root, cwd string) int {
 	default:
 		return 1
 	}
-}
-
-func (s *Service) resolveThreadTarget(surface *state.SurfaceConsoleRecord, threadID string) resolvedThreadTarget {
-	return s.resolveThreadTargetWithScope(surface, threadID, false)
 }
 
 func (s *Service) resolveThreadTargetWithScope(surface *state.SurfaceConsoleRecord, threadID string, allowCrossWorkspace bool) resolvedThreadTarget {

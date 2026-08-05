@@ -25,10 +25,6 @@ func (s *Service) useThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecor
 	return s.executeResolvedThreadTargetWithOverlayCleanup(surface, threadID, target, cleanup)
 }
 
-func (s *Service) executeResolvedThreadTarget(surface *state.SurfaceConsoleRecord, threadID string, target resolvedThreadTarget) []eventcontract.Event {
-	return s.executeResolvedThreadTargetWithOverlayCleanup(surface, threadID, target, surfaceOverlayRouteCleanupOptions{})
-}
-
 func (s *Service) executeResolvedThreadTargetWithOverlayCleanup(surface *state.SurfaceConsoleRecord, threadID string, target resolvedThreadTarget, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	switch target.Mode {
 	case threadAttachCurrentVisible:
@@ -48,14 +44,6 @@ func (s *Service) executeResolvedThreadTargetWithOverlayCleanup(surface *state.S
 		text := xutil.FirstNonEmpty(target.NoticeText, "目标会话不存在或当前不可见。")
 		return notice(surface, code, text)
 	}
-}
-
-func (s *Service) useAttachedVisibleThread(surface *state.SurfaceConsoleRecord, threadID string) []eventcontract.Event {
-	return s.useAttachedVisibleThreadMode(surface, threadID, s.surfaceThreadPickRouteMode(surface))
-}
-
-func (s *Service) useAttachedVisibleThreadMode(surface *state.SurfaceConsoleRecord, threadID string, routeMode state.RouteMode) []eventcontract.Event {
-	return s.useAttachedVisibleThreadModeWithOverlayCleanup(surface, threadID, routeMode, surfaceOverlayRouteCleanupOptions{})
 }
 
 func (s *Service) useAttachedVisibleThreadModeWithOverlayCleanup(surface *state.SurfaceConsoleRecord, threadID string, routeMode state.RouteMode, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
@@ -296,10 +284,6 @@ func (s *Service) attachSurfaceToKnownThreadWithOverlayCleanup(surface *state.Su
 	}
 	events = append(events, s.maybeRequestThreadRefresh(surface, inst, view.ThreadID)...)
 	return events
-}
-
-func (s *Service) startHeadlessForResolvedThread(surface *state.SurfaceConsoleRecord, view *mergedThreadView) []eventcontract.Event {
-	return s.startHeadlessForResolvedThreadWithOverlayCleanup(surface, view, surfaceOverlayRouteCleanupOptions{})
 }
 
 func (s *Service) startHeadlessForResolvedThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecord, view *mergedThreadView, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {

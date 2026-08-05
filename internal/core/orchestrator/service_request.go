@@ -437,13 +437,6 @@ func (s *Service) nextRequestDispatchCommandID() string {
 	return "reqcmd-" + strconv.Itoa(s.nextRequestCommandID)
 }
 
-func requestPromptQuestionCount(request *state.RequestPromptRecord) int {
-	if request == nil {
-		return 0
-	}
-	return len(request.Questions)
-}
-
 func normalizedRequestPromptCurrentQuestionIndex(request *state.RequestPromptRecord) int {
 	if request == nil || len(request.Questions) == 0 {
 		return 0
@@ -505,18 +498,6 @@ func firstIncompleteRequestQuestionIndex(request *state.RequestPromptRecord) int
 		}
 	}
 	return normalizedRequestPromptCurrentQuestionIndex(request)
-}
-
-func requestPromptQuestionsComplete(request *state.RequestPromptRecord) bool {
-	if request == nil || len(request.Questions) == 0 {
-		return false
-	}
-	for _, question := range request.Questions {
-		if !requestQuestionCompleted(request, question) {
-			return false
-		}
-	}
-	return true
 }
 
 func requestCurrentQuestionPendingText(request *state.RequestPromptRecord) string {

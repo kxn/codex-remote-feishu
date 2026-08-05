@@ -14,14 +14,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
-func (s *Service) presentInstanceSelection(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.presentInstanceSelectionWithInline(surface, false)
-}
-
-func (s *Service) presentInstanceSelectionWithInline(surface *state.SurfaceConsoleRecord, inline bool) []eventcontract.Event {
-	return s.presentInstanceSelectionWithAction(surface, control.Action{}, inline)
-}
-
 func (s *Service) presentInstanceSelectionWithAction(surface *state.SurfaceConsoleRecord, action control.Action, inline bool) []eventcontract.Event {
 	_ = inline
 	familyID, variantID, backend := s.catalogProvenanceForAction(surface, action)
@@ -195,29 +187,7 @@ func (s *Service) instanceSelectionContextText(surface *state.SurfaceConsoleReco
 	}, "\n")
 }
 
-func (s *Service) presentWorkspaceSelection(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.presentWorkspaceSelectionPage(surface, 1)
-}
-
-func (s *Service) presentAllWorkspaceSelection(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.presentWorkspaceSelectionPage(surface, 1)
-}
-
 const workspaceSelectionPageSize = 8
-
-func (s *Service) presentWorkspaceSelectionPage(surface *state.SurfaceConsoleRecord, page int) []eventcontract.Event {
-	model, events := s.buildWorkspaceSelectionModel(surface, page)
-	if len(events) != 0 {
-		return events
-	}
-	if model == nil {
-		return nil
-	}
-	return []eventcontract.Event{s.selectionViewEvent(surface, control.FeishuSelectionView{
-		PromptKind: control.SelectionPromptAttachWorkspace,
-		Workspace:  model,
-	})}
-}
 
 func (s *Service) buildWorkspaceSelectionModel(surface *state.SurfaceConsoleRecord, page int) (*control.FeishuWorkspaceSelectionView, []eventcontract.Event) {
 	grouped := map[string][]*state.InstanceRecord{}
@@ -361,20 +331,6 @@ func sortWorkspaceSelectionEntries(entries []workspaceSelectionEntry) {
 		}
 		return strings.TrimSpace(left.workspaceKey) < strings.TrimSpace(right.workspaceKey)
 	})
-}
-
-func (s *Service) workspaceLatestVisibleThreadUsedAt(instances []*state.InstanceRecord, workspaceKey string) time.Time {
-	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
-	latest := time.Time{}
-	for _, inst := range instances {
-		for _, thread := range workspaceVisibleThreads(inst, workspaceKey) {
-			if thread == nil || !thread.LastUsedAt.After(latest) {
-				continue
-			}
-			latest = thread.LastUsedAt
-		}
-	}
-	return latest
 }
 
 func instanceWorkspaceSelectionKeys(inst *state.InstanceRecord) []string {
@@ -567,17 +523,6 @@ func (s *Service) resolveWorkspaceAttachInstanceFromCandidates(surface *state.Su
 		}
 	}
 	return nil
-}
-
-func (s *Service) resolveWorkspaceAttachInstance(surface *state.SurfaceConsoleRecord, workspaceKey string) *state.InstanceRecord {
-	if surface != nil && s.surfaceIsHeadless(surface) {
-		resolution := s.resolveWorkspaceContract(surface, workspaceKey, s.surfaceBackend(surface))
-		if resolution.Mode == contractResolutionAttachVisible {
-			return resolution.Instance
-		}
-		return nil
-	}
-	return s.resolveWorkspaceAttachInstanceFromCandidates(surface, workspaceKey, s.workspaceOnlineInstances(workspaceKey))
 }
 
 func (s *Service) workspaceHasVSCodeActivity(instances []*state.InstanceRecord) bool {

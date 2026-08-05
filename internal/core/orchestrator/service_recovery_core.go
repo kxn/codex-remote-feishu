@@ -27,10 +27,6 @@ func (s *Service) resetSurfaceExecutionGates(surface *state.SurfaceConsoleRecord
 	delete(s.abandoningUntil, surface.SurfaceSessionID)
 }
 
-func (s *Service) prepareSurfaceForExecutionReattach(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
-	return s.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
-}
-
 func (s *Service) enterPromptDispatchRestartPendingRoute(surface *state.SurfaceConsoleRecord, workspaceKey string) bool {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
 	if surface == nil || workspaceKey == "" {

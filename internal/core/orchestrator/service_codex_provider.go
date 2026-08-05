@@ -181,24 +181,6 @@ func codexProfileKindRank(kind state.CodexProfileKind) int {
 	}
 }
 
-func (s *Service) codexProviderRecord(providerID string) state.CodexProviderRecord {
-	providerID = state.NormalizeCodexProviderID(providerID)
-	if s.root != nil && s.root.CodexProviders != nil {
-		if record, ok := s.root.CodexProviders[providerID]; ok {
-			return state.NormalizeCodexProviderRecord(record)
-		}
-	}
-	return state.NormalizeCodexProviderRecord(state.CodexProviderRecord{
-		ID:      providerID,
-		Name:    providerID,
-		BuiltIn: providerID == state.DefaultCodexProviderID,
-	})
-}
-
-func (s *Service) codexProviderDisplayName(providerID string) string {
-	return s.codexProviderRecord(providerID).Name
-}
-
 func (s *Service) SurfaceCodexProviderID(surfaceID string) string {
 	if s.root == nil {
 		return ""
