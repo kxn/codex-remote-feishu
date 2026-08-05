@@ -1,13 +1,11 @@
 package surfaceresume
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/statestore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadtitle"
@@ -43,95 +41,44 @@ type Entry struct {
 	UpdatedAt                   time.Time                `json:"updatedAt,omitempty"`
 }
 
-type StateFile struct {
-	Version int              `json:"version"`
-	Entries map[string]Entry `json:"entries,omitempty"`
-}
-
-type Store struct {
-	path    string
-	entries map[string]Entry
-	dirty   bool
+func StatePath(stateDir string) string {
+	return statestore.StatePath(stateDir, StateFileName)
 }
 
 func NewStore(path string) *Store {
-	return &Store{
-		path:    strings.TrimSpace(path),
-		entries: map[string]Entry{},
-	}
-}
-
-func StatePath(stateDir string) string {
-	stateDir = strings.TrimSpace(stateDir)
-	if stateDir == "" {
-		return ""
-	}
-	return filepath.Join(stateDir, StateFileName)
+	return &Store{Store: statestore.New[Entry](path, statestore.Options[Entry]{
+		Version:       StateVersion,
+		Name:          "surface resume state",
+		Equal:         sameEntryContentIncludingUpdatedAt,
+		LoadNormalize: func(entry Entry) (Entry, bool) { return NormalizeEntry(entry) },
+		LoadKey:       func(entry Entry) string { return entry.SurfaceSessionID },
+		LoadEqual:     SameEntryContent,
+		LoadPost:      CanonicalizeEntries,
+	})}
 }
 
 func LoadStore(path string) (*Store, error) {
-	store := NewStore(path)
-	if store.path == "" {
-		return store, nil
-	}
-	raw, err := os.ReadFile(store.path)
+	store, err := statestore.Load[Entry](path, statestore.Options[Entry]{
+		Version:       StateVersion,
+		Name:          "surface resume state",
+		Equal:         sameEntryContentIncludingUpdatedAt,
+		LoadNormalize: func(entry Entry) (Entry, bool) { return NormalizeEntry(entry) },
+		LoadKey:       func(entry Entry) string { return entry.SurfaceSessionID },
+		LoadEqual:     SameEntryContent,
+		LoadPost:      CanonicalizeEntries,
+	})
 	if err != nil {
-		if os.IsNotExist(err) {
-			return store, nil
-		}
 		return nil, err
 	}
-	var persisted StateFile
-	if err := json.Unmarshal(raw, &persisted); err != nil {
-		return nil, err
-	}
-	if persisted.Version == 0 {
-		persisted.Version = StateVersion
-	}
-	if persisted.Version != StateVersion {
-		return nil, fmt.Errorf("unsupported surface resume state version: %d", persisted.Version)
-	}
-	for key, entry := range persisted.Entries {
-		normalized, ok := NormalizeEntry(entry)
-		if !ok {
-			store.dirty = true
-			continue
-		}
-		if strings.TrimSpace(key) != normalized.SurfaceSessionID {
-			store.dirty = true
-		}
-		if !SameEntryContent(entry, normalized) {
-			store.dirty = true
-		}
-		store.entries[key] = normalized
-	}
-	if canonical, changed := CanonicalizeEntries(store.entries); changed {
-		store.entries = canonical
-		store.dirty = true
-	}
-	return store, nil
+	return &Store{Store: store}, nil
 }
 
-func (s *Store) Entries() map[string]Entry {
-	if s == nil || len(s.entries) == 0 {
-		return map[string]Entry{}
-	}
-	values := make(map[string]Entry, len(s.entries))
-	for key, entry := range s.entries {
-		values[key] = entry
-	}
-	return values
+type Store struct {
+	*statestore.Store[Entry]
 }
 
-func (s *Store) Get(surfaceID string) (Entry, bool) {
-	if s == nil {
-		return Entry{}, false
-	}
-	entry, ok := s.entries[strings.TrimSpace(surfaceID)]
-	if !ok {
-		return Entry{}, false
-	}
-	return entry, true
+func sameEntryContentIncludingUpdatedAt(left, right Entry) bool {
+	return SameEntryContent(left, right) && left.UpdatedAt.Equal(right.UpdatedAt)
 }
 
 func (s *Store) Put(entry Entry) error {
@@ -147,7 +94,7 @@ func (s *Store) Put(entry Entry) error {
 	if canonical, changed := CanonicalizeEntries(entries); changed {
 		entries = canonical
 	}
-	return s.replaceEntries(entries)
+	return s.Replace(entries)
 }
 
 func (s *Store) Delete(surfaceID string) error {
@@ -156,7 +103,7 @@ func (s *Store) Delete(surfaceID string) error {
 	}
 	entries := s.Entries()
 	delete(entries, strings.TrimSpace(surfaceID))
-	return s.replaceEntries(entries)
+	return s.Replace(entries)
 }
 
 func (s *Store) ReplaceAll(entries map[string]Entry) error {
@@ -174,80 +121,7 @@ func (s *Store) ReplaceAll(entries map[string]Entry) error {
 	if canonical, changed := CanonicalizeEntries(normalizedEntries); changed {
 		normalizedEntries = canonical
 	}
-	return s.replaceEntries(normalizedEntries)
-}
-
-func (s *Store) replaceEntries(entries map[string]Entry) error {
-	if sameEntries(s.entries, entries) {
-		return nil
-	}
-	previous := s.entries
-	s.entries = entries
-	if err := s.Save(); err != nil {
-		s.entries = previous
-		return err
-	}
-	return nil
-}
-
-func sameEntries(left, right map[string]Entry) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for key, leftEntry := range left {
-		rightEntry, ok := right[key]
-		if !ok || !SameEntryContent(leftEntry, rightEntry) || !leftEntry.UpdatedAt.Equal(rightEntry.UpdatedAt) {
-			return false
-		}
-	}
-	return true
-}
-
-func (s *Store) Save() error {
-	if s == nil || s.path == "" {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return err
-	}
-	persisted := StateFile{
-		Version: StateVersion,
-		Entries: s.Entries(),
-	}
-	raw, err := json.MarshalIndent(persisted, "", "  ")
-	if err != nil {
-		return err
-	}
-	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(s.path), filepath.Base(s.path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(0o600); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpPath, s.path); err != nil {
-		return err
-	}
-	s.dirty = false
-	return nil
-}
-
-func (s *Store) Dirty() bool {
-	if s == nil {
-		return false
-	}
-	return s.dirty
+	return s.Replace(normalizedEntries)
 }
 
 func NormalizeEntry(entry Entry) (Entry, bool) {

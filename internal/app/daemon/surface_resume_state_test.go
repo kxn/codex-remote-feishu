@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/statestore"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -196,7 +197,7 @@ func TestDaemonStartupCanonicalizesLegacySplitFeishuP2PSurfaceResumeState(t *tes
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	writeSurfaceResumeStateForTest(t, stateDir, surfaceresume.StateFile{
+	writeSurfaceResumeStateForTest(t, stateDir, statestore.StateFile[surfaceresume.Entry]{
 		Version: surfaceresume.StateVersion,
 		Entries: map[string]surfaceresume.Entry{
 			"feishu:Codex-5:user:a756fefe": {
@@ -336,7 +337,7 @@ func TestDaemonDoesNotRestoreCodexPlanModeAcrossRestart(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	writeSurfaceResumeStateForTest(t, stateDir, surfaceresume.StateFile{
+	writeSurfaceResumeStateForTest(t, stateDir, statestore.StateFile[surfaceresume.Entry]{
 		Version: 1,
 		Entries: map[string]surfaceresume.Entry{
 			"surface-1": {
@@ -383,7 +384,7 @@ func TestDaemonDoesNotRestoreClaudePlanModeAcrossRestart(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	writeSurfaceResumeStateForTest(t, stateDir, surfaceresume.StateFile{
+	writeSurfaceResumeStateForTest(t, stateDir, statestore.StateFile[surfaceresume.Entry]{
 		Version: 1,
 		Entries: map[string]surfaceresume.Entry{
 			"surface-1": {
@@ -1950,7 +1951,7 @@ func putSurfaceResumeStateForTest(t *testing.T, stateDir string, entry surfacere
 	}
 }
 
-func writeSurfaceResumeStateForTest(t *testing.T, stateDir string, persisted surfaceresume.StateFile) {
+func writeSurfaceResumeStateForTest(t *testing.T, stateDir string, persisted statestore.StateFile[surfaceresume.Entry]) {
 	t.Helper()
 	path := surfaceresume.StatePath(stateDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
