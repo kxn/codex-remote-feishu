@@ -5,6 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
+	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/app/installshim"
 )
 
 func TestMain(m *testing.M) {
@@ -36,6 +40,19 @@ func TestMain(m *testing.M) {
 	setenvOrExit("XDG_DATA_HOME", dataHome)
 	setenvOrExit("XDG_STATE_HOME", stateHome)
 	setenvOrExit("CODEX_REMOTE_REPO_ROOT", repoRoot)
+
+	// Mirror the main-process registration in launcher.Main: install flows
+	// reach editor detection/patching and upgrade-shim release through hooks,
+	// and the daemon test binary must register them like the real daemon does.
+	install.RegisterEditorHooks(editor.DetectBundleEntrypoints, func(p install.BundleEntrypointPatchOptions) error {
+		return editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+			EntrypointPath:   p.EntrypointPath,
+			InstallStatePath: p.InstallStatePath,
+			ConfigPath:       p.ConfigPath,
+			InstanceID:       p.InstanceID,
+		})
+	})
+	install.RegisterUpgradeHelperShimHook(installshim.PrepareUpgradeHelperShim)
 
 	code := m.Run()
 	if err := os.RemoveAll(tempRoot); err != nil {

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -141,7 +140,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	}
 
 	if hasIntegration(integrations, IntegrationManagedShim) && strings.TrimSpace(opts.BundleEntrypoint) != "" {
-		if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+		if err := patchBundleEntrypointFunc(BundleEntrypointPatchOptions{
 			EntrypointPath:   opts.BundleEntrypoint,
 			InstallStatePath: statePath,
 			ConfigPath:       configPath,

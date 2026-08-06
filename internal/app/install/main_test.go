@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
+	"github.com/kxn/codex-remote-feishu/internal/app/installshim"
 )
 
 func TestMain(m *testing.M) {
@@ -53,6 +56,16 @@ func TestMain(m *testing.M) {
 		systemctlUserRunner = originalSystemctl
 		launchctlUserRunner = originalLaunchctl
 	}()
+
+	RegisterEditorHooks(editor.DetectBundleEntrypoints, func(p BundleEntrypointPatchOptions) error {
+		return editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+			EntrypointPath:   p.EntrypointPath,
+			InstallStatePath: p.InstallStatePath,
+			ConfigPath:       p.ConfigPath,
+			InstanceID:       p.InstanceID,
+		})
+	})
+	RegisterUpgradeHelperShimHook(installshim.PrepareUpgradeHelperShim)
 
 	code := m.Run()
 	if err := os.RemoveAll(tempRoot); err != nil {

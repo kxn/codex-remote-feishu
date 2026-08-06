@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/codexupgrade"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/app/installshim"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -573,11 +574,11 @@ func TestPrepareUpgradeHelperShimWritesEmbeddedShimAndSidecar(t *testing.T) {
 	if len(raw) == 0 {
 		t.Fatal("expected helper shim binary to be non-empty")
 	}
-	sidecarRaw, err := os.ReadFile(install.UpgradeShimSidecarPath(helperPath))
+	sidecarRaw, err := os.ReadFile(installshim.UpgradeShimSidecarPath(helperPath))
 	if err != nil {
 		t.Fatalf("ReadFile sidecar: %v", err)
 	}
-	sidecar, err := upgradeshim.ReadSidecar(install.UpgradeShimSidecarPath(helperPath))
+	sidecar, err := upgradeshim.ReadSidecar(installshim.UpgradeShimSidecarPath(helperPath))
 	if err != nil {
 		t.Fatalf("ReadSidecar: %v", err)
 	}

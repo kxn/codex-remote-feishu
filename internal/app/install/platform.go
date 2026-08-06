@@ -7,7 +7,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
@@ -33,7 +32,7 @@ func DetectPlatformDefaults() (PlatformDefaults, error) {
 		BaseDir:                    homeDir,
 		InstallBinDir:              defaultInstallBinDir(goos, homeDir),
 		VSCodeSettingsPath:         defaultVSCodeSettingsPath(goos, homeDir),
-		CandidateBundleEntrypoints: detectBundleEntrypoints(goos, runtime.GOARCH, homeDir),
+		CandidateBundleEntrypoints: detectBundleEntrypointsFunc(goos, runtime.GOARCH, homeDir),
 		DefaultIntegrations:        DefaultIntegrations(goos),
 	}, nil
 }
@@ -67,7 +66,7 @@ func defaultVSCodeSettingsPath(goos, homeDir string) string {
 }
 
 func detectBundleEntrypoints(goos, goarch, homeDir string) []string {
-	return editor.DetectBundleEntrypoints(goos, goarch, homeDir)
+	return detectBundleEntrypointsFunc(goos, goarch, homeDir)
 }
 
 func recommendedBundleEntrypoint(defaults PlatformDefaults) string {

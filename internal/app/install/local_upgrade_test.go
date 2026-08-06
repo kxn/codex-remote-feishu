@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/installshim"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
@@ -73,7 +74,7 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	if len(startedArgs) != 0 {
 		t.Fatalf("helper args = %#v, want empty direct-exec shim", startedArgs)
 	}
-	sidecar, err := upgradeshim.ReadSidecar(UpgradeShimSidecarPath(startedBinary))
+	sidecar, err := upgradeshim.ReadSidecar(installshim.UpgradeShimSidecarPath(startedBinary))
 	if err != nil {
 		t.Fatalf("ReadSidecar: %v", err)
 	}
@@ -195,7 +196,7 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 	if len(helperRaw) == 0 {
 		t.Fatal("expected helper shim binary to be non-empty")
 	}
-	if sidecar, err := upgradeshim.ReadSidecar(UpgradeShimSidecarPath(startedBinary)); err != nil {
+	if sidecar, err := upgradeshim.ReadSidecar(installshim.UpgradeShimSidecarPath(startedBinary)); err != nil {
 		t.Fatalf("ReadSidecar: %v", err)
 	} else if !testutil.SamePath(sidecar.InstallStatePath, statePath) {
 		t.Fatalf("sidecar installStatePath = %q, want %q", sidecar.InstallStatePath, statePath)

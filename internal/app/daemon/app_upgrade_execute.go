@@ -12,6 +12,7 @@ import (
 
 	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/app/installshim"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -207,7 +208,7 @@ func (a *App) finishUpgradeStartFailure(request upgradeStartRequest, err error) 
 }
 
 func (a *App) prepareUpgradeHelperShimLocked(stateValue install.InstallState) (string, error) {
-	return install.PrepareUpgradeHelperShim(a.installStatePath(), stateValue.InstanceID)
+	return installshim.PrepareUpgradeHelperShim(a.installStatePath(), stateValue.InstanceID)
 }
 
 func (a *App) upgradeHelperLogPathLocked() string {
