@@ -62,6 +62,45 @@
 - 多步命令拆成多次工具调用；禁止用 `&&` 接在 heredoc 之后。
 - gh 命令失败后禁止原样重试；先读错误信息，改用 helper 或正确格式后再调用。
 
+## 输出防爆规范（防止工具输出撑爆上下文）
+
+原则：**阈值制，不为小输出增加步骤**。直接读便宜就直读，只有大概率大输出才走文件/限流。
+
+### 1. 小输出直接读（默认）
+
+- 预计输出 < 3k token（约 12KB 文本）且确实需要内容：直接跑、直接看，不写文件。
+- 这类操作照旧：`git status`、`git diff --stat`、`rg -l`、`gh issue view <n> --json number,title,state,labels`、`go test -run 某个用例`、`ls`、`wc`。
+
+### 2. 未知大小先探一次（只多一步）
+
+- 不知道输出多大时，先用廉价命令探量，再决定直读还是文件化：
+  - 文件大小：`wc -c <file>`（或 `ls -l`）
+  - 匹配量：`rg --count-matches` / `rg -l | wc -l`
+  - 命令输出量：先加 `head -n 20` 试跑
+- 探量结果 < 3k token：直接读；≥ 5k token：改走文件/片段读。
+
+### 3. 已知大输出固定走文件或片段读（不先探）
+
+这些场景默认就是大的，直接按防爆流程走：
+
+- issue 全文/评论：`issuectl prepare` 或 `issue-doc-sync inspect`，stdout 只有一行摘要，全文在文件里。
+- CI 日志 / daemon 日志：`> /tmp/xxx.log` 后再 `rg` 过滤，禁止直接打全文。
+- minified / 压缩 / 单行巨大文件：先 `rg -l` 定位，再 `sed -n` 取行；禁止 `cat` 或 `sed '1,300p'` 整读。
+- 整仓 diff：先 `git diff --stat`，需要全文时只对具体文件 `git diff -- <file>`。
+- sqlite 查询：加 `LIMIT` / 聚合 / `count(*)`，禁止整表 dump。
+
+### 4. 限流尽量是“单命令单 flag”，不加推理步骤
+
+- `rg`：`--max-count` / `-l` / `--count-matches`；禁止无上限 `-A/-B` 大上下文；`strings | rg` 必须接 `head`。
+- `go test`：先 `-run` 定向；失败输出用 `tail -n 50` 限长。
+- python：把结果写文件或只 print 摘要，禁止循环体全量 print。
+- 判断阈值参考：混合中英文约 4 字符 ≈ 1 token；文件 > 40KB 或预计输出 > 5k token 时走文件。
+
+### 5. 失败/截断后不原样重试
+
+- 输出被截断或命令失败：禁止原样重跑同一条命令；先缩小范围、换 helper 或改输出格式。
+- 截断本身说明输出过大：下一轮直接改用 `rg`/`head`/文件化，而不是提高 `max_output_tokens`。
+
 ## 领域基线（按需读取）
 
 - `docs/**/*.md` 改动：遵守 docs/README.md 的元信息（Type/Updated/Summary）、生命周期目录和链接同步规范。
