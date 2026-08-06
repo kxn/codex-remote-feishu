@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-08-05`
-> Summary: 刷新面向用户文档：README 与使用说明书补齐 Windows / macOS 原生安装器、WebSetup 本机集成阶段，以及 Codex / Claude Code 双后端与独立 Profile 模型配置说明。
+> Updated: `2026-08-06`
+> Summary: 新增 Windows 仓库操作规范，issue workflow 基线已精简为按需参考。
 
 ## 1. 适用范围
 
@@ -136,6 +136,7 @@
 - [relay-protocol-spec.md](./general/relay-protocol-spec.md)
 - [user-guide.md](./general/user-guide.md)
 - [web-design-guidelines.md](./general/web-design-guidelines.md)
+- [windows-repo-operations.md](./general/windows-repo-operations.md)
 
 ### 6.2 `implemented`
 

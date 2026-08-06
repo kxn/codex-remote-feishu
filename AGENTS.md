@@ -1,555 +1,68 @@
 # AGENTS
 
-## Conversation Handshake (Always On)
+## 会话握手
 
-- For direct user instructions, first send a short restatement:
-  - what the user asked
-  - what you will do immediately
-- Then execute without waiting unless user explicitly asks to pause.
-- If user gives correction/steer feedback, switch direction immediately.
+- 收到直接指令时，先简短复述：用户要求什么、我马上做什么。
+- 然后直接执行，除非用户明确要求暂停。
+- 用户纠正方向时立即切换。
 
-## Trigger Accuracy Rule (Always On)
+## 触发规则
 
-- Skill triggering uses **union matching**: trigger when **any** of these match:
-  - user wording / command intent
-  - touched logic carrier
-  - touched file area
-  - known symptom pattern
-- Do not narrow trigger scope below prior behavior.
-- If multiple skills match, use all relevant skills together.
-- Exclusion notes (for example “pure copy/styling/logging/tests only”) apply only when you can confirm logic carriers are unchanged.
+- Skill 触发使用并集匹配：用户措辞/意图、逻辑载体、触碰文件、已知症状，任一命中即触发。
+- 多个 skill 同时命中就一起用；排除说明只在能确认逻辑载体未变时适用（例如纯文案/样式/日志/测试）。
+- 不得为了少读文件而缩小触发范围。
 
-## Issue Gate Rule (Always On)
+## 仓库 skill 触发速查
 
-When any GitHub issue number or URL appears in the conversation:
+- issue：`issue-workflow-guardrail`（单子生命周期）、`issue-verifier`（独立验收，仅 full 高风险场景）、`issue-doc-sync`（已关 issue 同步 docs）。
+- relay / 飞书 / 远程面：`relay-stack-playbook`、`remote-state-machine-guardrail`、`feishu-ui-state-machine-guardrail`。
+- 安装/升级/推送：`local-upgrade`、`safe-push`。
+- 页面：`build-page-mock`。
 
-- Do **not** start code assessment or implementation directly.
-- First classify the work as `tiny` / `fast` / `full`, then enter the selected issue workflow via `prepare`: read the issue, verify current state against the live codebase, and decide the execution path.
-- A `tiny` fix that can be finished immediately is the only exception that skips formal `prepare`.
-- Use `fast` automatically for an already-clear, single-stage, low-risk issue. Use `full` for external-reporter, parent/child, multi-stage, state-machine, migration, security-sensitive, or otherwise uncertain work.
-- For `full` issues: shape the issue before implementation, record an execution snapshot when work is multi-stage or multi-turn, and follow `lint` / `finish` entry points.
-- Never conflate "product decision received" with "ready to implement" — first complete the prepare pass, then proceed.
-- If the issue carries `status:needs-clarification` or equivalent, surface the decision question before shaping or implementation.
-- This rule applies regardless of whether the user explicitly says "按流程" — issue numbers and URLs are the trigger.
+## 单子入口（GitHub Issue）
 
-## Repo-Local Issue Workflow Ownership (Always On)
+- 对话中出现 issue 编号或 URL 时，先进入单子流程（`issuectl prepare`），不直接评估或实现；能当场一次改完的 tiny 修复除外。
+- 分类默认 `fast`；命中以下任一条件即 `full`：外部提单、母/子结构或预计要拆、状态机/迁移/安全/权限/协议、多阶段或多 turn、风险不确定。
+- `prepare` 按 issue 正文/标签做机械升级；执行者还要按触碰文件面核对（状态机/迁移/安全/权限/协议等 guardrail 区域），命中即升 `full`。
+- 单子全流程由 `.codex/skills/issue-workflow-guardrail/` 唯一负责，不叠加通用 lifecycle skill（brainstorming、writing-plans、executing-plans、subagent-driven-development、requesting-code-review、finishing-a-development-branch、using-git-worktrees）。
+- 方法 skill 照常可用：`systematic-debugging`、`test-driven-development`、`verification-before-completion`；并行 agent 仅在任务真正独立可并行时使用。
+- 持久化只保留一份：需求/决策/执行状态写 issue body，长设计写 docs 生命周期文档，独立验收只由 `issue-verifier` 承担（full 高风险场景），机械检查和发布由 pre-commit + `safe-push` 承担。
+- 用户要求分阶段推进时按连续执行处理：阶段只是顺序不是停止点；每阶段结束只做四问（是否完成 / 硬阻塞 / 产品决策门 / 需要拆分），否则继续下一阶段。
 
-This ownership rule applies only inside this repository. Do not modify global Superpowers skills under `$CODEX_HOME`, and do not carry this override into repositories that do not provide their own issue workflow.
+## 工作区干净
 
-When `issue-workflow-guardrail` is triggered here, it is the sole lifecycle owner for issue shaping, product decisions, planning, execution orchestration, independent acceptance, publish, and close-out.
+- 任何新任务开始实质工作前先 `git status --short`。
+- 干净则继续；不干净先区分 `same-task` / `different-task`：
+  - different-task：停下问用户先提交/暂存/还是继续脏工作区。
+  - same-task：明确说明假设后继续。
+- 默认不把无关改动混进同一个提交。
 
-- Do not additionally invoke these generic Superpowers lifecycle skills merely because the task involves design or implementation:
-  - `superpowers:brainstorming`
-  - `superpowers:writing-plans`
-  - `superpowers:executing-plans`
-  - `superpowers:subagent-driven-development`
-  - `superpowers:requesting-code-review`
-  - `superpowers:finishing-a-development-branch`
-  - `superpowers:using-git-worktrees`
-- Continue using method skills when their technical trigger matches:
-  - `superpowers:systematic-debugging` for root-cause investigation
-  - `superpowers:test-driven-development` when implementation risk justifies TDD
-  - `superpowers:verification-before-completion` as the requirement for fresh evidence, without rerunning checks already proven by the current commit/push flow
-  - parallel-agent skills only when work is genuinely independent and parallelizable
-- Keep one durable artifact per concern:
-  - issue body for requirements, decisions, status, and execution snapshots
-  - a normal repository lifecycle doc for long designs
-  - `issue-verifier` for the single independent acceptance pass when `full` requires one
-  - pre-commit plus `safe-push` for repository mechanical checks and publication
-- Do not create duplicate `docs/superpowers/specs` or `docs/superpowers/plans` artifacts for workflow-managed issue work.
+## 根因优先
 
-## Workspace Cleanliness Rule (Always On)
+- bug/回归/失败一律先找根因，禁止症状掩盖或最小补丁兜底，除非用户明确批准临时方案。
+- 修复前先收集运行证据、跨组件追踪、给出根因假设；根因未知就继续调查，不把不确定变成补丁。
+- 若根因是错误抽象/所有权/状态机/协议边界，优先做更深修正，而不是叠兼容层。
 
-For every new repository task in chat (not only GitHub issue workflow):
+## 验证与发布底线
 
-- Do **not** start any substantive read/edit/build work before checking workspace cleanliness.
-- Check current workspace cleanliness with `git status --short`.
-- If the worktree is clean, proceed normally.
-- If the worktree is not clean, do not silently continue with mixed context:
-  - first classify existing local changes as either `same-task` or `different-task`
-  - if `different-task`, stop and ask the user whether to:
-    - commit/push them first
-    - shelve them
-    - or explicitly continue in dirty workspace
-  - if `same-task`, explicitly state that assumption in chat and continue
-- Do not mix unrelated edits into one commit by default.
-- When the user asks to "先提交" or similar, complete that commit before starting additional implementation work.
+- 声明“完成/通过/已修复”前必须有新鲜验证证据；同一提交已证明过的检查不重复跑。
+- 提交前跑 `scripts/check/pre-commit.sh`（含文件长度 gate），不得绕过。
+- 推送一律走 `./safe-push.sh`；rebase 后出现 review gate 时先人工核对再 `--confirm-rebase-review`。
+- 提交后默认同轮推送；除非用户要求本地-only、临时实验分支、或推送被真实阻塞。停止本地状态时明确报告 LOCAL-ONLY、分支、HEAD 和下一步。
+- 收尾前重查 `git status --short` 和本地 HEAD 是否领先 upstream。
+- 重复 tail-state 检查优先 `scripts/dev/worktree-facts.sh`；路径探测用 `scripts/dev/resolve-repo-path.sh`；陌生 `gh --json` 字段先 `scripts/dev/gh-json-fields.sh`；同一确定性失败不原样重跑。
 
-## Root-Cause First Bugfix Rule (Always On)
+## 领域基线（按需读取）
 
-For any bug, regression, flaky behavior, test failure, unexpected behavior, or suspected design mistake:
+- `docs/**/*.md` 改动：遵守 docs/README.md 的元信息（Type/Updated/Summary）、生命周期目录和链接同步规范。
+- Web/管理页改动：先读 `docs/general/web-design-guidelines.md`（含 mock 时另读 `page-mock-guidelines.md`）。
+- 飞书卡片/菜单/文本改动：按触碰面读 `docs/general/feishu-card-api-constraints.md`、`feishu-menu-card-usage-guidelines.md`、`feishu-card-content-context-guidelines.md`、`feishu-card-ui-state-machine.md`。
+- 远程面/状态机逻辑改动：读 `docs/general/remote-surface-state-machine.md`，提交前跑对应 guardrail skill 并同步 canonical doc，审计 dead/half-dead 状态。
+- Windows 仓库操作（WSL 禁用、PowerShell/gh 规范）：读 `docs/general/windows-repo-operations.md`。
 
-- Default objective is to identify and fix the root cause or wrong design boundary, not merely to hide the visible symptom.
-- Do **not** start with the smallest patch, extra guard, fallback, retry, null-check, copy tweak, or conditional bypass just because it makes the symptom disappear.
-- Symptom-only or containment-only fixes are **forbidden by default**. They are allowed only when the user explicitly approves that tradeoff in the current turn.
-- Before proposing or implementing a fix, first gather concrete runtime evidence, trace the failing path across component boundaries, and state the current root-cause hypothesis.
-- If the root cause is still unknown, continue investigation instead of converting uncertainty into a patch.
-- If the failure is caused by a wrong abstraction, ownership split, state machine, data shape, or protocol boundary, prefer the deeper corrective fix even when it is broader than the smallest diff.
-- Do not preserve a known-wrong design by layering compatibility shims or defensive patches on top unless the user explicitly asks for a temporary containment path.
-- If a true emergency hotfix is needed before root-cause work is complete, label it explicitly as temporary containment, explain what remains unproven, state the residual risk, and wait for explicit user approval before applying it.
-- Do not present symptom suppression as a completed fix. State exactly what was proven, what remains uncertain, and what deeper correction is still required.
+## 工程约束
 
-## Deterministic Repo Helper Rule
-
-- For repeated tail-state or publish-state checks, prefer `bash scripts/dev/worktree-facts.sh` instead of manually rerunning `git status --short --branch`.
-- Before opening a guessed repo path, prefer `bash scripts/dev/resolve-repo-path.sh <path>` or `rg --files` so path probes do not fail by typo.
-- Before using unfamiliar `gh ... --json` fields, prefer `bash scripts/dev/gh-json-fields.sh <gh-subcommand...>` and `--check ...` when needed.
-- Do not rerun an identical deterministic failure unless some input, state, or environment has changed; first state what changed.
-
-## Staged Execution Continuity Rule
-
-When the user explicitly asks staged rollout (for example: `按阶段推进`, `分阶段推进`, `阶段式推进`, `staged rollout`):
-
-- Treat it as continuous execution by default.
-- Complete all planned stages in one flow unless a real blocker appears.
-- Do not pause after one stage to ask whether to continue.
-- Treat a phase or stage as execution order only, not as a normal stopping boundary.
-- For unsplit issue work, finishing `阶段 A / B / C` is never by itself a valid reason to stop.
-- At the end of every phase, explicitly re-check:
-  - is the issue already fully complete?
-  - is there a hard blocker or real contradiction?
-  - did execution hit a product decision gate?
-  - does the issue now need a formal split before continuing?
-- If all answers above are no, continue immediately into the next phase instead of stopping at the phase boundary.
-- For repository or issue work, do not treat “local implementation is done” as a valid stopping point by itself.
-- The staged flow is only complete when the normal tail work is also done for that task:
-  - validation finished
-  - required docs / issue state synced
-  - commit completed when the change is worth keeping
-  - push completed when repo policy says it should be pushed
-  - issue closed when the issue is actually finished
-- Valid stop conditions:
-  - hard blocker (dependency/outage/permission)
-  - newly discovered contradiction that makes continuing unsafe
-  - explicit user redirection
-- On stop, report blocker evidence and exact resume action.
-
-## Skill Trigger Matrix
-
-### `systematic-debugging`
-
-Use `superpowers:systematic-debugging` when working on:
-
-- any bug, regression, flaky behavior, test failure, unexpected behavior, build failure, or performance anomaly
-- any request phrased as `debug`, `排查`, `看下为什么`, `修 bug`, `fix bug`, `why is this happening`, or similar
-- any situation where a quick patch, fallback, or smallest-diff fix feels tempting
-- any repeated failure where the previous fix did not fully explain the behavior
-
-Execution floor:
-
-- finish root-cause investigation before proposing or implementing a fix
-- do not use minimal symptom-suppression patches unless the user explicitly approves that path in the current turn
-- if evidence points to a design/ownership/boundary problem, escalate to that deeper fix instead of cosmetically patching the symptom
-- if 3 fix attempts fail, stop local patching and question the architecture explicitly before continuing
-
-### `relay-stack-playbook`
-
-Use `.codex/skills/relay-stack-playbook/` when working on:
-
-- `relayd` / `relay-wrapper`
-- Feishu bot inbound/outbound behavior
-- VS Code remote integration
-- Codex app-server protocol translation
-- `/list`, `/attach`, `/use`, `/stop`
-- queue/dispatch/thread routing/surface session issues
-- helper/internal traffic classification issues
-- “VS Code 有回复但飞书没回复” and similar missing-reply symptoms
-
-### `remote-state-machine-guardrail`
-
-Use `.codex/skills/remote-state-machine-guardrail/` for remote-surface state-machine logic carriers:
-
-- attach/detach, `/use`, `/follow`, `/new` state predicates or transitions
-- selected-thread / attached-instance / input-routing decisions
-- queue routing / dispatch mode / pause-handoff gating
-- headless launch/resume/cancel/timeout/recovery progression
-- request-capture / prompt-gate / modal-gate / staged-input / selection-flow enter-exit
-- command-availability matrix
-- any change that adds/removes remote surface states
-
-Do not trigger only for pure copy/styling/logging/tests/refactor with no logic-carrier change.
-
-### `feishu-ui-state-machine-guardrail`
-
-Use `.codex/skills/feishu-ui-state-machine-guardrail/` for Feishu card UI state-machine logic carriers:
-
-- callback payload schema/parsing
-- card owner/kind/action routing
-- inline replace vs append-only decision
-- command menu / selection prompt / request prompt navigation
-- `daemon_lifecycle_id`, old-card rejection, freshness/lifecycle stamping
-- projector/gateway decisions on whether an existing card can still mutate state
-
-Do not trigger only for pure copy/styling/logging/tests/refactor with no logic-carrier change.
-
-### `issue-workflow-guardrail`
-
-Use `.codex/skills/issue-workflow-guardrail/` when task is centered on a GitHub issue:
-
-- issue number or issue URL appears
-- raw issue needs shaping before execution
-- user asks to handle/complete/triage/refresh/close an issue
-- need parent/child issue split, schedule table, or staged orchestration
-- need result roll-up or next ready unit selection
-- need implementable-now reassessment / blocked-state update
-- need issue label/body/comment refinement
-
-Mode override phrases:
-
-- force `fast`: `workflow:fast`, `fast path`, `快速处理`, `简化流程`
-- force `full`: `workflow:full`, `full path`, `完整流程`, `标准 issue workflow`
-
-Without an explicit override, select `fast` for clear single-stage low-risk work and `full` for external-reporter, parent/child, multi-stage, state-machine, migration, security-sensitive, or uncertain work. When classification is uncertain, use `full`.
-
-### `issue-verifier`
-
-Use `.codex/skills/issue-verifier/` when issue work needs an independent validation pass:
-
-- `验收`
-- `独立验证`
-- `对齐验证`
-- `完成前复核`
-- a `full` issue is otherwise ready to close and needs a read-only acceptance check
-
-If the issue is still shaping, still missing execution closure, or still actively being implemented, stay on `issue-workflow-guardrail` first.
-
-### `local-upgrade`
-
-Use `.codex/skills/local-upgrade/` for repository-local daemon upgrade/debug routing:
-
-- `本地升级`
-- `upgrade-local.sh`
-- pull latest + rebuild + upgrade local daemon
-- local-upgrade transaction from repo build
-- without explicit user approval in the current turn, do not auto-run repository-local upgrade flows
-
-Natural-language repo requests split by target semantics:
-
-- `本地升级` and other repo-build upgrade requests are **repo tasks**:
-  - use `./upgrade-local.sh`
-  - when the user names a target instance, pass `--instance` and keep that target explicit
-- `升级当前 daemon 自身`, `把我现在这个实例升上去`, `恢复当前实例到支持 dev 的版本` use `./upgrade-self.sh`
-- `debug 一下`, `看下当前实例状态`, `查日志`, `报个 bug` default to the **current daemon self target**, not the repo-bound target
-- for explicit current self-target HTTP inspection, prefer `bash scripts/install/self-target-request.sh ...`
-- only use `bash scripts/install/repo-target-request.sh ...` or `bash scripts/install/repo-install-target.sh --format shell` when the user explicitly asks for:
-  - the repo-bound target
-  - or a named install target such as `stable` / `beta` / `master`
-- do not silently reinterpret a current-instance debug request as a repo-bound debug request
-- do not satisfy those natural-language requests by sending daemon slash commands unless the user explicitly asked for the slash-command path
-
-Explicit slash commands (`/upgrade`, `/upgrade local`, `/upgrade latest`, `/debug`) stay as daemon-direct actions.
-
-### `safe-push`
-
-Use `.codex/skills/safe-push/` when pushing committed changes:
-
-- user says `推送` / `push` / `提交并推送`
-- `git push` rejected because remote advanced
-- user asks fetch/rebase/retest/push flow
-
-**Always use `./safe-push.sh` to push committed changes.** Do not push with plain `git push`.
-
-When safe-push rebases and shows the rebase review gate:
-
-- The gate message will look like: `rebase review required (non-interactive shell)`
-- The gate blocks push until the rebased diff has been explicitly reviewed and confirmed.
-- The required action is: `./safe-push.sh --confirm-rebase-review`
-- Do **not** bypass this gate with `--no-verify` or other flags.
-- Confirm after reviewing the rebase log and verifying that no unrelated commits were pulled in.
-
-### `issue-doc-sync`
-
-Use `.codex/skills/issue-doc-sync/` when syncing closed GitHub issues back into `docs/`.
-
-### `build-page-mock`
-
-Use `.codex/skills/build-page-mock/` when working on:
-
-- `页面 Mock`
-- 浏览器可运行的页面原型 / interactive demo
-- 从已确认 mock 落最终产品页面
-- `按 mock 落产品` / `从 mock 生成页面` / `按原型实现最终页面`
-- `docs/draft/*mock*.html`
-- `web/src/**` 或 `internal/app/daemon/adminui/**` 下新增的 mock / preview 页面
-- 需要用假数据覆盖真实交互的用户可见页面预览
-
-Execution floor:
-
-- before writing visible page content, define the page's visible-content contract:
-  - final user
-  - current task
-  - allowed information types
-  - disallowed information types
-  - allowed feedback slots
-- before delivery, audit every visible string and sample value against that contract
-- if a visible element cannot be clearly justified for the final user's current task, remove it
-- sample data is not exempt; code, repo paths, internal names, protocol fields, and design notes are disallowed on non-technical user pages by default
-
-## Web Design Baseline
-
-When modifying any file in the trigger area below, do **not** merge until the page satisfies every baseline requirement listed. Violating any single requirement is a merge-blocker.
-
-For web page design/layout/copy/interaction changes, follow:
-
-- `docs/general/web-design-guidelines.md`
-- `docs/general/page-mock-guidelines.md` when the task includes page mocks or browser-runnable prototypes
-
-Trigger area:
-
-- `web/src/**`
-- `internal/app/daemon/adminui/**`
-- setup/admin/install/onboarding/status page redesign
-- any change that adds/removes user-visible sections, steps, cards, or default-exposed technical details
-
-Baseline requirements:
-
-- desktop + mobile both work
-- copy is user-facing, not architecture-facing
-- avoid long dump pages; defer/fold/split lower-priority info
-- do not expose internal design-purpose text to end users
-- define a visible-content contract before editing and use fail-closed judgment for visible content
-- if baseline rules are intentionally changed, update `docs/general/web-design-guidelines.md` in the same change
-
-## Feishu Card Constraints Baseline
-
-When touching Feishu card payloads, message-card patching, CardKit streaming, or card interaction pacing in the trigger area below, do **not** merge until the design has been checked against official hard limits with an explicit size budget and degradation path. Cards that silently exceed platform limits cannot ship.
-
-For any design or implementation that touches Feishu cards, message-card patching, CardKit streaming, or card interaction pacing, consult:
-
-- `docs/general/feishu-card-api-constraints.md`
-
-Trigger area:
-
-- `internal/adapter/feishu/**`
-- `internal/core/orchestrator/**` when change alters Feishu-surface card payloads, update cadence, or interaction composition
-- `docs/general/feishu-card-ui-state-machine.md`
-- any design/doc discussing single-turn cards, live cards, approval cards, request cards, or plan/progress/final-card aggregation on Feishu
-
-Baseline requirements:
-
-- design against official hard limits first: card size, element count, per-message/per-card update qps, callback SLA, streaming/interaction switching
-- do not assume one giant card is safe without explicit size budget and degradation path
-- if a design may exceed limits, specify fallback up front: truncate, summarize, paginate, split card, or spill to text/file/link
-- when relying on a numeric Feishu platform limit in code or product design, re-check the latest official docs and sync `docs/general/feishu-card-api-constraints.md` if the baseline changed
-
-## Feishu Menu Card Baseline
-
-When touching menu card logic in the trigger area below, do **not** merge until every new or changed menu item includes contract mapping (`keep` / `enter_owner` / `enter_terminal`), handoff behavior, and regression tests for menu handoff + inline replacement.
-
-For any design or implementation that touches Feishu command menu cards, launcher-to-business handoff, or menu callback replace/append behavior, consult:
-
-- `docs/general/feishu-menu-card-usage-guidelines.md`
-- `docs/general/feishu-card-ui-state-machine.md`
-
-Trigger area:
-
-- `internal/core/control/feishu_ui_lifecycle.go`
-- `internal/core/orchestrator/service_page_view.go`
-- `internal/core/orchestrator/service_feishu_ui_context.go`
-- `internal/core/orchestrator/service_workspace_page.go`
-- `internal/app/daemon/app_ingress.go`
-- menu-related Feishu callback/view docs under `docs/general/`
-
-Baseline requirements:
-
-- menu actions must be classified through unified frontstage contract (`keep` / `enter_owner` / `enter_terminal`)
-- menu card must stay launcher-only; business execution state belongs to owner cards
-- do not reintroduce submission-anchor fallback, bare command continuation fallback, or legacy menu substrate
-- any new menu item must include contract mapping, handoff behavior, and regression tests for menu handoff + inline replacement
-
-## Feishu Card Content Context Baseline
-
-When touching card text construction in the trigger area below, do **not** merge until all dynamic text stays out of raw markdown and regression tests prove the split. When a new structured path replaces an old markdown contract, remove the old path — do not leave permanent legacy coexistence.
-
-For any design or implementation that touches Feishu card text contracts, markdown/plain_text split, or card text render helpers, consult:
-
-- `docs/general/feishu-card-content-context-guidelines.md`
-
-Trigger area:
-
-- `internal/adapter/feishu/**`
-- `internal/core/control/**` when adding or changing Feishu card DTO text fields
-- `internal/core/orchestrator/**`
-- `internal/app/daemon/**` when constructing Feishu-facing summary/status/message/notice/catalog text
-- any design/doc discussing Feishu card markdown contracts, `plain_text`, `FeishuCardTextSection`, `SummarySections`, or `renderSystemInlineTags(...)`
-
-Baseline requirements:
-
-- external or dynamic text must not be precomposed into raw markdown upstream
-- adapter owns the final markdown/plain_text split and Feishu-specific tags
-- `renderSystemInlineTags(...)` and similar helpers are local formatting helpers, not general sanitizers
-- new card text defaults to structured/plain-text carriers such as `FeishuCardTextSection` and `SummarySections`
-- when a new structured path replaces an old markdown contract, remove the old path instead of leaving permanent legacy/fallback coexistence
-- add regression tests that prove dynamic text stays out of markdown, or explicitly justify the remaining markdown contract
-
-## Documentation Convention
-
-When adding, moving, or restructuring docs under `docs/`, do **not** merge until: the doc is placed in exactly one lifecycle dir, the metadata block is complete (`Type` / `Updated` / `Summary`), and links + `docs/README.md` are updated in the same change.
-
-For lifecycle/reference docs under `docs/`:
-
-- place docs in exactly one lifecycle dir:
-  - `docs/draft/`
-  - `docs/inprogress/`
-  - `docs/implemented/`
-  - `docs/general/`
-  - `docs/obsoleted/`
-- every `docs/**/*.md` starts with visible metadata block below title:
-  - `Type`
-  - `Updated`
-  - `Summary`
-- `Type` must match directory lifecycle
-- obsolete docs move to `docs/obsoleted/`
-- when moving docs, update links and `docs/README.md` in same change
-
-## State-Machine Doc Sync (Pre-commit Gate)
-
-Canonical docs:
-
-- remote surface: `docs/general/remote-surface-state-machine.md`
-- Feishu card UI: `docs/general/feishu-card-ui-state-machine.md`
-
-When corresponding logic carriers changed, do **not** commit until: guardrail skill passes, canonical doc is synced to implemented behavior, and dead/half-dead/stale-action states are audited.
-
-- implement + test first
-- run matching guardrail skill before commit
-- sync canonical doc to implemented behavior
-- audit dead/half-dead/stale-action states
-- if bug-grade issue found, fix + retest in same pass
-- if unresolved product tradeoff remains, append to `待讨论取舍`
-
-## GitHub Issue Workflow (Policy)
-
-- For medium/large issue work, use issue workflow skill and its fixed `prepare/lint/finish` entry points.
-- Raw issues are allowed to start rough; first shape them to at least research closure before trying to implement.
-- If an issue was opened by an external reporter, do not rewrite their original issue body into the repository's internal workflow template.
-- For an external reporter issue, first create a new internal execution issue; use that internal issue as the workflow-managed unit for shaping, execution snapshots, staged plans, and close-out.
-- If later split is needed, split under the internal execution issue rather than turning the external reporter issue itself into the parent scheduler.
-- Treat the original external reporter issue as a communication surface: keep the original description, link the internal execution issue both ways, and sync results back there by comment.
-- By default, close only the internal execution issue; do not auto-close the original external reporter issue unless the user explicitly asks for that policy.
-- Do not start code assessment against known-stale checkout when worktree is clean.
-- Tiny fixes that can be finished immediately do not require opening/normalizing an issue.
-- Before handing a subtask to a worker, make sure the active child issue is an information closure or a stable closure index for execution.
-- Prefer parent issue + child issue orchestration when one issue would otherwise mix multiple goals, validation surfaces, or weakly related code areas.
-- Workflow-managed active issues should carry exactly one explicit workflow status label; use `status:implementable-now` for ready-to-start work instead of encoding readiness as “no status label”.
-- When an issue is implementable and not truly single-stage, keep `建议范围`, `实现参考`, `检查参考`, and `收尾参考` current in the issue body.
-- For multi-stage or multi-turn issue work, keep a durable execution snapshot in the issue body or linked design doc, including at least `当前执行点`, `下一步`, `最后一致状态`, `未完成尾项`, and `恢复步骤`.
-- On resume, do not continue from chat memory alone. Re-read the execution snapshot and verify it against the current code and latest issue state before acting.
-- If `未完成尾项` only contains close-out work such as verifier / commit / push / finish, then `当前执行点` and `下一步` must also stay in close-out semantics; do not leave snapshot text that still points at more implementation or validation.
-- For unsplit implementable issues, a recorded phase/stage is execution sequencing only; it does not create a default stop point.
-- After each completed phase on an unsplit issue, explicitly decide only among:
-  - issue is actually complete
-  - blocked / contradiction / product gate
-  - needs formal split before more coding
-  - continue into the next phase now
-- Do not stop merely because the current phase ended.
-- When issue work uncovers a small, non-blocking, low-priority follow-up that is not worth a standalone issue, record it under a dedicated `低优先级待办` section in the active issue body instead of leaving it only in chat.
-- If implementation uncovers a red inconsistency that changes goals, acceptance, dependencies, or sibling issue assumptions, stop local patching and return the result to the orchestrating issue for replanning.
-- If issue work reaches a real product decision gate, do not guess. Add a dedicated `待决策` or `产品待拍板` section with the minimal decision packet, ask only for the smallest blocking decision, then resume after that decision is synced back into the issue body.
-- For finished `full` issues, default to an independent verifier pass before close-out; `fast` issues do not require one unless risk increased during execution.
-- Before `finish --close`, run `issuectl close-plan` and fix any returned issue-side blockers instead of using the first close attempt as a probe.
-- Treat a stale naked `processing` label as a recoverable lease, not a permanent lock; the default `prepare` path may reclaim it after the configured stale window, and resumed work must refresh the issue snapshot before continuing.
-- If a child issue has a parent issue, do not `finish --close` it until the parent has received a durable roll-up of the child result.
-- If a parent issue is being closed, make sure its total view includes child roll-up state, verifier state, and current close judgment before `finish --close`.
-- If an older issue is resumed under the current workflow, do not let it enter close-out with a legacy contract; first add the missing current workflow fields that the close gate depends on.
-- Before `finish`, explicitly re-check whether durable knowledge changed enough to require syncing the issue body, linked docs, state-machine docs, or repo workflow guidance.
-- For issue work requested as `处理`, `完成`, or staged rollout, do not stop after local code/test completion while any of these remain unfinished without a real blocker:
-  - commit
-  - push
-  - final `finish`
-  - issue close when acceptance is satisfied
-- “I already implemented it locally” is not a sufficient reason to leave an issue open or leave commits unpublished.
-
-## Windows Shell / bash 使用规范（禁用 WSL）
-
-- **禁止在仓库操作中使用任何 WSL 命令**：wsl / wsl.exe / C:\Windows\system32\bash.exe（WSL bash）。
-- 原因（实测踩坑，2026-08-05）：WSL 内的 git 与 Windows git 对行尾（CRLF/LF）、配置、路径的视角不一致。同一干净工作区，WSL git 会误报 200+ 个文件"每行都变"（206 个假 modified），并打印 wsl: Processing /etc/fstab with mount -a failed. 噪音，导致 safe-push / status 检查不可信。
-- 需要 bash 时**统一用 Git Bash**：C:\Program Files\Git\bin\bash.exe（或 C:\Program Files\Git\usr\bin\bash.exe）。它使用 Windows git，视角一致。
-- PowerShell 中调用示例：
-  ```powershell
-  & "C:\Program Files\Git\bin\bash.exe" -c 'cd /e/temp/codex-remote-feishu && ./safe-push.sh'
-  ```
-- 执行前先确认 bash 来源：`Get-Command bash | Select-Object Source`。若指向 `C:\Windows\system32\bash.exe` 就是 WSL，必须改用 Git Bash 完整路径。
-- 不要用裸 `bash` / `git` 让系统解析到 WSL；仓库操作一律走 Windows git（`C:\Program Files\Git\cmd\git.exe`）。
-- WSL 仅允许用于与仓库无关、且用户明确要求 WSL 的操作。
-## Windows GitHub CLI (gh) 使用规范
-
-PowerShell 5.1 与 Unix shell 的引号 / 管道 / 编码语义不同，直接照抄 Unix 习惯的 gh 命令会反复翻车（实测踩坑记录，2026-08-05）。以下为验证过的正确姿势：
-
-### 命令分隔
-- PowerShell 5.1 不支持 `&&` / `||`，报错 `The token '&&' is not a valid statement separator`。多条命令用 `;` 分隔，或分多次工具调用。
-
-### 输出与 jq
-- 能不用 `--jq` 就不用：默认表格输出（`gh run list` / `gh issue list`）或 `--json` + PowerShell `ConvertFrom-Json` 最稳。
-- 必须用 `--jq` 时：
-  - 表达式内不要使用 `\"` 转义（如 `'.[] | "\(.number): \(.title)"'`）——PowerShell 会把 `\"` 原样传给 gh，报 `unknown argument`。
-  - 用 `@tsv` / `@csv` 平铺输出：`--jq '.[] | [.number, .title] | @tsv'`。
-  - 不要在表达式里用切片 `[0:8]`（实测报 `function not defined: a/0`）；需要截断时在 PowerShell 侧处理。
-- PowerShell 侧解析：`$t = gh api <url> | ConvertFrom-Json`，再用 `Where-Object` / `ForEach-Object` 过滤，避免复杂 jq。
-
-### 通过 API 发 JSON（评论 / 创建资源）
-- 不要 `$json | gh api --input -`：PS 5.1 管道编码 + `ConvertTo-Json` 对象包装会报 `Problems parsing JSON`。
-- 正确姿势（无 BOM UTF-8 临时文件，从文件读）：
-  ```powershell
-  $body = [string][System.IO.File]::ReadAllText("$env:TEMP\msg.md")
-  $json = @{ body = $body } | ConvertTo-Json
-  [System.IO.File]::WriteAllText("$env:TEMP\payload.json", $json, (New-Object System.Text.UTF8Encoding($false)))
-  gh api -X POST repos/o/r/issues/1/comments --input "$env:TEMP\payload.json"
-  ```
-- `Get-Content -Raw` 在 PS 5.1 返回的是对象而非纯字符串，`ConvertTo-Json` 会包一层 `{ "value": ... }`，务必用 `[string]` 强转或 `[System.IO.File]::ReadAllText`。
-
-### 版本差异
-- 先 `gh <cmd> --help` 确认本机版本支持的 flags，不要凭记忆。例如本机 `gh issue close` 只有 `--comment`，没有 `--comment-file`；长评论走上面的 API 方式（先发评论再关单）。
-
-### 其他
-- `gh run watch <run-id> --exit-status --interval 20` 可阻塞等待 CI 结果。
-- 引用 jq 输出时避免含空格的表达式；不确定时先跑 `gh ... --json fields` 看原始 JSON。
-
-## Commit / Push / Branch Policy
-
-- If repository work is resolved and verified, do not end the turn with uncommitted changes unless the user explicitly wants local-only uncommitted state.
-- All pushes must go through `./safe-push.sh`; plain `git push` is not allowed.
-- When safe-push rebases and blocks on the rebase review gate, review the rebase log and confirm with `./safe-push.sh --confirm-rebase-review`.
-- If you intentionally commit during task work, push in the same turn by default unless user asked local-only staging.
-- Do not end a repository task with local commits left unpushed unless one of these is true:
-  - the user explicitly asked to keep it local-only
-  - the branch is explicitly a temporary local experiment branch
-  - push is genuinely blocked by conflict, failing post-rebase validation, permission, or outage
-- If stopping in a local-only state, explicitly report:
-  - `LOCAL-ONLY`
-  - current branch
-  - current `HEAD`
-  - why it was not pushed
-  - the exact next action needed to publish it
-- Before treating a repository task as complete, re-check both:
-  - `git status --short`
-  - whether local `HEAD` is ahead of its upstream
-- For issue work, also re-check whether the issue itself is still open only because of process tail work; if so, finish that tail work instead of stopping.
-- For temporary branch/ref switches, record start ref and return on normal exit unless user explicitly says stay.
-
-## File Length Gate Policy
-
-- `bash scripts/check/go-file-length.sh` is mandatory; do not bypass with `--no-verify` or equivalent.
-- If blocked by oversized files, perform structure-first split and keep behavior stable unless behavior change is in scope.
-
-## Proxy / Wrapper Policy
-
-- For local tests/debug against localhost, unset proxy env first:
-  - `unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy`
-- Wrapper exception:
-  - `relay-wrapper` itself should run without proxy for local relay communication
-  - when launching `codex.real`, restore captured proxy env for child process
-
-## External Command Launch Policy
-
-- Production Go code must not call `exec.Command` or `exec.CommandContext` directly.
-- Use `internal/execlaunch` for new external process creation so Windows no-console defaults stay centralized.
-- If a caller needs extra `SysProcAttr`, detached, or process-group behavior, layer it on top of `execlaunch.Prepare(cmd)` instead of replacing the shared defaults.
-
-## Debugging / Ownership Guardrails
-
-- Stateful bugs are evidence-first: collect full-path runtime evidence before patching.
-- Do not classify helper/internal traffic using thread-local/timing heuristics; use protocol correlation ids.
-- Wrapper owns accurate translation + explicit annotation; product visibility policy belongs to server/orchestrator layer.
-- Config migration/install writes must preserve existing credentials unless explicit destructive reset flow is defined.
-- For service lifecycle ops, do not run overlapping `stop/start/restart/bootstrap` on same daemon.
+- 生产 Go 代码不得直接 `exec.Command` / `exec.CommandContext`，统一用 `internal/execlaunch`。
+- 本地 localhost 调试先清 proxy 环境变量；`relay-wrapper` 本身不带 proxy，子进程恢复捕获的 proxy。
+- 配置迁移/安装写入必须保留既有凭据；服务生命周期操作不得对同一 daemon 重叠 stop/start/restart/bootstrap。
+- 调试流量分类用协议关联 id，不用线程/时序启发式。
