@@ -123,8 +123,11 @@ bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <
 - 终态：工作区干净、没有未推送的本地提交、`finish` 已跑、验收满足时 issue 已关闭。
 - 如果停在非终态，必须说明还差什么、为什么停，以及精确的恢复动作。
 
-## GitHub CLI 兼容
+## GitHub CLI 强制规范
 
-- 优先 `gh issue view <number> --json ...`；`--json` 不便时用 REST `gh api repos/<owner>/<repo>/issues/<number>`。
-- 陌生 `--json` 字段先跑 `bash scripts/dev/gh-json-fields.sh --check ...`。
-- 确定性失败不原样重跑：先改输入或换 helper。
+- 读写 issue 优先使用 `issuectl`，不要自己拼裸 `gh issue view <number> --comments`（projectCards GraphQL 必炸）。
+- `gh issue view <number> --json ...` 或 REST `gh api ...` 可用，但 `--json` 字段必须先跑 `bash scripts/dev/gh-json-fields.sh --check <field,...> <gh-subcommand>` 验证，禁止凭记忆猜。
+- issue 全文、评论、CI 日志一律重定向到文件再按需读（先 `rg '^## '` 列结构，再 `sed -n` 取段），不要打进 stdout。
+- 编辑 body 一律 `--body-file <file>`；禁止把含反引号、`$()`、长文本的 body 直接拼进命令行。
+- 多步命令拆成多次工具调用；禁止用 `&&` 接在 heredoc 之后。
+- 命令失败后禁止原样重试同一条命令：先读错误，换 helper 或正确格式。

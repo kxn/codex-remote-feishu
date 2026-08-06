@@ -144,6 +144,15 @@ bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <
 
 完整 JSON 用 `--json-file <path>` 写文件，stdout 只出文本摘要；按需读取文件里的 section，不 cat 全文。
 
+## 10. gh 使用强制规范
+
+- 读写 issue 优先 `issuectl`；禁止裸 `gh issue view <n> --comments`。
+- `--json` 字段先 `bash scripts/dev/gh-json-fields.sh --check` 验证，禁止凭记忆猜。
+- issue 全文 / 评论 / CI 日志重定向到文件按需读，不要打进 stdout。
+- 长 body 用 `--body-file`；禁止把反引号、`$()`、长文本拼进命令行。
+- 多步命令拆开，禁止 `&&` 接 heredoc。
+- 失败后禁止原样重试同一条命令。
+
 确定性检查优先仓库 helper：
 
 ```bash

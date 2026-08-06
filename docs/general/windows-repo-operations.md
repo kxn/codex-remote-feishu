@@ -54,3 +54,14 @@ PowerShell 5.1 与 Unix shell 的引号 / 管道 / 编码语义不同，直接�
 
 - `gh run watch <run-id> --exit-status --interval 20` 可阻塞等待 CI 结果。
 - 引用 jq 输出时避免含空格的表达式；不确定时先跑 `gh ... --json fields` 看原始 JSON。
+
+## 跨平台 gh 强制规范
+
+以下规则对所有平台生效，Windows 下同样适用：
+
+- 禁止裸 `gh issue view <n> --comments`（projectCards GraphQL 必炸），改用 `--json` 或 REST。
+- 任何 `gh ... --json` 字段先 `bash scripts/dev/gh-json-fields.sh --check` 验证，禁止凭记忆猜。
+- issue 全文 / 评论 / CI 日志重定向到文件按需读，不要打进 stdout。
+- 长 body 用 `--body-file`，禁止把含反引号、`$()`、长文本的 body 拼进命令行。
+- 多步命令拆成多次调用，禁止 `&&` 接在 heredoc 之后。
+- 失败后禁止原样重试同一条命令。
