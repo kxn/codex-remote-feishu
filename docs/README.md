@@ -160,6 +160,7 @@
 - [claude-plan-confirmation-permission-panel-design.md](./inprogress/claude-plan-confirmation-permission-panel-design.md)
 - [claude-live-projection-semantics-design.md](./inprogress/claude-live-projection-semantics-design.md)
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
+- [codex-claude-subagent-model-design.md](./inprogress/codex-claude-subagent-model-design.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
