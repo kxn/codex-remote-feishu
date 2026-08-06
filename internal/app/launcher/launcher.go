@@ -6,8 +6,10 @@ import (
 	"io"
 	"os"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/app/installshim"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
 )
 
@@ -35,6 +37,20 @@ type RunnerSet struct {
 
 func Main(opts Options) int {
 	opts = withDefaults(opts)
+
+	// Register the editor integration used by install flows (bundle entrypoint
+	// detection + managed-shim patching). The upgrade shim binary does not go
+	// through launcher and never registers these, which keeps managedshim/embed
+	// out of the shim's link graph.
+	install.RegisterEditorHooks(editor.DetectBundleEntrypoints, func(p install.BundleEntrypointPatchOptions) error {
+		return editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+			EntrypointPath:   p.EntrypointPath,
+			InstallStatePath: p.InstallStatePath,
+			ConfigPath:       p.ConfigPath,
+			InstanceID:       p.InstanceID,
+		})
+	})
+	install.RegisterUpgradeHelperShimHook(installshim.PrepareUpgradeHelperShim)
 
 	decision, err := Detect(opts.Args)
 	if err != nil {

@@ -2,12 +2,10 @@ package install
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -121,17 +119,10 @@ func observeUpgrade(ctx context.Context, cfg config.LoadedAppConfig) error {
 	runtimeStatusURL := strings.TrimRight(adminURL, "/") + "/api/admin/runtime-status"
 	statusURL := strings.TrimRight(adminURL, "/") + "/v1/status"
 
-	client := &http.Client{
-		Timeout: 5 * time.Second,
-		Transport: &http.Transport{
-			Proxy: nil,
-		},
-	}
-
 	deadline := time.Now().Add(upgradeHelperStartupTimeout)
 	var coreHealthyAt time.Time
 	for time.Now().Before(deadline) {
-		coreHealthy, gatewayReady, err := probeUpgradeHealth(ctx, client, healthURL, bootstrapURL, runtimeStatusURL, statusURL)
+		coreHealthy, gatewayReady, err := probeUpgradeHealth(ctx, healthURL, bootstrapURL, runtimeStatusURL, statusURL)
 		if err == nil && coreHealthy {
 			if coreHealthyAt.IsZero() {
 				coreHealthyAt = time.Now()
@@ -152,21 +143,21 @@ func observeUpgrade(ctx context.Context, cfg config.LoadedAppConfig) error {
 	return errors.New("timed out waiting for upgraded service to become healthy")
 }
 
-func probeUpgradeHealth(ctx context.Context, client *http.Client, healthURL, bootstrapURL, runtimeStatusURL, statusURL string) (bool, bool, error) {
-	if err := expectHTTPStatus(ctx, client, healthURL, http.StatusOK); err != nil {
+func probeUpgradeHealth(ctx context.Context, healthURL, bootstrapURL, runtimeStatusURL, statusURL string) (bool, bool, error) {
+	if err := expectHTTPStatus(ctx, healthURL, 200); err != nil {
 		return false, false, err
 	}
 	var bootstrapState upgradeHelperBootstrapState
-	if err := fetchJSON(ctx, client, bootstrapURL, &bootstrapState); err != nil {
+	if err := fetchJSON(ctx, bootstrapURL, &bootstrapState); err != nil {
 		return false, false, err
 	}
 	if bootstrapState.SetupRequired {
 		return false, false, errors.New("upgraded service unexpectedly returned to setup-required state")
 	}
-	if err := expectHTTPStatus(ctx, client, runtimeStatusURL, http.StatusOK); err != nil {
+	if err := expectHTTPStatus(ctx, runtimeStatusURL, 200); err != nil {
 		return false, false, err
 	}
-	if err := expectHTTPStatus(ctx, client, statusURL, http.StatusOK); err != nil {
+	if err := expectHTTPStatus(ctx, statusURL, 200); err != nil {
 		return false, false, err
 	}
 	return true, gatewayRecovered(bootstrapState), nil
@@ -187,38 +178,6 @@ func gatewayRecovered(state upgradeHelperBootstrapState) bool {
 		}
 	}
 	return hasConnected
-}
-
-func expectHTTPStatus(ctx context.Context, client *http.Client, rawURL string, want int) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != want {
-		return fmt.Errorf("%s returned http %d", rawURL, resp.StatusCode)
-	}
-	return nil
-}
-
-func fetchJSON(ctx context.Context, client *http.Client, rawURL string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
-	if err != nil {
-		return err
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s returned http %d", rawURL, resp.StatusCode)
-	}
-	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 func switchUpgradeBinary(stateValue *InstallState) error {

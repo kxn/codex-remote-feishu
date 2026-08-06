@@ -96,7 +96,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		return "", err
 	}
 
-	helperPath, err := PrepareUpgradeHelperShim(statePath, stateValue.InstanceID)
+	helperPath, err := prepareUpgradeHelperShimFunc(statePath, stateValue.InstanceID)
 	if err != nil {
 		stateValue.PendingUpgrade = nil
 		stateValue.RollbackCandidate = nil

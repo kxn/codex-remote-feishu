@@ -135,7 +135,7 @@ build_platform_archive() {
   bash "${ROOT_DIR}/scripts/upgradeshim/prepare-upgrade-shim-embed.sh" "${goos}" "${goarch}"
 
   CGO_ENABLED=0 GOOS="${goos}" GOARCH="${goarch}" \
-    go build -trimpath -ldflags "-X main.version=${version} -X main.branch=${build_branch} -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=${build_flavor}" \
+    go build -trimpath -ldflags "-s -w -X main.version=${version} -X main.branch=${build_branch} -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=${build_flavor}" \
     -o "${staging_dir}/codex-remote${extension}" ./cmd/codex-remote
 
   if [[ "${goos}" == "windows" ]]; then

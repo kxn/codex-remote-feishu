@@ -1,4 +1,4 @@
-package install
+package installshim
 
 import (
 	"fmt"
@@ -12,16 +12,21 @@ import (
 	upgradeshimembed "github.com/kxn/codex-remote-feishu/internal/upgradeshim/embed"
 )
 
+// UpgradeShimEntrypointOptions describes where to materialize an upgrade shim
+// binary and which install-state it must bind to.
 type UpgradeShimEntrypointOptions struct {
 	EntrypointPath   string
 	InstallStatePath string
 	InstanceID       string
 }
 
+// UpgradeShimSidecarPath returns the sidecar path for an upgrade shim entrypoint.
 func UpgradeShimSidecarPath(entrypointPath string) string {
 	return upgradeshim.SidecarPath(entrypointPath)
 }
 
+// WriteUpgradeShimEntrypoint releases the embedded upgrade shim binary to
+// entrypointPath and writes the sidecar that binds it to InstallStatePath.
 func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
 	entrypointPath := strings.TrimSpace(opts.EntrypointPath)
 	if entrypointPath == "" {
@@ -43,6 +48,8 @@ func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
 	return upgradeshim.WriteSidecar(UpgradeShimSidecarPath(entrypointPath), sidecar)
 }
 
+// PrepareUpgradeHelperShim releases a uniquely-named upgrade shim next to the
+// install-state file (under <stateDir>/upgrade-helper/) and returns its path.
 func PrepareUpgradeHelperShim(statePath, instanceID string) (string, error) {
 	statePath = filepath.Clean(strings.TrimSpace(statePath))
 	if statePath == "" {
@@ -63,4 +70,14 @@ func PrepareUpgradeHelperShim(statePath, instanceID string) (string, error) {
 		return "", err
 	}
 	return entrypointPath, nil
+}
+
+// executableName mirrors internal/app/install.executableName. Kept local so
+// this package does not import install (install depends on this package to
+// release shims, so importing back would create an import cycle).
+func executableName(goos string) string {
+	if goos == "windows" {
+		return "codex-remote.exe"
+	}
+	return "codex-remote"
 }

@@ -145,7 +145,7 @@ function Build-WindowsReleaseFixture([string]$VersionValue, [string]$TargetDir) 
     $env:CGO_ENABLED = "0"
     $env:GOOS = "windows"
     $env:GOARCH = "amd64"
-    $ldflags = "-X main.version=$VersionValue -X main.branch=$(Get-BuildBranch) -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=shipping"
+    $ldflags = "-s -w -X main.version=$VersionValue -X main.branch=$(Get-BuildBranch) -X github.com/kxn/codex-remote-feishu/internal/buildinfo.FlavorValue=shipping"
 
     Push-Location $RootDir
     try {
