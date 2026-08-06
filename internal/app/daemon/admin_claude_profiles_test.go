@@ -207,6 +207,62 @@ func TestAdminClaudeProfilesCRUDAndRedaction(t *testing.T) {
 	}
 }
 
+func TestAdminClaudeProfilesSubagentModelRoundTrip(t *testing.T) {
+	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/claude/profiles", `{
+  "name":"DevSeek",
+  "baseURL":"https://proxy.internal/v1",
+  "model":"mimo-v2.5-pro",
+  "smallModel":"mimo-v2.5-haiku",
+  "subagentModel":"mimo-v2.5-mini",
+  "reasoningEffort":"high"
+}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var created claudeProfileResponse
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.Profile.SubagentModel != "mimo-v2.5-mini" {
+		t.Fatalf("created SubagentModel = %q, want %q", created.Profile.SubagentModel, "mimo-v2.5-mini")
+	}
+
+	update := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/claude/profiles/"+created.Profile.ID, `{
+  "name":"DevSeek",
+  "baseURL":"https://proxy.internal/v1",
+  "model":"mimo-v2.5-pro",
+  "smallModel":"mimo-v2.5-haiku",
+  "subagentModel":"mimo-v2.5-mini-2",
+  "reasoningEffort":"high"
+}`, created.Profile.ContextPreference.ETag)
+	if update.Code != http.StatusOK {
+		t.Fatalf("update status = %d body=%s", update.Code, update.Body.String())
+	}
+	var updated claudeProfileResponse
+	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode update: %v", err)
+	}
+	if updated.Profile.SubagentModel != "mimo-v2.5-mini-2" {
+		t.Fatalf("updated SubagentModel = %q, want %q", updated.Profile.SubagentModel, "mimo-v2.5-mini-2")
+	}
+
+	list := performAdminRequest(t, app, http.MethodGet, "/api/admin/claude/profiles", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	var listed claudeProfilesResponse
+	if err := json.NewDecoder(list.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	for _, profile := range listed.Profiles {
+		if profile.ID == created.Profile.ID && profile.SubagentModel != "mimo-v2.5-mini-2" {
+			t.Fatalf("listed SubagentModel = %q, want %q", profile.SubagentModel, "mimo-v2.5-mini-2")
+		}
+	}
+}
+
 func TestAdminClaudeProfileNameRequired(t *testing.T) {
 	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 

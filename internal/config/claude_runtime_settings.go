@@ -76,6 +76,9 @@ func ClaudeProfileRuntimeSettings(profile ClaudeProfile) ClaudeRuntimeSettings {
 	if value := strings.TrimSpace(profile.SmallModel); value != "" {
 		settings.Env[ClaudeDefaultHaikuModelEnv] = value
 	}
+	if value := strings.TrimSpace(profile.SubagentModel); value != "" {
+		settings.Env[ClaudeSubagentModelEnv] = value
+	}
 	return MergeClaudeRuntimeSettings(settings, ClaudeReasoningRuntimeSettings(profile.ReasoningEffort))
 }
 

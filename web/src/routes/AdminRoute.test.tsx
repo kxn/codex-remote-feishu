@@ -1100,6 +1100,7 @@ describe("AdminRoute", () => {
       baseURL: "https://proxy.updated/v1",
       model: "mimo-v2.5-pro",
       smallModel: "mimo-v2.5-haiku",
+      subagentModel: "",
       reasoningEffort: "max",
     });
     expect(await screen.findByRole("button", { name: /DevSeek Updated/ })).toBeInTheDocument();
@@ -1131,6 +1132,7 @@ describe("AdminRoute", () => {
       authToken: "new-token",
       model: "",
       smallModel: "",
+      subagentModel: "",
       reasoningEffort: "high",
     });
   });

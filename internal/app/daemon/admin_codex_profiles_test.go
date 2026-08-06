@@ -209,6 +209,71 @@ func TestAdminCodexProfilesCanonicalCRUDUsesItemETagsAndRedaction(t *testing.T) 
 	}
 }
 
+func TestAdminCodexProfilesSubagentModelRoundTripAndLegacyPreserve(t *testing.T) {
+	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", `{
+  "name":"Team Proxy",
+  "baseURL":"https://proxy.example/v1",
+  "apiKey":"secret",
+  "model":"gpt-5.5",
+  "reviewModel":"gpt-5.5-mini",
+  "subagentModel":"gpt-5.5-nano",
+  "reasoningEffort":"high"
+}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var created codexProfileResponse
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.Profile.SubagentModel != "gpt-5.5-nano" {
+		t.Fatalf("created SubagentModel = %q, want %q", created.Profile.SubagentModel, "gpt-5.5-nano")
+	}
+
+	update := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/profiles/"+created.Profile.ID, `{
+  "name":"Team Proxy",
+  "baseURL":"https://proxy.example/v1",
+  "model":"gpt-5.5",
+  "reviewModel":"gpt-5.5-mini",
+  "subagentModel":"gpt-5.5-nano-2",
+  "reasoningEffort":"high"
+}`, created.Profile.ETag)
+	if update.Code != http.StatusOK {
+		t.Fatalf("update status = %d body=%s", update.Code, update.Body.String())
+	}
+	var updated codexProfileResponse
+	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode update: %v", err)
+	}
+	if updated.Profile.SubagentModel != "gpt-5.5-nano-2" {
+		t.Fatalf("updated SubagentModel = %q, want %q", updated.Profile.SubagentModel, "gpt-5.5-nano-2")
+	}
+
+	legacyUpdate := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/providers/"+created.Profile.ID, `{
+  "name":"Team Proxy",
+  "baseURL":"https://proxy.example/v1",
+  "model":"gpt-5.5",
+  "reasoningEffort":"high"
+}`, updated.Profile.ETag)
+	if legacyUpdate.Code != http.StatusOK {
+		t.Fatalf("legacy update status = %d body=%s", legacyUpdate.Code, legacyUpdate.Body.String())
+	}
+
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	secret, ok := config.CurrentCodexAPIProfile(loaded.Config.Codex.Profiles[0])
+	if !ok {
+		t.Fatal("CurrentCodexAPIProfile() did not return profile after legacy update")
+	}
+	if secret.SubagentModel != "gpt-5.5-nano-2" {
+		t.Fatalf("legacy update did not preserve SubagentModel: %q", secret.SubagentModel)
+	}
+}
+
 func TestAdminCodexProfilesListIncludesOAuthAndAllowsContextPreference(t *testing.T) {
 	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{CodexRealBinary: "fake-codex"})

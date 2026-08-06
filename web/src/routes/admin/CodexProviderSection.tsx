@@ -35,6 +35,7 @@ type CodexProviderDraft = {
   apiKey: string;
   model: string;
   reviewModel: string;
+  subagentModel: string;
   reasoningEffort: string;
   contextMode: string;
 };
@@ -444,6 +445,20 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
           </label>
 
           <label className="field">
+            <span>子代理模型</span>
+            <input
+              value={draft.subagentModel}
+              placeholder="留空时子代理跟随主模型"
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  subagentModel: event.target.value,
+                }))
+              }
+            />
+          </label>
+
+          <label className="field">
             <span>
               推理强度 <em className="field-required">*</em>
             </span>
@@ -506,6 +521,7 @@ function createEmptyDraft(): CodexProviderDraft {
     apiKey: "",
     model: "",
     reviewModel: "",
+    subagentModel: "",
     reasoningEffort: "",
     contextMode: codexContextModeDefault,
   };
@@ -518,6 +534,7 @@ function createDraftFromProvider(provider: CodexProfileSummary): CodexProviderDr
     apiKey: "",
     model: provider.model?.trim() || "",
     reviewModel: provider.reviewModel?.trim() || "",
+    subagentModel: provider.subagentModel?.trim() || "",
     reasoningEffort: normalizeCodexReasoningEffort(provider.reasoningEffort),
     contextMode: contextMode(provider),
   };
@@ -556,6 +573,7 @@ function buildCreatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest
     apiKey: draft.apiKey,
     model: draft.model.trim(),
     reviewModel: draft.reviewModel.trim(),
+    subagentModel: draft.subagentModel.trim(),
     reasoningEffort: normalizeCodexReasoningEffort(draft.reasoningEffort),
   };
 }
@@ -566,6 +584,7 @@ function buildUpdatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest
     baseURL: draft.baseURL.trim(),
     model: draft.model.trim(),
     reviewModel: draft.reviewModel.trim(),
+    subagentModel: draft.subagentModel.trim(),
     reasoningEffort: normalizeCodexReasoningEffort(draft.reasoningEffort),
   };
   if (draft.apiKey) {

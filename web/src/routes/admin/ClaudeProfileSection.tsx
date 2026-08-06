@@ -24,6 +24,7 @@ type ClaudeProfileDraft = {
   authToken: string;
   model: string;
   smallModel: string;
+  subagentModel: string;
   reasoningEffort: string;
   contextMode: string;
 };
@@ -384,6 +385,19 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
           />
         </label>
         <label className="field">
+          <span>子代理模型</span>
+          <input
+            value={draft.subagentModel}
+            placeholder="留空时子代理跟随主模型"
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                subagentModel: event.target.value,
+              }))
+            }
+          />
+        </label>
+        <label className="field">
           <span>推理强度</span>
           <select
             value={draft.reasoningEffort}
@@ -433,6 +447,7 @@ function createEmptyDraft(): ClaudeProfileDraft {
     authToken: "",
     model: "",
     smallModel: "",
+    subagentModel: "",
     reasoningEffort: "",
     contextMode: claudeContextModeDefault,
   };
@@ -445,6 +460,7 @@ function createDraftFromProfile(profile: ClaudeProfileSummary): ClaudeProfileDra
     authToken: "",
     model: profile.model?.trim() || "",
     smallModel: profile.smallModel?.trim() || "",
+    subagentModel: profile.subagentModel?.trim() || "",
     reasoningEffort: normalizeClaudeReasoningEffort(profile.reasoningEffort),
     contextMode: contextMode(profile),
   };
@@ -467,6 +483,7 @@ function buildCreatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     authToken: optionalString(draft.authToken),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
+    subagentModel: draft.subagentModel.trim(),
     reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
   };
 }
@@ -477,6 +494,7 @@ function buildUpdatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     baseURL: draft.baseURL.trim(),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
+    subagentModel: draft.subagentModel.trim(),
     reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
   };
   const authToken = optionalString(draft.authToken);

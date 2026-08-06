@@ -174,6 +174,35 @@ func TestClaudeProfileResolutionAndLaunchEnv(t *testing.T) {
 	}
 }
 
+func TestClaudeSubagentModelLaunchEnv(t *testing.T) {
+	profile := ClaudeProfile{
+		ClaudeProfileConfig: ClaudeProfileConfig{
+			ID:            "devseek",
+			Name:          "DevSeek",
+			AuthMode:      ClaudeAuthModeAuthToken,
+			SubagentModel: "mimo-v2.5-mini",
+		},
+	}
+	baseEnv := []string{"CLAUDE_CODE_SUBAGENT_MODEL=old-subagent"}
+
+	updatedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, profile)
+	if err != nil {
+		t.Fatalf("ApplyClaudeProfileLaunchEnv(set): %v", err)
+	}
+	if value, ok := lookupEnvValue(updatedEnv, "CLAUDE_CODE_SUBAGENT_MODEL"); !ok || value != "mimo-v2.5-mini" {
+		t.Fatalf("subagent model env = %q, %t; want %q", value, ok, "mimo-v2.5-mini")
+	}
+
+	profile.SubagentModel = ""
+	clearedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, profile)
+	if err != nil {
+		t.Fatalf("ApplyClaudeProfileLaunchEnv(clear): %v", err)
+	}
+	if _, ok := lookupEnvValue(clearedEnv, "CLAUDE_CODE_SUBAGENT_MODEL"); ok {
+		t.Fatalf("expected empty subagent model to clear env, got %#v", clearedEnv)
+	}
+}
+
 func TestApplyClaudeReasoningLaunchEnv(t *testing.T) {
 	baseEnv := []string{
 		ClaudeEffortLevelEnv + "=old-effort",
