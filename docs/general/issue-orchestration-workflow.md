@@ -1,499 +1,87 @@
 # Issue Orchestration Workflow
 
 > Type: `general`
-> Updated: `2026-07-31`
-> Summary: 当前仓库专用的 issue workflow 基线，以单一生命周期 owner、fast/full 分级合同、产品决策门、执行恢复、结果回卷和 issue-side close gate 减少重复规划、审批与验证。
+> Updated: `2026-08-06`
+> Summary: issue workflow 参考基线已精简：入口和最小合同以 issue-workflow-guardrail skill 为准，本文只保留拆分、快照、决策包、verifier 和 close gate 的详细模板。
 
-## 1. 文档定位
+## 1. 定位
 
-这份文档是公开仓库可共享的 issue workflow 基线。
+本文是 issue workflow 的参考基线，不是每次执行都要通读的必读材料。
 
-它只保留运行这套 workflow 所需的最小规则，不展开本地经验、私有判断偏好或更深的设计原则。
+- 入口、模式选择、最小合同、读序以 `.codex/skills/issue-workflow-guardrail/SKILL.md` 为准。
+- 连续执行一个单子时不需要回头重读本文；需要拆分表、决策包、verifier 输出或 close gate 细节时才查阅。
+- 若 `.codex/private/issue-orchestration-private.md` 存在，仅在分类或拆分判断有歧义时读取；它不改变公开基线。
 
-### 1.1 仓库边界与唯一 owner
+## 2. 模式与边界
 
-本规则只对当前仓库生效，不改变全局 Superpowers，也不应复制为其他仓库的默认行为。
+- 默认 `fast`；fast 准入清单见 skill。
+- full 高风险信号：外部提单、母/子结构或预计要拆、状态机/迁移/安全/权限/协议、多阶段/多 turn、不确定。
+- `prepare` 按 issue 正文/标签做机械升级；执行者按触碰文件面核对 guardrail 区域，执行中发现越界时立即升 full 并补执行上下文。
 
-当任务由 GitHub issue 驱动时，这套 issue workflow 是唯一生命周期 owner，负责 issue 整形、产品决策、计划、执行编排、独立验收、发布和关闭。不要再叠加通用的 brainstorming、writing-plans、executing-plans、per-task 双重 review、finishing-branch 或强制 worktree 流程。
+## 3. 最小合同
 
-Superpowers 只保留方法能力：
+- fast：`背景` / `目标` / `完成标准` + 一个 `status:*` 标签。
+- full：以上 + 执行上下文（`当前执行单元` / `下一步` / `最后一致状态` / `未完成尾项`）。
+- 参考区、阶段计划、执行快照、verifier 都是条件性产物，不是 full 默认项。
 
-- bug 使用 systematic debugging 做根因调研
-- 按实现风险使用 TDD
-- 完成前必须有新鲜验证证据，但不重复运行同一提交已经证明过的检查
-- 只有任务确实可以独立并行时才使用并行 agent
+## 4. 拆分
 
-持久化信息只保留一份：需求、决策和执行状态写在 issue；长设计写在仓库正常生命周期文档；独立验收只由 issue verifier 承担；代码机械检查和发布由 pre-commit 与 `safe-push` 承担。
-
-### 1.2 fast / full 分级
-
-在 `prepare` 前选择模式，并在所有 `issuectl` 命令中显式传递同一个 `--mode`。
-
-- `fast`
-  - 自动用于需求已经清楚、单阶段、低风险的 issue
-  - 最小合同只有 `背景`、`目标`、`完成标准` 和一个明确的 `status:*` 标签
-  - 不要求 `建议范围`、`执行决策`、三份参考区、执行快照或独立 verifier
-  - 一次完成实现、定向验证、提交、推送和 close-out
-- `full`
-  - 用于外部提单、母子 issue、多阶段、状态机、迁移、安全敏感或风险不确定的工作
-  - 保留执行决策、计划、上下文区、必要快照和独立 verifier
-  - 无法确定风险时回退到 `full`
-
-用户显式指定模式时优先服从；但执行中发现 `fast` 已不再安全，必须说明证据并升级到 `full`。
-
-`issuectl` 会机械拒绝把 `status:needs-plan`、母子结构、已有 `建议范围`、执行快照或恢复字段作为 `fast` 执行。状态机、迁移、安全等语义风险无法仅靠正文结构可靠识别，仍由 orchestrator 分类并在不确定时选择 `full`。
-
-## 2. 核心模型
-
-这套 workflow 将复杂 issue 分成五类单元：
-
-1. 原始需求入口
-2. 母 issue
-3. 子 issue
-4. 未拆分直做单元
-5. verifier pass
-
-它们的职责分别是：
-
-- 原始需求入口
-  - 允许粗糙
-  - 负责把想法带入 workflow
-- 母 issue
-  - 负责总目标、拆分、依赖、总调度和结果收拢
-- 子 issue
-  - 负责默认执行单元
-  - 应达到执行闭包或稳定闭包索引
-- 未拆分直做单元
-  - 当 issue 没有拆成子 issue 时，当前活动 issue 自身就是单 worker 执行单元
-  - 它不是旁路流程，仍受所选模式对应的不一致分级、产品决策门、快照和 verifier 约束
-- verifier pass
-  - 负责独立验收
-  - 默认不替代实现者继续编码
-
-### 2.1 原始需求入口的模板要求
-
-面向人类的新建 issue 模板应保持轻量，只要求最小入口信息。
-
-推荐最小字段：
-
-- `类型`
-- `你遇到的问题 / 你想做什么`
-- `你希望最后变成什么样`
-
-可选字段：
-
-- `相关证据`
-- `已知约束 / 担心点`
-- `补充说明`
-
-不应在新建模板阶段就强制填写这些执行期字段：
-
-- `范围`
-- `非目标`
-- `相关文档`
-- `涉及文件`
-- `建议范围`
-- `验证建议`
-- `实现参考`
-- `检查参考`
-- `收尾参考`
-
-这些内容应由后续整形、拆分、`prepare` 或进入执行闭包后逐步补齐，而不是把提单人直接变成执行编排者。
-
-### 2.2 外部提单 issue 的进入方式
-
-当 issue 由外部提单人创建，同时原 issue 还承担对外沟通责任时，应把它视为 `reporter-owned` 入口，而不是直接改造成内部执行单元。
-
-处理原则：
-
-- 原 issue body 保留提单人的原始描述，不直接改写成内部 workflow 模板
-- 原 issue 只做轻量补充：必要标签、澄清问题、以及指向内部执行 issue 的稳定链接
-- 真正进入 workflow 之前，先新建一个内部执行 issue，并作为该外部 issue 的子 issue 或稳定关联 issue
-- `背景`、`目标`、`完成标准`、`执行决策`、`执行快照`、`实现参考`、`检查参考`、`收尾参考` 等执行期字段，只写入内部执行 issue
-- 如果后续还要继续拆分，应围绕内部执行 issue 继续拆成母 issue / 子 issue，而不是把外部提单 issue 本身改造成母 issue
-- 外部提单 issue 主要承担补充证据、同步进展、回评结果，不承担内部执行编排
-
-这样做的目的，是把对外沟通面与内部执行面分开，避免对别人的原始提单做重写式改造。
-
-## 3. 闭包模型
-
-### 3.1 调研闭包
-
-一个 issue 达到调研闭包，表示已经足够判断：
-
-- 是否值得推进
-- 是否需要拆分
-- 依赖和并行关系
-- 下一步是继续调研、拆分还是开工
-
-这对应的默认状态是 `status:needs-investigation`。
-
-### 3.2 计划闭包
-
-一个 issue 达到计划闭包，表示技术调研已经足够，但执行计划还需要被稳定写回：
-
-- 当前 issue 是继续保持单 worker，还是需要拆成母 / 子 issue
-- 当前推荐顺序、依赖和可并行关系
-- 当前 worker 真正要做的那一段范围
-- 准备如何验证，以及哪些风险需要优先盯住
-
-这对应的默认状态是 `status:needs-plan`。
-
-典型例子：
-
-- 母 issue 已经明确“必须拆分”，但子 issue 还没真正创建出来
-- 母 issue 已有阶段 / 子单草图，但当前 worker 边界仍在和别的母单或前置 issue 重叠
-- 当前 issue 已经知道下一步是“先补拆分、先建子 issue”，而不是“直接编码”
-
-### 3.3 执行闭包
-
-一个 issue 达到执行闭包，表示已经足够交给 worker 执行：
-
-- worker 不需要重建大范围背景
-- 即使遇到局部不一致，也通常能在当前边界内解决
-- 如果 issue 暂时不拆分，当前活动 issue 也必须满足同样标准，才能作为未拆分直做单元开工
-
-这对应的默认状态是 `status:implementable-now`。
-
-额外约束：
-
-- `status:implementable-now` 只适用于两类执行单元：
-  - 已形成稳定执行闭包的子 issue
-  - 已明确决定“不拆分”的未拆分直做单元
-- 一个仍然承担母 issue 调度职责、且下一步还是“先拆子 issue”的 issue，不应标成 `status:implementable-now`
-
-### 3.4 显式状态标签
-
-workflow 管理下的活动 issue 应显式携带且只携带一个 `status:*` 标签。
-
-允许值：
-
-- `status:implementable-now`
-- `status:needs-investigation`
-- `status:needs-plan`
-- `status:needs-clarification`
-- `status:blocked`
-
-其中：
-
-- `status:implementable-now`
-  - 表示该 issue 当前已达到可安全开工的执行闭包
-- `status:needs-plan`
-  - 表示技术调研已经足够，但 `建议范围` / 拆分 / 顺序 / 当前执行单元等计划信息还未稳定收口，不允许直接开工
-  - 若当前 issue 是母 issue，且尚未产出真正可执行的子 issue，也应停留在这个状态
-- 其余三项
-  - 表示该 issue 仍处于不同类型的不可直接开工状态
-
-原始入口模板可以默认挂 `status:needs-investigation`，待后续整形后再切换到更准确的状态标签。
-
-推荐顺序：
-
-1. `status:needs-investigation`
-2. `status:needs-plan`
-3. `status:implementable-now`
-
-如果 issue 不需要长时间停留在中间态，也可以在一次调研后很快从 `needs-investigation` 更新到 `needs-plan`，再在计划写回完成后切到 `implementable-now`。
-
-不要再用“没有状态标签”来隐式表示可开工。
-
-这样做的原因是：
-
-- 空状态无法区分“尚未整形的旧 issue”与“已经确认可开工的 issue”
-- issue 列表和调度视图更容易被人和工具稳定识别
-- 恢复执行时可以减少对历史上下文的额外猜测
-
-## 4. 拆分规则
-
-当一个 issue 同时出现这些信号时，应优先考虑拆成母 issue + 子 issue：
+以下信号出现时优先拆成母 issue + 子 issue：
 
 - 同时覆盖多个弱相关目标
-- 需要多套弱相关背景知识
-- 不同部分依赖明显不同的验证方式
-- 会同时改多个弱相关模块
+- 需要多套弱相关背景
+- 不同部分验证面明显不同
 - 一部分失败不应阻塞另一部分
-- 天然存在可并行单元
+- 天然可并行
 
-如果最终决定不拆分，当前活动 issue 仍然必须按单 worker 单元来执行，而不是绕过后续规则直接进入实现。
+母 issue 至少包含：
 
-## 5. full 模式执行决策
+- `背景` / `目标` / `完成标准`
+- `拆分结构` / `推荐顺序` / `可并行组` / `当前风险`
+- 总调度表：`单元`、`类型`、`当前状态`、`依赖`、`可并行组`、`当前闭包等级`、`下一步建议`、`备注`
 
-### 5.1 开工前决策
+进入 close-out 后，总调度表补三列：`结果回卷`、`verifier 状态`、`当前结论`。
 
-在 `full` 模式下，`prepare` 完成且 issue 仍然是 `implementable now` 之后，进入编码前必须先记录一次执行决策。`fast` 不创建这份重复产物。
+子 issue 至少包含：
 
-推荐顺序固定为：
+- `父 issue` / `背景` / `目标` / `非目标` / `完成标准` / `依赖`
+- `信息索引`（需要时）
 
-1. 运行 `prepare`
-2. 重新读取最新的 workflow 文档、repo skill、issue body、最新评论和当前代码
-3. 回写或刷新 `执行决策`
-4. 如果是多阶段或多 turn，回写或刷新执行快照
-5. 再运行 `lint`
-6. 只有 lint 通过后才进入编码
+不要为了“结构好看”过拆；过拆的调度和回填成本高于收益。
 
-执行决策至少写清：
+## 5. 执行上下文与快照
 
-- `是否拆分`
-- `如果不拆，为什么当前 issue 可以直接作为单 worker 单元`
+执行上下文字段：
+
 - `当前执行单元`
-- `是否需要独立 verifier`
-- `如果暂不做 verifier，依据是什么`
-
-`full` 下的 `status:implementable-now` 不是“感觉差不多可以做了”。
-
-它至少应同时满足：
-
-- `建议范围` 已写回
-- `执行决策` 已写回
-- `实现参考`、`检查参考`、`收尾参考` 已写回
-- 若 issue 已跨多阶段或多 turn，执行快照已补齐
-
-如果当前 issue 自身已明确声明“本单不直接承担生产补丁，下一步先拆子 issue”，那它不满足这条状态，应该回退到 `status:needs-plan`。
-
-### 5.2 记录位置
-
-执行决策可以写在这些地方之一：
-
-- 当前活动 issue body
-- 母 issue 的总调度表或当前执行点
-- 稳定链接到的设计文档
-
-它不能只留在聊天上下文里。
-
-## 6. 最低结构
-
-### 6.1 母 issue
-
-母 issue 至少应包含：
-
-- `背景`
-- `目标`
-- `完成标准`
-- `相关文档`
-- `涉及文件`
-- `拆分结构`
-- `推荐顺序`
-- `可并行组`
-- `当前风险`
-- `总调度表`
-- `当前执行点`
-- `恢复步骤`
-
-### 6.2 子 issue
-
-子 issue 至少应包含：
-
-- `父 issue`
-- `背景`
-- `目标`
-- `非目标`
-- `完成标准`
-- `依赖`
-- `信息索引`
-- `实现参考`
-- `检查参考`
-- `收尾参考`
-
-如果子 issue 已进入执行中状态，还应补一个可恢复的执行快照。
-
-### 6.3 未拆分直做单元
-
-`full` 的未拆分直做单元至少应包含：
-
-- `背景`
-- `目标`
-- `完成标准`
-- `执行决策`
-- `实现参考`
-- `检查参考`
-- `收尾参考`
-
-如果未拆分直做单元已经跨多阶段或多 turn 推进，还应补一个可恢复的执行快照。
-
-`fast` 的未拆分直做单元只要求：
-
-- `背景`
-- `目标`
-- `完成标准`
-- 一个明确的 workflow 状态标签
-
-### 6.4 阶段不是停止边界
-
-对于未拆分直做单元：
-
-- `阶段 A / B / C` 这类记录只表示执行顺序，不表示默认可以在该阶段结束时停止
-- 阶段结束只能触发一次显式复核，不能自动变成“本轮做到这里就收工”
-
-每个阶段结束后，至少要重新判断四件事：
-
-1. 当前 issue 是否其实已经满足完成标准
-2. 是否出现了硬阻塞、红色不一致或新的不安全前提
-3. 是否已经进入产品决策门
-4. 当前 issue 是否不再适合作为未拆分直做单元，必须先正式拆分
-
-只有在上面四项中至少一项为真时，才可以不继续下一阶段。
-
-如果四项都不成立，则应直接继续下一阶段，而不是把“阶段已完成”本身当作停止理由。
-
-## 7. 总调度表
-
-母 issue 的总调度表至少应包含这些列：
-
-- `单元`
-- `类型`
-- `当前状态`
-- `依赖`
-- `可并行组`
-- `当前闭包等级`
-- `下一步建议`
-- `备注`
-
-在母 issue 进入 close-out 阶段后，总调度表还应补齐这三列：
-
-- `结果回卷`
-- `verifier 状态`
-- `当前结论`
-
-示例：
-
-```md
-| 单元 | 类型 | 当前状态 | 依赖 | 可并行组 | 当前闭包等级 | 下一步建议 | 备注 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| #300 | 母 issue | 进行中 | - | - | 调研闭包 | 继续拆分 | 总调度中心 |
-| #301 | 子 issue | ready | - | A | 执行闭包 | 交给 worker | 阶段 1 |
-| #302 | 子 issue | blocked | #301 | - | 调研闭包 | 等 #301 结果 | 阶段 2 |
-| #303 | 未拆分直做单元 | in progress | - | - | 执行闭包 | 继续实现并验证 | 当前 issue 自身作为 worker |
-| verify-#301 | verifier | pending | #301 | - | 执行闭包 | 独立验收 | 不一定单独建 issue |
-```
-
-## 8. 执行快照与恢复
-
-聊天上下文不能作为唯一记忆层。
-
-对于 `full` 且多阶段或多 turn 的 issue，当前执行状态应落到 issue body 或稳定索引到的设计文档中。`fast` 不创建执行快照；如果执行已经需要快照，应升级到 `full`。
-
-### 8.1 执行快照最小字段
-
-执行快照至少包含：
-
-- `当前阶段`
-- `当前执行点`
-- `已完成`
-- `下一步`
-- `当前阻塞`
-- `最后一致状态`
+- `下一步`（只写一个动作）
+- `最后一致状态`（哪些事实已确认、哪些已失效）
 - `未完成尾项`
-- `恢复步骤`
 
-### 8.2 执行快照更新时间
+快照只在真实停点更新：
 
-至少在这些时机更新：
+- 停 turn
+- 交给另一个 worker
+- 跨 session 恢复前
 
-- 每个阶段结束时
-- 准备停止当前 turn 前
-- 把任务交给另一个 worker 前
-- 遇到红色不一致后
-- 进入产品决策门前
-- 产品拍板完成并恢复推进后
+阶段结束本身不触发快照更新；阶段只触发四问：是否完成 / 硬阻塞 / 产品决策门 / 需要拆分。
 
-当阶段结束但 issue 仍未完成时，执行快照应明确记录：
+恢复流程：
 
-- 为什么当前还不能停
-- 下一阶段是什么
-- 如果这次没有继续推进，具体阻塞点是什么
+1. 读执行上下文或快照
+2. 对照当前代码确认 `下一步` 仍成立
+3. 失效就先回填，再继续
 
-如果 `未完成尾项` 已经只剩 close-out 项，例如：
+## 6. 产品决策门
 
-- `verifier`
-- `commit`
-- `push`
-- `finish`
-- `close`
-
-那么 `当前执行点` 与 `下一步` 也应同步切到 close-out 语义。
-
-不要留下这种自相矛盾的快照：
-
-- `未完成尾项` 写成只剩 verifier / commit / push / finish
-- 但 `当前执行点` 或 `下一步` 仍然写“继续实现 / 补测试 / 收口路由 / 再改代码”
-
-这种状态会让恢复者误判 issue 已接近完成，同时又看不出真正还差哪些实现工作。
-
-### 8.3 恢复契约
-
-任何 `处理 #123`、`推进 #123` 或其他恢复动作重新进入时，都不应凭记忆直接继续。
-
-恢复时至少要做：
-
-1. 读取执行快照
-2. 读取相关设计文档或闭包索引
-3. 对照当前代码确认 `下一步` 仍然成立
-4. 如果 `下一步` 已失效，先回填新的执行快照，再继续
-
-如果 `prepare` 在恢复前拉取了最新仓库内容，还应重新读取最新的 workflow 文档和 repo skill，而不是假定自己记得的流程仍然有效。
-
-### 8.4 processing claim 不是永久锁
-
-`processing` 标签只是当前 turn 的工作 claim，不是永久锁。
-
-规则如下：
-
-- 正常停止路径上，仍然要通过带有已选模式的 `finish` 机械释放 `processing`
-- 如果旧 turn 异常退出，留下了裸 `processing` 标签，后续 `prepare` 可以在默认 stale 窗口后回收该 claim
-- stale reclaim 只能解决“锁遗留”问题，不能替代 issue body / 执行快照的恢复校验
-- reclaim 后的第一步仍然是重新读取执行快照，并先修正任何已经过时或自相矛盾的快照字段
-
-## 9. 不一致分级
-
-这套分级同时适用于子 issue worker 和未拆分直做单元。
-
-### 9.1 绿色不一致
-
-满足这些条件时，worker 可以局部处理：
-
-- 不改变目标
-- 不改变完成标准
-- 不改变依赖
-- 不影响 sibling issue
-- 仍在当前 issue 的信息边界内
-
-### 9.2 黄色不一致
-
-允许做一次有界探查：
-
-- 先做一次局部调研或小范围确认
-- 如果确认仍在闭包内，就继续
-- 如果发现已经越出闭包，就回到 orchestrator
-
-### 9.3 红色不一致
-
-出现这些情况时，必须回到 orchestrator：
-
-- 需要改目标
-- 需要改完成标准
-- 需要改依赖关系
-- 会影响 sibling issue
-- 会推翻母 issue 的阶段假设
-- 需要大范围跳出当前索引重新探索
-- 当前活动 issue 不能再稳定地作为单 worker 单元继续直做
-
-一旦进入红色不一致，当前活动 issue 的实现必须暂停，并把矛盾回写到 issue body 或相关设计文档。
-
-## 10. 产品决策门
-
-当执行已经碰到真正的产品拍板点时，不应由实现者继续猜测。
-
-### 10.1 进入条件
-
-以下情况应视为产品决策门：
+进入条件：
 
 - 技术约束迫使产品语义让步
 - 用户可见行为存在多个合理方案
-- 交互取舍会影响用户理解或后续操作
-- 继续实现就等于在替产品拍板
+- 交互取舍会影响验收
+- 继续实现等于替产品拍板
 
-### 10.2 最小决策包
-
-进入产品决策门后，母 issue 或当前活动 issue 应写入 `待决策` 或 `产品待拍板` 区块，至少包含：
+最小决策包：
 
 - `触发原因`
 - `当前约束`
@@ -503,167 +91,61 @@ workflow 管理下的活动 issue 应显式携带且只携带一个 `status:*` �
 - `需要拍板的问题`
 - `受影响单元`
 
-### 10.3 决策后恢复
+拍板后先回填 issue，再重新评估阶段、依赖和快照。
 
-人类拍板后，orchestrator 应先：
+## 7. verifier
 
-1. 把结果回填进 issue 或相关设计文档
-2. 重新评估阶段划分、依赖、总调度表和执行快照
+独立 verifier 只用于：母 issue 关闭、外部提单 close-out、安全/迁移/状态机、用户明确要求、或执行中风险上升。
 
-然后再继续推进。
-
-## 11. verifier 边界
-
-verifier 默认以只读方式工作。
-
-它至少要检查：
-
-- 是否满足目标与完成标准
-- 是否偏离非目标
-- 是否存在未验证的高风险面
-- 是否需要补 issue、补文档或补状态机同步
-- 是否建议关闭 issue
-- 如果是母 issue，子 issue 回卷与汇总视图是否足够支撑关单
-
-`full` 的 close path 默认需要独立 verifier；只有用户显式豁免时可以跳过，并应记录豁免。
-
-`fast` 不要求 verifier 决策或独立验收。如果执行中风险上升到需要独立 verifier，应先升级为 `full`，而不是继续借用 `fast` 绕过合同。
-
-### 11.1 verifier 结果等级
-
-verifier 结果应显式记录为以下三种之一：
-
-- `pass`
-- `pass with gaps`
-- `fail`
-
-推荐在 issue body 或 verifier 评论里使用固定前缀：
+结果等级：
 
 - `独立 verifier 结果：pass`
 - `独立 verifier 结果：pass with gaps`
 - `独立 verifier 结果：fail`
 
-### 11.2 verifier 结果如何影响 close path
+`pass with gaps` 不允许直接 close，gap 必须 durable 记录；`fail` 阻断 close。
 
-- `pass`
-  - 可以继续正常 close path
-- `pass with gaps`
-  - 不允许直接 close
-  - 必须先把 gap durably 记录到母 issue、follow-up issue 或 `低优先级待办`
-- `fail`
-  - 直接阻断 close
+## 8. close gate
 
-## 12. 结果回卷与 close gate
+### 子 issue
 
-### 12.1 子 issue close gate
+关闭前必须满足：
 
-当子 issue 存在母 issue 时，关闭前必须满足：
+- 已标出 `父 issue`
+- 结果已 durable 回卷到母 issue
 
-- 已在子 issue 中用稳定字段或 `父 issue` section 标出母 issue
-- 已把完成结果回卷到母 issue
-- 子 issue 固定使用 `full`，因此还应满足 verifier close gate
+### 母 issue
 
-推荐的回卷评论前缀：
+关闭前必须满足：
 
-- `子 issue #248 已完成并关闭，结果回卷如下：`
+- 本轮纳入关闭的子 issue 都已回卷
+- 总调度表已补齐 `结果回卷` / `verifier 状态` / `当前结论`
+- 母级 verifier 已跑且结果为 `pass`
 
-### 12.2 母 issue close gate
+### legacy issue
 
-母 issue 关闭前必须满足：
+旧 issue 重新进入执行或 close path 时，先补齐当前合同：显式状态标签、执行上下文、父链接（如适用）、总调度表（如适用）。
 
-- 所有纳入本轮 close-out 的子 issue 都已有 durable 回卷
-- 总调度表已补齐 `结果回卷`、`verifier 状态`、`当前结论`
-- 已完成一次母 issue 级独立 verifier，且结果为 `pass`
+### 外部提单
 
-### 12.3 legacy issue rehab
+- 内部执行 issue 完成后，在原外部 issue 留一条简短回评（结果、内部 issue 链接、提交/版本、验证结论）
+- 默认只关内部 issue；是否关原 issue 由人工决定
 
-旧 issue 一旦重新进入执行或 close path，应先补齐到当前 contract。
+### finish --close
 
-至少补齐：
+`finish --close` 内置 close gate 检查，gate 不过拒绝关闭。`close-plan` 是可选 dry-run，用于人工预览，不是前置步骤。
 
-- 显式状态标签
-- 当前执行决策
-- 当前执行快照
-- 若为子 issue，则补 `父 issue`
-- 若为母 issue，则补总调度表与 close-out 汇总列
-
-### 12.4 外部提单 issue 的回评 gate
-
-如果当前工作起点是一个外部提单 issue，则 close path 需要额外满足：
-
-- 内部执行 issue 完成后，在外部提单 issue 留一条简短回评
-- 回评至少包含：处理结果、对应内部 issue 链接、关键提交或版本信息、验证结论
-- 默认只关闭内部执行 issue，不自动替外部提单人关闭原 issue
-- 如需关闭原 issue，应由人类维护者显式决定，而不是作为 workflow 默认行为
-
-### 12.5 close-plan 先于 finish --close
-
-不要把第一次 `finish --close` 当作探测 close gate 的手段。
-
-在 issue 进入正常 close path 时，先运行一次 issue-side dry-run：
+## 9. helper
 
 ```bash
-bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh close-plan --issue <number> --mode <fast|full>
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue <number> --mode <fast|full>
+bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> --mode <fast|full> [--comment-file path] [--close]
 ```
 
-`close-plan` 至少负责预检这些阻塞项：
-
-- workflow contract 是否满足所选模式；`full` 是否缺 `执行决策` / 执行快照必填字段
-- verifier close gate 是否已经通过
-- 子 issue 的父 issue durable 回卷是否已经到位
-- 母 issue 的 close-out 汇总视图是否已经补齐
-- 旧 issue 的 child/parent contract 是否仍停留在 legacy 形式
-
-只有 `close-plan` 已经返回 ready，才继续执行真正的：
+确定性检查优先仓库 helper：
 
 ```bash
-bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> --mode <fast|full> --close
+bash scripts/dev/worktree-facts.sh
+bash scripts/dev/resolve-repo-path.sh docs/general/issue-orchestration-workflow.md
+bash scripts/dev/gh-json-fields.sh --check number,title,state issue view <number>
 ```
-
-这样做的目的，是避免一次失败的 close 尝试只用来告诉执行者“其实还缺 verifier/回卷/汇总”。
-
-`finish` 只负责 issue-side workflow 和 close gate，不再读取 `git diff HEAD` 重新执行格式、文档或状态机检查。正常顺序是先完成定向验证、pre-commit、提交和 `safe-push`，再执行 `close-plan` 与 `finish`。
-
-pre-commit 会在当前仓库的 git metadata 中记录已验证的 tree hash。`safe-push` 只在该记录与当前 `HEAD` tree 完全一致时跳过重复的轻量检查；记录缺失、过期或不匹配时仍会补跑。该记录不进入提交，也不会影响其他仓库。
-
-## 13. 收尾决策
-
-在任何正常 stop path 或 close path 之前，当前执行单元都必须显式记录：
-
-- `本地验证做了什么`
-- `是否留下低优先级待办`
-
-`full` 还必须记录是否运行 verifier；若豁免，则记录豁免依据。`fast` 不需要记录“为什么没有 verifier”。
-
-这些内容可以放在完成评论、issue body 或链接设计文档中，但不能完全依赖操作者脑内记忆。
-
-## 14. 推荐用法
-
-默认入口应保持简单：
-
-- `处理 #123`
-  - 自动决定当前是整形、拆分、实现、收拢还是验收
-  - 如果 `#123` 是外部提单 issue，先创建内部执行 issue，再在内部 issue 上进入标准 workflow
-  - 如果中途进入产品决策门，暂停并请求拍板
-  - 如果中途压缩或换执行者，从执行快照恢复
-- `推进 #123`
-  - 从总调度表选择下一批 ready 单元继续
-- `收拢 #123`
-  - 汇总一批子 issue 结果并更新母 issue
-- `验收 #123`
-  - 进入 verifier pass
-
-如果不想区分过多入口，只保留 `处理 #123` 也可以。
-
-## 15. 仓库 helper 的默认用途
-
-为减少确定性试错，repo 内默认优先使用这些 helper：
-
-- `bash scripts/dev/worktree-facts.sh`
-  - 看当前 worktree 是否干净、ahead/behind 状态，以及推荐 publish 动作
-- `bash scripts/dev/resolve-repo-path.sh <path>`
-  - 在打开文件前确认 repo 路径是否真实存在
-- `bash scripts/dev/gh-json-fields.sh <gh-subcommand...>`
-  - 在使用新的 `gh ... --json` 字段前先确认字段是否真的受支持
-
-同一个确定性失败命令，如果输入、环境和代码都没变，不应原样重跑第二次。

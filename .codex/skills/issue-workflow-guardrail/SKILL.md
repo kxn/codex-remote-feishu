@@ -1,597 +1,125 @@
 ---
 name: issue-workflow-guardrail
-description: "Use when handling a GitHub issue for this repository, including raw issue shaping, implementability reassessment, parent/child issue orchestration, durable execution snapshots, product decision-gate handoff, staged execution, result roll-up, and verifier handoff. Run the fixed prepare/lint/finish workflow, keep the issue body current, and stop when the actionable state changed."
+description: "Use when handling a GitHub issue in this repository: raw issue shaping, implementability reassessment, fast/full classification, parent/child orchestration, execution snapshots on real handoffs, product decision gates, result roll-up, and close-out. Run the prepare/finish entry points and keep the issue body current."
 ---
 
 # Issue Workflow Guardrail
 
-Use this skill whenever the task is centered on a GitHub issue in this repository.
+## 定位
 
-Examples:
+本 skill 是当前仓库 GitHub issue 工作流的唯一生命周期 owner，负责整形、分类、计划、执行编排、独立验收（仅在需要的场景）、发布和关闭。
 
-- the user gives an issue number or URL
-- the issue is still raw and needs shaping before coding
-- the user asks to complete, triage, refine, or close an issue
-- the issue is large enough to need parent/child split or schedule management
-- multiple worker results must be rolled back into a mother issue
-- the issue may be blocked, underspecified, or waiting on clarification
-- the issue may have been opened by the user or by someone else
+- 不要叠加通用 Superpowers lifecycle skill（brainstorming、writing-plans、executing-plans、subagent-driven-development、requesting-code-review、finishing-a-development-branch、using-git-worktrees）。
+- 方法 skill 照常可用：`systematic-debugging`、`test-driven-development`、`verification-before-completion`；并行 agent 只在任务真正独立可并行时使用。
+- 持久化只保留一份：需求/决策/执行状态写 issue body 或链接设计文档；长设计写 docs 生命周期文档；独立验收由 `issue-verifier` 承担；机械检查和发布由 pre-commit + `safe-push` 承担。
+- 不为 workflow 管理的 issue 创建 `docs/superpowers/specs` 或 `docs/superpowers/plans`。
 
-Do not run a one-time cleanup pass over old issues. Normalize an issue only when it becomes active.
+## 模式选择
 
-For medium/large issue work, treat [docs/general/issue-orchestration-workflow.md](../../../docs/general/issue-orchestration-workflow.md) as the durable process baseline and use this skill as the operational entrypoint.
+默认 `fast`。命中以下任一高风险信号时选择 `full`：
 
-If repo-root `.codex/private/issue-orchestration-private.md` exists, read it after the public workflow doc and treat it as a local-only augmentation layer for orchestration heuristics, split quality, resume discipline, and product-decision timing. Do not assume that file exists in other clones.
+- 外部提单
+- 母/子结构，或预计需要拆分
+- 状态机、迁移、安全、权限、协议或跨 surface 行为
+- 多阶段或多 turn 执行
+- 分类不确定
 
-## Repository-Local Ownership
+`prepare` 会按 issue 正文和标签做机械升级：命中高风险信号时拒绝以 fast 继续。执行者还要按触碰文件面核对（状态机/迁移/安全/权限/协议等 guardrail 区域），命中即升 full。用户显式指定模式优先，但执行中发现 fast 已不安全时，必须说明证据并升级到 full。
 
-This skill is the sole issue lifecycle orchestrator for this repository only. It does not change global Superpowers behavior or the workflow of repositories that do not ship this skill.
+### fast 准入清单
 
-For workflow-managed issue work, do not stack generic Superpowers lifecycle skills on top of this skill. Issue shaping replaces generic brainstorming, issue or linked-doc planning replaces generic plan documents, `$issue-verifier` is the independent acceptance pass, and repository commit/`safe-push` rules own publication.
+以下条件必须全部成立：
 
-Method skills remain available when their technical trigger matches:
+1. 单一执行面，预期一个 commit 能收尾
+2. 不碰状态机 / 迁移 / 安全 / 权限 / 协议 / 跨 surface 行为
+3. 有明确测试或验证路径
+4. 不需要拆单、交人、跨 session 恢复
 
-- use `superpowers:systematic-debugging` for root-cause investigation
-- use `superpowers:test-driven-development` when implementation risk warrants it
-- use `superpowers:verification-before-completion` as an evidence rule without duplicating checks already run for the same commit
-- use parallel agents only when work is genuinely independent; do not require per-task double review
+任一条件不成立，使用 `full`。
 
-Do not create `docs/superpowers/specs` or `docs/superpowers/plans` for issue work managed here. Put durable requirements and execution state in the issue, and put long-lived design in the repository's normal lifecycle docs.
+## 入口
 
-## Orchestration Model
-
-Use this skill as the repository's main issue orchestrator:
-
-- external reporter issue
-  - preserve the reporter-owned body as the public communication record
-  - before normalization or execution, create a new internal execution issue linked back to the external issue
-  - use the internal issue as the workflow-managed unit for shaping, staged plans, snapshots, and close-out
-  - if more splitting is needed later, split under the internal issue instead of rewriting the reporter-owned issue into a parent scheduler
-- raw issue
-  - shape the issue into a stable problem statement
-  - decide whether it only has research closure or is ready for execution closure
-- parent issue
-  - hold the overall goal, schedule table, dependency order, and roll-up status
-  - prefer this mode when one issue would otherwise mix multiple goals or validation surfaces
-- child issue
-  - treat as the default worker unit
-  - do not hand it to implementation until it is an execution closure or a stable closure index
-- unsplit direct-execution unit
-  - when an issue stays unsplit, the active issue itself becomes the current worker unit
-  - direct execution is not a bypass; it inherits the selected mode's worker-boundary, product-gate, snapshot, and verifier rules
-- execution snapshot
-  - keep a durable current execution point and resume contract in the issue body or linked design doc
-- product decision gate
-  - when execution reaches a real product tradeoff, stop automation and hand back a minimal decision packet instead of guessing
-- verifier handoff
-  - when a `full` issue is effectively complete, hand it to `$issue-verifier` for an independent read-only pass before close-out
-
-Prefer these closure levels:
-
-- `research closure`
-  - enough information to decide whether to proceed, split, or keep investigating
-- `execution closure`
-  - enough information for a worker to implement without rebuilding wide context
-
-If the active issue only reaches research closure, do not force direct implementation. Shape, split, or stop with the issue state updated.
-
-## External Reporter Flow
-
-When the active GitHub issue was opened by someone else and still acts as the public bug report or feature request:
-
-1. do not rewrite the original reporter-owned body into the internal workflow format
-2. create a new internal execution issue first
-3. link the two issues both ways
-4. put all workflow structure on the internal issue:
-   - background / goal / acceptance
-   - execution decision
-   - staged plan
-   - execution snapshot
-   - implementation / check / finish context
-5. use the original external issue only for clarification, evidence requests, and final result comments
-6. close the internal execution issue when its close gates pass
-7. do not auto-close the original external issue; leave a concise completion comment there instead
-
-## Split and Roll-up Rules
-
-Split before coding when any of these are true:
-
-- the issue mixes multiple weakly related goals
-- the required background is no longer a single coherent closure
-- different parts need substantially different validation surfaces
-- the work is naturally parallelizable
-
-If you decide not to split, treat the active issue as the current worker unit and record that decision durably before coding.
-
-For a parent issue, keep the body or a linked design doc current with:
-
-- split structure
-- recommended order
-- dependency edges
-- parallel groups
-- current closure level for each unit
-- next recommended ready unit
-
-Roll results back into the parent issue whenever:
-
-- a worker finishes a child issue
-- a child issue changes the expected next stages
-- new findings invalidate the previous split or dependency assumptions
-
-Do not leave stage changes only in chat when they materially affect later execution.
-
-## Execution Decision Record
-
-For `full`, after `prepare` succeeds and before coding starts, write or refresh an execution decision record. `fast` intentionally skips this artifact.
-
-This record must say at least:
-
-- whether the issue is being split
-- if not split, why the active issue can safely act as a single worker unit
-- what the current worker unit is
-- whether an independent verifier pass is expected before close-out
-- if verifier is not planned, why skipping it is acceptable for this run
-
-Put this record in the active issue body, the parent issue, or a linked design doc.
-Do not leave it only in chat.
-
-## Durable Execution Snapshot
-
-Do not rely on live chat context as the only execution memory.
-
-For `full` work that is multi-stage or multi-turn, maintain a durable execution snapshot in the active parent issue, child issue, or its linked design doc.
-
-The snapshot should contain at least:
-
-- current stage
-- current execution point
-- done
-- next step
-- current blocker
-- recently changed assumptions
-- last known-good consistent state
-- unfinished tail work
-- resume steps
-
-Update the snapshot at least:
-
-- at the end of every stage
-- before any normal stop path
-- before handing work to another worker
-- after a red inconsistency
-- before and after a product decision gate
-
-On resume, never continue from memory alone. Re-read the snapshot, linked closure material, and current code, then confirm the recorded next step is still valid. If not, refresh the snapshot first and only then continue.
-
-For an unsplit direct-execution unit, a recorded stage or phase is execution sequencing only, not a default stopping point.
-When a stage ends, immediately decide among exactly these outcomes:
-
-- the overall issue is actually complete
-- a real blocker / contradiction / product decision gate now prevents safe continuation
-- the issue must be formally split before more implementation
-- continue directly into the next stage
-
-Do not stop merely because `phase A` or another recorded stage finished.
-
-## Worker Boundary
-
-Workers include both child issues and an unsplit active issue doing direct execution.
-
-Workers own execution inside the current issue closure, not replanning outside it.
-
-Use this practical rule:
-
-- green inconsistency
-  - fix locally when goals, acceptance, dependencies, and sibling assumptions stay unchanged
-- yellow inconsistency
-  - do one bounded investigation
-  - continue only if the result still stays inside the current closure
-- red inconsistency
-  - stop local implementation
-  - update the issue with the contradiction
-  - return control to the orchestrating issue instead of repeatedly hacking through a broken assumption
-
-Common red signals:
-
-- goal or acceptance would need to change
-- dependency order would need to change
-- sibling issue assumptions are now invalid
-- the issue no longer forms a stable execution closure
-- the unsplit active issue no longer forms a stable single-worker closure
-
-## Product Decision Gate
-
-Not every red inconsistency is purely technical.
-
-When execution hits a real product decision, do not keep pushing by guessing product intent.
-
-Treat it as a decision gate when any of these are true:
-
-- user-visible semantics would change depending on the choice
-- interaction or UX tradeoffs now matter to acceptance
-- a technical limitation forces a product compromise
-- multiple choices are implementable, but only product intent can decide the right one
-
-At a decision gate:
-
-1. stop autonomous implementation
-2. update the active parent issue or current issue with a dedicated `待决策` or `产品待拍板` section
-3. compress the problem into a minimal decision packet
-4. ask only for the decision that is actually needed
-5. after the user answers, sync the chosen direction back into the issue body before resuming work
-
-The minimal decision packet should contain:
-
-- trigger
-- current constraint or evidence
-- mutually exclusive options
-- impact of each option
-- recommended option
-- exact decision needed
-- affected child issues, stages, or validation surfaces
-
-Do not dump the whole project context back onto the user. The goal is to ask the smallest question that safely unblocks the workflow.
-
-## Verifier Hook
-
-Use `$issue-verifier` when:
-
-- implementation is done or nearly done
-- acceptance looks satisfied
-- the selected mode is `full`, or risk increased enough that `fast` must be upgraded
-
-The verifier pass is a role boundary, not just a longer self-review. Default to read-only verification unless the user explicitly asks for fixes as part of the same step.
-`fast` does not require a verifier decision record or independent pass.
-
-## Workflow Modes
-
-Select the mode before running `prepare`.
-
-- `fast` is the automatic default for already-clear, single-stage, low-risk issue work.
-- `full` is required for external-reporter, parent/child, multi-stage, state-machine, migration, security-sensitive, or otherwise uncertain work.
-- when classification is uncertain, use `full`.
-
-`issuectl` rejects `fast` mechanically when it sees `status:needs-plan`, parent/child structure, `建议范围`, an execution snapshot, or resume fields. Semantic risks such as state-machine, migration, or security work remain the orchestrator's classification responsibility.
-
-Treat these user phrases as a forced mode override:
-
-- force `fast`
-  - `workflow:fast`
-  - `fast path`
-  - `快速处理`
-  - `简化流程`
-- force `full`
-  - `workflow:full`
-  - `full path`
-  - `完整流程`
-  - `标准 issue workflow`
-
-An explicit user override wins unless newly discovered risk makes `fast` unsafe. In that case, explain the evidence and upgrade to `full`.
-
-## Fixed Entry Points
-
-Default to the bundled wrapper instead of redoing raw `git` / `gh` sequences by hand. Pass the selected mode consistently to every entry point:
+两个固定入口；`lint` 和 `close-plan` 保留为可选复检，不属于必跑流程。
 
 ```bash
 bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue <number> --mode <fast|full>
-bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh lint --issue <number> --mode <fast|full>
-bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh close-plan --issue <number> --mode <fast|full>
 bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> --mode <fast|full> [--comment-file path] [--close]
 ```
 
-What each command owns:
-
-- `prepare`
-  - blocks on tracked local changes before sync
-  - runs `git pull --ff-only`
-  - fetches the live issue snapshot from GitHub
-  - claims `processing` when available
-  - can reclaim a stale `processing` claim after the configured stale window
-  - returns non-ready when a mature state label such as `status:needs-plan` or `status:implementable-now` still lacks its required workflow contract
-  - writes a reusable snapshot JSON under `.codex/state/issue-workflow/`
-- `lint`
-  - checks required issue sections
-  - checks status/category/scope label shape
-  - in `fast`, requires only the minimum issue contract and a single status label
-  - in `full`, enforces staged-plan, execution-context, decision, and snapshot contracts where applicable
-- `finish`
-  - checks the selected issue-side workflow and close gates
-  - can post a comment, close the issue, and release `processing`
-  - does not rerun local formatting, docs, diff, or test checks; pre-commit, targeted validation, and `safe-push` own those checks
-- `close-plan`
-  - dry-runs the issue-side close gates
-  - reports whether close is ready
-  - returns explicit next actions for verifier / parent roll-up / parent summary / legacy contract blockers
+职责：
 
-Use these commands at fixed times:
+- `prepare`：git pull --ff-only、拉取实时 issue、分类扫描、workflow 合同检查（含 lint 报告）、claim processing、写 prepare snapshot JSON。未 ready 时阻塞继续。
+- body/标签改过后，重新跑 `prepare` 即可完成复检，不需要单独跑 `lint`。
+- `finish --close`：内部先跑 close gate 检查，gate 不过就拒绝关闭。`close-plan` 只是给人工预览的 dry-run，不是关闭前置步骤。
+- `finish` 不重跑本地格式、文档、diff 或测试；pre-commit、定向验证和 `safe-push` 负责这些。
 
-1. Before substantive issue assessment, run `prepare`.
-2. After body or label edits, run `lint`.
-3. Before `finish --close`, run `close-plan`.
-4. Before any normal stop path for the issue, run `finish`.
+## fast 合同
 
-Important:
+- 最小合同：`背景`、`目标`、`完成标准`，外加恰好一个 `status:*` 标签。
+- 流程：`prepare` → 读 issue + 相关代码 → 实现 → 定向验证 → pre-commit → commit → safe-push → `finish --close`。
+- 不写执行决策、执行快照、参考区，不跑独立 verifier。
+- 执行中发现不再是单阶段/低风险时，立即升级 full 并补齐缺失的执行上下文，再继续。
 
-- For an implementable issue, “local code is written and tests passed” is not by itself a normal stop path.
-- A stale `processing` label is a recoverable lease, not a durable lock. Reclaiming it only unlocks resume; it does not prove the issue is ready for close-out.
-- Unless the user explicitly asked for local-only staging, continue through the routine tail work as part of the same issue flow:
-  - commit the finished change
-  - push it when repo policy says pushes should happen
-  - post the final `finish` comment
-  - close the issue when acceptance is satisfied
-- Only stop short of that tail work when there is a real blocker or the user explicitly redirects you.
-
-## GitHub CLI Compatibility
-
-In this repository, do not rely on bare `gh issue view <number>` for issue reads.
-
-- The default `gh issue view` path may fail with a GraphQL error tied to deprecated classic Projects fields such as `repository.issue.projectCards`.
-- Prefer `gh issue view <number> --json ...` when you need structured issue data.
-- Before using unfamiliar `gh ... --json` fields, prefer:
-
-```bash
-bash scripts/dev/gh-json-fields.sh --check number,title,state issue view <number>
-```
-
-- If you only need raw issue contents or `--json` is still inconvenient, use REST directly:
-
-```bash
-gh api repos/<owner>/<repo>/issues/<number>
-```
-
-- Do not misclassify this failure as an issue-content problem; it is usually a `gh` query compatibility problem.
-
-Only spend extra reasoning on the parts the scripts cannot decide:
-
-- whether the issue is actually implementable now
-- whether the latest comments override the body
-- how to refine the body content
-- how to split staged delivery
-- what tests are sufficient
-- what the final completion or blocking comment should say
-
-For deterministic repo facts, also prefer the bundled helpers:
-
-```bash
-bash scripts/dev/worktree-facts.sh
-bash scripts/dev/resolve-repo-path.sh docs/general/issue-orchestration-workflow.md
-```
-
-Do not rerun the same deterministic failing command unchanged; first change the input or choose the right helper.
-
-## Read Order
-
-After `prepare` succeeds, read in this order:
-
-1. `docs/general/issue-orchestration-workflow.md`
-2. this skill file
-3. the current issue body
-4. linked design doc or closure index when present
-5. current labels
-6. the latest comments
-7. the current code
-
-Reason: `prepare` may have pulled newer local workflow guidance, so do not rely on a previously loaded copy of the process rules.
-
-If later comments conflict with the body, treat the latest maintainer or user comment as the current direction. Update the body if that can be done cheaply and accurately.
-
-If a durable execution snapshot exists, treat it as the default restart point, but still verify it against the current code before acting.
-
-## Body vs Comment
-
-Use the issue body for durable structure:
-
-- background
-- goal
-- acceptance criteria
-- low-priority deferred follow-ups in a dedicated `低优先级待办` section when they are too small to justify a standalone issue
-
-For `full`, also keep these fields current when applicable:
-
-- scope or non-goals
-- related docs and files
-- execution decision (`是否拆分`, `当前执行单元`, verifier plan, and why)
-- staged plan (`建议范围`) once the issue enters `status:needs-plan`
-- execution snapshot (`当前执行点`, `恢复步骤`, and related fields) when work spans multiple stages or turns
-- implementation, check, and finish context (`实现参考`, `检查参考`, `收尾参考`)
+## full 合同
 
-If the work started from an external reporter issue, keep this durable structure on the internal execution issue body, not on the original reporter-owned issue body.
-
-Use comments only for live collaboration:
-
-- blocking questions
-- decisions that need a reply
-- concise evidence that explains why work cannot safely start
-- a short completion note when closing
-
-Before implementation starts, do not use comments for long-term archive notes, process logs, or large summaries that belong in the body.
-
-## Refinement Rules
-
-When picking up or re-assessing an issue:
-
-1. Check whether `背景`, `目标`, and `完成标准` are present and specific enough.
-   - The issue is not implementable yet if these minimum sections are still missing or too vague.
-2. If related docs or files can be identified cheaply from repo context, add them.
-3. If scope or non-goals are already clear, add them.
-4. If original history or motivation cannot be reconstructed, do not invent it.
-   - Record only the current confirmed background.
-   - Mark missing original context as `待补充` when needed.
-5. If the issue is still too broad, narrow it or split follow-up issues before implementation.
-6. In `full`, if staged implementation is expected, write the current staged plan into the issue body before coding.
-   - For larger work, also decide whether this issue should stay single-stage, become a parent issue, or be split into child issues.
-7. In `full`, once the issue is implementable, decide and record whether it remains an unsplit single-worker issue or should become a parent/child split, and record the current verifier plan.
-8. In `full`, once the issue is implementable, fill or refresh `实现参考`, `检查参考`, and `收尾参考`.
-   - `实现参考`: recommended cut, key docs/files, current preferred solution, confirmed constraints
-   - `检查参考`: risky flows, regression points, exact docs/tests to re-check
-   - `收尾参考`: likely knowledge write-back targets such as issue body, linked design docs, docs/general, state-machine docs, AGENTS, or repo skills
-   - For multi-stage or multi-turn work, also create or refresh the execution snapshot instead of relying on chat memory.
-   - If a product decision gate already looks likely, prepare a `待决策` section early instead of waiting until implementation is confused.
-9. If later investigation or implementation changes the staged plan, execution decision, or any execution-context section materially, update the issue body before continuing.
-10. If work uncovers a small, non-blocking, low-priority follow-up that is not worth a standalone issue, append it to `低优先级待办` in the active issue body instead of leaving it only in chat.
-   - Keep entries concise and actionable.
-   - Include what is deferred and why it stayed in-body instead of becoming its own issue.
-   - Use this section as the canonical source for later backlog harvest.
-
-## Reassessment Decision
-
-After refining against the latest code, classify the issue into one of these states:
-
-- `implementable now`
-- `needs investigation`
-- `needs plan`
-- `needs clarification`
-- `blocked`
-
-## State-Transition Rule
-
-Compare the reassessed state with the issue's previously recorded actionable state.
-
-- If the state changed in either direction, update the issue body, labels, and concise evidence as needed, then run `finish --issue <number> --mode <fast|full>` and stop there for this turn.
-- If the state did not change but the issue is still not implementable, update the issue with any newly confirmed evidence, then run `finish --issue <number> --mode <fast|full>` and stop there for this turn.
-- Only when the issue was already implementable and remains implementable after reassessment may coding start immediately.
-- Do not code directly from `needs investigation` or `needs plan`; first update the issue until `status:implementable-now` and `lint` are both clean.
-- In `full`, write or refresh the execution decision record before coding.
-- The `fast` start sequence is: select `fast` -> `prepare --mode fast` -> verify the minimum contract -> `lint --mode fast` -> code.
-- The `full` start sequence is: select `full` -> `prepare --mode full` -> refresh `执行决策` and snapshot when applicable -> `lint --mode full` -> code.
-
-## Status Labels
-
-Workflow-managed issues should carry exactly one explicit workflow status label.
-
-Apply exactly one of:
-
-- `status:implementable-now`
-  - in `fast`, use when `背景`, `目标`, and `完成标准` are clear enough for one implementation pass
-  - in `full`, also require a written `建议范围`, `执行决策`, and execution context sections
-- `status:needs-investigation`
-  - use when the code or runtime path must be researched before safe implementation
-- `status:needs-plan`
-  - use when technical investigation is sufficient, but the execution plan has not yet been durably written back
-- `status:needs-clarification`
-  - use when product intent, user expectation, or acceptance criteria are still unclear
-- `status:blocked`
-  - use when an external dependency, upstream change, or awaited decision prevents progress
-
-Do not encode “ready to implement” as the absence of a status label.
-
-Remove stale status labels when the issue moves to a different workflow state.
-
-## Blocking Comment Rules
-
-When work cannot start, leave one concise comment that contains:
-
-- current blocking state
-- what was checked
-- the exact missing question, decision, or dependency
-- what reply or action would unblock the issue
-
-Keep it short and actionable. Do not restate the full issue body.
-If the blocker is a product decision gate, the comment should point to the in-body `待决策` section instead of duplicating all options in the comment.
-Before you stop on this path, prefer `finish --issue <number> --mode <fast|full> --comment-file <file>` so `processing` is released mechanically.
-
-## Implementation Rules
-
-If the issue was already implementable and still is after reassessment:
-
-- do not leave a ritual “starting work” comment
-- implement against the refined issue
-- if the issue remains unsplit, explicitly treat it as the current worker unit instead of as a bypass path
-- if the issue is actually serving as a parent issue, do not force coding in place; first refresh split/order/next-unit selection
-- in `full`, before each implementation stage, re-read the issue body, latest comments, current code state, `实现参考`, execution decision, and execution snapshot
-- before each implementation stage, re-run any repository skills already required by the task so the next step is based on current guidance
-- after each completed stage on an unsplit issue, explicitly run the stage-end check:
-  - is the whole issue already complete?
-  - is there a hard blocker / contradiction / product gate?
-  - must the issue now be split before further coding?
-  - if none of the above, continue immediately into the next stage
-- in `full`, before validation/check work, re-read `检查参考`
-- in `full`, if the best next stage or any execution-context section changed materially, update the issue body first instead of leaving the new plan only in a comment
-- in `full`, prefer staged delivery and keep the staged plan current in the issue or a linked design doc
-- apply the same green/yellow/red worker-boundary rules to unsplit direct execution; do not keep coding through a red inconsistency
-- if implementation hits a product decision gate, stop and return a minimal decision packet instead of silently picking one branch
-- when you intentionally defer a tiny follow-up that is not worth a new issue, record it under `低优先级待办` before moving on
-- continue through all planned stages in the same task unless a major assumption collapsed and the remaining direction would materially diverge
-- every stage must include sufficient validation, not only compilation or superficial smoke checks
-- in `full`, each stage should end with implementation, stage-scoped validation, a refreshed execution snapshot, and a local commit
-- when the overall issue is finished, do not stop at “last stage implemented locally”; continue through publish/close-out work in the same turn unless blocked
-- for `full`, default to an independent verifier pass before close-out unless the user explicitly waived it
-- before close-out, record what local validation ran; in `full`, also record verifier outcome or waiver
-- before `finish --close`, run `close-plan` and clear every failing issue-side close gate first
-- if the current issue is a child issue, make sure its result has been durably rolled back into the parent issue before `finish --close`
-- if the current issue is a parent issue, make sure its total view already includes child roll-up state, verifier state, and current close judgment before `finish --close`
-- if the current issue is an older issue that predates the current workflow contract, rehab the missing parent/child link or close-out fields before attempting `finish --close`
-- posting a “locally complete” comment is not an acceptable substitute for commit/push/close when the user asked to complete the issue
-- validate the result
-- in `full`, before any normal stop path, re-read `收尾参考`; in both modes, decide whether durable knowledge changed enough to require write-back
-- update any affected design or state-machine document required by repo rules
-
-## Finish Knowledge Write-back Rules
-
-Before `finish`, explicitly decide whether this work changed durable knowledge:
-
-1. Update the issue body or linked design doc when confirmed facts, stage split, or recommended execution path changed.
-2. Update `docs/general/` or other canonical docs when user-visible behavior, contracts, state transitions, or protocol semantics changed.
-3. Update `AGENTS.md`, repo skills, or other workflow docs when you discovered a reusable guardrail, gotcha, or review rule that future issue work should inherit.
-4. Skip durable write-back only when the change is truly local/trivial and introduces no reusable lesson.
-
-If you choose not to sync anything durable, make that a deliberate decision rather than an omission.
-
-For automatically selected or explicitly requested `fast` execution:
-
-- keep `prepare` and `finish`
-- require only `背景`, `目标`, `完成标准`, and exactly one workflow status label
-- do not require `建议范围`, `执行决策`, `实现参考`, `检查参考`, `收尾参考`, an execution snapshot, or an independent verifier
-- skip mid-task body rewrites when the issue body is already accurate enough and no material plan change occurred
-- do one implementation pass: implement, validate, commit, close out
-- if the issue stops looking single-stage, low-risk, or already-clear, upgrade to `full` immediately and add the newly required durable context before continuing
-
-## Close-out Rules
-
-When closing the issue, leave a short completion note with:
-
-- what was implemented
-- what was intentionally not changed, if relevant
-- how it was validated
-- for `full`, whether verifier ran or why it was explicitly waived
-- what durable knowledge was synced back, or why none was needed
-- commit or PR reference
-- follow-up issue reference if work was intentionally deferred
-
-If the work originated from an external reporter issue:
-
-- close the internal execution issue only
-- post the completion note back to the external issue as a comment
-- include the internal issue link and validation summary in that comment
-- do not auto-close the external issue
-
-Do not treat close-out as ready until all applicable close gates pass:
-
-- verifier close gate
-  - `full` issues need a durable `独立 verifier 结果：pass` record unless explicitly waived
-  - `fast` issues do not require verifier evidence
-- child roll-up gate
-  - child issues with a parent must already have a durable roll-up recorded on the parent
-- parent summary gate
-  - parent issues must already expose child roll-up state, verifier state, and current close judgment in their total view
-- legacy contract gate
-  - resumed older issues must first be upgraded to the current workflow contract fields that the close gate depends on
-
-The expected terminal state for a finished issue is:
-
-- clean worktree
-- no unpublished local commit left behind unless the user explicitly asked for local-only state
-- `finish` has been run
-- the issue is closed if its acceptance criteria are satisfied
-
-If you cannot reach that terminal state, say exactly why and what remains blocked instead of stopping silently at a local-only midpoint.
-
-Before finishing the turn, prefer:
-
-```bash
-bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh close-plan --issue <number> --mode <fast|full>
-bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> --mode <fast|full> --comment-file <file> --close
-```
-
-The first command must be green before using the second command.
-`finish --close` then runs the issue-side contract and close gates, closes the issue, and releases `processing`. Local code checks must already have passed through targeted validation, pre-commit, and `safe-push`.
+最小结构：
+
+- `背景` / `目标` / `完成标准`
+- 执行上下文：
+  - `当前执行单元`
+  - `下一步`
+  - `最后一致状态`
+  - `未完成尾项`
+
+以下内容都是**条件性**的，不是 full 的默认产物：
+
+- `实现参考` / `检查参考` / `收尾参考`：仅在要交人、跨 session 或 issue 确实复杂到需要索引时写。
+- 阶段计划 / 拆分表：仅当 issue 需要拆分或作为母 issue 调度时写。
+- 执行快照：仅在真实停点（停 turn、交 worker、跨 session）时更新，不要求每个 stage 结束都更新。
+- 独立 verifier：仅按下方「verifier」一节的范围执行。
+
+流程：`prepare` → 写/刷新执行上下文 → 连续实现（阶段结束只做四问，不重读流程文档）→ 定向验证 → commit → push → `finish --close`。
+
+## 读序
+
+- 每个任务开始读一次本 skill，加上 issue body、标签、最新评论和相关代码。
+- `docs/general/issue-orchestration-workflow.md` 是参考文档：需要拆分表、决策包、verifier 输出模板或 close gate 细节时才查阅，不是必读项。
+- 连续执行时不重读流程文档；每个 stage 前重读 issue/评论/代码只在真实恢复或上下文压缩后需要。
+- 如果 `.codex/private/issue-orchestration-private.md` 存在，仅在分类或拆分判断有歧义时读取；它不改变公开基线。
+
+## 执行规则
+
+- 绿/黄/红不一致分级保持不变：绿色局部处理，黄色做一次有界探查，红色停止实现、回写 issue、交还 orchestrator。
+- 产品决策门保持不变：停下自动化，写最小 `待决策` 包，只问最小的阻塞问题；拍板后先把结论回填 issue 再继续。
+- worker 边界：子 issue 或未拆分直做单元只负责当前闭包内执行，不做闭包外的重新规划。
+- 验证底线与模式无关：根因优先、定向测试、pre-commit、safe-push 全都要跑。
+
+## 外部提单
+
+- 单阶段、低风险的外部提单：直接在原 issue 上处理，保留提单人 body，完成后在原 issue 回一条简短评论。
+- 多阶段或需要内部编排的外部提单：先建内部执行 issue，双向链接；所有 workflow 结构只写内部 issue，默认只关内部 issue，原 issue 由人工决定是否关闭。
+
+## verifier
+
+使用 `issue-verifier` 的场景：
+
+- 关闭母 issue
+- 外部提单的 close-out
+- 安全 / 迁移 / 状态机类工作
+- 用户明确要求 `验收` / `独立验证` / `完成前复核`
+- 执行中风险上升，独立检查确实能降低风险
+
+其他 full issue 不做独立 verifier pass，由同一执行者做一次 close-readiness 检查（目标/验收/diff/durable sync）。
+
+## close-out
+
+- `finish --close` 内置 close gate：需要 verifier 记录、父 issue 回卷或 legacy contract rehab 时，gate 不过会拒绝关闭。
+- 完成评论保持简短：改了什么、怎么验证的、跑了 verifier 就给结论、durable 知识同步到哪里或为什么不需要、commit/PR 引用。
+- 终态：工作区干净、没有未推送的本地提交、`finish` 已跑、验收满足时 issue 已关闭。
+- 如果停在非终态，必须说明还差什么、为什么停，以及精确的恢复动作。
+
+## GitHub CLI 兼容
+
+- 优先 `gh issue view <number> --json ...`；`--json` 不便时用 REST `gh api repos/<owner>/<repo>/issues/<number>`。
+- 陌生 `--json` 字段先跑 `bash scripts/dev/gh-json-fields.sh --check ...`。
+- 确定性失败不原样重跑：先改输入或换 helper。
