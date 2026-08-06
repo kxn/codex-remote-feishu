@@ -150,6 +150,7 @@ type App struct {
 	cronRuntime                   cronRuntimeState
 	botCapabilitySettingsState    botCapabilitySettingsRuntimeState
 	feishuBotIdentityState        feishuBotIdentityRuntimeState
+	feishuFactsState              feishuFactsRuntimeState
 	feishuRoomState               feishuRoomRuntimeState
 	claudeWorkspaceProfileState   claudeWorkspaceProfileRuntimeState
 	profileContextPreferenceState profileContextPreferenceRuntimeState
@@ -336,6 +337,7 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.cronRuntime.repoManager = cronrepo.NewManager(cfg.Paths.StateDir)
 	a.mu.Lock()
 	a.configureFeishuBotIdentityStateLocked(cfg.Paths.StateDir)
+	a.configureFeishuFactsStateLocked(cfg.Paths.StateDir)
 	a.configureBotCapabilitySettingsStateLocked(cfg.Paths.StateDir)
 	a.configureFeishuRoomStateLocked(cfg.Paths.StateDir)
 	a.configureClaudeWorkspaceProfileStateLocked(cfg.Paths.StateDir)

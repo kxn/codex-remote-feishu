@@ -75,6 +75,10 @@ func (g *LiveGateway) setBotOpenID(openID string) {
 	g.mu.Unlock()
 }
 
+func (g *LiveGateway) SetBotOpenID(openID string) {
+	g.setBotOpenID(openID)
+}
+
 func (g *LiveGateway) lookupSurfaceMessage(messageID string) string {
 	if g == nil {
 		return ""

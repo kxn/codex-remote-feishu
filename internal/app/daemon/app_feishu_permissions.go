@@ -13,9 +13,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
-const defaultFeishuPermissionRefreshEvery = 2 * time.Minute
-const feishuPrimaryPermissionCacheTTL = 2 * time.Minute
-
 var listFeishuAppConfiguredScopes = feishu.ListAppConfiguredScopes
 
 type feishuPermissionGapRecord struct {
@@ -130,65 +127,6 @@ func (a *App) clearFeishuPermissionGaps(gatewayID string) {
 	a.feishuRuntime.permissionMu.Unlock()
 }
 
-func (a *App) maybeStartFeishuPermissionRefreshLocked(now time.Time) {
-	if a.feishuRuntime.permissionRefreshInFlight {
-		return
-	}
-	if a.feishuRuntime.permissionRefreshEvery <= 0 {
-		a.feishuRuntime.permissionRefreshEvery = defaultFeishuPermissionRefreshEvery
-	}
-	a.feishuRuntime.permissionMu.RLock()
-	hasGaps := len(a.feishuRuntime.permissionGaps) != 0
-	a.feishuRuntime.permissionMu.RUnlock()
-	if !hasGaps {
-		return
-	}
-	if !a.feishuRuntime.permissionNextRefresh.IsZero() && now.Before(a.feishuRuntime.permissionNextRefresh) {
-		return
-	}
-	a.feishuRuntime.permissionRefreshInFlight = true
-	a.feishuRuntime.permissionNextRefresh = now.Add(a.feishuRuntime.permissionRefreshEvery)
-	go a.refreshFeishuPermissionGaps()
-}
-
-func (a *App) refreshFeishuPermissionGaps() {
-	defer func() {
-		a.mu.Lock()
-		a.feishuRuntime.permissionRefreshInFlight = false
-		a.mu.Unlock()
-	}()
-
-	a.feishuRuntime.permissionMu.RLock()
-	gatewayIDs := make([]string, 0, len(a.feishuRuntime.permissionGaps))
-	for gatewayID := range a.feishuRuntime.permissionGaps {
-		gatewayIDs = append(gatewayIDs, gatewayID)
-	}
-	a.feishuRuntime.permissionMu.RUnlock()
-
-	for _, gatewayID := range gatewayIDs {
-		verifyCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		scopes, err := a.loadFeishuAppConfiguredScopes(verifyCtx, gatewayID)
-		cancel()
-		a.applyFeishuPermissionVerificationResult(gatewayID, scopes, err)
-	}
-}
-
-func (a *App) loadFeishuAppConfiguredScopes(ctx context.Context, gatewayID string) ([]feishu.AppScopeStatus, error) {
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		return nil, err
-	}
-	runtimeCfg, ok := a.runtimeGatewayConfigFor(loaded.Config, gatewayID)
-	if !ok {
-		return nil, nil
-	}
-	return listFeishuAppConfiguredScopes(ctx, feishu.LiveGatewayConfig{
-		GatewayID: runtimeCfg.GatewayID,
-		AppID:     runtimeCfg.AppID,
-		AppSecret: runtimeCfg.AppSecret,
-	})
-}
-
 func (a *App) applyFeishuPermissionVerificationResult(gatewayID string, scopes []feishu.AppScopeStatus, err error) {
 	gatewayID = canonicalGatewayID(gatewayID)
 	if gatewayID == "" {
@@ -250,10 +188,9 @@ func (a *App) CheckPrimaryBotPermission(ctx context.Context, req orchestrator.Pr
 	if gatewayID == "" {
 		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "missing_gateway"}
 	}
-	now := time.Now().UTC()
 	if !req.ForceRefresh {
-		if cached, ok := a.cachedPrimaryBotPermission(gatewayID, now); ok {
-			return primaryPermissionDecisionFromCache(cached)
+		if facts, ok := a.FeishuBotFacts(gatewayID); ok && feishuFactsScopesFresh(facts, time.Now().UTC()) {
+			return primaryPermissionDecisionFromScopes(appScopesFromFeishuFactsScopes(facts.Scopes), nil)
 		}
 	}
 	checkCtx := ctx
@@ -262,53 +199,8 @@ func (a *App) CheckPrimaryBotPermission(ctx context.Context, req orchestrator.Pr
 	}
 	checkCtx, cancel := context.WithTimeout(checkCtx, 20*time.Second)
 	defer cancel()
-	scopes, err := a.loadFeishuAppConfiguredScopes(checkCtx, gatewayID)
-	decision := primaryPermissionDecisionFromScopes(scopes, err)
-	a.storePrimaryBotPermissionCache(gatewayID, decision, now, req.ForceRefresh)
-	return decision
-}
-
-func (a *App) cachedPrimaryBotPermission(gatewayID string, now time.Time) (feishuPrimaryPermissionCacheRecord, bool) {
-	a.feishuRuntime.permissionMu.RLock()
-	defer a.feishuRuntime.permissionMu.RUnlock()
-	cached, ok := a.feishuRuntime.primaryPermissionCache[gatewayID]
-	if !ok || cached.ExpiresAt.IsZero() || !now.Before(cached.ExpiresAt) {
-		return feishuPrimaryPermissionCacheRecord{}, false
-	}
-	return cached, true
-}
-
-func (a *App) storePrimaryBotPermissionCache(gatewayID string, decision orchestrator.PrimaryBotPermissionDecision, now time.Time, forceRefreshed bool) {
-	a.feishuRuntime.permissionMu.Lock()
-	defer a.feishuRuntime.permissionMu.Unlock()
-	if a.feishuRuntime.primaryPermissionCache == nil {
-		a.feishuRuntime.primaryPermissionCache = map[string]feishuPrimaryPermissionCacheRecord{}
-	}
-	record := feishuPrimaryPermissionCacheRecord{
-		GatewayID:      gatewayID,
-		Allowed:        decision.Allowed,
-		Scope:          strings.TrimSpace(decision.Scope),
-		CheckedAt:      now,
-		ExpiresAt:      now.Add(feishuPrimaryPermissionCacheTTL),
-		LastReason:     strings.TrimSpace(decision.Reason),
-		ForceRefreshed: forceRefreshed,
-	}
-	if decision.Err != nil {
-		record.LastErr = decision.Err.Error()
-	}
-	a.feishuRuntime.primaryPermissionCache[gatewayID] = record
-}
-
-func primaryPermissionDecisionFromCache(record feishuPrimaryPermissionCacheRecord) orchestrator.PrimaryBotPermissionDecision {
-	decision := orchestrator.PrimaryBotPermissionDecision{
-		Allowed: record.Allowed,
-		Scope:   strings.TrimSpace(record.Scope),
-		Reason:  strings.TrimSpace(record.LastReason),
-	}
-	if decision.Reason == "" && !decision.Allowed {
-		decision.Reason = "cached_missing"
-	}
-	return decision
+	facts, err := a.RefreshFeishuBotFacts(checkCtx, gatewayID)
+	return primaryPermissionDecisionFromScopes(appScopesFromFeishuFactsScopes(facts.Scopes), err)
 }
 
 func primaryPermissionDecisionFromScopes(scopes []feishu.AppScopeStatus, err error) orchestrator.PrimaryBotPermissionDecision {

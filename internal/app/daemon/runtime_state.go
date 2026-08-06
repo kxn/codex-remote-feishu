@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/claudeworkspaceprofile"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishubotidentity"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishufacts"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishuroomstate"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -69,6 +70,13 @@ type feishuBotIdentityRuntimeState struct {
 	persistedStoreRuntimeState[*feishubotidentity.Store]
 }
 
+type feishuFactsRuntimeState struct {
+	persistedStoreRuntimeState[*feishufacts.Store]
+	mu              sync.RWMutex
+	nextRefresh     time.Time
+	refreshInFlight bool
+}
+
 type feishuRoomRuntimeState struct {
 	persistedStoreRuntimeState[*feishuroomstate.Store]
 	workspaceConflicts map[string]bool
@@ -94,29 +102,14 @@ type cronRuntimeState struct {
 }
 
 type feishuRuntimeState struct {
-	mu                        sync.RWMutex
-	permissionMu              sync.RWMutex
-	primaryGatewayByChat      atomic.Value
-	runtimeApply              map[string]feishuRuntimeApplyPendingState
-	attentionRequests         map[string]time.Time
-	permissionGaps            map[string]map[string]*feishuPermissionGapRecord
-	primaryPermissionCache    map[string]feishuPrimaryPermissionCacheRecord
-	permissionRefreshEvery    time.Duration
-	permissionNextRefresh     time.Time
-	permissionRefreshInFlight bool
-	onboarding                map[string]*feishuOnboardingSession
-	registration              feishuRegistrationRunner
-}
-
-type feishuPrimaryPermissionCacheRecord struct {
-	GatewayID      string
-	Allowed        bool
-	Scope          string
-	CheckedAt      time.Time
-	ExpiresAt      time.Time
-	LastErr        string
-	LastReason     string
-	ForceRefreshed bool
+	mu                   sync.RWMutex
+	permissionMu         sync.RWMutex
+	primaryGatewayByChat atomic.Value
+	runtimeApply         map[string]feishuRuntimeApplyPendingState
+	attentionRequests    map[string]time.Time
+	permissionGaps       map[string]map[string]*feishuPermissionGapRecord
+	onboarding           map[string]*feishuOnboardingSession
+	registration         feishuRegistrationRunner
 }
 
 func newSurfaceResumeRuntimeState() surfaceResumeRuntimeState {
@@ -141,11 +134,9 @@ func newCronRuntimeState() cronRuntimeState {
 
 func newFeishuRuntimeState() feishuRuntimeState {
 	return feishuRuntimeState{
-		runtimeApply:           map[string]feishuRuntimeApplyPendingState{},
-		attentionRequests:      map[string]time.Time{},
-		permissionGaps:         map[string]map[string]*feishuPermissionGapRecord{},
-		primaryPermissionCache: map[string]feishuPrimaryPermissionCacheRecord{},
-		permissionRefreshEvery: defaultFeishuPermissionRefreshEvery,
-		onboarding:             map[string]*feishuOnboardingSession{},
+		runtimeApply:      map[string]feishuRuntimeApplyPendingState{},
+		attentionRequests: map[string]time.Time{},
+		permissionGaps:    map[string]map[string]*feishuPermissionGapRecord{},
+		onboarding:        map[string]*feishuOnboardingSession{},
 	}
 }

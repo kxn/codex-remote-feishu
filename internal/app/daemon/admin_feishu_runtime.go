@@ -37,6 +37,7 @@ func (a *App) adminFeishuApps(loaded config.LoadedAppConfig) ([]adminFeishuAppSu
 		}
 		readOnly, reason := feishuAppReadOnly(admin, gatewayID)
 		summary := buildFeishuAppSummary(gatewayID, app, runtimeApp, statuses[gatewayID], true, false, readOnly, reason)
+		summary.Name = xutil.FirstNonEmpty(a.feishuFactAppName(gatewayID), summary.Name)
 		if pending, ok := pendingApply[gatewayID]; ok {
 			summary = applyFeishuRuntimePending(summary, pending)
 		}
@@ -50,6 +51,7 @@ func (a *App) adminFeishuApps(loaded config.LoadedAppConfig) ([]adminFeishuAppSu
 			if runtimeApp, ok := runtimeMap[gatewayID]; ok {
 				readOnly, reason := feishuAppReadOnly(admin, gatewayID)
 				summary := buildFeishuAppSummary(gatewayID, config.FeishuAppConfig{}, runtimeApp, statuses[gatewayID], false, true, readOnly, reason)
+				summary.Name = xutil.FirstNonEmpty(a.feishuFactAppName(gatewayID), summary.Name)
 				if pending, ok := pendingApply[gatewayID]; ok {
 					summary = applyFeishuRuntimePending(summary, pending)
 				}
@@ -67,6 +69,7 @@ func (a *App) adminFeishuApps(loaded config.LoadedAppConfig) ([]adminFeishuAppSu
 		if status, ok := statuses[gatewayID]; ok && status.GatewayID != "" {
 			statusCopy := status
 			summary.Name = xutil.FirstNonEmpty(strings.TrimSpace(status.Name), summary.Name)
+			summary.Name = xutil.FirstNonEmpty(a.feishuFactAppName(gatewayID), summary.Name)
 			summary.Enabled = !status.Disabled
 			summary.Status = &statusCopy
 		}
@@ -137,6 +140,7 @@ func (a *App) gatewayRuntimeHooks() gatewayRuntimeHooks {
 	}
 	return gatewayRuntimeHooks{
 		PrimaryGatewayForChat: a.feishuPrimaryGatewayForChat,
+		BotOpenIDForGateway:   a.feishuFactBotOpenID,
 	}
 }
 

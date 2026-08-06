@@ -78,6 +78,21 @@ export interface FeishuAppSummary {
   runtimeApply?: FeishuRuntimeApplyState;
 }
 
+export interface FeishuBotFacts {
+  gatewayID: string;
+  appID: string;
+  appName?: string;
+  botOpenID?: string;
+  scopes?: Array<{
+    scopeName: string;
+    scopeType?: string;
+    grantStatus: number;
+  }>;
+  fetchedAt?: string;
+  lastError?: string;
+  lastErrorAt?: string;
+}
+
 export interface FeishuRuntimeApplyState {
   pending: boolean;
   action?: string;
