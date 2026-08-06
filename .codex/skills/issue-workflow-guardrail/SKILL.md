@@ -87,6 +87,11 @@ bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <
 - 连续执行时不重读流程文档；每个 stage 前重读 issue/评论/代码只在真实恢复或上下文压缩后需要。
 - 如果 `.codex/private/issue-orchestration-private.md` 存在，仅在分类或拆分判断有歧义时读取；它不改变公开基线。
 
+## 输出约定
+
+- `prepare` / `lint` / `close-plan` / `finish` 默认只输出文本摘要；完整 JSON 用 `--json-file <path>` 写文件（prepare 也可用 `--snapshot-file`），stdout 不吐全文。
+- 读 snapshot 或 inspect 文件时，先 `rg '^## ' <file>` 列结构，再 `sed -n '/^## 目标/,/^## 完成标准/p' <file>` 取需要的 section；不要 cat 整个文件。
+
 ## 执行规则
 
 - 绿/黄/红不一致分级保持不变：绿色局部处理，黄色做一次有界探查，红色停止实现、回写 issue、交还 orchestrator。

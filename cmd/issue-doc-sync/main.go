@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -137,6 +138,7 @@ func runInspect(ctx context.Context, args []string) error {
 	repoValue := fs.String("repo", "", "GitHub repo in owner/name form")
 	issueNumber := fs.Int("issue", 0, "closed issue number to inspect")
 	format := fs.String("format", "markdown", "output format: markdown or json")
+	outPath := fs.String("out", "", "write full details to this file; default .codex/state/issue-doc-sync/cache/inspect-<n>.<ext>")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -156,7 +158,31 @@ func runInspect(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	return issuedocsync.WriteIssueDetails(os.Stdout, details, *format)
+	if strings.TrimSpace(*outPath) == "" {
+		ext := "md"
+		if *format == "json" {
+			ext = "json"
+		}
+		*outPath = filepath.Join(".codex", "state", "issue-doc-sync", "cache", fmt.Sprintf("inspect-%d.%s", *issueNumber, ext))
+	}
+	if err := os.MkdirAll(filepath.Dir(*outPath), 0o755); err != nil {
+		return err
+	}
+	file, err := os.Create(*outPath)
+	if err != nil {
+		return err
+	}
+	if err := issuedocsync.WriteIssueDetails(file, details, *format); err != nil {
+		_ = file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	title := strings.ReplaceAll(details.Title, "\n", " ")
+	_, err = fmt.Fprintf(os.Stdout, "issue: #%d %s | body: %d chars | comments: %d | file: %s\n",
+		details.Number, title, len(details.Body), len(details.Comments), *outPath)
+	return err
 }
 
 func runRecord(ctx context.Context, args []string) error {
@@ -262,5 +288,5 @@ func (m *multiFlag) Set(value string) error {
 
 func usageError(format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
-	return errors.New(msg + "\nusage:\n  go run ./cmd/issue-doc-sync plan --repo owner/name [--state-file path] [--format text|json]\n  go run ./cmd/issue-doc-sync next --repo owner/name [--state-file path] [--format number|text|json]\n  go run ./cmd/issue-doc-sync inspect --repo owner/name --issue 22 [--format markdown|json]\n  go run ./cmd/issue-doc-sync record --repo owner/name --issue 22 --decision skip|merge|new-doc --reason text [--updated-at RFC3339] [--closed-at RFC3339] [--target-doc path ...] [--force]")
+	return errors.New(msg + "\nusage:\n  go run ./cmd/issue-doc-sync plan --repo owner/name [--state-file path] [--format text|json]\n  go run ./cmd/issue-doc-sync next --repo owner/name [--state-file path] [--format number|text|json]\n  go run ./cmd/issue-doc-sync inspect --repo owner/name --issue 22 [--format markdown|json] [--out path]\n  go run ./cmd/issue-doc-sync record --repo owner/name --issue 22 --decision skip|merge|new-doc --reason text [--updated-at RFC3339] [--closed-at RFC3339] [--target-doc path ...] [--force]")
 }

@@ -142,6 +142,8 @@ bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh prepare --issue 
 bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <number> --mode <fast|full> [--comment-file path] [--close]
 ```
 
+完整 JSON 用 `--json-file <path>` 写文件，stdout 只出文本摘要；按需读取文件里的 section，不 cat 全文。
+
 确定性检查优先仓库 helper：
 
 ```bash

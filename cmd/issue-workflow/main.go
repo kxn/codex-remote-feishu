@@ -57,6 +57,7 @@ func runPrepare(ctx context.Context, svc *issueworkflow.Service, args []string) 
 	reclaimStale := fs.Bool("reclaim-stale-processing", true, "reclaim a stale existing processing label when the latest issue activity is older than the stale window")
 	staleAfter := fs.Duration("stale-processing-after", defaultStaleProcessingAfter, "consider an existing processing label stale after this age; set 0 to disable stale reclaim")
 	snapshotPath := fs.String("snapshot-file", "", "where to write the prepare snapshot JSON")
+	jsonFile := fs.String("json-file", "", "write full result JSON to this file; stdout prints the text summary")
 	modeValue := fs.String("mode", "full", "workflow mode: full or fast")
 	format := fs.String("format", "text", "output format: text or json")
 	if err := fs.Parse(args); err != nil {
@@ -86,7 +87,7 @@ func runPrepare(ctx context.Context, svc *issueworkflow.Service, args []string) 
 	if err != nil {
 		return 1, err
 	}
-	if err := writeOutput(os.Stdout, result, *format, renderPrepare); err != nil {
+	if err := writeOutputWithFile(os.Stdout, result, *format, renderPrepare, *jsonFile); err != nil {
 		return 1, err
 	}
 	switch result.Status {
@@ -103,6 +104,7 @@ func runLint(ctx context.Context, svc *issueworkflow.Service, args []string) (in
 	repoValue := fs.String("repo", "", "GitHub repo in owner/name form; defaults to origin remote")
 	issueNumber := fs.Int("issue", 0, "issue number")
 	comments := fs.Int("comments", 8, "recent comments to inspect")
+	jsonFile := fs.String("json-file", "", "write full result JSON to this file; stdout prints the text summary")
 	modeValue := fs.String("mode", "full", "workflow mode: full or fast")
 	format := fs.String("format", "text", "output format: text or json")
 	if err := fs.Parse(args); err != nil {
@@ -128,7 +130,7 @@ func runLint(ctx context.Context, svc *issueworkflow.Service, args []string) (in
 	if err != nil {
 		return 1, err
 	}
-	if err := writeOutput(os.Stdout, result, *format, renderLint); err != nil {
+	if err := writeOutputWithFile(os.Stdout, result, *format, renderLint, *jsonFile); err != nil {
 		return 1, err
 	}
 	if lintHasErrors(result.Lint) {
@@ -142,6 +144,7 @@ func runClosePlan(ctx context.Context, svc *issueworkflow.Service, args []string
 	fs.SetOutput(os.Stderr)
 	repoValue := fs.String("repo", "", "GitHub repo in owner/name form; defaults to origin remote")
 	issueNumber := fs.Int("issue", 0, "issue number")
+	jsonFile := fs.String("json-file", "", "write full result JSON to this file; stdout prints the text summary")
 	modeValue := fs.String("mode", "full", "workflow mode: full or fast")
 	format := fs.String("format", "text", "output format: text or json")
 	if err := fs.Parse(args); err != nil {
@@ -166,7 +169,7 @@ func runClosePlan(ctx context.Context, svc *issueworkflow.Service, args []string
 	if err != nil {
 		return 1, err
 	}
-	if err := writeOutput(os.Stdout, result, *format, renderClosePlan); err != nil {
+	if err := writeOutputWithFile(os.Stdout, result, *format, renderClosePlan, *jsonFile); err != nil {
 		return 1, err
 	}
 	if !result.CloseReady {
@@ -183,6 +186,7 @@ func runFinish(ctx context.Context, svc *issueworkflow.Service, args []string) (
 	commentFile := fs.String("comment-file", "", "post this file as an issue comment before cleanup")
 	closeIssue := fs.Bool("close", false, "close the issue after posting the comment")
 	releaseProcessing := fs.Bool("release-processing", true, "remove the processing label before finishing")
+	jsonFile := fs.String("json-file", "", "write full result JSON to this file; stdout prints the text summary")
 	modeValue := fs.String("mode", "full", "workflow mode: full or fast")
 	format := fs.String("format", "text", "output format: text or json")
 	if err := fs.Parse(args); err != nil {
@@ -214,7 +218,7 @@ func runFinish(ctx context.Context, svc *issueworkflow.Service, args []string) (
 	if err != nil {
 		return 1, err
 	}
-	if err := writeOutput(os.Stdout, result, *format, renderFinish); err != nil {
+	if err := writeOutputWithFile(os.Stdout, result, *format, renderFinish, *jsonFile); err != nil {
 		return 1, err
 	}
 	if finishHasFailures(result.Checks) {
@@ -257,6 +261,25 @@ func writeOutput[T any](out *os.File, value T, format string, render func(T) str
 	default:
 		return errors.New("unsupported format " + format)
 	}
+}
+
+func writeOutputWithFile[T any](out *os.File, value T, format string, render func(T) string, jsonFile string) error {
+	jsonFile = strings.TrimSpace(jsonFile)
+	if jsonFile == "" {
+		return writeOutput(out, value, format, render)
+	}
+	payload, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(jsonFile), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(jsonFile, append(payload, '\n'), 0o644); err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(out, render(value))
+	return err
 }
 
 func renderPrepare(result issueworkflow.PrepareResult) string {
@@ -448,5 +471,5 @@ func finishHasFailures(checks []issueworkflow.CheckResult) bool {
 
 func usageError(format string, args ...any) error {
 	msg := fmt.Sprintf(format, args...)
-	return fmt.Errorf("%s\nusage:\n  go run ./cmd/issue-workflow prepare --issue 123 [--repo owner/name] [--mode full|fast] [--format text|json]\n  go run ./cmd/issue-workflow lint --issue 123 [--repo owner/name] [--mode full|fast] [--format text|json]\n  go run ./cmd/issue-workflow close-plan --issue 123 [--repo owner/name] [--mode full|fast] [--format text|json]\n  go run ./cmd/issue-workflow finish --issue 123 [--comment-file path] [--close] [--mode full|fast]", msg)
+	return fmt.Errorf("%s\nusage:\n  go run ./cmd/issue-workflow prepare --issue 123 [--repo owner/name] [--mode full|fast] [--format text|json] [--json-file path]\n  go run ./cmd/issue-workflow lint --issue 123 [--repo owner/name] [--mode full|fast] [--format text|json] [--json-file path]\n  go run ./cmd/issue-workflow close-plan --issue 123 [--repo owner/name] [--mode full|fast] [--format text|json] [--json-file path]\n  go run ./cmd/issue-workflow finish --issue 123 [--comment-file path] [--close] [--mode full|fast] [--json-file path]", msg)
 }
