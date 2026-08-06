@@ -92,6 +92,13 @@ bash .codex/skills/issue-workflow-guardrail/scripts/issuectl.sh finish --issue <
 - `prepare` / `lint` / `close-plan` / `finish` 默认只输出文本摘要；完整 JSON 用 `--json-file <path>` 写文件（prepare 也可用 `--snapshot-file`），stdout 不吐全文。
 - 读 snapshot 或 inspect 文件时，先 `rg '^## ' <file>` 列结构，再 `sed -n '/^## 目标/,/^## 完成标准/p' <file>` 取需要的 section；不要 cat 整个文件。
 
+## 输出防爆（阈值制）
+
+- 小输出（预计 < 3k token）直接读，不写文件；只有大概率大输出（issue 全文、CI 日志、minified 文件、整仓 diff、sqlite 全表）才走文件/片段读。
+- 未知大小先探一次：`wc -c` / `rg --count-matches` / `head -n 20`，再决定直读还是文件化。
+- 限流用单 flag：`rg --max-count` / `-l`、`git diff --stat`、`go test -run`、sqlite `LIMIT`、`head`。
+- 输出被截断或失败：禁止原样重试同一命令，先缩小范围或换 helper；不要为提高上限而提高 `max_output_tokens`。
+
 ## 执行规则
 
 - 绿/黄/红不一致分级保持不变：绿色局部处理，黄色做一次有界探查，红色停止实现、回写 issue、交还 orchestrator。
