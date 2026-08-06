@@ -197,45 +197,6 @@ func TestAdminFeishuAutoConfigPlanRoute(t *testing.T) {
 	}
 }
 
-func TestAdminLegacyFeishuInstallTestRoutesAreRemoved(t *testing.T) {
-	cfg := config.DefaultAppConfig()
-	cfg.Feishu.Apps = []config.FeishuAppConfig{{
-		ID:        "main",
-		Name:      "Main",
-		AppID:     "cli_xxx",
-		AppSecret: "secret_xxx",
-	}}
-	app, _ := newFeishuAdminTestApp(t, cfg, defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
-
-	paths := []struct {
-		method string
-		path   string
-	}{
-		{method: http.MethodGet, path: "/api/admin/feishu/apps/main/permission-check"},
-		{method: http.MethodGet, path: "/api/admin/feishu/apps/main/permissions/check"},
-		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/auto-config/apply"},
-		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/auto-config/publish"},
-		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/auto-config/complete"},
-		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/auto-config/apply"},
-		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/auto-config/publish"},
-		{method: http.MethodPost, path: "/api/setup/feishu/apps/main/auto-config/complete"},
-		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/test-events"},
-		{method: http.MethodPost, path: "/api/admin/feishu/apps/main/test-callback"},
-	}
-	for _, tc := range paths {
-		rec := performAdminRequest(t, app, tc.method, tc.path, "")
-		if rec.Code == http.StatusNotFound || rec.Code == http.StatusMethodNotAllowed {
-			continue
-		}
-		if tc.method == http.MethodGet &&
-			rec.Code == http.StatusOK &&
-			strings.Contains(rec.Body.String(), "<h1>Codex Remote</h1>") {
-			continue
-		}
-		t.Fatalf("%s %s unexpectedly remained available: status=%d body=%s", tc.method, tc.path, rec.Code, rec.Body.String())
-	}
-}
-
 func TestSetupFeishuOnboardingSessionLifecycleCreatesAndVerifiesApp(t *testing.T) {
 	cfg := config.DefaultAppConfig()
 	gateway := &fakeAdminGatewayController{

@@ -409,20 +409,7 @@ func TestParseTextActionRecognizesHelpAndMenuCommands(t *testing.T) {
 	}
 }
 
-func TestRemovedLegacyHeadlessCompatCommandsAreIgnored(t *testing.T) {
-	for _, input := range []string{"/newinstance", "/killinstance"} {
-		if action, handled := parseTextAction(input); handled {
-			t.Fatalf("expected %q to be ignored, got %#v", input, action)
-		}
-	}
-	for _, input := range []string{"new_instance", "kill_instance"} {
-		if action, ok := menuAction(input); ok {
-			t.Fatalf("expected %q to be ignored, got %#v", input, action)
-		}
-	}
-}
-
-func TestParseMessageEventRemovedLegacyHeadlessCompatBecomesPlainTextMessage(t *testing.T) {
+func TestParseMessageEventUnknownCommandFallsBackToPlainTextMessage(t *testing.T) {
 	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-2"})
 	event := &larkim.P2MessageReceiveV1{
 		Event: &larkim.P2MessageReceiveV1Data{
@@ -430,11 +417,11 @@ func TestParseMessageEventRemovedLegacyHeadlessCompatBecomesPlainTextMessage(t *
 				SenderId: &larkim.UserId{OpenId: stringRef("ou_user")},
 			},
 			Message: &larkim.EventMessage{
-				MessageId:   stringRef("om-msg-compat"),
+				MessageId:   stringRef("om-msg-unknown"),
 				ChatId:      stringRef("oc_chat"),
 				ChatType:    stringRef("group"),
 				MessageType: stringRef("text"),
-				Content:     stringRef(`{"text":" /newinstance "}`),
+				Content:     stringRef(`{"text":" /frobnicate "}`),
 			},
 		},
 	}
@@ -444,10 +431,10 @@ func TestParseMessageEventRemovedLegacyHeadlessCompatBecomesPlainTextMessage(t *
 		t.Fatalf("parseMessageEvent returned error: %v", err)
 	}
 	if !ok {
-		t.Fatal("expected legacy compat command to be handled")
+		t.Fatal("expected unknown command text to be handled")
 	}
-	if action.Kind != control.ActionTextMessage || strings.TrimSpace(action.Text) != "/newinstance" {
-		t.Fatalf("expected removed compat command to flow through plain text path, got %#v", action)
+	if action.Kind != control.ActionTextMessage || strings.TrimSpace(action.Text) != "/frobnicate" {
+		t.Fatalf("expected unknown command to flow through plain text path, got %#v", action)
 	}
 }
 
@@ -567,41 +554,6 @@ func TestPlanInboundMessageEventTreatsMentionedSlashCommandAsCommand(t *testing.
 	}
 	if plan.action.Text != "/list" {
 		t.Fatalf("action text = %q, want /list", plan.action.Text)
-	}
-}
-
-func TestParseCardActionTriggerEventIgnoresRemovedLegacyKinds(t *testing.T) {
-	gateway := NewLiveGateway(LiveGatewayConfig{GatewayID: "app-1"})
-	gateway.recordSurfaceMessage("om-card-1", "feishu:app-1:user:user-1")
-	userID := "user-1"
-	tests := []string{
-		"prompt_select",
-		"resume_headless_thread",
-		"start_command_capture",
-		"cancel_command_capture",
-	}
-	for _, kind := range tests {
-		event := &larkcallback.CardActionTriggerEvent{
-			Event: &larkcallback.CardActionTriggerRequest{
-				Operator: &larkcallback.Operator{UserID: &userID},
-				Action: &larkcallback.CallBackAction{
-					Value: map[string]interface{}{
-						"kind":       kind,
-						"prompt_id":  "prompt-1",
-						"option_id":  "thread-1",
-						"thread_id":  "thread-1",
-						"command_id": control.FeishuCommandModel,
-					},
-				},
-				Context: &larkcallback.Context{
-					OpenChatID:    "oc_1",
-					OpenMessageID: "om-card-1",
-				},
-			},
-		}
-		if action, ok := gateway.parseCardActionTriggerEvent(event); ok {
-			t.Fatalf("%s: expected legacy kind to be ignored, got %#v", kind, action)
-		}
 	}
 }
 

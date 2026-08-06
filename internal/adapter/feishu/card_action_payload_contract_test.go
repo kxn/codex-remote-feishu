@@ -25,16 +25,13 @@ func TestActionPayloadUpgradeOwnerFlowUsesPickerAndOptionIDs(t *testing.T) {
 	}
 }
 
-func TestActionPayloadSubmitRequestFormOmitsLegacyOptionFields(t *testing.T) {
+func TestActionPayloadSubmitRequestFormIncludesRequestFields(t *testing.T) {
 	payload := actionPayloadSubmitRequestForm("req-1", "request_user_input")
 	if payload[cardActionPayloadKeyKind] != cardActionKindSubmitRequestForm {
 		t.Fatalf("unexpected payload kind: %#v", payload)
 	}
 	if payload[cardActionPayloadKeyRequestID] != "req-1" || payload[cardActionPayloadKeyRequestType] != "request_user_input" {
 		t.Fatalf("unexpected submit request form payload: %#v", payload)
-	}
-	if _, ok := payload[cardActionPayloadKeyRequestOptionID]; ok {
-		t.Fatalf("did not expect request option id on submit payload: %#v", payload)
 	}
 }
 

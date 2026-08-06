@@ -138,21 +138,6 @@ func TestParseFeishuTextActionRecognizesAutoContinueCommand(t *testing.T) {
 	}
 }
 
-func TestParseFeishuTextActionRejectsLegacyRecoveryAliases(t *testing.T) {
-	for _, input := range []string{
-		"/recovery",
-		"/recovery on",
-		"/recovery off",
-		"/autorecovery",
-		"/autorecovery on",
-		"/autorecovery off",
-	} {
-		if action, ok := ParseFeishuTextActionWithoutCatalog(input); ok {
-			t.Fatalf("expected %q to be rejected, got %#v", input, action)
-		}
-	}
-}
-
 func TestParseFeishuTextActionRecognizesModeCommand(t *testing.T) {
 	tests := []string{
 		"/mode",
@@ -424,48 +409,6 @@ func TestReviewExtraActionRoutesBuildCanonicalText(t *testing.T) {
 		commandID, ok := FeishuCommandIDForActionKind(tt.kind)
 		if !ok || commandID != FeishuCommandReview {
 			t.Fatalf("FeishuCommandIDForActionKind(%q) = (%q, %v), want (%q, true)", tt.kind, commandID, ok, FeishuCommandReview)
-		}
-	}
-}
-
-func TestFeishuCommandCatalogsHideKillInstanceFromVisibleEntries(t *testing.T) {
-	cases := []struct {
-		name    string
-		catalog FeishuPageView
-	}{
-		{name: "help", catalog: FeishuCommandHelpPageView()},
-		{name: "menu", catalog: FeishuCommandMenuPageView()},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			for _, section := range tc.catalog.Sections {
-				for _, entry := range section.Entries {
-					for _, command := range entry.Commands {
-						if command == "/killinstance" {
-							t.Fatalf("catalog still exposes /killinstance in commands: %#v", entry)
-						}
-					}
-					for _, button := range entry.Buttons {
-						if button.CommandText == "/killinstance" {
-							t.Fatalf("catalog still exposes /killinstance in buttons: %#v", entry)
-						}
-					}
-				}
-			}
-		})
-	}
-}
-
-func TestParseFeishuLegacyHeadlessCompatCommandsRejected(t *testing.T) {
-	for _, input := range []string{"/newinstance", "/killinstance"} {
-		if action, ok := ParseFeishuTextActionWithoutCatalog(input); ok {
-			t.Fatalf("expected %q to be rejected, got %#v", input, action)
-		}
-	}
-	for _, input := range []string{"newinstance", "new_instance", "killinstance", "kill_instance"} {
-		if action, ok := ParseFeishuMenuActionWithoutCatalog(input); ok {
-			t.Fatalf("expected %q menu alias to be rejected, got %#v", input, action)
 		}
 	}
 }

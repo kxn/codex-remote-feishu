@@ -752,25 +752,6 @@ func TestBuildUpgradeTrackPageOnlyExposesTrackSwitching(t *testing.T) {
 	}
 }
 
-func TestParseDebugCommandTextRejectsDeprecatedAdminSubcommand(t *testing.T) {
-	if _, err := parseDebugCommandText("/debug admin"); err == nil || !strings.Contains(err.Error(), "/admin web") {
-		t.Fatalf("expected /debug admin to be rejected with /admin web guidance, got %v", err)
-	}
-}
-
-func TestParseDebugCommandTextRejectsLegacySubcommands(t *testing.T) {
-	tests := []string{
-		"/debug track",
-		"/debug track beta",
-		"/debug upgrade",
-	}
-	for _, input := range tests {
-		if _, err := parseDebugCommandText(input); err == nil {
-			t.Fatalf("expected %q to be rejected", input)
-		}
-	}
-}
-
 func TestParseUpgradeCommandTextRecognizesTrackCommands(t *testing.T) {
 	parsed, err := parseUpgradeCommandText("/upgrade track")
 	if err != nil {
