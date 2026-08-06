@@ -17,6 +17,7 @@ import type {
   FeishuAppAutoConfigPlanResponse,
   FeishuAppAutoConfigPlanView,
   FeishuAppAutoConfigRequirementStatus,
+  FeishuBotFacts,
   FeishuAppResponse,
   FeishuAppSummary,
   FeishuAppsResponse,
@@ -453,6 +454,39 @@ export function AdminRoute() {
     }
   }
 
+  async function syncRobotFacts() {
+    if (!selectedApp?.id || selectedApp.id === newRobotID) {
+      return;
+    }
+    const appID = selectedApp.id;
+    setActionBusy("facts-refresh");
+    setDetailNotice(null);
+    try {
+      const facts = await requestJSON<FeishuBotFacts>(
+        `/api/admin/feishu/apps/${encodeURIComponent(appID)}/facts/refresh`,
+        { method: "POST" },
+      );
+      const updatedName = facts.appName?.trim() || selectedApp.name || "";
+      syncAppSummary({
+        ...selectedApp,
+        name: updatedName,
+      });
+      setDetailNotice({
+        tone: "good",
+        message: updatedName
+          ? `已从飞书同步机器人名称：${updatedName}`
+          : "已从飞书同步机器人信息。",
+      });
+    } catch {
+      setDetailNotice({
+        tone: "danger",
+        message: "从飞书同步失败，当前仍显示本地信息。",
+      });
+    } finally {
+      setActionBusy("");
+    }
+  }
+
   async function deleteRobot() {
     if (!deleteTargetID) {
       return;
@@ -834,9 +868,19 @@ export function AdminRoute() {
             <div>
               <h3>{selectedApp.name || "未命名机器人"}</h3>
             </div>
-            <span className={`badge ${connectionTone(selectedApp)}`}>
-              {describeConnectionState(selectedApp)}
-            </span>
+            <div className="inline-status-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={Boolean(actionBusy)}
+                onClick={() => void syncRobotFacts()}
+              >
+                {actionBusy === "facts-refresh" ? "同步中..." : "从飞书同步"}
+              </button>
+              <span className={`badge ${connectionTone(selectedApp)}`}>
+                {describeConnectionState(selectedApp)}
+              </span>
+            </div>
           </div>
           <dl className="definition-list">
             <div>

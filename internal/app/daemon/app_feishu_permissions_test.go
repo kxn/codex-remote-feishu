@@ -1,14 +1,12 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 )
 
 func TestApplyFeishuPermissionVerificationResultClearsGrantedGap(t *testing.T) {
@@ -112,22 +110,6 @@ func TestPrimaryPermissionDecisionRejectsMissingScopeAndErrors(t *testing.T) {
 	}
 	if decision := primaryPermissionDecisionFromScopes(nil, errors.New("boom")); decision.Allowed || decision.Reason != "scope_read_failed" || decision.Err == nil {
 		t.Fatalf("error decision = %#v, want failed with err", decision)
-	}
-}
-
-func TestPrimaryPermissionCheckerUsesFreshCacheWhenNotForced(t *testing.T) {
-	app := New(":0", ":0", &recordingGateway{}, serverIdentityForTest())
-	now := time.Now().UTC()
-	app.storePrimaryBotPermissionCache("app-1", orchestrator.PrimaryBotPermissionDecision{
-		Allowed: true,
-		Scope:   "im:message.group_msg",
-	}, now, true)
-
-	decision := app.CheckPrimaryBotPermission(context.Background(), orchestrator.PrimaryBotPermissionRequest{
-		GatewayID: "app-1",
-	})
-	if !decision.Allowed || decision.Scope != "im:message.group_msg" {
-		t.Fatalf("cached decision = %#v, want allowed group_msg", decision)
 	}
 }
 

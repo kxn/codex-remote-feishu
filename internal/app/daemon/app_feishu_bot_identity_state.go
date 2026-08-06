@@ -340,8 +340,12 @@ func (a *App) purgeFeishuGatewayRuntimeStateLocked(gatewayID string, surfaceIDs 
 
 	a.feishuRuntime.permissionMu.Lock()
 	delete(a.feishuRuntime.permissionGaps, gatewayID)
-	delete(a.feishuRuntime.primaryPermissionCache, gatewayID)
 	a.feishuRuntime.permissionMu.Unlock()
+	if a.feishuFactsState.store != nil {
+		a.feishuFactsState.mu.Lock()
+		_ = a.feishuFactsState.store.Delete(gatewayID)
+		a.feishuFactsState.mu.Unlock()
+	}
 	if len(turnPatchResumeEvents) != 0 {
 		a.handleUIEventsLocked(context.Background(), turnPatchResumeEvents)
 	}

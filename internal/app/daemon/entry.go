@@ -308,6 +308,7 @@ func resolveDesktopSessionInstanceID() string {
 
 type gatewayRuntimeHooks struct {
 	PrimaryGatewayForChat func(chatID string) string
+	BotOpenIDForGateway   func(gatewayID string) string
 }
 
 func buildRuntimeGatewayApps(appConfig config.AppConfig, services config.ServicesConfig, paths relayruntime.Paths, hooks gatewayRuntimeHooks) []feishu.GatewayAppConfig {
@@ -363,6 +364,7 @@ build:
 			Name:                  strings.TrimSpace(app.Name),
 			AppID:                 strings.TrimSpace(app.AppID),
 			AppSecret:             strings.TrimSpace(app.AppSecret),
+			BotOpenID:             hookBotOpenID(hooks.BotOpenIDForGateway, gatewayID),
 			Enabled:               enabled,
 			UseSystemProxy:        services.FeishuUseSystemProxy,
 			ImageTempDir:          filepath.Join(paths.StateDir, "image-staging", sanitizeGatewayPath(gatewayID)),
@@ -373,6 +375,13 @@ build:
 		})
 	}
 	return values
+}
+
+func hookBotOpenID(lookup func(string) string, gatewayID string) string {
+	if lookup == nil {
+		return ""
+	}
+	return strings.TrimSpace(lookup(gatewayID))
 }
 
 func runtimeGatewayApps(appConfig config.AppConfig, services config.ServicesConfig, paths relayruntime.Paths) []feishu.GatewayAppConfig {

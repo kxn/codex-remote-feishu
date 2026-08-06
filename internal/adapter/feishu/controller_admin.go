@@ -3,6 +3,7 @@ package feishu
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -109,4 +110,20 @@ func (c *MultiGatewayController) Status() []GatewayStatus {
 		return values[i].GatewayID < values[j].GatewayID
 	})
 	return values
+}
+
+func (c *MultiGatewayController) SetBotOpenID(gatewayID, openID string) {
+	gatewayID = normalizeGatewayID(gatewayID)
+	if gatewayID == "" || strings.TrimSpace(openID) == "" {
+		return
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	worker := c.workers[gatewayID]
+	if worker == nil || worker.runtime == nil {
+		return
+	}
+	if setter, ok := worker.runtime.(interface{ SetBotOpenID(string) }); ok {
+		setter.SetBotOpenID(strings.TrimSpace(openID))
+	}
 }

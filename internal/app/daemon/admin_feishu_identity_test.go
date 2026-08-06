@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishubotidentity"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishufacts"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishuroomstate"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
@@ -109,8 +110,14 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	app.feishuRuntime.permissionGaps["main"] = map[string]*feishuPermissionGapRecord{
 		"im:message|tenant": {Scope: "im:message", ScopeType: "tenant"},
 	}
-	app.feishuRuntime.primaryPermissionCache["main"] = feishuPrimaryPermissionCacheRecord{GatewayID: "main", Allowed: true}
 	app.feishuRuntime.permissionMu.Unlock()
+	if err := app.feishuFactsState.store.Put(feishufacts.Record{
+		GatewayID: "main",
+		AppID:     "cli_old",
+		AppName:   "Old Bot",
+	}); err != nil {
+		t.Fatalf("seed facts: %v", err)
+	}
 	importCancelled := make(chan struct{})
 	worktreeCancelled := make(chan struct{})
 	app.mu.Lock()
@@ -175,8 +182,8 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	if _, ok := app.feishuRuntime.permissionGaps["main"]; ok {
 		t.Fatal("old permission gaps survived identity change")
 	}
-	if _, ok := app.feishuRuntime.primaryPermissionCache["main"]; ok {
-		t.Fatal("old primary permission cache survived identity change")
+	if _, ok := app.FeishuBotFacts("main"); ok {
+		t.Fatal("old feishu facts survived identity change")
 	}
 	select {
 	case <-importCancelled:

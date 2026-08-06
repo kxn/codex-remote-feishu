@@ -907,7 +907,7 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 		RunHeadlessRecovery:                true,
 		HandleEvents:                       true,
 	})
-	a.maybeStartFeishuPermissionRefreshLocked(now)
+	a.maybeStartFeishuFactsRefreshLocked(now)
 	a.maybeScheduleCronJobsLocked(now)
 	a.reapCronExitTargetsLocked(now)
 	a.maybeShutdownExternalAccessIdleLocked(now)

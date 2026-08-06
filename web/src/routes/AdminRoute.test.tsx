@@ -161,6 +161,36 @@ describe("AdminRoute", () => {
     );
   });
 
+  it("syncs robot facts from Feishu and updates the displayed name", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const app = makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" });
+
+    installMockFetch(makeSingleRobotAdminRoutes(app, {
+      "/api/admin/feishu/apps/bot-1/facts/refresh": {
+        body: {
+          gatewayID: "bot-1",
+          appID: "cli_main",
+          appName: "新机器人名",
+          botOpenID: "ou_bot",
+          fetchedAt: new Date().toISOString(),
+        },
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    expect(
+      await screen.findByRole("heading", { name: "主机器人" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "从飞书同步" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "新机器人名" }),
+    ).toBeInTheDocument();
+  });
+
   it("checks the auto-config plan and displays missing scopes with a copyable import JSON", async () => {
     window.history.replaceState({}, "", "/admin");
     const user = userEvent.setup();
