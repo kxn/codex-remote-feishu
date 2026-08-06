@@ -51,6 +51,7 @@
 - 提交后默认同轮推送；除非用户要求本地-only、临时实验分支、或推送被真实阻塞。停止本地状态时明确报告 LOCAL-ONLY、分支、HEAD 和下一步。
 - 收尾前重查 `git status --short` 和本地 HEAD 是否领先 upstream。
 - 重复 tail-state 检查优先 `scripts/dev/worktree-facts.sh`；路径探测用 `scripts/dev/resolve-repo-path.sh`；陌生 `gh --json` 字段先 `scripts/dev/gh-json-fields.sh`；同一确定性失败不原样重跑。
+- 工具输出约定：`issuectl` / `issue-doc-sync` 默认只把摘要打到 stdout；完整 issue/评论/JSON 写文件（`--json-file`、`--snapshot-file`、inspect 默认输出文件）。按需读取时先 `rg '^## '` 列结构，再 `sed -n '/^## 目标/,/^## 完成标准/p'` 取需要的 section，禁止 cat 全文。
 
 ## 领域基线（按需读取）
 

@@ -24,6 +24,7 @@ Use this skill when the user asks to:
 3. Review each candidate issue.
    - Prefer `scripts/issue-doc-sync/review.sh inspect [issue-number]`.
    - If no issue number is given, the runner opens the oldest pending candidate automatically.
+   - `inspect` writes the full issue body and comments to `.codex/state/issue-doc-sync/cache/inspect-<n>.md` (or `.json`, git-ignored) and prints only a one-line summary. Read sections on demand with `rg '^## '` / `sed -n`; do not cat the whole file.
    - If current docs already cover the durable result, skip it and record why.
    - If an existing canonical doc is the right home, merge into that doc.
    - If no suitable doc exists, create a new doc under the correct lifecycle directory.

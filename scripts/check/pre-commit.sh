@@ -40,3 +40,4 @@ bash scripts/check/release-track-version.sh
 validation_dir="$(git rev-parse --git-path codex-remote)"
 mkdir -p "${validation_dir}"
 git write-tree > "${validation_dir}/pre-commit-tree"
+echo "pre-commit: passed"

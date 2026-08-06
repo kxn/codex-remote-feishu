@@ -40,10 +40,15 @@ assert_eq() {
 }
 
 assert_fails() {
-  if "$@"; then
+  local output_file
+  output_file="$(mktemp)"
+  if "$@" >"${output_file}" 2>&1; then
     echo "Expected command to fail: $*" >&2
+    sed 's/^/  /' "${output_file}" >&2
+    rm -f "${output_file}"
     exit 1
   fi
+  rm -f "${output_file}"
 }
 
 cat <<'EOF' > README.md
