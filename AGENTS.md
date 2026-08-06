@@ -53,6 +53,15 @@
 - 重复 tail-state 检查优先 `scripts/dev/worktree-facts.sh`；路径探测用 `scripts/dev/resolve-repo-path.sh`；陌生 `gh --json` 字段先 `scripts/dev/gh-json-fields.sh`；同一确定性失败不原样重跑。
 - 工具输出约定：`issuectl` / `issue-doc-sync` 默认只把摘要打到 stdout；完整 issue/评论/JSON 写文件（`--json-file`、`--snapshot-file`、inspect 默认输出文件）。按需读取时先 `rg '^## '` 列结构，再 `sed -n '/^## 目标/,/^## 完成标准/p'` 取需要的 section，禁止 cat 全文。
 
+## 外部工具调用规范（gh 强制）
+
+- 读 issue/评论：禁止裸 `gh issue view <n> --comments`（会触发 projectCards GraphQL 错误）；统一用 `gh issue view <n> --json ...` 或 `gh api ...`；workflow 内优先 `issuectl`，不要自己拼 gh 读写 issue。
+- 使用 `gh ... --json` 前，先用 `bash scripts/dev/gh-json-fields.sh --check <field,...> <gh-subcommand>` 验证字段，禁止凭记忆猜。
+- issue 全文、评论、CI 日志等大输出：重定向到文件（`> /tmp/xxx`）再按需读取；读取时先 `rg '^## '` 列结构、再 `sed -n` 取段，禁止把全文直接打进上下文。
+- 长 body 一律先写临时文件，再 `gh issue edit/create --body-file <file>`；禁止把含反引号、`$()`、长文本的 body 直接拼进命令行。
+- 多步命令拆成多次工具调用；禁止用 `&&` 接在 heredoc 之后。
+- gh 命令失败后禁止原样重试；先读错误信息，改用 helper 或正确格式后再调用。
+
 ## 领域基线（按需读取）
 
 - `docs/**/*.md` 改动：遵守 docs/README.md 的元信息（Type/Updated/Summary）、生命周期目录和链接同步规范。
