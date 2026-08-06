@@ -48,8 +48,61 @@ func TestManagedDeepSeekModelCatalogPath(t *testing.T) {
 	if got := DeepSeekModelCatalogPath(dir); got != filepath.Join(dir, DeepSeekModelCatalogFileName) {
 		t.Fatalf("DeepSeekModelCatalogPath = %q", got)
 	}
+	if got := ManagedModelCatalogPath(dir); got != filepath.Join(dir, ManagedModelCatalogFileName) {
+		t.Fatalf("ManagedModelCatalogPath = %q", got)
+	}
 	if got := ManagedModelCatalogDir(""); got != "" {
 		t.Fatalf("empty state dir should not produce managed dir, got %q", got)
+	}
+}
+
+func TestBuildManagedModelCatalogIncludesRequestedModels(t *testing.T) {
+	raw := BuildManagedModelCatalog([]string{"gpt-5.6", "gpt-5.6-nano"})
+	if len(raw) == 0 {
+		t.Fatal("expected managed model catalog JSON")
+	}
+	var catalog struct {
+		Models []struct {
+			Slug                    string `json:"slug"`
+			ContextWindow           int    `json:"context_window"`
+			DefaultReasoningLevel   string `json:"default_reasoning_level"`
+			MultiAgentVersion       string `json:"multi_agent_version"`
+			SupportedReasoningLevel []struct {
+				Effort string `json:"effort"`
+			} `json:"supported_reasoning_levels"`
+			ModelMessages *struct {
+				InstructionsTemplate string `json:"instructions_template"`
+			} `json:"model_messages"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatalf("BuildManagedModelCatalog produced invalid JSON: %v", err)
+	}
+	slugs := map[string]bool{}
+	for _, model := range catalog.Models {
+		slugs[model.Slug] = true
+		if model.ContextWindow <= 0 || model.DefaultReasoningLevel == "" || len(model.SupportedReasoningLevel) == 0 || model.ModelMessages == nil {
+			t.Fatalf("generic entry incomplete: %#v", model)
+		}
+	}
+	if !slugs["gpt-5.6"] || !slugs["gpt-5.6-nano"] {
+		t.Fatalf("managed catalog missing requested models: %#v", slugs)
+	}
+}
+
+func TestBuildManagedModelCatalogReusesDeepSeekEntry(t *testing.T) {
+	raw := BuildManagedModelCatalog([]string{"deepseek-v4-flash"})
+	var catalog struct {
+		Models []struct {
+			Slug        string `json:"slug"`
+			DisplayName string `json:"display_name"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatalf("BuildManagedModelCatalog produced invalid JSON: %v", err)
+	}
+	if len(catalog.Models) != 1 || catalog.Models[0].Slug != "deepseek-v4-flash" || catalog.Models[0].DisplayName != "DeepSeek-V4-Flash" {
+		t.Fatalf("expected embedded DeepSeek entry reuse, got %#v", catalog.Models)
 	}
 }
 

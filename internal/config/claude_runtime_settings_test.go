@@ -12,6 +12,7 @@ func TestClaudeProfileRuntimeSettings(t *testing.T) {
 			AuthToken:       "profile-token",
 			Model:           "mimo-v2.5-pro",
 			SmallModel:      "mimo-v2.5-haiku",
+			SubagentModel:   "mimo-v2.5-mini",
 			ReasoningEffort: "high",
 		},
 	}
@@ -21,6 +22,7 @@ func TestClaudeProfileRuntimeSettings(t *testing.T) {
 	assertRuntimeSettingEnvValue(t, settings, ClaudeAuthTokenEnv, "profile-token")
 	assertRuntimeSettingEnvValue(t, settings, ClaudeModelEnv, "mimo-v2.5-pro")
 	assertRuntimeSettingEnvValue(t, settings, ClaudeDefaultHaikuModelEnv, "mimo-v2.5-haiku")
+	assertRuntimeSettingEnvValue(t, settings, "CLAUDE_CODE_SUBAGENT_MODEL", "mimo-v2.5-mini")
 	assertRuntimeSettingEnvValue(t, settings, ClaudeEffortLevelEnv, "high")
 	assertRuntimeSettingEnvValue(t, settings, ClaudeDisableAdaptiveEnv, "1")
 	assertRuntimeSettingEnvValue(t, settings, ClaudeDisableThinkingEnv, "")

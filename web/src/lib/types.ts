@@ -109,6 +109,7 @@ export interface ClaudeProfileSummary {
   hasAuthToken: boolean;
   model?: string;
   smallModel?: string;
+  subagentModel?: string;
   reasoningEffort?: string;
   builtIn?: boolean;
   persisted: boolean;
@@ -130,6 +131,7 @@ export interface ClaudeProfileWriteRequest {
   authToken?: string;
   model?: string;
   smallModel?: string;
+  subagentModel?: string;
   reasoningEffort?: string;
 }
 
@@ -149,6 +151,7 @@ export interface CodexProfileSummary {
   baseURL?: string;
   model?: string;
   reviewModel?: string;
+  subagentModel?: string;
   reasoningEffort?: string;
   statusCode?: string;
   available: boolean;
@@ -191,6 +194,7 @@ export interface CodexProfileWriteRequest {
   apiKey?: string;
   model?: string;
   reviewModel?: string;
+  subagentModel?: string;
   reasoningEffort?: string;
 }
 

@@ -23,6 +23,7 @@ type adminClaudeProfileView struct {
 	HasAuthToken      bool                           `json:"hasAuthToken"`
 	Model             string                         `json:"model,omitempty"`
 	SmallModel        string                         `json:"smallModel,omitempty"`
+	SubagentModel     string                         `json:"subagentModel,omitempty"`
 	ReasoningEffort   string                         `json:"reasoningEffort,omitempty"`
 	BuiltIn           bool                           `json:"builtIn,omitempty"`
 	Persisted         bool                           `json:"persisted"`
@@ -48,6 +49,7 @@ type claudeProfileWriteRequest struct {
 	AuthToken       *string `json:"authToken"`
 	Model           *string `json:"model"`
 	SmallModel      *string `json:"smallModel"`
+	SubagentModel   *string `json:"subagentModel"`
 	ReasoningEffort *string `json:"reasoningEffort"`
 }
 
@@ -127,6 +129,7 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 		AuthToken:       optionalStringValue(req.AuthToken),
 		Model:           optionalStringValue(req.Model),
 		SmallModel:      optionalStringValue(req.SmallModel),
+		SubagentModel:   optionalStringValue(req.SubagentModel),
 		ReasoningEffort: config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort)),
 	}
 	if index := config.IndexOfClaudeProfile(updated.Claude.Profiles, profileID); index >= 0 {
@@ -278,6 +281,9 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	}
 	if req.SmallModel != nil {
 		current.SmallModel = optionalStringValue(req.SmallModel)
+	}
+	if req.SubagentModel != nil {
+		current.SubagentModel = optionalStringValue(req.SubagentModel)
 	}
 	if req.AuthToken != nil {
 		current.AuthToken = optionalStringValue(req.AuthToken)
@@ -513,6 +519,7 @@ func adminClaudeProfileViewFromConfig(profile config.ClaudeProfile) adminClaudeP
 		HasAuthToken:    strings.TrimSpace(profile.AuthToken) != "",
 		Model:           strings.TrimSpace(profile.Model),
 		SmallModel:      strings.TrimSpace(profile.SmallModel),
+		SubagentModel:   strings.TrimSpace(profile.SubagentModel),
 		ReasoningEffort: config.NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
 		BuiltIn:         profile.BuiltIn,
 		Persisted:       !profile.BuiltIn,

@@ -53,6 +53,7 @@ type codexProfileWriteRequest struct {
 	APIKey          *string `json:"apiKey"`
 	Model           *string `json:"model"`
 	ReviewModel     *string `json:"reviewModel"`
+	SubagentModel   *string `json:"subagentModel"`
 	ReasoningEffort *string `json:"reasoningEffort"`
 }
 
@@ -569,6 +570,7 @@ func codexAPIProfileSummary(profile config.CodexAPIProfileSecretConfig, preferen
 		BaseURL:           config.PublicCodexAPIProfileBaseURL(profile),
 		Model:             profile.Model,
 		ReviewModel:       profile.ReviewModel,
+		SubagentModel:     profile.SubagentModel,
 		ReasoningEffort:   profile.ReasoningEffort,
 		StatusCode:        statusCode,
 		Available:         statusCode == "" && profile.APIKey != "",
@@ -587,6 +589,7 @@ func codexAPIProfileInputFromRequest(req codexProfileWriteRequest) config.CodexA
 		APIKey:          rawOptionalStringValue(req.APIKey),
 		Model:           optionalStringValue(req.Model),
 		ReviewModel:     optionalStringValue(req.ReviewModel),
+		SubagentModel:   optionalStringValue(req.SubagentModel),
 		ReasoningEffort: optionalStringValue(req.ReasoningEffort),
 	}
 }

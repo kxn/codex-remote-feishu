@@ -106,6 +106,7 @@ func (a *App) handleCodexProviderUpdate(w http.ResponseWriter, r *http.Request) 
 	if err == nil {
 		input := codexAPIProfileInputFromLegacyRequest(req)
 		input.ReviewModel = current.ReviewModel
+		input.SubagentModel = current.SubagentModel
 		profile, _, err = a.updateCodexProfileLocked(providerID, current.ETag, input)
 	}
 	a.adminConfigMu.Unlock()

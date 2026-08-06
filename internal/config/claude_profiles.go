@@ -20,6 +20,7 @@ const (
 	ClaudeAuthTokenEnv           = "ANTHROPIC_AUTH_TOKEN"
 	ClaudeModelEnv               = "ANTHROPIC_MODEL"
 	ClaudeDefaultHaikuModelEnv   = "ANTHROPIC_DEFAULT_HAIKU_MODEL"
+	ClaudeSubagentModelEnv       = "CLAUDE_CODE_SUBAGENT_MODEL"
 	ClaudeEffortLevelEnv         = "CLAUDE_CODE_EFFORT_LEVEL"
 	ClaudeDisableAdaptiveEnv     = "CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING"
 	ClaudeDisableThinkingEnv     = "CLAUDE_CODE_DISABLE_THINKING"
@@ -32,6 +33,7 @@ var claudeProfileLaunchEnvKeys = []string{
 	ClaudeAuthTokenEnv,
 	ClaudeModelEnv,
 	ClaudeDefaultHaikuModelEnv,
+	ClaudeSubagentModelEnv,
 }
 
 type ClaudeSettings struct {
@@ -46,6 +48,7 @@ type ClaudeProfileConfig struct {
 	AuthToken       string `json:"authToken,omitempty"`
 	Model           string `json:"model,omitempty"`
 	SmallModel      string `json:"smallModel,omitempty"`
+	SubagentModel   string `json:"subagentModel,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
@@ -154,6 +157,7 @@ func NormalizeClaudeProfiles(profiles []ClaudeProfileConfig) []ClaudeProfileConf
 			AuthToken:       strings.TrimSpace(profile.AuthToken),
 			Model:           strings.TrimSpace(profile.Model),
 			SmallModel:      strings.TrimSpace(profile.SmallModel),
+			SubagentModel:   strings.TrimSpace(profile.SubagentModel),
 			ReasoningEffort: NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
 		}
 		current.ID = nextClaudeProfileID(current.ID, current.Name, used)
