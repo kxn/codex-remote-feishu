@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/markdown"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 )
 
@@ -51,7 +52,7 @@ func (p *DriveMarkdownPreviewer) RewriteFinalBlock(ctx context.Context, req Fina
 
 func (p *DriveMarkdownPreviewer) rewriteMarkdownLinks(ctx context.Context, req FinalBlockPreviewRequest, principals []previewPrincipal, runtime *previewRewriteRuntime) (string, bool, bool, error) {
 	text := req.Block.Text
-	segments := splitFinalCardFenceSegments(text)
+	segments := markdown.SplitFenceSegments(text)
 	if len(segments) == 0 {
 		return text, false, false, nil
 	}
@@ -64,9 +65,9 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinks(ctx context.Context, req F
 	changed := false
 	offset := 0
 	for _, segment := range segments {
-		if segment.fenced {
-			builder.WriteString(segment.text)
-			offset += len(segment.text)
+		if segment.Fenced {
+			builder.WriteString(segment.Text)
+			offset += len(segment.Text)
 			continue
 		}
 		rewrittenSegment, segmentChanged, segmentErrs := p.rewriteMarkdownLinksInline(
@@ -76,7 +77,7 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinks(ctx context.Context, req F
 			runtime,
 			scopeKey,
 			rewrittenTargets,
-			segment.text,
+			segment.Text,
 			offset,
 		)
 		builder.WriteString(rewrittenSegment)
@@ -86,7 +87,7 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinks(ctx context.Context, req F
 		if len(segmentErrs) > 0 {
 			errs = append(errs, segmentErrs...)
 		}
-		offset += len(segment.text)
+		offset += len(segment.Text)
 	}
 
 	var rewriteErr error
@@ -144,8 +145,8 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksInline(
 			i++
 			continue
 		}
-		run := consecutiveByteRun(text, i, '`')
-		close := closingBacktickRun(text, i+run, run)
+		run := markdown.ConsecutiveByteRun(text, i, '`')
+		close := markdown.ClosingBacktickRun(text, i+run, run)
 		if close < 0 {
 			break
 		}
@@ -227,7 +228,7 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksCodeSpan(
 		return rawSpan, false, nil
 	}
 	trimmed := text[trimStart:trimEnd]
-	if end, label, rawTarget, ok := parseMarkdownLinkAt(trimmed, 0); ok && end == len(trimmed) {
+	if end, label, rawTarget, ok := markdown.ParseMarkdownLinkAt(trimmed, 0); ok && end == len(trimmed) {
 		replacement, rewrittenChanged, rewrittenErrs := p.rewritePreviewReferenceTarget(
 			ctx,
 			req,
@@ -287,7 +288,7 @@ func (p *DriveMarkdownPreviewer) rewriteMarkdownLinksPlain(
 	last := 0
 	for i := 0; i < len(text); {
 		if text[i] == '[' {
-			end, label, rawTarget, ok := parseMarkdownLinkAt(text, i)
+			end, label, rawTarget, ok := markdown.ParseMarkdownLinkAt(text, i)
 			if ok {
 				builder.WriteString(text[last:i])
 				replacement, rewrittenChanged, rewrittenErrs := p.rewritePreviewReferenceTarget(
