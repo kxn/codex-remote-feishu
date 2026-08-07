@@ -1,6 +1,10 @@
 package issueworkflow
 
-import "time"
+import (
+	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/ghclient"
+)
 
 type WorkflowMode string
 
@@ -9,17 +13,8 @@ const (
 	WorkflowModeFast WorkflowMode = "fast"
 )
 
-type Repo struct {
-	Owner string `json:"owner"`
-	Name  string `json:"name"`
-}
-
-func (r Repo) String() string {
-	if r.Owner == "" || r.Name == "" {
-		return ""
-	}
-	return r.Owner + "/" + r.Name
-}
+// Repo is an alias for ghclient.Repo.
+type Repo = ghclient.Repo
 
 type Issue struct {
 	Number    int            `json:"number"`
