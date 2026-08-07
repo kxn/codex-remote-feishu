@@ -180,10 +180,10 @@ func overlayManagedSummary(summary *adminInstanceSummary, managed *headlessrunti
 	if strings.TrimSpace(managed.LastError) != "" {
 		summary.LastError = managed.LastError
 	}
-	if summary.Status == headlessruntime.StatusBusy || summary.Status == headlessruntime.StatusIdle {
+	switch headlessruntime.StatusOnlineState(summary.Status) {
+	case headlessruntime.OnlineTrue:
 		summary.Online = true
-	}
-	if summary.Status == headlessruntime.StatusOffline || summary.Status == headlessruntime.StatusStarting || summary.Status == headlessruntime.StatusStopping || summary.Status == "stopped" || summary.Status == "deleted" {
+	case headlessruntime.OnlineFalse:
 		summary.Online = false
 	}
 }
@@ -200,10 +200,10 @@ func (a *App) adminManagedInstanceSummaryLocked(instanceID string) (adminInstanc
 			Managed:       inst.Managed,
 			Online:        inst.Online,
 			PID:           inst.PID,
-			Status:        "offline",
+			Status:        headlessruntime.StatusOffline,
 		}
 		if inst.Online {
-			summary.Status = "online"
+			summary.Status = headlessruntime.StatusOnline
 			if headlessruntime.IsManagedInstance(inst) {
 				summary.Status = headlessruntime.StatusBusy
 			}
