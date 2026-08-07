@@ -39,8 +39,8 @@ func Main(opts Options) int {
 	opts = withDefaults(opts)
 
 	// Register the editor integration used by install flows (bundle entrypoint
-	// detection + managed-shim patching). The upgrade shim binary does not go
-	// through launcher and never registers these, which keeps managedshim/embed
+	// detection + managed-shim patching). The unified shim binary does not go
+	// through launcher and never registers these, which keeps shim/embed
 	// out of the shim's link graph.
 	install.RegisterEditorHooks(editor.DetectBundleEntrypoints, func(p install.BundleEntrypointPatchOptions) error {
 		return editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{

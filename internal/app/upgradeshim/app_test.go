@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
 )
 
 func TestResolveStatePathUsesSidecar(t *testing.T) {
@@ -19,10 +19,10 @@ func TestResolveStatePathUsesSidecar(t *testing.T) {
 	if err := os.WriteFile(statePath, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
-	if err := upgradeshim.WriteSidecar(upgradeshim.SidecarPath(entrypoint), upgradeshim.Sidecar{
+	if err := shim.WriteSidecar(shim.SidecarPath(entrypoint), shim.Sidecar{
 		InstallStatePath: statePath,
 		InstanceID:       "stable",
-	}); err != nil {
+	}, shim.ModeUpgrade); err != nil {
 		t.Fatalf("WriteSidecar: %v", err)
 	}
 
@@ -48,9 +48,9 @@ func TestRunMainInvokesUpgradeHelperWithResolvedState(t *testing.T) {
 	if err := os.WriteFile(statePath, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile state: %v", err)
 	}
-	if err := upgradeshim.WriteSidecar(upgradeshim.SidecarPath(entrypoint), upgradeshim.Sidecar{
+	if err := shim.WriteSidecar(shim.SidecarPath(entrypoint), shim.Sidecar{
 		InstallStatePath: statePath,
-	}); err != nil {
+	}, shim.ModeUpgrade); err != nil {
 		t.Fatalf("WriteSidecar: %v", err)
 	}
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
-	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
 )
 
 var runUpgradeHelperWithStatePath = install.RunUpgradeHelperWithStatePath
@@ -41,12 +41,12 @@ func resolveStatePath(entrypointPath string) (string, error) {
 	if entrypointPath == "" {
 		return "", fmt.Errorf("entrypoint path is empty")
 	}
-	sidecarPath := upgradeshim.SidecarPath(entrypointPath)
-	sidecar, err := upgradeshim.ReadSidecar(sidecarPath)
+	sidecarPath := shim.SidecarPath(entrypointPath)
+	sidecar, err := shim.ReadSidecar(sidecarPath)
 	if err != nil {
 		return "", err
 	}
-	if !upgradeshim.SidecarValid(sidecar) {
+	if !shim.SidecarValid(sidecar, shim.ModeUpgrade) {
 		return "", fmt.Errorf("upgrade shim sidecar is invalid")
 	}
 	return filepath.Clean(strings.TrimSpace(sidecar.InstallStatePath)), nil

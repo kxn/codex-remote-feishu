@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/managedshim"
-	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
 	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
+	shimembed "github.com/kxn/codex-remote-feishu/internal/shim/embed"
 )
 
 const (
@@ -93,8 +93,8 @@ func DetectManagedShim(entrypointPath, wrapperBinary string) (ManagedShimStatus,
 	case status.SidecarExists:
 		status.Kind = ManagedShimKindTiny
 		status.RepoManaged = true
-		sidecar, err := managedshim.ReadSidecar(status.SidecarPath)
-		if err == nil && managedshim.SidecarValid(sidecar) {
+		sidecar, err := shim.ReadSidecar(status.SidecarPath)
+		if err == nil && shim.SidecarValid(sidecar, shim.ModeManaged) {
 			status.SidecarValid = true
 			status.SidecarInstallStatePath = sidecar.InstallStatePath
 			status.SidecarConfigPath = sidecar.ConfigPath
@@ -118,7 +118,7 @@ func DetectManagedShim(entrypointPath, wrapperBinary string) (ManagedShimStatus,
 }
 
 func matchesEmbeddedManagedShim(path string) bool {
-	expected := managedshimembed.ExpectedSHA256()
+	expected := shimembed.ExpectedSHA256()
 	if strings.TrimSpace(expected) == "" {
 		return false
 	}

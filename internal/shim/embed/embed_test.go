@@ -12,7 +12,7 @@ import (
 )
 
 func TestWriteExecutableExtractsCurrentAsset(t *testing.T) {
-	payload := []byte("upgrade-shim-binary")
+	payload := []byte("unified-shim-binary")
 	previous, hadPrevious := Current()
 	register(Asset{
 		SourceDigest: "test",
@@ -29,7 +29,7 @@ func TestWriteExecutableExtractsCurrentAsset(t *testing.T) {
 		current = Asset{}
 	})
 
-	target := filepath.Join(t.TempDir(), "upgrade-shim")
+	target := filepath.Join(t.TempDir(), "codex")
 	if err := WriteExecutable(target); err != nil {
 		t.Fatalf("WriteExecutable: %v", err)
 	}
@@ -39,6 +39,25 @@ func TestWriteExecutableExtractsCurrentAsset(t *testing.T) {
 	}
 	if string(raw) != string(payload) {
 		t.Fatalf("payload = %q, want %q", string(raw), string(payload))
+	}
+}
+
+func TestExpectedSHA256EmptyWithoutAsset(t *testing.T) {
+	previous, hadPrevious := Current()
+	t.Cleanup(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if hadPrevious {
+			current = previous
+			return
+		}
+		current = Asset{}
+	})
+	mu.Lock()
+	current = Asset{}
+	mu.Unlock()
+	if got := ExpectedSHA256(); got != "" {
+		t.Fatalf("ExpectedSHA256 = %q, want empty", got)
 	}
 }
 

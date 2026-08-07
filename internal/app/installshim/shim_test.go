@@ -6,13 +6,13 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/shim"
+	shimembed "github.com/kxn/codex-remote-feishu/internal/shim/embed"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
-	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
-	upgradeshimembed "github.com/kxn/codex-remote-feishu/internal/upgradeshim/embed"
 )
 
 func TestWriteUpgradeShimEntrypointWritesExecutableAndSidecar(t *testing.T) {
-	if _, ok := upgradeshimembed.Current(); !ok {
+	if _, ok := shimembed.Current(); !ok {
 		t.Fatal("expected embedded upgrade shim asset for host platform")
 	}
 
@@ -38,7 +38,7 @@ func TestWriteUpgradeShimEntrypointWritesExecutableAndSidecar(t *testing.T) {
 	if len(raw) == 0 {
 		t.Fatal("expected extracted shim executable to be non-empty")
 	}
-	sidecar, err := upgradeshim.ReadSidecar(UpgradeShimSidecarPath(entrypoint))
+	sidecar, err := shim.ReadSidecar(UpgradeShimSidecarPath(entrypoint))
 	if err != nil {
 		t.Fatalf("ReadSidecar: %v", err)
 	}

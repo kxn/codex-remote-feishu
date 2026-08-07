@@ -5,7 +5,7 @@ import "fmt"
 // Editor integration hooks.
 //
 // install deliberately does not import internal/adapter/editor: editor pulls in
-// internal/managedshim/embed (the embedded vscode shim asset), and the upgrade
+// internal/shim/embed (the embedded unified shim asset), and the upgrade
 // shim links this package for its upgrade engine. Keeping editor out of the
 // package's import graph keeps embedded shim assets out of the upgrade shim
 // binary. The real editor implementations are registered once by the main

@@ -396,7 +396,7 @@ live installed binary:
 - `internal/app/install/upgrade_shim.go`
 - `internal/app/install/upgrade_helper_launch.go`
 - `internal/app/install/upgrade_helper.go`
-- `internal/upgradeshim/`
+- `internal/shim/`
 - `internal/app/install/rollback_bundle.go`
 - `internal/app/install/repo_target_info.go`
 - `scripts/install/repo-install-target.sh`

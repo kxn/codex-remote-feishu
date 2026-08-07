@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
-	upgradeshimembed "github.com/kxn/codex-remote-feishu/internal/upgradeshim/embed"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
+	shimembed "github.com/kxn/codex-remote-feishu/internal/shim/embed"
 )
 
 // UpgradeShimEntrypointOptions describes where to materialize an upgrade shim
@@ -22,7 +22,7 @@ type UpgradeShimEntrypointOptions struct {
 
 // UpgradeShimSidecarPath returns the sidecar path for an upgrade shim entrypoint.
 func UpgradeShimSidecarPath(entrypointPath string) string {
-	return upgradeshim.SidecarPath(entrypointPath)
+	return shim.SidecarPath(entrypointPath)
 }
 
 // WriteUpgradeShimEntrypoint releases the embedded upgrade shim binary to
@@ -32,20 +32,20 @@ func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
 	if entrypointPath == "" {
 		return fmt.Errorf("upgrade shim entrypoint path is required")
 	}
-	sidecar := upgradeshim.Sidecar{
+	sidecar := shim.Sidecar{
 		InstallStatePath: opts.InstallStatePath,
 		InstanceID:       opts.InstanceID,
 	}
-	if !upgradeshim.SidecarValid(sidecar) {
+	if !shim.SidecarValid(sidecar, shim.ModeUpgrade) {
 		return fmt.Errorf("upgrade shim install requires install state path")
 	}
 	if err := os.MkdirAll(filepath.Dir(entrypointPath), 0o755); err != nil {
 		return err
 	}
-	if err := upgradeshimembed.WriteExecutable(entrypointPath); err != nil {
+	if err := shimembed.WriteExecutable(entrypointPath); err != nil {
 		return err
 	}
-	return upgradeshim.WriteSidecar(UpgradeShimSidecarPath(entrypointPath), sidecar)
+	return shim.WriteSidecar(UpgradeShimSidecarPath(entrypointPath), sidecar, shim.ModeUpgrade)
 }
 
 // PrepareUpgradeHelperShim releases a uniquely-named upgrade shim next to the

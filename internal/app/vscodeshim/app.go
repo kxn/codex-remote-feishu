@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/managedshim"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
 )
 
 type launchPlan struct {
@@ -46,11 +46,11 @@ func resolveLaunchPlan(entrypointPath string, baseEnv []string) (launchPlan, err
 	if entrypointPath == "" {
 		return launchPlan{}, fmt.Errorf("entrypoint path is empty")
 	}
-	realBinaryPath := managedshim.RealBinaryPath(entrypointPath)
-	sidecarPath := managedshim.SidecarPath(entrypointPath)
+	realBinaryPath := shim.RealBinaryPath(entrypointPath)
+	sidecarPath := shim.SidecarPath(entrypointPath)
 
-	sidecar, err := managedshim.ReadSidecar(sidecarPath)
-	if err == nil && managedshim.SidecarValid(sidecar) {
+	sidecar, err := shim.ReadSidecar(sidecarPath)
+	if err == nil && shim.SidecarValid(sidecar, shim.ModeManaged) {
 		state, loadErr := loadInstallState(sidecar.InstallStatePath)
 		if loadErr == nil {
 			targetBinary := strings.TrimSpace(state.CurrentBinaryPath)
@@ -111,7 +111,7 @@ func usableLaunchTarget(path, entrypointPath, realBinaryPath string) bool {
 	if path == "" {
 		return false
 	}
-	if managedshim.SamePath(path, entrypointPath) || managedshim.SamePath(path, realBinaryPath) {
+	if shim.SamePath(path, entrypointPath) || shim.SamePath(path, realBinaryPath) {
 		return false
 	}
 	info, err := os.Stat(path)

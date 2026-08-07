@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kxn/codex-remote-feishu/internal/managedshim"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
 )
 
 func TestResolveLaunchPlanUsesStateBinding(t *testing.T) {
 	dir := t.TempDir()
 	entrypoint := filepath.Join(dir, "bundle", "codex")
-	realPath := managedshim.RealBinaryPath(entrypoint)
-	sidecarPath := managedshim.SidecarPath(entrypoint)
+	realPath := shim.RealBinaryPath(entrypoint)
+	sidecarPath := shim.SidecarPath(entrypoint)
 	statePath := filepath.Join(dir, "install-state.json")
 	configPath := filepath.Join(dir, "config.json")
 	targetBinary := filepath.Join(dir, "bin", "codex-remote")
@@ -26,11 +26,11 @@ func TestResolveLaunchPlanUsesStateBinding(t *testing.T) {
 		"configPath":        configPath,
 		"currentBinaryPath": targetBinary,
 	})
-	if err := managedshim.WriteSidecar(sidecarPath, managedshim.Sidecar{
+	if err := shim.WriteSidecar(sidecarPath, shim.Sidecar{
 		InstallStatePath: statePath,
 		ConfigPath:       configPath,
 		InstanceID:       "stable",
-	}); err != nil {
+	}, shim.ModeManaged); err != nil {
 		t.Fatalf("WriteSidecar: %v", err)
 	}
 
@@ -55,8 +55,8 @@ func TestResolveLaunchPlanUsesStateBinding(t *testing.T) {
 func TestResolveLaunchPlanFallsBackWhenConfigIsMissing(t *testing.T) {
 	dir := t.TempDir()
 	entrypoint := filepath.Join(dir, "bundle", "codex")
-	realPath := managedshim.RealBinaryPath(entrypoint)
-	sidecarPath := managedshim.SidecarPath(entrypoint)
+	realPath := shim.RealBinaryPath(entrypoint)
+	sidecarPath := shim.SidecarPath(entrypoint)
 	statePath := filepath.Join(dir, "install-state.json")
 	targetBinary := filepath.Join(dir, "bin", "codex-remote")
 
@@ -66,10 +66,10 @@ func TestResolveLaunchPlanFallsBackWhenConfigIsMissing(t *testing.T) {
 		"configPath":        filepath.Join(dir, "missing-config.json"),
 		"currentBinaryPath": targetBinary,
 	})
-	if err := managedshim.WriteSidecar(sidecarPath, managedshim.Sidecar{
+	if err := shim.WriteSidecar(sidecarPath, shim.Sidecar{
 		InstallStatePath: statePath,
 		ConfigPath:       filepath.Join(dir, "missing-config.json"),
-	}); err != nil {
+	}, shim.ModeManaged); err != nil {
 		t.Fatalf("WriteSidecar: %v", err)
 	}
 
@@ -88,8 +88,8 @@ func TestResolveLaunchPlanFallsBackWhenConfigIsMissing(t *testing.T) {
 func TestResolveLaunchPlanRejectsRecursiveTargetAndFallsBack(t *testing.T) {
 	dir := t.TempDir()
 	entrypoint := filepath.Join(dir, "bundle", "codex")
-	realPath := managedshim.RealBinaryPath(entrypoint)
-	sidecarPath := managedshim.SidecarPath(entrypoint)
+	realPath := shim.RealBinaryPath(entrypoint)
+	sidecarPath := shim.SidecarPath(entrypoint)
 	statePath := filepath.Join(dir, "install-state.json")
 	configPath := filepath.Join(dir, "config.json")
 
@@ -99,10 +99,10 @@ func TestResolveLaunchPlanRejectsRecursiveTargetAndFallsBack(t *testing.T) {
 		"configPath":        configPath,
 		"currentBinaryPath": entrypoint,
 	})
-	if err := managedshim.WriteSidecar(sidecarPath, managedshim.Sidecar{
+	if err := shim.WriteSidecar(sidecarPath, shim.Sidecar{
 		InstallStatePath: statePath,
 		ConfigPath:       configPath,
-	}); err != nil {
+	}, shim.ModeManaged); err != nil {
 		t.Fatalf("WriteSidecar: %v", err)
 	}
 
@@ -123,8 +123,8 @@ func TestResolveLaunchPlanKeepsPerEntrypointBindingsSeparate(t *testing.T) {
 
 	entrypointA := filepath.Join(dir, "bundle-a", "codex")
 	entrypointB := filepath.Join(dir, "bundle-b", "codex")
-	realA := managedshim.RealBinaryPath(entrypointA)
-	realB := managedshim.RealBinaryPath(entrypointB)
+	realA := shim.RealBinaryPath(entrypointA)
+	realB := shim.RealBinaryPath(entrypointB)
 	stateA := filepath.Join(dir, "instance-a", "install-state.json")
 	stateB := filepath.Join(dir, "instance-b", "install-state.json")
 	configA := filepath.Join(dir, "instance-a", "config.json")
@@ -146,18 +146,18 @@ func TestResolveLaunchPlanKeepsPerEntrypointBindingsSeparate(t *testing.T) {
 		"configPath":        configB,
 		"currentBinaryPath": targetB,
 	})
-	if err := managedshim.WriteSidecar(managedshim.SidecarPath(entrypointA), managedshim.Sidecar{
+	if err := shim.WriteSidecar(shim.SidecarPath(entrypointA), shim.Sidecar{
 		InstallStatePath: stateA,
 		ConfigPath:       configA,
 		InstanceID:       "instance-a",
-	}); err != nil {
+	}, shim.ModeManaged); err != nil {
 		t.Fatalf("WriteSidecar(a): %v", err)
 	}
-	if err := managedshim.WriteSidecar(managedshim.SidecarPath(entrypointB), managedshim.Sidecar{
+	if err := shim.WriteSidecar(shim.SidecarPath(entrypointB), shim.Sidecar{
 		InstallStatePath: stateB,
 		ConfigPath:       configB,
 		InstanceID:       "instance-b",
-	}); err != nil {
+	}, shim.ModeManaged); err != nil {
 		t.Fatalf("WriteSidecar(b): %v", err)
 	}
 
