@@ -14,13 +14,11 @@ import (
 type WorktreeErrorCode = gitmeta.WorktreeCreateErrorCode
 
 const (
-	WorktreeErrorGitMissing           = gitmeta.WorktreeCreateErrorGitMissing
-	WorktreeErrorInvalidBaseWorkspace = gitmeta.WorktreeCreateErrorInvalidBaseWorkspace
-	WorktreeErrorBaseWorkspaceNotGit  = gitmeta.WorktreeCreateErrorBaseWorkspaceNotGit
-	WorktreeErrorInvalidBranchName    = gitmeta.WorktreeCreateErrorInvalidBranchName
-	WorktreeErrorBranchExists         = gitmeta.WorktreeCreateErrorBranchExists
-	WorktreeErrorDestinationExists    = gitmeta.WorktreeCreateErrorDestinationExists
-	WorktreeErrorCreateFailed         = gitmeta.WorktreeCreateErrorCreateFailed
+	WorktreeErrorGitMissing        = gitmeta.WorktreeCreateErrorGitMissing
+	WorktreeErrorInvalidBranchName = gitmeta.WorktreeCreateErrorInvalidBranchName
+	WorktreeErrorBranchExists      = gitmeta.WorktreeCreateErrorBranchExists
+	WorktreeErrorDestinationExists = gitmeta.WorktreeCreateErrorDestinationExists
+	WorktreeErrorCreateFailed      = gitmeta.WorktreeCreateErrorCreateFailed
 )
 
 type WorktreeRequest = gitmeta.WorktreeCreateRequest
