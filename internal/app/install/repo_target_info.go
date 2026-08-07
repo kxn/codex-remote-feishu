@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -295,5 +296,5 @@ func repoTargetWSURL(host string, port int) string {
 	if port <= 0 {
 		return ""
 	}
-	return fmt.Sprintf("ws://%s:%d/ws/agent", host, port)
+	return fmt.Sprintf("ws://%s:%d%s", host, port, relayurl.AgentPath)
 }
