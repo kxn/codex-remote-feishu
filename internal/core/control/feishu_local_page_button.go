@@ -18,10 +18,6 @@ func FeishuLocalCardCommandPayload(commandText string) (map[string]any, bool) {
 	return FeishuLocalCardActionPayload(action.Kind, FeishuActionArgumentText(action.Text)), true
 }
 
-func FeishuLocalPageCommandPayload(commandText string) (map[string]any, bool) {
-	return FeishuLocalCardCommandPayload(commandText)
-}
-
 func FeishuLocalPageCommandButton(label, commandText, style string, disabled bool) CommandCatalogButton {
 	button := CommandCatalogButton{
 		Label:       strings.TrimSpace(label),

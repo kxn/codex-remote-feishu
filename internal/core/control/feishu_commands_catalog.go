@@ -53,10 +53,6 @@ func FeishuCommandDefinitionsForGroup(groupID string) []FeishuCommandDefinition 
 	return defs
 }
 
-func BuildFeishuCommandStaticPageView(title, summary string, interactive bool) FeishuPageView {
-	return BuildFeishuCommandStaticPageViewForContext(title, summary, interactive, CatalogContext{})
-}
-
 func BuildFeishuCommandStaticPageViewForContext(title, summary string, interactive bool, ctx CatalogContext) FeishuPageView {
 	ctx = NormalizeCatalogContext(ctx)
 	sections := make([]CommandCatalogSection, 0, len(feishuCommandGroups))

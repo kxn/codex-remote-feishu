@@ -23,7 +23,6 @@ const (
 type PathPickerEntryActionKind string
 
 const (
-	PathPickerEntryActionNone   PathPickerEntryActionKind = ""
 	PathPickerEntryActionEnter  PathPickerEntryActionKind = "enter"
 	PathPickerEntryActionSelect PathPickerEntryActionKind = "select"
 )

@@ -5,8 +5,6 @@ type BlockKind string
 const (
 	BlockAssistantMarkdown BlockKind = "assistant_markdown"
 	BlockAssistantCode     BlockKind = "assistant_code"
-	BlockStatus            BlockKind = "status"
-	BlockError             BlockKind = "error"
 )
 
 type Block struct {
