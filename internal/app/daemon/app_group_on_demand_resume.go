@@ -52,11 +52,15 @@ func (a *App) maybeStartFeishuGroupOnDemandResumeLocked(action control.Action) (
 		a.saveGroupOnDemandResumeContinuationLocked(surfaceID, action, now)
 		return events, true
 	case orchestrator.SurfaceResumeStatusThreadAttached, orchestrator.SurfaceResumeStatusWorkspaceAttached:
+		a.clearGroupOnDemandTerminalFailureLocked(surfaceID)
 		a.clearSurfaceResumeBackoffLocked(surfaceID)
 		return events, false
 	case orchestrator.SurfaceResumeStatusFailed:
-		displayCode := strings.TrimSpace(result.FailureCode)
-		events = rewriteHeadlessRestoreFailureEvents(events, displayCode, true)
+		displayCode, emit := a.recordGroupOnDemandTerminalFailureLocked(surfaceID, result.FailureCode)
+		events = rewriteHeadlessRestoreFailureEvents(events, displayCode, emit)
+		if !emit {
+			return nil, true
+		}
 		if len(events) == 0 {
 			if notice := orchestrator.NoticeForSurfaceResumeFailure(displayCode); notice != nil {
 				events = append(events, eventcontract.Event{
@@ -181,4 +185,26 @@ func groupOnDemandResumeNotice(action control.Action, code, title, text string) 
 			ThemeKey: "warning",
 		},
 	}}
+}
+
+func (a *App) recordGroupOnDemandTerminalFailureLocked(surfaceID, code string) (string, bool) {
+	surfaceID = strings.TrimSpace(surfaceID)
+	code = strings.TrimSpace(code)
+	if !isTerminalSurfaceResumeFailure(code) {
+		return code, true
+	}
+	if a.surfaceResumeRuntime.groupTerminalFailureNotices == nil {
+		a.surfaceResumeRuntime.groupTerminalFailureNotices = map[string]string{}
+	}
+	if last, ok := a.surfaceResumeRuntime.groupTerminalFailureNotices[surfaceID]; ok && last == code {
+		return code, false
+	}
+	a.surfaceResumeRuntime.groupTerminalFailureNotices[surfaceID] = code
+	return code, true
+}
+
+func (a *App) clearGroupOnDemandTerminalFailureLocked(surfaceID string) {
+	if a.surfaceResumeRuntime.groupTerminalFailureNotices != nil {
+		delete(a.surfaceResumeRuntime.groupTerminalFailureNotices, strings.TrimSpace(surfaceID))
+	}
 }

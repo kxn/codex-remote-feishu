@@ -343,7 +343,8 @@ surface 不是单一枚举，而是五层正交状态叠加。
    3. surface 是 Feishu group surface，当前没有 attached instance，也没有 pending headless。
    4. `surface resume state` 中存在 headless-compatible resume target。
    5. surface 不是 `vscode` mode；VS Code 群聊 lazy recovery 当前只返回不支持提示，不自动恢复。
-6. Feishu 群聊 on-demand resume 启动 headless 时，daemon 会把当前文本 action 作为短生命周期内存 continuation 保存到 `surfaceResumeRuntime`。headless attach 成功后，daemon 先删除 continuation，再进入统一 locked ingress episode，并仅禁用再次 on-demand recovery；因此原消息会重新经过 rejected inbound、room workspace conflict、upgrade owner flow、turn patch transaction/flow 等当前动态 gate。启动失败或 pending timeout 会清掉 continuation，并只把本次恢复失败反馈给当前交互。
+6. Feishu 群聊 on-demand resume 启动 headless 时，daemon 会把当前文本 action 作为短生命周期内存 continuation 保存到 `surfaceResumeRuntime`。headless attach 成功后，daemon 先删除 continuation，再进入统一 locked ingress episode，并仅禁用再次 on-demand recovery；因此原消息会重新经过 rejected inbound、room workspace conflict、upgrade owner flow、turn patch transaction/flow 等当前动态 gate。启动失败或 pending timeout 会清掉 continuation，并把本次恢复失败反馈给当前交互。
+7. 群聊 on-demand 恢复的 terminal 失败（与后台自动恢复同一套 `isTerminalSurfaceResumeFailure` 判定）在同一恢复目标下跨消息只发一次失败卡：daemon 用 `surfaceResumeRuntime.groupTerminalFailureNotices` 记录最后一次 terminal 通知码，直接失败（`TryAutoResumeHeadlessSurface` 返回 Failed）与 daemon 启动失败（`handleManagedHeadlessLaunchFailure` 消费 group continuation）两条路径都先经过该去重；恢复目标内容变化（resume entry 持久化变化）、恢复成功或用户显式重选（`/list`、`/use`、`/new` 等会改写 resume target 的路径）会清掉该记录，允许重新通知。非 terminal 失败（如 `thread_not_found`）不受此去重影响，每次触发消息仍按当前交互反馈。
 
 ### 3.2.1 thread 运行时状态 overlay
 
@@ -1940,4 +1941,4 @@ retained-offline overlay 额外规则：
 
 ## 11. 待讨论取舍
 
-1. 当前无未决产品取舍。
+1. 群聊 on-demand 恢复遇到 terminal 失败后，同一恢复目标下的后续普通文本会被静默吞掉（不重复发失败卡），直到恢复目标变化、恢复成功或用户显式重选（`/list`、`/use`、`/new`）。这是为了避免刷屏的有意取舍；风险是用户可能误以为机器人无响应，需要错误卡上的指引文案足够明确。

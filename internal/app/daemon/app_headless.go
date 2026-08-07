@@ -350,7 +350,11 @@ func validateHeadlessWorkDir(workDir string) error {
 func (a *App) handleManagedHeadlessLaunchFailure(command control.DaemonCommand, err error, now time.Time) []eventcontract.Event {
 	events := a.service.HandleHeadlessLaunchFailed(command.SurfaceSessionID, command.InstanceID, err)
 	if _, ok := a.consumeGroupOnDemandResumeContinuationLocked(command.SurfaceSessionID); ok {
-		return events
+		displayCode, emit := a.recordGroupOnDemandTerminalFailureLocked(
+			command.SurfaceSessionID,
+			orchestrator.HeadlessRestoreLaunchFailureCode(err),
+		)
+		return rewriteHeadlessRestoreFailureEvents(events, displayCode, emit)
 	}
 	if !command.AutoRestore {
 		return events
