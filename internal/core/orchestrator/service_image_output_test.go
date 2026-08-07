@@ -527,8 +527,11 @@ func TestFinishFailedAutoRestoreThreadConnectIgnoresNonRestoreNotices(t *testing
 	})
 
 	snapshot := svc.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.PendingHeadless.InstanceID != "inst-headless-1" {
-		t.Fatalf("expected non-restore notice not to consume pending launch, got %#v", snapshot)
+	if snapshot == nil {
+		t.Fatal("expected non-nil snapshot")
+	}
+	if snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected pending headless to be consumed on success, got PendingHeadless.InstanceID=%q", snapshot.PendingHeadless.InstanceID)
 	}
 	for _, event := range events {
 		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandKillHeadless {

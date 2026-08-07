@@ -455,6 +455,9 @@ func (s *Service) finishFailedAutoRestoreThreadConnect(surface *state.SurfaceCon
 		return events
 	}
 	if !eventsContainAutoRestoreThreadConnectFailure(events) {
+		// Successful attach — consume pending headless so subsequent actions
+		// are not blocked by pendingHeadlessActionBlocked.
+		s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
 		return events
 	}
 	if s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID) == nil {
