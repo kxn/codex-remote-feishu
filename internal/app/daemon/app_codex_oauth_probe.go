@@ -20,6 +20,7 @@ type codexRuntimeCapabilityState struct {
 	checking      bool
 	capabilitySet string
 	errorCode     string
+	errorStage    string
 	failedAt      time.Time
 	done          chan struct{}
 }
@@ -203,6 +204,7 @@ func (a *App) ensureCodexRuntimeCapability(ctx context.Context) {
 
 	capabilitySet := ""
 	errorCode := ""
+	errorStage := ""
 	failedAt := time.Time{}
 	if runPreflight == nil || strings.TrimSpace(options.BinaryPath) == "" {
 		errorCode = codexprofile.ErrorCodexBinaryUnavailable
@@ -217,6 +219,7 @@ func (a *App) ensureCodexRuntimeCapability(ctx context.Context) {
 			if errorCode == "" {
 				errorCode = codexprofile.ErrorCodexProbeUnavailable
 			}
+			errorStage = codexprofile.OAuthProbeErrorStage(err)
 			failedAt = time.Now().UTC()
 		case strings.TrimSpace(observation.CapabilitySet) != codexprofile.CodexProfileCapabilitySetV1:
 			errorCode = codexprofile.ErrorCodexCapabilityUnsupported
@@ -231,6 +234,7 @@ func (a *App) ensureCodexRuntimeCapability(ctx context.Context) {
 	a.codexRuntimeCapability.checking = false
 	a.codexRuntimeCapability.capabilitySet = capabilitySet
 	a.codexRuntimeCapability.errorCode = errorCode
+	a.codexRuntimeCapability.errorStage = errorStage
 	a.codexRuntimeCapability.failedAt = failedAt
 	close(done)
 	a.mu.Unlock()
@@ -259,6 +263,13 @@ func (a *App) effectiveCodexRuntimeCapabilitySetLocked() string {
 func (a *App) effectiveCodexRuntimeCapabilityErrorCodeLocked() string {
 	if a.codexRuntimeCapability.checked {
 		return strings.TrimSpace(a.codexRuntimeCapability.errorCode)
+	}
+	return ""
+}
+
+func (a *App) effectiveCodexRuntimeCapabilityErrorStageLocked() string {
+	if a.codexRuntimeCapability.checked {
+		return strings.TrimSpace(a.codexRuntimeCapability.errorStage)
 	}
 	return ""
 }

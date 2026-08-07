@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -63,6 +64,18 @@ func (e *OAuthProbeError) Error() string {
 func OAuthProbeErrorCode(err error) string {
 	if probeErr, ok := err.(*OAuthProbeError); ok {
 		return probeErr.Code
+	}
+	var wrapped *OAuthProbeError
+	if errors.As(err, &wrapped) {
+		return wrapped.Code
+	}
+	return ""
+}
+
+func OAuthProbeErrorStage(err error) string {
+	var probeErr *OAuthProbeError
+	if errors.As(err, &probeErr) {
+		return strings.TrimSpace(probeErr.Stage)
 	}
 	return ""
 }
