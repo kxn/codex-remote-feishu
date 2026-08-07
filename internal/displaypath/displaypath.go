@@ -52,17 +52,6 @@ func FileLabels(paths []string) map[string]string {
 	return resolved
 }
 
-func PathLabel(path string, labels map[string]string) string {
-	normalized := Normalize(path)
-	if normalized == "" {
-		return ""
-	}
-	if label := strings.TrimSpace(labels[normalized]); label != "" {
-		return label
-	}
-	return normalized
-}
-
 func PathLabels(paths []string) map[string]string {
 	unique := uniqueNormalized(paths)
 	if len(unique) == 0 {

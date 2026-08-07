@@ -84,28 +84,6 @@ func CloneCodexResumePolicy(policy *CodexResumePolicy) *CodexResumePolicy {
 	return NormalizeCodexResumePolicy(policy)
 }
 
-func CodexEffectiveThreadContractFromPolicy(policy *CodexResumePolicy) *CodexEffectiveThreadContract {
-	policy = NormalizeCodexResumePolicy(policy)
-	if policy == nil {
-		return nil
-	}
-	return &CodexEffectiveThreadContract{
-		ResumeMode:             policy.Mode,
-		ConnectionContractID:   policy.ConnectionContractID,
-		ThreadPolicyID:         policy.ThreadPolicyID,
-		ModelProviderID:        policy.ModelProviderID,
-		ModelMode:              policy.ModelMode,
-		Model:                  policy.Model,
-		ReviewModelMode:        policy.ReviewModelMode,
-		ReviewModel:            policy.ReviewModel,
-		ReasoningMode:          policy.ReasoningMode,
-		ReasoningEffort:        policy.ReasoningEffort,
-		ContextMode:            policy.ContextMode,
-		RequestedContextWindow: policy.ContextWindow,
-		RequestedAutoCompact:   policy.AutoCompactLimit,
-	}
-}
-
 func CloneCodexEffectiveThreadContract(contract *CodexEffectiveThreadContract) *CodexEffectiveThreadContract {
 	if contract == nil {
 		return nil
