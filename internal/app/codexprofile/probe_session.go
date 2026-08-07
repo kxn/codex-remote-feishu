@@ -12,6 +12,10 @@ import (
 const (
 	OAuthProbeCapabilitySetV1       = "codex-app-server-auth-v1"
 	ErrorCodexCapabilityUnsupported = "codex_capability_unsupported"
+	ErrorCodexBinaryUnavailable     = "codex_binary_unavailable"
+	ErrorCodexProbeTimeout          = "codex_probe_timeout"
+	ErrorCodexProbeUnavailable      = "codex_probe_unavailable"
+	ErrorCodexProbeContractMismatch = "codex_probe_contract_mismatch"
 	CodexProfileAPIKeyEnv           = "CODEX_REMOTE_CODEX_PROFILE_API_KEY"
 	CodexRuntimeResolvedEnv         = "CODEX_REMOTE_CODEX_PROFILE_RUNTIME_RESOLVED"
 	legacyCodexProviderAPIKeyEnv    = "CODEX_REMOTE_CODEX_PROVIDER_API_KEY"

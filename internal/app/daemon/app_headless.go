@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -69,6 +70,10 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventco
 }
 
 func (a *App) startManagedHeadless(command control.DaemonCommand) []eventcontract.Event {
+	if strings.EqualFold(string(command.Backend), string(agentproto.BackendCodex)) {
+		a.maybeRetryCodexRuntimeProbeIfDue(context.Background())
+		a.maybeRetryCodexNativeProbeIfDue(context.Background())
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.startManagedHeadlessLocked(command)

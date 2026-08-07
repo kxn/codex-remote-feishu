@@ -18,10 +18,15 @@ func surfaceResumeFailureSpecificity(code string) int {
 		"oauth_probe_unknown",
 		"oauth_deployment_unsupported",
 		"codex_capability_unsupported",
+		"codex_probe_contract_mismatch",
 		"managed_model_catalog_missing",
 		"profile_revision_unavailable":
 		return 3
 	case "headless_restore_runtime_unavailable":
+		return 2
+	case "codex_binary_unavailable",
+		"codex_probe_timeout",
+		"codex_probe_unavailable":
 		return 2
 	case "headless_restore_start_failed",
 		"headless_restore_start_timeout":
@@ -55,6 +60,7 @@ func isTerminalSurfaceResumeFailure(code string) bool {
 		"oauth_probe_unknown",
 		"oauth_deployment_unsupported",
 		"codex_capability_unsupported",
+		"codex_probe_contract_mismatch",
 		"managed_model_catalog_missing",
 		"profile_revision_unavailable":
 		return true

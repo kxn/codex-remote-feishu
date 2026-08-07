@@ -34,6 +34,7 @@ type RuntimeResolver struct {
 	NativeProviderEnvKeys   []string
 	NativeConfigProbeFailed bool
 	CapabilitySet           string
+	CapabilityErrorCode     string
 	ManagedModelCatalogDir  string
 }
 
@@ -168,7 +169,11 @@ func (r RuntimeResolver) Resolve(ref state.CodexAdmissionRef) (RuntimeProjection
 		return r.resolveOAuth(ref, capabilitySet)
 	}
 	if capabilitySet != CodexProfileCapabilitySetV1 {
-		return RuntimeProjection{}, runtimeError(ErrorCodexCapabilityUnsupported)
+		code := strings.TrimSpace(r.CapabilityErrorCode)
+		if code == "" {
+			code = ErrorCodexCapabilityUnsupported
+		}
+		return RuntimeProjection{}, runtimeError(code)
 	}
 	preference, ok := r.resolvePreference(ref.ContextPreferenceRef)
 	if !ok {
@@ -206,9 +211,6 @@ func (r RuntimeResolver) resolveAPI(ref state.CodexAdmissionRef, preference stat
 	}
 	if status := config.CodexAPIProfileStatus(profile); status != "" {
 		return RuntimeProjection{}, runtimeError(status)
-	}
-	if r.NativeConfigProbeFailed {
-		return RuntimeProjection{}, runtimeError(ErrorCodexCapabilityUnsupported)
 	}
 
 	providerID := availableInternalProviderID(profile.ID, r.ReservedProviderIDs)
@@ -296,7 +298,14 @@ func (r RuntimeResolver) resolveOAuth(ref state.CodexAdmissionRef, capabilitySet
 	if oauth.AvailabilityCode != "" {
 		return RuntimeProjection{}, runtimeError(oauth.AvailabilityCode)
 	}
-	if capabilitySet != CodexProfileCapabilitySetV1 || strings.TrimSpace(oauth.CapabilitySet) != CodexProfileCapabilitySetV1 || r.NativeConfigProbeFailed {
+	if capabilitySet != CodexProfileCapabilitySetV1 {
+		code := strings.TrimSpace(r.CapabilityErrorCode)
+		if code == "" {
+			code = ErrorCodexCapabilityUnsupported
+		}
+		return RuntimeProjection{}, runtimeError(code)
+	}
+	if strings.TrimSpace(oauth.CapabilitySet) != CodexProfileCapabilitySetV1 {
 		return RuntimeProjection{}, runtimeError(ErrorCodexCapabilityUnsupported)
 	}
 	preference, ok := r.resolvePreference(ref.ContextPreferenceRef)

@@ -120,7 +120,7 @@ func TestCodexNativeConfigProbeFailureUsesConservativeLifecycleEvidence(t *testi
 	}
 }
 
-func TestCodexNativeConfigProbeFailureBlocksAPIProfileLaunch(t *testing.T) {
+func TestCodexNativeConfigProbeFailureDoesNotBlockAPIProfileLaunch(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
@@ -148,13 +148,64 @@ func TestCodexNativeConfigProbeFailureBlocksAPIProfileLaunch(t *testing.T) {
 	}
 
 	app.ensureCodexNativeConnectionEvidence(context.Background())
-	_, _, err = app.applyCodexHeadlessProviderConfig(
+	env, args, err := app.applyCodexHeadlessProviderConfig(
 		[]string{"CUSTOM_API_KEY=native-secret"},
 		[]string{"app-server"},
 		agentproto.BackendCodex,
 		record.ID,
 	)
-	if got := codexprofile.RuntimeErrorCode(err); got != codexprofile.ErrorCodexCapabilityUnsupported {
-		t.Fatalf("API launch error = %q, want %q (err=%v)", got, codexprofile.ErrorCodexCapabilityUnsupported, err)
+	if err != nil {
+		t.Fatalf("API launch blocked by native probe failure: %v", err)
+	}
+	if !strings.Contains(strings.Join(args, "\n"), `model_provider="codex_remote_profile_`) {
+		t.Fatalf("API launch material missing isolated provider: args=%#v", args)
+	}
+	if !containsEnvEntry(env, "CUSTOM_API_KEY=native-secret") {
+		t.Fatalf("expected native provider env key to be preserved without probe evidence: %#v", env)
+	}
+}
+
+func TestCodexNativeProbeRetriesAfterFailureTTL(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	cfg := config.DefaultAppConfig()
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	app := New(":0", ":0", nil, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		CodexRealBinary: "/tmp/codex",
+		ConfigPath:      configPath,
+		BaseEnv:         []string{"HOME=/tmp/test"},
+		Paths:           relayruntime.Paths{StateDir: filepath.Join(root, "state")},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	calls := 0
+	app.runCodexNativeConfigProbe = func(context.Context, codexprofile.NativeConfigProbeOptions) (codexprofile.NativeConfigObservation, error) {
+		calls++
+		if calls == 1 {
+			return codexprofile.NativeConfigObservation{}, errors.New("native config unavailable")
+		}
+		return codexprofile.NativeConfigObservation{ProviderEnvKeys: []string{"CUSTOM_API_KEY"}}, nil
+	}
+
+	app.ensureCodexNativeConnectionEvidence(context.Background())
+	if _, _, _, failed := app.effectiveCodexNativeConnectionLocked(); !failed {
+		t.Fatal("expected first native probe failure to be recorded")
+	}
+	if calls != 1 {
+		t.Fatalf("expected one probe attempt, got %d", calls)
+	}
+
+	app.mu.Lock()
+	app.codexNativeConnection.failedAt = time.Now().Add(-codexProbeRetryInterval - time.Second)
+	app.mu.Unlock()
+	app.maybeRetryCodexNativeProbeIfDue(context.Background())
+
+	if _, _, _, failed := app.effectiveCodexNativeConnectionLocked(); failed {
+		t.Fatal("expected retry to clear native probe failure")
+	}
+	if calls != 2 {
+		t.Fatalf("expected retry after TTL, calls=%d", calls)
 	}
 }

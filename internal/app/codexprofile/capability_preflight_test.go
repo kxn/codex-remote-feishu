@@ -109,8 +109,38 @@ func TestRunCapabilityPreflightSessionFailsClosedOnContractMismatch(t *testing.T
 	}()
 
 	_, err := RunCapabilityPreflightSession(context.Background(), client, client, "test-version", "/tmp/codex-capability")
-	if got := OAuthProbeErrorCode(err); got != ErrorCodexCapabilityUnsupported {
-		t.Fatalf("error code = %q, want %q (err=%v)", got, ErrorCodexCapabilityUnsupported, err)
+	if got := OAuthProbeErrorCode(err); got != ErrorCodexProbeContractMismatch {
+		t.Fatalf("error code = %q, want %q (err=%v)", got, ErrorCodexProbeContractMismatch, err)
+	}
+}
+
+func TestCapabilityPreflightErrorClassification(t *testing.T) {
+	tests := []struct {
+		name  string
+		stage string
+		cause error
+		want  string
+	}{
+		{name: "binary missing", stage: "launch_binary_missing", want: ErrorCodexBinaryUnavailable},
+		{name: "launch start", stage: "launch_start", want: ErrorCodexBinaryUnavailable},
+		{name: "probe write", stage: "launch_stdin", want: ErrorCodexProbeUnavailable},
+		{name: "initialize method missing", stage: "initialize", cause: &OAuthProbeError{Code: ErrorCodexCapabilityUnsupported, Stage: "initialize"}, want: ErrorCodexCapabilityUnsupported},
+		{name: "config read canceled", stage: "capability_config_read_canceled", want: ErrorCodexProbeTimeout},
+		{name: "config read closed", stage: "capability_config_read_closed", want: ErrorCodexProbeUnavailable},
+		{name: "config contract", stage: "config_contract", want: ErrorCodexProbeContractMismatch},
+		{name: "thread contract", stage: "thread_contract", want: ErrorCodexProbeContractMismatch},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := capabilityPreflightError(test.stage, test.cause)
+			if got := OAuthProbeErrorCode(err); got != test.want {
+				t.Fatalf("capabilityPreflightError(%q) code = %q, want %q (err=%v)", test.stage, got, test.want, err)
+			}
+			probeErr, ok := err.(*OAuthProbeError)
+			if !ok || strings.TrimSpace(probeErr.Stage) != test.stage {
+				t.Fatalf("capabilityPreflightError(%q) = %#v, want stage preserved", test.stage, err)
+			}
+		})
 	}
 }
 

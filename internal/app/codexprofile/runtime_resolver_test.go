@@ -572,6 +572,66 @@ func TestRuntimeResolverRejectsUnknownCapabilitySet(t *testing.T) {
 	}
 }
 
+func TestRuntimeResolverSurfacesCapabilityErrorCode(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID: "cp_api", Revision: 1, CredentialGeneration: 1, ConnectionGeneration: 1,
+		Kind: state.CodexProfileKindAPI, BaseURL: "https://api.example/v1", APIKey: "secret", Model: "model", ReasoningEffort: "high",
+	}
+	for _, code := range []string{
+		ErrorCodexBinaryUnavailable,
+		ErrorCodexProbeTimeout,
+		ErrorCodexProbeUnavailable,
+		ErrorCodexProbeContractMismatch,
+	} {
+		resolver := RuntimeResolver{
+			APIProfiles:         []config.CodexAPIProfileRecord{{ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile}}},
+			Preference:          fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+			CapabilitySet:       "",
+			CapabilityErrorCode: code,
+		}
+		_, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+		if got := RuntimeErrorCode(err); got != code {
+			t.Fatalf("capability error code = %q, want %q (err=%v)", got, code, err)
+		}
+	}
+}
+
+func TestRuntimeResolverAPIProfileIgnoresNativeProbeFailure(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID: "cp_api", Revision: 1, CredentialGeneration: 1, ConnectionGeneration: 1,
+		Kind: state.CodexProfileKindAPI, BaseURL: "https://api.example/v1", APIKey: "secret", Model: "model", ReasoningEffort: "high",
+	}
+	resolver := RuntimeResolver{
+		APIProfiles:             []config.CodexAPIProfileRecord{{ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile}}},
+		Preference:              fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:           CodexProfileCapabilitySetV1,
+		NativeConfigProbeFailed: true,
+	}
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("API profile must not be blocked by native probe failure: %v", err)
+	}
+	if len(projection.Launch.CLIOverrides) == 0 {
+		t.Fatalf("expected API launch material despite native probe failure: %#v", projection.Launch)
+	}
+}
+
+func TestRuntimeResolverOAuthIgnoresNativeProbeFailure(t *testing.T) {
+	resolver := RuntimeResolver{
+		Preference: fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: state.OAuthCodexProfileID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		OAuthState: &state.CodexOAuthProfileState{
+			ProfileID: state.OAuthCodexProfileID, Revision: 1, AuthGeneration: 1,
+			Status: string(OAuthProbeStatusDetected), CapabilitySet: CodexProfileCapabilitySetV1,
+		},
+		CapabilitySet:           CodexProfileCapabilitySetV1,
+		NativeConfigProbeFailed: true,
+	}
+	_, err := resolver.Resolve(admissionRef(state.OAuthCodexProfileID, 1, 1))
+	if err != nil {
+		t.Fatalf("OAuth profile must not be blocked by native probe failure: %v", err)
+	}
+}
+
 func TestRuntimeResolverProjectsOAuthAndNativeIsolation(t *testing.T) {
 	preferences := map[string]state.ProfileContextPreference{
 		state.NativeCodexProfileID: {ProfileID: state.NativeCodexProfileID, Revision: 1, Mode: state.CodexContextModeDefault},

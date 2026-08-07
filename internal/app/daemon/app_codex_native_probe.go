@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -17,12 +18,14 @@ type codexNativeConnectionRuntimeState struct {
 	evidence                state.CodexNativeConnectionEvidence
 	reservedProviderIDs     []string
 	reservedProviderEnvKeys []string
+	failedAt                time.Time
 	done                    chan struct{}
 }
 
 func (a *App) ensureCodexNativeConnectionEvidence(ctx context.Context) {
 	a.mu.Lock()
-	if a.codexNativeConnection.checked {
+	state := a.codexNativeConnection
+	if state.checked && (state.probeSucceeded || time.Since(state.failedAt) < codexProbeRetryInterval) {
 		a.mu.Unlock()
 		return
 	}
@@ -49,6 +52,7 @@ func (a *App) ensureCodexNativeConnectionEvidence(ctx context.Context) {
 
 	observation := codexprofile.NativeConfigObservation{}
 	probeSucceeded := false
+	failedAt := time.Time{}
 	if runProbe != nil && strings.TrimSpace(options.BinaryPath) != "" {
 		probeCtx, cancel := context.WithTimeout(ctx, codexOAuthProbeTimeout)
 		probed, err := runProbe(probeCtx, options)
@@ -56,7 +60,11 @@ func (a *App) ensureCodexNativeConnectionEvidence(ctx context.Context) {
 		if err == nil {
 			observation = probed
 			probeSucceeded = true
+		} else {
+			failedAt = time.Now().UTC()
 		}
+	} else {
+		failedAt = time.Now().UTC()
 	}
 	evidence := codexprofile.ProjectNativeConnectionEvidence(observation, connectionGeneration)
 
@@ -67,8 +75,19 @@ func (a *App) ensureCodexNativeConnectionEvidence(ctx context.Context) {
 	a.codexNativeConnection.evidence = evidence
 	a.codexNativeConnection.reservedProviderIDs = append([]string{}, observation.ProviderIDs...)
 	a.codexNativeConnection.reservedProviderEnvKeys = append([]string{}, observation.ProviderEnvKeys...)
+	a.codexNativeConnection.failedAt = failedAt
 	close(done)
 	a.mu.Unlock()
+}
+
+func (a *App) maybeRetryCodexNativeProbeIfDue(ctx context.Context) {
+	a.mu.Lock()
+	state := a.codexNativeConnection
+	due := state.checked && !state.probeSucceeded && time.Since(state.failedAt) >= codexProbeRetryInterval
+	a.mu.Unlock()
+	if due {
+		a.ensureCodexNativeConnectionEvidence(ctx)
+	}
 }
 
 func (a *App) effectiveCodexNativeConnectionLocked() (state.CodexNativeConnectionEvidence, []string, []string, bool) {

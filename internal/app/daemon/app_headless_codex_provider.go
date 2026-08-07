@@ -32,6 +32,14 @@ func codexHeadlessLaunchProblem(err error, defaults agentproto.ErrorInfo) agentp
 		problem.Message = "当前 ChatGPT 登录使用了暂不支持的自定义部署，请改用本机默认或官方部署。"
 	case codexprofile.ErrorCodexCapabilityUnsupported:
 		problem.Message = "当前 Codex 版本不支持所需的 Profile 隔离能力，请先升级 Codex。"
+	case codexprofile.ErrorCodexBinaryUnavailable:
+		problem.Message = "找不到可用的 Codex 可执行文件，或 Codex 启动失败，请检查 Codex 安装与运行环境。"
+	case codexprofile.ErrorCodexProbeTimeout:
+		problem.Message = "Codex 能力探测超时，请稍后重试或重启服务。"
+	case codexprofile.ErrorCodexProbeUnavailable:
+		problem.Message = "暂时无法完成 Codex 能力探测，请稍后重试。"
+	case codexprofile.ErrorCodexProbeContractMismatch:
+		problem.Message = "Codex app-server 返回的协议契约与预期不一致，暂时无法确认兼容性。"
 	case codexprofile.ErrorManagedModelCatalogMissing:
 		problem.Message = "当前运行目录无法准备 Codex 模型目录，请检查服务安装状态后再试。"
 	case codexprofile.ErrorProfileRevisionUnavailable:
@@ -84,6 +92,7 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 		}
 	}
 	capabilitySet := a.effectiveCodexRuntimeCapabilitySetLocked()
+	capabilityErrorCode := a.effectiveCodexRuntimeCapabilityErrorCodeLocked()
 	if profileID == config.CodexOAuthProfileID {
 		profile, ok := a.codexOAuthProfileState.current()
 		if !ok {
@@ -122,6 +131,7 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 		NativeConfigProbeFailed: nativeConfigProbeFailed,
 		OAuthState:              oauthState,
 		CapabilitySet:           capabilitySet,
+		CapabilityErrorCode:     capabilityErrorCode,
 		ManagedModelCatalogDir:  codexcatalog.ManagedModelCatalogDir(a.headlessRuntime.Paths.StateDir),
 	}
 	projection, err := resolver.Resolve(effectiveRef)

@@ -3,6 +3,7 @@ package codexprofile
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -199,6 +200,29 @@ func verifyCapabilityThread(response map[string]any) error {
 	return nil
 }
 
-func capabilityPreflightError(stage string, _ error) error {
-	return &OAuthProbeError{Code: ErrorCodexCapabilityUnsupported, Stage: strings.TrimSpace(stage)}
+func capabilityPreflightError(stage string, cause error) error {
+	return &OAuthProbeError{
+		Code:  classifyCapabilityProbeFailure(stage, cause),
+		Stage: strings.TrimSpace(stage),
+	}
+}
+
+func classifyCapabilityProbeFailure(stage string, cause error) string {
+	var probeErr *OAuthProbeError
+	if errors.As(cause, &probeErr) && probeErr.Code == ErrorCodexCapabilityUnsupported {
+		return ErrorCodexCapabilityUnsupported
+	}
+	stage = strings.TrimSpace(stage)
+	switch stage {
+	case "launch_binary_missing", "launch_start":
+		return ErrorCodexBinaryUnavailable
+	case "create_codex_home", "launch_stdin", "launch_stdout":
+		return ErrorCodexProbeUnavailable
+	case "config_contract", "thread_contract":
+		return ErrorCodexProbeContractMismatch
+	}
+	if strings.Contains(stage, "canceled") {
+		return ErrorCodexProbeTimeout
+	}
+	return ErrorCodexProbeUnavailable
 }
