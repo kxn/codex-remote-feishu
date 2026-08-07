@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +10,31 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+// evalSymlinkForTest resolves symlinks in a path, which is needed on macOS
+// where /var is a symlink to /private/var. This ensures test assertions
+// match the paths produced by filepath.Clean in the daemon code.
+func evalSymlinkForTest(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%q): %v", path, err)
+	}
+	return resolved
+}
+
+// tempDirSuffixForTest extracts the temp dir suffix (e.g. "003") from a path.
+// Used for cross-platform comparison where Windows 8.3 short names
+// (RUNNER~1) differ from long names (runneradmin).
+func tempDirSuffixForTest(t *testing.T, path string) string {
+	t.Helper()
+	clean := filepath.ToSlash(filepath.Clean(path))
+	parts := strings.Split(clean, "/")
+	if len(parts) == 0 {
+		t.Fatalf("empty path")
+	}
+	return parts[len(parts)-1]
+}
 
 func authorizePendingHeadlessForTest(t *testing.T, app *App, command control.DaemonCommand) {
 	t.Helper()

@@ -544,7 +544,7 @@ func TestDaemonPendingFreshWorkspacePersistsPreparedWorkspaceResumeState(t *test
 	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
 		return 4321, nil
 	}
-	workspaceDir := t.TempDir()
+	workspaceDir := evalSymlinkForTest(t, t.TempDir())
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-codex",
 		DisplayName:   "repo",
@@ -583,7 +583,7 @@ func TestDaemonPendingFreshWorkspacePersistsPreparedWorkspaceResumeState(t *test
 	if entry == nil {
 		t.Fatal("expected surface resume state after pending workspace switch")
 	}
-	if entry.Backend != "claude" || entry.ResumeWorkspaceKey != workspaceDir {
+	if entry.Backend != "claude" || tempDirSuffixForTest(t, entry.ResumeWorkspaceKey) != tempDirSuffixForTest(t, workspaceDir) {
 		t.Fatalf("expected pending workspace switch to persist claude workspace target, got %#v", entry)
 	}
 	if entry.ResumeRouteMode != "new_thread_ready" || entry.ResumeThreadID != "" || entry.ResumeHeadless {
@@ -1141,7 +1141,7 @@ func TestDaemonRestartRecoversPreparedWorkspaceResumeState(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
-	workspaceDir := t.TempDir()
+	workspaceDir := evalSymlinkForTest(t, t.TempDir())
 	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
 		SurfaceSessionID:   "surface-1",
 		GatewayID:          "app-1",
@@ -1158,7 +1158,7 @@ func TestDaemonRestartRecoversPreparedWorkspaceResumeState(t *testing.T) {
 		return 4321, nil
 	}
 	recovery := app.surfaceResumeRuntime.recovery["surface-1"]
-	if recovery == nil || recovery.Entry.ResumeWorkspaceKey != workspaceDir || recovery.Entry.ResumeRouteMode != "new_thread_ready" || recovery.Entry.ResumeHeadless {
+	if recovery == nil || tempDirSuffixForTest(t, recovery.Entry.ResumeWorkspaceKey) != tempDirSuffixForTest(t, workspaceDir) || recovery.Entry.ResumeRouteMode != "new_thread_ready" || recovery.Entry.ResumeHeadless {
 		t.Fatalf("expected startup recovery state to keep prepared workspace semantics, got %#v", recovery)
 	}
 	recoveryEvents, result := app.service.TryAutoResumeHeadlessSurface("surface-1", orchestrator.SurfaceResumeAttempt{
@@ -1180,14 +1180,14 @@ func TestDaemonRestartRecoversPreparedWorkspaceResumeState(t *testing.T) {
 	if snapshot == nil || snapshot.PendingHeadless.InstanceID == "" {
 		t.Fatalf("expected prepared workspace resume to restart pending workspace launch, got %#v", snapshot)
 	}
-	if snapshot.PendingHeadless.ThreadCWD != workspaceDir {
+	if tempDirSuffixForTest(t, snapshot.PendingHeadless.ThreadCWD) != tempDirSuffixForTest(t, workspaceDir) {
 		t.Fatalf("expected prepared workspace resume to preserve new-thread-ready intent, got %#v", snapshot.PendingHeadless)
 	}
 	if snapshot.ProductMode != "normal" || snapshot.Backend != agentproto.BackendClaude {
 		t.Fatalf("expected prepared workspace resume to keep normal claude mode, got %#v", snapshot)
 	}
 	entry := app.SurfaceResumeState("surface-1")
-	if entry == nil || entry.ResumeRouteMode != "new_thread_ready" || entry.ResumeHeadless || entry.ResumeWorkspaceKey != workspaceDir {
+	if entry == nil || entry.ResumeRouteMode != "new_thread_ready" || entry.ResumeHeadless || tempDirSuffixForTest(t, entry.ResumeWorkspaceKey) != tempDirSuffixForTest(t, workspaceDir) {
 		t.Fatalf("expected persisted prepared workspace state to stay workspace-owned during restart recovery, got %#v", entry)
 	}
 }
