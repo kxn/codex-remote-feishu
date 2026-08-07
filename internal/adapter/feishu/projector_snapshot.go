@@ -199,7 +199,7 @@ func compactSnapshotStatusText(text string, limit int) string {
 
 func displaySnapshotMode(mode string, backend agentproto.Backend) string {
 	if state.IsVSCodeProductModeToken(mode) {
-		return "vscode"
+		return string(state.ProductModeVSCode)
 	}
 	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
 		return string(agentproto.BackendClaude)

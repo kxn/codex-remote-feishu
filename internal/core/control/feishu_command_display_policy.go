@@ -2,16 +2,18 @@ package control
 
 import (
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func normalizeFeishuCommandProductMode(productMode string) string {
 	switch strings.ToLower(strings.TrimSpace(productMode)) {
 	case "claude":
-		return "normal"
+		return string(state.ProductModeNormal)
 	case "vscode":
-		return "vscode"
+		return string(state.ProductModeVSCode)
 	default:
-		return "normal"
+		return string(state.ProductModeNormal)
 	}
 }
 
