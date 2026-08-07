@@ -3,44 +3,28 @@ package codexcatalog
 import (
 	"embed"
 	"encoding/json"
-	"net"
-	"net/url"
 	"path/filepath"
 	"strings"
 )
 
 const (
 	DeepSeekModelCatalogFileName = "deepseek-models-v1.json"
+	MimoModelCatalogFileName     = "mimo-models-v1.json"
 	ManagedModelCatalogFileName  = "managed-models-v1.json"
 	managedModelCatalogDirName   = "codex-model-catalogs"
 )
 
-//go:embed deepseek_models.json
-var embeddedDeepSeekModelCatalog embed.FS
+//go:embed deepseek_models.json mimo_models.json
+var embeddedCatalogsFS embed.FS
 
+// IsDeepSeekProfile 报告 baseURL/模型名是否命中 DeepSeek 内置模型目录。
 func IsDeepSeekProfile(baseURL, model string) bool {
-	return IsDeepSeekEndpoint(baseURL) || strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "deepseek-")
+	catalog, ok := IdentifyEmbeddedCatalog(baseURL, model)
+	return ok && catalog.Kind == "deepseek"
 }
 
 func IsDeepSeekEndpoint(baseURL string) bool {
-	baseURL = strings.TrimSpace(baseURL)
-	if baseURL == "" {
-		return false
-	}
-	parsed, err := url.Parse(baseURL)
-	if err != nil || parsed.Host == "" {
-		parsed, err = url.Parse("https://" + strings.TrimLeft(baseURL, "/"))
-	}
-	if err != nil || parsed.Host == "" {
-		return false
-	}
-	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
-	if host == "" {
-		if splitHost, _, err := net.SplitHostPort(parsed.Host); err == nil {
-			host = strings.ToLower(strings.TrimSpace(splitHost))
-		}
-	}
-	return host == "api.deepseek.com"
+	return DeepSeekCatalog.MatchesEndpoint(baseURL)
 }
 
 func ManagedModelCatalogDir(stateDir string) string {
@@ -68,17 +52,25 @@ func ManagedModelCatalogPath(dir string) string {
 }
 
 func DeepSeekModelCatalogJSON() []byte {
-	raw, err := embeddedDeepSeekModelCatalog.ReadFile("deepseek_models.json")
-	if err != nil {
-		return nil
-	}
-	return append([]byte(nil), raw...)
+	return DeepSeekCatalog.CatalogJSON()
+}
+
+func MimoModelCatalogJSON() []byte {
+	return MimoCatalog.CatalogJSON()
 }
 
 // BuildManagedModelCatalog 生成包含指定模型的模型目录 JSON。
 // DeepSeek 已知模型直接复用内嵌条目；其他模型以 DeepSeek 条目为模板生成
 // 保守的 fallback 元数据，保证 spawn_agent 能在目录中找到该模型。
+// BuildManagedModelCatalog 以 DeepSeek 内置目录为模板生成包含指定模型的目录。
 func BuildManagedModelCatalog(models []string) []byte {
+	return BuildEmbeddedModelCatalog(DeepSeekCatalog, models)
+}
+
+// BuildEmbeddedModelCatalog 以指定内置目录为模板，生成只包含请求模型子集的
+// 模型目录：已知 slug 复用内置条目，未知模型以该目录的 FallbackSlug 为模板
+// 生成元数据（保证 codex 的 spawn_agent 能找到该模型）。
+func BuildEmbeddedModelCatalog(catalog EmbeddedCatalog, models []string) []byte {
 	seen := map[string]bool{}
 	requested := make([]string, 0, len(models))
 	for _, model := range models {
@@ -97,7 +89,7 @@ func BuildManagedModelCatalog(models []string) []byte {
 		Models []map[string]json.RawMessage `json:"models"`
 	}
 	var embedded catalogFile
-	if err := json.Unmarshal(DeepSeekModelCatalogJSON(), &embedded); err != nil {
+	if err := json.Unmarshal(catalog.CatalogJSON(), &embedded); err != nil {
 		return nil
 	}
 	embeddedBySlug := make(map[string]map[string]json.RawMessage, len(embedded.Models))
@@ -107,15 +99,15 @@ func BuildManagedModelCatalog(models []string) []byte {
 		embeddedBySlug[strings.TrimSpace(slug)] = entry
 	}
 
+	base, ok := embeddedBySlug[catalog.FallbackSlug]
+	if !ok {
+		return nil
+	}
 	modelsOut := make([]map[string]json.RawMessage, 0, len(requested))
 	for _, model := range requested {
 		if entry, ok := embeddedBySlug[model]; ok {
 			modelsOut = append(modelsOut, cloneRawEntry(entry))
 			continue
-		}
-		base, ok := embeddedBySlug["deepseek-v4-flash"]
-		if !ok {
-			return nil
 		}
 		entry := cloneRawEntry(base)
 		entry["slug"], _ = json.Marshal(model)
@@ -134,7 +126,13 @@ func BuildManagedModelCatalog(models []string) []byte {
 // BuildManagedModelCatalogWithInstruction 生成包含指定模型的目录，并把 instruction
 // 追加到每个模型的 instructions_template 末尾（保留基础 instructions）。
 func BuildManagedModelCatalogWithInstruction(models []string, instruction string) []byte {
-	raw := BuildManagedModelCatalog(models)
+	return BuildEmbeddedModelCatalogWithInstruction(DeepSeekCatalog, models, instruction)
+}
+
+// BuildEmbeddedModelCatalogWithInstruction 是 BuildManagedModelCatalogWithInstruction
+// 的内置目录泛化版本。
+func BuildEmbeddedModelCatalogWithInstruction(catalog EmbeddedCatalog, models []string, instruction string) []byte {
+	raw := BuildEmbeddedModelCatalog(catalog, models)
 	if len(raw) == 0 {
 		return nil
 	}

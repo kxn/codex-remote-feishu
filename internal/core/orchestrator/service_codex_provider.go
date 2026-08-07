@@ -249,7 +249,7 @@ func fixedCodexAPIProfileReasoning(profile state.CodexProfileSummary) string {
 }
 
 func isDynamicCodexProfileModel(baseURL, model string) bool {
-	if codexcatalog.IsDeepSeekProfile(baseURL, model) {
+	if _, ok := codexcatalog.IdentifyEmbeddedCatalog(baseURL, model); ok {
 		return true
 	}
 	model = strings.ToLower(strings.TrimSpace(model))
