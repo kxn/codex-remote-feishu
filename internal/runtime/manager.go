@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	neturl "net/url"
 	"os"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 )
 
@@ -389,16 +389,7 @@ func normalizeRelayURL(raw string) string {
 }
 
 func relayURLUsesLoopback(raw string) bool {
-	parsed, err := neturl.Parse(raw)
-	if err != nil {
-		return false
-	}
-	host := strings.TrimSpace(parsed.Hostname())
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return netutil.IsLoopbackURL(raw)
 }
 
 func identitySummary(identity agentproto.BinaryIdentity) string {

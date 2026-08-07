@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/browseropen"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 )
 
 var errBrowserUnavailable = browseropen.ErrUnavailable
@@ -237,12 +238,7 @@ func isWildcardHost(host string) bool {
 }
 
 func isLoopbackHost(host string) bool {
-	host = strings.Trim(host, "[]")
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return netutil.IsLoopbackHost(host)
 }
 
 func httpURL(host, port, path string) string {

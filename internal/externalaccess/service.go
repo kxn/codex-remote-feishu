@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -17,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -742,11 +742,7 @@ func cloneGrant(value *grantRecord) *grantRecord {
 }
 
 func isLoopbackHost(host string) bool {
-	if strings.EqualFold(strings.TrimSpace(host), "localhost") {
-		return true
-	}
-	ip := net.ParseIP(strings.Trim(host, "[]"))
-	return ip != nil && ip.IsLoopback()
+	return netutil.IsLoopbackHost(host)
 }
 
 func sameOrigin(left, right *url.URL) bool {
