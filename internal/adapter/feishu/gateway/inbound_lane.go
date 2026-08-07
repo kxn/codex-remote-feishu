@@ -394,10 +394,6 @@ func (l *SurfaceInboundLane) EnqueueAction(action control.Action) bool {
 	return l.enqueue(&queuedActionWork{action: cloneAction(action)})
 }
 
-func (l *SurfaceInboundLane) MarkActionDuplicate(action control.Action) bool {
-	return l.markActionDuplicate(action)
-}
-
 func HandleInboundMessageEvent(ctx context.Context, env InboundEnv, event *larkim.P2MessageReceiveV1, lane *SurfaceInboundLane, dispatch ActionDispatcher) error {
 	plan, ok, err := PlanInboundMessageEvent(env, event)
 	if err != nil || !ok {

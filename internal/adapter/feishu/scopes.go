@@ -87,13 +87,6 @@ func MatchScopeRequirement(requirementScope, requirementType string, configured 
 	return matchScopeRequirement(requirementScope, requirementType, configuredKeys)
 }
 
-// ScopeRequirementSatisfied reports whether any granted configured scope
-// satisfies a manifest requirement, including documented alternatives.
-func ScopeRequirementSatisfied(requirementScope, requirementType string, configured []AppScopeStatus) bool {
-	_, ok := MatchScopeRequirement(requirementScope, requirementType, configured)
-	return ok
-}
-
 // ListAppConfiguredScopes reads the app's configured scopes from the config
 // side (application.get -> app.scopes) and normalizes config-side presence as
 // granted (GrantStatus=1). For legacy apps that cannot read application.get,

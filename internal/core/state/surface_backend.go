@@ -213,10 +213,6 @@ func HeadlessLaunchContractFromInstance(inst *InstanceRecord) HeadlessLaunchCont
 	})
 }
 
-func DesiredSurfaceBackend(surface *SurfaceConsoleRecord) agentproto.Backend {
-	return SurfaceDesiredBackendContract(surface).Backend
-}
-
 func EffectiveSurfaceCodexProviderID(contract SurfaceBackendContract) string {
 	contract = NormalizeSurfaceBackendContract(contract)
 	if !IsHeadlessProductMode(contract.ProductMode) || contract.Backend != agentproto.BackendCodex {

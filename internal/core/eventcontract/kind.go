@@ -41,12 +41,6 @@ var allKinds = []Kind{
 	KindDaemonCommand,
 }
 
-func AllKinds() []Kind {
-	out := make([]Kind, len(allKinds))
-	copy(out, allKinds)
-	return out
-}
-
 func IsKnownKind(kind Kind) bool {
 	for _, candidate := range allKinds {
 		if candidate == kind {

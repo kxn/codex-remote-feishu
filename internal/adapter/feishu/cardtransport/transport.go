@@ -71,10 +71,6 @@ func InlineCallbackPayloadSize(payload map[string]any) (int, error) {
 	return jsonSize(response)
 }
 
-func InteractiveMessageCardFits(title, body, themeKey string, elements []map[string]any, updateMulti bool) bool {
-	return InteractiveMessagePayloadFits(RenderInteractiveCardPayload(title, body, themeKey, elements, updateMulti))
-}
-
 func InteractiveMessageCardSize(title, body, themeKey string, elements []map[string]any, updateMulti bool) (int, error) {
 	return InteractiveMessagePayloadSize(RenderInteractiveCardPayload(title, body, themeKey, elements, updateMulti))
 }

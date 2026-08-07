@@ -17,10 +17,6 @@ import (
 
 const ProductName = "codex-remote"
 
-func CurrentBinaryIdentity(version string) (agentproto.BinaryIdentity, error) {
-	return CurrentBinaryIdentityWithBranch(version, "")
-}
-
 func CurrentBinaryIdentityWithBranch(version, branch string) (agentproto.BinaryIdentity, error) {
 	executable, err := os.Executable()
 	if err != nil {
@@ -50,10 +46,6 @@ func BinaryIdentityForPathWithBranch(executable, version, branch string) (agentp
 		BuildFingerprint: fingerprint,
 		BinaryPath:       executable,
 	}, nil
-}
-
-func NewServerIdentity(version, configPath string, startedAt time.Time) (agentproto.ServerIdentity, error) {
-	return NewServerIdentityWithBranch(version, "", configPath, startedAt)
 }
 
 func NewServerIdentityWithBranch(version, branch, configPath string, startedAt time.Time) (agentproto.ServerIdentity, error) {

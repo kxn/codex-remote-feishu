@@ -23,14 +23,6 @@ type PageRenderOptions struct {
 	MenuHomeVersion string
 }
 
-func PageBody(view control.FeishuPageView) string {
-	return ""
-}
-
-func PageElements(view control.FeishuPageView, daemonLifecycleID string) []map[string]any {
-	return PageElementsWithOptions(view, daemonLifecycleID, PageRenderOptions{})
-}
-
 func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID string, opts PageRenderOptions) []map[string]any {
 	view = control.NormalizeFeishuPageView(view)
 	elements := make([]map[string]any, 0, len(view.Sections)*3+len(view.SummarySections)*2+len(view.NoticeSections)*2+3)

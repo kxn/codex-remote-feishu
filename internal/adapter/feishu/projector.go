@@ -158,16 +158,14 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 		if title == "" {
 			title = "页面"
 		}
-		body := projectorpkg.PageBody(pageView)
+		theme := xutil.FirstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
 		elements := projectorpkg.PageElementsWithOptions(
 			pageView,
 			xutil.FirstNonEmpty(event.DaemonLifecycleID, event.Meta.DaemonLifecycleID),
 			projectorpkg.PageRenderOptions{MenuHomeVersion: p.menuHomeVersion},
 		)
-		theme := xutil.FirstNonEmpty(strings.TrimSpace(pageView.ThemeKey), cardThemeInfo)
 		return []Operation{newEventCardOperation(chatID, event, eventCardOperationSpec{
 			Title:                 title,
-			Body:                  body,
 			ThemeKey:              theme,
 			Elements:              elements,
 			MessageID:             pageView.MessageID,

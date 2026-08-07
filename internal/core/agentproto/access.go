@@ -57,17 +57,6 @@ func TurnSandboxPolicyForAccessMode(value string) map[string]any {
 	}
 }
 
-func DisplayAccessMode(value string) string {
-	switch EffectiveAccessMode(value) {
-	case AccessModeAcceptEdits:
-		return "accept edits"
-	case AccessModeConfirm:
-		return "confirm"
-	default:
-		return "full access"
-	}
-}
-
 func DisplayAccessModeShort(value string) string {
 	switch EffectiveAccessMode(value) {
 	case AccessModeAcceptEdits:

@@ -39,12 +39,3 @@ func NormalizeProtocolNotice(notice *ProtocolNotice) *ProtocolNotice {
 	}
 	return &normalized
 }
-
-func CloneProtocolNotice(notice *ProtocolNotice) *ProtocolNotice {
-	normalized := NormalizeProtocolNotice(notice)
-	if normalized == nil {
-		return nil
-	}
-	cloned := *normalized
-	return &cloned
-}
