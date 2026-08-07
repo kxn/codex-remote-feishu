@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 type instanceLifetime string
@@ -68,7 +70,7 @@ func parseParentPIDValue(raw string) (int, bool, error) {
 }
 
 func defaultInstanceLifetime(source string, managed bool) instanceLifetime {
-	if strings.EqualFold(strings.TrimSpace(source), "headless") && managed {
+	if state.IsInstanceSource(source, state.InstanceSourceHeadless) && managed {
 		return lifetimeDaemonOwned
 	}
 	return lifetimeHostBound

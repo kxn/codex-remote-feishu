@@ -356,7 +356,7 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 		if snapshot != nil {
 			target.ResumeHeadless = target.ResumeThreadID != "" &&
 				snapshot.Attachment.Managed &&
-				strings.EqualFold(strings.TrimSpace(snapshot.Attachment.Source), "headless")
+				state.IsInstanceSource(snapshot.Attachment.Source, state.InstanceSourceHeadless)
 			target.ResumeThreadTitle = strings.TrimSpace(snapshot.Attachment.SelectedThreadTitle)
 		}
 		if target.ResumeThreadID != "" {

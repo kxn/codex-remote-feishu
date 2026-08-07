@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -76,7 +77,7 @@ func (a *App) needsSyntheticBootstrap() bool {
 	// Daemon-launched hidden clients must complete initialize/initialized
 	// themselves before the first thread/start reaches Codex app-server.
 	switch {
-	case strings.EqualFold(strings.TrimSpace(a.config.Source), "headless"):
+	case state.IsInstanceSource(a.config.Source, state.InstanceSourceHeadless):
 		return true
 	case strings.EqualFold(strings.TrimSpace(a.config.Source), "cron"):
 		return true

@@ -1,7 +1,6 @@
 package headlessruntime
 
 import (
-	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -52,7 +51,7 @@ func NewState() State {
 }
 
 func IsManagedInstance(inst *state.InstanceRecord) bool {
-	return inst != nil && strings.EqualFold(strings.TrimSpace(inst.Source), "headless") && inst.Managed
+	return state.IsManagedHeadlessInstance(inst)
 }
 
 func LastRefreshActivity(managed *Process) time.Time {

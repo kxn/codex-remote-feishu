@@ -558,7 +558,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		inst.ClaudeProfileID = ""
 		inst.ClaudeReasoningEffort = ""
 	}
-	inst.Source = xutil.FirstNonEmpty(strings.TrimSpace(hello.Instance.Source), "vscode")
+	inst.Source = xutil.FirstNonEmpty(strings.TrimSpace(hello.Instance.Source), string(state.InstanceSourceVSCode))
 	inst.Capabilities = capabilities
 	inst.CapabilitiesDeclared = hello.CapabilitiesDeclared
 	inst.Managed = hello.Instance.Managed
@@ -580,7 +580,7 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	connectEvents = a.gateUngatedManagedHeadlessResumeOutcomeEventsLocked(connectEvents, now)
 	a.handleUIEventsLocked(ctx, connectEvents)
 	a.replayGroupOnDemandResumeContinuationsLocked(ctx, inst.InstanceID, now)
-	if inst.Source == "vscode" {
+	if state.IsInstanceSource(inst.Source, state.InstanceSourceVSCode) {
 		a.invalidateVSCodeCompatibilityCacheLocked()
 	}
 
@@ -869,7 +869,7 @@ func (a *App) onDisconnect(ctx context.Context, instanceID string) {
 		inst.PID,
 	)
 	a.handleUIEventsLocked(ctx, uiEvents)
-	if inst.Source == "vscode" {
+	if state.IsInstanceSource(inst.Source, state.InstanceSourceVSCode) {
 		a.invalidateVSCodeCompatibilityCacheLocked()
 	}
 	a.runSurfaceRecoveryPipelineLocked(ctx, now, surfaceRecoveryPipelineOptions{

@@ -479,7 +479,7 @@ func formatInstanceLabel(displayName, source string, managed bool) string {
 	if label == "" {
 		label = "未知实例"
 	}
-	if strings.EqualFold(strings.TrimSpace(source), "headless") {
+	if state.IsInstanceSource(source, state.InstanceSourceHeadless) {
 		_ = managed
 		return label
 	}
