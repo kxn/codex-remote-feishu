@@ -17,7 +17,7 @@ func TestProfileSwitchReconcilesOtherGatewayHeadlessSurfaces(t *testing.T) {
 	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
-	workspaceKey := "/data/dl/repo"
+	workspaceKey := t.TempDir()
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-b",
 		DisplayName:     "repo",
@@ -89,7 +89,7 @@ func TestProfileSwitchDefersBusySurfaceContractRefresh(t *testing.T) {
 	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
-	workspaceKey := "/data/dl/repo"
+	workspaceKey := t.TempDir()
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-b",
 		Backend:         agentproto.BackendCodex,
@@ -132,7 +132,7 @@ func TestHandleTextConvergesPendingContractRefresh(t *testing.T) {
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "team-proxy", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
-	workspaceKey := "/data/dl/repo"
+	workspaceKey := t.TempDir()
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-b",
 		Backend:         agentproto.BackendCodex,
