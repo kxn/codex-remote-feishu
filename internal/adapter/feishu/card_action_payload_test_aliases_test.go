@@ -3,38 +3,6 @@ package feishu
 import frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 
 const (
-	cardActionPayloadKeyKind                  = frontstagecontract.CardActionPayloadKeyKind
-	cardActionPayloadKeyInstanceID            = frontstagecontract.CardActionPayloadKeyInstanceID
-	cardActionPayloadKeyWorkspaceKey          = frontstagecontract.CardActionPayloadKeyWorkspaceKey
-	cardActionPayloadKeyThreadID              = frontstagecontract.CardActionPayloadKeyThreadID
-	cardActionPayloadKeyTurnID                = frontstagecontract.CardActionPayloadKeyTurnID
-	cardActionPayloadKeyViewMode              = frontstagecontract.CardActionPayloadKeyViewMode
-	cardActionPayloadKeyPage                  = frontstagecontract.CardActionPayloadKeyPage
-	cardActionPayloadKeyReturnPage            = frontstagecontract.CardActionPayloadKeyReturnPage
-	cardActionPayloadKeyAllowCrossWorkspace   = frontstagecontract.CardActionPayloadKeyAllowCrossWorkspace
-	cardActionPayloadKeyPromptID              = frontstagecontract.CardActionPayloadKeyPromptID
-	cardActionPayloadKeyOptionID              = frontstagecontract.CardActionPayloadKeyOptionID
-	cardActionPayloadKeyRequestID             = frontstagecontract.CardActionPayloadKeyRequestID
-	cardActionPayloadKeyRequestType           = frontstagecontract.CardActionPayloadKeyRequestType
-	cardActionPayloadKeyRequestOptionID       = frontstagecontract.CardActionPayloadKeyRequestOptionID
-	cardActionPayloadKeyRequestAnswers        = frontstagecontract.CardActionPayloadKeyRequestAnswers
-	cardActionPayloadKeyRequestRevision       = frontstagecontract.CardActionPayloadKeyRequestRevision
-	cardActionPayloadKeyRequestControl        = frontstagecontract.CardActionPayloadKeyRequestControl
-	cardActionPayloadKeyQuestionID            = frontstagecontract.CardActionPayloadKeyQuestionID
-	cardActionPayloadKeyCommandID             = frontstagecontract.CardActionPayloadKeyCommandID
-	cardActionPayloadKeyActionKind            = frontstagecontract.CardActionPayloadKeyActionKind
-	cardActionPayloadKeyActionArg             = frontstagecontract.CardActionPayloadKeyActionArg
-	cardActionPayloadKeyActionArgPrefix       = frontstagecontract.CardActionPayloadKeyActionArgPrefix
-	cardActionPayloadKeyCatalogFamilyID       = frontstagecontract.CardActionPayloadKeyCatalogFamilyID
-	cardActionPayloadKeyCatalogVariantID      = frontstagecontract.CardActionPayloadKeyCatalogVariantID
-	cardActionPayloadKeyCatalogBackend        = frontstagecontract.CardActionPayloadKeyCatalogBackend
-	cardActionPayloadKeyFieldName             = frontstagecontract.CardActionPayloadKeyFieldName
-	cardActionPayloadKeyCursor                = frontstagecontract.CardActionPayloadKeyCursor
-	cardActionPayloadKeyPickerID              = frontstagecontract.CardActionPayloadKeyPickerID
-	cardActionPayloadKeyEntryName             = frontstagecontract.CardActionPayloadKeyEntryName
-	cardActionPayloadKeyTargetValue           = frontstagecontract.CardActionPayloadKeyTargetValue
-	cardActionPayloadKeyDaemonLifecycleID     = frontstagecontract.CardActionPayloadKeyDaemonLifecycleID
-	cardActionPayloadKeySurfaceSessionID      = frontstagecontract.CardActionPayloadKeySurfaceSessionID
 	cardPathPickerDirectorySelectFieldName    = frontstagecontract.CardPathPickerDirectorySelectFieldName
 	cardPathPickerFileSelectFieldName         = frontstagecontract.CardPathPickerFileSelectFieldName
 	cardTargetPickerWorkspaceFieldName        = frontstagecontract.CardTargetPickerWorkspaceFieldName

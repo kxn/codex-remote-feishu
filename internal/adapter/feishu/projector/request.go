@@ -337,11 +337,11 @@ func requestPromptFormElement(prompt control.FeishuRequestView, daemonLifecycleI
 		input["default_value"] = value
 	}
 	submit := cardFormSubmitButtonElement("提交", stampActionValue(map[string]any{
-		cardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
-		cardActionPayloadKeyRequestID:       prompt.RequestID,
-		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
-		cardActionPayloadKeyFieldName:       name,
-		cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
+		frontstagecontract.CardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
+		frontstagecontract.CardActionPayloadKeyRequestID:       prompt.RequestID,
+		frontstagecontract.CardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
+		frontstagecontract.CardActionPayloadKeyFieldName:       name,
+		frontstagecontract.CardActionPayloadKeyRequestRevision: prompt.RequestRevision,
 	}, daemonLifecycleID))
 	if len(submit) == 0 {
 		return nil
@@ -383,10 +383,10 @@ func requestPromptStructuredFormElement(prompt control.FeishuRequestView, daemon
 		}
 	}
 	submit := cardFormActionButtonElement(xutil.FirstNonEmpty(strings.TrimSpace(prompt.StructuredForm.SubmitLabel), "提交"), "primary", stampActionValue(map[string]any{
-		cardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
-		cardActionPayloadKeyRequestID:       prompt.RequestID,
-		cardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
-		cardActionPayloadKeyRequestRevision: prompt.RequestRevision,
+		frontstagecontract.CardActionPayloadKeyKind:            cardActionKindSubmitRequestForm,
+		frontstagecontract.CardActionPayloadKeyRequestID:       prompt.RequestID,
+		frontstagecontract.CardActionPayloadKeyRequestType:     strings.TrimSpace(prompt.RequestType),
+		frontstagecontract.CardActionPayloadKeyRequestRevision: prompt.RequestRevision,
 	}, daemonLifecycleID), false, "fill")
 	if len(submit) != 0 {
 		submit["name"] = "submit_request_structured"

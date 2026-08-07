@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func TestProjectTargetPickerStampsDaemonLifecycleID(t *testing.T) {
@@ -50,12 +51,12 @@ func TestProjectTargetPickerStampsDaemonLifecycleID(t *testing.T) {
 	}
 	for _, action := range actions {
 		value := cardValueMap(action)
-		if value[cardActionPayloadKeyDaemonLifecycleID] != "life-1" {
+		if value[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-1" {
 			t.Fatalf("expected daemon lifecycle on target picker action, got %#v", value)
 		}
-		if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUse ||
-			value[cardActionPayloadKeyCatalogVariantID] != "use.codex.normal" ||
-			value[cardActionPayloadKeyCatalogBackend] != "codex" {
+		if value[frontstagecontract.CardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUse ||
+			value[frontstagecontract.CardActionPayloadKeyCatalogVariantID] != "use.codex.normal" ||
+			value[frontstagecontract.CardActionPayloadKeyCatalogBackend] != "codex" {
 			t.Fatalf("expected target picker action to carry catalog provenance, got %#v", value)
 		}
 	}
@@ -98,7 +99,7 @@ func TestTargetPickerProcessingStageRendersCancelOnlyForGitImport(t *testing.T) 
 	}, "life-processing")
 	var sawCancel bool
 	for _, action := range cardActionsFromElements(elements) {
-		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		switch cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerCancel:
 			sawCancel = true
 		case cardActionKindTargetPickerConfirm:
@@ -146,7 +147,7 @@ func TestTargetPickerElementsUseSelectCallbacksAndConfirm(t *testing.T) {
 	actions := cardActionsFromElements(elements)
 	var sawWorkspace, sawSession, sawCancel, sawConfirm bool
 	for _, action := range actions {
-		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		switch cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerSelectWorkspace:
 			sawWorkspace = true
 		case cardActionKindTargetPickerSelectSession:
@@ -208,7 +209,7 @@ func TestTargetPickerElementsRenderLockedWorkspaceAsReadOnlyContext(t *testing.T
 	actions := cardActionsFromElements(elements)
 	var sawWorkspace, sawSession bool
 	for _, action := range actions {
-		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		switch cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerSelectWorkspace:
 			sawWorkspace = true
 		case cardActionKindTargetPickerSelectSession:
@@ -268,9 +269,9 @@ func TestTargetPickerElementsPaginateLargeDualSelectAndKeepFooter(t *testing.T) 
 	var sawWorkspacePage, sawSessionPage, sawConfirm bool
 	for _, action := range cardActionsFromElements(elements) {
 		value := cardValueMap(action)
-		switch value[cardActionPayloadKeyKind] {
+		switch value[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerPage:
-			switch value[cardActionPayloadKeyFieldName] {
+			switch value[frontstagecontract.CardActionPayloadKeyFieldName] {
 			case cardTargetPickerWorkspaceFieldName:
 				sawWorkspacePage = true
 			case cardTargetPickerSessionFieldName:
@@ -330,10 +331,10 @@ func TestTargetPickerElementsPaginateLockedWorkspaceSessionAndKeepFooter(t *test
 	var sawSessionPage, sawWorkspacePage bool
 	for _, action := range cardActionsFromElements(elements) {
 		value := cardValueMap(action)
-		if value[cardActionPayloadKeyKind] != cardActionKindTargetPickerPage {
+		if value[frontstagecontract.CardActionPayloadKeyKind] != cardActionKindTargetPickerPage {
 			continue
 		}
-		switch value[cardActionPayloadKeyFieldName] {
+		switch value[frontstagecontract.CardActionPayloadKeyFieldName] {
 		case cardTargetPickerSessionFieldName:
 			sawSessionPage = true
 		case cardTargetPickerWorkspaceFieldName:
@@ -458,7 +459,7 @@ func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testi
 	}
 	var sawDisabledConfirm bool
 	for _, action := range cardActionsFromElements(elements) {
-		if cardValueMap(action)[cardActionPayloadKeyKind] == cardActionKindTargetPickerConfirm && action["disabled"] == true {
+		if cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] == cardActionKindTargetPickerConfirm && action["disabled"] == true {
 			sawDisabledConfirm = true
 		}
 	}
@@ -507,9 +508,9 @@ func TestTargetPickerElementsRenderLocalDirectoryOpenPathAction(t *testing.T) {
 	var sawOpenPath bool
 	var sawConfirm bool
 	for _, action := range cardActionsFromElements(elements) {
-		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		switch cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerOpenPathPicker:
-			if cardValueMap(action)[cardActionPayloadKeyTargetValue] != control.FeishuTargetPickerPathFieldLocalDirectory {
+			if cardValueMap(action)[frontstagecontract.CardActionPayloadKeyTargetValue] != control.FeishuTargetPickerPathFieldLocalDirectory {
 				t.Fatalf("unexpected local-directory open-path payload: %#v", cardValueMap(action))
 			}
 			sawOpenPath = true
@@ -603,9 +604,9 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	var sawConfirm bool
 	var sawBack bool
 	for _, action := range cardActionsFromElements(formElements) {
-		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		switch cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerOpenPathPicker:
-			if cardValueMap(action)[cardActionPayloadKeyTargetValue] == control.FeishuTargetPickerPathFieldGitParentDir {
+			if cardValueMap(action)[frontstagecontract.CardActionPayloadKeyTargetValue] == control.FeishuTargetPickerPathFieldGitParentDir {
 				sawOpenPath = true
 			}
 		case cardActionKindPageLocalAction:
@@ -616,7 +617,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 	}
 	var sawCancel bool
 	for _, action := range cardActionsFromElements(formElements) {
-		if cardValueMap(action)[cardActionPayloadKeyKind] == cardActionKindTargetPickerCancel {
+		if cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] == cardActionKindTargetPickerCancel {
 			sawCancel = true
 			break
 		}
@@ -697,7 +698,7 @@ func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *t
 
 	var sawWorkspace, sawConfirm bool
 	for _, action := range cardActionsFromElements(formElements) {
-		switch cardValueMap(action)[cardActionPayloadKeyKind] {
+		switch cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerSelectWorkspace:
 			sawWorkspace = true
 		case cardActionKindTargetPickerConfirm:

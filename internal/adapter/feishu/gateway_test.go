@@ -11,6 +11,7 @@ import (
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
@@ -1586,10 +1587,10 @@ func TestHandleCardActionTriggerWaitsForParameterApplyReplacement(t *testing.T) 
 
 func TestActionPayloadPageSubmitDefaultsFieldName(t *testing.T) {
 	payload := actionPayloadPageSubmit(string(control.ActionModelCommand), "", "")
-	if payload[cardActionPayloadKeyKind] != cardActionKindPageSubmit {
+	if payload[frontstagecontract.CardActionPayloadKeyKind] != cardActionKindPageSubmit {
 		t.Fatalf("unexpected payload kind: %#v", payload)
 	}
-	if payload[cardActionPayloadKeyFieldName] != cardActionPayloadDefaultCommandFieldName {
+	if payload[frontstagecontract.CardActionPayloadKeyFieldName] != cardActionPayloadDefaultCommandFieldName {
 		t.Fatalf("expected default command field name, got %#v", payload)
 	}
 }

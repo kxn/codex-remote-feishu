@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -161,7 +162,7 @@ func commandCatalogFormPaginationButtons(form control.CommandCatalogForm, pageBa
 
 func commandCatalogFormPageButton(label string, form control.CommandCatalogForm, actionKind control.ActionKind, pageBackend controlBackend, daemonLifecycleID string, cursor int) map[string]any {
 	payload := actionPayloadPageLocalAction(string(actionKind), strings.TrimSpace(form.Field.DefaultValue))
-	payload[cardActionPayloadKeyCursor] = cursor
+	payload[frontstagecontract.CardActionPayloadKeyCursor] = cursor
 	if resolved, ok := resolveCatalogActionForPage(control.Action{
 		Kind:             actionKind,
 		Text:             strings.TrimSpace(form.CommandText),
@@ -270,7 +271,7 @@ func pageButtons(buttons []control.CommandCatalogButton, pageBackend controlBack
 }
 
 func isLocalPagePayload(payload map[string]any) bool {
-	switch strings.TrimSpace(fmt.Sprint(payload[cardActionPayloadKeyKind])) {
+	switch strings.TrimSpace(fmt.Sprint(payload[frontstagecontract.CardActionPayloadKeyKind])) {
 	case cardActionKindPageLocalAction, cardActionKindPageLocalSubmit:
 		return true
 	default:

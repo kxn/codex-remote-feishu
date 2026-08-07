@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -167,7 +168,7 @@ func pathPickerSelectStaticElement(name, placeholder string, payload map[string]
 func pathPickerFieldActionPayload(kind, pickerID, fieldName string) map[string]any {
 	payload := actionPayloadPathPicker(kind, pickerID, "")
 	if strings.TrimSpace(fieldName) != "" {
-		payload[cardActionPayloadKeyFieldName] = strings.TrimSpace(fieldName)
+		payload[frontstagecontract.CardActionPayloadKeyFieldName] = strings.TrimSpace(fieldName)
 	}
 	return payload
 }
