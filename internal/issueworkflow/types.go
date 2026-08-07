@@ -135,9 +135,8 @@ type LintResult struct {
 type CheckStatus string
 
 const (
-	CheckStatusPass    CheckStatus = "pass"
-	CheckStatusFail    CheckStatus = "fail"
-	CheckStatusWarning CheckStatus = "warning"
+	CheckStatusPass CheckStatus = "pass"
+	CheckStatusFail CheckStatus = "fail"
 )
 
 type CheckResult struct {

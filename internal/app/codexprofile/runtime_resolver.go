@@ -127,20 +127,6 @@ func ensureLaunchManagedFile(file LaunchManagedFile) error {
 	return nil
 }
 
-func LegacyThreadCLIOverrides(policy state.CodexThreadPolicy) []string {
-	if policy.ModelMode != state.CodexThreadValueExplicit || policy.ReasoningMode != state.CodexThreadValueExplicit {
-		return nil
-	}
-	overrides := []string{
-		"-c", codexOverride("model", policy.Model),
-		"-c", codexOverride("model_reasoning_effort", policy.ReasoningEffort),
-	}
-	if policy.ReviewModelMode == state.CodexReviewModelExplicit {
-		overrides = append(overrides, "-c", codexOverride("review_model", policy.ReviewModel))
-	}
-	return overrides
-}
-
 type RuntimeError struct {
 	Code  string
 	Stage string
