@@ -462,3 +462,48 @@ func TestCodexHeadlessLaunchProblemClassifiesProbeFailures(t *testing.T) {
 		}
 	}
 }
+
+func TestDaemonIgnoresStaleAdmissionRefForDifferentProvider(t *testing.T) {
+	root := t.TempDir()
+	configPath := filepath.Join(root, "config.json")
+	stateDir := filepath.Join(root, "state")
+	record, err := config.PrepareCodexAPIProfileCreate(nil, config.CodexAPIProfileInput{
+		Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "team-secret",
+		Model: "gpt-5.5", ReasoningEffort: "high",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
+	}
+	cfg := config.DefaultAppConfig()
+	cfg.Codex.Profiles = []config.CodexAPIProfileRecord{record}
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		CodexRealBinary: "/tmp/codex",
+		ConfigPath:      configPath,
+		BaseEnv:         []string{"HOME=/tmp/test"},
+		Paths:           relayruntime.Paths{StateDir: stateDir},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	app.runCodexNativeConfigProbe = func(context.Context, codexprofile.NativeConfigProbeOptions) (codexprofile.NativeConfigObservation, error) {
+		return codexprofile.NativeConfigObservation{}, nil
+	}
+	app.ensureCodexNativeConnectionEvidence(context.Background())
+
+	_, _, _, err = app.applyCodexHeadlessProviderConfigLocked(
+		[]string{"HOME=/tmp/test"},
+		[]string{"app-server"},
+		agentproto.BackendCodex,
+		record.ID,
+		&state.CodexAdmissionRef{
+			ProfileRef:           state.CodexProfileRef{ID: "other", Revision: 1},
+			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "other", Revision: 1},
+		},
+	)
+	if err != nil {
+		t.Fatalf("stale admission ref for a different provider must not block launch: %v", err)
+	}
+}

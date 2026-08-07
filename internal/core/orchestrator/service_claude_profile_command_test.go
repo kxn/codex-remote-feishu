@@ -145,6 +145,78 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 	}
 }
 
+func TestClaudeProfileSwitchReconcilesOtherGatewayHeadlessSurfaces(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{
+		{ID: "profile-a", Name: "Profile A"},
+		{ID: "profile-b", Name: "Profile B"},
+	})
+	svc.MaterializeSurfaceResume("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendClaude, "profile-a", "", state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResume("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendClaude, "profile-a", "", state.PlanModeSettingOff)
+
+	workspaceKey := "/data/dl/repo"
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:      "inst-b",
+		Backend:         agentproto.BackendClaude,
+		ClaudeProfileID: "profile-a",
+		Source:          "headless",
+		Managed:         true,
+		Online:          true,
+		WorkspaceKey:    workspaceKey,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: workspaceKey, Loaded: true},
+		},
+	})
+	surfaceB := svc.root.Surfaces["feishu:app-1:user:ou_b"]
+	surfaceB.AttachedInstanceID = "inst-b"
+	surfaceB.ClaimedWorkspaceKey = workspaceKey
+	surfaceB.SelectedThreadID = "thread-1"
+	surfaceB.RouteMode = state.RouteModePinned
+	surfaceB.LastSelection = &state.SelectionAnnouncementRecord{
+		ThreadID:  "thread-1",
+		RouteMode: string(state.RouteModePinned),
+		Title:     "修复登录流程",
+	}
+	if !svc.claimKnownThread(surfaceB, svc.root.Instances["inst-b"], "thread-1") {
+		t.Fatal("expected test setup to claim thread")
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionClaudeProfileCommand,
+		SurfaceSessionID: "feishu:app-1:user:ou_a",
+		GatewayID:        "app-1",
+		ChatID:           "ou_a",
+		ActorUserID:      "ou_a",
+		Text:             "/claudeprofile profile-b",
+	})
+
+	foundKill := false
+	foundStart := false
+	for _, event := range events {
+		if event.DaemonCommand == nil {
+			continue
+		}
+		switch event.DaemonCommand.Kind {
+		case control.DaemonCommandKillHeadless:
+			if event.DaemonCommand.InstanceID == "inst-b" {
+				foundKill = true
+			}
+		case control.DaemonCommandStartHeadless:
+			if event.DaemonCommand.SurfaceSessionID == surfaceB.SurfaceSessionID &&
+				event.DaemonCommand.ClaudeProfileID == "profile-b" {
+				foundStart = true
+			}
+		}
+	}
+	if !foundKill || !foundStart {
+		t.Fatalf("expected other gateway surface to restart under new claude profile, kill=%t start=%t events=%#v", foundKill, foundStart, events)
+	}
+	if surfaceB.PendingHeadless == nil || surfaceB.PendingHeadless.ClaudeProfileID != "profile-b" {
+		t.Fatalf("expected pending headless on other surface with new claude profile, got %#v", surfaceB.PendingHeadless)
+	}
+}
+
 func TestClaudeProfileCommandRestartsPinnedClaudeThreadOnProfileSwitch(t *testing.T) {
 	now := time.Date(2026, 5, 1, 2, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

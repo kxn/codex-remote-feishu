@@ -314,6 +314,7 @@ type SurfaceConsoleRecord struct {
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
+	ContractRefreshPending  bool
 	ClaudeProfileID         string
 	Verbosity               SurfaceVerbosity
 	PlanMode                PlanModeSetting

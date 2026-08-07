@@ -130,12 +130,18 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 	if !ok {
 		return
 	}
+	previousProviderID := state.NormalizeCodexProviderID(surface.CodexProviderID)
 	s.setSurfaceDesiredContract(surface, state.BotCapabilitySettingsContract(normalized))
 	surface.CodexProviderID = normalized.CodexProviderID
 	surface.ClaudeProfileID = normalized.ClaudeProfileID
 	surface.PromptOverride = normalized.PromptOverride
 	surface.PlanMode = normalized.PlanMode
 	surface.PlanModeOverrideSet = normalized.PlanModeOverrideSet
+	if state.NormalizeCodexProviderID(normalized.CodexProviderID) != previousProviderID {
+		surface.CodexAdmissionRef = nil
+		surface.CodexConnectionContract = nil
+		surface.CodexThreadPolicy = nil
+	}
 }
 
 func (s *Service) projectLatestBotCapabilitySettingsToSurface(surface *state.SurfaceConsoleRecord) bool {

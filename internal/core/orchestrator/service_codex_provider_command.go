@@ -134,6 +134,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	events = s.queueHeadlessContractRestart(events, surface, continuation)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	applySelection()
+	reconcileEvents := s.reconcileGatewayHeadlessSurfacesAfterContractChange(surface)
 	if currentWorkspaceKey == "" {
 		text := fmt.Sprintf("已切换到 Codex Profile：%s。当前没有接管中的工作区。", targetLabel)
 		if commandCardOwnsInlineResult(action) {
@@ -141,9 +142,9 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 				Sealed:     true,
 				StatusKind: "success",
 				StatusText: text,
-			}, events...)
+			}, append(events, reconcileEvents...)...)
 		}
-		return append(events, notice(surface, "codex_provider_switched", text)...)
+		return append(append(events, reconcileEvents...), notice(surface, "codex_provider_switched", text)...)
 	}
 
 	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
@@ -158,9 +159,9 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 			Sealed:     true,
 			StatusKind: "success",
 			StatusText: statusText,
-		}, append(events, resumeEvents...)...)
+		}, append(append(events, reconcileEvents...), resumeEvents...)...)
 	}
-	events = append(events, notice(surface, "codex_provider_switched", statusText)...)
+	events = append(append(events, reconcileEvents...), notice(surface, "codex_provider_switched", statusText)...)
 	return append(events, resumeEvents...)
 }
 

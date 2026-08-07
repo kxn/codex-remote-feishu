@@ -233,6 +233,18 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		}
 		return notice(surface, "not_attached", s.notAttachedText(surface))
 	}
+	if surface.ContractRefreshPending && !s.surfaceInstanceCompatibleForAttach(surface, inst) {
+		if surface.PendingHeadless != nil || s.surfaceHasLiveRemoteWork(surface) {
+			return notice(surface, "contract_refresh_pending", "机器人配置刚发生变化，当前会话仍在处理中，稍后会自动切换到新配置。")
+		}
+		surface.ContractRefreshPending = false
+		events := s.reconcileHeadlessSurfaceContract(surface)
+		if len(events) == 0 {
+			return notice(surface, "contract_refresh_unavailable", "当前会话暂时无法自动切换到新配置，请稍后重试，或 /detach 后重新连接。")
+		}
+		s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
+		return events
+	}
 	reviewSession := s.activeReviewSession(surface)
 	if reviewSession != nil {
 		s.ensureReviewSessionParentSelection(surface, reviewSession)

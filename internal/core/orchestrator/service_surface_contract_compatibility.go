@@ -33,6 +33,11 @@ func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleReco
 	result := surfaceInstanceCompatibility{Visible: true, Compatible: true}
 	switch observed.Backend {
 	case agentproto.BackendCodex:
+		desiredProviderID := state.EffectiveSurfaceCodexProviderID(desired)
+		result.Compatible = state.NormalizeCodexProviderID(observed.CodexProviderID) == desiredProviderID
+		if !result.Compatible {
+			break
+		}
 		if desiredConnectionID := codexConnectionContractID(surface.CodexConnectionContract); desiredConnectionID != "" {
 			result.Compatible = desiredConnectionID == codexConnectionContractID(inst.CodexConnectionContract)
 			break
@@ -42,7 +47,6 @@ func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleReco
 			result.Compatible = observedAdmissionRef != nil && *desiredAdmissionRef == *observedAdmissionRef
 			break
 		}
-		result.Compatible = state.NormalizeCodexProviderID(observed.CodexProviderID) == state.EffectiveSurfaceCodexProviderID(desired)
 	case agentproto.BackendClaude:
 		result.Compatible = state.NormalizeClaudeProfileID(observed.ClaudeProfileID) == state.EffectiveSurfaceClaudeProfileID(desired)
 	}
