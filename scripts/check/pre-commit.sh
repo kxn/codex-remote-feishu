@@ -34,6 +34,8 @@ bash scripts/check/feishu-call-broker.sh
 bash scripts/check/eventcontract-legacy-guards.sh
 bash scripts/check/go-file-length.sh
 bash scripts/check/go-format.sh
+# test-path-guard: warns about cross-platform path pitfalls (non-blocking until backlog cleared)
+bash scripts/check/test-path-guard.sh || true
 
 bash scripts/check/release-track-version.sh
 
