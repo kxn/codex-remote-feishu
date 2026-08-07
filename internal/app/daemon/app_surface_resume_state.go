@@ -885,7 +885,7 @@ func (a *App) shouldDeferHeadlessResumeUntilInitialRefreshLocked(entry surfacere
 	}
 	// Give a connected visible-instance resume one startup refresh round before
 	// falling back to a managed headless restart for the same persisted target.
-	return strings.TrimSpace(inst.Source) != "headless"
+	return !state.IsInstanceSource(inst.Source, state.InstanceSourceHeadless)
 }
 
 func (a *App) markStartupThreadsRefreshRequestedLocked(instanceID string) {
