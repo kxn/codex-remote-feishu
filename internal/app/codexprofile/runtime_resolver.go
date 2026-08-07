@@ -244,25 +244,28 @@ func (r RuntimeResolver) resolveAPI(ref state.CodexAdmissionRef, preference stat
 	if subagentModel != "" {
 		launch.CLIOverrides = append(launch.CLIOverrides, "-c", codexOverride("agents.default_subagent_model", subagentModel))
 	}
-	deepSeek := codexcatalog.IsDeepSeekProfile(profile.BaseURL, profile.Model)
-	if subagentModel != "" || deepSeek || instruction != "" {
+	catalog, known := codexcatalog.IdentifyEmbeddedCatalog(profile.BaseURL, profile.Model)
+	if subagentModel != "" || known || instruction != "" {
 		var catalogPath string
 		var catalogJSON []byte
 		switch {
-		case deepSeek && subagentModel == "":
-			catalogPath = codexcatalog.DeepSeekModelCatalogPath(r.ManagedModelCatalogDir)
+		case known && subagentModel == "":
+			catalogPath = catalog.CatalogPath(r.ManagedModelCatalogDir)
 			if instruction != "" {
-				catalogJSON = codexcatalog.AppendCatalogInstruction(codexcatalog.DeepSeekModelCatalogJSON(), instruction)
+				catalogJSON = codexcatalog.AppendCatalogInstruction(catalog.CatalogJSON(), instruction)
 			} else {
-				catalogJSON = codexcatalog.DeepSeekModelCatalogJSON()
+				catalogJSON = catalog.CatalogJSON()
 			}
 		default:
-			if deepSeek {
-				catalogPath = codexcatalog.DeepSeekModelCatalogPath(r.ManagedModelCatalogDir)
+			template := codexcatalog.DeepSeekCatalog
+			if known {
+				catalogPath = catalog.CatalogPath(r.ManagedModelCatalogDir)
+				template = catalog
 			} else {
 				catalogPath = codexcatalog.ManagedModelCatalogPath(r.ManagedModelCatalogDir)
 			}
-			catalogJSON = codexcatalog.BuildManagedModelCatalogWithInstruction(
+			catalogJSON = codexcatalog.BuildEmbeddedModelCatalogWithInstruction(
+				template,
 				[]string{profile.Model, profile.ReviewModel, profile.SubagentModel},
 				instruction,
 			)

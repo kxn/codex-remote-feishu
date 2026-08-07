@@ -725,3 +725,174 @@ func admissionRef(profileID string, profileRevision, preferenceRevision uint64) 
 		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: profileID, Revision: preferenceRevision},
 	}
 }
+
+func TestRuntimeResolverProjectsMimoManagedModelCatalog(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_mimo",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "MiMo",
+		BaseURL:              "https://token-plan-cn.xiaomimimo.com/v1",
+		APIKey:               "tp-test-key",
+		Model:                "mimo-v2.5-pro",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	catalogPath := filepath.Join(managedDir, "mimo-models-v1.json")
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
+		t.Fatalf("launch overrides missing MiMo catalog path: %#v", projection.Launch.CLIOverrides)
+	}
+	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
+		t.Fatalf("expected one managed MiMo catalog file, got %#v", projection.Launch.ManagedFiles)
+	}
+	content := string(projection.Launch.ManagedFiles[0].Content)
+	for _, want := range []string{"mimo-v2.5-pro", "mimo-v2.5", `"effort": "none"`} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("managed MiMo catalog missing %q: %s", want, content)
+		}
+	}
+	for _, forbidden := range []string{"deepseek-v4-flash", "deepseek-v4-pro"} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("managed MiMo catalog must not contain %q: %s", forbidden, content)
+		}
+	}
+	if strings.Contains(content, profile.APIKey) {
+		t.Fatal("managed MiMo catalog leaked API key")
+	}
+}
+
+func TestRuntimeResolverProjectsMimoViaProxyModelPrefix(t *testing.T) {
+	// sub2api 中转：端点不匹配任何官方域名，仅凭模型名前缀命中 mimo。
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_mimo_proxy",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "MiMo via proxy",
+		BaseURL:              "https://my-proxy.example.com/v1",
+		APIKey:               "sk-test-key",
+		Model:                "mimo-v2.5-pro",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	catalogPath := filepath.Join(managedDir, "mimo-models-v1.json")
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
+		t.Fatalf("proxy mimo profile must inject MiMo catalog, got overrides: %#v", projection.Launch.CLIOverrides)
+	}
+	content := string(projection.Launch.ManagedFiles[0].Content)
+	if strings.Contains(content, "deepseek-") {
+		t.Fatalf("proxy mimo profile must not inject DeepSeek models: %s", content)
+	}
+}
+
+func TestRuntimeResolverProjectsMimoSubagentModelOverride(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_mimo_sub",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "MiMo",
+		BaseURL:              "https://api.xiaomimimo.com/v1",
+		APIKey:               "sk-test-key",
+		Model:                "mimo-v2.5-pro",
+		SubagentModel:        "mimo-v2.5",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("agents.default_subagent_model", profile.SubagentModel)) {
+		t.Fatalf("launch overrides missing subagent model: %#v", projection.Launch.CLIOverrides)
+	}
+	catalogPath := filepath.Join(managedDir, "mimo-models-v1.json")
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
+		t.Fatalf("launch overrides missing MiMo catalog path: %#v", projection.Launch.CLIOverrides)
+	}
+}
+
+func TestRuntimeResolverProjectsMimoInstructionManagedCatalog(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_mimo_instruction",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "MiMo",
+		BaseURL:              "https://token-plan-cn.xiaomimimo.com/v1",
+		APIKey:               "tp-test-key",
+		Model:                "mimo-v2.5",
+		Instruction:          "你是一个乐于助人的助手。",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	catalogPath := filepath.Join(managedDir, "mimo-models-v1.json")
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
+		t.Fatalf("launch overrides missing MiMo catalog path: %#v", projection.Launch.CLIOverrides)
+	}
+	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
+		t.Fatalf("expected one MiMo instruction catalog file, got %#v", projection.Launch.ManagedFiles)
+	}
+	content := string(projection.Launch.ManagedFiles[0].Content)
+	for _, want := range []string{`"slug":"mimo-v2.5"`, "你是一个乐于助人的助手。"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("MiMo instruction catalog missing %q: %s", want, content)
+		}
+	}
+	if strings.Contains(content, profile.APIKey) {
+		t.Fatal("MiMo instruction catalog leaked API key")
+	}
+}
