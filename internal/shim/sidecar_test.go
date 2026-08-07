@@ -3,6 +3,7 @@ package shim
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 )
 
@@ -140,7 +141,7 @@ func TestWriteSidecarUpgradeAcceptsStateOnly(t *testing.T) {
 func TestReadSidecarLegacyManaged(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "legacy.remote.json")
-	raw := `{"schemaVersion":1,"manager":"codex-remote","installStatePath":"` + filepath.Join(dir, "install-state.json") + `","configPath":"` + filepath.Join(dir, "config.json") + `"}`
+	raw := `{"schemaVersion":1,"manager":"codex-remote","installStatePath":` + strconv.Quote(filepath.Join(dir, "install-state.json")) + `,"configPath":` + strconv.Quote(filepath.Join(dir, "config.json")) + `}`
 	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
