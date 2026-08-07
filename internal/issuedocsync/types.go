@@ -1,15 +1,13 @@
 package issuedocsync
 
-import "time"
+import (
+	"time"
 
-type Repo struct {
-	Owner string
-	Name  string
-}
+	"github.com/kxn/codex-remote-feishu/internal/ghclient"
+)
 
-func (r Repo) String() string {
-	return r.Owner + "/" + r.Name
-}
+// Repo is an alias for ghclient.Repo.
+type Repo = ghclient.Repo
 
 type IssueSummary struct {
 	Number    int       `json:"number"`

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/ghclient"
 )
 
 const listClosedIssuesQuery = `
@@ -66,16 +66,12 @@ query($owner: String!, $name: String!, $number: Int!, $after: String) {
 }
 `
 
-type Runner interface {
-	Run(ctx context.Context, args ...string) ([]byte, error)
-}
-
 type ghCLI struct {
-	runner Runner
+	runner ghclient.Runner
 }
 
 func NewGitHubCLI() *ghCLI {
-	return &ghCLI{runner: execRunner{}}
+	return &ghCLI{runner: ghclient.ExecRunner{}}
 }
 
 func (c *ghCLI) ListClosedIssueSummaries(ctx context.Context, repo Repo) ([]IssueSummary, error) {
@@ -260,15 +256,4 @@ func (c *ghCLI) FetchIssueDetails(ctx context.Context, repo Repo, number int) (I
 		}
 		after = issue.Comments.PageInfo.EndCursor
 	}
-}
-
-type execRunner struct{}
-
-func (execRunner) Run(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := execlaunch.CommandContext(ctx, "gh", args...)
-	payload, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("gh %v: %w\n%s", args, err, string(payload))
-	}
-	return payload, nil
 }

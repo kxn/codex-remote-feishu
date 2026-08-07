@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/ghclient"
 )
 
 const fetchIssueQuery = `
@@ -51,10 +51,12 @@ type GitHubClient interface {
 	Close(context.Context, Repo, int) error
 }
 
-type ghCLI struct{}
+type ghCLI struct {
+	runner ghclient.Runner
+}
 
 func NewGitHubCLI() GitHubClient {
-	return &ghCLI{}
+	return &ghCLI{runner: ghclient.ExecRunner{}}
 }
 
 func (g *ghCLI) FetchIssue(ctx context.Context, repo Repo, number int, comments int) (Issue, error) {
@@ -69,7 +71,7 @@ func (g *ghCLI) FetchIssue(ctx context.Context, repo Repo, number int, comments 
 		"-F", fmt.Sprintf("number=%d", number),
 		"-F", fmt.Sprintf("comments=%d", comments),
 	}
-	payload, err := g.run(ctx, args...)
+	payload, err := g.runner.Run(ctx, args...)
 	if err != nil {
 		return Issue{}, err
 	}
@@ -160,7 +162,7 @@ func (g *ghCLI) AddLabels(ctx context.Context, repo Repo, number int, labels []s
 	for _, label := range labels {
 		args = append(args, "--add-label", label)
 	}
-	_, err := g.run(ctx, args...)
+	_, err := g.runner.Run(ctx, args...)
 	return err
 }
 
@@ -172,29 +174,16 @@ func (g *ghCLI) RemoveLabels(ctx context.Context, repo Repo, number int, labels 
 	for _, label := range labels {
 		args = append(args, "--remove-label", label)
 	}
-	_, err := g.run(ctx, args...)
+	_, err := g.runner.Run(ctx, args...)
 	return err
 }
 
 func (g *ghCLI) Comment(ctx context.Context, repo Repo, number int, bodyFile string) error {
-	_, err := g.run(ctx, "issue", "comment", fmt.Sprintf("%d", number), "--repo", repo.String(), "--body-file", bodyFile)
+	_, err := g.runner.Run(ctx, "issue", "comment", fmt.Sprintf("%d", number), "--repo", repo.String(), "--body-file", bodyFile)
 	return err
 }
 
 func (g *ghCLI) Close(ctx context.Context, repo Repo, number int) error {
-	_, err := g.run(ctx, "issue", "close", fmt.Sprintf("%d", number), "--repo", repo.String())
+	_, err := g.runner.Run(ctx, "issue", "close", fmt.Sprintf("%d", number), "--repo", repo.String())
 	return err
-}
-
-func (g *ghCLI) run(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := execlaunch.CommandContext(ctx, "gh", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		message := strings.TrimSpace(string(output))
-		if message == "" {
-			message = err.Error()
-		}
-		return nil, fmt.Errorf("gh %s: %s", strings.Join(args, " "), message)
-	}
-	return output, nil
 }
