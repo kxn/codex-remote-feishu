@@ -18,7 +18,7 @@ func codexHeadlessLaunchProblem(err error, defaults agentproto.ErrorInfo) agentp
 	}
 	problem.Code = code
 	problem.Retryable = false
-	problem.Details = ""
+	problem.Details = codexprofile.RuntimeErrorStage(err)
 	switch code {
 	case codexprofile.ErrorProfileDefinitionIncomplete:
 		problem.Message = "Codex Profile 缺少必需的模型或推理配置，请先完成配置。"
@@ -93,6 +93,7 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 	}
 	capabilitySet := a.effectiveCodexRuntimeCapabilitySetLocked()
 	capabilityErrorCode := a.effectiveCodexRuntimeCapabilityErrorCodeLocked()
+	capabilityErrorStage := a.effectiveCodexRuntimeCapabilityErrorStageLocked()
 	if profileID == config.CodexOAuthProfileID {
 		profile, ok := a.codexOAuthProfileState.current()
 		if !ok {
@@ -132,6 +133,7 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 		OAuthState:              oauthState,
 		CapabilitySet:           capabilitySet,
 		CapabilityErrorCode:     capabilityErrorCode,
+		CapabilityErrorStage:    capabilityErrorStage,
 		ManagedModelCatalogDir:  codexcatalog.ManagedModelCatalogDir(a.headlessRuntime.Paths.StateDir),
 	}
 	projection, err := resolver.Resolve(effectiveRef)

@@ -435,16 +435,17 @@ func TestCodexHeadlessLaunchProblemPreservesStableRuntimeReason(t *testing.T) {
 func TestCodexHeadlessLaunchProblemClassifiesProbeFailures(t *testing.T) {
 	tests := []struct {
 		code        string
+		stage       string
 		wantMessage string
 	}{
 		{code: codexprofile.ErrorCodexBinaryUnavailable, wantMessage: "找不到"},
 		{code: codexprofile.ErrorCodexProbeTimeout, wantMessage: "超时"},
-		{code: codexprofile.ErrorCodexProbeUnavailable, wantMessage: "暂时无法"},
+		{code: codexprofile.ErrorCodexProbeUnavailable, stage: "capability_initialize", wantMessage: "暂时无法"},
 		{code: codexprofile.ErrorCodexProbeContractMismatch, wantMessage: "契约"},
 	}
 	for _, test := range tests {
 		problem := codexHeadlessLaunchProblem(
-			&codexprofile.RuntimeError{Code: test.code},
+			&codexprofile.RuntimeError{Code: test.code, Stage: test.stage},
 			agentproto.ErrorInfo{Code: "codex_provider_prepare_failed", Message: "Codex Provider 准备失败。", Retryable: true},
 		)
 		if problem.Code != test.code {
@@ -455,6 +456,9 @@ func TestCodexHeadlessLaunchProblemClassifiesProbeFailures(t *testing.T) {
 		}
 		if !strings.Contains(problem.Message, test.wantMessage) {
 			t.Fatalf("problem message for %q = %q, want contains %q", test.code, problem.Message, test.wantMessage)
+		}
+		if problem.Details != test.stage {
+			t.Fatalf("problem details for %q = %q, want stage %q", test.code, problem.Details, test.stage)
 		}
 	}
 }

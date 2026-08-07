@@ -35,6 +35,7 @@ type RuntimeResolver struct {
 	NativeConfigProbeFailed bool
 	CapabilitySet           string
 	CapabilityErrorCode     string
+	CapabilityErrorStage    string
 	ManagedModelCatalogDir  string
 }
 
@@ -141,12 +142,16 @@ func LegacyThreadCLIOverrides(policy state.CodexThreadPolicy) []string {
 }
 
 type RuntimeError struct {
-	Code string
+	Code  string
+	Stage string
 }
 
 func (e *RuntimeError) Error() string {
 	if e == nil {
 		return ""
+	}
+	if strings.TrimSpace(e.Stage) != "" {
+		return e.Code + ": " + e.Stage
 	}
 	return e.Code
 }
@@ -155,6 +160,14 @@ func RuntimeErrorCode(err error) string {
 	var runtimeErr *RuntimeError
 	if errors.As(err, &runtimeErr) && runtimeErr != nil {
 		return runtimeErr.Code
+	}
+	return ""
+}
+
+func RuntimeErrorStage(err error) string {
+	var runtimeErr *RuntimeError
+	if errors.As(err, &runtimeErr) && runtimeErr != nil {
+		return strings.TrimSpace(runtimeErr.Stage)
 	}
 	return ""
 }
@@ -173,7 +186,7 @@ func (r RuntimeResolver) Resolve(ref state.CodexAdmissionRef) (RuntimeProjection
 		if code == "" {
 			code = ErrorCodexCapabilityUnsupported
 		}
-		return RuntimeProjection{}, runtimeError(code)
+		return RuntimeProjection{}, runtimeErrorWithStage(code, r.CapabilityErrorStage)
 	}
 	preference, ok := r.resolvePreference(ref.ContextPreferenceRef)
 	if !ok {
@@ -303,7 +316,7 @@ func (r RuntimeResolver) resolveOAuth(ref state.CodexAdmissionRef, capabilitySet
 		if code == "" {
 			code = ErrorCodexCapabilityUnsupported
 		}
-		return RuntimeProjection{}, runtimeError(code)
+		return RuntimeProjection{}, runtimeErrorWithStage(code, r.CapabilityErrorStage)
 	}
 	if strings.TrimSpace(oauth.CapabilitySet) != CodexProfileCapabilitySetV1 {
 		return RuntimeProjection{}, runtimeError(ErrorCodexCapabilityUnsupported)
@@ -470,6 +483,10 @@ func codexOverride(key, value string) string {
 
 func runtimeError(code string) error {
 	return &RuntimeError{Code: code}
+}
+
+func runtimeErrorWithStage(code, stage string) error {
+	return &RuntimeError{Code: code, Stage: strings.TrimSpace(stage)}
 }
 
 func knownOAuthProbeRuntimeError(code string) string {

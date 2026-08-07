@@ -584,14 +584,18 @@ func TestRuntimeResolverSurfacesCapabilityErrorCode(t *testing.T) {
 		ErrorCodexProbeContractMismatch,
 	} {
 		resolver := RuntimeResolver{
-			APIProfiles:         []config.CodexAPIProfileRecord{{ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile}}},
-			Preference:          fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
-			CapabilitySet:       "",
-			CapabilityErrorCode: code,
+			APIProfiles:          []config.CodexAPIProfileRecord{{ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile}}},
+			Preference:           fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+			CapabilitySet:        "",
+			CapabilityErrorCode:  code,
+			CapabilityErrorStage: "capability_initialize",
 		}
 		_, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
 		if got := RuntimeErrorCode(err); got != code {
 			t.Fatalf("capability error code = %q, want %q (err=%v)", got, code, err)
+		}
+		if got := RuntimeErrorStage(err); got != "capability_initialize" {
+			t.Fatalf("capability error stage = %q, want %q (err=%v)", got, "capability_initialize", err)
 		}
 	}
 }
