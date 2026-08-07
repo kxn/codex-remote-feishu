@@ -30,7 +30,7 @@ func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 			StateDir: stateDir,
 		},
 	})
-	workspaceDir := t.TempDir()
+	workspaceDir := evalSymlinkForTest(t, t.TempDir())
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-offline",
 		DisplayName:   "droid",
@@ -61,7 +61,7 @@ func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 	if snapshot == nil || snapshot.PendingHeadless.ThreadID != "thread-1" || snapshot.PendingHeadless.ThreadCWD != workspaceDir {
 		t.Fatalf("expected pending preselected headless snapshot, got %#v", snapshot)
 	}
-	if captured.WorkDir != workspaceDir || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
+	if tempDirSuffixForTest(t, captured.WorkDir) != tempDirSuffixForTest(t, workspaceDir) || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
 		t.Fatalf("unexpected preselected headless launch opts: %#v", captured)
 	}
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_LIFETIME=daemon-owned") {
@@ -165,7 +165,7 @@ func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
 		},
 	})
 	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
-	claudeWorkspaceDir := t.TempDir()
+	claudeWorkspaceDir := evalSymlinkForTest(t, t.TempDir())
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-offline-claude",
 		DisplayName:   "repo",
