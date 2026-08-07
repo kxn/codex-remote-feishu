@@ -25,6 +25,7 @@ type ClaudeProfileDraft = {
   model: string;
   smallModel: string;
   subagentModel: string;
+  instruction: string;
   reasoningEffort: string;
   contextMode: string;
 };
@@ -40,6 +41,7 @@ const newClaudeProfileID = "new-claude-profile";
 const claudeReasoningOptions = ["low", "medium", "high", "max"] as const;
 const claudeContextModeDefault = "default";
 const claudeContextModeExtended = "extended_1m";
+const claudeInstructionMaxChars = 16000;
 
 export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
   const { profiles, loadError, setProfiles, onReload } = props;
@@ -412,9 +414,28 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
             {claudeReasoningOptions.map((value) => (
               <option key={value} value={value}>
                 {value}
-              </option>
-            ))}
-          </select>
+            </option>
+          ))}
+        </select>
+        </label>
+        <label className="field form-grid-span-2 stack-top">
+          <span>指令 / 角色提示词（可选）</span>
+          <textarea
+            aria-label="指令 / 角色提示词（可选）"
+            maxLength={claudeInstructionMaxChars}
+            placeholder="用于预设代理的角色与行为，留空不注入"
+            rows={6}
+            value={draft.instruction}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                instruction: event.target.value,
+              }))
+            }
+          />
+          <span className="field-hint">
+            {draft.instruction.length}/{claudeInstructionMaxChars}
+          </span>
         </label>
       </div> : null}
       <label className="field form-grid-span-2 stack-top">
@@ -448,6 +469,7 @@ function createEmptyDraft(): ClaudeProfileDraft {
     model: "",
     smallModel: "",
     subagentModel: "",
+    instruction: "",
     reasoningEffort: "",
     contextMode: claudeContextModeDefault,
   };
@@ -461,6 +483,7 @@ function createDraftFromProfile(profile: ClaudeProfileSummary): ClaudeProfileDra
     model: profile.model?.trim() || "",
     smallModel: profile.smallModel?.trim() || "",
     subagentModel: profile.subagentModel?.trim() || "",
+    instruction: profile.instruction?.trim() || "",
     reasoningEffort: normalizeClaudeReasoningEffort(profile.reasoningEffort),
     contextMode: contextMode(profile),
   };
@@ -473,6 +496,9 @@ function validateDraft(draft: ClaudeProfileDraft, editorMode: string): string {
   if (!draft.name.trim()) {
     return "请填写名称。";
   }
+  if (draft.instruction.length > claudeInstructionMaxChars) {
+    return `指令最多 ${claudeInstructionMaxChars} 字符。`;
+  }
   return "";
 }
 
@@ -484,6 +510,7 @@ function buildCreatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
     subagentModel: draft.subagentModel.trim(),
+    instruction: draft.instruction.trim(),
     reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
   };
 }
@@ -495,6 +522,7 @@ function buildUpdatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
     subagentModel: draft.subagentModel.trim(),
+    instruction: draft.instruction.trim(),
     reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
   };
   const authToken = optionalString(draft.authToken);

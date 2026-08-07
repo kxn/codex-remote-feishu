@@ -131,6 +131,59 @@ func BuildManagedModelCatalog(models []string) []byte {
 	return raw
 }
 
+// BuildManagedModelCatalogWithInstruction 生成包含指定模型的目录，并把 instruction
+// 追加到每个模型的 instructions_template 末尾（保留基础 instructions）。
+func BuildManagedModelCatalogWithInstruction(models []string, instruction string) []byte {
+	raw := BuildManagedModelCatalog(models)
+	if len(raw) == 0 {
+		return nil
+	}
+	return appendCatalogInstruction(raw, instruction)
+}
+
+// AppendCatalogInstruction 在既有模型目录 JSON 上追加 instruction 到每个模型，
+// 保留目录中的其他模型与字段。instruction 为空时返回原目录副本。
+func AppendCatalogInstruction(raw []byte, instruction string) []byte {
+	if len(raw) == 0 {
+		return nil
+	}
+	return appendCatalogInstruction(raw, instruction)
+}
+
+func appendCatalogInstruction(raw []byte, instruction string) []byte {
+	instruction = strings.TrimSpace(instruction)
+	if instruction == "" {
+		return append([]byte(nil), raw...)
+	}
+	var catalog struct {
+		Models []map[string]json.RawMessage `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		return nil
+	}
+	for _, entry := range catalog.Models {
+		messagesRaw, ok := entry["model_messages"]
+		if !ok {
+			return nil
+		}
+		var messages map[string]json.RawMessage
+		if err := json.Unmarshal(messagesRaw, &messages); err != nil {
+			return nil
+		}
+		var template string
+		if err := json.Unmarshal(messages["instructions_template"], &template); err != nil {
+			return nil
+		}
+		messages["instructions_template"], _ = json.Marshal(template + "\n\n" + instruction)
+		entry["model_messages"], _ = json.Marshal(messages)
+	}
+	out, err := json.Marshal(catalog)
+	if err != nil {
+		return nil
+	}
+	return out
+}
+
 func cloneRawEntry(entry map[string]json.RawMessage) map[string]json.RawMessage {
 	cloned := make(map[string]json.RawMessage, len(entry))
 	for key, value := range entry {

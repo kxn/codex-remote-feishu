@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 )
@@ -48,13 +50,17 @@ func (a *App) bootstrapClaude(childStdin io.Writer, childStdout io.Reader, rawLo
 }
 
 func (a *App) claudeBootstrapInitializeFrame() ([]byte, error) {
+	request := map[string]any{
+		"subtype": "initialize",
+		"hooks":   map[string]any{},
+	}
+	if instruction := strings.TrimSpace(os.Getenv(config.ClaudeAppendSystemPromptEnv)); instruction != "" {
+		request["appendSystemPrompt"] = instruction
+	}
 	bytes, err := json.Marshal(map[string]any{
 		"type":       "control_request",
 		"request_id": relayBootstrapInitializeID,
-		"request": map[string]any{
-			"subtype": "initialize",
-			"hooks":   map[string]any{},
-		},
+		"request":    request,
 	})
 	if err != nil {
 		return nil, err

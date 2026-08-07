@@ -24,6 +24,7 @@ type adminClaudeProfileView struct {
 	Model             string                         `json:"model,omitempty"`
 	SmallModel        string                         `json:"smallModel,omitempty"`
 	SubagentModel     string                         `json:"subagentModel,omitempty"`
+	Instruction       string                         `json:"instruction,omitempty"`
 	ReasoningEffort   string                         `json:"reasoningEffort,omitempty"`
 	BuiltIn           bool                           `json:"builtIn,omitempty"`
 	Persisted         bool                           `json:"persisted"`
@@ -50,6 +51,7 @@ type claudeProfileWriteRequest struct {
 	Model           *string `json:"model"`
 	SmallModel      *string `json:"smallModel"`
 	SubagentModel   *string `json:"subagentModel"`
+	Instruction     *string `json:"instruction"`
 	ReasoningEffort *string `json:"reasoningEffort"`
 }
 
@@ -130,7 +132,17 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 		Model:           optionalStringValue(req.Model),
 		SmallModel:      optionalStringValue(req.SmallModel),
 		SubagentModel:   optionalStringValue(req.SubagentModel),
+		Instruction:     optionalStringValue(req.Instruction),
 		ReasoningEffort: config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort)),
+	}
+	if err := config.ValidateInstruction(profile.Instruction); err != nil {
+		a.adminConfigMu.Unlock()
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "claude_profile_instruction_invalid",
+			Message: "claude profile instruction is invalid",
+			Details: err.Error(),
+		})
+		return
 	}
 	if index := config.IndexOfClaudeProfile(updated.Claude.Profiles, profileID); index >= 0 {
 		current := updated.Claude.Profiles[index]
@@ -285,11 +297,23 @@ func (a *App) handleClaudeProfileUpdate(w http.ResponseWriter, r *http.Request) 
 	if req.SubagentModel != nil {
 		current.SubagentModel = optionalStringValue(req.SubagentModel)
 	}
+	if req.Instruction != nil {
+		current.Instruction = optionalStringValue(req.Instruction)
+	}
 	if req.AuthToken != nil {
 		current.AuthToken = optionalStringValue(req.AuthToken)
 	}
 	if req.ReasoningEffort != nil {
 		current.ReasoningEffort = config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort))
+	}
+	if err := config.ValidateInstruction(current.Instruction); err != nil {
+		a.adminConfigMu.Unlock()
+		writeAPIError(w, http.StatusBadRequest, apiError{
+			Code:    "claude_profile_instruction_invalid",
+			Message: "claude profile instruction is invalid",
+			Details: err.Error(),
+		})
+		return
 	}
 	preferenceStore, err := a.profileContextPreferenceStore()
 	if err != nil {
@@ -520,6 +544,7 @@ func adminClaudeProfileViewFromConfig(profile config.ClaudeProfile) adminClaudeP
 		Model:           strings.TrimSpace(profile.Model),
 		SmallModel:      strings.TrimSpace(profile.SmallModel),
 		SubagentModel:   strings.TrimSpace(profile.SubagentModel),
+		Instruction:     strings.TrimSpace(profile.Instruction),
 		ReasoningEffort: config.NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
 		BuiltIn:         profile.BuiltIn,
 		Persisted:       !profile.BuiltIn,

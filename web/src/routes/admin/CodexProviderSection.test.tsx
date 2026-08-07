@@ -128,6 +128,7 @@ describe("CodexProviderSection", () => {
       model: "gpt-5.5",
       reviewModel: "gpt-5.5-review",
       subagentModel: "",
+      instruction: "",
       reasoningEffort: "xhigh",
     });
     const preferenceCall = calls.find(
@@ -242,6 +243,7 @@ describe("CodexProviderSection", () => {
       model: "gpt-5.5",
       reviewModel: "",
       subagentModel: "",
+      instruction: "",
       reasoningEffort: "high",
     });
 
@@ -595,6 +597,94 @@ describe("CodexProviderSection", () => {
     expect(updateCall).toBeDefined();
     expect(JSON.parse(String(updateCall?.init?.body))).toMatchObject({
       subagentModel: "gpt-5.5-nano-2",
+    });
+  });
+
+  it("saves and restores instruction for API profiles", async () => {
+    const user = userEvent.setup();
+    const initialProfiles = [
+      makeCodexProfile(),
+      makeCodexProfile({
+        id: "team-proxy",
+        name: "Team Proxy",
+        kind: "api",
+        etag: '"codex-profile-definition:team-proxy:7"',
+        baseURL: "https://api.example.com/v1",
+        hasAPIKey: true,
+        model: "gpt-5.5",
+        instruction: "你是一个严谨的工程师。",
+        reasoningEffort: "high",
+        editable: true,
+        deletable: true,
+        contextEditable: true,
+        contextPreference: {
+          profileID: "team-proxy",
+          revision: 3,
+          etag: '"codex-context-preference:team-proxy:3"',
+          mode: "codex_default",
+        },
+      }),
+    ];
+    const { calls } = installMockFetch({
+      "/api/admin/codex/profiles/team-proxy": (call) => {
+        const body = JSON.parse(String(call.init?.body ?? "{}"));
+        return {
+          body: {
+            profile: makeCodexProfile({
+              id: "team-proxy",
+              name: body.name,
+              kind: "api",
+              etag: '"codex-profile-definition:team-proxy:8"',
+              baseURL: body.baseURL,
+              hasAPIKey: true,
+              model: body.model,
+              instruction: body.instruction,
+              reasoningEffort: body.reasoningEffort,
+              editable: true,
+              deletable: true,
+              contextEditable: true,
+              contextPreference: {
+                profileID: "team-proxy",
+                revision: 3,
+                etag: '"codex-context-preference:team-proxy:3"',
+                mode: "codex_default",
+              },
+            }),
+          },
+        };
+      },
+    });
+
+    function Harness() {
+      const [profiles, setProfiles] = useState(initialProfiles);
+      return (
+        <CodexProviderSection
+          providers={profiles}
+          loadError=""
+          setProviders={setProfiles}
+          onReload={async () => {}}
+        />
+      );
+    }
+
+    render(<Harness />);
+    await user.click(await screen.findByRole("button", { name: /Team Proxy/ }));
+
+    const instructionInput = screen.getByLabelText(/指令/);
+    expect(instructionInput).toHaveValue("你是一个严谨的工程师。");
+    expect(instructionInput).toHaveAttribute("maxlength", "16000");
+    await user.clear(instructionInput);
+    await user.type(instructionInput, "你是一个乐于助人的助手。");
+    expect(screen.getByText(/\/16000/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+    expect(await screen.findByText("Codex 配置已保存。")).toBeInTheDocument();
+    const updateCall = calls.find(
+      (call) => call.method === "PUT" && call.path === "/api/admin/codex/profiles/team-proxy",
+    );
+    expect(updateCall).toBeDefined();
+    expect(JSON.parse(String(updateCall?.init?.body))).toMatchObject({
+      instruction: "你是一个乐于助人的助手。",
     });
   });
 });

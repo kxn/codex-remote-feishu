@@ -3,6 +3,7 @@ package codexcatalog
 import (
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -103,6 +104,81 @@ func TestBuildManagedModelCatalogReusesDeepSeekEntry(t *testing.T) {
 	}
 	if len(catalog.Models) != 1 || catalog.Models[0].Slug != "deepseek-v4-flash" || catalog.Models[0].DisplayName != "DeepSeek-V4-Flash" {
 		t.Fatalf("expected embedded DeepSeek entry reuse, got %#v", catalog.Models)
+	}
+}
+
+func TestBuildManagedModelCatalogWithInstructionAppendsToAllModels(t *testing.T) {
+	raw := BuildManagedModelCatalogWithInstruction([]string{"gpt-5.6", "gpt-5.6-nano"}, "你是一个严谨的工程师。")
+	if len(raw) == 0 {
+		t.Fatal("expected managed model catalog JSON with instruction")
+	}
+	var catalog struct {
+		Models []struct {
+			Slug          string `json:"slug"`
+			ModelMessages *struct {
+				InstructionsTemplate string `json:"instructions_template"`
+			} `json:"model_messages"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatalf("BuildManagedModelCatalogWithInstruction produced invalid JSON: %v", err)
+	}
+	if len(catalog.Models) != 2 {
+		t.Fatalf("expected two managed models, got %#v", catalog.Models)
+	}
+	for _, model := range catalog.Models {
+		if model.ModelMessages == nil {
+			t.Fatalf("model %s missing model_messages", model.Slug)
+		}
+		template := model.ModelMessages.InstructionsTemplate
+		if !strings.HasPrefix(template, "You are Codex") {
+			t.Fatalf("model %s lost base instructions prefix", model.Slug)
+		}
+		if !strings.HasSuffix(template, "\n\n你是一个严谨的工程师。") {
+			t.Fatalf("model %s instruction suffix = %q, want appended role prompt", model.Slug, template)
+		}
+	}
+}
+
+func TestBuildManagedModelCatalogWithInstructionEmptyKeepsTemplateUnchanged(t *testing.T) {
+	models := []string{"gpt-5.6", "gpt-5.6-nano"}
+	plain := BuildManagedModelCatalog(models)
+	withEmpty := BuildManagedModelCatalogWithInstruction(models, "   ")
+	if string(plain) != string(withEmpty) {
+		t.Fatal("empty instruction must not modify the managed catalog")
+	}
+}
+
+func TestAppendCatalogInstructionPreservesFullDeepSeekCatalog(t *testing.T) {
+	raw := AppendCatalogInstruction(DeepSeekModelCatalogJSON(), "你是一个乐于助人的助手。")
+	if len(raw) == 0 {
+		t.Fatal("expected DeepSeek catalog JSON with instruction")
+	}
+	var catalog struct {
+		Models []struct {
+			Slug          string `json:"slug"`
+			ContextWindow int    `json:"context_window"`
+			ModelMessages *struct {
+				InstructionsTemplate string `json:"instructions_template"`
+			} `json:"model_messages"`
+		} `json:"models"`
+	}
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatalf("AppendCatalogInstruction produced invalid JSON: %v", err)
+	}
+	if len(catalog.Models) != 2 {
+		t.Fatalf("expected two DeepSeek models, got %#v", catalog.Models)
+	}
+	for _, model := range catalog.Models {
+		if model.ContextWindow != 1048576 {
+			t.Fatalf("model %s context window changed: %#v", model.Slug, model)
+		}
+		if model.ModelMessages == nil {
+			t.Fatalf("model %s missing model_messages", model.Slug)
+		}
+		if !strings.HasSuffix(model.ModelMessages.InstructionsTemplate, "\n\n你是一个乐于助人的助手。") {
+			t.Fatalf("model %s instruction suffix = %q, want appended role prompt", model.Slug, model.ModelMessages.InstructionsTemplate)
+		}
 	}
 }
 

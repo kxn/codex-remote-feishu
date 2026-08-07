@@ -26,6 +26,7 @@ const (
 	ClaudeDisableThinkingEnv     = "CLAUDE_CODE_DISABLE_THINKING"
 	ClaudeRuntimeProfileIDEnv    = "CODEX_REMOTE_CLAUDE_PROFILE_ID"
 	ClaudeRuntimeSettingsJSONEnv = "CODEX_REMOTE_CLAUDE_SETTINGS_JSON"
+	ClaudeAppendSystemPromptEnv  = "CODEX_REMOTE_CLAUDE_APPEND_SYSTEM_PROMPT"
 )
 
 var claudeProfileLaunchEnvKeys = []string{
@@ -34,6 +35,7 @@ var claudeProfileLaunchEnvKeys = []string{
 	ClaudeModelEnv,
 	ClaudeDefaultHaikuModelEnv,
 	ClaudeSubagentModelEnv,
+	ClaudeAppendSystemPromptEnv,
 }
 
 type ClaudeSettings struct {
@@ -49,6 +51,7 @@ type ClaudeProfileConfig struct {
 	Model           string `json:"model,omitempty"`
 	SmallModel      string `json:"smallModel,omitempty"`
 	SubagentModel   string `json:"subagentModel,omitempty"`
+	Instruction     string `json:"instruction,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
 }
 
@@ -158,6 +161,7 @@ func NormalizeClaudeProfiles(profiles []ClaudeProfileConfig) []ClaudeProfileConf
 			Model:           strings.TrimSpace(profile.Model),
 			SmallModel:      strings.TrimSpace(profile.SmallModel),
 			SubagentModel:   strings.TrimSpace(profile.SubagentModel),
+			Instruction:     strings.TrimSpace(profile.Instruction),
 			ReasoningEffort: NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
 		}
 		current.ID = nextClaudeProfileID(current.ID, current.Name, used)
@@ -219,7 +223,11 @@ func ApplyClaudeProfileLaunchEnv(baseEnv []string, profile ClaudeProfile) ([]str
 		return env, nil
 	}
 	env = removeEnvKeys(env, claudeProfileLaunchEnvKeys...)
-	return ApplyClaudeRuntimeSettingsEnv(env, ClaudeProfileRuntimeSettings(profile)), nil
+	env = ApplyClaudeRuntimeSettingsEnv(env, ClaudeProfileRuntimeSettings(profile))
+	if value := strings.TrimSpace(profile.Instruction); value != "" {
+		env = upsertEnvValue(env, ClaudeAppendSystemPromptEnv, value)
+	}
+	return env, nil
 }
 
 func ApplyClaudeReasoningLaunchEnv(baseEnv []string, effort string) []string {

@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -261,6 +262,84 @@ func TestAdminClaudeProfilesSubagentModelRoundTrip(t *testing.T) {
 			t.Fatalf("listed SubagentModel = %q, want %q", profile.SubagentModel, "mimo-v2.5-mini-2")
 		}
 	}
+}
+
+func TestAdminClaudeProfilesInstructionRoundTripAndLimit(t *testing.T) {
+	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/claude/profiles", `{
+  "name":"DevSeek",
+  "baseURL":"https://proxy.internal/v1",
+  "model":"mimo-v2.5-pro",
+  "instruction":"你是一个严谨的工程师。"
+}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var created claudeProfileResponse
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.Profile.Instruction != "你是一个严谨的工程师。" {
+		t.Fatalf("created Instruction = %q, want role prompt", created.Profile.Instruction)
+	}
+
+	list := performAdminRequest(t, app, http.MethodGet, "/api/admin/claude/profiles", "")
+	if list.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", list.Code, list.Body.String())
+	}
+	var listed claudeProfilesResponse
+	if err := json.NewDecoder(list.Body).Decode(&listed); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	found := false
+	for _, profile := range listed.Profiles {
+		if profile.ID == created.Profile.ID {
+			found = true
+			if profile.Instruction != "你是一个严谨的工程师。" {
+				t.Fatalf("listed Instruction = %q, want role prompt", profile.Instruction)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("listed profiles missing created profile: %#v", listed.Profiles)
+	}
+
+	clear := performAdminRequest(t, app, http.MethodPut, "/api/admin/claude/profiles/"+created.Profile.ID, `{
+  "name":"DevSeek",
+  "baseURL":"https://proxy.internal/v1",
+  "model":"mimo-v2.5-pro",
+  "instruction":""
+}`)
+	if clear.Code != http.StatusOK {
+		t.Fatalf("clear status = %d body=%s", clear.Code, clear.Body.String())
+	}
+	var cleared claudeProfileResponse
+	if err := json.NewDecoder(clear.Body).Decode(&cleared); err != nil {
+		t.Fatalf("decode clear: %v", err)
+	}
+	if cleared.Profile.Instruction != "" {
+		t.Fatalf("cleared Instruction = %q, want empty", cleared.Profile.Instruction)
+	}
+
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	if len(loaded.Config.Claude.Profiles) != 1 || loaded.Config.Claude.Profiles[0].Instruction != "" {
+		t.Fatalf("persisted profiles = %#v, want cleared instruction", loaded.Config.Claude.Profiles)
+	}
+
+	oversized := strings.Repeat("a", config.InstructionMaxChars+1)
+	rejected := performAdminRequest(t, app, http.MethodPost, "/api/admin/claude/profiles", `{
+  "name":"Too Long",
+  "baseURL":"https://proxy.internal/v1",
+  "instruction":`+strconv.Quote(oversized)+`
+}`)
+	if rejected.Code != http.StatusBadRequest {
+		t.Fatalf("oversized create status = %d body=%s", rejected.Code, rejected.Body.String())
+	}
+	assertAdminAPIErrorCode(t, rejected, "claude_profile_instruction_invalid")
 }
 
 func TestAdminClaudeProfileNameRequired(t *testing.T) {

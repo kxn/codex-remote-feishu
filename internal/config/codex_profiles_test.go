@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -168,6 +169,87 @@ func TestPrepareCodexAPIProfileCreateAndUpdateCarriesSubagentModel(t *testing.T)
 	}
 	if current, _ := CurrentCodexAPIProfile(unchanged); current.SubagentModel != "weak-model-2" {
 		t.Fatalf("unchanged SubagentModel = %q, want preserved %q", current.SubagentModel, "weak-model-2")
+	}
+}
+
+func TestPrepareCodexAPIProfileCreateAndUpdateCarriesInstruction(t *testing.T) {
+	created, err := PrepareCodexAPIProfileCreate(nil, CodexAPIProfileInput{
+		Name:            "Team Proxy",
+		BaseURL:         "https://proxy.example/v1",
+		APIKey:          "secret",
+		Model:           "gpt-5.5",
+		ReasoningEffort: "high",
+		Instruction:     "你是一个乐于助人的助手。",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileCreate: %v", err)
+	}
+	createdProfile, ok := CurrentCodexAPIProfile(created)
+	if !ok {
+		t.Fatal("CurrentCodexAPIProfile() did not return created revision")
+	}
+	if createdProfile.Instruction != "你是一个乐于助人的助手。" {
+		t.Fatalf("created Instruction = %q, want role prompt", createdProfile.Instruction)
+	}
+
+	updated, changed, err := PrepareCodexAPIProfileUpdate(created, CodexAPIProfileInput{
+		Name:            "Team Proxy",
+		BaseURL:         "https://proxy.example/v1",
+		APIKey:          "secret",
+		Model:           "gpt-5.5",
+		ReasoningEffort: "high",
+		Instruction:     "你是一个严谨的工程师。",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileUpdate: %v", err)
+	}
+	if !changed {
+		t.Fatal("PrepareCodexAPIProfileUpdate() expected a change for new instruction")
+	}
+	updatedProfile, ok := CurrentCodexAPIProfile(updated)
+	if !ok {
+		t.Fatal("CurrentCodexAPIProfile() did not return updated revision")
+	}
+	if updatedProfile.Instruction != "你是一个严谨的工程师。" {
+		t.Fatalf("updated Instruction = %q, want new role prompt", updatedProfile.Instruction)
+	}
+
+	unchanged, changed, err := PrepareCodexAPIProfileUpdate(updated, CodexAPIProfileInput{
+		Name:            "Team Proxy",
+		BaseURL:         "https://proxy.example/v1",
+		APIKey:          "secret",
+		Model:           "gpt-5.5",
+		ReasoningEffort: "high",
+		Instruction:     "你是一个严谨的工程师。",
+	})
+	if err != nil {
+		t.Fatalf("PrepareCodexAPIProfileUpdate unchanged: %v", err)
+	}
+	if changed {
+		t.Fatal("PrepareCodexAPIProfileUpdate() expected no change for identical input")
+	}
+	if current, _ := CurrentCodexAPIProfile(unchanged); current.Instruction != "你是一个严谨的工程师。" {
+		t.Fatalf("unchanged Instruction = %q, want preserved value", current.Instruction)
+	}
+}
+
+func TestPrepareCodexAPIProfileRejectsInvalidInstruction(t *testing.T) {
+	base := CodexAPIProfileInput{
+		Name:            "Team Proxy",
+		BaseURL:         "https://proxy.example/v1",
+		APIKey:          "secret",
+		Model:           "gpt-5.5",
+		ReasoningEffort: "high",
+	}
+	for _, mutate := range []func(*CodexAPIProfileInput){
+		func(input *CodexAPIProfileInput) { input.Instruction = strings.Repeat("a", InstructionMaxChars+1) },
+		func(input *CodexAPIProfileInput) { input.Instruction = "bad\x00instruction" },
+	} {
+		input := base
+		mutate(&input)
+		if _, err := PrepareCodexAPIProfileCreate(nil, input); err == nil {
+			t.Fatalf("PrepareCodexAPIProfileCreate accepted invalid instruction %q", input.Instruction)
+		}
 	}
 }
 
