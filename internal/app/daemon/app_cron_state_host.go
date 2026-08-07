@@ -8,6 +8,8 @@ import (
 	"time"
 
 	cronrt "github.com/kxn/codex-remote-feishu/internal/app/cronruntime"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
 
 func (a *App) cronStatePath() string {
@@ -116,7 +118,7 @@ func (a *App) writeCronStateLocked() error {
 	path := a.cronStatePath()
 	a.cronRuntime.stateIOMu.Lock()
 	a.mu.Unlock()
-	err := writeJSONFileAtomic(path, snapshot, 0o600)
+	err := toolservicecontract.WriteJSONFileAtomic(path, snapshot, 0o600)
 	a.cronRuntime.stateIOMu.Unlock()
 	a.mu.Lock()
 	return err

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
 
 func (a *App) applyClaudeRuntimeSettingsOverlay(baseArgs, baseEnv []string) ([]string, []string) {
@@ -53,7 +54,7 @@ func (a *App) writeClaudeRuntimeSettingsOverlay(settings config.ClaudeRuntimeSet
 	if err != nil {
 		return "", err
 	}
-	if err := writeJSONFileAtomic(path, settings, 0o600); err != nil {
+	if err := toolservicecontract.WriteJSONFileAtomic(path, settings, 0o600); err != nil {
 		return "", err
 	}
 	return path, nil

@@ -3,7 +3,6 @@ package daemon
 import (
 	"context"
 	"crypto/subtle"
-	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
 
 const feishuSurfaceResolverToolName = "feishu_resolve_surface_context"
@@ -34,15 +34,10 @@ type toolDefinition struct {
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
-type toolError struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Retryable bool   `json:"retryable,omitempty"`
-}
-
-type toolErrorPayload struct {
-	Error toolError `json:"error"`
-}
+// toolError 与 toolErrorPayload 是 MCP 工具调用错误信封的 daemon 侧别名，
+// 定义单一来源在 internal/core/toolservicecontract。
+type toolError = toolservicecontract.Error
+type toolErrorPayload = toolservicecontract.ErrorPayload
 
 type resolvedToolSurfaceContext struct {
 	SurfaceSessionID   string
@@ -141,7 +136,7 @@ func (a *App) requireToolAuth(next http.Handler) http.Handler {
 			})
 			return
 		}
-		instanceID := strings.TrimSpace(r.URL.Query().Get(toolCallerInstanceIDQueryParam))
+		instanceID := strings.TrimSpace(r.URL.Query().Get(toolservicecontract.CallerInstanceIDQueryParam))
 		next.ServeHTTP(w, r.WithContext(withToolCallerInstanceID(r.Context(), instanceID)))
 	})
 }
@@ -442,37 +437,4 @@ func (a *App) resolveToolSurfaceContextLocked(surfaceID string) (resolvedToolSur
 
 func writeToolError(w http.ResponseWriter, status int, apiErr toolError) {
 	writeJSON(w, status, toolErrorPayload{Error: apiErr})
-}
-
-func writeJSONFileAtomic(path string, payload any, mode os.FileMode) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(mode); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
 }

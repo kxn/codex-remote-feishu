@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
 
 const workspaceSurfaceContextDir = ".codex-remote"
@@ -102,7 +103,7 @@ func writeWorkspaceSurfaceContext(workspaceRoot string, payload workspaceSurface
 	if !info.IsDir() {
 		return nil
 	}
-	return writeJSONFileAtomic(workspaceSurfaceContextPath(workspaceRoot), payload, 0o600)
+	return toolservicecontract.WriteJSONFileAtomic(workspaceSurfaceContextPath(workspaceRoot), payload, 0o600)
 }
 
 func removeWorkspaceSurfaceContext(workspaceRoot string) error {

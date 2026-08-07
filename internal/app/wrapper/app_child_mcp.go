@@ -1,28 +1,20 @@
 package wrapper
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
 
 const (
 	feishuMCPServerID      = "codex_remote_feishu"
 	feishuMCPBearerEnvName = "CODEX_REMOTE_FEISHU_MCP_BEARER"
-	feishuMCPInstanceIDKey = "codex_remote_instance_id"
 )
-
-type childToolServiceInfo struct {
-	URL       string `json:"url"`
-	Token     string `json:"token"`
-	TokenType string `json:"tokenType"`
-}
 
 func (a *App) buildCodexChildLaunch(baseArgs []string) ([]string, []string) {
 	args := append([]string{}, baseArgs...)
@@ -64,29 +56,29 @@ func (a *App) applyClaudeFeishuMCPPublication(baseArgs, baseEnv []string) ([]str
 	return args, env
 }
 
-func (a *App) readFeishuMCPPublicationInfo() (childToolServiceInfo, bool) {
+func (a *App) readFeishuMCPPublicationInfo() (toolservicecontract.ServiceInfo, bool) {
 	if !a.feishuMCPPublicationEligible() {
-		return childToolServiceInfo{}, false
+		return toolservicecontract.ServiceInfo{}, false
 	}
 
-	info, err := readChildToolServiceInfo(a.config.RuntimePaths.ToolServiceFile)
+	info, err := toolservicecontract.ReadServiceInfo(a.config.RuntimePaths.ToolServiceFile)
 	if err != nil {
 		a.debugf("feishu mcp publication skipped: read state failed path=%s err=%v", a.config.RuntimePaths.ToolServiceFile, err)
-		return childToolServiceInfo{}, false
+		return toolservicecontract.ServiceInfo{}, false
 	}
 	if strings.TrimSpace(info.URL) == "" || strings.TrimSpace(info.Token) == "" {
 		a.debugf("feishu mcp publication skipped: incomplete state path=%s", a.config.RuntimePaths.ToolServiceFile)
-		return childToolServiceInfo{}, false
+		return toolservicecontract.ServiceInfo{}, false
 	}
 	urlWithCaller, ok := appendToolCallerInstanceParam(info.URL, a.config.InstanceID)
 	if !ok {
 		a.debugf("feishu mcp publication skipped: caller identity unavailable instance=%s url=%s", a.config.InstanceID, info.URL)
-		return childToolServiceInfo{}, false
+		return toolservicecontract.ServiceInfo{}, false
 	}
 	info.URL = urlWithCaller
 	if tokenType := strings.TrimSpace(info.TokenType); tokenType != "" && !strings.EqualFold(tokenType, "bearer") {
 		a.debugf("feishu mcp publication skipped: unsupported token type=%s", tokenType)
-		return childToolServiceInfo{}, false
+		return toolservicecontract.ServiceInfo{}, false
 	}
 	return info, true
 }
@@ -110,12 +102,12 @@ func appendToolCallerInstanceParam(rawURL, instanceID string) (string, bool) {
 		return "", false
 	}
 	values := parsed.Query()
-	values.Set(feishuMCPInstanceIDKey, instanceID)
+	values.Set(toolservicecontract.CallerInstanceIDQueryParam, instanceID)
 	parsed.RawQuery = values.Encode()
 	return parsed.String(), true
 }
 
-func (a *App) writeClaudeFeishuMCPConfig(info childToolServiceInfo) (string, error) {
+func (a *App) writeClaudeFeishuMCPConfig(info toolservicecontract.ServiceInfo) (string, error) {
 	path := a.claudeFeishuMCPConfigPath()
 	if strings.TrimSpace(path) == "" {
 		return "", fmt.Errorf("claude mcp config path is empty")
@@ -131,7 +123,7 @@ func (a *App) writeClaudeFeishuMCPConfig(info childToolServiceInfo) (string, err
 			},
 		},
 	}
-	if err := writeJSONFileAtomic(path, payload, 0o600); err != nil {
+	if err := toolservicecontract.WriteJSONFileAtomic(path, payload, 0o600); err != nil {
 		return "", err
 	}
 	return path, nil
@@ -145,55 +137,6 @@ func (a *App) claudeFeishuMCPConfigPath() string {
 		return filepath.Join(stateDir, "codex-remote-claude-mcp.json")
 	}
 	return ""
-}
-
-func readChildToolServiceInfo(path string) (childToolServiceInfo, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return childToolServiceInfo{}, fmt.Errorf("tool service state path is empty")
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return childToolServiceInfo{}, err
-	}
-	var info childToolServiceInfo
-	if err := json.Unmarshal(raw, &info); err != nil {
-		return childToolServiceInfo{}, err
-	}
-	return info, nil
-}
-
-func writeJSONFileAtomic(path string, payload any, mode os.FileMode) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return fmt.Errorf("path is empty")
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(mode); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
 }
 
 func upsertEnvValue(env []string, key, value string) []string {
