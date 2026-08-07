@@ -131,14 +131,31 @@ curl_with_localhost_bypass() {
   local url="$1"
   shift || true
 
-  local -a curl_args=(-fsSL)
+  local -a curl_args=(-fSL -S)
   case "${url}" in
     http://127.0.0.1:*|http://localhost:*|https://127.0.0.1:*|https://localhost:*)
       curl_args+=(--noproxy '*')
       ;;
   esac
 
+  # Show progress bar in terminals, stay silent otherwise (piped install).
+  if [[ -t 2 ]]; then
+    curl_args+=(--progress-bar)
+  else
+    curl_args+=(--silent)
+  fi
+
   curl "${curl_args[@]}" "$@" "${url}"
+}
+
+# download_file downloads a URL to a local path with progress reporting.
+download_file() {
+  local url="$1"
+  local output="$2"
+
+  printf '  Downloading...\n' >&2
+  curl_with_localhost_bypass "${url}" -o "${output}"
+  printf '  Download complete.\n' >&2
 }
 
 extract_release_string_field() {
@@ -267,8 +284,11 @@ cleanup() {
 trap cleanup EXIT
 
 archive_path="${tmp_dir}/${asset_name}"
-curl_with_localhost_bypass "${asset_url}" -o "${archive_path}"
+printf 'Installing Codex Remote %s (%s/%s)...\n' "${VERSION}" "${goos}" "${goarch}" >&2
+download_file "${asset_url}" "${archive_path}"
+printf '  Extracting... ' >&2
 tar -xzf "${archive_path}" -C "${tmp_dir}"
+printf 'done.\n' >&2
 
 package_dir="${tmp_dir}/codex-remote-feishu_${VERSION#v}_${goos}_${goarch}"
 if [[ ! -d "${package_dir}" ]]; then
