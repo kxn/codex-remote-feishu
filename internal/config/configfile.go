@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -350,7 +351,7 @@ func defaultRelayServerURL(port int) string {
 	if port <= 0 {
 		port = defaultRelayListenPort
 	}
-	return fmt.Sprintf("ws://127.0.0.1:%d/ws/agent", port)
+	return fmt.Sprintf("ws://127.0.0.1:%d%s", port, relayurl.AgentPath)
 }
 
 func feishuAppEnabled(app FeishuAppConfig) bool {

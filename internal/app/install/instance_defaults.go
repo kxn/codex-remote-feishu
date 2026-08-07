@@ -5,6 +5,7 @@ import (
 	"hash/fnv"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -103,5 +104,5 @@ func applyInstanceConfigDefaults(cfg *config.AppConfig, instanceID string, newCo
 }
 
 func relayServerURLForPort(port int) string {
-	return fmt.Sprintf("ws://127.0.0.1:%d/ws/agent", port)
+	return fmt.Sprintf("ws://127.0.0.1:%d%s", port, relayurl.AgentPath)
 }

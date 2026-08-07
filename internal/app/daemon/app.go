@@ -27,6 +27,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
+	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
@@ -273,7 +274,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 	app.relay.SetServerIdentity(serverIdentity)
 
 	relayMux := http.NewServeMux()
-	relayMux.Handle("GET /ws/agent", app.relay)
+	relayMux.Handle("GET "+relayurl.AgentPath, app.relay)
 	relayMux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok\n"))
