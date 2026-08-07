@@ -104,6 +104,7 @@ type CodexProfileSummary struct {
 	Model                  string                   `json:"model,omitempty"`
 	ReviewModel            string                   `json:"reviewModel,omitempty"`
 	SubagentModel          string                   `json:"subagentModel,omitempty"`
+	Instruction            string                   `json:"instruction,omitempty"`
 	ReasoningEffort        string                   `json:"reasoningEffort,omitempty"`
 	StatusCode             string                   `json:"statusCode,omitempty"`
 	Available              bool                     `json:"available"`

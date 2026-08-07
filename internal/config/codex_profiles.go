@@ -38,6 +38,7 @@ type CodexAPIProfileSecretConfig struct {
 	Model                string           `json:"model,omitempty"`
 	ReviewModel          string           `json:"reviewModel,omitempty"`
 	SubagentModel        string           `json:"subagentModel,omitempty"`
+	Instruction          string           `json:"instruction,omitempty"`
 	ReasoningEffort      string           `json:"reasoningEffort,omitempty"`
 }
 
@@ -54,6 +55,7 @@ type CodexAPIProfileInput struct {
 	Model           string
 	ReviewModel     string
 	SubagentModel   string
+	Instruction     string
 	ReasoningEffort string
 }
 
@@ -157,6 +159,7 @@ func PrepareCodexAPIProfileCreate(existing []CodexAPIProfileRecord, input CodexA
 		Model:                input.Model,
 		ReviewModel:          input.ReviewModel,
 		SubagentModel:        input.SubagentModel,
+		Instruction:          input.Instruction,
 		ReasoningEffort:      input.ReasoningEffort,
 	}
 	return CodexAPIProfileRecord{ID: id, CurrentRevision: 1, Revisions: []CodexAPIProfileSecretConfig{profile}}, nil
@@ -175,7 +178,8 @@ func PrepareCodexAPIProfileUpdate(record CodexAPIProfileRecord, input CodexAPIPr
 		return record, false, err
 	}
 	if current.Name == input.Name && current.BaseURL == input.BaseURL && current.APIKey == input.APIKey &&
-		current.Model == input.Model && current.ReviewModel == input.ReviewModel && current.SubagentModel == input.SubagentModel && current.ReasoningEffort == input.ReasoningEffort {
+		current.Model == input.Model && current.ReviewModel == input.ReviewModel && current.SubagentModel == input.SubagentModel &&
+		current.Instruction == input.Instruction && current.ReasoningEffort == input.ReasoningEffort {
 		return record, false, nil
 	}
 	next := current
@@ -185,6 +189,7 @@ func PrepareCodexAPIProfileUpdate(record CodexAPIProfileRecord, input CodexAPIPr
 	next.Model = input.Model
 	next.ReviewModel = input.ReviewModel
 	next.SubagentModel = input.SubagentModel
+	next.Instruction = input.Instruction
 	next.ReasoningEffort = input.ReasoningEffort
 	if current.APIKey != input.APIKey {
 		next.APIKey = input.APIKey
@@ -233,6 +238,7 @@ func NormalizeCodexAPIProfileRecords(records []CodexAPIProfileRecord) []CodexAPI
 			revision.Model = strings.TrimSpace(revision.Model)
 			revision.ReviewModel = strings.TrimSpace(revision.ReviewModel)
 			revision.SubagentModel = strings.TrimSpace(revision.SubagentModel)
+			revision.Instruction = strings.TrimSpace(revision.Instruction)
 			revision.ReasoningEffort = strings.TrimSpace(revision.ReasoningEffort)
 			revisions = append(revisions, revision)
 		}
@@ -333,6 +339,7 @@ func validateCodexAPIProfileInput(input CodexAPIProfileInput, requireKey bool) (
 	input.Model = strings.TrimSpace(input.Model)
 	input.ReviewModel = strings.TrimSpace(input.ReviewModel)
 	input.SubagentModel = strings.TrimSpace(input.SubagentModel)
+	input.Instruction = strings.TrimSpace(input.Instruction)
 	input.ReasoningEffort = strings.TrimSpace(input.ReasoningEffort)
 	if input.Name == "" || utf8.RuneCountInString(input.Name) > 64 || hasUnsafeProfileText(input.Name) {
 		return input, fmt.Errorf("codex profile name is invalid")
@@ -351,6 +358,9 @@ func validateCodexAPIProfileInput(input CodexAPIProfileInput, requireKey bool) (
 	}
 	if len(input.SubagentModel) > 256 || hasUnsafeProfileText(input.SubagentModel) {
 		return input, fmt.Errorf("codex profile subagentModel is invalid")
+	}
+	if err := ValidateInstruction(input.Instruction); err != nil {
+		return input, fmt.Errorf("codex profile instruction is invalid: %w", err)
 	}
 	if input.ReasoningEffort == "" || len(input.ReasoningEffort) > 64 || hasUnsafeProfileText(input.ReasoningEffort) {
 		return input, fmt.Errorf("codex profile reasoningEffort is invalid")
@@ -373,6 +383,7 @@ func validateStoredCodexAPIProfileRevision(revision CodexAPIProfileSecretConfig)
 		len(revision.Model) > 256 || hasUnsafeProfileText(revision.Model) ||
 		len(revision.ReviewModel) > 256 || hasUnsafeProfileText(revision.ReviewModel) ||
 		len(revision.SubagentModel) > 256 || hasUnsafeProfileText(revision.SubagentModel) ||
+		ValidateInstruction(revision.Instruction) != nil ||
 		len(revision.ReasoningEffort) > 64 || hasUnsafeProfileText(revision.ReasoningEffort) ||
 		len(revision.APIKey) > 16*1024 || strings.ContainsAny(revision.APIKey, "\x00\r\n") {
 		return fmt.Errorf("invalid field")

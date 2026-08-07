@@ -36,6 +36,7 @@ type CodexProviderDraft = {
   model: string;
   reviewModel: string;
   subagentModel: string;
+  instruction: string;
   reasoningEffort: string;
   contextMode: string;
 };
@@ -50,6 +51,7 @@ type CodexProviderSectionProps = {
 const newCodexProviderID = "new-codex-profile";
 const codexReasoningOptions = ["low", "medium", "high", "xhigh"] as const;
 const codexContextModeDefault = "codex_default";
+const codexInstructionMaxChars = 16000;
 
 export function CodexProviderSection(props: CodexProviderSectionProps) {
   const { providers, loadError, setProviders, onReload } = props;
@@ -482,6 +484,25 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
               ))}
             </datalist>
           </label>
+          <label className="field form-grid-span-2 stack-top">
+            <span>指令 / 角色提示词（可选）</span>
+            <textarea
+              aria-label="指令 / 角色提示词（可选）"
+              maxLength={codexInstructionMaxChars}
+              placeholder="用于预设代理的角色与行为，留空不注入"
+              rows={6}
+              value={draft.instruction}
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  instruction: event.target.value,
+                }))
+              }
+            />
+            <span className="field-hint">
+              {draft.instruction.length}/{codexInstructionMaxChars}
+            </span>
+          </label>
         </div>
       ) : (
         <div className="hero-card">
@@ -522,6 +543,7 @@ function createEmptyDraft(): CodexProviderDraft {
     model: "",
     reviewModel: "",
     subagentModel: "",
+    instruction: "",
     reasoningEffort: "",
     contextMode: codexContextModeDefault,
   };
@@ -535,6 +557,7 @@ function createDraftFromProvider(provider: CodexProfileSummary): CodexProviderDr
     model: provider.model?.trim() || "",
     reviewModel: provider.reviewModel?.trim() || "",
     subagentModel: provider.subagentModel?.trim() || "",
+    instruction: provider.instruction?.trim() || "",
     reasoningEffort: normalizeCodexReasoningEffort(provider.reasoningEffort),
     contextMode: contextMode(provider),
   };
@@ -563,6 +586,9 @@ function validateDraft(
   if (!draft.reasoningEffort.trim()) {
     return "请填写推理强度。";
   }
+  if (draft.instruction.length > codexInstructionMaxChars) {
+    return `指令最多 ${codexInstructionMaxChars} 字符。`;
+  }
   return "";
 }
 
@@ -574,6 +600,7 @@ function buildCreatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest
     model: draft.model.trim(),
     reviewModel: draft.reviewModel.trim(),
     subagentModel: draft.subagentModel.trim(),
+    instruction: draft.instruction.trim(),
     reasoningEffort: normalizeCodexReasoningEffort(draft.reasoningEffort),
   };
 }
@@ -585,6 +612,7 @@ function buildUpdatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest
     model: draft.model.trim(),
     reviewModel: draft.reviewModel.trim(),
     subagentModel: draft.subagentModel.trim(),
+    instruction: draft.instruction.trim(),
     reasoningEffort: normalizeCodexReasoningEffort(draft.reasoningEffort),
   };
   if (draft.apiKey) {

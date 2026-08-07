@@ -148,6 +148,7 @@ describe("ClaudeProfileSection", () => {
       model: "mimo-v2.6",
       smallModel: "mimo-v2.6-mini",
       subagentModel: "",
+      instruction: "",
       reasoningEffort: "max",
     });
     const preferenceCall = calls.find(
@@ -185,6 +186,7 @@ describe("ClaudeProfileSection", () => {
       model: "sonnet-4",
       smallModel: "haiku-4",
       subagentModel: "",
+      instruction: "",
       reasoningEffort: "medium",
     });
   });
@@ -324,6 +326,92 @@ describe("ClaudeProfileSection", () => {
     expect(updateCall).toBeDefined();
     expect(JSON.parse(String(updateCall?.init?.body))).toMatchObject({
       subagentModel: "mimo-v2.5-mini-2",
+    });
+  });
+
+  it("saves and restores instruction for Claude profiles", async () => {
+    const user = userEvent.setup();
+    const initialProfiles = [
+      makeClaudeProfile(),
+      makeClaudeProfile({
+        id: "devseek",
+        name: "DevSeek",
+        authMode: "auth_token",
+        baseURL: "https://api.example.com/v1",
+        hasAuthToken: true,
+        model: "mimo-v2.5-pro",
+        instruction: "你是一个严谨的工程师。",
+        reasoningEffort: "high",
+        builtIn: false,
+        persisted: true,
+        readOnly: false,
+        contextPreference: {
+          profileID: "devseek",
+          revision: 2,
+          etag: '"claude-context-preference:devseek:2"',
+          mode: "default",
+        },
+      }),
+    ];
+    const { calls } = installMockFetch({
+      "/api/admin/claude/profiles/devseek": (call) => {
+        const body = JSON.parse(String(call.init?.body ?? "{}"));
+        return {
+          body: {
+            profile: makeClaudeProfile({
+              id: "devseek",
+              name: body.name,
+              authMode: "auth_token",
+              baseURL: body.baseURL,
+              hasAuthToken: true,
+              model: body.model,
+              instruction: body.instruction,
+              reasoningEffort: body.reasoningEffort,
+              builtIn: false,
+              persisted: true,
+              readOnly: false,
+              contextPreference: {
+                profileID: "devseek",
+                revision: 3,
+                etag: '"claude-context-preference:devseek:3"',
+                mode: "default",
+              },
+            }),
+          },
+        };
+      },
+    });
+
+    function Harness() {
+      const [profiles, setProfiles] = useState(initialProfiles);
+      return (
+        <ClaudeProfileSection
+          profiles={profiles}
+          loadError=""
+          setProfiles={setProfiles}
+          onReload={async () => {}}
+        />
+      );
+    }
+
+    render(<Harness />);
+    await user.click(await screen.findByRole("button", { name: /DevSeek/ }));
+
+    const instructionInput = screen.getByLabelText(/指令/);
+    expect(instructionInput).toHaveValue("你是一个严谨的工程师。");
+    expect(instructionInput).toHaveAttribute("maxlength", "16000");
+    await user.clear(instructionInput);
+    await user.type(instructionInput, "你是一个乐于助人的助手。");
+    expect(screen.getByText(/\/16000/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存修改" }));
+
+    expect(await screen.findByText("Claude 配置已保存。")).toBeInTheDocument();
+    const updateCall = calls.find(
+      (call) => call.method === "PUT" && call.path === "/api/admin/claude/profiles/devseek",
+    );
+    expect(updateCall).toBeDefined();
+    expect(JSON.parse(String(updateCall?.init?.body))).toMatchObject({
+      instruction: "你是一个乐于助人的助手。",
     });
   });
 });

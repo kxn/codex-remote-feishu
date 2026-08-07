@@ -224,6 +224,161 @@ func TestRuntimeResolverProjectsDeepSeekSubagentModelOverride(t *testing.T) {
 	}
 }
 
+func TestRuntimeResolverProjectsInstructionManagedCatalog(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_api_instruction",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "Team API",
+		BaseURL:              "https://proxy.example/v1",
+		APIKey:               "secret",
+		Model:                "gpt-5.6",
+		ReviewModel:          "gpt-5.6-mini",
+		Instruction:          "你是一个严谨的工程师。",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	catalogPath := filepath.Join(managedDir, "managed-models-v1.json")
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
+		t.Fatalf("launch overrides missing instruction managed catalog path: %#v", projection.Launch.CLIOverrides)
+	}
+	if containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("agents.default_subagent_model", "")) {
+		t.Fatalf("instruction alone must not set subagent model: %#v", projection.Launch.CLIOverrides)
+	}
+	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
+		t.Fatalf("expected one instruction managed catalog file, got %#v", projection.Launch.ManagedFiles)
+	}
+	content := string(projection.Launch.ManagedFiles[0].Content)
+	for _, want := range []string{`"slug":"gpt-5.6"`, `"slug":"gpt-5.6-mini"`, "你是一个严谨的工程师。"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("instruction managed catalog missing %q: %s", want, content)
+		}
+	}
+	if strings.Contains(content, profile.APIKey) {
+		t.Fatal("instruction managed catalog leaked API key")
+	}
+}
+
+func TestRuntimeResolverProjectsDeepSeekInstructionManagedCatalog(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_deepseek_instruction",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "DeepSeek",
+		BaseURL:              "https://api.deepseek.com/",
+		APIKey:               "deepseek-secret",
+		Model:                "deepseek-v4-pro",
+		Instruction:          "你是一个乐于助人的助手。",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	catalogPath := filepath.Join(managedDir, "deepseek-models-v1.json")
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
+		t.Fatalf("launch overrides missing DeepSeek instruction catalog path: %#v", projection.Launch.CLIOverrides)
+	}
+	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
+		t.Fatalf("expected one DeepSeek instruction catalog file, got %#v", projection.Launch.ManagedFiles)
+	}
+	content := string(projection.Launch.ManagedFiles[0].Content)
+	for _, want := range []string{"deepseek-v4-flash", "deepseek-v4-pro", "你是一个乐于助人的助手。"} {
+		if !strings.Contains(content, want) {
+			t.Fatalf("DeepSeek instruction catalog missing %q: %s", want, content)
+		}
+	}
+}
+
+func TestRuntimeResolverRejectsInstructionWithoutManagedModelCatalogDir(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_api_instruction",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "Team API",
+		BaseURL:              "https://proxy.example/v1",
+		APIKey:               "secret",
+		Model:                "gpt-5.6",
+		Instruction:          "你是一个严谨的工程师。",
+		ReasoningEffort:      "high",
+	}
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:    fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet: CodexProfileCapabilitySetV1,
+	}
+
+	_, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if got := RuntimeErrorCode(err); got != ErrorManagedModelCatalogMissing {
+		t.Fatalf("error code = %q, want %q (err=%v)", got, ErrorManagedModelCatalogMissing, err)
+	}
+}
+
+func TestRuntimeResolverOmitsInstructionCatalogWhenInstructionEmpty(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_api_plain",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "Team API",
+		BaseURL:              "https://proxy.example/v1",
+		APIKey:               "secret",
+		Model:                "gpt-5.6",
+		ReasoningEffort:      "high",
+	}
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: filepath.Join(t.TempDir(), "catalogs"),
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(projection.Launch.ManagedFiles) != 0 {
+		t.Fatalf("empty instruction must not generate managed files: %#v", projection.Launch.ManagedFiles)
+	}
+	if containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", "")) {
+		t.Fatalf("empty instruction must not inject catalog override: %#v", projection.Launch.CLIOverrides)
+	}
+}
+
 func containsCLIOverride(args []string, override string) bool {
 	for index := 0; index+1 < len(args); index++ {
 		if args[index] == "-c" && args[index+1] == override {

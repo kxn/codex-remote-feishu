@@ -203,6 +203,45 @@ func TestClaudeSubagentModelLaunchEnv(t *testing.T) {
 	}
 }
 
+func TestClaudeInstructionLaunchEnv(t *testing.T) {
+	profile := ClaudeProfile{
+		ClaudeProfileConfig: ClaudeProfileConfig{
+			ID:          "devseek",
+			Name:        "DevSeek",
+			AuthMode:    ClaudeAuthModeAuthToken,
+			Instruction: "你是一个乐于助人的助手。",
+		},
+	}
+	baseEnv := []string{ClaudeAppendSystemPromptEnv + "=old-instruction"}
+
+	updatedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, profile)
+	if err != nil {
+		t.Fatalf("ApplyClaudeProfileLaunchEnv(set): %v", err)
+	}
+	if value, ok := lookupEnvValue(updatedEnv, ClaudeAppendSystemPromptEnv); !ok || value != "你是一个乐于助人的助手。" {
+		t.Fatalf("instruction env = %q, %t; want role prompt", value, ok)
+	}
+
+	profile.Instruction = ""
+	clearedEnv, err := ApplyClaudeProfileLaunchEnv(baseEnv, profile)
+	if err != nil {
+		t.Fatalf("ApplyClaudeProfileLaunchEnv(clear): %v", err)
+	}
+	if _, ok := lookupEnvValue(clearedEnv, ClaudeAppendSystemPromptEnv); ok {
+		t.Fatalf("expected empty instruction to clear env, got %#v", clearedEnv)
+	}
+}
+
+func TestNormalizeClaudeProfilesTrimsInstruction(t *testing.T) {
+	normalized := NormalizeClaudeProfiles([]ClaudeProfileConfig{{
+		Name:        "DevSeek",
+		Instruction: "  \n  你是一个严谨的工程师。\n  ",
+	}})
+	if len(normalized) != 1 || normalized[0].Instruction != "你是一个严谨的工程师。" {
+		t.Fatalf("NormalizeClaudeProfiles() = %#v, want trimmed instruction", normalized)
+	}
+}
+
 func TestApplyClaudeReasoningLaunchEnv(t *testing.T) {
 	baseEnv := []string{
 		ClaudeEffortLevelEnv + "=old-effort",

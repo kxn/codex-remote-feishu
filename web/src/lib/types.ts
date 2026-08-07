@@ -110,6 +110,7 @@ export interface ClaudeProfileSummary {
   model?: string;
   smallModel?: string;
   subagentModel?: string;
+  instruction?: string;
   reasoningEffort?: string;
   builtIn?: boolean;
   persisted: boolean;
@@ -132,6 +133,7 @@ export interface ClaudeProfileWriteRequest {
   model?: string;
   smallModel?: string;
   subagentModel?: string;
+  instruction?: string;
   reasoningEffort?: string;
 }
 
@@ -152,6 +154,7 @@ export interface CodexProfileSummary {
   model?: string;
   reviewModel?: string;
   subagentModel?: string;
+  instruction?: string;
   reasoningEffort?: string;
   statusCode?: string;
   available: boolean;
@@ -195,6 +198,7 @@ export interface CodexProfileWriteRequest {
   model?: string;
   reviewModel?: string;
   subagentModel?: string;
+  instruction?: string;
   reasoningEffort?: string;
 }
 

@@ -1101,6 +1101,7 @@ describe("AdminRoute", () => {
       model: "mimo-v2.5-pro",
       smallModel: "mimo-v2.5-haiku",
       subagentModel: "",
+      instruction: "",
       reasoningEffort: "max",
     });
     expect(await screen.findByRole("button", { name: /DevSeek Updated/ })).toBeInTheDocument();
@@ -1133,6 +1134,7 @@ describe("AdminRoute", () => {
       model: "",
       smallModel: "",
       subagentModel: "",
+      instruction: "",
       reasoningEffort: "high",
     });
   });

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -272,6 +273,91 @@ func TestAdminCodexProfilesSubagentModelRoundTripAndLegacyPreserve(t *testing.T)
 	if secret.SubagentModel != "gpt-5.5-nano-2" {
 		t.Fatalf("legacy update did not preserve SubagentModel: %q", secret.SubagentModel)
 	}
+}
+
+func TestAdminCodexProfilesInstructionRoundTripAndLimit(t *testing.T) {
+	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", `{
+  "name":"Team Proxy",
+  "baseURL":"https://proxy.example/v1",
+  "apiKey":"secret",
+  "model":"gpt-5.5",
+  "reasoningEffort":"high",
+  "instruction":"你是一个严谨的工程师。"
+}`)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.Code, create.Body.String())
+	}
+	var created codexProfileResponse
+	if err := json.NewDecoder(create.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.Profile.Instruction != "你是一个严谨的工程师。" {
+		t.Fatalf("created Instruction = %q, want role prompt", created.Profile.Instruction)
+	}
+
+	update := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/profiles/"+created.Profile.ID, `{
+  "name":"Team Proxy",
+  "baseURL":"https://proxy.example/v1",
+  "model":"gpt-5.5",
+  "reasoningEffort":"high",
+  "instruction":"你是一个乐于助人的助手。"
+}`, created.Profile.ETag)
+	if update.Code != http.StatusOK {
+		t.Fatalf("update status = %d body=%s", update.Code, update.Body.String())
+	}
+	var updated codexProfileResponse
+	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode update: %v", err)
+	}
+	if updated.Profile.Instruction != "你是一个乐于助人的助手。" {
+		t.Fatalf("updated Instruction = %q, want new role prompt", updated.Profile.Instruction)
+	}
+
+	clear := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/profiles/"+created.Profile.ID, `{
+  "name":"Team Proxy",
+  "baseURL":"https://proxy.example/v1",
+  "model":"gpt-5.5",
+  "reasoningEffort":"high",
+  "instruction":""
+}`, updated.Profile.ETag)
+	if clear.Code != http.StatusOK {
+		t.Fatalf("clear status = %d body=%s", clear.Code, clear.Body.String())
+	}
+	var cleared codexProfileResponse
+	if err := json.NewDecoder(clear.Body).Decode(&cleared); err != nil {
+		t.Fatalf("decode clear: %v", err)
+	}
+	if cleared.Profile.Instruction != "" {
+		t.Fatalf("cleared Instruction = %q, want empty", cleared.Profile.Instruction)
+	}
+
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	secret, ok := config.CurrentCodexAPIProfile(loaded.Config.Codex.Profiles[0])
+	if !ok {
+		t.Fatal("CurrentCodexAPIProfile() did not return profile")
+	}
+	if secret.Instruction != "" {
+		t.Fatalf("persisted Instruction = %q, want empty after clear", secret.Instruction)
+	}
+
+	oversized := strings.Repeat("a", config.InstructionMaxChars+1)
+	rejected := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", `{
+  "name":"Too Long",
+  "baseURL":"https://proxy.example/v1",
+  "apiKey":"secret",
+  "model":"gpt-5.5",
+  "reasoningEffort":"high",
+  "instruction":`+strconv.Quote(oversized)+`
+}`)
+	if rejected.Code != http.StatusBadRequest {
+		t.Fatalf("oversized create status = %d body=%s", rejected.Code, rejected.Body.String())
+	}
+	assertAdminAPIErrorCode(t, rejected, "invalid_codex_profile")
 }
 
 func TestAdminCodexProfilesListIncludesOAuthAndAllowsContextPreference(t *testing.T) {
