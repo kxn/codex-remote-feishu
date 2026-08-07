@@ -124,7 +124,7 @@
 本轮按当前 master 代码复核，catalog 漂移已经不是未来风险，而是当前事实：
 
 1. help/menu 静态页仍直接遍历全局 `feishuCommandSpecs`。
-   - `BuildFeishuCommandStaticPageView(...)` 还没有 backend/context 输入。
+   - `BuildFeishuCommandStaticPageViewForContext(...)` 已带 `CatalogContext` 输入（原无 context 的 `BuildFeishuCommandStaticPageView` 已删除）。
 2. 文本命令与菜单回调 parser 仍是无上下文的全局 parser。
    - `ParseFeishuTextAction(...)` 与 `ParseFeishuMenuAction(...)` 只扫描同一套全局 spec。
 3. `/mode` 的实际 parser 与用法文案仍只支持 `normal | vscode`。

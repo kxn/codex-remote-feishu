@@ -264,7 +264,7 @@ internal/app/install/entry.go
 
 示意：
 
-- `daemon.RunMain(ctx) error`
+- `daemon.RunMainWithArgs(ctx, args []string, version, branch string) error`
 - `wrapper.RunMain(ctx, args []string, stdin, stdout, stderr) (int, error)`
 - `install.RunMain(args []string, stdin, stdout, stderr) error`
 

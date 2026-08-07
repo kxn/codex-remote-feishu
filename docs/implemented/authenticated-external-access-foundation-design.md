@@ -267,7 +267,6 @@ type Purpose string
 
 const (
 	PurposePreview Purpose = "preview"
-	PurposeReview  Purpose = "review"
 	PurposeDebug   Purpose = "debug"
 )
 

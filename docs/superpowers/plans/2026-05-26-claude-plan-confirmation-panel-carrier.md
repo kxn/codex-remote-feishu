@@ -80,7 +80,6 @@ Expected: FAIL with missing `StructuredForm` / `StructuredDraftAnswers` types or
 type RequestPromptFormFieldKind string
 
 const (
-	RequestPromptFormFieldText              RequestPromptFormFieldKind = "text"
 	RequestPromptFormFieldSelectStatic      RequestPromptFormFieldKind = "select_static"
 	RequestPromptFormFieldMultiSelectStatic RequestPromptFormFieldKind = "multi_select_static"
 )
