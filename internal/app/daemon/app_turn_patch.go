@@ -204,16 +204,24 @@ func (a *App) handleTurnPatchRequestActionLocked(action control.Action, flow *tu
 			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_expired", "这张修补卡已失效，请重新发送 `/bendtomywill`。"),
 		}
 	}
-	if flow.SurfaceSessionID != "" && strings.TrimSpace(flow.SurfaceSessionID) != strings.TrimSpace(action.SurfaceSessionID) {
-		a.ensureSurfaceRouteForNotice(action)
-		return []eventcontract.Event{
-			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_expired", "这张修补卡已失效，请重新发送 `/bendtomywill`。"),
-		}
-	}
-	if owneridentity.Decide(flow.OwnerUserID, action.ActorUserID, a.service.SurfaceActorUserID(action.SurfaceSessionID)) != owneridentity.DecisionAllow {
+	verdict := owneridentity.VerifyOwnerCard(owneridentity.OwnerCardClaims{
+		FlowID:           flow.FlowID,
+		SurfaceSessionID: flow.SurfaceSessionID,
+		OwnerUserID:      flow.OwnerUserID,
+		ExpiresAt:        flow.ExpiresAt,
+	}, action.SurfaceSessionID, flow.FlowID, action.ActorUserID, a.service.SurfaceActorUserID(action.SurfaceSessionID), time.Now().UTC())
+	switch verdict {
+	case owneridentity.OwnerCardOK:
+		// continue
+	case owneridentity.OwnerCardUnauthorized:
 		a.ensureSurfaceRouteForNotice(action)
 		return []eventcontract.Event{
 			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_unauthorized", "这张修补卡只允许发起者本人操作。"),
+		}
+	default:
+		a.ensureSurfaceRouteForNotice(action)
+		return []eventcontract.Event{
+			turnPatchNoticeEvent(action.SurfaceSessionID, "turn_patch_expired", "这张修补卡已失效，请重新发送 `/bendtomywill`。"),
 		}
 	}
 	if revision := turnPatchRequestRevision(action); revision > 0 && revision != flow.Revision {

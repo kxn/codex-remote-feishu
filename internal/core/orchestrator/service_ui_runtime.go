@@ -489,13 +489,19 @@ func (s *Service) requireActiveOwnerCardFlow(surface *state.SurfaceConsoleRecord
 		s.clearSurfaceOwnerCardFlow(surface)
 		return nil, notice(surface, "owner_card_expired", strings.TrimSpace(expiredText))
 	}
-	if strings.TrimSpace(flowID) == "" || strings.TrimSpace(flow.FlowID) != strings.TrimSpace(flowID) {
+	verdict := owneridentity.VerifyOwnerCard(owneridentity.OwnerCardClaims{
+		FlowID:      flow.FlowID,
+		OwnerUserID: flow.OwnerUserID,
+		ExpiresAt:   flow.ExpiresAt,
+	}, surface.SurfaceSessionID, flowID, actorUserID, surface.ActorUserID, s.now())
+	switch verdict {
+	case owneridentity.OwnerCardOK:
+		return flow, nil
+	case owneridentity.OwnerCardUnauthorized:
+		return nil, notice(surface, "owner_card_unauthorized", strings.TrimSpace(unauthorizedText))
+	default:
 		return nil, notice(surface, "owner_card_expired", strings.TrimSpace(expiredText))
 	}
-	if owneridentity.Decide(flow.OwnerUserID, actorUserID, surface.ActorUserID) != owneridentity.DecisionAllow {
-		return nil, notice(surface, "owner_card_unauthorized", strings.TrimSpace(unauthorizedText))
-	}
-	return flow, nil
 }
 
 func (s *Service) RecordOwnerCardFlowMessage(surfaceID, flowID, messageID string) {

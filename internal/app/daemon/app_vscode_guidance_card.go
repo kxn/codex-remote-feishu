@@ -101,13 +101,22 @@ func (a *App) requireVSCodeMigrationFlowLocked(surfaceID, flowID, actorUserID st
 	surfaceID = strings.TrimSpace(surfaceID)
 	flowID = strings.TrimSpace(flowID)
 	flow := a.activeVSCodeMigrationFlowLocked(surfaceID)
-	if flow == nil || strings.TrimSpace(flow.FlowID) != flowID {
+	if flow == nil {
 		return nil, []eventcontract.Event{vscodeMigrationStandaloneEvent(surfaceID, true, "迁移卡片已失效", []string{"这张 VS Code 迁移卡片已失效，请重新发送 `/vscode-migrate`。"}, "", "error", nil)}
 	}
-	if owneridentity.Decide(flow.OwnerUserID, actorUserID, a.service.SurfaceActorUserID(surfaceID)) != owneridentity.DecisionAllow {
+	verdict := owneridentity.VerifyOwnerCard(owneridentity.OwnerCardClaims{
+		FlowID:      flow.FlowID,
+		OwnerUserID: flow.OwnerUserID,
+		ExpiresAt:   flow.ExpiresAt,
+	}, surfaceID, flowID, actorUserID, a.service.SurfaceActorUserID(surfaceID), time.Now().UTC())
+	switch verdict {
+	case owneridentity.OwnerCardOK:
+		return flow, nil
+	case owneridentity.OwnerCardUnauthorized:
 		return nil, []eventcontract.Event{vscodeMigrationStandaloneEvent(surfaceID, true, "无法执行迁移", []string{"这张 VS Code 迁移卡片只允许发起者本人操作。"}, "", "error", nil)}
+	default:
+		return nil, []eventcontract.Event{vscodeMigrationStandaloneEvent(surfaceID, true, "迁移卡片已失效", []string{"这张 VS Code 迁移卡片已失效，请重新发送 `/vscode-migrate`。"}, "", "error", nil)}
 	}
-	return flow, nil
 }
 
 func vscodeMigrationOwnerButton(label, flowID string) control.CommandCatalogButton {

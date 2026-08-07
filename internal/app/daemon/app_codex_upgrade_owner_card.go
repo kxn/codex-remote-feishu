@@ -83,16 +83,23 @@ func (a *App) recordCodexUpgradeOwnerCardMessageLocked(trackingKey, messageID st
 
 func (a *App) requireCodexUpgradeOwnerFlowLocked(surfaceID, flowID, actorUserID string) (*codexupgraderuntime.OwnerCardFlowRecord, []eventcontract.Event) {
 	flow := a.activeCodexUpgradeOwnerFlowLocked()
-	if flow == nil || strings.TrimSpace(flow.FlowID) != strings.TrimSpace(flowID) {
+	if flow == nil {
 		return nil, []eventcontract.Event{upgradeNoticeEvent(strings.TrimSpace(surfaceID), "codex_upgrade_owner_expired", "这张 Codex 升级卡片已失效，请重新发送 `/upgrade codex`。")}
 	}
-	if strings.TrimSpace(flow.SurfaceSessionID) != "" && strings.TrimSpace(flow.SurfaceSessionID) != strings.TrimSpace(surfaceID) {
-		return nil, []eventcontract.Event{upgradeNoticeEvent(strings.TrimSpace(surfaceID), "codex_upgrade_owner_expired", "这张 Codex 升级卡片已失效，请重新发送 `/upgrade codex`。")}
-	}
-	if owneridentity.Decide(flow.OwnerUserID, actorUserID, a.service.SurfaceActorUserID(surfaceID)) != owneridentity.DecisionAllow {
+	verdict := owneridentity.VerifyOwnerCard(owneridentity.OwnerCardClaims{
+		FlowID:           flow.FlowID,
+		SurfaceSessionID: flow.SurfaceSessionID,
+		OwnerUserID:      flow.OwnerUserID,
+		ExpiresAt:        flow.ExpiresAt,
+	}, surfaceID, flowID, actorUserID, a.service.SurfaceActorUserID(surfaceID), time.Now().UTC())
+	switch verdict {
+	case owneridentity.OwnerCardOK:
+		return flow, nil
+	case owneridentity.OwnerCardUnauthorized:
 		return nil, []eventcontract.Event{upgradeNoticeEvent(strings.TrimSpace(surfaceID), "codex_upgrade_owner_unauthorized", "这张 Codex 升级卡片只允许发起者本人操作。")}
+	default:
+		return nil, []eventcontract.Event{upgradeNoticeEvent(strings.TrimSpace(surfaceID), "codex_upgrade_owner_expired", "这张 Codex 升级卡片已失效，请重新发送 `/upgrade codex`。")}
 	}
-	return flow, nil
 }
 
 func codexUpgradeOwnerButton(label, flowID, optionID, style string) control.CommandCatalogButton {
