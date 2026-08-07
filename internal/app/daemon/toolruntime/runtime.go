@@ -3,30 +3,19 @@ package toolruntime
 import (
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
 
 type Config struct {
 	ListenAddr string
 	StateFile  string
-}
-
-type ServiceInfo struct {
-	URL         string    `json:"url"`
-	Protocol    string    `json:"protocol,omitempty"`
-	Transport   string    `json:"transport,omitempty"`
-	ManifestURL string    `json:"manifestUrl,omitempty"`
-	CallURL     string    `json:"callUrl,omitempty"`
-	Token       string    `json:"token"`
-	TokenType   string    `json:"tokenType"`
-	GeneratedAt time.Time `json:"generatedAt"`
 }
 
 type State struct {
@@ -78,7 +67,7 @@ func (t *State) persistStateLocked() error {
 	if strings.TrimSpace(t.StatePath) == "" || t.Listener == nil || strings.TrimSpace(t.BearerToken) == "" {
 		return nil
 	}
-	info := ServiceInfo{
+	info := toolservicecontract.ServiceInfo{
 		URL:         "http://" + t.Listener.Addr().String(),
 		Protocol:    "mcp",
 		Transport:   "streamable_http",
@@ -86,7 +75,7 @@ func (t *State) persistStateLocked() error {
 		TokenType:   "bearer",
 		GeneratedAt: time.Now().UTC(),
 	}
-	return writeJSONFileAtomic(t.StatePath, info, 0o600)
+	return toolservicecontract.WriteJSONFileAtomic(t.StatePath, info, 0o600)
 }
 
 func (t *State) RemoveStateLocked() {
@@ -104,37 +93,4 @@ func generateBearerToken() (string, error) {
 		return "", err
 	}
 	return base64.RawURLEncoding.EncodeToString(raw), nil
-}
-
-func writeJSONFileAtomic(path string, payload any, mode os.FileMode) error {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	raw, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(mode); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
 }

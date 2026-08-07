@@ -17,3 +17,5 @@ web/.vite/
 !.codex/state/issue-doc-sync/
 !.codex/state/issue-doc-sync/**
 .codex/state/issue-doc-sync/cache/**
+
+.codex/tmp/

@@ -16,6 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
@@ -167,7 +168,7 @@ func TestToolRuntimeRequiresBearerAndPublishesMCPState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read tool service file: %v", err)
 	}
-	var info toolruntime.ServiceInfo
+	var info toolservicecontract.ServiceInfo
 	if err := json.Unmarshal(infoRaw, &info); err != nil {
 		t.Fatalf("unmarshal tool service file: %v", err)
 	}

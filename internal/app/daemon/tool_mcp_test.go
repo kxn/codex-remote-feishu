@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
 
 type toolMCPRequestOptions struct {
@@ -57,7 +58,7 @@ func performToolMCPRequest(t *testing.T, handler http.Handler, opts toolMCPReque
 	target := "http://127.0.0.1/"
 	if strings.TrimSpace(opts.CallerInstanceID) != "" {
 		values := url.Values{}
-		values.Set(toolCallerInstanceIDQueryParam, strings.TrimSpace(opts.CallerInstanceID))
+		values.Set(toolservicecontract.CallerInstanceIDQueryParam, strings.TrimSpace(opts.CallerInstanceID))
 		target += "?" + values.Encode()
 	}
 	req := httptest.NewRequest(method, target, strings.NewReader(opts.Body))

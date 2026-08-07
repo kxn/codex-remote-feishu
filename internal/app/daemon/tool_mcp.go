@@ -15,7 +15,6 @@ import (
 const toolMCPServerName = "codex-remote-feishu-tool-service"
 
 const toolMCPSessionTimeout = 30 * time.Minute
-const toolCallerInstanceIDQueryParam = "codex_remote_instance_id"
 
 type toolCallerInstanceIDContextKey struct{}
 
