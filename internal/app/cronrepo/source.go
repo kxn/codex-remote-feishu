@@ -76,10 +76,6 @@ func ParseSourceInput(raw string) (SourceSpec, error) {
 	}, nil
 }
 
-func SQLiteRunPathLikePattern() string {
-	return "%/" + InternalRootDirName + "/" + RunsDirName + "/%"
-}
-
 func splitRefFragment(raw string) (string, string) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

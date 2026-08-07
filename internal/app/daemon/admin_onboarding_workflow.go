@@ -35,7 +35,6 @@ const (
 
 	onboardingDecisionAutostartEnabled = "enabled"
 	onboardingDecisionDeferred         = "deferred"
-	onboardingDecisionVSCodeManaged    = "managed_shim"
 	onboardingDecisionVSCodeRemoteOnly = "remote_only"
 	onboardingDecisionMenuConfirmed    = "confirmed"
 )

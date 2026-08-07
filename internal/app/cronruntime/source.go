@@ -33,15 +33,6 @@ func NormalizeJobSourceType(raw string) JobSourceType {
 	}
 }
 
-func JobSourceTypeLabel(sourceType JobSourceType) string {
-	switch sourceType {
-	case JobSourceGitRepo:
-		return TaskSourceGitRepoText
-	default:
-		return TaskSourceWorkspaceText
-	}
-}
-
 func InferJobSourceType(rawLabel, gitInput string, workspaceLinks []string) JobSourceType {
 	switch strings.TrimSpace(rawLabel) {
 	case TaskSourceGitRepoText, string(JobSourceGitRepo):

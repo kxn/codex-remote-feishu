@@ -35,7 +35,6 @@ const (
 	FlowStageRolledBack      FlowStage = "rolled_back"
 	FlowStageFailed          FlowStage = "failed"
 	FlowStageCancelled       FlowStage = "cancelled"
-	FlowStageExpired         FlowStage = "expired"
 )
 
 type FlowRecord struct {

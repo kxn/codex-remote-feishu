@@ -14,8 +14,7 @@ type persistedStore interface {
 type persistedStoreStatus uint8
 
 const (
-	persistedStoreStatusUnconfigured persistedStoreStatus = iota
-	persistedStoreStatusWritable
+	persistedStoreStatusWritable persistedStoreStatus = iota
 	persistedStoreStatusDegraded
 )
 

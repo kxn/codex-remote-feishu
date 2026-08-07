@@ -34,10 +34,6 @@ type runnableDaemon interface {
 	PprofURL() string
 }
 
-func RunMain(ctx context.Context, version, branch string) error {
-	return RunMainWithArgs(ctx, nil, version, branch)
-}
-
 func RunMainWithArgs(ctx context.Context, args []string, version, branch string) error {
 	if err := applyDaemonStartupArgs(args); err != nil {
 		return err

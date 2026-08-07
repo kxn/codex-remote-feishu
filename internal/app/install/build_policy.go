@@ -5,10 +5,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
-func CurrentBuildFlavor() buildinfo.Flavor {
-	return buildinfo.CurrentFlavor()
-}
-
 func CurrentBuildAllowsReleaseTrack(track ReleaseTrack) bool {
 	return buildinfo.CurrentCapabilityPolicy().AllowsReleaseTrack(string(track))
 }
