@@ -192,11 +192,39 @@ function Invoke-DownloadRequest([string]$Url, [string]$OutFile) {
     if (-not [string]::IsNullOrWhiteSpace($directory)) {
       New-Item -ItemType Directory -Force -Path $directory | Out-Null
     }
+    $totalBytes = $response.Content.Headers.ContentLength
     $stream = $response.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
     try {
       $file = [System.IO.File]::Open($OutFile, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
       try {
-        ([System.IO.Stream]$stream).CopyTo([System.IO.Stream]$file)
+        $buffer = New-Object byte[] 65536
+        $bytesRead = 0
+        $lastProgressUpdate = [DateTime]::MinValue
+        while ($true) {
+          $n = $stream.Read($buffer, 0, $buffer.Length)
+          if ($n -le 0) { break }
+          $file.Write($buffer, 0, $n)
+          $bytesRead += $n
+          $now = [DateTime]::UtcNow
+          if (($now - $lastProgressUpdate).TotalMilliseconds -ge 200) {
+            $lastProgressUpdate = $now
+            if ($totalBytes -gt 0) {
+              $pct = [Math]::Min(100, [int]($bytesRead * 100 / $totalBytes))
+              $mbDone = '{0:N1}' -f ($bytesRead / 1MB)
+              $mbTotal = '{0:N1}' -f ($totalBytes / 1MB)
+              Write-Host "`r  Downloading... $pct% ($mbDone / $mbTotal MB)" -NoNewline
+            } else {
+              $mbDone = '{0:N1}' -f ($bytesRead / 1MB)
+              Write-Host "`r  Downloading... $mbDone MB" -NoNewline
+            }
+          }
+        }
+        if ($totalBytes -gt 0) {
+          $mbTotal = '{0:N1}' -f ($totalBytes / 1MB)
+          Write-Host "`r  Downloading... 100% ($mbTotal MB)   "
+        } else {
+          Write-Host ""
+        }
       } finally {
         $file.Dispose()
       }
@@ -318,8 +346,11 @@ $tmpDir = Join-Path ([System.IO.Path]::GetTempPath()) ("codex-remote-install-" +
 New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
 try {
   $archivePath = Join-Path $tmpDir $assetName
+  Write-Host "Installing Codex Remote $Version (windows/$goarch)..."
   Invoke-DownloadRequest $assetUrl $archivePath
+  Write-Host "  Extracting... " -NoNewline
   Expand-Archive -Path $archivePath -DestinationPath $tmpDir -Force
+  Write-Host "done."
 
   $packageDir = Join-Path $tmpDir ("codex-remote-feishu_{0}_windows_{1}" -f $Version.TrimStart("v"), $goarch)
   if (-not (Test-Path -LiteralPath $packageDir -PathType Container)) {
