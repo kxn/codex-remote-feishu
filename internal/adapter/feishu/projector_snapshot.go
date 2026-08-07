@@ -198,15 +198,13 @@ func compactSnapshotStatusText(text string, limit int) string {
 }
 
 func displaySnapshotMode(mode string, backend agentproto.Backend) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "vscode", "vs-code", "vs_code":
+	if state.IsVSCodeProductModeToken(mode) {
 		return "vscode"
-	default:
-		if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
-			return "claude"
-		}
-		return "codex"
 	}
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		return string(agentproto.BackendClaude)
+	}
+	return string(agentproto.BackendCodex)
 }
 
 func displaySnapshotValue(value string) string {

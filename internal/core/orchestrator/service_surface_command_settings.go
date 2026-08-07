@@ -32,22 +32,23 @@ type surfaceModeSelection struct {
 
 func parseSurfaceModeSelection(value string) (surfaceModeSelection, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "normal", "codex":
+	case "normal", string(agentproto.BackendCodex):
 		return surfaceModeSelection{
 			ProductMode: state.ProductModeNormal,
 			Backend:     agentproto.BackendCodex,
 		}, true
-	case "claude":
+	case string(agentproto.BackendClaude):
 		return surfaceModeSelection{
 			ProductMode: state.ProductModeNormal,
 			Backend:     agentproto.BackendClaude,
 		}, true
-	case "vscode", "vs-code", "vs_code":
-		return surfaceModeSelection{
-			ProductMode: state.ProductModeVSCode,
-			Backend:     agentproto.BackendCodex,
-		}, true
 	default:
+		if state.IsVSCodeProductModeToken(value) {
+			return surfaceModeSelection{
+				ProductMode: state.ProductModeVSCode,
+				Backend:     agentproto.BackendCodex,
+			}, true
+		}
 		return surfaceModeSelection{}, false
 	}
 }
