@@ -548,11 +548,11 @@ detect/apply/reinstall 的当前规则也同步收紧：
 
 另外单独生成：
 
-- `codex-remote-feishu-install.sh`
-- `codex-remote-feishu-install.ps1`
 - `codex-remote-feishu_<version>_windows_amd64_installer.exe`
 - `codex-remote-feishu_<version>_darwin_universal_installer.dmg`
 - `checksums.txt`
+
+在线安装脚本（`install-release.sh` / `install-release.ps1`）不作为版本 release asset 发布，始终从 repo 主分支获取。
 
 macOS packaged installer 由本地脚本 contract 统一构建：
 

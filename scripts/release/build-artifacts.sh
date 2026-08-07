@@ -330,9 +330,6 @@ if (( ${#batch_pids[@]} > 0 )); then
   flush_platform_batch
 fi
 
-cp install-release.sh "${output_dir}/codex-remote-feishu-install.sh"
-cp install-release.ps1 "${output_dir}/codex-remote-feishu-install.ps1"
-
 bash "${ROOT_DIR}/scripts/release/write-checksums.sh" "${output_dir}"
 
 rm -rf "${work_root}" "${log_root}"
