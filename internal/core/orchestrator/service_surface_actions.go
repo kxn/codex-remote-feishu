@@ -213,6 +213,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			}
 			workspaceKey := s.surfaceCurrentWorkspaceKey(surface)
 			if workspaceKey == "" {
+				// Save message for replay after the user selects a workspace
+				// and thread from the picker.
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return s.openTargetPickerForAction(surface, action, "", nil, action.MessageID, false)
 			}
 			targetBackend := s.surfaceBackend(surface)
@@ -221,6 +224,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			events := s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{SuppressAutoUsePrompt: true})
 			inst = s.root.Instances[surface.AttachedInstanceID]
 			if inst == nil {
+				// Instance is starting — save message for replay when it
+				// connects and the surface attaches.
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return events
 			}
 			return append(events, s.handleText(surface, action)...)
