@@ -87,7 +87,7 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 		{ID: "profile-b", Name: "Profile B"},
 	})
 
-	workspaceKey := "/data/dl/repo"
+	workspaceKey := t.TempDir()
 	surface := svc.root.Surfaces["surface-1"]
 	surface.ClaimedWorkspaceKey = workspaceKey
 	surface.RouteMode = state.RouteModeNewThreadReady
