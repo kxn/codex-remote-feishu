@@ -192,6 +192,10 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 	if _, err := os.Stat(targetBinary); err != nil {
 		return err
 	}
+	// Migrate version-scoped legacy live binary to canonical instance bin dir.
+	if canonicalDir, needsMigration := canonicalInstallBinDirForMigration(runtime.GOOS, *stateValue); needsMigration {
+		stateValue.CurrentBinaryPath = filepath.Join(canonicalDir, filepath.Base(stateValue.CurrentBinaryPath))
+	}
 	if err := copyFile(targetBinary, stateValue.CurrentBinaryPath); err != nil {
 		return fmt.Errorf("copy upgrade binary %s -> %s: %w", targetBinary, stateValue.CurrentBinaryPath, err)
 	}

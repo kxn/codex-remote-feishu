@@ -371,7 +371,7 @@ named instance <instanceId>:
 - macOS: `<baseDir>/Library/Application Support/codex-remote-<instanceId>/bin`
 - Windows: `<baseDir>/AppData/Local/codex-remote-<instanceId>/bin`
 
-如果目标 `install-state.json` 已经存在，则 `codex-remote install` 在未显式传 `-install-bin-dir` 时会优先复用现有 `installedBinary` 所在目录，而不是擅自迁移稳定入口。
+如果目标 `install-state.json` 已经存在，则 `codex-remote install` 在未显式传 `-install-bin-dir` 时会优先复用现有 `installedBinary` 所在目录，而不是擅自迁移稳定入口。唯一的例外是 legacy version-scoped 入口：当 `CurrentBinaryPath` 位于该实例的 `VersionsRoot` 下（例如 `releases/v1.8.4/codex-remote`）时，upgrade / repair 会自动将 live binary 迁移到该实例的 canonical 无版本稳定入口（例如 `bin/codex-remote`）。位于 `VersionsRoot` 外的用户自定义安装目录不会被迁移。
 
 release 包中的归档目录只是版本缓存位置，不是长期运行路径。
 

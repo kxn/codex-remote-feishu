@@ -292,3 +292,87 @@ func TestRunMainReusesExistingInstalledBinaryDirWhenInstallBinDirOmitted(t *test
 		t.Fatalf("installed binary content = %q, want new-binary", string(raw))
 	}
 }
+
+func TestResolveTargetInstallBinDirMigratesVersionScopedPath(t *testing.T) {
+	baseDir := t.TempDir()
+	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	// Use the derived versions root so LoadState can re-derive it from the state path.
+	derivedVersionsRoot := defaultVersionsRootForStatePath(statePath)
+	versionScopedBinary := seedBinary(t, filepath.Join(derivedVersionsRoot, "v1.8.4", executableName(runtime.GOOS)), "old-binary")
+	if err := WriteState(statePath, InstallState{
+		InstanceID:        defaultInstanceID,
+		BaseDir:           baseDir,
+		StatePath:         statePath,
+		CurrentBinaryPath: versionScopedBinary,
+		VersionsRoot:      derivedVersionsRoot,
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	selection := installInstanceSelection{
+		InstanceID:    defaultInstanceID,
+		BaseDir:       baseDir,
+		InstallBinDir: defaultInstallBinDirForInstance(runtime.GOOS, baseDir, defaultInstanceID),
+		StatePath:     statePath,
+	}
+	got := resolveTargetInstallBinDir(selection, "")
+	want := defaultInstallBinDirForInstance(runtime.GOOS, baseDir, defaultInstanceID)
+	if got != want {
+		t.Fatalf("resolveTargetInstallBinDir = %q, want %q (canonical bin dir)", got, want)
+	}
+}
+
+func TestResolveTargetInstallBinDirPreservesCustomDir(t *testing.T) {
+	baseDir := t.TempDir()
+	customBinDir := filepath.Join(baseDir, "my-custom-bin")
+	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	existingBinary := seedBinary(t, filepath.Join(customBinDir, executableName(runtime.GOOS)), "binary")
+	if err := WriteState(statePath, InstallState{
+		InstanceID:        defaultInstanceID,
+		BaseDir:           baseDir,
+		StatePath:         statePath,
+		CurrentBinaryPath: existingBinary,
+		VersionsRoot:      filepath.Join(baseDir, "releases"),
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	selection := installInstanceSelection{
+		InstanceID:    defaultInstanceID,
+		BaseDir:       baseDir,
+		InstallBinDir: defaultInstallBinDirForInstance(runtime.GOOS, baseDir, defaultInstanceID),
+		StatePath:     statePath,
+	}
+	got := resolveTargetInstallBinDir(selection, "")
+	if got != customBinDir {
+		t.Fatalf("resolveTargetInstallBinDir = %q, want %q (custom dir preserved)", got, customBinDir)
+	}
+}
+
+func TestResolveTargetInstallBinDirExplicitValueOverridesMigration(t *testing.T) {
+	baseDir := t.TempDir()
+	versionsRoot := filepath.Join(baseDir, "releases")
+	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	versionScopedBinary := seedBinary(t, filepath.Join(versionsRoot, "v1.8.4", executableName(runtime.GOOS)), "old-binary")
+	if err := WriteState(statePath, InstallState{
+		InstanceID:        defaultInstanceID,
+		BaseDir:           baseDir,
+		StatePath:         statePath,
+		CurrentBinaryPath: versionScopedBinary,
+		VersionsRoot:      versionsRoot,
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	explicitDir := filepath.Join(baseDir, "explicit-bin")
+	selection := installInstanceSelection{
+		InstanceID:    defaultInstanceID,
+		BaseDir:       baseDir,
+		InstallBinDir: defaultInstallBinDirForInstance(runtime.GOOS, baseDir, defaultInstanceID),
+		StatePath:     statePath,
+	}
+	got := resolveTargetInstallBinDir(selection, explicitDir)
+	if got != explicitDir {
+		t.Fatalf("resolveTargetInstallBinDir = %q, want %q (explicit value overrides)", got, explicitDir)
+	}
+}

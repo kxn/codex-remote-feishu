@@ -576,3 +576,75 @@ func TestRunUpgradeHelperWithStatePathFailsWhenRollbackStopFails(t *testing.T) {
 		t.Fatalf("pending upgrade = %#v, want failed", updated.PendingUpgrade)
 	}
 }
+
+func TestSwitchUpgradeBinaryMigratesVersionScopedPath(t *testing.T) {
+	dir := t.TempDir()
+	versionsRoot := filepath.Join(dir, "releases")
+	// Live binary is in a version-scoped legacy slot.
+	currentBinary := seedBinary(t, filepath.Join(versionsRoot, "v1.8.4", executableName(runtime.GOOS)), "old-binary")
+	seedBinary(t, filepath.Join(versionsRoot, "v1.9.0", executableName(runtime.GOOS)), "new-binary")
+
+	stateValue := InstallState{
+		BaseDir:           dir,
+		CurrentBinaryPath: currentBinary,
+		VersionsRoot:      versionsRoot,
+		CurrentVersion:    "v1.8.4",
+		PendingUpgrade: &PendingUpgrade{
+			Phase:         PendingUpgradePhasePrepared,
+			TargetVersion: "v1.9.0",
+		},
+	}
+
+	if err := switchUpgradeBinary(&stateValue); err != nil {
+		t.Fatalf("switchUpgradeBinary: %v", err)
+	}
+
+	// After switch, CurrentBinaryPath should be migrated to canonical bin dir.
+	wantBinDir := defaultInstallBinDirForInstance(runtime.GOOS, dir, defaultInstanceID)
+	wantBinaryPath := filepath.Join(wantBinDir, executableName(runtime.GOOS))
+	if stateValue.CurrentBinaryPath != wantBinaryPath {
+		t.Fatalf("CurrentBinaryPath = %q, want %q", stateValue.CurrentBinaryPath, wantBinaryPath)
+	}
+	// New binary content should be at the canonical path.
+	raw, err := os.ReadFile(wantBinaryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(canonical binary): %v", err)
+	}
+	if string(raw) != "new-binary" {
+		t.Fatalf("canonical binary content = %q, want new-binary", string(raw))
+	}
+}
+
+func TestSwitchUpgradeBinaryPreservesCustomDir(t *testing.T) {
+	dir := t.TempDir()
+	customBinDir := filepath.Join(dir, "custom-bin")
+	currentBinary := seedBinary(t, filepath.Join(customBinDir, executableName(runtime.GOOS)), "old-binary")
+	seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+
+	stateValue := InstallState{
+		BaseDir:           dir,
+		CurrentBinaryPath: currentBinary,
+		VersionsRoot:      filepath.Join(dir, "releases"),
+		CurrentVersion:    "v1.0.0",
+		PendingUpgrade: &PendingUpgrade{
+			Phase:         PendingUpgradePhasePrepared,
+			TargetVersion: "v1.1.0",
+		},
+	}
+
+	if err := switchUpgradeBinary(&stateValue); err != nil {
+		t.Fatalf("switchUpgradeBinary: %v", err)
+	}
+
+	// Custom dir should be preserved.
+	if stateValue.CurrentBinaryPath != currentBinary {
+		t.Fatalf("CurrentBinaryPath = %q, want %q (custom dir preserved)", stateValue.CurrentBinaryPath, currentBinary)
+	}
+	raw, err := os.ReadFile(currentBinary)
+	if err != nil {
+		t.Fatalf("ReadFile(current binary): %v", err)
+	}
+	if string(raw) != "new-binary" {
+		t.Fatalf("current binary content = %q, want new-binary", string(raw))
+	}
+}
