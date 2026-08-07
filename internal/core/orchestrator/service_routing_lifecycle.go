@@ -34,6 +34,7 @@ func (s *Service) finalizeDetachedSurfaceWithOverlayCleanup(surface *state.Surfa
 	s.clearPlanProposalRuntime(surface)
 	clearSurfaceFinalCards(surface)
 	surface.LastSelection = nil
+	s.clearPendingTextInput(surface)
 	if strings.TrimSpace(instanceID) == "" {
 		return events
 	}

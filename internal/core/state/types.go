@@ -349,6 +349,7 @@ type SurfaceConsoleRecord struct {
 	AutoWhip                AutoWhipRuntimeRecord
 	AutoContinue            AutoContinueRuntimeRecord
 	ReviewSession           *ReviewSessionRecord
+	PendingTextInput        *PendingTextInputRecord
 }
 
 type FeishuRoomContextRecord struct {
@@ -397,6 +398,21 @@ const (
 	ReviewSessionPhasePending ReviewSessionPhase = "pending"
 	ReviewSessionPhaseActive  ReviewSessionPhase = "active"
 )
+
+// PendingTextInputRecord holds a user text message that could not be processed
+// immediately (e.g., implicit thread preparation failed). The message is saved
+// and replayed when the blocking condition is resolved (e.g., user selects a
+// thread from the target picker).
+type PendingTextInputRecord struct {
+	Text             string             `json:"text,omitempty"`
+	Inputs           []agentproto.Input `json:"inputs,omitempty"`
+	SourceMessageID  string             `json:"sourceMessageID,omitempty"`
+	ActorUserID      string             `json:"actorUserID,omitempty"`
+	ReplyToMessageID string             `json:"replyToMessageID,omitempty"`
+	StagedMessageIDs []string           `json:"stagedMessageIDs,omitempty"`
+	CreatedAt        time.Time          `json:"createdAt,omitempty"`
+	ExpiresAt        time.Time          `json:"expiresAt,omitempty"`
+}
 
 type ReviewSessionRecord struct {
 	Phase           ReviewSessionPhase

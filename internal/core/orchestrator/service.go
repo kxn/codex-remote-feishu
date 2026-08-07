@@ -319,6 +319,11 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if blocked := s.pendingHeadlessActionBlocked(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
+	// Auto-close active pickers when the user sends a text message.
+	// The picker card becomes stale if the user bypasses it by typing directly.
+	if action.Kind == control.ActionTextMessage {
+		s.dismissActivePickersForTextMessage(surface)
+	}
 	if blocked := s.blockActionForActivePathPicker(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}

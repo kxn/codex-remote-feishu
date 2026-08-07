@@ -252,9 +252,13 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if !detour.Triggered {
 		if reviewSession == nil {
 			if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
+				// Save the message for replay after the user resolves the
+				// blocking condition (e.g., selects a thread from the picker).
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return blocked
 			}
 			if blocked := s.unboundInputBlocked(surface); blocked != nil {
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return blocked
 			}
 			if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
@@ -341,6 +345,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			false,
 		)...)
 	}
+	// Clear any saved pending input — the user sent a new message that is
+	// being processed, so the old pending is stale.
+	s.clearPendingTextInput(surface)
 	return append(events, s.enqueueQueueItem(surface, action.MessageID, action.Text, stagedMessageIDs, inputs, threadID, cwd, routeMode, surface.PromptOverride, false)...)
 }
 
