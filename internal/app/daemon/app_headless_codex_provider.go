@@ -70,8 +70,13 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 	profileRevision := uint64(1)
 	ref := state.NormalizeCodexAdmissionRef(admissionRef)
 	if ref != nil {
-		profileID = ref.ProfileRef.ID
-		profileRevision = ref.ProfileRef.Revision
+		if state.CodexProfileIDFromLegacyProviderID(ref.ProfileRef.ID) == profileID {
+			profileRevision = ref.ProfileRef.Revision
+		} else {
+			// admission ref 属于另一个 profile（例如 bot 级 Profile 切换后 surface
+			// 缓存未刷新）：以期望 provider 为准，丢弃过期 ref 并按当前 revision 解析。
+			ref = nil
+		}
 	}
 	var oauthState *state.CodexOAuthProfileState
 	if profileID != config.CodexNativeProfileID && profileID != config.CodexOAuthProfileID {

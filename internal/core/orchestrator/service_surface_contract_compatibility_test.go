@@ -1,0 +1,64 @@
+package orchestrator
+
+import (
+	"testing"
+	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
+)
+
+func TestSurfaceInstanceCompatibilityPrefersExpectedProviderOverStaleCache(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user",
+		state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "team-proxy",
+		state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	oldRef := &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "default", Revision: 1}}
+	oldContract := &state.CodexConnectionContract{ConnectionContractID: "old-contract"}
+	surface.CodexAdmissionRef = oldRef
+	surface.CodexConnectionContract = oldContract
+	surface.CodexThreadPolicy = &state.CodexThreadPolicy{}
+
+	inst := &state.InstanceRecord{
+		InstanceID:              "inst-old",
+		Backend:                 agentproto.BackendCodex,
+		CodexProviderID:         "default",
+		CodexAdmissionRef:       oldRef,
+		CodexConnectionContract: oldContract,
+		Online:                  true,
+	}
+	if svc.surfaceInstanceCompatibleForAttach(surface, inst) {
+		t.Fatal("stale codex contract cache must not make an old-provider instance compatible")
+	}
+}
+
+func TestSurfaceInstanceCompatibilityKeepsSameProviderRevisionPrecision(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user",
+		state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "team-proxy",
+		state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	newRef := &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "team-proxy", Revision: 2}}
+	newContract := &state.CodexConnectionContract{ConnectionContractID: "new-contract"}
+	surface.CodexAdmissionRef = newRef
+	surface.CodexConnectionContract = newContract
+
+	inst := &state.InstanceRecord{
+		InstanceID:              "inst-new",
+		Backend:                 agentproto.BackendCodex,
+		CodexProviderID:         "team-proxy",
+		CodexAdmissionRef:       &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "team-proxy", Revision: 1}},
+		CodexConnectionContract: &state.CodexConnectionContract{ConnectionContractID: "old-contract"},
+		Online:                  true,
+	}
+	if svc.surfaceInstanceCompatibleForAttach(surface, inst) {
+		t.Fatal("same provider with different contract revision must stay incompatible")
+	}
+}

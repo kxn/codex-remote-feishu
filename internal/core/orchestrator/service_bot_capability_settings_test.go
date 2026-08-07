@@ -318,6 +318,33 @@ func TestMaterializeBotCapabilitySettingsRefreshesExistingSurfaceProjection(t *t
 	}
 }
 
+func TestProfileProjectionClearsStaleCodexDerivedCache(t *testing.T) {
+	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
+	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
+	surface.CodexAdmissionRef = &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "default", Revision: 1}}
+	surface.CodexConnectionContract = &state.CodexConnectionContract{ConnectionContractID: "old-contract"}
+	surface.CodexThreadPolicy = &state.CodexThreadPolicy{}
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionCodexProviderCommand,
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		GatewayID:        "app-1",
+		ChatID:           "ou_user",
+		ActorUserID:      "ou_user",
+		Text:             "/codexprofile team-proxy",
+	})
+
+	if surface.CodexAdmissionRef != nil || surface.CodexConnectionContract != nil || surface.CodexThreadPolicy != nil {
+		t.Fatalf("expected stale codex derived cache to be cleared on provider projection, got %#v", surface)
+	}
+	if surface.CodexProviderID != "team-proxy" {
+		t.Fatalf("expected provider projection, got %q", surface.CodexProviderID)
+	}
+}
+
 func TestBotCapabilitySettingsExportRejectsCrossGatewayRecord(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
