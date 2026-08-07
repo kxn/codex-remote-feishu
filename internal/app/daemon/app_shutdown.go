@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/shutdownctx"
 )
 
@@ -270,7 +271,7 @@ func (a *App) collectRelayShutdownTargets() []relayShutdownTarget {
 			continue
 		}
 		observed, ok := instances[instanceID]
-		if !ok || !strings.EqualFold(strings.TrimSpace(observed.Source), "headless") || !observed.Managed {
+		if !ok || !state.IsInstanceSource(observed.Source, state.InstanceSourceHeadless) || !observed.Managed {
 			continue
 		}
 		target := relayShutdownTarget{

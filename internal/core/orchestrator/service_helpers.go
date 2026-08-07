@@ -5,18 +5,14 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func isHeadlessInstance(inst *state.InstanceRecord) bool {
-	return inst != nil && strings.EqualFold(strings.TrimSpace(inst.Source), "headless") && inst.Managed
+	return state.IsManagedHeadlessInstance(inst)
 }
 
 func isVSCodeInstance(inst *state.InstanceRecord) bool {
-	if inst == nil {
-		return false
-	}
-	return strings.EqualFold(xutil.FirstNonEmpty(inst.Source, "vscode"), "vscode")
+	return inst != nil && state.IsVSCodeOrDefaultSource(inst.Source)
 }
 
 func headlessThreadWorkspaceMustMatch(inst *state.InstanceRecord) bool {

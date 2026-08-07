@@ -371,7 +371,7 @@ func (a *App) killManagedHeadless(command control.DaemonCommand) []eventcontract
 		pid = managed.PID
 	}
 	if pid == 0 {
-		if inst := a.service.Instance(command.InstanceID); inst != nil && strings.EqualFold(strings.TrimSpace(inst.Source), "headless") && inst.Managed {
+		if inst := a.service.Instance(command.InstanceID); inst != nil && headlessruntime.IsManagedInstance(inst) {
 			pid = inst.PID
 		}
 	}
@@ -419,7 +419,7 @@ func (a *App) killManagedHeadless(command control.DaemonCommand) []eventcontract
 }
 
 func (a *App) observeManagedHeadless(inst *state.InstanceRecord) {
-	if inst == nil || !strings.EqualFold(strings.TrimSpace(inst.Source), "headless") || !inst.Managed {
+	if inst == nil || !headlessruntime.IsManagedInstance(inst) {
 		return
 	}
 	now := time.Now().UTC()

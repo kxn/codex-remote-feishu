@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 const (
@@ -90,7 +92,7 @@ func (a *App) readFeishuMCPPublicationInfo() (childToolServiceInfo, bool) {
 }
 
 func (a *App) feishuMCPPublicationEligible() bool {
-	return !strings.EqualFold(strings.TrimSpace(a.config.Source), "vscode")
+	return !state.IsInstanceSource(a.config.Source, state.InstanceSourceVSCode)
 }
 
 func codexMCPOverride(field, value string) string {
