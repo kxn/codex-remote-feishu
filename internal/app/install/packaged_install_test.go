@@ -396,6 +396,159 @@ func TestCopyPackagedRepairLiveBinaryRetriesWindowsFileLock(t *testing.T) {
 	}
 }
 
+func TestRunPackagedRepairMigratesVersionScopedLiveBinaryToCanonicalDir(t *testing.T) {
+	t.Setenv(repoRootEnvVar, t.TempDir())
+	baseDir := t.TempDir()
+	versionsRoot := filepath.Join(baseDir, "releases")
+	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	// Live binary is in a version-scoped legacy slot.
+	liveBinary := seedBinary(t, filepath.Join(versionsRoot, "v1.8.4", executableName(runtime.GOOS)), "old-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", executableName(runtime.GOOS)), "new-binary")
+	if err := WriteState(statePath, InstallState{
+		InstanceID:        defaultInstanceID,
+		BaseDir:           baseDir,
+		ConfigPath:        defaultConfigPathForInstance(baseDir, defaultInstanceID),
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerDetached,
+		InstallSource:     InstallSourceRelease,
+		CurrentTrack:      ReleaseTrackProduction,
+		CurrentVersion:    "v1.8.4",
+		CurrentBinaryPath: liveBinary,
+		VersionsRoot:      versionsRoot,
+		CurrentSlot:       "v1.8.4",
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	originalValidator := sourceBinaryValidator
+	sourceBinaryValidator = func(string) error { return nil }
+	defer func() { sourceBinaryValidator = originalValidator }()
+
+	originalEnsureReady := packagedInstallEnsureReadyFunc
+	packagedInstallEnsureReadyFunc = func(_ context.Context, _ string, _ string) (DaemonReadyStatus, error) {
+		return DaemonReadyStatus{AdminURL: "http://localhost:9501/admin/"}, nil
+	}
+	defer func() { packagedInstallEnsureReadyFunc = originalEnsureReady }()
+
+	var stdout bytes.Buffer
+	if err := RunPackagedInstall([]string{
+		"-state-path", statePath,
+		"-versions-root", versionsRoot,
+		"-binary", sourceBinary,
+		"-current-version", "v1.9.0",
+		"-format", "json",
+	}, bytes.NewBuffer(nil), &stdout, &bytes.Buffer{}, "v1.9.0"); err != nil {
+		t.Fatalf("RunPackagedInstall repair: %v", err)
+	}
+
+	var result PackagedInstallResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode result json: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("result.OK = false, want true: %#v", result)
+	}
+
+	// After repair, the installed binary should be in the canonical bin dir,
+	// not the version-scoped slot.
+	wantBinDir := defaultInstallBinDirForInstance(runtime.GOOS, baseDir, defaultInstanceID)
+	wantBinaryPath := filepath.Join(wantBinDir, executableName(runtime.GOOS))
+	if result.InstalledBinary != wantBinaryPath {
+		t.Fatalf("result.InstalledBinary = %q, want %q", result.InstalledBinary, wantBinaryPath)
+	}
+
+	updated, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState updated: %v", err)
+	}
+	if updated.CurrentBinaryPath != wantBinaryPath {
+		t.Fatalf("CurrentBinaryPath = %q, want %q", updated.CurrentBinaryPath, wantBinaryPath)
+	}
+	// The new binary content should be at the canonical path.
+	raw, err := os.ReadFile(wantBinaryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(canonical binary): %v", err)
+	}
+	if string(raw) != "new-binary" {
+		t.Fatalf("canonical binary content = %q, want new-binary", string(raw))
+	}
+}
+
+func TestRunPackagedRepairPreservesCustomInstallDir(t *testing.T) {
+	t.Setenv(repoRootEnvVar, t.TempDir())
+	baseDir := t.TempDir()
+	customBinDir := filepath.Join(baseDir, "custom-bin")
+	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	liveBinary := seedBinary(t, filepath.Join(customBinDir, executableName(runtime.GOOS)), "old-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", executableName(runtime.GOOS)), "new-binary")
+	versionsRoot := filepath.Join(baseDir, "releases")
+	if err := WriteState(statePath, InstallState{
+		InstanceID:        defaultInstanceID,
+		BaseDir:           baseDir,
+		ConfigPath:        defaultConfigPathForInstance(baseDir, defaultInstanceID),
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerDetached,
+		InstallSource:     InstallSourceRelease,
+		CurrentVersion:    "v1.0.0",
+		CurrentBinaryPath: liveBinary,
+		VersionsRoot:      versionsRoot,
+		CurrentSlot:       "v1.0.0",
+	}); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	originalValidator := sourceBinaryValidator
+	sourceBinaryValidator = func(string) error { return nil }
+	defer func() { sourceBinaryValidator = originalValidator }()
+
+	originalEnsureReady := packagedInstallEnsureReadyFunc
+	packagedInstallEnsureReadyFunc = func(_ context.Context, _ string, _ string) (DaemonReadyStatus, error) {
+		return DaemonReadyStatus{AdminURL: "http://localhost:9501/admin/"}, nil
+	}
+	defer func() { packagedInstallEnsureReadyFunc = originalEnsureReady }()
+
+	var stdout bytes.Buffer
+	if err := RunPackagedInstall([]string{
+		"-state-path", statePath,
+		"-versions-root", versionsRoot,
+		"-binary", sourceBinary,
+		"-current-version", "v1.1.0",
+		"-format", "json",
+	}, bytes.NewBuffer(nil), &stdout, &bytes.Buffer{}, "v1.1.0"); err != nil {
+		t.Fatalf("RunPackagedInstall repair: %v", err)
+	}
+
+	var result PackagedInstallResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode result json: %v", err)
+	}
+	if !result.OK {
+		t.Fatalf("result.OK = false, want true: %#v", result)
+	}
+
+	// Custom dir should be preserved — no migration.
+	wantBinaryPath := filepath.Join(customBinDir, executableName(runtime.GOOS))
+	if result.InstalledBinary != wantBinaryPath {
+		t.Fatalf("result.InstalledBinary = %q, want %q (custom dir preserved)", result.InstalledBinary, wantBinaryPath)
+	}
+
+	updated, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if updated.CurrentBinaryPath != wantBinaryPath {
+		t.Fatalf("CurrentBinaryPath = %q, want %q (custom dir preserved)", updated.CurrentBinaryPath, wantBinaryPath)
+	}
+	// New binary content should be at the custom path.
+	raw, err := os.ReadFile(wantBinaryPath)
+	if err != nil {
+		t.Fatalf("ReadFile(custom binary): %v", err)
+	}
+	if string(raw) != "new-binary" {
+		t.Fatalf("custom binary content = %q, want new-binary", string(raw))
+	}
+}
+
 func assertPackagedInstallResultFileContains(t *testing.T, path string, wantFragments ...string) {
 	t.Helper()
 	raw, err := os.ReadFile(path)

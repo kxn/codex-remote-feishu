@@ -271,6 +271,12 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 	state.CurrentBinaryPath = liveBinaryPath
 	state.VersionsRoot = xutil.FirstNonEmpty(strings.TrimSpace(opts.VersionsRoot), strings.TrimSpace(state.VersionsRoot), defaultVersionsRootForStatePath(state.StatePath))
 
+	// Migrate version-scoped legacy live binary to canonical instance bin dir.
+	if canonicalDir, needsMigration := canonicalInstallBinDirForMigration(opts.GOOS, state); needsMigration {
+		liveBinaryPath = filepath.Join(canonicalDir, filepath.Base(liveBinaryPath))
+		state.CurrentBinaryPath = liveBinaryPath
+	}
+
 	targetSlot, err := importLocalBinaryForUpgrade(state, opts.SourceBinary, opts.CurrentSlot)
 	if err != nil {
 		result.Error = err.Error()

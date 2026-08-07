@@ -95,7 +95,7 @@ Windows 下文件名为 `codex-remote.exe`。
 
 - `CurrentBinaryPath`
 
-helper 真正切换版本时，覆盖的是这条路径。
+helper 真正切换版本时，覆盖的是这条路径。如果该路径位于 `VersionsRoot` 下（legacy version-scoped 入口，例如 `releases/v1.8.4/codex-remote`），helper 会先迁移到 canonical 无版本稳定入口再覆盖。
 
 ### 3.5 upgrade helper shim
 
@@ -284,7 +284,7 @@ helper shim 入口是一个独立 binary，本身不再接受 `upgrade-helper -s
 3. 停掉当前 daemon/service
    - 当前实现不会只看 `stop` 命令是否已发出
    - 只有在 helper 确认旧 daemon/service 已真正退出后，才会继续进入 binary 切换
-4. 把 `PendingUpgrade.TargetBinaryPath` 复制覆盖到 `CurrentBinaryPath`
+4. 若 `CurrentBinaryPath` 位于 `VersionsRoot` 下（legacy version-scoped 入口），先迁移到 canonical 无版本稳定入口，再把 `PendingUpgrade.TargetBinaryPath` 复制覆盖到迁移后的 `CurrentBinaryPath`
 5. 把 phase 改成 `observing`
 6. 用新的 live binary 重新启动 daemon/service
 7. 轮询健康状态，直到成功或超时

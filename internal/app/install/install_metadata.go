@@ -254,6 +254,32 @@ func binaryWithinVersionsRoot(sourceBinary, versionsRoot string) bool {
 	return true
 }
 
+// canonicalInstallBinDirForMigration checks whether the current live binary
+// path is a version-scoped legacy slot under VersionsRoot. If so, it returns
+// the canonical instance bin directory and true, indicating that upgrade/repair
+// should migrate the live binary to the canonical path. Returns ("", false)
+// when the current path is already canonical or is a user-specified custom
+// directory outside VersionsRoot.
+func canonicalInstallBinDirForMigration(goos string, state InstallState) (string, bool) {
+	installedBinary := strings.TrimSpace(state.CurrentBinaryPath)
+	versionsRoot := strings.TrimSpace(state.VersionsRoot)
+	if installedBinary == "" || versionsRoot == "" {
+		return "", false
+	}
+	if !binaryWithinVersionsRoot(installedBinary, versionsRoot) {
+		return "", false
+	}
+	canonicalDir := defaultInstallBinDirForInstance(goos, state.BaseDir, state.InstanceID)
+	if canonicalDir == "" {
+		return "", false
+	}
+	installedDir := filepath.Dir(filepath.Clean(installedBinary))
+	if filepath.Clean(installedDir) == filepath.Clean(canonicalDir) {
+		return "", false
+	}
+	return canonicalDir, true
+}
+
 func looksLikeReleaseVersion(version string) bool {
 	return releaseVersionPattern.MatchString(strings.TrimSpace(version))
 }

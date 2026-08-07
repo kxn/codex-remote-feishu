@@ -253,6 +253,9 @@ func resolveTargetInstallBinDir(selection installInstanceSelection, explicitValu
 	}
 	if state, err := LoadState(selection.StatePath); err == nil {
 		if candidate := strings.TrimSpace(state.CurrentBinaryPath); candidate != "" {
+			if canonicalDir, needsMigration := canonicalInstallBinDirForMigration(runtime.GOOS, state); needsMigration {
+				return canonicalDir
+			}
 			return filepath.Dir(candidate)
 		}
 	}
