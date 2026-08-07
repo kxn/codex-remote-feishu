@@ -115,7 +115,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	}
 	source := strings.TrimSpace(os.Getenv(config.CodexRemoteInstanceSourceEnv))
 	if source == "" {
-		source = "vscode"
+		source = string(state.InstanceSourceVSCode)
 	}
 	managed := parseBoolEnv("CODEX_REMOTE_INSTANCE_MANAGED")
 	lifetime, parentPID, err := resolveInstanceLifetime(

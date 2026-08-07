@@ -266,7 +266,7 @@ func NormalizeDesiredClaudeProfileID(profileID string) string {
 // current user-visible mode names.
 func SurfaceModeAlias(mode ProductMode, backend agentproto.Backend) string {
 	if !IsHeadlessProductMode(mode) {
-		return "vscode"
+		return string(ProductModeVSCode)
 	}
 	switch NormalizeHeadlessBackend(backend) {
 	case agentproto.BackendClaude:
