@@ -1,3 +1,6 @@
+// Package embed embeds the platform-specific unified shim binary
+// (cmd/shim) as a zstd-compressed asset so installers can materialize it
+// without a Go toolchain.
 package embed
 
 import (
@@ -42,16 +45,24 @@ func Current() (Asset, bool) {
 	return current, true
 }
 
+func ExpectedSHA256() string {
+	asset, ok := Current()
+	if !ok {
+		return ""
+	}
+	return normalizeSHA256(asset.SHA256)
+}
+
 func WriteExecutable(path string) error {
 	asset, ok := Current()
 	if !ok {
-		return fmt.Errorf("no embedded upgrade shim asset for this platform")
+		return fmt.Errorf("no embedded shim asset for this platform")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 
-	tempFile, err := os.CreateTemp(filepath.Dir(path), "upgrade-shim-*.tmp")
+	tempFile, err := os.CreateTemp(filepath.Dir(path), "shim-*.tmp")
 	if err != nil {
 		return err
 	}
@@ -75,7 +86,7 @@ func WriteExecutable(path string) error {
 	}
 	if sum := hex.EncodeToString(digest.Sum(nil)); sum != normalizeSHA256(asset.SHA256) {
 		cleanup()
-		return fmt.Errorf("upgrade shim digest mismatch: got %s want %s", sum, normalizeSHA256(asset.SHA256))
+		return fmt.Errorf("shim digest mismatch: got %s want %s", sum, normalizeSHA256(asset.SHA256))
 	}
 	if err := tempFile.Chmod(0o755); err != nil {
 		cleanup()

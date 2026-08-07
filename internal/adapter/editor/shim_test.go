@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
+	shimembed "github.com/kxn/codex-remote-feishu/internal/shim/embed"
 )
 
 func TestPatchBundleEntrypoint(t *testing.T) {
@@ -51,7 +51,7 @@ func TestPatchBundleEntrypoint(t *testing.T) {
 	if status.Kind != ManagedShimKindTiny || !status.Installed || !status.SidecarValid || !status.MatchesBinary {
 		t.Fatalf("unexpected shim status: %#v", status)
 	}
-	if _, ok := managedshimembed.Current(); !ok {
+	if _, ok := shimembed.Current(); !ok {
 		t.Fatal("expected embedded managed shim asset for host platform")
 	}
 }

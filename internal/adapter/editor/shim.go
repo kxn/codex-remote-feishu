@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/managedshim"
-	managedshimembed "github.com/kxn/codex-remote-feishu/internal/managedshim/embed"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
+	shimembed "github.com/kxn/codex-remote-feishu/internal/shim/embed"
 )
 
 type PatchBundleEntrypointOptions struct {
@@ -18,11 +18,11 @@ type PatchBundleEntrypointOptions struct {
 }
 
 func ManagedShimRealBinaryPath(entrypointPath string) string {
-	return managedshim.RealBinaryPath(entrypointPath)
+	return shim.RealBinaryPath(entrypointPath)
 }
 
 func ManagedShimSidecarPath(entrypointPath string) string {
-	return managedshim.SidecarPath(entrypointPath)
+	return shim.SidecarPath(entrypointPath)
 }
 
 func PatchBundleEntrypoint(opts PatchBundleEntrypointOptions) error {
@@ -30,12 +30,12 @@ func PatchBundleEntrypoint(opts PatchBundleEntrypointOptions) error {
 	if entrypointPath == "" {
 		return fmt.Errorf("bundle entrypoint path is required")
 	}
-	sidecar := managedshim.Sidecar{
+	sidecar := shim.Sidecar{
 		InstallStatePath: opts.InstallStatePath,
 		ConfigPath:       opts.ConfigPath,
 		InstanceID:       opts.InstanceID,
 	}
-	if !managedshim.SidecarValid(sidecar) {
+	if !shim.SidecarValid(sidecar, shim.ModeManaged) {
 		return fmt.Errorf("managed shim install requires install state path and config path")
 	}
 	if err := os.MkdirAll(filepath.Dir(entrypointPath), 0o755); err != nil {
@@ -65,11 +65,11 @@ func PatchBundleEntrypoint(opts PatchBundleEntrypointOptions) error {
 		_ = os.Rename(realBinaryPath, entrypointPath)
 	}
 
-	if err := managedshimembed.WriteExecutable(entrypointPath); err != nil {
+	if err := shimembed.WriteExecutable(entrypointPath); err != nil {
 		restoreOriginal()
 		return err
 	}
-	if err := managedshim.WriteSidecar(ManagedShimSidecarPath(entrypointPath), sidecar); err != nil {
+	if err := shim.WriteSidecar(ManagedShimSidecarPath(entrypointPath), sidecar, shim.ModeManaged); err != nil {
 		restoreOriginal()
 		return err
 	}

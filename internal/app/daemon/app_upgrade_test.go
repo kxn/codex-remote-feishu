@@ -18,7 +18,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
-	"github.com/kxn/codex-remote-feishu/internal/upgradeshim"
+	"github.com/kxn/codex-remote-feishu/internal/shim"
 )
 
 func TestUpgradeLatestManualCheckPromptsIdleSurface(t *testing.T) {
@@ -578,11 +578,11 @@ func TestPrepareUpgradeHelperShimWritesEmbeddedShimAndSidecar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile sidecar: %v", err)
 	}
-	sidecar, err := upgradeshim.ReadSidecar(installshim.UpgradeShimSidecarPath(helperPath))
+	sidecar, err := shim.ReadSidecar(installshim.UpgradeShimSidecarPath(helperPath))
 	if err != nil {
 		t.Fatalf("ReadSidecar: %v", err)
 	}
-	if !upgradeshim.SamePath(sidecar.InstallStatePath, statePath) {
+	if !shim.SamePath(sidecar.InstallStatePath, statePath) {
 		t.Fatalf("sidecar install state path = %q, want %q (raw=%q)", sidecar.InstallStatePath, statePath, string(sidecarRaw))
 	}
 }
