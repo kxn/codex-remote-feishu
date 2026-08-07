@@ -408,7 +408,22 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 			title = "已进入新会话待命"
 			text = "当前工作目标已经准备完成，下一条文本会直接开启新会话。"
 		}
-		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, title, text, false, filtered)
+		result := s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, title, text, false, filtered)
+		// Replay any pending text input that was saved when the user first
+		// sent a message in unbound state.
+		if pending := s.takePendingTextInput(surface); pending != nil {
+			replayAction := control.Action{
+				Kind:             control.ActionTextMessage,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				GatewayID:        surface.GatewayID,
+				MessageID:        pending.SourceMessageID,
+				ActorUserID:      pending.ActorUserID,
+				Text:             pending.Text,
+				Inputs:           pending.Inputs,
+			}
+			result = append(result, s.handleText(surface, replayAction)...)
+		}
+		return result
 	}
 	if kind == control.FeishuTargetPickerSessionThread && surface.PendingHeadless != nil && strings.TrimSpace(surface.PendingHeadless.ThreadID) == threadID {
 		filtered := targetPickerFilteredFollowupEvents(events)

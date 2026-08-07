@@ -213,6 +213,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			}
 			workspaceKey := s.surfaceCurrentWorkspaceKey(surface)
 			if workspaceKey == "" {
+				// Save message for replay after the user selects a workspace
+				// and thread from the picker.
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return s.openTargetPickerForAction(surface, action, "", nil, action.MessageID, false)
 			}
 			targetBackend := s.surfaceBackend(surface)
@@ -221,6 +224,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			events := s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{SuppressAutoUsePrompt: true})
 			inst = s.root.Instances[surface.AttachedInstanceID]
 			if inst == nil {
+				// Instance is starting — save message for replay when it
+				// connects and the surface attaches.
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return events
 			}
 			return append(events, s.handleText(surface, action)...)
@@ -252,9 +258,13 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if !detour.Triggered {
 		if reviewSession == nil {
 			if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
+				// Save the message for replay after the user resolves the
+				// blocking condition (e.g., selects a thread from the picker).
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return blocked
 			}
 			if blocked := s.unboundInputBlocked(surface); blocked != nil {
+				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 				return blocked
 			}
 			if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
@@ -341,6 +351,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			false,
 		)...)
 	}
+	// Clear any saved pending input — the user sent a new message that is
+	// being processed, so the old pending is stale.
+	s.clearPendingTextInput(surface)
 	return append(events, s.enqueueQueueItem(surface, action.MessageID, action.Text, stagedMessageIDs, inputs, threadID, cwd, routeMode, surface.PromptOverride, false)...)
 }
 

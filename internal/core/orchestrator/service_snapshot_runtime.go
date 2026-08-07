@@ -604,6 +604,23 @@ func (s *Service) ApplyInstanceConnected(instanceID string) []eventcontract.Even
 	for _, surface := range s.findAttachedSurfaces(instanceID) {
 		events = append(events, s.dispatchNext(surface)...)
 	}
+	// Replay any pending text input saved when the user sent a message
+	// before the instance was available (e.g., group on-demand resume,
+	// workspace binding with headless start).
+	for _, surface := range s.findAttachedSurfaces(instanceID) {
+		if pending := s.takePendingTextInput(surface); pending != nil {
+			replayAction := control.Action{
+				Kind:             control.ActionTextMessage,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				GatewayID:        surface.GatewayID,
+				MessageID:        pending.SourceMessageID,
+				ActorUserID:      pending.ActorUserID,
+				Text:             pending.Text,
+				Inputs:           pending.Inputs,
+			}
+			events = append(events, s.handleText(surface, replayAction)...)
+		}
+	}
 	events = append(events, s.reevaluateFollowSurfaces(instanceID)...)
 	return events
 }
