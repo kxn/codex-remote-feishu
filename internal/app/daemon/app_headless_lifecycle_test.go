@@ -30,15 +30,16 @@ func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 			StateDir: stateDir,
 		},
 	})
+	workspaceDir := t.TempDir()
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-offline",
 		DisplayName:   "droid",
-		WorkspaceRoot: "/data/dl/droid",
-		WorkspaceKey:  "/data/dl/droid",
+		WorkspaceRoot: workspaceDir,
+		WorkspaceKey:  workspaceDir,
 		ShortName:     "droid",
 		Online:        false,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: workspaceDir, Loaded: true},
 		},
 	})
 
@@ -57,10 +58,10 @@ func TestDaemonStartsPreselectedHeadlessForGlobalThreadUse(t *testing.T) {
 	})
 
 	snapshot := app.service.SurfaceSnapshot("surface-1")
-	if snapshot == nil || snapshot.PendingHeadless.ThreadID != "thread-1" || snapshot.PendingHeadless.ThreadCWD != "/data/dl/droid" {
+	if snapshot == nil || snapshot.PendingHeadless.ThreadID != "thread-1" || snapshot.PendingHeadless.ThreadCWD != workspaceDir {
 		t.Fatalf("expected pending preselected headless snapshot, got %#v", snapshot)
 	}
-	if captured.WorkDir != "/data/dl/droid" || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
+	if captured.WorkDir != workspaceDir || captured.InstanceID != snapshot.PendingHeadless.InstanceID {
 		t.Fatalf("unexpected preselected headless launch opts: %#v", captured)
 	}
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_LIFETIME=daemon-owned") {
@@ -164,16 +165,17 @@ func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
 		},
 	})
 	app.service.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
+	claudeWorkspaceDir := t.TempDir()
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-offline-claude",
 		DisplayName:   "repo",
-		WorkspaceRoot: "/data/dl/repo",
-		WorkspaceKey:  "/data/dl/repo",
+		WorkspaceRoot: claudeWorkspaceDir,
+		WorkspaceKey:  claudeWorkspaceDir,
 		ShortName:     "repo",
 		Backend:       agentproto.BackendClaude,
 		Online:        false,
 		Threads: map[string]*state.ThreadRecord{
-			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: "/data/dl/repo", Loaded: true},
+			"thread-claude": {ThreadID: "thread-claude", Name: "Claude 会话", CWD: claudeWorkspaceDir, Loaded: true},
 		},
 	})
 

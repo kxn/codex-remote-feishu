@@ -216,20 +216,18 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 	if workDir == "" {
 		workDir = strings.TrimSpace(cfg.Paths.StateDir)
 	}
-	if command.AutoRestore {
-		if err := validateHeadlessWorkDir(workDir); err != nil {
-			return a.handleManagedHeadlessLaunchFailure(command, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
-				Code:             "headless_workspace_missing",
-				Layer:            "daemon",
-				Stage:            "headless_start",
-				Operation:        "start_headless",
-				Message:          "恢复会话的工作目录不存在或不可用。",
-				Details:          workDir,
-				SurfaceSessionID: command.SurfaceSessionID,
-				ThreadID:         command.ThreadID,
-				Retryable:        false,
-			}), now)
-		}
+	if err := validateHeadlessWorkDir(workDir); err != nil {
+		return a.handleManagedHeadlessLaunchFailure(command, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+			Code:             "headless_workspace_missing",
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          fmt.Sprintf("工作目录不存在或不可用：%s", workDir),
+			Details:          workDir,
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+			Retryable:        false,
+		}), now)
 	}
 	if !a.headlessLaunchStillAuthorizedLocked(launchAuthorization) {
 		return nil
