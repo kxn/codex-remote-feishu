@@ -26,15 +26,6 @@ func ParseFeishuMenuActionWithoutCatalog(eventKey string) (Action, bool) {
 	return parseFeishuMenuAction(eventKey)
 }
 
-func ResolveFeishuMenuCommand(ctx CatalogContext, eventKey string) (ResolvedCommand, bool) {
-	ctx = NormalizeCatalogContext(ctx)
-	action, ok := parseFeishuMenuAction(eventKey)
-	if !ok {
-		return ResolvedCommand{}, false
-	}
-	return resolvedCommandFromCommandID(ctx, action.CommandID, action)
-}
-
 func parseFeishuTextAction(text string) (Action, bool) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {

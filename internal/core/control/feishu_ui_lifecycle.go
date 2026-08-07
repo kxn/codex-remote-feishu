@@ -9,7 +9,6 @@ import (
 const (
 	FeishuUIInlineReplaceFreshnessDaemonLifecycle = "daemon_lifecycle"
 	FeishuUIInlineReplaceViewSessionSurfaceState  = "surface_state_rederived"
-	FeishuUIInlineReplaceOwnerController          = "feishu_ui_controller"
 )
 
 type FeishuFrontstageCurrentCardMode string
@@ -33,9 +32,6 @@ type FeishuFollowupHandoffClass = handoffcontract.HandoffClass
 const (
 	FeishuFollowupHandoffClassNotice          = handoffcontract.HandoffClassNotice
 	FeishuFollowupHandoffClassThreadSelection = handoffcontract.HandoffClassThreadSelection
-	FeishuFollowupHandoffClassNavigation      = handoffcontract.HandoffClassNavigation
-	FeishuFollowupHandoffClassProcessDetail   = handoffcontract.HandoffClassProcessDetail
-	FeishuFollowupHandoffClassTerminal        = handoffcontract.HandoffClassTerminalContent
 )
 
 type FeishuFollowupPolicy = handoffcontract.FollowupPolicy

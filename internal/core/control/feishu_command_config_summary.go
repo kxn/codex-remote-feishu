@@ -6,13 +6,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-// BuildFeishuCommandConfigSummarySections converts command-config runtime view
-// state into adapter-owned summary sections, so dynamic values no longer need
-// to pass through markdown summary strings.
-func BuildFeishuCommandConfigSummarySections(def FeishuCommandDefinition, view FeishuCatalogConfigView) []FeishuCardTextSection {
-	return BuildFeishuCommandConfigBodySections(def, view)
-}
-
 func BuildFeishuCommandConfigBodySections(_ FeishuCommandDefinition, view FeishuCatalogConfigView) []FeishuCardTextSection {
 	base := commandConfigBaseSummarySections(view)
 	sections := make([]FeishuCardTextSection, 0, len(base))

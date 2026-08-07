@@ -208,10 +208,6 @@ func (p FeishuCommandDisplayProfile) VisibleFamiliesForGroup(groupID string) []s
 	return visible
 }
 
-func (p FeishuCommandDisplayProfile) IncludesGroup(groupID string) bool {
-	return len(p.VisibleFamiliesForGroup(groupID)) > 0
-}
-
 func ResolveFeishuCommandSupport(ctx CatalogContext, familyID string) (FeishuCommandSupport, bool) {
 	ctx = NormalizeCatalogContext(ctx)
 	familyID = strings.TrimSpace(familyID)

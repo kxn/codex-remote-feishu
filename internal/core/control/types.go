@@ -94,7 +94,6 @@ const (
 	ActionTargetPickerConfirm         ActionKind = "surface.target_picker.confirm"
 	ActionHistoryPage                 ActionKind = "surface.history.page"
 	ActionHistoryDetail               ActionKind = "surface.history.detail"
-	ActionFeishuAppTestCallback       ActionKind = "surface.button.feishu_app_test_callback"
 )
 
 type InboundLifecycleVerdict string
@@ -412,7 +411,6 @@ type RequestPromptQuestion struct {
 type RequestPromptFormFieldKind string
 
 const (
-	RequestPromptFormFieldText              RequestPromptFormFieldKind = "text"
 	RequestPromptFormFieldSelectStatic      RequestPromptFormFieldKind = "select_static"
 	RequestPromptFormFieldMultiSelectStatic RequestPromptFormFieldKind = "multi_select_static"
 )

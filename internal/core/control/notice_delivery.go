@@ -5,7 +5,6 @@ import "strings"
 type NoticeDeliveryClass string
 
 const (
-	NoticeDeliveryClassDefault       NoticeDeliveryClass = ""
 	NoticeDeliveryClassGlobalRuntime NoticeDeliveryClass = "global_runtime"
 )
 
