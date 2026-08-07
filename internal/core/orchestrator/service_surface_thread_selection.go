@@ -632,6 +632,30 @@ func headlessRestoreFailureNotice(code string) *control.Notice {
 			Title: "Codex 版本不兼容",
 			Text:  "当前 Codex 版本不支持所需的 Profile 隔离能力，请先升级 Codex。",
 		}
+	case "codex_binary_unavailable":
+		return &control.Notice{
+			Code:  "codex_binary_unavailable",
+			Title: "Codex 运行环境不可用",
+			Text:  "找不到可用的 Codex 可执行文件，或 Codex 启动失败，请检查 Codex 安装与运行环境后重试。",
+		}
+	case "codex_probe_timeout":
+		return &control.Notice{
+			Code:  "codex_probe_timeout",
+			Title: "Codex 探测超时",
+			Text:  "Codex 能力探测超时，请稍后重试或重启服务。",
+		}
+	case "codex_probe_unavailable":
+		return &control.Notice{
+			Code:  "codex_probe_unavailable",
+			Title: "Codex 探测暂不可用",
+			Text:  "暂时无法完成 Codex 能力探测，请稍后重试。",
+		}
+	case "codex_probe_contract_mismatch":
+		return &control.Notice{
+			Code:  "codex_probe_contract_mismatch",
+			Title: "Codex 协议契约不匹配",
+			Text:  "Codex app-server 返回的协议契约与预期不一致，暂时无法确认兼容性。",
+		}
 	case "managed_model_catalog_missing":
 		return &control.Notice{
 			Code:  "managed_model_catalog_missing",
@@ -706,6 +730,10 @@ func HeadlessRestoreLaunchFailureCode(err error) string {
 		"oauth_probe_unknown",
 		"oauth_deployment_unsupported",
 		"codex_capability_unsupported",
+		"codex_binary_unavailable",
+		"codex_probe_timeout",
+		"codex_probe_unavailable",
+		"codex_probe_contract_mismatch",
 		"managed_model_catalog_missing",
 		"profile_revision_unavailable":
 		return strings.TrimSpace(problem.Code)

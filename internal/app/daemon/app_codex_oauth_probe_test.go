@@ -622,6 +622,69 @@ func TestOAuthProfileCapabilityProbeErrorReachesLaunchFailure(t *testing.T) {
 	}
 }
 
+func TestCodexRuntimeCapabilityRetriesAfterFailureTTL(t *testing.T) {
+	app, _ := newOAuthLaunchAuthorizationTestApp(t)
+	calls := 0
+	app.runCodexCapabilityPreflight = func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error) {
+		calls++
+		if calls == 1 {
+			return codexprofile.CapabilityPreflightObservation{}, &codexprofile.OAuthProbeError{
+				Code:  codexprofile.ErrorCodexProbeUnavailable,
+				Stage: "capability_initialize",
+			}
+		}
+		return codexprofile.CapabilityPreflightObservation{CapabilitySet: codexprofile.CodexProfileCapabilitySetV1}, nil
+	}
+
+	app.ensureCodexRuntimeCapability(context.Background())
+	if got := app.effectiveCodexRuntimeCapabilitySetLocked(); got != "" {
+		t.Fatalf("expected failed probe to leave capability empty, got %q", got)
+	}
+	if calls != 1 {
+		t.Fatalf("expected one probe attempt, got %d", calls)
+	}
+
+	app.mu.Lock()
+	app.codexRuntimeCapability.failedAt = time.Now().Add(-codexProbeRetryInterval - time.Second)
+	app.mu.Unlock()
+	app.maybeRetryCodexRuntimeProbeIfDue(context.Background())
+
+	if got := app.effectiveCodexRuntimeCapabilitySetLocked(); got != codexprofile.CodexProfileCapabilitySetV1 {
+		t.Fatalf("expected retry to restore capability, got %q", got)
+	}
+	if calls != 2 {
+		t.Fatalf("expected retry after TTL, calls=%d", calls)
+	}
+}
+
+func TestCodexCapabilityPreflightFailureCodeReachesHeadlessNotice(t *testing.T) {
+	app, command := newOAuthLaunchAuthorizationTestApp(t)
+	app.runCodexOAuthProbe = func(context.Context, codexprofile.OAuthProbeOptions) (codexprofile.OAuthProbeObservation, error) {
+		return testDetectedOAuthObservation(), nil
+	}
+	app.runCodexCapabilityPreflight = func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error) {
+		return codexprofile.CapabilityPreflightObservation{}, &codexprofile.OAuthProbeError{
+			Code:  codexprofile.ErrorCodexProbeUnavailable,
+			Stage: "capability_initialize",
+		}
+	}
+	var launches atomic.Int32
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		launches.Add(1)
+		return 4321, nil
+	}
+
+	app.ensureCodexRuntimeCapability(context.Background())
+	events := app.startManagedHeadless(command)
+
+	if launches.Load() != 0 {
+		t.Fatalf("probe failure reached headless launcher")
+	}
+	if len(events) == 0 || events[0].Notice == nil || events[0].Notice.Code != codexprofile.ErrorCodexProbeUnavailable {
+		t.Fatalf("expected probe unavailable launch failure notice, got %#v", events)
+	}
+}
+
 func testDetectedOAuthObservation() codexprofile.OAuthProbeObservation {
 	return codexprofile.OAuthProbeObservation{
 		Result: codexprofile.OAuthProbeResult{

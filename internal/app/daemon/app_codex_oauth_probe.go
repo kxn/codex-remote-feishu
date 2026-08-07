@@ -10,13 +10,17 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-const codexOAuthProbeTimeout = 10 * time.Second
+const (
+	codexOAuthProbeTimeout  = 10 * time.Second
+	codexProbeRetryInterval = 60 * time.Second
+)
 
 type codexRuntimeCapabilityState struct {
 	checked       bool
 	checking      bool
 	capabilitySet string
 	errorCode     string
+	failedAt      time.Time
 	done          chan struct{}
 }
 
@@ -172,7 +176,8 @@ func (a *App) runCodexOAuthProbeTask(ctx context.Context, task codexOAuthProbeTa
 
 func (a *App) ensureCodexRuntimeCapability(ctx context.Context) {
 	a.mu.Lock()
-	if a.codexRuntimeCapability.checked {
+	state := a.codexRuntimeCapability
+	if state.checked && (state.capabilitySet != "" || time.Since(state.failedAt) < codexProbeRetryInterval) {
 		a.mu.Unlock()
 		return
 	}
@@ -198,15 +203,25 @@ func (a *App) ensureCodexRuntimeCapability(ctx context.Context) {
 
 	capabilitySet := ""
 	errorCode := ""
+	failedAt := time.Time{}
 	if runPreflight == nil || strings.TrimSpace(options.BinaryPath) == "" {
-		errorCode = codexprofile.ErrorCodexCapabilityUnsupported
+		errorCode = codexprofile.ErrorCodexBinaryUnavailable
+		failedAt = time.Now().UTC()
 	} else {
 		preflightCtx, cancel := context.WithTimeout(ctx, codexOAuthProbeTimeout)
 		observation, err := runPreflight(preflightCtx, options)
 		cancel()
-		if err != nil || strings.TrimSpace(observation.CapabilitySet) != codexprofile.CodexProfileCapabilitySetV1 {
+		switch {
+		case err != nil:
+			errorCode = codexprofile.OAuthProbeErrorCode(err)
+			if errorCode == "" {
+				errorCode = codexprofile.ErrorCodexProbeUnavailable
+			}
+			failedAt = time.Now().UTC()
+		case strings.TrimSpace(observation.CapabilitySet) != codexprofile.CodexProfileCapabilitySetV1:
 			errorCode = codexprofile.ErrorCodexCapabilityUnsupported
-		} else {
+			failedAt = time.Now().UTC()
+		default:
 			capabilitySet = codexprofile.CodexProfileCapabilitySetV1
 		}
 	}
@@ -216,8 +231,20 @@ func (a *App) ensureCodexRuntimeCapability(ctx context.Context) {
 	a.codexRuntimeCapability.checking = false
 	a.codexRuntimeCapability.capabilitySet = capabilitySet
 	a.codexRuntimeCapability.errorCode = errorCode
+	a.codexRuntimeCapability.failedAt = failedAt
 	close(done)
 	a.mu.Unlock()
+}
+
+func (a *App) maybeRetryCodexRuntimeProbeIfDue(ctx context.Context) {
+	a.mu.Lock()
+	state := a.codexRuntimeCapability
+	due := state.checked && state.capabilitySet == "" && state.errorCode != "" &&
+		time.Since(state.failedAt) >= codexProbeRetryInterval
+	a.mu.Unlock()
+	if due {
+		a.ensureCodexRuntimeCapability(ctx)
+	}
 }
 
 func (a *App) effectiveCodexRuntimeCapabilitySetLocked() string {
@@ -227,4 +254,11 @@ func (a *App) effectiveCodexRuntimeCapabilitySetLocked() string {
 	// Production calls ensureCodexRuntimeCapability before ingress starts. The
 	// pre-run value keeps direct component tests deterministic.
 	return codexprofile.CodexProfileCapabilitySetV1
+}
+
+func (a *App) effectiveCodexRuntimeCapabilityErrorCodeLocked() string {
+	if a.codexRuntimeCapability.checked {
+		return strings.TrimSpace(a.codexRuntimeCapability.errorCode)
+	}
+	return ""
 }

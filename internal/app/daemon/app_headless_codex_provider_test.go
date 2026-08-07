@@ -431,3 +431,30 @@ func TestCodexHeadlessLaunchProblemPreservesStableRuntimeReason(t *testing.T) {
 		t.Fatalf("problem message = %q, want actionable API Key reason", problem.Message)
 	}
 }
+
+func TestCodexHeadlessLaunchProblemClassifiesProbeFailures(t *testing.T) {
+	tests := []struct {
+		code        string
+		wantMessage string
+	}{
+		{code: codexprofile.ErrorCodexBinaryUnavailable, wantMessage: "找不到"},
+		{code: codexprofile.ErrorCodexProbeTimeout, wantMessage: "超时"},
+		{code: codexprofile.ErrorCodexProbeUnavailable, wantMessage: "暂时无法"},
+		{code: codexprofile.ErrorCodexProbeContractMismatch, wantMessage: "契约"},
+	}
+	for _, test := range tests {
+		problem := codexHeadlessLaunchProblem(
+			&codexprofile.RuntimeError{Code: test.code},
+			agentproto.ErrorInfo{Code: "codex_provider_prepare_failed", Message: "Codex Provider 准备失败。", Retryable: true},
+		)
+		if problem.Code != test.code {
+			t.Fatalf("problem code = %q, want %q", problem.Code, test.code)
+		}
+		if problem.Retryable {
+			t.Fatalf("probe failure %q must not be marked retryable", test.code)
+		}
+		if !strings.Contains(problem.Message, test.wantMessage) {
+			t.Fatalf("problem message for %q = %q, want contains %q", test.code, problem.Message, test.wantMessage)
+		}
+	}
+}
