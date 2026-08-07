@@ -3,11 +3,13 @@ package daemon
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
 	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
@@ -114,6 +116,154 @@ func TestFeishuGroupOnDemandLaunchFailureClearsContinuationAndRepliesOnce(t *tes
 	}
 	if gateway.operations[0].CardTitle != "恢复失败" {
 		t.Fatalf("expected restore failure notice, got %#v", gateway.operations[0])
+	}
+}
+
+func TestFeishuGroupOnDemandTerminalFailureDoesNotRepeatAcrossMessages(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:   "feishu:app-1:chat:oc_room",
+		GatewayID:          "app-1",
+		ChatID:             "oc_room",
+		ActorUserID:        "ou_user",
+		ProductMode:        "normal",
+		Backend:            "codex",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    workspaceDir,
+		ResumeWorkspaceKey: workspaceDir,
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	})
+	app := newRestoreHintTestApp(stateDir)
+	app.headlessRuntime.CodexRealBinary = "codex"
+	app.runCodexCapabilityPreflight = func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error) {
+		return codexprofile.CapabilityPreflightObservation{}, &codexprofile.OAuthProbeError{
+			Code:  codexprofile.ErrorCodexCapabilityUnsupported,
+			Stage: "capability_initialize",
+		}
+	}
+	app.ensureCodexRuntimeCapability(context.Background())
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		t.Fatal("capability failure must not reach launcher")
+		return 0, nil
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_user",
+		MessageID:        "om-on-demand-1",
+		Text:             "继续刚才的任务",
+	})
+	gateway := app.gateway.(*recordingGateway)
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected first failure notice, got %#v", gateway.operations)
+	}
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionTextMessage,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_user",
+		MessageID:        "om-on-demand-2",
+		Text:             "继续刚才的任务",
+	})
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected terminal failure notice to be suppressed across messages, got %#v", gateway.operations)
+	}
+}
+
+func TestFeishuGroupOnDemandTerminalFailureRepeatsAfterTargetChange(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	workspaceDir := t.TempDir()
+	entry := surfaceresume.Entry{
+		SurfaceSessionID:   "feishu:app-1:chat:oc_room",
+		GatewayID:          "app-1",
+		ChatID:             "oc_room",
+		ActorUserID:        "ou_user",
+		ProductMode:        "normal",
+		Backend:            "codex",
+		ResumeThreadID:     "thread-1",
+		ResumeThreadTitle:  "修复登录流程",
+		ResumeThreadCWD:    workspaceDir,
+		ResumeWorkspaceKey: workspaceDir,
+		ResumeRouteMode:    "pinned",
+		ResumeHeadless:     true,
+	}
+	putSurfaceResumeStateForTest(t, stateDir, entry)
+	app := newRestoreHintTestApp(stateDir)
+	app.headlessRuntime.CodexRealBinary = "codex"
+	app.runCodexCapabilityPreflight = func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error) {
+		return codexprofile.CapabilityPreflightObservation{}, &codexprofile.OAuthProbeError{
+			Code:  codexprofile.ErrorCodexCapabilityUnsupported,
+			Stage: "capability_initialize",
+		}
+	}
+	app.ensureCodexRuntimeCapability(context.Background())
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		t.Fatal("capability failure must not reach launcher")
+		return 0, nil
+	}
+
+	sendText := func(messageID string) {
+		app.HandleAction(context.Background(), control.Action{
+			Kind:             control.ActionTextMessage,
+			GatewayID:        "app-1",
+			SurfaceSessionID: "feishu:app-1:chat:oc_room",
+			ChatID:           "oc_room",
+			ActorUserID:      "ou_user",
+			MessageID:        messageID,
+			Text:             "继续刚才的任务",
+		})
+	}
+	sendText("om-on-demand-1")
+	gateway := app.gateway.(*recordingGateway)
+	if len(gateway.operations) != 1 {
+		t.Fatalf("expected first failure notice, got %#v", gateway.operations)
+	}
+
+	entry.ResumeThreadID = "thread-2"
+	entry.ResumeThreadCWD = filepath.Join(workspaceDir, "other")
+	if !app.putSurfaceResumeEntryLocked(entry, time.Now().UTC()) {
+		t.Fatal("expected target change to persist a new resume entry")
+	}
+	app.syncSurfaceResumeRecoveryStateLocked()
+
+	sendText("om-on-demand-2")
+	if len(gateway.operations) != 2 {
+		t.Fatalf("expected target change to re-enable failure notice, got %#v", gateway.operations)
+	}
+}
+
+func TestGroupOnDemandTerminalFailureRecordAndClear(t *testing.T) {
+	app := newRestoreHintTestApp(t.TempDir())
+	surfaceID := "feishu:app-1:chat:oc_room"
+
+	if code, emit := app.recordGroupOnDemandTerminalFailureLocked(surfaceID, "codex_capability_unsupported"); !emit || code != "codex_capability_unsupported" {
+		t.Fatalf("first terminal failure emit=%t code=%q, want emit with code", emit, code)
+	}
+	if _, emit := app.recordGroupOnDemandTerminalFailureLocked(surfaceID, "codex_capability_unsupported"); emit {
+		t.Fatal("same terminal failure must be suppressed")
+	}
+	if _, emit := app.recordGroupOnDemandTerminalFailureLocked(surfaceID, "thread_not_found"); !emit {
+		t.Fatal("non-terminal failure must always emit")
+	}
+	if _, emit := app.recordGroupOnDemandTerminalFailureLocked(surfaceID, "workspace_not_found"); !emit {
+		t.Fatal("different terminal failure must emit again")
+	}
+
+	app.clearGroupOnDemandTerminalFailureLocked(surfaceID)
+	if _, emit := app.recordGroupOnDemandTerminalFailureLocked(surfaceID, "codex_capability_unsupported"); !emit {
+		t.Fatal("clear must allow the same terminal failure to emit again")
 	}
 }
 

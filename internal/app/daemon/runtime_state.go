@@ -42,6 +42,7 @@ type surfaceResumeRuntimeState struct {
 	persistedStoreRuntimeState[*surfaceresume.Store]
 	recovery                    map[string]*surfaceResumeRecoveryState
 	groupOnDemandContinuations  map[string]*groupOnDemandResumeContinuation
+	groupTerminalFailureNotices map[string]string
 	vscodeMigrationFlows        map[string]*vscodeMigrationFlowRecord
 	vscodeMigrationNextSeq      int64
 	vscodeResumeNotices         map[string]bool

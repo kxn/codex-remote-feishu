@@ -217,6 +217,8 @@ func (a *App) putSurfaceResumeEntryLocked(entry surfaceresume.Entry, now time.Ti
 	entry.UpdatedAt = now
 	if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
 		log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
+	} else {
+		a.clearGroupOnDemandTerminalFailureLocked(entry.SurfaceSessionID)
 	}
 	a.markVSCodeDetachedPromptScanDueLocked()
 	return true
