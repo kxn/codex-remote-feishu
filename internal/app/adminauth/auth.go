@@ -8,11 +8,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 )
 
 const (
@@ -289,20 +290,5 @@ func ExpiredSessionCookie() *http.Cookie {
 }
 
 func IsLoopbackRequest(r *http.Request) bool {
-	if r == nil {
-		return false
-	}
-	host := strings.TrimSpace(r.RemoteAddr)
-	if host == "" {
-		return false
-	}
-	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
-		host = parsedHost
-	}
-	host = strings.Trim(host, "[]")
-	if strings.EqualFold(host, "localhost") {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
+	return netutil.IsLoopbackRequest(r)
 }

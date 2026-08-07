@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -192,11 +193,7 @@ func fallbackSetupURL(cfg config.AppConfig) string {
 
 func displayAdminHost(host string) string {
 	trimmed := strings.TrimSpace(strings.Trim(host, "[]"))
-	if trimmed == "" || strings.EqualFold(trimmed, "localhost") || trimmed == "0.0.0.0" || trimmed == "::" {
-		return "localhost"
-	}
-	ip := net.ParseIP(trimmed)
-	if ip != nil && ip.IsLoopback() {
+	if trimmed == "" || trimmed == "0.0.0.0" || trimmed == "::" || netutil.IsLoopbackHost(trimmed) {
 		return "localhost"
 	}
 	return trimmed
