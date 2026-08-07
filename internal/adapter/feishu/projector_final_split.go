@@ -3,6 +3,8 @@ package feishu
 import (
 	"strings"
 	"unicode/utf8"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/markdown"
 )
 
 type finalReplyChunk struct {
@@ -129,8 +131,8 @@ func explodeFinalReplyUnit(unit string) []string {
 }
 
 func explodeFencedFinalReplyUnit(unit string) []string {
-	segments := splitFinalCardFenceSegments(unit)
-	if len(segments) != 1 || !segments[0].fenced || segments[0].text != unit {
+	segments := markdown.SplitFenceSegments(unit)
+	if len(segments) != 1 || !segments[0].Fenced || segments[0].Text != unit {
 		return nil
 	}
 	lines := strings.SplitAfter(unit, "\n")
@@ -139,8 +141,8 @@ func explodeFencedFinalReplyUnit(unit string) []string {
 	}
 	open := lines[0]
 	closeLine := lines[len(lines)-1]
-	openChar, openCount, openOK := finalCardFenceMarker(open)
-	closeChar, closeCount, closeOK := finalCardFenceMarker(closeLine)
+	openChar, openCount, openOK := markdown.FenceMarker(open)
+	closeChar, closeCount, closeOK := markdown.FenceMarker(closeLine)
 	if !openOK || !closeOK || openChar != closeChar || closeCount < openCount {
 		return nil
 	}

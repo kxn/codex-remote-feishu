@@ -1,21 +1,27 @@
-package preview
+// Package markdown provides shared markdown fence and link parsing helpers
+// used by the feishu card renderer and the feishu preview rewriter.
+package markdown
 
 import "strings"
 
-type finalCardFenceSegment struct {
-	fenced bool
-	text   string
+// FenceSegment represents a contiguous run of text that is either inside a
+// markdown fenced code block or outside of one.
+type FenceSegment struct {
+	Fenced bool
+	Text   string
 }
 
-func splitFinalCardFenceSegments(text string) []finalCardFenceSegment {
+// SplitFenceSegments splits text into alternating fenced / non-fenced segments
+// by scanning for markdown code fence markers (``` or ~~~).
+func SplitFenceSegments(text string) []FenceSegment {
 	if text == "" {
 		return nil
 	}
 	lines := strings.SplitAfter(text, "\n")
 	if len(lines) == 0 {
-		return []finalCardFenceSegment{{text: text}}
+		return []FenceSegment{{Text: text}}
 	}
-	segments := make([]finalCardFenceSegment, 0, len(lines))
+	segments := make([]FenceSegment, 0, len(lines))
 	var current strings.Builder
 	inFence := false
 	fenceChar := byte(0)
@@ -24,14 +30,14 @@ func splitFinalCardFenceSegments(text string) []finalCardFenceSegment {
 		if current.Len() == 0 {
 			return
 		}
-		segments = append(segments, finalCardFenceSegment{
-			fenced: fenced,
-			text:   current.String(),
+		segments = append(segments, FenceSegment{
+			Fenced: fenced,
+			Text:   current.String(),
 		})
 		current.Reset()
 	}
 	for _, line := range lines {
-		char, count, ok := finalCardFenceMarker(line)
+		char, count, ok := FenceMarker(line)
 		switch {
 		case !inFence && ok:
 			flush(false)
@@ -55,7 +61,10 @@ func splitFinalCardFenceSegments(text string) []finalCardFenceSegment {
 	return segments
 }
 
-func finalCardFenceMarker(line string) (byte, int, bool) {
+// FenceMarker checks whether line is a markdown code fence opener. Returns the
+// fence character (backtick or tilde), the run length, and true if it is a
+// valid fence marker (>= 3 characters).
+func FenceMarker(line string) (byte, int, bool) {
 	trimmed := strings.TrimLeft(line, " \t")
 	if len(trimmed) < 3 {
 		return 0, 0, false
@@ -74,7 +83,9 @@ func finalCardFenceMarker(line string) (byte, int, bool) {
 	return 0, 0, false
 }
 
-func consecutiveByteRun(text string, start int, target byte) int {
+// ConsecutiveByteRun counts how many consecutive bytes starting at position
+// start in text equal to target.
+func ConsecutiveByteRun(text string, start int, target byte) int {
 	count := 0
 	for start+count < len(text) && text[start+count] == target {
 		count++
@@ -82,19 +93,25 @@ func consecutiveByteRun(text string, start int, target byte) int {
 	return count
 }
 
-func closingBacktickRun(text string, start, run int) int {
+// ClosingBacktickRun finds the position of a closing backtick run of exactly
+// run length, starting from position start. Returns -1 if not found.
+func ClosingBacktickRun(text string, start, run int) int {
 	for i := start; i < len(text); i++ {
 		if text[i] != '`' {
 			continue
 		}
-		if consecutiveByteRun(text, i, '`') == run {
+		if ConsecutiveByteRun(text, i, '`') == run {
 			return i
 		}
 	}
 	return -1
 }
 
-func parseMarkdownLinkAt(text string, start int) (end int, label, target string, ok bool) {
+// ParseMarkdownLinkAt parses a markdown inline link starting at position start
+// (which must be '['). Returns the end position (exclusive), the link label,
+// the raw target, and true on success. Handles nested parentheses and
+// backslash escapes inside the target.
+func ParseMarkdownLinkAt(text string, start int) (end int, label, target string, ok bool) {
 	if start < 0 || start >= len(text) || text[start] != '[' {
 		return 0, "", "", false
 	}

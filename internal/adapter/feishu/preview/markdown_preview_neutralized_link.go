@@ -5,6 +5,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/markdown"
 )
 
 type neutralizedLocalMarkdownRewrite struct {
@@ -117,11 +119,11 @@ func (p *DriveMarkdownPreviewer) tryRewriteNeutralizedLocalMarkdownLink(
 	if p == nil || index < 2 || text[index-2:index] != " (" {
 		return neutralizedLocalMarkdownRewrite{}, false
 	}
-	run := consecutiveByteRun(text, index, '`')
+	run := markdown.ConsecutiveByteRun(text, index, '`')
 	if run == 0 {
 		return neutralizedLocalMarkdownRewrite{}, false
 	}
-	close := closingBacktickRun(text, index+run, run)
+	close := markdown.ClosingBacktickRun(text, index+run, run)
 	if close < 0 || close+run >= len(text) || text[close+run] != ')' {
 		return neutralizedLocalMarkdownRewrite{}, false
 	}
