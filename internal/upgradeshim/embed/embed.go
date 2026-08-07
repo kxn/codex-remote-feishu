@@ -42,14 +42,6 @@ func Current() (Asset, bool) {
 	return current, true
 }
 
-func ExpectedSHA256() string {
-	asset, ok := Current()
-	if !ok {
-		return ""
-	}
-	return normalizeSHA256(asset.SHA256)
-}
-
 func WriteExecutable(path string) error {
 	asset, ok := Current()
 	if !ok {

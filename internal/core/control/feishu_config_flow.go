@@ -5,7 +5,7 @@ import "strings"
 type FeishuConfigFlowValueKey string
 
 const (
-	FeishuConfigFlowValueSurfaceProductMode   FeishuConfigFlowValueKey = "surface_product_mode"
+	FeishuConfigFlowValueSurfaceProductMode         FeishuConfigFlowValueKey = "surface_product_mode"
 	FeishuConfigFlowValueSurfaceCodexProvider       FeishuConfigFlowValueKey = "surface_codex_provider"
 	FeishuConfigFlowValueSurfaceClaudeProfile       FeishuConfigFlowValueKey = "surface_claude_profile"
 	FeishuConfigFlowValueSurfaceAutoWhip            FeishuConfigFlowValueKey = "surface_auto_whip"

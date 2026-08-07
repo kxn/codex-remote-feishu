@@ -57,12 +57,6 @@ func (h *Harness) ApplyAction(action control.Action) error {
 	return h.consumeUIEvents(events)
 }
 
-func (h *Harness) Tick(d time.Duration) error {
-	h.Now = h.Now.Add(d)
-	events := h.Service.Tick(h.Now)
-	return h.consumeUIEvents(events)
-}
-
 func (h *Harness) LocalClient(raw []byte) error {
 	result, err := h.Translator.ObserveClient(raw)
 	if err != nil {

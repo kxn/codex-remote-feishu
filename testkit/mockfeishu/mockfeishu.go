@@ -21,10 +21,6 @@ func NewRecorder() *Recorder {
 	return &Recorder{}
 }
 
-func (r *Recorder) Apply(events []eventcontract.Event) {
-	r.ApplyEvents(events)
-}
-
 func (r *Recorder) ApplyEvents(events []eventcontract.Event) {
 	for _, event := range events {
 		event = event.Normalized()
