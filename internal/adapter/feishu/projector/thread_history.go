@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -58,7 +59,7 @@ func ThreadHistoryListElements(view control.FeishuThreadHistoryView, daemonLifec
 		"content": "**选择要查看的一轮**",
 	})
 	payload := actionPayloadThreadHistory(cardActionKindHistoryDetail, view.PickerID, "", 0)
-	payload[cardActionPayloadKeyFieldName] = cardThreadHistoryTurnFieldName
+	payload[frontstagecontract.CardActionPayloadKeyFieldName] = cardThreadHistoryTurnFieldName
 	elements = append(elements, pathPickerSelectStaticElement(
 		cardThreadHistoryTurnFieldName,
 		"选择一轮并查看详情",

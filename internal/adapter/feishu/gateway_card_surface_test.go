@@ -3,6 +3,7 @@ package feishu
 import (
 	"testing"
 
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 )
 
@@ -100,7 +101,7 @@ func cardActionSurfaceEvent(surfaceID, operatorID, chatID, messageID string) *la
 		"kind": "show_all_workspaces",
 	}
 	if surfaceID != "" {
-		value[cardActionPayloadKeySurfaceSessionID] = surfaceID
+		value[frontstagecontract.CardActionPayloadKeySurfaceSessionID] = surfaceID
 	}
 	event := &larkcallback.CardActionTriggerEvent{
 		Event: &larkcallback.CardActionTriggerRequest{

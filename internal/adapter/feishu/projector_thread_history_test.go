@@ -7,6 +7,7 @@ import (
 	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func TestProjectThreadHistoryLoadingCreatesPatchableDirectCard(t *testing.T) {
@@ -77,14 +78,14 @@ func TestThreadHistoryListElementsUseHistoryCallbacks(t *testing.T) {
 	var sawDetail, sawPrev, sawNext bool
 	for _, action := range actions {
 		value := cardValueMap(action)
-		switch value[cardActionPayloadKeyKind] {
+		switch value[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindHistoryDetail:
 			sawDetail = true
 		case cardActionKindHistoryPage:
-			if _, ok := value[cardActionPayloadKeyPage]; !ok {
+			if _, ok := value[frontstagecontract.CardActionPayloadKeyPage]; !ok {
 				sawPrev = true
 			}
-			if value[cardActionPayloadKeyPage] == 2 {
+			if value[frontstagecontract.CardActionPayloadKeyPage] == 2 {
 				sawNext = true
 			}
 		}

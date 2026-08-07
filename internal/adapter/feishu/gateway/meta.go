@@ -11,6 +11,7 @@ import (
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -70,7 +71,7 @@ func InboundMetaFromCardActionEvent(event *larkcallback.CardActionTriggerEvent) 
 			meta.OpenMessageID = strings.TrimSpace(event.Event.Context.OpenMessageID)
 		}
 		if event.Event.Action != nil {
-			meta.CardDaemonLifecycleID = strings.TrimSpace(stringMapValue(event.Event.Action.Value, cardActionPayloadKeyDaemonLifecycleID))
+			meta.CardDaemonLifecycleID = strings.TrimSpace(stringMapValue(event.Event.Action.Value, frontstagecontract.CardActionPayloadKeyDaemonLifecycleID))
 		}
 	}
 	return meta

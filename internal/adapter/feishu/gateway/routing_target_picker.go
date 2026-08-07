@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func parseTargetPickerCardAction(
@@ -18,7 +19,7 @@ func parseTargetPickerCardAction(
 ) (control.Action, bool) {
 	switch actionPayloadKind(value) {
 	case cardActionKindTargetPickerSelectWorkspace:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		workspaceKey := selectflow.TargetPickerWorkspaceFlow.RecoverSelectedValue(value, event.Event.Action)
 		if pickerID == "" || workspaceKey == "" {
 			return control.Action{}, false
@@ -36,7 +37,7 @@ func parseTargetPickerCardAction(
 			Inbound:          meta,
 		}, true
 	case cardActionKindTargetPickerSelectSession:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		targetValue := selectflow.TargetPickerSessionFlow.RecoverSelectedValue(value, event.Event.Action)
 		if pickerID == "" || targetValue == "" {
 			return control.Action{}, false
@@ -53,8 +54,8 @@ func parseTargetPickerCardAction(
 			Inbound:           meta,
 		}, true
 	case cardActionKindTargetPickerPage:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
+		fieldName := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyFieldName))
 		if pickerID == "" || fieldName == "" {
 			return control.Action{}, false
 		}
@@ -67,12 +68,12 @@ func parseTargetPickerCardAction(
 			MessageID:        messageID,
 			PickerID:         pickerID,
 			FieldName:        fieldName,
-			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
+			Cursor:           intMapValue(value, frontstagecontract.CardActionPayloadKeyCursor),
 			Inbound:          meta,
 		}, true
 	case cardActionKindTargetPickerOpenPathPicker:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		targetValue := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyTargetValue))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
+		targetValue := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyTargetValue))
 		if pickerID == "" || targetValue == "" {
 			return control.Action{}, false
 		}
@@ -89,7 +90,7 @@ func parseTargetPickerCardAction(
 			Inbound:           meta,
 		}, true
 	case cardActionKindTargetPickerCancel:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		if pickerID == "" {
 			return control.Action{}, false
 		}
@@ -105,7 +106,7 @@ func parseTargetPickerCardAction(
 			Inbound:          meta,
 		}, true
 	case cardActionKindTargetPickerConfirm:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		if pickerID == "" {
 			return control.Action{}, false
 		}

@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func selectionEvent(view control.FeishuSelectionView, ctx *control.FeishuUISelectionContext) eventcontract.Event {
@@ -229,7 +230,7 @@ func assertPageLocalActionPayloadMatchesCommand(t *testing.T, value map[string]a
 	if gotArg != wantArg {
 		t.Fatalf("unexpected action arg payload: got %q want %q in %#v", gotArg, wantArg, value)
 	}
-	if _, ok := value[cardActionPayloadKeyCatalogFamilyID]; ok {
+	if _, ok := value[frontstagecontract.CardActionPayloadKeyCatalogFamilyID]; ok {
 		t.Fatalf("did not expect catalog provenance on local page action, got %#v", value)
 	}
 }
@@ -256,13 +257,13 @@ func assertCatalogProvenancePayloadMatchesCommand(t *testing.T, value map[string
 	if !ok {
 		t.Fatalf("expected parseable command text %q", commandText)
 	}
-	if got := strings.TrimSpace(stringAnyValue(value[cardActionPayloadKeyCatalogFamilyID])); got != resolved.FamilyID {
+	if got := strings.TrimSpace(stringAnyValue(value[frontstagecontract.CardActionPayloadKeyCatalogFamilyID])); got != resolved.FamilyID {
 		t.Fatalf("unexpected catalog family: got %q want %q in %#v", got, resolved.FamilyID, value)
 	}
-	if got := strings.TrimSpace(stringAnyValue(value[cardActionPayloadKeyCatalogVariantID])); got != resolved.VariantID {
+	if got := strings.TrimSpace(stringAnyValue(value[frontstagecontract.CardActionPayloadKeyCatalogVariantID])); got != resolved.VariantID {
 		t.Fatalf("unexpected catalog variant: got %q want %q in %#v", got, resolved.VariantID, value)
 	}
-	if got := strings.TrimSpace(stringAnyValue(value[cardActionPayloadKeyCatalogBackend])); got != string(resolved.Backend) {
+	if got := strings.TrimSpace(stringAnyValue(value[frontstagecontract.CardActionPayloadKeyCatalogBackend])); got != string(resolved.Backend) {
 		t.Fatalf("unexpected catalog backend: got %q want %q in %#v", got, resolved.Backend, value)
 	}
 }

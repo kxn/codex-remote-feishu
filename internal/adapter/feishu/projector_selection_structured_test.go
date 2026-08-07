@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -69,12 +70,12 @@ func TestProjectInstanceSelectionViewUsesStructuredButtons(t *testing.T) {
 		for _, button := range cardElementButtons(t, element) {
 			buttonLabels = append(buttonLabels, cardButtonLabel(t, button))
 			value := renderedButtonCallbackValue(t, button)
-			if value[cardActionPayloadKeyDaemonLifecycleID] != "life-1" {
+			if value[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-1" {
 				t.Fatalf("expected stamped daemon lifecycle on instance button, got %#v", value)
 			}
-			if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandList ||
-				value[cardActionPayloadKeyCatalogVariantID] != "list.codex.vscode" ||
-				value[cardActionPayloadKeyCatalogBackend] != "codex" {
+			if value[frontstagecontract.CardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandList ||
+				value[frontstagecontract.CardActionPayloadKeyCatalogVariantID] != "list.codex.vscode" ||
+				value[frontstagecontract.CardActionPayloadKeyCatalogBackend] != "codex" {
 				t.Fatalf("expected instance button to carry catalog provenance, got %#v", value)
 			}
 		}
@@ -145,14 +146,14 @@ func TestProjectVSCodeThreadSelectionViewUsesDropdown(t *testing.T) {
 		t.Fatalf("expected current thread as initial option, got %#v", selectElement)
 	}
 	value := cardValueMap(selectElement)
-	if value[cardActionPayloadKeyKind] != cardActionKindUseThread ||
-		value[cardActionPayloadKeyFieldName] != cardSelectionThreadFieldName ||
-		value[cardActionPayloadKeyDaemonLifecycleID] != "life-2" {
+	if value[frontstagecontract.CardActionPayloadKeyKind] != cardActionKindUseThread ||
+		value[frontstagecontract.CardActionPayloadKeyFieldName] != cardSelectionThreadFieldName ||
+		value[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-2" {
 		t.Fatalf("unexpected dropdown callback payload: %#v", value)
 	}
-	if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUseAll ||
-		value[cardActionPayloadKeyCatalogVariantID] != "useall.codex.vscode" ||
-		value[cardActionPayloadKeyCatalogBackend] != "codex" {
+	if value[frontstagecontract.CardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUseAll ||
+		value[frontstagecontract.CardActionPayloadKeyCatalogVariantID] != "useall.codex.vscode" ||
+		value[frontstagecontract.CardActionPayloadKeyCatalogBackend] != "codex" {
 		t.Fatalf("expected dropdown callback payload to carry catalog provenance: %#v", value)
 	}
 	var optionValues []string
@@ -236,29 +237,29 @@ func TestProjectVSCodeThreadSelectionViewPaginatesLargeDropdown(t *testing.T) {
 	selectElement := columns[1]["elements"].([]map[string]any)[0]
 
 	prevValue := renderedButtonCallbackValue(t, prev)
-	if prevValue[cardActionPayloadKeyKind] != "thread_selection_page" ||
-		prevValue[cardActionPayloadKeyViewMode] != string(control.FeishuThreadSelectionVSCodeAll) ||
-		prevValue[cardActionPayloadKeyDaemonLifecycleID] != "life-3" {
+	if prevValue[frontstagecontract.CardActionPayloadKeyKind] != "thread_selection_page" ||
+		prevValue[frontstagecontract.CardActionPayloadKeyViewMode] != string(control.FeishuThreadSelectionVSCodeAll) ||
+		prevValue[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-3" {
 		t.Fatalf("unexpected prev payload: %#v", prevValue)
 	}
 	nextValue := renderedButtonCallbackValue(t, next)
-	if nextValue[cardActionPayloadKeyKind] != "thread_selection_page" ||
-		nextValue[cardActionPayloadKeyViewMode] != string(control.FeishuThreadSelectionVSCodeAll) ||
-		nextValue[cardActionPayloadKeyDaemonLifecycleID] != "life-3" {
+	if nextValue[frontstagecontract.CardActionPayloadKeyKind] != "thread_selection_page" ||
+		nextValue[frontstagecontract.CardActionPayloadKeyViewMode] != string(control.FeishuThreadSelectionVSCodeAll) ||
+		nextValue[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-3" {
 		t.Fatalf("unexpected next payload: %#v", nextValue)
 	}
 	if got := cardStringValue(selectElement["initial_option"]); got != "" {
 		t.Fatalf("expected off-page current thread to clear initial option, got %#v", selectElement)
 	}
 	value := cardValueMap(selectElement)
-	if value[cardActionPayloadKeyKind] != cardActionKindUseThread ||
-		value[cardActionPayloadKeyFieldName] != cardSelectionThreadFieldName ||
-		value[cardActionPayloadKeyDaemonLifecycleID] != "life-3" {
+	if value[frontstagecontract.CardActionPayloadKeyKind] != cardActionKindUseThread ||
+		value[frontstagecontract.CardActionPayloadKeyFieldName] != cardSelectionThreadFieldName ||
+		value[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-3" {
 		t.Fatalf("unexpected dropdown callback payload: %#v", value)
 	}
-	if value[cardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUseAll ||
-		value[cardActionPayloadKeyCatalogVariantID] != "useall.codex.vscode" ||
-		value[cardActionPayloadKeyCatalogBackend] != "codex" {
+	if value[frontstagecontract.CardActionPayloadKeyCatalogFamilyID] != control.FeishuCommandUseAll ||
+		value[frontstagecontract.CardActionPayloadKeyCatalogVariantID] != "useall.codex.vscode" ||
+		value[frontstagecontract.CardActionPayloadKeyCatalogBackend] != "codex" {
 		t.Fatalf("expected dropdown callback payload to carry catalog provenance: %#v", value)
 	}
 	if !strings.Contains(renderedV2CardText(t, ops[0]), "超出卡片大小，如未找到请翻页。") {
@@ -305,7 +306,7 @@ func TestProjectKickThreadSelectionViewUsesStructuredButtons(t *testing.T) {
 				continue
 			}
 			value := renderedButtonCallbackValue(t, button)
-			if value[cardActionPayloadKeyKind] != cardActionKindKickThreadConfirm || value[cardActionPayloadKeyThreadID] != "thread-1" || value[cardActionPayloadKeyDaemonLifecycleID] != "life-kick" {
+			if value[frontstagecontract.CardActionPayloadKeyKind] != cardActionKindKickThreadConfirm || value[frontstagecontract.CardActionPayloadKeyThreadID] != "thread-1" || value[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-kick" {
 				t.Fatalf("unexpected kick confirm payload: %#v", value)
 			}
 			sawConfirm = true

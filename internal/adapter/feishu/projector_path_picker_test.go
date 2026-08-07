@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func TestProjectPathPickerStampsDaemonLifecycleID(t *testing.T) {
@@ -44,7 +45,7 @@ func TestProjectPathPickerStampsDaemonLifecycleID(t *testing.T) {
 	}
 	for _, action := range actions {
 		value := cardValueMap(action)
-		if value[cardActionPayloadKeyDaemonLifecycleID] != "life-1" {
+		if value[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-1" {
 			t.Fatalf("expected daemon lifecycle on picker action, got %#v", value)
 		}
 	}
@@ -178,7 +179,7 @@ func TestPathPickerElementsUseEnterAndSelectPayloadKinds(t *testing.T) {
 	foundSelect := false
 	for _, action := range actions {
 		value := cardValueMap(action)
-		switch value[cardActionPayloadKeyKind] {
+		switch value[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindPathPickerEnter:
 			foundEnter = true
 		case cardActionKindPathPickerSelect:
@@ -248,7 +249,7 @@ func TestDirectoryModePathPickerUsesCompactDirectorySelect(t *testing.T) {
 	foundEnter := false
 	for _, action := range actions {
 		value := cardValueMap(action)
-		if value[cardActionPayloadKeyKind] == cardActionKindPathPickerEnter {
+		if value[frontstagecontract.CardActionPayloadKeyKind] == cardActionKindPathPickerEnter {
 			foundEnter = true
 		}
 	}
@@ -337,9 +338,9 @@ func TestPathPickerFileModePaginatesOversizedLanesAndKeepsFooter(t *testing.T) {
 	var sawDirectoryPage, sawFilePage, sawConfirm bool
 	for _, action := range cardActionsFromElements(elements) {
 		value := cardValueMap(action)
-		switch value[cardActionPayloadKeyKind] {
+		switch value[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindPathPickerPage:
-			switch value[cardActionPayloadKeyFieldName] {
+			switch value[frontstagecontract.CardActionPayloadKeyFieldName] {
 			case cardPathPickerDirectorySelectFieldName:
 				sawDirectoryPage = true
 			case cardPathPickerFileSelectFieldName:

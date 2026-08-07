@@ -12,6 +12,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -39,7 +40,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 	if env.SurfaceForCardAction != nil {
 		surfaceSessionID = strings.TrimSpace(env.SurfaceForCardAction(CardActionSurfaceLookup{
 			MessageID:               messageID,
-			PayloadSurfaceSessionID: stringMapValue(value, cardActionPayloadKeySurfaceSessionID),
+			PayloadSurfaceSessionID: stringMapValue(value, frontstagecontract.CardActionPayloadKeySurfaceSessionID),
 			ChatID:                  chatID,
 			OperatorID:              operatorID,
 		}))
@@ -50,7 +51,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 
 	switch kind {
 	case cardActionKindAttachInstance:
-		instanceID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyInstanceID))
+		instanceID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
 		if instanceID == "" {
 			return control.Action{}, false
 		}
@@ -65,7 +66,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound:          meta,
 		}, true
 	case cardActionKindAttachWorkspace:
-		workspaceKey := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyWorkspaceKey))
+		workspaceKey := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyWorkspaceKey))
 		if workspaceKey == "" {
 			return control.Action{}, false
 		}
@@ -92,11 +93,11 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:         operatorID,
 			MessageID:           messageID,
 			ThreadID:            threadID,
-			AllowCrossWorkspace: boolMapValue(value, cardActionPayloadKeyAllowCrossWorkspace),
+			AllowCrossWorkspace: boolMapValue(value, frontstagecontract.CardActionPayloadKeyAllowCrossWorkspace),
 			Inbound:             meta,
 		}, true
 	case cardActionKindThreadSelectionPage:
-		viewMode := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyViewMode))
+		viewMode := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyViewMode))
 		if viewMode == "" {
 			return control.Action{}, false
 		}
@@ -108,7 +109,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			ViewMode:         viewMode,
-			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
+			Cursor:           intMapValue(value, frontstagecontract.CardActionPayloadKeyCursor),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowScopedThreads:
@@ -119,8 +120,8 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			ViewMode:         strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyViewMode)),
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			ViewMode:         strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyViewMode)),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowThreads:
@@ -131,8 +132,8 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			ViewMode:         strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyViewMode)),
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			ViewMode:         strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyViewMode)),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowAllThreads:
@@ -143,8 +144,8 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			ViewMode:         strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyViewMode)),
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			ViewMode:         strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyViewMode)),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowAllThreadWorkspaces:
@@ -155,7 +156,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowRecentThreadWorkspaces:
@@ -166,11 +167,11 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowWorkspaceThreads:
-		workspaceKey := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyWorkspaceKey))
+		workspaceKey := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyWorkspaceKey))
 		if workspaceKey == "" {
 			return control.Action{}, false
 		}
@@ -182,8 +183,8 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			WorkspaceKey:     workspaceKey,
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
-			ReturnPage:       intMapValue(value, cardActionPayloadKeyReturnPage),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
+			ReturnPage:       intMapValue(value, frontstagecontract.CardActionPayloadKeyReturnPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowAllWorkspaces:
@@ -194,7 +195,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindShowRecentWorkspaces:
@@ -205,11 +206,11 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindKickThreadConfirm:
-		threadID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyThreadID))
+		threadID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyThreadID))
 		if threadID == "" {
 			return control.Action{}, false
 		}
@@ -234,12 +235,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound:          meta,
 		}, true
 	case cardActionKindRequestRespond:
-		requestID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestID))
+		requestID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestID))
 		if requestID == "" {
 			return control.Action{}, false
 		}
 		requestAnswers := requestAnswersFromValue(value)
-		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestOptionID))
+		optionID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestOptionID))
 		return control.Action{
 			Kind:             control.ActionRespondRequest,
 			GatewayID:        gatewayID,
@@ -249,16 +250,16 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			MessageID:        messageID,
 			Request: &control.ActionRequestResponse{
 				RequestID:       requestID,
-				RequestType:     strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
+				RequestType:     strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestType)),
 				RequestOptionID: optionID,
 				Answers:         requestAnswers,
-				RequestRevision: intMapValue(value, cardActionPayloadKeyRequestRevision),
+				RequestRevision: intMapValue(value, frontstagecontract.CardActionPayloadKeyRequestRevision),
 			},
 			Inbound: meta,
 		}, true
 	case cardActionKindRequestControl:
-		requestID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestID))
-		requestControl := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestControl))
+		requestID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestID))
+		requestControl := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestControl))
 		if requestID == "" || requestControl == "" {
 			return control.Action{}, false
 		}
@@ -271,22 +272,22 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			MessageID:        messageID,
 			RequestControl: &control.ActionRequestControl{
 				RequestID:       requestID,
-				RequestType:     strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
+				RequestType:     strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestType)),
 				Control:         requestControl,
-				QuestionID:      strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyQuestionID)),
-				RequestRevision: intMapValue(value, cardActionPayloadKeyRequestRevision),
+				QuestionID:      strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyQuestionID)),
+				RequestRevision: intMapValue(value, frontstagecontract.CardActionPayloadKeyRequestRevision),
 			},
 			Inbound: meta,
 		}, true
 	case cardActionKindPageAction, cardActionKindPageLocalAction:
-		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionKind)))
+		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyActionKind)))
 		if actionKind == "" {
 			return control.Action{}, false
 		}
-		actionArg := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionArg))
-		catalogFamilyID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID))
-		catalogVariantID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID))
-		catalogBackend := agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend))))
+		actionArg := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyActionArg))
+		catalogFamilyID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyCatalogFamilyID))
+		catalogVariantID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyCatalogVariantID))
+		catalogBackend := agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyCatalogBackend))))
 		if kind == cardActionKindPageLocalAction {
 			catalogFamilyID = ""
 			catalogVariantID = ""
@@ -304,12 +305,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			CatalogVariantID: catalogVariantID,
 			CatalogBackend:   catalogBackend,
 			LocalPageAction:  kind == cardActionKindPageLocalAction,
-			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
+			Cursor:           intMapValue(value, frontstagecontract.CardActionPayloadKeyCursor),
 			Inbound:          meta,
 		}, true
 	case cardActionKindUpgradeOwnerFlow:
-		flowID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyOptionID))
+		flowID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
+		optionID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyOptionID))
 		if flowID == "" || optionID == "" {
 			return control.Action{}, false
 		}
@@ -327,8 +328,8 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound: meta,
 		}, true
 	case cardActionKindVSCodeMigrateOwnerFlow:
-		flowID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyOptionID))
+		flowID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
+		optionID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyOptionID))
 		if flowID == "" || optionID == "" {
 			return control.Action{}, false
 		}
@@ -346,8 +347,8 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound: meta,
 		}, true
 	case cardActionKindPlanProposal:
-		flowID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		optionID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyOptionID))
+		flowID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
+		optionID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyOptionID))
 		if flowID == "" || optionID == "" {
 			return control.Action{}, false
 		}
@@ -363,15 +364,15 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound:          meta,
 		}, true
 	case cardActionKindPageSubmit, cardActionKindPageLocalSubmit:
-		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionKind)))
+		actionKind := control.ActionKind(strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyActionKind)))
 		if actionKind == "" {
 			return control.Action{}, false
 		}
-		fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+		fieldName := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyFieldName))
 		if fieldName == "" {
 			fieldName = cardActionPayloadDefaultCommandFieldName
 		}
-		actionArg := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyActionArgPrefix))
+		actionArg := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyActionArgPrefix))
 		argValue := commandFormArgumentValue(event.Event.Action, fieldName)
 		if argValue != "" {
 			if actionArg != "" {
@@ -379,9 +380,9 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			}
 			actionArg += argValue
 		}
-		catalogFamilyID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogFamilyID))
-		catalogVariantID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogVariantID))
-		catalogBackend := agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyCatalogBackend))))
+		catalogFamilyID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyCatalogFamilyID))
+		catalogVariantID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyCatalogVariantID))
+		catalogBackend := agentproto.NormalizeBackend(agentproto.Backend(strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyCatalogBackend))))
 		if kind == cardActionKindPageLocalSubmit {
 			catalogFamilyID = ""
 			catalogVariantID = ""
@@ -402,13 +403,13 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound:          meta,
 		}, true
 	case cardActionKindSubmitRequestForm:
-		requestID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestID))
+		requestID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestID))
 		if requestID == "" {
 			return control.Action{}, false
 		}
 		requestAnswers := requestAnswersFromFormValue(event.Event.Action.FormValue)
 		if len(requestAnswers) == 0 && strings.TrimSpace(event.Event.Action.InputValue) != "" {
-			fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+			fieldName := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyFieldName))
 			if fieldName != "" {
 				if requestAnswers == nil {
 					requestAnswers = map[string][]string{}
@@ -425,15 +426,15 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			MessageID:        messageID,
 			Request: &control.ActionRequestResponse{
 				RequestID:       requestID,
-				RequestType:     strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestType)),
-				RequestOptionID: strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyRequestOptionID)),
+				RequestType:     strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestType)),
+				RequestOptionID: strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestOptionID)),
 				Answers:         requestAnswers,
-				RequestRevision: intMapValue(value, cardActionPayloadKeyRequestRevision),
+				RequestRevision: intMapValue(value, frontstagecontract.CardActionPayloadKeyRequestRevision),
 			},
 			Inbound: meta,
 		}, true
 	case cardActionKindPathPickerEnter, cardActionKindPathPickerSelect:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		flow := selectflow.PathPickerDirectoryFlow
 		actionKind := control.ActionPathPickerEnter
 		if actionPayloadKind(value) == cardActionKindPathPickerSelect {
@@ -456,7 +457,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound:          meta,
 		}, true
 	case cardActionKindPathPickerUp, cardActionKindPathPickerConfirm, cardActionKindPathPickerCancel:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		if pickerID == "" {
 			return control.Action{}, false
 		}
@@ -478,8 +479,8 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			Inbound:          meta,
 		}, true
 	case cardActionKindPathPickerPage:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
-		fieldName := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyFieldName))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
+		fieldName := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyFieldName))
 		if pickerID == "" || fieldName == "" {
 			return control.Action{}, false
 		}
@@ -492,7 +493,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			MessageID:        messageID,
 			PickerID:         pickerID,
 			FieldName:        fieldName,
-			Cursor:           intMapValue(value, cardActionPayloadKeyCursor),
+			Cursor:           intMapValue(value, frontstagecontract.CardActionPayloadKeyCursor),
 			Inbound:          meta,
 		}, true
 	case cardActionKindTargetPickerSelectWorkspace,
@@ -503,7 +504,7 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 		cardActionKindTargetPickerConfirm:
 		return parseTargetPickerCardAction(env, value, event, meta, surfaceSessionID, chatID, operatorID, messageID)
 	case cardActionKindHistoryPage:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		if pickerID == "" {
 			return control.Action{}, false
 		}
@@ -515,11 +516,11 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
 			PickerID:         pickerID,
-			Page:             intMapValue(value, cardActionPayloadKeyPage),
+			Page:             intMapValue(value, frontstagecontract.CardActionPayloadKeyPage),
 			Inbound:          meta,
 		}, true
 	case cardActionKindHistoryDetail:
-		pickerID := strings.TrimSpace(stringMapValue(value, cardActionPayloadKeyPickerID))
+		pickerID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyPickerID))
 		if pickerID == "" {
 			return control.Action{}, false
 		}
@@ -564,7 +565,7 @@ func requestAnswersFromValue(values map[string]interface{}) map[string][]string 
 	if len(values) == 0 {
 		return nil
 	}
-	raw, ok := values[cardActionPayloadKeyRequestAnswers]
+	raw, ok := values[frontstagecontract.CardActionPayloadKeyRequestAnswers]
 	if !ok || raw == nil {
 		return nil
 	}

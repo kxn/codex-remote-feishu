@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
 func TestRenderOperationCardV2EnvelopeFromOperationFields(t *testing.T) {
@@ -139,7 +140,7 @@ func TestRenderOperationCardStampsCallbackSurfaceSessionID(t *testing.T) {
 	body, _ := payload["body"].(map[string]any)
 	elements, _ := body["elements"].([]map[string]any)
 	value := renderedButtonCallbackValue(t, elements[0])
-	if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
+	if value[frontstagecontract.CardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
 		t.Fatalf("expected callback surface stamp, got %#v", value)
 	}
 }
@@ -169,7 +170,7 @@ func TestRenderOperationCardStampsLegacyButtonCallbackSurfaceSessionID(t *testin
 	elements, _ := body["elements"].([]map[string]any)
 	actions, _ := elements[0]["actions"].([]map[string]any)
 	value, _ := actions[0]["value"].(map[string]any)
-	if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:chat:oc_1" {
+	if value[frontstagecontract.CardActionPayloadKeySurfaceSessionID] != "feishu:app-1:chat:oc_1" {
 		t.Fatalf("expected legacy callback surface stamp, got %#v", value)
 	}
 }
@@ -198,7 +199,7 @@ func TestRenderOperationCardStampsCallbackSurfaceSessionIDInAnySliceBehaviors(t 
 	behaviors, _ := elements[0]["behaviors"].([]any)
 	behavior, _ := behaviors[0].(map[string]any)
 	value, _ := behavior["value"].(map[string]any)
-	if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
+	if value[frontstagecontract.CardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
 		t.Fatalf("expected callback surface stamp, got %#v", value)
 	}
 }
@@ -233,7 +234,7 @@ func TestRenderOperationCardStampsEveryCallbackBehaviorSurfaceSessionID(t *testi
 	behaviors, _ := elements[0]["behaviors"].([]map[string]any)
 	for i, behavior := range behaviors {
 		value, _ := behavior["value"].(map[string]any)
-		if value[cardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
+		if value[frontstagecontract.CardActionPayloadKeySurfaceSessionID] != "feishu:app-1:user:user-1" {
 			t.Fatalf("expected callback behavior %d surface stamp, got %#v", i, value)
 		}
 	}
