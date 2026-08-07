@@ -87,7 +87,7 @@ func TestClaudeProfileCommandRestartsWorkspaceAndRestoresTargetProfileSnapshot(t
 		{ID: "profile-b", Name: "Profile B"},
 	})
 
-	workspaceKey := t.TempDir()
+	workspaceKey := "/data/dl/repo"
 	surface := svc.root.Surfaces["surface-1"]
 	surface.ClaimedWorkspaceKey = workspaceKey
 	surface.RouteMode = state.RouteModeNewThreadReady
@@ -155,7 +155,7 @@ func TestClaudeProfileSwitchReconcilesOtherGatewayHeadlessSurfaces(t *testing.T)
 	svc.MaterializeSurfaceResume("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendClaude, "profile-a", "", state.PlanModeSettingOff)
 	svc.MaterializeSurfaceResume("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendClaude, "profile-a", "", state.PlanModeSettingOff)
 
-	workspaceKey := "/data/dl/repo"
+	workspaceKey := t.TempDir()
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-b",
 		Backend:         agentproto.BackendClaude,
