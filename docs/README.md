@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-08-06`
-> Summary: 新增 Windows 仓库操作规范，issue workflow 基线已精简为按需参考。
+> Updated: `2026-08-07`
+> Summary: 新增 Codex / Claude profile instruction（角色提示词）配置设计文档索引。
 
 ## 1. 适用范围
 
@@ -161,6 +161,7 @@
 - [claude-live-projection-semantics-design.md](./inprogress/claude-live-projection-semantics-design.md)
 - [codex-app-server-state-machine-audit.md](./inprogress/codex-app-server-state-machine-audit.md)
 - [codex-claude-subagent-model-design.md](./inprogress/codex-claude-subagent-model-design.md)
+- [codex-claude-profile-instruction-design.md](./inprogress/codex-claude-profile-instruction-design.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
