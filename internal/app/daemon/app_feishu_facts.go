@@ -16,10 +16,6 @@ const feishuFactsFreshTTL = 2 * time.Minute
 
 var getFeishuBotInfo = feishu.GetBotInfo
 
-func feishuFactsFresh(record feishufacts.Record, now time.Time) bool {
-	return !record.FetchedAt.IsZero() && now.Sub(record.FetchedAt) <= feishuFactsFreshTTL
-}
-
 func feishuFactsScopesFresh(record feishufacts.Record, now time.Time) bool {
 	return !record.ScopesFetchedAt.IsZero() &&
 		record.ScopesError == "" &&
