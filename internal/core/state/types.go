@@ -51,6 +51,18 @@ func IsVSCodeProductMode(mode ProductMode) bool {
 	return NormalizeProductMode(mode) == ProductModeVSCode
 }
 
+// IsVSCodeProductModeToken 报告 mode 字符串是否代表 VS Code 模式，
+// 含历史别名（vs-code / vs_code）。这是 display/解析层识别 VS Code
+// 模式 token 的唯一入口，禁止在调用点内联别名表。
+func IsVSCodeProductModeToken(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "vscode", "vs-code", "vs_code":
+		return true
+	default:
+		return false
+	}
+}
+
 type SurfaceVerbosity string
 
 const (
