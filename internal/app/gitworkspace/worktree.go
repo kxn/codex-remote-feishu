@@ -19,7 +19,6 @@ const (
 	WorktreeErrorBaseWorkspaceNotGit  = gitmeta.WorktreeCreateErrorBaseWorkspaceNotGit
 	WorktreeErrorInvalidBranchName    = gitmeta.WorktreeCreateErrorInvalidBranchName
 	WorktreeErrorBranchExists         = gitmeta.WorktreeCreateErrorBranchExists
-	WorktreeErrorInvalidDirectoryName = gitmeta.WorktreeCreateErrorInvalidDirectoryName
 	WorktreeErrorDestinationExists    = gitmeta.WorktreeCreateErrorDestinationExists
 	WorktreeErrorCreateFailed         = gitmeta.WorktreeCreateErrorCreateFailed
 )
@@ -35,10 +34,6 @@ type WorktreeResult struct {
 type WorktreePreviewResult = gitmeta.WorktreePreviewResult
 
 type WorktreeError = gitmeta.WorktreeCreateError
-
-func PreviewWorktree(req WorktreeRequest) (WorktreePreviewResult, error) {
-	return gitmeta.PreviewWorktree(req)
-}
 
 func CreateWorktree(ctx context.Context, req WorktreeRequest) (WorktreeResult, error) {
 	if _, err := exec.LookPath("git"); err != nil {

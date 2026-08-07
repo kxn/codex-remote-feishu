@@ -118,17 +118,3 @@ func OwnerActionError(action string, resolution OwnerResolution) error {
 		return fmt.Errorf("%s失败：Cron owner 状态无效", action)
 	}
 }
-
-func (r OwnerResolution) WritebackTarget() WritebackTarget {
-	if strings.TrimSpace(r.Binding.AppToken) == "" {
-		return WritebackTarget{}
-	}
-	gatewayID := strings.TrimSpace(r.Gateway.GatewayID)
-	if gatewayID == "" && r.CurrentOwner != nil {
-		gatewayID = strings.TrimSpace(r.CurrentOwner.GatewayID)
-	}
-	return WritebackTarget{
-		GatewayID: gatewayID,
-		Bitable:   r.Binding,
-	}
-}

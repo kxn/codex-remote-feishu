@@ -181,16 +181,6 @@ func ListClaudeProfiles(cfg AppConfig) []ClaudeProfile {
 	return profiles
 }
 
-func NextClaudeProfileID(existing []ClaudeProfileConfig, requestedID, requestedName string) string {
-	used := map[string]struct{}{
-		ClaudeDefaultProfileID: {},
-	}
-	for _, profile := range NormalizeClaudeProfiles(existing) {
-		used[profile.ID] = struct{}{}
-	}
-	return nextClaudeProfileID(requestedID, requestedName, used)
-}
-
 func IndexOfClaudeProfile(profiles []ClaudeProfileConfig, profileID string) int {
 	profileID = CanonicalClaudeProfileID(profileID)
 	if profileID == "" || profileID == ClaudeDefaultProfileID {

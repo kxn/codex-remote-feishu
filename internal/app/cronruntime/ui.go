@@ -302,29 +302,6 @@ func PrimaryMenuCommand(stateValue *StateFile, ownerView OwnerView) string {
 	return "/cron status"
 }
 
-func PrimaryDetailCommand(stateValue *StateFile, ownerView OwnerView) string {
-	if RepairShouldBePrimary(stateValue, ownerView) {
-		return "/cron repair"
-	}
-	if CanEdit(stateValue) {
-		return "/cron edit"
-	}
-	if CanReload(stateValue, ownerView) {
-		return "/cron reload"
-	}
-	return ""
-}
-
-func PrimaryEditCommand(stateValue *StateFile, ownerView OwnerView) string {
-	if RepairShouldBePrimary(stateValue, ownerView) {
-		return "/cron repair"
-	}
-	if CanReload(stateValue, ownerView) {
-		return "/cron reload"
-	}
-	return ""
-}
-
 func PrimaryButtonStyle(primaryCommand, commandText string) string {
 	if strings.TrimSpace(primaryCommand) == strings.TrimSpace(commandText) {
 		return "primary"

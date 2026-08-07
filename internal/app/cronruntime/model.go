@@ -142,14 +142,6 @@ type RuntimeState struct {
 	LastStateNormalization time.Time
 }
 
-func NewRuntimeState() RuntimeState {
-	return RuntimeState{
-		Runs:          map[string]*RunState{},
-		JobActiveRuns: map[string]map[string]struct{}{},
-		ExitTargets:   map[string]*ExitTarget{},
-	}
-}
-
 func NormalizeState(stateValue StateFile) *StateFile {
 	stateValue.SchemaVersion = StateSchemaVersion
 	if stateValue.Bitable == nil {
@@ -257,10 +249,6 @@ func NextRunAtIn(job JobState, now time.Time, timeZone string) time.Time {
 	default:
 		return time.Time{}
 	}
-}
-
-func AdvanceRunAt(job JobState, current, now time.Time) time.Time {
-	return AdvanceRunAtIn(job, current, now, SystemTimeZone())
 }
 
 func AdvanceRunAtIn(job JobState, current, now time.Time, timeZone string) time.Time {
