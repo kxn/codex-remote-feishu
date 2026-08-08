@@ -2,144 +2,77 @@
 
 > Type: `draft`
 > Updated: `2026-08-09`
-> Summary: 按 Claude 现有实现基线重新校准 OpenCode backend 需要产品/架构讨论的风险、降级和决策点。
+> Summary: 按 Claude 现有产品基线收敛 OpenCode backend 的剩余硬门槛和实现前提。
 
 ## 1. 结论
 
-OpenCode 可以接，但风险清单不能按 Codex 的完整能力硬套。对照当前 Claude backend 后，很多能力已经是“backend-specific 近似”或“显式不支持”，OpenCode 第一版也应采用同一标准：能明确投影就投影，不能投影就通过 backend capability / command profile 显式隐藏或拒绝。
+OpenCode 可以进入完整设计。对照当前 Claude backend 后，大部分差异都不是需要产品拍板的风险，而是 backend adapter 的承接细节：能投影就投影，不能投影就按现有 Claude 式产品壳自然退化，必要时写 debug trace，不把内部 carrier 差异暴露给用户。
 
-真正需要讨论的不是“OpenCode 是否补齐 Codex 全量语义”，而是下面几类会误导用户或破坏现有产品承诺的差异：
+当前唯一设计前硬门槛是 profile/auth：
 
-- profile/auth 是否隔离；
-- 权限模式是否被误读为强 sandbox；
-- ACP runtime close 是否被误读为历史删除；
-- MCP/OAuth 失败是否能在发送前或启动后尽早诊断；
-- 是否要把 OpenCode 独有 usage/context meter 暴露给用户。
+- 如果 OpenCode profile 明确配置 API key / base URL / model，这个实例必须稳定使用该 API profile；
+- 系统上原本存在的 OpenCode OAuth 登录态不得覆盖或污染这个 API profile；
+- 我们不要求、也不支持在后台替用户首填或管理多个 OAuth profile；
+- 系统 OAuth 只作为“继承系统现状”的默认/非隔离模式存在；如果它会干扰 API profile，则第一版直接禁用 OAuth/inherit 路径也可以接受。
 
 推荐默认策略：
 
 - 第一版按 `API key + 本地 profile overlay + ACP runtime adapter + backend capability profile` 做。
-- 不承诺 OAuth 完全隔离、OS/container sandbox、历史会话删除、未知 slash command 透传。
+- 不承诺 OAuth profile 隔离、OS/container sandbox、历史会话删除、未知 slash command 透传。
 - Plan、命令、usage、error 允许像 Claude 一样做 adapter synthesis 或 backend profile 降级；这些优先是实现细节，不默认变成用户可见“不支持”提示。
-- 所有会误导用户的能力必须在启动前、发送前或会话顶部给明确诊断，不能静默降级。
+- 用户可见产品面只保留现有 Claude/Codex 类似入口；底层差异默认写 debug trace 或日志。
 
 ## 2. Claude 基线校准
 
 | 能力面 | Claude 现状 | 对 OpenCode 的校准结论 |
 | --- | --- | --- |
-| Profile / auth | 自定义 profile 继承系统环境，只移除并覆盖 `ANTHROPIC_*`、subagent model、reasoning、追加 instruction 等有限 env；默认 profile 是 inherit。没有通用配置目录/OAuth 完全隔离抽象。 | OpenCode 不需要实现通用 loader 抽象；只需声明 API key overlay 支持边界。OAuth / MCP OAuth 是单独风险。 |
-| 权限 / sandbox | Claude 把 native `default`、`acceptEdits`、`plan`、`bypassPermissions` 投影到 access/plan；不是 OS/container sandbox。 | OpenCode 不应被要求补齐 Codex sandbox，但必须避免把 permission/file access 近似能力说成强隔离。 |
-| Plan | Claude 是拼出来的产品语义：`ExitPlanMode` 走确认卡，`TodoWrite` 有结构化输入时投影计划更新卡，普通计划正文仍可作为普通 assistant/plan 文本承接。它没有向用户暴露“snapshot 不支持”。 | OpenCode 比照 Claude：能从 ACP/tool/text 稳定承接就承接；不能承接时自然退化为普通内容或 backend plan mode，不需要专门提示用户“不支持结构化 Plan”。 |
+| Profile / auth | 自定义 profile 继承系统环境，只移除并覆盖 `ANTHROPIC_*`、subagent model、reasoning、追加 instruction 等有限 env；默认 profile 是 inherit。没有通用配置目录/OAuth 完全隔离抽象。 | OpenCode 不需要通用 loader 抽象；只需要证明 API profile overlay 能压过系统 OAuth，不被系统登录态影响。 |
+| 权限 / sandbox | Claude 把 native `default`、`acceptEdits`、`plan`、`bypassPermissions` 投影到 access/plan；不是 OS/container sandbox。 | OpenCode 不补齐 Codex sandbox，也不新增用户可见风险；按现有权限/访问语义承接，底层差异只进 debug trace。 |
+| Plan | Claude 是拼出来的产品语义：`ExitPlanMode` 走确认卡，`TodoWrite` 有结构化输入时投影计划更新卡，普通计划正文仍可作为普通 assistant/plan 文本承接。它没有向用户暴露内部 carrier 差异。 | OpenCode 比照 Claude：能从 ACP/tool/text 稳定承接就承接；不能承接时自然退化为普通内容或 backend plan mode，不需要专门提示用户内部承接方式。 |
 | 命令兼容 | Claude command profile 已隐藏/拒绝 `/compact`、`/review`、`/patch`、`/auto-continue`、`/auto-whip` 等多项 Codex 命令；部分 `/new`、workspace list、steer all 是 approximation。 | OpenCode 也应做 backend command profile。未知或未验证命令发送前拒绝，不作为阻塞项。 |
-| 历史会话 | Claude catalog 从本地 session store/list 读取，只有 recent/list/thread lookup 语义，没有在 catalog 层提供删除历史。 | OpenCode `session/close` 不能映射成删除；但“无 persistent delete”不是比 Claude 更差的阻塞项。 |
+| 历史会话 | Claude catalog 从本地 session store/list 读取，只有 recent/list/thread lookup 语义，没有在 catalog 层提供删除历史。 | OpenCode `session/close` 按 detach/stop runtime 承接即可；不额外产品化 close/delete 差异。 |
 | Usage | Claude 从 result `usage` 合成 last/total token usage，并用 `modelUsage.contextWindow` 补 context window；这是投影，不是统一原生账单语义。 | OpenCode 也按现有 usage 事件尽量投影。只有当产品要展示 ACP context meter 时才需要单独讨论。 |
 | Error | Claude 当前失败主要归一到 `claude_turn_failed`，details 带原始 errors；不是细粒度完整 taxonomy。 | OpenCode 不必做完整 taxonomy；只需把 auth/session/MCP/model 这类影响用户下一步操作的错误提前诊断或归一化。 |
 
-## 3. 仍需讨论的风险
+## 3. 设计前硬门槛
 
-### 3.1 Profile 与 OAuth 隔离
+### 3.1 API Profile Overlay 必须压过系统 OAuth
 
-为什么仍需讨论：
+必须证明：
 
-- Claude 允许 inherit，所以“不是完全隔离”本身不是新 backend blocker。
-- OpenCode 的特殊风险是 `OPENCODE_CONFIG_CONTENT`、`OPENCODE_AUTH_CONTENT` 可以覆盖 API key，但 OAuth provider / MCP OAuth 可能落到 `mcp-auth.json` 或系统登录态；用户容易误解为 per-profile 隔离。
-
-推荐方案：
-
-- 第一版只把 API-key profile 定义为 fully supported。
-- OAuth profile 分两种显式模式：
-  - `shared-system-auth`：继承系统登录态，明确提示不是隔离 profile。
-  - `isolated-xdg-auth`：启动时使用独立 XDG data/config/cache root，OAuth 文件只落实例目录。
-- MCP OAuth 默认 gate 掉；单独测试通过后再开放。
-
-需要拍板：
-
-- 第一版是否允许共享系统 OAuth 登录态？
-- 如果允许，UI/配置里是否必须显示“共享系统登录态”？
-
-### 3.2 权限模式与 Sandbox 文案
-
-为什么仍需讨论：
-
-- Claude 也只是 permission mode 投影，不提供 Codex 式强 sandbox；所以 OpenCode 不支持 OS/container sandbox 不是独有缺口。
-- 风险在产品文案：如果用户选择“强 sandbox”，OpenCode 只能做 permission/file-access 近似时会造成安全误导。
+- 系统已有 OpenCode OAuth 登录态时，启动一个显式 API key profile 实例，实际 provider/model/auth 走 profile overlay，而不是系统 OAuth。
+- 两个不同 API key profile 可以并发启动，互不污染，也不写回系统 OpenCode 配置。
+- 缺少 API key 或 overlay 无效时，启动前失败或在首轮前给内部诊断；不能悄悄 fallback 到系统 OAuth。
 
 推荐方案：
 
-- backend capability 拆成 `fileAccess`、`commandPermission`、`networkPolicy`、`strongSandbox`。
-- OpenCode 第一版只声明 permission/file-access 能力；`strongSandbox=false`。
-- 如果 profile 要求强 sandbox，OpenCode 启动前 fail-fast。
+- 第一版只把 API-key profile 定义为 fully supported profile。
+- 默认 profile 可以继承系统 OpenCode 现状，包括用户自己已有的 OAuth；我们不负责配置、刷新或隔离这个 OAuth。
+- 自定义 API profile 启动时使用 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，必要时配合独立 XDG root，确保系统 OAuth 不参与该实例。
+- 如果实测发现 API overlay 仍会受系统 OAuth 影响，则第一版禁止 OpenCode OAuth/inherit 模式，只允许 API profile。
 
-需要拍板：
+完整设计前必须补的测试：
 
-- OpenCode 是否允许创建“无强 sandbox”的实例？
-- 哪些入口需要阻止用户把它误配置成强隔离运行？
+- 系统 OAuth 存在 + API profile overlay：请求捕获证明 authorization/baseURL/model 来自 profile。
+- 系统 OAuth 存在 + 两个 API profiles 并发：请求捕获证明互不串 key/model/baseURL。
+- API profile 启动后扫描系统 OpenCode config/auth/data 文件：证明没有写回或污染系统配置。
 
-### 3.3 ACP Close 与历史删除
-
-为什么仍需讨论：
-
-- Claude 也没有统一 persistent delete，所以 OpenCode 不需要为了对齐 Claude 去实现历史删除。
-- 但 ACP `session/close` 黑盒语义更像关闭 runtime/abort backing session，历史 `session/list` 仍可能看到该 session；如果映射成“删除”会误导。
-
-推荐方案：
-
-- OpenCode `close` 只映射为 stop/detach active runtime。
-- 第一版不提供 persistent delete。
-- UI/API 文案避免“删除”，使用“停止/分离/关闭运行中实例”。
-
-需要拍板：
-
-- 产品上是否接受 OpenCode backend 暂无删除历史会话？
-
-### 3.4 MCP OAuth 与失败诊断
-
-为什么仍需讨论：
-
-- Claude 当前 profile/env 覆盖没有通用 MCP 注入抽象，OpenCode 这块必然 backend-specific。
-- OpenCode local stdio MCP 已验证可用；OAuth remote MCP 可能引入共享 auth 文件和延迟失败。
-
-推荐方案：
-
-- 第一版支持 local stdio MCP 和非 OAuth remote MCP。
-- MCP OAuth 默认 gate 掉。
-- `session/new` 后主动做 MCP 状态/工具可见性检查；失败时立刻返回 warning，不等模型调用变成 `invalid tool`。
-- MCP headers/env 必须做 redaction。
-
-需要拍板：
-
-- 第一版是否允许 remote MCP，但禁用 OAuth？
-- MCP 注册失败是阻止实例启动，还是允许启动但在会话顶部显示 warning？
-
-### 3.5 Usage/context meter 是否产品化
-
-为什么仍需讨论：
-
-- Claude usage 是 adapter 投影：usage 从 result 累加，已经能满足现有 token 展示。
-- OpenCode 的差异是 ACP 可能同时有 prompt response usage 与 `usage_update` context/cumulative meter。如果只映射现有 token 展示，这不是产品讨论；如果要新增 context meter 展示，才需要拍板。
-
-推荐方案：
-
-- 第一版只把可归因于当前 turn 的 usage 投影到现有 token usage。
-- `usage_update` 先作为 runtime/debug state 保留，不主动新增用户可见入口。
-- error normalizer 第一版只优先覆盖可行动错误：auth-required、missing session、invalid model、MCP unavailable、permission denied；其他 service failure 走 Claude 类似的保守通用错误。
-
-需要拍板：
-
-- 是否真的要新增 context meter UI？如果没有明确产品需求，默认不做。
+如果这组测试通过，就可以进入完整设计；如果失败，则设计结论改成“OpenCode 第一版只支持系统 inherit 或只支持 API profile 二选一”，不能同时承诺二者。
 
 ## 4. 从原风险清单降级的项
 
 - `/review`、`/compact`、`/patch`、`/auto-continue`、`/auto-whip`：按 Claude command profile 的先例，属于 backend capability/command profile 问题，不是 OpenCode 接入 blocker。
-- Plan snapshot / Plan UI 支持：按 Claude 先例属于 adapter 投影和现有卡片承接问题，不是需要用户可见“不支持”的产品风险。
+- Plan snapshot / Plan UI 支持：按 Claude 先例属于 adapter 投影和现有卡片承接问题，不是产品风险。
 - persistent delete：Claude catalog 也没有统一删除语义，OpenCode 只需避免把 close 说成 delete。
 - 完整 error taxonomy：Claude 也没有完整细粒度分类；OpenCode 第一版只要求关键可行动错误归一化。
-- Codex 强 sandbox：Claude 未对齐 Codex 强 sandbox，OpenCode 也不需要补齐；需要的是 capability 文案和 fail-fast。
+- Codex 强 sandbox：Claude 未对齐 Codex 强 sandbox，OpenCode 也不需要补齐；这不是 OpenCode 完整设计前的产品决策。
+- MCP OAuth：第一版不支持我们侧首填或隔离 OAuth；系统已有 OAuth 只属于默认 inherit 模式，API profile 必须绕开它。
+- Usage/context meter：第一版不新增用户可见 context meter，只投影现有 token usage；差异进 debug trace。
 
 ## 5. 实现顺序建议
 
-1. 先做 profile compiler、secret redaction、backend capability profile、strong sandbox fail-fast。
+1. 先做 API profile overlay 黑盒验证：系统 OAuth 存在时，API profile 仍能稳定覆盖 auth/baseURL/model。
 2. 再做 ACP runtime adapter：turn buffer、load hydration、tool/permission/usage/error mapping。
 3. 再做 command profile：可见/可发/近似/拒绝与诊断文案。
-4. 再按 Claude 产品语义接 Plan：mode/确认/普通计划文本/可结构化 todo 各走现有承接面，不新增“不支持 Plan snapshot”提示。
-5. 最后决定 OAuth / MCP OAuth / isolated XDG 是否进入第一版。
+4. 再按 Claude 产品语义接 Plan：mode/确认/普通计划文本/可结构化 todo 各走现有承接面，不新增内部 carrier 提示。
+5. 最后补 profile compiler、secret redaction 与调试日志；OAuth 管理不进入第一版。
