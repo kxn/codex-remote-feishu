@@ -123,6 +123,7 @@ func TestClaudePromptRestartHoldsRoomReservationUntilLaunchFailure(t *testing.T)
 	surface.ChatID = "oc_claude"
 	svc.root.Surfaces[surface.SurfaceSessionID] = surface
 	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.WorkspaceKey = "/data/dl/repo"
 	room.ConcurrencyLimit = intPointer(1)
 	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
 		ID:                    "queue-1",
@@ -488,6 +489,7 @@ func TestAutoContinueClaudePromptRestartHoldsRoomReservation(t *testing.T) {
 	surface.ChatID = "oc_claude"
 	svc.root.Surfaces[surface.SurfaceSessionID] = surface
 	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.WorkspaceKey = "/data/dl/repo"
 	room.ConcurrencyLimit = intPointer(1)
 	surface.AutoContinue.Enabled = true
 	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{
@@ -530,6 +532,7 @@ func TestAutoContinueDispatchDoesNotDuplicateRoomReservation(t *testing.T) {
 	surface.ChatID = "oc_claude"
 	svc.root.Surfaces[surface.SurfaceSessionID] = surface
 	room := svc.ensureFeishuRoomContextForSurface(surface)
+	room.WorkspaceKey = "/data/dl/repo"
 	room.ConcurrencyLimit = intPointer(1)
 	surface.AutoContinue.Enabled = true
 	surface.AutoContinue.Episode = &state.PendingAutoContinueEpisodeRecord{

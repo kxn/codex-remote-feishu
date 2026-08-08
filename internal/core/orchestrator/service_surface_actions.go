@@ -194,6 +194,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if text == "" && len(action.Inputs) == 0 {
 		return nil
 	}
+	if blocked := s.blockFeishuRoomNoWorkspaceDataPlane(surface, action); blocked != nil {
+		return blocked
+	}
 
 	if surface.ActiveRequestCapture != nil {
 		if text == "" {
@@ -371,27 +374,38 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 
 func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	events := []eventcontract.Event{}
 	if inst == nil {
-		return notice(surface, "not_attached", s.notAttachedText(surface))
+		prepared, preparedInst, handled := s.prepareFeishuRoomWorkspaceForDetachedInput(surface)
+		if !handled {
+			return notice(surface, "not_attached", s.notAttachedText(surface))
+		}
+		events = append(events, prepared...)
+		inst = preparedInst
+		if inst == nil && surface.PendingHeadless == nil {
+			return events
+		}
 	}
-	if autoSteer := s.maybeAutoSteerReply(surface, action); autoSteer != nil {
-		return append(s.maybeSealPlanProposalForInput(surface), autoSteer...)
-	}
-	if blocked := s.maybePrepareImplicitNewThreadFromUnboundImage(surface, inst); blocked != nil {
-		return blocked
+	if inst != nil {
+		if autoSteer := s.maybeAutoSteerReply(surface, action); autoSteer != nil {
+			return append(s.maybeSealPlanProposalForInput(surface), autoSteer...)
+		}
+		if blocked := s.maybePrepareImplicitNewThreadFromUnboundImage(surface, inst); blocked != nil {
+			return blocked
+		}
 	}
 	if blocked := s.unboundInputBlocked(surface); blocked != nil {
-		return blocked
+		return append(events, blocked...)
 	}
 	if surface.ActiveRequestCapture != nil {
-		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
+		return append(events, notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")...)
 	}
 	if pending := activePendingRequest(surface); pending != nil {
 		_ = pending
-		return notice(surface, "request_pending", pendingRequestNoticeText(pending))
+		return append(events, notice(surface, "request_pending", pendingRequestNoticeText(pending))...)
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
-		return notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；如需带图，请等它创建完成后再发送下一条。")
+		return append(events, notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；如需带图，请等它创建完成后再发送下一条。")...)
 	}
 	s.nextImageID++
 	image := &state.StagedImageRecord{
@@ -404,7 +418,7 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 		State:            state.ImageStaged,
 	}
 	surface.StagedImages[image.ImageID] = image
-	events := s.maybeSealPlanProposalForInput(surface)
+	events = append(events, s.maybeSealPlanProposalForInput(surface)...)
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindPendingInput,
 		SurfaceSessionID: surface.SurfaceSessionID,
@@ -420,24 +434,35 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 
 func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	events := []eventcontract.Event{}
 	if inst == nil {
-		return notice(surface, "not_attached", s.notAttachedText(surface))
+		prepared, preparedInst, handled := s.prepareFeishuRoomWorkspaceForDetachedInput(surface)
+		if !handled {
+			return notice(surface, "not_attached", s.notAttachedText(surface))
+		}
+		events = append(events, prepared...)
+		inst = preparedInst
+		if inst == nil && surface.PendingHeadless == nil {
+			return events
+		}
 	}
-	if blocked := s.maybePrepareImplicitNewThreadFromUnboundFile(surface, inst); blocked != nil {
-		return blocked
+	if inst != nil {
+		if blocked := s.maybePrepareImplicitNewThreadFromUnboundFile(surface, inst); blocked != nil {
+			return blocked
+		}
 	}
 	if blocked := s.unboundInputBlocked(surface); blocked != nil {
-		return blocked
+		return append(events, blocked...)
 	}
 	if surface.ActiveRequestCapture != nil {
-		return notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")
+		return append(events, notice(surface, "request_capture_waiting_text", "当前正在等待你发送一条文字处理意见，请先发送文本或重新处理确认卡片。")...)
 	}
 	if pending := activePendingRequest(surface); pending != nil {
 		_ = pending
-		return notice(surface, "request_pending", pendingRequestNoticeText(pending))
+		return append(events, notice(surface, "request_pending", pendingRequestNoticeText(pending))...)
 	}
 	if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
-		return notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；如需带文件，请等它创建完成后再发送下一条。")
+		return append(events, notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；如需带文件，请等它创建完成后再发送下一条。")...)
 	}
 	if surface.StagedFiles == nil {
 		surface.StagedFiles = map[string]*state.StagedFileRecord{}
@@ -453,7 +478,7 @@ func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.
 		State:            state.FileStaged,
 	}
 	surface.StagedFiles[file.FileID] = file
-	events := s.maybeSealPlanProposalForInput(surface)
+	events = append(events, s.maybeSealPlanProposalForInput(surface)...)
 	events = append(events, eventcontract.Event{
 		Kind:             eventcontract.KindPendingInput,
 		SurfaceSessionID: surface.SurfaceSessionID,
@@ -465,6 +490,28 @@ func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.
 		},
 	})
 	return events
+}
+
+func (s *Service) prepareFeishuRoomWorkspaceForDetachedInput(surface *state.SurfaceConsoleRecord) ([]eventcontract.Event, *state.InstanceRecord, bool) {
+	if surface == nil || !s.surfaceIsHeadless(surface) || surfaceFeishuRoomID(surface) == "" {
+		return nil, nil, false
+	}
+	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
+		return blocked, nil, true
+	}
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	workspaceKey := ""
+	if room != nil {
+		workspaceKey = normalizeWorkspaceClaimKey(room.WorkspaceKey)
+	}
+	if workspaceKey == "" {
+		return roomWorkspaceRequiredNotice(surface), nil, true
+	}
+	targetBackend := s.surfaceBackend(surface)
+	continuation := s.buildHeadlessWorkspaceContinuation(surface, workspaceKey, targetBackend, false)
+	resolution := s.resolveWorkspaceContract(surface, workspaceKey, targetBackend)
+	events := s.executeResolvedWorkspaceContinuation(surface, continuation, resolution, attachWorkspaceOptions{SuppressAutoUsePrompt: true})
+	return events, s.root.Instances[surface.AttachedInstanceID], true
 }
 
 func (s *Service) handleReactionCreated(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {

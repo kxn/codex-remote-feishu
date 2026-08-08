@@ -35,9 +35,6 @@ func (a *App) maybeStartFeishuGroupOnDemandResumeLocked(action control.Action) (
 	if !ok || !surfaceResumeEntryAllowsOnDemandRecovery(entry, action) || !surfaceResumeEntryNeedsRecovery(entry) {
 		return nil, false
 	}
-	if len(action.Files) > 0 {
-		return groupOnDemandResumeNotice(action, "group_on_demand_files_unsupported", "请先恢复群上下文", "当前群上下文需要先恢复。请先发送一条普通文本 @ 机器人，恢复成功后再发送文件。"), true
-	}
 	if state.IsVSCodeProductMode(state.ProductMode(entry.ProductMode)) {
 		return groupOnDemandResumeNotice(action, "group_on_demand_vscode_unsupported", "当前群暂不能自动恢复 VS Code", "群聊按需恢复当前只支持 headless 模式。请在私聊处理 VS Code 连接，或在群里切换到 headless 模式后再试。"), true
 	}

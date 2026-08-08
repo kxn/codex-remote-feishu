@@ -129,6 +129,29 @@ func (s *Service) checkFeishuRoomWorkspaceChange(surface *state.SurfaceConsoleRe
 	return nil
 }
 
+func (s *Service) detachWorkspace(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return s.detach(surface)
+	}
+	if primaryBotStateForSurface(surface, room) != control.CatalogPrimaryBotStateCurrent {
+		return notice(surface, "room_workspace_primary_required", "只有当前群主机器人可以解除或切换群 workspace。请先对当前机器人执行 `/primary on`。")
+	}
+	if blocked := s.blockUnsafeFeishuRoomWorkspaceReset(room); blocked != "" {
+		return notice(surface, "room_workspace_busy", blocked)
+	}
+	if normalizeWorkspaceClaimKey(room.WorkspaceKey) == "" {
+		s.resetFeishuRoomWorkspaceSurfaces(room, nil)
+		return notice(surface, "room_workspace_not_attached", "当前群还没有绑定 workspace。")
+	}
+	s.resetFeishuRoomWorkspaceSurfaces(room, nil)
+	room.WorkspaceResetGeneration++
+	room.WorkspaceKey = ""
+	room.WorkspaceUpdatedBy = strings.TrimSpace(surface.ActorUserID)
+	room.WorkspaceUpdatedAt = s.now()
+	return notice(surface, "room_workspace_detached", "已解除本群 workspace 绑定，并清理同群所有机器人的工作上下文。")
+}
+
 func (s *Service) syncFeishuRoomWorkspaceBinding(surface *state.SurfaceConsoleRecord, workspaceKey string) {
 	room := s.ensureFeishuRoomContextForSurface(surface)
 	if room == nil {
@@ -144,6 +167,62 @@ func (s *Service) syncFeishuRoomWorkspaceBinding(surface *state.SurfaceConsoleRe
 	room.WorkspaceKey = workspaceKey
 	room.WorkspaceUpdatedBy = strings.TrimSpace(surface.ActorUserID)
 	room.WorkspaceUpdatedAt = s.now()
+}
+
+func (s *Service) blockFeishuRoomNoWorkspaceDataPlane(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return nil
+	}
+	if normalizeWorkspaceClaimKey(room.WorkspaceKey) != "" {
+		return nil
+	}
+	if !feishuRoomActionRequiresWorkspace(action) {
+		return nil
+	}
+	return roomWorkspaceRequiredNotice(surface)
+}
+
+func feishuRoomActionRequiresWorkspace(action control.Action) bool {
+	switch action.Kind {
+	case control.ActionTextMessage,
+		control.ActionImageMessage,
+		control.ActionFileMessage,
+		control.ActionNewThread,
+		control.ActionCompact,
+		control.ActionSteerAll,
+		control.ActionReviewCommand,
+		control.ActionReviewStart,
+		control.ActionReviewStartUncommitted,
+		control.ActionReviewApply,
+		control.ActionRespondRequest,
+		control.ActionControlRequest:
+		return true
+	case control.ActionPlanProposalDecision:
+		switch strings.TrimSpace(action.OptionID) {
+		case planProposalActionExecute, planProposalActionExecuteNew:
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
+func (s *Service) blockFeishuRoomNoWorkspaceAutoDispatch(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return nil
+	}
+	if normalizeWorkspaceClaimKey(room.WorkspaceKey) != "" {
+		return nil
+	}
+	return roomWorkspaceRequiredNotice(surface)
+}
+
+func roomWorkspaceRequiredNotice(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	return notice(surface, "room_workspace_required", "当前群还没有绑定 workspace。请先使用 `/workspace` 选择或新建群 workspace。")
 }
 
 func (s *Service) blockUnsafeFeishuRoomWorkspaceReset(room *state.FeishuRoomContextRecord) string {

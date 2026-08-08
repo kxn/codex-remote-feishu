@@ -256,7 +256,7 @@ func TestRoomWorkspaceFreshPendingBindsRoomWorkspaceForSiblingText(t *testing.T)
 	}
 }
 
-func TestRoomWorkspaceFirstGroupTextOpensWorkspacePicker(t *testing.T) {
+func TestRoomNoWorkspaceTextRejectsWithoutPickerOrPending(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -269,16 +269,142 @@ func TestRoomWorkspaceFirstGroupTextOpensWorkspacePicker(t *testing.T) {
 		Text:             "hi",
 	})
 
-	if noticeCode(events, "not_attached") != "" {
-		t.Fatalf("first group text should not return not_attached, got %#v", events)
+	if noticeCode(events, "room_workspace_required") == "" {
+		t.Fatalf("group text without room workspace should require workspace, got %#v", events)
 	}
-	view := singleTargetPickerEvent(t, events)
-	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/droid"); !ok {
-		t.Fatalf("expected workspace picker to include /data/dl/droid, got %#v", view.WorkspaceOptions)
+	if hasTargetPicker(events) {
+		t.Fatalf("group text without room workspace must not open target picker, got %#v", events)
 	}
 	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
-	if surface.AttachedInstanceID != "" || surface.ClaimedWorkspaceKey != "" {
-		t.Fatalf("opening first workspace picker should not attach implicitly, got %#v", surface)
+	if surface.AttachedInstanceID != "" || surface.ClaimedWorkspaceKey != "" || svc.hasPendingTextInput(surface) {
+		t.Fatalf("rejected no-workspace text must not attach, claim, or save pending text, got %#v", surface)
+	}
+}
+
+func TestRoomNoWorkspacePendingTextReplayRejectsWithoutPicker(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+	svc.storePendingTextInput(surface, "hi", nil, "msg-1", "ou_owner", "msg-1", nil)
+	pending := svc.takePendingTextInput(surface)
+
+	events := svc.replayPendingTextInput(surface, pending)
+
+	if noticeCode(events, "room_workspace_required") == "" {
+		t.Fatalf("group pending text replay without room workspace should require workspace, got %#v", events)
+	}
+	if hasTargetPicker(events) {
+		t.Fatalf("group pending text replay without room workspace must not open target picker, got %#v", events)
+	}
+	if surface.AttachedInstanceID != "" || surface.ClaimedWorkspaceKey != "" || svc.hasPendingTextInput(surface) {
+		t.Fatalf("rejected pending replay must not attach, claim, or re-save pending text, got %#v", surface)
+	}
+}
+
+func TestRoomNoWorkspaceImageAndFileRejectWithoutStaging(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		action control.Action
+	}{
+		{
+			name: "image",
+			action: control.Action{
+				Kind:             control.ActionImageMessage,
+				SurfaceSessionID: "feishu:app-1:chat:oc_room",
+				GatewayID:        "app-1",
+				ChatID:           "oc_room",
+				ActorUserID:      "ou_owner",
+				MessageID:        "msg-image",
+				LocalPath:        "/tmp/image.png",
+				MIMEType:         "image/png",
+			},
+		},
+		{
+			name: "file",
+			action: control.Action{
+				Kind:             control.ActionFileMessage,
+				SurfaceSessionID: "feishu:app-1:chat:oc_room",
+				GatewayID:        "app-1",
+				ChatID:           "oc_room",
+				ActorUserID:      "ou_owner",
+				MessageID:        "msg-file",
+				LocalPath:        "/tmp/file.txt",
+				FileName:         "file.txt",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newRoomWorkspaceTestService(t)
+
+			events := svc.ApplySurfaceAction(tc.action)
+
+			if noticeCode(events, "room_workspace_required") == "" {
+				t.Fatalf("group %s without room workspace should require workspace, got %#v", tc.name, events)
+			}
+			if hasTargetPicker(events) || hasStartHeadlessCommand(events) || hasAgentCommand(events) {
+				t.Fatalf("rejected no-workspace %s must not open picker or dispatch, got %#v", tc.name, events)
+			}
+			surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+			if len(surface.StagedImages) != 0 || len(surface.StagedFiles) != 0 {
+				t.Fatalf("rejected no-workspace %s must not stage input, got images=%#v files=%#v", tc.name, surface.StagedImages, surface.StagedFiles)
+			}
+		})
+	}
+}
+
+func TestRoomNoWorkspaceControlPlaneCommandsStillWork(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPrimaryCommand,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		Text:             "/primary status",
+	})
+
+	if noticeCode(events, "room_workspace_required") != "" {
+		t.Fatalf("control-plane primary command must not be blocked by no-workspace gate, got %#v", events)
+	}
+}
+
+func TestRoomNoWorkspacePlanProposalExecuteRejectsWithoutDispatch(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+	surface.AttachedInstanceID = "inst-droid-a"
+	surface.SelectedThreadID = "thread-droid-a"
+	surface.RouteMode = state.RouteModePinned
+	now := svc.now()
+	flow := newOwnerCardFlowRecord(ownerCardFlowKindPlanProposal, "proposal-1", "ou_owner", now, defaultPlanProposalTTL, ownerCardFlowPhaseResolved)
+	svc.setActiveOwnerCardFlow(surface, flow)
+	svc.setActivePlanProposal(surface, newPlanProposalRecord("proposal-1", "inst-droid-a", "thread-droid-a", "turn-1", "/data/dl/droid", "Do it", "", now, defaultPlanProposalTTL))
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPlanProposalDecision,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		MessageID:        "msg-plan",
+		PickerID:         "proposal-1",
+		OptionID:         planProposalActionExecute,
+	})
+
+	if noticeCode(events, "room_workspace_required") == "" {
+		t.Fatalf("plan proposal execute without room workspace should require workspace, got %#v", events)
+	}
+	if hasAgentCommand(events) || surface.ActiveQueueItemID != "" || len(surface.QueuedQueueItemIDs) != 0 {
+		t.Fatalf("rejected plan proposal execute must not dispatch, active=%q queued=%#v events=%#v", surface.ActiveQueueItemID, surface.QueuedQueueItemIDs, events)
 	}
 }
 
@@ -328,6 +454,93 @@ func TestRoomWorkspaceSecondBotTextInheritsRoomWorkspaceAndStartsOwnNewThread(t 
 	}
 	if second.SelectedThreadID == "thread-droid-a" {
 		t.Fatalf("second surface must not inherit first surface thread, got %q", second.SelectedThreadID)
+	}
+}
+
+func TestRoomWorkspaceSecondBotImageInheritsRoomWorkspaceAndStages(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	first := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	first.SelectedThreadID = "thread-droid-a"
+	first.RouteMode = state.RouteModePinned
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionImageMessage,
+		SurfaceSessionID: "feishu:app-2:chat:oc_room",
+		GatewayID:        "app-2",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_member",
+		MessageID:        "msg-image",
+		LocalPath:        "/tmp/reference.png",
+		MIMEType:         "image/png",
+	})
+
+	if noticeCode(events, "not_attached") != "" {
+		t.Fatalf("same-room image should not return not_attached, got %#v", events)
+	}
+	if !hasPendingInputStatus(events, string(state.ImageStaged)) {
+		t.Fatalf("same-room image should stage after inheriting workspace, got %#v", events)
+	}
+	second := svc.root.Surfaces["feishu:app-2:chat:oc_room"]
+	if second.ClaimedWorkspaceKey != "/data/dl/droid" || second.AttachedInstanceID == "" {
+		t.Fatalf("expected second image surface to inherit room workspace and attach, got %#v", second)
+	}
+	if second.SelectedThreadID == "thread-droid-a" {
+		t.Fatalf("second image surface must not inherit sibling thread, got %q", second.SelectedThreadID)
+	}
+	if len(second.StagedImages) != 1 {
+		t.Fatalf("expected image staged on second surface, got %#v", second.StagedImages)
+	}
+}
+
+func TestRoomWorkspaceSecondBotFileStartsHeadlessAndStagesWhenOnlySiblingInstanceExists(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	delete(svc.root.Instances, "inst-droid-b")
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionFileMessage,
+		SurfaceSessionID: "feishu:app-2:chat:oc_room",
+		GatewayID:        "app-2",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_member",
+		MessageID:        "msg-file",
+		LocalPath:        "/tmp/reference.txt",
+		FileName:         "reference.txt",
+	})
+
+	if noticeCode(events, "not_attached") != "" || noticeCode(events, "workspace_instance_busy") != "" {
+		t.Fatalf("same-room file should inherit room workspace instead of failing attach, got %#v", events)
+	}
+	if !hasStartHeadlessCommand(events) {
+		t.Fatalf("expected same-room file to start independent headless when only sibling instance exists, got %#v", events)
+	}
+	if !hasPendingInputStatus(events, string(state.FileStaged)) {
+		t.Fatalf("same-room file should stage while headless starts, got %#v", events)
+	}
+	second := svc.root.Surfaces["feishu:app-2:chat:oc_room"]
+	if second.PendingHeadless == nil || second.PendingHeadless.WorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected second file surface pending headless for room workspace, got %#v", second)
+	}
+	if len(second.StagedFiles) != 1 {
+		t.Fatalf("expected file staged on second surface, got %#v", second.StagedFiles)
+	}
+	if second.SelectedThreadID == "thread-droid-a" {
+		t.Fatalf("second file surface must not inherit sibling thread, got %#v", second)
 	}
 }
 
@@ -664,6 +877,113 @@ func TestRoomWorkspaceSwitchByAdminResetsSameRoomSurfaces(t *testing.T) {
 	}
 	if len(second.StagedImages) != 0 || len(second.PendingRequests) != 0 || second.ReviewSession != nil {
 		t.Fatalf("expected sibling overlays to reset, got images=%#v requests=%#v review=%#v", second.StagedImages, second.PendingRequests, second.ReviewSession)
+	}
+}
+
+func TestRoomWorkspaceDetachByPrimaryClearsRoomAndAllSurfaces(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.PrimaryGatewayID = "app-1"
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-2:chat:oc_room",
+		GatewayID:        "app-2",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_member",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	for _, surfaceID := range []string{"feishu:app-1:chat:oc_room", "feishu:app-2:chat:oc_room"} {
+		surface := svc.root.Surfaces[surfaceID]
+		surface.SelectedThreadID = "thread-droid-a"
+		surface.RouteMode = state.RouteModePinned
+		surface.QueueItems["queue-"+surfaceID] = &state.QueueItemRecord{ID: "queue-" + surfaceID, Status: state.QueueItemQueued}
+		surface.QueuedQueueItemIDs = []string{"queue-" + surfaceID}
+		surface.StagedImages["img-"+surfaceID] = &state.StagedImageRecord{ImageID: "img-" + surfaceID, State: state.ImageStaged}
+		surface.StagedFiles["file-"+surfaceID] = &state.StagedFileRecord{FileID: "file-" + surfaceID, State: state.FileStaged}
+	}
+	room.ActiveReservations = map[string]*state.FeishuRoomActiveReservationRecord{
+		"stale": {ReservationID: "stale", SurfaceSessionID: "feishu:app-2:chat:oc_room", UpdatedAt: svc.now()},
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionWorkspaceDetach,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+
+	if noticeCode(events, "room_workspace_detached") == "" {
+		t.Fatalf("primary workspace detach should report room clear, got %#v", events)
+	}
+	if room.WorkspaceKey != "" || room.WorkspaceResetGeneration != 1 {
+		t.Fatalf("primary workspace detach should clear room workspace and bump generation, got %#v", room)
+	}
+	if len(room.ActiveReservations) != 0 {
+		t.Fatalf("primary workspace detach should clear room active reservations, got %#v", room.ActiveReservations)
+	}
+	for _, surfaceID := range []string{"feishu:app-1:chat:oc_room", "feishu:app-2:chat:oc_room"} {
+		surface := svc.root.Surfaces[surfaceID]
+		if surface.AttachedInstanceID != "" || surface.SelectedThreadID != "" || surface.ClaimedWorkspaceKey != "" || surface.PendingHeadless != nil {
+			t.Fatalf("room clear should detach %s, got %#v", surfaceID, surface)
+		}
+		if surface.ActiveQueueItemID != "" || len(surface.QueueItems) != 0 || len(surface.QueuedQueueItemIDs) != 0 {
+			t.Fatalf("room clear should reset queue for %s, active=%q queued=%#v items=%#v", surfaceID, surface.ActiveQueueItemID, surface.QueuedQueueItemIDs, surface.QueueItems)
+		}
+		if len(surface.StagedImages) != 0 || len(surface.StagedFiles) != 0 || len(surface.PendingRequests) != 0 || surface.ReviewSession != nil {
+			t.Fatalf("room clear should reset overlays for %s, images=%#v files=%#v requests=%#v review=%#v", surfaceID, surface.StagedImages, surface.StagedFiles, surface.PendingRequests, surface.ReviewSession)
+		}
+	}
+}
+
+func TestRoomWorkspaceDetachByNonPrimaryRejectsWithoutMutation(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	room.PrimaryGatewayID = "app-1"
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-2:chat:oc_room",
+		GatewayID:        "app-2",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_member",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	second := svc.root.Surfaces["feishu:app-2:chat:oc_room"]
+	second.SelectedThreadID = "thread-droid-b"
+	second.RouteMode = state.RouteModePinned
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionWorkspaceDetach,
+		SurfaceSessionID: "feishu:app-2:chat:oc_room",
+		GatewayID:        "app-2",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_member",
+	})
+
+	if noticeCode(events, "room_workspace_primary_required") == "" {
+		t.Fatalf("non-primary workspace detach should be rejected, got %#v", events)
+	}
+	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 0 {
+		t.Fatalf("non-primary workspace detach should not mutate room, got %#v", room)
+	}
+	if second.AttachedInstanceID == "" || second.SelectedThreadID != "thread-droid-b" || second.ClaimedWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("non-primary workspace detach should not reset surface, got %#v", second)
 	}
 }
 
@@ -1465,6 +1785,15 @@ func hasStartHeadlessCommand(events []eventcontract.Event) bool {
 func hasTargetPicker(events []eventcontract.Event) bool {
 	for _, event := range events {
 		if event.TargetPickerView != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func hasPendingInputStatus(events []eventcontract.Event, status string) bool {
+	for _, event := range events {
+		if event.PendingInput != nil && event.PendingInput.Status == status {
 			return true
 		}
 	}
