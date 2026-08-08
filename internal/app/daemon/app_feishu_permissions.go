@@ -203,6 +203,31 @@ func (a *App) CheckPrimaryBotPermission(ctx context.Context, req orchestrator.Pr
 	return primaryPermissionDecisionFromScopes(appScopesFromFeishuFactsScopes(facts.Scopes), err)
 }
 
+func (a *App) checkFeishuScopePermission(ctx context.Context, gatewayID, feature string, forceRefresh bool) orchestrator.PrimaryBotPermissionDecision {
+	gatewayID = canonicalGatewayID(gatewayID)
+	feature = strings.TrimSpace(feature)
+	if gatewayID == "" {
+		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "missing_gateway"}
+	}
+	requirement, ok := feishuScopeRequirementByFeature(feature)
+	if !ok {
+		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "scope_requirement_missing"}
+	}
+	if !forceRefresh {
+		if facts, ok := a.FeishuBotFacts(gatewayID); ok && feishuFactsScopesFresh(facts, time.Now().UTC()) {
+			return feishuScopePermissionDecisionFromScopes(requirement, appScopesFromFeishuFactsScopes(facts.Scopes), nil)
+		}
+	}
+	checkCtx := ctx
+	if checkCtx == nil {
+		checkCtx = context.Background()
+	}
+	checkCtx, cancel := context.WithTimeout(checkCtx, 20*time.Second)
+	defer cancel()
+	facts, err := a.RefreshFeishuBotFacts(checkCtx, gatewayID)
+	return feishuScopePermissionDecisionFromScopes(requirement, appScopesFromFeishuFactsScopes(facts.Scopes), err)
+}
+
 func primaryPermissionDecisionFromScopes(scopes []feishu.AppScopeStatus, err error) orchestrator.PrimaryBotPermissionDecision {
 	if err != nil {
 		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "scope_read_failed", Err: err}
@@ -217,9 +242,24 @@ func primaryPermissionDecisionFromScopes(scopes []feishu.AppScopeStatus, err err
 	return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "missing_group_message_scope"}
 }
 
+func feishuScopePermissionDecisionFromScopes(requirement feishuapp.ScopeRequirement, scopes []feishu.AppScopeStatus, err error) orchestrator.PrimaryBotPermissionDecision {
+	if err != nil {
+		return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "scope_read_failed", Err: err}
+	}
+	if scope, ok := feishu.MatchScopeRequirement(requirement.Scope, requirement.ScopeType, scopes); ok {
+		return orchestrator.PrimaryBotPermissionDecision{Allowed: true, Scope: scope}
+	}
+	return orchestrator.PrimaryBotPermissionDecision{Allowed: false, Reason: "missing_scope"}
+}
+
 func primaryPermissionScopeRequirement() (feishuapp.ScopeRequirement, bool) {
+	return feishuScopeRequirementByFeature("primary_room_bot")
+}
+
+func feishuScopeRequirementByFeature(feature string) (feishuapp.ScopeRequirement, bool) {
+	feature = strings.TrimSpace(feature)
 	for _, requirement := range feishuapp.DefaultManifest().ScopeRequirements {
-		if requirement.Required && strings.TrimSpace(requirement.Feature) == "primary_room_bot" {
+		if requirement.Required && strings.TrimSpace(requirement.Feature) == feature {
 			return requirement, true
 		}
 	}

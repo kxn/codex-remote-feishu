@@ -192,6 +192,9 @@ type ingressEpisodeOptions struct {
 }
 
 func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.ActionResult {
+	if action.Kind == control.ActionFeishuBotAddedToGroup {
+		return a.handleFeishuBotAddedToGroup(ctx, action)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.handleActionLocked(ctx, action, ingressEpisodeOptions{allowGroupOnDemandResume: true})

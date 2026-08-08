@@ -38,6 +38,7 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 	}
 	if got, want := run.Options.Addons.Events.Items.Tenant, []string{
 		"application.bot.menu_v6",
+		"im.chat.member.bot.added_v1",
 		"im.message.reaction.created_v1",
 		"im.message.reaction.deleted_v1",
 		"im.message.recalled_v1",
@@ -55,6 +56,7 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 		"im:message.group_at_msg.include_bot:readonly",
 		"im:message.group_at_msg:readonly",
 		"im:message.group_msg",
+		"im:chat:readonly",
 		"im:message.p2p_msg:readonly",
 		"im:message.reactions:read",
 		"im:message.reactions:write_only",

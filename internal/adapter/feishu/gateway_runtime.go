@@ -35,6 +35,13 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 	dispatch.OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
 		return gatewaypkg.HandleInboundMessageReactionCreatedEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
 	})
+	dispatch.OnP2ChatMemberBotAddedV1(func(ctx context.Context, event *larkim.P2ChatMemberBotAddedV1) error {
+		action, ok := gatewaypkg.ParseBotAddedToGroupEvent(g.inboundEnv(), event)
+		if !ok {
+			return nil
+		}
+		return handleGatewayEventAction(ctx, action, handler)
+	})
 	dispatch.OnP2CardActionTrigger(func(ctx context.Context, event *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
 		action, ok := gatewaypkg.ParseCardActionTriggerEvent(g.routingEnv(), event)
 		if ok {

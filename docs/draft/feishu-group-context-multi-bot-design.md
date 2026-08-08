@@ -1,8 +1,8 @@
 # Feishu Group Context Multi-Bot Design
 
 > Type: `draft`
-> Updated: `2026-08-04`
-> Summary: 记录飞书群聊多 context / 多机器人共享群 workspace 的产品结论、底层调研与当前落地状态。
+> Updated: `2026-08-08`
+> Summary: 补充机器人进群自动成为唯一主机器人的权限、事件与竞争收口设计。
 
 ## 1. 背景
 
@@ -196,7 +196,7 @@ managed headless 启动时会为每个 `InstanceID` 启动独立进程，并通�
 
 已有 room workspace 且目标 workspace 不同的时候，只有当前 surface 的 gateway 与 `PrimaryGatewayID` 精确匹配才允许切换，并继续经过 active / pending / review / running blocker 和 sibling reset。没有 primary、primary 状态无法证明或当前 bot 不是 primary 时，拒绝切换并提示先对目标 bot 执行 `/primary on`。
 
-此 gate 不调用 `im.v1.chat.get`，也不要求 `im:chat:readonly`、`im:chat:read` 或 `im:chat`。`/primary off`、`status`、`refresh` 和 primary replacement 仍按现有 room primary 状态工作。
+手动 `/primary on` gate 不调用 `im.v1.chat.get`，也不要求 `im:chat:readonly`、`im:chat:read` 或 `im:chat`；它只确认群普通消息权限。机器人进群自动引导是独立入口：收到 `im.chat.member.bot.added_v1` 后，先复用 daemon `feishufacts` scope 缓存确认 `im:chat:readonly`（兼容更宽 `im:chat`），再在锁外调用 `im.v1.chat.get` 读取 `chat_mode` 与 `bot_count`。只有 `chat_mode == group`、`bot_count == 1` 且锁内 CAS 看到 room `PrimaryGatewayID` 仍为空时，才写入当前 gateway 并发送纯文本提示；已有 primary 不会被自动替换。`/primary off`、`status`、`refresh` 和 primary replacement 仍按现有 room primary 状态工作。
 
 ### 7.2 `OpenChatID` / `chat_id` 跨 app 稳定性
 
@@ -266,7 +266,7 @@ workspace switch 不新增 Feishu chat info client，也不查询原生群管理
 截至 2026-08-04，已完成 room concurrency 这一轮落地：
 
 1. room identity/state：`state.Root.FeishuRoomContexts` 保存 `feishu:chat:<chatID>` room context；`ensureSurface` 在群聊 surface materialize/resume 时登记 gateway/surface evidence；私聊 surface 不进入 room context。该记录现在是 room workspace binding/reset 与 room concurrency limit 的 durable SSOT，runtime active reservations 只保留在内存。
-2. Feishu 群 primary 授权：`/primary on` 通过 `PrimaryBotPermissionChecker` 强制刷新当前 bot 的群普通消息能力并写入 `PrimaryGatewayID`；workspace switch 只允许当前 primary bot，完全不依赖 Feishu 群管理员 API。
+2. Feishu 群 primary 授权：`/primary on` 通过 `PrimaryBotPermissionChecker` 强制刷新当前 bot 的群普通消息能力并写入 `PrimaryGatewayID`；workspace switch 只允许当前 primary bot，完全不依赖 Feishu 群管理员 API。机器人进群自动引导额外依赖 `im.chat.member.bot.added_v1` 与 `im:chat:readonly`，只用 `chat.get` 的 `chat_mode` / `bot_count` 判断是否群聊唯一机器人，不读取 Feishu 群管理员。
 3. workspace claim owner：`workspaceClaims` 已从单 `SurfaceSessionID` 扩展为 `surface` / `room` 结构化 owner；同 room 群 surface 可以共享 workspace claim，不同 room / 私聊 surface 仍互斥；instance/thread claim 仍保持 surface 独占。
 4. room workspace binding / switch / reset：`FeishuRoomContextRecord` 已保存 `WorkspaceKey`、绑定操作者、绑定更新时间与 reset generation。workspace attach、attach instance、跨 workspace thread attach、fresh workspace prepare 等真正改变 workspace claim 的入口统一经过 room binding helper；没有自身 workspace route 的 same-room surface 会把 room binding 作为当前 workspace 默认值，因此第二个 bot 首次打开 `/use` / target picker 时会默认看到群 workspace。room 已绑定且目标 workspace 不同时，先确认当前 surface 可以安全离开，再检查同 room 是否有 active/pending request/headless/review/running blocker，随后要求当前 surface gateway 与 `PrimaryGatewayID` 匹配。primary gate 失败时拒绝；primary bot 切换成功会 reset 同 room 其它 surface 的 attachment、thread selection、queue、staged input、pending request/capture、exec/reasoning progress、review、plan proposal 和 target picker runtime。最终 room binding 只在 route/attach 成功或 fresh workspace 连接完成后写入新 workspace。
 5. room durable state：`FeishuRoomStateRecord` 通过原 `feishu-room-primary.json` 路径的 schema v2 持久化 workspace/update/reset、primary/update 与可选 `ConcurrencyLimit`；旧 v1 primary-only 文件原位迁移，缺失字段运行时默认 1。设置失败时恢复旧 runtime 值，不允许只在内存中成功。

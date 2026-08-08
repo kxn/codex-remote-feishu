@@ -202,6 +202,25 @@ func ParseMessageReactionCreatedEvent(env InboundEnv, event *larkim.P2MessageRea
 	}, true
 }
 
+func ParseBotAddedToGroupEvent(env InboundEnv, event *larkim.P2ChatMemberBotAddedV1) (control.Action, bool) {
+	if event == nil || event.Event == nil {
+		return control.Action{}, false
+	}
+	chatID := strings.TrimSpace(xutil.StringValue(event.Event.ChatId))
+	if chatID == "" {
+		return control.Action{}, false
+	}
+	actorUserID := userIDFromLarkUserID(event.Event.OperatorId)
+	return control.Action{
+		Kind:             control.ActionFeishuBotAddedToGroup,
+		GatewayID:        strings.TrimSpace(env.GatewayID),
+		SurfaceSessionID: SurfaceIDForInbound(env.GatewayID, chatID, "group", actorUserID),
+		ChatID:           chatID,
+		ActorUserID:      actorUserID,
+		Inbound:          InboundMetaFromBotAddedToGroupEvent(event),
+	}, true
+}
+
 func ParseMenuEvent(gatewayID string, event *larkapplication.P2BotMenuV6) (control.Action, bool) {
 	if event == nil || event.Event == nil || event.Event.EventKey == nil {
 		return control.Action{}, false

@@ -150,18 +150,39 @@ func TestDefaultManifestRequirementsMetadata(t *testing.T) {
 	}
 }
 
-func TestDefaultManifestOmitsChatInfoScope(t *testing.T) {
+func TestDefaultManifestIncludesChatInfoScopeForPrimaryBootstrap(t *testing.T) {
 	manifest := DefaultManifest()
+	foundScope := false
 	for _, scope := range manifest.Scopes.Scopes.Tenant {
-		if strings.HasPrefix(strings.TrimSpace(scope), "im:chat") {
-			t.Fatalf("default manifest must not require chat info scope, got %q", scope)
+		if strings.TrimSpace(scope) == "im:chat:readonly" {
+			foundScope = true
 		}
 	}
+	if !foundScope {
+		t.Fatal("default manifest must require im:chat:readonly for primary bootstrap")
+	}
+	foundRequirement := false
 	for _, item := range manifest.ScopeRequirements {
-		if strings.HasPrefix(strings.TrimSpace(item.Scope), "im:chat") {
-			t.Fatalf("default manifest must not describe chat info requirement, got %#v", item)
+		if strings.TrimSpace(item.Scope) == "im:chat:readonly" && item.ScopeType == "tenant" && item.Feature == "primary_room_auto_bootstrap" && item.Required {
+			foundRequirement = true
 		}
 	}
+	if !foundRequirement {
+		t.Fatal("default manifest must describe required im:chat:readonly primary bootstrap scope")
+	}
+}
+
+func TestDefaultManifestIncludesBotAddedEventForPrimaryBootstrap(t *testing.T) {
+	manifest := DefaultManifest()
+	for _, item := range manifest.Events {
+		if strings.TrimSpace(item.Event) == "im.chat.member.bot.added_v1" {
+			if item.Feature != "primary_room_auto_bootstrap" || !item.Required {
+				t.Fatalf("bot added event requirement = %#v, want required primary bootstrap event", item)
+			}
+			return
+		}
+	}
+	t.Fatal("default manifest must subscribe im.chat.member.bot.added_v1 for primary bootstrap")
 }
 
 func TestDefaultManifestUsesCurrentGroupMessageScope(t *testing.T) {

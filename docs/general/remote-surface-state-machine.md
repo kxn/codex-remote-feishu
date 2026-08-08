@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-08`
-> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
+> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`（含 hidden alias `/codexprovider`）现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -17,6 +17,8 @@
 这份文档描述的是**当前代码已经实现**的 remote surface 状态机，不是历史问题列表，也不是未来方案草稿。
 
 2026-08-08 #838 补充：`/detach` 与 `/workspace detach` 都是 detach-like route mutation，会清除当前私聊 surface 的全部 durable resume target（instance、thread、cwd、workspace、route、headless）。清理会在事件/UI/daemon dispatch 之前完成，并在 dispatch 后用同一清理意图再次同步，避免 dispatch 释放 app mutex 时被 recovery tick 插入；`E6 Abandoning` 期间 headless 与 VS Code auto-resume 都明确跳过，直到 surface 最终 detach。
+
+2026-08-08 #840 补充：Feishu 机器人进群事件 `im.chat.member.bot.added_v1` 现在是 room primary bootstrap 的独立入口。daemon 收到事件后先在 app 锁外复用 `feishufacts` scope 缓存确认 `im:chat:readonly`（兼容 `im:chat`），再通过 gateway `im.v1.chat.get` 读取 `chat_mode` 与 `bot_count`；只有 `chat_mode == group` 且 `bot_count == 1` 时才进入锁内尝试写 room primary。锁内写入是 compare-and-set：仅当 `PrimaryGatewayID` 仍为空时把当前 gateway 写入 room durable state 并刷新 primary snapshot；已有 primary 时 no-op，不替换，也不发成功提示。若 room state 持久化失败，daemon 会回滚刚写入的 runtime primary 并刷新 snapshot，不留下只在内存中生效的假 primary。`chat.get` 缺权限会进入现有 permission gap / call broker cooldown 路径，并给群内发送权限提示；事件是否已订阅仍由 setup/admin auto-config 基于已发布版本 `event_infos` 检查，runtime 不把“没有收到事件”推断成未订阅。
 
 2026-08-01 #768/#769 补充：Codex 的可见配置入口已从 provider-first 收口为 Profile-first。`/codexprofile` 是 canonical 用户入口，旧 `/codexprovider` 只作为 hidden + allow 兼容 alias 继续进入同一 action path；gateway/bot record 的 canonical owner 是 `CodexProfileID`，`CodexProviderID` 仅由 Profile 派生用于旧合同投影。bare Profile 卡使用可分页 `select_static`，只暴露可用 native/API/OAuth Profile 为可选项；缺 secret、OAuth 不可用或探测未知的 Profile 保留在只读状态说明里，不能被 callback 选中。legacy Provider catalog 不再反向合成 Profile catalog；Profile 选择只能消费 daemon materialized canonical Profile read model。
 
@@ -125,7 +127,7 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
 7. room binding 是没有自身 workspace route 的 same-room surface 的最后一级 current-workspace fallback；因此第二个 bot 首次打开 `/use` / target picker 时会默认选中 room workspace，而不是回到全局列表第一项；若第二个 bot 在群里被 @ 并收到普通文本，文本入口也会先消费该 room workspace，并通过 workspace continuation 接管或启动当前 bot 自己的 headless context。若该 workspace 只有同 room sibling 已 claim 的实例，continuation 会走 fresh headless，而不是抢 sibling instance；后续文本按新会话首条消息派发，不继承其它 bot 的 selected thread。
 8. room binding 的写入点收口在真正改变 workspace claim 的入口：workspace attach、attach instance、跨 workspace thread attach、fresh workspace prepare 成功建立 `PendingHeadless` 后立即同步 room binding；target picker 只负责选择，confirm 后复用这些底层入口。fresh pending 后续启动失败不会自动清空 room binding，因为群 workspace 选择已经成立，用户可以继续在该 workspace 上重试或由同 room 其它 bot 启动自己的 context。
 9. room 已绑定且目标 workspace 不同时，切换前先确认当前 surface 可以安全离开，再检查同 room 是否存在 active/pending request、pending headless、active review、dispatching/running queue 或 instance active turn；命中 blocker 时拒绝，不 reset sibling surface，也不进入 primary gate。
-10. destructive room workspace change 必须通过 room primary gate：当前 surface 的 gateway 必须与 `FeishuRoomContextRecord.PrimaryGatewayID` 精确匹配；无 primary 或其他 bot 都 fail closed，提示先对目标 bot 执行 `/primary on`，不调用 Feishu chat info API。
+10. destructive room workspace change 必须通过 room primary gate：当前 surface 的 gateway 必须与 `FeishuRoomContextRecord.PrimaryGatewayID` 精确匹配；无 primary 或其他 bot 都 fail closed，提示先对目标 bot 执行 `/primary on`。该 workspace change gate 不调用 Feishu chat info API；只有机器人进群自动 bootstrap 会在锁外调用 `chat.get` 判断 `bot_count`。
 11. primary bot 切换成功会 reset 同 room 其它 surface 的 context-bound runtime：attachment、selected thread、workspace claim、queue、staged image/file、pending request/capture、exec/reasoning progress、review session、plan proposal、target picker；触发切换的当前 surface 后续按目标 workspace 正常 attach/launch。
 12. instance claim 与 thread claim 仍是 surface 级全局独占，同 room 不共享实例或会话。
 13. room context 的 `ActiveReservations` 是同 room 执行预算的 runtime SSOT，而不是单一 holder lock：每个新的独立 agent turn 在 staged input 绑定、route mutation、thread message 记录和 queue item 创建前先占一个 reservation；queue item / remote turn 会用实际 queue/turn evidence 刷新，review start、Claude prompt restart 和 headless group replay 在各自 pending 生命周期内保留独立 reservation。`ConcurrencyLimit` 缺失时按 1，显式 0 表示 unlimited，正数限制同 room 内所有实际 agent dispatch；compact、refresh、model list 等 context-only/control action 不占 slot。
@@ -1722,7 +1724,7 @@ transport degraded retained attachment
 | bare `/debug` `/upgrade` | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 |
 | 带参数 `/model` `/reasoning` `/access` | 拒绝 | 允许 | 允许 | 允许 | 允许 | 允许 |
 
-Feishu 群聊 surface 对 bot 能力设置有额外覆盖规则：`/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 的 bare open、带参数 apply 与同卡 callback 都不修改群 surface 或 bot SSOT，并提示到私聊修改；`/autowhip`、`/autocontinue`、`/verbose` 仍按当前群 surface/context 生效。`/primary` 只改 room primary gateway，不改 workspace/session/thread route；`/primary on` 只强制刷新当前 gateway 的群普通消息权限并写入 `PrimaryGatewayID`，不查询飞书群管理员。已有 room workspace 时，只有当前 primary bot 能切换；无 primary 或其他 bot 必须先对目标 bot 执行 `/primary on`。
+Feishu 群聊 surface 对 bot 能力设置有额外覆盖规则：`/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 的 bare open、带参数 apply 与同卡 callback 都不修改群 surface 或 bot SSOT，并提示到私聊修改；`/autowhip`、`/autocontinue`、`/verbose` 仍按当前群 surface/context 生效。`/primary` 只改 room primary gateway，不改 workspace/session/thread route；`/primary on` 只强制刷新当前 gateway 的群普通消息权限并写入 `PrimaryGatewayID`，不查询飞书群管理员。机器人进群自动 bootstrap 只在 `chat.get` 证明群内唯一机器人且 room primary 为空时写入，不替换已有 primary。已有 room workspace 时，只有当前 primary bot 能切换；无 primary 或其他 bot 必须先对目标 bot 执行 `/primary on`。
 
 ### 6.2 覆盖门禁
 

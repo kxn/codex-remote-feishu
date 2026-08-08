@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -50,6 +51,47 @@ func (s *Service) handlePrimaryOn(surface *state.SurfaceConsoleRecord, room *sta
 	default:
 		return notice(surface, "primary_replaced", "已将本群主机器人切换为当前机器人。之后未 @ 的普通消息将由当前机器人承接。")
 	}
+}
+
+func (s *Service) SetFeishuPrimaryGatewayIfEmpty(action control.Action, now time.Time) bool {
+	if s == nil {
+		return false
+	}
+	surface := s.ensureSurface(action)
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return false
+	}
+	current := strings.TrimSpace(surface.GatewayID)
+	if current == "" || strings.TrimSpace(room.PrimaryGatewayID) != "" {
+		return false
+	}
+	room.PrimaryGatewayID = current
+	room.PrimaryUpdatedBy = strings.TrimSpace(action.ActorUserID)
+	if room.PrimaryUpdatedBy == "" {
+		room.PrimaryUpdatedBy = strings.TrimSpace(surface.ActorUserID)
+	}
+	room.PrimaryUpdatedAt = now
+	return true
+}
+
+func (s *Service) ClearFeishuPrimaryGatewayIfMatches(action control.Action) bool {
+	if s == nil || s.root == nil {
+		return false
+	}
+	surface := s.root.Surfaces[strings.TrimSpace(action.SurfaceSessionID)]
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return false
+	}
+	current := strings.TrimSpace(action.GatewayID)
+	if current == "" || strings.TrimSpace(room.PrimaryGatewayID) != current {
+		return false
+	}
+	room.PrimaryGatewayID = ""
+	room.PrimaryUpdatedBy = strings.TrimSpace(action.ActorUserID)
+	room.PrimaryUpdatedAt = s.now()
+	return true
 }
 
 func (s *Service) handlePrimaryOff(surface *state.SurfaceConsoleRecord, room *state.FeishuRoomContextRecord) []eventcontract.Event {
