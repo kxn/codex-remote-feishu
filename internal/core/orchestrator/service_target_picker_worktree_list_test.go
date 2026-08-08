@@ -287,7 +287,7 @@ func TestTargetPickerWorktreeConfirmPreflightsRoomWorkspaceBeforeDaemonCreate(t 
 	if blocked.Page != control.FeishuTargetPickerPageWorktree || !targetPickerHasBlockingMessage(blocked.SourceMessages, "请先对当前机器人执行 `/primary on`，再切换群 workspace。") {
 		t.Fatalf("expected worktree page to show room primary preflight failure, got %#v", blocked)
 	}
-	if room.WorkspaceKey != currentWorkspace || room.WorkspaceResetGeneration != 0 {
+	if !testutil.SamePath(room.WorkspaceKey, currentWorkspace) || room.WorkspaceResetGeneration != 0 {
 		t.Fatalf("preflight must not mutate room binding, got %#v", room)
 	}
 }
