@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-09`
-> Summary: 新增 OpenCode backend 接入评估与黑盒测试计划索引。
+> Summary: 新增 OpenCode backend 风险与降级讨论索引。
 
 ## 1. 适用范围
 
@@ -192,6 +192,7 @@
 - [feishu-request-delivery-reliability-design.md](./draft/feishu-request-delivery-reliability-design.md)
 - [acp-backend-profile-integration-design.md](./draft/acp-backend-profile-integration-design.md)
 - [opencode-backend-integration-evaluation.md](./draft/opencode-backend-integration-evaluation.md)
+- [opencode-backend-risk-discussion.md](./draft/opencode-backend-risk-discussion.md)
 - [feishu-setup-auto-configuration-design.md](./draft/feishu-setup-auto-configuration-design.md)
 - [feishu-slash-menu-owner-card-audit-2026-04.md](./draft/feishu-slash-menu-owner-card-audit-2026-04.md)
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
