@@ -20,7 +20,7 @@
 - ACP 协议面足以承载我们的核心 backend lifecycle：initialize、session new/list/load/resume/fork/close、prompt/cancel、stream delta、tool lifecycle、permission request、usage、MCP injection 均已用 `opencode-ai@1.18.15` binary 黑盒验证。
 - profile overlay 可以实现“少字段覆盖，其余继承”：默认建议用 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，必要时配合临时 XDG；不建议把 `OPENCODE_CONFIG_DIR` 作为默认 overlay，因为它会替换 global config path 并写 `.gitignore`。
 - 仍需我们侧单独实现 loader/profile compiler。ACP 只能抽象运行期协议，不能抽象 OpenCode 的配置、auth、MCP OAuth、模型目录、权限 schema 和产品命令差异。
-- 主要缺口是语义退化而非不可接入：OpenCode 没有我们的原生 `TurnPlanSnapshot`、sandbox profile、persistent delete、独立 thread/turn API、未知 slash command 的显式错误；这些应在 adapter/compiler 层显式弱化或标记 unsupported。
+- 主要缺口是语义退化而非不可接入：OpenCode 没有 Codex 式 sandbox profile、persistent delete、独立 thread/turn API、未知 slash command 的显式错误；Plan/usage/error 等能力应比照 Claude 做 adapter 侧承接和投影，不能把内部 carrier 差异直接暴露成用户可见“不支持”。
 
 ## 2. 调研对象
 
@@ -177,7 +177,7 @@ OpenCode ACP raw update 类型和我们 `agentproto` 不同：
 - prompt response stopReason 不等于完整 final assistant text。
 - OpenCode ACP 没有独立 `thread/*` / `turn/*` 方法或 turn lifecycle event；canonical `TurnID` 需要由我们侧 dispatch correlation 或额外 runtime evidence 生成。
 - JSON-RPC request id、OpenCode permission id、tool `callID`、message id 不能混用。
-- OpenCode `mode=plan` 是 session mode/config option，不是 ACP plan snapshot；不能映射成 `agentproto.TurnPlanSnapshot`。
+- OpenCode `mode=plan` 是 session mode/config option，不是 ACP plan snapshot；应比照 Claude 的产品语义承接计划文本、确认请求或 todo/tool 事件，不从普通 mode 字段硬造 `agentproto.TurnPlanSnapshot`。
 
 ### 4.5 Surface Resume / Thread Catalog
 
@@ -443,17 +443,17 @@ raw-to-canonical adapter 需要按以下规则实现：
 | prompt response 无 final text | 不能把 prompt response 当最终 assistant message | adapter 建 turn buffer：以 `messageId` 聚合 `agent_message_chunk` / `agent_thought_chunk`；prompt response 只关闭 turn 并附 usage/stopReason。若 turn close 时无 assistant chunk，输出空完成或命令专用结果 | ACP protocol adapter | text/reasoning delta fixture；无文本 `/patch` 负向 fixture |
 | live delta 与 load replay 形态不同 | resume/load 时容易重复追加消息 | adapter 引入 hydration mode。`session/load` 期间的 chunk 作为历史快照导入，不触发“正在生成”状态；同一 `messageId` 已存在时覆盖/合并，不追加重复 delta | ACP protocol adapter + surface resume | load replay fixture：live 两段 delta，load 一段 aggregate，最终 canonical 只有一条消息 |
 | OpenCode 没有独立 turn/thread API | 我们的 thread/turn 语义比 ACP 更细 | `sessionId` 映射 thread；TurnID 由我们在 prompt admission 时生成，并记录 `jsonrpc id -> turnID`、`messageId -> turnID`。OpenCode message id 只作为 backend message id 保存 | adapter state store | 并发/乱序 response fixture；id domain 不混用单测 |
-| usage 两套语义 | prompt response usage 与 `usage_update` 不同 | canonical 里拆两类：turn usage 使用 prompt response；context meter 使用 `usage_update`。UI/API 不把 `usage_update` 覆盖到本 turn token 统计 | ACP usage mapper | response usage 和 usage_update fixture；cache/reasoning token 字段 golden |
+| usage 两套语义 | prompt response usage 与 `usage_update` 不同 | 第一版只把可归因于当前 turn 的 usage 投影到现有 token usage；`usage_update` 作为 runtime/debug state 保留，不默认新增 context meter UI，也不覆盖本 turn token 统计 | ACP usage mapper | response usage 和 usage_update fixture；cache/reasoning token 字段 golden |
 | permission reject 是 tool failed | 用户拒绝不应被显示为 backend 崩溃 | request bridge 把 `session/request_permission` 映射成现有 request card；返回 once/always/reject。reject 关闭 request 后等待 tool failed 事件；turn 仍可 end_turn | request bridge + Feishu/remote surfaces | once/always/reject golden；reject 后 card 状态和 tool failed 一致 |
 | edit 会调用 `fs/write_text_file` | OpenCode 会请求客户端预览/写入 proposed content | adapter 必须实现 `fs/write_text_file` server method：在远程面只更新 proposed diff/preview，不直接绕过权限写我们自己的工作区；实际文件写入仍以 OpenCode tool execution 为准 | ACP connection method handler | edit fixture：request diff、writeTextFile、completed diff 三者一致 |
 | tool taxonomy 不完全同构 | MCP tool kind 是 `other`，部分 OpenCode tool 没有现有分类 | 建 OpenCode tool taxonomy table：bash->execute、read->read、edit/write/apply_patch->edit、grep/glob->search、task/todowrite->think/plan-like、MCP unknown->other with display name。不要为了好看强行归类 MCP | tool mapper | read/bash/edit/MCP/error golden |
-| plan mode 不等于 Plan snapshot | 不能假装有 Codex/Claude 的结构化 plan | 两层处理：`mode=plan` 只映射成 session mode capability；如果 OpenCode 通过 todo/plan-file 工具产出计划，再作为普通 tool/content 展示，不合成 `TurnPlanSnapshot`。需要 Plan UI 时显示“backend does not provide structured plan snapshots” | config mapper + plan surface | mode switch fixture；todo/tool fixture；确认不发虚假的 plan snapshot |
+| plan mode 不等于 Plan snapshot | 不能从 `mode=plan` 硬造结构化计划 | 比照 Claude：`mode=plan` 只作为后续 turn 的模式/权限意图；计划正文、确认请求、todo/tool 结果按现有普通内容、确认卡或计划更新卡自然承接。有结构化 todo 才投影 `TurnPlanSnapshot`；没有时不额外显示“不支持结构化 Plan” | config mapper + plan surface | mode switch fixture；todo/tool/text fixture；确认不从 mode 字段发虚假的 plan snapshot |
 | sandbox 缺失 | 这是安全语义，不能用权限近似冒充 | profile schema 把 sandbox 拆成 `fileAccess`/`commandPermission`/`networkPolicy` 三类。OpenCode 第一版只实现 permission/fileAccess 近似；若用户选择必须 OS sandbox，则 launch 前 fail fast，不启动 backend | profile compiler + launch validator | sandbox-required profile 返回 blocking diagnostic；permission-only profile 可启动 |
 | `session/close` 不是 persistent delete | 不能把 close 按删除历史展示 | close 只映射为 detach/stop active runtime。历史删除另建产品能力，OpenCode backend 第一版不提供 delete；UI 文案避免“删除会话” | session lifecycle mapper | close 后 list 仍可见 fixture；surface 状态显示 detached/stopped |
 | `/review` 语义不同 | 它会启动 task/sub-session，不等于现有 review surface | 支持 `/review` 作为 OpenCode command，但 canonical 里标记 `commandKind=review` 和 `backendShape=task_summary`。不要承诺和 Claude/Codex review 字段一致；后续可在 adapter 中提取 task result 为 review summary | command adapter | `/review` fixture：task tool lifecycle + final summary |
 | `/compact` 语义不同 | 它走 summarize/compaction，prompt response 可能无 usage | 支持为 compact command；完成条件用 prompt response + observed compaction messages。usage 可为空，不回填错误值 | command adapter | `/compact` fixture：无 usage 时仍完成 |
 | 未知 slash 命令空 end_turn | OpenCode 不报错会让用户误以为执行成功 | 我们侧 command registry 预检：只允许 OpenCode available commands 和显式支持的 `/compact`。未知命令在发送给 OpenCode 前返回产品诊断，不让 OpenCode 空吞 | command router before ACP prompt | `/patch`、`/auto-continue`、`/auto-whip`、`/sendfile` 负向 golden |
-| error taxonomy 粗 | `-32603 OpenCode service failure` 不够产品化 | adapter 建 error normalizer：JSON-RPC code + method + stderr/log pattern + known OpenCode safeMessage -> canonical error。保留 raw frame 到 debug trace | diagnostics layer | missing session、invalid model、MCP failure、auth-required fixture |
+| error taxonomy 粗 | `-32603 OpenCode service failure` 不够产品化 | 不追求第一版完整 taxonomy。优先归一化会改变用户下一步操作的错误：missing session、invalid model、MCP failure、auth-required、permission denied；其他保留 raw frame 到 debug trace，并走 Claude 类似的保守通用失败 | diagnostics layer | missing session、invalid model、MCP failure、auth-required fixture |
 | runtime busy/retry 不转发 | UI 可能缺少精细状态 | 第一版用 prompt in-flight 状态驱动 busy；cancel/close 走本地 state。retry 只从错误/usage/log 推断，不假装 native status。若后续需要，考虑直接查 OpenCode event API 或贡献 upstream ACP status update | lifecycle state machine | prompt start/end/cancel state fixture |
 
 实现优先级：
