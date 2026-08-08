@@ -235,6 +235,9 @@ func (s *Service) maybeDispatchPendingAutoWhip(surface *state.SurfaceConsoleReco
 	if now.Before(surface.AutoWhip.PendingDueAt) {
 		return nil
 	}
+	if blocked := s.blockFeishuRoomNoWorkspaceAutoDispatch(surface); blocked != nil {
+		return blocked
+	}
 	if blocked := s.blockFeishuRoomActiveAutoDispatch(surface); blocked != nil {
 		return blocked
 	}

@@ -357,6 +357,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if events, ok := s.boundDaemonCommandEvents(surface, action); ok {
 		return s.filterEventsForSurfaceVisibility(events)
 	}
+	if blocked := s.blockFeishuRoomNoWorkspaceDataPlane(surface, action); blocked != nil {
+		return s.filterEventsForSurfaceVisibility(blocked)
+	}
 	var events []eventcontract.Event
 	switch action.Kind {
 	case control.ActionListInstances:
@@ -366,7 +369,7 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		}
 		events = s.presentInstanceSelectionWithAction(surface, action, false)
 	case control.ActionWorkspaceDetach:
-		events = s.detach(surface)
+		events = s.detachWorkspace(surface)
 	case control.ActionNewThread:
 		events = s.prepareNewThread(surface)
 	case control.ActionCompact:

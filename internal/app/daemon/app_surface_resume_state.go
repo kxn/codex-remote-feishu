@@ -437,28 +437,95 @@ func previousSurfaceResumeTargetMatchesWorkspace(entry surfaceresume.Entry, effe
 	return previousWorkspaceKey != "" && previousWorkspaceKey == effectiveWorkspaceKey
 }
 
-func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before *control.Snapshot) bool {
+func (a *App) surfaceResumeClearTargetsForActionLocked(action control.Action, before *control.Snapshot, events []eventcontract.Event) map[string]bool {
+	targets := map[string]bool{}
+	add := func(surfaceID string) {
+		surfaceID = strings.TrimSpace(surfaceID)
+		if surfaceID != "" {
+			targets[surfaceID] = true
+		}
+	}
 	switch action.Kind {
-	case control.ActionDetach, control.ActionWorkspaceDetach:
-		return true
-	case control.ActionModeCommand:
-		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
-		if before == nil || after == nil {
-			return false
-		}
-		if strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode)) &&
-			agentproto.NormalizeBackend(before.Backend) == agentproto.NormalizeBackend(after.Backend) {
-			return false
-		}
-		if afterSurface := a.surfaceByIDLocked(action.SurfaceSessionID); afterSurface != nil {
-			if _, ok := a.currentSurfaceResumeTargetLocked(afterSurface); ok {
-				return false
+	case control.ActionDetach:
+		add(action.SurfaceSessionID)
+	case control.ActionWorkspaceDetach:
+		if surfaceIsFeishuGroup(strings.TrimSpace(action.SurfaceSessionID)) {
+			if eventsContainNoticeCode(events, "room_workspace_detached") || eventsContainNoticeCode(events, "room_workspace_not_attached") {
+				for _, surfaceID := range a.feishuRoomSurfaceIDsForActionLocked(action) {
+					add(surfaceID)
+				}
 			}
+			break
 		}
-		return true
-	default:
+		add(action.SurfaceSessionID)
+	case control.ActionModeCommand:
+		if a.shouldClearModeSurfaceResumeTargetLocked(action, before) {
+			add(action.SurfaceSessionID)
+		}
+	}
+	if len(targets) == 0 {
+		return nil
+	}
+	return targets
+}
+
+func (a *App) shouldClearModeSurfaceResumeTargetLocked(action control.Action, before *control.Snapshot) bool {
+	after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
+	if before == nil || after == nil {
 		return false
 	}
+	if strings.EqualFold(strings.TrimSpace(before.ProductMode), strings.TrimSpace(after.ProductMode)) &&
+		agentproto.NormalizeBackend(before.Backend) == agentproto.NormalizeBackend(after.Backend) {
+		return false
+	}
+	if afterSurface := a.surfaceByIDLocked(action.SurfaceSessionID); afterSurface != nil {
+		if _, ok := a.currentSurfaceResumeTargetLocked(afterSurface); ok {
+			return false
+		}
+	}
+	return true
+}
+
+func eventsContainNoticeCode(events []eventcontract.Event, code string) bool {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false
+	}
+	for _, event := range events {
+		if event.Notice != nil && strings.TrimSpace(event.Notice.Code) == code {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) feishuRoomSurfaceIDsForActionLocked(action control.Action) []string {
+	chatID := strings.TrimSpace(action.ChatID)
+	if chatID == "" {
+		if surface := a.surfaceByIDLocked(action.SurfaceSessionID); surface != nil {
+			chatID = strings.TrimSpace(surface.ChatID)
+		}
+	}
+	ids := []string{}
+	for _, surface := range a.service.Surfaces() {
+		if surface == nil {
+			continue
+		}
+		surfaceID := strings.TrimSpace(surface.SurfaceSessionID)
+		if surfaceID == "" || !surfaceIsFeishuGroup(surfaceID) {
+			continue
+		}
+		if chatID != "" && strings.TrimSpace(surface.ChatID) != chatID {
+			continue
+		}
+		ids = append(ids, surfaceID)
+	}
+	if len(ids) == 0 {
+		if surfaceID := strings.TrimSpace(action.SurfaceSessionID); surfaceID != "" {
+			ids = append(ids, surfaceID)
+		}
+	}
+	return ids
 }
 
 func (a *App) syncSurfaceResumeRecoveryStateLocked() {

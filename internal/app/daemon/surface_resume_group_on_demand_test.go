@@ -513,7 +513,7 @@ func TestFeishuGroupOnDemandReplayRechecksTurnPatchTransactionGate(t *testing.T)
 	}
 }
 
-func TestFeishuGroupOnDemandTextWithFilesReturnsRecoveryPrompt(t *testing.T) {
+func TestFeishuGroupOnDemandTextWithFilesStartsHeadlessAndDefersMessage(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -531,10 +531,10 @@ func TestFeishuGroupOnDemandTextWithFilesReturnsRecoveryPrompt(t *testing.T) {
 		ResumeHeadless:     true,
 	})
 	app := newRestoreHintTestApp(stateDir)
-	startHeadlessCalls := 0
-	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
-		startHeadlessCalls++
-		return 0, nil
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4321, nil
 	}
 
 	app.HandleAction(context.Background(), control.Action{
@@ -552,18 +552,20 @@ func TestFeishuGroupOnDemandTextWithFilesReturnsRecoveryPrompt(t *testing.T) {
 		}},
 	})
 
-	if snapshot := app.service.SurfaceSnapshot("feishu:app-1:chat:oc_room"); snapshot == nil || snapshot.PendingHeadless.InstanceID != "" {
-		t.Fatalf("expected text with files to avoid pending headless, got %#v", snapshot)
+	snapshot := app.service.SurfaceSnapshot("feishu:app-1:chat:oc_room")
+	if snapshot == nil || snapshot.PendingHeadless.InstanceID == "" {
+		t.Fatalf("expected text with files to start pending headless recovery, got %#v", snapshot)
 	}
-	if startHeadlessCalls != 0 {
-		t.Fatalf("text with files must not start on-demand headless recovery, got %d calls", startHeadlessCalls)
+	if captured.InstanceID != snapshot.PendingHeadless.InstanceID || !testutil.SamePath(captured.WorkDir, workspaceDir) {
+		t.Fatalf("unexpected on-demand headless launch options: captured=%#v pending=%#v", captured, snapshot.PendingHeadless)
 	}
-	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
-		t.Fatalf("expected no continuation for text with files, got %#v", continuation)
+	continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]
+	if continuation == nil || len(continuation.Action.Files) != 1 || continuation.Action.Files[0].FileName != "file.txt" {
+		t.Fatalf("expected continuation to preserve text file attachments, got %#v", continuation)
 	}
 	gateway := app.gateway.(*recordingGateway)
-	if len(gateway.operations) != 1 || gateway.operations[0].CardTitle != "请先恢复群上下文" {
-		t.Fatalf("expected one file recovery prompt, got %#v", gateway.operations)
+	if len(gateway.operations) != 0 {
+		t.Fatalf("text with files should wait for recovery without unsupported prompt, got %#v", gateway.operations)
 	}
 }
 

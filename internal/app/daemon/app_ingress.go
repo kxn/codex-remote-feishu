@@ -294,10 +294,7 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		previousCoworkersLimit = a.service.FeishuRoomConcurrencyLimit(action.SurfaceSessionID)
 	}
 	events := a.applyIngressActionLocked(action)
-	var clearTargets map[string]bool
-	if a.shouldClearSurfaceResumeTargetLocked(action, before) {
-		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
-	}
+	clearTargets := a.surfaceResumeClearTargetsForActionLocked(action, before, events)
 	// Persist detach clearing before dispatching events: daemon/agent dispatch can
 	// release the app lock and allow a recovery tick to run concurrently.
 	a.syncSurfaceResumeStateLocked(clearTargets)

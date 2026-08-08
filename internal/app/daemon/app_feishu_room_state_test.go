@@ -507,3 +507,94 @@ func TestRoomWorkspaceSwitchClearsSiblingStaleResumeTargetBeforeRestart(t *testi
 		t.Fatalf("restarted room state = %#v, want workspace B", records)
 	}
 }
+
+func TestRoomWorkspaceDetachClearsSiblingResumeTargetsBeforeRestart(t *testing.T) {
+	stateDir := t.TempDir()
+	workspaceA := t.TempDir()
+	roomStore, err := feishuroomstate.LoadStore(feishuroomstate.StatePath(stateDir))
+	if err != nil {
+		t.Fatalf("load room state: %v", err)
+	}
+	if err := roomStore.Put(state.FeishuRoomStateRecord{
+		RoomID:           "feishu:chat:oc_room",
+		ChatID:           "oc_room",
+		WorkspaceKey:     workspaceA,
+		PrimaryGatewayID: "app-1",
+	}); err != nil {
+		t.Fatalf("put room state: %v", err)
+	}
+	for _, entry := range []surfaceresume.Entry{
+		{
+			SurfaceSessionID:   "feishu:app-1:chat:oc_room",
+			GatewayID:          "app-1",
+			ChatID:             "oc_room",
+			ActorUserID:        "ou_owner",
+			ProductMode:        "normal",
+			Backend:            "codex",
+			ResumeThreadID:     "thread-a-1",
+			ResumeThreadCWD:    workspaceA,
+			ResumeWorkspaceKey: workspaceA,
+			ResumeRouteMode:    "pinned",
+			ResumeHeadless:     true,
+		},
+		{
+			SurfaceSessionID:   "feishu:app-2:chat:oc_room",
+			GatewayID:          "app-2",
+			ChatID:             "oc_room",
+			ActorUserID:        "ou_member",
+			ProductMode:        "normal",
+			Backend:            "codex",
+			ResumeThreadID:     "thread-a-2",
+			ResumeThreadCWD:    workspaceA,
+			ResumeWorkspaceKey: workspaceA,
+			ResumeRouteMode:    "pinned",
+			ResumeHeadless:     true,
+		},
+	} {
+		putSurfaceResumeStateForTest(t, stateDir, entry)
+	}
+
+	newTestApp := func() *App {
+		app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+		app.service = orchestrator.NewService(time.Now, orchestrator.Config{}, renderer.NewPlanner())
+		return app
+	}
+	app := newTestApp()
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{Paths: relayruntime.Paths{StateDir: stateDir}})
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionWorkspaceDetach,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+
+	for _, surfaceID := range []string{"feishu:app-1:chat:oc_room", "feishu:app-2:chat:oc_room"} {
+		entry := app.SurfaceResumeState(surfaceID)
+		if entry == nil {
+			t.Fatalf("surface resume entry %s was deleted with its identity", surfaceID)
+		}
+		if staleWorkspace := state.ResolveWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD); staleWorkspace != "" {
+			t.Fatalf("workspace detach left stale resume workspace for %s = %q", surfaceID, staleWorkspace)
+		}
+		if entry.ResumeInstanceID != "" || entry.ResumeThreadID != "" || entry.ResumeRouteMode != "" || entry.ResumeHeadless {
+			t.Fatalf("workspace detach left stale resume target for %s: %#v", surfaceID, entry)
+		}
+	}
+	records := app.service.FeishuRoomState()
+	if len(records) != 1 || records[0].WorkspaceKey != "" || records[0].PrimaryGatewayID != "app-1" {
+		t.Fatalf("workspace detach should clear only room workspace and preserve primary, got %#v", records)
+	}
+
+	restarted := newTestApp()
+	restarted.SetHeadlessRuntime(HeadlessRuntimeConfig{Paths: relayruntime.Paths{StateDir: stateDir}})
+	if restarted.feishuRoomState.workspaceConflicts["feishu:chat:oc_room"] {
+		t.Fatal("cleared room workspace became a recovery conflict after restart")
+	}
+	for _, record := range restarted.service.FeishuRoomState() {
+		if record.WorkspaceKey != "" {
+			t.Fatalf("restarted room state restored cleared workspace: %#v", restarted.service.FeishuRoomState())
+		}
+	}
+}
