@@ -49,6 +49,13 @@ func InboundMetaFromMessageReactionCreatedEvent(event *larkim.P2MessageReactionC
 	return meta
 }
 
+func InboundMetaFromBotAddedToGroupEvent(event *larkim.P2ChatMemberBotAddedV1) *control.ActionInboundMeta {
+	if event == nil {
+		return nil
+	}
+	return newInboundMeta(headerFromBotAddedToGroupEvent(event), requestIDFromEventReq(event.EventReq))
+}
+
 func InboundMetaFromMenuEvent(event *larkapplication.P2BotMenuV6) *control.ActionInboundMeta {
 	if event == nil {
 		return nil
@@ -112,6 +119,13 @@ func headerFromMessageRecalledEvent(event *larkim.P2MessageRecalledV1) *larkeven
 }
 
 func headerFromMessageReactionCreatedEvent(event *larkim.P2MessageReactionCreatedV1) *larkevent.EventHeader {
+	if event == nil || event.EventV2Base == nil {
+		return nil
+	}
+	return event.EventV2Base.Header
+}
+
+func headerFromBotAddedToGroupEvent(event *larkim.P2ChatMemberBotAddedV1) *larkevent.EventHeader {
 	if event == nil || event.EventV2Base == nil {
 		return nil
 	}

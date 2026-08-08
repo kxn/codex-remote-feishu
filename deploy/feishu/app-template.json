@@ -55,6 +55,7 @@
         "im:message.group_at_msg:readonly",
         "im:message.group_at_msg.include_bot:readonly",
         "im:message.group_msg",
+        "im:chat:readonly",
         "im:message.p2p_msg:readonly",
         "im:message.reactions:read",
         "im:message.reactions:write_only",
@@ -80,6 +81,10 @@
     {
       "event": "im.message.reaction.deleted_v1",
       "purpose": "用户撤销消息 reaction 时，同步撤销对应的反馈动作。"
+    },
+    {
+      "event": "im.chat.member.bot.added_v1",
+      "purpose": "机器人被加入群时，如果它是群内唯一机器人，自动引导成为本群主机器人。"
     },
     {
       "event": "application.bot.menu_v6",
@@ -110,6 +115,7 @@
         "开启 P2P 消息接收事件",
         "开启消息撤回事件",
         "开启消息 reaction 创建事件",
+        "开启机器人进群事件",
         "开启机器人菜单点击事件"
       ]
     },

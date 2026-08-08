@@ -58,6 +58,7 @@ const (
 	ActionFileMessage                 ActionKind = "surface.message.file"
 	ActionReactionCreated             ActionKind = "surface.message.reaction.created"
 	ActionMessageRecalled             ActionKind = "surface.message.recalled"
+	ActionFeishuBotAddedToGroup       ActionKind = "surface.feishu.bot_added_to_group"
 	ActionReviewStart                 ActionKind = "surface.button.review_start"
 	ActionReviewStartUncommitted      ActionKind = "surface.button.review_start_uncommitted"
 	ActionReviewOpenCommitPicker      ActionKind = "surface.button.review_open_commit_picker"

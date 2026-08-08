@@ -40,6 +40,10 @@ var scopeSatisfiers = map[string][]string{
 		"im:message:readonly",
 		"im:message",
 	},
+	"im:chat:readonly": {
+		"im:chat:readonly",
+		"im:chat",
+	},
 	"im:message.reactions:read": {
 		"im:message.reactions:read",
 		"im:message:readonly",

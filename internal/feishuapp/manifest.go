@@ -76,6 +76,7 @@ func DefaultManifest() Manifest {
 					"im:message.group_at_msg:readonly",
 					"im:message.group_at_msg.include_bot:readonly",
 					"im:message.group_msg",
+					"im:chat:readonly",
 					"im:message.p2p_msg:readonly",
 					"im:message.reactions:read",
 					"im:message.reactions:write_only",
@@ -126,6 +127,12 @@ func DefaultManifest() Manifest {
 				Scope:     "im:message.group_msg",
 				ScopeType: "tenant",
 				Feature:   "primary_room_bot",
+				Required:  true,
+			},
+			{
+				Scope:     "im:chat:readonly",
+				ScopeType: "tenant",
+				Feature:   "primary_room_auto_bootstrap",
 				Required:  true,
 			},
 			{
@@ -182,6 +189,12 @@ func DefaultManifest() Manifest {
 				Event:    "im.message.reaction.deleted_v1",
 				Purpose:  "处理用户对消息的反馈动作",
 				Feature:  "reaction_feedback",
+				Required: true,
+			},
+			{
+				Event:    "im.chat.member.bot.added_v1",
+				Purpose:  "机器人被加入群时自动引导唯一机器人成为本群主机器人",
+				Feature:  "primary_room_auto_bootstrap",
 				Required: true,
 			},
 			{

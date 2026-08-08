@@ -78,7 +78,7 @@ type RateLimitEvidence struct {
 	RateLimitResetAfter time.Duration
 }
 
-var permissionScopePattern = regexp.MustCompile(`([a-z][a-z0-9_.-]*:[a-z0-9_.-]+)`)
+var permissionScopePattern = regexp.MustCompile(`([a-z][a-z0-9_.-]*(?::[a-z0-9_.-]+)+)`)
 
 func newAPIError(api string, resp *larkcore.ApiResp, codeErr larkcore.CodeError) *APIError {
 	err := &APIError{
