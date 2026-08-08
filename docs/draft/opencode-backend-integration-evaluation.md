@@ -425,15 +425,49 @@ raw-to-canonical adapter 需要按以下规则实现：
 
 最终缺口：
 
-- 还没有设计我们侧代码落点；这属于下一阶段 OpenCode adapter/compiler 详细设计。
+- 代码落点已在差异解决策略中拆到 profile compiler、launcher、ACP adapter、diagnostics、command router 和 lifecycle state machine；下一阶段需要把这些落到具体 Go 包和测试文件。
 - MCP OAuth、provider OAuth refresh、managed account 写入路径仍需单独设计为 unsupported/unknown，不能混入 ACP 抽象。
 - 无 auth 场景能进入 config/model/session 层，但完整 prompt 仍取决于 provider；实现时应把 auth-required 转成产品可读诊断。
 
-## 12. 下一步执行
+## 12. 差异解决策略
+
+这部分是后续实现的真正设计输入。原则不是把缺口简单标成 unsupported，而是先判断能否在我们侧补齐语义；只有补齐会造成误导、破坏隔离或需要 OpenCode 不存在的底层能力时，才明确降级或拒绝。
+
+| 差异 | 影响 | 解决策略 | 实现位置 | 验收方式 |
+| --- | --- | --- | --- | --- |
+| OpenCode 无 native profile catalog | 我们不能像 Claude/Codex 一样直接列系统 profile | 由我们侧维护 `OpenCodeProfile` catalog；profile 只描述 override intent，不镜像 OpenCode 全配置。运行时 compiler 读取 profile + workspace intent，生成一次性 env/config overlay | daemon profile/admin 层 + OpenCode launcher | profile CRUD golden；同一机器多个 profile 并发启动互不污染 |
+| 少字段覆盖并继承系统配置 | 这是必备能力；不能要求用户改全局 config | 默认只写 `OPENCODE_CONFIG_CONTENT` 和 `OPENCODE_AUTH_CONTENT`。不设置 `OPENCODE_DISABLE_PROJECT_CONFIG` 时继承 global+project；profile 要求禁用项目配置时才加该 env。`OPENCODE_CONFIG_DIR` 只作为强隔离模式，不作为默认路径 | OpenCode profile compiler | global/project/content 三层优先级 fixture；扫描临时目录确认不写用户 config |
+| API key / baseURL / custom provider 注入 | provider 配置不是 ACP 的一部分 | compiler 生成 `provider.<id>.options.baseURL/apiKey` 和 `model`；API key 优先放 `OPENCODE_AUTH_CONTENT`，只有 OpenCode schema 必须的非密字段放 config content | OpenCode profile compiler | fake provider request 捕获 authorization、model、baseURL；secret redaction test |
+| Auth/OAuth 隔离 | `OPENCODE_AUTH_CONTENT` 只覆盖 API auth；MCP OAuth 可能写 `mcp-auth.json` | 第一版只支持 API-key profile；OAuth profile 要么使用独立 XDG data root，要么显式要求“共享系统登录态”。MCP OAuth 不走临时 profile 默认路径，必须单独产品开关 | profile schema + launcher isolation mode | API auth no-write；OAuth mode 启动前产品诊断；独立 XDG 下 token 文件只落临时 root |
+| MCP local/remote 注入 | ACP 能注册 MCP，但 OAuth、状态诊断和命名要处理 | local/remote MCP 作为 session launch material 注入；MCP tool 名按 OpenCode `server_tool` 暴露。注册失败不能等模型调用 invalid tool 后才发现，launcher 应在 newSession 后读可用 tool/commands 或解析日志/status 形成 warning | OpenCode ACP adapter + diagnostics | local stdio MCP list/call golden；失败 MCP 返回可见诊断；header/env redaction |
+| prompt response 无 final text | 不能把 prompt response 当最终 assistant message | adapter 建 turn buffer：以 `messageId` 聚合 `agent_message_chunk` / `agent_thought_chunk`；prompt response 只关闭 turn 并附 usage/stopReason。若 turn close 时无 assistant chunk，输出空完成或命令专用结果 | ACP protocol adapter | text/reasoning delta fixture；无文本 `/patch` 负向 fixture |
+| live delta 与 load replay 形态不同 | resume/load 时容易重复追加消息 | adapter 引入 hydration mode。`session/load` 期间的 chunk 作为历史快照导入，不触发“正在生成”状态；同一 `messageId` 已存在时覆盖/合并，不追加重复 delta | ACP protocol adapter + surface resume | load replay fixture：live 两段 delta，load 一段 aggregate，最终 canonical 只有一条消息 |
+| OpenCode 没有独立 turn/thread API | 我们的 thread/turn 语义比 ACP 更细 | `sessionId` 映射 thread；TurnID 由我们在 prompt admission 时生成，并记录 `jsonrpc id -> turnID`、`messageId -> turnID`。OpenCode message id 只作为 backend message id 保存 | adapter state store | 并发/乱序 response fixture；id domain 不混用单测 |
+| usage 两套语义 | prompt response usage 与 `usage_update` 不同 | canonical 里拆两类：turn usage 使用 prompt response；context meter 使用 `usage_update`。UI/API 不把 `usage_update` 覆盖到本 turn token 统计 | ACP usage mapper | response usage 和 usage_update fixture；cache/reasoning token 字段 golden |
+| permission reject 是 tool failed | 用户拒绝不应被显示为 backend 崩溃 | request bridge 把 `session/request_permission` 映射成现有 request card；返回 once/always/reject。reject 关闭 request 后等待 tool failed 事件；turn 仍可 end_turn | request bridge + Feishu/remote surfaces | once/always/reject golden；reject 后 card 状态和 tool failed 一致 |
+| edit 会调用 `fs/write_text_file` | OpenCode 会请求客户端预览/写入 proposed content | adapter 必须实现 `fs/write_text_file` server method：在远程面只更新 proposed diff/preview，不直接绕过权限写我们自己的工作区；实际文件写入仍以 OpenCode tool execution 为准 | ACP connection method handler | edit fixture：request diff、writeTextFile、completed diff 三者一致 |
+| tool taxonomy 不完全同构 | MCP tool kind 是 `other`，部分 OpenCode tool 没有现有分类 | 建 OpenCode tool taxonomy table：bash->execute、read->read、edit/write/apply_patch->edit、grep/glob->search、task/todowrite->think/plan-like、MCP unknown->other with display name。不要为了好看强行归类 MCP | tool mapper | read/bash/edit/MCP/error golden |
+| plan mode 不等于 Plan snapshot | 不能假装有 Codex/Claude 的结构化 plan | 两层处理：`mode=plan` 只映射成 session mode capability；如果 OpenCode 通过 todo/plan-file 工具产出计划，再作为普通 tool/content 展示，不合成 `TurnPlanSnapshot`。需要 Plan UI 时显示“backend does not provide structured plan snapshots” | config mapper + plan surface | mode switch fixture；todo/tool fixture；确认不发虚假的 plan snapshot |
+| sandbox 缺失 | 这是安全语义，不能用权限近似冒充 | profile schema 把 sandbox 拆成 `fileAccess`/`commandPermission`/`networkPolicy` 三类。OpenCode 第一版只实现 permission/fileAccess 近似；若用户选择必须 OS sandbox，则 launch 前 fail fast，不启动 backend | profile compiler + launch validator | sandbox-required profile 返回 blocking diagnostic；permission-only profile 可启动 |
+| `session/close` 不是 persistent delete | 不能把 close 按删除历史展示 | close 只映射为 detach/stop active runtime。历史删除另建产品能力，OpenCode backend 第一版不提供 delete；UI 文案避免“删除会话” | session lifecycle mapper | close 后 list 仍可见 fixture；surface 状态显示 detached/stopped |
+| `/review` 语义不同 | 它会启动 task/sub-session，不等于现有 review surface | 支持 `/review` 作为 OpenCode command，但 canonical 里标记 `commandKind=review` 和 `backendShape=task_summary`。不要承诺和 Claude/Codex review 字段一致；后续可在 adapter 中提取 task result 为 review summary | command adapter | `/review` fixture：task tool lifecycle + final summary |
+| `/compact` 语义不同 | 它走 summarize/compaction，prompt response 可能无 usage | 支持为 compact command；完成条件用 prompt response + observed compaction messages。usage 可为空，不回填错误值 | command adapter | `/compact` fixture：无 usage 时仍完成 |
+| 未知 slash 命令空 end_turn | OpenCode 不报错会让用户误以为执行成功 | 我们侧 command registry 预检：只允许 OpenCode available commands 和显式支持的 `/compact`。未知命令在发送给 OpenCode 前返回产品诊断，不让 OpenCode 空吞 | command router before ACP prompt | `/patch`、`/auto-continue`、`/auto-whip`、`/sendfile` 负向 golden |
+| error taxonomy 粗 | `-32603 OpenCode service failure` 不够产品化 | adapter 建 error normalizer：JSON-RPC code + method + stderr/log pattern + known OpenCode safeMessage -> canonical error。保留 raw frame 到 debug trace | diagnostics layer | missing session、invalid model、MCP failure、auth-required fixture |
+| runtime busy/retry 不转发 | UI 可能缺少精细状态 | 第一版用 prompt in-flight 状态驱动 busy；cancel/close 走本地 state。retry 只从错误/usage/log 推断，不假装 native status。若后续需要，考虑直接查 OpenCode event API 或贡献 upstream ACP status update | lifecycle state machine | prompt start/end/cancel state fixture |
+
+实现优先级：
+
+1. 先做不会误导安全语义的底座：backend identity、launcher、profile compiler、error normalizer、secret redaction。
+2. 再做 ACP runtime adapter：JSON-RPC correlation、turn buffer、load hydration、tool/permission/usage mapping。
+3. 再做产品命令层：command registry 预检、`/review`、`/compact`、未知 slash 拦截。
+4. 最后处理高级隔离：MCP OAuth、独立 XDG、系统登录态继承/隔离切换。
+
+## 13. 下一步执行
 
 1. 新增 OpenCode backend identity、binary resolver 和 launch contract。
-2. 设计 OpenCode profile schema/compiler：默认 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，可选临时 XDG，禁止默认 `OPENCODE_CONFIG_DIR`。
+2. 实现 OpenCode profile schema/compiler：默认 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，可选临时 XDG，禁止默认 `OPENCODE_CONFIG_DIR`。
 3. 实现 ACP protocol adapter：JSON-RPC id correlation、session/update dispatcher、stream buffer、load replay hydration、tool/permission/usage mapping。
-4. 实现 explicit unsupported diagnostics：sandbox、structured plan snapshot、persistent delete、MCP OAuth、unknown slash commands、turn patch。
+4. 实现差异策略里的 validator/diagnostics：sandbox-required fail-fast、MCP OAuth mode gate、persistent delete 隐藏、unknown slash preflight。
 5. 将本轮 `/tmp/opencode-acp-*.json` 证据中挑选脱敏 raw fixture 进入测试目录，建立 OpenCode adapter golden tests。
 6. 再进入 OpenCode 详细设计与代码实现。
