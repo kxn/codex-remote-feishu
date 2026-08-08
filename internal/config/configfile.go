@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -451,7 +452,19 @@ func (cfg AppConfig) normalized() AppConfig {
 }
 
 func normalizeExternalAccessNetworkMode(value string) string {
-	return strings.ToLower(strings.TrimSpace(value))
+	mode := strings.ToLower(strings.TrimSpace(value))
+	switch {
+	case mode == "":
+		return ""
+	case mode == "wan", mode == "local":
+		return mode
+	case strings.HasPrefix(mode, "lan:"):
+		host := strings.TrimSpace(strings.TrimPrefix(mode, "lan:"))
+		if netutil.IsLANHost(host) {
+			return "lan:" + host
+		}
+	}
+	return "local"
 }
 
 func (cfg PprofSettings) normalized() PprofSettings {

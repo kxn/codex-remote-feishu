@@ -44,6 +44,7 @@ type externalAccessShutdownPlan struct {
 }
 
 var externalAccessLocalLANHosts = listLocalLANHosts
+var externalAccessListen = net.Listen
 
 func externalAccessSettingsViewFromConfig(value config.ExternalAccessSettings) externalAccessSettingsView {
 	value = config.ResolveExternalAccessSettings(value)
@@ -172,25 +173,32 @@ func (a *App) ensureExternalAccessIssueTargetLocked() (*externalaccess.Service, 
 	}
 }
 
-func externalAccessListenHostForMode(settings externalAccessSettingsView) string {
+func externalAccessListenHostForMode(settings externalAccessSettingsView) (string, error) {
 	mode := strings.ToLower(strings.TrimSpace(settings.NetworkMode))
 	if mode == "local" {
-		return ""
+		return "", nil
 	}
 	if strings.HasPrefix(mode, "lan:") {
-		return strings.TrimSpace(strings.TrimPrefix(mode, "lan:"))
+		host := strings.TrimSpace(strings.TrimPrefix(mode, "lan:"))
+		if !netutil.IsLANHost(host) {
+			return "", fmt.Errorf("invalid lan ip: %s", host)
+		}
+		return host, nil
+	}
+	if mode != "" && mode != "wan" {
+		return "", fmt.Errorf("unsupported network mode: %s", mode)
 	}
 	host := strings.TrimSpace(settings.ListenHost)
 	if host == "" {
-		return "127.0.0.1"
+		return "127.0.0.1", nil
 	}
-	return host
+	return host, nil
 }
 
 func externalAccessProviderKindForMode(settings externalAccessSettingsView) string {
 	mode := strings.ToLower(strings.TrimSpace(settings.NetworkMode))
 	switch {
-	case mode == "local", strings.HasPrefix(mode, "lan:"):
+	case mode == "local", strings.HasPrefix(mode, "lan:"), mode != "" && mode != "wan":
 		return "disabled"
 	default:
 		return strings.ToLower(strings.TrimSpace(settings.ProviderKind))
@@ -306,7 +314,10 @@ func (a *App) ensureExternalAccessListenerLocked() (string, error) {
 		return "http://" + a.externalAccessListener.Addr().String(), nil
 	}
 	settings := a.externalAccessRuntime.Settings
-	host := externalAccessListenHostForMode(settings)
+	host, err := externalAccessListenHostForMode(settings)
+	if err != nil {
+		return "", err
+	}
 	if host == "" {
 		return "", externalaccess.ErrDisabled
 	}
@@ -314,7 +325,7 @@ func (a *App) ensureExternalAccessListenerLocked() (string, error) {
 	if port < 0 {
 		port = 9512
 	}
-	listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	listener, err := externalAccessListen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return "", err
 	}
