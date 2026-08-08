@@ -26,6 +26,7 @@ func CodexResumePolicyFromContract(connection *state.CodexConnectionContract, th
 		policy.ReviewModel = threadPolicy.ReviewModel
 		policy.ReasoningMode = threadPolicy.ReasoningMode
 		policy.ReasoningEffort = threadPolicy.ReasoningEffort
+		policy.DeveloperInstruction = threadPolicy.DeveloperInstruction
 		policy.ContextMode = threadPolicy.ContextMode
 		policy.ContextWindow = threadPolicy.ContextWindow
 		policy.AutoCompactLimit = threadPolicy.AutoCompactLimit
@@ -69,6 +70,7 @@ func codexPreservePolicyFromObserved(connection *state.CodexConnectionContract, 
 		policy.ThreadPolicyID = threadPolicy.ThreadPolicyID
 		policy.ReviewModelMode = threadPolicy.ReviewModelMode
 		policy.ReviewModel = threadPolicy.ReviewModel
+		policy.DeveloperInstruction = threadPolicy.DeveloperInstruction
 		policy.ContextMode = threadPolicy.ContextMode
 		policy.ContextWindow = threadPolicy.ContextWindow
 		policy.AutoCompactLimit = threadPolicy.AutoCompactLimit

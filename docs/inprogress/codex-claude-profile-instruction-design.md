@@ -1,23 +1,23 @@
 # Codex / Claude Profile instruction（角色提示词）配置设计
 
 > Type: `inprogress`
-> Updated: `2026-08-07`
-> Summary: 在 Codex / Claude profile 配置中增加可选 `instruction` 字段（角色提示词）。Claude 侧通过 SDK 初始化控制消息追加 `appendSystemPrompt`，Codex 侧把 instruction 追加到 daemon 管理的 models.json 各模型 `instructions_template` 末尾；Web UI 增加全宽 textarea 与 16000 字符上限。对应 issue #823。
+> Updated: `2026-08-08`
+> Summary: Codex 侧改用 app-server `thread/start` / `thread/resume` 的 `developerInstructions` 承载 profile instruction，不再通过 managed models.json 修改 `instructions_template`；Claude 侧继续通过 SDK 初始化控制消息追加 `appendSystemPrompt`。对应 issue #823/#839。
 
 ## 1. 背景
 
 用户希望每个 Codex / Claude profile 都能配置一段可选的“角色提示词 / instruction”，用于预设代理的角色与行为。调研结论：
 
 - Claude Code 原生支持追加语义：`--append-system-prompt <text>` 或 SDK 控制消息 `appendSystemPrompt`，都会追加到默认系统提示词末尾，保留 Claude Code 自身能力。完全替换语义（`--system-prompt`）不在本单范围。
-- Codex 的 `model_instructions_file` 是“替换内置 instructions”语义，不适合做追加；`model_messages.instructions_template`（models.json 内每模型字段）是 Codex 实际用于组装 instructions 的载体，可以在既有模板文本末尾追加用户 instruction，实现追加语义。
-- 本仓库 #822 已把 DeepSeek managed models.json 机制泛化为 `BuildManagedModelCatalog`，可复用于 instruction 注入。
+- Codex 的 `model_instructions_file` / `base_instructions` 是“替换内置 instructions”语义，不适合做追加。最新 app-server 协议在 `thread/start` / `thread/resume` 支持 `developerInstructions`，会进入 session developer section，更符合 profile instruction 的追加语义。
+- `model_catalog_json` 是完整模型目录接管，不是字段级 overlay；不应为了 instruction 生成 generic models.json，也不应通过修改 `model_messages.instructions_template` 覆盖无关模型 metadata。
 
 ## 2. 调研结论：长度上限
 
 ### 2.1 上游没有硬性长度上限
 
 - **Claude Code**：SDK `SDKControlInitializeRequestSchema` 中 `appendSystemPrompt` 是 `z.string()`，无最大长度（`claudecode-src/src/entrypoints/sdk/controlSchemas.ts`）；CLI 侧 `--append-system-prompt` 仅受 OS 命令行参数长度（ARG_MAX）约束，源码还提供 `--append-system-prompt-file` 与 stdin 控制消息路径规避该限制（`src/main.tsx`、`src/cli/print.ts`）。官方文档未声明字符上限。
-- **Codex**：`instructions_template` 是普通字符串，读取路径无大小截断；`model_instructions_file` 由 `try_read_non_empty_file` 全量读取，同样无硬上限。官方手册仅对项目说明 `AGENTS.md` 定义默认 `project_doc_max_bytes = 32768`（32 KiB），该限制不适用于模型 instructions。
+- **Codex**：`developerInstructions` 是 app-server `thread/start` / `thread/resume` 参数中的普通字符串；`model_instructions_file` 由 `try_read_non_empty_file` 全量读取，同样无硬上限。官方手册仅对项目说明 `AGENTS.md` 定义默认 `project_doc_max_bytes = 32768`（32 KiB），该限制不适用于 profile instruction。
 
 ### 2.2 产品上限：16,000 字符
 
@@ -36,7 +36,7 @@
 
 1. Codex API profile 与自定义 Claude profile 增加可选 `instruction` 字段，可保存、编辑、清空。
 2. Claude：instruction 非空时，在 SDK 初始化控制消息中追加 `appendSystemPrompt`；留空不传。
-3. Codex：instruction 非空时，为 profile 生成 managed models.json，并把 instruction 追加到目录内每个模型的 `instructions_template` 末尾；留空维持现状（不生成/不追加）。
+3. Codex：instruction 非空时，写入 `CodexThreadPolicy` / `CodexResumePolicy` 并在 `thread/start` / `thread/resume` 投影为 `developerInstructions`；留空不传，并清理旧模板里的同名字段。
 4. Web UI：两个 Section 在模型/推理强度区域下方增加全宽 textarea，展示字符计数与上限，超限阻止保存。
 5. 后端与 web 单测覆盖持久化、启动注入、留空不传、超限校验。
 6. 设计文档落 `docs/inprogress/` 并更新 `docs/README.md` 索引。
@@ -55,8 +55,8 @@
 - 持久化：`config.CodexAPIProfileSecretConfig`（`internal/config/codex_profiles.go`）。
 - 校验：`validateCodexAPIProfileInput` / `validateStoredCodexAPIProfileRevision`。
 - admin API：`codexProfileWriteRequest`、`codexAPIProfileInputFromRequest`、`codexAPIProfileSummary`（`internal/app/daemon/admin_codex_profiles.go`），摘要类型 `state.CodexProfileSummary`（`internal/core/state/profile_catalog.go`）。
-- 启动材料：`RuntimeResolver.resolveAPI` 生成 `SecretLaunchMaterial`；仅当 `subagentModel != "" || deepSeek` 时才生成 managed models.json（`internal/app/codexprofile/runtime_resolver.go`）。
-- 目录生成：`codexcatalog.BuildManagedModelCatalog` + 内嵌 `deepseek_models.json`（`internal/codexcatalog/deepseek.go`）。内嵌条目已含 `model_messages.instructions_template` 基础模板。
+- Runtime resolver：`RuntimeResolver.resolveAPI` 生成 `SecretLaunchMaterial` 与 `CodexThreadPolicy`；instruction 属于 thread policy，不属于 launch catalog material。
+- Resume policy / translator：orchestrator 从 `CodexConnectionContract` + `CodexThreadPolicy` 生成 `CodexResumePolicy`，translator 在 `thread/start` / `thread/resume` 参数中投影 `developerInstructions`。
 
 ### Claude
 
@@ -89,12 +89,12 @@
 
 这样指令通过 stdin JSON 控制消息传递，天然规避 ARG_MAX，且不污染 Claude 的 `--settings` 文件格式。
 
-### 5.4 Codex 注入：managed models.json 追加 instructions_template
+### 5.4 Codex 注入：thread/resume policy 投影 developerInstructions
 
-1. `codexcatalog.BuildManagedModelCatalog(models []string)` 增加 instruction 参数（或新增 `AppendInstruction(catalogJSON, instruction)` 辅助函数）。
-2. 追加方式：对目录内每个 model 条目，取其 `model_messages.instructions_template`（缺失则视为目录生成失败，沿用现有失败语义），末尾拼接 `\n\n` + instruction，保持 `model_messages` 其他字段不变。
-3. `RuntimeResolver.resolveAPI`：当 `instruction` 非空时，**强制**为 profile 生成 managed models.json（不再只依赖 subagentModel/DeepSeek 条件），并把主模型、审阅模型、子代理模型一并放入目录；既有 DeepSeek 分支选择逻辑保持不变。
-4. 同一 instruction 应用到目录内全部模型（主模型 + 审阅 + 子代理），保证子代理也带上 profile 角色预设；这是 profile 级语义，也是实现上最简的一致路径。
+1. `state.CodexThreadPolicy` 增加 `DeveloperInstruction`，由 `RuntimeResolver.resolveAPI` 从 profile instruction trim 后写入；该字段参与 thread policy ID，instruction 编辑会触发新的 thread policy。
+2. `agentproto.CodexResumePolicy` 增加同名字段；orchestrator 在普通 dispatch、compact、child restart restore 等路径从 frozen thread policy 复制。
+3. `applyCodexResumePolicyToThreadParams`：字段非空时设置 `params["developerInstructions"]`；字段为空时删除该 key，避免复用旧 `thread/start` / `thread/resume` template 的 stale instruction。
+4. 不设置 `baseInstructions`，不使用 `model_instructions_file`，不修改 `model_messages.instructions_template`，也不为了 instruction 生成 `model_catalog_json`。
 
 ### 5.5 Web UI 版式
 
@@ -124,8 +124,8 @@
 ### 6.3 启动注入
 
 - `internal/app/wrapper/app_headless_claude.go`：initialize 帧加入 `appendSystemPrompt`。
-- `internal/app/codexprofile/runtime_resolver.go`：instruction 非空时生成 managed catalog。
-- `internal/codexcatalog/deepseek.go`：目录生成支持 instruction 追加（及对应单测）。
+- `internal/app/codexprofile/runtime_resolver.go`：instruction 写入 `CodexThreadPolicy`；非 catalog-backed profile 不因 instruction 生成 managed catalog。
+- `internal/core/state/codex_profile_runtime.go`、`internal/core/agentproto/codex_resume_policy.go`、`internal/core/orchestrator/service_codex_resume_policy.go`、`internal/adapter/codex/translator_config.go`：承载并投影 `developerInstructions`。
 
 ### 6.4 Web
 
@@ -137,8 +137,8 @@
 ## 7. 测试计划
 
 - `internal/config`：字段持久化/规范化/上限校验（Codex create/update、Claude normalize）、launch env 注入与清理。
-- `internal/app/codexprofile`：instruction 非空生成 managed catalog、留空不生成、目录内模板追加正确。
-- `internal/codexcatalog`：append instruction 后 JSON 结构、基础模板保留、缺失模板失败语义。
+- `internal/app/codexprofile`：instruction 非空写入 thread policy；非 catalog-backed profile 不生成 managed catalog；DeepSeek/MiMo catalog 内容不包含 profile instruction。
+- `internal/adapter/codex`、`internal/core/orchestrator`：`CodexResumePolicy` 在 `thread/start` / `thread/resume`、compact、child restart restore 中投影并保留 `developerInstructions`。
 - `internal/app/wrapper`：initialize 控制帧在 instruction 非空时携带 `appendSystemPrompt`，空时不携带。
 - `internal/app/daemon`：admin API 创建/更新/清空、超限返回校验错误、摘要回显。
 - web：两个 Section 组件测试。

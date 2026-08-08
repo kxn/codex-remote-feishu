@@ -130,7 +130,7 @@ func TestMimoModelCatalogJSON(t *testing.T) {
 	}
 }
 
-func TestBuildManagedModelCatalogUsesMimoFallback(t *testing.T) {
+func TestBuildEmbeddedModelCatalogUsesMimoFallback(t *testing.T) {
 	// 未知 mimo 模型必须用 mimo 模板（mimo-v2.5）生成，而不是 deepseek 模板。
 	raw := BuildEmbeddedModelCatalog(MimoCatalog, []string{"mimo-v2.5-future"})
 	if len(raw) == 0 {

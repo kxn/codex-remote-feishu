@@ -44,15 +44,16 @@ type CodexConnectionContract struct {
 }
 
 type CodexThreadPolicy struct {
-	ThreadPolicyID     string `json:"threadPolicyID"`
-	ModelMode          string `json:"modelMode"`
-	Model              string `json:"model,omitempty"`
-	ReviewModelMode    string `json:"reviewModelMode"`
-	ReviewModel        string `json:"reviewModel,omitempty"`
-	ReasoningMode      string `json:"reasoningMode"`
-	ReasoningEffort    string `json:"reasoningEffort,omitempty"`
-	ContextMode        string `json:"contextMode"`
-	ContextWindow      int64  `json:"contextWindow,omitempty"`
-	AutoCompactLimit   int64  `json:"autoCompactLimit,omitempty"`
-	PreferenceRevision uint64 `json:"preferenceRevision"`
+	ThreadPolicyID       string `json:"threadPolicyID"`
+	ModelMode            string `json:"modelMode"`
+	Model                string `json:"model,omitempty"`
+	ReviewModelMode      string `json:"reviewModelMode"`
+	ReviewModel          string `json:"reviewModel,omitempty"`
+	ReasoningMode        string `json:"reasoningMode"`
+	ReasoningEffort      string `json:"reasoningEffort,omitempty"`
+	DeveloperInstruction string `json:"developerInstruction,omitempty"`
+	ContextMode          string `json:"contextMode"`
+	ContextWindow        int64  `json:"contextWindow,omitempty"`
+	AutoCompactLimit     int64  `json:"autoCompactLimit,omitempty"`
+	PreferenceRevision   uint64 `json:"preferenceRevision"`
 }

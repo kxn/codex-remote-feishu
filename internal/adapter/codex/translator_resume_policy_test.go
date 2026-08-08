@@ -19,17 +19,18 @@ func TestTranslatePromptSendApplyTargetProfilePolicyUsesTypedStartPayload(t *tes
 		Target: agentproto.Target{CWD: "/tmp/project"},
 		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
 		CodexResume: &agentproto.CodexResumePolicy{
-			Mode:             agentproto.CodexResumeApplyTargetProfile,
-			ModelProviderID:  "codex_remote_profile_team",
-			ModelMode:        agentproto.CodexThreadValueExplicit,
-			Model:            "gpt-5.5",
-			ReviewModelMode:  agentproto.CodexReviewModelExplicit,
-			ReviewModel:      "gpt-5.5-review",
-			ReasoningMode:    agentproto.CodexThreadValueExplicit,
-			ReasoningEffort:  "high",
-			ContextMode:      "extended_1m",
-			ContextWindow:    1000000,
-			AutoCompactLimit: 900000,
+			Mode:                 agentproto.CodexResumeApplyTargetProfile,
+			ModelProviderID:      "codex_remote_profile_team",
+			ModelMode:            agentproto.CodexThreadValueExplicit,
+			Model:                "gpt-5.5",
+			ReviewModelMode:      agentproto.CodexReviewModelExplicit,
+			ReviewModel:          "gpt-5.5-review",
+			ReasoningMode:        agentproto.CodexThreadValueExplicit,
+			ReasoningEffort:      "high",
+			ContextMode:          "extended_1m",
+			ContextWindow:        1000000,
+			AutoCompactLimit:     900000,
+			DeveloperInstruction: "Profile says: be precise.",
 		},
 	})
 	if err != nil {
@@ -46,6 +47,9 @@ func TestTranslatePromptSendApplyTargetProfilePolicyUsesTypedStartPayload(t *tes
 	}
 	if config["model_context_window"] != float64(1000000) || config["model_auto_compact_token_limit"] != float64(900000) {
 		t.Fatalf("expected context policy in config, got %#v", config)
+	}
+	if params["developerInstructions"] != "Profile says: be precise." {
+		t.Fatalf("expected profile instruction as developerInstructions, got %#v", params)
 	}
 	if params["cwd"] != "/tmp/project" {
 		t.Fatalf("expected target cwd, got %#v", params)
@@ -84,6 +88,9 @@ func TestTranslatePromptSendApplyTargetProfileDefaultPolicyOmitsModelReasoningAn
 	}
 	if _, exists := params["model"]; exists {
 		t.Fatalf("default model policy must omit model, got %#v", params)
+	}
+	if instruction, exists := params["developerInstructions"]; exists && instruction != nil {
+		t.Fatalf("default instruction policy must omit developerInstructions, got %#v", params)
 	}
 	config := payloadConfig(t, params)
 	for _, key := range []string{"model_reasoning_effort", "reasoning_effort", "review_model", "model_context_window", "model_auto_compact_token_limit"} {
@@ -142,13 +149,14 @@ func TestTranslateCompactAndChildRestartRestoreCarryCodexResumePolicy(t *testing
 		t.Fatalf("seed current thread: %v", err)
 	}
 	policy := &agentproto.CodexResumePolicy{
-		Mode:            agentproto.CodexResumePreserveThreadSettings,
-		ModelProviderID: "codex_remote_profile_team",
-		ModelMode:       agentproto.CodexThreadValuePreservedObserved,
-		Model:           "observed-model",
-		ReasoningMode:   agentproto.CodexThreadValuePreservedObserved,
-		ReasoningEffort: "medium",
-		ContextMode:     "codex_default",
+		Mode:                 agentproto.CodexResumePreserveThreadSettings,
+		ModelProviderID:      "codex_remote_profile_team",
+		ModelMode:            agentproto.CodexThreadValuePreservedObserved,
+		Model:                "observed-model",
+		ReasoningMode:        agentproto.CodexThreadValuePreservedObserved,
+		ReasoningEffort:      "medium",
+		ContextMode:          "codex_default",
+		DeveloperInstruction: "Carry me through restore.",
 	}
 	commands, err := tr.TranslateCommand(agentproto.Command{
 		Kind:        agentproto.CommandThreadCompactStart,
@@ -166,6 +174,9 @@ func TestTranslateCompactAndChildRestartRestoreCarryCodexResumePolicy(t *testing
 	if config := payloadConfig(t, params); config["model_reasoning_effort"] != "medium" {
 		t.Fatalf("expected preserved reasoning in compact resume config, got %#v", config)
 	}
+	if params["developerInstructions"] != "Carry me through restore." {
+		t.Fatalf("expected compact resume to carry developerInstructions, got %#v", params)
+	}
 
 	tr.PrepareChildRestartRestorePolicy(policy)
 	frame, _, ok, err := tr.BuildChildRestartRestoreFrame("cmd-restart-1")
@@ -178,6 +189,9 @@ func TestTranslateCompactAndChildRestartRestoreCarryCodexResumePolicy(t *testing
 	restoreParams := payloadParams(t, decodePayload(t, frame), "thread/resume")
 	if restoreParams["modelProvider"] != "codex_remote_profile_team" || restoreParams["model"] != "observed-model" {
 		t.Fatalf("expected child restart restore to carry preserve policy, got %#v", restoreParams)
+	}
+	if restoreParams["developerInstructions"] != "Carry me through restore." {
+		t.Fatalf("expected child restart restore to carry developerInstructions, got %#v", restoreParams)
 	}
 }
 
