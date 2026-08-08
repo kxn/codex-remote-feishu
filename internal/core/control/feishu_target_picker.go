@@ -22,6 +22,7 @@ type FeishuTargetPickerSessionKind string
 const (
 	FeishuTargetPickerSessionThread    FeishuTargetPickerSessionKind = "thread"
 	FeishuTargetPickerSessionNewThread FeishuTargetPickerSessionKind = "new_thread"
+	FeishuTargetPickerSessionWorktree  FeishuTargetPickerSessionKind = "worktree_create"
 )
 
 type FeishuTargetPickerPage string

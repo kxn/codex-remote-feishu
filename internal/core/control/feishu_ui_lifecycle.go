@@ -210,6 +210,7 @@ func inlineReplaceableFeishuUIIntentAction(action Action) bool {
 		FeishuUIIntentTargetPickerPage,
 		FeishuUIIntentTargetPickerOpenPathPicker,
 		FeishuUIIntentTargetPickerCancel,
+		FeishuUIIntentTargetPickerBack,
 		FeishuUIIntentHistoryPage,
 		FeishuUIIntentHistoryDetail:
 		return true

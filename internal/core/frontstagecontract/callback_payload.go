@@ -77,6 +77,7 @@ const (
 	CardActionKindTargetPickerPage            = "target_picker_page"
 	CardActionKindTargetPickerOpenPathPicker  = "target_picker_open_path_picker"
 	CardActionKindTargetPickerCancel          = "target_picker_cancel"
+	CardActionKindTargetPickerBack            = "target_picker_back"
 	CardActionKindTargetPickerConfirm         = "target_picker_confirm"
 	CardActionKindHistoryPage                 = "history_page"
 	CardActionKindHistoryDetail               = "history_detail"

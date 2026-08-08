@@ -47,6 +47,7 @@ const (
 	FeishuUIIntentTargetPickerPage            FeishuUIIntentKind = "target_picker_page"
 	FeishuUIIntentTargetPickerOpenPathPicker  FeishuUIIntentKind = "target_picker_open_path_picker"
 	FeishuUIIntentTargetPickerCancel          FeishuUIIntentKind = "target_picker_cancel"
+	FeishuUIIntentTargetPickerBack            FeishuUIIntentKind = "target_picker_back"
 	FeishuUIIntentHistoryPage                 FeishuUIIntentKind = "history_page"
 	FeishuUIIntentHistoryDetail               FeishuUIIntentKind = "history_detail"
 )
@@ -119,6 +120,8 @@ func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
 		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerOpenPathPicker, PickerID: action.PickerID, TargetValue: action.TargetPickerValue, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionTargetPickerCancel:
 		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerCancel, PickerID: action.PickerID, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
+	case ActionTargetPickerBack:
+		return &FeishuUIIntent{Kind: FeishuUIIntentTargetPickerBack, PickerID: action.PickerID, ActorUserID: action.ActorUserID, RequestAnswers: action.RequestAnswers}, true
 	case ActionHistoryPage:
 		return &FeishuUIIntent{Kind: FeishuUIIntentHistoryPage, PickerID: action.PickerID, Page: action.Page, ActorUserID: action.ActorUserID, SourceMessageID: action.MessageID, Inline: action.Inbound != nil && strings.TrimSpace(action.Inbound.CardDaemonLifecycleID) != ""}, true
 	case ActionHistoryDetail:

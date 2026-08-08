@@ -45,6 +45,7 @@ const (
 	cardActionKindTargetPickerPage            = frontstagecontract.CardActionKindTargetPickerPage
 	cardActionKindTargetPickerOpenPathPicker  = frontstagecontract.CardActionKindTargetPickerOpenPathPicker
 	cardActionKindTargetPickerCancel          = frontstagecontract.CardActionKindTargetPickerCancel
+	cardActionKindTargetPickerBack            = frontstagecontract.CardActionKindTargetPickerBack
 	cardActionKindTargetPickerConfirm         = frontstagecontract.CardActionKindTargetPickerConfirm
 	cardActionKindHistoryPage                 = frontstagecontract.CardActionKindHistoryPage
 	cardActionKindHistoryDetail               = frontstagecontract.CardActionKindHistoryDetail

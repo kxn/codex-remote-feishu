@@ -97,6 +97,14 @@ func (s *Service) feishuRoomSurfaces(roomID string) []*state.SurfaceConsoleRecor
 }
 
 func (s *Service) prepareFeishuRoomWorkspaceChange(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
+	return s.checkFeishuRoomWorkspaceChange(surface, workspaceKey, true)
+}
+
+func (s *Service) preflightFeishuRoomWorkspaceChange(surface *state.SurfaceConsoleRecord, workspaceKey string) []eventcontract.Event {
+	return s.checkFeishuRoomWorkspaceChange(surface, workspaceKey, false)
+}
+
+func (s *Service) checkFeishuRoomWorkspaceChange(surface *state.SurfaceConsoleRecord, workspaceKey string, mutate bool) []eventcontract.Event {
 	room := s.ensureFeishuRoomContextForSurface(surface)
 	if room == nil {
 		return nil
@@ -111,6 +119,9 @@ func (s *Service) prepareFeishuRoomWorkspaceChange(surface *state.SurfaceConsole
 	}
 	if primaryBotStateForSurface(surface, room) != control.CatalogPrimaryBotStateCurrent {
 		return notice(surface, "room_workspace_primary_required", "请先对当前机器人执行 `/primary on`，再切换群 workspace。")
+	}
+	if !mutate {
+		return nil
 	}
 	s.resetFeishuRoomWorkspaceSurfaces(room, surface)
 	room.WorkspaceResetGeneration++

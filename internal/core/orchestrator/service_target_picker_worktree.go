@@ -145,6 +145,19 @@ func (s *Service) confirmTargetPickerWorktree(surface *state.SurfaceConsoleRecor
 		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
 	}
 	finalPath := strings.TrimSpace(worktreeState.FinalPath)
+	if blocked := s.preflightFeishuRoomWorkspaceChange(surface, finalPath); blocked != nil {
+		message := strings.TrimSpace(targetPickerFirstNoticeText(blocked))
+		if message == "" {
+			message = "当前群 workspace 暂时不能切换，请稍后重试。"
+		}
+		if !targetPickerHasBlockingMessage(view.SourceMessages, message) {
+			view.SourceMessages = append([]control.FeishuTargetPickerMessage{{
+				Level: control.FeishuTargetPickerMessageDanger,
+				Text:  message,
+			}}, view.SourceMessages...)
+		}
+		return []eventcontract.Event{s.targetPickerViewEvent(surface, view, false)}
+	}
 	record.WorktreeFinalPath = finalPath
 	status := targetPickerWorktreeCreateProcessingStatus(view.SelectedWorkspaceLabel, strings.TrimSpace(record.WorktreeBranchName), finalPath)
 	processing := s.startTargetPickerProcessingWithSections(
@@ -190,12 +203,15 @@ func (s *Service) CompleteTargetPickerWorktreeCreate(surfaceSessionID, pickerID,
 		return notice(surface, "worktree_create_flow_stale", fmt.Sprintf("worktree 已创建到 `%s`，但原始选择流程已经失效。目录会保留，你可以稍后通过“从目录新建”继续接入。", workspaceKey))
 	}
 	record.WorktreeFinalPath = workspaceKey
+	pendingText := s.takePendingTextInput(surface)
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
 	filtered := targetPickerFilteredFollowupEvents(events)
 	if targetPickerNewThreadReady(surface, workspaceKey) {
 		status := targetPickerWorktreeCreateSuccessStatus(workspaceKey)
-		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
+		result := s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
+		return append(result, s.replayPendingTextInput(surface, pendingText)...)
 	}
+	restorePendingTextInput(surface, pendingText)
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
 		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
 		status := targetPickerWorktreeCreatePostCreateProcessingStatus(strings.TrimSpace(record.WorktreeBranchName), workspaceKey)
