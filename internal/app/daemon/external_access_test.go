@@ -30,6 +30,26 @@ type blockingShutdownExternalAccessProvider struct {
 	unblockClose chan struct{}
 }
 
+type staticAddrListener struct {
+	addr   net.Addr
+	closed chan struct{}
+	once   sync.Once
+}
+
+func (l *staticAddrListener) Accept() (net.Conn, error) {
+	<-l.closed
+	return nil, net.ErrClosed
+}
+
+func (l *staticAddrListener) Close() error {
+	l.once.Do(func() {
+		close(l.closed)
+	})
+	return nil
+}
+
+func (l *staticAddrListener) Addr() net.Addr { return l.addr }
+
 func (p *blockingShutdownExternalAccessProvider) Kind() string { return "fake" }
 
 func (p *blockingShutdownExternalAccessProvider) EnsurePublicBase(context.Context, string) (externalaccess.PublicBase, error) {
@@ -146,16 +166,23 @@ func TestExternalAccessNetworkModeRuntimeSelection(t *testing.T) {
 		networkMode  string
 		wantHost     string
 		wantProvider string
+		wantHostErr  bool
 	}{
 		{name: "wan uses localhost listener and configured provider", networkMode: "wan", wantHost: "127.0.0.1", wantProvider: "trycloudflare"},
 		{name: "lan uses selected ip and local provider", networkMode: "lan:192.168.1.50", wantHost: "192.168.1.50", wantProvider: "disabled"},
 		{name: "local disables external listener and provider", networkMode: "local", wantHost: "", wantProvider: "disabled"},
+		{name: "invalid lan host disables listener", networkMode: "lan:0.0.0.0", wantHost: "", wantProvider: "disabled", wantHostErr: true},
+		{name: "unknown mode disables listener and provider", networkMode: "bogus", wantHost: "", wantProvider: "disabled", wantHostErr: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			settings := base
 			settings.NetworkMode = tt.networkMode
-			if got := externalAccessListenHostForMode(settings); got != tt.wantHost {
+			got, err := externalAccessListenHostForMode(settings)
+			if (err != nil) != tt.wantHostErr {
+				t.Fatalf("listen host err = %v, want err=%v", err, tt.wantHostErr)
+			}
+			if got != tt.wantHost {
 				t.Fatalf("listen host = %q, want %q", got, tt.wantHost)
 			}
 			if got := externalAccessProviderKindForMode(settings); got != tt.wantProvider {
@@ -313,6 +340,67 @@ func TestApplyExternalAccessNetworkModeSelectsAvailableLANIP(t *testing.T) {
 	}
 	if got := app.externalAccessRuntime.Settings.NetworkMode; got != "lan:192.168.1.10" {
 		t.Fatalf("runtime network mode = %q, want lan:192.168.1.10", got)
+	}
+}
+
+func TestIssueExternalAccessURLInLANModeUsesGrantProxyOnLANHost(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenPort:        0,
+			NetworkMode:       "lan:192.168.1.10",
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "trycloudflare",
+		},
+	})
+	defer app.Shutdown(nil)
+
+	oldListen := externalAccessListen
+	var listenNetwork, listenAddress string
+	externalAccessListen = func(network, address string) (net.Listener, error) {
+		listenNetwork = network
+		listenAddress = address
+		return &staticAddrListener{
+			addr:   &net.TCPAddr{IP: net.ParseIP("192.168.1.10"), Port: 34567},
+			closed: make(chan struct{}),
+		}, nil
+	}
+	defer func() {
+		externalAccessListen = oldListen
+	}()
+
+	issued, err := app.IssueExternalAccessURL(context.Background(), debugAdminIssueRequest("http://127.0.0.1:9501/admin/"))
+	if err != nil {
+		t.Fatalf("IssueExternalAccessURL: %v", err)
+	}
+	if listenNetwork != "tcp" || listenAddress != "192.168.1.10:0" {
+		t.Fatalf("listener bind = %s %s, want tcp 192.168.1.10:0", listenNetwork, listenAddress)
+	}
+	if !strings.HasPrefix(issued.ExternalURL, "http://192.168.1.10:34567/g/") {
+		t.Fatalf("external URL = %q, want LAN grant proxy URL", issued.ExternalURL)
+	}
+	if strings.Contains(issued.ExternalURL, "/admin/") {
+		t.Fatalf("external URL should not expose bare admin path: %q", issued.ExternalURL)
+	}
+	if issued.ProviderKind != "local" {
+		t.Fatalf("provider kind = %q, want local", issued.ProviderKind)
+	}
+	snapshot := app.externalAccess.Snapshot()
+	if snapshot.Provider.Kind != "local" || snapshot.Provider.BaseURL != "http://192.168.1.10:34567" {
+		t.Fatalf("provider snapshot = %#v, want local LAN base", snapshot.Provider)
+	}
+	if len(snapshot.ActiveGrants) != 1 {
+		t.Fatalf("active grants = %#v, want one", snapshot.ActiveGrants)
+	}
+	if got := snapshot.ActiveGrants[0].TargetURL; got != "http://127.0.0.1:9501/admin/" {
+		t.Fatalf("grant target = %q, want localhost admin URL", got)
 	}
 }
 

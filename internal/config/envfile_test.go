@@ -79,6 +79,33 @@ func TestWriteAppConfigNormalizesExternalAccessNetworkMode(t *testing.T) {
 	}
 }
 
+func TestWriteAppConfigNormalizesUnsafeExternalAccessNetworkModeToLocal(t *testing.T) {
+	unsetUnifiedConfigOverride(t)
+	tests := []string{
+		"lan:0.0.0.0",
+		"lan:127.0.0.1",
+		"bogus",
+	}
+	for _, networkMode := range tests {
+		t.Run(networkMode, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.json")
+			cfg := DefaultAppConfig()
+			cfg.ExternalAccess.NetworkMode = networkMode
+
+			if err := WriteAppConfig(configPath, cfg); err != nil {
+				t.Fatalf("WriteAppConfig: %v", err)
+			}
+			loaded, err := LoadAppConfigAtPath(configPath)
+			if err != nil {
+				t.Fatalf("LoadAppConfigAtPath: %v", err)
+			}
+			if loaded.Config.ExternalAccess.NetworkMode != "local" {
+				t.Fatalf("NetworkMode = %q, want local", loaded.Config.ExternalAccess.NetworkMode)
+			}
+		})
+	}
+}
+
 func TestLoadServicesConfigUsesUnifiedConfigEnvOverride(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()
