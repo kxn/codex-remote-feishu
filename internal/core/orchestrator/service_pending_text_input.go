@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -58,6 +60,29 @@ func (s *Service) hasPendingTextInput(surface *state.SurfaceConsoleRecord) bool 
 		return false
 	}
 	return true
+}
+
+func (s *Service) replayPendingTextInput(surface *state.SurfaceConsoleRecord, pending *state.PendingTextInputRecord) []eventcontract.Event {
+	if surface == nil || pending == nil {
+		return nil
+	}
+	replayAction := control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		GatewayID:        surface.GatewayID,
+		MessageID:        pending.SourceMessageID,
+		ActorUserID:      pending.ActorUserID,
+		Text:             pending.Text,
+		Inputs:           pending.Inputs,
+	}
+	return s.handleText(surface, replayAction)
+}
+
+func restorePendingTextInput(surface *state.SurfaceConsoleRecord, pending *state.PendingTextInputRecord) {
+	if surface == nil || pending == nil || surface.PendingTextInput != nil {
+		return
+	}
+	surface.PendingTextInput = pending
 }
 
 func cloneInputs(inputs []agentproto.Input) []agentproto.Input {

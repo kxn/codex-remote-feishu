@@ -91,6 +91,7 @@ const (
 	ActionTargetPickerPage            ActionKind = "surface.target_picker.page"
 	ActionTargetPickerOpenPathPicker  ActionKind = "surface.target_picker.open_path_picker"
 	ActionTargetPickerCancel          ActionKind = "surface.target_picker.cancel"
+	ActionTargetPickerBack            ActionKind = "surface.target_picker.back"
 	ActionTargetPickerConfirm         ActionKind = "surface.target_picker.confirm"
 	ActionHistoryPage                 ActionKind = "surface.history.page"
 	ActionHistoryDetail               ActionKind = "surface.history.detail"

@@ -629,9 +629,14 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 
 func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *testing.T) {
 	elements := projectorpkg.TargetPickerElements(control.FeishuTargetPickerView{
-		PickerID:                 "picker-1",
-		Title:                    "从 Worktree 新建工作区",
-		Page:                     control.FeishuTargetPickerPageWorktree,
+		PickerID:  "picker-1",
+		Title:     "从 Worktree 新建工作区",
+		Page:      control.FeishuTargetPickerPageWorktree,
+		CanGoBack: true,
+		BackValue: map[string]any{
+			frontstagecontract.CardActionPayloadKeyKind:     cardActionKindTargetPickerBack,
+			frontstagecontract.CardActionPayloadKeyPickerID: "picker-1",
+		},
 		ConfirmLabel:             "创建并进入",
 		CanConfirm:               false,
 		ConfirmValidatesOnSubmit: true,
@@ -696,17 +701,19 @@ func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *t
 		t.Fatalf("expected worktree form confirm button to stay clickable for submit-time validation, got %#v", footerButtons[len(footerButtons)-1])
 	}
 
-	var sawWorkspace, sawConfirm bool
+	var sawWorkspace, sawBack, sawConfirm bool
 	for _, action := range cardActionsFromElements(formElements) {
 		switch cardValueMap(action)[frontstagecontract.CardActionPayloadKeyKind] {
 		case cardActionKindTargetPickerSelectWorkspace:
 			sawWorkspace = true
+		case cardActionKindTargetPickerBack:
+			sawBack = true
 		case cardActionKindTargetPickerConfirm:
 			sawConfirm = true
 		}
 	}
-	if !sawWorkspace || !sawConfirm {
-		t.Fatalf("expected worktree form to render workspace select and confirm actions, got %#v", formElements)
+	if !sawWorkspace || !sawBack || !sawConfirm {
+		t.Fatalf("expected worktree form to render workspace select/back/confirm actions, got %#v", formElements)
 	}
 }
 

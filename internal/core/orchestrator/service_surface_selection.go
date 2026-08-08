@@ -313,6 +313,7 @@ type workspaceSelectionEntry struct {
 	hasVSCodeActivity bool
 	busy              bool
 	attachable        bool
+	worktreeBase      bool
 	recoverableOnly   bool
 }
 

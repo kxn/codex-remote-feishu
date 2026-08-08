@@ -50,6 +50,8 @@ func parseTargetPickerSessionValue(value string) (control.FeishuTargetPickerSess
 	switch {
 	case value == targetPickerNewThreadValue:
 		return control.FeishuTargetPickerSessionNewThread, ""
+	case value == targetPickerWorktreeCreateValue:
+		return control.FeishuTargetPickerSessionWorktree, ""
 	case strings.HasPrefix(value, targetPickerThreadPrefix):
 		return control.FeishuTargetPickerSessionThread, strings.TrimPrefix(value, targetPickerThreadPrefix)
 	default:
@@ -62,6 +64,19 @@ func targetPickerSessionMetaText(source control.TargetPickerRequestSource, value
 		return ""
 	}
 	return strings.TrimSpace(value)
+}
+
+func targetPickerWorkspaceEntryByKey(entries []workspaceSelectionEntry, workspaceKey string) (workspaceSelectionEntry, bool) {
+	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	if workspaceKey == "" {
+		return workspaceSelectionEntry{}, false
+	}
+	for _, entry := range entries {
+		if normalizeWorkspaceClaimKey(entry.workspaceKey) == workspaceKey {
+			return entry, true
+		}
+	}
+	return workspaceSelectionEntry{}, false
 }
 
 func targetPickerHasWorkspaceOption(options []control.FeishuTargetPickerWorkspaceOption, value string) bool {
