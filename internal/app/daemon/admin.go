@@ -65,16 +65,17 @@ type apiError struct {
 }
 
 type bootstrapStatePayload struct {
-	Phase         string                  `json:"phase"`
-	SetupRequired bool                    `json:"setupRequired"`
-	SSHSession    bool                    `json:"sshSession"`
-	Product       bootstrapProductPayload `json:"product"`
-	Session       bootstrapSessionPayload `json:"session"`
-	Config        bootstrapConfigPayload  `json:"config"`
-	Relay         bootstrapRelayPayload   `json:"relay"`
-	Admin         bootstrapAdminPayload   `json:"admin"`
-	Feishu        bootstrapFeishuPayload  `json:"feishu"`
-	Gateways      []feishu.GatewayStatus  `json:"gateways,omitempty"`
+	Phase          string                         `json:"phase"`
+	SetupRequired  bool                           `json:"setupRequired"`
+	SSHSession     bool                           `json:"sshSession"`
+	Product        bootstrapProductPayload        `json:"product"`
+	Session        bootstrapSessionPayload        `json:"session"`
+	Config         bootstrapConfigPayload         `json:"config"`
+	Relay          bootstrapRelayPayload          `json:"relay"`
+	Admin          bootstrapAdminPayload          `json:"admin"`
+	ExternalAccess bootstrapExternalAccessPayload `json:"externalAccess"`
+	Feishu         bootstrapFeishuPayload         `json:"feishu"`
+	Gateways       []feishu.GatewayStatus         `json:"gateways,omitempty"`
 }
 
 type bootstrapProductPayload struct {
@@ -107,6 +108,10 @@ type bootstrapAdminPayload struct {
 	SetupURL            string     `json:"setupURL,omitempty"`
 	SetupTokenRequired  bool       `json:"setupTokenRequired"`
 	SetupTokenExpiresAt *time.Time `json:"setupTokenExpiresAt,omitempty"`
+}
+
+type bootstrapExternalAccessPayload struct {
+	NetworkMode string `json:"networkMode"`
 }
 
 type bootstrapFeishuPayload struct {
@@ -591,6 +596,9 @@ func (a *App) bootstrapState(auth requestAuthState) (bootstrapStatePayload, erro
 			SetupURL:            admin.setupURL,
 			SetupTokenRequired:  setupRequired && !a.authAllowsSetup(auth),
 			SetupTokenExpiresAt: setupTokenExpiresAt,
+		},
+		ExternalAccess: bootstrapExternalAccessPayload{
+			NetworkMode: loaded.Config.ExternalAccess.NetworkMode,
 		},
 		Feishu: bootstrapFeishuPayload{
 			AppCount:              len(loaded.Config.Feishu.Apps),

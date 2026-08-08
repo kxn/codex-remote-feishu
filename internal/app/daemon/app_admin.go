@@ -21,8 +21,13 @@ func (a *App) handleAdminDaemonCommand(command control.DaemonCommand) []eventcon
 	switch parsed.Mode {
 	case adminCommandWeb:
 		return a.handleAdminWebCommand(command)
-	case adminCommandLocalWeb:
-		return commandPageEvents(command.SurfaceSessionID, buildAdminLocalWebPageView(a.localAdminURLLocked()))
+	case adminCommandNetwork:
+		return commandPageEvents(command.SurfaceSessionID, buildAdminNetworkPageView(a.externalAccessNetworkModeLocked(), ""))
+	case adminCommandNetworkSet:
+		if err := a.applyExternalAccessNetworkModeLocked(parsed.NetworkMode); err != nil {
+			return adminNoticePageEvents(command.SurfaceSessionID, "网络模式", fmt.Sprintf("切换网络模式失败：%v", err))
+		}
+		return commandPageEvents(command.SurfaceSessionID, buildAdminNetworkPageView(a.externalAccessNetworkModeLocked(), "已切换网络模式。"))
 	case adminCommandAutostart:
 		status, err := detectAutostart(a.installStatePath())
 		if err != nil {
@@ -38,10 +43,40 @@ func (a *App) handleAdminDaemonCommand(command control.DaemonCommand) []eventcon
 	}
 }
 
+func buildAdminNetworkPageView(networkMode, statusText string) control.FeishuPageView {
+	mode := strings.TrimSpace(networkMode)
+	if mode == "" {
+		mode = "wan"
+	}
+	return control.NormalizeFeishuPageView(control.FeishuPageView{
+		CommandID:       control.FeishuCommandAdmin,
+		Title:           "网络模式",
+		StatusKind:      "",
+		StatusText:      strings.TrimSpace(statusText),
+		SummarySections: commandCatalogSummarySections(fmt.Sprintf("当前模式：%s", mode)),
+		Interactive:     true,
+		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
+		Sections: []control.CommandCatalogSection{{
+			Title: "切换模式",
+			Entries: []control.CommandCatalogEntry{{
+				Buttons: []control.CommandCatalogButton{
+					runCommandButton("WAN", "/admin network wan", "primary", mode == "wan"),
+					runCommandButton("Local", "/admin network local", "", mode == "local"),
+					runCommandButton("LAN", "/admin network lan", "", strings.HasPrefix(mode, "lan:")),
+				},
+			}},
+		}},
+		RelatedButtons: control.FeishuCommandBackToRootButtons(control.FeishuCommandAdmin),
+	})
+}
+
 func (a *App) handleAdminWebCommand(command control.DaemonCommand) []eventcontract.Event {
+	if a.externalAccessNetworkModeLocked() == "local" {
+		return commandPageEvents(command.SurfaceSessionID, buildAdminLocalWebPageView(a.localAdminURLLocked()))
+	}
 	service, localURL, err := a.ensureExternalAccessIssueTargetLocked()
 	if err != nil {
-		return []eventcontract.Event{adminNoticeEvent(command.SurfaceSessionID, "admin_web_issue_failed", fmt.Sprintf("生成管理页外链失败：%v\n如只需要本机地址，可改用 `/admin localweb`。", err))}
+		return []eventcontract.Event{adminNoticeEvent(command.SurfaceSessionID, "admin_web_issue_failed", fmt.Sprintf("生成管理页链接失败：%v", err))}
 	}
 	req := debugAdminIssueRequest(a.admin.adminURL)
 	surfaceID := command.SurfaceSessionID
@@ -58,7 +93,7 @@ func (a *App) handleAdminWebCommand(command control.DaemonCommand) []eventcontra
 		}
 		if err != nil {
 			a.queueDaemonAsyncUIEventsLocked([]eventcontract.Event{
-				adminNoticeEvent(surfaceID, "admin_web_issue_failed", fmt.Sprintf("生成管理页外链失败：%v\n如只需要本机地址，可改用 `/admin localweb`。", err)),
+				adminNoticeEvent(surfaceID, "admin_web_issue_failed", fmt.Sprintf("生成管理页链接失败：%v", err)),
 			})
 			return
 		}
@@ -75,6 +110,14 @@ func (a *App) handleAdminWebCommand(command control.DaemonCommand) []eventcontra
 	return []eventcontract.Event{
 		adminNoticeEvent(command.SurfaceSessionID, "admin_web_prepare_started", "正在准备临时管理页外链。首次启动 tunnel 或重新拉起 external access 时，可能需要几十秒，请稍候。"),
 	}
+}
+
+func (a *App) externalAccessNetworkModeLocked() string {
+	mode := strings.ToLower(strings.TrimSpace(a.externalAccessRuntime.Settings.NetworkMode))
+	if mode == "" {
+		return "wan"
+	}
+	return mode
 }
 
 func (a *App) handleAdminAutostartApplyCommand(command control.DaemonCommand) []eventcontract.Event {

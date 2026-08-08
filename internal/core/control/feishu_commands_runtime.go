@@ -23,8 +23,8 @@ func runtimeFeishuCommandDefinition(spec feishuCommandSpec) FeishuCommandDefinit
 }
 
 func runtimeAdminCommandDefinition(def FeishuCommandDefinition) FeishuCommandDefinition {
-	def.Description = "打开系统管理入口；可从这里访问管理页、自动启动和维护命令。"
-	def.Examples = []string{"/admin web", "/admin localweb"}
+	def.Description = "打开系统管理入口；可从这里访问管理页、网络模式、自动启动和维护命令。"
+	def.Examples = []string{"/admin web", "/admin network"}
 	if feishuAdminAutostartSupportedPlatform(runtime.GOOS) {
 		def.Description += " `/admin autostart on|off` 用于配置自动启动。"
 		def.Examples = append(def.Examples, "/admin autostart on", "/admin autostart off")

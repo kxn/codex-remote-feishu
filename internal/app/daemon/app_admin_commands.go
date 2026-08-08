@@ -9,14 +9,16 @@ type adminCommandMode string
 
 const (
 	adminCommandWeb          adminCommandMode = "web"
-	adminCommandLocalWeb     adminCommandMode = "localweb"
+	adminCommandNetwork      adminCommandMode = "network"
+	adminCommandNetworkSet   adminCommandMode = "network_set"
 	adminCommandAutostart    adminCommandMode = "autostart"
 	adminCommandAutostartOn  adminCommandMode = "autostart_on"
 	adminCommandAutostartOff adminCommandMode = "autostart_off"
 )
 
 type parsedAdminCommand struct {
-	Mode adminCommandMode
+	Mode        adminCommandMode
+	NetworkMode string
 }
 
 func parseAdminCommandText(text string) (parsedAdminCommand, error) {
@@ -27,8 +29,10 @@ func parseAdminCommandText(text string) (parsedAdminCommand, error) {
 	switch {
 	case len(fields) == 2 && fields[1] == "web":
 		return parsedAdminCommand{Mode: adminCommandWeb}, nil
-	case len(fields) == 2 && fields[1] == "localweb":
-		return parsedAdminCommand{Mode: adminCommandLocalWeb}, nil
+	case len(fields) == 2 && fields[1] == "network":
+		return parsedAdminCommand{Mode: adminCommandNetwork}, nil
+	case len(fields) == 3 && fields[1] == "network":
+		return parsedAdminCommand{Mode: adminCommandNetworkSet, NetworkMode: adminCommandNetworkModeArg(fields[2])}, nil
 	case len(fields) == 2 && fields[1] == "autostart":
 		return parsedAdminCommand{Mode: adminCommandAutostart}, nil
 	case len(fields) == 3 && fields[1] == "autostart" && fields[2] == "on":
@@ -41,5 +45,16 @@ func parseAdminCommandText(text string) (parsedAdminCommand, error) {
 }
 
 func adminCommandUsageSummary() string {
-	return "请使用 `/admin`、`/admin web`、`/admin localweb`、`/admin autostart`、`/admin autostart on` 或 `/admin autostart off`。"
+	return "请使用 `/admin`、`/admin web`、`/admin network`、`/admin network wan|local|lan|<ip>`、`/admin autostart`、`/admin autostart on` 或 `/admin autostart off`。"
+}
+
+func adminCommandNetworkModeArg(value string) string {
+	value = strings.TrimSpace(strings.ToLower(value))
+	if value == "lan" {
+		return value
+	}
+	if value == "wan" || value == "local" || strings.HasPrefix(value, "lan:") {
+		return value
+	}
+	return "lan:" + value
 }

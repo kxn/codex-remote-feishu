@@ -37,7 +37,8 @@ func TestParseFeishuTextActionRecognizesAdminRootCommand(t *testing.T) {
 func TestParseFeishuTextActionRecognizesAdminSubcommands(t *testing.T) {
 	for _, input := range []string{
 		"/admin web",
-		"/admin localweb",
+		"/admin network",
+		"/admin network local",
 		"/admin autostart",
 		"/admin autostart on",
 		"/admin autostart off",

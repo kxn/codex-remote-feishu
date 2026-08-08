@@ -53,6 +53,32 @@ func TestDefaultAppConfigIncludesTryCloudflareLaunchTimeout(t *testing.T) {
 	}
 }
 
+func TestDefaultAppConfigUsesWANExternalAccessNetworkMode(t *testing.T) {
+	unsetUnifiedConfigOverride(t)
+	cfg := DefaultAppConfig()
+	if cfg.ExternalAccess.NetworkMode != "wan" {
+		t.Fatalf("NetworkMode = %q, want wan", cfg.ExternalAccess.NetworkMode)
+	}
+}
+
+func TestWriteAppConfigNormalizesExternalAccessNetworkMode(t *testing.T) {
+	unsetUnifiedConfigOverride(t)
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := DefaultAppConfig()
+	cfg.ExternalAccess.NetworkMode = " LAN:192.168.1.50 "
+
+	if err := WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	loaded, err := LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	if loaded.Config.ExternalAccess.NetworkMode != "lan:192.168.1.50" {
+		t.Fatalf("NetworkMode = %q, want lan:192.168.1.50", loaded.Config.ExternalAccess.NetworkMode)
+	}
+}
+
 func TestLoadServicesConfigUsesUnifiedConfigEnvOverride(t *testing.T) {
 	unsetUnifiedConfigOverride(t)
 	xdgHome := t.TempDir()

@@ -23,12 +23,13 @@ import type {
 } from "../lib/types";
 
 type BootstrapOverrides = Partial<
-  Omit<BootstrapState, "session" | "config" | "relay" | "admin" | "feishu">
+  Omit<BootstrapState, "session" | "config" | "relay" | "admin" | "externalAccess" | "feishu">
 > & {
   session?: Partial<BootstrapState["session"]>;
   config?: Partial<BootstrapState["config"]>;
   relay?: Partial<BootstrapState["relay"]>;
   admin?: Partial<BootstrapState["admin"]>;
+  externalAccess?: Partial<BootstrapState["externalAccess"]>;
   feishu?: Partial<BootstrapState["feishu"]>;
 };
 
@@ -40,6 +41,7 @@ export function makeBootstrap(
     config: configOverrides,
     relay: relayOverrides,
     admin: adminOverrides,
+    externalAccess: externalAccessOverrides,
     feishu: feishuOverrides,
     ...rest
   } = overrides;
@@ -72,6 +74,9 @@ export function makeBootstrap(
       setupURL: adminOverrides?.setupURL ?? "/setup",
       setupTokenRequired: adminOverrides?.setupTokenRequired ?? false,
       setupTokenExpiresAt: adminOverrides?.setupTokenExpiresAt,
+    },
+    externalAccess: {
+      networkMode: externalAccessOverrides?.networkMode ?? "wan",
     },
     feishu: {
       appCount: feishuOverrides?.appCount ?? 1,

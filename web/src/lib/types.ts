@@ -39,6 +39,9 @@ export interface BootstrapState {
     setupTokenRequired: boolean;
     setupTokenExpiresAt?: string;
   };
+  externalAccess: {
+    networkMode: string;
+  };
   feishu: {
     appCount: number;
     enabledAppCount: number;

@@ -9,7 +9,9 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -128,6 +130,189 @@ func TestAdminExternalAccessStatusAndLink(t *testing.T) {
 	}
 	if !strings.Contains(payload.URL.ExternalURL, "/g/") {
 		t.Fatalf("external url = %q, want /g/ path", payload.URL.ExternalURL)
+	}
+}
+
+func TestExternalAccessNetworkModeRuntimeSelection(t *testing.T) {
+	base := externalAccessSettingsView{
+		ListenHost:     "127.0.0.1",
+		ListenPort:     9512,
+		ProviderKind:   "trycloudflare",
+		NetworkMode:    "wan",
+		DefaultLinkTTL: time.Minute,
+	}
+	tests := []struct {
+		name         string
+		networkMode  string
+		wantHost     string
+		wantProvider string
+	}{
+		{name: "wan uses localhost listener and configured provider", networkMode: "wan", wantHost: "127.0.0.1", wantProvider: "trycloudflare"},
+		{name: "lan uses selected ip and local provider", networkMode: "lan:192.168.1.50", wantHost: "192.168.1.50", wantProvider: "disabled"},
+		{name: "local disables external listener and provider", networkMode: "local", wantHost: "", wantProvider: "disabled"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := base
+			settings.NetworkMode = tt.networkMode
+			if got := externalAccessListenHostForMode(settings); got != tt.wantHost {
+				t.Fatalf("listen host = %q, want %q", got, tt.wantHost)
+			}
+			if got := externalAccessProviderKindForMode(settings); got != tt.wantProvider {
+				t.Fatalf("provider = %q, want %q", got, tt.wantProvider)
+			}
+		})
+	}
+}
+
+func TestApplyExternalAccessNetworkModePersistsAndRebuildsRuntime(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := config.DefaultAppConfig()
+	cfg.ExternalAccess.NetworkMode = "wan"
+	cfg.ExternalAccess.Provider.Kind = "trycloudflare"
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		ConfigPath:      configPath,
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	provider := &blockingShutdownExternalAccessProvider{
+		closeStarted: make(chan struct{}),
+		unblockClose: make(chan struct{}),
+	}
+	app.externalAccessRuntime = ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenHost:        "127.0.0.1",
+			ListenPort:        0,
+			NetworkMode:       "wan",
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "trycloudflare",
+		},
+	}
+	app.externalAccess = externalaccess.NewService(externalaccess.Options{
+		Provider:          provider,
+		DefaultLinkTTL:    10 * time.Second,
+		DefaultSessionTTL: 30 * time.Second,
+	})
+	defer app.Shutdown(nil)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- app.applyExternalAccessNetworkMode("local")
+	}()
+
+	select {
+	case <-provider.closeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("expected old external access provider shutdown to start")
+	}
+	provider.unblock()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("applyExternalAccessNetworkMode: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("applyExternalAccessNetworkMode did not finish")
+	}
+
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile config: %v", err)
+	}
+	if !strings.Contains(string(raw), `"networkMode": "local"`) {
+		t.Fatalf("config did not persist local network mode: %s", raw)
+	}
+	if got := app.externalAccessRuntime.Settings.NetworkMode; got != "local" {
+		t.Fatalf("runtime network mode = %q, want local", got)
+	}
+	if _, err := app.ensureExternalAccessListenerLocked(); err != externalaccess.ErrDisabled {
+		t.Fatalf("local mode listener error = %v, want ErrDisabled", err)
+	}
+}
+
+func TestApplyExternalAccessNetworkModeRejectsUnavailableLANIP(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := config.DefaultAppConfig()
+	cfg.ExternalAccess.NetworkMode = "wan"
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			NetworkMode:  "wan",
+			ProviderKind: "disabled",
+		},
+	})
+	defer app.Shutdown(nil)
+
+	oldLocalLANHosts := externalAccessLocalLANHosts
+	externalAccessLocalLANHosts = func() ([]string, error) {
+		return []string{"192.168.1.10"}, nil
+	}
+	defer func() {
+		externalAccessLocalLANHosts = oldLocalLANHosts
+	}()
+
+	if err := app.applyExternalAccessNetworkMode("lan:192.168.1.50"); err == nil {
+		t.Fatal("expected unavailable LAN IP to be rejected")
+	}
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	if got := loaded.Config.ExternalAccess.NetworkMode; got != "wan" {
+		t.Fatalf("persisted network mode = %q, want wan", got)
+	}
+	if got := app.externalAccessRuntime.Settings.NetworkMode; got != "wan" {
+		t.Fatalf("runtime network mode = %q, want wan", got)
+	}
+}
+
+func TestApplyExternalAccessNetworkModeSelectsAvailableLANIP(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	cfg := config.DefaultAppConfig()
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			NetworkMode:  "wan",
+			ProviderKind: "disabled",
+		},
+	})
+	defer app.Shutdown(nil)
+
+	oldLocalLANHosts := externalAccessLocalLANHosts
+	externalAccessLocalLANHosts = func() ([]string, error) {
+		return []string{"192.168.1.10"}, nil
+	}
+	defer func() {
+		externalAccessLocalLANHosts = oldLocalLANHosts
+	}()
+
+	if err := app.applyExternalAccessNetworkMode("lan"); err != nil {
+		t.Fatalf("applyExternalAccessNetworkMode: %v", err)
+	}
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	if got := loaded.Config.ExternalAccess.NetworkMode; got != "lan:192.168.1.10" {
+		t.Fatalf("persisted network mode = %q, want lan:192.168.1.10", got)
+	}
+	if got := app.externalAccessRuntime.Settings.NetworkMode; got != "lan:192.168.1.10" {
+		t.Fatalf("runtime network mode = %q, want lan:192.168.1.10", got)
 	}
 }
 

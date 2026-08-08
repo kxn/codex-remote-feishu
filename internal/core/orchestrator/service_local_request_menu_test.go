@@ -348,7 +348,7 @@ func TestMenuActionMaintenanceGroupShowsSystemManagementCommands(t *testing.T) {
 		t.Fatalf("expected maintenance menu to open admin root page, got %#v", catalog)
 	}
 	got := firstButtonLabels(catalog.Sections[0].Entries)
-	want := []string{"管理页外链", "本地管理页"}
+	want := []string{"管理页", "网络模式"}
 	if runtime.GOOS == "linux" || runtime.GOOS == "darwin" {
 		want = append(want, "自动启动")
 	}
