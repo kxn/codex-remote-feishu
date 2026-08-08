@@ -271,6 +271,42 @@ func TestManagedHeadlessResumeBranchPrefersHeadlessOverVisibleVSCode(t *testing.
 	}
 }
 
+func TestTryAutoResumeHeadlessSurfaceSkipsAbandoningSurface(t *testing.T) {
+	now := time.Date(2026, 4, 8, 3, 1, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	svc.root.Surfaces["surface-1"].Abandoning = true
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless-1",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "headless",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+	})
+
+	events, result := svc.TryAutoResumeHeadlessSurface("surface-1", SurfaceResumeAttempt{
+		ThreadID:       "thread-1",
+		ThreadCWD:      "/data/dl/droid",
+		ResumeHeadless: true,
+	}, true)
+
+	if result.Status != SurfaceResumeStatusSkipped {
+		t.Fatalf("expected abandoning surface to skip auto-resume, got %#v", result)
+	}
+	if len(events) != 0 {
+		t.Fatalf("expected no events for abandoning surface, got %#v", events)
+	}
+	if snapshot := svc.SurfaceSnapshot("surface-1"); snapshot == nil || snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("expected abandoning surface to remain detached, got %#v", snapshot)
+	}
+}
+
 func TestTryAutoResumeHeadlessSurfaceManagedHeadlessTargetSkipsVSCodeSurface(t *testing.T) {
 	now := time.Date(2026, 4, 8, 3, 2, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

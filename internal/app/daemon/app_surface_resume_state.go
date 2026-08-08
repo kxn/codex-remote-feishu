@@ -439,7 +439,7 @@ func previousSurfaceResumeTargetMatchesWorkspace(entry surfaceresume.Entry, effe
 
 func (a *App) shouldClearSurfaceResumeTargetLocked(action control.Action, before *control.Snapshot) bool {
 	switch action.Kind {
-	case control.ActionDetach:
+	case control.ActionDetach, control.ActionWorkspaceDetach:
 		return true
 	case control.ActionModeCommand:
 		after := a.service.SurfaceSnapshot(action.SurfaceSessionID)
