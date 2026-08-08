@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-08-07`
-> Summary: 新增 Codex / Claude profile instruction（角色提示词）配置设计文档索引。
+> Updated: `2026-08-08`
+> Summary: 新增通用 backend 接入评估 playbook 与 ACP 后端调研文档索引。
 
 ## 1. 适用范围
 
@@ -112,6 +112,7 @@
 
 - [adding-new-ai-backend.md](./general/adding-new-ai-backend.md)
 - [architecture.md](./general/architecture.md)
+- [backend-integration-evaluation-playbook.md](./general/backend-integration-evaluation-playbook.md)
 - [codex-mcp-app-server-protocol.md](./general/codex-mcp-app-server-protocol.md)
 - [config-state-storage-guidelines.md](./general/config-state-storage-guidelines.md)
 - [dev-conversation-trace.md](./general/dev-conversation-trace.md)
@@ -189,6 +190,7 @@
 - [file-length-split-audit-2026-04.md](./draft/file-length-split-audit-2026-04.md)
 - [feishu-owner-card-bypass-prompt-audit-2026-04.md](./draft/feishu-owner-card-bypass-prompt-audit-2026-04.md)
 - [feishu-request-delivery-reliability-design.md](./draft/feishu-request-delivery-reliability-design.md)
+- [acp-backend-profile-integration-design.md](./draft/acp-backend-profile-integration-design.md)
 - [feishu-setup-auto-configuration-design.md](./draft/feishu-setup-auto-configuration-design.md)
 - [feishu-slash-menu-owner-card-audit-2026-04.md](./draft/feishu-slash-menu-owner-card-audit-2026-04.md)
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
