@@ -2,12 +2,12 @@
 
 > Type: `draft`
 > Updated: `2026-08-09`
-> Summary: 锁定 OpenCode v1.18.15，按 backend integration playbook 制定接入评估、映射审计与真实黑盒测试计划。
+> Summary: 锁定 OpenCode v1.18.15，按 backend integration playbook 完成接入评估、映射审计与真实黑盒测试，形成接入结论。
 
 ## 1. 结论
 
-- Verdict: `unknown`，进入真实黑盒测试。
-- 推荐接入阶段：先做 ACP backend candidate，不先承诺 production candidate。
+- Verdict: `candidate with known gaps`，可以进入 OpenCode ACP backend 详细设计与实现。
+- 推荐接入阶段：实现 production-oriented adapter/compiler 的第一版，不做只证明可启动的最小 POC。
 - 锁定版本：OpenCode `v1.18.15`。
 - Release: `https://github.com/anomalyco/opencode/releases/tag/v1.18.15`
 - Release published: `2026-08-07T06:49:55Z`
@@ -15,11 +15,12 @@
 - 本地源码 tag commit: `d7b115f623760e68a4749d16508a9eca350f246f`，commit message `release: v1.18.15`
 - NPM package: `opencode-ai@1.18.15`，bin `opencode`。
 
-当前源码判断：
+当前结论：
 
-- ACP 协议面覆盖较广，值得继续测。
-- 配置/profile overlay 有强候选机制，但必须黑盒证明是否满足“只覆盖少数字段，其余继承系统/项目配置，不修改用户全局配置”。
-- 真正风险不在 ACP handshake，而在配置闭环、session/catalog 持久化、raw-to-canonical 事件映射、产品命令和现有 Claude/Codex 特化面的对应。
+- ACP 协议面足以承载我们的核心 backend lifecycle：initialize、session new/list/load/resume/fork/close、prompt/cancel、stream delta、tool lifecycle、permission request、usage、MCP injection 均已用 `opencode-ai@1.18.15` binary 黑盒验证。
+- profile overlay 可以实现“少字段覆盖，其余继承”：默认建议用 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，必要时配合临时 XDG；不建议把 `OPENCODE_CONFIG_DIR` 作为默认 overlay，因为它会替换 global config path 并写 `.gitignore`。
+- 仍需我们侧单独实现 loader/profile compiler。ACP 只能抽象运行期协议，不能抽象 OpenCode 的配置、auth、MCP OAuth、模型目录、权限 schema 和产品命令差异。
+- 主要缺口是语义退化而非不可接入：OpenCode 没有我们的原生 `TurnPlanSnapshot`、sandbox profile、persistent delete、独立 thread/turn API、未知 slash command 的显式错误；这些应在 adapter/compiler 层显式弱化或标记 unsupported。
 
 ## 2. 调研对象
 
@@ -55,19 +56,19 @@
 | session new/load/list/resume/close/fork | required | `newSession`、`loadSession`、`listSessions`、`resumeSession`、`closeSession`、`forkSession` | source supported | daemon restart、process restart、cwd filter、replay |
 | prompt/cancel | required | `prompt` calls `sdk.session.prompt` or `sdk.session.command`; `cancel` aborts backing session | source supported | cancel late event、stopReason、queue cleanup |
 | model/effort/mode config options | required | `setSessionConfigOption` supports `model`、`effort`、`mode` | source supported | runtime set 是否影响下一 turn，失败是否半应用 |
-| profile overlay | required | `OPENCODE_CONFIG`、`OPENCODE_CONFIG_DIR`、`OPENCODE_CONFIG_CONTENT`、merge order | unknown | 继承/覆盖/不写全局配置 |
-| auth isolation | required | `OPENCODE_AUTH_CONTENT` bypasses auth file read | unknown | secret 不落盘、不进 log/status |
-| MCP publication | best_effort | `registerMcpServers` maps ACP MCP servers to OpenCode `sdk.mcp.add` | source supported | bearer redaction、http/sse/local、OAuth |
-| permission request | required | `ACPEvent` handles `permission.asked`; `ACPPermission.Handler` calls `requestPermission` | source supported | allow once/always/reject、edit diff、missing callback fail-closed |
-| tool taxonomy | required | `toToolKind` maps bash/read/edit/grep/task/etc. | source supported | agentproto item kind mapping |
-| assistant/reasoning stream | required | `message.part.delta` maps text to `agent_message_chunk` and reasoning to `agent_thought_chunk` | source supported | delta/final/replay de-dupe |
-| file changes | required | edit tools become ACP `edit` with diff content where possible | best_effort | structured file change path/kind/diff extraction |
-| token usage | best_effort | `UsageService.buildUsage` maps tokens/cache/reasoning | source supported | per-turn vs cumulative semantics |
+| profile overlay | required | `OPENCODE_CONFIG`、`OPENCODE_CONFIG_DIR`、`OPENCODE_CONFIG_CONTENT`、merge order | supported with caveats | 用 inline content + auth content；不要默认用 config dir |
+| auth isolation | required | `OPENCODE_AUTH_CONTENT` bypasses auth file read | supported for API auth | secret 不落盘 smoke 通过；OAuth 另算 |
+| MCP publication | best_effort | `registerMcpServers` maps ACP MCP servers to OpenCode `sdk.mcp.add` | supported for local MCP | local stdio MCP list/call 通过；OAuth 未覆盖 |
+| permission request | required | `ACPEvent` handles `permission.asked`; `ACPPermission.Handler` calls `requestPermission` | supported | allow once/always/reject、edit diff、fail-closed 源码成立 |
+| tool taxonomy | required | `toToolKind` maps bash/read/edit/grep/task/etc. | supported with approximation | MCP tool kind 为 `other`；read/bash/edit 映射通过 |
+| assistant/reasoning stream | required | `message.part.delta` maps text to `agent_message_chunk` and reasoning to `agent_thought_chunk` | supported | live delta 与 load replay 形态不同 |
+| file changes | required | edit tools become ACP `edit` with diff content where possible | supported for edit/write style diffs | edit diff + `fs/write_text_file` 通过 |
+| token usage | best_effort | `UsageService.buildUsage` maps tokens/cache/reasoning | supported | prompt response usage + cumulative `usage_update` 均有 |
 | model catalog | required | directory snapshot uses `sdk.config.providers` | source supported | provider/model list, variants, hidden/disabled providers |
-| review command | best_effort | no ACP-specific review API found yet | unknown | command list or unsupported reject |
-| compact command | best_effort | slash `/compact` calls `sdk.session.summarize` | source supported | lifecycle events and errors |
-| turn patch / patch rollback | best_effort | no ACP-specific turn patch API found yet | unknown | unsupported or approximation |
-| workspace defaults/profile snapshots | required | no OpenCode-specific equivalent yet | unknown | our side design required |
+| review command | best_effort | `available_commands_update` exposes `review`; slash command calls `sdk.session.command` | supported with different shape | 会启动 task/sub-session，再把 task result 汇总 |
+| compact command | best_effort | slash `/compact` calls `sdk.session.summarize` | supported with caveat | prompt response 无 usage，输出来自 compaction/title |
+| turn patch / patch rollback | best_effort | no ACP-specific turn patch API found | unsupported | `/patch` 不是产品命令，只是 tool kind 兼容名 |
+| workspace defaults/profile snapshots | required | no OpenCode-specific equivalent | our-side only | 由我们侧 profile snapshot/compiler 实现 |
 
 ## 4. 接入地图差异
 
@@ -141,12 +142,11 @@ OpenCode 没有直接等价 Codex/Claude profile catalog。候选机制来自配
 - MCP OAuth 不视为实例隔离 supported，源码 `packages/opencode/src/mcp/auth.ts` 使用 `Global.Path.data/mcp-auth.json`。
 - sandbox 没有 OpenCode 同名或等价 OS/container 隔离字段，只能映射 permission / external directory 规则，不能声明为 sandbox supported。
 
-必须黑盒证明：
+已黑盒证明：
 
-- `OPENCODE_CONFIG_CONTENT` 是否真正最后覆盖 global/project。
-- 设置 `OPENCODE_CONFIG_CONTENT` 时不会创建/修改 global config schema 文件。
-- `OPENCODE_AUTH_CONTENT` 不写 `auth.json`。
-- `OPENCODE_CONFIG_DIR` 是否会完全替换 global config path；若是，则只作为隔离模式，不作为默认 profile overlay。
+- `OPENCODE_CONFIG_CONTENT` 最后覆盖 global/project。
+- `OPENCODE_AUTH_CONTENT` 注入 API key 时不写 `auth.json`，临时目录扫描未发现 secret。
+- `OPENCODE_CONFIG_DIR` 会替换 config path 并写 `.gitignore`；只作为隔离模式，不作为默认 profile overlay。
 - `/config` 与 `/global/config` API 会写 project/global config，接入层不得用它们实现临时 profile。
 - `instructions` 和 `plugin` merge 有特殊 concat/dedupe 行为，要单独测，不能按普通 object override 推断。
 
@@ -229,18 +229,18 @@ OpenCode initialize 声明 MCP http/sse capability。`registerMcpServers` 会把
 | --- | --- | --- | --- |
 | initialize response | capability.state / hello capability | source supported | initialize raw fixture |
 | `sessionId` + cwd | thread identity / workspace key | source supported | new/list/resume |
-| prompt request/response | turn lifecycle | unknown | prompt raw order fixture |
-| `agent_message_chunk` | `item.delta(agent_message)` | source supported | delta/final de-dupe |
-| `agent_thought_chunk` | reasoning summary/content | source supported | hidden/replay reasoning |
-| `tool_call` | item.started(dynamic/tool) | source supported | tool start fixture |
-| `tool_call_update` running/completed/failed | item.delta/completed | source supported | bash/edit/read/web/task matrix |
-| `permission.asked` -> requestPermission | request.started/resolved | source supported | approve/reject/stale |
-| `available_commands_update` | capability/model/command projection | best_effort | command catalog fixture |
-| prompt `usage` | token usage | source supported | per-turn/cumulative fixture |
-| `configOptions` | model/reasoning/mode config view | source supported | dynamic config fixture |
-| `stopReason` | turn.completed status/origin | source supported | end/cancel/max/refusal/auth |
-| load/fork replay chunks | thread history / hydration | unknown | replay fixture |
-| slash `/compact` summarize | compact command lifecycle | source supported | compact fixture |
+| prompt request/response | turn lifecycle | supported with adapter buffering | prompt response has no final text |
+| `agent_message_chunk` | `item.delta(agent_message)` | supported | live delta and replay aggregate differ |
+| `agent_thought_chunk` | reasoning summary/content | supported | live delta and replay aggregate differ |
+| `tool_call` | item.started(dynamic/tool) | supported | read/bash/edit/MCP verified |
+| `tool_call_update` running/completed/failed | item.delta/completed | supported | read/bash/edit/MCP/failure verified |
+| `permission.asked` -> requestPermission | request.started/resolved | supported | once/always/reject verified |
+| `available_commands_update` | capability/model/command projection | supported | command catalog fixture verified |
+| prompt `usage` | token usage | supported with caveat | response usage and usage_update semantics differ |
+| `configOptions` | model/reasoning/mode config view | supported | dynamic model/mode verified |
+| `stopReason` | turn.completed status/origin | supported | end_turn and cancelled verified |
+| load/fork replay chunks | thread history / hydration | supported with caveat | replay sends aggregate chunks |
+| slash `/compact` summarize | compact command lifecycle | supported with caveat | no normal prompt usage in response |
 | ACP mode `plan` | session config only | best_effort | must not emit `turn.plan.updated` without real plan content |
 
 ## 6. Configuration Mapping Coverage
@@ -248,20 +248,20 @@ OpenCode initialize 声明 MCP http/sse capability。`registerMcpServers` 会把
 | 产品配置 intent | OpenCode native 目标 | launch material | observed/product projection | 当前结论 | 黑盒测试 |
 | --- | --- | --- | --- | --- | --- |
 | profile id/name/revision | our config only | daemon launch contract | status/admin | needs local design | compiler golden |
-| base URL/provider/API key | `provider` config + auth | `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT` | `configOptions` / provider list | unknown | fake provider config |
+| base URL/provider/API key | `provider` config + auth | `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT` | provider request to local fake server | supported | fake provider config |
 | main model | `model` config or ACP set model | config content / ACP config option | configOptions currentValue | source supported | model set before prompt |
 | reasoning effort | model variants / ACP `effort` | config content / ACP config option | configOptions effort | source supported | variant set |
-| instruction | `instructions` / agent/mode config | config content | unknown | unknown | prompt context capture |
-| subagent model | agent config | config content | unknown | unknown | delegated task fixture |
-| permission/access | `permission` config / `OPENCODE_PERMISSION` | env JSON | permission events | best_effort | edit/bash permission matrix |
+| instruction | `instructions` / agent/mode config | config content | prompt/system context only | best_effort | compiler golden |
+| subagent model | agent config | config content | task/sub-session behavior | best_effort | `/review` task path observed |
+| permission/access | `permission` config / `OPENCODE_PERMISSION` | env JSON | permission events | supported with caveats | edit/bash permission matrix |
 | plan mode | OpenCode modes/agents | config content / ACP mode option | configOptions mode | best_effort | mode switch and plan output |
 | sandbox | no native sandbox config found | none | none | unsupported | explicit unsupported diagnostic |
 | context window | provider model limit | provider catalog | usage context limit | best_effort | provider limit fixture |
-| MCP | ACP mcpServers -> `sdk.mcp.add` | session params | MCP events/status unknown | source supported | local/remote MCP injection |
+| MCP | ACP mcpServers -> `sdk.mcp.add` | session params | provider tool list + MCP call | supported for local stdio | remote/OAuth separate |
 | project config inherit | default loader behavior | no disable env | observed config | source supported | global + project merge |
 | project config disable | `OPENCODE_DISABLE_PROJECT_CONFIG=1` | env | observed config | source supported | disabled project fixture |
 | auth isolation | `OPENCODE_AUTH_CONTENT` | secret env | no direct projection | source supported | no auth.json write |
-| data/session isolation | XDG paths / `OPENCODE_TEST_HOME` / `OPENCODE_DB` | env | state paths | unknown | temp XDG fixture |
+| data/session isolation | XDG paths / `OPENCODE_TEST_HOME` / `OPENCODE_DB` | env | state paths | supported for process-level isolation | OAuth caveat |
 
 ## 7. 黑盒测试计划
 
@@ -329,43 +329,53 @@ OpenCode initialize 声明 MCP http/sse capability。`registerMcpServers` 会把
 | JSON-RPC response ordering | observed | negative test 中 id=2 response 早于 id=1 initialize response | adapter must correlate by id, not order |
 | fork session | pass | `session/fork` returns new `ses_...` and configOptions; list includes original and fork | fork smoke supported |
 | close session | caveat | `session/close` returns `{}` but subsequent `session/list` still includes closed session | close is not persistent delete |
+| fake OpenAI-compatible provider | pass | `OPENCODE_CONFIG_CONTENT.provider.fake` + `@ai-sdk/openai-compatible` 调用本地 `/v1/chat/completions`；请求含 `Authorization: Bearer secret-fake-key`、`stream: true`、主请求含 tools | deterministic provider harness supported |
+| title generation side request | observed | 每次 prompt 通常先发一次不带 tools 的 title/small-model 请求，再发主请求 | fixture 必须按 request body 区分 title vs main |
+| assistant text delta | pass | 主请求 SSE `content: "Hello "` + `"ACP"` -> ACP `agent_message_chunk` 两段；prompt response `stopReason: end_turn` 且无 final text | adapter must buffer chunks |
+| reasoning delta | pass | SSE `reasoning_content` -> ACP `agent_thought_chunk`；prompt response usage 含 `thoughtTokens` | reasoning supported |
+| prompt response usage | pass | provider usage `prompt_tokens=17, completion_tokens=7, cached_tokens=5, reasoning_tokens=2` -> response usage `inputTokens=12, outputTokens=5, totalTokens=24, thoughtTokens=2, cachedReadTokens=5` | OpenCode usage is normalized, not raw provider totals |
+| `usage_update` | pass | prompt 后 ACP 推送 `usage_update used=17, size=8000, cost.amount=0` | this is context/cumulative style, not exact per-turn response usage |
+| load replay after prompt | pass with caveat | `session/load` replay emits `user_message_chunk`、`agent_thought_chunk`、`agent_message_chunk` as whole content (`thought-delta`, `Hello ACP`) | live delta and replay chunk shapes differ; de-dupe by message/part lifecycle |
+| read tool lifecycle | pass | provider calls `read` -> ACP `tool_call pending`、`tool_call_update in_progress` with `locations:[README.md]`、`completed` with preview/rawOutput | read mapping supported |
+| bash tool lifecycle | pass | provider calls `bash` -> permission request, `in_progress` with cwd, running output snapshot `probe-bash`, `completed` with exit metadata | execute mapping supported |
+| edit permission + file diff | pass | provider calls `edit`; ACP sends `session/request_permission` with diff content and options; then `fs/write_text_file`; final tool update includes diff/rawOutput | edit mapping and proposed-write bridge supported |
+| permission allow always | pass | client selected `always`; OpenCode continued edit and final prompt `end_turn` | adapter can expose persistent allow intent, but persistence semantics belong to OpenCode |
+| permission reject | pass | client selected `reject`; tool update becomes `failed` with error text, prompt still returns `end_turn` | rejection is a failed tool, not a failed turn |
+| tool execution error | pass | `read missing.txt` -> `tool_call_update failed` with raw error, prompt still returns `end_turn` after model handles tool result | tool errors are item-level |
+| cancel running prompt | pass | hanging provider stream after partial text; `session/cancel` -> prompt response `stopReason: cancelled` with zero usage | cancellation supported; late partial chunks may already be emitted |
+| local MCP injection | pass | `session/new` with local stdio MCP server; server received `tools/list` and `tools/call`; provider tools include `fixture_echo`; ACP emits MCP tool pending/in_progress/completed | ACP mcpServers -> OpenCode MCP tool path supported |
+| MCP failed registration | observed | bad MCP fixture import caused `server unavailable` and no provider tool; model calling unavailable tool became OpenCode `invalid` tool result | wrapper should surface MCP status diagnostics if available |
+| `/review` command | pass with caveat | `available_commands_update` exposes `review`; `/review` logs `command=review`, starts task/sub-session, model then summarizes `<task_result>` | supported but not equivalent to Codex/Claude native review surfaces |
+| `/compact` command | pass with caveat | `/compact` calls compaction prompt (`agent=compaction`); prompt response `end_turn` without usage; emitted text can come from compaction/title path | supported, but lifecycle differs from normal prompt |
+| unsupported slash commands | pass negative | `/patch`、`/auto-continue`、`/auto-whip`、`/sendfile` produce no provider call, only empty `end_turn` and available commands update | adapter should pre-filter/diagnose unsupported product commands |
 
-仍未验证：
+未完全覆盖但不阻塞接入的风险：
 
-- prompt stream、tool lifecycle、permission request、usage。
-- load replay and prompt history after restart。
-- missing session / backend service failures need product-specific diagnostics because OpenCode may return coarse `-32603`。
-- native runtime status has `session.status` idle/busy/retry, but ACP consumes idle internally and does not forward full runtime status to client.
-- MCP server injection 和 MCP OAuth。
-- OAuth refresh 是否写全局 auth。
-- config overlay 对 nested provider/baseURL/API key/instructions/permission 的精确优先级。
-- `OPENCODE_CONFIG_DIR` 是否替换 global path。
+- MCP OAuth / remote OAuth：源码显示会使用 `mcp-auth.json` 和 OAuth flow；默认结论是不能承诺 profile-level 完全隔离，先标 unsupported/unknown。
+- OAuth refresh / managed account：`OPENCODE_AUTH_CONTENT` 只证明 API key 注入不落盘，不代表 OAuth token 更新不写全局状态。
+- native runtime status：OpenCode 内部有 `session.status` idle/busy/retry，但 ACP bridge 只用 idle 解 `runUntilIdle`，不向客户端转发完整 busy/retry 状态。
+- persistent delete：`session/close` 不是删除历史 session，不能映射成我们的删除语义。
+- plan snapshot：`mode=plan` 只是 OpenCode mode/agent，不能还原 Codex/Claude 风格结构化 Plan。
+- sandbox：未发现 OpenCode profile 级 sandbox 配置；只能表达 permission/external_directory 层面的近似约束。
 
-## 9. 后续黑盒测试批次
+## 9. Mapping 结论
 
-第一批 raw-to-canonical fixture：
+raw-to-canonical adapter 需要按以下规则实现：
 
-1. assistant text delta + prompt response stopReason。
-   - prompt response 没有 final text；adapter 必须缓冲 chunks，并用 prompt response / idle / message fetch 关闭 item。
-   - `messageId` 可能是 OpenCode 自有 `msg_...` 形态，不能假设为 UUID。
-2. reasoning delta。
-3. bash tool pending/running/completed/error。
-4. read/edit/write/file diff。
-5. webfetch/websearch/grep/glob/task。
-6. permission asked allow once/always/reject。
-7. usage update。
-8. model/effort/mode set success/fail。
-9. available commands update。
-10. malformed/unknown ACP update。
-11. JSON-RPC id、message id、tool call id、permission id correlation，禁止混用成 canonical `TurnID` / `RequestID`。
-
-第二批产品命令：
-
-1. `/compact`。
-2. `/review`，若 OpenCode command list 没有等价命令则 explicit unsupported。
-3. `/patch` / turn patch rollback explicit unsupported unless raw evidence exists。
-4. `/sendfile` local image/text file。
-5. MCP OAuth unknown path。
+1. JSON-RPC response 必须按 id 关联，不能按 stdout 顺序。
+2. ACP `session/update` 中 `sessionUpdate` 是主类型判别：
+   - `agent_message_chunk` -> assistant text delta。
+   - `agent_thought_chunk` -> reasoning/thought delta。
+   - `user_message_chunk` -> load replay/hydration 的 user content。
+   - `tool_call` -> tool item start，状态 pending。
+   - `tool_call_update` -> tool item state transition，状态 `in_progress` / `completed` / `failed`。
+   - `usage_update` -> context/cumulative usage meter，不等价于 prompt response per-turn usage。
+   - `available_commands_update` -> command catalog refresh。
+3. prompt response 不带 final assistant text；必须由 streamed chunks 组装文本，并以 prompt response、idle 语义或 message fetch 作为 turn close 信号。
+4. live stream 与 `session/load` replay 形态不同：live 是 delta，load replay 是聚合 content chunk；adapter 要基于 hydration 状态避免重复追加。
+5. tool call id、OpenCode message id、JSON-RPC id、permission request id 是不同 id 域，不能复用为 canonical turn/request id。
+6. permission request 是 OpenCode 主动调客户端的 `session/request_permission`；reject/failure 归为 tool failed，而不是 backend turn failed。
+7. `/review`、`/compact` 是 OpenCode 产品语义，不能假设和现有 Codex/Claude 命令同构；未知 slash 命令必须由我们侧提前拦截并给 explicit unsupported。
 
 ## 10. Existing Specialization Audit
 
@@ -377,16 +387,16 @@ OpenCode initialize 声明 MCP http/sse capability。`registerMcpServers` 会把
 | Claude local session store | different | 使用 ACP list/load/resume + OpenCode server session store |
 | Codex SQLite thread catalog | different | 不读 OpenCode DB unless later needed |
 | permission/access projection | best_effort | mapping to OpenCode permission + ACP request |
-| plan semantics | unknown | 测 mode/plan/tool/request |
-| tool taxonomy | supported source | 建 OpenCode taxonomy matrix |
-| reasoning/final reconciliation | supported source but risky | delta/replay/final de-dupe fixture |
-| request bridge | supported source | Feishu request round-trip fixture |
+| plan semantics | weak mapping | mode=plan supported, no structured plan snapshot |
+| tool taxonomy | supported with approximation | OpenCode taxonomy matrix + `other` fallback |
+| reasoning/final reconciliation | supported but nontrivial | live delta vs replay aggregate de-dupe |
+| request bridge | supported | permission request / fs write request 已验证 |
 | runtime config observation | partial | ACP configOptions + our launch contract |
-| workspace profile snapshots | no native | 我们侧 snapshot 或 unsupported |
-| child restart restore | unknown | ACP process restart restore fixture |
-| review/compact/turn patch | compact source supported; review/patch unknown | command compatibility tests |
+| workspace profile snapshots | no native | 我们侧 snapshot/compiler |
+| child restart restore | supported | ACP process restart list/resume 通过 |
+| review/compact/turn patch | review/compact supported; patch unsupported | command compatibility documented |
 | todo / plan / delegated task | OpenCode has native todo, plan file tool, task sub-session, but ACP projects these mostly as tool updates | best-effort taxonomy, no synthetic canonical plan snapshot |
-| MCP publication/OAuth | publication source supported; OAuth unknown | black-box |
+| MCP publication/OAuth | local publication supported; OAuth unknown | local stdio MCP 通过，OAuth explicit unknown |
 | admin/config APIs | no native profile API | 我们侧 CRUD + compiler |
 | upgrade lifecycle | optional | 默认 unsupported/hidden |
 
@@ -413,18 +423,17 @@ OpenCode initialize 声明 MCP http/sse capability。`registerMcpServers` 会把
 - 覆盖 `4.17` security/isolation：临时 XDG、secret redaction、auth no-write 单列。
 - 覆盖 `4.18` existing specialization audit：已有初版对应表。
 
-缺口：
+最终缺口：
 
-- 还没有真实 binary raw frame。
-- 还没有验证 OpenCode config overlay 的实际优先级。
-- 还没有确认无 auth 场景能否完整跑到 config/model/session 层。
-- 还没有设计我们侧代码落点；这要等黑盒测试结果。
+- 还没有设计我们侧代码落点；这属于下一阶段 OpenCode adapter/compiler 详细设计。
+- MCP OAuth、provider OAuth refresh、managed account 写入路径仍需单独设计为 unsupported/unknown，不能混入 ACP 抽象。
+- 无 auth 场景能进入 config/model/session 层，但完整 prompt 仍取决于 provider；实现时应把 auth-required 转成产品可读诊断。
 
 ## 12. 下一步执行
 
-1. 扩展 ACP JSON-RPC harness，捕获 prompt/session update raw frames。
-2. 跑 permission/tool/usage/product command 黑盒测试。
-3. 跑 process restart resume 和 MCP injection。
-4. 固化 raw frames 到 `tmp` 证据文件，再挑选可进入 repo 的 fixture。
-5. 根据真实结果继续更新本文能力矩阵。
-6. 再进入我们侧 adapter/compiler 详细设计。
+1. 新增 OpenCode backend identity、binary resolver 和 launch contract。
+2. 设计 OpenCode profile schema/compiler：默认 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，可选临时 XDG，禁止默认 `OPENCODE_CONFIG_DIR`。
+3. 实现 ACP protocol adapter：JSON-RPC id correlation、session/update dispatcher、stream buffer、load replay hydration、tool/permission/usage mapping。
+4. 实现 explicit unsupported diagnostics：sandbox、structured plan snapshot、persistent delete、MCP OAuth、unknown slash commands、turn patch。
+5. 将本轮 `/tmp/opencode-acp-*.json` 证据中挑选脱敏 raw fixture 进入测试目录，建立 OpenCode adapter golden tests。
+6. 再进入 OpenCode 详细设计与代码实现。
