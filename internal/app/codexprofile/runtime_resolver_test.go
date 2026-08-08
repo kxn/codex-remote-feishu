@@ -137,7 +137,7 @@ func TestRuntimeResolverProjectsDeepSeekManagedModelCatalog(t *testing.T) {
 	}
 }
 
-func TestRuntimeResolverProjectsGenericSubagentModelManagedCatalog(t *testing.T) {
+func TestRuntimeResolverProjectsGenericSubagentModelWithoutManagedCatalog(t *testing.T) {
 	profile := config.CodexAPIProfileSecretConfig{
 		ID:                   "cp_api_sub",
 		Revision:             1,
@@ -169,21 +169,11 @@ func TestRuntimeResolverProjectsGenericSubagentModelManagedCatalog(t *testing.T)
 	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("agents.default_subagent_model", profile.SubagentModel)) {
 		t.Fatalf("launch overrides missing subagent model: %#v", projection.Launch.CLIOverrides)
 	}
-	catalogPath := filepath.Join(managedDir, "managed-models-v1.json")
-	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
-		t.Fatalf("launch overrides missing generic managed catalog path: %#v", projection.Launch.CLIOverrides)
+	if containsCLIOverrideKey(projection.Launch.CLIOverrides, "model_catalog_json") {
+		t.Fatalf("generic GPT subagent must not inject managed catalog: %#v", projection.Launch.CLIOverrides)
 	}
-	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
-		t.Fatalf("expected one generic managed catalog file, got %#v", projection.Launch.ManagedFiles)
-	}
-	content := string(projection.Launch.ManagedFiles[0].Content)
-	for _, want := range []string{`"slug":"gpt-5.6"`, `"slug":"gpt-5.6-mini"`, `"slug":"gpt-5.6-nano"`} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("generic managed catalog missing %q: %s", want, content)
-		}
-	}
-	if strings.Contains(content, profile.APIKey) {
-		t.Fatal("generic managed catalog leaked API key")
+	if len(projection.Launch.ManagedFiles) != 0 {
+		t.Fatalf("generic GPT subagent must not generate managed files: %#v", projection.Launch.ManagedFiles)
 	}
 }
 
@@ -224,7 +214,7 @@ func TestRuntimeResolverProjectsDeepSeekSubagentModelOverride(t *testing.T) {
 	}
 }
 
-func TestRuntimeResolverProjectsInstructionManagedCatalog(t *testing.T) {
+func TestRuntimeResolverProjectsInstructionThreadPolicyWithoutManagedCatalog(t *testing.T) {
 	profile := config.CodexAPIProfileSecretConfig{
 		ID:                   "cp_api_instruction",
 		Revision:             1,
@@ -253,24 +243,60 @@ func TestRuntimeResolverProjectsInstructionManagedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	catalogPath := filepath.Join(managedDir, "managed-models-v1.json")
-	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
-		t.Fatalf("launch overrides missing instruction managed catalog path: %#v", projection.Launch.CLIOverrides)
+	if projection.Thread.DeveloperInstruction != profile.Instruction {
+		t.Fatalf("thread policy developer instruction = %q, want %q", projection.Thread.DeveloperInstruction, profile.Instruction)
 	}
-	if containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("agents.default_subagent_model", "")) {
+	if containsCLIOverrideKey(projection.Launch.CLIOverrides, "model_catalog_json") {
+		t.Fatalf("generic GPT instruction must not inject managed catalog: %#v", projection.Launch.CLIOverrides)
+	}
+	if containsCLIOverrideKey(projection.Launch.CLIOverrides, "agents.default_subagent_model") {
 		t.Fatalf("instruction alone must not set subagent model: %#v", projection.Launch.CLIOverrides)
 	}
-	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
-		t.Fatalf("expected one instruction managed catalog file, got %#v", projection.Launch.ManagedFiles)
+	if len(projection.Launch.ManagedFiles) != 0 {
+		t.Fatalf("generic GPT instruction must not generate managed files: %#v", projection.Launch.ManagedFiles)
 	}
-	content := string(projection.Launch.ManagedFiles[0].Content)
-	for _, want := range []string{`"slug":"gpt-5.6"`, `"slug":"gpt-5.6-mini"`, "你是一个严谨的工程师。"} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("instruction managed catalog missing %q: %s", want, content)
-		}
+}
+
+func TestRuntimeResolverProjectsGenericSubagentAndInstructionAsFirstClassOverrides(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_api_sub_instruction",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "Team API",
+		BaseURL:              "https://proxy.example/v1",
+		APIKey:               "secret",
+		Model:                "gpt-5.6",
+		ReviewModel:          "gpt-5.6-mini",
+		SubagentModel:        "gpt-5.6-nano",
+		Instruction:          "你是一个严谨的工程师。",
+		ReasoningEffort:      "high",
 	}
-	if strings.Contains(content, profile.APIKey) {
-		t.Fatal("instruction managed catalog leaked API key")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: filepath.Join(t.TempDir(), "catalogs"),
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("agents.default_subagent_model", profile.SubagentModel)) {
+		t.Fatalf("launch overrides missing subagent model: %#v", projection.Launch.CLIOverrides)
+	}
+	if projection.Thread.DeveloperInstruction != profile.Instruction {
+		t.Fatalf("thread policy developer instruction = %q, want %q", projection.Thread.DeveloperInstruction, profile.Instruction)
+	}
+	if containsCLIOverrideKey(projection.Launch.CLIOverrides, "model_catalog_json") {
+		t.Fatalf("generic GPT subagent+instruction must not inject managed catalog: %#v", projection.Launch.CLIOverrides)
+	}
+	if len(projection.Launch.ManagedFiles) != 0 {
+		t.Fatalf("generic GPT subagent+instruction must not generate managed files: %#v", projection.Launch.ManagedFiles)
 	}
 }
 
@@ -309,15 +335,21 @@ func TestRuntimeResolverProjectsDeepSeekInstructionManagedCatalog(t *testing.T) 
 	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
 		t.Fatalf("expected one DeepSeek instruction catalog file, got %#v", projection.Launch.ManagedFiles)
 	}
+	if projection.Thread.DeveloperInstruction != profile.Instruction {
+		t.Fatalf("thread policy developer instruction = %q, want %q", projection.Thread.DeveloperInstruction, profile.Instruction)
+	}
 	content := string(projection.Launch.ManagedFiles[0].Content)
-	for _, want := range []string{"deepseek-v4-flash", "deepseek-v4-pro", "你是一个乐于助人的助手。"} {
+	for _, want := range []string{"deepseek-v4-flash", "deepseek-v4-pro"} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("DeepSeek instruction catalog missing %q: %s", want, content)
 		}
 	}
+	if strings.Contains(content, profile.Instruction) {
+		t.Fatalf("DeepSeek catalog must not carry profile instruction: %s", content)
+	}
 }
 
-func TestRuntimeResolverRejectsInstructionWithoutManagedModelCatalogDir(t *testing.T) {
+func TestRuntimeResolverAllowsGenericInstructionWithoutManagedModelCatalogDir(t *testing.T) {
 	profile := config.CodexAPIProfileSecretConfig{
 		ID:                   "cp_api_instruction",
 		Revision:             1,
@@ -339,9 +371,15 @@ func TestRuntimeResolverRejectsInstructionWithoutManagedModelCatalogDir(t *testi
 		CapabilitySet: CodexProfileCapabilitySetV1,
 	}
 
-	_, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
-	if got := RuntimeErrorCode(err); got != ErrorManagedModelCatalogMissing {
-		t.Fatalf("error code = %q, want %q (err=%v)", got, ErrorManagedModelCatalogMissing, err)
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if projection.Thread.DeveloperInstruction != profile.Instruction {
+		t.Fatalf("thread policy developer instruction = %q, want %q", projection.Thread.DeveloperInstruction, profile.Instruction)
+	}
+	if len(projection.Launch.ManagedFiles) != 0 || containsCLIOverrideKey(projection.Launch.CLIOverrides, "model_catalog_json") {
+		t.Fatalf("generic instruction must not require or inject managed catalog: %#v %#v", projection.Launch.CLIOverrides, projection.Launch.ManagedFiles)
 	}
 }
 
@@ -388,6 +426,16 @@ func containsCLIOverride(args []string, override string) bool {
 	return false
 }
 
+func containsCLIOverrideKey(args []string, key string) bool {
+	prefix := strings.TrimSpace(key) + "="
+	for index := 0; index+1 < len(args); index++ {
+		if args[index] == "-c" && strings.HasPrefix(args[index+1], prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestRuntimeResolverRejectsDeepSeekWithoutManagedModelCatalogDir(t *testing.T) {
 	profile := config.CodexAPIProfileSecretConfig{
 		ID:                   "cp_deepseek",
@@ -415,7 +463,7 @@ func TestRuntimeResolverRejectsDeepSeekWithoutManagedModelCatalogDir(t *testing.
 	}
 }
 
-func TestRuntimeResolverRejectsGenericSubagentWithoutManagedModelCatalogDir(t *testing.T) {
+func TestRuntimeResolverAllowsGenericSubagentWithoutManagedModelCatalogDir(t *testing.T) {
 	profile := config.CodexAPIProfileSecretConfig{
 		ID:                   "cp_api_sub",
 		Revision:             1,
@@ -437,9 +485,15 @@ func TestRuntimeResolverRejectsGenericSubagentWithoutManagedModelCatalogDir(t *t
 		CapabilitySet: CodexProfileCapabilitySetV1,
 	}
 
-	_, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
-	if got := RuntimeErrorCode(err); got != ErrorManagedModelCatalogMissing {
-		t.Fatalf("error code = %q, want %q (err=%v)", got, ErrorManagedModelCatalogMissing, err)
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("agents.default_subagent_model", profile.SubagentModel)) {
+		t.Fatalf("launch overrides missing subagent model: %#v", projection.Launch.CLIOverrides)
+	}
+	if len(projection.Launch.ManagedFiles) != 0 || containsCLIOverrideKey(projection.Launch.CLIOverrides, "model_catalog_json") {
+		t.Fatalf("generic subagent must not require or inject managed catalog: %#v %#v", projection.Launch.CLIOverrides, projection.Launch.ManagedFiles)
 	}
 }
 
@@ -889,11 +943,17 @@ func TestRuntimeResolverProjectsMimoInstructionManagedCatalog(t *testing.T) {
 	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
 		t.Fatalf("expected one MiMo instruction catalog file, got %#v", projection.Launch.ManagedFiles)
 	}
+	if projection.Thread.DeveloperInstruction != profile.Instruction {
+		t.Fatalf("thread policy developer instruction = %q, want %q", projection.Thread.DeveloperInstruction, profile.Instruction)
+	}
 	content := string(projection.Launch.ManagedFiles[0].Content)
-	for _, want := range []string{`"slug":"mimo-v2.5"`, "你是一个乐于助人的助手。"} {
+	for _, want := range []string{`"slug": "mimo-v2.5"`} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("MiMo instruction catalog missing %q: %s", want, content)
 		}
+	}
+	if strings.Contains(content, profile.Instruction) {
+		t.Fatalf("MiMo catalog must not carry profile instruction: %s", content)
 	}
 	if strings.Contains(content, profile.APIKey) {
 		t.Fatal("MiMo instruction catalog leaked API key")

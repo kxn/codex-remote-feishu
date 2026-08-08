@@ -1,8 +1,8 @@
 # Codex / Claude Profile 子代理模型配置设计
 
 > Type: `inprogress`
-> Updated: `2026-08-06`
-> Summary: 在 Codex / Claude profile 配置中增加可选“子代理模型”字段，让主模型开子代理时使用更便宜的弱模型。Codex 侧把该模型并入 daemon 管理的 models.json 并注入 `agents.default_subagent_model`；Claude 侧注入 `CLAUDE_CODE_SUBAGENT_MODEL`。UI 沿用现有 `form-grid` / `field` 两列排版，不新增样式。对应 issue #822。
+> Updated: `2026-08-08`
+> Summary: 明确 Codex 子代理模型优先使用 `agents.default_subagent_model` first-class override；只有 DeepSeek/MiMo 等 catalog-backed provider 注入 provider-owned models.json，普通 GPT/OpenAI-like profile 不再生成 generic managed catalog。对应 issue #822/#839。
 
 ## 1. 背景
 
@@ -17,7 +17,7 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
 
 - Claude Code 原生支持子代理模型：agent 定义 frontmatter、Task 工具参数、全局 `CLAUDE_CODE_SUBAGENT_MODEL` 环境变量，默认 `inherit`（继承主模型）。子代理模型不需要模型目录。
 - Codex 通过 `agents.default_subagent_model` 配置子代理默认模型；spawn_agent 要求模型必须存在于当前模型目录（models.json）中，否则报 `Unknown model`。
-- 本仓库已有 DeepSeek profile 的 managed models.json 注入机制（`model_catalog_json`），可泛化复用。
+- 本仓库已有 DeepSeek / MiMo 这类 catalog-backed provider 的 managed models.json 注入机制（`model_catalog_json`），但该 catalog 是完整目录接管，不是字段级 overlay；普通 GPT/OpenAI-like profile 不应为了子代理模型伪造 generic catalog。
 
 ## 2. 目标与非目标
 
@@ -25,7 +25,7 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
 
 1. Codex / Claude profile 各自增加一个可选“子代理模型”输入框。
 2. 后端按各端语义生效：
-   - Codex：启动材料注入 `agents.default_subagent_model=<model>`，并把子代理模型（连同主模型、审阅模型）并入 daemon 管理的 models.json。
+   - Codex：启动材料注入 `agents.default_subagent_model=<model>`；只有当前 profile 命中 DeepSeek / MiMo 等 catalog-backed provider 时，才把子代理模型（连同主模型、审阅模型）并入该 provider-owned models.json。
    - Claude：启动环境注入 `CLAUDE_CODE_SUBAGENT_MODEL=<model>`。
 3. 留空时行为与现状完全一致，不注入任何新配置。
 4. UI 沿用现有 `form-grid` / `field` 样式体系，不新增样式类。
@@ -43,8 +43,8 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
 
 - `config.CodexAPIProfileSecretConfig` 持久化字段：`Model` / `ReviewModel` / `ReasoningEffort`（`internal/config/codex_profiles.go`）。
 - admin API：`codexProfileWriteRequest`、`codexAPIProfileInputFromRequest`、`codexAPIProfileSummary`（`internal/app/daemon/admin_codex_profiles.go`）。
-- 启动材料：`RuntimeResolver.resolveAPI` 生成 `SecretLaunchMaterial`，其中 DeepSeek profile 会注入 `model_catalog_json` 与 managed models.json 文件（`internal/app/codexprofile/runtime_resolver.go`）。
-- managed 目录：`codexcatalog.ManagedModelCatalogDir(stateDir)` + 内嵌 `deepseek_models.json`（`internal/codexcatalog/deepseek.go`）。
+- 启动材料：`RuntimeResolver.resolveAPI` 生成 `SecretLaunchMaterial`，其中 DeepSeek / MiMo 等 catalog-backed profile 会注入 `model_catalog_json` 与 provider-owned managed models.json 文件（`internal/app/codexprofile/runtime_resolver.go`）。
+- managed 目录：`codexcatalog.ManagedModelCatalogDir(stateDir)` + 内嵌 `deepseek_models.json` / `mimo_models.json`（`internal/codexcatalog`）。
 - 目录生成文件写入：`EnsureLaunchManagedFiles`（`internal/app/codexprofile/runtime_resolver.go`）。
 - Codex 端配置键：`agents.default_subagent_model`（codex-rs `config_toml.rs`）。
 
@@ -90,12 +90,12 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
 
 - `internal/app/codexprofile/runtime_resolver.go`：
   - `resolveAPI`：当 `profile.SubagentModel` 非空时追加 CLI override `agents.default_subagent_model=<model>`。
-  - 当 `profile.SubagentModel` 非空且非 DeepSeek 时，追加 `model_catalog_json` 指向 managed 目录文件，并生成包含主模型/审阅模型/子代理模型的目录 JSON。
-  - DeepSeek profile 保持现有目录逻辑（内嵌目录已含 deepseek-v4-flash / deepseek-v4-pro），只追加子代理 override；若子代理模型不在内嵌目录内，按 4.4 的通用生成逻辑补充。
-  - `ManagedModelCatalogDir` 缺失时复用 `ErrorManagedModelCatalogMissing`。
+  - `codexcatalog.IdentifyEmbeddedCatalog` 命中 DeepSeek / MiMo 等 catalog-backed provider 时，追加 `model_catalog_json` 指向该 provider 的 managed 目录文件；若配置了子代理模型，目录生成只在 provider catalog 模板内补齐主模型/审阅模型/子代理模型。
+  - 非 catalog-backed 的 GPT/OpenAI-like API profile 不生成 `managed-models-v1.json`，不接管 Codex 默认模型元数据；若 Codex 当前模型目录找不到该子代理模型，保留 Codex 原生 `Unknown model` 行为。
+  - `ManagedModelCatalogDir` 缺失只在 catalog-backed provider 需要注入目录时复用 `ErrorManagedModelCatalogMissing`。
 - `internal/codexcatalog/deepseek.go`（或新文件 `internal/codexcatalog/build.go`）：
-  - 新增通用 `BuildManagedModelCatalog(models []string) []byte`：优先复用内嵌 DeepSeek 条目；其余模型用保守的 fallback 元数据生成条目（text-only、默认 reasoning、合理 context window、`multi_agent_version` 等）。
-  - 新增文件名常量（例如 `managed-models-v1.json`），与 DeepSeek 文件名分开，避免两个 profile 写同一文件。
+  - provider catalog builder 只服务已识别 provider；不要再新增/使用 generic GPT fallback template 或 `managed-models-v1.json` 来补未知模型。
+  - provider 文件名与目录内容由各 provider owner 维护，例如 `deepseek-models-v1.json` / `mimo-models-v1.json`。
 - `internal/app/daemon/app_headless_codex_provider.go`：已统一走 `EnsureLaunchManagedFiles` + `ApplyLaunchMaterial`，无需改结构；新增字段自动随 `LaunchManagedFile` 写入。
 
 ### 4.4 Web UI
@@ -117,8 +117,8 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
 
 - `internal/config/codex_profiles_test.go`：create/update 持久化、无变化比较、normalize。
 - `internal/config/claude_profiles_test.go`、`claude_runtime_settings_test.go`：新字段 normalize、env 映射、launch env 清理。
-- `internal/app/codexprofile/runtime_resolver_test.go`：子代理 override 注入、非 DeepSeek managed catalog 生成、DeepSeek 分支保持、目录缺失报错。
-- `internal/app/daemon/app_headless_codex_provider_test.go`：启动 args 包含 `agents.default_subagent_model` 与 `model_catalog_json`。
+- `internal/app/codexprofile/runtime_resolver_test.go`：子代理 override 注入、非 catalog-backed profile 不生成 managed catalog、DeepSeek/MiMo catalog-backed 分支保持、catalog-backed provider 目录缺失报错。
+- `internal/app/daemon/app_headless_codex_provider_test.go`：启动 args 包含 `agents.default_subagent_model`；仅 catalog-backed provider 额外包含 `model_catalog_json`。
 - `internal/app/daemon/admin_codex_profiles_test.go`、`admin_claude_profiles_test.go`：API create/update/read 新字段；legacy API 更新保留新字段。
 - `internal/app/daemon/profile_catalog_migration_test.go`：旧配置无字段 → 迁移后为空，凭据不受影响。
 
@@ -156,9 +156,8 @@ Claude:
 - `subagentModel` 为空：不注入 `agents.default_subagent_model`，不追加 managed models.json，保持现状。
 - `subagentModel` 非空：
   - CLI override：`-c agents.default_subagent_model="<model>"`。
-  - managed models.json 必须包含该模型；否则 spawn_agent 会报 `Unknown model`。
-  - 非 DeepSeek profile 的模型目录由 daemon 生成，包含主模型、审阅模型（若配置）、子代理模型；该 profile 的 Codex `/model` 可见模型以目录为准。
-  - DeepSeek profile 继续使用内嵌目录；若子代理模型不在内嵌目录，合并通用生成条目。
+  - 非 catalog-backed GPT/OpenAI-like profile 不生成 managed models.json；Codex 继续使用自身 bundled / fallback 模型目录。若 spawn_agent 找不到子代理模型，报错由 Codex 原生 `Unknown model ... Available models ...` 承担。
+  - DeepSeek / MiMo 等 catalog-backed profile 继续使用 provider-owned 内嵌目录；若子代理模型不在内嵌目录，按该 provider catalog 模板补充条目。
 
 ### Claude
 
@@ -167,14 +166,14 @@ Claude:
 
 ## 7. 错误处理与兼容
 
-- managed 目录缺失：复用 `ErrorManagedModelCatalogMissing`，headless 启动路径已有对应错误映射。
+- catalog-backed provider 需要写 managed 目录但目录缺失：复用 `ErrorManagedModelCatalogMissing`，headless 启动路径已有对应错误映射。非 catalog-backed profile 不因子代理模型要求 managed 目录。
 - 旧配置/历史 revision 无 `subagentModel` 字段：按空处理，不触发迁移写入。
 - 配置迁移只读不写；不得改变既有凭据、revision、connection generation。
 - legacy `/api/admin/codex/providers` 更新继续保留 `subagentModel`。
 
 ## 8. 风险与取舍
 
-- 设置 Codex 子代理模型后，该 profile 的模型目录由 daemon 接管，`/model` 可选模型变为目录内容；这是让 spawn_agent 可用的必要代价。
-- 通用 managed models.json 使用 fallback 元数据（context window、reasoning levels、multi_agent_version），可能与真实模型能力不完全一致；以端点实际支持为准，避免声明过大的 context window。
+- 设置 Codex 子代理模型后，普通 GPT/OpenAI-like profile 只写 `agents.default_subagent_model`，不改变 `/model` 的动态目录来源和 Codex 默认 metadata。
+- DeepSeek / MiMo 等 catalog-backed provider 会继续由 daemon 注入 provider-owned catalog；该目录只声明 provider owner 明确维护或按 provider 模板补齐的模型能力。
 - 子代理模型与主模型可以相同；此时仍注入 override，语义等价于默认 inherit，但目录逻辑保持一致。
 - Claude 的 `CLAUDE_CODE_SUBAGENT_MODEL` 是全局 env，会同时影响所有子代理（无法按 agent 区分）；按 agent 区分留给未来需求。

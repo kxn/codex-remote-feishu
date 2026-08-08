@@ -240,35 +240,20 @@ func (r RuntimeResolver) resolveAPI(ref state.CodexAdmissionRef, preference stat
 		SecretChildEnv: []string{CodexProfileAPIKeyEnv + "=" + profile.APIKey},
 	}
 	subagentModel := strings.TrimSpace(profile.SubagentModel)
-	instruction := strings.TrimSpace(profile.Instruction)
 	if subagentModel != "" {
 		launch.CLIOverrides = append(launch.CLIOverrides, "-c", codexOverride("agents.default_subagent_model", subagentModel))
 	}
 	catalog, known := codexcatalog.IdentifyEmbeddedCatalog(profile.BaseURL, profile.Model)
-	if subagentModel != "" || known || instruction != "" {
+	if known {
 		var catalogPath string
 		var catalogJSON []byte
 		switch {
 		case known && subagentModel == "":
 			catalogPath = catalog.CatalogPath(r.ManagedModelCatalogDir)
-			if instruction != "" {
-				catalogJSON = codexcatalog.AppendCatalogInstruction(catalog.CatalogJSON(), instruction)
-			} else {
-				catalogJSON = catalog.CatalogJSON()
-			}
+			catalogJSON = catalog.CatalogJSON()
 		default:
-			template := codexcatalog.DeepSeekCatalog
-			if known {
-				catalogPath = catalog.CatalogPath(r.ManagedModelCatalogDir)
-				template = catalog
-			} else {
-				catalogPath = codexcatalog.ManagedModelCatalogPath(r.ManagedModelCatalogDir)
-			}
-			catalogJSON = codexcatalog.BuildEmbeddedModelCatalogWithInstruction(
-				template,
-				[]string{profile.Model, profile.ReviewModel, profile.SubagentModel},
-				instruction,
-			)
+			catalogPath = catalog.CatalogPath(r.ManagedModelCatalogDir)
+			catalogJSON = codexcatalog.BuildEmbeddedModelCatalog(catalog, []string{profile.Model, profile.ReviewModel, profile.SubagentModel})
 		}
 		if catalogPath == "" || len(catalogJSON) == 0 {
 			return RuntimeProjection{}, runtimeError(ErrorManagedModelCatalogMissing)
@@ -383,14 +368,15 @@ func explicitAPIThreadPolicy(profile config.CodexAPIProfileSecretConfig, prefere
 		reviewMode = state.CodexReviewModelExplicit
 	}
 	policy := state.CodexThreadPolicy{
-		ModelMode:          state.CodexThreadValueExplicit,
-		Model:              profile.Model,
-		ReviewModelMode:    reviewMode,
-		ReviewModel:        profile.ReviewModel,
-		ReasoningMode:      state.CodexThreadValueExplicit,
-		ReasoningEffort:    profile.ReasoningEffort,
-		ContextMode:        preference.Mode,
-		PreferenceRevision: preference.Revision,
+		ModelMode:            state.CodexThreadValueExplicit,
+		Model:                profile.Model,
+		ReviewModelMode:      reviewMode,
+		ReviewModel:          profile.ReviewModel,
+		ReasoningMode:        state.CodexThreadValueExplicit,
+		ReasoningEffort:      profile.ReasoningEffort,
+		DeveloperInstruction: strings.TrimSpace(profile.Instruction),
+		ContextMode:          preference.Mode,
+		PreferenceRevision:   preference.Revision,
 	}
 	applyContextPreference(&policy)
 	return policy

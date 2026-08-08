@@ -84,6 +84,7 @@ func CloneCodexThreadPolicy(value *CodexThreadPolicy) *CodexThreadPolicy {
 	clone.Model = strings.TrimSpace(clone.Model)
 	clone.ReviewModel = strings.TrimSpace(clone.ReviewModel)
 	clone.ReasoningEffort = strings.TrimSpace(clone.ReasoningEffort)
+	clone.DeveloperInstruction = strings.TrimSpace(clone.DeveloperInstruction)
 	return &clone
 }
 

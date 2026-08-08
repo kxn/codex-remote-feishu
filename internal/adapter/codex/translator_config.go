@@ -110,6 +110,11 @@ func applyCodexResumePolicyToThreadParams(params map[string]any, policy *agentpr
 	} else {
 		delete(configMap, "model_auto_compact_token_limit")
 	}
+	if policy.DeveloperInstruction != "" {
+		params["developerInstructions"] = policy.DeveloperInstruction
+	} else {
+		delete(params, "developerInstructions")
+	}
 	params["config"] = configMap
 }
 

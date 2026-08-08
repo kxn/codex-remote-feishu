@@ -31,6 +31,7 @@ type CodexResumePolicy struct {
 	ReviewModel          string          `json:"reviewModel,omitempty"`
 	ReasoningMode        string          `json:"reasoningMode,omitempty"`
 	ReasoningEffort      string          `json:"reasoningEffort,omitempty"`
+	DeveloperInstruction string          `json:"developerInstruction,omitempty"`
 	ContextMode          string          `json:"contextMode,omitempty"`
 	ContextWindow        int64           `json:"contextWindow,omitempty"`
 	AutoCompactLimit     int64           `json:"autoCompactLimit,omitempty"`
@@ -68,6 +69,7 @@ func NormalizeCodexResumePolicy(policy *CodexResumePolicy) *CodexResumePolicy {
 	clone.ReviewModel = strings.TrimSpace(clone.ReviewModel)
 	clone.ReasoningMode = strings.TrimSpace(clone.ReasoningMode)
 	clone.ReasoningEffort = strings.TrimSpace(clone.ReasoningEffort)
+	clone.DeveloperInstruction = strings.TrimSpace(clone.DeveloperInstruction)
 	clone.ContextMode = strings.TrimSpace(clone.ContextMode)
 	switch clone.Mode {
 	case CodexResumeApplyTargetProfile, CodexResumePreserveThreadSettings:

@@ -25,17 +25,18 @@ func TestPromptDispatchProjectsFrozenCodexResumePolicy(t *testing.T) {
 			ModelProviderID:      "codex_remote_profile_team",
 		},
 		CodexThreadPolicy: &state.CodexThreadPolicy{
-			ThreadPolicyID:     "thread-policy-r7",
-			ModelMode:          state.CodexThreadValueExplicit,
-			Model:              "gpt-5.5",
-			ReviewModelMode:    state.CodexReviewModelExplicit,
-			ReviewModel:        "gpt-5.5-review",
-			ReasoningMode:      state.CodexThreadValueExplicit,
-			ReasoningEffort:    "high",
-			ContextMode:        state.CodexContextModeExtended,
-			ContextWindow:      1000000,
-			AutoCompactLimit:   900000,
-			PreferenceRevision: 7,
+			ThreadPolicyID:       "thread-policy-r7",
+			ModelMode:            state.CodexThreadValueExplicit,
+			Model:                "gpt-5.5",
+			ReviewModelMode:      state.CodexReviewModelExplicit,
+			ReviewModel:          "gpt-5.5-review",
+			ReasoningMode:        state.CodexThreadValueExplicit,
+			ReasoningEffort:      "high",
+			DeveloperInstruction: "Profile says: be precise.",
+			ContextMode:          state.CodexContextModeExtended,
+			ContextWindow:        1000000,
+			AutoCompactLimit:     900000,
+			PreferenceRevision:   7,
 		},
 	}
 
@@ -49,6 +50,7 @@ func TestPromptDispatchProjectsFrozenCodexResumePolicy(t *testing.T) {
 		command.CodexResume.ModelProviderID != "codex_remote_profile_team" ||
 		command.CodexResume.Model != "gpt-5.5" ||
 		command.CodexResume.ReasoningEffort != "high" ||
+		command.CodexResume.DeveloperInstruction != "Profile says: be precise." ||
 		command.CodexResume.ContextWindow != 1000000 {
 		t.Fatalf("unexpected codex resume policy: %#v", command.CodexResume)
 	}
@@ -90,15 +92,16 @@ func TestPromptDispatchPreservesObservedThreadSettingsForSameCodexConnection(t *
 			ModelProviderID:      "codex_remote_profile_team",
 		},
 		CodexThreadPolicy: &state.CodexThreadPolicy{
-			ThreadPolicyID:     "thread-policy-r7",
-			ModelMode:          state.CodexThreadValueExplicit,
-			Model:              "target-profile-model",
-			ReasoningMode:      state.CodexThreadValueExplicit,
-			ReasoningEffort:    "high",
-			ContextMode:        state.CodexContextModeExtended,
-			ContextWindow:      1000000,
-			AutoCompactLimit:   900000,
-			PreferenceRevision: 7,
+			ThreadPolicyID:       "thread-policy-r7",
+			ModelMode:            state.CodexThreadValueExplicit,
+			Model:                "target-profile-model",
+			ReasoningMode:        state.CodexThreadValueExplicit,
+			ReasoningEffort:      "high",
+			DeveloperInstruction: "Preserve profile instruction.",
+			ContextMode:          state.CodexContextModeExtended,
+			ContextWindow:        1000000,
+			AutoCompactLimit:     900000,
+			PreferenceRevision:   7,
 		},
 		FrozenDispatchPlan: agentproto.PromptDispatchPlan{
 			ExecutionThreadID: "thread-1",
@@ -118,6 +121,9 @@ func TestPromptDispatchPreservesObservedThreadSettingsForSameCodexConnection(t *
 		command.CodexResume.ReasoningMode != agentproto.CodexThreadValuePreservedObserved ||
 		command.CodexResume.ReasoningEffort != "medium" {
 		t.Fatalf("expected observed model/reasoning to be preserved, got %#v", command.CodexResume)
+	}
+	if command.CodexResume.DeveloperInstruction != "Preserve profile instruction." {
+		t.Fatalf("expected preserve policy to keep profile instruction, got %#v", command.CodexResume)
 	}
 	if command.CodexResume.ContextWindow != 1000000 || command.CodexResume.AutoCompactLimit != 900000 {
 		t.Fatalf("expected current profile context preference to remain requested, got %#v", command.CodexResume)
