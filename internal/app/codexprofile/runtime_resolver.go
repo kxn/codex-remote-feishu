@@ -279,6 +279,11 @@ func (r RuntimeResolver) resolveAPI(ref state.CodexAdmissionRef, preference stat
 			Content: catalogJSON,
 		})
 	}
+	// 临时兼容 MiMo 当前网关能力：关闭 Codex 的 web search runtime override。
+	// 等 MiMo 网关支持 web search 后删除这段定向 hack。
+	if known && catalog.Kind == codexcatalog.MimoCatalog.Kind {
+		launch.CLIOverrides = append(launch.CLIOverrides, "-c", codexOverride("web_search", "disabled"))
+	}
 	return RuntimeProjection{Connection: connection, Thread: thread, Launch: launch}, nil
 }
 

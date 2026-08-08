@@ -757,6 +757,9 @@ func TestRuntimeResolverProjectsMimoManagedModelCatalog(t *testing.T) {
 	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("model_catalog_json", catalogPath)) {
 		t.Fatalf("launch overrides missing MiMo catalog path: %#v", projection.Launch.CLIOverrides)
 	}
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("web_search", "disabled")) {
+		t.Fatalf("launch overrides missing MiMo web_search disable: %#v", projection.Launch.CLIOverrides)
+	}
 	if len(projection.Launch.ManagedFiles) != 1 || projection.Launch.ManagedFiles[0].Path != catalogPath {
 		t.Fatalf("expected one managed MiMo catalog file, got %#v", projection.Launch.ManagedFiles)
 	}
