@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 	"github.com/kxn/codex-remote-feishu/internal/externalaccess"
 )
 
@@ -41,12 +43,15 @@ type externalAccessShutdownPlan struct {
 	closeProvider bool
 }
 
+var externalAccessLocalLANHosts = listLocalLANHosts
+
 func externalAccessSettingsViewFromConfig(value config.ExternalAccessSettings) externalAccessSettingsView {
 	value = config.ResolveExternalAccessSettings(value)
 	lazyStart := value.Provider.LazyStart == nil || *value.Provider.LazyStart
 	return externalAccessSettingsView{
 		ListenHost:                 strings.TrimSpace(value.ListenHost),
 		ListenPort:                 value.ListenPort,
+		NetworkMode:                strings.TrimSpace(value.NetworkMode),
 		DefaultLinkTTL:             time.Duration(value.DefaultLinkTTLSeconds) * time.Second,
 		DefaultSessionTTL:          time.Duration(value.DefaultSessionTTLSeconds) * time.Second,
 		ProviderKind:               strings.TrimSpace(value.Provider.Kind),
@@ -68,7 +73,7 @@ func (a *App) SetExternalAccess(cfg ExternalAccessRuntimeConfig) {
 func newExternalAccessService(cfg ExternalAccessRuntimeConfig) *externalaccess.Service {
 	settings := cfg.Settings
 	var provider externalaccess.Provider
-	switch strings.ToLower(strings.TrimSpace(settings.ProviderKind)) {
+	switch externalAccessProviderKindForMode(settings) {
 	case "", "disabled":
 		provider = nil
 	case "trycloudflare":
@@ -167,6 +172,132 @@ func (a *App) ensureExternalAccessIssueTargetLocked() (*externalaccess.Service, 
 	}
 }
 
+func externalAccessListenHostForMode(settings externalAccessSettingsView) string {
+	mode := strings.ToLower(strings.TrimSpace(settings.NetworkMode))
+	if mode == "local" {
+		return ""
+	}
+	if strings.HasPrefix(mode, "lan:") {
+		return strings.TrimSpace(strings.TrimPrefix(mode, "lan:"))
+	}
+	host := strings.TrimSpace(settings.ListenHost)
+	if host == "" {
+		return "127.0.0.1"
+	}
+	return host
+}
+
+func externalAccessProviderKindForMode(settings externalAccessSettingsView) string {
+	mode := strings.ToLower(strings.TrimSpace(settings.NetworkMode))
+	switch {
+	case mode == "local", strings.HasPrefix(mode, "lan:"):
+		return "disabled"
+	default:
+		return strings.ToLower(strings.TrimSpace(settings.ProviderKind))
+	}
+}
+
+func (a *App) applyExternalAccessNetworkMode(mode string) error {
+	normalized, err := normalizeExternalAccessNetworkModeForRuntime(mode)
+	if err != nil {
+		return err
+	}
+	a.adminConfigMu.Lock()
+	defer a.adminConfigMu.Unlock()
+
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return err
+	}
+	updated := loaded.Config
+	updated.ExternalAccess.NetworkMode = normalized
+	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
+		return err
+	}
+	settings := externalAccessSettingsViewFromConfig(updated.ExternalAccess)
+
+	a.mu.Lock()
+	runtimeCfg := a.externalAccessRuntime
+	runtimeCfg.Settings = settings
+	plan := a.prepareExternalAccessShutdownLocked("network_mode_change", true)
+	a.externalAccessRuntime = runtimeCfg
+	a.externalAccess = newExternalAccessService(runtimeCfg)
+	a.mu.Unlock()
+
+	a.executeExternalAccessShutdownPlan(plan)
+	return nil
+}
+
+func (a *App) applyExternalAccessNetworkModeLocked(mode string) error {
+	a.mu.Unlock()
+	err := a.applyExternalAccessNetworkMode(mode)
+	a.mu.Lock()
+	return err
+}
+
+func normalizeExternalAccessNetworkModeForRuntime(mode string) (string, error) {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	switch {
+	case mode == "", mode == "wan":
+		return "wan", nil
+	case mode == "local":
+		return "local", nil
+	case mode == "lan":
+		hosts, err := externalAccessLocalLANHosts()
+		if err != nil {
+			return "", err
+		}
+		if len(hosts) == 0 {
+			return "", fmt.Errorf("no lan ip found")
+		}
+		return "lan:" + hosts[0], nil
+	case strings.HasPrefix(mode, "lan:"):
+		host := strings.TrimSpace(strings.TrimPrefix(mode, "lan:"))
+		if !netutil.IsLANHost(host) {
+			return "", fmt.Errorf("invalid lan ip: %s", host)
+		}
+		hosts, err := externalAccessLocalLANHosts()
+		if err != nil {
+			return "", err
+		}
+		for _, candidate := range hosts {
+			if candidate == host {
+				return "lan:" + host, nil
+			}
+		}
+		return "", fmt.Errorf("lan ip is not available on this machine: %s", host)
+	default:
+		return "", fmt.Errorf("unsupported network mode: %s", mode)
+	}
+}
+
+func listLocalLANHosts() ([]string, error) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil, err
+	}
+	var hosts []string
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			host, _, err := net.ParseCIDR(addr.String())
+			if err != nil {
+				continue
+			}
+			if netutil.IsLANHost(host.String()) {
+				hosts = append(hosts, host.String())
+			}
+		}
+	}
+	return hosts, nil
+}
+
 func (a *App) ensureExternalAccessListenerLocked() (string, error) {
 	if a.externalAccess == nil {
 		return "", externalaccess.ErrDisabled
@@ -175,9 +306,9 @@ func (a *App) ensureExternalAccessListenerLocked() (string, error) {
 		return "http://" + a.externalAccessListener.Addr().String(), nil
 	}
 	settings := a.externalAccessRuntime.Settings
-	host := strings.TrimSpace(settings.ListenHost)
+	host := externalAccessListenHostForMode(settings)
 	if host == "" {
-		host = "127.0.0.1"
+		return "", externalaccess.ErrDisabled
 	}
 	port := settings.ListenPort
 	if port < 0 {

@@ -11,14 +11,14 @@ func buildFeishuAdminRootPageViewForGOOS(inMenu bool, goos string) FeishuPageVie
 		Title: "管理页",
 		Entries: adminPageEntries(
 			adminPageEntrySpec{
-				Title:       "管理页外链",
-				Description: "生成可从外部访问的临时管理页链接。",
+				Title:       "管理页",
+				Description: "按当前网络模式生成管理页链接。",
 				CommandText: "/admin web",
 			},
 			adminPageEntrySpec{
-				Title:       "本地管理页",
-				Description: "显示当前机器可直接打开的本地管理页地址。",
-				CommandText: "/admin localweb",
+				Title:       "网络模式",
+				Description: "查看或切换 WAN、LAN、本机访问模式。",
+				CommandText: "/admin network",
 			},
 		),
 	}}

@@ -58,6 +58,7 @@ type ExternalAccessRuntimeConfig struct {
 type externalAccessSettingsView struct {
 	ListenHost                 string
 	ListenPort                 int
+	NetworkMode                string
 	DefaultLinkTTL             time.Duration
 	DefaultSessionTTL          time.Duration
 	ProviderKind               string

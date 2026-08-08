@@ -71,6 +71,10 @@ func (a *App) issuePreviewScopePrefix(ctx context.Context, req previewpkg.WebPre
 	now := time.Now().UTC()
 
 	a.mu.Lock()
+	if a.externalAccessNetworkModeLocked() == "local" {
+		a.mu.Unlock()
+		return a.localPreviewScopePrefix(scopePublicID)
+	}
 	if grant := a.webPreviewGrants[cacheKey]; grant != nil && strings.TrimSpace(grant.ExternalURL) != "" && grant.ExpiresAt.After(now) {
 		url := grant.ExternalURL
 		a.mu.Unlock()
@@ -136,6 +140,14 @@ func (a *App) previewScopeTarget(scopePublicID string) (string, string, error) {
 	}
 	targetBasePath := "/preview/s/" + scopePublicID + "/"
 	return strings.TrimRight(baseURL, "/") + targetBasePath, targetBasePath, nil
+}
+
+func (a *App) localPreviewScopePrefix(scopePublicID string) (string, error) {
+	baseURL, err := a.previewLocalBaseURL()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(baseURL, "/") + "/preview/s/" + scopePublicID + "/", nil
 }
 
 func (a *App) previewLocalBaseURL() (string, error) {

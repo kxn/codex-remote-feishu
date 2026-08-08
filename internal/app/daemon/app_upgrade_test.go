@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -608,11 +609,11 @@ func TestBuildDebugRootPageLinksBackToAdminCommands(t *testing.T) {
 	if got := catalog.Sections[0].Entries[1].Buttons[0].CommandText; got != "/admin web" {
 		t.Fatalf("expected debug catalog to expose /admin web, got %#v", catalog.Sections[0].Entries[1].Buttons)
 	}
-	if got := catalog.Sections[0].Entries[2].Buttons[0].CommandText; got != "/admin localweb" {
-		t.Fatalf("expected debug catalog to expose /admin localweb, got %#v", catalog.Sections[0].Entries[2].Buttons)
+	if got := catalog.Sections[0].Entries[2].Buttons[0].CommandText; got != "/admin network" {
+		t.Fatalf("expected debug catalog to expose /admin network, got %#v", catalog.Sections[0].Entries[2].Buttons)
 	}
 	summary := catalogSummaryText(&catalog)
-	if !strings.Contains(summary, "/admin web") || !strings.Contains(summary, "/admin localweb") {
+	if !strings.Contains(summary, "/admin web") || !strings.Contains(summary, "/admin network") {
 		t.Fatalf("expected debug root page to explain admin migration, got %#v", summary)
 	}
 }
@@ -824,6 +825,54 @@ func TestAdminWebCommandIssuesExternalAccessLink(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatal("timed out waiting for admin web link notice")
+}
+
+func TestAdminWebCommandUsesLocalAdminURLInLocalNetworkMode(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, _ := newUpgradeTestApp(t, gateway)
+	defer app.Shutdown(nil)
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			ListenPort:        0,
+			NetworkMode:       "local",
+			DefaultLinkTTL:    10 * time.Second,
+			DefaultSessionTTL: 30 * time.Second,
+			ProviderKind:      "disabled",
+		},
+	})
+
+	app.HandleAction(context.Background(), control.Action{
+		Kind:             control.ActionAdminCommand,
+		SurfaceSessionID: "feishu:main:chat:1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/admin web",
+	})
+
+	ops := gateway.snapshotOperations()
+	if len(ops) == 0 {
+		t.Fatal("expected admin web notice")
+	}
+	last := ops[len(ops)-1]
+	if last.CardTitle != "本地管理页" {
+		t.Fatalf("expected admin notice, got %#v", last)
+	}
+	body := last.CardBody
+	for _, elem := range last.CardElements {
+		body += fmt.Sprint(elem)
+	}
+	if !strings.Contains(body, "本地管理页") || !strings.Contains(body, "http://localhost:9501/admin/") {
+		t.Fatalf("expected local admin URL, got body=%#v elements=%#v", last.CardBody, last.CardElements)
+	}
+	if strings.Contains(body, "/g/") || strings.Contains(body, "临时管理页外链") {
+		t.Fatalf("local mode should not issue external grant URL: body=%#v elements=%#v", last.CardBody, last.CardElements)
+	}
 }
 
 func TestAdminWebCommandEmitsPreparingNoticeBeforeLinkReady(t *testing.T) {

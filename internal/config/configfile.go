@@ -86,6 +86,7 @@ type ToolSettings struct {
 type ExternalAccessSettings struct {
 	ListenHost               string                         `json:"listenHost,omitempty"`
 	ListenPort               int                            `json:"listenPort,omitempty"`
+	NetworkMode              string                         `json:"networkMode,omitempty"`
 	DefaultLinkTTLSeconds    int                            `json:"defaultLinkTTLSeconds,omitempty"`
 	DefaultSessionTTLSeconds int                            `json:"defaultSessionTTLSeconds,omitempty"`
 	Provider                 ExternalAccessProviderSettings `json:"provider,omitempty"`
@@ -169,6 +170,7 @@ func DefaultAppConfig() AppConfig {
 		ExternalAccess: ExternalAccessSettings{
 			ListenHost:               defaultAdminListenHost,
 			ListenPort:               9512,
+			NetworkMode:              "wan",
 			DefaultLinkTTLSeconds:    600,
 			DefaultSessionTTLSeconds: 1800,
 			Provider: ExternalAccessProviderSettings{
@@ -398,6 +400,10 @@ func (cfg AppConfig) normalized() AppConfig {
 	if cfg.ExternalAccess.ListenPort <= 0 {
 		cfg.ExternalAccess.ListenPort = defaults.ExternalAccess.ListenPort
 	}
+	cfg.ExternalAccess.NetworkMode = normalizeExternalAccessNetworkMode(cfg.ExternalAccess.NetworkMode)
+	if cfg.ExternalAccess.NetworkMode == "" {
+		cfg.ExternalAccess.NetworkMode = defaults.ExternalAccess.NetworkMode
+	}
 	if cfg.ExternalAccess.DefaultLinkTTLSeconds <= 0 {
 		cfg.ExternalAccess.DefaultLinkTTLSeconds = defaults.ExternalAccess.DefaultLinkTTLSeconds
 	}
@@ -442,6 +448,10 @@ func (cfg AppConfig) normalized() AppConfig {
 	}
 
 	return cfg
+}
+
+func normalizeExternalAccessNetworkMode(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }
 
 func (cfg PprofSettings) normalized() PprofSettings {

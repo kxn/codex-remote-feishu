@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os/exec"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -120,6 +121,42 @@ func TestIssuePreviewScopePrefixUsesPreviewGrantDefaultTTL(t *testing.T) {
 	}
 	if grant.SessionTTL != defaultPreviewGrantTTL {
 		t.Fatalf("session ttl = %s, want %s", grant.SessionTTL, defaultPreviewGrantTTL)
+	}
+}
+
+func TestIssuePreviewScopePrefixUsesLocalURLInLocalNetworkMode(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://127.0.0.1:9501/admin/",
+		SetupURL:        "http://127.0.0.1:9501/setup",
+	})
+	app.SetExternalAccess(ExternalAccessRuntimeConfig{
+		Settings: externalAccessSettingsView{
+			NetworkMode:       "local",
+			DefaultLinkTTL:    10 * time.Minute,
+			DefaultSessionTTL: 10 * time.Minute,
+			ProviderKind:      "disabled",
+		},
+	})
+	defer app.Shutdown(nil)
+
+	prefix, err := app.issuePreviewScopePrefix(context.Background(), previewpkg.WebPreviewGrantRequest{
+		ScopePublicID: "scope-1",
+		GrantKey:      "message-1",
+	})
+	if err != nil {
+		t.Fatalf("issuePreviewScopePrefix: %v", err)
+	}
+	if prefix != "http://127.0.0.1:9501/preview/s/scope-1/" && prefix != "http://localhost:9501/preview/s/scope-1/" {
+		t.Fatalf("prefix = %q, want local preview URL", prefix)
+	}
+	if strings.Contains(prefix, "/g/") {
+		t.Fatalf("local mode should not use grant path: %q", prefix)
+	}
+	if snapshot := app.externalAccess.Snapshot(); snapshot.GrantCount != 0 {
+		t.Fatalf("local mode should not create preview grant, got %#v", snapshot)
 	}
 }
 

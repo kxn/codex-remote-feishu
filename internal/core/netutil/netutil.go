@@ -44,3 +44,18 @@ func IsLoopbackURL(raw string) bool {
 	}
 	return IsLoopbackHost(parsed.Hostname())
 }
+
+// IsLANHost reports whether host is a private LAN address suitable for a
+// user-selected local-network listener.
+func IsLANHost(host string) bool {
+	host = strings.Trim(strings.TrimSpace(host), "[]")
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsPrivate() &&
+		!ip.IsLoopback() &&
+		!ip.IsLinkLocalUnicast() &&
+		!ip.IsUnspecified() &&
+		!ip.IsMulticast()
+}

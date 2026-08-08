@@ -1365,6 +1365,13 @@ export function AdminRoute() {
           ) : null}
         </section>
         <section className="card">
+          <h3>网络模式</h3>
+          <div className="status-line">
+            <span className={`dot ${bootstrap?.externalAccess?.networkMode ? "good" : "idle"}`} />
+            <span>{describeNetworkMode(bootstrap)}</span>
+          </div>
+        </section>
+        <section className="card">
           <h3>VS Code 集成</h3>
           <div className="status-line">
             <span
@@ -1620,6 +1627,17 @@ function describeAdminSession(bootstrap: BootstrapState | null): string {
     return `已认证会话，到期时间 ${formatTimestamp(session.expiresAt)}`;
   }
   return "已认证会话";
+}
+
+function describeNetworkMode(bootstrap: BootstrapState | null): string {
+  const mode = bootstrap?.externalAccess?.networkMode?.trim() || "wan";
+  if (mode === "local") {
+    return "本机直连。";
+  }
+  if (mode.startsWith("lan:")) {
+    return `LAN 直连：${mode.slice(4)}`;
+  }
+  return "WAN 外链。";
 }
 
 function describeAutostart(

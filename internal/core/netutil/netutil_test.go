@@ -79,3 +79,28 @@ func TestIsLoopbackURL(t *testing.T) {
 		}
 	}
 }
+
+func TestIsLANHost(t *testing.T) {
+	cases := []struct {
+		host string
+		want bool
+	}{
+		{"192.168.1.10", true},
+		{"10.2.3.4", true},
+		{"172.16.0.1", true},
+		{"172.31.255.250", true},
+		{"fd00::1", true},
+		{"127.0.0.1", false},
+		{"localhost", false},
+		{"169.254.1.2", false},
+		{"172.32.0.1", false},
+		{"8.8.8.8", false},
+		{"0.0.0.0", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := IsLANHost(tc.host); got != tc.want {
+			t.Fatalf("IsLANHost(%q) = %v, want %v", tc.host, got, tc.want)
+		}
+	}
+}

@@ -1,8 +1,8 @@
 # Authenticated External Access Foundation Design
 
 > Type: `implemented`
-> Updated: `2026-04-16`
-> Summary: external-access 基座已落地到当前代码，文档记录独立 listener、`trycloudflare` provider、短时授权 URL、idle listener-only deactivation，以及 provider reuse 的 health/target 约束。
+> Updated: `2026-08-08`
+> Summary: external-access 基座已落地到当前代码，文档记录独立 listener、`trycloudflare` provider、短时授权 URL、idle listener-only deactivation、provider reuse 的 health/target 约束，以及 `wan` / `lan:<ip>` / `local` 网络模式。
 
 ## 1. 文档定位
 
@@ -37,7 +37,11 @@
 当前产品方向按下面结论收敛：
 
 - 走独立 listener，不与现有 admin/setup listener 混用。
-- provider 第一阶段选择 `trycloudflare`。
+- provider 第一阶段选择 `trycloudflare`，但只在 `wan` 模式启用。
+- `externalAccess.networkMode` 是当前访问方式的 source of truth：
+  - `wan`：external-access listener 绑定 localhost，通过 `trycloudflare` 暴露 grant URL。
+  - `lan:<ip>`：external-access listener 绑定指定本机 LAN IP，不启动 Cloudflare，仍只暴露 `/g/<grant-id>/?t=<token>` 授权链接。
+  - `local`：不启动 external-access listener/provider，管理页和 preview 返回本机直连 URL。
 - 运行时需要随仓库发行物一起 bundle 一个 `cloudflared`，实现上优先收敛为主二进制内嵌、首次使用时解到当前进程旁边。
 - 对外能力的 source of truth 是 daemon 内部的授权与 allowlist 规则，不是 consumer 自己拼 token。
 - 面向公网的第一阶段只提供“有认证的 HTTP/WS 反代能力”，不承诺通用任意端口穿透。
@@ -89,10 +93,12 @@
    - daemon 内部总入口
    - 负责签发 URL、持有 grants、协调 provider 与 proxy listener
 2. `proxy listener`
-   - 独立监听 `127.0.0.1:<externalAccess.listenPort>`
+   - `wan` 下独立监听 `127.0.0.1:<externalAccess.listenPort>`
+   - `lan:<ip>` 下独立监听 `<ip>:<externalAccess.listenPort>`
    - 负责 token 交换、cookie 建立、请求转发、header/cookie/redirect 重写
 3. `provider`
-   - 第一阶段唯一实现为 `trycloudflare`
+   - `wan` 下实现为 `trycloudflare`
+   - `lan:<ip>` / `local` 下禁用 provider
    - 负责把 proxy listener 暴露到公网，并给出 `publicBaseURL`
 4. `consumer-facing URL builder`
    - 给程序内部调用
@@ -133,6 +139,7 @@ external user browser
 type ExternalAccessSettings struct {
 	ListenHost                string                         `json:"listenHost,omitempty"`
 	ListenPort                int                            `json:"listenPort,omitempty"`
+	NetworkMode              string                         `json:"networkMode,omitempty"`
 	DefaultLinkTTLSeconds     int                            `json:"defaultLinkTTLSeconds,omitempty"`
 	DefaultSessionTTLSeconds  int                            `json:"defaultSessionTTLSeconds,omitempty"`
 	Provider                  ExternalAccessProviderSettings `json:"provider,omitempty"`
@@ -156,6 +163,7 @@ type TryCloudflareSettings struct {
 
 - `listenHost = "127.0.0.1"`
 - `listenPort = 9512`
+- `networkMode = "wan"`
 - `defaultLinkTTLSeconds = 600`
 - `defaultSessionTTLSeconds = 1800`
 - `provider.kind = "trycloudflare"`
@@ -175,7 +183,26 @@ type TryCloudflareSettings struct {
 
 这批 env 只做 runtime override，不改变“当前真实配置以 `config.json` 为准”的方向。
 
-### 6.3 不落盘的状态
+`networkMode` 不新增 env override；运行时切换入口是 `/admin network`，并写回 `config.json`。
+
+### 6.3 网络模式切换
+
+当前实现提供 `/admin network` 查看模式，并支持：
+
+- `/admin network wan`
+- `/admin network local`
+- `/admin network lan`
+- `/admin network <ip>`
+
+`lan` 会自动选择第一张本机可用 LAN IP；`<ip>` 会被归一化为 `lan:<ip>`，且必须满足：
+
+- 是私有地址
+- 不是 loopback / link-local / unspecified / multicast
+- 存在于当前机器的 up 状态非 loopback 网卡地址列表
+
+切换时由 `adminConfigMu` 串行化配置读写，避免两个切换请求并发污染 `config.json`。配置写入成功后，daemon 使用既有 external-access shutdown plan 关闭旧 listener/provider、清理 preview grants，并重建 runtime service。
+
+### 6.4 不落盘的状态
 
 以下内容不建议持久化：
 
