@@ -291,6 +291,13 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		previousCoworkersLimit = a.service.FeishuRoomConcurrencyLimit(action.SurfaceSessionID)
 	}
 	events := a.applyIngressActionLocked(action)
+	var clearTargets map[string]bool
+	if a.shouldClearSurfaceResumeTargetLocked(action, before) {
+		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
+	}
+	// Persist detach clearing before dispatching events: daemon/agent dispatch can
+	// release the app lock and allow a recovery tick to run concurrently.
+	a.syncSurfaceResumeStateLocked(clearTargets)
 	coworkersLimitChanged := false
 	if action.Kind == control.ActionCoworkersCommand {
 		coworkersLimitChanged = !sameOptionalInt(previousCoworkersLimit, a.service.FeishuRoomConcurrencyLimit(action.SurfaceSessionID))
@@ -319,10 +326,6 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		a.handleUIEventsLocked(ctx, appendEvents)
 	}
 	a.maybeReplayPendingRequestVisibilityAfterActionLocked(ctx, action)
-	var clearTargets map[string]bool
-	if a.shouldClearSurfaceResumeTargetLocked(action, before) {
-		clearTargets = map[string]bool{strings.TrimSpace(action.SurfaceSessionID): true}
-	}
 	a.syncSurfaceResumeStateLocked(clearTargets)
 	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncBotCapabilitySettingsStateLocked()

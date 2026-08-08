@@ -370,7 +370,7 @@ func (s *Service) TryAutoResumeHeadlessSurface(surfaceID string, attempt Surface
 	if !s.surfaceIsHeadless(surface) {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
-	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
+	if surface.Abandoning || strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
 
@@ -517,7 +517,7 @@ func (s *Service) TryAutoResumeVSCodeSurface(surfaceID, instanceID string) ([]ev
 	if !s.surfaceIsVSCode(surface) {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
-	if strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
+	if surface.Abandoning || strings.TrimSpace(surface.AttachedInstanceID) != "" || surface.PendingHeadless != nil {
 		return nil, SurfaceResumeResult{Status: SurfaceResumeStatusSkipped}
 	}
 

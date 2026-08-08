@@ -16,6 +16,8 @@
 
 这份文档描述的是**当前代码已经实现**的 remote surface 状态机，不是历史问题列表，也不是未来方案草稿。
 
+2026-08-08 #838 补充：`/detach` 与 `/workspace detach` 都是 detach-like route mutation，会清除当前私聊 surface 的全部 durable resume target（instance、thread、cwd、workspace、route、headless）。清理会在事件/UI/daemon dispatch 之前完成，并在 dispatch 后用同一清理意图再次同步，避免 dispatch 释放 app mutex 时被 recovery tick 插入；`E6 Abandoning` 期间 headless 与 VS Code auto-resume 都明确跳过，直到 surface 最终 detach。
+
 2026-08-01 #768/#769 补充：Codex 的可见配置入口已从 provider-first 收口为 Profile-first。`/codexprofile` 是 canonical 用户入口，旧 `/codexprovider` 只作为 hidden + allow 兼容 alias 继续进入同一 action path；gateway/bot record 的 canonical owner 是 `CodexProfileID`，`CodexProviderID` 仅由 Profile 派生用于旧合同投影。bare Profile 卡使用可分页 `select_static`，只暴露可用 native/API/OAuth Profile 为可选项；缺 secret、OAuth 不可用或探测未知的 Profile 保留在只读状态说明里，不能被 callback 选中。legacy Provider catalog 不再反向合成 Profile catalog；Profile 选择只能消费 daemon materialized canonical Profile read model。
 
 它承担两个职责：
@@ -412,8 +414,9 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    1. 若仍是 pre-start dispatch（`pendingRemote` 还没有 `TurnID`、没有 output、active item 仍是 `dispatching`），会立即把 active item 标成 failed、清掉 pending remote ownership，并直接 detach。
    2. 只有已经存在真实 started remote turn、或 compact/steer 等仍需等待的 live work 时，才会进入 `E6 Abandoning`。
 5. `E6 Abandoning` 现在只覆盖“确实还有 live work 在收尾”的场景，不再把 pre-start dispatching 残留也一并塞进 watchdog-only 等待路径。
-6. Feishu room active reservations 不是新的 surface 执行态，而是 room context coordination overlay；当前 surface 自己的 `E2/E3` 不会被自己的 reservation 重复阻挡，但同 room 其它 surface 的普通 queued dispatch、AutoContinue scheduled dispatch、AutoWhip scheduled dispatch、review start/apply 和 headless replay 会在真正创建新 turn 前检查预算，并收到 `room_workspace_active` notice；其中自动 tick 路径会复用 active notice cooldown，避免每轮 tick 都追加同一条提示。
-7. reservation 的释放收口到各自 owner 的终止路径：queue item 的 turn completed/failed、pre-start detach abort、system/recovery fail、finalizeDetachedSurface 释放 queue-owned reservation；review session、pending headless/replay、Claude restart failure/timeout/disconnect 分别释放自己的 reservation；destructive room workspace reset 会额外清掉 room-level reservations。transport degraded 若仍保留真实 queue/remote ownership，保留对应 queue reservation，不提前放行同 room 新 turn。
+6. `E6 Abandoning` 是 detach 的取消门，不是可恢复的 detached 状态：headless/VS Code 的自动恢复入口必须跳过 `Abandoning=true` 的 surface；detach-like action 的 durable resume target 清理必须先于任何可能释放 app mutex 的事件派发。
+7. Feishu room active reservations 不是新的 surface 执行态，而是 room context coordination overlay；当前 surface 自己的 `E2/E3` 不会被自己的 reservation 重复阻挡，但同 room 其它 surface 的普通 queued dispatch、AutoContinue scheduled dispatch、AutoWhip scheduled dispatch、review start/apply 和 headless replay 会在真正创建新 turn 前检查预算，并收到 `room_workspace_active` notice；其中自动 tick 路径会复用 active notice cooldown，避免每轮 tick 都追加同一条提示。
+8. reservation 的释放收口到各自 owner 的终止路径：queue item 的 turn completed/failed、pre-start detach abort、system/recovery fail、finalizeDetachedSurface 释放 queue-owned reservation；review session、pending headless/replay、Claude restart failure/timeout/disconnect 分别释放自己的 reservation；destructive room workspace reset 会额外清掉 room-level reservations。transport degraded 若仍保留真实 queue/remote ownership，保留对应 queue reservation，不提前放行同 room 新 turn。
 
 ### 3.4 审阅态 overlay
 
