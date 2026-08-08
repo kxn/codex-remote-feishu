@@ -48,6 +48,33 @@ func TestBuildCodexChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 	}
 }
 
+func TestBuildCodexChildLaunchKeepsFeishuMCPForMimoCatalog(t *testing.T) {
+	clearFeishuMCPBearerEnv(t)
+	statePath := writeToolServiceState(t, `{
+  "url": "http://127.0.0.1:9702",
+  "token": "secret-token",
+  "tokenType": "bearer"
+}`)
+	app := New(Config{
+		InstanceID:   "inst-1",
+		Source:       "headless",
+		RuntimePaths: relayruntime.Paths{ToolServiceFile: statePath},
+	})
+
+	args, env := app.buildCodexChildLaunch([]string{
+		"app-server",
+		"-c",
+		`model_catalog_json="/state/codex-model-catalogs/mimo-models-v1.json"`,
+	})
+
+	if len(args) != 7 {
+		t.Fatalf("expected mimo catalog args plus MCP overrides, got %d args: %#v", len(args), args)
+	}
+	if got := lookupEnv(env, feishuMCPBearerEnvName); got != "secret-token" {
+		t.Fatalf("expected injected bearer env for mimo catalog, got %q", got)
+	}
+}
+
 func TestBuildCodexChildLaunchPreservesRootOptionsBeforeAppServer(t *testing.T) {
 	clearFeishuMCPBearerEnv(t)
 	app := New(Config{Source: "vscode"})

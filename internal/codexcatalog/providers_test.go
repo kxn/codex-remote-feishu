@@ -71,11 +71,12 @@ func TestMimoModelCatalogJSON(t *testing.T) {
 
 	var catalog struct {
 		Models []struct {
-			Slug                  string `json:"slug"`
-			ContextWindow         int    `json:"context_window"`
-			MaxContextWindow      int    `json:"max_context_window"`
-			DefaultReasoningLevel string `json:"default_reasoning_level"`
-			BaseInstructions      string `json:"base_instructions"`
+			Slug                  string  `json:"slug"`
+			ApplyPatchToolType    *string `json:"apply_patch_tool_type"`
+			ContextWindow         int     `json:"context_window"`
+			MaxContextWindow      int     `json:"max_context_window"`
+			DefaultReasoningLevel string  `json:"default_reasoning_level"`
+			BaseInstructions      string  `json:"base_instructions"`
 			TruncationPolicy      struct {
 				Mode string `json:"mode"`
 			} `json:"truncation_policy"`
@@ -98,6 +99,9 @@ func TestMimoModelCatalogJSON(t *testing.T) {
 		t.Fatalf("unexpected MiMo model order: %#v", catalog.Models)
 	}
 	for _, model := range catalog.Models {
+		if model.ApplyPatchToolType != nil {
+			t.Fatalf("MiMo model %s must not advertise apply_patch_tool_type, got %q", model.Slug, *model.ApplyPatchToolType)
+		}
 		if model.ContextWindow != 1048576 || model.MaxContextWindow != 1048576 {
 			t.Fatalf("unexpected context window for %s: %#v", model.Slug, model)
 		}
