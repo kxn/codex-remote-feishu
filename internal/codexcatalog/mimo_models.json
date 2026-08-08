@@ -4,7 +4,6 @@
       "slug": "mimo-v2.5-pro",
       "prefer_websockets": false,
       "support_verbosity": false,
-      "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text",
       "input_modalities": [
         "text"
@@ -66,7 +65,6 @@
       "slug": "mimo-v2.5",
       "prefer_websockets": false,
       "support_verbosity": false,
-      "apply_patch_tool_type": "freeform",
       "web_search_tool_type": "text",
       "input_modalities": [
         "text",
