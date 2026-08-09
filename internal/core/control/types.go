@@ -565,7 +565,8 @@ type FinalTurnSummary struct {
 type TimelineTextType string
 
 const (
-	TimelineTextSteerUserSupplement TimelineTextType = "steer_user_supplement"
+	TimelineTextSteerUserSupplement  TimelineTextType = "steer_user_supplement"
+	TimelineTextQueuedMessageStarted TimelineTextType = "queued_message_started"
 )
 
 type TimelineText struct {

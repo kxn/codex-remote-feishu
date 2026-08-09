@@ -1018,6 +1018,25 @@ func TestProjectTimelineTextRepliesToTurnAnchor(t *testing.T) {
 	}
 }
 
+func TestProjectQueuedMessageStartTimelineTextUsesOriginalReply(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:            eventcontract.KindTimelineText,
+		SourceMessageID: "msg-queued-1",
+		TimelineText: &control.TimelineText{
+			Type:             control.TimelineTextQueuedMessageStarted,
+			Text:             "开始执行这条排队消息。",
+			ReplyToMessageID: "msg-queued-1",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendText {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	if ops[0].ReplyToMessageID != "msg-queued-1" || ops[0].Text != "开始执行这条排队消息。" {
+		t.Fatalf("unexpected queued-start text operation: %#v", ops[0])
+	}
+}
+
 func TestProjectRequestCardCarriesAttentionAnnotation(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{

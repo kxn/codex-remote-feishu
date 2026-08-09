@@ -218,7 +218,9 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 		QueuePosition: position,
 		QueueOn:       true,
 	}, queueItemSourceMessageIDs(item))...)
-	return append(events, s.dispatchNext(surface)...)
+	return append(events, s.dispatchNextWithOptions(surface, dispatchNextOptions{
+		suppressQueuedStartNoticeQueueItemID: item.ID,
+	})...)
 }
 
 func (s *Service) consumeStagedInputs(surface *state.SurfaceConsoleRecord, actorUserID string) ([]agentproto.Input, []string, string) {
@@ -301,6 +303,10 @@ func freezeRoute(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord
 }
 
 func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	return s.dispatchNextWithOptions(surface, dispatchNextOptions{})
+}
+
+func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, opts dispatchNextOptions) []eventcontract.Event {
 	if blocked, ok := s.invalidBotCapabilitySettingsDispatchGate(surface); ok {
 		return blocked
 	}
@@ -341,6 +347,11 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 		Status:      string(item.Status),
 		QueueOff:    true,
 	}, queueItemSourceMessageIDs(item)), item.SourceMessageID, true)
+	if !opts.suppressesQueuedStartNotice(item) {
+		if notice := s.queuedMessageStartedEvent(surface, item); notice != nil {
+			events = append(events, *notice)
+		}
+	}
 	command, guardEvents := s.promptSendCommandAndGuardEventsFromQueueItem(surface, item, queuedItemActorUserID(item, surface), originMessageID)
 	events = append(events, guardEvents...)
 	events = append(events, eventcontract.Event{

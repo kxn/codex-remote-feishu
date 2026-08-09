@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-08`
-> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、群聊 room workspace data-plane gate / room-level detach、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
+> Updated: `2026-08-09`
+> Summary: 当前实现同步 workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、群聊 room workspace data-plane gate / room-level detach、queued->dispatching 用户可见回复提示、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`（含 hidden alias `/codexprovider`）现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -19,6 +19,8 @@
 2026-08-08 #838 补充：`/detach` 与 `/workspace detach` 都是 detach-like route mutation，会清除当前私聊 surface 的全部 durable resume target（instance、thread、cwd、workspace、route、headless）。清理会在事件/UI/daemon dispatch 之前完成，并在 dispatch 后用同一清理意图再次同步，避免 dispatch 释放 app mutex 时被 recovery tick 插入；`E6 Abandoning` 期间 headless 与 VS Code auto-resume 都明确跳过，直到 surface 最终 detach。
 
 2026-08-08 #840 补充：Feishu 机器人进群事件 `im.chat.member.bot.added_v1` 现在是 room primary bootstrap 的独立入口。daemon 收到事件后先在 app 锁外复用 `feishufacts` scope 缓存确认 `im:chat:readonly`（兼容 `im:chat`），再通过 gateway `im.v1.chat.get` 读取 `chat_mode` 与 `bot_count`；只有 `chat_mode == group` 且 `bot_count == 1` 时才进入锁内尝试写 room primary。锁内写入是 compare-and-set：仅当 `PrimaryGatewayID` 仍为空时把当前 gateway 写入 room durable state 并刷新 primary snapshot；已有 primary 时 no-op，不替换，也不发成功提示。若 room state 持久化失败，daemon 会回滚刚写入的 runtime primary 并刷新 snapshot，不留下只在内存中生效的假 primary。`chat.get` 缺权限会进入现有 permission gap / call broker cooldown 路径，并给群内发送权限提示；事件是否已订阅仍由 setup/admin auto-config 基于已发布版本 `event_infos` 检查，runtime 不把“没有收到事件”推断成未订阅。
+
+2026-08-09 补充：用户可见 queue item 曾进入排队后，再由 dispatch core 推进到 `E2 Dispatching` 时，会追加 `TimelineTextQueuedMessageStarted`，并投递成回复原消息的短提示「开始执行这条排队消息。」；同一次 enqueue 立刻 dispatch 的输入不会发这条提示，AutoWhip / AutoContinue 等内部来源也不会发。
 
 2026-08-08 #837 补充：Feishu 群聊 workspace 以 room 为 SSOT。`RoomNoWorkspace` 下普通文本、图片、文件和 backend-bound action 统一返回 `room_workspace_required`，不保存 pending text、不打开 target picker、不 stage 输入；`/menu`、`/help`、`/status`、`/primary`、`/workspace`、workspace picker 等 control-plane 仍可用。`RoomHasWorkspace` 下未 attach 的同 room bot 收到文本/图片/文件时，继承 room workspace 并 attach 或启动自己的 headless context，不继承 sibling selected thread。群聊 `/workspace detach` 改为 room-level clear：只有当前 primary bot 可执行，成功后清 room workspace、reset 同 room 全部 surface runtime，并在 daemon 持久层清同 room 全部 surface resume target；裸 `/detach` 仍是 surface 级兼容 detach。
 
@@ -415,15 +417,16 @@ thread 自身现在还有一层**authoritative runtime status overlay**，来源
    3. 两者交界只保留显式 handshake：dispatch 在真正 `prompt.send` 前可以请求 recovery 先做 `prompt_dispatch_restart`，但 queue item 与 remote binding 的最终归属仍回到 dispatch core 收口。
    4. 非 turn agent command（当前包括 `/model` 打开时触发的后台 `model.list`）不会调用 `BindPendingRemoteCommand`，也不会建立 `pendingRemote` 或进入 steer trace；其 response 只更新对应能力缓存，不参与 `E2/E3` 执行态。
 2. `E2 Dispatching` 当前只表示“本地 active queue item 已派发，真实 remote turn 还没完成建联”；它并不自动等价于“已有 live turn”。
-3. 对 Claude backend，pre-start remote turn 的 stage-0 关联键当前先用 dispatch `CommandID`，再回退 `Initiator.SurfaceSessionID` 与 thread 信息；Claude translator 也会把 remote-surface initiator 显式带进 turn lifecycle。即使某些早期事件仍带 blank initiator，daemon 也会先把它视为 unknown，再通过 `CommandID` 命中 pending turn 并提升成真实 turn lifecycle；因此 backend/runtime 的早失败与 `start_new` 首条消息都不会再把 surface 永久卡在 `dispatching`。
-3.1. Feishu MCP 发送类工具和 Drive comments 工具当前也消费这套 remote turn 绑定：wrapper 发布 MCP URL 时只附带 caller instance id，daemon 在 tool call 时先按该 instance 查询 `activeRemote`，再查询 `pendingRemote`，并把产物或评论读取上下文绑定到命中的 `SurfaceSessionID`。工具参数里的 legacy `surface_session_id` 不参与路由；如果 caller instance 当前没有 active/pending remote turn，工具会 fail closed，不回退到 workspace surface context。
-4. `/detach` 在 `E2 Dispatching` 下当前分两类处理：
+3. 从 `E1 Queued` 被前序 turn 完成、显式 resume、watchdog resume 或 instance reconnect 等非本次 enqueue 入口推进到 `E2 Dispatching` 时，若 queue item `SourceKind=user` 且有原消息 reply anchor，会追加 `TimelineTextQueuedMessageStarted` 回复原消息；同一次 enqueue 立即 dispatch、AutoWhip / AutoContinue 等内部来源不触发这条可见提示。
+4. 对 Claude backend，pre-start remote turn 的 stage-0 关联键当前先用 dispatch `CommandID`，再回退 `Initiator.SurfaceSessionID` 与 thread 信息；Claude translator 也会把 remote-surface initiator 显式带进 turn lifecycle。即使某些早期事件仍带 blank initiator，daemon 也会先把它视为 unknown，再通过 `CommandID` 命中 pending turn 并提升成真实 turn lifecycle；因此 backend/runtime 的早失败与 `start_new` 首条消息都不会再把 surface 永久卡在 `dispatching`。
+4.1. Feishu MCP 发送类工具和 Drive comments 工具当前也消费这套 remote turn 绑定：wrapper 发布 MCP URL 时只附带 caller instance id，daemon 在 tool call 时先按该 instance 查询 `activeRemote`，再查询 `pendingRemote`，并把产物或评论读取上下文绑定到命中的 `SurfaceSessionID`。工具参数里的 legacy `surface_session_id` 不参与路由；如果 caller instance 当前没有 active/pending remote turn，工具会 fail closed，不回退到 workspace surface context。
+5. `/detach` 在 `E2 Dispatching` 下当前分两类处理：
    1. 若仍是 pre-start dispatch（`pendingRemote` 还没有 `TurnID`、没有 output、active item 仍是 `dispatching`），会立即把 active item 标成 failed、清掉 pending remote ownership，并直接 detach。
    2. 只有已经存在真实 started remote turn、或 compact/steer 等仍需等待的 live work 时，才会进入 `E6 Abandoning`。
-5. `E6 Abandoning` 现在只覆盖“确实还有 live work 在收尾”的场景，不再把 pre-start dispatching 残留也一并塞进 watchdog-only 等待路径。
-6. `E6 Abandoning` 是 detach 的取消门，不是可恢复的 detached 状态：headless/VS Code 的自动恢复入口必须跳过 `Abandoning=true` 的 surface；detach-like action 的 durable resume target 清理必须先于任何可能释放 app mutex 的事件派发。
-7. Feishu room active reservations 不是新的 surface 执行态，而是 room context coordination overlay；当前 surface 自己的 `E2/E3` 不会被自己的 reservation 重复阻挡，但同 room 其它 surface 的普通 queued dispatch、AutoContinue scheduled dispatch、AutoWhip scheduled dispatch、review start/apply 和 headless replay 会在真正创建新 turn 前检查预算，并收到 `room_workspace_active` notice；其中自动 tick 路径会复用 active notice cooldown，避免每轮 tick 都追加同一条提示。
-8. reservation 的释放收口到各自 owner 的终止路径：queue item 的 turn completed/failed、pre-start detach abort、system/recovery fail、finalizeDetachedSurface 释放 queue-owned reservation；review session、pending headless/replay、Claude restart failure/timeout/disconnect 分别释放自己的 reservation；destructive room workspace reset 会额外清掉 room-level reservations。transport degraded 若仍保留真实 queue/remote ownership，保留对应 queue reservation，不提前放行同 room 新 turn。
+6. `E6 Abandoning` 现在只覆盖“确实还有 live work 在收尾”的场景，不再把 pre-start dispatching 残留也一并塞进 watchdog-only 等待路径。
+7. `E6 Abandoning` 是 detach 的取消门，不是可恢复的 detached 状态：headless/VS Code 的自动恢复入口必须跳过 `Abandoning=true` 的 surface；detach-like action 的 durable resume target 清理必须先于任何可能释放 app mutex 的事件派发。
+8. Feishu room active reservations 不是新的 surface 执行态，而是 room context coordination overlay；当前 surface 自己的 `E2/E3` 不会被自己的 reservation 重复阻挡，但同 room 其它 surface 的普通 queued dispatch、AutoContinue scheduled dispatch、AutoWhip scheduled dispatch、review start/apply 和 headless replay 会在真正创建新 turn 前检查预算，并收到 `room_workspace_active` notice；其中自动 tick 路径会复用 active notice cooldown，避免每轮 tick 都追加同一条提示。
+9. reservation 的释放收口到各自 owner 的终止路径：queue item 的 turn completed/failed、pre-start detach abort、system/recovery fail、finalizeDetachedSurface 释放 queue-owned reservation；review session、pending headless/replay、Claude restart failure/timeout/disconnect 分别释放自己的 reservation；destructive room workspace reset 会额外清掉 room-level reservations。transport degraded 若仍保留真实 queue/remote ownership，保留对应 queue reservation，不提前放行同 room 新 turn。
 
 ### 3.4 审阅态 overlay
 
