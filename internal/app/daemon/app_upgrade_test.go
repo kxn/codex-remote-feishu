@@ -126,6 +126,41 @@ func TestUpgradeTrackSwitchPersistsAndClearsCandidate(t *testing.T) {
 	}
 }
 
+func TestLoadUpgradeStateRepairsStaleRuntimeIdentity(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app, statePath := newUpgradeTestApp(t, gateway)
+	runtimeBinary := filepath.Join(filepath.Dir(statePath), "runtime", "codex-remote")
+	app.serverIdentity.BinaryPath = runtimeBinary
+	app.serverIdentity.Version = "dev-runtime"
+	app.headlessRuntime.BinaryPath = runtimeBinary
+
+	stateValue, err := install.LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	stateValue.CurrentBinaryPath = filepath.Join(filepath.Dir(statePath), "bin", "codex-remote")
+	stateValue.CurrentVersion = "v1.0.0"
+	if err := install.WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	app.mu.Lock()
+	loaded, ok, err := app.loadUpgradeStateLocked(false)
+	app.mu.Unlock()
+	if err != nil {
+		t.Fatalf("loadUpgradeStateLocked: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected upgrade state to load")
+	}
+	if loaded.CurrentBinaryPath != runtimeBinary {
+		t.Fatalf("CurrentBinaryPath = %q, want %q", loaded.CurrentBinaryPath, runtimeBinary)
+	}
+	if loaded.CurrentVersion != "dev-runtime" {
+		t.Fatalf("CurrentVersion = %q, want dev-runtime", loaded.CurrentVersion)
+	}
+}
+
 func TestDebugTrackAliasRejected(t *testing.T) {
 	gateway := newLifecycleGateway()
 	app, statePath := newUpgradeTestApp(t, gateway)

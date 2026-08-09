@@ -370,6 +370,12 @@ func (a *App) loadUpgradeStateLocked(create bool) (install.InstallState, bool, e
 	stateValue.ConfigPath = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.ConfigPath), configPath)
 	stateValue.StatePath = path
 	stateValue.CurrentBinaryPath = xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentBinaryPath), currentBinary)
+	install.RepairRuntimeState(&stateValue, install.RuntimeStateRepairOptions{
+		CurrentBinaryPath: currentBinary,
+		CurrentVersion:    a.currentBinaryVersion(),
+		ConfigPath:        configPath,
+		PID:               a.serverIdentity.PID,
+	})
 	return stateValue, true, nil
 }
 
