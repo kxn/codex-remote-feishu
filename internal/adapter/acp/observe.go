@@ -71,10 +71,13 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 
 func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]any, result Result) (Result, error) {
 	sessionID := strings.TrimSpace(xutil.LookupStringFromAny(payload["sessionId"]))
+	command := pending.Command
+	if sessionID == "" && pending.Kind == "session/resume" {
+		sessionID = strings.TrimSpace(command.Target.ThreadID)
+	}
 	if sessionID == "" {
 		return result, fmt.Errorf("%s response missing sessionId", pending.Kind)
 	}
-	command := pending.Command
 	session := t.upsertSession(sessionID, t.commandCWD(command), payload)
 	t.currentSessionID = sessionID
 	events := []agentproto.Event{
@@ -90,6 +93,9 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 			CWD:         session.CWD,
 			FocusSource: "opencode_acp",
 		},
+	}
+	if settingsEvent, ok := threadSettingsEventForCurrentModel(sessionID, session); ok {
+		events = append(events, settingsEvent)
 	}
 	promptResult, err := t.startPromptForSession(sessionID, command)
 	if err != nil {
@@ -707,6 +713,10 @@ func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[stri
 	if strings.TrimSpace(xutil.LookupStringFromAny(option["id"])) != "model" || strings.TrimSpace(session.CurrentModel) == "" {
 		return agentproto.Event{}, false
 	}
+	return threadSettingsEventForCurrentModel(sessionID, session)
+}
+
+func threadSettingsEventForCurrentModel(sessionID string, session sessionState) (agentproto.Event, bool) {
 	settings := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
 		ThreadID: sessionID,
 		Model:    session.CurrentModel,

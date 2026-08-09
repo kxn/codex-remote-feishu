@@ -387,6 +387,11 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 	dispatchPlan := queuedItemPromptDispatchPlan(item)
 	overrides, guard := s.sanitizePromptOverridesForDispatch(surface, item.FrozenOverride)
 	inst := s.root.Instances[surface.AttachedInstanceID]
+	backend := s.promptConfigBackend(inst, surface)
+	planModeOverride := frozenPlanModeOverrideValue(item.FrozenPlanMode)
+	if !state.BackendAcceptsFeishuPlanOverride(backend) {
+		planModeOverride = ""
+	}
 	command := &agentproto.Command{
 		Kind: agentproto.CommandPromptSend,
 		Origin: agentproto.Origin{
@@ -403,7 +408,7 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 			Model:           overrides.Model,
 			ReasoningEffort: overrides.ReasoningEffort,
 			AccessMode:      overrides.AccessMode,
-			PlanMode:        frozenPlanModeOverrideValue(item.FrozenPlanMode),
+			PlanMode:        planModeOverride,
 		},
 		CodexResume: CodexResumePolicyForThread(item.CodexConnectionContract, item.CodexThreadPolicy, codexResumeTargetThread(inst, dispatchPlan)),
 	}
@@ -433,6 +438,9 @@ func (s *Service) sanitizePromptOverridesForDispatch(surface *state.SurfaceConso
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	backend := s.promptConfigBackend(inst, surface)
+	if !state.BackendAcceptsFeishuPromptOverrides(backend) {
+		return state.ModelConfigRecord{}, promptOverrideGuardResult{}
+	}
 	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
 		return override, promptOverrideGuardResult{}
 	}

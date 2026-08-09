@@ -76,6 +76,34 @@ func TestNormalizeBotCapabilitySettingsRecordCarriesOpenCodeProfile(t *testing.T
 	}
 }
 
+func TestNormalizeBotCapabilitySettingsRecordClearsOpenCodePromptAndPlanOverrides(t *testing.T) {
+	record, ok := NormalizeBotCapabilitySettingsRecord(BotCapabilitySettingsRecord{
+		GatewayID:         "app-1",
+		ProductMode:       ProductModeNormal,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+		PromptOverride: ModelConfigRecord{
+			Model:           " gpt-5.5 ",
+			ReasoningEffort: " high ",
+			AccessMode:      agentproto.AccessModeConfirm,
+		},
+		PlanMode:            PlanModeSettingOn,
+		PlanModeOverrideSet: true,
+	})
+	if !ok {
+		t.Fatal("expected normalized record")
+	}
+	if record.PromptOverride != (ModelConfigRecord{}) {
+		t.Fatalf("opencode prompt override = %#v, want empty", record.PromptOverride)
+	}
+	if record.PlanMode != PlanModeSettingOff || record.PlanModeOverrideSet {
+		t.Fatalf("opencode plan override = %s/%v, want off/false", record.PlanMode, record.PlanModeOverrideSet)
+	}
+	if record.Backend != agentproto.BackendOpenCode || record.OpenCodeProfileID != "op_team" {
+		t.Fatalf("opencode contract fields changed unexpectedly: %#v", record)
+	}
+}
+
 func TestBotCapabilitySettingsKeyRequiresGateway(t *testing.T) {
 	if key := BotCapabilitySettingsKey(" app-1 "); key != "feishu:gateway:app-1" {
 		t.Fatalf("key = %q, want feishu:gateway:app-1", key)
@@ -117,6 +145,47 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing
 	}
 	if effective.PlanMode != PlanModeSettingOn || !effective.PlanModeOverrideSet {
 		t.Fatalf("effective plan = %s/%v, want bot on/true", effective.PlanMode, effective.PlanModeOverrideSet)
+	}
+}
+
+func TestEffectiveSurfaceCapabilitySettingsSanitizesOpenCodeBotPromptAndPlanOverrides(t *testing.T) {
+	root := NewRoot()
+	root.BotCapabilitySettings["feishu:gateway:app-1"] = BotCapabilitySettingsRecord{
+		GatewayID:         "app-1",
+		ProductMode:       ProductModeNormal,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+		PromptOverride: ModelConfigRecord{
+			Model:           "gpt-5.5",
+			ReasoningEffort: "high",
+			AccessMode:      agentproto.AccessModeConfirm,
+		},
+		PlanMode:            PlanModeSettingOn,
+		PlanModeOverrideSet: true,
+	}
+	surface := &SurfaceConsoleRecord{
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		Platform:         "feishu",
+		GatewayID:        "app-1",
+		ChatID:           "ou_user",
+		ActorUserID:      "ou_user",
+		ProductMode:      ProductModeNormal,
+		Backend:          agentproto.BackendCodex,
+		CodexProviderID:  "team-proxy",
+	}
+
+	effective := EffectiveSurfaceCapabilitySettings(root, surface)
+	if effective.Source != SurfaceCapabilitySettingsSourceBot {
+		t.Fatalf("source = %q, want bot settings", effective.Source)
+	}
+	if effective.Contract.Backend != agentproto.BackendOpenCode || effective.Contract.OpenCodeProfileID != "op_team" {
+		t.Fatalf("effective contract = %#v, want opencode profile", effective.Contract)
+	}
+	if effective.PromptOverride != (ModelConfigRecord{}) {
+		t.Fatalf("effective opencode prompt override = %#v, want empty", effective.PromptOverride)
+	}
+	if effective.PlanMode != PlanModeSettingOff || effective.PlanModeOverrideSet {
+		t.Fatalf("effective opencode plan = %s/%v, want off/false", effective.PlanMode, effective.PlanModeOverrideSet)
 	}
 }
 

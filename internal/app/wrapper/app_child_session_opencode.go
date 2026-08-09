@@ -137,7 +137,7 @@ func (a *App) bootstrapOpenCodeACP(translator *acpadapter.Translator, childStdin
 	if err != nil {
 		return nil, err
 	}
-	if err := writeChildFrame(childStdin, frame, a.debugf, rawLogger, reportProblem); err != nil {
+	if err := writeChildFrameForRuntime(childStdin, frame, a.runtime, a.debugf, rawLogger, reportProblem); err != nil {
 		return nil, err
 	}
 

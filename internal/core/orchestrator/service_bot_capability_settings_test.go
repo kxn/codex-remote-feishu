@@ -82,6 +82,13 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 		ProductMode:       state.ProductModeNormal,
 		Backend:           agentproto.BackendOpenCode,
 		OpenCodeProfileID: "op_team",
+		PromptOverride: state.ModelConfigRecord{
+			Model:           "gpt-5.5",
+			ReasoningEffort: "high",
+			AccessMode:      agentproto.AccessModeConfirm,
+		},
+		PlanMode:            state.PlanModeSettingOn,
+		PlanModeOverrideSet: true,
 	}
 	svc.MaterializeSurfaceResumeWithCodexProvider(
 		"feishu:app-1:chat:oc_room",
@@ -106,6 +113,54 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 	contract := state.SurfaceDesiredBackendContract(surface)
 	if contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("opencode desired contract retained inactive profile fields: %#v", contract)
+	}
+	if surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+		t.Fatalf("opencode bot projection retained unsupported prompt/plan overrides: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+	}
+}
+
+func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndClearsPromptPlan(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
+	surface.PromptOverride = state.ModelConfigRecord{
+		Model:           "gpt-5.5",
+		ReasoningEffort: "high",
+		AccessMode:      agentproto.AccessModeConfirm,
+	}
+	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
+	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
+		GatewayID:           "app-1",
+		ProductMode:         state.ProductModeNormal,
+		Backend:             agentproto.BackendCodex,
+		CodexProviderID:     "default",
+		PromptOverride:      surface.PromptOverride,
+		PlanMode:            surface.PlanMode,
+		PlanModeOverrideSet: surface.PlanModeOverrideSet,
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		GatewayID:        "app-1",
+		ChatID:           "ou_user",
+		ActorUserID:      "ou_user",
+		Text:             "/mode opencode",
+	})
+	if len(events) == 0 {
+		t.Fatalf("expected mode switch feedback")
+	}
+
+	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
+	if record.Backend != agentproto.BackendOpenCode {
+		t.Fatalf("bot backend = %q, want opencode", record.Backend)
+	}
+	if record.PromptOverride != (state.ModelConfigRecord{}) || record.PlanMode != state.PlanModeSettingOff || record.PlanModeOverrideSet {
+		t.Fatalf("bot opencode settings retained unsupported prompt/plan overrides: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
+	}
+	if surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+		t.Fatalf("surface opencode projection retained unsupported prompt/plan overrides: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 

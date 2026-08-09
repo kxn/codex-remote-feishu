@@ -87,7 +87,7 @@ func startChildSessionIO(ctx context.Context, session *childSession, parentStdou
 	session.writeDone = make(chan struct{})
 	session.stdoutDone = make(chan struct{})
 	session.stderrDone = make(chan struct{})
-	go writeLoop(writeCtx, session.stdin, writeCh, errCh, debugf, rawLogger, reportProblem, session.writeDone)
+	go writeLoop(writeCtx, session.stdin, writeCh, runtime, errCh, debugf, rawLogger, reportProblem, session.writeDone)
 	go stdoutLoop(ioCtx, session.stdout, parentStdout, writeCh, runtime, client, commandResponses, turnTracker, activeGeneration, generation, errCh, debugf, rawLogger, reportProblem, session.stdoutDone)
 	go streamCopy(session.stderr, parentStderr, errCh, session.stderrDone)
 }

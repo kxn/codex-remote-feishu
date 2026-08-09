@@ -201,10 +201,14 @@ func displaySnapshotMode(mode string, backend agentproto.Backend) string {
 	if state.IsVSCodeProductModeToken(mode) {
 		return string(state.ProductModeVSCode)
 	}
-	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+	switch agentproto.NormalizeBackend(backend) {
+	case agentproto.BackendClaude:
 		return string(agentproto.BackendClaude)
+	case agentproto.BackendOpenCode:
+		return string(agentproto.BackendOpenCode)
+	default:
+		return string(agentproto.BackendCodex)
 	}
-	return string(agentproto.BackendCodex)
 }
 
 func displaySnapshotValue(value string) string {

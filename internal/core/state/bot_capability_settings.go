@@ -52,8 +52,8 @@ func NormalizeBotCapabilitySettingsRecord(record BotCapabilitySettingsRecord) (B
 	record.CodexProviderID = codexProviderID
 	record.ClaudeProfileID = claudeProfileID
 	record.OpenCodeProfileID = openCodeProfileID
-	record.PromptOverride = NormalizeModelConfigRecord(record.PromptOverride)
-	record.PlanMode = NormalizePlanModeSetting(record.PlanMode)
+	record.PromptOverride = NormalizePromptOverrideForBackend(record.Backend, record.PromptOverride)
+	record.PlanMode, record.PlanModeOverrideSet = NormalizePlanOverrideForBackend(record.Backend, record.PlanMode, record.PlanModeOverrideSet)
 	record.UpdatedBy = strings.TrimSpace(record.UpdatedBy)
 	if !record.UpdatedAt.IsZero() {
 		record.UpdatedAt = record.UpdatedAt.UTC()
@@ -77,6 +77,40 @@ func NormalizeModelConfigRecord(record ModelConfigRecord) ModelConfigRecord {
 	return record
 }
 
+func BackendAcceptsFeishuPromptOverrides(backend agentproto.Backend) bool {
+	switch agentproto.NormalizeBackend(backend) {
+	case agentproto.BackendOpenCode:
+		return false
+	default:
+		return true
+	}
+}
+
+func NormalizePromptOverrideForBackend(backend agentproto.Backend, record ModelConfigRecord) ModelConfigRecord {
+	record = NormalizeModelConfigRecord(record)
+	if !BackendAcceptsFeishuPromptOverrides(backend) {
+		return ModelConfigRecord{}
+	}
+	return record
+}
+
+func BackendAcceptsFeishuPlanOverride(backend agentproto.Backend) bool {
+	switch agentproto.NormalizeBackend(backend) {
+	case agentproto.BackendOpenCode:
+		return false
+	default:
+		return true
+	}
+}
+
+func NormalizePlanOverrideForBackend(backend agentproto.Backend, plan PlanModeSetting, overrideSet bool) (PlanModeSetting, bool) {
+	plan = NormalizePlanModeSetting(plan)
+	if !BackendAcceptsFeishuPlanOverride(backend) {
+		return PlanModeSettingOff, false
+	}
+	return plan, overrideSet
+}
+
 func BotCapabilitySettingsContract(record BotCapabilitySettingsRecord) SurfaceBackendContract {
 	normalized, ok := NormalizeBotCapabilitySettingsRecord(record)
 	if !ok {
@@ -94,11 +128,13 @@ func BotCapabilitySettingsContract(record BotCapabilitySettingsRecord) SurfaceBa
 func EffectiveSurfaceCapabilitySettings(root *Root, surface *SurfaceConsoleRecord) SurfaceCapabilitySettings {
 	record, status := LookupSurfaceBotCapabilitySettings(root, surface)
 	if status == BotCapabilitySettingsLookupValid {
+		contract := BotCapabilitySettingsContract(record)
+		planMode, planModeOverrideSet := NormalizePlanOverrideForBackend(contract.Backend, record.PlanMode, record.PlanModeOverrideSet)
 		return SurfaceCapabilitySettings{
-			Contract:            BotCapabilitySettingsContract(record),
-			PromptOverride:      NormalizeModelConfigRecord(record.PromptOverride),
-			PlanMode:            NormalizePlanModeSetting(record.PlanMode),
-			PlanModeOverrideSet: record.PlanModeOverrideSet,
+			Contract:            contract,
+			PromptOverride:      NormalizePromptOverrideForBackend(contract.Backend, record.PromptOverride),
+			PlanMode:            planMode,
+			PlanModeOverrideSet: planModeOverrideSet,
 			Source:              SurfaceCapabilitySettingsSourceBot,
 		}
 	}
@@ -111,11 +147,13 @@ func EffectiveSurfaceCapabilitySettings(root *Root, surface *SurfaceConsoleRecor
 			Source:   SurfaceCapabilitySettingsSourceSurface,
 		}
 	}
+	contract := SurfaceDesiredBackendContract(surface)
+	planMode, planModeOverrideSet := NormalizePlanOverrideForBackend(contract.Backend, surface.PlanMode, surface.PlanModeOverrideSet)
 	return SurfaceCapabilitySettings{
-		Contract:            SurfaceDesiredBackendContract(surface),
-		PromptOverride:      NormalizeModelConfigRecord(surface.PromptOverride),
-		PlanMode:            NormalizePlanModeSetting(surface.PlanMode),
-		PlanModeOverrideSet: surface.PlanModeOverrideSet,
+		Contract:            contract,
+		PromptOverride:      NormalizePromptOverrideForBackend(contract.Backend, surface.PromptOverride),
+		PlanMode:            planMode,
+		PlanModeOverrideSet: planModeOverrideSet,
 		Source:              SurfaceCapabilitySettingsSourceSurface,
 	}
 }

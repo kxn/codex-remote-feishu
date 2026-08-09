@@ -96,8 +96,8 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 					Code:      "relay_send_server_events_failed",
 					Layer:     "wrapper",
 					Stage:     "forward_server_events",
-					Operation: "codex.stdout",
-					Message:   "wrapper 无法把 Codex 事件发送到 relay。",
+					Operation: runtimeStdoutOperation(runtime),
+					Message:   fmt.Sprintf("wrapper 无法把 %s 事件发送到 relay。", runtimeDisplayName(runtime)),
 					Retryable: true,
 				}))
 			}
@@ -157,7 +157,7 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 								Layer:     "wrapper",
 								Stage:     "write_parent_stdout",
 								Operation: "parent.stdout",
-								Message:   "wrapper 无法把 Codex 输出回传给上游客户端。",
+								Message:   runtimeWriteParentStdoutMessage(runtime, false),
 							}))
 						}
 						errCh <- writeErr
@@ -175,7 +175,7 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 								Layer:     "wrapper",
 								Stage:     "write_parent_stdout",
 								Operation: "parent.stdout",
-								Message:   "wrapper 无法把合并后的 Codex 输出回传给上游客户端。",
+								Message:   runtimeWriteParentStdoutMessage(runtime, true),
 							}))
 						}
 						errCh <- writeErr
@@ -190,9 +190,9 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 					reportProblem(agentproto.ErrorInfo{
 						Code:      "stdout_parse_failed",
 						Layer:     "wrapper",
-						Stage:     "observe_codex_stdout",
-						Operation: "codex.stdout",
-						Message:   "wrapper 无法解析 Codex 子进程输出的 JSON-RPC 帧。",
+						Stage:     runtimeStdoutObserveStage(runtime),
+						Operation: runtimeStdoutOperation(runtime),
+						Message:   fmt.Sprintf("wrapper 无法解析 %s 子进程输出的 JSON-RPC 帧。", runtimeDisplayName(runtime)),
 						Details:   fmt.Sprintf("%v; frame=%q", parseErr, previewRawLine(line)),
 					})
 				}
@@ -206,7 +206,7 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 							Layer:     "wrapper",
 							Stage:     "write_parent_stdout",
 							Operation: "parent.stdout",
-							Message:   "wrapper 无法把 Codex 输出回传给上游客户端。",
+							Message:   runtimeWriteParentStdoutMessage(runtime, false),
 						}))
 					}
 					errCh <- writeErr
@@ -228,7 +228,45 @@ func stdoutLoop(ctx context.Context, childStdout io.Reader, parentStdout io.Writ
 	}
 }
 
-func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []byte, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo), done chan<- struct{}) {
+func runtimeStdoutObserveStage(runtime backendRuntime) string {
+	return "observe_" + string(runtimeBackend(runtime)) + "_stdout"
+}
+
+func runtimeStdoutOperation(runtime backendRuntime) string {
+	return string(runtimeBackend(runtime)) + ".stdout"
+}
+
+func runtimeStdinOperation(runtime backendRuntime) string {
+	return string(runtimeBackend(runtime)) + ".stdin"
+}
+
+func runtimeDisplayName(runtime backendRuntime) string {
+	return agentproto.BackendDisplayName(runtimeBackend(runtime))
+}
+
+func runtimeWriteParentStdoutMessage(runtime backendRuntime, merged bool) string {
+	if merged {
+		return fmt.Sprintf("wrapper 无法把合并后的 %s 输出回传给上游客户端。", runtimeDisplayName(runtime))
+	}
+	return fmt.Sprintf("wrapper 无法把 %s 输出回传给上游客户端。", runtimeDisplayName(runtime))
+}
+
+func runtimeWriteStdinCode(runtime backendRuntime) string {
+	return "write_" + string(runtimeBackend(runtime)) + "_stdin_failed"
+}
+
+func runtimeWriteStdinStage(runtime backendRuntime) string {
+	return "write_" + string(runtimeBackend(runtime)) + "_stdin"
+}
+
+func runtimeBackend(runtime backendRuntime) agentproto.Backend {
+	if runtime == nil {
+		return agentproto.BackendCodex
+	}
+	return agentproto.NormalizeBackend(runtime.Backend())
+}
+
+func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []byte, runtime backendRuntime, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo), done chan<- struct{}) {
 	defer childStdin.Close()
 	defer close(done)
 	for {
@@ -239,7 +277,7 @@ func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []
 			if len(line) == 0 {
 				continue
 			}
-			if err := writeChildFrame(childStdin, line, debugf, rawLogger, reportProblem); err != nil {
+			if err := writeChildFrameForRuntime(childStdin, line, runtime, debugf, rawLogger, reportProblem); err != nil {
 				errCh <- err
 				return
 			}
@@ -248,6 +286,10 @@ func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []
 }
 
 func writeChildFrame(childStdin io.Writer, line []byte, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
+	return writeChildFrameForRuntime(childStdin, line, nil, debugf, rawLogger, reportProblem)
+}
+
+func writeChildFrameForRuntime(childStdin io.Writer, line []byte, runtime backendRuntime, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
 	if len(line) == 0 {
 		return nil
 	}
@@ -258,11 +300,11 @@ func writeChildFrame(childStdin io.Writer, line []byte, debugf func(string, ...a
 	if _, err := childStdin.Write(line); err != nil {
 		if reportProblem != nil {
 			reportProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
-				Code:      "write_codex_stdin_failed",
+				Code:      runtimeWriteStdinCode(runtime),
 				Layer:     "wrapper",
-				Stage:     "write_codex_stdin",
-				Operation: "codex.stdin",
-				Message:   "wrapper 无法继续向 Codex 子进程写入数据。",
+				Stage:     runtimeWriteStdinStage(runtime),
+				Operation: runtimeStdinOperation(runtime),
+				Message:   fmt.Sprintf("wrapper 无法继续向 %s 子进程写入数据。", runtimeDisplayName(runtime)),
 			}))
 		}
 		return err

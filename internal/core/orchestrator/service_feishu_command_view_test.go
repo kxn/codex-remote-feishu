@@ -151,6 +151,39 @@ func TestBuildConfigCommandViewStatePopulatesOpenCodeProfileOptions(t *testing.T
 	}
 }
 
+func TestApplySurfaceActionRejectsOpenCodePromptSettingCommands(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 30, 0, 0, time.UTC)
+	for _, tt := range []struct {
+		name string
+		kind control.ActionKind
+		text string
+	}{
+		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning high"},
+		{name: "access", kind: control.ActionAccessCommand, text: "/access confirm"},
+		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			svc := newServiceForTest(&now)
+			svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+			surface := svc.root.Surfaces["surface-1"]
+
+			events := svc.ApplySurfaceAction(control.Action{
+				Kind:             tt.kind,
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				Text:             tt.text,
+			})
+			if !eventsContainNotice(events, "command_rejected", "OpenCode") {
+				t.Fatalf("expected OpenCode command rejection, got %#v", events)
+			}
+			if surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+				t.Fatalf("rejected OpenCode command mutated prompt/plan state: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+			}
+		})
+	}
+}
+
 func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableStatus(t *testing.T) {
 	now := time.Date(2026, 8, 1, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

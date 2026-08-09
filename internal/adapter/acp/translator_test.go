@@ -89,13 +89,17 @@ func TestPromptSendStartNewCreatesSessionThenPromptsAfterResponse(t *testing.T) 
 	assertEventKinds(t, observed.Events,
 		agentproto.EventThreadDiscovered,
 		agentproto.EventThreadFocused,
+		agentproto.EventThreadSettingsUpdated,
 		agentproto.EventTurnStarted,
 	)
-	if observed.Events[2].CommandID != "cmd-1" || observed.Events[2].ThreadID != "ses_1" {
-		t.Fatalf("turn started event lost command/thread context: %#v", observed.Events[2])
+	if settings := observed.Events[2].ThreadSettings; settings == nil || settings.ThreadID != "ses_1" || settings.Model != "test/test-model" {
+		t.Fatalf("thread settings event = %#v", observed.Events[2])
 	}
-	if observed.Events[2].Initiator.Kind != agentproto.InitiatorRemoteSurface || observed.Events[2].Initiator.SurfaceSessionID != "surface-1" {
-		t.Fatalf("turn initiator = %#v", observed.Events[2].Initiator)
+	if observed.Events[3].CommandID != "cmd-1" || observed.Events[3].ThreadID != "ses_1" {
+		t.Fatalf("turn started event lost command/thread context: %#v", observed.Events[3])
+	}
+	if observed.Events[3].Initiator.Kind != agentproto.InitiatorRemoteSurface || observed.Events[3].Initiator.SurfaceSessionID != "surface-1" {
+		t.Fatalf("turn initiator = %#v", observed.Events[3].Initiator)
 	}
 	if len(observed.OutboundToChild) != 1 {
 		t.Fatalf("followup outbound = %d frames, want session/prompt", len(observed.OutboundToChild))
@@ -195,6 +199,56 @@ func TestPromptSendExistingSessionResumesThenPromptsAfterResponse(t *testing.T) 
 		agentproto.EventThreadFocused,
 		agentproto.EventTurnStarted,
 	)
+	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_existing" {
+		t.Fatalf("resume followup frame = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendExistingSessionResumesWithoutReturnedSessionID(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-resume",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_existing",
+			CWD:      "/tmp/work",
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "continue"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(resume prompt): %v", err)
+	}
+	resumeFrame := decodeFrame(t, result.OutboundToChild[0])
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      resumeFrame["id"],
+		"result": map[string]any{
+			"configOptions": []any{
+				map[string]any{
+					"id":           "model",
+					"type":         "select",
+					"currentValue": "opencode/big-pickle",
+					"options": []any{
+						map[string]any{"value": "opencode/big-pickle", "name": "Big Pickle"},
+					},
+				},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(resume response): %v", err)
+	}
+	assertEventKinds(t, observed.Events,
+		agentproto.EventThreadDiscovered,
+		agentproto.EventThreadFocused,
+		agentproto.EventThreadSettingsUpdated,
+		agentproto.EventTurnStarted,
+	)
+	if settings := observed.Events[2].ThreadSettings; settings == nil || settings.ThreadID != "ses_existing" || settings.Model != "opencode/big-pickle" {
+		t.Fatalf("resume config settings event = %#v", observed.Events[2])
+	}
 	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
 	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_existing" {
 		t.Fatalf("resume followup frame = %#v", promptFrame)

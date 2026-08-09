@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
@@ -147,6 +148,36 @@ func TestProjectSnapshotShowsClaudeProfile(t *testing.T) {
 	rendered := renderedV2CardText(t, ops[0])
 	if !containsAll(rendered, "Claude 配置：DevSeek Pro（devseek）", "当前模式：claude") {
 		t.Fatalf("expected snapshot rendering to show claude profile, got %q", rendered)
+	}
+}
+
+func TestProjectSnapshotShowsOpenCodeMode(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode: "normal",
+			Backend:     agentproto.BackendOpenCode,
+			Attachment: control.AttachmentSummary{
+				InstanceID:  "inst-opencode",
+				DisplayName: "OpenCode",
+				Source:      "headless",
+				RouteMode:   "pinned",
+			},
+			NextPrompt: control.PromptRouteSummary{
+				EffectiveModel: "opencode/big-pickle",
+			},
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered, "当前模式：opencode") {
+		t.Fatalf("expected snapshot rendering to show opencode mode, got %q", rendered)
+	}
+	if strings.Contains(rendered, "当前模式：codex") {
+		t.Fatalf("opencode snapshot must not be rendered as codex, got %q", rendered)
 	}
 }
 

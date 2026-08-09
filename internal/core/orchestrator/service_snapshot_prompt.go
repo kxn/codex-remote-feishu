@@ -124,22 +124,26 @@ func compactPromptOverride(value state.ModelConfigRecord) state.ModelConfigRecor
 
 func (s *Service) resolveFrozenPromptOverride(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string, override state.ModelConfigRecord) state.ModelConfigRecord {
 	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
+	backend := s.promptConfigBackend(inst, surface)
+	if !state.BackendAcceptsFeishuPromptOverrides(backend) {
+		return state.ModelConfigRecord{}
+	}
 	if s.surfaceUsesLocalRequestedPromptOverrides(surface) {
 		if promptOverrideIsEmpty(override) && surface != nil {
 			override = settings.PromptOverride
 		}
-		return compactPromptOverride(override)
+		return state.NormalizePromptOverrideForBackend(backend, compactPromptOverride(override))
 	}
 	requestedOverride := compactPromptOverride(override)
 	if promptOverrideIsEmpty(requestedOverride) && surface != nil {
 		requestedOverride = compactPromptOverride(settings.PromptOverride)
 	}
 	resolution := s.resolvePromptConfig(inst, surface, threadID, cwd, override)
-	return state.ModelConfigRecord{
+	return state.NormalizePromptOverrideForBackend(backend, state.ModelConfigRecord{
 		Model:           resolution.EffectiveModel.Value,
 		ReasoningEffort: requestedOverride.ReasoningEffort,
 		AccessMode:      resolution.EffectiveAccessMode,
-	}
+	})
 }
 
 func (s *Service) surfaceUsesLocalRequestedPromptOverrides(surface *state.SurfaceConsoleRecord) bool {
@@ -154,6 +158,9 @@ func (s *Service) freezePlanModeForPrompt(surface *state.SurfaceConsoleRecord) s
 		return ""
 	}
 	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
+	if !state.BackendAcceptsFeishuPlanOverride(settings.Contract.Backend) {
+		return ""
+	}
 	if state.IsVSCodeProductMode(settings.Contract.ProductMode) && !settings.PlanModeOverrideSet {
 		return ""
 	}
@@ -161,12 +168,13 @@ func (s *Service) freezePlanModeForPrompt(surface *state.SurfaceConsoleRecord) s
 }
 
 func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string, override state.ModelConfigRecord) promptConfigResolution {
-	if surface != nil && promptOverrideIsEmpty(override) {
-		override = state.EffectiveSurfaceCapabilitySettings(s.root, surface).PromptOverride
-	}
-	override = compactPromptOverride(override)
-	baseModel, baseEffort, baseAccess := s.resolveBasePromptConfig(inst, surface, threadID, cwd)
 	backend := s.promptConfigBackend(inst, surface)
+	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
+	if surface != nil && promptOverrideIsEmpty(override) {
+		override = settings.PromptOverride
+	}
+	override = state.NormalizePromptOverrideForBackend(backend, compactPromptOverride(override))
+	baseModel, baseEffort, baseAccess := s.resolveBasePromptConfig(inst, surface, threadID, cwd)
 	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
 		override.Model = ""
 		baseModel = configValue{Source: "profile"}
@@ -174,20 +182,22 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 			Value:  s.claudeProfileReasoningEffort(s.promptConfigClaudeProfileID(inst, surface)),
 			Source: "profile",
 		}
-	} else if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
-		profile = normalizeCodexProfileSummary(profile)
-		if profile.Kind == state.CodexProfileKindAPI {
-			if model := strings.TrimSpace(profile.Model); model != "" {
-				baseModel = configValue{Value: model, Source: "profile"}
+	} else if agentproto.NormalizeBackend(backend) == agentproto.BackendCodex {
+		if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+			profile = normalizeCodexProfileSummary(profile)
+			if profile.Kind == state.CodexProfileKindAPI {
+				if model := strings.TrimSpace(profile.Model); model != "" {
+					baseModel = configValue{Value: model, Source: "profile"}
+				}
+				if effort := normalizeModelReasoningEffort(profile.ReasoningEffort); effort != "" {
+					baseEffort = configValue{Value: effort, Source: "profile"}
+				}
 			}
-			if effort := normalizeModelReasoningEffort(profile.ReasoningEffort); effort != "" {
-				baseEffort = configValue{Value: effort, Source: "profile"}
+			if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
+				override.Model = ""
+				baseModel = configValue{Value: fixedModel, Source: "profile"}
+				baseEffort = configValue{Value: fixedCodexAPIProfileReasoning(profile), Source: "profile"}
 			}
-		}
-		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
-			override.Model = ""
-			baseModel = configValue{Value: fixedModel, Source: "profile"}
-			baseEffort = configValue{Value: fixedCodexAPIProfileReasoning(profile), Source: "profile"}
 		}
 	}
 	effectiveModel := baseModel
@@ -206,8 +216,12 @@ func (s *Service) resolvePromptConfig(inst *state.InstanceRecord, surface *state
 			effectiveEffort = configValue{Value: defaultValue, Source: "surface_default"}
 		}
 	}
-	effectiveAccessModeSource := "surface_default"
-	effectiveAccessMode := agentproto.AccessModeFullAccess
+	effectiveAccessModeSource := ""
+	effectiveAccessMode := ""
+	if state.BackendAcceptsFeishuPromptOverrides(backend) {
+		effectiveAccessModeSource = "surface_default"
+		effectiveAccessMode = agentproto.AccessModeFullAccess
+	}
 	if agentproto.NormalizeAccessMode(override.AccessMode) != "" {
 		effectiveAccessMode = override.AccessMode
 		effectiveAccessModeSource = "surface_override"
@@ -247,17 +261,17 @@ func (s *Service) promptConfigClaudeProfileID(inst *state.InstanceRecord, surfac
 }
 
 func defaultPromptModelForBackend(backend agentproto.Backend) string {
-	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
-		return ""
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendCodex {
+		return defaultModel
 	}
-	return defaultModel
+	return ""
 }
 
 func defaultPromptReasoningEffortForBackend(backend agentproto.Backend) string {
-	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
-		return ""
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendCodex {
+		return defaultReasoningEffort
 	}
-	return defaultReasoningEffort
+	return ""
 }
 
 func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, threadID, cwd string) (configValue, configValue, configValue) {
@@ -275,9 +289,13 @@ func (s *Service) resolveBasePromptConfig(inst *state.InstanceRecord, surface *s
 		}
 		if thread.ExplicitModel != "" {
 			model = configValue{Value: thread.ExplicitModel, Source: "thread"}
+		} else if thread.ThreadSettings != nil && strings.TrimSpace(thread.ThreadSettings.Model) != "" {
+			model = configValue{Value: strings.TrimSpace(thread.ThreadSettings.Model), Source: "thread"}
 		}
 		if thread.ExplicitReasoningEffort != "" {
 			effort = configValue{Value: thread.ExplicitReasoningEffort, Source: "thread"}
+		} else if thread.ThreadSettings != nil && strings.TrimSpace(thread.ThreadSettings.ReasoningEffort) != "" {
+			effort = configValue{Value: strings.TrimSpace(thread.ThreadSettings.ReasoningEffort), Source: "thread"}
 		}
 		if claudeHeadless {
 			if observed := agentproto.NormalizeAccessMode(thread.ObservedAccessMode); observed != "" {

@@ -19,7 +19,7 @@ func (a *App) bootstrapClaude(childStdin io.Writer, childStdout io.Reader, rawLo
 	if err != nil {
 		return nil, err
 	}
-	if err := writeChildFrame(childStdin, frame, a.debugf, rawLogger, reportProblem); err != nil {
+	if err := writeChildFrameForRuntime(childStdin, frame, a.runtime, a.debugf, rawLogger, reportProblem); err != nil {
 		return nil, err
 	}
 

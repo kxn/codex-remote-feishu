@@ -153,6 +153,185 @@ func (r *restartOrderFakeRuntime) BuildChildRestartRestoreFrame(string) ([]byte,
 
 func (r *restartOrderFakeRuntime) CancelChildRestartRestore(string) {}
 
+type stdoutTestRuntime struct {
+	backend       agentproto.Backend
+	observeServer func([]byte) (runtimeObserveResult, error)
+}
+
+func (r stdoutTestRuntime) Backend() agentproto.Backend {
+	return r.backend
+}
+
+func (r stdoutTestRuntime) Capabilities() agentproto.Capabilities {
+	return agentproto.Capabilities{}
+}
+
+func (r stdoutTestRuntime) Launch(context.Context, *App, *debuglog.RawLogger, func(agentproto.ErrorInfo)) (*childSession, error) {
+	return nil, nil
+}
+
+func (r stdoutTestRuntime) ObserveClient([]byte) (runtimeObserveResult, error) {
+	return runtimeObserveResult{}, nil
+}
+
+func (r stdoutTestRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
+	if r.observeServer != nil {
+		return r.observeServer(line)
+	}
+	return runtimeObserveResult{}, nil
+}
+
+func (r stdoutTestRuntime) TranslateCommand(agentproto.Command) (runtimeCommandResult, error) {
+	return runtimeCommandResult{}, nil
+}
+
+func (r stdoutTestRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan, *agentproto.CodexResumePolicy) error {
+	return nil
+}
+
+func (r stdoutTestRuntime) BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error) {
+	return nil, "", false, nil
+}
+
+func (r stdoutTestRuntime) CancelChildRestartRestore(string) {}
+
+type failingWriter struct {
+	err error
+}
+
+func (w failingWriter) Write([]byte) (int, error) {
+	return 0, w.err
+}
+
+func TestStdoutLoopReportsOpenCodeParseFailureWithBackendSpecificContext(t *testing.T) {
+	var reported agentproto.ErrorInfo
+	reportProblem := func(problem agentproto.ErrorInfo) {
+		reported = problem
+	}
+	ctx := context.Background()
+	done := make(chan struct{})
+	errCh := make(chan error, 1)
+	stdoutLoop(
+		ctx,
+		strings.NewReader("not-json\n"),
+		io.Discard,
+		make(chan []byte, 1),
+		stdoutTestRuntime{
+			backend: agentproto.BackendOpenCode,
+			observeServer: func([]byte) (runtimeObserveResult, error) {
+				return runtimeObserveResult{}, errors.New("native parse failed")
+			},
+		},
+		nil,
+		newCommandResponseTracker(),
+		newRuntimeTurnTracker(),
+		nil,
+		0,
+		errCh,
+		nil,
+		nil,
+		reportProblem,
+		done,
+	)
+
+	if reported.Code != "stdout_parse_failed" {
+		t.Fatalf("reported code = %q, want stdout_parse_failed", reported.Code)
+	}
+	if reported.Stage != "observe_opencode_stdout" {
+		t.Fatalf("reported stage = %q, want observe_opencode_stdout", reported.Stage)
+	}
+	if reported.Operation != "opencode.stdout" {
+		t.Fatalf("reported operation = %q, want opencode.stdout", reported.Operation)
+	}
+	if strings.Contains(reported.Message, "Codex") {
+		t.Fatalf("opencode parse failure message must not mention Codex, got %q", reported.Message)
+	}
+	select {
+	case err := <-errCh:
+		t.Fatalf("stdoutLoop reported unexpected async error: %v", err)
+	default:
+	}
+}
+
+func TestStdoutLoopReportsOpenCodeParentWriteFailureWithBackendSpecificMessage(t *testing.T) {
+	writeErr := errors.New("parent pipe closed")
+	var reported agentproto.ErrorInfo
+	reportProblem := func(problem agentproto.ErrorInfo) {
+		reported = problem
+	}
+	ctx := context.Background()
+	done := make(chan struct{})
+	errCh := make(chan error, 1)
+	stdoutLoop(
+		ctx,
+		strings.NewReader("not-json\n"),
+		failingWriter{err: writeErr},
+		make(chan []byte, 1),
+		stdoutTestRuntime{backend: agentproto.BackendOpenCode},
+		nil,
+		newCommandResponseTracker(),
+		newRuntimeTurnTracker(),
+		nil,
+		0,
+		errCh,
+		nil,
+		nil,
+		reportProblem,
+		done,
+	)
+
+	if reported.Code != "write_parent_stdout_failed" {
+		t.Fatalf("reported code = %q, want write_parent_stdout_failed", reported.Code)
+	}
+	if strings.Contains(reported.Message, "Codex") {
+		t.Fatalf("opencode write failure message must not mention Codex, got %q", reported.Message)
+	}
+	if !strings.Contains(reported.Message, "OpenCode") {
+		t.Fatalf("opencode write failure message should mention OpenCode, got %q", reported.Message)
+	}
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, writeErr) {
+			t.Fatalf("stdoutLoop error = %v, want %v", err, writeErr)
+		}
+	default:
+		t.Fatal("expected stdoutLoop to report parent write error")
+	}
+}
+
+func TestWriteChildFrameReportsOpenCodeFailureWithBackendSpecificContext(t *testing.T) {
+	writeErr := errors.New("child pipe closed")
+	var reported agentproto.ErrorInfo
+	reportProblem := func(problem agentproto.ErrorInfo) {
+		reported = problem
+	}
+
+	err := writeChildFrameForRuntime(
+		failingWriter{err: writeErr},
+		[]byte(`{"jsonrpc":"2.0","method":"session/prompt"}`+"\n"),
+		stdoutTestRuntime{backend: agentproto.BackendOpenCode},
+		nil,
+		nil,
+		reportProblem,
+	)
+
+	if !errors.Is(err, writeErr) {
+		t.Fatalf("writeChildFrameForRuntime error = %v, want %v", err, writeErr)
+	}
+	if reported.Code != "write_opencode_stdin_failed" {
+		t.Fatalf("reported code = %q, want write_opencode_stdin_failed", reported.Code)
+	}
+	if reported.Stage != "write_opencode_stdin" {
+		t.Fatalf("reported stage = %q, want write_opencode_stdin", reported.Stage)
+	}
+	if reported.Operation != "opencode.stdin" {
+		t.Fatalf("reported operation = %q, want opencode.stdin", reported.Operation)
+	}
+	if strings.Contains(reported.Message, "Codex") {
+		t.Fatalf("opencode stdin failure message must not mention Codex, got %q", reported.Message)
+	}
+}
+
 func TestRestartChildSessionStopsCurrentIOBeforeLaunchingReplacement(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
