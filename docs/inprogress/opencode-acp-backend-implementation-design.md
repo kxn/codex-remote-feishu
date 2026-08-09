@@ -28,6 +28,7 @@ OpenCode backend 可以开始完整实现。第一版目标不是最小 PoC，�
 
 - `internal/adapter/acp` 已覆盖 JSON-RPC correlation、initialize、session new/list/load/resume/fork/prompt/cancel、permission request/respond、usage、tool/text/thought chunk、`session/load` hydration replay 汇总和 `fs/write_text_file`。
 - `fs/write_text_file` 当前策略是：必须先收到 OpenCode permission approval，且路径必须经 workspace realpath confinement 校验，已有 symlink/junction 指向 workspace 外部时 fail-closed；成功时真实写入文件并发出 `item.file_change.patch_updated`，未批准或越界时 JSON-RPC error fail-closed。
+- `fs/write_text_file` 已封住确定性的 symlink/junction escape 和 dangling symlink escape；并发 TOCTOU path swap 仍作为后续安全 hardening 记录，不阻塞 #847 skeleton close。
 - `internal/app/wrapper` 已把 `opencode-acp` wrapper mode 接到真实 `opencode acp` child launch，并在返回前完成 ACP initialize bootstrap。
 - 已用 `opencode-ai@1.18.15` npm binary 和本地 fake provider 跑通 Go guarded smoke：initialize -> session/new -> session/prompt -> thought/text delta -> prompt response `stopReason=end_turn` -> turn completion -> `session/load` replay 汇总成 history，且 replay 不泄漏 live delta。测试入口：`OPENCODE_ACP_SMOKE_BIN=/path/to/opencode go test ./internal/adapter/acp -run TestRealOpenCodeACPPromptSmoke -count=1 -v`。
 - OAuth/API overlay 压过系统 OAuth 仍按暂未测试处理，不作为 #847 runtime skeleton 阻塞项。
@@ -420,6 +421,7 @@ response 必须按 JSON-RPC id 关联，不能按 stdout 顺序；黑盒已观�
 | `request.respond` | 回应 pending `session/request_permission` | option id 原样 round-trip |
 | `model.list` | 从 `configOptions.model` 构造 catalog snapshot | 缺 option 时返回 unsupported snapshot |
 | `process.child.restart` | child 重启后 `session/resume` | 成功后 emit child restart outcome |
+| `process.exit` | wrapper 现有 stop/detach | 不主动发送 ACP `session/close`，避免把用户的 OpenCode session 从运行时视角关闭/删除；进程停止后的 turn reconciliation 沿用现有 tracker |
 | `turn.steer` | 第一版默认不承诺同轮追加 | 若 OpenCode 后续有等价能力再开放 |
 | `mcp.oauth_login.start` | 不支持 OpenCode MCP OAuth | 继承系统状态或用户本机处理 |
 
@@ -467,7 +469,7 @@ turn close：
 - `stopReason=cancelled` -> `turn.completed(status=cancelled)`。
 - JSON-RPC error -> `turn.completed(status=failed)` + normalized `system.error`。
 - permission reject 后如果 OpenCode 仍 `end_turn`，turn 按 completed，tool item failed。
-- child exit 时用现有 runtime turn tracker 做 reconciliation。
+- child exit / process exit 时用现有 runtime turn tracker 做 reconciliation；不把 wrapper stop/detach 映射成 ACP `session/close`。
 
 ### 9.4 hydration
 
