@@ -443,9 +443,11 @@ func dynamicToolProgressLabel(tool string) string {
 }
 
 func dynamicToolProgressSummaryFromMetadata(metadata map[string]any) string {
-	summary := strings.TrimSpace(metadataString(metadata, "text"))
-	if summary != "" {
-		return summary
+	if value, ok := metadata["suppressFinalText"].(bool); !ok || !value {
+		summary := strings.TrimSpace(metadataString(metadata, "text"))
+		if summary != "" {
+			return summary
+		}
 	}
 	if value := metadata["arguments"]; value != nil {
 		return compactStructuredJSON(value)

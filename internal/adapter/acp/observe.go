@@ -512,14 +512,20 @@ func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]a
 	if content == "" {
 		return events
 	}
+	deltaKind := item.Kind
+	metadata := xutil.CloneMap(item.Metadata)
+	if deltaKind == "command_execution" {
+		deltaKind = "command_execution_output"
+		metadata = nil
+	}
 	events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
 		ThreadID: sessionID,
 		TurnID:   turn.TurnID,
 		ItemID:   item.ItemID,
-		ItemKind: item.Kind,
+		ItemKind: deltaKind,
 		Delta:    content,
-		Metadata: xutil.CloneMap(item.Metadata),
+		Metadata: metadata,
 	}))
 	return events
 }
