@@ -18,7 +18,7 @@
 当前结论：
 
 - ACP 协议面足以承载我们的核心 backend lifecycle：initialize、session new/list/load/resume/fork/close、prompt/cancel、stream delta、tool lifecycle、permission request、usage、MCP injection 均已用 `opencode-ai@1.18.15` binary 黑盒验证。
-- profile overlay 可以实现“少字段覆盖，其余继承”：默认建议用 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，必要时配合临时 XDG；完整设计前还需要补一组黑盒验证，确认系统已有 OAuth 时显式 API profile 仍稳定使用 overlay auth/baseURL/model。
+- profile overlay 可以实现“少字段覆盖，其余继承”：默认建议用 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，必要时配合临时 XDG；系统已有 OAuth 时显式 API profile 是否仍稳定使用 overlay auth/baseURL/model 暂未测试，完整设计先按可行假设推进。
 - 仍需我们侧单独实现 loader/profile compiler。ACP 只能抽象运行期协议，不能抽象 OpenCode 的配置、auth、MCP OAuth、模型目录、权限 schema 和产品命令差异。
 - 主要缺口是语义退化而非不可接入：OpenCode 没有 Codex 式 sandbox profile、persistent delete、独立 thread/turn API、未知 slash command 的显式错误；Plan/usage/error 等能力应比照 Claude 做 adapter 侧承接和投影，不能把内部 carrier 差异直接暴露成用户可见“不支持”。
 
@@ -352,7 +352,7 @@ OpenCode initialize 声明 MCP http/sse capability。`registerMcpServers` 会把
 未完全覆盖但不阻塞接入的风险：
 
 - MCP OAuth / remote OAuth：源码显示会使用 `mcp-auth.json` 和 OAuth flow；第一版不做我们侧首填、刷新或多 OAuth profile 管理，只继承系统现状。
-- OAuth refresh / managed account：`OPENCODE_AUTH_CONTENT` 只证明 API key 注入不落盘，不代表 OAuth token 更新不写全局状态；完整设计只需证明系统 OAuth 不影响显式 API profile。
+- OAuth refresh / managed account：`OPENCODE_AUTH_CONTENT` 只证明 API key 注入不落盘，不代表 OAuth token 更新不写全局状态；设计先假设系统 OAuth 不影响显式 API profile，具体证据放到实现验证阶段补。
 - native runtime status：OpenCode 内部有 `session.status` idle/busy/retry，但 ACP bridge 只用 idle 解 `runUntilIdle`，不向客户端转发完整 busy/retry 状态。
 - persistent delete：`session/close` 不是删除历史 session，不能映射成我们的删除语义。
 - plan snapshot：`mode=plan` 只是 OpenCode mode/agent，不能还原 Codex/Claude 风格结构化 Plan。
@@ -436,9 +436,9 @@ raw-to-canonical adapter 需要按以下规则实现：
 | 差异 | 影响 | 解决策略 | 实现位置 | 验收方式 |
 | --- | --- | --- | --- | --- |
 | OpenCode 无 native profile catalog | 我们不能像 Claude/Codex 一样直接列系统 profile | 由我们侧维护 `OpenCodeProfile` catalog；profile 只描述 override intent，不镜像 OpenCode 全配置。运行时 compiler 读取 profile + workspace intent，生成一次性 env/config overlay | daemon profile/admin 层 + OpenCode launcher | profile CRUD golden；同一机器多个 profile 并发启动互不污染 |
-| 少字段覆盖并继承系统配置 | 这是必备能力；不能要求用户改全局 config | 默认只写 `OPENCODE_CONFIG_CONTENT` 和 `OPENCODE_AUTH_CONTENT`。不设置 `OPENCODE_DISABLE_PROJECT_CONFIG` 时继承 global+project；profile 要求禁用项目配置时才加该 env。`OPENCODE_CONFIG_DIR` 只作为 API profile 受系统 OAuth 干扰时的隔离候选，不作为默认路径 | OpenCode profile compiler | global/project/content 三层优先级 fixture；系统 OAuth 存在时 API overlay 仍命中 fake provider；扫描临时目录确认不写用户 config |
-| API key / baseURL / custom provider 注入 | provider 配置不是 ACP 的一部分 | compiler 生成 `provider.<id>.options.baseURL/apiKey` 和 `model`；API key 优先放 `OPENCODE_AUTH_CONTENT`，只有 OpenCode schema 必须的非密字段放 config content。显式 API profile 不允许 fallback 到系统 OAuth | OpenCode profile compiler | fake provider request 捕获 authorization、model、baseURL；系统 OAuth 存在时仍捕获 profile key；secret redaction test |
-| Auth/OAuth 边界 | `OPENCODE_AUTH_CONTENT` 只覆盖 API auth；OAuth/MCP OAuth 可能使用系统状态 | 第一版只支持 API-key profile 的可控覆盖。默认 profile 可以继承系统 OAuth，但我们不首填、不刷新、不隔离多个 OAuth profile；若 OAuth 会干扰 API profile，则第一版禁止 inherit/OAuth 路径 | profile schema + launcher validation | API auth no-write；系统 OAuth + API profile overlay；两个 API profiles 并发不串 key/model/baseURL |
+| 少字段覆盖并继承系统配置 | 这是必备能力；不能要求用户改全局 config | 默认只写 `OPENCODE_CONFIG_CONTENT` 和 `OPENCODE_AUTH_CONTENT`。不设置 `OPENCODE_DISABLE_PROJECT_CONFIG` 时继承 global+project；profile 要求禁用项目配置时才加该 env。`OPENCODE_CONFIG_DIR` 只作为 API profile 受系统 OAuth 干扰时的隔离候选，不作为默认路径。系统 OAuth 存在时 API overlay 能否稳定压过它暂未测试，设计先按可行假设推进 | OpenCode profile compiler | global/project/content 三层优先级 fixture；系统 OAuth 存在时 API overlay 仍命中 fake provider；扫描临时目录确认不写用户 config |
+| API key / baseURL / custom provider 注入 | provider 配置不是 ACP 的一部分 | compiler 生成 `provider.<id>.options.baseURL/apiKey` 和 `model`；API key 优先放 `OPENCODE_AUTH_CONTENT`，只有 OpenCode schema 必须的非密字段放 config content。显式 API profile 不允许 fallback 到系统 OAuth；该 fallback 风险暂未测试 | OpenCode profile compiler | fake provider request 捕获 authorization、model、baseURL；系统 OAuth 存在时仍捕获 profile key；secret redaction test |
+| Auth/OAuth 边界 | `OPENCODE_AUTH_CONTENT` 只覆盖 API auth；OAuth/MCP OAuth 可能使用系统状态 | 第一版只支持 API-key profile 的可控覆盖。默认 profile 可以继承系统 OAuth，但我们不首填、不刷新、不隔离多个 OAuth profile；若 OAuth 会干扰 API profile，则第一版禁止 inherit/OAuth 路径。当前先假设 API overlay 能压过系统 OAuth | profile schema + launcher validation | API auth no-write；系统 OAuth + API profile overlay；两个 API profiles 并发不串 key/model/baseURL |
 | MCP local/remote 注入 | ACP 能注册 MCP，但 OAuth、状态诊断和命名要处理 | local/remote MCP 作为 session launch material 注入；MCP tool 名按 OpenCode `server_tool` 暴露。MCP OAuth 不进入第一版 profile 管理；注册失败优先写 debug trace/log，产品面按现有失败通道保守处理 | OpenCode ACP adapter + diagnostics | local stdio MCP list/call golden；失败 MCP debug trace；header/env redaction |
 | prompt response 无 final text | 不能把 prompt response 当最终 assistant message | adapter 建 turn buffer：以 `messageId` 聚合 `agent_message_chunk` / `agent_thought_chunk`；prompt response 只关闭 turn 并附 usage/stopReason。若 turn close 时无 assistant chunk，输出空完成或命令专用结果 | ACP protocol adapter | text/reasoning delta fixture；无文本 `/patch` 负向 fixture |
 | live delta 与 load replay 形态不同 | resume/load 时容易重复追加消息 | adapter 引入 hydration mode。`session/load` 期间的 chunk 作为历史快照导入，不触发“正在生成”状态；同一 `messageId` 已存在时覆盖/合并，不追加重复 delta | ACP protocol adapter + surface resume | load replay fixture：live 两段 delta，load 一段 aggregate，最终 canonical 只有一条消息 |
@@ -461,12 +461,12 @@ raw-to-canonical adapter 需要按以下规则实现：
 1. 先做不会误导安全语义的底座：backend identity、launcher、profile compiler、error normalizer、secret redaction。
 2. 再做 ACP runtime adapter：JSON-RPC correlation、turn buffer、load hydration、tool/permission/usage mapping。
 3. 再做产品命令层：command registry 预检、`/review`、`/compact`、未知 slash 拦截。
-4. 最后处理系统登录态继承边界：只证明 API profile 不受系统 OAuth 影响；MCP OAuth 和多 OAuth profile 管理不进入第一版。
+4. 最后处理系统登录态继承边界：API profile 不受系统 OAuth 影响先作为未测试假设；MCP OAuth 和多 OAuth profile 管理不进入第一版。
 
 ## 13. 下一步执行
 
 1. 新增 OpenCode backend identity、binary resolver 和 launch contract。
-2. 实现 OpenCode profile schema/compiler：默认 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，可选临时 XDG，禁止默认 `OPENCODE_CONFIG_DIR`；完整设计前先补系统 OAuth + API overlay 黑盒验证。
+2. 实现 OpenCode profile schema/compiler：默认 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，可选临时 XDG，禁止默认 `OPENCODE_CONFIG_DIR`；系统 OAuth + API overlay 黑盒验证放到实现/验证阶段补。
 3. 实现 ACP protocol adapter：JSON-RPC id correlation、session/update dispatcher、stream buffer、load replay hydration、tool/permission/usage mapping。
 4. 实现差异策略里的 validator/diagnostics：API overlay 失败禁止 fallback 到系统 OAuth、persistent delete 隐藏、unknown slash preflight；sandbox/MCP/OAuth 细节进入 debug trace。
 5. 将本轮 `/tmp/opencode-acp-*.json` 证据中挑选脱敏 raw fixture 进入测试目录，建立 OpenCode adapter golden tests。

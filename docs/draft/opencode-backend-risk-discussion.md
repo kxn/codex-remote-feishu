@@ -2,18 +2,18 @@
 
 > Type: `draft`
 > Updated: `2026-08-09`
-> Summary: 按 Claude 现有产品基线收敛 OpenCode backend 的剩余硬门槛和实现前提。
+> Summary: 按 Claude 现有产品基线收敛 OpenCode backend 的剩余设计假设和实现前提。
 
 ## 1. 结论
 
 OpenCode 可以进入完整设计。对照当前 Claude backend 后，大部分差异都不是需要产品拍板的风险，而是 backend adapter 的承接细节：能投影就投影，不能投影就按现有 Claude 式产品壳自然退化，必要时写 debug trace，不把内部 carrier 差异暴露给用户。
 
-当前唯一设计前硬门槛是 profile/auth：
+当前 profile/auth 按暂未测试假设推进：
 
 - 如果 OpenCode profile 明确配置 API key / base URL / model，这个实例必须稳定使用该 API profile；
-- 系统上原本存在的 OpenCode OAuth 登录态不得覆盖或污染这个 API profile；
+- 暂未实测系统上原本存在 OpenCode OAuth 登录态时，API profile overlay 是否一定能压过系统 OAuth；完整设计先假设可以压过；
 - 我们不要求、也不支持在后台替用户首填或管理多个 OAuth profile；
-- 系统 OAuth 只作为“继承系统现状”的默认/非隔离模式存在；如果它会干扰 API profile，则第一版直接禁用 OAuth/inherit 路径也可以接受。
+- 系统 OAuth 只作为“继承系统现状”的默认/非隔离模式存在；如果后续实测它会干扰 API profile，则第一版直接禁用 OAuth/inherit 路径也可以接受。
 
 推荐默认策略：
 
@@ -26,7 +26,7 @@ OpenCode 可以进入完整设计。对照当前 Claude backend 后，大部分�
 
 | 能力面 | Claude 现状 | 对 OpenCode 的校准结论 |
 | --- | --- | --- |
-| Profile / auth | 自定义 profile 继承系统环境，只移除并覆盖 `ANTHROPIC_*`、subagent model、reasoning、追加 instruction 等有限 env；默认 profile 是 inherit。没有通用配置目录/OAuth 完全隔离抽象。 | OpenCode 不需要通用 loader 抽象；只需要证明 API profile overlay 能压过系统 OAuth，不被系统登录态影响。 |
+| Profile / auth | 自定义 profile 继承系统环境，只移除并覆盖 `ANTHROPIC_*`、subagent model、reasoning、追加 instruction 等有限 env；默认 profile 是 inherit。没有通用配置目录/OAuth 完全隔离抽象。 | OpenCode 不需要通用 loader 抽象；API profile overlay 压过系统 OAuth 暂未测试，完整设计先按可行假设处理。 |
 | 权限 / sandbox | Claude 把 native `default`、`acceptEdits`、`plan`、`bypassPermissions` 投影到 access/plan；不是 OS/container sandbox。 | OpenCode 不补齐 Codex sandbox，也不新增用户可见风险；按现有权限/访问语义承接，底层差异只进 debug trace。 |
 | Plan | Claude 是拼出来的产品语义：`ExitPlanMode` 走确认卡，`TodoWrite` 有结构化输入时投影计划更新卡，普通计划正文仍可作为普通 assistant/plan 文本承接。它没有向用户暴露内部 carrier 差异。 | OpenCode 比照 Claude：能从 ACP/tool/text 稳定承接就承接；不能承接时自然退化为普通内容或 backend plan mode，不需要专门提示用户内部承接方式。 |
 | 命令兼容 | Claude command profile 已隐藏/拒绝 `/compact`、`/review`、`/patch`、`/auto-continue`、`/auto-whip` 等多项 Codex 命令；部分 `/new`、workspace list、steer all 是 approximation。 | OpenCode 也应做 backend command profile。未知或未验证命令发送前拒绝，不作为阻塞项。 |
@@ -34,15 +34,15 @@ OpenCode 可以进入完整设计。对照当前 Claude backend 后，大部分�
 | Usage | Claude 从 result `usage` 合成 last/total token usage，并用 `modelUsage.contextWindow` 补 context window；这是投影，不是统一原生账单语义。 | OpenCode 也按现有 usage 事件尽量投影。只有当产品要展示 ACP context meter 时才需要单独讨论。 |
 | Error | Claude 当前失败主要归一到 `claude_turn_failed`，details 带原始 errors；不是细粒度完整 taxonomy。 | OpenCode 不必做完整 taxonomy；只需把 auth/session/MCP/model 这类影响用户下一步操作的错误提前诊断或归一化。 |
 
-## 3. 设计前硬门槛
+## 3. 暂未测试假设
 
-### 3.1 API Profile Overlay 必须压过系统 OAuth
+### 3.1 API Profile Overlay 压过系统 OAuth
 
-必须证明：
+当前假设：
 
 - 系统已有 OpenCode OAuth 登录态时，启动一个显式 API key profile 实例，实际 provider/model/auth 走 profile overlay，而不是系统 OAuth。
 - 两个不同 API key profile 可以并发启动，互不污染，也不写回系统 OpenCode 配置。
-- 缺少 API key 或 overlay 无效时，启动前失败或在首轮前给内部诊断；不能悄悄 fallback 到系统 OAuth。
+- 这组行为暂未测试，不阻塞进入完整设计；后续实现/验证阶段必须补黑盒证据。
 
 推荐方案：
 
@@ -51,13 +51,13 @@ OpenCode 可以进入完整设计。对照当前 Claude backend 后，大部分�
 - 自定义 API profile 启动时使用 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT`，必要时配合独立 XDG root，确保系统 OAuth 不参与该实例。
 - 如果实测发现 API overlay 仍会受系统 OAuth 影响，则第一版禁止 OpenCode OAuth/inherit 模式，只允许 API profile。
 
-完整设计前必须补的测试：
+后续实现/验证阶段要补的测试：
 
 - 系统 OAuth 存在 + API profile overlay：请求捕获证明 authorization/baseURL/model 来自 profile。
 - 系统 OAuth 存在 + 两个 API profiles 并发：请求捕获证明互不串 key/model/baseURL。
 - API profile 启动后扫描系统 OpenCode config/auth/data 文件：证明没有写回或污染系统配置。
 
-如果这组测试通过，就可以进入完整设计；如果失败，则设计结论改成“OpenCode 第一版只支持系统 inherit 或只支持 API profile 二选一”，不能同时承诺二者。
+如果这组测试失败，则实现阶段把结论改成“OpenCode 第一版只支持系统 inherit 或只支持 API profile 二选一”，不能同时承诺二者。
 
 ## 4. 从原风险清单降级的项
 
@@ -71,8 +71,7 @@ OpenCode 可以进入完整设计。对照当前 Claude backend 后，大部分�
 
 ## 5. 实现顺序建议
 
-1. 先做 API profile overlay 黑盒验证：系统 OAuth 存在时，API profile 仍能稳定覆盖 auth/baseURL/model。
-2. 再做 ACP runtime adapter：turn buffer、load hydration、tool/permission/usage/error mapping。
-3. 再做 command profile：可见/可发/近似/拒绝与诊断文案。
-4. 再按 Claude 产品语义接 Plan：mode/确认/普通计划文本/可结构化 todo 各走现有承接面，不新增内部 carrier 提示。
-5. 最后补 profile compiler、secret redaction 与调试日志；OAuth 管理不进入第一版。
+1. 先做完整设计：backend identity、launcher、profile compiler、ACP runtime adapter、command profile、fixture/golden test 布局。
+2. 设计中把 API profile overlay 压过系统 OAuth 标成未测试假设，并安排实现阶段黑盒验证。
+3. 按 Claude 产品语义接 Plan：mode/确认/普通计划文本/可结构化 todo 各走现有承接面，不新增内部 carrier 提示。
+4. 底层差异统一进 debug trace/log；OAuth 管理不进入第一版。
