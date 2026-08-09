@@ -180,35 +180,36 @@ func TestBuildDaemonHeadlessBaseEnvFreezesExplicitClaudeBinary(t *testing.T) {
 	}
 }
 
-func TestBuildDaemonHeadlessBaseEnvRefreshesProcessPATHForCommandResolution(t *testing.T) {
-	home := t.TempDir()
-	shellBin := filepath.Join(home, "shell-bin")
-	if err := os.MkdirAll(shellBin, 0o755); err != nil {
-		t.Fatalf("MkdirAll shell bin: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(home, ".bashrc"), []byte("export PATH=\""+shellBin+":$PATH\"\n"), 0o644); err != nil {
-		t.Fatalf("write .bashrc: %v", err)
-	}
-	currentPath := strings.Join([]string{"/usr/bin", "/bin"}, string(os.PathListSeparator))
-	t.Setenv("HOME", home)
-	t.Setenv("PATH", currentPath)
+func TestBuildDaemonHeadlessBaseEnvDoesNotMutateProcessPATH(t *testing.T) {
+	processPath := filepath.Join(t.TempDir(), "process-bin")
+	headlessPath := filepath.Join(t.TempDir(), "headless-bin")
+	t.Setenv("PATH", processPath)
 
-	env := buildDaemonHeadlessBaseEnv(os.Environ(), nil)
+	env := buildDaemonHeadlessBaseEnv([]string{
+		"HOME=" + t.TempDir(),
+		"PATH=" + headlessPath,
+	}, nil)
 
-	processPath := os.Getenv("PATH")
-	basePath, ok := lookupEnvEntryForTest(env, "PATH")
-	if !ok {
+	if got := os.Getenv("PATH"); got != processPath {
+		t.Fatalf("process PATH = %q, want unchanged %q", got, processPath)
+	}
+	if _, ok := lookupEnvEntryForTest(env, "PATH"); !ok {
 		t.Fatal("base env PATH missing")
 	}
-	if processPath != basePath {
-		t.Fatalf("process PATH = %q, base env PATH = %q", processPath, basePath)
-	}
-	parts := strings.Split(processPath, string(os.PathListSeparator))
-	if len(parts) < 3 || parts[0] != "/usr/bin" || parts[1] != "/bin" {
-		t.Fatalf("process PATH entries = %#v, want current PATH entries first", parts)
-	}
-	if !containsString(parts, shellBin) {
-		t.Fatalf("process PATH entries = %#v, want interactive shell bin %q", parts, shellBin)
+}
+
+func TestSyncProcessPATHFromEnvSetsProcessPATH(t *testing.T) {
+	before := filepath.Join(t.TempDir(), "before-bin")
+	expected := strings.Join([]string{
+		filepath.Join(t.TempDir(), "first-bin"),
+		filepath.Join(t.TempDir(), "second-bin"),
+	}, string(os.PathListSeparator))
+	t.Setenv("PATH", before)
+
+	syncProcessPATHFromEnv([]string{"PATH=" + expected})
+
+	if got := os.Getenv("PATH"); got != expected {
+		t.Fatalf("process PATH = %q, want %q", got, expected)
 	}
 }
 
@@ -274,13 +275,4 @@ func lookupEnvEntryForTest(env []string, key string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-func containsString(values []string, target string) bool {
-	for _, value := range values {
-		if value == target {
-			return true
-		}
-	}
-	return false
 }

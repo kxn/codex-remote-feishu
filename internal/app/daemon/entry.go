@@ -102,6 +102,7 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		identity,
 	)
 	baseEnv := buildDaemonHeadlessBaseEnv(os.Environ(), capturedProxyEnv)
+	syncProcessPATHFromEnv(baseEnv)
 	codexRealBinary := strings.TrimSpace(loadedConfig.Config.Wrapper.CodexRealBinary)
 	if resolved, resolveErr := wrapper.ResolveNormalCodexBinaryPreview(codexRealBinary); resolveErr == nil {
 		codexRealBinary = resolved
@@ -232,7 +233,6 @@ func applyDaemonStartupArgs(args []string) error {
 
 func buildDaemonHeadlessBaseEnv(currentEnv, proxyEnv []string) []string {
 	baseEnv := config.BuildCodexChildEnv(currentEnv, proxyEnv, nil)
-	syncProcessPATHFromEnv(baseEnv)
 	if resolved, err := config.ResolveClaudeBinary(baseEnv); err == nil && strings.TrimSpace(resolved) != "" {
 		baseEnv = config.UpsertEnvValue(baseEnv, config.ClaudeBinaryEnv, resolved)
 	}
