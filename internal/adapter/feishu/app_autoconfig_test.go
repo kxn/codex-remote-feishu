@@ -819,54 +819,60 @@ func TestPlanAppAutoConfigClassifiesReadAPIErrorWithoutRawUserText(t *testing.T)
 	}
 }
 
-func TestPlanAppAutoConfigReadPermissionDeniedReturnsActionableMissingScope(t *testing.T) {
-	restoreAutoConfigHooks(t)
-	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
-		return nil, &APIError{
-			API:        "application.v6.application.get",
-			Code:       99991663,
-			Msg:        "permission denied",
-			StatusCode: http.StatusForbidden,
-		}
+func TestPlanAppAutoConfigReadPermissionErrorsReturnActionableMissingScope(t *testing.T) {
+	tests := []struct {
+		name string
+		err  *APIError
+	}{
+		{
+			name: "forbidden",
+			err: &APIError{
+				API:        "application.v6.application.get",
+				Code:       99991663,
+				Msg:        "permission denied",
+				StatusCode: http.StatusForbidden,
+			},
+		},
+		{
+			name: "permission violations",
+			err: &APIError{
+				API:        "application.v6.application.get",
+				Code:       99991663,
+				Msg:        "permission denied",
+				StatusCode: http.StatusBadRequest,
+				PermissionViolations: []APIErrorPermissionViolation{
+					{Type: "tenant", Subject: "application:application:self_manage"},
+				},
+			},
+		},
+		{
+			name: "extracted permission gap",
+			err: &APIError{
+				API:        "application.v6.application.get",
+				Code:       99991663,
+				Msg:        "missing application:application:self_manage",
+				StatusCode: http.StatusBadRequest,
+			},
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			restoreAutoConfigHooks(t)
+			autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
+				return nil, tt.err
+			}
 
-	plan, err := PlanAppAutoConfig(
-		context.Background(),
-		LiveGatewayConfig{GatewayID: "main", AppID: "cli_permission"},
-		feishuapp.DefaultManifest(),
-		feishuapp.DefaultFixedPolicy(),
-	)
-	if err != nil {
-		t.Fatalf("PlanAppAutoConfig returned error: %v", err)
-	}
-	if plan.Status != AutoConfigStatusApplyRequired {
-		t.Fatalf("plan status = %q, want %q", plan.Status, AutoConfigStatusApplyRequired)
-	}
-	if plan.BlockingReason != "" {
-		t.Fatalf("blocking reason = %q, want empty actionable plan", plan.BlockingReason)
-	}
-	if !plan.Diff.ConfigPatchRequired {
-		t.Fatalf("config patch must be required for missing scope: %#v", plan.Diff)
-	}
-	if !reflect.DeepEqual(plan.Diff.MissingScopes, []AutoConfigScopeRef{{
-		Scope:     "application:application:self_manage",
-		ScopeType: "tenant",
-	}}) {
-		t.Fatalf("missing scopes = %#v, want only application self-manage tenant", plan.Diff.MissingScopes)
-	}
-	if len(plan.BlockingRequirements) != 1 {
-		t.Fatalf("blocking requirements = %#v, want one known scope", plan.BlockingRequirements)
-	}
-	req := plan.BlockingRequirements[0]
-	if req.Kind != AutoConfigRequirementKindScope ||
-		req.Key != "application:application:self_manage" ||
-		req.ScopeType != "tenant" ||
-		!req.Required ||
-		req.Present {
-		t.Fatalf("unexpected blocking requirement: %#v", req)
-	}
-	if len(plan.Diff.MissingEvents) != 0 || len(plan.Diff.MissingCallbacks) != 0 {
-		t.Fatalf("read permission fallback must not infer events/callbacks: %#v", plan.Diff)
+			plan, err := PlanAppAutoConfig(
+				context.Background(),
+				LiveGatewayConfig{GatewayID: "main", AppID: "cli_permission"},
+				feishuapp.DefaultManifest(),
+				feishuapp.DefaultFixedPolicy(),
+			)
+			if err != nil {
+				t.Fatalf("PlanAppAutoConfig returned error: %v", err)
+			}
+			assertAppManagementPermissionPlan(t, plan)
+		})
 	}
 }
 
@@ -956,6 +962,39 @@ func hasRequirement(values []AutoConfigRequirementStatus, kind string, key strin
 		}
 	}
 	return false
+}
+
+func assertAppManagementPermissionPlan(t *testing.T, plan AutoConfigPlan) {
+	t.Helper()
+	if plan.Status != AutoConfigStatusApplyRequired {
+		t.Fatalf("plan status = %q, want %q", plan.Status, AutoConfigStatusApplyRequired)
+	}
+	if plan.BlockingReason != "" {
+		t.Fatalf("blocking reason = %q, want empty actionable plan", plan.BlockingReason)
+	}
+	if !plan.Diff.ConfigPatchRequired {
+		t.Fatalf("config patch must be required for missing scope: %#v", plan.Diff)
+	}
+	if !reflect.DeepEqual(plan.Diff.MissingScopes, []AutoConfigScopeRef{{
+		Scope:     "application:application:self_manage",
+		ScopeType: "tenant",
+	}}) {
+		t.Fatalf("missing scopes = %#v, want only application self-manage tenant", plan.Diff.MissingScopes)
+	}
+	if len(plan.BlockingRequirements) != 1 {
+		t.Fatalf("blocking requirements = %#v, want one known scope", plan.BlockingRequirements)
+	}
+	req := plan.BlockingRequirements[0]
+	if req.Kind != AutoConfigRequirementKindScope ||
+		req.Key != "application:application:self_manage" ||
+		req.ScopeType != "tenant" ||
+		!req.Required ||
+		req.Present {
+		t.Fatalf("unexpected blocking requirement: %#v", req)
+	}
+	if len(plan.Diff.MissingEvents) != 0 || len(plan.Diff.MissingCallbacks) != 0 {
+		t.Fatalf("read permission fallback must not infer events/callbacks: %#v", plan.Diff)
+	}
 }
 
 func strp(value string) *string {
