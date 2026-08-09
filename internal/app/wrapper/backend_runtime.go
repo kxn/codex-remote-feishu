@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	acpadapter "github.com/kxn/codex-remote-feishu/internal/adapter/acp"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
@@ -87,7 +88,9 @@ func newBackendRuntime(cfg Config) backendRuntime {
 		}
 		return runtime
 	case agentproto.BackendOpenCode:
-		return &opencodeBackendRuntime{}
+		return &opencodeBackendRuntime{
+			translator: acpadapter.NewTranslator(cfg.InstanceID, cfg.WorkspaceRoot),
+		}
 	default:
 		return &codexBackendRuntime{translator: codex.NewTranslator(cfg.InstanceID)}
 	}
@@ -145,7 +148,10 @@ func (r *unsupportedBackendRuntime) BuildChildRestartRestoreFrame(string) ([]byt
 
 func (r *unsupportedBackendRuntime) CancelChildRestartRestore(string) {}
 
-type opencodeBackendRuntime struct{}
+type opencodeBackendRuntime struct {
+	mu         sync.Mutex
+	translator *acpadapter.Translator
+}
 
 func (r *opencodeBackendRuntime) Backend() agentproto.Backend {
 	return agentproto.BackendOpenCode
@@ -155,28 +161,51 @@ func (r *opencodeBackendRuntime) Capabilities() agentproto.Capabilities {
 	return agentproto.DefaultCapabilitiesForBackend(agentproto.BackendOpenCode)
 }
 
-func (r *opencodeBackendRuntime) Launch(context.Context, *App, *debuglog.RawLogger, func(agentproto.ErrorInfo)) (*childSession, error) {
-	return nil, nil
+func (r *opencodeBackendRuntime) Launch(ctx context.Context, app *App, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+	if app == nil {
+		return nil, nil
+	}
+	return app.launchOpenCodeChildSession(ctx, rawLogger, reportProblem, r.translator)
 }
 
-func (r *opencodeBackendRuntime) ObserveClient([]byte) (runtimeObserveResult, error) {
-	return runtimeObserveResult{}, nil
+func (r *opencodeBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result, err := r.translator.ObserveClient(line)
+	if err != nil {
+		return runtimeObserveResult{}, err
+	}
+	return mapOpenCodeObserveResult(result), nil
 }
 
-func (r *opencodeBackendRuntime) ObserveServer([]byte) (runtimeObserveResult, error) {
-	return runtimeObserveResult{}, nil
+func (r *opencodeBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result, err := r.translator.ObserveServer(line)
+	if err != nil {
+		return runtimeObserveResult{}, err
+	}
+	return mapOpenCodeObserveResult(result), nil
 }
 
 func (r *opencodeBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
-	return runtimeCommandResult{}, agentproto.ErrorInfo{
-		Code:      "opencode_acp_adapter_not_implemented",
-		Layer:     "wrapper",
-		Stage:     "translate_command",
-		Operation: string(command.Kind),
-		Message:   "opencode_acp_adapter_not_implemented",
-		CommandID: command.CommandID,
-		ThreadID:  command.Target.ThreadID,
-		TurnID:    command.Target.TurnID,
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result, err := r.translator.TranslateCommand(command)
+	if err != nil {
+		return runtimeCommandResult{}, err
+	}
+	return runtimeCommandResult{
+		Events: result.Events,
+		Phases: singleRuntimeCommandPhases(result.OutboundToChild),
+	}, nil
+}
+
+func (r *opencodeBackendRuntime) SetDebugLogger(debugLog func(string, ...any)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.translator != nil {
+		r.translator.SetDebugLogger(debugLog)
 	}
 }
 
@@ -189,6 +218,37 @@ func (r *opencodeBackendRuntime) BuildChildRestartRestoreFrame(string) ([]byte, 
 }
 
 func (r *opencodeBackendRuntime) CancelChildRestartRestore(string) {}
+
+func mapOpenCodeObserveResult(result acpadapter.Result) runtimeObserveResult {
+	return runtimeObserveResult{
+		Events:                   result.Events,
+		OutboundToChild:          result.OutboundToChild,
+		OutboundToParent:         result.OutboundToParent,
+		ResolvedCommandResponses: mapOpenCodeResolvedCommandResponses(result.ResolvedCommandResponses),
+		Suppress:                 result.Suppress,
+	}
+}
+
+func mapOpenCodeResolvedCommandResponses(responses []acpadapter.ResolvedCommandResponse) []runtimeResolvedCommandResponse {
+	if len(responses) == 0 {
+		return nil
+	}
+	mapped := make([]runtimeResolvedCommandResponse, 0, len(responses))
+	for _, response := range responses {
+		requestID := strings.TrimSpace(response.RequestID)
+		if requestID == "" {
+			continue
+		}
+		mapped = append(mapped, runtimeResolvedCommandResponse{
+			RequestID:     requestID,
+			RejectMessage: strings.TrimSpace(response.RejectMessage),
+		})
+	}
+	if len(mapped) == 0 {
+		return nil
+	}
+	return mapped
+}
 
 type codexBackendRuntime struct {
 	mu         sync.Mutex

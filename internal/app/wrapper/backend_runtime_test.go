@@ -15,8 +15,9 @@ import (
 
 func TestNewBackendRuntimeOpenCodeDoesNotFallBackToCodex(t *testing.T) {
 	runtime := newBackendRuntime(Config{
-		Backend:    agentproto.BackendOpenCode,
-		InstanceID: "inst-opencode",
+		Backend:       agentproto.BackendOpenCode,
+		InstanceID:    "inst-opencode",
+		WorkspaceRoot: "/tmp/work",
 	})
 	if runtime.Backend() != agentproto.BackendOpenCode {
 		t.Fatalf("runtime backend = %q, want %q", runtime.Backend(), agentproto.BackendOpenCode)
@@ -24,16 +25,41 @@ func TestNewBackendRuntimeOpenCodeDoesNotFallBackToCodex(t *testing.T) {
 	if _, ok := runtime.(*codexBackendRuntime); ok {
 		t.Fatal("opencode backend runtime must not fall back to codex runtime")
 	}
+	opencodeRuntime, ok := runtime.(*opencodeBackendRuntime)
+	if !ok {
+		t.Fatalf("runtime = %T, want *opencodeBackendRuntime", runtime)
+	}
+	if opencodeRuntime.translator == nil {
+		t.Fatal("opencode backend runtime must own an ACP translator")
+	}
 	caps := runtime.Capabilities()
 	if !caps.SessionCatalog || !caps.RequestRespond || !caps.RequiresCWDForResume || caps.VSCodeMode || caps.TurnSteer {
 		t.Fatalf("unexpected opencode runtime capabilities: %#v", caps)
 	}
 	if session, err := runtime.Launch(context.Background(), nil, nil, nil); err != nil || session != nil {
-		t.Fatalf("opencode launch skeleton = %#v, %v; want nil session without startup failure", session, err)
+		t.Fatalf("opencode launch with nil app = %#v, %v; want nil session without startup failure", session, err)
 	}
-	_, err := runtime.TranslateCommand(agentproto.Command{Kind: agentproto.CommandPromptSend})
-	if err == nil || !strings.Contains(err.Error(), "opencode_acp_adapter_not_implemented") {
-		t.Fatalf("opencode TranslateCommand error = %v, want explicit not implemented", err)
+	translated, err := runtime.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-opencode",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           "/tmp/work",
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+	})
+	if err != nil {
+		t.Fatalf("opencode TranslateCommand: %v", err)
+	}
+	if len(translated.Phases) != 1 || len(translated.Phases[0].OutboundToChild) != 1 {
+		t.Fatalf("opencode translated phases = %#v, want one session/new frame", translated.Phases)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(translated.Phases[0].OutboundToChild[0], &payload); err != nil {
+		t.Fatalf("unmarshal opencode frame: %v", err)
+	}
+	if payload["method"] != "session/new" {
+		t.Fatalf("opencode first method = %#v, want session/new", payload["method"])
 	}
 }
 

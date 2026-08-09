@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-09`
-> Summary: 固定 OpenCode ACP backend 的实现边界、代码落点、映射合同和验证矩阵。
+> Summary: 补充 #847 runtime adapter 已验证的真实 OpenCode ACP smoke 与剩余承接项。
 
 ## 1. 结论
 
@@ -23,6 +23,14 @@ OpenCode backend 可以开始完整实现。第一版目标不是最小 PoC，�
 - API-key OpenCode profile 是第一版 fully supported 目标。默认 profile 可以继承系统 OpenCode 当前状态，但我们不管理 OAuth，不首填 OAuth，不支持多个 OAuth profile。
 - API profile overlay 压过系统 OAuth 是暂未测试假设：设计先按可行推进，实现验证必须补证据；如果失败，第一版直接收紧成 API-only 或 inherit-only，不能静默 fallback。
 - Plan、sandbox、usage context meter、persistent delete、完整 error taxonomy 都按 Claude 现有产品基线处理：能投影就投影，不能投影就自然退化到现有文本/日志/diagnostic，不新增用户可见的内部 carrier 提示。
+
+#847 已补第一批 runtime adapter skeleton：
+
+- `internal/adapter/acp` 已覆盖 JSON-RPC correlation、initialize、session new/list/load/resume/fork/prompt/cancel、permission request/respond、usage、tool/text/thought chunk、`session/load` hydration replay 汇总和 `fs/write_text_file`。
+- `fs/write_text_file` 当前策略是：必须先收到 OpenCode permission approval，且路径必须位于 session workspace 内；成功时真实写入文件并发出 `item.file_change.patch_updated`，未批准或越界时 JSON-RPC error fail-closed。
+- `internal/app/wrapper` 已把 `opencode-acp` wrapper mode 接到真实 `opencode acp` child launch，并在返回前完成 ACP initialize bootstrap。
+- 已用 `opencode-ai@1.18.15` npm binary 和本地 fake provider 跑通 Go guarded smoke：initialize -> session/new -> session/prompt -> thought/text delta -> prompt response `stopReason=end_turn` -> turn completion -> `session/load` replay 汇总成 history，且 replay 不泄漏 live delta。测试入口：`OPENCODE_ACP_SMOKE_BIN=/path/to/opencode go test ./internal/adapter/acp -run TestRealOpenCodeACPPromptSmoke -count=1 -v`。
+- OAuth/API overlay 压过系统 OAuth 仍按暂未测试处理，不作为 #847 runtime skeleton 阻塞项。
 
 ## 2. 范围
 
@@ -586,17 +594,16 @@ errors：
 - `internal/adapter/acp/*`
 - `internal/app/wrapper/backend_runtime.go`
 - `internal/app/wrapper/app_child_session_opencode.go`
-- `internal/app/wrapper/app_headless_opencode.go`
-- `testkit/mockopencode/*`
 
 完成标准：
 
-- JSON-RPC id correlation。
-- initialize/session list/new/resume/load/prompt/cancel。
-- request permission/respond。
-- `fs/write_text_file`。
-- config options / available commands / usage / error。
-- wrapper runtime integration with mock ACP child。
+- JSON-RPC id correlation：#847 已由 unit tests 覆盖。
+- initialize/session list/new/resume/load/prompt/cancel：#847 已由 unit tests 覆盖，initialize/new/prompt/load replay 已由真实 OpenCode smoke 覆盖。
+- `session/load` hydration：#847 已固定 OpenCode replay update 在 load response 前进入 history collector，不产生 live turn/item delta；更完整 raw JSONL golden 由 #848 承接。
+- request permission/respond：#847 已由 unit tests 覆盖。
+- `fs/write_text_file`：#847 已实现 permission-gated workspace write、越界 fail-closed 和 file patch event；真实 edit tool e2e 仍由 #849 覆盖。
+- config options / available commands / usage / error：#847 已覆盖 model option snapshot、available commands ignore、usage projection 和 JSON-RPC error；更完整 golden taxonomy 由 #848 承接。
+- wrapper runtime integration：#847 已覆盖 runtime construction、command translation和 child launch args/env；真实 daemon/e2e 由 #849 承接。
 
 ### #848 canonical mapping and golden tests
 
@@ -639,11 +646,11 @@ errors：
 | config | profile validation、revision/ETag、secret update、reference checks | Go unit tests |
 | compiler | `OPENCODE_CONFIG_CONTENT` / `OPENCODE_AUTH_CONTENT` / project disable / data isolation / redaction | golden tests |
 | daemon launch | start env, launch mode, pending headless, failure mapping | Go unit tests |
-| wrapper runtime | entry args, child launch, initialize, command phases, restart restore | mock child integration |
-| ACP adapter | response乱序、session lifecycle、turn buffer、hydration、tool、permission、fs、usage、errors | raw JSONL golden |
+| wrapper runtime | entry args, child launch, initialize, command phases, restart restore | Go unit tests；#849 补 daemon e2e |
+| ACP adapter | response乱序、session lifecycle、turn buffer、hydration、tool、permission、fs、usage、errors | Go unit tests；#848 补 raw JSONL golden |
 | orchestrator | mode/profile switch、compatibility、restart/fresh fallback、command preflight | focused Go tests |
 | Feishu projection | request card dynamic options、plan/text/tool projection不重叠 | focused projector tests |
-| real OpenCode | `opencode-ai@1.18.15` black-box with fake provider/MCP | guarded script/log artifacts |
+| real OpenCode | `opencode-ai@1.18.15` black-box with fake provider/MCP | guarded Go smoke；#849 补 MCP/edit/auth overlay |
 | repo gate | `git diff --check`、`scripts/check/pre-commit.sh` | command output |
 
 黑盒测试必须记录：
