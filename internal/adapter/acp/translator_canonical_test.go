@@ -547,9 +547,15 @@ func TestCanonicalRawJSONLFixtureMatchesGoldenProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read golden: %v", err)
 	}
-	if strings.TrimSpace(string(got)) != strings.TrimSpace(string(want)) {
+	if normalizeGoldenLineEndings(string(got)) != normalizeGoldenLineEndings(string(want)) {
 		t.Fatalf("golden mismatch\n got:\n%s\nwant:\n%s", got, want)
 	}
+}
+
+func normalizeGoldenLineEndings(value string) string {
+	value = strings.ReplaceAll(value, "\r\n", "\n")
+	value = strings.ReplaceAll(value, "\r", "\n")
+	return strings.TrimSpace(value)
 }
 
 func TestRPCErrorNormalizerClassifiesKnownOpenCodeFailures(t *testing.T) {
