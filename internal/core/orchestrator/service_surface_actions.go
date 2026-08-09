@@ -20,7 +20,7 @@ func (s *Service) prepareNewThreadPreservingTargetPicker(surface *state.SurfaceC
 
 func (s *Service) prepareNewThreadWithOverlayCleanup(surface *state.SurfaceConsoleRecord, cleanup surfaceOverlayRouteCleanupOptions) []eventcontract.Event {
 	if !s.surfaceIsHeadless(surface) {
-		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，`/new` 只在 headless 模式可用。请先 `/mode codex` 或 `/mode claude`，或继续通过 follow / `/use` 使用当前 VS Code 会话。")
+		return notice(surface, "new_thread_disabled_vscode", "当前处于 vscode 模式，`/new` 只在 headless 模式可用。请先 `/mode codex`、`/mode claude` 或 `/mode opencode`，或继续通过 follow / `/use` 使用当前 VS Code 会话。")
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {

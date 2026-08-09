@@ -35,6 +35,7 @@ const (
 	FeishuCommandVerbose              = "verbose"
 	FeishuCommandCodexProvider        = "codex_provider"
 	FeishuCommandClaudeProfile        = "claude_profile"
+	FeishuCommandOpenCodeProfile      = "opencode_profile"
 	FeishuCommandHelp                 = "help"
 	FeishuCommandMenu                 = "menu"
 	FeishuCommandDebug                = "debug"
@@ -464,6 +465,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "claude_profile", action: Action{Kind: ActionClaudeProfileCommand, Text: "/claudeprofile"}},
 		},
 	},
+	openCodeProfileCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{
 			ID:               FeishuCommandWorkspace,
@@ -741,13 +743,14 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			CanonicalMenuKey: "mode",
 			ArgumentKind:     FeishuCommandArgumentChoice,
 			ArgumentFormHint: "codex",
-			ArgumentFormNote: "输入 codex / claude / vscode；`normal` 仍兼容为 `codex`。",
+			ArgumentFormNote: "输入 codex / claude / opencode / vscode；`normal` 仍兼容为 `codex`。",
 			ArgumentSubmit:   "切换",
-			Description:      "查看当前模式；bare `/mode` 会返回 codex / claude / vscode 切换卡片。",
-			Examples:         []string{"/mode codex", "/mode claude", "/mode vscode", "/mode normal"},
+			Description:      "查看当前模式；bare `/mode` 会返回 codex / claude / opencode / vscode 切换卡片。",
+			Examples:         []string{"/mode codex", "/mode claude", "/mode opencode", "/mode vscode", "/mode normal"},
 			Options: []FeishuCommandOption{
 				commandOption("/mode", "mode", "codex", "codex", "切换到 headless 的 Codex 模式。"),
 				commandOption("/mode", "mode", "claude", "claude", "切换到 headless 的 Claude 模式。"),
+				commandOption("/mode", "mode", "opencode", "opencode", "切换到 headless 的 OpenCode 模式。"),
 				commandOption("/mode", "mode", "vscode", "vscode", "切换到 vscode 模式。"),
 			},
 			ShowInHelp: true,

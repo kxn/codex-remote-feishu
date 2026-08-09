@@ -79,6 +79,11 @@ func (s *Service) buildConfigCommandViewState(
 		if strings.TrimSpace(view.Config.FormDefaultValue) == "" {
 			view.Config.FormDefaultValue = s.surfaceClaudeProfileID(surface)
 		}
+	case control.FeishuCommandOpenCodeProfile:
+		view.Config.FormOptions = s.openCodeProfileCommandOptions()
+		if strings.TrimSpace(view.Config.FormDefaultValue) == "" {
+			view.Config.FormDefaultValue = s.surfaceOpenCodeProfileID(surface)
+		}
 	case control.FeishuCommandModel:
 		options, truncated := s.modelCatalogCommandOptions(surface, inst)
 		if len(options) != 0 {
@@ -170,6 +175,11 @@ func (s *Service) resolveConfigFlowValue(
 			return s.surfaceClaudeProfileID(surface)
 		}
 		return state.DefaultClaudeProfileID
+	case control.FeishuConfigFlowValueSurfaceOpenCodeProfile:
+		if surface != nil {
+			return s.surfaceOpenCodeProfileID(surface)
+		}
+		return state.DefaultOpenCodeProfileID
 	case control.FeishuConfigFlowValueSurfaceAutoWhip:
 		if surface != nil && surface.AutoWhip.Enabled {
 			return "on"

@@ -201,6 +201,26 @@ func TestParseFeishuTextActionRecognizesCodexProfileCommandAndAlias(t *testing.T
 	}
 }
 
+func TestParseFeishuTextActionRecognizesOpenCodeProfileCommand(t *testing.T) {
+	tests := []string{
+		"/opencodeprofile",
+		"/opencodeprofile op_default",
+		"/opencodeprofile op_team",
+	}
+	for _, input := range tests {
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
+		if !ok {
+			t.Fatalf("expected %q to be parsed", input)
+		}
+		if action.Kind != ActionOpenCodeProfileCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionOpenCodeProfileCommand)
+		}
+		if action.Text != input {
+			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
 func TestParseFeishuMenuActionRecognizesCodexProfileCommandAndAlias(t *testing.T) {
 	tests := []struct {
 		menuKey  string
@@ -223,6 +243,22 @@ func TestParseFeishuMenuActionRecognizesCodexProfileCommandAndAlias(t *testing.T
 		if action.CommandID != FeishuCommandCodexProvider {
 			t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandCodexProvider)
 		}
+	}
+}
+
+func TestParseFeishuMenuActionRecognizesOpenCodeProfileCommand(t *testing.T) {
+	action, ok := ParseFeishuMenuActionWithoutCatalog("opencode_profile")
+	if !ok {
+		t.Fatal("expected opencode_profile menu action to be parsed")
+	}
+	if action.Kind != ActionOpenCodeProfileCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionOpenCodeProfileCommand)
+	}
+	if action.Text != "/opencodeprofile" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/opencodeprofile")
+	}
+	if action.CommandID != FeishuCommandOpenCodeProfile {
+		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandOpenCodeProfile)
 	}
 }
 

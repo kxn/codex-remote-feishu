@@ -49,6 +49,16 @@ func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleReco
 		}
 	case agentproto.BackendClaude:
 		result.Compatible = state.NormalizeClaudeProfileID(observed.ClaudeProfileID) == state.EffectiveSurfaceClaudeProfileID(desired)
+	case agentproto.BackendOpenCode:
+		result.Compatible = state.NormalizeOpenCodeProfileID(observed.OpenCodeProfileID) == state.EffectiveSurfaceOpenCodeProfileID(desired)
+		if !result.Compatible {
+			break
+		}
+		if desiredAdmissionRef := state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef); desiredAdmissionRef != nil {
+			observedAdmissionRef := state.NormalizeOpenCodeAdmissionRef(inst.OpenCodeAdmissionRef)
+			result.Compatible = observedAdmissionRef != nil && *desiredAdmissionRef == *observedAdmissionRef
+			break
+		}
 	}
 	return result
 }

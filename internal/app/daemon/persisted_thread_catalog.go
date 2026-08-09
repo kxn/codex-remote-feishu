@@ -47,6 +47,8 @@ func (c *daemonPersistedThreadCatalog) RecentThreadsForBackend(backend agentprot
 			return nil, nil
 		}
 		return c.claude.RecentThreads(limit)
+	case agentproto.BackendOpenCode:
+		return nil, nil
 	default:
 		if c == nil || c.codex == nil {
 			return nil, nil
@@ -62,6 +64,8 @@ func (c *daemonPersistedThreadCatalog) RecentWorkspacesForBackend(backend agentp
 			return nil, nil
 		}
 		return c.claude.RecentWorkspaces(limit)
+	case agentproto.BackendOpenCode:
+		return nil, nil
 	default:
 		if c == nil || c.codex == nil {
 			return nil, nil
@@ -77,6 +81,8 @@ func (c *daemonPersistedThreadCatalog) ThreadByIDForBackend(backend agentproto.B
 			return nil, nil
 		}
 		return c.claude.ThreadByID(threadID)
+	case agentproto.BackendOpenCode:
+		return nil, nil
 	default:
 		if c == nil || c.codex == nil {
 			return nil, nil

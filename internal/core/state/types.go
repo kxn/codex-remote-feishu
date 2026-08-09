@@ -29,7 +29,7 @@ type ProductMode string
 
 const (
 	// ProductModeNormal is the persisted token for the headless runtime shape.
-	// User-visible mode names should usually be projected as codex / claude / vscode.
+	// User-visible mode names should usually be projected as codex / claude / opencode / vscode.
 	ProductModeNormal ProductMode = "normal"
 	ProductModeVSCode ProductMode = "vscode"
 )
@@ -179,6 +179,7 @@ type Root struct {
 	CodexProviders                  map[string]CodexProviderRecord
 	CodexProfiles                   map[string]CodexProfileSummary
 	ClaudeProfiles                  map[string]ClaudeProfileRecord
+	OpenCodeProfiles                map[string]OpenCodeProfileSummary
 	ClaudeWorkspaceProfileSnapshots map[string]ClaudeWorkspaceProfileSnapshotRecord
 }
 
@@ -806,6 +807,7 @@ func NewRoot() *Root {
 		CodexProviders:                  map[string]CodexProviderRecord{},
 		CodexProfiles:                   map[string]CodexProfileSummary{},
 		ClaudeProfiles:                  map[string]ClaudeProfileRecord{},
+		OpenCodeProfiles:                map[string]OpenCodeProfileSummary{},
 		ClaudeWorkspaceProfileSnapshots: map[string]ClaudeWorkspaceProfileSnapshotRecord{},
 	}
 }

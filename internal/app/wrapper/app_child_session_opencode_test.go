@@ -14,7 +14,7 @@ import (
 func TestBuildOpenCodeChildLaunchStripsWrapperModeAndKeepsProfileEnv(t *testing.T) {
 	t.Setenv("HTTP_PROXY", "http://system-proxy.invalid")
 	t.Setenv(config.OpenCodeConfigContentEnv, `{"model":"test/test-model"}`)
-	t.Setenv(config.OpenCodeAuthContentEnv, `{"provider":{"test":{"apiKey":"secret"}}}`)
+	t.Setenv(config.OpenCodeAuthContentEnv, `{"test":{"type":"api","key":"secret"}}`)
 
 	workspaceRoot := "/tmp/opencode-work"
 	app := &App{config: Config{
@@ -36,7 +36,7 @@ func TestBuildOpenCodeChildLaunchStripsWrapperModeAndKeepsProfileEnv(t *testing.
 	if got := lookupEnv(env, config.OpenCodeConfigContentEnv); got != `{"model":"test/test-model"}` {
 		t.Fatalf("opencode config env = %q", got)
 	}
-	if got := lookupEnv(env, config.OpenCodeAuthContentEnv); got != `{"provider":{"test":{"apiKey":"secret"}}}` {
+	if got := lookupEnv(env, config.OpenCodeAuthContentEnv); got != `{"test":{"type":"api","key":"secret"}}` {
 		t.Fatalf("opencode auth env = %q", got)
 	}
 }

@@ -40,6 +40,7 @@ type Translator struct {
 	workspaceRoot string
 	nextID        int
 	debugLog      func(string, ...any)
+	mcpServers    []MCPServer
 
 	currentSessionID string
 	sessions         map[string]sessionState

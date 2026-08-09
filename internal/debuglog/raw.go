@@ -87,7 +87,7 @@ func (l *RawLogger) Log(entry RawEntry) {
 	frame := bytesTrimSpace(entry.Frame)
 	if len(frame) > 0 {
 		if json.Valid(frame) {
-			record.Frame = json.RawMessage(frame)
+			record.Frame = redactRawJSONFrame(frame)
 		} else {
 			record.Text = string(frame)
 		}
@@ -128,6 +128,63 @@ trimEnd:
 		}
 	}
 	return raw[start:end]
+}
+
+func redactRawJSONFrame(frame []byte) json.RawMessage {
+	var payload any
+	if err := json.Unmarshal(frame, &payload); err != nil {
+		return json.RawMessage(frame)
+	}
+	redacted, err := json.Marshal(redactRawJSONValue(payload))
+	if err != nil {
+		return json.RawMessage(frame)
+	}
+	return json.RawMessage(redacted)
+}
+
+func redactRawJSONValue(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(typed))
+		name := ""
+		if rawName, ok := typed["name"].(string); ok {
+			name = rawName
+		}
+		for key, item := range typed {
+			if key == "value" && isSensitiveRawField(name) {
+				out[key] = "<redacted>"
+				continue
+			}
+			if isSensitiveRawField(key) {
+				out[key] = "<redacted>"
+				continue
+			}
+			out[key] = redactRawJSONValue(item)
+		}
+		return out
+	case []any:
+		out := make([]any, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, redactRawJSONValue(item))
+		}
+		return out
+	default:
+		return value
+	}
+}
+
+func isSensitiveRawField(name string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(name))
+	normalized = strings.NewReplacer("_", "", "-", "", " ", "", ".", "").Replace(normalized)
+	if normalized == "key" || normalized == "authorization" || normalized == "proxyauthorization" {
+		return true
+	}
+	for _, marker := range []string{"token", "secret", "password", "credential", "apikey", "bearer"} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func chooseFirstNonEmpty(values ...string) string {

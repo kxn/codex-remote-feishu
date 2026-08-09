@@ -115,6 +115,50 @@ func TestPromptSendStartNewCreatesSessionThenPromptsAfterResponse(t *testing.T) 
 	}
 }
 
+func TestPromptSendStartNewIncludesConfiguredRemoteMCPServers(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.SetMCPServers([]MCPServer{
+		{
+			Name: "codex_remote_feishu",
+			Type: "http",
+			URL:  "http://127.0.0.1:9702/mcp?codex_remote_instance_id=inst-1",
+			Headers: []MCPNameValue{
+				{Name: "Authorization", Value: "Bearer secret-token"},
+			},
+		},
+	})
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-1",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           "/tmp/work",
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand: %v", err)
+	}
+	frame := decodeFrame(t, result.OutboundToChild[0])
+	params := asMap(t, frame["params"])
+	servers := asSlice(t, params["mcpServers"])
+	if len(servers) != 1 {
+		t.Fatalf("mcpServers = %#v, want one server", servers)
+	}
+	server := asMap(t, servers[0])
+	if server["type"] != "http" || server["name"] != "codex_remote_feishu" || server["url"] != "http://127.0.0.1:9702/mcp?codex_remote_instance_id=inst-1" {
+		t.Fatalf("unexpected remote MCP server: %#v", server)
+	}
+	headers := asSlice(t, server["headers"])
+	if len(headers) != 1 {
+		t.Fatalf("headers = %#v, want one Authorization header", headers)
+	}
+	header := asMap(t, headers[0])
+	if header["name"] != "Authorization" || header["value"] != "Bearer secret-token" {
+		t.Fatalf("unexpected Authorization header: %#v", header)
+	}
+}
+
 func TestPromptSendExistingSessionResumesThenPromptsAfterResponse(t *testing.T) {
 	tr := NewTranslator("inst-1", "/tmp/work")
 	result, err := tr.TranslateCommand(agentproto.Command{
@@ -833,6 +877,15 @@ func asMap(t *testing.T, value any) map[string]any {
 	out, ok := value.(map[string]any)
 	if !ok {
 		t.Fatalf("value is %T, want map: %#v", value, value)
+	}
+	return out
+}
+
+func asSlice(t *testing.T, value any) []any {
+	t.Helper()
+	out, ok := value.([]any)
+	if !ok {
+		t.Fatalf("value is %T, want slice: %#v", value, value)
 	}
 	return out
 }

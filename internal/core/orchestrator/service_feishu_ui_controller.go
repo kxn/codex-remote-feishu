@@ -6,6 +6,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+const workspaceHeadlessModeRequiredText = "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex`、`/mode claude` 或 `/mode opencode`）。"
+
 func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, action control.Action, intent control.FeishuUIIntent) []eventcontract.Event {
 	if flow, ok := control.FeishuConfigFlowDefinitionByIntentKind(intent.Kind); ok {
 		if support, ok := control.ResolveFeishuCommandSupport(s.buildCatalogContext(surface), flow.CommandID); ok && !support.DispatchAllowed {
@@ -18,32 +20,32 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		return []eventcontract.Event{s.adminRootPageEvent(surface, s.adminPageTriggeredFromMenu(surface, intent.SourceMessageID))}
 	case control.FeishuUIIntentShowWorkspaceRoot:
 		if !s.surfaceIsHeadless(surface) {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
+			return notice(surface, "workspace_normal_only", workspaceHeadlessModeRequiredText)
 		}
 		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspace, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceNew:
 		if !s.surfaceIsHeadless(surface) {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
+			return notice(surface, "workspace_normal_only", workspaceHeadlessModeRequiredText)
 		}
 		return []eventcontract.Event{s.workspacePageEvent(surface, control.FeishuCommandWorkspaceNew, s.workspacePageTriggeredFromMenu(surface, intent.SourceMessageID), intent.SourceMessageID)}
 	case control.FeishuUIIntentShowWorkspaceList:
 		if !s.surfaceIsHeadless(surface) {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
+			return notice(surface, "workspace_normal_only", workspaceHeadlessModeRequiredText)
 		}
 		return s.openTargetPickerForAction(surface, action, "", s.workspacePageParentPayload(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewDir:
 		if !s.surfaceIsHeadless(surface) {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
+			return notice(surface, "workspace_normal_only", workspaceHeadlessModeRequiredText)
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceDir, "", s.workspacePageParentPayload(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewGit:
 		if !s.surfaceIsHeadless(surface) {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
+			return notice(surface, "workspace_normal_only", workspaceHeadlessModeRequiredText)
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceGit, "", s.workspacePageParentPayload(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowWorkspaceNewWorktree:
 		if !s.surfaceIsHeadless(surface) {
-			return notice(surface, "workspace_normal_only", "当前处于 vscode 模式，请先切到 headless 模式（`/mode codex` 或 `/mode claude`）。")
+			return notice(surface, "workspace_normal_only", workspaceHeadlessModeRequiredText)
 		}
 		return s.openTargetPicker(surface, control.TargetPickerRequestSourceWorktree, "", s.workspacePageParentPayload(surface, intent.SourceMessageID), intent.SourceMessageID, true)
 	case control.FeishuUIIntentShowCommandMenu:

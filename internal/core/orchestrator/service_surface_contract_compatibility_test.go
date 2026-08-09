@@ -62,3 +62,58 @@ func TestSurfaceInstanceCompatibilityKeepsSameProviderRevisionPrecision(t *testi
 		t.Fatal("same provider with different contract revision must stay incompatible")
 	}
 }
+
+func TestSurfaceInstanceCompatibilityRejectsDifferentOpenCodeProfile(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract(
+		"feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user",
+		state.HeadlessOpenCodeSurfaceBackendContract("op_team"),
+		state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+
+	inst := &state.InstanceRecord{
+		InstanceID:        "inst-other",
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_other",
+		Online:            true,
+	}
+	if svc.surfaceInstanceCompatibleForAttach(surface, inst) {
+		t.Fatal("different opencode profile must be incompatible")
+	}
+}
+
+func TestSurfaceInstanceCompatibilityRejectsStaleOpenCodeAdmissionRevision(t *testing.T) {
+	now := time.Date(2026, 8, 9, 12, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract(
+		"feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user",
+		state.HeadlessOpenCodeSurfaceBackendContract("op_team"),
+		state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7}}
+
+	stale := &state.InstanceRecord{
+		InstanceID:           "inst-stale",
+		Backend:              agentproto.BackendOpenCode,
+		OpenCodeProfileID:    "op_team",
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 6}},
+		Online:               true,
+	}
+	if svc.surfaceInstanceCompatibleForAttach(surface, stale) {
+		t.Fatal("same opencode profile with stale admission revision must be incompatible")
+	}
+
+	current := &state.InstanceRecord{
+		InstanceID:           "inst-current",
+		Backend:              agentproto.BackendOpenCode,
+		OpenCodeProfileID:    "op_team",
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7}},
+		Online:               true,
+	}
+	if !svc.surfaceInstanceCompatibleForAttach(surface, current) {
+		t.Fatal("same opencode profile and admission revision should be compatible")
+	}
+}

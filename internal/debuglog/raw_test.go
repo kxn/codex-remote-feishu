@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -77,4 +78,53 @@ func TestRawLoggerFallsBackToTextForInvalidJSON(t *testing.T) {
 	if _, ok := payload["frame"]; ok {
 		t.Fatalf("did not expect frame for invalid json: %#v", payload["frame"])
 	}
+}
+
+func TestRawLoggerRedactsSensitiveJSONFrameValues(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "raw.ndjson")
+	logger, err := OpenRaw(path, "wrapper", "inst-1", 42)
+	if err != nil {
+		t.Fatalf("OpenRaw: %v", err)
+	}
+	defer logger.Close()
+
+	logger.Log(RawEntry{
+		Channel:   "codex.stdin",
+		Direction: "out",
+		Frame: []byte(`{
+			"method": "session/new",
+			"params": {
+				"mcpServers": [{
+					"type": "http",
+					"name": "codex_remote_feishu",
+					"url": "http://127.0.0.1:9702/mcp",
+					"headers": [{"name": "Authorization", "value": "Bearer secret-token"}]
+				}],
+				"auth": {"key": "profile-api-key", "accessToken": "access-token"}
+			}
+		}`),
+	})
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(raw) == "" {
+		t.Fatal("expected raw log content")
+	}
+	if stringContainsAny(string(raw), "secret-token", "profile-api-key", "access-token") {
+		t.Fatalf("raw log leaked secret: %s", raw)
+	}
+	if !strings.Contains(string(raw), "redacted") {
+		t.Fatalf("raw log did not include redaction marker: %s", raw)
+	}
+}
+
+func stringContainsAny(text string, needles ...string) bool {
+	for _, needle := range needles {
+		if strings.Contains(text, needle) {
+			return true
+		}
+	}
+	return false
 }

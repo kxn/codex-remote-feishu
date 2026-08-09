@@ -55,6 +55,10 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 	if strings.Contains(rec.Body.String(), "secret-v1") {
 		t.Fatalf("create response leaked secret: %s", rec.Body.String())
 	}
+	if profile, ok := findOpenCodeProfileSummary(app.service.OpenCodeProfiles(), created.ID); !ok ||
+		profile.Revision != 1 || profile.Name != "Team OpenCode" || profile.Model != "kimi-k2" || !profile.Available {
+		t.Fatalf("created profile was not materialized into orchestrator catalog: %#v ok=%t", profile, ok)
+	}
 
 	loaded, err := config.LoadAppConfigAtPath(configPath)
 	if err != nil {
@@ -79,6 +83,10 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 	if updatePayload.Profile.Revision != 2 || updatePayload.Profile.Model != "kimi-k2-pro" || !updatePayload.Profile.HasAPIKey {
 		t.Fatalf("unexpected updated profile view: %#v", updatePayload.Profile)
 	}
+	if profile, ok := findOpenCodeProfileSummary(app.service.OpenCodeProfiles(), created.ID); !ok ||
+		profile.Revision != 2 || profile.Name != "Team OpenCode" || profile.Model != "kimi-k2-pro" || !profile.Available {
+		t.Fatalf("updated profile was not materialized into orchestrator catalog: %#v ok=%t", profile, ok)
+	}
 	loaded, err = config.LoadAppConfigAtPath(configPath)
 	if err != nil {
 		t.Fatalf("LoadAppConfigAtPath after update: %v", err)
@@ -87,6 +95,16 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 	if !ok || current.APIKey != "secret-v1" || current.Revision != 2 {
 		t.Fatalf("expected update to preserve secret when apiKey omitted, got %#v ok=%t", current, ok)
 	}
+}
+
+func findOpenCodeProfileSummary(profiles []state.OpenCodeProfileSummary, profileID string) (state.OpenCodeProfileSummary, bool) {
+	profileID = state.NormalizeOpenCodeProfileID(profileID)
+	for _, profile := range profiles {
+		if state.NormalizeOpenCodeProfileID(profile.ID) == profileID {
+			return profile, true
+		}
+	}
+	return state.OpenCodeProfileSummary{}, false
 }
 
 func TestAdminOpenCodeProfileReferencesBlockDelete(t *testing.T) {

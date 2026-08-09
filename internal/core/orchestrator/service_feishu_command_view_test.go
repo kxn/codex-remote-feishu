@@ -113,6 +113,44 @@ func TestBuildConfigCommandViewStatePopulatesCodexProfileOptions(t *testing.T) {
 	}
 }
 
+func TestBuildConfigCommandViewStatePopulatesOpenCodeProfileOptions(t *testing.T) {
+	now := time.Date(2026, 8, 9, 10, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", "")
+	materializeTestOpenCodeProfiles(svc,
+		state.OpenCodeProfileSummary{ID: "op_team", Revision: 7, Name: "Team OpenCode"},
+		state.OpenCodeProfileSummary{ID: "op_team_2", Revision: 8, Name: "Team OpenCode"},
+	)
+
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandOpenCodeProfile)
+	if !ok {
+		t.Fatal("expected opencode profile config flow")
+	}
+	view := svc.buildConfigCommandViewState(svc.root.Surfaces["surface-1"], flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil {
+		t.Fatal("expected config view")
+	}
+	if view.Config.CurrentValue != "op_team" {
+		t.Fatalf("current value = %q, want %q", view.Config.CurrentValue, "op_team")
+	}
+	if view.Config.FormDefaultValue != "op_team" {
+		t.Fatalf("default value = %q, want %q", view.Config.FormDefaultValue, "op_team")
+	}
+	if got := view.Config.FormOptions; len(got) != 3 {
+		t.Fatalf("expected default + 2 API profiles, got %#v", got)
+	} else {
+		if got[0].Label != "本机默认" || got[0].Value != state.DefaultOpenCodeProfileID {
+			t.Fatalf("unexpected built-in default option: %#v", got[0])
+		}
+		if got[1].Label != "Team OpenCode（op_team）" || got[1].Value != "op_team" {
+			t.Fatalf("unexpected first custom option: %#v", got[1])
+		}
+		if got[2].Label != "Team OpenCode（op_team_2）" || got[2].Value != "op_team_2" {
+			t.Fatalf("unexpected second custom option: %#v", got[2])
+		}
+	}
+}
+
 func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableStatus(t *testing.T) {
 	now := time.Date(2026, 8, 1, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

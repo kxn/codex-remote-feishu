@@ -373,6 +373,49 @@ func TestBuildClaudeChildLaunchSkipsFeishuMCPWhenConfigPathMissing(t *testing.T)
 	}
 }
 
+func TestBuildOpenCodeFeishuMCPServersPublishesRemoteServer(t *testing.T) {
+	statePath := writeToolServiceState(t, `{
+  "url": "http://127.0.0.1:9702",
+  "token": "secret-token",
+  "tokenType": "bearer"
+}`)
+	app := New(Config{
+		InstanceID:   "inst-1",
+		Source:       "headless",
+		RuntimePaths: relayruntime.Paths{ToolServiceFile: statePath},
+	})
+
+	servers := app.openCodeFeishuMCPServers()
+
+	if len(servers) != 1 {
+		t.Fatalf("expected one OpenCode MCP server, got %#v", servers)
+	}
+	server := servers[0]
+	if server.Type != "http" || server.Name != feishuMCPServerID || server.URL != "http://127.0.0.1:9702?codex_remote_instance_id=inst-1" {
+		t.Fatalf("unexpected OpenCode MCP server: %#v", server)
+	}
+	if len(server.Headers) != 1 || server.Headers[0].Name != "Authorization" || server.Headers[0].Value != "Bearer secret-token" {
+		t.Fatalf("unexpected OpenCode MCP headers: %#v", server.Headers)
+	}
+}
+
+func TestBuildOpenCodeFeishuMCPServersSkipsVSCodeSource(t *testing.T) {
+	statePath := writeToolServiceState(t, `{
+  "url": "http://127.0.0.1:9702",
+  "token": "secret-token",
+  "tokenType": "bearer"
+}`)
+	app := New(Config{
+		InstanceID:   "inst-1",
+		Source:       "vscode",
+		RuntimePaths: relayruntime.Paths{ToolServiceFile: statePath},
+	})
+
+	if servers := app.openCodeFeishuMCPServers(); len(servers) != 0 {
+		t.Fatalf("expected no OpenCode MCP server for VS Code source, got %#v", servers)
+	}
+}
+
 func writeToolServiceState(t *testing.T, raw string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "tool-service.json")

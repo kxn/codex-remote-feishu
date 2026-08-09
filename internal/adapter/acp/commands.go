@@ -24,7 +24,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 			"method":  "session/new",
 			"params": map[string]any{
 				"cwd":        t.commandCWD(command),
-				"mcpServers": []any{},
+				"mcpServers": t.mcpServersParam(),
 			},
 		})
 		if err != nil {
@@ -42,7 +42,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 			"params": map[string]any{
 				"cwd":        t.commandCWD(command),
 				"sessionId":  threadID,
-				"mcpServers": []any{},
+				"mcpServers": t.mcpServersParam(),
 			},
 		})
 		if err != nil {
@@ -67,7 +67,7 @@ func (t *Translator) translatePromptFork(command agentproto.Command) (Result, er
 		"params": map[string]any{
 			"cwd":        t.commandCWD(command),
 			"sessionId":  sourceThreadID,
-			"mcpServers": []any{},
+			"mcpServers": t.mcpServersParam(),
 		},
 	})
 	if err != nil {
@@ -185,7 +185,7 @@ func (t *Translator) translateThreadHistoryRead(command agentproto.Command) (Res
 		"params": map[string]any{
 			"cwd":        t.commandCWD(command),
 			"sessionId":  sessionID,
-			"mcpServers": []any{},
+			"mcpServers": t.mcpServersParam(),
 		},
 	})
 	if err != nil {

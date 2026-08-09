@@ -24,6 +24,7 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 	}
 	childCtx, childCancel := context.WithCancel(ctx)
 	childArgs, childEnv := a.buildOpenCodeChildLaunch()
+	translator.SetMCPServers(a.openCodeFeishuMCPServers())
 	openCodeBinary, err := a.resolveOpenCodeBinary(childEnv)
 	if err != nil {
 		childCancel()

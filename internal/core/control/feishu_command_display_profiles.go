@@ -78,6 +78,7 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		commandSupportVisible(FeishuCommandHelp),
 		commandSupportVisible(FeishuCommandMenu),
 		commandSupportHiddenReject(FeishuCommandClaudeProfile, FeishuCommandSupportReject, "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"),
+		commandSupportHiddenReject(FeishuCommandOpenCodeProfile, FeishuCommandSupportReject, "当前不在 OpenCode 模式，暂时不能切换 OpenCode Profile。请先 `/mode opencode`。"),
 	),
 	"claude": newFeishuCommandDisplayProfile("claude", false,
 		commandSupportVisible(FeishuCommandStop),
@@ -118,10 +119,12 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		commandSupportHiddenReject(FeishuCommandAutoWhip, FeishuCommandSupportReject, claudeDefaultRejectNote),
 		commandSupportHiddenReject(FeishuCommandAutoContinue, FeishuCommandSupportReject, claudeDefaultRejectNote),
 		commandSupportHiddenReject(FeishuCommandCodexProvider, FeishuCommandSupportReject, "当前不在 Codex 模式，暂时不能切换 Codex Provider。请先 `/mode codex`。"),
+		commandSupportHiddenReject(FeishuCommandOpenCodeProfile, FeishuCommandSupportReject, "当前不在 OpenCode 模式，暂时不能切换 OpenCode Profile。请先 `/mode opencode`。"),
 		commandSupportHiddenReject(FeishuCommandFollow, FeishuCommandSupportReject, claudeDefaultRejectNote),
 		commandSupportHiddenReject(FeishuCommandCron, FeishuCommandSupportReject, claudeDefaultRejectNote),
 		commandSupportHiddenReject(FeishuCommandVSCodeMigrate, FeishuCommandSupportReject, claudeDefaultRejectNote),
 	),
+	"opencode": newOpenCodeFeishuCommandDisplayProfile(),
 	"vscode": newFeishuCommandDisplayProfile("vscode", true,
 		commandSupportVisible(FeishuCommandStop),
 		commandSupportVisible(FeishuCommandCompact),
@@ -153,12 +156,64 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		commandSupportVisible(FeishuCommandMenu),
 		commandSupportVisible(FeishuCommandVSCodeMigrate),
 		commandSupportHiddenReject(FeishuCommandClaudeProfile, FeishuCommandSupportReject, "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"),
+		commandSupportHiddenReject(FeishuCommandOpenCodeProfile, FeishuCommandSupportReject, "当前不在 OpenCode 模式，暂时不能切换 OpenCode Profile。请先 `/mode opencode`。"),
 	),
 }
 
 const (
-	claudeDefaultRejectNote = "当前 Claude 模式暂不支持这个命令。"
+	claudeDefaultRejectNote   = "当前 Claude 模式暂不支持这个命令。"
+	opencodeApproxNote        = "OpenCode 当前按现有会话控制近似处理。"
+	opencodeDefaultRejectNote = "当前 OpenCode 模式暂不支持这个命令。"
 )
+
+func newOpenCodeFeishuCommandDisplayProfile() FeishuCommandDisplayProfile {
+	profile := newFeishuCommandDisplayProfile("opencode", false,
+		commandSupportVisible(FeishuCommandStop),
+		commandSupportHiddenReject(FeishuCommandCompact, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportVisibleAs(FeishuCommandSteerAll, FeishuCommandSupportApproximation, opencodeApproxNote),
+		commandSupportVisibleAs(FeishuCommandNew, FeishuCommandSupportApproximation, opencodeApproxNote),
+		commandSupportVisible(FeishuCommandStatus),
+		commandSupportHiddenReject(FeishuCommandModel, FeishuCommandSupportReject, "OpenCode 模型请在 OpenCode profile 或原生配置里设置，当前飞书会话不支持临时切换模型。"),
+		commandSupportVisibleAs(FeishuCommandReasoning, FeishuCommandSupportApproximation, "OpenCode reasoning 按当前 profile/backend 默认行为处理。"),
+		commandSupportVisibleAs(FeishuCommandAccess, FeishuCommandSupportApproximation, "OpenCode 权限按执行时确认处理。"),
+		commandSupportVisibleAs(FeishuCommandPlan, FeishuCommandSupportApproximation, "OpenCode plan 按文本和结构化待办显示。"),
+		commandSupportVisible(FeishuCommandVerbose),
+		commandSupportVisible(FeishuCommandOpenCodeProfile),
+		commandSupportVisible(FeishuCommandWorkspace),
+		commandSupportVisible(FeishuCommandWorkspaceList),
+		commandSupportVisible(FeishuCommandWorkspaceNew),
+		commandSupportVisible(FeishuCommandWorkspaceNewDir),
+		commandSupportVisible(FeishuCommandWorkspaceNewGit),
+		commandSupportVisible(FeishuCommandWorkspaceNewWorktree),
+		commandSupportVisible(FeishuCommandWorkspaceDetach),
+		commandSupportVisible(FeishuCommandPrimary),
+		commandSupportVisible(FeishuCommandCoworkers),
+		commandSupportVisible(FeishuCommandHistory),
+		commandSupportHiddenReject(FeishuCommandReview, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportVisible(FeishuCommandSendFile),
+		commandSupportVisible(FeishuCommandMode),
+		commandSupportVisible(FeishuCommandAdmin),
+		commandSupportHiddenAllowed(FeishuCommandAdminSubcommand),
+		commandSupportVisible(FeishuCommandUpgrade),
+		commandSupportVisible(FeishuCommandDebug),
+		commandSupportVisible(FeishuCommandHelp),
+		commandSupportVisible(FeishuCommandMenu),
+		commandSupportHiddenAllowed(FeishuCommandList),
+		commandSupportHiddenAllowed(FeishuCommandUse),
+		commandSupportHiddenAllowed(FeishuCommandDetach),
+		commandSupportHiddenAllowed(FeishuCommandUseAll),
+		commandSupportHiddenReject(FeishuCommandPatch, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandAutoWhip, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandAutoContinue, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandCodexProvider, FeishuCommandSupportReject, "当前不在 Codex 模式，暂时不能切换 Codex Provider。请先 `/mode codex`。"),
+		commandSupportHiddenReject(FeishuCommandClaudeProfile, FeishuCommandSupportReject, "当前不在 Claude 模式，暂时不能切换 Claude 配置。请先 `/mode claude`。"),
+		commandSupportHiddenReject(FeishuCommandFollow, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandCron, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportHiddenReject(FeishuCommandVSCodeMigrate, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+	)
+	profile.DefaultRejectNote = opencodeDefaultRejectNote
+	return profile
+}
 
 func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuCommandDisplayProfile {
 	normalized := NormalizeCatalogContext(ctx)

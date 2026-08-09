@@ -33,21 +33,37 @@ type configOverlay struct {
 	ReviewModel   string                     `json:"review_model,omitempty"`
 	SubagentModel string                     `json:"subagent_model,omitempty"`
 	Instructions  string                     `json:"instructions,omitempty"`
-	Reasoning     string                     `json:"reasoning,omitempty"`
-	Permission    string                     `json:"permission,omitempty"`
+	Permission    map[string]string          `json:"permission,omitempty"`
 }
 
 type providerOverlay struct {
-	NPM     string         `json:"npm,omitempty"`
-	Options map[string]any `json:"options,omitempty"`
+	Name    string                  `json:"name,omitempty"`
+	ID      string                  `json:"id,omitempty"`
+	Env     []string                `json:"env,omitempty"`
+	NPM     string                  `json:"npm,omitempty"`
+	Models  map[string]modelOverlay `json:"models,omitempty"`
+	Options map[string]any          `json:"options,omitempty"`
 }
 
-type authOverlay struct {
-	Provider map[string]authProviderOverlay `json:"provider,omitempty"`
+type modelOverlay struct {
+	ID          string                    `json:"id,omitempty"`
+	Name        string                    `json:"name,omitempty"`
+	Attachment  bool                      `json:"attachment"`
+	Reasoning   bool                      `json:"reasoning"`
+	Temperature bool                      `json:"temperature"`
+	ToolCall    bool                      `json:"tool_call"`
+	ReleaseDate string                    `json:"release_date,omitempty"`
+	Limit       map[string]int            `json:"limit,omitempty"`
+	Cost        map[string]float64        `json:"cost,omitempty"`
+	Variants    map[string]map[string]any `json:"variants,omitempty"`
+	Options     map[string]any            `json:"options,omitempty"`
 }
+
+type authOverlay map[string]authProviderOverlay
 
 type authProviderOverlay struct {
-	APIKey string `json:"apiKey,omitempty"`
+	Type string `json:"type"`
+	Key  string `json:"key"`
 }
 
 func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
@@ -83,7 +99,25 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	configRaw, err := json.Marshal(configOverlay{
 		Provider: map[string]providerOverlay{
 			providerID: {
-				NPM: "@ai-sdk/openai-compatible",
+				Name: "Codex Remote " + profile.Name,
+				ID:   providerID,
+				Env:  []string{},
+				NPM:  "@ai-sdk/openai-compatible",
+				Models: map[string]modelOverlay{
+					strings.TrimSpace(profile.Model): {
+						ID:          strings.TrimSpace(profile.Model),
+						Name:        strings.TrimSpace(profile.Model),
+						Attachment:  false,
+						Reasoning:   strings.TrimSpace(profile.ReasoningEffort) != "",
+						Temperature: false,
+						ToolCall:    true,
+						ReleaseDate: "2025-01-01",
+						Limit:       map[string]int{"context": 100000, "output": 10000},
+						Cost:        map[string]float64{"input": 0, "output": 0},
+						Variants:    openCodeReasoningVariants(profile.ReasoningEffort),
+						Options:     map[string]any{},
+					},
+				},
 				Options: map[string]any{
 					"baseURL": strings.TrimSpace(profile.BaseURL),
 				},
@@ -94,16 +128,13 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		ReviewModel:   prefixedModel(providerID, profile.ReviewModel),
 		SubagentModel: prefixedModel(providerID, profile.SubagentModel),
 		Instructions:  strings.TrimSpace(profile.Instruction),
-		Reasoning:     strings.TrimSpace(profile.ReasoningEffort),
-		Permission:    strings.TrimSpace(profile.PermissionMode),
+		Permission:    openCodePermissionMode(profile.PermissionMode),
 	})
 	if err != nil {
 		return LaunchMaterial{}, err
 	}
 	authRaw, err := json.Marshal(authOverlay{
-		Provider: map[string]authProviderOverlay{
-			providerID: {APIKey: profile.APIKey},
-		},
+		providerID: {Type: "api", Key: profile.APIKey},
 	})
 	if err != nil {
 		return LaunchMaterial{}, err
@@ -161,4 +192,21 @@ func prefixedModel(providerID, model string) string {
 		return ""
 	}
 	return providerID + "/" + model
+}
+
+func openCodePermissionMode(value string) map[string]string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "ask", "allow", "deny":
+		return map[string]string{"*": strings.ToLower(strings.TrimSpace(value))}
+	default:
+		return nil
+	}
+}
+
+func openCodeReasoningVariants(value string) map[string]map[string]any {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return nil
+	}
+	return map[string]map[string]any{value: {}}
 }

@@ -245,6 +245,7 @@ func isBotCapabilitySettingsAction(kind control.ActionKind) bool {
 	case control.ActionModeCommand,
 		control.ActionCodexProviderCommand,
 		control.ActionClaudeProfileCommand,
+		control.ActionOpenCodeProfileCommand,
 		control.ActionModelCommand,
 		control.ActionReasoningCommand,
 		control.ActionAccessCommand,

@@ -120,6 +120,35 @@ func TestDaemonStartsOpenCodeHeadlessWithProfileOverlayAndACPLaunchMode(t *testi
 	}
 }
 
+func TestResolveOpenCodeLaunchProfileRequiresAdmissionRefForAPIProfile(t *testing.T) {
+	record, err := config.PrepareOpenCodeAPIProfileCreate(nil, config.OpenCodeAPIProfileInput{
+		Name: "Team OpenCode", BaseURL: "https://proxy.example/v1", APIKey: "secret-v1", Model: "kimi-k2",
+	})
+	if err != nil {
+		t.Fatalf("PrepareOpenCodeAPIProfileCreate: %v", err)
+	}
+	record, changed, err := config.PrepareOpenCodeAPIProfileUpdate(record, config.OpenCodeAPIProfileInput{
+		Name: "Team OpenCode", BaseURL: "https://proxy.example/v1", APIKey: "secret-v2", Model: "kimi-k2",
+	})
+	if err != nil || !changed {
+		t.Fatalf("PrepareOpenCodeAPIProfileUpdate: changed=%v err=%v", changed, err)
+	}
+	cfg := config.DefaultAppConfig()
+	cfg.OpenCode.Profiles = []config.OpenCodeAPIProfileRecord{record}
+
+	if _, err := resolveOpenCodeLaunchProfile(cfg, record.ID, nil); err == nil {
+		t.Fatal("expected custom opencode profile without admission ref to fail closed")
+	}
+	if _, err := resolveOpenCodeLaunchProfile(cfg, record.ID, &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: record.ID, Revision: 1},
+	}); err != nil {
+		t.Fatalf("expected exact historical revision to resolve with admission ref: %v", err)
+	}
+	if _, err := resolveOpenCodeLaunchProfile(cfg, state.DefaultOpenCodeProfileID, nil); err != nil {
+		t.Fatalf("expected default opencode profile to resolve without admission ref: %v", err)
+	}
+}
+
 func envValueForTest(env []string, key string) string {
 	for _, entry := range env {
 		currentKey, value, ok := strings.Cut(entry, "=")

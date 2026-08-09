@@ -60,6 +60,11 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 			singleValueCardSection("当前配置", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, state.DefaultClaudeProfileName))),
 			singleValueCardSection("切换方式", "切换后会重启当前工作区，并恢复该配置最近一次的推理与权限临时覆盖。"),
 		}
+	case FeishuCommandOpenCodeProfile:
+		return []FeishuCardTextSection{
+			singleValueCardSection("当前 Profile", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, "本机默认"))),
+			singleValueCardSection("切换方式", "切换后会重启当前工作区，并按新的 OpenCode Profile 重新准备当前会话。"),
+		}
 	case FeishuCommandAutoWhip:
 		return []FeishuCardTextSection{singleValueCardSection("当前", autoWhipDisplayValue(view.CurrentValue))}
 	case FeishuCommandAutoContinue:

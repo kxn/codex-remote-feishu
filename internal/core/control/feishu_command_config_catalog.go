@@ -99,6 +99,39 @@ func claudeProfilePageViewFromCommandConfigView(view FeishuCatalogConfigView) Fe
 	}})
 }
 
+func openCodeProfilePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
+	def, _ := FeishuCommandDefinitionByID(FeishuCommandOpenCodeProfile)
+	bodySections := BuildFeishuCommandConfigBodySections(def, view)
+	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
+	if view.Sealed {
+		return sealedCommandPageViewForDefinition(def, view, bodySections, noticeSections)
+	}
+	defaultValue := strings.TrimSpace(view.FormDefaultValue)
+	if !commandCatalogFormOptionExists(view.FormOptions, defaultValue) {
+		defaultValue = strings.TrimSpace(view.CurrentValue)
+	}
+	if !commandCatalogFormOptionExists(view.FormOptions, defaultValue) {
+		defaultValue = ""
+	}
+	return commandConfigPageView(def, view, bodySections, noticeSections, []CommandCatalogSection{{
+		Title: "立即切换",
+		Entries: []CommandCatalogEntry{{
+			Form: &CommandCatalogForm{
+				CommandID:   FeishuCommandOpenCodeProfile,
+				CommandText: "/opencodeprofile",
+				SubmitLabel: "切换",
+				Field: CommandCatalogFormField{
+					Name:         "command_args",
+					Kind:         CommandCatalogFormFieldSelectStatic,
+					Placeholder:  "选择 OpenCode Profile",
+					DefaultValue: defaultValue,
+					Options:      append([]CommandCatalogFormFieldOption(nil), view.FormOptions...),
+				},
+			},
+		}},
+	}})
+}
+
 func autoWhipPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
 	def, _ := FeishuCommandDefinitionByID(FeishuCommandAutoWhip)
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)

@@ -201,6 +201,7 @@ func TestGroupCatalogContextHidesBotCapabilitySettings(t *testing.T) {
 		FeishuCommandMode,
 		FeishuCommandCodexProvider,
 		FeishuCommandClaudeProfile,
+		FeishuCommandOpenCodeProfile,
 		FeishuCommandModel,
 		FeishuCommandReasoning,
 		FeishuCommandAccess,
@@ -219,7 +220,7 @@ func TestGroupCatalogContextHidesBotCapabilitySettings(t *testing.T) {
 		ProductMode:                   "normal",
 		BotCapabilitySettingsReadOnly: true,
 	})
-	for _, command := range []string{"/mode", "/codexprovider", "/model", "/reasoning", "/access", "/plan"} {
+	for _, command := range []string{"/mode", "/codexprovider", "/opencodeprofile", "/model", "/reasoning", "/access", "/plan"} {
 		if catalogContainsCommand(page, command) {
 			t.Fatalf("group send settings menu should hide %q: %#v", command, page.Sections)
 		}
@@ -325,6 +326,66 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesClaudeVisibleProfile(t 
 	}
 }
 
+func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *testing.T) {
+	ctx := CatalogContext{
+		Backend:     agentproto.BackendOpenCode,
+		ProductMode: "normal",
+		MenuStage:   string(FeishuCommandMenuStageNormalWorking),
+	}
+	profile := ResolveFeishuCommandDisplayProfileForContext(ctx)
+	if profile.VisibleMode != "opencode" {
+		t.Fatalf("VisibleMode = %q, want opencode", profile.VisibleMode)
+	}
+
+	currentWork := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupCurrentWork, true, ctx)
+	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/steerall", "/new", "/status"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("opencode current_work menu commands = %#v, want %#v", got, want)
+	}
+
+	sendSettings := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSendSettings, false, ctx)
+	for _, command := range []string{"/reasoning", "/access", "/plan", "/verbose", "/opencodeprofile", "/mode"} {
+		if !containsCommandSlash(sendSettings, command) {
+			t.Fatalf("opencode send_settings should include %q, got %#v", command, resolvedDisplayCommands(sendSettings))
+		}
+	}
+	for _, command := range []string{"/model", "/codexprovider", "/claudeprofile"} {
+		if containsCommandSlash(sendSettings, command) {
+			t.Fatalf("opencode send_settings should hide %q, got %#v", command, resolvedDisplayCommands(sendSettings))
+		}
+	}
+
+	for _, tt := range []struct {
+		familyID string
+		kind     FeishuCommandSupportKind
+		notePart string
+	}{
+		{familyID: FeishuCommandNew, kind: FeishuCommandSupportApproximation, notePart: "OpenCode"},
+		{familyID: FeishuCommandReasoning, kind: FeishuCommandSupportApproximation, notePart: "OpenCode"},
+		{familyID: FeishuCommandAccess, kind: FeishuCommandSupportApproximation, notePart: "OpenCode"},
+		{familyID: FeishuCommandPlan, kind: FeishuCommandSupportApproximation, notePart: "OpenCode"},
+		{familyID: FeishuCommandModel, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
+		{familyID: FeishuCommandPatch, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
+		{familyID: FeishuCommandAutoWhip, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
+		{familyID: FeishuCommandAutoContinue, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
+		{familyID: FeishuCommandCodexProvider, kind: FeishuCommandSupportReject, notePart: "/mode codex"},
+		{familyID: FeishuCommandClaudeProfile, kind: FeishuCommandSupportReject, notePart: "/mode claude"},
+		{familyID: FeishuCommandOpenCodeProfile, kind: FeishuCommandSupportNative, notePart: ""},
+	} {
+		t.Run(tt.familyID, func(t *testing.T) {
+			support, ok := ResolveFeishuCommandSupport(ctx, tt.familyID)
+			if !ok {
+				t.Fatalf("ResolveFeishuCommandSupport(%q) missing", tt.familyID)
+			}
+			if support.Kind != tt.kind || support.DispatchAllowed != (tt.kind != FeishuCommandSupportReject) {
+				t.Fatalf("support for %q = %#v, want kind %q dispatch %v", tt.familyID, support, tt.kind, tt.kind != FeishuCommandSupportReject)
+			}
+			if !strings.Contains(support.Note, tt.notePart) {
+				t.Fatalf("support note for %q = %q, want to contain %q", tt.familyID, support.Note, tt.notePart)
+			}
+		})
+	}
+}
+
 func TestBuildFeishuCommandMenuHomePageUsesProfileAwareRootEntry(t *testing.T) {
 	normal := BuildFeishuCommandMenuHomePageViewForContext(CatalogContext{ProductMode: "normal"})
 	if got := commandTextForMenuHomeEntry(normal, "工作区与会话"); got != "/workspace" {
@@ -343,6 +404,15 @@ func TestBuildFeishuCommandMenuHomePageUsesProfileAwareRootEntry(t *testing.T) {
 	if got := commandTextForMenuHomeEntry(claude, "工作区与会话"); got != "/workspace" {
 		t.Fatalf("claude switch_target home command = %q, want /workspace", got)
 	}
+}
+
+func containsCommandSlash(values []FeishuCommandDisplayResolution, command string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value.Definition.CanonicalSlash) == command {
+			return true
+		}
+	}
+	return false
 }
 
 func resolvedDisplayCommands(values []FeishuCommandDisplayResolution) []string {

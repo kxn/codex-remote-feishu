@@ -104,6 +104,7 @@ func (a *App) handleOpenCodeProfileCreate(w http.ResponseWriter, r *http.Request
 		writeOpenCodeProfileServiceError(w, err)
 		return
 	}
+	a.syncOpenCodeProfilesCatalogFromConfig()
 	w.Header().Set("ETag", profile.ETag)
 	writeJSON(w, http.StatusCreated, opencodeProfileResponse{Profile: profile})
 }
@@ -132,6 +133,7 @@ func (a *App) handleOpenCodeProfileUpdate(w http.ResponseWriter, r *http.Request
 		writeOpenCodeProfileServiceError(w, err)
 		return
 	}
+	a.syncOpenCodeProfilesCatalogFromConfig()
 	w.Header().Set("ETag", profile.ETag)
 	writeJSON(w, http.StatusOK, opencodeProfileResponse{Profile: profile})
 }
@@ -155,6 +157,7 @@ func (a *App) handleOpenCodeProfileDelete(w http.ResponseWriter, r *http.Request
 		writeOpenCodeProfileServiceError(w, err)
 		return
 	}
+	a.syncOpenCodeProfilesCatalogFromConfig()
 	w.WriteHeader(http.StatusNoContent)
 }
 

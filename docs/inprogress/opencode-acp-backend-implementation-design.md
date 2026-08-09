@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-09`
-> Summary: 补充 #848 canonical mapping/golden tests 的 adapter 结果、偏离和 #849 承接项。
+> Summary: 同步 #849 daemon integration/e2e 的 OpenCode 真实验证、MCP 接入和首版偏离记录。
 
 ## 1. 结论
 
@@ -21,7 +21,7 @@ OpenCode backend 可以开始完整实现。第一版目标不是最小 PoC，�
 - 新增 `internal/adapter/acp` 承接 ACP JSON-RPC、session/update、permission、tool、usage、hydration 等协议段。Kimi/Goose 后续如果也接 ACP，应复用这个包，但各自另写 compiler/launcher。
 - 新增 `internal/app/opencodeprofile` 承接 OpenCode profile schema 到 launch material 的编译。它不能抽象成 ACP 通用 loader。
 - API-key OpenCode profile 是第一版 fully supported 目标。默认 profile 可以继承系统 OpenCode 当前状态，但我们不管理 OAuth，不首填 OAuth，不支持多个 OAuth profile。
-- API profile overlay 压过系统 OAuth 是暂未测试假设：设计先按可行推进，实现验证必须补证据；如果失败，第一版直接收紧成 API-only 或 inherit-only，不能静默 fallback。
+- API-key profile overlay 已用真实 `opencode-ai@1.18.15` + fake provider 验证：模型和 `Authorization` 都来自 profile overlay。OAuth profile 管理、refresh 和多个 OAuth profile 仍不做；系统 OAuth 共存只作为默认 inherit profile 的用户本机状态处理。
 - Plan、sandbox、usage context meter、persistent delete、完整 error taxonomy 都按 Claude 现有产品基线处理：能投影就投影，不能投影就自然退化到现有文本/日志/diagnostic，不新增用户可见的内部 carrier 提示。
 
 #847 已补第一批 runtime adapter skeleton：
@@ -31,7 +31,7 @@ OpenCode backend 可以开始完整实现。第一版目标不是最小 PoC，�
 - `fs/write_text_file` 已封住确定性的 symlink/junction escape 和 dangling symlink escape；并发 TOCTOU path swap 仍作为后续安全 hardening 记录，不阻塞 #847 skeleton close。
 - `internal/app/wrapper` 已把 `opencode-acp` wrapper mode 接到真实 `opencode acp` child launch，并在返回前完成 ACP initialize bootstrap。
 - 已用 `opencode-ai@1.18.15` npm binary 和本地 fake provider 跑通 Go guarded smoke：initialize -> session/new -> session/prompt -> thought/text delta -> prompt response `stopReason=end_turn` -> turn completion -> `session/load` replay 汇总成 history，且 replay 不泄漏 live delta。测试入口：`OPENCODE_ACP_SMOKE_BIN=/path/to/opencode go test ./internal/adapter/acp -run TestRealOpenCodeACPPromptSmoke -count=1 -v`。
-- OAuth/API overlay 压过系统 OAuth 仍按暂未测试处理，不作为 #847 runtime skeleton 阻塞项。
+- API-key overlay 已由 #849 真实 smoke 补证；系统 OAuth 共存不作为第一版承诺，OAuth 管理仍不进入产品面。
 
 ## 2. 范围
 
@@ -266,7 +266,7 @@ type LaunchMaterial struct {
 env 策略：
 
 - API profile 写 `OPENCODE_CONFIG_CONTENT`，只覆盖 provider/model/instruction/permission 等需要字段。
-- API profile 写 `OPENCODE_AUTH_CONTENT`，注入 profile API key。
+- API profile 写 `OPENCODE_AUTH_CONTENT={"<providerID>":{"type":"api","key":"..."}}`，注入 profile API key；旧的 `{"provider":{...}}` / `apiKey` 形状不是 OpenCode `v1.18.15` 的真实 auth schema。
 - 默认 inherit profile 不写 config/auth overlay。
 - `ProjectConfigMode=disable` 时写 `OPENCODE_DISABLE_PROJECT_CONFIG=1`；默认继承 project config。
 - 默认不写 `OPENCODE_CONFIG_DIR`，因为它会改变 global config path 并产生 `.gitignore` 等副作用。
@@ -283,18 +283,20 @@ OpenCode config content 的建议形状由 golden test 固定，不能靠字符�
 
 - `provider.<generatedProviderID>.npm = "@ai-sdk/openai-compatible"`
 - `provider.<generatedProviderID>.options.baseURL`
+- `provider.<generatedProviderID>.models.<model>`：必须写入当前 profile 模型的最小 metadata；`OPENCODE_DISABLE_MODELS_FETCH=1` 下不能只写 provider/model 字符串。
 - `model = "<providerID>/<model>"`
 - `small_model` 或 OpenCode 对应 small model 字段
 - instructions/agent/mode 相关字段
-- permission JSON 或 `OPENCODE_PERMISSION`
+- `permission` 只写 OpenCode 原生 map，例如 `{"*":"ask"}` / `allow` / `deny`。产品侧 `plan` 等非 OpenCode 原生 permission intent 不写入 config，避免生成无效配置。
+- `reasoningEffort` 不能写成 top-level `reasoning`，OpenCode 1.18.15 会拒绝该字段；当前只能通过模型 `variants` 做最接近的注入。
 
 具体字段名以 `opencode-ai@1.18.15` 黑盒 fixture 为准。
 
-OAuth overlay 假设：
+OAuth/API overlay 结论：
 
-- 暂时假设 API profile 的 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT` 能压过系统 OAuth。
-- #846/#849 必须补三组测试：系统 OAuth 存在 + API profile、两个 API profiles 并发、启动后系统 config/auth/data 文件未污染。
-- 如果测试失败，第一版禁用 inherit/OAuth 或禁用 API+OAuth 共存路径，由实现子单回写结论。
+- API profile 的 `OPENCODE_CONFIG_CONTENT` + `OPENCODE_AUTH_CONTENT` 已在真实 smoke 中压过默认环境并被 fake provider 观测到；真实 smoke 使用 production `opencodeprofile.CompileLaunchMaterial` 产物，而不是手写测试 env。
+- 系统 OAuth 不由我们写入、刷新或多 profile 管理；默认 inherit profile 保持用户本机 OpenCode 状态。
+- 如果后续发现系统 OAuth 会污染 API profile，第一版可直接禁止 API+OAuth 共存路径；当前 #849 只承诺 API-key overlay path。
 
 ## 7. Daemon Launch 与 Orchestrator
 
@@ -444,8 +446,8 @@ prompt input 映射：
 
 MCP session 参数：
 
-- Feishu tool service 的 local MCP server 在 `session/new` params 中以 ACP `mcpServers` 注入。
-- bearer/header/env 只进入 launch/session material，debug/admin 只显示 redacted summary。
+- Feishu tool service 的 HTTP MCP server 在 `session/new` / `session/resume` / `session/fork` / `session/load` params 中以 ACP `mcpServers` 注入。
+- OpenCode ACP `McpServer::Http` 要求 headers 直接出现在 JSON-RPC frame 中，不能像 Claude MCP config 那样依赖 env placeholder；因此 raw frame log 必须递归 redaction `Authorization`、token、key、secret 等敏感字段。
 - MCP 注册失败不阻塞普通 prompt，但要产生 diagnostic；模型随后调用不可用工具时按 tool failed 映射。
 
 ### 9.3 session/update mapping
@@ -587,7 +589,7 @@ errors：
 - compiler golden 覆盖 config/auth/project/data/permission/MCP。
 - binary resolver 和 runtime requirements 测试。
 - daemon launch material 不泄漏 secret。
-- OAuth overlay 标为暂未测试并在 #849 补真实验证。
+- API-key overlay 已由 #849 真实 smoke 补证；OAuth 管理保持 out of scope。
 
 ### #847 runtime adapter
 
@@ -603,9 +605,9 @@ errors：
 - initialize/session list/new/resume/load/prompt/cancel：#847 已由 unit tests 覆盖，initialize/new/prompt/load replay 已由真实 OpenCode smoke 覆盖。
 - `session/load` hydration：#847 已固定 OpenCode replay update 在 load response 前进入 history collector，不产生 live turn/item delta；更完整 raw JSONL golden 由 #848 承接。
 - request permission/respond：#847 已由 unit tests 覆盖。
-- `fs/write_text_file`：#847 已实现 permission-gated workspace write、once approval one-shot、symlink/junction escape fail-closed、越界 fail-closed 和 file patch event；真实 edit tool e2e 仍由 #849 覆盖。
+- `fs/write_text_file`：#847 已实现 permission-gated workspace write、once approval one-shot、symlink/junction escape fail-closed、越界 fail-closed 和 file patch event；真实 edit tool e2e 已由 #849 覆盖。
 - config options / available commands / usage / error：#847 已覆盖 model option snapshot、available commands ignore、usage projection 和 JSON-RPC error；更完整 golden taxonomy 由 #848 承接。
-- wrapper runtime integration：#847 已覆盖 runtime construction、command translation、child launch args/env 和 ACP initialize bootstrap；真实 daemon/e2e 由 #849 承接。
+- wrapper runtime integration：#847 已覆盖 runtime construction、command translation、child launch args/env 和 ACP initialize bootstrap；真实 daemon/e2e 已由 #849 承接。
 
 ### #848 canonical mapping and golden tests
 
@@ -633,7 +635,7 @@ errors：
 
 - `unknown slash` / command display profile 不是 ACP adapter 层能力，实际载体在 `internal/core/control`、orchestrator 和 Feishu menu；从 #848 移到 #849 实现和 e2e 验证。
 - `available_commands_update` 第一版不替换产品命令菜单，只写 debug。后续若要允许 OpenCode backend slash passthrough，必须在 #849 做 allowlist 和用户可见 preflight。
-- real edit tool e2e、MCP 注入、OAuth/API overlay 与系统 OAuth 共存仍留在 #849；#848 只固定 adapter 侧 raw frame 映射和受控 `fs/write_text_file` 行为。
+- real edit tool e2e、MCP 注入和 API-key overlay 已由 #849 补证；#848 只固定 adapter 侧 raw frame 映射和受控 `fs/write_text_file` 行为。
 - 2026-08-09 verifier 初次复核指出 #848 issue 完成标准仍把 command profile 当作本单交付项；已把该完成项正式纠偏为 #849 承接，#848 只要求 adapter 对 `available_commands_update` debug-only 有测试约束。
 
 ### #849 daemon integration and e2e
@@ -650,8 +652,28 @@ errors：
 
 - `/mode opencode` / profile switch / workspace restart / exact-thread resume。
 - command profile 行为和 Claude-like 降级。
-- real OpenCode black-box：initialize、profile overlay、auth isolation、prompt/cancel/resume/load、local MCP、permission/edit。
-- 系统 OAuth 存在 + API profile overlay 测试完成并回写结论。
+- real OpenCode black-box：initialize、API-key profile overlay、prompt/cancel/resume/load、HTTP MCP、permission/edit。
+- API-key profile overlay 测试完成并回写结论；OAuth 管理/refresh/多 OAuth profile 明确 out of scope。
+
+当前执行结果：
+
+- `/mode opencode`、`/opencodeprofile`、detached/fresh workspace/workspace-route restart 和 pending headless connect 已补 orchestrator/control/daemon 测试，OpenCode surface 不再在 connect 时退回 Codex。
+- OpenCode profile catalog 会同步到 Service，profile switch 会冻结 `OpenCodeAdmissionRef`；同 profile 只有 revision 未变时才 no-op，revision 变化会刷新当前 profile。
+- API profile daemon launch 会注入 `opencode-acp` launch mode、`CODEX_REMOTE_INSTANCE_BACKEND=opencode`、profile id、`OPENCODE_CONFIG_CONTENT` 和 `OPENCODE_AUTH_CONTENT`，且 config env 不泄漏 API key。
+- 真实 OpenCode guarded smoke 已覆盖 prompt/thought/text/load、API-key auth/model overlay、permission/edit/file preview、cancel 和 ACP `mcpServers` HTTP MCP publication。
+- raw frame log 已补递归 redaction，避免 OpenCode ACP MCP header 中的 bearer token 落盘。
+
+首版偏离/边界：
+
+- OpenCode persisted thread catalog 第一版不读取 Codex SQLite 历史，也暂不提供 OpenCode durable history catalog；`/use` 等历史入口只能看到在线/当前 runtime 可见会话，避免跨 backend 误曝。
+- 自定义/API profile launch 必须带匹配的 `OpenCodeAdmissionRef`；缺失或 stale revision fail-closed。默认 `op_default` inherit profile 可以无 ref 启动。
+- OpenCode observed config 不写回 workspace/default model/reasoning 配置，避免把某个 OpenCode 实例的 runtime snapshot 污染 Codex/Claude 默认值。
+- `OPENCODE_AUTH_CONTENT` 真实 schema 是顶层 provider id map；旧 nested provider/apiKey 设计已废弃。
+- `OPENCODE_CONFIG_CONTENT` 不能写 top-level `reasoning`；profile reasoning effort 只通过 provider model variant 近似注入，动态 `/reasoning` 仍取决于 OpenCode ACP `configOptions` 是否暴露 effort。
+- OpenCode edit tool 的模型侧参数名是 `filePath`，不是 `path`；测试按真实 schema 固定。
+- profile `permissionMode` 只映射 OpenCode 原生 `ask` / `allow` / `deny`；`plan` 等产品侧意图不写入 OpenCode config，也不对用户提示“Plan snapshot 不支持”。
+- `process.exit` / stop / detach 不主动发送 ACP `session/close`；关闭仍走 wrapper child lifecycle 和 turn tracker reconciliation，不把内部 session close 暴露成用户能力。
+- OAuth 管理、OAuth refresh、多 OAuth profile 和 OpenCode MCP OAuth 不进入第一版产品面；API-key overlay 已验证，系统 OAuth 只作为默认 inherit profile 的本机状态存在。
 
 ## 12. 测试矩阵
 
@@ -661,11 +683,11 @@ errors：
 | config | profile validation、revision/ETag、secret update、reference checks | Go unit tests |
 | compiler | `OPENCODE_CONFIG_CONTENT` / `OPENCODE_AUTH_CONTENT` / project disable / data isolation / redaction | golden tests |
 | daemon launch | start env, launch mode, pending headless, failure mapping | Go unit tests |
-| wrapper runtime | entry args, child launch, initialize, command phases, restart restore | Go unit tests；#849 补 daemon e2e |
+| wrapper runtime | entry args, child launch, initialize, command phases, restart restore | Go unit tests；#849 已补 daemon/e2e |
 | ACP adapter | response乱序、session lifecycle、turn buffer、hydration、tool、permission、fs、usage、errors | Go unit tests；#848 补 raw JSONL golden |
 | orchestrator | mode/profile switch、compatibility、restart/fresh fallback、command preflight | focused Go tests |
 | Feishu projection | request card dynamic options、plan/text/tool projection不重叠 | focused projector tests |
-| real OpenCode | `opencode-ai@1.18.15` black-box with fake provider/MCP | guarded Go smoke；#849 补 MCP/edit/auth overlay |
+| real OpenCode | `opencode-ai@1.18.15` black-box with fake provider/MCP | guarded Go smoke 已覆盖 prompt/load/auth overlay、permission/edit、cancel、HTTP MCP publication |
 | repo gate | `git diff --check`、`scripts/check/pre-commit.sh` | command output |
 
 黑盒测试必须记录：
@@ -681,20 +703,11 @@ errors：
 1. 先做 #846 的 backend identity + state contract + OpenCode profile schema/compiler。没有这层，后续 adapter 即使能聊天也无法证明 profile 隔离。
 2. 接 #847 的 wrapper OpenCode runtime + ACP adapter。先用 mock ACP server 固定 JSON-RPC 和 mapping，再接真实 binary。
 3. 接 #848，把黑盒 raw frames 收进 golden，补 hydration/tool/permission/usage/plan 的确定性测试。
-4. 接 #849，把 orchestrator/Feishu/admin/e2e 串起来，并补系统 OAuth overlay 验证。
+4. 接 #849，把 orchestrator/Feishu/admin/e2e 串起来，并补 API-key overlay、MCP、permission/edit、cancel 的真实验证；OAuth 管理保持 out of scope。
 5. 父 issue #844 关闭前再决定是否需要独立 verifier；协议/auth/cross-surface 风险未完全降到低风险前，父 issue 不关闭。
 
 ## 14. 当前未拍板项
 
 没有阻塞实现设计的产品拍板项。
 
-实现阶段需要用证据关闭的假设只有一个：
-
-- API profile overlay 是否能稳定压过系统 OAuth。
-
-处理结论已经固定：
-
-- 通过：API profile + inherit default 都可保留。
-- 失败：第一版禁用会造成污染的路径，优先保证 API profile 隔离；如果只能 inherit，则不承诺 API profile。
-
-其他差异按 Claude 基线处理，不作为用户可见“不支持”项目扩散。
+API-key overlay、HTTP MCP、permission/edit 和 cancel 已由 #849 guarded smoke 补证。OAuth 管理/refresh/多 OAuth profile 按产品决策不进入第一版；其他差异按 Claude 基线处理，不作为用户可见“不支持”项目扩散。

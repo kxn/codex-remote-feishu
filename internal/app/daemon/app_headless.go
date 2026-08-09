@@ -439,7 +439,11 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 
 func resolveOpenCodeLaunchProfile(cfg config.AppConfig, profileID string, admissionRef *state.OpenCodeAdmissionRef) (config.OpenCodeProfile, error) {
 	normalizedID := state.NormalizeOpenCodeProfileID(profileID)
-	if ref := state.NormalizeOpenCodeAdmissionRef(admissionRef); ref != nil && strings.TrimSpace(ref.ProfileRef.ID) == normalizedID {
+	ref := state.NormalizeOpenCodeAdmissionRef(admissionRef)
+	if ref != nil && state.NormalizeOpenCodeProfileID(ref.ProfileRef.ID) != normalizedID {
+		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile admission ref mismatch: profile=%s ref=%s", normalizedID, ref.ProfileRef.ID)
+	}
+	if ref != nil {
 		if normalizedID == state.DefaultOpenCodeProfileID {
 			profile := config.BuiltInOpenCodeProfile()
 			profile.Revision = ref.ProfileRef.Revision
@@ -458,6 +462,9 @@ func resolveOpenCodeLaunchProfile(cfg config.AppConfig, profileID string, admiss
 			}
 		}
 		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile revision %s@%d not found", normalizedID, ref.ProfileRef.Revision)
+	}
+	if normalizedID != state.DefaultOpenCodeProfileID {
+		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile admission ref required for %s", normalizedID)
 	}
 	profile, ok := config.ResolveOpenCodeProfile(cfg, normalizedID)
 	if !ok {
