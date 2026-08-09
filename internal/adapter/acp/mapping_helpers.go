@@ -142,6 +142,7 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 		}
 	case "file_change":
 		metadata["semanticKind"] = "file_change_request"
+		metadata["suppressFinalText"] = true
 		if path := firstMapString(rawInput, "path", "filePath", "file_path"); path != "" {
 			metadata["filePath"] = path
 		}
@@ -160,7 +161,8 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 			metadata["tool"] = tool
 		}
 	case "dynamic_tool_call":
-		if isExplorationToolKind(kind) {
+		metadata["suppressFinalText"] = true
+		if isExplorationToolKind(effectiveKind) {
 			metadata["semanticKind"] = "exploration"
 		} else {
 			metadata["semanticKind"] = "generic_tool"
@@ -171,17 +173,23 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 
 func opencodeToolCompletionMetadata(metadata map[string]any, update map[string]any) map[string]any {
 	out := opencodeToolMetadata(update, metadata)
+	effectiveKind := xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["kind"]), metadataString(out, "kind"))
+	rawInput := opencodeRawInput(update, out)
+	itemKind := toolItemKind(map[string]any{"kind": effectiveKind, "rawInput": rawInput})
+	if itemKind == "" && effectiveKind == "" {
+		itemKind = toolItemKind(update)
+	}
 	if rawOutput := xutil.CloneJSONValue(update["rawOutput"]); rawOutput != nil {
 		out["rawOutput"] = rawOutput
 		if output, _ := rawOutput.(map[string]any); output != nil {
-			if text := firstMapStringPreserve(output, "output", "stdout", "text"); text != "" {
-				out["text"] = text
-			}
 			if errorMessage := firstMapString(output, "error", "errorMessage", "message"); errorMessage != "" {
 				out["errorMessage"] = errorMessage
 			}
 			if _, ok := output["exitCode"]; ok {
 				out["exitCode"] = xutil.LookupIntFromAny(output["exitCode"])
+			}
+			if itemKind == "mcp_tool_call" {
+				mergeOpenCodeMCPResultMetadata(out, output)
 			}
 		}
 	}
@@ -189,6 +197,38 @@ func opencodeToolCompletionMetadata(metadata map[string]any, update map[string]a
 		out["errorMessage"] = errorMessage
 	}
 	return out
+}
+
+func mergeOpenCodeMCPResultMetadata(metadata map[string]any, output map[string]any) {
+	if metadata == nil || output == nil {
+		return
+	}
+	if _, ok := output["durationMs"]; ok {
+		metadata["durationMs"] = xutil.LookupIntFromAny(output["durationMs"])
+	} else if _, ok := output["duration_ms"]; ok {
+		metadata["durationMs"] = xutil.LookupIntFromAny(output["duration_ms"])
+	}
+	if result := xutil.CloneJSONValue(output["result"]); result != nil {
+		metadata["result"] = result
+	}
+	result, _ := output["result"].(map[string]any)
+	if result == nil {
+		if output["content"] != nil || output["structuredContent"] != nil || output["_meta"] != nil {
+			result = output
+		}
+	}
+	if result == nil {
+		return
+	}
+	if content := xutil.CloneJSONValue(result["content"]); content != nil {
+		metadata["resultContent"] = content
+	}
+	if structuredContent := xutil.CloneJSONValue(result["structuredContent"]); structuredContent != nil {
+		metadata["resultStructuredContent"] = structuredContent
+	}
+	if meta, _ := result["_meta"].(map[string]any); len(meta) != 0 {
+		metadata["resultMeta"] = xutil.CloneMap(meta)
+	}
 }
 
 func opencodeRawInput(update map[string]any, metadata map[string]any) map[string]any {
@@ -236,18 +276,6 @@ func firstMapString(values map[string]any, keys ...string) string {
 	}
 	for _, key := range keys {
 		if text := strings.TrimSpace(xutil.LookupStringFromAny(values[key])); text != "" {
-			return text
-		}
-	}
-	return ""
-}
-
-func firstMapStringPreserve(values map[string]any, keys ...string) string {
-	if values == nil {
-		return ""
-	}
-	for _, key := range keys {
-		if text := xutil.LookupStringFromAny(values[key]); text != "" {
 			return text
 		}
 	}

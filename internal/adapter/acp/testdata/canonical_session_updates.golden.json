@@ -88,23 +88,8 @@
       "surfaceSessionId": "surface-1"
     },
     "itemId": "opencode-tool-shell_1",
-    "itemKind": "command_execution",
+    "itemKind": "command_execution_output",
     "kind": "item.delta",
-    "metadata": {
-      "arguments": {
-        "cmd": "go test ./internal/adapter/acp",
-        "cwd": "/tmp/work"
-      },
-      "command": "go test ./internal/adapter/acp",
-      "cwd": "/tmp/work",
-      "kind": "bash",
-      "rawInput": {
-        "cmd": "go test ./internal/adapter/acp",
-        "cwd": "/tmp/work"
-      },
-      "tool": "bash",
-      "toolCallId": "shell_1"
-    },
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"
   },
@@ -134,7 +119,6 @@
         "exitCode": 0,
         "output": "PASS\n"
       },
-      "text": "PASS\n",
       "tool": "bash",
       "toolCallId": "shell_1"
     },

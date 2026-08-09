@@ -562,6 +562,72 @@ func TestThreadHistoryReadUsesSessionLoadAndReturnsHistoryEnvelope(t *testing.T)
 	}
 }
 
+func TestThreadHistoryReadSuppressesDynamicToolResultText(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-history",
+		Kind:      agentproto.CommandThreadHistoryRead,
+		Target:    agentproto.Target{ThreadID: "ses_1", CWD: "/tmp/work"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(history): %v", err)
+	}
+	frame := decodeFrame(t, result.OutboundToChild[0])
+
+	for _, replay := range []map[string]any{
+		sessionUpdate("ses_1", map[string]any{
+			"sessionUpdate": "user_message_chunk",
+			"messageId":     "msg_user",
+			"content":       map[string]any{"type": "text", "text": "inspect repo"},
+		}),
+		sessionUpdate("ses_1", map[string]any{
+			"sessionUpdate": "tool_call",
+			"toolCallId":    "read_1",
+			"title":         "read",
+			"kind":          "read",
+			"status":        "pending",
+			"rawInput":      map[string]any{"path": "README.md"},
+		}),
+		sessionUpdate("ses_1", map[string]any{
+			"sessionUpdate": "tool_call_update",
+			"toolCallId":    "read_1",
+			"status":        "completed",
+			"content": []any{
+				map[string]any{"type": "content", "content": map[string]any{"type": "text", "text": "# README\n\nfull file contents"}},
+			},
+			"rawOutput": map[string]any{"output": "# README\n\nfull file contents"},
+		}),
+	} {
+		replayed, err := tr.ObserveServer(mustLine(t, replay))
+		if err != nil {
+			t.Fatalf("ObserveServer(replay): %v", err)
+		}
+		if len(replayed.Events) != 0 {
+			t.Fatalf("load replay update leaked live events: %#v", replayed.Events)
+		}
+	}
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      frame["id"],
+		"result":  map[string]any{"configOptions": []any{}},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(load response): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadHistoryRead)
+	items := observed.Events[0].ThreadHistory.Turns[0].Items
+	if len(items) != 2 {
+		t.Fatalf("history items = %#v, want user/tool", items)
+	}
+	if items[1].Kind != "dynamic_tool_call" || items[1].Text != "" {
+		t.Fatalf("dynamic tool raw result should not become history text: %#v", items[1])
+	}
+	if raw, ok := items[1].Metadata["rawOutput"].(map[string]any); !ok || raw["output"] != "# README\n\nfull file contents" {
+		t.Fatalf("dynamic raw output should stay in metadata: %#v", items[1])
+	}
+}
+
 func TestTurnInterruptSendsSessionCancelNotification(t *testing.T) {
 	tr, _ := startPromptedSession(t)
 	result, err := tr.TranslateCommand(agentproto.Command{

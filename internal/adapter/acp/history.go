@@ -116,7 +116,7 @@ func (h *historyHydrationState) observeHistoryToolCallUpdate(update map[string]a
 	if status := strings.TrimSpace(xutil.LookupStringFromAny(update["status"])); status != "" {
 		item.Status = status
 	}
-	if text := historyContentText(update["content"]); text != "" {
+	if text := historyContentText(update["content"]); text != "" && opencodeHistoryToolContentVisible(item.Kind) {
 		appendHistoryText(item, text)
 	}
 	h.mergeHistoryMetadata(item, map[string]any{
@@ -132,6 +132,10 @@ func (h *historyHydrationState) observeHistoryToolCallUpdate(update map[string]a
 			}
 		}
 	}
+}
+
+func opencodeHistoryToolContentVisible(kind string) bool {
+	return strings.TrimSpace(kind) == "command_execution"
 }
 
 func (h *historyHydrationState) addTurn(seed string) int {

@@ -162,6 +162,9 @@ func TestCanonicalToolUpdatesUseHumanTextAndKeepTerminalMetadata(t *testing.T) {
 		t.Fatalf("ObserveServer(tool progress): %v", err)
 	}
 	assertEventKinds(t, progress.Events, agentproto.EventItemDelta)
+	if progress.Events[0].ItemKind != "command_execution_output" {
+		t.Fatalf("tool progress item kind = %q, want command_execution_output; event=%#v", progress.Events[0].ItemKind, progress.Events[0])
+	}
 	if progress.Events[0].Delta != "PASS\n" {
 		t.Fatalf("tool progress delta = %q, want human text", progress.Events[0].Delta)
 	}
@@ -179,6 +182,121 @@ func TestCanonicalToolUpdatesUseHumanTextAndKeepTerminalMetadata(t *testing.T) {
 	event := completed.Events[0]
 	if event.ItemKind != "command_execution" || event.Metadata["command"] != "go test ./internal/adapter/acp" || event.Metadata["exitCode"] != 0 {
 		t.Fatalf("completion metadata lost canonical command fields: %#v", event)
+	}
+	if text, ok := event.Metadata["text"]; ok {
+		t.Fatalf("command completion raw output must not be promoted to metadata text, got %#v", text)
+	}
+}
+
+func TestOpenCodeDynamicToolCompletionKeepsRawOutputNonVisible(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	if _, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call",
+		"toolCallId":    "read_1",
+		"title":         "read",
+		"kind":          "read",
+		"status":        "pending",
+		"rawInput":      map[string]any{"path": "README.md"},
+	}))); err != nil {
+		t.Fatalf("ObserveServer(tool start): %v", err)
+	}
+
+	completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call_update",
+		"toolCallId":    "read_1",
+		"status":        "completed",
+		"rawOutput":     map[string]any{"output": "# README\n\nfull file contents"},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(tool completed): %v", err)
+	}
+	assertEventKinds(t, completed.Events, agentproto.EventItemCompleted)
+	event := completed.Events[0]
+	if event.ItemKind != "dynamic_tool_call" {
+		t.Fatalf("completion item kind = %q, want dynamic_tool_call; event=%#v", event.ItemKind, event)
+	}
+	if event.Metadata["suppressFinalText"] != true {
+		t.Fatalf("dynamic tool completion must suppress final text, metadata=%#v", event.Metadata)
+	}
+	if text, ok := event.Metadata["text"]; ok {
+		t.Fatalf("dynamic raw output must not be promoted to metadata text, got %#v", text)
+	}
+	if raw, ok := event.Metadata["rawOutput"].(map[string]any); !ok || raw["output"] != "# README\n\nfull file contents" {
+		t.Fatalf("dynamic raw output should be retained for diagnostics, metadata=%#v", event.Metadata)
+	}
+}
+
+func TestOpenCodeFileChangeCompletionSuppressesRawOutputText(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	if _, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call",
+		"toolCallId":    "edit_1",
+		"title":         "edit",
+		"kind":          "edit",
+		"status":        "pending",
+		"rawInput":      map[string]any{"path": "main.go"},
+	}))); err != nil {
+		t.Fatalf("ObserveServer(tool start): %v", err)
+	}
+
+	completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call_update",
+		"toolCallId":    "edit_1",
+		"status":        "completed",
+		"rawOutput":     map[string]any{"output": "wrote main.go"},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(tool completed): %v", err)
+	}
+	assertEventKinds(t, completed.Events, agentproto.EventItemCompleted)
+	event := completed.Events[0]
+	if event.ItemKind != "file_change" {
+		t.Fatalf("completion item kind = %q, want file_change; event=%#v", event.ItemKind, event)
+	}
+	if event.Metadata["suppressFinalText"] != true {
+		t.Fatalf("file change completion must suppress final text, metadata=%#v", event.Metadata)
+	}
+	if text, ok := event.Metadata["text"]; ok {
+		t.Fatalf("file change raw output must not be promoted to metadata text, got %#v", text)
+	}
+}
+
+func TestOpenCodeMCPCompletionKeepsStructuredResultWithoutText(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call_update",
+		"toolCallId":    "mcp_1",
+		"kind":          "mcp",
+		"status":        "completed",
+		"rawInput":      map[string]any{"server": "docs", "tool": "lookup"},
+		"rawOutput": map[string]any{
+			"result": map[string]any{
+				"content":           []any{map[string]any{"type": "text", "text": "raw docs result"}},
+				"structuredContent": map[string]any{"answer": "ok"},
+				"_meta":             map[string]any{"source": "docs"},
+			},
+			"durationMs": 24,
+		},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(mcp completed): %v", err)
+	}
+	assertEventKinds(t, result.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
+	event := result.Events[1]
+	if event.ItemKind != "mcp_tool_call" || event.Metadata["server"] != "docs" || event.Metadata["tool"] != "lookup" {
+		t.Fatalf("unexpected mcp completion metadata: %#v", event)
+	}
+	if text, ok := event.Metadata["text"]; ok {
+		t.Fatalf("mcp result body must not be promoted to metadata text, got %#v", text)
+	}
+	if event.Metadata["durationMs"] != 24 {
+		t.Fatalf("expected duration metadata, got %#v", event.Metadata)
+	}
+	if structured, ok := event.Metadata["resultStructuredContent"].(map[string]any); !ok || structured["answer"] != "ok" {
+		t.Fatalf("expected structured result metadata, got %#v", event.Metadata)
+	}
+	if meta, ok := event.Metadata["resultMeta"].(map[string]any); !ok || meta["source"] != "docs" {
+		t.Fatalf("expected result meta metadata, got %#v", event.Metadata)
 	}
 }
 
