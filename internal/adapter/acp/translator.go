@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -377,11 +378,32 @@ func resolveWorkspaceWritePath(workspaceRoot, target string) (string, string, er
 	if err != nil {
 		return "", "", err
 	}
+	baseAbs = filepath.Clean(baseAbs)
+	baseReal, err := filepath.EvalSymlinks(baseAbs)
+	if err != nil {
+		return "", "", err
+	}
+	baseReal = filepath.Clean(baseReal)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(baseAbs, target)
+	}
 	targetAbs, err := filepath.Abs(target)
 	if err != nil {
 		return "", "", err
 	}
-	rel, err := filepath.Rel(baseAbs, targetAbs)
+	targetAbs = filepath.Clean(targetAbs)
+	realExisting, err := resolveExistingWritePathComponent(targetAbs)
+	if err != nil {
+		return "", "", err
+	}
+	if !pathWithinWorkspaceRoot(baseReal, realExisting) {
+		return "", "", fmt.Errorf("fs/write_text_file path is outside workspace")
+	}
+	relBase := baseAbs
+	if !pathWithinWorkspaceRoot(relBase, targetAbs) {
+		relBase = baseReal
+	}
+	rel, err := filepath.Rel(relBase, targetAbs)
 	if err != nil {
 		return "", "", err
 	}
@@ -389,6 +411,58 @@ func resolveWorkspaceWritePath(workspaceRoot, target string) (string, string, er
 		return "", "", fmt.Errorf("fs/write_text_file path is outside workspace")
 	}
 	return targetAbs, filepath.ToSlash(rel), nil
+}
+
+func resolveExistingWritePathComponent(targetAbs string) (string, error) {
+	current := filepath.Clean(targetAbs)
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			return filepath.Clean(resolved), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		info, lstatErr := os.Lstat(current)
+		if lstatErr == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return "", fmt.Errorf("fs/write_text_file path is outside workspace")
+			}
+			return "", err
+		}
+		if !os.IsNotExist(lstatErr) {
+			return "", lstatErr
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		current = parent
+	}
+}
+
+func pathWithinWorkspaceRoot(rootPath, targetPath string) bool {
+	rootPath = canonicalWorkspaceComparePath(rootPath)
+	targetPath = canonicalWorkspaceComparePath(targetPath)
+	if rootPath == "" || targetPath == "" {
+		return false
+	}
+	rel, err := filepath.Rel(rootPath, targetPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || rel == "" || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
+}
+
+func canonicalWorkspaceComparePath(path string) string {
+	path = filepath.Clean(strings.TrimSpace(path))
+	if path == "" || path == "." {
+		return ""
+	}
+	if runtime.GOOS == "windows" {
+		path = strings.ToLower(path)
+	}
+	return path
 }
 
 func simpleTextDiff(path, oldText, newText string) string {

@@ -115,6 +115,141 @@ func TestPromptSendStartNewCreatesSessionThenPromptsAfterResponse(t *testing.T) 
 	}
 }
 
+func TestPromptSendExistingSessionResumesThenPromptsAfterResponse(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-resume",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_existing",
+			CWD:      "/tmp/work",
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "continue"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(resume prompt): %v", err)
+	}
+	resumeFrame := decodeFrame(t, result.OutboundToChild[0])
+	if resumeFrame["method"] != "session/resume" {
+		t.Fatalf("method = %#v, want session/resume", resumeFrame["method"])
+	}
+	resumeParams := asMap(t, resumeFrame["params"])
+	if resumeParams["sessionId"] != "ses_existing" {
+		t.Fatalf("resume params = %#v", resumeParams)
+	}
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      resumeFrame["id"],
+		"result":  map[string]any{"sessionId": "ses_existing", "title": "Existing"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(resume response): %v", err)
+	}
+	assertEventKinds(t, observed.Events,
+		agentproto.EventThreadDiscovered,
+		agentproto.EventThreadFocused,
+		agentproto.EventTurnStarted,
+	)
+	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_existing" {
+		t.Fatalf("resume followup frame = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendForkEphemeralForksThenPromptsNewSession(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-fork",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ExecutionMode:  agentproto.PromptExecutionModeForkEphemeral,
+			SourceThreadID: "ses_source",
+			CWD:            "/tmp/work",
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "try this"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(fork prompt): %v", err)
+	}
+	forkFrame := decodeFrame(t, result.OutboundToChild[0])
+	if forkFrame["method"] != "session/fork" {
+		t.Fatalf("method = %#v, want session/fork", forkFrame["method"])
+	}
+	forkParams := asMap(t, forkFrame["params"])
+	if forkParams["sessionId"] != "ses_source" {
+		t.Fatalf("fork params = %#v", forkParams)
+	}
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      forkFrame["id"],
+		"result":  map[string]any{"sessionId": "ses_forked", "title": "Forked"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(fork response): %v", err)
+	}
+	assertEventKinds(t, observed.Events,
+		agentproto.EventThreadDiscovered,
+		agentproto.EventThreadFocused,
+		agentproto.EventTurnStarted,
+	)
+	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_forked" {
+		t.Fatalf("fork followup frame = %#v", promptFrame)
+	}
+}
+
+func TestResponsesCorrelateByJSONRPCIDOutOfOrder(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	listResult, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-list",
+		Kind:      agentproto.CommandThreadsRefresh,
+		Target:    agentproto.Target{CWD: "/tmp/work"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(list): %v", err)
+	}
+	historyResult, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-history",
+		Kind:      agentproto.CommandThreadHistoryRead,
+		Target:    agentproto.Target{ThreadID: "ses_1", CWD: "/tmp/work"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(history): %v", err)
+	}
+	listFrame := decodeFrame(t, listResult.OutboundToChild[0])
+	historyFrame := decodeFrame(t, historyResult.OutboundToChild[0])
+
+	historyObserved, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      historyFrame["id"],
+		"result":  map[string]any{"configOptions": []any{}},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(history response): %v", err)
+	}
+	assertEventKinds(t, historyObserved.Events, agentproto.EventThreadHistoryRead)
+	if historyObserved.Events[0].CommandID != "cmd-history" {
+		t.Fatalf("history response correlated to wrong command: %#v", historyObserved.Events[0])
+	}
+
+	listObserved, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      listFrame["id"],
+		"result": map[string]any{
+			"sessions": []any{map[string]any{"sessionId": "ses_1", "cwd": "/tmp/work", "title": "One"}},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(list response): %v", err)
+	}
+	assertEventKinds(t, listObserved.Events, agentproto.EventThreadsSnapshot)
+	if listObserved.Events[0].CommandID != "cmd-list" {
+		t.Fatalf("list response correlated to wrong command: %#v", listObserved.Events[0])
+	}
+}
+
 func TestAgentAndThoughtChunksMapToExistingTurn(t *testing.T) {
 	tr, _ := startPromptedSession(t)
 
@@ -504,6 +639,123 @@ func TestWriteTextFileAfterPermissionApprovalWritesWorkspaceFileAndEmitsPatch(t 
 	secondFrame := decodeFrame(t, second.OutboundToChild[0])
 	if secondFrame["id"] != "write-2" || secondFrame["error"] == nil {
 		t.Fatalf("second write must fail after once approval is consumed: %#v", secondFrame)
+	}
+}
+
+func TestWriteTextFileRejectsSymlinkEscape(t *testing.T) {
+	workspace := t.TempDir()
+	outside := t.TempDir()
+	outsideFile := filepath.Join(outside, "outside.txt")
+	if err := os.WriteFile(outsideFile, []byte("outside\n"), 0o644); err != nil {
+		t.Fatalf("seed outside file: %v", err)
+	}
+	linkPath := filepath.Join(workspace, "escape.txt")
+	if err := os.Symlink(outsideFile, linkPath); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+	tr, _ := startPromptedSessionWithWorkspace(t, workspace)
+	if _, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "perm-escape",
+		"method":  "session/request_permission",
+		"params": map[string]any{
+			"sessionId": "ses_1",
+			"toolCall":  map[string]any{"toolCallId": "tool_escape", "title": "Edit escape", "kind": "edit", "status": "pending"},
+			"options": []any{
+				map[string]any{"optionId": "once", "kind": "allow_once", "name": "Allow once"},
+				map[string]any{"optionId": "reject", "kind": "reject_once", "name": "Reject"},
+			},
+		},
+	})); err != nil {
+		t.Fatalf("ObserveServer(permission): %v", err)
+	}
+	if _, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-approve-escape",
+		Kind:      agentproto.CommandRequestRespond,
+		Request: agentproto.Request{
+			RequestID: "perm-escape",
+			Response:  map[string]any{"optionId": "once"},
+		},
+	}); err != nil {
+		t.Fatalf("TranslateCommand(approve escape): %v", err)
+	}
+
+	result, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "write-escape",
+		"method":  "fs/write_text_file",
+		"params": map[string]any{
+			"sessionId": "ses_1",
+			"path":      linkPath,
+			"content":   "escaped\n",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(write escape): %v", err)
+	}
+	frame := decodeFrame(t, result.OutboundToChild[0])
+	if frame["id"] != "write-escape" || frame["error"] == nil {
+		t.Fatalf("symlink escape write must fail closed: %#v", frame)
+	}
+	if got, err := os.ReadFile(outsideFile); err != nil || string(got) != "outside\n" {
+		t.Fatalf("outside file changed through symlink: %q, %v", string(got), err)
+	}
+}
+
+func TestWriteTextFileRejectsDanglingSymlinkEscape(t *testing.T) {
+	workspace := t.TempDir()
+	outside := t.TempDir()
+	outsideFile := filepath.Join(outside, "created-through-link.txt")
+	linkPath := filepath.Join(workspace, "dangling-escape.txt")
+	if err := os.Symlink(outsideFile, linkPath); err != nil {
+		t.Skipf("symlink not available: %v", err)
+	}
+	tr, _ := startPromptedSessionWithWorkspace(t, workspace)
+	if _, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "perm-dangling",
+		"method":  "session/request_permission",
+		"params": map[string]any{
+			"sessionId": "ses_1",
+			"toolCall":  map[string]any{"toolCallId": "tool_dangling", "title": "Edit dangling", "kind": "edit", "status": "pending"},
+			"options": []any{
+				map[string]any{"optionId": "once", "kind": "allow_once", "name": "Allow once"},
+				map[string]any{"optionId": "reject", "kind": "reject_once", "name": "Reject"},
+			},
+		},
+	})); err != nil {
+		t.Fatalf("ObserveServer(permission): %v", err)
+	}
+	if _, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-approve-dangling",
+		Kind:      agentproto.CommandRequestRespond,
+		Request: agentproto.Request{
+			RequestID: "perm-dangling",
+			Response:  map[string]any{"optionId": "once"},
+		},
+	}); err != nil {
+		t.Fatalf("TranslateCommand(approve dangling): %v", err)
+	}
+
+	result, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "write-dangling",
+		"method":  "fs/write_text_file",
+		"params": map[string]any{
+			"sessionId": "ses_1",
+			"path":      linkPath,
+			"content":   "escaped\n",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(write dangling): %v", err)
+	}
+	frame := decodeFrame(t, result.OutboundToChild[0])
+	if frame["id"] != "write-dangling" || frame["error"] == nil {
+		t.Fatalf("dangling symlink escape write must fail closed: %#v", frame)
+	}
+	if _, err := os.Stat(outsideFile); !os.IsNotExist(err) {
+		t.Fatalf("outside file was created through dangling symlink: %v", err)
 	}
 }
 

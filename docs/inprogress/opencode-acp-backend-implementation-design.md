@@ -27,7 +27,7 @@ OpenCode backend 可以开始完整实现。第一版目标不是最小 PoC，�
 #847 已补第一批 runtime adapter skeleton：
 
 - `internal/adapter/acp` 已覆盖 JSON-RPC correlation、initialize、session new/list/load/resume/fork/prompt/cancel、permission request/respond、usage、tool/text/thought chunk、`session/load` hydration replay 汇总和 `fs/write_text_file`。
-- `fs/write_text_file` 当前策略是：必须先收到 OpenCode permission approval，且路径必须位于 session workspace 内；成功时真实写入文件并发出 `item.file_change.patch_updated`，未批准或越界时 JSON-RPC error fail-closed。
+- `fs/write_text_file` 当前策略是：必须先收到 OpenCode permission approval，且路径必须经 workspace realpath confinement 校验，已有 symlink/junction 指向 workspace 外部时 fail-closed；成功时真实写入文件并发出 `item.file_change.patch_updated`，未批准或越界时 JSON-RPC error fail-closed。
 - `internal/app/wrapper` 已把 `opencode-acp` wrapper mode 接到真实 `opencode acp` child launch，并在返回前完成 ACP initialize bootstrap。
 - 已用 `opencode-ai@1.18.15` npm binary 和本地 fake provider 跑通 Go guarded smoke：initialize -> session/new -> session/prompt -> thought/text delta -> prompt response `stopReason=end_turn` -> turn completion -> `session/load` replay 汇总成 history，且 replay 不泄漏 live delta。测试入口：`OPENCODE_ACP_SMOKE_BIN=/path/to/opencode go test ./internal/adapter/acp -run TestRealOpenCodeACPPromptSmoke -count=1 -v`。
 - OAuth/API overlay 压过系统 OAuth 仍按暂未测试处理，不作为 #847 runtime skeleton 阻塞项。
@@ -601,9 +601,9 @@ errors：
 - initialize/session list/new/resume/load/prompt/cancel：#847 已由 unit tests 覆盖，initialize/new/prompt/load replay 已由真实 OpenCode smoke 覆盖。
 - `session/load` hydration：#847 已固定 OpenCode replay update 在 load response 前进入 history collector，不产生 live turn/item delta；更完整 raw JSONL golden 由 #848 承接。
 - request permission/respond：#847 已由 unit tests 覆盖。
-- `fs/write_text_file`：#847 已实现 permission-gated workspace write、越界 fail-closed 和 file patch event；真实 edit tool e2e 仍由 #849 覆盖。
+- `fs/write_text_file`：#847 已实现 permission-gated workspace write、once approval one-shot、symlink/junction escape fail-closed、越界 fail-closed 和 file patch event；真实 edit tool e2e 仍由 #849 覆盖。
 - config options / available commands / usage / error：#847 已覆盖 model option snapshot、available commands ignore、usage projection 和 JSON-RPC error；更完整 golden taxonomy 由 #848 承接。
-- wrapper runtime integration：#847 已覆盖 runtime construction、command translation和 child launch args/env；真实 daemon/e2e 由 #849 承接。
+- wrapper runtime integration：#847 已覆盖 runtime construction、command translation、child launch args/env 和 ACP initialize bootstrap；真实 daemon/e2e 由 #849 承接。
 
 ### #848 canonical mapping and golden tests
 

@@ -1,9 +1,13 @@
 package wrapper
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
+	acpadapter "github.com/kxn/codex-remote-feishu/internal/adapter/acp"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
@@ -44,5 +48,32 @@ func TestBuildOpenCodeChildLaunchDefaultsToACPWorkspaceArgs(t *testing.T) {
 	args, _ := app.buildOpenCodeChildLaunch()
 	if strings.Join(args, "\x00") != strings.Join([]string{"acp", "--cwd", workspaceRoot}, "\x00") {
 		t.Fatalf("default opencode child args = %#v", args)
+	}
+}
+
+func TestBootstrapOpenCodeACPWaitsForInitializeAndReplaysBufferedStdout(t *testing.T) {
+	app := &App{config: Config{WorkspaceRoot: "/tmp/opencode-work"}}
+	translator := acpadapter.NewTranslator("inst-opencode", "/tmp/opencode-work")
+	var childStdin bytes.Buffer
+	bufferedLine := []byte(`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"ses_1","update":{"sessionUpdate":"available_commands_update","availableCommands":[]}}}` + "\n")
+	initializeResponse := []byte(`{"jsonrpc":"2.0","id":"relay-initialize-1","result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true}}}` + "\n")
+
+	reader, err := app.bootstrapOpenCodeACP(translator, &childStdin, bytes.NewReader(append(bufferedLine, initializeResponse...)), nil, nil)
+	if err != nil {
+		t.Fatalf("bootstrapOpenCodeACP: %v", err)
+	}
+	var written map[string]any
+	if err := json.Unmarshal(childStdin.Bytes(), &written); err != nil {
+		t.Fatalf("unmarshal written initialize: %v", err)
+	}
+	if written["method"] != "initialize" || written["id"] != "relay-initialize-1" {
+		t.Fatalf("written initialize frame = %#v", written)
+	}
+	replayed, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read replayed stdout: %v", err)
+	}
+	if string(replayed) != string(bufferedLine) {
+		t.Fatalf("replayed stdout = %q, want %q", string(replayed), string(bufferedLine))
 	}
 }
