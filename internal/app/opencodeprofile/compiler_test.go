@@ -2,6 +2,7 @@ package opencodeprofile
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -40,6 +41,7 @@ func TestCompilerBuiltInProfileInheritsSystemOpenCodeConfig(t *testing.T) {
 }
 
 func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
+	runtimeDir := filepath.Join(string(filepath.Separator), "tmp", "codex-remote", "opencode", "op_team")
 	profile := config.OpenCodeProfile{
 		OpenCodeAPIProfileSecretConfig: config.OpenCodeAPIProfileSecretConfig{
 			ID:                   "op_team",
@@ -63,7 +65,7 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	material, err := CompileLaunchMaterial(CompileInput{
 		Profile:       profile,
 		WorkspaceRoot: "/repo",
-		RuntimeDir:    "/tmp/codex-remote/opencode/op_team",
+		RuntimeDir:    runtimeDir,
 		BaseEnv: []string{
 			"KEEP_ME=1",
 			config.OpenCodeConfigContentEnv + "=old-config",
@@ -80,8 +82,17 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	if value, ok := lookupEnv(material.Env, config.OpenCodeDisableProjectConfigEnv); !ok || value != "1" {
 		t.Fatalf("expected project config disable env, got %#v", material.Env)
 	}
-	if value, ok := lookupEnv(material.Env, "XDG_DATA_HOME"); !ok || value != "/tmp/codex-remote/opencode/op_team/data" {
-		t.Fatalf("unexpected XDG_DATA_HOME: %#v", material.Env)
+	for _, tc := range []struct {
+		key  string
+		want string
+	}{
+		{key: "XDG_DATA_HOME", want: filepath.Join(runtimeDir, "data")},
+		{key: "XDG_STATE_HOME", want: filepath.Join(runtimeDir, "state")},
+		{key: "XDG_CACHE_HOME", want: filepath.Join(runtimeDir, "cache")},
+	} {
+		if value, ok := lookupEnv(material.Env, tc.key); !ok || value != tc.want {
+			t.Fatalf("%s = %q, want %q in %#v", tc.key, value, tc.want, material.Env)
+		}
 	}
 	configRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
 	if !ok {
