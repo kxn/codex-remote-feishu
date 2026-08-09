@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -52,7 +51,7 @@ func StartUpgradeHelperProcess(ctx context.Context, opts UpgradeHelperLaunchOpti
 	if opts.DirectExec {
 		args = nil
 	}
-	if effectiveServiceManager(opts.State) == ServiceManagerSystemdUser && runtime.GOOS == "linux" {
+	if effectiveServiceManager(opts.State) == ServiceManagerSystemdUser && serviceRuntimeGOOS == "linux" {
 		unitName := uniqueUpgradeHelperUnitName()
 		_, err := upgradeHelperStartSystemdUserTransientFunc(ctx, systemdUserTransientCommandOptions{
 			UnitName:   unitName,

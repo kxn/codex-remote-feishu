@@ -11,6 +11,44 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
+func TestStartUpgradeHelperProcessUsesServiceRuntimeGOOSForSystemdEligibility(t *testing.T) {
+	originalGOOS := serviceRuntimeGOOS
+	serviceRuntimeGOOS = "darwin"
+	t.Cleanup(func() { serviceRuntimeGOOS = originalGOOS })
+
+	originalDetached := upgradeHelperStartDetachedCommandFunc
+	originalSystemd := upgradeHelperStartSystemdUserTransientFunc
+	t.Cleanup(func() {
+		upgradeHelperStartDetachedCommandFunc = originalDetached
+		upgradeHelperStartSystemdUserTransientFunc = originalSystemd
+	})
+
+	var detached relayruntime.DetachedCommandOptions
+	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
+		detached = opts
+		return 123, nil
+	}
+	upgradeHelperStartSystemdUserTransientFunc = func(context.Context, systemdUserTransientCommandOptions) (string, error) {
+		t.Fatal("unexpected systemd-run launcher for non-linux service runtime")
+		return "", nil
+	}
+
+	result, err := StartUpgradeHelperProcess(context.Background(), UpgradeHelperLaunchOptions{
+		State:        InstallState{ServiceManager: ServiceManagerSystemdUser},
+		HelperBinary: testutil.WorkspacePath("tmp", "helper"),
+		StatePath:    testutil.WorkspacePath("tmp", "install-state.json"),
+	})
+	if err != nil {
+		t.Fatalf("StartUpgradeHelperProcess: %v", err)
+	}
+	if result.UnitName != "" {
+		t.Fatalf("unit name = %q, want empty for non-linux service runtime", result.UnitName)
+	}
+	if !testutil.SamePath(detached.BinaryPath, testutil.WorkspacePath("tmp", "helper")) {
+		t.Fatalf("detached binary = %q, want helper path", detached.BinaryPath)
+	}
+}
+
 func TestStartUpgradeHelperProcessUsesDetachedCommandForDetachedService(t *testing.T) {
 	originalDetached := upgradeHelperStartDetachedCommandFunc
 	originalSystemd := upgradeHelperStartSystemdUserTransientFunc
