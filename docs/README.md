@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-09`
-> Summary: 新增 OpenCode backend 风险与降级讨论索引。
+> Summary: 新增 OpenCode ACP backend 实现设计索引。
 
 ## 1. 适用范围
 
@@ -164,6 +164,7 @@
 - [codex-claude-subagent-model-design.md](./inprogress/codex-claude-subagent-model-design.md)
 - [codex-claude-profile-instruction-design.md](./inprogress/codex-claude-profile-instruction-design.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
+- [opencode-acp-backend-implementation-design.md](./inprogress/opencode-acp-backend-implementation-design.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
 
