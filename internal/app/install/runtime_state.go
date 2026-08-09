@@ -54,6 +54,8 @@ func detectRuntimeSystemdUserUnit(state InstallState, pid int) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	state.ServiceManager = ServiceManagerSystemdUser
+	state.ServiceUnitPath = ""
 	state = normalizedServiceState(state)
 	current, err := systemdUserReadUnitState(ctx, state)
 	if err != nil {
