@@ -232,10 +232,23 @@ func applyDaemonStartupArgs(args []string) error {
 
 func buildDaemonHeadlessBaseEnv(currentEnv, proxyEnv []string) []string {
 	baseEnv := config.BuildCodexChildEnv(currentEnv, proxyEnv, nil)
+	syncProcessPATHFromEnv(baseEnv)
 	if resolved, err := config.ResolveClaudeBinary(baseEnv); err == nil && strings.TrimSpace(resolved) != "" {
 		baseEnv = config.UpsertEnvValue(baseEnv, config.ClaudeBinaryEnv, resolved)
 	}
 	return baseEnv
+}
+
+func syncProcessPATHFromEnv(env []string) {
+	for _, entry := range env {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok || key != "PATH" || strings.TrimSpace(value) == "" {
+			continue
+		}
+		// Keep daemon-owned command resolution aligned with the headless env.
+		_ = os.Setenv("PATH", value)
+		return
+	}
 }
 
 func runConfiguredDaemon(ctx context.Context, app runnableDaemon, startup startupAccessPlan, services config.ServicesConfig, env map[string]string) error {
