@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 const { navigateToLocalPathMock } = vi.hoisted(() => ({
@@ -142,6 +142,12 @@ describe("SetupRoute", () => {
       id: "bot-missing-items",
       name: "团队机器人",
       appId: "cli_missing_items",
+      consoleLinks: {
+        auth: "https://open.feishu.cn/app/cli_missing_items/auth",
+        events: "https://open.feishu.cn/app/cli_missing_items/event?tab=event",
+        callback: "https://open.feishu.cn/app/cli_missing_items/event?tab=callback",
+        bot: "https://open.feishu.cn/app/cli_missing_items/bot",
+      },
       verifiedAt: "2026-04-25T08:10:00Z",
     });
     const workflow = buildAutoConfigWorkflow(app, {
@@ -182,6 +188,24 @@ describe("SetupRoute", () => {
     expect(await screen.findByRole("button", { name: "复制权限 im:message.group_msg" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制事件 im.message.receive_v1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制回调 card.action.trigger" })).toBeInTheDocument();
+    const scopeRow = screen.getByText("权限 im:message.group_msg").closest("li");
+    const eventRow = screen.getByText("事件 im.message.receive_v1").closest("li");
+    const callbackRow = screen.getByText("回调 card.action.trigger").closest("li");
+    expect(scopeRow).not.toBeNull();
+    expect(eventRow).not.toBeNull();
+    expect(callbackRow).not.toBeNull();
+    expect(within(scopeRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+      "href",
+      "https://open.feishu.cn/app/cli_missing_items/auth",
+    );
+    expect(within(eventRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+      "href",
+      "https://open.feishu.cn/app/cli_missing_items/event?tab=event",
+    );
+    expect(within(callbackRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+      "href",
+      "https://open.feishu.cn/app/cli_missing_items/event?tab=callback",
+    );
 
     await user.click(screen.getByRole("button", { name: "复制权限 im:message.group_msg" }));
     expect(writeText).toHaveBeenCalledWith("im:message.group_msg");

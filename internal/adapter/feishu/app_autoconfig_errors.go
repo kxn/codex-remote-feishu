@@ -3,7 +3,11 @@ package feishu
 import (
 	"errors"
 	"net/http"
+
+	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
+
+const autoConfigAppManagementScope = "application:application:self_manage"
 
 func overridePlanFromAPIError(plan AutoConfigPlan, err error) AutoConfigPlan {
 	updated := plan
@@ -16,6 +20,61 @@ func overridePlanFromAPIError(plan AutoConfigPlan, err error) AutoConfigPlan {
 	updated.Status = AutoConfigStatusBlocked
 	updated.Summary, updated.BlockingReason = autoConfigReadAPIErrorSummary(apiErr)
 	return updated
+}
+
+func autoConfigReadPermissionError(apiErr *APIError) bool {
+	if apiErr == nil || apiErr.StatusCode == http.StatusUnauthorized {
+		return false
+	}
+	if apiErr.StatusCode == http.StatusForbidden || len(apiErr.PermissionViolations) > 0 {
+		return true
+	}
+	_, ok := ExtractPermissionGap(apiErr)
+	return ok
+}
+
+func autoConfigReadPermissionPlan(plan AutoConfigPlan, scopeReqs []feishuapp.ScopeRequirement) AutoConfigPlan {
+	requirement := autoConfigAppManagementScopeRequirement(scopeReqs)
+	scopeType := normalizeTokenType(requirement.ScopeType)
+	if scopeType == "" {
+		scopeType = "tenant"
+	}
+	updated := plan
+	updated.BlockingReason = ""
+	updated.Diff = AutoConfigDiff{
+		ConfigPatchRequired: true,
+		MissingScopes: []AutoConfigScopeRef{{
+			Scope:     requirement.Scope,
+			ScopeType: scopeType,
+		}},
+		PublishRequired: true,
+	}
+	updated.Publish = AutoConfigPublishState{NeedsPublish: true}
+	updated.BlockingRequirements = []AutoConfigRequirementStatus{{
+		Kind:           AutoConfigRequirementKindScope,
+		Key:            requirement.Scope,
+		ScopeType:      scopeType,
+		Feature:        requirement.Feature,
+		Required:       true,
+		DegradeMessage: requirement.DegradeMessage,
+		Present:        false,
+	}}
+	updated.DegradableRequirements = nil
+	updated.Status, updated.Summary = derivePlanState(updated)
+	return updated
+}
+
+func autoConfigAppManagementScopeRequirement(scopeReqs []feishuapp.ScopeRequirement) feishuapp.ScopeRequirement {
+	for _, item := range scopeReqs {
+		if item.Scope == autoConfigAppManagementScope {
+			return item
+		}
+	}
+	return feishuapp.ScopeRequirement{
+		Scope:     autoConfigAppManagementScope,
+		ScopeType: "tenant",
+		Required:  true,
+	}
 }
 
 func autoConfigReadAPIErrorSummary(apiErr *APIError) (string, string) {

@@ -196,6 +196,17 @@ describe("AdminRoute", () => {
     const user = userEvent.setup();
     const originalClipboard = navigator.clipboard;
     const writeText = vi.fn().mockResolvedValue(undefined);
+    const app = makeApp({
+      id: "bot-permission",
+      name: "权限机器人",
+      appId: "cli_permission",
+      consoleLinks: {
+        auth: "https://open.feishu.cn/app/cli_permission/auth",
+        events: "https://open.feishu.cn/app/cli_permission/event?tab=event",
+        callback: "https://open.feishu.cn/app/cli_permission/event?tab=callback",
+        bot: "https://open.feishu.cn/app/cli_permission/bot",
+      },
+    });
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText },
@@ -205,21 +216,11 @@ describe("AdminRoute", () => {
       "/api/admin/bootstrap-state": { body: makeBootstrap() },
       "/api/admin/feishu/apps": {
         body: {
-          apps: [
-            makeApp({
-              id: "bot-permission",
-              name: "权限机器人",
-              appId: "cli_permission",
-            }),
-          ],
+          apps: [app],
         },
       },
       "/api/admin/feishu/apps/bot-permission/auto-config/plan": {
-        body: makeAdminAutoConfigPlan(makeApp({
-          id: "bot-permission",
-          name: "权限机器人",
-          appId: "cli_permission",
-        }), {
+        body: makeAdminAutoConfigPlan(app, {
           status: "apply_required",
           summary: "飞书配置还需要补齐。",
           blockingRequirements: [
@@ -292,8 +293,26 @@ describe("AdminRoute", () => {
     expect(screen.getByDisplayValue(/im:message\.group_msg/)).toBeInTheDocument();
     expect(screen.getByText("事件 im.message.receive_v1")).toBeInTheDocument();
     expect(screen.getByText("接收用户消息")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制权限 im:message.group_msg" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制事件 im.message.receive_v1" })).toBeInTheDocument();
+    const scopeRow = screen.getByText("权限 im:message.group_msg").closest("li");
+    const eventRow = screen.getByText("事件 im.message.receive_v1").closest("li");
+    expect(scopeRow).not.toBeNull();
+    expect(eventRow).not.toBeNull();
+    expect(within(scopeRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+      "href",
+      "https://open.feishu.cn/app/cli_permission/auth",
+    );
+    expect(within(eventRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+      "href",
+      "https://open.feishu.cn/app/cli_permission/event?tab=event",
+    );
     expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "复制权限 im:message.group_msg" }));
+    expect(writeText).toHaveBeenCalledWith("im:message.group_msg");
+    expect(await screen.findByText("权限 im:message.group_msg 已复制。")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "复制导入 JSON" }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"im:message.group_msg"'));

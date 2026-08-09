@@ -16,7 +16,6 @@ import type {
   FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigPlanResponse,
   FeishuAppAutoConfigPlanView,
-  FeishuAppAutoConfigRequirementStatus,
   FeishuBotFacts,
   FeishuAppResponse,
   FeishuAppSummary,
@@ -46,9 +45,10 @@ import {
   buildMissingScopesImportJSON,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
-  groupAutoConfigRequirements,
+  type AutoConfigRequirementRow,
   autoConfigNoticeTone,
 } from "./shared/feishuAutoConfig";
+import { AutoConfigRequirementList } from "./shared/AutoConfigRequirementList";
 import { runAdminStorageCleanup } from "./shared/adminStorage";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
 import { CodexProviderSection } from "./admin/CodexProviderSection";
@@ -703,6 +703,25 @@ export function AdminRoute() {
     }
   }
 
+  async function copyAutoConfigRequirement(row: AutoConfigRequirementRow) {
+    if (!navigator.clipboard?.writeText) {
+      setDetailNotice({
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(row.copyValue);
+      setDetailNotice({ tone: "good", message: `${row.label} 已复制。` });
+    } catch {
+      setDetailNotice({
+        tone: "warn",
+        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+      });
+    }
+  }
+
   function renderRobotDetail() {
     if (!selectedApp) {
       return (
@@ -1013,16 +1032,20 @@ export function AdminRoute() {
             <div className={`notice-banner ${autoConfigNoticeTone(autoConfigPlan.status)}`}>
               {autoConfigPlan.summary?.trim() || describeAutoConfigSummary(autoConfigPlan.status)}
             </div>
-            {renderAutoConfigPlanRequirements(
-              "必须补齐",
-              autoConfigPlan.blockingRequirements || [],
-              "danger",
-            )}
-            {renderAutoConfigPlanRequirements(
-              "可稍后处理",
-              autoConfigPlan.degradableRequirements || [],
-              "warn",
-            )}
+            <AutoConfigRequirementList
+              title="必须补齐"
+              requirements={autoConfigPlan.blockingRequirements || []}
+              tone="danger"
+              consoleLinks={selectedApp.consoleLinks}
+              onCopy={(row) => void copyAutoConfigRequirement(row)}
+            />
+            <AutoConfigRequirementList
+              title="可稍后处理"
+              requirements={autoConfigPlan.degradableRequirements || []}
+              tone="warn"
+              consoleLinks={selectedApp.consoleLinks}
+              onCopy={(row) => void copyAutoConfigRequirement(row)}
+            />
             {missingScopes.length > 0 ? (
               <>
                 <textarea
@@ -1531,37 +1554,6 @@ async function safeRequest<T>(path: string) {
       error: "暂时没有读取成功，请稍后重试。",
     };
   }
-}
-
-function renderAutoConfigPlanRequirements(
-  title: string,
-  requirements: FeishuAppAutoConfigRequirementStatus[],
-  tone: "warn" | "danger",
-) {
-  if (requirements.length === 0) {
-    return null;
-  }
-  const rows = groupAutoConfigRequirements(requirements);
-  return (
-    <div className="req-group">
-      <div className={`req-group-title ${tone}`}>{title}</div>
-      <ul className="requirement-list">
-        {rows.map((item) => (
-          <li className="requirement-row" key={item.key}>
-            <div className="requirement-main">
-              <span className={`badge ${tone === "danger" ? "danger" : "warn"}`}>
-                {item.meta}
-              </span>
-              <strong className="mono">{item.label}</strong>
-            </div>
-            <div className="requirement-impact">
-              {item.impacts.length > 0 ? item.impacts.join("、") : "基础配置"}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
 }
 
 function noticeFromAutoConfigView(view?: FeishuAppAutoConfigPlanView): DetailNotice | null {

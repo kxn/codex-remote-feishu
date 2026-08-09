@@ -204,13 +204,17 @@ func (s *autoConfigService) planFromReadError(err error) (AutoConfigPlan, bool) 
 	if !errors.As(err, &apiErr) || apiErr == nil {
 		return AutoConfigPlan{}, false
 	}
+	scopeRequirements := normalizeScopeRequirements(s.manifest)
 	plan := AutoConfigPlan{
 		Target: AutoConfigTargetState{
-			ScopeRequirements: normalizeScopeRequirements(s.manifest),
+			ScopeRequirements: scopeRequirements,
 			Events:            append([]feishuapp.EventRequirement(nil), s.manifest.Events...),
 			Callbacks:         append([]feishuapp.CallbackRequirement(nil), s.manifest.Callbacks...),
 			Policy:            s.policy,
 		},
+	}
+	if autoConfigReadPermissionError(apiErr) {
+		return autoConfigReadPermissionPlan(plan, scopeRequirements), true
 	}
 	plan = overridePlanFromAPIError(plan, err)
 	switch plan.Status {

@@ -12,7 +12,6 @@ import type {
   BootstrapState,
   FeishuAppAutoConfigPlan,
   FeishuAppAutoConfigPlanView,
-  FeishuAppAutoConfigRequirementStatus,
   FeishuAppResponse,
   OnboardingWorkflowAutoConfig,
   OnboardingWorkflowResponse,
@@ -26,9 +25,10 @@ import {
   describeAutoConfigBlockingReason,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
-  groupAutoConfigRequirements,
+  type AutoConfigRequirementRow,
   onboardingAutoConfigNoticeTone,
 } from "./shared/feishuAutoConfig";
+import { AutoConfigRequirementList } from "./shared/AutoConfigRequirementList";
 import {
   resolveRuntimeApplyFailureTarget,
   saveAndVerifyFeishuApp,
@@ -374,7 +374,7 @@ export function SetupRoute() {
     }
   }
 
-  async function copyAutoConfigRequirement(row: { label: string; copyValue: string }) {
+  async function copyAutoConfigRequirement(row: AutoConfigRequirementRow) {
     if (!navigator.clipboard?.writeText) {
       setNotice({
         tone: "warn",
@@ -1070,18 +1070,20 @@ export function SetupRoute() {
             </p>
           ) : null}
 
-          {renderAutoConfigRequirementList(
-            "需要先解决的问题",
-            plan?.blockingRequirements || [],
-            "danger",
-            (row) => void copyAutoConfigRequirement(row),
-          )}
-          {renderAutoConfigRequirementList(
-            "可按降级继续的能力",
-            plan?.degradableRequirements || [],
-            "warn",
-            (row) => void copyAutoConfigRequirement(row),
-          )}
+          <AutoConfigRequirementList
+            title="需要先解决的问题"
+            requirements={plan?.blockingRequirements || []}
+            tone="danger"
+            consoleLinks={activeConsoleLinks}
+            onCopy={(row) => void copyAutoConfigRequirement(row)}
+          />
+          <AutoConfigRequirementList
+            title="可按降级继续的能力"
+            requirements={plan?.degradableRequirements || []}
+            tone="warn"
+            consoleLinks={activeConsoleLinks}
+            onCopy={(row) => void copyAutoConfigRequirement(row)}
+          />
 
           {missingScopes.length > 0 ? (
             <>
@@ -1469,51 +1471,6 @@ function formatAutoConfigCheckedAt(value: string): string {
     minute: "2-digit",
     second: "2-digit",
   }).format(date);
-}
-
-function renderAutoConfigRequirementList(
-  title: string,
-  requirements: FeishuAppAutoConfigRequirementStatus[],
-  tone: "warn" | "danger",
-  onCopy: (row: { label: string; copyValue: string }) => void,
-) {
-  if (requirements.length === 0) {
-    return null;
-  }
-  const rows = groupAutoConfigRequirements(requirements);
-  return (
-    <div className="req-group">
-      <div className={`req-group-title ${tone}`}>{title}</div>
-      <ul className="requirement-list">
-        {rows.map((item) => {
-          return (
-            <li key={item.key} className="requirement-row">
-              <div className="requirement-main">
-                <span className={`badge ${tone === "danger" ? "danger" : "warn"}`}>
-                  {item.meta}
-                </span>
-                <div className="requirement-name-row">
-                  <strong className="mono">{item.label}</strong>
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    aria-label={`复制${item.label}`}
-                    title={`复制${item.label}`}
-                    onClick={() => onCopy(item)}
-                  >
-                    <span aria-hidden="true">⧉</span>
-                  </button>
-                </div>
-              </div>
-              <div className="requirement-impact">
-                {item.impacts.length > 0 ? item.impacts.join("、") : "基础配置"}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
 }
 
 type EnvironmentActionItem = {

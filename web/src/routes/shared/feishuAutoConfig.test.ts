@@ -110,6 +110,7 @@ describe("feishu auto-config shared helpers", () => {
     ).toEqual([
       {
         key: "scope:tenant:bitable:app",
+        kind: "scope",
         label: "权限 bitable:app",
         copyValue: "bitable:app",
         meta: "权限 · tenant",
@@ -117,6 +118,7 @@ describe("feishu auto-config shared helpers", () => {
       },
       {
         key: "scope:tenant:im:message.group_msg",
+        kind: "scope",
         label: "权限 im:message.group_msg",
         copyValue: "im:message.group_msg",
         meta: "权限 · tenant",
