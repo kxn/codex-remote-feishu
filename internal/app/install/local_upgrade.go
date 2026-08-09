@@ -52,6 +52,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		CurrentVersion:  stateValue.CurrentVersion,
 		ServiceManager:  stateValue.ServiceManager,
 	})
+	repairCurrentPlatformManagedServiceState(&stateValue)
 	if strings.TrimSpace(stateValue.CurrentBinaryPath) == "" {
 		return "", fmt.Errorf("current binary path is missing from install state")
 	}

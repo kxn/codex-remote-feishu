@@ -2,6 +2,7 @@ package install
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -106,6 +107,80 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 	}
 	if updated.RollbackCandidate == nil || strings.TrimSpace(updated.RollbackCandidate.BinaryPath) == "" {
 		t.Fatalf("rollback candidate = %#v, want binary backup", updated.RollbackCandidate)
+	}
+}
+
+func TestRunLocalBinaryUpgradeWithStatePathRepairsCrossPlatformServiceManager(t *testing.T) {
+	baseDir := t.TempDir()
+	homeDir := t.TempDir()
+	statePath := defaultInstallStatePath(baseDir)
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", executableName(runtime.GOOS)), "local-build")
+	systemdUnitPath := filepath.Join(homeDir, ".config", "systemd", "user", "codex-remote.service")
+	if err := os.MkdirAll(filepath.Dir(systemdUnitPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll systemd unit dir: %v", err)
+	}
+	if err := os.WriteFile(systemdUnitPath, []byte("[Service]\nExecStart=/new/bin/codex-remote daemon\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile systemd unit: %v", err)
+	}
+
+	originalGOOS := serviceRuntimeGOOS
+	serviceRuntimeGOOS = "linux"
+	defer func() { serviceRuntimeGOOS = originalGOOS }()
+	originalHome := serviceUserHomeDir
+	serviceUserHomeDir = func() (string, error) { return homeDir, nil }
+	defer func() { serviceUserHomeDir = originalHome }()
+	originalSystemctl := systemctlUserRunner
+	systemctlUserRunner = func(_ context.Context, args ...string) (string, error) {
+		if len(args) >= 1 && args[0] == "is-enabled" {
+			return "enabled\n", nil
+		}
+		return "", nil
+	}
+	defer func() { systemctlUserRunner = originalSystemctl }()
+
+	stateValue := InstallState{
+		InstanceID:        defaultInstanceID,
+		BaseDir:           baseDir,
+		StatePath:         statePath,
+		ServiceManager:    ServiceManagerLaunchdUser,
+		ServiceUnitPath:   filepath.Join(homeDir, "Library", "LaunchAgents", "com.codex-remote.service.plist"),
+		CurrentTrack:      ReleaseTrackAlpha,
+		CurrentVersion:    "dev-old",
+		CurrentBinaryPath: currentBinary,
+		VersionsRoot:      filepath.Join(baseDir, ".local", "share", "codex-remote", "releases"),
+	}
+	if err := WriteState(statePath, stateValue); err != nil {
+		t.Fatalf("WriteState: %v", err)
+	}
+
+	originalStart := upgradeHelperStartSystemdUserTransientFunc
+	var helperUnit string
+	upgradeHelperStartSystemdUserTransientFunc = func(_ context.Context, opts systemdUserTransientCommandOptions) (string, error) {
+		helperUnit = opts.UnitName
+		return "", nil
+	}
+	defer func() { upgradeHelperStartSystemdUserTransientFunc = originalStart }()
+
+	if _, err := RunLocalBinaryUpgradeWithStatePath(LocalBinaryUpgradeOptions{
+		StatePath:    statePath,
+		SourceBinary: sourceBinary,
+	}); err != nil {
+		t.Fatalf("RunLocalBinaryUpgradeWithStatePath: %v", err)
+	}
+	if helperUnit == "" {
+		t.Fatal("expected local upgrade helper to be launched through systemd")
+	}
+
+	updated, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if updated.ServiceManager != ServiceManagerSystemdUser {
+		t.Fatalf("ServiceManager = %q, want %q", updated.ServiceManager, ServiceManagerSystemdUser)
+	}
+	if updated.ServiceUnitPath != systemdUnitPath {
+		t.Fatalf("ServiceUnitPath = %q, want %q", updated.ServiceUnitPath, systemdUnitPath)
 	}
 }
 

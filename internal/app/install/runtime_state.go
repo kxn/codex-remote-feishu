@@ -47,6 +47,36 @@ func RepairRuntimeState(state *InstallState, opts RuntimeStateRepairOptions) boo
 	return changed
 }
 
+func repairCurrentPlatformManagedServiceState(state *InstallState) bool {
+	if state == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	manager, ok := probeServiceManagerForState(ctx, *state)
+	if !ok {
+		return false
+	}
+
+	changed := false
+	if state.ServiceManager != manager {
+		state.ServiceManager = manager
+		changed = true
+	}
+	if driver, ok := managedServiceDriverForManager(manager); ok {
+		unitPath := driver.ServiceUnitPath(state.BaseDir, state.InstanceID)
+		if strings.TrimSpace(state.ServiceUnitPath) != unitPath {
+			state.ServiceUnitPath = unitPath
+			changed = true
+		}
+	} else if strings.TrimSpace(state.ServiceUnitPath) != "" {
+		state.ServiceUnitPath = ""
+		changed = true
+	}
+	return changed
+}
+
 func detectRuntimeSystemdUserUnit(state InstallState, pid int) (string, bool) {
 	if serviceRuntimeGOOS != "linux" || pid <= 0 {
 		return "", false
