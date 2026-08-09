@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -42,6 +43,7 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 	requestID := idKey(frame["id"])
 	pending, ok := t.pendingRPC[requestID]
 	if !ok {
+		t.debugf("opencode unknown response id=%s payload=%s", requestID, xutil.CompactJSON(frame))
 		return result, nil
 	}
 	delete(t.pendingRPC, requestID)
@@ -145,6 +147,7 @@ func (t *Translator) observePromptResponse(pending pendingRPC, payload map[strin
 	if usage, ok := promptUsage(payload["usage"]); ok {
 		result.Events = append(result.Events, t.updateUsage(turn.ThreadID, usage))
 	}
+	result.Events = append(result.Events, t.completeOpenTextItems(turn)...)
 	status := statusFromStopReason(xutil.LookupStringFromAny(payload["stopReason"]))
 	completed := agentproto.Event{
 		Kind:                 agentproto.EventTurnCompleted,
@@ -162,6 +165,58 @@ func (t *Translator) observePromptResponse(pending pendingRPC, payload map[strin
 	turn.Completed = true
 	delete(t.activeTurns, turn.ThreadID)
 	return result
+}
+
+func (t *Translator) completeOpenTextItems(turn *turnState) []agentproto.Event {
+	if turn == nil {
+		return nil
+	}
+	type pendingItem struct {
+		key  string
+		item *itemState
+	}
+	var pending []pendingItem
+	for key, item := range t.messageItems {
+		if item == nil || item.ThreadID != turn.ThreadID || item.TurnID != turn.TurnID || !item.Started || item.Completed {
+			continue
+		}
+		switch item.Kind {
+		case "reasoning_summary", "agent_message":
+			pending = append(pending, pendingItem{key: key, item: item})
+		}
+	}
+	sort.Slice(pending, func(i, j int) bool {
+		left := textItemCompletionPriority(pending[i].item.Kind)
+		right := textItemCompletionPriority(pending[j].item.Kind)
+		if left != right {
+			return left < right
+		}
+		return pending[i].key < pending[j].key
+	})
+	events := make([]agentproto.Event, 0, len(pending))
+	for _, current := range pending {
+		current.item.Completed = true
+		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
+			Kind:     agentproto.EventItemCompleted,
+			ThreadID: turn.ThreadID,
+			TurnID:   turn.TurnID,
+			ItemID:   current.item.ItemID,
+			ItemKind: current.item.Kind,
+			Status:   "completed",
+		}))
+	}
+	return events
+}
+
+func textItemCompletionPriority(kind string) int {
+	switch kind {
+	case "reasoning_summary":
+		return 0
+	case "agent_message":
+		return 1
+	default:
+		return 2
+	}
 }
 
 func (t *Translator) observeSessionListResponse(pending pendingRPC, payload map[string]any, result Result) Result {
@@ -225,17 +280,14 @@ func (t *Translator) observeRPCError(pending pendingRPC, errorPayload any, resul
 	if pending.Kind == "session/load" {
 		delete(t.historyHydrations, strings.TrimSpace(pending.Command.Target.ThreadID))
 	}
-	problem := agentproto.ErrorInfo{
-		Code:      "opencode_acp_request_failed",
+	problem := normalizeOpenCodeRPCError(errorPayload, agentproto.ErrorInfo{
 		Layer:     "wrapper",
 		Stage:     "observe_server",
 		Operation: pending.Kind,
-		Message:   "OpenCode ACP request failed.",
-		Details:   xutil.CompactJSON(errorPayload),
 		CommandID: pending.Command.CommandID,
 		ThreadID:  pending.Command.Target.ThreadID,
 		TurnID:    pending.Command.Target.TurnID,
-	}
+	})
 	if pending.Turn != nil {
 		result.Events = append(result.Events, agentproto.Event{
 			Kind:                 agentproto.EventTurnCompleted,
@@ -277,12 +329,17 @@ func (t *Translator) observeSessionUpdate(params map[string]any, result Result) 
 	case "tool_call_update":
 		result.Events = append(result.Events, t.observeToolCallUpdate(sessionID, update)...)
 	case "usage_update":
-		if event, ok := t.observeUsageUpdate(sessionID, update); ok {
-			result.Events = append(result.Events, event)
-		}
+		t.observeUsageUpdate(sessionID, update)
 	case "session_info_update":
 		t.observeSessionInfoUpdate(sessionID, update)
-	case "available_commands_update", "config_option_update", "current_mode_update":
+	case "config_option_update":
+		if event, ok := t.observeConfigOptionUpdate(sessionID, update); ok {
+			result.Events = append(result.Events, event)
+		}
+	case "current_mode_update":
+		t.observeCurrentModeUpdate(sessionID, update)
+	case "available_commands_update":
+		t.debugf("opencode available_commands_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
 		return result, nil
 	}
 	return result, nil
@@ -367,9 +424,13 @@ func (t *Translator) observeToolCall(sessionID string, update map[string]any) []
 		Kind:     kind,
 		ThreadID: sessionID,
 		TurnID:   turn.TurnID,
-		Started:  true,
+		Started:  kind != "",
+		Metadata: opencodeToolMetadata(update, nil),
 	}
 	t.messageItems[key] = item
+	if kind == "" {
+		return nil
+	}
 	return []agentproto.Event{t.annotateTurnEvent(turn, agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
 		ThreadID: sessionID,
@@ -378,11 +439,7 @@ func (t *Translator) observeToolCall(sessionID string, update map[string]any) []
 		ItemKind: kind,
 		Name:     xutil.LookupStringFromAny(update["title"]),
 		Status:   xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["status"]), "pending"),
-		Metadata: map[string]any{
-			"toolCallId": toolID,
-			"kind":       xutil.LookupStringFromAny(update["kind"]),
-			"rawInput":   xutil.CloneJSONValue(update["rawInput"]),
-		},
+		Metadata: xutil.CloneMap(item.Metadata),
 	})}
 }
 
@@ -400,40 +457,71 @@ func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]a
 	if item == nil {
 		item = &itemState{
 			ItemID:   "opencode-tool-" + sanitizeID(toolID),
-			Kind:     "tool_call",
+			Kind:     toolItemKind(update),
 			ThreadID: sessionID,
 			TurnID:   turn.TurnID,
-			Started:  true,
+			Metadata: opencodeToolMetadata(update, nil),
 		}
 		t.messageItems[key] = item
 	}
+	if item.Kind == "" {
+		item.Kind = toolItemKind(update)
+	}
+	item.Metadata = opencodeToolMetadata(update, item.Metadata)
+	if item.Kind == "" {
+		if event, ok := t.todoPlanEvent(turn, sessionID, item, update); ok {
+			return []agentproto.Event{event}
+		}
+		return nil
+	}
+	events := make([]agentproto.Event, 0, 2)
+	if !item.Started {
+		item.Started = true
+		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
+			Kind:     agentproto.EventItemStarted,
+			ThreadID: sessionID,
+			TurnID:   turn.TurnID,
+			ItemID:   item.ItemID,
+			ItemKind: item.Kind,
+			Name:     xutil.LookupStringFromAny(update["title"]),
+			Status:   xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["status"]), "in_progress"),
+			Metadata: xutil.CloneMap(item.Metadata),
+		}))
+	}
 	status := xutil.LookupStringFromAny(update["status"])
 	if status == "completed" || status == "failed" {
-		return []agentproto.Event{t.annotateTurnEvent(turn, agentproto.Event{
+		if item.Completed {
+			return events
+		}
+		item.Completed = true
+		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
 			Kind:     agentproto.EventItemCompleted,
 			ThreadID: sessionID,
 			TurnID:   turn.TurnID,
 			ItemID:   item.ItemID,
 			ItemKind: item.Kind,
 			Status:   status,
-			Metadata: map[string]any{
-				"toolCallId": toolID,
-				"rawOutput":  xutil.CloneJSONValue(update["rawOutput"]),
-			},
-		})}
+			Metadata: opencodeToolCompletionMetadata(item.Metadata, update),
+		}))
+		return events
 	}
-	content := xutil.CompactJSON(update["content"])
+	content := historyContentText(update["content"])
 	if content == "" {
-		return nil
+		content = xutil.CompactJSON(update["content"])
 	}
-	return []agentproto.Event{t.annotateTurnEvent(turn, agentproto.Event{
+	if content == "" {
+		return events
+	}
+	events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
 		Kind:     agentproto.EventItemDelta,
 		ThreadID: sessionID,
 		TurnID:   turn.TurnID,
 		ItemID:   item.ItemID,
 		ItemKind: item.Kind,
 		Delta:    content,
-	})}
+		Metadata: xutil.CloneMap(item.Metadata),
+	}))
+	return events
 }
 
 func (t *Translator) observePermissionRequest(frame map[string]any, result Result) (Result, error) {
@@ -575,18 +663,13 @@ func (t *Translator) rejectClientRequest(frame map[string]any, result Result, co
 	return result, nil
 }
 
-func (t *Translator) observeUsageUpdate(sessionID string, update map[string]any) (agentproto.Event, bool) {
+func (t *Translator) observeUsageUpdate(sessionID string, update map[string]any) {
 	used := xutil.LookupIntFromAny(update["used"])
 	size := xutil.LookupIntFromAny(update["size"])
 	if used == 0 && size == 0 {
-		return agentproto.Event{}, false
+		return
 	}
-	usage := agentproto.TokenUsageBreakdown{InputTokens: used, TotalTokens: used}
-	event := t.updateUsage(sessionID, usage)
-	if size > 0 {
-		event.TokenUsage.ModelContextWindow = &size
-	}
-	return event, true
+	t.debugf("opencode usage_update session=%s used=%d size=%d payload=%s", sessionID, used, size, xutil.CompactJSON(update))
 }
 
 func (t *Translator) observeSessionInfoUpdate(sessionID string, update map[string]any) {
@@ -597,6 +680,55 @@ func (t *Translator) observeSessionInfoUpdate(sessionID string, update map[strin
 		session.CWD = xutil.FirstNonEmpty(xutil.LookupStringFromAny(info["cwd"]), session.CWD)
 	}
 	t.sessions[sessionID] = session
+}
+
+func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[string]any) (agentproto.Event, bool) {
+	option, _ := update["configOption"].(map[string]any)
+	if option == nil {
+		option, _ = update["option"].(map[string]any)
+	}
+	if option == nil {
+		t.debugf("opencode config_option_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
+		return agentproto.Event{}, false
+	}
+	session := t.sessions[sessionID]
+	session.ID = sessionID
+	session.CWD = xutil.FirstNonEmpty(session.CWD, t.workspaceRoot)
+	session.ConfigOptions = upsertConfigOption(session.ConfigOptions, option)
+	session.ModelOptions, session.CurrentModel, session.CurrentMode = parseConfigOptions(session.ConfigOptions)
+	t.sessions[sessionID] = session
+	t.debugf("opencode config_option_update session=%s option=%s", sessionID, xutil.CompactJSON(option))
+	if strings.TrimSpace(xutil.LookupStringFromAny(option["id"])) != "model" || strings.TrimSpace(session.CurrentModel) == "" {
+		return agentproto.Event{}, false
+	}
+	settings := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
+		ThreadID: sessionID,
+		Model:    session.CurrentModel,
+	})
+	if settings == nil {
+		return agentproto.Event{}, false
+	}
+	return agentproto.Event{
+		Kind:           agentproto.EventThreadSettingsUpdated,
+		ThreadID:       sessionID,
+		ThreadSettings: settings,
+	}, true
+}
+
+func (t *Translator) observeCurrentModeUpdate(sessionID string, update map[string]any) {
+	mode := strings.TrimSpace(xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(update["currentMode"]),
+		xutil.LookupStringFromAny(update["mode"]),
+		xutil.LookupStringFromAny(update["value"]),
+	))
+	if mode != "" {
+		session := t.sessions[sessionID]
+		session.ID = sessionID
+		session.CWD = xutil.FirstNonEmpty(session.CWD, t.workspaceRoot)
+		session.CurrentMode = mode
+		t.sessions[sessionID] = session
+	}
+	t.debugf("opencode current_mode_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
 }
 
 func (t *Translator) updateUsage(sessionID string, last agentproto.TokenUsageBreakdown) agentproto.Event {

@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-09`
-> Summary: 补充 #847 runtime adapter 已验证的真实 OpenCode ACP smoke 与剩余承接项。
+> Summary: 补充 #848 canonical mapping/golden tests 的 adapter 结果、偏离和 #849 承接项。
 
 ## 1. 结论
 
@@ -613,15 +613,28 @@ errors：
 
 - `internal/adapter/acp/testdata/*.jsonl`
 - `internal/adapter/acp/*_test.go`
-- `internal/core/agentproto` tests for new event/capability fields if needed
-- Feishu projector/orchestrator focused tests only where mapping changes state
+- `internal/adapter/acp/translator.go`
+- `internal/adapter/acp/observe.go`
+- `internal/adapter/acp/commands.go`
+- `internal/adapter/acp/history.go`
 
-完成标准：
+执行结果：
 
-- raw-to-canonical golden 覆盖 live delta vs load replay、assistant/reasoning、read/bash/edit/MCP、permission once/always/reject、cancel、usage、unknown slash。
-- hydration 不刷主消息。
-- plan mode 不生成虚假 plan snapshot。
-- tool id/message id/request id/turn id 不混用。
+- 已新增 raw JSONL fixture/golden：`internal/adapter/acp/testdata/canonical_session_updates.input.jsonl` -> `canonical_session_updates.golden.json`，固定 assistant/reasoning delta、tool lifecycle、todo plan snapshot、model config option 和 available commands debug-only 行为。
+- 已补 tool taxonomy：`bash`/`execute` -> `command_execution`，`read`/`grep`/`glob`/`list` -> `dynamic_tool_call` + exploration metadata，`edit`/`write`/`apply_patch` -> `file_change`，`task` -> `delegated_task`，MCP -> `mcp_tool_call`，unknown -> `dynamic_tool_call` + generic metadata。
+- 已补 tool lifecycle：`tool_call_update` 先到时补 `item.started`，terminal update 去重；失败工具只完成 tool item，不投影成 turn/system failure；terminal metadata 保留 command/cwd/exitCode/errorMessage。
+- 已补 Plan best-effort：`todowrite` start 不进入可见 tool timeline，terminal update 有稳定 todo 结构时生成 `turn.plan.updated`；普通 plan text 仍按 assistant text，仍不暴露内部 carrier 缺口。
+- 已补 permission bridge：response 仍原样 round-trip option id，同时按 option kind 识别 `allow_once`/`allow_always` 写授权；`once` 仍 one-shot，`always` 进 session-local runtime grant。
+- 已补 usage/error/config 边界：prompt response usage 才投影 `thread.token_usage.updated`；ACP `usage_update` 和 `available_commands_update` 只进 debug；JSON-RPC error 分类为 missing session、invalid model、MCP failure、auth-required、permission denied 或 raw fallback；model `config_option_update` 更新 session state 并驱动 `model.list`。
+- hydration 不刷主消息的 #847 测试继续保留；#848 增补了 load error 后 hydration state 清理，避免失败 load 后吞 live update。
+- 验证证据：`go test ./internal/adapter/acp -count=1`、`go test ./internal/app/wrapper -count=1`、`go test ./...`、真实 OpenCode guarded smoke 和 `scripts/check/pre-commit.sh` 均通过；pre-commit 仅打印既有 cross-platform path 告警，最终 exit 0 / `pre-commit: passed`。
+
+偏离/承接：
+
+- `unknown slash` / command display profile 不是 ACP adapter 层能力，实际载体在 `internal/core/control`、orchestrator 和 Feishu menu；从 #848 移到 #849 实现和 e2e 验证。
+- `available_commands_update` 第一版不替换产品命令菜单，只写 debug。后续若要允许 OpenCode backend slash passthrough，必须在 #849 做 allowlist 和用户可见 preflight。
+- real edit tool e2e、MCP 注入、OAuth/API overlay 与系统 OAuth 共存仍留在 #849；#848 只固定 adapter 侧 raw frame 映射和受控 `fs/write_text_file` 行为。
+- 2026-08-09 verifier 初次复核指出 #848 issue 完成标准仍把 command profile 当作本单交付项；已把该完成项正式纠偏为 #849 承接，#848 只要求 adapter 对 `available_commands_update` debug-only 有测试约束。
 
 ### #849 daemon integration and e2e
 

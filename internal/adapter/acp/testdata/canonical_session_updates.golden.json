@@ -1,0 +1,176 @@
+[
+  {
+    "commandId": "cmd-1",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-reasoning_summary-msg_thought",
+    "itemKind": "reasoning_summary",
+    "kind": "item.started",
+    "status": "in_progress",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "delta": "thinking",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-reasoning_summary-msg_thought",
+    "itemKind": "reasoning_summary",
+    "kind": "item.reasoning.summary_part_added",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-agent_message-msg_text",
+    "itemKind": "agent_message",
+    "kind": "item.started",
+    "status": "in_progress",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "delta": "hello",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-agent_message-msg_text",
+    "itemKind": "agent_message",
+    "kind": "item.delta",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-shell_1",
+    "itemKind": "command_execution",
+    "kind": "item.started",
+    "metadata": {
+      "arguments": {
+        "cmd": "go test ./internal/adapter/acp",
+        "cwd": "/tmp/work"
+      },
+      "command": "go test ./internal/adapter/acp",
+      "cwd": "/tmp/work",
+      "kind": "bash",
+      "rawInput": {
+        "cmd": "go test ./internal/adapter/acp",
+        "cwd": "/tmp/work"
+      },
+      "tool": "bash",
+      "toolCallId": "shell_1"
+    },
+    "name": "go test",
+    "status": "pending",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "delta": "PASS\n",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-shell_1",
+    "itemKind": "command_execution",
+    "kind": "item.delta",
+    "metadata": {
+      "arguments": {
+        "cmd": "go test ./internal/adapter/acp",
+        "cwd": "/tmp/work"
+      },
+      "command": "go test ./internal/adapter/acp",
+      "cwd": "/tmp/work",
+      "kind": "bash",
+      "rawInput": {
+        "cmd": "go test ./internal/adapter/acp",
+        "cwd": "/tmp/work"
+      },
+      "tool": "bash",
+      "toolCallId": "shell_1"
+    },
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-shell_1",
+    "itemKind": "command_execution",
+    "kind": "item.completed",
+    "metadata": {
+      "arguments": {
+        "cmd": "go test ./internal/adapter/acp",
+        "cwd": "/tmp/work"
+      },
+      "command": "go test ./internal/adapter/acp",
+      "cwd": "/tmp/work",
+      "exitCode": 0,
+      "kind": "bash",
+      "rawInput": {
+        "cmd": "go test ./internal/adapter/acp",
+        "cwd": "/tmp/work"
+      },
+      "rawOutput": {
+        "exitCode": 0,
+        "output": "PASS\n"
+      },
+      "text": "PASS\n",
+      "tool": "bash",
+      "toolCallId": "shell_1"
+    },
+    "status": "completed",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "kind": "turn.plan.updated",
+    "planSnapshot": {
+      "explanation": "Adding golden tests",
+      "steps": [
+        {
+          "step": "Read adapter",
+          "status": "completed"
+        },
+        {
+          "step": "Add golden tests",
+          "status": "in_progress"
+        }
+      ]
+    },
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "kind": "thread.settings.updated",
+    "threadId": "ses_1",
+    "threadSettings": {
+      "threadId": "ses_1",
+      "model": "test/default"
+    }
+  }
+]

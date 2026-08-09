@@ -110,7 +110,7 @@ func (h *historyHydrationState) observeHistoryToolCallUpdate(update map[string]a
 		Status: xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["status"]), "in_progress"),
 	})
 	item := &h.Turns[ref.Turn].Items[ref.Item]
-	if kind := toolItemKind(update); kind != "" && kind != "tool_call" {
+	if kind := toolItemKind(update); strings.TrimSpace(xutil.LookupStringFromAny(update["kind"])) != "" && kind != "" {
 		item.Kind = kind
 	}
 	if status := strings.TrimSpace(xutil.LookupStringFromAny(update["status"])); status != "" {

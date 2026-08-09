@@ -105,12 +105,14 @@ type turnState struct {
 }
 
 type itemState struct {
-	ItemID   string
-	Kind     string
-	ThreadID string
-	TurnID   string
-	Started  bool
-	Text     strings.Builder
+	ItemID    string
+	Kind      string
+	ThreadID  string
+	TurnID    string
+	Started   bool
+	Completed bool
+	Text      strings.Builder
+	Metadata  map[string]any
 }
 
 type historyHydrationState struct {
@@ -629,49 +631,6 @@ func parsePermissionOptions(value any) []permissionOption {
 		}
 	}
 	return out
-}
-
-func permissionOptionStyle(option permissionOption) string {
-	if strings.Contains(option.Kind, "reject") || strings.EqualFold(option.ID, "reject") {
-		return "danger"
-	}
-	return "primary"
-}
-
-func resolvePermissionOptionID(response map[string]any) string {
-	if id := strings.TrimSpace(xutil.LookupStringFromAny(response["optionId"])); id != "" {
-		return id
-	}
-	if decision := strings.TrimSpace(xutil.LookupStringFromAny(response["decision"])); decision != "" {
-		switch decision {
-		case "accept", "approved", "allow", "once":
-			return "once"
-		case "decline", "reject", "denied":
-			return "reject"
-		default:
-			return decision
-		}
-	}
-	if approved, ok := response["approved"].(bool); ok {
-		if approved {
-			return "once"
-		}
-		return "reject"
-	}
-	return ""
-}
-
-func toolItemKind(update map[string]any) string {
-	switch strings.TrimSpace(xutil.LookupStringFromAny(update["kind"])) {
-	case "execute":
-		return "command_execution"
-	case "edit":
-		return "file_change"
-	case "fetch":
-		return "web_fetch"
-	default:
-		return "tool_call"
-	}
 }
 
 func sanitizeID(value string) string {

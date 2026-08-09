@@ -121,7 +121,7 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) (Result
 	if optionID == "" {
 		optionID = "reject"
 	}
-	switch optionID {
+	switch permissionApprovalGrant(optionID, pending.Options) {
 	case "once":
 		t.writeApprovals[pending.ThreadID] = writeApproval{Remaining: 1}
 	case "always":
