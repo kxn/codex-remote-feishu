@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-08-07`
-> Summary: 新增 Codex / Claude profile instruction（角色提示词）配置设计文档索引。
+> Updated: `2026-08-09`
+> Summary: 新增 OpenCode ACP backend 实现设计索引。
 
 ## 1. 适用范围
 
@@ -112,6 +112,7 @@
 
 - [adding-new-ai-backend.md](./general/adding-new-ai-backend.md)
 - [architecture.md](./general/architecture.md)
+- [backend-integration-evaluation-playbook.md](./general/backend-integration-evaluation-playbook.md)
 - [codex-mcp-app-server-protocol.md](./general/codex-mcp-app-server-protocol.md)
 - [config-state-storage-guidelines.md](./general/config-state-storage-guidelines.md)
 - [dev-conversation-trace.md](./general/dev-conversation-trace.md)
@@ -163,6 +164,7 @@
 - [codex-claude-subagent-model-design.md](./inprogress/codex-claude-subagent-model-design.md)
 - [codex-claude-profile-instruction-design.md](./inprogress/codex-claude-profile-instruction-design.md)
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
+- [opencode-acp-backend-implementation-design.md](./inprogress/opencode-acp-backend-implementation-design.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
 - [unified-binary-design.md](./inprogress/unified-binary-design.md)
 
@@ -189,6 +191,9 @@
 - [file-length-split-audit-2026-04.md](./draft/file-length-split-audit-2026-04.md)
 - [feishu-owner-card-bypass-prompt-audit-2026-04.md](./draft/feishu-owner-card-bypass-prompt-audit-2026-04.md)
 - [feishu-request-delivery-reliability-design.md](./draft/feishu-request-delivery-reliability-design.md)
+- [acp-backend-profile-integration-design.md](./draft/acp-backend-profile-integration-design.md)
+- [opencode-backend-integration-evaluation.md](./draft/opencode-backend-integration-evaluation.md)
+- [opencode-backend-risk-discussion.md](./draft/opencode-backend-risk-discussion.md)
 - [feishu-setup-auto-configuration-design.md](./draft/feishu-setup-auto-configuration-design.md)
 - [feishu-slash-menu-owner-card-audit-2026-04.md](./draft/feishu-slash-menu-owner-card-audit-2026-04.md)
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)

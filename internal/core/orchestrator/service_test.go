@@ -336,6 +336,8 @@ func TestApplySurfaceActionBuildsConfigCatalogsFromRegistry(t *testing.T) {
 				svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "", "", "")
 			case control.FeishuCommandCodexProvider:
 				svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "", "", "", "")
+			case control.FeishuCommandOpenCodeProfile:
+				svc.MaterializeSurfaceResumeWithOpenCodeProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendOpenCode, "", "", "")
 			}
 			events := svc.ApplySurfaceAction(control.Action{
 				Kind:             flow.ActionKind,

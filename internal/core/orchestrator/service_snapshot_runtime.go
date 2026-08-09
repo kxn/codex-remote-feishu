@@ -99,6 +99,8 @@ func (s *Service) MaterializeSurfaceResume(surfaceID, gatewayID, chatID, actorUs
 		contract = state.VSCodeSurfaceBackendContract()
 	} else if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
 		contract = state.HeadlessClaudeSurfaceBackendContract(claudeProfileID)
+	} else if agentproto.NormalizeBackend(backend) == agentproto.BackendOpenCode {
+		contract = state.HeadlessOpenCodeSurfaceBackendContract("")
 	} else {
 		contract = state.HeadlessCodexSurfaceBackendContract("")
 	}
@@ -111,6 +113,15 @@ func (s *Service) MaterializeSurfaceResumeWithCodexProvider(surfaceID, gatewayID
 		Backend:         backend,
 		CodexProviderID: codexProviderID,
 		ClaudeProfileID: claudeProfileID,
+	})
+	s.MaterializeSurfaceResumeContract(surfaceID, gatewayID, chatID, actorUserID, contract, verbosity, planMode)
+}
+
+func (s *Service) MaterializeSurfaceResumeWithOpenCodeProfile(surfaceID, gatewayID, chatID, actorUserID string, mode state.ProductMode, backend agentproto.Backend, openCodeProfileID string, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
+	contract := state.NormalizeSurfaceBackendContract(state.SurfaceBackendContract{
+		ProductMode:       mode,
+		Backend:           backend,
+		OpenCodeProfileID: openCodeProfileID,
 	})
 	s.MaterializeSurfaceResumeContract(surfaceID, gatewayID, chatID, actorUserID, contract, verbosity, planMode)
 }

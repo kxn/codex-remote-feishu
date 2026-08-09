@@ -561,6 +561,12 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 		inst.ClaudeProfileID = ""
 		inst.ClaudeReasoningEffort = ""
 	}
+	if backend == agentproto.BackendOpenCode {
+		inst.OpenCodeProfileID = state.NormalizeOpenCodeProfileID(hello.Instance.OpenCodeProfileID)
+	} else {
+		inst.OpenCodeProfileID = ""
+		inst.OpenCodeAdmissionRef = nil
+	}
 	inst.Source = xutil.FirstNonEmpty(strings.TrimSpace(hello.Instance.Source), string(state.InstanceSourceVSCode))
 	inst.Capabilities = capabilities
 	inst.CapabilitiesDeclared = hello.CapabilitiesDeclared

@@ -19,6 +19,7 @@ const (
 )
 
 var resolveClaudeBinaryForRuntimeRequirements = config.ResolveClaudeBinary
+var resolveOpenCodeBinaryForRuntimeRequirements = config.ResolveOpenCodeBinary
 
 type runtimeRequirementsResponse struct {
 	Ready                   bool                      `json:"ready"`
@@ -27,6 +28,8 @@ type runtimeRequirementsResponse struct {
 	CodexRealBinary         string                    `json:"codexRealBinary,omitempty"`
 	CodexRealBinarySource   string                    `json:"codexRealBinarySource,omitempty"`
 	ResolvedCodexRealBinary string                    `json:"resolvedCodexRealBinary,omitempty"`
+	OpenCodeBinary          string                    `json:"openCodeBinary,omitempty"`
+	ResolvedOpenCodeBinary  string                    `json:"resolvedOpenCodeBinary,omitempty"`
 	LookupMode              string                    `json:"lookupMode,omitempty"`
 	Checks                  []runtimeRequirementCheck `json:"checks"`
 	Notes                   []string                  `json:"notes,omitempty"`
@@ -80,11 +83,20 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 	} else {
 		claudeResolveErr = err
 	}
+	openCodeBinary := strings.TrimSpace(loaded.Config.OpenCode.BinaryPath)
+	resolvedOpenCodeBinary := ""
+	openCodeResolveErr := error(nil)
+	if value, err := resolveOpenCodeBinaryForRuntimeRequirements(os.Environ(), openCodeBinary); err == nil {
+		resolvedOpenCodeBinary = value
+	} else {
+		openCodeResolveErr = err
+	}
 
 	checks := make([]runtimeRequirementCheck, 0, 5)
 	launcherReady := true
 	codexReady := false
 	claudeReady := false
+	openCodeReady := false
 	hasWarn := false
 
 	if strings.TrimSpace(currentBinary) == "" {
@@ -175,6 +187,24 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 			Detail:  resolvedClaudeBinary,
 		})
 	}
+	if strings.TrimSpace(resolvedOpenCodeBinary) == "" {
+		checks = append(checks, runtimeRequirementCheck{
+			ID:      "opencode_binary",
+			Title:   "OpenCode 可执行文件",
+			Status:  runtimeRequirementStatusFail,
+			Summary: "当前服务环境下无法解析 OpenCode 可执行文件。",
+			Detail:  errorDetail(openCodeResolveErr),
+		})
+	} else {
+		openCodeReady = true
+		checks = append(checks, runtimeRequirementCheck{
+			ID:      "opencode_binary",
+			Title:   "OpenCode 可执行文件",
+			Status:  runtimeRequirementStatusPass,
+			Summary: "当前服务环境下可以解析 OpenCode 可执行文件。",
+			Detail:  resolvedOpenCodeBinary,
+		})
+	}
 
 	switch lookupMode {
 	case "absolute":
@@ -205,13 +235,13 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 		})
 	}
 
-	ready := launcherReady && (codexReady || claudeReady)
+	ready := launcherReady && (codexReady || claudeReady || openCodeReady)
 	summary := "当前机器已满足基础运行条件，可以继续后面的可选配置。"
 	switch {
 	case !launcherReady:
 		summary = "当前服务缺少可用启动器，请先修复后再继续。"
-	case !codexReady && !claudeReady:
-		summary = "当前机器还不满足基础运行条件，请先保证 Claude 或 Codex 至少一个可用。"
+	case !codexReady && !claudeReady && !openCodeReady:
+		summary = "当前机器还不满足基础运行条件，请先保证 Claude、Codex 或 OpenCode 至少一个可用。"
 	case hasWarn:
 		summary = "当前机器已满足基础运行条件，但仍有需要注意的配置风险。"
 	}
@@ -223,6 +253,8 @@ func buildRuntimeRequirementsResponseForLoaded(loaded config.LoadedAppConfig, cu
 		CodexRealBinary:         codexRealBinary,
 		CodexRealBinarySource:   source,
 		ResolvedCodexRealBinary: resolvedRealBinary,
+		OpenCodeBinary:          openCodeBinary,
+		ResolvedOpenCodeBinary:  resolvedOpenCodeBinary,
 		LookupMode:              lookupMode,
 		Checks:                  checks,
 		Notes: []string{

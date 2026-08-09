@@ -50,6 +50,7 @@ const (
 	ActionAutoContinueCommand         ActionKind = "surface.command.auto_continue"
 	ActionModeCommand                 ActionKind = "surface.command.mode"
 	ActionClaudeProfileCommand        ActionKind = "surface.command.claude_profile"
+	ActionOpenCodeProfileCommand      ActionKind = "surface.command.opencode_profile"
 	ActionSendFile                    ActionKind = "surface.command.send_file"
 	ActionRespondRequest              ActionKind = "surface.request.respond"
 	ActionControlRequest              ActionKind = "surface.request.control"
@@ -257,6 +258,8 @@ type PendingHeadlessSummary struct {
 	CodexThreadPolicy       *state.CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *state.OpenCodeAdmissionRef
 	Status                  string
 	PID                     int
 	ExpiresAt               time.Time
@@ -666,6 +669,8 @@ type DaemonCommand struct {
 	CodexThreadPolicy       *state.CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *state.OpenCodeAdmissionRef
 	WorkspaceKey            string
 	AutoRestore             bool
 	Text                    string

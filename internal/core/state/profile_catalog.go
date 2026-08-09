@@ -23,6 +23,8 @@ const (
 
 	NativeCodexProfileID = "cp_native"
 	OAuthCodexProfileID  = "cp_oauth"
+
+	DefaultOpenCodeProfileID = "op_default"
 )
 
 type CodexProfileRef struct {
@@ -38,6 +40,30 @@ type CodexContextPreferenceRef struct {
 type CodexAdmissionRef struct {
 	ProfileRef           CodexProfileRef           `json:"profileRef"`
 	ContextPreferenceRef CodexContextPreferenceRef `json:"contextPreferenceRef"`
+}
+
+type OpenCodeProfileRef struct {
+	ID       string `json:"id"`
+	Revision uint64 `json:"revision"`
+}
+
+type OpenCodeAdmissionRef struct {
+	ProfileRef OpenCodeProfileRef `json:"profileRef"`
+}
+
+type OpenCodeProfileSummary struct {
+	ID         string `json:"id"`
+	Revision   uint64 `json:"revision,omitempty"`
+	ETag       string `json:"etag,omitempty"`
+	Name       string `json:"name"`
+	BaseURL    string `json:"baseURL,omitempty"`
+	Model      string `json:"model,omitempty"`
+	StatusCode string `json:"statusCode,omitempty"`
+	Available  bool   `json:"available"`
+	BuiltIn    bool   `json:"builtIn,omitempty"`
+	Editable   bool   `json:"editable"`
+	Deletable  bool   `json:"deletable"`
+	HasAPIKey  bool   `json:"hasAPIKey,omitempty"`
 }
 
 func NormalizeCodexAdmissionRef(value *CodexAdmissionRef) *CodexAdmissionRef {
@@ -57,6 +83,22 @@ func NormalizeCodexAdmissionRef(value *CodexAdmissionRef) *CodexAdmissionRef {
 		ContextPreferenceRef: CodexContextPreferenceRef{
 			ProfileID: preferenceProfileID,
 			Revision:  value.ContextPreferenceRef.Revision,
+		},
+	}
+}
+
+func NormalizeOpenCodeAdmissionRef(value *OpenCodeAdmissionRef) *OpenCodeAdmissionRef {
+	if value == nil {
+		return nil
+	}
+	profileID := strings.TrimSpace(value.ProfileRef.ID)
+	if profileID == "" || value.ProfileRef.Revision == 0 {
+		return nil
+	}
+	return &OpenCodeAdmissionRef{
+		ProfileRef: OpenCodeProfileRef{
+			ID:       profileID,
+			Revision: value.ProfileRef.Revision,
 		},
 	}
 }
@@ -129,6 +171,10 @@ func CodexContextPreferenceETag(profileID string, revision uint64) string {
 
 func ClaudeContextPreferenceETag(profileID string, revision uint64) string {
 	return profileItemETag("claude-context-preference", profileID, revision)
+}
+
+func OpenCodeProfileDefinitionETag(profileID string, revision uint64) string {
+	return profileItemETag("opencode-profile-definition", profileID, revision)
 }
 
 func CodexProfileIDFromLegacyProviderID(providerID string) string {

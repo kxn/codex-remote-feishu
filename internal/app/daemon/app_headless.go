@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	headlessruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
+	"github.com/kxn/codex-remote-feishu/internal/app/opencodeprofile"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -96,7 +98,6 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 
 	env := append([]string{}, cfg.BaseEnv...)
 	claudeRuntimeSettings := config.ClaudeRuntimeSettings{}
-	backend := agentproto.NormalizeBackend(command.Backend)
 	if strings.TrimSpace(string(command.Backend)) == "" {
 		errInfo := agentproto.ErrorInfo{
 			Code:             "headless_backend_missing",
@@ -104,6 +105,20 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 			Stage:            "headless_start",
 			Operation:        "start_headless",
 			Message:          "headless 启动合同缺少 backend。",
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+		}
+		return a.handleManagedHeadlessLaunchFailure(command, errInfo, now)
+	}
+	backend, ok := agentproto.ParseBackend(command.Backend)
+	if !ok {
+		rawBackend := strings.TrimSpace(string(command.Backend))
+		errInfo := agentproto.ErrorInfo{
+			Code:             "headless_backend_unsupported",
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          fmt.Sprintf("不支持的 headless backend：%s。", rawBackend),
 			SurfaceSessionID: command.SurfaceSessionID,
 			ThreadID:         command.ThreadID,
 		}
@@ -153,6 +168,9 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 	if backend == agentproto.BackendClaude {
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
 	}
+	if backend == agentproto.BackendOpenCode {
+		env = append(env, config.OpenCodeRuntimeProfileIDEnv+"="+state.NormalizeOpenCodeProfileID(command.OpenCodeProfileID))
+	}
 	launchArgs := append([]string{}, cfg.LaunchArgs...)
 	env, launchArgs, codexProjection, err := a.applyCodexHeadlessProviderConfigLocked(env, launchArgs, backend, command.CodexProviderID, command.CodexAdmissionRef)
 	if err != nil {
@@ -169,6 +187,22 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 	}
 	if codexProjection != nil {
 		a.service.RecordPendingHeadlessCodexRuntime(command.SurfaceSessionID, command.InstanceID, command.CodexAdmissionRef, &codexProjection.Connection, &codexProjection.Thread)
+	}
+	env, launchArgs, opencodeAdmissionRef, err := a.applyOpenCodeHeadlessProfileConfigLocked(env, launchArgs, backend, command)
+	if err != nil {
+		return a.handleManagedHeadlessLaunchFailure(command, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
+			Code:             "opencode_profile_prepare_failed",
+			Layer:            "daemon",
+			Stage:            "headless_start",
+			Operation:        "start_headless",
+			Message:          "OpenCode Profile 准备失败。",
+			SurfaceSessionID: command.SurfaceSessionID,
+			ThreadID:         command.ThreadID,
+			Retryable:        true,
+		}), now)
+	}
+	if opencodeAdmissionRef != nil {
+		a.service.RecordPendingHeadlessOpenCodeRuntime(command.SurfaceSessionID, command.InstanceID, opencodeAdmissionRef)
 	}
 	env, claudeRuntimeSettings, err = a.applyClaudeHeadlessProfileEnv(env, backend, command.ClaudeProfileID)
 	if err != nil {
@@ -366,10 +400,77 @@ func (a *App) handleManagedHeadlessLaunchFailure(command control.DaemonCommand, 
 }
 
 func headlessLaunchModeForBackend(backend agentproto.Backend) string {
-	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+	switch agentproto.NormalizeBackend(backend) {
+	case agentproto.BackendClaude:
 		return relayruntime.HeadlessLaunchModeClaudeAppServer
+	case agentproto.BackendOpenCode:
+		return relayruntime.HeadlessLaunchModeOpenCodeACP
+	default:
+		return relayruntime.HeadlessLaunchModeAppServer
 	}
-	return relayruntime.HeadlessLaunchModeAppServer
+}
+
+func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []string, backend agentproto.Backend, command control.DaemonCommand) ([]string, []string, *state.OpenCodeAdmissionRef, error) {
+	env := append([]string{}, baseEnv...)
+	args := append([]string{}, baseArgs...)
+	if agentproto.NormalizeBackend(backend) != agentproto.BackendOpenCode {
+		return env, args, nil, nil
+	}
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	profile, err := resolveOpenCodeLaunchProfile(loaded.Config, command.OpenCodeProfileID, command.OpenCodeAdmissionRef)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	workspaceRoot := strings.TrimSpace(xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
+	material, err := opencodeprofile.CompileLaunchMaterial(opencodeprofile.CompileInput{
+		Profile:       profile,
+		WorkspaceRoot: workspaceRoot,
+		RuntimeDir:    filepath.Join(a.headlessRuntime.Paths.StateDir, "opencode", strings.TrimSpace(command.InstanceID)),
+		BaseEnv:       env,
+	})
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return material.Env, material.Args, state.NormalizeOpenCodeAdmissionRef(material.AdmissionRef), nil
+}
+
+func resolveOpenCodeLaunchProfile(cfg config.AppConfig, profileID string, admissionRef *state.OpenCodeAdmissionRef) (config.OpenCodeProfile, error) {
+	normalizedID := state.NormalizeOpenCodeProfileID(profileID)
+	ref := state.NormalizeOpenCodeAdmissionRef(admissionRef)
+	if ref != nil && state.NormalizeOpenCodeProfileID(ref.ProfileRef.ID) != normalizedID {
+		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile admission ref mismatch: profile=%s ref=%s", normalizedID, ref.ProfileRef.ID)
+	}
+	if ref != nil {
+		if normalizedID == state.DefaultOpenCodeProfileID {
+			profile := config.BuiltInOpenCodeProfile()
+			profile.Revision = ref.ProfileRef.Revision
+			return profile, nil
+		}
+		for _, record := range cfg.OpenCode.Profiles {
+			recordID := config.NormalizeOpenCodeProfileID(record.ID)
+			if recordID != normalizedID {
+				continue
+			}
+			for _, revision := range record.Revisions {
+				if config.NormalizeOpenCodeProfileID(revision.ID) == normalizedID && revision.Revision == ref.ProfileRef.Revision {
+					revision.ID = normalizedID
+					return config.OpenCodeProfile{OpenCodeAPIProfileSecretConfig: revision}, nil
+				}
+			}
+		}
+		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile revision %s@%d not found", normalizedID, ref.ProfileRef.Revision)
+	}
+	if normalizedID != state.DefaultOpenCodeProfileID {
+		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile admission ref required for %s", normalizedID)
+	}
+	profile, ok := config.ResolveOpenCodeProfile(cfg, normalizedID)
+	if !ok {
+		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile %q not found", normalizedID)
+	}
+	return profile, nil
 }
 
 func (a *App) killManagedHeadless(command control.DaemonCommand) []eventcontract.Event {

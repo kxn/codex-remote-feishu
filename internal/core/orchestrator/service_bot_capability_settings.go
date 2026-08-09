@@ -116,6 +116,7 @@ func botCapabilitySettingsFromSurface(surface *state.SurfaceConsoleRecord) state
 		Backend:             contract.Backend,
 		CodexProviderID:     surface.CodexProviderID,
 		ClaudeProfileID:     surface.ClaudeProfileID,
+		OpenCodeProfileID:   surface.OpenCodeProfileID,
 		PromptOverride:      surface.PromptOverride,
 		PlanMode:            surface.PlanMode,
 		PlanModeOverrideSet: surface.PlanModeOverrideSet,
@@ -131,9 +132,11 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 		return
 	}
 	previousProviderID := state.NormalizeCodexProviderID(surface.CodexProviderID)
+	previousOpenCodeProfileID := state.NormalizeOpenCodeProfileID(surface.OpenCodeProfileID)
 	s.setSurfaceDesiredContract(surface, state.BotCapabilitySettingsContract(normalized))
 	surface.CodexProviderID = normalized.CodexProviderID
 	surface.ClaudeProfileID = normalized.ClaudeProfileID
+	surface.OpenCodeProfileID = normalized.OpenCodeProfileID
 	surface.PromptOverride = normalized.PromptOverride
 	surface.PlanMode = normalized.PlanMode
 	surface.PlanModeOverrideSet = normalized.PlanModeOverrideSet
@@ -141,6 +144,9 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 		surface.CodexAdmissionRef = nil
 		surface.CodexConnectionContract = nil
 		surface.CodexThreadPolicy = nil
+	}
+	if state.NormalizeOpenCodeProfileID(normalized.OpenCodeProfileID) != previousOpenCodeProfileID {
+		surface.OpenCodeAdmissionRef = nil
 	}
 }
 
@@ -239,6 +245,7 @@ func isBotCapabilitySettingsAction(kind control.ActionKind) bool {
 	case control.ActionModeCommand,
 		control.ActionCodexProviderCommand,
 		control.ActionClaudeProfileCommand,
+		control.ActionOpenCodeProfileCommand,
 		control.ActionModelCommand,
 		control.ActionReasoningCommand,
 		control.ActionAccessCommand,

@@ -29,6 +29,7 @@ type Entry struct {
 	CodexProfileSelectionStatus string                   `json:"codexProfileSelectionStatus,omitempty"`
 	CodexAdmissionRef           *state.CodexAdmissionRef `json:"codexAdmissionRef,omitempty"`
 	ClaudeProfileID             string                   `json:"claudeProfileID,omitempty"`
+	OpenCodeProfileID           string                   `json:"openCodeProfileID,omitempty"`
 	Verbosity                   string                   `json:"verbosity,omitempty"`
 	PlanMode                    string                   `json:"planMode,omitempty"`
 	ResumeInstanceID            string                   `json:"resumeInstanceID,omitempty"`
@@ -135,6 +136,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.CodexProfileSelectionStatus = strings.TrimSpace(entry.CodexProfileSelectionStatus)
 	entry.CodexAdmissionRef = normalizeCodexAdmissionRef(entry.CodexAdmissionRef)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
+	entry.OpenCodeProfileID = strings.TrimSpace(entry.OpenCodeProfileID)
 	codexProviderID := entry.CodexProviderID
 	if entry.CodexProfileID != "" {
 		codexProviderID = state.LegacyCodexProviderIDFromProfileID(entry.CodexProfileID)
@@ -144,10 +146,12 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 		agentproto.Backend(strings.TrimSpace(entry.Backend)),
 		codexProviderID,
 		entry.ClaudeProfileID,
+		entry.OpenCodeProfileID,
 	)
 	entry.Backend = string(rawContract.Backend)
 	entry.CodexProviderID = state.EffectiveSurfaceCodexProviderID(rawContract)
 	entry.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(rawContract)
+	entry.OpenCodeProfileID = state.EffectiveSurfaceOpenCodeProfileID(rawContract)
 	entry = CanonicalizeEntryProfileSelection(entry)
 	if entry.CodexProviderID == "" {
 		entry.CodexProfileID = ""
@@ -196,6 +200,7 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.CodexProfileSelectionStatus) == strings.TrimSpace(right.CodexProfileSelectionStatus) &&
 		sameCodexAdmissionRef(left.CodexAdmissionRef, right.CodexAdmissionRef) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
+		strings.TrimSpace(left.OpenCodeProfileID) == strings.TrimSpace(right.OpenCodeProfileID) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&
 		strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID) &&

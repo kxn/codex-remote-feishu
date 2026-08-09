@@ -37,6 +37,11 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowCodexProviderCatalog, RawText: "/codexprovider"},
 		},
 		{
+			name:   "bare opencode profile",
+			action: Action{Kind: ActionOpenCodeProfileCommand, Text: "/opencodeprofile"},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowOpenCodeProfileCatalog, RawText: "/opencodeprofile"},
+		},
+		{
 			name:   "workspace new page",
 			action: Action{Kind: ActionWorkspaceNew, Text: "/workspace new"},
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceNew, RawText: "/workspace new"},
@@ -59,6 +64,11 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 		{
 			name:   "codex provider apply stays product owned",
 			action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprovider team-proxy"},
+			want:   nil,
+		},
+		{
+			name:   "opencode profile apply stays product owned",
+			action: Action{Kind: ActionOpenCodeProfileCommand, Text: "/opencodeprofile op_team"},
 			want:   nil,
 		},
 		{

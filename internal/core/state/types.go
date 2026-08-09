@@ -29,7 +29,7 @@ type ProductMode string
 
 const (
 	// ProductModeNormal is the persisted token for the headless runtime shape.
-	// User-visible mode names should usually be projected as codex / claude / vscode.
+	// User-visible mode names should usually be projected as codex / claude / opencode / vscode.
 	ProductModeNormal ProductMode = "normal"
 	ProductModeVSCode ProductMode = "vscode"
 )
@@ -179,6 +179,7 @@ type Root struct {
 	CodexProviders                  map[string]CodexProviderRecord
 	CodexProfiles                   map[string]CodexProfileSummary
 	ClaudeProfiles                  map[string]ClaudeProfileRecord
+	OpenCodeProfiles                map[string]OpenCodeProfileSummary
 	ClaudeWorkspaceProfileSnapshots map[string]ClaudeWorkspaceProfileSnapshotRecord
 }
 
@@ -200,6 +201,7 @@ type BotCapabilitySettingsRecord struct {
 	CodexProviderID     string
 	CodexProfileID      string
 	ClaudeProfileID     string
+	OpenCodeProfileID   string
 	PromptOverride      ModelConfigRecord
 	PlanMode            PlanModeSetting
 	PlanModeOverrideSet bool
@@ -228,6 +230,8 @@ type InstanceRecord struct {
 	CodexThreadPolicy       *CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	Source                  string
 	Capabilities            agentproto.Capabilities
 	CapabilitiesDeclared    bool
@@ -316,6 +320,8 @@ type SurfaceConsoleRecord struct {
 	CodexThreadPolicy       *CodexThreadPolicy
 	ContractRefreshPending  bool
 	ClaudeProfileID         string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	Verbosity               SurfaceVerbosity
 	PlanMode                PlanModeSetting
 	PlanModeOverrideSet     bool
@@ -550,6 +556,7 @@ type PendingAutoContinueEpisodeRecord struct {
 	CodexAdmissionRef          *CodexAdmissionRef
 	CodexConnectionContract    *CodexConnectionContract
 	CodexThreadPolicy          *CodexThreadPolicy
+	OpenCodeAdmissionRef       *OpenCodeAdmissionRef
 	RootReplyToMessageID       string
 	RootReplyToMessagePreview  string
 	NoticeMessageID            string
@@ -600,6 +607,8 @@ type HeadlessLaunchRecord struct {
 	CodexThreadPolicy       *CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	ThreadName              string
 	ThreadPreview           string
 	RequestedAt             time.Time
@@ -763,6 +772,7 @@ type QueueItemRecord struct {
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	RouteModeAtEnqueue      RouteMode
 	Status                  QueueItemStatus
 }
@@ -797,6 +807,7 @@ func NewRoot() *Root {
 		CodexProviders:                  map[string]CodexProviderRecord{},
 		CodexProfiles:                   map[string]CodexProfileSummary{},
 		ClaudeProfiles:                  map[string]ClaudeProfileRecord{},
+		OpenCodeProfiles:                map[string]OpenCodeProfileSummary{},
 		ClaudeWorkspaceProfileSnapshots: map[string]ClaudeWorkspaceProfileSnapshotRecord{},
 	}
 }

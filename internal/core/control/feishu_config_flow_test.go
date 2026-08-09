@@ -17,6 +17,7 @@ func TestFeishuConfigFlowRegistryRoundTrip(t *testing.T) {
 		{commandID: FeishuCommandMode, actionKind: ActionModeCommand, bareCommand: "/mode", intentKind: FeishuUIIntentShowModeCatalog},
 		{commandID: FeishuCommandCodexProvider, actionKind: ActionCodexProviderCommand, bareCommand: "/codexprofile", intentKind: FeishuUIIntentShowCodexProviderCatalog},
 		{commandID: FeishuCommandClaudeProfile, actionKind: ActionClaudeProfileCommand, bareCommand: "/claudeprofile", intentKind: FeishuUIIntentShowClaudeProfileCatalog},
+		{commandID: FeishuCommandOpenCodeProfile, actionKind: ActionOpenCodeProfileCommand, bareCommand: "/opencodeprofile", intentKind: FeishuUIIntentShowOpenCodeProfileCatalog},
 		{commandID: FeishuCommandAutoWhip, actionKind: ActionAutoWhipCommand, bareCommand: "/autowhip", intentKind: FeishuUIIntentShowAutoWhipCatalog},
 		{commandID: FeishuCommandAutoContinue, actionKind: ActionAutoContinueCommand, bareCommand: "/autocontinue", intentKind: FeishuUIIntentShowAutoContinueCatalog},
 		{commandID: FeishuCommandReasoning, actionKind: ActionReasoningCommand, bareCommand: "/reasoning", intentKind: FeishuUIIntentShowReasoningCatalog},
@@ -94,6 +95,15 @@ func TestBuildFeishuCommandConfigPageViewResolvesFromCatalogFamily(t *testing.T)
 	form := page.Sections[0].Entries[0].Form
 	if form.CatalogFamilyID != FeishuCommandModel || form.CatalogVariantID != "model.codex.normal" || form.CatalogBackend != agentproto.BackendCodex {
 		t.Fatalf("expected catalog provenance to stay on config form, got %#v", form)
+	}
+}
+
+func TestBuildFeishuModeConfigPageIncludesOpenCodeOption(t *testing.T) {
+	page := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{CommandID: FeishuCommandMode})
+	got := commandTextsForFirstButtonRow(page)
+	want := []string{"/mode codex", "/mode claude", "/mode opencode", "/mode vscode"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mode options = %#v, want %#v", got, want)
 	}
 }
 

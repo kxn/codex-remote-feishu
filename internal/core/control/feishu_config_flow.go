@@ -8,6 +8,7 @@ const (
 	FeishuConfigFlowValueSurfaceProductMode         FeishuConfigFlowValueKey = "surface_product_mode"
 	FeishuConfigFlowValueSurfaceCodexProvider       FeishuConfigFlowValueKey = "surface_codex_provider"
 	FeishuConfigFlowValueSurfaceClaudeProfile       FeishuConfigFlowValueKey = "surface_claude_profile"
+	FeishuConfigFlowValueSurfaceOpenCodeProfile     FeishuConfigFlowValueKey = "surface_opencode_profile"
 	FeishuConfigFlowValueSurfaceAutoWhip            FeishuConfigFlowValueKey = "surface_auto_whip"
 	FeishuConfigFlowValueSurfaceAutoContinue        FeishuConfigFlowValueKey = "surface_auto_continue"
 	FeishuConfigFlowValueSurfacePlanMode            FeishuConfigFlowValueKey = "surface_plan_mode"
@@ -118,6 +119,14 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 		IntentKind:      FeishuUIIntentShowClaudeProfileCatalog,
 		PageBuilder:     claudeProfilePageViewFromCommandConfigView,
 		CurrentValueKey: FeishuConfigFlowValueSurfaceClaudeProfile,
+	},
+	{
+		CommandID:       FeishuCommandOpenCodeProfile,
+		ActionKind:      ActionOpenCodeProfileCommand,
+		BareCommand:     "/opencodeprofile",
+		IntentKind:      FeishuUIIntentShowOpenCodeProfileCatalog,
+		PageBuilder:     openCodeProfilePageViewFromCommandConfigView,
+		CurrentValueKey: FeishuConfigFlowValueSurfaceOpenCodeProfile,
 	},
 	{
 		CommandID:       FeishuCommandAutoWhip,

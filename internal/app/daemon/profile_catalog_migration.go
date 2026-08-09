@@ -56,6 +56,7 @@ func (a *App) runProfileCatalogMigrationLocked() error {
 		a.mu.Lock()
 		a.syncCodexProvidersCatalogLocked(loaded.Config)
 		a.syncClaudeProfilesCatalogLocked(loaded.Config)
+		a.syncOpenCodeProfilesCatalogLocked(loaded.Config)
 		a.mu.Unlock()
 		return nil
 	}
@@ -110,6 +111,7 @@ func (a *App) runProfileCatalogMigrationLocked() error {
 	a.mu.Lock()
 	a.syncCodexProvidersCatalogLocked(planned)
 	a.syncClaudeProfilesCatalogLocked(planned)
+	a.syncOpenCodeProfilesCatalogLocked(planned)
 	a.materializeBotCapabilitySettingsStateLocked()
 	a.syncSurfaceResumeStateLocked(nil)
 	a.mu.Unlock()

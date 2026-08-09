@@ -3,8 +3,9 @@ package appserverargs
 type Mode string
 
 const (
-	ModeCodex  Mode = "app-server"
-	ModeClaude Mode = "claude-app-server"
+	ModeCodex    Mode = "app-server"
+	ModeClaude   Mode = "claude-app-server"
+	ModeOpenCode Mode = "opencode-acp"
 )
 
 type Match struct {
@@ -14,7 +15,7 @@ type Match struct {
 
 func IsMode(arg string) bool {
 	switch Mode(arg) {
-	case ModeCodex, ModeClaude:
+	case ModeCodex, ModeClaude, ModeOpenCode:
 		return true
 	default:
 		return false

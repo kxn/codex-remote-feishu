@@ -35,6 +35,11 @@ func TestWrapperBackendFromArgs(t *testing.T) {
 			want: agentproto.BackendClaude,
 		},
 		{
+			name: "opencode acp",
+			args: []string{"--cd=/tmp/work", "opencode-acp", "--verbose"},
+			want: agentproto.BackendOpenCode,
+		},
+		{
 			name:    "empty args",
 			args:    nil,
 			wantErr: "requires app-server",

@@ -330,6 +330,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	if blocked := s.blockActionForActiveTargetPicker(surface, action); blocked != nil {
 		return s.filterEventsForSurfaceVisibility(blocked)
 	}
+	if blocked := s.unknownSlashCommandBlocked(surface, action); blocked != nil {
+		return s.filterEventsForSurfaceVisibility(blocked)
+	}
 	s.noteAutoWhipAction(surface, action)
 	switch action.Kind {
 	case control.ActionTextMessage:
@@ -446,6 +449,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handleCodexProviderCommand(surface, action)
 	case control.ActionClaudeProfileCommand:
 		events = s.handleClaudeProfileCommand(surface, action)
+	case control.ActionOpenCodeProfileCommand:
+		events = s.handleOpenCodeProfileCommand(surface, action)
 	case control.ActionRespondRequest:
 		events = s.respondRequest(surface, action)
 	case control.ActionControlRequest:

@@ -96,6 +96,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	codexAdmissionRef := s.freezeCodexAdmissionRefForPrompt(surface)
 	codexConnectionContract := s.freezeCodexConnectionContractForPrompt(surface)
 	codexThreadPolicy := s.freezeCodexThreadPolicyForPrompt(surface)
+	openCodeAdmissionRef := s.freezeOpenCodeAdmissionRefForPrompt(surface)
 	var routeAdjustmentEvents []eventcontract.Event
 	adjustment := s.maybeStartNewThreadForCodexModelGroupSwitch(surface, inst, dispatchPlan, routeMode, overrides, frozenOverride, codexThreadPolicy)
 	if adjustment.Applied {
@@ -122,6 +123,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		CodexAdmissionRef:       codexAdmissionRef,
 		CodexConnectionContract: codexConnectionContract,
 		CodexThreadPolicy:       codexThreadPolicy,
+		OpenCodeAdmissionRef:    openCodeAdmissionRef,
 		RouteModeAtEnqueue:      routeMode,
 		Status:                  state.QueueItemQueued,
 	}
@@ -149,6 +151,7 @@ func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, 
 		CodexAdmissionRef:       s.freezeCodexAdmissionRefForPrompt(surface),
 		CodexConnectionContract: s.freezeCodexConnectionContractForPrompt(surface),
 		CodexThreadPolicy:       s.freezeCodexThreadPolicyForPrompt(surface),
+		OpenCodeAdmissionRef:    s.freezeOpenCodeAdmissionRefForPrompt(surface),
 		RouteModeAtEnqueue:      routeMode,
 		Status:                  state.QueueItemQueued,
 	}
@@ -163,6 +166,16 @@ func (s *Service) freezeCodexAdmissionRefForPrompt(surface *state.SurfaceConsole
 		return nil
 	}
 	return state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef)
+}
+
+func (s *Service) freezeOpenCodeAdmissionRefForPrompt(surface *state.SurfaceConsoleRecord) *state.OpenCodeAdmissionRef {
+	if surface == nil {
+		return nil
+	}
+	if s.surfaceDesiredContract(surface).Backend != agentproto.BackendOpenCode {
+		return nil
+	}
+	return state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
 }
 
 func (s *Service) freezeCodexThreadPolicyForPrompt(surface *state.SurfaceConsoleRecord) *state.CodexThreadPolicy {

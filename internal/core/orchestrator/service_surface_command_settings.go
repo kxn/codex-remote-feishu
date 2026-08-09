@@ -42,6 +42,11 @@ func parseSurfaceModeSelection(value string) (surfaceModeSelection, bool) {
 			ProductMode: state.ProductModeNormal,
 			Backend:     agentproto.BackendClaude,
 		}, true
+	case string(agentproto.BackendOpenCode):
+		return surfaceModeSelection{
+			ProductMode: state.ProductModeNormal,
+			Backend:     agentproto.BackendOpenCode,
+		}, true
 	default:
 		if state.IsVSCodeProductModeToken(value) {
 			return surfaceModeSelection{
@@ -180,7 +185,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：/mode 查看当前状态；/mode codex|claude|vscode（`normal` 仍兼容）。",
+			StatusText:       "用法：/mode 查看当前状态；/mode codex|claude|opencode|vscode（`normal` 仍兼容）。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
@@ -188,7 +193,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 	if !ok {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
-			StatusText:       "用法：/mode 查看当前状态；/mode codex|claude|vscode（`normal` 仍兼容）。",
+			StatusText:       "用法：/mode 查看当前状态；/mode codex|claude|opencode|vscode（`normal` 仍兼容）。",
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
@@ -246,6 +251,14 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 			record.Backend = agentproto.BackendClaude
 		}, func(local *state.SurfaceConsoleRecord) {
 			s.setSurfaceDesiredContract(local, state.HeadlessClaudeSurfaceBackendContract(local.ClaudeProfileID))
+		})
+	case target.Backend == agentproto.BackendOpenCode:
+		s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
+			record.ProductMode = state.ProductModeNormal
+			record.Backend = agentproto.BackendOpenCode
+			record.OpenCodeProfileID = surface.OpenCodeProfileID
+		}, func(local *state.SurfaceConsoleRecord) {
+			s.setSurfaceDesiredContract(local, state.HeadlessOpenCodeSurfaceBackendContract(local.OpenCodeProfileID))
 		})
 	default:
 		s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {

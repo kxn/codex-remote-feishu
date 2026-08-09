@@ -173,6 +173,7 @@ func (s *Service) maybeScheduleAutoContinueAfterOutcome(outcome *remoteTurnOutco
 			CodexAdmissionRef:         state.NormalizeCodexAdmissionRef(outcome.Item.CodexAdmissionRef),
 			CodexConnectionContract:   state.CloneCodexConnectionContract(outcome.Item.CodexConnectionContract),
 			CodexThreadPolicy:         state.CloneCodexThreadPolicy(outcome.Item.CodexThreadPolicy),
+			OpenCodeAdmissionRef:      state.NormalizeOpenCodeAdmissionRef(outcome.Item.OpenCodeAdmissionRef),
 			RootReplyToMessageID:      strings.TrimSpace(xutil.FirstNonEmpty(outcome.Binding.ReplyToMessageID, outcome.Item.ReplyToMessageID, outcome.Item.SourceMessageID)),
 			RootReplyToMessagePreview: strings.TrimSpace(xutil.FirstNonEmpty(outcome.Binding.ReplyToMessagePreview, outcome.Item.ReplyToMessagePreview, outcome.Item.SourceMessagePreview)),
 			TriggerKind:               state.AutoContinueTriggerKindEligibleFailure,
@@ -304,6 +305,7 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(episode.CodexAdmissionRef),
 		CodexConnectionContract: state.CloneCodexConnectionContract(episode.CodexConnectionContract),
 		CodexThreadPolicy:       state.CloneCodexThreadPolicy(episode.CodexThreadPolicy),
+		OpenCodeAdmissionRef:    state.NormalizeOpenCodeAdmissionRef(episode.OpenCodeAdmissionRef),
 		RouteModeAtEnqueue:      episode.FrozenRouteMode,
 		Status:                  state.QueueItemDispatching,
 	}

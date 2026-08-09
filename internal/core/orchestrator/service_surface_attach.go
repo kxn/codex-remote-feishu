@@ -123,7 +123,7 @@ func (s *Service) attachInstanceWithMode(surface *state.SurfaceConsoleRecord, in
 	workspaceKey := instanceWorkspaceClaimKey(inst)
 	switchingInstance := surface.AttachedInstanceID != "" && surface.AttachedInstanceID != instanceID
 	if s.surfaceIsVSCode(surface) && (instanceBackend != agentproto.BackendCodex || !isVSCodeInstance(inst)) {
-		return notice(surface, "mode_backend_mismatch", "当前处于 vscode 模式，只能接管 Codex VS Code 实例。请先选择 VS Code 实例，或切回 `/mode codex` / `/mode claude`。")
+		return notice(surface, "mode_backend_mismatch", "当前处于 vscode 模式，只能接管 Codex VS Code 实例。请先选择 VS Code 实例，或切回 `/mode codex` / `/mode claude` / `/mode opencode`。")
 	}
 	if s.surfaceIsHeadless(surface) && instanceBackend != surfaceBackend {
 		return notice(surface, "mode_backend_mismatch", fmt.Sprintf("当前处于 %s 模式，不能直接接管 %s backend。请先 `/mode %s`。", s.surfaceModeAlias(surface), instanceBackend, instanceBackend))
@@ -312,9 +312,13 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 	}
 	if pending.Purpose == state.HeadlessLaunchPurposeFreshWorkspace {
 		pendingContract := state.HeadlessLaunchContractFromPending(pending)
-		if pendingContract.Backend == agentproto.BackendClaude {
+		switch pendingContract.Backend {
+		case agentproto.BackendClaude:
 			s.setSurfaceDesiredContract(surface, state.HeadlessClaudeSurfaceBackendContract(pendingContract.ClaudeProfileID))
-		} else {
+		case agentproto.BackendOpenCode:
+			s.setSurfaceDesiredContract(surface, state.HeadlessOpenCodeSurfaceBackendContract(pendingContract.OpenCodeProfileID))
+			surface.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(pendingContract.OpenCodeAdmissionRef)
+		default:
 			s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
 		}
 		workspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
@@ -378,9 +382,13 @@ func (s *Service) attachHeadlessWorkspaceRouteRestart(surface *state.SurfaceCons
 		return nil
 	}
 	pendingContract := state.HeadlessLaunchContractFromPending(pending)
-	if pendingContract.Backend == agentproto.BackendClaude {
+	switch pendingContract.Backend {
+	case agentproto.BackendClaude:
 		s.setSurfaceDesiredContract(surface, state.HeadlessClaudeSurfaceBackendContract(pendingContract.ClaudeProfileID))
-	} else {
+	case agentproto.BackendOpenCode:
+		s.setSurfaceDesiredContract(surface, state.HeadlessOpenCodeSurfaceBackendContract(pendingContract.OpenCodeProfileID))
+		surface.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(pendingContract.OpenCodeAdmissionRef)
+	default:
 		s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
 	}
 	workspaceKey := normalizeWorkspaceClaimKey(pending.WorkspaceKey)
@@ -436,18 +444,27 @@ func (s *Service) applyPendingHeadlessRuntimeToInstance(surface *state.SurfaceCo
 	if surface == nil || inst == nil || pending == nil {
 		return
 	}
-	if state.NormalizeHeadlessBackend(pending.Backend) != agentproto.BackendCodex {
-		return
+	switch state.NormalizeHeadlessBackend(pending.Backend) {
+	case agentproto.BackendCodex:
+		admissionRef := state.NormalizeCodexAdmissionRef(pending.CodexAdmissionRef)
+		connection := state.CloneCodexConnectionContract(pending.CodexConnectionContract)
+		threadPolicy := state.CloneCodexThreadPolicy(pending.CodexThreadPolicy)
+		inst.CodexAdmissionRef = admissionRef
+		inst.CodexConnectionContract = connection
+		inst.CodexThreadPolicy = threadPolicy
+		surface.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(admissionRef)
+		surface.CodexConnectionContract = state.CloneCodexConnectionContract(connection)
+		surface.CodexThreadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
+	case agentproto.BackendOpenCode:
+		admissionRef := state.NormalizeOpenCodeAdmissionRef(pending.OpenCodeAdmissionRef)
+		profileID := state.NormalizeOpenCodeProfileID(pending.OpenCodeProfileID)
+		if admissionRef != nil && strings.TrimSpace(admissionRef.ProfileRef.ID) != "" {
+			profileID = state.NormalizeOpenCodeProfileID(admissionRef.ProfileRef.ID)
+		}
+		inst.OpenCodeProfileID = profileID
+		inst.OpenCodeAdmissionRef = admissionRef
+		surface.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(admissionRef)
 	}
-	admissionRef := state.NormalizeCodexAdmissionRef(pending.CodexAdmissionRef)
-	connection := state.CloneCodexConnectionContract(pending.CodexConnectionContract)
-	threadPolicy := state.CloneCodexThreadPolicy(pending.CodexThreadPolicy)
-	inst.CodexAdmissionRef = admissionRef
-	inst.CodexConnectionContract = connection
-	inst.CodexThreadPolicy = threadPolicy
-	surface.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(admissionRef)
-	surface.CodexConnectionContract = state.CloneCodexConnectionContract(connection)
-	surface.CodexThreadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
 }
 
 func (s *Service) finishFailedAutoRestoreThreadConnect(surface *state.SurfaceConsoleRecord, pending *state.HeadlessLaunchRecord, events []eventcontract.Event) []eventcontract.Event {

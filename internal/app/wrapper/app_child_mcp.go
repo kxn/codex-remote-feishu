@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	acpadapter "github.com/kxn/codex-remote-feishu/internal/adapter/acp"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/toolservicecontract"
 )
@@ -54,6 +55,22 @@ func (a *App) applyClaudeFeishuMCPPublication(baseArgs, baseEnv []string) ([]str
 	args = append(args, "--mcp-config", configPath)
 	env = upsertEnvValue(env, feishuMCPBearerEnvName, strings.TrimSpace(info.Token))
 	return args, env
+}
+
+func (a *App) openCodeFeishuMCPServers() []acpadapter.MCPServer {
+	info, ok := a.readFeishuMCPPublicationInfo()
+	if !ok {
+		return nil
+	}
+	return []acpadapter.MCPServer{{
+		Name: feishuMCPServerID,
+		Type: "http",
+		URL:  strings.TrimSpace(info.URL),
+		Headers: []acpadapter.MCPNameValue{{
+			Name:  "Authorization",
+			Value: "Bearer " + strings.TrimSpace(info.Token),
+		}},
+	}}
 }
 
 func (a *App) readFeishuMCPPublicationInfo() (toolservicecontract.ServiceInfo, bool) {

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	acpadapter "github.com/kxn/codex-remote-feishu/internal/adapter/acp"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
@@ -69,7 +70,11 @@ type runtimeDebugLogger interface {
 }
 
 func newBackendRuntime(cfg Config) backendRuntime {
-	switch agentproto.NormalizeBackend(cfg.Backend) {
+	backend, ok := agentproto.ParseBackend(cfg.Backend)
+	if !ok {
+		return &unsupportedBackendRuntime{backend: agentproto.Backend(strings.TrimSpace(string(cfg.Backend)))}
+	}
+	switch backend {
 	case agentproto.BackendClaude:
 		runtime := &claudeBackendRuntime{
 			translator:    claude.NewTranslator(cfg.InstanceID),
@@ -82,9 +87,167 @@ func newBackendRuntime(cfg Config) backendRuntime {
 			}
 		}
 		return runtime
+	case agentproto.BackendOpenCode:
+		return &opencodeBackendRuntime{
+			translator: acpadapter.NewTranslator(cfg.InstanceID, cfg.WorkspaceRoot),
+		}
 	default:
 		return &codexBackendRuntime{translator: codex.NewTranslator(cfg.InstanceID)}
 	}
+}
+
+type unsupportedBackendRuntime struct {
+	backend agentproto.Backend
+}
+
+func (r *unsupportedBackendRuntime) Backend() agentproto.Backend {
+	return r.backend
+}
+
+func (r *unsupportedBackendRuntime) Capabilities() agentproto.Capabilities {
+	return agentproto.Capabilities{}
+}
+
+func (r *unsupportedBackendRuntime) Launch(context.Context, *App, *debuglog.RawLogger, func(agentproto.ErrorInfo)) (*childSession, error) {
+	return nil, agentproto.ErrorInfo{
+		Code:    "backend_unsupported",
+		Layer:   "wrapper",
+		Stage:   "launch",
+		Message: "backend_unsupported",
+	}
+}
+
+func (r *unsupportedBackendRuntime) ObserveClient([]byte) (runtimeObserveResult, error) {
+	return runtimeObserveResult{}, nil
+}
+
+func (r *unsupportedBackendRuntime) ObserveServer([]byte) (runtimeObserveResult, error) {
+	return runtimeObserveResult{}, nil
+}
+
+func (r *unsupportedBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
+	return runtimeCommandResult{}, agentproto.ErrorInfo{
+		Code:      "backend_unsupported",
+		Layer:     "wrapper",
+		Stage:     "translate_command",
+		Operation: string(command.Kind),
+		Message:   "backend_unsupported",
+		CommandID: command.CommandID,
+		ThreadID:  command.Target.ThreadID,
+		TurnID:    command.Target.TurnID,
+	}
+}
+
+func (r *unsupportedBackendRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan, *agentproto.CodexResumePolicy) error {
+	return nil
+}
+
+func (r *unsupportedBackendRuntime) BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error) {
+	return nil, "", false, nil
+}
+
+func (r *unsupportedBackendRuntime) CancelChildRestartRestore(string) {}
+
+type opencodeBackendRuntime struct {
+	mu         sync.Mutex
+	translator *acpadapter.Translator
+}
+
+func (r *opencodeBackendRuntime) Backend() agentproto.Backend {
+	return agentproto.BackendOpenCode
+}
+
+func (r *opencodeBackendRuntime) Capabilities() agentproto.Capabilities {
+	return agentproto.DefaultCapabilitiesForBackend(agentproto.BackendOpenCode)
+}
+
+func (r *opencodeBackendRuntime) Launch(ctx context.Context, app *App, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+	if app == nil {
+		return nil, nil
+	}
+	return app.launchOpenCodeChildSession(ctx, rawLogger, reportProblem, r.translator)
+}
+
+func (r *opencodeBackendRuntime) ObserveClient(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result, err := r.translator.ObserveClient(line)
+	if err != nil {
+		return runtimeObserveResult{}, err
+	}
+	return mapOpenCodeObserveResult(result), nil
+}
+
+func (r *opencodeBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result, err := r.translator.ObserveServer(line)
+	if err != nil {
+		return runtimeObserveResult{}, err
+	}
+	return mapOpenCodeObserveResult(result), nil
+}
+
+func (r *opencodeBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	result, err := r.translator.TranslateCommand(command)
+	if err != nil {
+		return runtimeCommandResult{}, err
+	}
+	return runtimeCommandResult{
+		Events: result.Events,
+		Phases: singleRuntimeCommandPhases(result.OutboundToChild),
+	}, nil
+}
+
+func (r *opencodeBackendRuntime) SetDebugLogger(debugLog func(string, ...any)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.translator != nil {
+		r.translator.SetDebugLogger(debugLog)
+	}
+}
+
+func (r *opencodeBackendRuntime) PrepareChildRestart(string, agentproto.PromptDispatchPlan, *agentproto.CodexResumePolicy) error {
+	return nil
+}
+
+func (r *opencodeBackendRuntime) BuildChildRestartRestoreFrame(string) ([]byte, string, bool, error) {
+	return nil, "", false, nil
+}
+
+func (r *opencodeBackendRuntime) CancelChildRestartRestore(string) {}
+
+func mapOpenCodeObserveResult(result acpadapter.Result) runtimeObserveResult {
+	return runtimeObserveResult{
+		Events:                   result.Events,
+		OutboundToChild:          result.OutboundToChild,
+		OutboundToParent:         result.OutboundToParent,
+		ResolvedCommandResponses: mapOpenCodeResolvedCommandResponses(result.ResolvedCommandResponses),
+		Suppress:                 result.Suppress,
+	}
+}
+
+func mapOpenCodeResolvedCommandResponses(responses []acpadapter.ResolvedCommandResponse) []runtimeResolvedCommandResponse {
+	if len(responses) == 0 {
+		return nil
+	}
+	mapped := make([]runtimeResolvedCommandResponse, 0, len(responses))
+	for _, response := range responses {
+		requestID := strings.TrimSpace(response.RequestID)
+		if requestID == "" {
+			continue
+		}
+		mapped = append(mapped, runtimeResolvedCommandResponse{
+			RequestID:     requestID,
+			RejectMessage: strings.TrimSpace(response.RejectMessage),
+		})
+	}
+	if len(mapped) == 0 {
+		return nil
+	}
+	return mapped
 }
 
 type codexBackendRuntime struct {

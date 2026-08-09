@@ -24,6 +24,7 @@ func TestSurfaceModeAlias(t *testing.T) {
 	}{
 		{name: "codex headless", mode: ProductModeNormal, backend: agentproto.BackendCodex, want: "codex"},
 		{name: "claude headless", mode: ProductModeNormal, backend: agentproto.BackendClaude, want: "claude"},
+		{name: "opencode headless", mode: ProductModeNormal, backend: agentproto.BackendOpenCode, want: "opencode"},
 		{name: "vscode forces codex alias", mode: ProductModeVSCode, backend: agentproto.BackendClaude, want: "vscode"},
 	}
 	for _, tc := range tests {
@@ -32,6 +33,70 @@ func TestSurfaceModeAlias(t *testing.T) {
 				t.Fatalf("SurfaceModeAlias(%q, %q) = %q, want %q", tc.mode, tc.backend, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSurfaceDesiredBackendContractProjectsOpenCodeBinding(t *testing.T) {
+	surface := &SurfaceConsoleRecord{
+		ProductMode:       ProductModeNormal,
+		Backend:           agentproto.BackendOpenCode,
+		CodexProviderID:   "team-proxy",
+		ClaudeProfileID:   "devseek",
+		OpenCodeProfileID: "op_team",
+	}
+	contract := SurfaceDesiredBackendContract(surface)
+	if contract.Backend != agentproto.BackendOpenCode {
+		t.Fatalf("unexpected backend: %#v", contract)
+	}
+	if contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+		t.Fatalf("expected inactive backend bindings to stay hidden, got %#v", contract)
+	}
+	if contract.OpenCodeProfileID != "op_team" {
+		t.Fatalf("expected opencode profile to survive projection, got %#v", contract)
+	}
+	if got := EffectiveSurfaceOpenCodeProfileID(contract); got != "op_team" {
+		t.Fatalf("expected active opencode profile projection, got %q", got)
+	}
+}
+
+func TestHeadlessLaunchContractCarriesOpenCodeAdmissionRef(t *testing.T) {
+	ref := &OpenCodeAdmissionRef{ProfileRef: OpenCodeProfileRef{ID: "op_team", Revision: 7}}
+	surface := &SurfaceConsoleRecord{
+		ProductMode:            ProductModeNormal,
+		Backend:                agentproto.BackendOpenCode,
+		OpenCodeProfileID:      "op_team",
+		OpenCodeAdmissionRef:   ref,
+		CodexAdmissionRef:      &CodexAdmissionRef{ProfileRef: CodexProfileRef{ID: "cp_team", Revision: 1}, ContextPreferenceRef: CodexContextPreferenceRef{ProfileID: "cp_team", Revision: 1}},
+		CodexProviderID:        "team-proxy",
+		ClaudeProfileID:        "devseek",
+		ContractRefreshPending: true,
+	}
+	contract := HeadlessLaunchContractFromSurface(surface)
+	if contract.Backend != agentproto.BackendOpenCode {
+		t.Fatalf("unexpected backend: %#v", contract)
+	}
+	if contract.OpenCodeProfileID != "op_team" {
+		t.Fatalf("unexpected opencode profile: %#v", contract)
+	}
+	if contract.OpenCodeAdmissionRef == nil || contract.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected opencode admission ref to be cloned into launch contract, got %#v", contract)
+	}
+	if contract.CodexAdmissionRef != nil || contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+		t.Fatalf("expected inactive backend launch fields to be hidden, got %#v", contract)
+	}
+}
+
+func TestWorkspaceDefaultsStorageKeyPartitionsOpenCodeProfiles(t *testing.T) {
+	left := WorkspaceDefaultsStorageKey("/repo", OpenCodeInstanceBackendContract("op_left"))
+	right := WorkspaceDefaultsStorageKey("/repo", OpenCodeInstanceBackendContract("op_right"))
+	if left == "" || right == "" {
+		t.Fatalf("expected opencode workspace default keys, got %q %q", left, right)
+	}
+	if left == right {
+		t.Fatalf("expected opencode workspace defaults to partition by profile, got %q", left)
+	}
+	if got := WorkspaceDefaultsIdentity(OpenCodeInstanceBackendContract("")); got != DefaultOpenCodeProfileID {
+		t.Fatalf("default opencode workspace identity = %q, want %q", got, DefaultOpenCodeProfileID)
 	}
 }
 
@@ -64,7 +129,7 @@ func TestSurfaceDesiredBackendContractProjectsOnlyActiveBackendBinding(t *testin
 }
 
 func TestPersistedSurfaceBackendContractCanonicalizesLegacyClaudeProfileProjection(t *testing.T) {
-	contract := PersistedSurfaceBackendContract(ProductModeNormal, agentproto.BackendCodex, "", "devseek")
+	contract := PersistedSurfaceBackendContract(ProductModeNormal, agentproto.BackendCodex, "", "devseek", "")
 	if contract.Backend != agentproto.BackendClaude {
 		t.Fatalf("expected legacy persisted claude profile to canonicalize back to claude, got %#v", contract)
 	}

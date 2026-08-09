@@ -74,6 +74,41 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForBackend(t *testing.T) {
 	}
 }
 
+func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) {
+	now := time.Date(2026, 8, 1, 14, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
+		GatewayID:         "app-1",
+		ProductMode:       state.ProductModeNormal,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+	}
+	svc.MaterializeSurfaceResumeWithCodexProvider(
+		"feishu:app-1:chat:oc_room",
+		"app-1",
+		"oc_room",
+		"ou_user",
+		state.ProductModeNormal,
+		agentproto.BackendCodex,
+		"team-proxy",
+		"",
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+
+	if got := svc.SurfaceBackend("feishu:app-1:chat:oc_room"); got != agentproto.BackendOpenCode {
+		t.Fatalf("SurfaceBackend = %s, want opencode", got)
+	}
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	if surface.Backend != agentproto.BackendOpenCode || surface.OpenCodeProfileID != "op_team" {
+		t.Fatalf("group surface opencode projection = %s/%q, want opencode/op_team", surface.Backend, surface.OpenCodeProfileID)
+	}
+	contract := state.SurfaceDesiredBackendContract(surface)
+	if contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+		t.Fatalf("opencode desired contract retained inactive profile fields: %#v", contract)
+	}
+}
+
 func TestPrivatePlanCommandWritesBotCapabilitySettings(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
