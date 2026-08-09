@@ -43,6 +43,7 @@ type AppConfig struct {
 	Wrapper        WrapperSettings        `json:"wrapper"`
 	Codex          CodexSettings          `json:"codex,omitempty"`
 	Claude         ClaudeSettings         `json:"claude,omitempty"`
+	OpenCode       OpenCodeSettings       `json:"openCode,omitempty"`
 	Feishu         FeishuSettings         `json:"feishu"`
 	Debug          DebugSettings          `json:"debug"`
 	Storage        StorageSettings        `json:"storage,omitempty"`
@@ -213,6 +214,9 @@ func WriteAppConfig(path string, cfg AppConfig) error {
 	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
 		return err
 	}
+	if err := ValidateOpenCodeAPIProfileRecords(cfg.OpenCode.Profiles); err != nil {
+		return err
+	}
 	cfg = cfg.normalized()
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -287,6 +291,9 @@ func readConfigFile(path string) (AppConfig, error) {
 	}
 	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
 		return AppConfig{}, fmt.Errorf("validate codex profile catalog %s: %w", path, err)
+	}
+	if err := ValidateOpenCodeAPIProfileRecords(cfg.OpenCode.Profiles); err != nil {
+		return AppConfig{}, fmt.Errorf("validate opencode profile catalog %s: %w", path, err)
 	}
 	return cfg.normalized(), nil
 }
@@ -427,6 +434,8 @@ func (cfg AppConfig) normalized() AppConfig {
 	cfg.Codex.Providers = NormalizeCodexProviders(cfg.Codex.Providers)
 	cfg.Codex.Profiles = NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles)
 	cfg.Claude.Profiles = NormalizeClaudeProfiles(cfg.Claude.Profiles)
+	cfg.OpenCode.BinaryPath = strings.TrimSpace(cfg.OpenCode.BinaryPath)
+	cfg.OpenCode.Profiles = NormalizeOpenCodeAPIProfileRecords(cfg.OpenCode.Profiles)
 
 	if cfg.Debug.Pprof != nil {
 		normalized := cfg.Debug.Pprof.normalized()

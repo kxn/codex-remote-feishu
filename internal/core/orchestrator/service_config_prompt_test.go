@@ -763,6 +763,62 @@ func TestQueuedMessageFreezesCodexAdmissionRefAtEnqueue(t *testing.T) {
 	}
 }
 
+func TestQueuedMessageFreezesOpenCodeAdmissionRefAtEnqueue(t *testing.T) {
+	now := time.Date(2026, 8, 1, 9, 35, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", "")
+	svc.root.Surfaces["surface-1"].OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Backend:                 agentproto.BackendOpenCode,
+		OpenCodeProfileID:       "op_team",
+		OpenCodeAdmissionRef:    state.NormalizeOpenCodeAdmissionRef(svc.root.Surfaces["surface-1"].OpenCodeAdmissionRef),
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventLocalInteractionObserved,
+		ThreadID: "thread-1",
+		Action:   "turn_start",
+	})
+
+	queued := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "你好",
+	})
+	if len(queued) != 1 || queued[0].PendingInput == nil || queued[0].PendingInput.Status != string(state.QueueItemQueued) {
+		t.Fatalf("expected queued-only event while paused, got %#v", queued)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	surface.OpenCodeProfileID = "op_other"
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_other", Revision: 1},
+	}
+
+	item := surface.QueueItems[surface.QueuedQueueItemIDs[0]]
+	want := state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	if item.OpenCodeAdmissionRef == nil || *item.OpenCodeAdmissionRef != want {
+		t.Fatalf("expected queue item to freeze opencode admission ref, got %#v", item)
+	}
+	if item.CodexAdmissionRef != nil {
+		t.Fatalf("expected queue item to clear inactive codex admission ref, got %#v", item)
+	}
+}
+
 func TestLocalInteractionPausesRemoteQueueAndHandoffResumes(t *testing.T) {
 	now := time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

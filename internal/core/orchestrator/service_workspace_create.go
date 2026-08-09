@@ -199,6 +199,8 @@ func (s *Service) startWorkspaceHeadlessLaunchWithOverlayCleanup(surface *state.
 		CodexThreadPolicy:       state.CloneCodexThreadPolicy(launchContract.CodexThreadPolicy),
 		ClaudeProfileID:         launchContract.ClaudeProfileID,
 		ClaudeReasoningEffort:   launchContract.ClaudeReasoningEffort,
+		OpenCodeProfileID:       launchContract.OpenCodeProfileID,
+		OpenCodeAdmissionRef:    state.NormalizeOpenCodeAdmissionRef(launchContract.OpenCodeAdmissionRef),
 		RequestedAt:             s.now(),
 		ExpiresAt:               s.now().Add(s.config.HeadlessLaunchWait),
 		Status:                  state.HeadlessLaunchStarting,

@@ -952,6 +952,71 @@ func TestDaemonHelloCanonicalizesWorkspaceMetadata(t *testing.T) {
 	}
 }
 
+func TestDaemonHelloRecordsOpenCodeProfile(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.onHello(context.Background(), agentproto.Hello{
+		Protocol: agentproto.WireProtocol,
+		Instance: agentproto.InstanceHello{
+			InstanceID:        "inst-opencode",
+			DisplayName:       "OpenCode",
+			WorkspaceRoot:     "/tmp/repo",
+			WorkspaceKey:      "/tmp/repo",
+			Backend:           agentproto.BackendOpenCode,
+			CodexProviderID:   "team-proxy",
+			ClaudeProfileID:   "devseek",
+			OpenCodeProfileID: "op_team",
+			Source:            "headless",
+		},
+		CapabilitiesDeclared: true,
+		Capabilities:         agentproto.DefaultCapabilitiesForBackend(agentproto.BackendOpenCode),
+	})
+
+	inst := app.service.Instance("inst-opencode")
+	if inst == nil {
+		t.Fatal("expected OpenCode instance record")
+	}
+	if inst.Backend != agentproto.BackendOpenCode || inst.OpenCodeProfileID != "op_team" {
+		t.Fatalf("unexpected OpenCode instance backend contract: %#v", inst)
+	}
+	if inst.CodexProviderID != "" || inst.ClaudeProfileID != "" {
+		t.Fatalf("expected inactive backend profile fields to be cleared, got %#v", inst)
+	}
+	if got := state.ObservedInstanceBackendContract(inst); got.Backend != agentproto.BackendOpenCode || got.OpenCodeProfileID != "op_team" {
+		t.Fatalf("observed backend contract = %#v", got)
+	}
+}
+
+func TestDaemonHelloRecordsUnknownBackendWithoutCodexFallback(t *testing.T) {
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.onHello(context.Background(), agentproto.Hello{
+		Instance: agentproto.InstanceHello{
+			InstanceID:        "inst-mystery",
+			DisplayName:       "Mystery",
+			WorkspaceRoot:     "/tmp/mystery",
+			WorkspaceKey:      "/tmp/mystery",
+			ShortName:         "mystery",
+			Backend:           agentproto.Backend("mystery"),
+			CodexProviderID:   "team-proxy",
+			ClaudeProfileID:   "devseek",
+			OpenCodeProfileID: "op_team",
+		},
+	})
+
+	inst := app.service.Instance("inst-mystery")
+	if inst == nil {
+		t.Fatal("expected instance record")
+	}
+	if inst.Backend != agentproto.Backend("mystery") {
+		t.Fatalf("unknown backend was not preserved: %#v", inst)
+	}
+	if inst.CodexProviderID != "" || inst.ClaudeProfileID != "" || inst.OpenCodeProfileID != "" {
+		t.Fatalf("unknown backend retained inactive profile fields: %#v", inst)
+	}
+	if inst.Capabilities.VSCodeMode || inst.Capabilities.ThreadsRefresh {
+		t.Fatalf("unknown backend inherited codex capabilities: %#v", inst.Capabilities)
+	}
+}
+
 func TestDaemonProjectsListAttachAndAssistantOutput(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

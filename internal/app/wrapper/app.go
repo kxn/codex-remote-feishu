@@ -59,6 +59,7 @@ type Config struct {
 	CodexProviderID       string
 	ClaudeProfileID       string
 	ClaudeReasoningEffort string
+	OpenCodeProfileID     string
 	ResumeThreadID        string
 	Source                string
 	Managed               bool
@@ -136,6 +137,10 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	backend := agentproto.Backend(strings.TrimSpace(os.Getenv(config.CodexRemoteInstanceBackendEnv)))
+	if parsed, ok := agentproto.ParseBackend(backend); ok {
+		backend = parsed
+	}
 	return Config{
 		RelayServerURL:        loaded.RelayServerURL,
 		CodexRealBinary:       loaded.CodexRealBinary,
@@ -147,10 +152,11 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		WorkspaceRoot:         workspaceRoot,
 		WorkspaceKey:          state.ResolveWorkspaceKey(workspaceRoot),
 		ShortName:             shortName,
-		Backend:               agentproto.NormalizeBackend(agentproto.Backend(os.Getenv(config.CodexRemoteInstanceBackendEnv))),
+		Backend:               backend,
 		CodexProviderID:       state.NormalizeCodexProviderID(os.Getenv(config.CodexRuntimeProviderIDEnv)),
 		ClaudeProfileID:       state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
 		ClaudeReasoningEffort: state.NormalizeReasoningEffort(os.Getenv(config.ClaudeEffortLevelEnv)),
+		OpenCodeProfileID:     state.NormalizeOpenCodeProfileID(os.Getenv(config.OpenCodeRuntimeProfileIDEnv)),
 		ResumeThreadID:        strings.TrimSpace(os.Getenv(config.ResumeThreadIDEnv)),
 		Source:                source,
 		Managed:               managed,
@@ -171,7 +177,11 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 }
 
 func New(cfg Config) *App {
-	cfg.Backend = agentproto.NormalizeBackend(cfg.Backend)
+	if backend, ok := agentproto.ParseBackend(cfg.Backend); ok {
+		cfg.Backend = backend
+	} else {
+		cfg.Backend = agentproto.Backend(strings.TrimSpace(string(cfg.Backend)))
+	}
 	runtime := newBackendRuntime(cfg)
 	if cfg.DebugRelayFlow {
 		if debuggable, ok := runtime.(runtimeDebugLogger); ok {
@@ -241,29 +251,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	var client *relayws.Client
 	var activeChild *childSession
 	connectedOnce := false
-	client = relayws.NewClient(a.config.RelayServerURL, agentproto.Hello{
-		Protocol: agentproto.WireProtocol,
-		Instance: agentproto.InstanceHello{
-			InstanceID:            a.config.InstanceID,
-			DisplayName:           a.config.DisplayName,
-			WorkspaceRoot:         a.config.WorkspaceRoot,
-			WorkspaceKey:          a.config.WorkspaceKey,
-			ShortName:             a.config.ShortName,
-			Backend:               a.runtime.Backend(),
-			CodexProviderID:       strings.TrimSpace(a.config.CodexProviderID),
-			ClaudeProfileID:       strings.TrimSpace(a.config.ClaudeProfileID),
-			ClaudeReasoningEffort: strings.TrimSpace(a.config.ClaudeReasoningEffort),
-			Source:                a.config.Source,
-			Managed:               a.config.Managed,
-			Version:               a.config.Version,
-			Branch:                a.config.Branch,
-			BuildFingerprint:      a.config.BuildFingerprint,
-			BinaryPath:            a.config.BinaryPath,
-			PID:                   os.Getpid(),
-		},
-		Capabilities:         a.runtime.Capabilities(),
-		CapabilitiesDeclared: true,
-	}, relayws.ClientCallbacks{
+	client = relayws.NewClient(a.config.RelayServerURL, a.relayHello(), relayws.ClientCallbacks{
 		OnWelcome: func(_ context.Context, welcome agentproto.Welcome) error {
 			a.debugf("relay welcome: connectedOnce=%t server=%s", connectedOnce, relayWelcomeSummary(welcome))
 			if manager.WelcomeCompatible(welcome) {
@@ -516,6 +504,39 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			stopChildSession(activeChild, a.debugf)
 			return 0, ctx.Err()
 		}
+	}
+}
+
+func (a *App) relayHello() agentproto.Hello {
+	instance := agentproto.InstanceHello{
+		InstanceID:       a.config.InstanceID,
+		DisplayName:      a.config.DisplayName,
+		WorkspaceRoot:    a.config.WorkspaceRoot,
+		WorkspaceKey:     a.config.WorkspaceKey,
+		ShortName:        a.config.ShortName,
+		Backend:          a.runtime.Backend(),
+		Source:           a.config.Source,
+		Managed:          a.config.Managed,
+		Version:          a.config.Version,
+		Branch:           a.config.Branch,
+		BuildFingerprint: a.config.BuildFingerprint,
+		BinaryPath:       a.config.BinaryPath,
+		PID:              os.Getpid(),
+	}
+	switch instance.Backend {
+	case agentproto.BackendClaude:
+		instance.ClaudeProfileID = strings.TrimSpace(a.config.ClaudeProfileID)
+		instance.ClaudeReasoningEffort = strings.TrimSpace(a.config.ClaudeReasoningEffort)
+	case agentproto.BackendOpenCode:
+		instance.OpenCodeProfileID = strings.TrimSpace(a.config.OpenCodeProfileID)
+	default:
+		instance.CodexProviderID = strings.TrimSpace(a.config.CodexProviderID)
+	}
+	return agentproto.Hello{
+		Protocol:             agentproto.WireProtocol,
+		Instance:             instance,
+		Capabilities:         a.runtime.Capabilities(),
+		CapabilitiesDeclared: true,
 	}
 }
 

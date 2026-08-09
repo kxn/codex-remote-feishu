@@ -151,6 +151,61 @@ func TestDetachedUseFreezesCodexAdmissionRefIntoPendingAndCommand(t *testing.T) 
 	}
 }
 
+func TestDetachedUseFreezesOpenCodeAdmissionRefIntoPendingAndCommand(t *testing.T) {
+	now := time.Date(2026, 8, 1, 9, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", "")
+	svc.root.Surfaces["surface-1"].OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-offline",
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		ShortName:     "repo",
+		Backend:       agentproto.BackendOpenCode,
+		Online:        false,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", WorkspaceKey: "/data/dl/repo", CWD: "/data/dl/repo/web", Loaded: true},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	if len(events) != 2 || events[1].DaemonCommand == nil || events[1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+		t.Fatalf("expected detached /use to start headless launch, got %#v", events)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	surface.OpenCodeProfileID = "op_other"
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_other", Revision: 1},
+	}
+
+	want := state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	pending := surface.PendingHeadless
+	if pending == nil || pending.Backend != agentproto.BackendOpenCode || pending.OpenCodeProfileID != "op_team" || pending.OpenCodeAdmissionRef == nil || *pending.OpenCodeAdmissionRef != want {
+		t.Fatalf("expected pending launch to freeze opencode profile/admission ref, got %#v", pending)
+	}
+	if pending.CodexProviderID != "" || pending.CodexAdmissionRef != nil || pending.ClaudeProfileID != "" {
+		t.Fatalf("expected pending launch to clear inactive backend fields, got %#v", pending)
+	}
+	if got := events[1].DaemonCommand; got.Backend != agentproto.BackendOpenCode || got.OpenCodeProfileID != "op_team" || got.OpenCodeAdmissionRef == nil || *got.OpenCodeAdmissionRef != want {
+		t.Fatalf("expected daemon command to carry frozen opencode launch contract, got %#v", got)
+	}
+	if got := events[1].DaemonCommand; got.CodexProviderID != "" || got.CodexAdmissionRef != nil || got.ClaudeProfileID != "" {
+		t.Fatalf("expected daemon command to clear inactive backend fields, got %#v", got)
+	}
+}
+
 func TestCodexInstanceCompatibilityRequiresMatchingConnectionContract(t *testing.T) {
 	now := time.Date(2026, 8, 1, 9, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

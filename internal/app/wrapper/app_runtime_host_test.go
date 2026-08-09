@@ -104,6 +104,38 @@ func TestWrapperClaudeHelloAndShutdown(t *testing.T) {
 	}
 }
 
+func TestWrapperOpenCodeHelloCarriesProfileID(t *testing.T) {
+	app := New(Config{
+		InstanceID:        "inst-opencode",
+		DisplayName:       "opencode",
+		WorkspaceRoot:     "/repo",
+		WorkspaceKey:      "/repo",
+		ShortName:         "repo",
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+		Version:           "test",
+		BuildFingerprint:  "fp-test",
+		BinaryPath:        "/test/codex-remote",
+	})
+
+	hello := app.relayHello()
+	if hello.Instance.Backend != agentproto.BackendOpenCode {
+		t.Fatalf("hello backend = %q, want %q", hello.Instance.Backend, agentproto.BackendOpenCode)
+	}
+	if hello.Instance.OpenCodeProfileID != "op_team" {
+		t.Fatalf("hello opencode profile id = %q", hello.Instance.OpenCodeProfileID)
+	}
+	if hello.Instance.CodexProviderID != "" || hello.Instance.ClaudeProfileID != "" {
+		t.Fatalf("hello leaked inactive backend profile fields: %#v", hello.Instance)
+	}
+	if !hello.Capabilities.SessionCatalog || !hello.Capabilities.RequestRespond || !hello.Capabilities.RequiresCWDForResume {
+		t.Fatalf("hello opencode capabilities missing expected defaults: %#v", hello.Capabilities)
+	}
+	if hello.Capabilities.VSCodeMode || hello.Capabilities.TurnSteer {
+		t.Fatalf("hello opencode capabilities overstated unsupported defaults: %#v", hello.Capabilities)
+	}
+}
+
 func TestWrapperClaudeThreadsRefreshUsesLocalSessionCatalog(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", configDir)

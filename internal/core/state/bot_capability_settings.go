@@ -39,16 +39,19 @@ func NormalizeBotCapabilitySettingsRecord(record BotCapabilitySettingsRecord) (B
 	record = CanonicalizeBotCapabilityProfileSelection(record)
 	codexProviderID := record.CodexProviderID
 	claudeProfileID := NormalizeDesiredClaudeProfileID(record.ClaudeProfileID)
+	openCodeProfileID := NormalizeDesiredOpenCodeProfileID(record.OpenCodeProfileID)
 	contract := NormalizeSurfaceBackendContract(SurfaceBackendContract{
-		ProductMode:     record.ProductMode,
-		Backend:         record.Backend,
-		CodexProviderID: codexProviderID,
-		ClaudeProfileID: claudeProfileID,
+		ProductMode:       record.ProductMode,
+		Backend:           record.Backend,
+		CodexProviderID:   codexProviderID,
+		ClaudeProfileID:   claudeProfileID,
+		OpenCodeProfileID: openCodeProfileID,
 	})
 	record.ProductMode = contract.ProductMode
 	record.Backend = contract.Backend
 	record.CodexProviderID = codexProviderID
 	record.ClaudeProfileID = claudeProfileID
+	record.OpenCodeProfileID = openCodeProfileID
 	record.PromptOverride = NormalizeModelConfigRecord(record.PromptOverride)
 	record.PlanMode = NormalizePlanModeSetting(record.PlanMode)
 	record.UpdatedBy = strings.TrimSpace(record.UpdatedBy)
@@ -80,10 +83,11 @@ func BotCapabilitySettingsContract(record BotCapabilitySettingsRecord) SurfaceBa
 		return HeadlessCodexSurfaceBackendContract("")
 	}
 	return NormalizeSurfaceBackendContract(SurfaceBackendContract{
-		ProductMode:     normalized.ProductMode,
-		Backend:         normalized.Backend,
-		CodexProviderID: normalized.CodexProviderID,
-		ClaudeProfileID: normalized.ClaudeProfileID,
+		ProductMode:       normalized.ProductMode,
+		Backend:           normalized.Backend,
+		CodexProviderID:   normalized.CodexProviderID,
+		ClaudeProfileID:   normalized.ClaudeProfileID,
+		OpenCodeProfileID: normalized.OpenCodeProfileID,
 	})
 }
 

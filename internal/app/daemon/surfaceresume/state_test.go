@@ -152,3 +152,28 @@ func TestNormalizeEntryClearsCodexProfileStateOutsideCodexBackend(t *testing.T) 
 		t.Fatalf("non-Codex entry retained Codex profile state: %#v", entry)
 	}
 }
+
+func TestNormalizeEntryPreservesOpenCodeProfileForOpenCodeBackend(t *testing.T) {
+	entry, ok := NormalizeEntry(Entry{
+		SurfaceSessionID:   "surface-1",
+		ProductMode:        string(state.ProductModeNormal),
+		Backend:            string(agentproto.BackendOpenCode),
+		CodexProviderID:    "team-proxy",
+		ClaudeProfileID:    "devseek",
+		OpenCodeProfileID:  " op_team ",
+		CodexAdmissionRef:  &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "team-proxy", Revision: 1}},
+		ResumeThreadID:     "thread-1",
+		ResumeThreadCWD:    "/data/dl/repo",
+		ResumeWorkspaceKey: "/data/dl/repo",
+		ResumeHeadless:     true,
+	})
+	if !ok {
+		t.Fatal("expected normalized entry")
+	}
+	if entry.Backend != string(agentproto.BackendOpenCode) || entry.OpenCodeProfileID != "op_team" {
+		t.Fatalf("opencode entry normalized to %#v, want backend opencode profile op_team", entry)
+	}
+	if entry.CodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexAdmissionRef != nil || entry.ClaudeProfileID != "" {
+		t.Fatalf("opencode entry retained inactive backend profile state: %#v", entry)
+	}
+}

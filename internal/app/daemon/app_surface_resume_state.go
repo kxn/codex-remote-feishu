@@ -78,6 +78,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 				agentproto.Backend(entry.Backend),
 				entry.CodexProviderID,
 				entry.ClaudeProfileID,
+				entry.OpenCodeProfileID,
 			),
 			state.SurfaceVerbosity(entry.Verbosity),
 			state.PlanModeSettingOff,
@@ -244,15 +245,16 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		return surfaceresume.Entry{}, false
 	}
 	entry := surfaceresume.Entry{
-		SurfaceSessionID: strings.TrimSpace(surface.SurfaceSessionID),
-		GatewayID:        strings.TrimSpace(surface.GatewayID),
-		ChatID:           strings.TrimSpace(surface.ChatID),
-		ActorUserID:      strings.TrimSpace(surface.ActorUserID),
-		ProductMode:      string(state.NormalizeProductMode(surface.ProductMode)),
-		Backend:          string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
-		CodexProviderID:  strings.TrimSpace(a.service.SurfaceCodexProviderID(surface.SurfaceSessionID)),
-		ClaudeProfileID:  strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
-		Verbosity:        string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
+		SurfaceSessionID:  strings.TrimSpace(surface.SurfaceSessionID),
+		GatewayID:         strings.TrimSpace(surface.GatewayID),
+		ChatID:            strings.TrimSpace(surface.ChatID),
+		ActorUserID:       strings.TrimSpace(surface.ActorUserID),
+		ProductMode:       string(state.NormalizeProductMode(surface.ProductMode)),
+		Backend:           string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
+		CodexProviderID:   strings.TrimSpace(a.service.SurfaceCodexProviderID(surface.SurfaceSessionID)),
+		ClaudeProfileID:   strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
+		OpenCodeProfileID: strings.TrimSpace(a.service.SurfaceOpenCodeProfileID(surface.SurfaceSessionID)),
+		Verbosity:         string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
 	}
 	if entry.SurfaceSessionID == "" {
 		return surfaceresume.Entry{}, false
@@ -565,6 +567,7 @@ func sameSurfaceResumeRecoveryTarget(left, right surfaceresume.Entry) bool {
 		state.NormalizeHeadlessBackend(agentproto.Backend(left.Backend)) == state.NormalizeHeadlessBackend(agentproto.Backend(right.Backend)) &&
 		strings.TrimSpace(left.CodexProviderID) == strings.TrimSpace(right.CodexProviderID) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
+		strings.TrimSpace(left.OpenCodeProfileID) == strings.TrimSpace(right.OpenCodeProfileID) &&
 		strings.TrimSpace(left.ResumeRouteMode) == strings.TrimSpace(right.ResumeRouteMode) &&
 		left.ResumeHeadless == right.ResumeHeadless
 	if !commonMatch {

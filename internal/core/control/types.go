@@ -257,6 +257,8 @@ type PendingHeadlessSummary struct {
 	CodexThreadPolicy       *state.CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *state.OpenCodeAdmissionRef
 	Status                  string
 	PID                     int
 	ExpiresAt               time.Time
@@ -665,6 +667,8 @@ type DaemonCommand struct {
 	CodexThreadPolicy       *state.CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *state.OpenCodeAdmissionRef
 	WorkspaceKey            string
 	AutoRestore             bool
 	Text                    string

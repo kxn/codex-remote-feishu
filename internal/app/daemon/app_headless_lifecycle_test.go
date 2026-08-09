@@ -151,6 +151,60 @@ func TestDaemonAutoRestoreMissingWorkspaceFailsBeforeHeadlessLaunch(t *testing.T
 	}
 }
 
+func TestDaemonRejectsUnknownHeadlessBackendBeforeLaunch(t *testing.T) {
+	t.Parallel()
+
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		BaseEnv:    []string{"PATH=/usr/bin"},
+		Paths: relayruntime.Paths{
+			LogsDir:  t.TempDir(),
+			StateDir: stateDir,
+		},
+	})
+	workspaceDir := evalSymlinkForTest(t, t.TempDir())
+	app.service.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), "", "")
+	surface := app.service.Surface("surface-1")
+	surface.PendingHeadless = &state.HeadlessLaunchRecord{
+		InstanceID:   "inst-unknown",
+		ThreadID:     "thread-1",
+		WorkspaceKey: workspaceDir,
+		ThreadCWD:    workspaceDir,
+		Backend:      agentproto.Backend("mystery"),
+		Status:       state.HeadlessLaunchStarting,
+		Purpose:      state.HeadlessLaunchPurposeThreadRestore,
+	}
+	launchCalled := false
+	app.startHeadless = func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		launchCalled = true
+		return 0, errors.New("launch should not be reached for an unknown backend")
+	}
+
+	events := app.startManagedHeadless(control.DaemonCommand{
+		Kind:             control.DaemonCommandStartHeadless,
+		SurfaceSessionID: "surface-1",
+		InstanceID:       "inst-unknown",
+		ThreadID:         "thread-1",
+		WorkspaceKey:     workspaceDir,
+		ThreadCWD:        workspaceDir,
+		Backend:          agentproto.Backend("mystery"),
+	})
+
+	if launchCalled {
+		t.Fatal("expected unknown backend to fail before invoking headless launcher")
+	}
+	if len(events) != 1 || events[0].Notice == nil || !strings.Contains(events[0].Notice.Text, "不支持") {
+		t.Fatalf("expected unsupported backend notice, got %#v", events)
+	}
+	if surface.PendingHeadless != nil {
+		t.Fatalf("expected unknown backend launch failure to consume pending record, got %#v", surface.PendingHeadless)
+	}
+}
+
 func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

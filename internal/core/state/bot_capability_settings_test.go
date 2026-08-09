@@ -52,6 +52,30 @@ func TestNormalizeBotCapabilitySettingsRecord(t *testing.T) {
 	}
 }
 
+func TestNormalizeBotCapabilitySettingsRecordCarriesOpenCodeProfile(t *testing.T) {
+	record, ok := NormalizeBotCapabilitySettingsRecord(BotCapabilitySettingsRecord{
+		GatewayID:         " app-1 ",
+		ProductMode:       ProductModeNormal,
+		Backend:           agentproto.BackendOpenCode,
+		CodexProviderID:   " team-proxy ",
+		ClaudeProfileID:   " devseek ",
+		OpenCodeProfileID: " op_team ",
+	})
+	if !ok {
+		t.Fatalf("expected normalized record")
+	}
+	if record.Backend != agentproto.BackendOpenCode || record.OpenCodeProfileID != "op_team" {
+		t.Fatalf("opencode settings normalized to %#v, want backend opencode profile op_team", record)
+	}
+	contract := BotCapabilitySettingsContract(record)
+	if contract.Backend != agentproto.BackendOpenCode || contract.OpenCodeProfileID != "op_team" {
+		t.Fatalf("opencode bot capability contract = %#v, want opencode/op_team", contract)
+	}
+	if contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+		t.Fatalf("opencode bot capability contract retained inactive profile fields: %#v", contract)
+	}
+}
+
 func TestBotCapabilitySettingsKeyRequiresGateway(t *testing.T) {
 	if key := BotCapabilitySettingsKey(" app-1 "); key != "feishu:gateway:app-1" {
 		t.Fatalf("key = %q, want feishu:gateway:app-1", key)

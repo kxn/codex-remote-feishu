@@ -1,15 +1,58 @@
 package wrapper
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/claude"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/codex"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 )
+
+func TestNewBackendRuntimeOpenCodeDoesNotFallBackToCodex(t *testing.T) {
+	runtime := newBackendRuntime(Config{
+		Backend:    agentproto.BackendOpenCode,
+		InstanceID: "inst-opencode",
+	})
+	if runtime.Backend() != agentproto.BackendOpenCode {
+		t.Fatalf("runtime backend = %q, want %q", runtime.Backend(), agentproto.BackendOpenCode)
+	}
+	if _, ok := runtime.(*codexBackendRuntime); ok {
+		t.Fatal("opencode backend runtime must not fall back to codex runtime")
+	}
+	caps := runtime.Capabilities()
+	if !caps.SessionCatalog || !caps.RequestRespond || !caps.RequiresCWDForResume || caps.VSCodeMode || caps.TurnSteer {
+		t.Fatalf("unexpected opencode runtime capabilities: %#v", caps)
+	}
+	if session, err := runtime.Launch(context.Background(), nil, nil, nil); err != nil || session != nil {
+		t.Fatalf("opencode launch skeleton = %#v, %v; want nil session without startup failure", session, err)
+	}
+	_, err := runtime.TranslateCommand(agentproto.Command{Kind: agentproto.CommandPromptSend})
+	if err == nil || !strings.Contains(err.Error(), "opencode_acp_adapter_not_implemented") {
+		t.Fatalf("opencode TranslateCommand error = %v, want explicit not implemented", err)
+	}
+}
+
+func TestNewBackendRuntimeUnknownDoesNotFallBackToCodex(t *testing.T) {
+	runtime := newBackendRuntime(Config{
+		Backend:    agentproto.Backend("mystery"),
+		InstanceID: "inst-mystery",
+	})
+	if runtime.Backend() == agentproto.BackendCodex {
+		t.Fatalf("unknown backend runtime fell back to codex")
+	}
+	if _, ok := runtime.(*codexBackendRuntime); ok {
+		t.Fatal("unknown backend runtime must not use codex runtime")
+	}
+	_, err := runtime.TranslateCommand(agentproto.Command{Kind: agentproto.CommandPromptSend})
+	if err == nil || !strings.Contains(err.Error(), "backend_unsupported") {
+		t.Fatalf("unknown backend TranslateCommand error = %v, want backend_unsupported", err)
+	}
+}
 
 func TestClaudeBackendRuntimeRestartPlanUsesPersistedResumeTarget(t *testing.T) {
 	configDir := t.TempDir()

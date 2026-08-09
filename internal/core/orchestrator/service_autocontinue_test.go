@@ -196,6 +196,54 @@ func TestAutoContinueCarriesFrozenCodexAdmissionRef(t *testing.T) {
 	}
 }
 
+func TestAutoContinueCarriesFrozenOpenCodeAdmissionRef(t *testing.T) {
+	now := time.Date(2026, 8, 1, 13, 25, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	surface := setupAutoWhipSurface(t, svc)
+	svc.setSurfaceDesiredContract(surface, state.HeadlessOpenCodeSurfaceBackendContract("op_team"))
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	inst := svc.root.Instances["inst-1"]
+	inst.Backend = agentproto.BackendOpenCode
+	inst.OpenCodeProfileID = "op_team"
+	inst.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
+	surface.AutoWhip.Enabled = false
+	surface.AutoContinue.Enabled = true
+
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续处理", "turn-1")
+	original := surface.QueueItems[surface.ActiveQueueItemID]
+	if original == nil {
+		t.Fatal("expected original active queue item")
+	}
+	original.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
+	events := completeRemoteTurnWithFinalText(t, svc, "turn-1", "interrupted", "upstream stream closed", "", &agentproto.ErrorInfo{
+		Code:      "responseStreamDisconnected",
+		Stage:     "runtime_error",
+		Message:   "upstream stream closed",
+		ThreadID:  "thread-1",
+		TurnID:    "turn-1",
+		Retryable: false,
+	})
+	if len(events) == 0 {
+		t.Fatal("expected autocontinue events")
+	}
+	wantRef := state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	episode := surface.AutoContinue.Episode
+	if episode == nil || episode.OpenCodeAdmissionRef == nil || *episode.OpenCodeAdmissionRef != wantRef {
+		t.Fatalf("expected autocontinue episode to inherit frozen opencode admission ref, got %#v", episode)
+	}
+	active := surface.QueueItems[surface.ActiveQueueItemID]
+	if active == nil || active.OpenCodeAdmissionRef == nil || *active.OpenCodeAdmissionRef != wantRef {
+		t.Fatalf("expected autocontinue queue item to carry frozen opencode admission ref, got %#v", active)
+	}
+	if active.CodexAdmissionRef != nil {
+		t.Fatalf("expected autocontinue queue item to clear inactive codex admission ref, got %#v", active)
+	}
+}
+
 func TestAutoContinueDoesNotScheduleAfterUserStopEvenWithAutoContinueEligibleProblem(t *testing.T) {
 	now := time.Date(2026, 4, 9, 12, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

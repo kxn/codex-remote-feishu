@@ -47,6 +47,12 @@ func TestBuildHeadlessWrapperArgsUsesExplicitLaunchMode(t *testing.T) {
 		t.Fatalf("buildHeadlessWrapperArgs claude = %#v", got)
 	}
 	if got := buildHeadlessWrapperArgs(HeadlessLaunchOptions{
+		LaunchMode: HeadlessLaunchModeOpenCodeACP,
+		Args:       []string{"--flag"},
+	}); strings.Join(got, "\x00") != strings.Join([]string{HeadlessLaunchModeOpenCodeACP, "--flag"}, "\x00") {
+		t.Fatalf("buildHeadlessWrapperArgs opencode = %#v", got)
+	}
+	if got := buildHeadlessWrapperArgs(HeadlessLaunchOptions{
 		LaunchMode: "",
 		Args:       []string{"--flag"},
 	}); strings.Join(got, "\x00") != strings.Join([]string{HeadlessLaunchModeAppServer, "--flag"}, "\x00") {

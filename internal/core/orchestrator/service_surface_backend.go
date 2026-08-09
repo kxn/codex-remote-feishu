@@ -40,6 +40,8 @@ func (s *Service) setSurfaceDesiredContract(surface *state.SurfaceConsoleRecord,
 		// remembered headless selections untouched so mode switches can reuse them.
 	case contract.Backend == agentproto.BackendClaude:
 		surface.ClaudeProfileID = contract.ClaudeProfileID
+	case contract.Backend == agentproto.BackendOpenCode:
+		surface.OpenCodeProfileID = contract.OpenCodeProfileID
 	default:
 		surface.CodexProviderID = contract.CodexProviderID
 	}
@@ -48,14 +50,22 @@ func (s *Service) setSurfaceDesiredContract(surface *state.SurfaceConsoleRecord,
 func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) state.HeadlessLaunchContract {
 	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
 	contract := state.NormalizeSurfaceBackendContract(settings.Contract)
-	launch := state.HeadlessCodexLaunchContract(state.EffectiveSurfaceCodexProviderID(contract))
+	var launch state.HeadlessLaunchContract
+	switch contract.Backend {
+	case agentproto.BackendClaude:
+		launch = state.HeadlessClaudeLaunchContract(state.EffectiveSurfaceClaudeProfileID(contract), settings.PromptOverride.ReasoningEffort)
+	case agentproto.BackendOpenCode:
+		launch = state.HeadlessOpenCodeLaunchContract(state.EffectiveSurfaceOpenCodeProfileID(contract))
+		if surface != nil {
+			launch.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
+		}
+	default:
+		launch = state.HeadlessCodexLaunchContract(state.EffectiveSurfaceCodexProviderID(contract))
+	}
 	if launch.Backend == agentproto.BackendCodex && surface != nil {
 		launch.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef)
 		launch.CodexConnectionContract = state.CloneCodexConnectionContract(surface.CodexConnectionContract)
 		launch.CodexThreadPolicy = state.CloneCodexThreadPolicy(surface.CodexThreadPolicy)
-	}
-	if contract.Backend == agentproto.BackendClaude {
-		launch = state.HeadlessClaudeLaunchContract(state.EffectiveSurfaceClaudeProfileID(contract), settings.PromptOverride.ReasoningEffort)
 	}
 	if launch.Backend == agentproto.BackendClaude {
 		launch.ClaudeReasoningEffort = s.effectiveClaudeReasoningEffort(surface, settings.PromptOverride)
@@ -83,6 +93,8 @@ func (s *Service) applyHeadlessLaunchContract(command *control.DaemonCommand, co
 	command.CodexThreadPolicy = state.CloneCodexThreadPolicy(contract.CodexThreadPolicy)
 	command.ClaudeProfileID = contract.ClaudeProfileID
 	command.ClaudeReasoningEffort = contract.ClaudeReasoningEffort
+	command.OpenCodeProfileID = contract.OpenCodeProfileID
+	command.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(contract.OpenCodeAdmissionRef)
 }
 
 func (s *Service) surfaceModeAlias(surface *state.SurfaceConsoleRecord) string {
@@ -103,6 +115,21 @@ func (s *Service) effectiveClaudeReasoningEffort(surface *state.SurfaceConsoleRe
 func (s *Service) SurfaceBackend(surfaceID string) agentproto.Backend {
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	return s.surfaceBackend(surface)
+}
+
+func (s *Service) SurfaceOpenCodeProfileID(surfaceID string) string {
+	if s == nil || s.root == nil {
+		return ""
+	}
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	if surface == nil {
+		return ""
+	}
+	return s.surfaceOpenCodeProfileID(surface)
+}
+
+func (s *Service) surfaceOpenCodeProfileID(surface *state.SurfaceConsoleRecord) string {
+	return state.EffectiveSurfaceOpenCodeProfileID(s.surfaceDesiredContract(surface))
 }
 
 func (s *Service) surfaceWorkspaceDefaultsBackend(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) agentproto.Backend {
@@ -129,6 +156,14 @@ func (s *Service) surfaceWorkspaceDefaultsContract(surface *state.SurfaceConsole
 				return observed
 			}
 			return state.ClaudeInstanceBackendContract("")
+		case agentproto.BackendOpenCode:
+			if desired.Backend == agentproto.BackendOpenCode && state.EffectiveSurfaceOpenCodeProfileID(desired) != "" {
+				return state.OpenCodeInstanceBackendContract(state.EffectiveSurfaceOpenCodeProfileID(desired))
+			}
+			if observed.Backend == agentproto.BackendOpenCode {
+				return observed
+			}
+			return state.OpenCodeInstanceBackendContract("")
 		default:
 			if desired.Backend == agentproto.BackendCodex && state.EffectiveSurfaceCodexProviderID(desired) != "" {
 				return state.CodexInstanceBackendContract(state.EffectiveSurfaceCodexProviderID(desired))

@@ -57,6 +57,8 @@ func authorizePendingHeadlessForTest(t *testing.T, app *App, command control.Dae
 		CodexProviderID:       state.NormalizeCodexProviderID(command.CodexProviderID),
 		ClaudeProfileID:       state.NormalizeClaudeProfileID(command.ClaudeProfileID),
 		ClaudeReasoningEffort: strings.TrimSpace(command.ClaudeReasoningEffort),
+		OpenCodeProfileID:     state.NormalizeOpenCodeProfileID(command.OpenCodeProfileID),
+		OpenCodeAdmissionRef:  state.NormalizeOpenCodeAdmissionRef(command.OpenCodeAdmissionRef),
 		RequestedAt:           now,
 		ExpiresAt:             now.Add(30 * time.Second),
 		Status:                state.HeadlessLaunchStarting,

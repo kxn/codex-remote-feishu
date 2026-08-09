@@ -32,13 +32,17 @@ func RunMain(ctx context.Context, args []string, stdin io.Reader, stdout, stderr
 func wrapperBackendFromArgs(args []string) (agentproto.Backend, error) {
 	mode, ok := appserverargs.Find(args)
 	if len(args) == 0 {
-		return "", fmt.Errorf("wrapper role requires app-server or claude-app-server mode")
+		return "", fmt.Errorf("wrapper role requires app-server, claude-app-server, or opencode-acp mode")
 	}
 	if !ok {
-		return "", fmt.Errorf("wrapper role only supports app-server or claude-app-server mode")
+		return "", fmt.Errorf("wrapper role only supports app-server, claude-app-server, or opencode-acp mode")
 	}
-	if mode.Mode == appserverargs.ModeClaude {
+	switch mode.Mode {
+	case appserverargs.ModeClaude:
 		return agentproto.BackendClaude, nil
+	case appserverargs.ModeOpenCode:
+		return agentproto.BackendOpenCode, nil
+	default:
+		return agentproto.BackendCodex, nil
 	}
-	return agentproto.BackendCodex, nil
 }

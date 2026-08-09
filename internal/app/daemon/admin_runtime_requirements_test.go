@@ -215,6 +215,54 @@ func TestAdminRuntimeRequirementsReadyWhenClaudeIsAvailableWithoutCodex(t *testi
 	}
 }
 
+func TestAdminRuntimeRequirementsReadyWhenOpenCodeIsAvailableWithoutCodexOrClaude(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	t.Setenv("PATH", filepath.Join(home, "missing-bin"))
+	t.Setenv(config.ClaudeBinaryEnv, "")
+	withRuntimeRequirementsClaudeResolver(t, func(env []string) (string, error) {
+		_ = env
+		return "", fmt.Errorf("claude executable not found")
+	})
+
+	binaryPath := filepath.Join(home, executableName("codex-remote"))
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+	opencodePath := filepath.Join(home, "bin", executableName("opencode"))
+	writeExecutableFile(t, opencodePath, "real-opencode")
+	t.Setenv(config.OpenCodeBinaryEnv, opencodePath)
+
+	app, configPath, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath: %v", err)
+	}
+	loaded.Config.Wrapper.CodexRealBinary = filepath.Join(home, "missing-codex")
+	if err := config.WriteAppConfig(configPath, loaded.Config); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/runtime-requirements/detect", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("detect status = %d, want 200 body=%s", rec.Code, rec.Body.String())
+	}
+	var payload runtimeRequirementsResponse
+	if err := json.NewDecoder(rec.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode detect: %v", err)
+	}
+	if !payload.Ready {
+		t.Fatalf("expected runtime requirements to be ready with OpenCode, got %#v", payload)
+	}
+	if got := checkStatusByID(payload.Checks, "opencode_binary"); got != runtimeRequirementStatusPass {
+		t.Fatalf("opencode_binary status = %q, want pass", got)
+	}
+	if got := checkStatusByID(payload.Checks, "real_codex_binary"); got != runtimeRequirementStatusFail {
+		t.Fatalf("real_codex_binary status = %q, want fail", got)
+	}
+	if got := checkStatusByID(payload.Checks, "claude_binary"); got != runtimeRequirementStatusFail {
+		t.Fatalf("claude_binary status = %q, want fail", got)
+	}
+}
+
 func TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvailable(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)
@@ -244,8 +292,8 @@ func TestAdminRuntimeRequirementsFailWhenNeitherCodexNorClaudeIsAvailable(t *tes
 	if got := checkStatusByID(payload.Checks, "claude_binary"); got != runtimeRequirementStatusFail {
 		t.Fatalf("claude_binary status = %q, want fail", got)
 	}
-	if !strings.Contains(payload.Summary, "Claude 或 Codex") {
-		t.Fatalf("summary = %q, want Claude/Codex prerequisite hint", payload.Summary)
+	if !strings.Contains(payload.Summary, "Claude、Codex 或 OpenCode") {
+		t.Fatalf("summary = %q, want Claude/Codex/OpenCode prerequisite hint", payload.Summary)
 	}
 }
 

@@ -49,6 +49,7 @@ type InstanceHello struct {
 	CodexProviderID       string  `json:"codexProviderId,omitempty"`
 	ClaudeProfileID       string  `json:"claudeProfileId,omitempty"`
 	ClaudeReasoningEffort string  `json:"claudeReasoningEffort,omitempty"`
+	OpenCodeProfileID     string  `json:"openCodeProfileId,omitempty"`
 	Source                string  `json:"source,omitempty"`
 	Managed               bool    `json:"managed,omitempty"`
 	Version               string  `json:"version,omitempty"`

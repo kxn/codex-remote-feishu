@@ -136,6 +136,15 @@ func (s *Service) RecordPendingHeadlessCodexRuntime(surfaceID, instanceID string
 	pending.CodexThreadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
 }
 
+func (s *Service) RecordPendingHeadlessOpenCodeRuntime(surfaceID, instanceID string, admissionRef *state.OpenCodeAdmissionRef) {
+	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
+	pending := s.pendingSurfaceHeadlessLaunch(surface, instanceID)
+	if pending == nil {
+		return
+	}
+	pending.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(admissionRef)
+}
+
 func (s *Service) setSurfaceDetachAbandoning(surface *state.SurfaceConsoleRecord, until time.Time) {
 	if surface == nil {
 		return

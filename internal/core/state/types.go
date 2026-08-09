@@ -200,6 +200,7 @@ type BotCapabilitySettingsRecord struct {
 	CodexProviderID     string
 	CodexProfileID      string
 	ClaudeProfileID     string
+	OpenCodeProfileID   string
 	PromptOverride      ModelConfigRecord
 	PlanMode            PlanModeSetting
 	PlanModeOverrideSet bool
@@ -228,6 +229,8 @@ type InstanceRecord struct {
 	CodexThreadPolicy       *CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	Source                  string
 	Capabilities            agentproto.Capabilities
 	CapabilitiesDeclared    bool
@@ -316,6 +319,8 @@ type SurfaceConsoleRecord struct {
 	CodexThreadPolicy       *CodexThreadPolicy
 	ContractRefreshPending  bool
 	ClaudeProfileID         string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	Verbosity               SurfaceVerbosity
 	PlanMode                PlanModeSetting
 	PlanModeOverrideSet     bool
@@ -550,6 +555,7 @@ type PendingAutoContinueEpisodeRecord struct {
 	CodexAdmissionRef          *CodexAdmissionRef
 	CodexConnectionContract    *CodexConnectionContract
 	CodexThreadPolicy          *CodexThreadPolicy
+	OpenCodeAdmissionRef       *OpenCodeAdmissionRef
 	RootReplyToMessageID       string
 	RootReplyToMessagePreview  string
 	NoticeMessageID            string
@@ -600,6 +606,8 @@ type HeadlessLaunchRecord struct {
 	CodexThreadPolicy       *CodexThreadPolicy
 	ClaudeProfileID         string
 	ClaudeReasoningEffort   string
+	OpenCodeProfileID       string
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	ThreadName              string
 	ThreadPreview           string
 	RequestedAt             time.Time
@@ -763,6 +771,7 @@ type QueueItemRecord struct {
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
+	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
 	RouteModeAtEnqueue      RouteMode
 	Status                  QueueItemStatus
 }
