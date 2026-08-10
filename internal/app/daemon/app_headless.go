@@ -416,6 +416,7 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 	if agentproto.NormalizeBackend(backend) != agentproto.BackendOpenCode {
 		return env, args, nil, nil
 	}
+	env = applyOpenCodeHeadlessRuntimePathEnv(env, a.headlessRuntime.Paths)
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return nil, nil, nil, err
@@ -435,6 +436,31 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 		return nil, nil, nil, err
 	}
 	return material.Env, material.Args, state.NormalizeOpenCodeAdmissionRef(material.AdmissionRef), nil
+}
+
+func applyOpenCodeHeadlessRuntimePathEnv(env []string, paths relayruntime.Paths) []string {
+	if value := xdgHomeForOpenCodeHeadlessPath(paths.ConfigDir); value != "" {
+		env = config.UpsertEnvValue(env, "XDG_CONFIG_HOME", value)
+	}
+	if value := xdgHomeForOpenCodeHeadlessPath(paths.DataDir); value != "" {
+		env = config.UpsertEnvValue(env, "XDG_DATA_HOME", value)
+	}
+	if value := xdgHomeForOpenCodeHeadlessPath(paths.StateDir); value != "" {
+		env = config.UpsertEnvValue(env, "XDG_STATE_HOME", value)
+	}
+	return env
+}
+
+func xdgHomeForOpenCodeHeadlessPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	dir := filepath.Dir(path)
+	if dir == "." || dir == string(filepath.Separator) {
+		return ""
+	}
+	return dir
 }
 
 func resolveOpenCodeLaunchProfile(cfg config.AppConfig, profileID string, admissionRef *state.OpenCodeAdmissionRef) (config.OpenCodeProfile, error) {

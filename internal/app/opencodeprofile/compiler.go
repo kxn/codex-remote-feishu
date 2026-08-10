@@ -92,6 +92,15 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		},
 	}
 	if profile.BuiltIn || profile.ID == config.OpenCodeDefaultProfileID {
+		if model := systemOpenCodeRecentModelForACP(env); model != "" {
+			configRaw, err := json.Marshal(configOverlay{Model: model})
+			if err != nil {
+				return LaunchMaterial{}, err
+			}
+			material.Env = config.UpsertEnvValue(material.Env, config.OpenCodeConfigContentEnv, string(configRaw))
+			material.RedactedSummary = "opencode profile op_default inherit model=" + model
+			return material, nil
+		}
 		material.RedactedSummary = "opencode profile op_default inherit"
 		return material, nil
 	}
