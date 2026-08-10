@@ -520,15 +520,7 @@ func humanizeThreadHistoryTime(now, value time.Time) string {
 }
 
 func truncateThreadHistoryText(text string, limit int) string {
-	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
-	if limit <= 3 {
-		limit = 3
-	}
-	runes := []rune(text)
-	if len(runes) <= limit {
-		return text
-	}
-	return string(runes[:limit-3]) + "..."
+	return xutil.TruncateRunes(text, limit, xutil.TruncateOptions{CollapseSpaces: true, ReserveEllipsis: true, MinLimit: 3})
 }
 
 func (s *Service) clearThreadHistoryRuntime(surface *state.SurfaceConsoleRecord) {

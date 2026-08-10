@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -188,16 +189,5 @@ func normalizeText(text string) string {
 }
 
 func truncateText(text string, limit int) string {
-	text = normalizeText(text)
-	if text == "" {
-		return ""
-	}
-	if limit <= 0 {
-		return text
-	}
-	runes := []rune(text)
-	if len(runes) <= limit {
-		return text
-	}
-	return string(runes[:limit]) + "..."
+	return xutil.TruncateRunes(text, limit, xutil.TruncateOptions{CollapseSpaces: true})
 }

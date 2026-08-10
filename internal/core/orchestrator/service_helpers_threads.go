@@ -439,15 +439,7 @@ func previewSnippet(text string) string {
 }
 
 func truncateThreadPreview(text string, limit int) string {
-	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
-	if text == "" || limit <= 0 {
-		return ""
-	}
-	runes := []rune(text)
-	if len(runes) > limit {
-		return string(runes[:limit]) + "..."
-	}
-	return text
+	return xutil.TruncateRunes(text, limit, xutil.TruncateOptions{CollapseSpaces: true, NonPositiveLimitEmpty: true})
 }
 
 func isClearCommand(value string) bool {

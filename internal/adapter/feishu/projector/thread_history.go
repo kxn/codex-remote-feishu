@@ -199,15 +199,7 @@ func threadHistoryTurnOptionText(option control.FeishuThreadHistoryTurnOption) s
 }
 
 func truncateThreadHistoryDetailText(text string, limit int) string {
-	text = strings.TrimSpace(text)
-	if limit <= 3 {
-		limit = 3
-	}
-	runes := []rune(text)
-	if len(runes) <= limit {
-		return text
-	}
-	return string(runes[:limit-3]) + "..."
+	return xutil.TruncateRunes(strings.TrimSpace(text), limit, xutil.TruncateOptions{ReserveEllipsis: true, MinLimit: 3})
 }
 
 func threadHistoryNoticeSections(view control.FeishuThreadHistoryView) []control.FeishuCardTextSection {

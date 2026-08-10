@@ -256,12 +256,7 @@ func targetPickerGitImportTailLines(text string, limit int) []string {
 }
 
 func truncateTargetPickerGitImportLine(line string, limit int) string {
-	line = strings.TrimSpace(line)
-	if limit <= 0 || len([]rune(line)) <= limit {
-		return line
-	}
-	runes := []rune(line)
-	return strings.TrimSpace(string(runes[:limit-1])) + "…"
+	return xutil.TruncateRunes(strings.TrimSpace(line), limit, xutil.TruncateOptions{Ellipsis: "…", ReserveEllipsis: true, TrimResult: true})
 }
 
 func targetPickerGitImportNextStep(importErr *workspaceimport.ImportError) string {
