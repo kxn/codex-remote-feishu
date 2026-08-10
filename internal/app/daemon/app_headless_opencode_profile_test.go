@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -117,6 +118,92 @@ func TestDaemonStartsOpenCodeHeadlessWithProfileOverlayAndACPLaunchMode(t *testi
 	pending := app.service.Surface("surface-1").PendingHeadless
 	if pending == nil || pending.OpenCodeAdmissionRef == nil || pending.OpenCodeAdmissionRef.ProfileRef.Revision != profile.Revision {
 		t.Fatalf("expected pending headless to carry opencode admission ref, got %#v", pending)
+	}
+}
+
+func TestDaemonStartsDefaultOpenCodeHeadlessWithRecentSystemModel(t *testing.T) {
+	cfg := config.DefaultAppConfig()
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+
+	runtimeRoot := t.TempDir()
+	configDir := filepath.Join(runtimeRoot, ".config", "codex-remote")
+	stateDir := filepath.Join(runtimeRoot, ".local", "state", "codex-remote")
+	configHome := filepath.Dir(configDir)
+	stateHome := filepath.Dir(stateDir)
+	if err := os.MkdirAll(filepath.Join(configHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll opencode config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(stateHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll opencode state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, "opencode", "opencode.jsonc"), []byte(`{"provider":{"mimo":{"models":{"mimo-v2.5-pro":{"name":"mimo-v2.5-pro"}}}}}`), 0o644); err != nil {
+		t.Fatalf("WriteFile opencode config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateHome, "opencode", "model.json"), []byte(`{"recent":[{"providerID":"mimo","modelID":"mimo-v2.5-pro"}]}`), 0o644); err != nil {
+		t.Fatalf("WriteFile opencode state: %v", err)
+	}
+
+	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: configPath,
+		BaseEnv:    []string{"PATH=/usr/bin"},
+		LaunchArgs: []string{"app-server"},
+		Paths: relayruntime.Paths{
+			ConfigDir: configDir,
+			LogsDir:   t.TempDir(),
+			StateDir:  stateDir,
+		},
+	})
+	app.ConfigureAdmin(AdminRuntimeOptions{
+		ConfigPath:      configPath,
+		Services:        defaultFeishuServices(),
+		AdminListenHost: "127.0.0.1",
+		AdminListenPort: "9501",
+		AdminURL:        "http://localhost:9501/admin/",
+		SetupURL:        "http://localhost:9501/setup",
+	})
+	app.service.MaterializeSurfaceResume("surface-default", "", "chat-1", "user-1", "normal", agentproto.BackendOpenCode, "", "", "")
+	surface := app.service.Surface("surface-default")
+	surface.OpenCodeProfileID = state.DefaultOpenCodeProfileID
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4326, nil
+	}
+	workspaceDir := evalSymlinkForTest(t, t.TempDir())
+	command := control.DaemonCommand{
+		Kind:              control.DaemonCommandStartHeadless,
+		SurfaceSessionID:  "surface-default",
+		InstanceID:        "inst-opencode-default",
+		ThreadCWD:         workspaceDir,
+		WorkspaceKey:      workspaceDir,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: state.DefaultOpenCodeProfileID,
+	}
+	authorizePendingHeadlessForTest(t, app, command)
+	app.startManagedHeadless(command)
+
+	configRaw := envValueForTest(captured.Env, config.OpenCodeConfigContentEnv)
+	if configRaw == "" {
+		t.Fatalf("expected default opencode launch to project recent system model, got %#v", captured.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v", err)
+	}
+	if configDoc["model"] != "mimo/mimo-v2.5-pro" {
+		t.Fatalf("unexpected default opencode model overlay: %#v", configDoc)
+	}
+	if got := envValueForTest(captured.Env, "XDG_CONFIG_HOME"); got != configHome {
+		t.Fatalf("XDG_CONFIG_HOME = %q, want %q in %#v", got, configHome, captured.Env)
+	}
+	if got := envValueForTest(captured.Env, "XDG_STATE_HOME"); got != stateHome {
+		t.Fatalf("XDG_STATE_HOME = %q, want %q in %#v", got, stateHome, captured.Env)
 	}
 }
 

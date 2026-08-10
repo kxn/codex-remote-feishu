@@ -2,6 +2,7 @@ package opencodeprofile
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,6 +38,109 @@ func TestCompilerBuiltInProfileInheritsSystemOpenCodeConfig(t *testing.T) {
 	}
 	if material.AdmissionRef == nil || material.AdmissionRef.ProfileRef.ID != state.DefaultOpenCodeProfileID || material.AdmissionRef.ProfileRef.Revision != 1 {
 		t.Fatalf("unexpected built-in admission ref: %#v", material.AdmissionRef)
+	}
+}
+
+func TestCompilerBuiltInProfileProjectsRecentSystemModelForACP(t *testing.T) {
+	root := t.TempDir()
+	configHome := filepath.Join(root, ".config")
+	stateHome := filepath.Join(root, ".local", "state")
+	if err := os.MkdirAll(filepath.Join(configHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(stateHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll state: %v", err)
+	}
+	configRaw := []byte(`{
+  "$schema": "https://opencode.ai/config.json",
+  // No top-level model: ACP should inherit the recent TUI selection.
+  "provider": {
+    "mimo": {
+      "models": {
+        "mimo-v2.5-pro": { "name": "mimo-v2.5-pro" },
+      },
+    },
+  },
+}`)
+	if err := os.WriteFile(filepath.Join(configHome, "opencode", "opencode.jsonc"), configRaw, 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	stateRaw := []byte(`{
+  "recent": [
+    { "providerID": "mimo", "modelID": "mimo-v2.5-pro" },
+    { "providerID": "mimo", "modelID": "mimo-v2.5" }
+  ]
+}`)
+	if err := os.WriteFile(filepath.Join(stateHome, "opencode", "model.json"), stateRaw, 0o644); err != nil {
+		t.Fatalf("WriteFile state: %v", err)
+	}
+
+	material, err := CompileLaunchMaterial(CompileInput{
+		Profile:       config.BuiltInOpenCodeProfile(),
+		WorkspaceRoot: "/repo",
+		BaseEnv: []string{
+			"KEEP_ME=1",
+			"XDG_CONFIG_HOME=" + configHome,
+			"XDG_STATE_HOME=" + stateHome,
+			config.OpenCodeConfigContentEnv + "=old-config",
+			config.OpenCodeAuthContentEnv + "=old-auth",
+			config.OpenCodeDisableProjectConfigEnv + "=1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(default): %v", err)
+	}
+	configOverlayRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("missing projected recent model config overlay in %#v", material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configOverlayRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v\n%s", err, configOverlayRaw)
+	}
+	if configDoc["model"] != "mimo/mimo-v2.5-pro" {
+		t.Fatalf("projected model = %#v, want mimo/mimo-v2.5-pro in %#v", configDoc["model"], configDoc)
+	}
+	if _, ok := lookupEnv(material.Env, config.OpenCodeAuthContentEnv); ok {
+		t.Fatalf("built-in profile must not project auth overlay, got %#v", material.Env)
+	}
+	if _, ok := lookupEnv(material.Env, config.OpenCodeDisableProjectConfigEnv); ok {
+		t.Fatalf("built-in profile must not retain project config disable overlay, got %#v", material.Env)
+	}
+	if value, ok := lookupEnv(material.Env, "KEEP_ME"); !ok || value != "1" {
+		t.Fatalf("expected unrelated env to survive, got %#v", material.Env)
+	}
+}
+
+func TestCompilerBuiltInProfileKeepsExplicitSystemModelAuthoritative(t *testing.T) {
+	root := t.TempDir()
+	configHome := filepath.Join(root, ".config")
+	stateHome := filepath.Join(root, ".local", "state")
+	if err := os.MkdirAll(filepath.Join(configHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(stateHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, "opencode", "opencode.jsonc"), []byte(`{"model":"mimo/mimo-v2.5"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateHome, "opencode", "model.json"), []byte(`{"recent":[{"providerID":"mimo","modelID":"mimo-v2.5-pro"}]}`), 0o644); err != nil {
+		t.Fatalf("WriteFile state: %v", err)
+	}
+
+	material, err := CompileLaunchMaterial(CompileInput{
+		Profile: config.BuiltInOpenCodeProfile(),
+		BaseEnv: []string{
+			"XDG_CONFIG_HOME=" + configHome,
+			"XDG_STATE_HOME=" + stateHome,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(default): %v", err)
+	}
+	if _, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv); ok {
+		t.Fatalf("explicit system model should remain authoritative without overlay, got %#v", material.Env)
 	}
 }
 
