@@ -1,9 +1,12 @@
 package gitmeta
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -74,6 +77,23 @@ func TestInspectWorkspaceRegularRepo(t *testing.T) {
 	}
 	if info.Detached || info.Branch != "main" {
 		t.Fatalf("unexpected branch info: %#v", info)
+	}
+}
+
+func TestInspectWorkspaceReadsHeadWithoutInvokingGit(t *testing.T) {
+	repoRoot := createManualGitRepoForTest(t, "main")
+	marker := filepath.Join(t.TempDir(), "git-invoked")
+	t.Setenv("PATH", fakeFailingGitBinForTest(t, marker))
+
+	info, err := InspectWorkspace(repoRoot, InspectOptions{})
+	if err != nil {
+		t.Fatalf("InspectWorkspace() error = %v", err)
+	}
+	if !info.InRepo() || info.Branch != "main" || info.Detached {
+		t.Fatalf("unexpected file-only git info: %#v", info)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("InspectWorkspace should not invoke git, marker err=%v", err)
 	}
 }
 
@@ -205,6 +225,24 @@ func TestPreviewWorktreeInfersDirectoryNameFromBranch(t *testing.T) {
 	}
 }
 
+func TestPreviewWorktreeRejectsNonGitBaseBeforeGitAvailability(t *testing.T) {
+	baseDir := createNonRepoDirForTest(t)
+	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-bin"))
+
+	_, err := PreviewWorktree(WorktreeCreateRequest{
+		BaseWorkspacePath: baseDir,
+		BranchName:        "feat/no-git-base",
+	})
+
+	var worktreeErr *WorktreeCreateError
+	if !errors.As(err, &worktreeErr) {
+		t.Fatalf("PreviewWorktree() error = %#v, want WorktreeCreateError", err)
+	}
+	if worktreeErr.Code != WorktreeCreateErrorBaseWorkspaceNotGit {
+		t.Fatalf("PreviewWorktree() code = %q, want %q", worktreeErr.Code, WorktreeCreateErrorBaseWorkspaceNotGit)
+	}
+}
+
 func TestPreviewWorktreeAcceptsLinkedWorktreeBase(t *testing.T) {
 	ensureGitForTest(t)
 	repoRoot := createGitRepoForTest(t)
@@ -251,6 +289,19 @@ func createGitRepoForTest(t *testing.T) string {
 	return repoRoot
 }
 
+func createManualGitRepoForTest(t *testing.T, branch string) string {
+	t.Helper()
+	repoRoot := filepath.Join(t.TempDir(), "repo")
+	gitDir := filepath.Join(repoRoot, ".git")
+	if err := os.MkdirAll(gitDir, 0o755); err != nil {
+		t.Fatalf("mkdir manual git dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/"+branch+"\n"), 0o644); err != nil {
+		t.Fatalf("write manual HEAD: %v", err)
+	}
+	return repoRoot
+}
+
 func createUnbornGitRepoForTest(t *testing.T) string {
 	t.Helper()
 	repoRoot := filepath.Join(t.TempDir(), "repo")
@@ -288,6 +339,25 @@ func createNonRepoDirForTest(t *testing.T) string {
 	}
 	t.Skip("could not allocate temp dir outside any git repo")
 	return ""
+}
+
+func fakeFailingGitBinForTest(t *testing.T, marker string) string {
+	t.Helper()
+	bin := t.TempDir()
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(bin, "git.bat")
+		body := fmt.Sprintf("@echo off\r\necho invoked>>%q\r\nexit /b 1\r\n", marker)
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+		return bin
+	}
+	path := filepath.Join(bin, "git")
+	body := fmt.Sprintf("#!/bin/sh\nprintf 'invoked\\n' >> %q\nexit 1\n", marker)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	return bin
 }
 
 func disableGitAutoMaintenanceForTest(t *testing.T, repoRoot string) {

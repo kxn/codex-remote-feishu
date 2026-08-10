@@ -67,6 +67,7 @@ func LocateWorkspace(path string) (WorkspaceInfo, error) {
 }
 
 // InspectWorkspace resolves git workspace metadata and optionally reads status.
+// Metadata-only inspection is file-system based and does not invoke git.
 func InspectWorkspace(path string, opts InspectOptions) (WorkspaceInfo, error) {
 	info, err := locateWorkspace(path)
 	if err != nil || !info.InRepo() {
@@ -80,12 +81,14 @@ func InspectWorkspace(path string, opts InspectOptions) (WorkspaceInfo, error) {
 	if commandDir == "" {
 		commandDir = info.RepoRoot
 	}
-	branch, detached, err := inspectBranch(commandDir, info.GitDir, timeout)
+	branch, detached, ok, err := inspectBranchFromHeadFile(info.GitDir)
 	if err != nil {
 		return info, err
 	}
-	info.Branch = branch
-	info.Detached = detached
+	if ok {
+		info.Branch = branch
+		info.Detached = detached
+	}
 	if !opts.IncludeStatus {
 		return info, nil
 	}
@@ -188,24 +191,6 @@ func locateWorkspace(path string) (WorkspaceInfo, error) {
 		current = parent
 	}
 	return info, nil
-}
-
-func inspectBranch(cwd, gitDir string, timeout time.Duration) (string, bool, error) {
-	output, symbolicErr := runGit(cwd, timeout, "symbolic-ref", "--short", "HEAD")
-	if branch := strings.TrimSpace(output); symbolicErr == nil && branch != "" {
-		return branch, false, nil
-	}
-	output, headErr := runGit(cwd, timeout, "rev-parse", "--short", "HEAD")
-	if branch := strings.TrimSpace(output); headErr == nil && branch != "" {
-		return branch, true, nil
-	}
-	if branch, detached, ok, err := inspectBranchFromHeadFile(gitDir); ok {
-		return branch, detached, err
-	}
-	if headErr != nil {
-		return "", false, headErr
-	}
-	return "", false, symbolicErr
 }
 
 func inspectBranchFromHeadFile(gitDir string) (string, bool, bool, error) {

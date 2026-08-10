@@ -81,16 +81,6 @@ func PreviewWorktree(req WorktreeCreateRequest) (WorktreePreviewResult, error) {
 			Message: "base workspace path is required",
 		}
 	}
-	if _, err := exec.LookPath("git"); err != nil {
-		return WorktreePreviewResult{}, &WorktreeCreateError{
-			Code:              WorktreeCreateErrorGitMissing,
-			Message:           "git executable not found",
-			BaseWorkspacePath: baseWorkspacePath,
-			BranchName:        branchName,
-			DirectoryName:     directoryName,
-			Err:               err,
-		}
-	}
 	info, err := InspectWorkspace(baseWorkspacePath, InspectOptions{})
 	if err != nil {
 		return WorktreePreviewResult{}, &WorktreeCreateError{
@@ -110,6 +100,16 @@ func PreviewWorktree(req WorktreeCreateRequest) (WorktreePreviewResult, error) {
 			BaseWorkspacePath: normalizeProbePath(req.BaseWorkspacePath),
 			BranchName:        branchName,
 			DirectoryName:     directoryName,
+		}
+	}
+	if _, err := exec.LookPath("git"); err != nil {
+		return WorktreePreviewResult{}, &WorktreeCreateError{
+			Code:              WorktreeCreateErrorGitMissing,
+			Message:           "git executable not found",
+			BaseWorkspacePath: baseWorkspacePath,
+			BranchName:        branchName,
+			DirectoryName:     directoryName,
+			Err:               err,
 		}
 	}
 	if err := ValidateBranchName(branchName); err != nil {
