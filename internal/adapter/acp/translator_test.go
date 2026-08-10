@@ -359,7 +359,7 @@ func TestAgentAndThoughtChunksMapToExistingTurn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer(thought): %v", err)
 	}
-	assertEventKinds(t, thought.Events, agentproto.EventItemStarted, agentproto.EventItemReasoningSummaryPartAdded)
+	assertEventKinds(t, thought.Events, agentproto.EventItemStarted, agentproto.EventItemDelta)
 	if thought.Events[0].ItemKind != "reasoning_summary" || thought.Events[1].Delta != "think" {
 		t.Fatalf("unexpected thought events: %#v", thought.Events)
 	}

@@ -140,10 +140,14 @@ func TestRunPackagedFirstInstallWritesManagedServiceUnitBeforeEnsureReady(t *tes
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(repoRootEnvVar, t.TempDir())
 			baseDir := t.TempDir()
+			repoRoot := filepath.Join(baseDir, "repo")
+			if err := os.MkdirAll(repoRoot, 0o755); err != nil {
+				t.Fatalf("mkdir repo root: %v", err)
+			}
+			t.Setenv(repoRootEnvVar, repoRoot)
 			sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", tc.binaryName), "package-binary")
-			selection, err := resolveInstallInstanceSelection("", "", baseDir, tc.goos)
+			selection, err := resolveInstallInstanceSelection("", baseDir, "", tc.goos)
 			if err != nil {
 				t.Fatalf("resolve selection: %v", err)
 			}

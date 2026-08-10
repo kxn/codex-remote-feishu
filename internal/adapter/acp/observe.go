@@ -391,7 +391,7 @@ func (t *Translator) observeTextChunk(sessionID string, update map[string]any, k
 	item.Text.WriteString(text)
 	if kind == "reasoning_summary" {
 		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
-			Kind:     agentproto.EventItemReasoningSummaryPartAdded,
+			Kind:     agentproto.EventItemDelta,
 			ThreadID: sessionID,
 			TurnID:   turn.TurnID,
 			ItemID:   item.ItemID,

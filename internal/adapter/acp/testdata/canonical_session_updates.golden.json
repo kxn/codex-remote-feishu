@@ -21,7 +21,7 @@
     },
     "itemId": "opencode-reasoning_summary-msg_thought",
     "itemKind": "reasoning_summary",
-    "kind": "item.reasoning.summary_part_added",
+    "kind": "item.delta",
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"
   },

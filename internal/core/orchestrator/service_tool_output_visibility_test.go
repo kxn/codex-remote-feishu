@@ -33,6 +33,7 @@ func TestDynamicToolCallProgressSuppressFinalTextIgnoresMetadataText(t *testing.
 	}
 
 	rawText := "raw tool result that must stay out of user-visible progress"
+	rawOutput := "raw output payload that must stay out of user-visible progress"
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemCompleted,
 		ThreadID: "thread-1",
@@ -43,17 +44,23 @@ func TestDynamicToolCallProgressSuppressFinalTextIgnoresMetadataText(t *testing.
 		Metadata: map[string]any{
 			"tool":              "custom_tool",
 			"text":              rawText,
+			"rawOutput":         map[string]any{"output": rawOutput},
 			"suppressFinalText": true,
 		},
 	})
 	for _, event := range completed {
-		if event.Block != nil && strings.Contains(event.Block.Text, rawText) {
+		if event.Block != nil && (strings.Contains(event.Block.Text, rawText) || strings.Contains(event.Block.Text, rawOutput)) {
 			t.Fatalf("suppressed dynamic tool text leaked into final block: %#v", completed)
 		}
 		if event.ExecCommandProgress != nil {
 			for _, item := range event.ExecCommandProgress.Timeline {
-				if strings.Contains(item.Summary, rawText) {
+				if strings.Contains(item.Summary, rawText) || strings.Contains(item.Summary, rawOutput) {
 					t.Fatalf("suppressed dynamic tool text leaked into progress summary: %#v", event.ExecCommandProgress)
+				}
+				for _, visibleItem := range item.Items {
+					if strings.Contains(visibleItem, rawText) || strings.Contains(visibleItem, rawOutput) {
+						t.Fatalf("suppressed dynamic tool text leaked into progress item: %#v", event.ExecCommandProgress)
+					}
 				}
 			}
 		}

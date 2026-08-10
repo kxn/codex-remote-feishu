@@ -546,6 +546,20 @@ func compactStructuredJSON(value any) string {
 	if value == nil {
 		return ""
 	}
+	switch typed := value.(type) {
+	case map[string]any:
+		if len(typed) == 0 {
+			return ""
+		}
+	case []any:
+		if len(typed) == 0 {
+			return ""
+		}
+	case []string:
+		if len(typed) == 0 {
+			return ""
+		}
+	}
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return ""

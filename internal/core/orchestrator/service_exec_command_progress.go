@@ -220,6 +220,9 @@ func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event 
 		}
 		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 	}
+	if dynamicToolCallAwaitingExplorationDetails(event) {
+		return nil
+	}
 	entry, groupKey, changed := execprogress.UpsertDynamicToolProgressEntry(progress, event)
 	if !changed {
 		return nil
@@ -245,6 +248,9 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 		}
 		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 	}
+	if dynamicToolCallAwaitingExplorationDetails(event) {
+		return nil
+	}
 	entry, groupKey, changed := execprogress.UpsertDynamicToolProgressEntry(progress, event)
 	if groupKey == "" || !changed {
 		return nil
@@ -252,6 +258,13 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 	progress.ItemID = groupKey
 	execprogress.UpsertEntry(progress, entry)
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
+}
+
+func dynamicToolCallAwaitingExplorationDetails(event agentproto.Event) bool {
+	if strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "semanticKind")), "exploration") {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "tool")), "read")
 }
 
 func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnID, turnStatus, finalText string) []eventcontract.Event {
