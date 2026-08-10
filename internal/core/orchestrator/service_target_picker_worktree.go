@@ -21,20 +21,6 @@ type targetPickerWorktreeState struct {
 	Messages   []control.FeishuTargetPickerMessage
 }
 
-func (s *Service) filterGitWorkspaceSelectionEntries(entries []workspaceSelectionEntry) []workspaceSelectionEntry {
-	if len(entries) == 0 {
-		return nil
-	}
-	filtered := make([]workspaceSelectionEntry, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.gitInfo.InRepo() {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	return filtered
-}
-
 func (s *Service) buildTargetPickerWorktreeState(record *activeTargetPickerRecord) targetPickerWorktreeState {
 	worktreeState := targetPickerWorktreeState{}
 	if record == nil {

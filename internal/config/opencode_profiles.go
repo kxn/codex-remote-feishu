@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -543,11 +542,4 @@ func newOpenCodeProfileID(existing []OpenCodeAPIProfileRecord) (string, error) {
 	return "", fmt.Errorf("generate unique opencode profile id")
 }
 
-func hasUnsafeOpenCodeProfileText(value string) bool {
-	for _, current := range value {
-		if current == '\n' || current == '\r' || unicode.IsControl(current) {
-			return true
-		}
-	}
-	return false
-}
+

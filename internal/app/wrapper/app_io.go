@@ -285,10 +285,6 @@ func writeLoop(ctx context.Context, childStdin io.WriteCloser, writeCh <-chan []
 	}
 }
 
-func writeChildFrame(childStdin io.Writer, line []byte, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
-	return writeChildFrameForRuntime(childStdin, line, nil, debugf, rawLogger, reportProblem)
-}
-
 func writeChildFrameForRuntime(childStdin io.Writer, line []byte, runtime backendRuntime, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) error {
 	if len(line) == 0 {
 		return nil

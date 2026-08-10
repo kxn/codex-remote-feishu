@@ -34,10 +34,6 @@ func (s *Service) targetPickerWorkspaceEntriesForRecord(surface *state.SurfaceCo
 	return s.targetPickerWorkspaceEntriesForMode(surface, mode)
 }
 
-func (s *Service) targetPickerWorkspaceEntries(surface *state.SurfaceConsoleRecord) []workspaceSelectionEntry {
-	return s.targetPickerWorkspaceEntriesForMode(surface, targetPickerWorkspaceEntryModeAttach)
-}
-
 func (s *Service) targetPickerWorkspaceEntriesForMode(surface *state.SurfaceConsoleRecord, mode targetPickerWorkspaceEntryMode) []workspaceSelectionEntry {
 	grouped := map[string][]*state.InstanceRecord{}
 	targetBackend, filterByBackend := s.normalModeThreadBackend(surface)

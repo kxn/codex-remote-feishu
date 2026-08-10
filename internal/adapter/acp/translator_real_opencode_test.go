@@ -870,27 +870,11 @@ func historyContainsItemText(history *agentproto.ThreadHistoryRecord, kind, text
 	return false
 }
 
-func mustFrame(t *testing.T, frame []byte, err error) []byte {
-	t.Helper()
-	if err != nil {
-		t.Fatalf("build frame: %v", err)
-	}
-	return frame
-}
-
 func mustCompactJSON(t *testing.T, value any) string {
 	t.Helper()
 	data, err := json.Marshal(value)
 	if err != nil {
 		t.Fatalf("marshal JSON: %v", err)
-	}
-	return string(data)
-}
-
-func mustCompactJSONForEnv(value any) string {
-	data, err := json.Marshal(value)
-	if err != nil {
-		panic(err)
 	}
 	return string(data)
 }
