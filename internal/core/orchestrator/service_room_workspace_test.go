@@ -256,8 +256,93 @@ func TestRoomWorkspaceFreshPendingBindsRoomWorkspaceForSiblingText(t *testing.T)
 	}
 }
 
-func TestRoomNoWorkspaceTextRejectsWithoutPickerOrPending(t *testing.T) {
+func TestRoomNoWorkspaceTextByCurrentPrimaryOpensPickerAndSavesPending(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-1"
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		MessageID:        "msg-1",
+		Text:             "hi",
+	})
+
+	if noticeCode(events, "room_workspace_required") != "" {
+		t.Fatalf("current primary text should open picker instead of requiring workspace, got %#v", events)
+	}
+	if !hasTargetPicker(events) {
+		t.Fatalf("current primary text without room workspace should open target picker, got %#v", events)
+	}
+	if surface.AttachedInstanceID != "" || surface.ClaimedWorkspaceKey != "" {
+		t.Fatalf("picker handoff must not attach or claim before selection, got %#v", surface)
+	}
+	pending := svc.takePendingTextInput(surface)
+	if pending == nil || pending.Text != "hi" || pending.SourceMessageID != "msg-1" || pending.ActorUserID != "ou_owner" {
+		t.Fatalf("current primary text should be saved for picker replay, got %#v", pending)
+	}
+}
+
+func TestRoomNoWorkspaceTextByCurrentPrimaryReplaysAfterPickerConfirm(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-1"
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		MessageID:        "msg-1",
+		Text:             "hi from primary",
+	}))
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:              control.ActionTargetPickerConfirm,
+		SurfaceSessionID:  "feishu:app-1:chat:oc_room",
+		GatewayID:         "app-1",
+		ChatID:            "oc_room",
+		ActorUserID:       "ou_owner",
+		PickerID:          view.PickerID,
+		WorkspaceKey:      view.SelectedWorkspaceKey,
+		TargetPickerValue: targetPickerNewThreadValue,
+	})
+
+	command := promptSendCommand(events)
+	if command == nil {
+		t.Fatalf("expected picker confirm to replay pending primary text, got %#v", events)
+	}
+	if len(command.Prompt.Inputs) != 1 || command.Prompt.Inputs[0].Text != "hi from primary" {
+		t.Fatalf("replayed prompt inputs = %#v, want original text", command.Prompt.Inputs)
+	}
+	if svc.hasPendingTextInput(surface) {
+		t.Fatalf("pending text should be consumed after successful picker confirm replay, got %#v", surface.PendingTextInput)
+	}
+}
+
+func TestRoomNoWorkspaceTextByNonPrimaryRejectsWithoutPickerOrPending(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+	svc.root.FeishuRoomContexts["feishu:chat:oc_room"].PrimaryGatewayID = "app-2"
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
@@ -270,12 +355,11 @@ func TestRoomNoWorkspaceTextRejectsWithoutPickerOrPending(t *testing.T) {
 	})
 
 	if noticeCode(events, "room_workspace_required") == "" {
-		t.Fatalf("group text without room workspace should require workspace, got %#v", events)
+		t.Fatalf("non-primary group text without room workspace should require workspace, got %#v", events)
 	}
 	if hasTargetPicker(events) {
-		t.Fatalf("group text without room workspace must not open target picker, got %#v", events)
+		t.Fatalf("non-primary group text without room workspace must not open target picker, got %#v", events)
 	}
-	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
 	if surface.AttachedInstanceID != "" || surface.ClaimedWorkspaceKey != "" || svc.hasPendingTextInput(surface) {
 		t.Fatalf("rejected no-workspace text must not attach, claim, or save pending text, got %#v", surface)
 	}
