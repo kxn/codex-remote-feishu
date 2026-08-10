@@ -21,6 +21,7 @@ import type {
 } from "../lib/types";
 import { blankToUndefined, vscodeApplyModeForScenario, vscodeIsReady } from "./shared/helpers";
 import {
+  autoConfigClipboardFailureMessage,
   buildMissingScopesImportJSON,
   describeAutoConfigBlockingReason,
   describeAutoConfigRefreshFeedback,
@@ -359,7 +360,7 @@ export function SetupRoute() {
     if (!navigator.clipboard?.writeText) {
       setNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
+        message: autoConfigClipboardFailureMessage,
       });
       return;
     }
@@ -369,7 +370,7 @@ export function SetupRoute() {
     } catch {
       setNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
+        message: autoConfigClipboardFailureMessage,
       });
     }
   }
@@ -378,7 +379,7 @@ export function SetupRoute() {
     if (!navigator.clipboard?.writeText) {
       setNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+        message: autoConfigClipboardFailureMessage,
       });
       return;
     }
@@ -388,7 +389,7 @@ export function SetupRoute() {
     } catch {
       setNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+        message: autoConfigClipboardFailureMessage,
       });
     }
   }

@@ -17,6 +17,9 @@ export type AutoConfigRequirementRow = {
   impacts: string[];
 };
 
+export const autoConfigClipboardFailureMessage =
+  "复制只有在 HTTPS 或 localhost 下才有效，请手动选择内容然后复制。";
+
 export function describeAutoConfigSummary(status: string): string {
   switch (status) {
     case "clean":

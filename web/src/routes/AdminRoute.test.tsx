@@ -310,14 +310,18 @@ describe("AdminRoute", () => {
     const eventRow = screen.getByText("事件 im.message.receive_v1").closest("li");
     expect(scopeRow).not.toBeNull();
     expect(eventRow).not.toBeNull();
-    expect(within(scopeRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+    const scopeConsoleLink = within(scopeRow!).getByRole("link", { name: "去后台配置" });
+    const eventConsoleLink = within(eventRow!).getByRole("link", { name: "去后台配置" });
+    expect(scopeConsoleLink).toHaveAttribute(
       "href",
       "https://open.feishu.cn/app/cli_permission/auth",
     );
-    expect(within(eventRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+    expect(eventConsoleLink).toHaveAttribute(
       "href",
       "https://open.feishu.cn/app/cli_permission/event?tab=event",
     );
+    expect(scopeConsoleLink.closest(".requirement-name-row")).toBeNull();
+    expect(scopeConsoleLink.closest(".requirement-action")).not.toBeNull();
     expect(screen.getByText(/^最近检查：/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "自动补齐" })).not.toBeInTheDocument();
 
@@ -328,6 +332,63 @@ describe("AdminRoute", () => {
     await user.click(screen.getByRole("button", { name: "复制导入 JSON" }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"im:message.group_msg"'));
     expect(await screen.findByText("导入 JSON 已复制。")).toBeInTheDocument();
+
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: originalClipboard,
+    });
+  });
+
+  it("shows clipboard failures inside the permission check card", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn().mockRejectedValue(new Error("NotAllowedError"));
+    const app = makeApp({
+      id: "bot-permission",
+      name: "权限机器人",
+      appId: "cli_permission",
+      consoleLinks: {
+        auth: "https://open.feishu.cn/app/cli_permission/auth",
+      },
+    });
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    installMockFetch(makeSingleRobotAdminRoutes(app, {
+      "/api/admin/feishu/apps/bot-permission/auto-config/plan": {
+        body: makeAdminAutoConfigPlan(app, {
+          status: "apply_required",
+          summary: "飞书配置还需要补齐。",
+          blockingRequirements: [
+            {
+              kind: "scope",
+              key: "im:message.group_msg",
+              scopeType: "tenant",
+              required: true,
+              present: false,
+            },
+          ],
+        }),
+      },
+    }));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "机器人");
+    await user.click(await screen.findByRole("button", { name: "重新检查配置" }));
+    const permissionSection = screen.getByRole("heading", { name: "权限检查" }).closest("section");
+    expect(permissionSection).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "复制权限 im:message.group_msg" }));
+
+    expect(writeText).toHaveBeenCalledWith("im:message.group_msg");
+    expect(
+      await within(permissionSection!).findByText(
+        "复制只有在 HTTPS 或 localhost 下才有效，请手动选择内容然后复制。",
+      ),
+    ).toBeInTheDocument();
 
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,

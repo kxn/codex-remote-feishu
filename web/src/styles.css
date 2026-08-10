@@ -789,7 +789,7 @@ a:hover {
 
 .requirement-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(180px, 0.8fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(160px, 0.8fr) max-content;
   gap: 16px;
   align-items: start;
   padding: 10px 0;
@@ -813,10 +813,30 @@ a:hover {
   justify-self: start;
 }
 
+.requirement-name-row {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
 .requirement-impact {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
+}
+
+.requirement-action {
+  display: flex;
+  justify-content: flex-end;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.requirement-action .inline-link {
+  white-space: nowrap;
 }
 
 .ordered-checklist li,
@@ -884,6 +904,10 @@ a:hover {
   .requirement-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .requirement-action {
+    justify-content: flex-start;
   }
 }
 

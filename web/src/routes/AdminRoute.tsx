@@ -44,6 +44,7 @@ import {
   useQRCodeOnboardingFlow,
 } from "./shared/feishuFlow";
 import {
+  autoConfigClipboardFailureMessage,
   buildMissingScopesImportJSON,
   describeAutoConfigRefreshFeedback,
   describeAutoConfigSummary,
@@ -109,6 +110,7 @@ export function AdminRoute() {
     {},
   );
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
+  const [autoConfigCopyNotice, setAutoConfigCopyNotice] = useState<DetailNotice | null>(null);
   const [codexProviders, setCodexProviders] = useState<CodexProfileSummary[]>([]);
   const [codexProvidersError, setCodexProvidersError] = useState("");
   const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfileSummary[]>([]);
@@ -438,6 +440,7 @@ export function AdminRoute() {
       return;
     }
     const appID = selectedApp.id;
+    setAutoConfigCopyNotice(null);
     setActionBusy("permission-auto-config-check");
     try {
       const payload = await loadRobotConfigurationPlan(appID);
@@ -695,38 +698,38 @@ export function AdminRoute() {
   ) {
     const content = buildMissingScopesImportJSON(plan);
     if (!content || !navigator.clipboard?.writeText) {
-      setDetailNotice({
+      setAutoConfigCopyNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
+        message: autoConfigClipboardFailureMessage,
       });
       return;
     }
     try {
       await navigator.clipboard.writeText(content);
-      setDetailNotice({ tone: "good", message: "导入 JSON 已复制。" });
+      setAutoConfigCopyNotice({ tone: "good", message: "导入 JSON 已复制。" });
     } catch {
-      setDetailNotice({
+      setAutoConfigCopyNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择导入 JSON。",
+        message: autoConfigClipboardFailureMessage,
       });
     }
   }
 
   async function copyAutoConfigRequirement(row: AutoConfigRequirementRow) {
     if (!navigator.clipboard?.writeText) {
-      setDetailNotice({
+      setAutoConfigCopyNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+        message: autoConfigClipboardFailureMessage,
       });
       return;
     }
     try {
       await navigator.clipboard.writeText(row.copyValue);
-      setDetailNotice({ tone: "good", message: `${row.label} 已复制。` });
+      setAutoConfigCopyNotice({ tone: "good", message: `${row.label} 已复制。` });
     } catch {
-      setDetailNotice({
+      setAutoConfigCopyNotice({
         tone: "warn",
-        message: "当前浏览器不能自动复制，请手动选择要复制的项名。",
+        message: autoConfigClipboardFailureMessage,
       });
     }
   }
@@ -1041,6 +1044,9 @@ export function AdminRoute() {
             <div className={`notice-banner ${autoConfigNoticeTone(autoConfigPlan.status)}`}>
               {autoConfigPlan.summary?.trim() || describeAutoConfigSummary(autoConfigPlan.status)}
             </div>
+            {autoConfigCopyNotice ? (
+              <Toast tone={autoConfigCopyNotice.tone} message={autoConfigCopyNotice.message} />
+            ) : null}
             <AutoConfigRequirementList
               title="必须补齐"
               requirements={autoConfigPlan.blockingRequirements || []}
@@ -1286,6 +1292,7 @@ export function AdminRoute() {
                 type="button"
                 onClick={() => {
                   setDetailNotice(null);
+                  setAutoConfigCopyNotice(null);
                   setSelectedRobotID(app.id);
                 }}
               >
@@ -1301,6 +1308,7 @@ export function AdminRoute() {
               type="button"
               onClick={() => {
                 setDetailNotice(null);
+                setAutoConfigCopyNotice(null);
                 setSelectedRobotID(newRobotID);
               }}
             >

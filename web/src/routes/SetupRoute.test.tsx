@@ -194,18 +194,23 @@ describe("SetupRoute", () => {
     expect(scopeRow).not.toBeNull();
     expect(eventRow).not.toBeNull();
     expect(callbackRow).not.toBeNull();
-    expect(within(scopeRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+    const scopeConsoleLink = within(scopeRow!).getByRole("link", { name: "去后台配置" });
+    const eventConsoleLink = within(eventRow!).getByRole("link", { name: "去后台配置" });
+    const callbackConsoleLink = within(callbackRow!).getByRole("link", { name: "去后台配置" });
+    expect(scopeConsoleLink).toHaveAttribute(
       "href",
       "https://open.feishu.cn/app/cli_missing_items/auth",
     );
-    expect(within(eventRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+    expect(eventConsoleLink).toHaveAttribute(
       "href",
       "https://open.feishu.cn/app/cli_missing_items/event?tab=event",
     );
-    expect(within(callbackRow!).getByRole("link", { name: "打开后台" })).toHaveAttribute(
+    expect(callbackConsoleLink).toHaveAttribute(
       "href",
       "https://open.feishu.cn/app/cli_missing_items/event?tab=callback",
     );
+    expect(scopeConsoleLink.closest(".requirement-name-row")).toBeNull();
+    expect(scopeConsoleLink.closest(".requirement-action")).not.toBeNull();
 
     await user.click(screen.getByRole("button", { name: "复制权限 im:message.group_msg" }));
     expect(writeText).toHaveBeenCalledWith("im:message.group_msg");

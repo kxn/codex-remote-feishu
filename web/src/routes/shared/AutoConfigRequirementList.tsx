@@ -49,20 +49,22 @@ export function AutoConfigRequirementList({
                   >
                     <span aria-hidden="true">⧉</span>
                   </button>
-                  {consoleURL ? (
-                    <a
-                      className="inline-link"
-                      href={consoleURL}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      打开后台
-                    </a>
-                  ) : null}
                 </div>
               </div>
               <div className="requirement-impact">
                 {item.impacts.length > 0 ? item.impacts.join("、") : "基础配置"}
+              </div>
+              <div className="requirement-action">
+                {consoleURL ? (
+                  <a
+                    className="inline-link"
+                    href={consoleURL}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    去后台配置
+                  </a>
+                ) : null}
               </div>
             </li>
           );
