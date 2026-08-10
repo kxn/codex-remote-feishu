@@ -180,7 +180,17 @@ func (s *Service) blockFeishuRoomNoWorkspaceDataPlane(surface *state.SurfaceCons
 	if !feishuRoomActionRequiresWorkspace(action) {
 		return nil
 	}
+	if feishuRoomNoWorkspaceTextCanOpenPicker(surface, room, action) {
+		return nil
+	}
 	return roomWorkspaceRequiredNotice(surface)
+}
+
+func feishuRoomNoWorkspaceTextCanOpenPicker(surface *state.SurfaceConsoleRecord, room *state.FeishuRoomContextRecord, action control.Action) bool {
+	if action.Kind != control.ActionTextMessage {
+		return false
+	}
+	return primaryBotStateForSurface(surface, room) == control.CatalogPrimaryBotStateCurrent
 }
 
 func feishuRoomActionRequiresWorkspace(action control.Action) bool {
