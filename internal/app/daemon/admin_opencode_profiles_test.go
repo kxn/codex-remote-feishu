@@ -97,6 +97,62 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 	}
 }
 
+func TestAdminOpenCodeProfileUpdatePreservesOmittedHiddenFields(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	binaryPath := filepath.Join(home, executableName("codex-remote"))
+	writeExecutableFile(t, binaryPath, "wrapper-binary")
+	app, configPath, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
+
+	createBody := `{"name":"Team OpenCode","baseURL":"https://proxy.example/v1","apiKey":"secret-v1","model":"kimi-k2","smallModel":"kimi-small","reviewModel":"kimi-review","subagentModel":"kimi-subagent","instruction":"be precise","reasoningEffort":"high","projectConfigMode":"disable","dataIsolationMode":"process","permissionMode":"ask"}`
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/opencode/profiles", createBody)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", rec.Code, rec.Body.String())
+	}
+	createETag := rec.Header().Get("ETag")
+	var createPayload struct {
+		Profile adminOpenCodeProfileView `json:"profile"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&createPayload); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	updateBody := `{"name":"Team OpenCode","baseURL":"https://proxy.example/v1","model":"kimi-k2-pro","smallModel":"kimi-small-2","subagentModel":"kimi-subagent-2","instruction":"be exact","reasoningEffort":"medium"}`
+	rec = performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/opencode/profiles/"+createPayload.Profile.ID, updateBody, createETag)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update status = %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	loaded, err := config.LoadAppConfigAtPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadAppConfigAtPath after update: %v", err)
+	}
+	current, ok := config.CurrentOpenCodeAPIProfile(loaded.Config.OpenCode.Profiles[0])
+	if !ok {
+		t.Fatal("CurrentOpenCodeAPIProfile() did not return updated profile")
+	}
+	if current.APIKey != "secret-v1" {
+		t.Fatalf("APIKey = %q, want preserved secret", current.APIKey)
+	}
+	if current.ReviewModel != "kimi-review" {
+		t.Fatalf("ReviewModel = %q, want preserved hidden review model", current.ReviewModel)
+	}
+	if current.ProjectConfigMode != config.OpenCodeProjectConfigDisable {
+		t.Fatalf("ProjectConfigMode = %q, want preserved disable", current.ProjectConfigMode)
+	}
+	if current.DataIsolationMode != config.OpenCodeDataIsolationProcess {
+		t.Fatalf("DataIsolationMode = %q, want preserved process", current.DataIsolationMode)
+	}
+	if current.PermissionMode != "ask" {
+		t.Fatalf("PermissionMode = %q, want preserved ask", current.PermissionMode)
+	}
+	if current.Model != "kimi-k2-pro" || current.SmallModel != "kimi-small-2" ||
+		current.SubagentModel != "kimi-subagent-2" || current.Instruction != "be exact" ||
+		current.ReasoningEffort != "medium" {
+		t.Fatalf("visible fields were not updated: %#v", current)
+	}
+}
+
 func findOpenCodeProfileSummary(profiles []state.OpenCodeProfileSummary, profileID string) (state.OpenCodeProfileSummary, bool) {
 	profileID = state.NormalizeOpenCodeProfileID(profileID)
 	for _, profile := range profiles {

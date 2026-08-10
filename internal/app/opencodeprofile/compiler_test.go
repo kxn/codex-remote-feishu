@@ -130,8 +130,27 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	if configDoc["model"] != "codex_remote_opencode_op_team/kimi-k2" {
 		t.Fatalf("unexpected model projection: %#v", configDoc)
 	}
+	if configDoc["small_model"] != "codex_remote_opencode_op_team/kimi-small" {
+		t.Fatalf("unexpected small model projection: %#v", configDoc)
+	}
+	if _, ok := configDoc["review_model"]; ok {
+		t.Fatalf("OpenCode 1.18.15 has no top-level review_model overlay: %#v", configDoc)
+	}
+	if _, ok := configDoc["subagent_model"]; ok {
+		t.Fatalf("OpenCode 1.18.15 has no top-level subagent_model overlay: %#v", configDoc)
+	}
 	if _, ok := configDoc["permission"]; ok {
 		t.Fatalf("unsupported permission mode must not be written to OpenCode config overlay: %#v", configDoc)
+	}
+	agent, ok := configDoc["agent"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing subagent model agent overrides: %#v", configDoc)
+	}
+	for _, agentName := range []string{"general", "explore"} {
+		entry, ok := agent[agentName].(map[string]any)
+		if !ok || entry["model"] != "codex_remote_opencode_op_team/kimi-subagent" {
+			t.Fatalf("agent.%s model override = %#v in %#v", agentName, agent[agentName], agent)
+		}
 	}
 	provider, ok := configDoc["provider"].(map[string]any)["codex_remote_opencode_op_team"].(map[string]any)
 	if !ok {
@@ -140,6 +159,11 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	models, ok := provider["models"].(map[string]any)
 	if !ok {
 		t.Fatalf("missing provider model metadata: %#v", provider)
+	}
+	for _, modelID := range []string{"kimi-k2", "kimi-small", "kimi-subagent"} {
+		if _, ok := models[modelID].(map[string]any); !ok {
+			t.Fatalf("missing generated metadata for %s: %#v", modelID, models)
+		}
 	}
 	model, ok := models["kimi-k2"].(map[string]any)
 	if !ok || model["name"] != "kimi-k2" || model["tool_call"] != true {

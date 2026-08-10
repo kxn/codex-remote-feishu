@@ -120,7 +120,7 @@ func (a *App) handleOpenCodeProfileUpdate(w http.ResponseWriter, r *http.Request
 		return
 	}
 	a.adminConfigMu.Lock()
-	profile, currentETag, err := a.updateOpenCodeProfileLocked(r.PathValue("id"), r.Header.Get("If-Match"), openCodeAPIProfileInputFromRequest(req))
+	profile, currentETag, err := a.updateOpenCodeProfileLocked(r.PathValue("id"), r.Header.Get("If-Match"), req)
 	a.adminConfigMu.Unlock()
 	if currentETag != "" {
 		w.Header().Set("ETag", currentETag)
@@ -202,7 +202,7 @@ func (a *App) createOpenCodeProfileLocked(input config.OpenCodeAPIProfileInput) 
 	return adminOpenCodeProfileViewFromProfile(config.OpenCodeProfile{OpenCodeAPIProfileSecretConfig: current}), nil
 }
 
-func (a *App) updateOpenCodeProfileLocked(profileID, expectedETag string, input config.OpenCodeAPIProfileInput) (adminOpenCodeProfileView, string, error) {
+func (a *App) updateOpenCodeProfileLocked(profileID, expectedETag string, req opencodeProfileWriteRequest) (adminOpenCodeProfileView, string, error) {
 	profileID = config.NormalizeOpenCodeProfileID(profileID)
 	if profileID == config.OpenCodeDefaultProfileID {
 		return adminOpenCodeProfileView{}, "", fmt.Errorf("opencode_profile_read_only")
@@ -225,6 +225,7 @@ func (a *App) updateOpenCodeProfileLocked(profileID, expectedETag string, input 
 	if expectedETag != currentETag {
 		return currentView, currentETag, profilecontextstate.ErrETagMismatch
 	}
+	input := openCodeAPIProfileUpdateInputFromRequest(current, req)
 	if err := config.ValidateOpenCodeAPIProfileNameUnique(loaded.Config.OpenCode.Profiles, profileID, input.Name); err != nil {
 		return adminOpenCodeProfileView{}, currentETag, err
 	}
@@ -333,6 +334,60 @@ func openCodeAPIProfileInputFromRequest(req opencodeProfileWriteRequest) config.
 		DataIsolationMode: optionalStringValue(req.DataIsolationMode),
 		PermissionMode:    optionalStringValue(req.PermissionMode),
 	}
+}
+
+func openCodeAPIProfileUpdateInputFromRequest(current config.OpenCodeAPIProfileSecretConfig, req opencodeProfileWriteRequest) config.OpenCodeAPIProfileInput {
+	input := config.OpenCodeAPIProfileInput{
+		Name:              current.Name,
+		BaseURL:           current.BaseURL,
+		APIKey:            current.APIKey,
+		Model:             current.Model,
+		SmallModel:        current.SmallModel,
+		ReviewModel:       current.ReviewModel,
+		SubagentModel:     current.SubagentModel,
+		Instruction:       current.Instruction,
+		ReasoningEffort:   current.ReasoningEffort,
+		ProjectConfigMode: current.ProjectConfigMode,
+		DataIsolationMode: current.DataIsolationMode,
+		PermissionMode:    current.PermissionMode,
+	}
+	if req.Name != nil {
+		input.Name = *req.Name
+	}
+	if req.BaseURL != nil {
+		input.BaseURL = *req.BaseURL
+	}
+	if req.APIKey != nil && strings.TrimSpace(*req.APIKey) != "" {
+		input.APIKey = *req.APIKey
+	}
+	if req.Model != nil {
+		input.Model = *req.Model
+	}
+	if req.SmallModel != nil {
+		input.SmallModel = *req.SmallModel
+	}
+	if req.ReviewModel != nil {
+		input.ReviewModel = *req.ReviewModel
+	}
+	if req.SubagentModel != nil {
+		input.SubagentModel = *req.SubagentModel
+	}
+	if req.Instruction != nil {
+		input.Instruction = *req.Instruction
+	}
+	if req.ReasoningEffort != nil {
+		input.ReasoningEffort = *req.ReasoningEffort
+	}
+	if req.ProjectConfigMode != nil {
+		input.ProjectConfigMode = *req.ProjectConfigMode
+	}
+	if req.DataIsolationMode != nil {
+		input.DataIsolationMode = *req.DataIsolationMode
+	}
+	if req.PermissionMode != nil {
+		input.PermissionMode = *req.PermissionMode
+	}
+	return input
 }
 
 func findOpenCodeProfileView(profiles []adminOpenCodeProfileView, profileID string) (adminOpenCodeProfileView, bool) {

@@ -24,6 +24,8 @@ import type {
   ImageStagingStatusResponse,
   LogsStorageCleanupResponse,
   LogsStorageStatusResponse,
+  OpenCodeProfilesResponse,
+  OpenCodeProfileSummary,
   PreviewDriveCleanupResponse,
   PreviewDriveStatusResponse,
   VSCodeDetectResponse,
@@ -52,6 +54,7 @@ import { AutoConfigRequirementList } from "./shared/AutoConfigRequirementList";
 import { runAdminStorageCleanup } from "./shared/adminStorage";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
 import { CodexProviderSection } from "./admin/CodexProviderSection";
+import { OpenCodeProfileSection } from "./admin/OpenCodeProfileSection";
 import { BrandLockup, Toast } from "../components/ui";
 
 type NoticeTone = "good" | "warn" | "danger";
@@ -73,7 +76,7 @@ type NewRobotForm = {
 };
 
 type AdminAreaID = "overview" | "bots" | "backends" | "system";
-type BackendTabID = "claude" | "codex";
+type BackendTabID = "claude" | "codex" | "opencode";
 type OverviewTodoItem = {
   id: string;
   text: string;
@@ -110,6 +113,8 @@ export function AdminRoute() {
   const [codexProvidersError, setCodexProvidersError] = useState("");
   const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfileSummary[]>([]);
   const [claudeProfilesError, setClaudeProfilesError] = useState("");
+  const [openCodeProfiles, setOpenCodeProfiles] = useState<OpenCodeProfileSummary[]>([]);
+  const [openCodeProfilesError, setOpenCodeProfilesError] = useState("");
   const [newRobotForm, setNewRobotForm] = useState<NewRobotForm>({
     name: "",
     appId: "",
@@ -225,6 +230,7 @@ export function AdminRoute() {
       appList,
       codexProvidersResult,
       claudeProfilesResult,
+      openCodeProfilesResult,
       autostartState,
       vscodeState,
       imageResult,
@@ -234,6 +240,7 @@ export function AdminRoute() {
       requestJSON<FeishuAppsResponse>("/api/admin/feishu/apps"),
       safeRequest<CodexProfilesResponse>("/api/admin/codex/profiles"),
       safeRequest<ClaudeProfilesResponse>("/api/admin/claude/profiles"),
+      safeRequest<OpenCodeProfilesResponse>("/api/admin/opencode/profiles"),
       loadAutostartState("/api/admin/autostart/detect"),
       loadVSCodeState("/api/admin/vscode/detect"),
       safeRequest<ImageStagingStatusResponse>("/api/admin/storage/image-staging"),
@@ -272,6 +279,8 @@ export function AdminRoute() {
     setCodexProvidersError(codexProvidersResult.error);
     setClaudeProfiles(claudeProfilesResult.data?.profiles || []);
     setClaudeProfilesError(claudeProfilesResult.error);
+    setOpenCodeProfiles(openCodeProfilesResult.data?.profiles || []);
+    setOpenCodeProfilesError(openCodeProfilesResult.error);
     setAutostart(autostartState.data);
     setAutostartError(autostartState.error);
     setVSCode(vscodeState.data);
@@ -1325,6 +1334,13 @@ export function AdminRoute() {
           >
             Codex
           </button>
+          <button
+            className={backendTab === "opencode" ? "on" : ""}
+            type="button"
+            onClick={() => setBackendTab("opencode")}
+          >
+            OpenCode
+          </button>
         </div>
         {backendTab === "claude" ? (
           <ClaudeProfileSection
@@ -1335,11 +1351,20 @@ export function AdminRoute() {
               await loadAdminPage({ preferredRobotID: selectedRobotID });
             }}
           />
-        ) : (
+        ) : backendTab === "codex" ? (
           <CodexProviderSection
             loadError={codexProvidersError}
             providers={codexProviders}
             setProviders={setCodexProviders}
+            onReload={async () => {
+              await loadAdminPage({ preferredRobotID: selectedRobotID });
+            }}
+          />
+        ) : (
+          <OpenCodeProfileSection
+            loadError={openCodeProfilesError}
+            profiles={openCodeProfiles}
+            setProfiles={setOpenCodeProfiles}
             onReload={async () => {
               await loadAdminPage({ preferredRobotID: selectedRobotID });
             }}

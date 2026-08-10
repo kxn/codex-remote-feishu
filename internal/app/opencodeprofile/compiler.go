@@ -27,13 +27,12 @@ type LaunchMaterial struct {
 }
 
 type configOverlay struct {
-	Provider      map[string]providerOverlay `json:"provider,omitempty"`
-	Model         string                     `json:"model,omitempty"`
-	SmallModel    string                     `json:"small_model,omitempty"`
-	ReviewModel   string                     `json:"review_model,omitempty"`
-	SubagentModel string                     `json:"subagent_model,omitempty"`
-	Instructions  string                     `json:"instructions,omitempty"`
-	Permission    map[string]string          `json:"permission,omitempty"`
+	Provider     map[string]providerOverlay `json:"provider,omitempty"`
+	Model        string                     `json:"model,omitempty"`
+	SmallModel   string                     `json:"small_model,omitempty"`
+	Agent        map[string]agentOverlay    `json:"agent,omitempty"`
+	Instructions string                     `json:"instructions,omitempty"`
+	Permission   map[string]string          `json:"permission,omitempty"`
 }
 
 type providerOverlay struct {
@@ -57,6 +56,10 @@ type modelOverlay struct {
 	Cost        map[string]float64        `json:"cost,omitempty"`
 	Variants    map[string]map[string]any `json:"variants,omitempty"`
 	Options     map[string]any            `json:"options,omitempty"`
+}
+
+type agentOverlay struct {
+	Model string `json:"model,omitempty"`
 }
 
 type authOverlay map[string]authProviderOverlay
@@ -96,39 +99,28 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		return LaunchMaterial{}, fmt.Errorf("%s", status)
 	}
 	providerID := generatedProviderID(profile.ID)
+	models := make(map[string]modelOverlay)
+	addModelOverlay(models, profile.Model, profile.ReasoningEffort)
+	addModelOverlay(models, profile.SmallModel, "")
+	addModelOverlay(models, profile.SubagentModel, "")
 	configRaw, err := json.Marshal(configOverlay{
 		Provider: map[string]providerOverlay{
 			providerID: {
-				Name: "Codex Remote " + profile.Name,
-				ID:   providerID,
-				Env:  []string{},
-				NPM:  "@ai-sdk/openai-compatible",
-				Models: map[string]modelOverlay{
-					strings.TrimSpace(profile.Model): {
-						ID:          strings.TrimSpace(profile.Model),
-						Name:        strings.TrimSpace(profile.Model),
-						Attachment:  false,
-						Reasoning:   strings.TrimSpace(profile.ReasoningEffort) != "",
-						Temperature: false,
-						ToolCall:    true,
-						ReleaseDate: "2025-01-01",
-						Limit:       map[string]int{"context": 100000, "output": 10000},
-						Cost:        map[string]float64{"input": 0, "output": 0},
-						Variants:    openCodeReasoningVariants(profile.ReasoningEffort),
-						Options:     map[string]any{},
-					},
-				},
+				Name:   "Codex Remote " + profile.Name,
+				ID:     providerID,
+				Env:    []string{},
+				NPM:    "@ai-sdk/openai-compatible",
+				Models: models,
 				Options: map[string]any{
 					"baseURL": strings.TrimSpace(profile.BaseURL),
 				},
 			},
 		},
-		Model:         providerID + "/" + strings.TrimSpace(profile.Model),
-		SmallModel:    prefixedModel(providerID, profile.SmallModel),
-		ReviewModel:   prefixedModel(providerID, profile.ReviewModel),
-		SubagentModel: prefixedModel(providerID, profile.SubagentModel),
-		Instructions:  strings.TrimSpace(profile.Instruction),
-		Permission:    openCodePermissionMode(profile.PermissionMode),
+		Model:        providerID + "/" + strings.TrimSpace(profile.Model),
+		SmallModel:   prefixedModel(providerID, profile.SmallModel),
+		Agent:        openCodeAgentModelOverrides(providerID, profile.SubagentModel),
+		Instructions: strings.TrimSpace(profile.Instruction),
+		Permission:   openCodePermissionMode(profile.PermissionMode),
 	})
 	if err != nil {
 		return LaunchMaterial{}, err
@@ -186,12 +178,46 @@ func generatedProviderID(profileID string) string {
 	return "codex_remote_opencode_" + hex.EncodeToString(sum[:8])
 }
 
+func addModelOverlay(models map[string]modelOverlay, model, reasoningEffort string) {
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return
+	}
+	if _, exists := models[model]; exists {
+		return
+	}
+	models[model] = modelOverlay{
+		ID:          model,
+		Name:        model,
+		Attachment:  false,
+		Reasoning:   strings.TrimSpace(reasoningEffort) != "",
+		Temperature: false,
+		ToolCall:    true,
+		ReleaseDate: "2025-01-01",
+		Limit:       map[string]int{"context": 100000, "output": 10000},
+		Cost:        map[string]float64{"input": 0, "output": 0},
+		Variants:    openCodeReasoningVariants(reasoningEffort),
+		Options:     map[string]any{},
+	}
+}
+
 func prefixedModel(providerID, model string) string {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		return ""
 	}
 	return providerID + "/" + model
+}
+
+func openCodeAgentModelOverrides(providerID, subagentModel string) map[string]agentOverlay {
+	model := prefixedModel(providerID, subagentModel)
+	if model == "" {
+		return nil
+	}
+	return map[string]agentOverlay{
+		"general": {Model: model},
+		"explore": {Model: model},
+	}
 }
 
 func openCodePermissionMode(value string) map[string]string {

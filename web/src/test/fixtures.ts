@@ -17,6 +17,7 @@ import type {
   OnboardingWorkflowMachineStep,
   OnboardingWorkflowResponse,
   OnboardingWorkflowStage,
+  OpenCodeProfileSummary,
   PreviewDriveStatusResponse,
   RuntimeRequirementsDetectResponse,
   VSCodeDetectResponse,
@@ -164,6 +165,23 @@ export function makeCodexProfile(
       etag: '"codex-context-preference:codex-native:1"',
       mode: "codex_default",
     },
+    ...overrides,
+  };
+}
+
+export function makeOpenCodeProfile(
+  overrides: Partial<OpenCodeProfileSummary> = {},
+): OpenCodeProfileSummary {
+  return {
+    id: "op_default",
+    revision: 1,
+    etag: '"opencode-profile-definition:op_default:1"',
+    name: "本机默认",
+    hasAPIKey: false,
+    available: true,
+    builtIn: true,
+    persisted: false,
+    readOnly: true,
     ...overrides,
   };
 }

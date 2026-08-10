@@ -205,6 +205,60 @@ export interface CodexProfileWriteRequest {
   reasoningEffort?: string;
 }
 
+export interface OpenCodeProfileSummary {
+  id: string;
+  revision?: number;
+  etag?: string;
+  name?: string;
+  baseURL?: string;
+  apiKey?: string;
+  hasAPIKey: boolean;
+  model?: string;
+  smallModel?: string;
+  reviewModel?: string;
+  subagentModel?: string;
+  instruction?: string;
+  reasoningEffort?: string;
+  projectConfigMode?: string;
+  dataIsolationMode?: string;
+  permissionMode?: string;
+  available: boolean;
+  statusCode?: string;
+  builtIn?: boolean;
+  persisted: boolean;
+  readOnly?: boolean;
+}
+
+export interface OpenCodeProfilesResponse {
+  profiles: OpenCodeProfileSummary[];
+}
+
+export interface OpenCodeProfileResponse {
+  profile: OpenCodeProfileSummary;
+}
+
+export interface OpenCodeProfileReference {
+  kind: string;
+  name?: string;
+  reason?: string;
+}
+
+export interface OpenCodeProfileReferencesResponse {
+  profileID: string;
+  references: OpenCodeProfileReference[];
+}
+
+export interface OpenCodeProfileWriteRequest {
+  name?: string;
+  baseURL?: string;
+  apiKey?: string;
+  model?: string;
+  smallModel?: string;
+  subagentModel?: string;
+  instruction?: string;
+  reasoningEffort?: string;
+}
+
 export interface FeishuAppMutation {
   kind?: string;
   message?: string;

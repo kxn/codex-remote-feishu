@@ -11,6 +11,7 @@ import {
   makeCodexProfile,
   makeImageStagingStatus,
   makeLogsStorageStatus,
+  makeOpenCodeProfile,
   makePreviewDriveStatus,
   makeVSCodeDetect,
 } from "../test/fixtures";
@@ -32,6 +33,16 @@ function withClaudeProfiles(
     },
     "/g/demo/api/admin/claude/profiles": {
       body: { profiles },
+    },
+    "/api/admin/opencode/profiles": {
+      body: {
+        profiles: [makeOpenCodeProfile()],
+      },
+    },
+    "/g/demo/api/admin/opencode/profiles": {
+      body: {
+        profiles: [makeOpenCodeProfile()],
+      },
     },
     ...routes,
   };
@@ -1006,6 +1017,55 @@ describe("AdminRoute", () => {
     const section = heading.closest("section");
     expect(section).not.toBeNull();
     expect(within(section as HTMLElement).getByText("本机默认 · 跟随 Codex")).toBeInTheDocument();
+  });
+
+  it("loads OpenCode profiles and exposes the OpenCode tab", async () => {
+    window.history.replaceState({}, "", "/admin");
+    const user = userEvent.setup();
+    const { calls } = installMockFetch(makeSingleRobotAdminRoutes(
+      makeApp({ id: "bot-1", name: "主机器人", appId: "cli_main" }),
+      {
+        "/api/admin/opencode/profiles": {
+          body: {
+            profiles: [
+              makeOpenCodeProfile(),
+              makeOpenCodeProfile({
+                id: "op_team",
+                revision: 7,
+                etag: '"opencode-profile-definition:op_team:7"',
+                name: "Team OpenCode",
+                baseURL: "https://api.example.com/v1",
+                hasAPIKey: true,
+                model: "kimi-k2",
+                smallModel: "kimi-small",
+                reviewModel: "hidden-review",
+                subagentModel: "kimi-agent",
+                reasoningEffort: "high",
+                projectConfigMode: "disable",
+                dataIsolationMode: "process",
+                permissionMode: "ask",
+                available: true,
+                builtIn: false,
+                persisted: true,
+                readOnly: false,
+              }),
+            ],
+          },
+        },
+      },
+    ));
+
+    render(<AdminRoute />);
+
+    await openAdminArea(user, "对话后端");
+    await user.click(await screen.findByRole("button", { name: "OpenCode" }));
+
+    expect(await screen.findByRole("heading", { name: "OpenCode" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Team OpenCode/ })).toBeInTheDocument();
+    expect(screen.getByText(/模型 kimi-k2/)).toBeInTheDocument();
+    expect(screen.queryByText("hidden-review")).not.toBeInTheDocument();
+    expect(screen.queryByText("projectConfigMode")).not.toBeInTheDocument();
+    expect(calls.some((call) => call.path === "/api/admin/opencode/profiles")).toBe(true);
   });
 
   it("keeps Claude profile editing user-facing and saves by required name", async () => {
