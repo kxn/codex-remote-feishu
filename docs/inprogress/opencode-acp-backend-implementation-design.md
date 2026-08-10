@@ -1,8 +1,8 @@
 # OpenCode ACP Backend 实现设计
 
 > Type: `inprogress`
-> Updated: `2026-08-09`
-> Summary: 同步 #849 daemon integration/e2e 的 OpenCode 真实验证、MCP 接入和首版偏离记录。
+> Updated: `2026-08-10`
+> Summary: 收敛 OpenCode profile 子代理模型设计：放弃 review model，subagentModel 投影到内置 general/explore agent model。
 
 ## 1. 结论
 
@@ -175,8 +175,7 @@ type OpenCodeAPIProfileSecretConfig struct {
     APIKey               string `json:"apiKey"`
     Model                string `json:"model"`
     SmallModel           string `json:"smallModel,omitempty"`
-    ReviewModel          string `json:"reviewModel,omitempty"`
-    SubagentModel        string `json:"subagentModel,omitempty"`
+    SubagentModel        string `json:"subagentModel,omitempty"` // projected as agent.general/explore.model, not top-level subagent_model
     Instruction          string `json:"instruction,omitempty"`
     ReasoningEffort      string `json:"reasoningEffort,omitempty"`
     ProjectConfigMode    string `json:"projectConfigMode,omitempty"`
@@ -197,7 +196,9 @@ API profile：
 
 - ID 建议前缀 `op_`，例如 `op_team_proxy`。
 - 必填：name、baseURL、apiKey、model。
-- 可选：small/review/subagent/instruction/reasoning、project config mode、data isolation mode、permission mode。
+- 可选：small/subagent/instruction/reasoning、project config mode、data isolation mode、permission mode。
+- `subagentModel` 不是 OpenCode 顶层 `subagent_model`。OpenCode v1.18.15 的 Task tool 按 `subagent_type` 精确选择 agent，agent 没有 model 时回退父会话模型；`general.model` 不会成为其它 subagent 的 fallback。因此第一版只把 `subagentModel` 投影为内置 `agent.general.model` 和 `agent.explore.model`，自定义 subagent 继续按用户自己的 OpenCode agent 配置处理。
+- `reviewModel` 不进入第一版 profile schema/WebUI/compiler。OpenCode v1.18.15 没有顶层 `review_model`；内置 `/review` 是 `subtask` command，如需指定 review model 必须覆盖 `command.review.model` 且同时承担内置 review template 版本耦合。
 - 只要 apiKey/baseURL/model 不完整，`Available=false`，启动失败信息要可操作。
 - API profile 不允许 fallback 到系统 OAuth。请求未命中 profile provider 时视为 compiler/runtime 错误。
 
@@ -285,10 +286,12 @@ OpenCode config content 的建议形状由 golden test 固定，不能靠字符�
 - `provider.<generatedProviderID>.options.baseURL`
 - `provider.<generatedProviderID>.models.<model>`：必须写入当前 profile 模型的最小 metadata；`OPENCODE_DISABLE_MODELS_FETCH=1` 下不能只写 provider/model 字符串。
 - `model = "<providerID>/<model>"`
-- `small_model` 或 OpenCode 对应 small model 字段
+- `small_model = "<providerID>/<smallModel>"`，当 profile 配置了轻量模型时写入。
+- `agent.general.model = "<providerID>/<subagentModel>"` 和 `agent.explore.model = "<providerID>/<subagentModel>"`，当 profile 配置了子代理模型时写入；不要写不存在的顶层 `subagent_model`。
 - instructions/agent/mode 相关字段
 - `permission` 只写 OpenCode 原生 map，例如 `{"*":"ask"}` / `allow` / `deny`。产品侧 `plan` 等非 OpenCode 原生 permission intent 不写入 config，避免生成无效配置。
 - `reasoningEffort` 不能写成 top-level `reasoning`，OpenCode 1.18.15 会拒绝该字段；当前只能通过模型 `variants` 做最接近的注入。
+- `review_model` 不写入第一版 config overlay；如后续要支持 review model，需要单独设计 command override，不能复用 profile 顶层模型字段。
 
 具体字段名以 `opencode-ai@1.18.15` 黑盒 fixture 为准。
 
@@ -586,7 +589,7 @@ errors：
 完成标准：
 
 - OpenCode profile CRUD/revision/ETag/reference check。
-- compiler golden 覆盖 config/auth/project/data/permission/MCP。
+- compiler golden 覆盖 config/auth/project/data/permission/MCP、`small_model`、`subagentModel -> agent.general/explore.model`，并断言不生成顶层 `review_model` / `subagent_model`。
 - binary resolver 和 runtime requirements 测试。
 - daemon launch material 不泄漏 secret。
 - API-key overlay 已由 #849 真实 smoke 补证；OAuth 管理保持 out of scope。
