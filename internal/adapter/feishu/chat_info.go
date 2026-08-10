@@ -15,6 +15,27 @@ type ChatInfo struct {
 	ChatMode string
 }
 
+type ChatInfoRequest struct {
+	GatewayID        string
+	SurfaceSessionID string
+	ChatID           string
+}
+
+type ChatInfoReader interface {
+	ReadChatInfo(context.Context, ChatInfoRequest) (ChatInfo, error)
+}
+
+func (g *LiveGateway) ReadChatInfo(ctx context.Context, req ChatInfoRequest) (ChatInfo, error) {
+	if g == nil {
+		return ChatInfo{}, fmt.Errorf("im.v1.chat.get failed: gateway not configured")
+	}
+	gatewayID := normalizeGatewayID(req.GatewayID)
+	if gatewayID != "" && gatewayID != g.config.GatewayID {
+		return ChatInfo{}, fmt.Errorf("im.v1.chat.get failed: gateway mismatch: request=%s gateway=%s", gatewayID, g.config.GatewayID)
+	}
+	return g.GetChatInfo(ctx, req.ChatID)
+}
+
 func (g *LiveGateway) GetChatInfo(ctx context.Context, chatID string) (ChatInfo, error) {
 	if g == nil {
 		return ChatInfo{}, fmt.Errorf("im.v1.chat.get failed: gateway not configured")

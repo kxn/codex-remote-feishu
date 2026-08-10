@@ -58,6 +58,7 @@ type GatewayStatus struct {
 
 type gatewayRuntime interface {
 	Gateway
+	ChatInfoReader
 	IMFileSender
 	IMImageSender
 	IMVideoSender

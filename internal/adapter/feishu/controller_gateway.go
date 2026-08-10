@@ -165,6 +165,25 @@ func (c *MultiGatewayController) SendIMVideo(ctx context.Context, req IMVideoSen
 	return result, nil
 }
 
+func (c *MultiGatewayController) ReadChatInfo(ctx context.Context, req ChatInfoRequest) (ChatInfo, error) {
+	resolution := c.resolveGatewayTarget(eventcontract.TargetRef{
+		GatewayID:        req.GatewayID,
+		SurfaceSessionID: req.SurfaceSessionID,
+		SelectionPolicy:  eventcontract.GatewaySelectionAllowSurfaceDerived,
+		FailurePolicy:    eventcontract.GatewayFailureError,
+	}, gatewayTargetRequireRuntime)
+	if !resolution.ok() {
+		return ChatInfo{}, resolution.errorf("read chat info failed")
+	}
+	req.GatewayID = resolution.GatewayID
+	info, err := resolution.Worker.runtime.ReadChatInfo(ctx, req)
+	if err != nil {
+		c.updateWorkerError(resolution.GatewayID, err)
+		return ChatInfo{}, err
+	}
+	return info, nil
+}
+
 func (c *MultiGatewayController) ReadDriveFileComments(ctx context.Context, req DriveFileCommentReadRequest) (DriveFileCommentReadResult, error) {
 	result := DriveFileCommentReadResult{
 		GatewayID: strings.TrimSpace(req.GatewayID),

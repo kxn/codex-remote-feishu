@@ -351,6 +351,61 @@ func TestMultiGatewayControllerRoutesDriveCommentReadByGatewayID(t *testing.T) {
 	}
 }
 
+func TestMultiGatewayControllerRoutesChatInfoReadByGatewayID(t *testing.T) {
+	controller := NewMultiGatewayController()
+	runtimes := newFakeGatewayRuntimeRegistry()
+	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
+		runtime := newFakeGatewayRuntime(cfg.GatewayID)
+		runtimes.set(cfg.GatewayID, runtime)
+		return runtime
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	for _, gatewayID := range []string{"app-1", "app-2"} {
+		if err := controller.UpsertApp(ctx, GatewayAppConfig{
+			GatewayID: gatewayID,
+			AppID:     "cli_" + gatewayID,
+			AppSecret: "secret_" + gatewayID,
+			Enabled:   true,
+		}); err != nil {
+			t.Fatalf("UpsertApp(%s): %v", gatewayID, err)
+		}
+	}
+	go func() {
+		_ = controller.Start(ctx, func(context.Context, control.Action) *ActionResult { return nil })
+	}()
+	app1 := runtimes.wait(t, "app-1")
+	app2 := runtimes.wait(t, "app-2")
+	waitFakeGatewayStarted(t, app1)
+	waitFakeGatewayStarted(t, app2)
+
+	info, err := controller.ReadChatInfo(context.Background(), ChatInfoRequest{
+		GatewayID:        "app-2",
+		SurfaceSessionID: "feishu:app-2:chat:oc_2",
+		ChatID:           "oc_2",
+	})
+	if err != nil {
+		t.Fatalf("ReadChatInfo: %v", err)
+	}
+	app1Calls := app1.readChatInfoCallsSnapshot()
+	if len(app1Calls) != 0 {
+		t.Fatalf("unexpected app-1 chat info calls: %#v", app1Calls)
+	}
+	app2Calls := app2.readChatInfoCallsSnapshot()
+	if len(app2Calls) != 1 {
+		t.Fatalf("unexpected app-2 chat info calls: %#v", app2Calls)
+	}
+	got := app2Calls[0]
+	if got.GatewayID != "app-2" || got.SurfaceSessionID != "feishu:app-2:chat:oc_2" || got.ChatID != "oc_2" {
+		t.Fatalf("unexpected chat info request: %#v", got)
+	}
+	if info.BotCount != 1 || info.ChatMode != "group" {
+		t.Fatalf("unexpected chat info: %#v", info)
+	}
+}
+
 func TestMultiGatewayControllerUpsertRestartsWorker(t *testing.T) {
 	controller := NewMultiGatewayController()
 	var (
@@ -558,19 +613,21 @@ type fakeGatewayRuntime struct {
 	startedCh chan struct{}
 	stoppedCh chan struct{}
 
-	mu               sync.Mutex
-	stateHook        func(GatewayState, error)
-	actionHandler    ActionHandler
-	applyCalls       [][]Operation
-	applyFn          func(context.Context, []Operation) error
-	sendIMFileCalls  []IMFileSendRequest
-	sendIMFileFn     func(context.Context, IMFileSendRequest) (IMFileSendResult, error)
-	sendIMImageCalls []IMImageSendRequest
-	sendIMImageFn    func(context.Context, IMImageSendRequest) (IMImageSendResult, error)
-	sendIMVideoCalls []IMVideoSendRequest
-	sendIMVideoFn    func(context.Context, IMVideoSendRequest) (IMVideoSendResult, error)
-	readCommentCalls []DriveFileCommentReadRequest
-	readCommentFn    func(context.Context, DriveFileCommentReadRequest) (DriveFileCommentReadResult, error)
+	mu                sync.Mutex
+	stateHook         func(GatewayState, error)
+	actionHandler     ActionHandler
+	applyCalls        [][]Operation
+	applyFn           func(context.Context, []Operation) error
+	sendIMFileCalls   []IMFileSendRequest
+	sendIMFileFn      func(context.Context, IMFileSendRequest) (IMFileSendResult, error)
+	sendIMImageCalls  []IMImageSendRequest
+	sendIMImageFn     func(context.Context, IMImageSendRequest) (IMImageSendResult, error)
+	sendIMVideoCalls  []IMVideoSendRequest
+	sendIMVideoFn     func(context.Context, IMVideoSendRequest) (IMVideoSendResult, error)
+	readChatInfoCalls []ChatInfoRequest
+	readChatInfoFn    func(context.Context, ChatInfoRequest) (ChatInfo, error)
+	readCommentCalls  []DriveFileCommentReadRequest
+	readCommentFn     func(context.Context, DriveFileCommentReadRequest) (DriveFileCommentReadResult, error)
 }
 
 type fakeGatewayRuntimeRegistry struct {
@@ -758,6 +815,27 @@ func (f *fakeGatewayRuntime) sendIMVideoCallsSnapshot() []IMVideoSendRequest {
 	defer f.mu.Unlock()
 
 	return append([]IMVideoSendRequest(nil), f.sendIMVideoCalls...)
+}
+
+func (f *fakeGatewayRuntime) ReadChatInfo(ctx context.Context, req ChatInfoRequest) (ChatInfo, error) {
+	f.mu.Lock()
+	f.readChatInfoCalls = append(f.readChatInfoCalls, req)
+	fn := f.readChatInfoFn
+	f.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, req)
+	}
+	return ChatInfo{
+		BotCount: 1,
+		ChatMode: "group",
+	}, nil
+}
+
+func (f *fakeGatewayRuntime) readChatInfoCallsSnapshot() []ChatInfoRequest {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return append([]ChatInfoRequest(nil), f.readChatInfoCalls...)
 }
 
 func (f *fakeGatewayRuntime) ReadDriveFileComments(ctx context.Context, req DriveFileCommentReadRequest) (DriveFileCommentReadResult, error) {

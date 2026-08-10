@@ -17,17 +17,19 @@ import (
 
 type primaryBootstrapGateway struct {
 	recordingGateway
-	chatInfo      feishu.ChatInfo
-	chatInfoErr   error
-	chatInfoCalls int
-	mu            sync.Mutex
-	chatInfoGate  <-chan struct{}
-	chatInfoSeen  chan<- struct{}
+	chatInfo         feishu.ChatInfo
+	chatInfoErr      error
+	chatInfoCalls    int
+	chatInfoRequests []feishu.ChatInfoRequest
+	mu               sync.Mutex
+	chatInfoGate     <-chan struct{}
+	chatInfoSeen     chan<- struct{}
 }
 
-func (g *primaryBootstrapGateway) GetChatInfo(_ context.Context, chatID string) (feishu.ChatInfo, error) {
+func (g *primaryBootstrapGateway) ReadChatInfo(_ context.Context, req feishu.ChatInfoRequest) (feishu.ChatInfo, error) {
 	g.mu.Lock()
 	g.chatInfoCalls++
+	g.chatInfoRequests = append(g.chatInfoRequests, req)
 	if g.chatInfoSeen != nil {
 		select {
 		case g.chatInfoSeen <- struct{}{}:
@@ -38,7 +40,7 @@ func (g *primaryBootstrapGateway) GetChatInfo(_ context.Context, chatID string) 
 	if g.chatInfoGate != nil {
 		<-g.chatInfoGate
 	}
-	if chatID != "oc_room" {
+	if req.ChatID != "oc_room" {
 		return feishu.ChatInfo{}, nil
 	}
 	return g.chatInfo, g.chatInfoErr
@@ -63,6 +65,9 @@ func TestFeishuBotAddedAutoPrimarySetsEmptyRoomWhenOnlyBot(t *testing.T) {
 	}
 	if gateway.chatInfoCalls != 1 {
 		t.Fatalf("chat info calls = %d, want 1", gateway.chatInfoCalls)
+	}
+	if len(gateway.chatInfoRequests) != 1 || gateway.chatInfoRequests[0].GatewayID != "app-1" || gateway.chatInfoRequests[0].ChatID != "oc_room" {
+		t.Fatalf("chat info requests = %#v, want gateway-scoped oc_room read", gateway.chatInfoRequests)
 	}
 	if len(gateway.operations) != 1 || gateway.operations[0].Kind != feishu.OperationSendText {
 		t.Fatalf("operations = %#v, want one text notice", gateway.operations)

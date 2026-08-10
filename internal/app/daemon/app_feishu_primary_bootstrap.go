@@ -17,10 +17,6 @@ const (
 	feishuPrimaryBootstrapScopeText   = "当前机器人已进群，但还不能自动设置为本群主机器人：请在飞书开放平台开通“获取群组信息”权限，并确认已订阅机器人进群事件后再发布应用。"
 )
 
-type feishuChatInfoReader interface {
-	GetChatInfo(context.Context, string) (feishu.ChatInfo, error)
-}
-
 func (a *App) handleFeishuBotAddedToGroup(ctx context.Context, action control.Action) *feishu.ActionResult {
 	action.GatewayID = canonicalGatewayID(action.GatewayID)
 	action.ChatID = strings.TrimSpace(action.ChatID)
@@ -35,12 +31,16 @@ func (a *App) handleFeishuBotAddedToGroup(ctx context.Context, action control.Ac
 		return nil
 	}
 
-	reader, ok := a.gateway.(feishuChatInfoReader)
+	reader, ok := a.gateway.(feishu.ChatInfoReader)
 	if !ok {
-		log.Printf("feishu bot-added primary bootstrap skipped: gateway does not expose chat info reader")
+		log.Printf("feishu bot-added primary bootstrap skipped: gateway=%s chat=%s reason=gateway_does_not_expose_chat_info_reader", action.GatewayID, action.ChatID)
 		return nil
 	}
-	info, err := reader.GetChatInfo(ctx, action.ChatID)
+	info, err := reader.ReadChatInfo(ctx, feishu.ChatInfoRequest{
+		GatewayID:        action.GatewayID,
+		SurfaceSessionID: action.SurfaceSessionID,
+		ChatID:           action.ChatID,
+	})
 	if err != nil {
 		if a.observeFeishuPermissionError(action.GatewayID, err) {
 			a.deliverFeishuBotAddedText(ctx, action, feishuPrimaryBootstrapScopeText)
