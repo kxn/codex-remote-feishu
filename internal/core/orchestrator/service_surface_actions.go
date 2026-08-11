@@ -59,7 +59,7 @@ func (s *Service) prepareNewThreadWithOverlayCleanup(surface *state.SurfaceConso
 		clearIdleReviewSession(surface)
 		clearAutoContinueRuntime(surface)
 		events = append(events, s.discardDrafts(surface)...)
-		surface.PreparedAt = s.now()
+		s.refreshPreparedNewThreadRouteCore(surface)
 		if discarded == 0 {
 			return append(events, notice(surface, "already_new_thread_ready", "当前已经在新建会话待命状态。下一条文本会创建新会话。")...)
 		}
@@ -90,7 +90,6 @@ func (s *Service) prepareNewThreadWithOverlayCleanup(surface *state.SurfaceConso
 	}) {
 		return append(events, notice(surface, "new_thread_cwd_missing", "当前无法获取新会话的工作目录，请先重新 /use 一个有工作目录的会话。")...)
 	}
-	surface.PreparedAt = s.now()
 	events = append(events, s.cleanupContextBoundSurfaceOverlays(surface, "当前工作目标已变化", cleanup)...)
 	events = append(events, s.discardStagedInputsForRouteChange(surface, prevThreadID, prevRouteMode, "", state.RouteModeNewThreadReady)...)
 	events = append(events, s.threadSelectionEvents(surface, "", string(state.RouteModeNewThreadReady), preparedNewThreadSelectionTitle())...)
@@ -163,7 +162,6 @@ func (s *Service) maybePrepareImplicitNewThreadFromUnbound(surface *state.Surfac
 		}) {
 			return notice(surface, "new_thread_cwd_missing", "当前工作区缺少可继承的工作目录，暂时无法新建会话。请先 /list 切换工作区，或稍后重试。")
 		}
-		surface.PreparedAt = s.now()
 		return nil
 	}
 	cwd, threadID, ok := s.prepareNewThreadBase(surface, inst)
@@ -181,7 +179,6 @@ func (s *Service) maybePrepareImplicitNewThreadFromUnbound(surface *state.Surfac
 	}) {
 		return notice(surface, "new_thread_cwd_missing", "当前工作区缺少可继承的工作目录，暂时无法新建会话。请先 /list 切换工作区，或稍后重试。")
 	}
-	surface.PreparedAt = s.now()
 	return nil
 }
 

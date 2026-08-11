@@ -88,7 +88,7 @@ func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *
 		})...)
 		clearAutoContinueRuntime(surface)
 		clearSurfaceRequests(surface)
-		s.clearPreparedNewThread(surface)
+		s.clearPreparedNewThreadRouteCore(surface)
 	}
 	surface.PromptOverride = state.ModelConfigRecord{}
 	s.consumeSurfacePendingHeadlessLaunch(surface, "")

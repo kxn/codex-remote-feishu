@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-11`
-> Summary: 同步 headless 收到旧 `attach_instance` 卡片回调时 fail closed 的状态机边界，并保留既有群主机器人无群 workspace 文本打开 target picker 并保留 pending 输入的例外、OpenCode headless backend mode/profile/restart/command 状态机合同、workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、群聊 room workspace data-plane gate / room-level detach、queued->dispatching 用户可见回复提示、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
+> Summary: 同步 route core 对 `PreparedThread*` / `PreparedAt` 写入和 cleanup API 的唯一 owner 边界、headless 收到旧 `attach_instance` 卡片回调时 fail closed 的状态机边界，并保留既有群主机器人无群 workspace 文本打开 target picker 并保留 pending 输入的例外、OpenCode headless backend mode/profile/restart/command 状态机合同、workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、群聊 room workspace data-plane gate / room-level detach、queued->dispatching 用户可见回复提示、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`（含 hidden alias `/codexprovider`）、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -328,9 +328,10 @@ surface 不是单一枚举，而是五层正交状态叠加。
 补充说明：
 
 1. 从 2026-05-03 起，`R1~R5` 的 live mutation 已收口到同一个 route-core transition seam：
-   1. `AttachedInstanceID`、`SelectedThreadID`、`RouteMode`、`PreparedThread*` 不再允许由 attach/use/follow/new/detach/kick/thread-lost 各自平行直写。
+   1. `AttachedInstanceID`、`SelectedThreadID`、`RouteMode`、`PreparedThread*` 与 `PreparedAt` 不再允许由 attach/use/follow/new/detach/kick/thread-lost 各自平行直写；进入或刷新 `R5 NewThreadReady`、清理 prepared route 都必须走 route-core-owned API。
    2. 真正发生 attachment 变更时，会在同一处重做 workspace / instance / thread claim 对齐。
    3. 仅在同一 attachment 内切换 route 时，不再重复改写 instance claim；这类 transition 只重排 thread claim 与 route 主字段，避免把历史兼容态或 kick-thread 迁移路径卡死在“instance claim 必须先转移”的半状态。
+   4. detached recovery / reattach cleanup 若需要丢弃 `PreparedThread*`，会通过 route core 归一到 `R0 Detached` + workspace continuation memory，而不是只清 prepared 字段后留下 `RouteMode=new_thread_ready` 的半状态。
 2. detached 态当前仍允许保留一个“记住当前 workspace”的弱 carrier：`AttachedInstanceID == ""` 时 `ClaimedWorkspaceKey` 可以仅作为 continuation intent 存在，但它不等价于 active workspace claim。
 3. `R0 Detached` 现在允许存在一种 daemon materialize 出来的 latent surface：
    1. surface 有 `gateway/chat/user` 路由信息。

@@ -66,7 +66,6 @@ func (s *Service) maybeStartNewThreadForCodexModelGroupSwitch(surface *state.Sur
 	}) {
 		return adjustment
 	}
-	surface.PreparedAt = s.now()
 	dispatchPlan.ExecutionMode = agentproto.PromptExecutionModeStartNew
 	dispatchPlan.ExecutionThreadID = ""
 	dispatchPlan.SourceThreadID = ""

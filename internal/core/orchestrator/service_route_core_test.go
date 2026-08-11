@@ -87,6 +87,100 @@ func TestTransitionSurfaceRouteCoreMaintainsClaimsAcrossStates(t *testing.T) {
 	}
 }
 
+func TestTransitionSurfaceRouteCoreOwnsPreparedAt(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 2, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	inst := svc.root.Instances["inst-1"]
+
+	if !svc.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID:   "inst-1",
+		WorkspaceKey:         "/data/dl/droid",
+		RouteMode:            state.RouteModeNewThreadReady,
+		PreparedThreadCWD:    "/data/dl/droid",
+		PreparedFromThreadID: "thread-1",
+	}) {
+		t.Fatal("expected new-thread-ready route transition to succeed")
+	}
+
+	if !surface.PreparedAt.Equal(now) {
+		t.Fatalf("expected route core to stamp prepared route at %s, got %s", now, surface.PreparedAt)
+	}
+}
+
+func TestDetachedExecutionReattachCleanupClearsPreparedRouteThroughRouteCore(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 3, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.ClaimedWorkspaceKey = "/data/dl/droid"
+	surface.RouteMode = state.RouteModeNewThreadReady
+	surface.PreparedThreadCWD = "/data/dl/droid"
+	surface.PreparedFromThreadID = "thread-1"
+	surface.PreparedAt = now.Add(-time.Minute)
+
+	svc.prepareSurfaceForExecutionReattachWithOverlayCleanup(surface, surfaceOverlayRouteCleanupOptions{})
+
+	if surface.RouteMode != state.RouteModeUnbound || surface.PreparedThreadCWD != "" || surface.PreparedFromThreadID != "" || !surface.PreparedAt.IsZero() {
+		t.Fatalf("expected detached cleanup to leave a valid unbound route, got %#v", surface)
+	}
+	if surface.ClaimedWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("expected detached cleanup to preserve workspace memory, got %q", surface.ClaimedWorkspaceKey)
+	}
+}
+
+func TestRouteCorePreparedRouteCleanupPreservesAttachedUnboundClaims(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 4, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "droid",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	inst := svc.root.Instances["inst-1"]
+	if !svc.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+		AttachedInstanceID:   "inst-1",
+		WorkspaceKey:         "/data/dl/droid",
+		RouteMode:            state.RouteModeNewThreadReady,
+		PreparedThreadCWD:    "/data/dl/droid",
+		PreparedFromThreadID: "thread-1",
+	}) {
+		t.Fatal("expected new-thread-ready route transition to succeed")
+	}
+
+	if !svc.clearPreparedNewThreadRouteCore(surface) {
+		t.Fatal("expected route core prepared-route cleanup to succeed")
+	}
+
+	if surface.AttachedInstanceID != "inst-1" || surface.RouteMode != state.RouteModeUnbound || surface.SelectedThreadID != "" {
+		t.Fatalf("expected attached-unbound route after cleanup, got %#v", surface)
+	}
+	if surface.PreparedThreadCWD != "" || surface.PreparedFromThreadID != "" || !surface.PreparedAt.IsZero() {
+		t.Fatalf("expected prepared route carriers to be cleared, got %#v", surface)
+	}
+	if claim := svc.instanceClaims["inst-1"]; claim == nil || claim.SurfaceSessionID != "surface-1" {
+		t.Fatalf("expected instance claim to remain with attached cleanup, got %#v", claim)
+	}
+	if claim := svc.workspaceClaims["/data/dl/droid"]; claim == nil || claim.SurfaceSessionID != "surface-1" {
+		t.Fatalf("expected workspace claim to remain with attached cleanup, got %#v", claim)
+	}
+}
+
 func TestTransitionSurfaceRouteCoreRejectsConflictingAttachWithoutMutation(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

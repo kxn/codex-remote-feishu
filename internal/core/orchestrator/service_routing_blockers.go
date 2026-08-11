@@ -2,7 +2,6 @@ package orchestrator
 
 import (
 	"strings"
-	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -198,15 +197,6 @@ func (s *Service) preparedNewThreadQueuedItem(surface *state.SurfaceConsoleRecor
 
 func (s *Service) preparedNewThreadHasPendingCreate(surface *state.SurfaceConsoleRecord) bool {
 	return s.preparedNewThreadActiveItem(surface) != nil || s.preparedNewThreadQueuedItem(surface) != nil
-}
-
-func (s *Service) clearPreparedNewThread(surface *state.SurfaceConsoleRecord) {
-	if surface == nil {
-		return
-	}
-	surface.PreparedThreadCWD = ""
-	surface.PreparedFromThreadID = ""
-	surface.PreparedAt = time.Time{}
 }
 
 func (s *Service) unboundInputBlocked(surface *state.SurfaceConsoleRecord) []eventcontract.Event {

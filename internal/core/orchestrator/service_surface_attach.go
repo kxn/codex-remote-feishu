@@ -435,7 +435,6 @@ func (s *Service) attachHeadlessWorkspaceRouteRestart(surface *state.SurfaceCons
 	if !pending.PrepareNewThread {
 		return notice(surface, "workspace_route_restarted", "当前工作区已重新准备完成。")
 	}
-	surface.PreparedAt = s.now()
 	events := s.threadSelectionEvents(surface, "", string(state.RouteModeNewThreadReady), preparedNewThreadSelectionTitle())
 	return append(events, notice(surface, "new_thread_ready", "当前工作区已重新准备完成。下一条文本会创建新会话。")...)
 }
