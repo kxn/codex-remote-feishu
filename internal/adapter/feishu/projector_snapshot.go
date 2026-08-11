@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -17,7 +18,7 @@ const (
 )
 
 func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []map[string]any {
-	return appendCardTextSections(nil, snapshotSections(snapshot, daemonBinary, currentDirectory, worktree))
+	return cardkit.AppendTextSections(nil, snapshotSections(snapshot, daemonBinary, currentDirectory, worktree))
 }
 
 func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []control.FeishuCardTextSection {

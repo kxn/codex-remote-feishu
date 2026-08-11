@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
 	larkcallback "github.com/larksuite/oapi-sdk-go/v3/event/dispatcher/callback"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -87,7 +88,7 @@ func RenderInteractiveCardPayload(title, body, themeKey string, elements []map[s
 		if len(element) == 0 {
 			continue
 		}
-		renderedElements = append(renderedElements, cloneCardMap(element))
+		renderedElements = append(renderedElements, cardkit.CloneMap(element))
 	}
 	config := map[string]any{
 		"width_mode":     "fill",
@@ -119,36 +120,4 @@ func jsonSize(value any) (int, error) {
 		return 0, err
 	}
 	return len(data), nil
-}
-
-func cloneCardMap(value map[string]any) map[string]any {
-	if len(value) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(value))
-	for key, raw := range value {
-		out[key] = cloneCardAny(raw)
-	}
-	return out
-}
-
-func cloneCardAny(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneCardMap(typed)
-	case []map[string]any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardMap(item))
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardAny(item))
-		}
-		return out
-	default:
-		return typed
-	}
 }

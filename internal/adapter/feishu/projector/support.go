@@ -3,20 +3,13 @@ package projector
 import (
 	"strings"
 
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 )
 
 const (
 	cardThemeInfo  = "info"
 	cardThemeError = "error"
 )
-
-func cardPlainText(content string) map[string]any {
-	return map[string]any{
-		"tag":     "plain_text",
-		"content": strings.TrimSpace(content),
-	}
-}
 
 func cardCallbackButtonElement(label, buttonType string, value map[string]any, disabled bool, width string) map[string]any {
 	label = strings.TrimSpace(label)
@@ -30,7 +23,7 @@ func cardCallbackButtonElement(label, buttonType string, value map[string]any, d
 	button := map[string]any{
 		"tag":      "button",
 		"type":     buttonType,
-		"text":     cardPlainText(label),
+		"text":     cardkit.PlainText(label),
 		"disabled": disabled,
 	}
 	if strings.TrimSpace(width) != "" {
@@ -39,7 +32,7 @@ func cardCallbackButtonElement(label, buttonType string, value map[string]any, d
 	if len(value) != 0 {
 		button["behaviors"] = []map[string]any{{
 			"type":  "callback",
-			"value": cloneCardMap(value),
+			"value": cardkit.CloneMap(value),
 		}}
 	}
 	return button
@@ -81,38 +74,6 @@ func cardFormActionButtonElement(label, buttonType string, value map[string]any,
 	return button
 }
 
-func cardButtonGroupElement(buttons []map[string]any) map[string]any {
-	filtered := make([]map[string]any, 0, len(buttons))
-	for _, button := range buttons {
-		if len(button) == 0 {
-			continue
-		}
-		filtered = append(filtered, cloneCardMap(button))
-	}
-	switch len(filtered) {
-	case 0:
-		return nil
-	case 1:
-		return filtered[0]
-	default:
-		columns := make([]map[string]any, 0, len(filtered))
-		for _, button := range filtered {
-			columns = append(columns, map[string]any{
-				"tag":            "column",
-				"width":          "auto",
-				"vertical_align": "top",
-				"elements":       []map[string]any{button},
-			})
-		}
-		return map[string]any{
-			"tag":                "column_set",
-			"flex_mode":          "flow",
-			"horizontal_spacing": "small",
-			"columns":            columns,
-		}
-	}
-}
-
 func cardDividerElement() map[string]any {
 	return map[string]any{
 		"tag": "hr",
@@ -120,7 +81,7 @@ func cardDividerElement() map[string]any {
 }
 
 func appendCardFooterButtonGroup(elements []map[string]any, buttons []map[string]any) []map[string]any {
-	group := cardButtonGroupElement(buttons)
+	group := cardkit.ButtonGroupElement(buttons)
 	if len(group) == 0 {
 		return elements
 	}
@@ -129,74 +90,4 @@ func appendCardFooterButtonGroup(elements []map[string]any, buttons []map[string
 	}
 	elements = append(elements, group)
 	return elements
-}
-
-func cardPlainTextBlockElement(content string) map[string]any {
-	content = strings.TrimSpace(content)
-	if content == "" {
-		return nil
-	}
-	return map[string]any{
-		"tag": "div",
-		"text": map[string]any{
-			"tag":     "plain_text",
-			"content": content,
-		},
-	}
-}
-
-func appendCardTextSections(elements []map[string]any, sections []control.FeishuCardTextSection) []map[string]any {
-	for _, section := range sections {
-		normalized := section.Normalized()
-		if normalized.Label == "" && len(normalized.Lines) == 0 {
-			continue
-		}
-		if normalized.Label != "" {
-			elements = append(elements, map[string]any{
-				"tag":     "markdown",
-				"content": "**" + normalized.Label + "**",
-			})
-		}
-		if block := cardPlainTextBlockElement(strings.Join(normalized.Lines, "\n")); len(block) != 0 {
-			elements = append(elements, block)
-		}
-	}
-	return elements
-}
-
-func cloneCardMap(value map[string]any) map[string]any {
-	if len(value) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(value))
-	for key, raw := range value {
-		out[key] = cloneCardAny(raw)
-	}
-	return out
-}
-
-func cloneCardAny(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneCardMap(typed)
-	case []map[string]any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardMap(item))
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardAny(item))
-		}
-		return out
-	default:
-		return typed
-	}
-}
-
-func cardStringValue(raw any) string {
-	value, _ := raw.(string)
-	return value
 }

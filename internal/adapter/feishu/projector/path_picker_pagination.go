@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
@@ -60,7 +61,7 @@ func pathPickerDirectoryLane(view control.FeishuPathPickerView) paginatedSelectF
 	fixedOptions := []map[string]any{currentDirectoryPathPickerOption(view.CurrentPath)}
 	if view.CanGoUp {
 		fixedOptions = append(fixedOptions, map[string]any{
-			"text":  cardPlainText(".."),
+			"text":  cardkit.PlainText(".."),
 			"value": "..",
 		})
 	}
@@ -211,7 +212,7 @@ func pathPickerFileModeElementsWithPages(
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return appendCardFooterButtonGroup(elements, pathPickerDefaultFooterButtons(view, daemonLifecycleID))
 }
@@ -253,7 +254,7 @@ func pathPickerDirectoryModeElementsWithPage(
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return appendCardFooterButtonGroup(elements, pathPickerDefaultFooterButtons(view, daemonLifecycleID))
 }
@@ -276,7 +277,7 @@ func pathPickerOwnerSubpageDirectoryModeElementsWithPage(
 			"tag":     "markdown",
 			"content": "**当前位置**",
 		})
-		if block := cardPlainTextBlockElement(current); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(current); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
@@ -291,13 +292,13 @@ func pathPickerOwnerSubpageDirectoryModeElementsWithPage(
 		})
 	}
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
-		if block := cardPlainTextBlockElement(hint); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(hint); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return appendCardFooterButtonGroup(elements, pathPickerOwnerSubpageFooterButtons(view, daemonLifecycleID))
 }

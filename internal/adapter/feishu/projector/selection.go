@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -24,18 +25,18 @@ func selectionPromptElements(prompt selectionRenderModel, daemonLifecycleID stri
 	}
 	elements := make([]map[string]any, 0, len(prompt.Options)*2+1)
 	for _, option := range prompt.Options {
-		button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)})
+		button := cardkit.ButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)})
 		line := selectionOptionBody(prompt.Kind, option)
 		if prompt.Kind == control.SelectionPromptUseThread {
 			if len(button) != 0 {
 				elements = append(elements, button)
 			}
-			if block := cardPlainTextBlockElement(line); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement(line); len(block) != 0 {
 				elements = append(elements, block)
 			}
 			continue
 		}
-		if block := cardPlainTextBlockElement(line); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(line); len(block) != 0 {
 			elements = append(elements, block)
 		}
 		if len(button) != 0 {
@@ -110,7 +111,7 @@ func buildAttachSelectionPromptElements(
 		})
 	}
 	if text := strings.TrimSpace(prompt.ContextText); text != "" {
-		if block := cardPlainTextBlockElement(text); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(text); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
@@ -147,11 +148,11 @@ func appendAttachSelectionSection(
 		"content": "**" + title + "**",
 	})
 	for _, option := range options {
-		if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
+		if button := cardkit.ButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
 			elements = append(elements, button)
 		}
 		if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-			if block := cardPlainTextBlockElement(meta); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement(meta); len(block) != 0 {
 				elements = append(elements, block)
 			}
 		}
@@ -307,7 +308,7 @@ func selectionPromptPaginationFooter(prompt selectionRenderModel, daemonLifecycl
 			buttons = append(buttons, button)
 		}
 	}
-	return cardButtonGroupElement(buttons)
+	return cardkit.ButtonGroupElement(buttons)
 }
 
 func selectionPromptPageButton(prompt selectionRenderModel, daemonLifecycleID string, page int, previous bool) map[string]any {

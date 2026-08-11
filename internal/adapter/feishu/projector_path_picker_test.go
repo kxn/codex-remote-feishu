@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
@@ -101,7 +102,7 @@ func TestPathPickerTerminalElementsHideSelectorsAndButtons(t *testing.T) {
 		t.Fatalf("expected terminal picker to omit buttons, got %#v", elements)
 	}
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) == "select_static" {
+		if cardkit.StringValue(element["tag"]) == "select_static" {
 			t.Fatalf("expected terminal picker to omit selectors, got %#v", elements)
 		}
 	}
@@ -556,21 +557,21 @@ func selectStaticPlaceholder(t *testing.T, elements []map[string]any, fieldName 
 	t.Helper()
 	selectElement := findSelectStaticElement(t, elements, fieldName)
 	placeholder, _ := selectElement["placeholder"].(map[string]any)
-	return cardStringValue(placeholder["content"])
+	return cardkit.StringValue(placeholder["content"])
 }
 
 func selectStaticInitialOption(t *testing.T, elements []map[string]any, fieldName string) string {
 	t.Helper()
 	selectElement := findSelectStaticElement(t, elements, fieldName)
-	return cardStringValue(selectElement["initial_option"])
+	return cardkit.StringValue(selectElement["initial_option"])
 }
 
 func findSelectStaticElement(t *testing.T, elements []map[string]any, fieldName string) map[string]any {
 	t.Helper()
 	for _, element := range elements {
-		switch cardStringValue(element["tag"]) {
+		switch cardkit.StringValue(element["tag"]) {
 		case "select_static":
-			if cardStringValue(element["name"]) == fieldName {
+			if cardkit.StringValue(element["name"]) == fieldName {
 				return element
 			}
 		case "column_set":
@@ -589,9 +590,9 @@ func findSelectStaticElement(t *testing.T, elements []map[string]any, fieldName 
 
 func findSelectStaticElementOptional(elements []map[string]any, fieldName string) map[string]any {
 	for _, element := range elements {
-		switch cardStringValue(element["tag"]) {
+		switch cardkit.StringValue(element["tag"]) {
 		case "select_static":
-			if cardStringValue(element["name"]) == fieldName {
+			if cardkit.StringValue(element["name"]) == fieldName {
 				return element
 			}
 		case "column_set":
@@ -612,7 +613,7 @@ func cardOptionValues(raw any) []string {
 	case []map[string]any:
 		values := make([]string, 0, len(typed))
 		for _, option := range typed {
-			if value := cardStringValue(option["value"]); value != "" {
+			if value := cardkit.StringValue(option["value"]); value != "" {
 				values = append(values, value)
 			}
 		}
@@ -624,7 +625,7 @@ func cardOptionValues(raw any) []string {
 			if !ok {
 				continue
 			}
-			if value := cardStringValue(option["value"]); value != "" {
+			if value := cardkit.StringValue(option["value"]); value != "" {
 				values = append(values, value)
 			}
 		}
@@ -640,7 +641,7 @@ func cardOptionLabels(raw any) []string {
 		labels := make([]string, 0, len(typed))
 		for _, option := range typed {
 			if text, ok := option["text"].(map[string]any); ok {
-				labels = append(labels, cardStringValue(text["content"]))
+				labels = append(labels, cardkit.StringValue(text["content"]))
 			}
 		}
 		return labels
@@ -652,7 +653,7 @@ func cardOptionLabels(raw any) []string {
 				continue
 			}
 			if text, ok := option["text"].(map[string]any); ok {
-				labels = append(labels, cardStringValue(text["content"]))
+				labels = append(labels, cardkit.StringValue(text["content"]))
 			}
 		}
 		return labels

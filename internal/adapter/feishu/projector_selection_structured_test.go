@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
@@ -134,7 +135,7 @@ func TestProjectVSCodeThreadSelectionViewUsesDropdown(t *testing.T) {
 	rendered := renderedV2BodyElements(t, ops[0])
 	var selectElement map[string]any
 	for _, element := range rendered {
-		if cardStringValue(element["tag"]) == "select_static" && element["name"] == cardSelectionThreadFieldName {
+		if cardkit.StringValue(element["tag"]) == "select_static" && element["name"] == cardSelectionThreadFieldName {
 			selectElement = element
 			break
 		}
@@ -142,7 +143,7 @@ func TestProjectVSCodeThreadSelectionViewUsesDropdown(t *testing.T) {
 	if len(selectElement) == 0 {
 		t.Fatalf("expected vscode thread view to render one dropdown, got %#v", rendered)
 	}
-	if got := cardStringValue(selectElement["initial_option"]); got != "thread-current" {
+	if got := cardkit.StringValue(selectElement["initial_option"]); got != "thread-current" {
 		t.Fatalf("expected current thread as initial option, got %#v", selectElement)
 	}
 	value := cardValueMap(selectElement)
@@ -160,12 +161,12 @@ func TestProjectVSCodeThreadSelectionViewUsesDropdown(t *testing.T) {
 	switch typed := selectElement["options"].(type) {
 	case []map[string]any:
 		for _, option := range typed {
-			optionValues = append(optionValues, cardStringValue(option["value"]))
+			optionValues = append(optionValues, cardkit.StringValue(option["value"]))
 		}
 	case []any:
 		for _, raw := range typed {
 			option, _ := raw.(map[string]any)
-			optionValues = append(optionValues, cardStringValue(option["value"]))
+			optionValues = append(optionValues, cardkit.StringValue(option["value"]))
 		}
 	}
 	if strings.Join(optionValues, ",") != "thread-current,thread-2" {
@@ -220,7 +221,7 @@ func TestProjectVSCodeThreadSelectionViewPaginatesLargeDropdown(t *testing.T) {
 
 	var row map[string]any
 	for _, element := range rendered {
-		if cardStringValue(element["tag"]) == "column_set" {
+		if cardkit.StringValue(element["tag"]) == "column_set" {
 			row = element
 			break
 		}
@@ -248,7 +249,7 @@ func TestProjectVSCodeThreadSelectionViewPaginatesLargeDropdown(t *testing.T) {
 		nextValue[frontstagecontract.CardActionPayloadKeyDaemonLifecycleID] != "life-3" {
 		t.Fatalf("unexpected next payload: %#v", nextValue)
 	}
-	if got := cardStringValue(selectElement["initial_option"]); got != "" {
+	if got := cardkit.StringValue(selectElement["initial_option"]); got != "" {
 		t.Fatalf("expected off-page current thread to clear initial option, got %#v", selectElement)
 	}
 	value := cardValueMap(selectElement)
@@ -298,7 +299,7 @@ func TestProjectKickThreadSelectionViewUsesStructuredButtons(t *testing.T) {
 	rendered := renderedV2BodyElements(t, ops[0])
 	var sawConfirm bool
 	for _, element := range rendered {
-		if cardStringValue(element["tag"]) != "button" && cardStringValue(element["tag"]) != "column_set" {
+		if cardkit.StringValue(element["tag"]) != "button" && cardkit.StringValue(element["tag"]) != "column_set" {
 			continue
 		}
 		for _, button := range cardElementButtons(t, element) {

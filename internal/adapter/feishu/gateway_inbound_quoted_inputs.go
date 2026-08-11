@@ -13,6 +13,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -172,13 +173,13 @@ func quotedCardPayloadTitleText(payload map[string]any) string {
 	}
 	if header, _ := payload["header"].(map[string]any); len(header) != 0 {
 		if title, _ := header["title"].(map[string]any); len(title) != 0 {
-			if text := strings.TrimSpace(cardStringValue(title["content"])); text != "" {
+			if text := strings.TrimSpace(cardkit.StringValue(title["content"])); text != "" {
 				return text
 			}
 		}
 	}
 	if title, _ := payload["title"].(map[string]any); len(title) != 0 {
-		if text := strings.TrimSpace(cardStringValue(title["content"])); text != "" {
+		if text := strings.TrimSpace(cardkit.StringValue(title["content"])); text != "" {
 			return text
 		}
 	}
@@ -210,18 +211,18 @@ func quotedCardPayloadTextFromElement(element map[string]any) []string {
 }
 
 func quotedCardPayloadInlineText(element map[string]any) string {
-	switch strings.ToLower(strings.TrimSpace(cardStringValue(element["tag"]))) {
+	switch strings.ToLower(strings.TrimSpace(cardkit.StringValue(element["tag"]))) {
 	case "markdown":
-		return strings.TrimSpace(cardStringValue(element["content"]))
+		return strings.TrimSpace(cardkit.StringValue(element["content"]))
 	case "div":
 		text, _ := element["text"].(map[string]any)
 		if len(text) == 0 {
 			return ""
 		}
-		if tag := strings.ToLower(strings.TrimSpace(cardStringValue(text["tag"]))); tag != "plain_text" {
+		if tag := strings.ToLower(strings.TrimSpace(cardkit.StringValue(text["tag"]))); tag != "plain_text" {
 			return ""
 		}
-		return strings.TrimSpace(cardStringValue(text["content"]))
+		return strings.TrimSpace(cardkit.StringValue(text["content"]))
 	default:
 		return ""
 	}

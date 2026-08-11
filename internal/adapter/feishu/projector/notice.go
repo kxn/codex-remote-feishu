@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -30,7 +31,7 @@ func projectNoticeElements(notice control.Notice) []map[string]any {
 		return nil
 	}
 	elements := make([]map[string]any, 0, len(sections)*2)
-	return appendCardTextSections(elements, sections)
+	return cardkit.AppendTextSections(elements, sections)
 }
 
 func projectNoticeBody(notice control.Notice) string {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -45,10 +46,10 @@ func useThreadSelectionPromptElements(prompt selectionRenderModel, daemonLifecyc
 			"content": "**" + useThreadSelectionGroupTitle(group) + "**",
 		})
 		for _, option := range options {
-			if button := cardButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
+			if button := cardkit.ButtonGroupElement([]map[string]any{selectionOptionButton(prompt, option, daemonLifecycleID)}); len(button) != 0 {
 				elements = append(elements, button)
 			}
-			if block := cardPlainTextBlockElement(selectionOptionBody(prompt.Kind, option)); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement(selectionOptionBody(prompt.Kind, option)); len(block) != 0 {
 				elements = append(elements, block)
 			}
 		}
@@ -103,7 +104,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 		})
 	}
 	if text := strings.TrimSpace(prompt.ContextText); text != "" {
-		if block := cardPlainTextBlockElement(text); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(text); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
@@ -116,7 +117,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 		for _, option := range current {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
+				if block := cardkit.PlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}
 			}
@@ -132,7 +133,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 		}
 		for index, option := range remaining {
 			meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, "时间未知"))
-			if block := cardPlainTextBlockElement(fmt.Sprintf("%d. %s", index+1, meta)); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement(fmt.Sprintf("%d. %s", index+1, meta)); len(block) != 0 {
 				elements = append(elements, block)
 			}
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
@@ -146,7 +147,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 			for _, option := range available {
 				elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 				if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-					if block := cardPlainTextBlockElement(meta); len(block) != 0 {
+					if block := cardkit.PlainTextBlockElement(meta); len(block) != 0 {
 						elements = append(elements, block)
 					}
 				}
@@ -160,7 +161,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 			for _, option := range unavailable {
 				elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 				if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-					if block := cardPlainTextBlockElement(meta); len(block) != 0 {
+					if block := cardkit.PlainTextBlockElement(meta); len(block) != 0 {
 						elements = append(elements, block)
 					}
 				}
@@ -176,7 +177,7 @@ func useThreadVSCodeInstanceElements(prompt selectionRenderModel, daemonLifecycl
 		for _, option := range more {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
+				if block := cardkit.PlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}
 			}
@@ -262,7 +263,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 		for _, option := range currentOptions {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
+				if block := cardkit.PlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}
 			}
@@ -277,13 +278,13 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 			})
 		}
 		if text := strings.TrimSpace(prompt.ContextText); text != "" {
-			if block := cardPlainTextBlockElement(text); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement(text); len(block) != 0 {
 				elements = append(elements, block)
 			}
 		}
 		if contextKey := strings.TrimSpace(prompt.ContextKey); contextKey != "" {
 			label := "查看当前工作区全部会话"
-			if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton(label, contextKey, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
+			if button := cardkit.ButtonGroupElement([]map[string]any{workspaceThreadsButton(label, contextKey, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
 				elements = append(elements, button)
 			}
 		}
@@ -298,7 +299,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 			if age := strings.TrimSpace(group.AgeText); age != "" {
 				header += " · " + age
 			}
-			if block := cardPlainTextBlockElement(header); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement(header); len(block) != 0 {
 				elements = append(elements, block)
 			}
 		}
@@ -315,7 +316,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 		}
 		if len(available) == 0 {
 			if unavailableReason != "" {
-				if block := cardPlainTextBlockElement(unavailableReason); len(block) != 0 {
+				if block := cardkit.PlainTextBlockElement(unavailableReason); len(block) != 0 {
 					elements = append(elements, block)
 				}
 			}
@@ -327,14 +328,14 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 		}
 		for index, option := range visible {
 			meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, "时间未知"))
-			if block := cardPlainTextBlockElement(fmt.Sprintf("%d. %s", index+1, meta)); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement(fmt.Sprintf("%d. %s", index+1, meta)); len(block) != 0 {
 				elements = append(elements, block)
 			}
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 		}
 		if !singleWorkspaceView && len(available) > useThreadWorkspacePreviewLimit {
 			label := "展开 " + xutil.FirstNonEmpty(strings.TrimSpace(group.Label), strings.TrimSpace(group.Key))
-			if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton(label, group.Key, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
+			if button := cardkit.ButtonGroupElement([]map[string]any{workspaceThreadsButton(label, group.Key, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
 				elements = append(elements, button)
 			}
 		}
@@ -348,7 +349,7 @@ func useThreadWorkspaceGroupedElements(prompt selectionRenderModel, daemonLifecy
 		for _, option := range moreOptions {
 			elements = append(elements, useThreadActionElement(prompt, option, daemonLifecycleID))
 			if meta := strings.TrimSpace(xutil.FirstNonEmpty(option.MetaText, selectionOptionBody(prompt.Kind, option))); meta != "" {
-				if block := cardPlainTextBlockElement(meta); len(block) != 0 {
+				if block := cardkit.PlainTextBlockElement(meta); len(block) != 0 {
 					elements = append(elements, block)
 				}
 			}
@@ -405,12 +406,12 @@ func useThreadWorkspaceIndexElements(prompt selectionRenderModel, daemonLifecycl
 		})
 	}
 	if text := strings.TrimSpace(prompt.ContextText); text != "" {
-		if block := cardPlainTextBlockElement(text); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(text); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
 	if contextKey := strings.TrimSpace(prompt.ContextKey); contextKey != "" {
-		if button := cardButtonGroupElement([]map[string]any{workspaceThreadsButton("查看当前工作区全部会话", contextKey, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
+		if button := cardkit.ButtonGroupElement([]map[string]any{workspaceThreadsButton("查看当前工作区全部会话", contextKey, prompt.Page, daemonLifecycleID)}); len(button) != 0 {
 			elements = append(elements, button)
 		}
 	}
@@ -494,7 +495,7 @@ func useThreadPromptFooter(prompt selectionRenderModel, daemonLifecycleID string
 			}
 		}
 	}
-	return cardButtonGroupElement(buttons)
+	return cardkit.ButtonGroupElement(buttons)
 }
 
 func useThreadPageButton(prompt selectionRenderModel, daemonLifecycleID string, page int, previous bool) map[string]any {

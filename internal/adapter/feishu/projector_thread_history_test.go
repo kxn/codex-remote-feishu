@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
@@ -170,7 +171,7 @@ func TestThreadHistoryDetailElementsKeepFooterButtonsVisibleWithLargeContent(t *
 	actions := cardActionsFromElements(elements)
 	var sawNewer, sawOlder, sawBack bool
 	for _, action := range actions {
-		switch cardStringValue(action["text"].(map[string]any)["content"]) {
+		switch cardkit.StringValue(action["text"].(map[string]any)["content"]) {
 		case "较新一轮":
 			sawNewer = true
 		case "较旧一轮":

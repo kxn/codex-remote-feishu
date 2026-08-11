@@ -3,6 +3,7 @@ package projector
 import (
 	"fmt"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
@@ -28,7 +29,7 @@ func permissionsRequestPromptElements(prompt control.FeishuRequestView, daemonLi
 		}
 	}
 	elements := make([]map[string]any, 0, 2)
-	if row := cardButtonGroupElement(actions); len(row) != 0 {
+	if row := cardkit.ButtonGroupElement(actions); len(row) != 0 {
 		elements = append(elements, row)
 	}
 	if hint := requestPromptHintMarkdown(prompt, "你可以选择仅授权当前这一次，或在当前会话内持续授权。"); hint != "" {
@@ -113,7 +114,7 @@ func mcpElicitationApprovalElements(prompt control.FeishuRequestView, daemonLife
 		}
 	}
 	elements := make([]map[string]any, 0, 3)
-	if row := cardButtonGroupElement(actions); len(row) != 0 {
+	if row := cardkit.ButtonGroupElement(actions); len(row) != 0 {
 		elements = append(elements, row)
 	}
 	if hint := requestPromptHintMarkdown(prompt, "这个确认只影响当前这一次 MCP 工具调用。"); hint != "" {
@@ -152,7 +153,7 @@ func mcpElicitationChoiceElements(prompt control.FeishuRequestView, daemonLifecy
 		}
 	}
 	elements := make([]map[string]any, 0, 2)
-	if row := cardButtonGroupElement(actions); len(row) != 0 {
+	if row := cardkit.ButtonGroupElement(actions); len(row) != 0 {
 		elements = append(elements, row)
 	}
 	if hint := requestPromptHintMarkdown(prompt, "如果需要先完成外部页面操作，请完成后再点击“继续”；如果不打算继续，可直接拒绝或取消。"); hint != "" {

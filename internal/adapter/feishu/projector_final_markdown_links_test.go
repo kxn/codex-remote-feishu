@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 )
@@ -183,10 +184,10 @@ func renderedMarkdownElementContents(t *testing.T, operation Operation) []string
 	elements, _ := body["elements"].([]map[string]any)
 	values := make([]string, 0, len(elements))
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) != "markdown" {
+		if cardkit.StringValue(element["tag"]) != "markdown" {
 			continue
 		}
-		values = append(values, cardStringValue(element["content"]))
+		values = append(values, cardkit.StringValue(element["content"]))
 	}
 	return values
 }

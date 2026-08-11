@@ -4,24 +4,26 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 )
 
 func markdownContent(element map[string]any) string {
-	if cardStringValue(element["tag"]) != "markdown" {
+	if cardkit.StringValue(element["tag"]) != "markdown" {
 		return ""
 	}
-	return cardStringValue(element["content"])
+	return cardkit.StringValue(element["content"])
 }
 
 func plainTextContent(element map[string]any) string {
-	if cardStringValue(element["tag"]) != "div" {
+	if cardkit.StringValue(element["tag"]) != "div" {
 		return ""
 	}
 	text, _ := element["text"].(map[string]any)
-	if cardStringValue(text["tag"]) != "plain_text" {
+	if cardkit.StringValue(text["tag"]) != "plain_text" {
 		return ""
 	}
-	return cardStringValue(text["content"])
+	return cardkit.StringValue(text["content"])
 }
 
 func cardTextContent(element map[string]any) string {
@@ -43,21 +45,21 @@ func renderedV2CardHeader(t *testing.T, operation Operation) map[string]any {
 
 func headerTextTag(header map[string]any, key string) string {
 	text, _ := header[key].(map[string]any)
-	return cardStringValue(text["tag"])
+	return cardkit.StringValue(text["tag"])
 }
 
 func headerTextContent(header map[string]any, key string) string {
 	text, _ := header[key].(map[string]any)
-	return cardStringValue(text["content"])
+	return cardkit.StringValue(text["content"])
 }
 
 func lastButtonLabel(elements []map[string]any) string {
 	for i := len(elements) - 1; i >= 0; i-- {
-		if cardStringValue(elements[i]["tag"]) != "button" {
+		if cardkit.StringValue(elements[i]["tag"]) != "button" {
 			continue
 		}
 		text, _ := elements[i]["text"].(map[string]any)
-		if label := cardStringValue(text["content"]); label != "" {
+		if label := cardkit.StringValue(text["content"]); label != "" {
 			return label
 		}
 	}
@@ -66,11 +68,11 @@ func lastButtonLabel(elements []map[string]any) string {
 
 func containsButtonLabel(elements []map[string]any, want string) bool {
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) != "button" {
+		if cardkit.StringValue(element["tag"]) != "button" {
 			continue
 		}
 		text, _ := element["text"].(map[string]any)
-		if cardStringValue(text["content"]) == want {
+		if cardkit.StringValue(text["content"]) == want {
 			return true
 		}
 	}
@@ -125,7 +127,7 @@ func parseWorkspaceIndexFromRestoreLabel(t *testing.T, label string) int {
 func cardActionsFromElements(elements []map[string]any) []map[string]any {
 	var actions []map[string]any
 	for _, element := range elements {
-		switch cardStringValue(element["tag"]) {
+		switch cardkit.StringValue(element["tag"]) {
 		case "button":
 			actions = append(actions, element)
 		case "select_static":
@@ -219,7 +221,7 @@ func cardButtonsFromColumnSet(element map[string]any) []map[string]any {
 	var buttons []map[string]any
 	for _, column := range rawColumns {
 		for _, button := range cardButtonArray(column["elements"]) {
-			if cardStringValue(button["tag"]) == "button" {
+			if cardkit.StringValue(button["tag"]) == "button" {
 				buttons = append(buttons, button)
 			}
 		}

@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -34,13 +35,13 @@ func sealedPathPickerElements(view control.FeishuPathPickerView) []map[string]an
 	}
 	bodySections := pathPickerBodySectionsForView(view)
 	if len(bodySections) != 0 {
-		elements = appendCardTextSections(elements, bodySections)
+		elements = cardkit.AppendTextSections(elements, bodySections)
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
 		if len(bodySections) != 0 {
 			elements = append(elements, cardDividerElement())
 		}
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return elements
 }
@@ -114,7 +115,7 @@ func pathPickerNoticeSectionsForView(view control.FeishuPathPickerView) []contro
 func currentDirectoryPathPickerOption(currentPath string) map[string]any {
 	label := pathPickerCurrentDirectoryLabel(currentPath)
 	return map[string]any{
-		"text":  cardPlainText(label),
+		"text":  cardkit.PlainText(label),
 		"value": ".",
 	}
 }
@@ -143,7 +144,7 @@ func pathPickerSelectStaticOptions(view control.FeishuPathPickerView, kind contr
 			continue
 		}
 		options = append(options, map[string]any{
-			"text":  cardPlainText(pathPickerSelectStaticLabel(entry)),
+			"text":  cardkit.PlainText(pathPickerSelectStaticLabel(entry)),
 			"value": value,
 		})
 		if entry.Selected {

@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -32,7 +33,7 @@ func paginatedThreadSelectionDropdownElements(
 			continue
 		}
 		options = append(options, map[string]any{
-			"text":  cardPlainText(label),
+			"text":  cardkit.PlainText(label),
 			"value": value,
 		})
 		if entry.Current {
@@ -45,7 +46,7 @@ func paginatedThreadSelectionDropdownElements(
 
 	if len(options) == 0 {
 		if hiddenCount != 0 {
-			if block := cardPlainTextBlockElement("当前没有可切换的会话。"); len(block) != 0 {
+			if block := cardkit.PlainTextBlockElement("当前没有可切换的会话。"); len(block) != 0 {
 				elements = append(elements, block)
 			}
 		}
@@ -113,7 +114,7 @@ func threadSelectionDropdownElementsWithPage(
 ) []map[string]any {
 	elements := lane.renderElements(daemonLifecycleID, page)
 	if strings.TrimSpace(hiddenHint) != "" {
-		if block := cardPlainTextBlockElement(hiddenHint); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(hiddenHint); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}

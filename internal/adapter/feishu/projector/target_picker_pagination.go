@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -41,13 +42,13 @@ func targetPickerComposeEditingElements(view control.FeishuTargetPickerView, dae
 		elements = append(elements, messages...)
 	}
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
-		if block := cardPlainTextBlockElement(hint); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(hint); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
 	if noticeSections := targetPickerNoticeSections(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	if targetPickerUsesInlineForm(view) {
 		return elements
@@ -65,7 +66,7 @@ func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonL
 
 	pagePrefix := make([]map[string]any, 0, 2)
 	if view.WorkspaceSelectionLocked {
-		pagePrefix = appendCardTextSections(pagePrefix, targetPickerLockedWorkspaceSections(view))
+		pagePrefix = cardkit.AppendTextSections(pagePrefix, targetPickerLockedWorkspaceSections(view))
 	}
 
 	switch {
@@ -272,7 +273,7 @@ func cloneCardElementSlice(elements []map[string]any) []map[string]any {
 		if len(element) == 0 {
 			continue
 		}
-		out = append(out, cloneCardMap(element))
+		out = append(out, cardkit.CloneMap(element))
 	}
 	return out
 }

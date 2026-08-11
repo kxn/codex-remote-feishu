@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
@@ -35,9 +36,9 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 	}
 	bodySections := control.BuildFeishuPageBodySections(view)
 	if len(bodySections) != 0 {
-		elements = appendCardTextSections(elements, bodySections)
+		elements = cardkit.AppendTextSections(elements, bodySections)
 	} else {
-		elements = appendCardTextSections(elements, cloneNormalizedCardSections(view.SummarySections))
+		elements = cardkit.AppendTextSections(elements, cloneNormalizedCardSections(view.SummarySections))
 	}
 	hasBusinessContent := len(bodySections) != 0
 	for _, section := range view.Sections {
@@ -57,9 +58,9 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 					continue
 				}
 			}
-			elements = appendCardTextSections(elements, commandCatalogEntryFallbackSections(entry))
+			elements = cardkit.AppendTextSections(elements, commandCatalogEntryFallbackSections(entry))
 			if view.Interactive && len(entry.Buttons) > 0 && !renderedCompactButtons {
-				if group := cardButtonGroupElement(pageButtons(entry.Buttons, view.CatalogBackend, daemonLifecycleID)); len(group) != 0 {
+				if group := cardkit.ButtonGroupElement(pageButtons(entry.Buttons, view.CatalogBackend, daemonLifecycleID)); len(group) != 0 {
 					elements = append(elements, group)
 				}
 			}
@@ -75,7 +76,7 @@ func PageElementsWithOptions(view control.FeishuPageView, daemonLifecycleID stri
 		if hasBusinessContent {
 			elements = append(elements, cardDividerElement())
 		}
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	if len(view.RelatedButtons) > 0 {
 		elements = appendCardFooterButtonGroup(elements, pageButtons(view.RelatedButtons, view.CatalogBackend, daemonLifecycleID))
@@ -157,7 +158,7 @@ func commandCatalogFormPaginationButtons(form control.CommandCatalogForm, pageBa
 	if next := cursor + commandCatalogPaginatedSelectPageSize; next < len(form.Field.Options) {
 		buttons = append(buttons, commandCatalogFormPageButton("下一页", form, actionKind, pageBackend, daemonLifecycleID, next))
 	}
-	return cardButtonGroupElement(buttons)
+	return cardkit.ButtonGroupElement(buttons)
 }
 
 func commandCatalogFormPageButton(label string, form control.CommandCatalogForm, actionKind control.ActionKind, pageBackend controlBackend, daemonLifecycleID string, cursor int) map[string]any {
@@ -286,7 +287,7 @@ func pageCompactButtonElements(buttons []control.CommandCatalogButton, pageBacke
 		if len(actions) == 0 {
 			continue
 		}
-		if group := cardButtonGroupElement(actions); len(group) != 0 {
+		if group := cardkit.ButtonGroupElement(actions); len(group) != 0 {
 			elements = append(elements, group)
 		}
 	}
@@ -356,7 +357,7 @@ func commandCatalogFormFieldElement(field control.CommandCatalogFormField) map[s
 	case control.CommandCatalogFormFieldSelectStatic:
 		element["tag"] = "select_static"
 		if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
-			element["placeholder"] = cardPlainText(placeholder)
+			element["placeholder"] = cardkit.PlainText(placeholder)
 		}
 		if options := commandCatalogSelectStaticOptions(field.Options); len(options) != 0 {
 			element["options"] = options
@@ -394,7 +395,7 @@ func commandCatalogSelectStaticOptions(options []control.CommandCatalogFormField
 			continue
 		}
 		result = append(result, map[string]any{
-			"text":  cardPlainText(label),
+			"text":  cardkit.PlainText(label),
 			"value": value,
 		})
 	}
