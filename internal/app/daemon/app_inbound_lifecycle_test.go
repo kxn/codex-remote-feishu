@@ -99,8 +99,71 @@ func TestRejectedInboundActionDetailShowsMenuFallback(t *testing.T) {
 	got := rejectedInboundActionDetail(control.Action{
 		Kind: control.ActionStop,
 	})
-	if got != "停止（对应 /stop）" {
-		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "停止（对应 /stop）")
+	if got != "停止推理（对应 /stop）" {
+		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "停止推理（对应 /stop）")
+	}
+}
+
+func TestRejectedInboundActionDetailUsesCommandCatalogForDaemonCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		kind control.ActionKind
+		want string
+	}{
+		{
+			name: "direct daemon command",
+			kind: control.ActionUpgradeCommand,
+			want: "升级系统（对应 /upgrade）",
+		},
+		{
+			name: "command backed ui intent",
+			kind: control.ActionListInstances,
+			want: "工作区与会话（对应 /list）",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rejectedInboundActionDetail(control.Action{Kind: tt.kind})
+			if got != tt.want {
+				t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRejectedInboundActionDetailUsesCommandCatalogRouteTitle(t *testing.T) {
+	tests := []struct {
+		name string
+		kind control.ActionKind
+		want string
+	}{
+		{
+			name: "turn patch rollback",
+			kind: control.ActionTurnPatchRollback,
+			want: "回滚最近一次修补（对应 /bendtomywill rollback）",
+		},
+		{
+			name: "review uncommitted",
+			kind: control.ActionReviewStartUncommitted,
+			want: "审阅待提交内容（对应 /review uncommitted）",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := rejectedInboundActionDetail(control.Action{Kind: tt.kind})
+			if got != tt.want {
+				t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRejectedInboundActionDetailKeepsLocalLabelForOwnerCardAction(t *testing.T) {
+	got := rejectedInboundActionDetail(control.Action{
+		Kind: control.ActionReviewApply,
+	})
+	if got != "按审阅意见继续修改" {
+		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "按审阅意见继续修改")
 	}
 }
 

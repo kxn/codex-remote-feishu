@@ -171,44 +171,15 @@ func explicitActionCommand(action control.Action) string {
 }
 
 func rejectedInboundActionLabel(action control.Action) (label, command string) {
+	if display, ok := control.ResolveFeishuCommandDisplayFromAction(action); ok {
+		return display.Title, display.CanonicalSlash
+	}
 	if intent, ok := control.FeishuUIIntentFromAction(action); ok {
 		return rejectedInboundIntentLabel(*intent)
 	}
 	switch action.Kind {
-	case control.ActionListInstances:
-		return "查看实例", "/list"
-	case control.ActionStatus:
-		return "查看状态", "/status"
-	case control.ActionStop:
-		return "停止", "/stop"
-	case control.ActionNewThread:
-		return "新建会话", "/new"
-	case control.ActionShowCommandHelp:
-		return "查看帮助", "/help"
-	case control.ActionDebugCommand:
-		return "查看调试升级状态", "/debug"
-	case control.ActionAdminCommand:
-		return "执行系统管理子命令", "/admin"
-	case control.ActionUpgradeCommand:
-		return "发起升级", "/upgrade"
-	case control.ActionTurnPatchCommand:
-		return "修补当前会话", "/bendtomywill"
-	case control.ActionTurnPatchRollback:
-		return "回滚最近一次修补", "/bendtomywill rollback"
 	case control.ActionUpgradeOwnerFlow:
 		return "升级卡片动作", ""
-	case control.ActionModelCommand:
-		return "设置下一条消息模型", "/model"
-	case control.ActionReasoningCommand:
-		return "设置下一条消息推理强度", "/reasoning"
-	case control.ActionAccessCommand:
-		return "设置下一条消息执行权限", "/access"
-	case control.ActionReviewCommand:
-		return "审阅代码变更", "/review"
-	case control.ActionReviewStartUncommitted:
-		return "审阅待提交内容", "/review uncommitted"
-	case control.ActionReviewOpenCommitPicker:
-		return "选择审阅提交记录", "/review commit"
 	case control.ActionRespondRequest:
 		return "响应授权请求", ""
 	case control.ActionReviewStart:

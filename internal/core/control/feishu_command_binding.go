@@ -24,6 +24,13 @@ type FeishuCommandBinding struct {
 	intentBuilder               func(Action) (*FeishuUIIntent, bool)
 }
 
+type FeishuCommandActionDisplay struct {
+	FamilyID       string
+	BindingKind    FeishuCommandBindingKind
+	Title          string
+	CanonicalSlash string
+}
+
 var feishuCommandBindingsByFamilyID = buildFeishuCommandBindings()
 
 func ResolveFeishuCommandBindingByFamilyID(familyID string) (FeishuCommandBinding, bool) {
@@ -38,6 +45,36 @@ func ResolveFeishuCommandBindingFromAction(action Action) (FeishuCommandBinding,
 		}
 	}
 	return FeishuCommandBinding{}, false
+}
+
+func ResolveFeishuCommandDisplayFromAction(action Action) (FeishuCommandActionDisplay, bool) {
+	binding, ok := ResolveFeishuCommandBindingFromAction(action)
+	if !ok {
+		return FeishuCommandActionDisplay{}, false
+	}
+	def, ok := FeishuCommandDefinitionByID(binding.FamilyID)
+	if !ok {
+		return FeishuCommandActionDisplay{}, false
+	}
+	title := strings.TrimSpace(def.Title)
+	command := strings.TrimSpace(def.CanonicalSlash)
+	if commandID, route, ok := feishuCommandActionRouteByKind(action.Kind); ok && commandID == binding.FamilyID {
+		if routedTitle := strings.TrimSpace(route.title); routedTitle != "" {
+			title = routedTitle
+		}
+		if routed := strings.TrimSpace(route.canonicalSlash); routed != "" {
+			command = routed
+		}
+	}
+	if title == "" && command == "" {
+		return FeishuCommandActionDisplay{}, false
+	}
+	return FeishuCommandActionDisplay{
+		FamilyID:       binding.FamilyID,
+		BindingKind:    binding.Kind,
+		Title:          title,
+		CanonicalSlash: command,
+	}, true
 }
 
 func (b FeishuCommandBinding) IntentFromAction(action Action) (*FeishuUIIntent, bool) {
