@@ -4,14 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net/url"
-	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"golang.org/x/text/cases"
 )
 
 type CodexProfileKind = state.CodexProfileKind
@@ -74,7 +71,7 @@ func CurrentCodexAPIProfile(record CodexAPIProfileRecord) (CodexAPIProfileSecret
 }
 
 func CodexAPIProfileStatus(profile CodexAPIProfileSecretConfig) string {
-	if strings.TrimSpace(profile.BaseURL) == "" || validateCodexAPIProfileBaseURL(strings.TrimSpace(profile.BaseURL)) != nil ||
+	if strings.TrimSpace(profile.BaseURL) == "" || validateProfileBaseURL(strings.TrimSpace(profile.BaseURL)) != nil ||
 		strings.TrimSpace(profile.Model) == "" || strings.TrimSpace(profile.ReasoningEffort) == "" {
 		return "profile_definition_incomplete"
 	}
@@ -86,7 +83,7 @@ func CodexAPIProfileStatus(profile CodexAPIProfileSecretConfig) string {
 
 func PublicCodexAPIProfileBaseURL(profile CodexAPIProfileSecretConfig) string {
 	baseURL := strings.TrimSpace(profile.BaseURL)
-	if validateCodexAPIProfileBaseURL(baseURL) != nil {
+	if validateProfileBaseURL(baseURL) != nil {
 		return ""
 	}
 	return baseURL
@@ -287,14 +284,14 @@ func ValidateCodexAPIProfileRecords(records []CodexAPIProfileRecord) error {
 				current = revision
 			}
 		}
-		if err := validateCodexAPIProfileGenerations(record.Revisions); err != nil {
+		if err := validateProfileGenerations(record.Revisions, codexGenerationAccessors); err != nil {
 			return fmt.Errorf("invalid codex profile generations for %q: %w", record.ID, err)
 		}
 		if current.Revision == 0 || maxRevision != record.CurrentRevision {
 			return fmt.Errorf("missing or stale current codex profile revision for %q", record.ID)
 		}
 		for _, name := range names {
-			if codexProfileNameKey(name) == codexProfileNameKey(current.Name) {
+			if profileNameKey(name) == profileNameKey(current.Name) {
 				return fmt.Errorf("duplicate codex profile name")
 			}
 		}
@@ -316,21 +313,17 @@ func PruneCodexAPIProfileHistory(record CodexAPIProfileRecord, retained map[uint
 }
 
 func validateCodexProfileNameUnique(records []CodexAPIProfileRecord, exceptID, name string) error {
-	nameKey := codexProfileNameKey(name)
+	nameKey := profileNameKey(name)
 	for _, record := range records {
 		if record.ID == exceptID {
 			continue
 		}
 		current, ok := CurrentCodexAPIProfile(record)
-		if ok && codexProfileNameKey(current.Name) == nameKey {
+		if ok && profileNameKey(current.Name) == nameKey {
 			return fmt.Errorf("codex profile name already exists")
 		}
 	}
 	return nil
-}
-
-func codexProfileNameKey(name string) string {
-	return cases.Fold().String(strings.TrimSpace(name))
 }
 
 func validateCodexAPIProfileInput(input CodexAPIProfileInput, requireKey bool) (CodexAPIProfileInput, error) {
@@ -347,7 +340,7 @@ func validateCodexAPIProfileInput(input CodexAPIProfileInput, requireKey bool) (
 	if input.BaseURL == "" || len(input.BaseURL) > 2048 {
 		return input, fmt.Errorf("codex profile baseURL is invalid")
 	}
-	if err := validateCodexAPIProfileBaseURL(input.BaseURL); err != nil {
+	if err := validateProfileBaseURL(input.BaseURL); err != nil {
 		return input, fmt.Errorf("codex profile baseURL is invalid: %w", err)
 	}
 	if input.Model == "" || len(input.Model) > 256 || hasUnsafeProfileText(input.Model) {
@@ -391,42 +384,6 @@ func validateStoredCodexAPIProfileRevision(revision CodexAPIProfileSecretConfig)
 	if revision.CredentialGeneration > revision.Revision || revision.ConnectionGeneration > revision.Revision ||
 		revision.ConnectionGeneration < revision.CredentialGeneration {
 		return fmt.Errorf("invalid generation")
-	}
-	return nil
-}
-
-func validateCodexAPIProfileGenerations(revisions []CodexAPIProfileSecretConfig) error {
-	ordered := append([]CodexAPIProfileSecretConfig{}, revisions...)
-	sort.Slice(ordered, func(left, right int) bool { return ordered[left].Revision < ordered[right].Revision })
-	for index := 1; index < len(ordered); index++ {
-		previous := ordered[index-1]
-		current := ordered[index]
-		revisionDelta := current.Revision - previous.Revision
-		if current.CredentialGeneration < previous.CredentialGeneration ||
-			current.CredentialGeneration-previous.CredentialGeneration > revisionDelta ||
-			current.ConnectionGeneration < previous.ConnectionGeneration ||
-			current.ConnectionGeneration-previous.ConnectionGeneration > revisionDelta {
-			return fmt.Errorf("generation is not monotonic")
-		}
-		credentialChanged := current.CredentialGeneration != previous.CredentialGeneration
-		if current.APIKey != previous.APIKey && !credentialChanged {
-			return fmt.Errorf("credential changed without generation")
-		}
-		if (current.BaseURL != previous.BaseURL || credentialChanged) && current.ConnectionGeneration == previous.ConnectionGeneration {
-			return fmt.Errorf("connection changed without generation")
-		}
-	}
-	return nil
-}
-
-func validateCodexAPIProfileBaseURL(value string) error {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return err
-	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil ||
-		parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Opaque != "" {
-		return fmt.Errorf("absolute http(s) URL without userinfo, query, or fragment is required")
 	}
 	return nil
 }

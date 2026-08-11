@@ -4,13 +4,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"net/url"
-	"sort"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"golang.org/x/text/cases"
 )
 
 const (
@@ -110,7 +107,7 @@ func CurrentOpenCodeAPIProfile(record OpenCodeAPIProfileRecord) (OpenCodeAPIProf
 
 func OpenCodeAPIProfileStatus(profile OpenCodeAPIProfileSecretConfig) string {
 	profile = normalizeOpenCodeAPIProfileRevision(profile)
-	if profile.BaseURL == "" || validateOpenCodeAPIProfileBaseURL(profile.BaseURL) != nil || profile.Model == "" {
+	if profile.BaseURL == "" || validateProfileBaseURL(profile.BaseURL) != nil || profile.Model == "" {
 		return "profile_definition_incomplete"
 	}
 	if profile.APIKey == "" {
@@ -343,14 +340,14 @@ func ValidateOpenCodeAPIProfileRecords(records []OpenCodeAPIProfileRecord) error
 				current = normalizeOpenCodeAPIProfileRevision(revision)
 			}
 		}
-		if err := validateOpenCodeAPIProfileGenerations(record.Revisions); err != nil {
+		if err := validateProfileGenerations(record.Revisions, openCodeGenerationAccessors); err != nil {
 			return fmt.Errorf("invalid opencode profile generations for %q: %w", record.ID, err)
 		}
 		if current.Revision == 0 || maxRevision != record.CurrentRevision {
 			return fmt.Errorf("missing or stale current opencode profile revision for %q", record.ID)
 		}
 		for _, name := range names {
-			if opencodeProfileNameKey(name) == opencodeProfileNameKey(current.Name) {
+			if profileNameKey(name) == profileNameKey(current.Name) {
 				return fmt.Errorf("duplicate opencode profile name")
 			}
 		}
@@ -393,7 +390,7 @@ func validateOpenCodeAPIProfileInput(input OpenCodeAPIProfileInput, requireKey b
 	if input.BaseURL == "" || len(input.BaseURL) > 2048 {
 		return input, fmt.Errorf("opencode profile baseURL is invalid")
 	}
-	if err := validateOpenCodeAPIProfileBaseURL(input.BaseURL); err != nil {
+	if err := validateProfileBaseURL(input.BaseURL); err != nil {
 		return input, fmt.Errorf("opencode profile baseURL is invalid: %w", err)
 	}
 	for fieldName, value := range map[string]string{
@@ -432,7 +429,7 @@ func validateStoredOpenCodeAPIProfileRevision(revision OpenCodeAPIProfileSecretC
 	if normalized.Name == "" || utf8.RuneCountInString(normalized.Name) > 64 || hasUnsafeProfileText(revision.Name) {
 		return fmt.Errorf("invalid name")
 	}
-	if len(normalized.BaseURL) > 2048 || validateOpenCodeAPIProfileBaseURL(normalized.BaseURL) != nil ||
+	if len(normalized.BaseURL) > 2048 || validateProfileBaseURL(normalized.BaseURL) != nil ||
 		normalized.Model == "" || len(normalized.Model) > 256 || hasUnsafeProfileText(revision.Model) ||
 		len(normalized.SmallModel) > 256 || hasUnsafeProfileText(revision.SmallModel) ||
 		len(normalized.ReviewModel) > 256 || hasUnsafeProfileText(revision.ReviewModel) ||
@@ -450,46 +447,18 @@ func validateStoredOpenCodeAPIProfileRevision(revision OpenCodeAPIProfileSecretC
 	return nil
 }
 
-func validateOpenCodeAPIProfileGenerations(revisions []OpenCodeAPIProfileSecretConfig) error {
-	ordered := append([]OpenCodeAPIProfileSecretConfig{}, revisions...)
-	sort.Slice(ordered, func(left, right int) bool { return ordered[left].Revision < ordered[right].Revision })
-	for index := 1; index < len(ordered); index++ {
-		previous := ordered[index-1]
-		current := ordered[index]
-		revisionDelta := current.Revision - previous.Revision
-		if current.CredentialGeneration < previous.CredentialGeneration ||
-			current.CredentialGeneration-previous.CredentialGeneration > revisionDelta ||
-			current.ConnectionGeneration < previous.ConnectionGeneration ||
-			current.ConnectionGeneration-previous.ConnectionGeneration > revisionDelta {
-			return fmt.Errorf("generation is not monotonic")
-		}
-		credentialChanged := current.CredentialGeneration != previous.CredentialGeneration
-		if current.APIKey != previous.APIKey && !credentialChanged {
-			return fmt.Errorf("credential changed without generation")
-		}
-		if (current.BaseURL != previous.BaseURL || credentialChanged) && current.ConnectionGeneration == previous.ConnectionGeneration {
-			return fmt.Errorf("connection changed without generation")
-		}
-	}
-	return nil
-}
-
 func validateOpenCodeProfileNameUnique(records []OpenCodeAPIProfileRecord, exceptID, name string) error {
-	nameKey := opencodeProfileNameKey(name)
+	nameKey := profileNameKey(name)
 	for _, record := range records {
 		if CanonicalOpenCodeProfileID(record.ID) == exceptID {
 			continue
 		}
 		current, ok := CurrentOpenCodeAPIProfile(record)
-		if ok && opencodeProfileNameKey(current.Name) == nameKey {
+		if ok && profileNameKey(current.Name) == nameKey {
 			return fmt.Errorf("opencode profile name already exists")
 		}
 	}
 	return nil
-}
-
-func opencodeProfileNameKey(name string) string {
-	return cases.Fold().String(strings.TrimSpace(name))
 }
 
 func normalizeOpenCodeProjectConfigMode(value string) string {
@@ -508,18 +477,6 @@ func normalizeOpenCodeDataIsolationMode(value string) string {
 	default:
 		return OpenCodeDataIsolationInherit
 	}
-}
-
-func validateOpenCodeAPIProfileBaseURL(value string) error {
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return err
-	}
-	if (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Hostname() == "" || parsed.User != nil ||
-		parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Opaque != "" {
-		return fmt.Errorf("absolute http(s) URL without userinfo, query, or fragment is required")
-	}
-	return nil
 }
 
 func newOpenCodeProfileID(existing []OpenCodeAPIProfileRecord) (string, error) {
@@ -541,5 +498,3 @@ func newOpenCodeProfileID(existing []OpenCodeAPIProfileRecord) (string, error) {
 	}
 	return "", fmt.Errorf("generate unique opencode profile id")
 }
-
-
