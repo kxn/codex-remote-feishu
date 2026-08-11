@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const xdgStateHomeEnv = "XDG_STATE_HOME"
@@ -35,7 +36,7 @@ func systemOpenCodeConfigHasExplicitModel(env []string) (bool, bool) {
 	var doc struct {
 		Model string `json:"model"`
 	}
-	normalized := stripJSONTrailingCommas(stripJSONComments(raw))
+	normalized := xutil.NormalizeJSONC(raw)
 	if err := json.Unmarshal(normalized, &doc); err != nil {
 		return false, false
 	}
@@ -124,116 +125,4 @@ func lookupEnvForOpenCodeProfile(env []string, key string) string {
 		}
 	}
 	return ""
-}
-
-func stripJSONComments(raw []byte) []byte {
-	out := make([]byte, 0, len(raw))
-	inString := false
-	escape := false
-	lineComment := false
-	blockComment := false
-	for i := 0; i < len(raw); i++ {
-		current := raw[i]
-		if lineComment {
-			if current == '\n' || current == '\r' {
-				lineComment = false
-				out = append(out, current)
-			}
-			continue
-		}
-		if blockComment {
-			if current == '\n' || current == '\r' {
-				out = append(out, current)
-				continue
-			}
-			if current == '*' && i+1 < len(raw) && raw[i+1] == '/' {
-				blockComment = false
-				i++
-			}
-			continue
-		}
-		if inString {
-			out = append(out, current)
-			if escape {
-				escape = false
-				continue
-			}
-			switch current {
-			case '\\':
-				escape = true
-			case '"':
-				inString = false
-			}
-			continue
-		}
-		if current == '"' {
-			inString = true
-			out = append(out, current)
-			continue
-		}
-		if current == '/' && i+1 < len(raw) {
-			switch raw[i+1] {
-			case '/':
-				lineComment = true
-				i++
-				continue
-			case '*':
-				blockComment = true
-				i++
-				continue
-			}
-		}
-		out = append(out, current)
-	}
-	return out
-}
-
-func stripJSONTrailingCommas(raw []byte) []byte {
-	out := make([]byte, 0, len(raw))
-	inString := false
-	escape := false
-	for _, current := range raw {
-		if inString {
-			out = append(out, current)
-			if escape {
-				escape = false
-				continue
-			}
-			switch current {
-			case '\\':
-				escape = true
-			case '"':
-				inString = false
-			}
-			continue
-		}
-		switch current {
-		case '"':
-			inString = true
-			out = append(out, current)
-		case '}', ']':
-			for i := len(out) - 1; i >= 0; i-- {
-				if isJSONWhitespace(out[i]) {
-					continue
-				}
-				if out[i] == ',' {
-					out = append(out[:i], out[i+1:]...)
-				}
-				break
-			}
-			out = append(out, current)
-		default:
-			out = append(out, current)
-		}
-	}
-	return out
-}
-
-func isJSONWhitespace(value byte) bool {
-	switch value {
-	case ' ', '\n', '\r', '\t':
-		return true
-	default:
-		return false
-	}
 }
