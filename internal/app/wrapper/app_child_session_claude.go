@@ -9,6 +9,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo), resume *claudeLaunchResumeTarget) (*childSession, error) {
@@ -19,7 +20,7 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	cmd.Dir = a.config.WorkspaceRoot
+	cmd.Dir = pathcanon.Native(a.config.WorkspaceRoot)
 	cmd.Env = childEnv
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)

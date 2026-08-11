@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -38,7 +39,7 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	cmd.Dir = a.config.WorkspaceRoot
+	cmd.Dir = pathcanon.Native(a.config.WorkspaceRoot)
 	cmd.Env = childEnv
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)

@@ -5,18 +5,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func NormalizeWorkspaceKey(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	normalized := filepath.Clean(value)
-	if normalized == "." {
-		return ""
-	}
-	return filepath.ToSlash(normalized)
+	return pathcanon.WorkspaceKey(value)
 }
 
 func ResolveWorkspaceKey(values ...string) string {
@@ -106,15 +100,15 @@ func ResolveHeadlessResumeWorkspaceKey(workspaceKey, threadCWD string) string {
 }
 
 func ResolveWorkspaceRootOnHost(value string) (string, error) {
-	absolute, err := filepath.Abs(strings.TrimSpace(value))
+	native := pathcanon.Native(value)
+	absolute, err := filepath.Abs(native)
 	if err != nil {
 		return "", err
 	}
-	normalized := NormalizeWorkspaceKey(absolute)
-	if resolved, err := filepath.EvalSymlinks(normalized); err == nil {
-		normalized = NormalizeWorkspaceKey(resolved)
+	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
+		absolute = resolved
 	}
-	return normalized, nil
+	return NormalizeWorkspaceKey(absolute), nil
 }
 
 func WorkspaceShortName(value string) string {

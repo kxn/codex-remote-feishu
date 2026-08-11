@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -122,7 +123,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 		}
 		opts.BaseDir = selection.BaseDir
 		if !flagWasProvided(flagSet, "install-bin-dir") &&
-			filepath.Clean(strings.TrimSpace(opts.InstallBinDir)) == filepath.Clean(strings.TrimSpace(preInteractiveInstallBinDir)) {
+			pathcompare.SameCleanPlatformPath(opts.InstallBinDir, preInteractiveInstallBinDir) {
 			opts.InstallBinDir = resolveTargetInstallBinDir(selection, "")
 		}
 	}

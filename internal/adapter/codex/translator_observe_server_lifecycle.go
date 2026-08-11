@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -30,7 +31,7 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 		delete(t.suppressedThreadStarted, threadID)
 		t.currentThreadID = threadID
 		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
+			t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 		}
 		t.mergeObservedThread(threadID, threadRecord.ModelProviderID, threadRecord.Model, threadRecord.ReasoningEffort)
 		t.Debugf("observe server suppressed thread/started after child restart: thread=%s cwd=%s", threadID, cwd)
@@ -38,7 +39,7 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 	}
 	if t.internalThreadIDs[threadID] {
 		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
+			t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 		}
 		t.mergeObservedThread(threadID, threadRecord.ModelProviderID, threadRecord.Model, threadRecord.ReasoningEffort)
 		event := buildThreadDiscoveredEvent(threadRecord, threadID, cwd, name, status, loaded, runtimeStatus)
@@ -54,7 +55,7 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 		t.pendingLocalNewThreadTurn = false
 	}
 	if cwd != "" {
-		t.knownThreadCWD[threadID] = cwd
+		t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 	}
 	t.mergeObservedThread(threadID, threadRecord.ModelProviderID, threadRecord.Model, threadRecord.ReasoningEffort)
 	return Result{Events: []agentproto.Event{event}}

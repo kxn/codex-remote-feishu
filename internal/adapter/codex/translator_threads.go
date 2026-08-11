@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -259,7 +260,7 @@ func parseThreadHistoryItems(source any) []agentproto.ThreadHistoryItemRecord {
 					record.Command = strings.TrimSpace(command)
 				}
 				if cwd, _ := metadata["cwd"].(string); strings.TrimSpace(cwd) != "" {
-					record.CWD = strings.TrimSpace(cwd)
+					record.CWD = pathcanon.Native(cwd)
 				}
 				if exitCode, ok := metadata["exitCode"].(int); ok {
 					value := exitCode

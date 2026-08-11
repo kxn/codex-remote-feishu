@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -43,7 +44,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		cwd, _ := params["cwd"].(string)
 		t.currentThreadID = threadID
 		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
+			t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 		}
 		t.Debugf("observe client thread/resume: thread=%s cwd=%s", threadID, cwd)
 		return Result{Events: []agentproto.Event{{
@@ -80,7 +81,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		}
 		t.currentThreadID = threadID
 		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
+			t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 		}
 		template := normalizeTurnStartTemplate(params)
 		t.latestTurnStartTemplate = template

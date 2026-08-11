@@ -8,13 +8,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/adapterkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -358,8 +358,8 @@ func (t *Translator) sessionWorkspace(sessionID string) string {
 }
 
 func resolveWorkspaceWritePath(workspaceRoot, target string) (string, string, error) {
-	workspaceRoot = strings.TrimSpace(workspaceRoot)
-	target = strings.TrimSpace(target)
+	workspaceRoot = pathcanon.Native(workspaceRoot)
+	target = pathcanon.Native(target)
 	if workspaceRoot == "" {
 		return "", "", fmt.Errorf("workspace root is required")
 	}
@@ -434,27 +434,7 @@ func resolveExistingWritePathComponent(targetAbs string) (string, error) {
 }
 
 func pathWithinWorkspaceRoot(rootPath, targetPath string) bool {
-	rootPath = canonicalWorkspaceComparePath(rootPath)
-	targetPath = canonicalWorkspaceComparePath(targetPath)
-	if rootPath == "" || targetPath == "" {
-		return false
-	}
-	rel, err := filepath.Rel(rootPath, targetPath)
-	if err != nil {
-		return false
-	}
-	return rel == "." || rel == "" || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
-}
-
-func canonicalWorkspaceComparePath(path string) string {
-	path = filepath.Clean(strings.TrimSpace(path))
-	if path == "" || path == "." {
-		return ""
-	}
-	if runtime.GOOS == "windows" {
-		path = strings.ToLower(path)
-	}
-	return path
+	return pathcanon.Containment(rootPath, targetPath)
 }
 
 func simpleTextDiff(path, oldText, newText string) string {

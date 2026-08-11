@@ -77,3 +77,15 @@ func TestBootstrapOpenCodeACPWaitsForInitializeAndReplaysBufferedStdout(t *testi
 		t.Fatalf("replayed stdout = %q, want %q", string(replayed), string(bufferedLine))
 	}
 }
+
+func TestBuildOpenCodeChildLaunchStripsWindowsExtendedWorkspace(t *testing.T) {
+	app := &App{config: Config{WorkspaceRoot: `\\?\C:\repo`}}
+	args, _ := app.buildOpenCodeChildLaunch()
+	joined := strings.Join(args, "\x00")
+	if strings.Contains(joined, `\\?\`) || strings.Contains(joined, "//?/") {
+		t.Fatalf("extended-length workspace leaked into opencode child args: %q", joined)
+	}
+	if !strings.Contains(joined, "--cwd") {
+		t.Fatalf("expected --cwd in opencode child args: %q", joined)
+	}
+}

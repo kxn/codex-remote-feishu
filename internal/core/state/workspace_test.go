@@ -87,3 +87,37 @@ func TestShouldResolveWorkspacePathOnHostWindowsResolvesVolumePaths(t *testing.T
 		t.Fatal("expected volume path to resolve on host")
 	}
 }
+
+func TestNormalizeWorkspaceKeyStripsWindowsExtendedPrefix(t *testing.T) {
+	cases := []struct {
+		name, input, want string
+	}{
+		{"extended native drive", `\\?\C:\repo`, `C:/repo`},
+		{"extended slash drive", `//?/C:/repo`, `C:/repo`},
+		{"extended UNC native", `\\?\UNC\server\share\repo`, `//server/share/repo`},
+		{"extended UNC slash", `//?/UNC/server/share/repo`, `//server/share/repo`},
+		{"plain drive", `C:\repo`, `C:/repo`},
+		{"plain UNC", `\\server\share\repo`, `//server/share/repo`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NormalizeWorkspaceKey(tc.input); got != tc.want {
+				t.Fatalf("NormalizeWorkspaceKey(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestShouldResolveWorkspacePathOnHostWindowsRecognizesExtendedPrefixes(t *testing.T) {
+	cases := []string{
+		`\\?\C:\repo`,
+		`//?/C:/repo`,
+		`\\?\UNC\server\share`,
+		`//?/UNC/server/share`,
+	}
+	for _, input := range cases {
+		if !ShouldResolveWorkspacePathOnHost("windows", input) {
+			t.Fatalf("expected extended-length path to resolve on host: %q", input)
+		}
+	}
+}

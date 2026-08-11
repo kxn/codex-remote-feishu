@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 type CompileInput struct {
@@ -75,7 +76,7 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	if profile.Revision == 0 {
 		profile.Revision = 1
 	}
-	workspaceRoot := strings.TrimSpace(input.WorkspaceRoot)
+	workspaceRoot := pathcanon.Native(input.WorkspaceRoot)
 	args := []string{"acp"}
 	if workspaceRoot != "" {
 		args = append(args, "--cwd", workspaceRoot)

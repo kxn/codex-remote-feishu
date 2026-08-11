@@ -7,6 +7,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -92,7 +93,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			}
 			t.currentThreadID = pending.ThreadID
 			if pending.CWD != "" {
-				t.knownThreadCWD[pending.ThreadID] = pending.CWD
+				t.knownThreadCWD[pending.ThreadID] = pathcanon.Native(pending.CWD)
 			}
 			t.suppressedThreadStarted[pending.ThreadID] = true
 			t.Debugf("observe server child restart restore result: request=%s thread=%s", requestID, pending.ThreadID)
@@ -174,7 +175,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			}
 			t.currentThreadID = threadID
 			if pending.Command.Target.CWD != "" {
-				t.knownThreadCWD[threadID] = pending.Command.Target.CWD
+				t.knownThreadCWD[threadID] = pathcanon.Native(pending.Command.Target.CWD)
 			}
 			followup, followupID, err := t.directTurnStart(threadID, pending.Command, true)
 			if err != nil {
@@ -224,7 +225,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			}
 			t.currentThreadID = pending.ThreadID
 			if pending.Command.Target.CWD != "" {
-				t.knownThreadCWD[pending.ThreadID] = pending.Command.Target.CWD
+				t.knownThreadCWD[pending.ThreadID] = pathcanon.Native(pending.Command.Target.CWD)
 			}
 			switch pending.Command.Kind {
 			case agentproto.CommandThreadCompactStart:
@@ -363,7 +364,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 				record.Name = choose(patch.Name, record.Name)
 				record.Preview = choose(patch.Preview, record.Preview)
-				record.CWD = choose(patch.CWD, record.CWD)
+				record.CWD = pathcanon.Native(choose(patch.CWD, record.CWD))
 				record.PlanMode = choose(patch.PlanMode, record.PlanMode)
 				record.Loaded = record.Loaded || patch.Loaded
 				record.Archived = record.Archived || patch.Archived

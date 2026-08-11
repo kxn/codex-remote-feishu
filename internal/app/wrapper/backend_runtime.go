@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/claudesessionstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 type runtimeObserveResult struct {
@@ -83,7 +84,7 @@ func newBackendRuntime(cfg Config) backendRuntime {
 		if threadID := strings.TrimSpace(cfg.ResumeThreadID); threadID != "" {
 			runtime.initialLaunchResume = &claudeLaunchResumeTarget{
 				ThreadID: threadID,
-				CWD:      strings.TrimSpace(cfg.WorkspaceRoot),
+				CWD:      pathcanon.Native(cfg.WorkspaceRoot),
 			}
 		}
 		return runtime

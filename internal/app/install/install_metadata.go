@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -274,7 +275,7 @@ func canonicalInstallBinDirForMigration(goos string, state InstallState) (string
 		return "", false
 	}
 	installedDir := filepath.Dir(filepath.Clean(installedBinary))
-	if filepath.Clean(installedDir) == filepath.Clean(canonicalDir) {
+	if pathcompare.SameCleanPlatformPath(installedDir, canonicalDir) {
 		return "", false
 	}
 	return canonicalDir, true

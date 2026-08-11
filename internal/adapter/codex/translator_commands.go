@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -37,7 +38,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 			)
 			params := map[string]any{
 				"threadId": threadID,
-				"cwd":      choose(command.Target.CWD, t.knownThreadCWD[threadID]),
+				"cwd":      pathcanon.Native(choose(command.Target.CWD, t.knownThreadCWD[threadID])),
 			}
 			applyCodexResumePolicyToThreadParams(params, command.CodexResume)
 			t.recordCodexPolicyForThread(threadID, command.CodexResume)
@@ -353,7 +354,7 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 		)
 		params := map[string]any{
 			"threadId": command.Target.ThreadID,
-			"cwd":      choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID]),
+			"cwd":      pathcanon.Native(choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID])),
 		}
 		applyCodexResumePolicyToThreadParams(params, command.CodexResume)
 		t.recordCodexPolicyForThread(command.Target.ThreadID, command.CodexResume)
@@ -430,7 +431,7 @@ func (t *Translator) buildThreadStartParamsWithPolicy(cwd string, overrides agen
 	if len(params) == 0 {
 		params = map[string]any{}
 	}
-	params["cwd"] = choose(cwd, xutil.LookupStringFromAny(params["cwd"]))
+	params["cwd"] = pathcanon.Native(choose(cwd, xutil.LookupStringFromAny(params["cwd"])))
 	setDefault(params, "model", nil)
 	setDefault(params, "modelProvider", nil)
 	setDefault(params, "config", map[string]any{})
@@ -452,7 +453,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	template := t.selectTurnTemplate(threadID, newThread)
 	template["threadId"] = threadID
 	template["input"] = t.buildInputs(command.Prompt.Inputs)
-	template["cwd"] = choose(command.Target.CWD, choose(xutil.LookupStringFromAny(template["cwd"]), t.knownThreadCWD[threadID]))
+	template["cwd"] = pathcanon.Native(choose(command.Target.CWD, choose(xutil.LookupStringFromAny(template["cwd"]), t.knownThreadCWD[threadID])))
 	setDefault(template, "approvalPolicy", nil)
 	setDefault(template, "sandboxPolicy", nil)
 	setDefault(template, "model", nil)
