@@ -321,7 +321,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		default:
 			s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
 		}
-		workspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
+		workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
 		if pending.PrepareNewThread {
 			return s.attachWorkspaceWithOptions(surface, workspaceKey, attachWorkspaceOptions{
 				PrepareNewThread: true,
@@ -343,7 +343,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 		// This connection belongs to a concrete managed instance. A global
 		// merged view can pick the same thread ID from another instance and
 		// leak that instance's workspace into this restore attempt.
-		thread.WorkspaceKey = normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD))
+		thread.WorkspaceKey = pendingHeadlessWorkspaceClaimKey(pending)
 		thread.CWD = strings.TrimSpace(pending.ThreadCWD)
 		view := &mergedThreadView{
 			ThreadID: pending.ThreadID,
@@ -391,9 +391,9 @@ func (s *Service) attachHeadlessWorkspaceRouteRestart(surface *state.SurfaceCons
 	default:
 		s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(pending.WorkspaceKey)
+	workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
 	if workspaceKey == "" {
-		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot), pending.ThreadCWD)
+		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey(instanceWorkspaceClaimKey(inst), pending.ThreadCWD)
 	}
 	if workspaceKey == "" {
 		s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID)
@@ -479,7 +479,10 @@ func (s *Service) finishFailedAutoRestoreThreadConnect(surface *state.SurfaceCon
 	if s.consumeSurfacePendingHeadlessLaunch(surface, pending.InstanceID) == nil {
 		return events
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD, surface.ClaimedWorkspaceKey))
+	workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
+	if workspaceKey == "" {
+		workspaceKey = normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey)
+	}
 	if surface.AttachedInstanceID == pending.InstanceID {
 		events = append(events, s.finalizeDetachedSurface(surface)...)
 	} else {
@@ -519,7 +522,10 @@ func (s *Service) attachHeadlessPromptDispatchRestart(surface *state.SurfaceCons
 		return nil
 	}
 	s.applyPendingHeadlessRuntimeToInstance(surface, inst, pending)
-	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(inst.WorkspaceKey, inst.WorkspaceRoot, pending.WorkspaceKey), pending.ThreadCWD)
+	workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
+	if workspaceKey == "" {
+		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey(instanceWorkspaceClaimKey(inst), pending.ThreadCWD)
+	}
 	next := promptDispatchRestartRouteState(inst.InstanceID, workspaceKey, pending)
 	if !s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
 		AttachedInstanceID:   next.AttachedInstanceID,

@@ -385,7 +385,11 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 	}
 	if pending := surface.PendingHeadless; pending != nil {
 		if routeMode, ok := pendingHeadlessWorkspaceRouteMode(pending); ok {
-			if resumeWorkspaceKey := state.ResolveWorkspaceClaimKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
+			resumeWorkspaceKey := state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)
+			if resumeWorkspaceKey == "" {
+				resumeWorkspaceKey = state.ResolveHeadlessResumeWorkspaceKey(workspaceKey, pending.ThreadCWD)
+			}
+			if resumeWorkspaceKey != "" {
 				return surfaceResumeTarget{
 					ResumeWorkspaceKey: resumeWorkspaceKey,
 					ResumeRouteMode:    string(routeMode),
@@ -393,11 +397,15 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 			}
 			return surfaceResumeTarget{}, workspaceKey, false
 		}
+		resumeWorkspaceKey := state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)
+		if resumeWorkspaceKey == "" {
+			resumeWorkspaceKey = state.ResolveHeadlessResumeWorkspaceKey(workspaceKey, pending.ThreadCWD)
+		}
 		return surfaceResumeTarget{
 			ResumeThreadID:     strings.TrimSpace(pending.ThreadID),
 			ResumeThreadTitle:  strings.TrimSpace(pending.ThreadTitle),
 			ResumeThreadCWD:    state.ResolveWorkspaceClaimKey(pending.ThreadCWD),
-			ResumeWorkspaceKey: state.ResolveHeadlessResumeWorkspaceKey(state.ResolveWorkspaceClaimKey(workspaceKey, pending.WorkspaceKey), pending.ThreadCWD),
+			ResumeWorkspaceKey: resumeWorkspaceKey,
 			ResumeRouteMode:    string(state.RouteModePinned),
 			ResumeHeadless:     true,
 		}, workspaceKey, true

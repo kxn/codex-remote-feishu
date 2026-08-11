@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type surfaceRouteThreadClaimPolicy int
@@ -34,13 +33,13 @@ func (s *Service) surfaceCurrentWorkspaceKeyRaw(surface *state.SurfaceConsoleRec
 	if surface == nil || !surfaceUsesWorkspaceClaimsRaw(surface) {
 		return ""
 	}
-	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
-		return key
-	}
 	if pending := surface.PendingHeadless; pending != nil {
-		if key := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)); key != "" {
+		if key := pendingHeadlessWorkspaceClaimKey(pending); key != "" {
 			return key
 		}
+	}
+	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
+		return key
 	}
 	if key := normalizeWorkspaceClaimKey(surface.PreparedThreadCWD); key != "" {
 		return key
@@ -162,7 +161,7 @@ func (s *Service) normalizeSurfaceRouteCoreState(surface *state.SurfaceConsoleRe
 	if !surfaceUsesWorkspaceClaimsRaw(surface) {
 		next.WorkspaceKey = ""
 	} else if next.WorkspaceKey == "" {
-		if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
+		if key := s.surfaceCurrentWorkspaceKeyRaw(surface); key != "" {
 			next.WorkspaceKey = key
 		}
 		if next.WorkspaceKey == "" && next.PreparedThreadCWD != "" {

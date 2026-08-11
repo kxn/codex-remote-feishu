@@ -5,11 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 )
 
 const (
@@ -317,8 +317,5 @@ func canonicalExecutablePath(path string) string {
 func sameExecutablePath(left, right string) bool {
 	left = canonicalExecutablePath(left)
 	right = canonicalExecutablePath(right)
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(left, right)
-	}
-	return left == right
+	return pathcompare.SameCleanPlatformPath(left, right)
 }

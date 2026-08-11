@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -783,7 +784,10 @@ func pathWithinRoot(rootPath, targetPath string) bool {
 }
 
 func samePath(left, right string) bool {
-	return canonicalPathPickerPath(left) == canonicalPathPickerPath(right)
+	if pathcompare.SameCleanPlatformPath(left, right) {
+		return true
+	}
+	return pathcompare.SameCleanPlatformPath(canonicalPathPickerPath(left), canonicalPathPickerPath(right))
 }
 
 func canonicalPathPickerPath(path string) string {

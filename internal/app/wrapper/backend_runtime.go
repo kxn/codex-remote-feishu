@@ -3,7 +3,6 @@ package wrapper
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 )
 
 type runtimeObserveResult struct {
@@ -762,7 +762,7 @@ func (r *claudeBackendRuntime) lookupStoredResumeTarget(dispatchPlan agentproto.
 		cwd = strings.TrimSpace(r.workspaceRoot)
 	}
 	if strings.TrimSpace(cwd) != "" && strings.TrimSpace(r.workspaceRoot) != "" &&
-		filepath.Clean(cwd) != filepath.Clean(r.workspaceRoot) {
+		!pathcompare.SameCleanPlatformPath(cwd, r.workspaceRoot) {
 		return nil, false, agentproto.ErrorInfo{
 			Code:      "claude_resume_workspace_mismatch",
 			Layer:     "wrapper",

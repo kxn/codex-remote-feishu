@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-11`
-> Summary: 同步旧 `attach_instance` 卡片回调在 headless surface 上只能触发产品层 fail-closed notice、不得改变 route 的边界，并保留当前 live 的 workspace/page/request/review owner-flow、`select_static` 取值规则、callback surface identity、workspace target picker、动态模型/推理菜单、群聊菜单能力边界、Profile 下拉、MCP elicitation 与 `/mcpoauth` 等既有 UI 状态机合同。
+> Summary: 同步 target picker processing/cancel 使用 PendingHeadless resolver 匹配当前业务流的边界，并保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、`select_static`、callback surface identity、动态模型/推理菜单、群聊菜单、Profile 下拉、MCP elicitation 与 `/mcpoauth` 等既有 UI 状态机合同。
 
 ## 1. 文档定位
 
@@ -575,7 +575,7 @@ MCP request 卡片当前新增的可视语义：
   - `/sendfile` confirm 后会先做启动前校验，失败则把错误提示继续留在当前 picker 卡；启动成功则把当前卡封成 `已开始发送，可继续其他操作`，展示文件名/大小，超 `100 MB` 时再追加 `文件较大，请耐心等待`
   - `/sendfile` cancel 当前也会把当前 picker 卡封成 `已取消发送文件` 终态，而不是把旧卡留在原地再额外 append 一条取消 notice
   - `/sendfile` 启动成功后，真实文件消息会直接出现在聊天流里作为成功结果；不再额外补一张成功确认卡。只有后台异步失败才补轻量 notice
-  - `target_picker_cancel` 当前会直接把这张 owner card 封成 terminal 状态；普通编辑态为 `已取消`，Git import processing 态为 `已取消导入`，Worktree processing 态为 `已取消创建`，并会分别 best-effort 停止 clone / prepare 或 `git worktree add`
+  - `target_picker_cancel` 当前会直接把这张 owner card 封成 terminal 状态；普通编辑态为 `已取消`，Git import processing 态为 `已取消导入`，Worktree processing 态为 `已取消创建`，并会分别 best-effort 停止 clone / prepare 或 `git worktree add`。processing cancel 与后续 prepare continuation 匹配 pending headless 时使用 `state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)`，不把旧 workspaceKey 当作唯一身份
   - target picker 的 processing / terminal 阶段当前也不再把整张卡覆写成纯状态块；`工作区 / 会话 / 目录 / 仓库 / 落地目录 / 目标路径` 等业务上下文会继续保留在业务区，状态推进与终态结果统一进入 notice 区
   - `从目录新建` 的主按钮当前仍会前置阻塞已知必败条件；只有目录可接入时，`接入并继续` 才会启用
   - `从 GIT URL 新建` 与 `从 Worktree 新建` 因依赖 Feishu 文本输入，当前不再把 `克隆并继续` / `创建并进入` 的可点击性绑定到 live preview；按钮保持可点，提交后再由服务端做 repo / branch / 目录名 / 基准工作区 / 最终路径 / 环境检查，并把阻塞原因保留在同卡提示区

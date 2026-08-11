@@ -1,8 +1,8 @@
 # Configuration State Storage Guidelines
 
 > Type: `general`
-> Updated: `2026-07-31`
-> Summary: 规定配置项的 owner 与冻结边界，并补充 Profile definition、上下文偏好、desired selection 和 admission revision 的独立存储合同。
+> Updated: `2026-08-11`
+> Summary: 补充 workspace/path identity 的 canonical helper 边界，并保留配置 owner、冻结边界、Profile definition、上下文偏好、desired selection 和 admission revision 的独立存储合同。
 
 ## 1. 适用范围
 
@@ -76,6 +76,12 @@
 - Claude: `claude + claudeProfileID + workspaceKey`
 
 旧版 `backend + workspaceKey` 只能作为兼容读取或迁移来源，不应作为新写入目标。
+
+workspace/path identity 只能通过 canonical helper 得到：
+
+- 单个 workspace carrier 写入持久化 key 或 claim 时，使用 `state.ResolveWorkspaceClaimKey(...)`。
+- 同时持有 `workspaceKey` 与 `threadCWD` 时，使用 `state.ResolveHeadlessResumeWorkspaceKey(workspaceKey, threadCWD)`；若 cwd 位于 workspace root 下，持久化稳定 workspace root；若 cwd 已经不在 workspace root 下，视为旧 workspace carrier 过期，改以 cwd 作为 workspace claim。
+- 普通路径身份比较使用 `pathcompare.SameCleanPlatformPath(...)`。`filepath.Clean` 只能用于路径构造、展示、archive containment 或本机文件系统导航，不得作为跨平台身份比较的 SSOT。
 
 ## 3. 配置分类规则
 

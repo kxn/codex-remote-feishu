@@ -87,6 +87,175 @@ func TestTransitionSurfaceRouteCoreMaintainsClaimsAcrossStates(t *testing.T) {
 	}
 }
 
+func TestSurfaceCurrentWorkspaceKeyUsesPendingThreadCWDWhenWorkspaceConflicts(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 1, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.ClaimedWorkspaceKey = "/data/dl/repo"
+	surface.PendingHeadless = &state.HeadlessLaunchRecord{
+		WorkspaceKey:     "/data/dl/repo",
+		ThreadCWD:        "/data/dl/other",
+		PrepareNewThread: true,
+	}
+
+	want := state.ResolveHeadlessResumeWorkspaceKey("/data/dl/repo", "/data/dl/other")
+	if got := svc.surfaceCurrentWorkspaceKey(surface); got != want {
+		t.Fatalf("surfaceCurrentWorkspaceKey() = %q, want resolved pending workspace %q", got, want)
+	}
+	if surface.ClaimedWorkspaceKey != want {
+		t.Fatalf("expected surface claim to persist resolved pending workspace %q, got %q", want, surface.ClaimedWorkspaceKey)
+	}
+}
+
+func TestFinishWorkspaceRouteRestartPendingRouteUsesResolvedThreadCWDWhenClaimConflicts(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 1, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.ClaimedWorkspaceKey = "/data/dl/repo"
+	pending := &state.HeadlessLaunchRecord{
+		WorkspaceKey:     "/data/dl/repo",
+		ThreadCWD:        "/data/dl/other",
+		PrepareNewThread: true,
+		Purpose:          state.HeadlessLaunchPurposeWorkspaceRouteRestart,
+	}
+
+	svc.finishWorkspaceRouteRestartPendingRoute(surface, pending)
+
+	want := state.ResolveHeadlessResumeWorkspaceKey("/data/dl/repo", "/data/dl/other")
+	if surface.ClaimedWorkspaceKey != want {
+		t.Fatalf("expected workspace-route restart to preserve resolved pending workspace %q, got %#v", want, surface)
+	}
+}
+
+func TestFinishPromptDispatchRestartPendingRouteUsesPendingWorkspaceRootWhenSurfaceClaimConflicts(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 1, 35, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.ClaimedWorkspaceKey = "/data/dl/old"
+	pending := &state.HeadlessLaunchRecord{
+		WorkspaceKey: "/data/dl/repo",
+		ThreadCWD:    "/data/dl/repo/pkg",
+		Purpose:      state.HeadlessLaunchPurposePromptDispatchRestart,
+	}
+
+	svc.finishPromptDispatchRestartPendingRoute(surface, pending)
+
+	want := state.ResolveHeadlessResumeWorkspaceKey("/data/dl/repo", "/data/dl/repo/pkg")
+	if surface.ClaimedWorkspaceKey != want {
+		t.Fatalf("expected prompt restart recovery to use pending workspace root %q, got %#v", want, surface)
+	}
+}
+
+func TestFinishWorkspaceRouteRestartPendingRouteUsesPendingWorkspaceRootWhenSurfaceClaimConflicts(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 1, 40, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.ClaimedWorkspaceKey = "/data/dl/old"
+	pending := &state.HeadlessLaunchRecord{
+		WorkspaceKey:     "/data/dl/repo",
+		ThreadCWD:        "/data/dl/repo/pkg",
+		PrepareNewThread: true,
+		Purpose:          state.HeadlessLaunchPurposeWorkspaceRouteRestart,
+	}
+
+	svc.finishWorkspaceRouteRestartPendingRoute(surface, pending)
+
+	want := state.ResolveHeadlessResumeWorkspaceKey("/data/dl/repo", "/data/dl/repo/pkg")
+	if surface.ClaimedWorkspaceKey != want {
+		t.Fatalf("expected workspace-route restart recovery to use pending workspace root %q, got %#v", want, surface)
+	}
+}
+
+func TestAttachHeadlessWorkspaceRouteRestartUsesResolvedPendingWorkspace(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 1, 45, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.ClaimedWorkspaceKey = "/data/dl/repo"
+	pending := &state.HeadlessLaunchRecord{
+		InstanceID:       "inst-restarted",
+		WorkspaceKey:     "/data/dl/repo",
+		ThreadCWD:        "/data/dl/other",
+		PrepareNewThread: true,
+		Purpose:          state.HeadlessLaunchPurposeWorkspaceRouteRestart,
+	}
+	surface.PendingHeadless = pending
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    pending.InstanceID,
+		DisplayName:   "repo",
+		WorkspaceRoot: "/data/dl/repo",
+		WorkspaceKey:  "/data/dl/repo",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplyInstanceConnected(pending.InstanceID)
+
+	want := state.ResolveHeadlessResumeWorkspaceKey("/data/dl/repo", "/data/dl/other")
+	if surface.PendingHeadless != nil ||
+		surface.AttachedInstanceID != pending.InstanceID ||
+		surface.RouteMode != state.RouteModeNewThreadReady ||
+		surface.PreparedThreadCWD != want ||
+		surface.ClaimedWorkspaceKey != want {
+		t.Fatalf("expected workspace-route restart attach to use resolved pending workspace %q, surface=%#v events=%#v", want, surface, events)
+	}
+	if inst := svc.root.Instances[pending.InstanceID]; inst.WorkspaceKey != want || inst.WorkspaceRoot != want {
+		t.Fatalf("expected managed instance to retarget resolved workspace %q, got %#v", want, inst)
+	}
+}
+
+func TestAttachHeadlessPromptDispatchRestartUsesPendingWorkspaceRootWhenInstanceConflicts(t *testing.T) {
+	now := time.Date(2026, 5, 3, 12, 1, 50, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	surface := svc.root.Surfaces["surface-1"]
+	surface.ProductMode = state.ProductModeNormal
+	surface.ClaimedWorkspaceKey = "/data/dl/old"
+	pending := &state.HeadlessLaunchRecord{
+		InstanceID:       "inst-restarted",
+		WorkspaceKey:     "/data/dl/repo",
+		ThreadCWD:        "/data/dl/repo/pkg",
+		PrepareNewThread: true,
+		Purpose:          state.HeadlessLaunchPurposePromptDispatchRestart,
+	}
+	surface.PendingHeadless = pending
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    pending.InstanceID,
+		DisplayName:   "old",
+		WorkspaceRoot: "/data/dl/old",
+		WorkspaceKey:  "/data/dl/old",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads:       map[string]*state.ThreadRecord{},
+	})
+
+	events := svc.ApplyInstanceConnected(pending.InstanceID)
+
+	want := state.ResolveHeadlessResumeWorkspaceKey("/data/dl/repo", "/data/dl/repo/pkg")
+	if surface.PendingHeadless != nil ||
+		surface.AttachedInstanceID != pending.InstanceID ||
+		surface.RouteMode != state.RouteModeNewThreadReady ||
+		surface.PreparedThreadCWD != "/data/dl/repo/pkg" ||
+		surface.ClaimedWorkspaceKey != want {
+		t.Fatalf("expected prompt restart attach to use pending workspace root %q, surface=%#v events=%#v", want, surface, events)
+	}
+	if inst := svc.root.Instances[pending.InstanceID]; inst.WorkspaceKey != want || inst.WorkspaceRoot != want {
+		t.Fatalf("expected managed instance to retarget pending workspace root %q, got %#v", want, inst)
+	}
+}
+
 func TestTransitionSurfaceRouteCoreOwnsPreparedAt(t *testing.T) {
 	now := time.Date(2026, 5, 3, 12, 2, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

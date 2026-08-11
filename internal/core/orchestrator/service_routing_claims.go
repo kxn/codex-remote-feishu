@@ -6,7 +6,6 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) defaultAttachThread(inst *state.InstanceRecord) string {
@@ -32,6 +31,13 @@ func (s *Service) surfaceThreadPickRouteMode(surface *state.SurfaceConsoleRecord
 
 func normalizeWorkspaceClaimKey(value string) string {
 	return state.ResolveWorkspaceClaimKey(value)
+}
+
+func pendingHeadlessWorkspaceClaimKey(pending *state.HeadlessLaunchRecord) string {
+	if pending == nil {
+		return ""
+	}
+	return state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)
 }
 
 func instanceWorkspaceClaimKey(inst *state.InstanceRecord) string {
@@ -70,15 +76,15 @@ func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord
 	if surface == nil || !s.surfaceUsesWorkspaceClaims(surface) {
 		return ""
 	}
-	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
-		surface.ClaimedWorkspaceKey = key
-		return key
-	}
 	if pending := surface.PendingHeadless; pending != nil {
-		if key := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)); key != "" {
+		if key := pendingHeadlessWorkspaceClaimKey(pending); key != "" {
 			surface.ClaimedWorkspaceKey = key
 			return key
 		}
+	}
+	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
+		surface.ClaimedWorkspaceKey = key
+		return key
 	}
 	if key := normalizeWorkspaceClaimKey(surface.PreparedThreadCWD); key != "" {
 		surface.ClaimedWorkspaceKey = key

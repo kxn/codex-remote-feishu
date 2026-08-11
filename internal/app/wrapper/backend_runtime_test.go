@@ -154,6 +154,31 @@ func TestClaudeBackendRuntimePrepareChildRestartStoresResolvedResumeTarget(t *te
 	}
 }
 
+func TestClaudeBackendRuntimePrepareChildRestartUsesCanonicalWorkspacePathIdentity(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	workspaceRoot := `c:\Users\Codex\repo`
+	sessionCWD := `\\?\C:\Users\Codex\repo`
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "resume-session-1", []map[string]any{
+		{"type": "system", "cwd": sessionCWD, "session_id": "resume-session-1", "model": "mimo-v2.5-pro"},
+		{"type": "session-title", "title": "Canonical path identity"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "resume me"}},
+	})
+
+	runtime := &claudeBackendRuntime{
+		workspaceRoot: workspaceRoot,
+	}
+	if err := runtime.PrepareChildRestart("cmd-prompt-claude-resume", agentproto.PromptDispatchPlan{
+		ExecutionThreadID: "resume-session-1",
+		CWD:               sessionCWD,
+	}, nil); err != nil {
+		t.Fatalf("PrepareChildRestart: %v", err)
+	}
+	if runtime.pendingLaunchResume == nil || runtime.pendingLaunchResume.CWD != sessionCWD {
+		t.Fatalf("expected canonical-equivalent resume cwd to be accepted, got %#v", runtime.pendingLaunchResume)
+	}
+}
+
 func TestCodexBackendRuntimePrepareChildRestartStoresResumePolicy(t *testing.T) {
 	runtime := &codexBackendRuntime{translator: codex.NewTranslator("inst-1")}
 	if _, err := runtime.translator.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {

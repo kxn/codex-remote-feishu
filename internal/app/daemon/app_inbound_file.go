@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 )
 
 const (
@@ -286,18 +287,5 @@ func removeInboundWorkspaceFile(path string) error {
 }
 
 func sameCleanPath(left, right string) bool {
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-	if left == "" || right == "" {
-		return false
-	}
-	left = filepath.Clean(left)
-	right = filepath.Clean(right)
-	if abs, err := filepath.Abs(left); err == nil {
-		left = abs
-	}
-	if abs, err := filepath.Abs(right); err == nil {
-		right = abs
-	}
-	return left == right
+	return pathcompare.SameCleanPlatformPath(left, right)
 }

@@ -8,6 +8,12 @@ import (
 	"testing"
 )
 
+func TestSamePathUsesPlatformCanonicalComparison(t *testing.T) {
+	if !samePath(`\\?\C:\Users\Codex\bin\codex.exe`, `c:/users/codex/bin/codex.exe`) {
+		t.Fatal("expected samePath to use platform canonical comparison after symlink resolution")
+	}
+}
+
 func TestInspectTreatsBundleConfigWithPATHCodexAsStandaloneNPM(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("test fixture uses unix shell scripts")

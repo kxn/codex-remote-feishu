@@ -232,7 +232,7 @@ func targetPickerPendingStillRunning(surface *state.SurfaceConsoleRecord, record
 		fallthrough
 	case targetPickerPendingWorktreeCreate:
 		return surface.PendingHeadless.PrepareNewThread &&
-			normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
+			pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
 	default:
 		return false
 	}

@@ -44,7 +44,7 @@ func (s *Service) CompleteTargetPickerGitImport(surfaceSessionID, pickerID, work
 		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 	}
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
+		pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == workspaceKey {
 		status := targetPickerGitImportPostCloneProcessingStatus(strings.TrimSpace(record.GitRepoURL), workspaceKey)
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingGitImport, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)
 		return append(processing, filtered...)
@@ -88,7 +88,7 @@ func (s *Service) cancelTargetPickerGitImport(surface *state.SurfaceConsoleRecor
 		},
 	}}
 	pending := surface.PendingHeadless
-	if pending == nil || !pending.PrepareNewThread || normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
+	if pending == nil || !pending.PrepareNewThread || pendingHeadlessWorkspaceClaimKey(pending) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
 		return events
 	}
 	events = append(events, s.finalizeDetachedSurface(surface)...)

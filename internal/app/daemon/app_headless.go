@@ -21,7 +21,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) handleDaemonCommand(command control.DaemonCommand) []eventcontract.Event {
@@ -247,7 +246,8 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
 	}
 
-	workDir := pathcanon.Native(xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
+	commandWorkspaceKey := headlessCommandWorkspaceKey(command)
+	workDir := pathcanon.Native(commandWorkspaceKey)
 	if workDir == "" {
 		workDir = pathcanon.Native(cfg.Paths.StateDir)
 	}
@@ -284,7 +284,7 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 			command.SurfaceSessionID,
 			command.InstanceID,
 			command.ThreadID,
-			xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD),
+			commandWorkspaceKey,
 			err,
 		)
 		return a.handleManagedHeadlessLaunchFailure(command, err, now)
@@ -411,6 +411,10 @@ func headlessLaunchModeForBackend(backend agentproto.Backend) string {
 	}
 }
 
+func headlessCommandWorkspaceKey(command control.DaemonCommand) string {
+	return state.ResolveHeadlessResumeWorkspaceKey(command.WorkspaceKey, command.ThreadCWD)
+}
+
 func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []string, backend agentproto.Backend, command control.DaemonCommand) ([]string, []string, *state.OpenCodeAdmissionRef, error) {
 	env := append([]string{}, baseEnv...)
 	args := append([]string{}, baseArgs...)
@@ -426,7 +430,7 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	workspaceRoot := strings.TrimSpace(xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
+	workspaceRoot := headlessCommandWorkspaceKey(command)
 	material, err := opencodeprofile.CompileLaunchMaterial(opencodeprofile.CompileInput{
 		Profile:       profile,
 		WorkspaceRoot: workspaceRoot,
