@@ -132,8 +132,8 @@ type App struct {
 	pendingThreadHistoryReads     map[string]pendingThreadHistoryRead
 	pendingMCPOAuthLogins         map[string]pendingMCPOAuthLogin
 	childRestartWaiters           map[string]*childRestartWaiter
-	gitWorkspaceImports           map[string]*gitWorkspaceImportRuntime
-	gitWorkspaceWorktrees         map[string]*gitWorkspaceWorktreeRuntime
+	gitWorkspaceImports           map[string]*cancellablePickerRuntime
+	gitWorkspaceWorktrees         map[string]*cancellablePickerRuntime
 	startHeadless                 func(relayruntime.HeadlessLaunchOptions) (int, error)
 	runCodexCapabilityPreflight   func(context.Context, codexprofile.CapabilityPreflightOptions) (codexprofile.CapabilityPreflightObservation, error)
 	runCodexOAuthProbe            func(context.Context, codexprofile.OAuthProbeOptions) (codexprofile.OAuthProbeObservation, error)
@@ -225,8 +225,8 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		feishuRuntime:               newFeishuRuntimeState(),
 		pendingThreadHistoryReads:   map[string]pendingThreadHistoryRead{},
 		pendingMCPOAuthLogins:       map[string]pendingMCPOAuthLogin{},
-		gitWorkspaceImports:         map[string]*gitWorkspaceImportRuntime{},
-		gitWorkspaceWorktrees:       map[string]*gitWorkspaceWorktreeRuntime{},
+		gitWorkspaceImports:         map[string]*cancellablePickerRuntime{},
+		gitWorkspaceWorktrees:       map[string]*cancellablePickerRuntime{},
 		startHeadless:               relayruntime.StartDetachedWrapper,
 		runCodexCapabilityPreflight: codexprofile.RunCapabilityPreflight,
 		runCodexOAuthProbe:          codexprofile.RunOAuthProbe,
