@@ -45,6 +45,79 @@ func TestLoadStateCollapsesLegacyConfigPaths(t *testing.T) {
 	}
 }
 
+func TestLoadStateCanonicalizesWindowsExtendedPathFields(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "install-state.json")
+	raw := map[string]interface{}{
+		"instanceId":         "stable",
+		"baseDir":            `//?/C:/repo`,
+		"statePath":          `\\?\C:\repo\state\install-state.json`,
+		"configPath":         `//?/C:/repo/config/config.json`,
+		"serviceUnitPath":    `\\?\C:\repo\service.xml`,
+		"currentBinaryPath":  `//?/C:/repo/bin/codex-remote.exe`,
+		"versionsRoot":       `\\?\C:\repo\versions`,
+		"vscodeSettingsPath": `//?/C:/repo/editor/settings.json`,
+		"bundleEntrypoint":   `\\?\C:\repo\bundle\codex.exe`,
+		"pendingUpgrade": map[string]interface{}{
+			"phase":            "prepared",
+			"targetBinaryPath": `//?/C:/repo/versions/v1/codex-remote.exe`,
+		},
+		"rollbackCandidate": map[string]interface{}{
+			"binaryPath": `\\?\C:\repo\versions\v0\codex-remote.exe`,
+			"configSnapshots": []map[string]interface{}{
+				{
+					"path":       `//?/C:/repo/config/config.json`,
+					"backupPath": `\\?\C:\repo\backup\config.json`,
+					"existed":    true,
+				},
+			},
+		},
+	}
+	rawBytes, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
+	}
+	if err := os.WriteFile(statePath, rawBytes, 0o644); err != nil {
+		t.Fatalf("write state: %v", err)
+	}
+
+	loaded, err := LoadState(statePath)
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+
+	checks := map[string]string{
+		"BaseDir":            loaded.BaseDir,
+		"StatePath":          loaded.StatePath,
+		"ConfigPath":         loaded.ConfigPath,
+		"ServiceUnitPath":    loaded.ServiceUnitPath,
+		"CurrentBinaryPath":  loaded.CurrentBinaryPath,
+		"VersionsRoot":       loaded.VersionsRoot,
+		"VSCodeSettingsPath": loaded.VSCodeSettingsPath,
+		"BundleEntrypoint":   loaded.BundleEntrypoint,
+	}
+	for name, got := range checks {
+		if strings.Contains(got, `\\?\`) || strings.Contains(got, `//?/`) || strings.Contains(got, `/?/`) {
+			t.Fatalf("%s still contains extended path pollution: %q", name, got)
+		}
+	}
+	if loaded.CurrentBinaryPath != `C:\repo\bin\codex-remote.exe` {
+		t.Fatalf("CurrentBinaryPath = %q, want native extended-prefix-free path", loaded.CurrentBinaryPath)
+	}
+	if loaded.PendingUpgrade == nil || loaded.PendingUpgrade.TargetBinaryPath != `C:\repo\versions\v1\codex-remote.exe` {
+		t.Fatalf("PendingUpgrade.TargetBinaryPath = %#v, want native extended-prefix-free path", loaded.PendingUpgrade)
+	}
+	if loaded.RollbackCandidate == nil || loaded.RollbackCandidate.BinaryPath != `C:\repo\versions\v0\codex-remote.exe` {
+		t.Fatalf("RollbackCandidate = %#v, want native extended-prefix-free binary path", loaded.RollbackCandidate)
+	}
+	if got := loaded.RollbackCandidate.ConfigSnapshots[0].Path; got != `C:\repo\config\config.json` {
+		t.Fatalf("ConfigSnapshot.Path = %q, want native extended-prefix-free path", got)
+	}
+	if got := loaded.RollbackCandidate.ConfigSnapshots[0].BackupPath; got != `C:\repo\backup\config.json` {
+		t.Fatalf("ConfigSnapshot.BackupPath = %q, want native extended-prefix-free path", got)
+	}
+}
+
 func TestWriteStateOmitsLegacyConfigPathFields(t *testing.T) {
 	baseDir := t.TempDir()
 	statePath := filepath.Join(baseDir, ".local", "share", "codex-remote", "install-state.json")

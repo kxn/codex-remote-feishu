@@ -5,6 +5,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 )
 
 type RuntimeStateRepairOptions struct {
@@ -20,8 +23,8 @@ func RepairRuntimeState(state *InstallState, opts RuntimeStateRepairOptions) boo
 	}
 
 	changed := false
-	if currentBinary := strings.TrimSpace(opts.CurrentBinaryPath); currentBinary != "" {
-		if strings.TrimSpace(state.CurrentBinaryPath) != currentBinary {
+	if currentBinary := pathcanon.Native(opts.CurrentBinaryPath); currentBinary != "" {
+		if !sameInstallStatePath(state.CurrentBinaryPath, currentBinary) {
 			state.CurrentBinaryPath = currentBinary
 			changed = true
 		}
@@ -30,9 +33,11 @@ func RepairRuntimeState(state *InstallState, opts RuntimeStateRepairOptions) boo
 		state.CurrentVersion = currentVersion
 		changed = true
 	}
-	if configPath := strings.TrimSpace(opts.ConfigPath); configPath != "" && strings.TrimSpace(state.ConfigPath) != configPath {
-		state.ConfigPath = configPath
-		changed = true
+	if configPath := pathcanon.Native(opts.ConfigPath); configPath != "" {
+		if !sameInstallStatePath(state.ConfigPath, configPath) {
+			state.ConfigPath = configPath
+			changed = true
+		}
 	}
 	if unitPath, ok := detectRuntimeSystemdUserUnit(*state, opts.PID); ok {
 		if state.ServiceManager != ServiceManagerSystemdUser {
@@ -45,6 +50,10 @@ func RepairRuntimeState(state *InstallState, opts RuntimeStateRepairOptions) boo
 		}
 	}
 	return changed
+}
+
+func sameInstallStatePath(left, right string) bool {
+	return pathcompare.SameCleanPlatformPath(left, right)
 }
 
 func repairCurrentPlatformManagedServiceState(state *InstallState) bool {

@@ -61,6 +61,27 @@ func TestRepairRuntimeStateUpdatesBinaryVersionAndPromotesLiveSystemdUnit(t *tes
 	}
 }
 
+func TestRepairRuntimeStateIgnoresEquivalentWindowsExtendedPaths(t *testing.T) {
+	state := InstallState{
+		CurrentBinaryPath: `C:\repo\bin\codex-remote.exe`,
+		ConfigPath:        `C:\repo\config\config.json`,
+	}
+
+	changed := RepairRuntimeState(&state, RuntimeStateRepairOptions{
+		CurrentBinaryPath: `\\?\C:\repo\bin\codex-remote.exe`,
+		ConfigPath:        `//?/C:/repo/config/config.json`,
+	})
+	if changed {
+		t.Fatal("RepairRuntimeState reported changes for equivalent canonical paths")
+	}
+	if state.CurrentBinaryPath != `C:\repo\bin\codex-remote.exe` {
+		t.Fatalf("CurrentBinaryPath = %q, want canonical path", state.CurrentBinaryPath)
+	}
+	if state.ConfigPath != `C:\repo\config\config.json` {
+		t.Fatalf("ConfigPath = %q, want canonical path", state.ConfigPath)
+	}
+}
+
 func TestRepairRuntimeStateReplacesCrossPlatformManagerWithLiveSystemdUnit(t *testing.T) {
 	baseDir := t.TempDir()
 	homeDir := t.TempDir()
