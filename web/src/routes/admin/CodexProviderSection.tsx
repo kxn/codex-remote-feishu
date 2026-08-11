@@ -28,6 +28,12 @@ import {
   type EditorMode,
   useConfigEditorSection,
 } from "./ConfigEditorShared";
+import {
+  appendOrReplaceProfileItem,
+  maxProfileTextLengthMessage,
+  removeProfileItem,
+  requiredProfileFieldMessage,
+} from "./ProfileEditorShared";
 
 type CodexProviderDraft = {
   name: string;
@@ -102,7 +108,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         if (draft.contextMode !== codexContextModeDefault) {
           nextProfile = await saveContextPreference(nextProfile, draft.contextMode);
         }
-        setProviders((current) => appendOrReplaceProvider(current, nextProfile));
+        setProviders((current) => appendOrReplaceProfileItem(current, nextProfile));
         selectPersistedItem(nextProfile);
         setDetailNotice({ tone: "good", message: "Codex 配置已创建。" });
         return;
@@ -132,7 +138,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         nextProfile = await saveContextPreference(nextProfile, draft.contextMode);
       }
       setProviders((current) =>
-        appendOrReplaceProvider(current, nextProfile, activeProvider.id),
+        appendOrReplaceProfileItem(current, nextProfile, activeProvider.id),
       );
       selectPersistedItem(nextProfile);
       setDetailNotice({
@@ -193,7 +199,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
           headers: { "If-Match": provider.etag ?? "" },
         },
       );
-      const nextProviders = removeProvider(providers, deleteTargetID);
+      const nextProviders = removeProfileItem(providers, deleteTargetID);
       setProviders(nextProviders);
       setDeleteTargetID(null);
       setDeleteReferences([]);
@@ -571,23 +577,34 @@ function validateDraft(
   if (editorMode !== "create" && activeProvider && !activeProvider.editable) {
     return "";
   }
-  if (!draft.name.trim()) {
-    return "请填写名称。";
+  const nameError = requiredProfileFieldMessage(draft.name, "名称");
+  if (nameError) {
+    return nameError;
   }
-  if (!draft.baseURL.trim()) {
-    return "请填写端点地址。";
+  const baseURLError = requiredProfileFieldMessage(draft.baseURL, "端点地址");
+  if (baseURLError) {
+    return baseURLError;
   }
-  if (editorMode === "create" && !draft.apiKey.trim()) {
-    return "请填写 API Key。";
+  const apiKeyError =
+    editorMode === "create" ? requiredProfileFieldMessage(draft.apiKey, "API Key") : "";
+  if (apiKeyError) {
+    return apiKeyError;
   }
-  if (!draft.model.trim()) {
-    return "请填写主模型。";
+  const modelError = requiredProfileFieldMessage(draft.model, "主模型");
+  if (modelError) {
+    return modelError;
   }
-  if (!draft.reasoningEffort.trim()) {
-    return "请填写推理强度。";
+  const reasoningError = requiredProfileFieldMessage(draft.reasoningEffort, "推理强度");
+  if (reasoningError) {
+    return reasoningError;
   }
-  if (draft.instruction.length > codexInstructionMaxChars) {
-    return `指令最多 ${codexInstructionMaxChars} 字符。`;
+  const instructionError = maxProfileTextLengthMessage(
+    draft.instruction,
+    codexInstructionMaxChars,
+    "指令",
+  );
+  if (instructionError) {
+    return instructionError;
   }
   return "";
 }
@@ -619,27 +636,6 @@ function buildUpdatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest
     payload.apiKey = draft.apiKey;
   }
   return payload;
-}
-
-function appendOrReplaceProvider(
-  providers: CodexProfileSummary[],
-  provider: CodexProfileSummary,
-  previousID = provider.id,
-): CodexProfileSummary[] {
-  const nextProviders = providers
-    .filter((current) => current.id !== previousID || current.id === provider.id)
-    .map((current) => (current.id === provider.id ? provider : current));
-  if (nextProviders.some((current) => current.id === provider.id)) {
-    return nextProviders;
-  }
-  return [...nextProviders, provider];
-}
-
-function removeProvider(
-  providers: CodexProfileSummary[],
-  targetID: string,
-): CodexProfileSummary[] {
-  return providers.filter((provider) => provider.id !== targetID);
 }
 
 function providerTitle(provider: CodexProfileSummary | null): string {

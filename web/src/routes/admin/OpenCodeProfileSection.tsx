@@ -28,6 +28,12 @@ import {
   type EditorMode,
   useConfigEditorSection,
 } from "./ConfigEditorShared";
+import {
+  appendOrReplaceProfileItem,
+  maxProfileTextLengthMessage,
+  removeProfileItem,
+  requiredProfileFieldMessage,
+} from "./ProfileEditorShared";
 
 type OpenCodeProfileDraft = {
   name: string;
@@ -96,7 +102,7 @@ export function OpenCodeProfileSection(props: OpenCodeProfileSectionProps) {
           "POST",
           buildCreatePayload(draft),
         );
-        setProfiles((current) => appendOrReplaceProfile(current, response.profile));
+        setProfiles((current) => appendOrReplaceProfileItem(current, response.profile));
         selectPersistedItem(response.profile);
         setDetailNotice({ tone: "good", message: "OpenCode 配置已创建。" });
         return;
@@ -118,7 +124,7 @@ export function OpenCodeProfileSection(props: OpenCodeProfileSectionProps) {
       );
       const nextProfile = response.profile;
       setProfiles((current) =>
-        appendOrReplaceProfile(current, nextProfile, activeProfile.id),
+        appendOrReplaceProfileItem(current, nextProfile, activeProfile.id),
       );
       selectPersistedItem(nextProfile);
       setDetailNotice({ tone: "good", message: "OpenCode 配置已保存。" });
@@ -176,7 +182,7 @@ export function OpenCodeProfileSection(props: OpenCodeProfileSectionProps) {
           headers: { "If-Match": profile.etag ?? "" },
         },
       );
-      const nextProfiles = removeProfile(profiles, deleteTargetID);
+      const nextProfiles = removeProfileItem(profiles, deleteTargetID);
       setProfiles(nextProfiles);
       setDeleteTargetID(null);
       setDeleteReferences([]);
@@ -511,20 +517,30 @@ function validateDraft(draft: OpenCodeProfileDraft, editorMode: EditorMode): str
   if (editorMode === "built-in") {
     return "";
   }
-  if (!draft.name.trim()) {
-    return "请填写名称。";
+  const nameError = requiredProfileFieldMessage(draft.name, "名称");
+  if (nameError) {
+    return nameError;
   }
-  if (!draft.baseURL.trim()) {
-    return "请填写端点地址。";
+  const baseURLError = requiredProfileFieldMessage(draft.baseURL, "端点地址");
+  if (baseURLError) {
+    return baseURLError;
   }
-  if (editorMode === "create" && !draft.apiKey.trim()) {
-    return "请填写 API Key。";
+  const apiKeyError =
+    editorMode === "create" ? requiredProfileFieldMessage(draft.apiKey, "API Key") : "";
+  if (apiKeyError) {
+    return apiKeyError;
   }
-  if (!draft.model.trim()) {
-    return "请填写主模型。";
+  const modelError = requiredProfileFieldMessage(draft.model, "主模型");
+  if (modelError) {
+    return modelError;
   }
-  if (draft.instruction.length > openCodeInstructionMaxChars) {
-    return `指令最多 ${openCodeInstructionMaxChars} 字符。`;
+  const instructionError = maxProfileTextLengthMessage(
+    draft.instruction,
+    openCodeInstructionMaxChars,
+    "指令",
+  );
+  if (instructionError) {
+    return instructionError;
   }
   return "";
 }
@@ -557,27 +573,6 @@ function buildUpdatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRe
     payload.apiKey = apiKey;
   }
   return payload;
-}
-
-function appendOrReplaceProfile(
-  profiles: OpenCodeProfileSummary[],
-  profile: OpenCodeProfileSummary,
-  previousID = profile.id,
-): OpenCodeProfileSummary[] {
-  const nextProfiles = profiles
-    .filter((current) => current.id !== previousID || current.id === profile.id)
-    .map((current) => (current.id === profile.id ? profile : current));
-  if (nextProfiles.some((current) => current.id === profile.id)) {
-    return nextProfiles;
-  }
-  return [...nextProfiles, profile];
-}
-
-function removeProfile(
-  profiles: OpenCodeProfileSummary[],
-  targetID: string,
-): OpenCodeProfileSummary[] {
-  return profiles.filter((profile) => profile.id !== targetID);
 }
 
 function optionalString(value: string): string | undefined {
