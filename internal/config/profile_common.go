@@ -24,9 +24,7 @@ type apiGenerationAccessors[T any] struct {
 
 // validateProfileGenerations verifies that credential/connection generations
 // across an ordered revision list are monotonic and that every credential or
-// connection change carries a generation bump. It consolidates the identical
-// validateCodexAPIProfileGenerations and validateOpenCodeAPIProfileGenerations
-// implementations.
+// connection change carries a generation bump across profile types.
 func validateProfileGenerations[T any](revisions []T, access apiGenerationAccessors[T]) error {
 	ordered := append([]T{}, revisions...)
 	sort.Slice(ordered, func(left, right int) bool {
@@ -54,9 +52,7 @@ func validateProfileGenerations[T any](revisions []T, access apiGenerationAccess
 }
 
 // canonicalProfileID lowercases and trims value, keeps [a-z0-9] runes, and
-// folds every other rune into a single separator. It consolidates the
-// CanonicalCodexProviderID / CanonicalClaudeProfileID / CanonicalOpenCodeProfileID
-// implementations, which differ only in the separator byte ('-' vs '_').
+// folds every other rune into a single separator.
 func canonicalProfileID(value string, separator byte) string {
 	value = strings.TrimSpace(strings.ToLower(value))
 	if value == "" {
@@ -83,8 +79,7 @@ func canonicalProfileID(value string, separator byte) string {
 }
 
 // nextCatalogID derives a unique catalog id from id/name using the given
-// canonicalizer, appending -2, -3, ... on collisions. It consolidates the
-// nextCodexProviderID and nextClaudeProfileID implementations.
+// canonicalizer, appending -2, -3, ... on collisions.
 func nextCatalogID(canonical func(string) string, fallback, id, name string, used map[string]struct{}) string {
 	base := canonical(chooseNonEmpty(id, name, fallback))
 	if base == "" {
@@ -101,8 +96,7 @@ func nextCatalogID(canonical func(string) string, fallback, id, name string, use
 }
 
 // newRandomProfileID generates a random 128-bit profile id with the given
-// prefix that is not present in used. It consolidates the newCodexProfileID and
-// newOpenCodeProfileID implementations.
+// prefix that is not present in used.
 func newRandomProfileID(name, idPrefix string, used map[string]struct{}) (string, error) {
 	for attempt := 0; attempt < 4; attempt++ {
 		raw := make([]byte, 16)
@@ -118,9 +112,7 @@ func newRandomProfileID(name, idPrefix string, used map[string]struct{}) (string
 }
 
 // validateProfileBaseURL verifies that value is an absolute http(s) URL
-// without userinfo, query, or fragment. It consolidates the identical
-// validateCodexAPIProfileBaseURL and validateOpenCodeAPIProfileBaseURL
-// implementations.
+// without userinfo, query, or fragment.
 func validateProfileBaseURL(value string) error {
 	parsed, err := url.Parse(value)
 	if err != nil {
@@ -134,8 +126,7 @@ func validateProfileBaseURL(value string) error {
 }
 
 // profileNameKey returns the case-folded key used to compare profile names
-// for uniqueness. It consolidates the identical codexProfileNameKey and
-// opencodeProfileNameKey implementations.
+// for uniqueness.
 func profileNameKey(name string) string {
 	return cases.Fold().String(strings.TrimSpace(name))
 }
