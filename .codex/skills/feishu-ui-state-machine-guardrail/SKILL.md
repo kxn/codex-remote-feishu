@@ -22,6 +22,18 @@ Do not trigger this skill for pure copy, styling, logging, tests, or refactors t
 
 Use this skill once per implementation pass, after the code and tests are mostly stable and before committing. Do not trigger it after every tiny edit.
 
+## Fast Path For `state-light`
+
+Use this path when the repo task is classified as `state-light`: it changes Feishu card/status projection, command visibility text, or a narrow UI state carrier, but does not change callback payload schema, owner/freshness validation, inline replace rules, or product state mutation semantics.
+
+1. Read only the canonical document section(s) for the touched card, command, or projection boundary. Locate sections with headings or exact command/kind names before opening excerpts.
+2. Read the touched projector/gateway/controller code paths.
+3. Sync only the affected current-behavior text in the canonical document.
+4. Audit for UI dead ends, stale-action leaks, and projector/gateway disagreement on any payload currently emitted.
+5. Run focused tests for the touched Feishu UI path and `scripts/check/pre-commit.sh`.
+
+Escalate to the full workflow below if callback schema, lifecycle stamping, old-card handling, owner identity, or inline replacement semantics changed; also escalate if the audit finds a bug-grade stale action or user dead end outside the edited path.
+
 ## Workflow
 
 1. Read the canonical document and the touched Feishu UI code paths.

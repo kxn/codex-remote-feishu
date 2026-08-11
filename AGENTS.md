@@ -9,8 +9,27 @@
 ## 触发规则
 
 - Skill 触发使用并集匹配：用户措辞/意图、逻辑载体、触碰文件、已知症状，任一命中即触发。
-- 多个 skill 同时命中就一起用；排除说明只在能确认逻辑载体未变时适用（例如纯文案/样式/日志/测试）。
-- 不得为了少读文件而缩小触发范围。
+- 多个 skill 同时命中时先做任务分级；`full` 才默认叠加完整流程，`tiny` / `state-light` 只加载直接决定当前操作的 skill 和相关文档段落。
+- 排除说明只在能确认逻辑载体未变时适用（例如纯文案/样式/日志/测试）；不得为了少读文件而缩小触发范围。
+- 用户已明确要求直接修、需求边界清楚的 bugfix，不触发通用产品设计流程（brainstorming / writing-plans / executing-plans 等）；除非用户要求方案设计，或实现前仍存在产品决策门。
+
+## 任务分级
+
+- `tiny`：行为明确、根因已定位或可在小范围内定位、预计生产代码不超过 3 个文件、不涉及迁移/安全/权限/持久化格式/协议兼容/跨组件异步生命周期。
+  - 必须：`git status --short`、最小回归测试或明确说明不可测原因、focused test、`scripts/check/pre-commit.sh`。
+  - 不默认：完整状态机文档通读、`go test ./...`、通用设计/计划 skill。
+- `state-light`：触碰 attach/detach/use/status 投影、命令可见性、routing predicate 等状态机载体，但不改持久化格式、不改协议、不引入新的异步 lifecycle。
+  - 必须：读取触碰代码和 canonical doc 的相关 section、focused tests、对应 guardrail fast path、`scripts/check/pre-commit.sh`。
+  - 只有跨 daemon/gateway/wrapper、风险不确定、或 rebase 后语义可能漂移时才默认 `go test ./...`。
+- `full`：迁移、安全/权限、协议、持久化格式、跨组件 lifecycle、恢复/队列/并发、多阶段、多 turn、外部提单、或风险不确定。
+  - 必须：完整 guardrail、必要文档同步、覆盖相关组件的测试；提交/推送仍按验证与发布底线执行。
+
+## Skill / 文档读取缓存
+
+- 同一用户任务或自动 continuation 中，若上下文摘要明确列出某个 skill / canonical doc 已完整读取，且本轮没有修改该 skill/doc 文件，不重复全文读取。
+- 需要确认版本时，只做轻量检查，例如 `git status --short <file>`、`git diff -- <file>` 或读取相关 section。
+- 长文档按 section 读取：先 `rg '^## '` 或精确关键词定位，再 `sed` 取相关段；禁止用宽泛关键词把整份状态机文档打进上下文。
+- 如果后续要修改某个 skill 本身，必须重新读取该 skill 当前文件；读取缓存只适用于把 skill 当流程依据，不适用于编辑 skill。
 
 ## 仓库 skill 触发速查
 

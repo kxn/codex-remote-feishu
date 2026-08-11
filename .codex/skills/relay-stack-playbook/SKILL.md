@@ -14,6 +14,12 @@ Use this skill for changes or debugging involving:
 - Codex app-server protocol translation
 - `/list`, `/attach`, `/use`, `/stop`, thread routing, queue state, missing replies
 
+## Fast path
+
+For `tiny` or `state-light` repo tasks that only touch orchestrator/projector/unit-test behavior, do not run real-stack diagnostics by default. Use only the layer split from this playbook, read the touched code, and run focused tests.
+
+Escalate to the full checks below when the task depends on live relayd state, gateway delivery, wrapper/native protocol frames, daemon logs, localhost status, missing Feishu replies, or cross-layer behavior that unit tests cannot explain.
+
 ## Core rules
 
 - Start from runtime evidence, not the first plausible fix.
@@ -26,9 +32,9 @@ Use this skill for changes or debugging involving:
 - Product visibility decisions belong in the server layer, not in the wrapper.
 - Do not trust mocks unless they match real frames captured from logs.
 
-## First checks
+## Full real-stack checks
 
-Before changing code, gather these facts in order:
+When the task is a real-stack debug or has escalated beyond the fast path, gather these facts in order:
 
 0. Prefer the repo helper script first.
    - Run `./scripts/relay/collect-diagnostics.sh`.
