@@ -385,6 +385,9 @@ func mergeThreadMetadata(currentThread, nextThread *state.ThreadRecord) *state.T
 	if strings.TrimSpace(string(merged.ObservedPlanMode)) == "" {
 		merged.ObservedPlanMode = secondary.ObservedPlanMode
 	}
+	if strings.TrimSpace(merged.ObservedPlanModeRaw) == "" {
+		merged.ObservedPlanModeRaw = strings.TrimSpace(secondary.ObservedPlanModeRaw)
+	}
 	if merged.LastModelReroute == nil && secondary.LastModelReroute != nil {
 		merged.LastModelReroute = agentproto.CloneTurnModelReroute(secondary.LastModelReroute)
 	}

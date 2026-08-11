@@ -159,7 +159,6 @@ func TestApplySurfaceActionRejectsUnsupportedOpenCodePromptSettingCommands(t *te
 		text string
 	}{
 		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning high"},
-		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := newServiceForTest(&now)
@@ -180,6 +179,28 @@ func TestApplySurfaceActionRejectsUnsupportedOpenCodePromptSettingCommands(t *te
 				t.Fatalf("rejected OpenCode command mutated prompt/plan state: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 			}
 		})
+	}
+}
+
+func TestApplySurfaceActionAcceptsOpenCodePlanCommand(t *testing.T) {
+	now := time.Date(2026, 8, 11, 13, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	surface := svc.root.Surfaces["surface-1"]
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPlanCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/plan on",
+	})
+
+	if eventsContainNotice(events, "command_rejected", "OpenCode") {
+		t.Fatalf("OpenCode /plan should be accepted, got %#v", events)
+	}
+	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
+		t.Fatalf("OpenCode /plan did not persist override: %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 

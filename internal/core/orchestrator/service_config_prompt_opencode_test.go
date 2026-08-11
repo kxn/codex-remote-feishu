@@ -66,7 +66,7 @@ func TestOpenCodeHeadlessObservedConfigDoesNotPersistWorkspaceDefaults(t *testin
 	}
 }
 
-func TestOpenCodePromptSummaryAndDispatchCarryRuntimeAccessButIgnoreCodexPromptDefaults(t *testing.T) {
+func TestOpenCodePromptSummaryAndDispatchCarryRuntimeAccessAndPlanButIgnoreCodexPromptDefaults(t *testing.T) {
 	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	workspaceKey := "/data/dl/droid"
@@ -110,8 +110,10 @@ func TestOpenCodePromptSummaryAndDispatchCarryRuntimeAccessButIgnoreCodexPromptD
 		snapshot.NextPrompt.EffectiveAccessModeSource != "surface_override" {
 		t.Fatalf("opencode prompt summary did not retain runtime access override: %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.EffectivePlanMode != string(state.PlanModeSettingOff) || snapshot.NextPrompt.PlanModeOverrideSet {
-		t.Fatalf("opencode prompt summary retained plan override: %#v", snapshot.NextPrompt)
+	if snapshot.NextPrompt.OverridePlanMode != string(state.PlanModeSettingOn) ||
+		snapshot.NextPrompt.EffectivePlanMode != string(state.PlanModeSettingOn) ||
+		!snapshot.NextPrompt.PlanModeOverrideSet {
+		t.Fatalf("opencode prompt summary did not retain plan override: %#v", snapshot.NextPrompt)
 	}
 
 	svc.ApplySurfaceAction(control.Action{
@@ -127,12 +129,131 @@ func TestOpenCodePromptSummaryAndDispatchCarryRuntimeAccessButIgnoreCodexPromptD
 	if item == nil {
 		t.Fatal("expected queued item")
 	}
-	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm || item.FrozenPlanMode != "" {
-		t.Fatalf("opencode queue item should freeze runtime access only: override=%#v plan=%q", item.FrozenOverride, item.FrozenPlanMode)
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm || item.FrozenPlanMode != state.PlanModeSettingOn {
+		t.Fatalf("opencode queue item should freeze runtime access and plan only: override=%#v plan=%q", item.FrozenOverride, item.FrozenPlanMode)
 	}
 	command := svc.promptSendCommandFromQueueItem(surface, item, "user-1", "msg-1")
-	if command.Overrides != (agentproto.PromptOverrides{}) {
-		t.Fatalf("opencode dispatch should not send runtime access as ACP per-turn override: %#v", command.Overrides)
+	if command.Overrides != (agentproto.PromptOverrides{PlanMode: string(state.PlanModeSettingOn)}) {
+		t.Fatalf("opencode dispatch should send only plan ACP override: %#v", command.Overrides)
+	}
+}
+
+func TestOpenCodeFrozenQueueItemKeepsPlanModeAfterLaterPlanCommand(t *testing.T) {
+	now := time.Date(2026, 8, 11, 13, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/droid"
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:        "inst-1",
+		DisplayName:       "droid",
+		WorkspaceRoot:     workspaceKey,
+		WorkspaceKey:      workspaceKey,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+		Online:            true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "默认会话", CWD: workspaceKey},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	surface := svc.root.Surfaces["surface-1"]
+	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "先规划",
+	})
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected first queue item")
+	}
+	if item.FrozenPlanMode != state.PlanModeSettingOn {
+		t.Fatalf("first queue item frozen plan = %q, want on", item.FrozenPlanMode)
+	}
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPlanCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/plan off",
+	})
+
+	if surface.PlanMode != state.PlanModeSettingOff || !surface.PlanModeOverrideSet {
+		t.Fatalf("surface plan after command = %s/%v, want off/true", surface.PlanMode, surface.PlanModeOverrideSet)
+	}
+	if item.FrozenPlanMode != state.PlanModeSettingOn {
+		t.Fatalf("frozen queue item plan was retroactively changed to %q", item.FrozenPlanMode)
+	}
+	command := svc.promptSendCommandFromQueueItem(surface, item, "user-1", "msg-1")
+	if command.Overrides.PlanMode != string(state.PlanModeSettingOn) {
+		t.Fatalf("dispatch plan override = %#v, want frozen on", command.Overrides)
+	}
+}
+
+func TestOpenCodePlanClearStopsFreezingMode(t *testing.T) {
+	now := time.Date(2026, 8, 11, 13, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/droid"
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:        "inst-1",
+		DisplayName:       "droid",
+		WorkspaceRoot:     workspaceKey,
+		WorkspaceKey:      workspaceKey,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+		Online:            true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "默认会话", CWD: workspaceKey},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	surface := svc.root.Surfaces["surface-1"]
+	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPlanCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/plan clear",
+	})
+	if surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+		t.Fatalf("surface plan after clear = %s/%v, want off/false", surface.PlanMode, surface.PlanModeOverrideSet)
+	}
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil {
+		t.Fatal("expected surface snapshot")
+	}
+	if snapshot.NextPrompt.OverridePlanMode != "" || snapshot.NextPrompt.PlanModeOverrideSet {
+		t.Fatalf("clear should remove local plan override from summary: %#v", snapshot.NextPrompt)
+	}
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "跟随当前 mode",
+	})
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected queued item")
+	}
+	if item.FrozenPlanMode != "" {
+		t.Fatalf("clear should not freeze mode, got %q", item.FrozenPlanMode)
+	}
+	command := svc.promptSendCommandFromQueueItem(surface, item, "user-1", "msg-1")
+	if command.Overrides.PlanMode != "" {
+		t.Fatalf("clear should not dispatch mode override, got %#v", command.Overrides)
 	}
 }
 
@@ -283,5 +404,45 @@ func TestOpenCodePromptSummaryUsesObservedThreadSettingsAsReadOnlyBackendState(t
 	}
 	if item.FrozenOverride != (state.ModelConfigRecord{}) {
 		t.Fatalf("opencode observed model should not be resent as a prompt override: %#v", item.FrozenOverride)
+	}
+}
+
+func TestOpenCodePromptSummaryShowsObservedPlanModeWithoutFoldingCustomMode(t *testing.T) {
+	now := time.Date(2026, 8, 11, 13, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/droid"
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:        "inst-1",
+		WorkspaceRoot:     workspaceKey,
+		WorkspaceKey:      workspaceKey,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+		Online:            true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "默认会话", CWD: workspaceKey},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventThreadSettingsUpdated,
+		ThreadID: "thread-1",
+		PlanMode: "on",
+	})
+	snapshot := svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.NextPrompt.ObservedThreadPlanMode != "on" {
+		t.Fatalf("observed plan snapshot = %#v, want on", snapshot)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventThreadSettingsUpdated,
+		ThreadID: "thread-1",
+		PlanMode: "review",
+	})
+	snapshot = svc.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.NextPrompt.ObservedThreadPlanMode != "review" {
+		t.Fatalf("custom observed mode snapshot = %#v, want raw review", snapshot)
 	}
 }

@@ -575,7 +575,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			thread.ObservedAccessMode = agentproto.NormalizeAccessMode(event.AccessMode)
 		}
 		if event.PlanMode != "" {
-			thread.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(event.PlanMode))
+			applyObservedPlanMode(thread, event.PlanMode)
 		}
 		if event.ObservedPermission != nil {
 			thread.ObservedPermission = agentproto.CloneObservedPermissionState(event.ObservedPermission)
@@ -662,7 +662,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 				current.Source = agentproto.CloneThreadSourceRecord(thread.Source)
 			}
 			if thread.PlanMode != "" {
-				current.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(thread.PlanMode))
+				applyObservedPlanMode(current, thread.PlanMode)
 			}
 			if thread.ObservedPermission != nil {
 				current.ObservedPermission = agentproto.CloneObservedPermissionState(thread.ObservedPermission)

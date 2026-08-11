@@ -101,7 +101,7 @@ func NormalizePromptOverrideForBackend(backend agentproto.Backend, record ModelC
 func BackendAcceptsFeishuPlanOverride(backend agentproto.Backend) bool {
 	switch agentproto.NormalizeBackend(backend) {
 	case agentproto.BackendOpenCode:
-		return false
+		return true
 	default:
 		return true
 	}

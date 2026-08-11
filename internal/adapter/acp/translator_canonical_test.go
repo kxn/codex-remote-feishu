@@ -754,6 +754,58 @@ func TestConfigOptionUpdateRefreshesModelCatalogState(t *testing.T) {
 	}
 }
 
+func TestConfigOptionUpdateRefreshesOpenCodePlanMode(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+
+	observed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "config_option_update",
+		"configOption": map[string]any{
+			"id":           "mode",
+			"type":         "select",
+			"currentValue": "plan",
+		},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(plan mode config option): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadSettingsUpdated)
+	if observed.Events[0].PlanMode != "on" {
+		t.Fatalf("plan mode event = %#v, want on", observed.Events[0])
+	}
+
+	observed, err = tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "config_option_update",
+		"configOption": map[string]any{
+			"id":           "mode",
+			"type":         "select",
+			"currentValue": "build",
+		},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(build mode config option): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadSettingsUpdated)
+	if observed.Events[0].PlanMode != "off" {
+		t.Fatalf("build mode event = %#v, want off", observed.Events[0])
+	}
+
+	observed, err = tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "config_option_update",
+		"configOption": map[string]any{
+			"id":           "mode",
+			"type":         "select",
+			"currentValue": "review",
+		},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(custom mode config option): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadSettingsUpdated)
+	if observed.Events[0].PlanMode != "review" {
+		t.Fatalf("custom mode event = %#v, want raw review", observed.Events[0])
+	}
+}
+
 func TestAvailableCommandsUpdateIsDebugOnly(t *testing.T) {
 	tr, _ := startPromptedSession(t)
 	var logs []string

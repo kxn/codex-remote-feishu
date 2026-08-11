@@ -61,6 +61,7 @@ func (s *Service) buildConfigCommandViewState(
 	view.Config.OverrideExtraValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideExtraValueKey)
 	view.Config.UsesLocalRequestedOverrides = summary.UsesLocalRequestedOverrides
 	view.Config.PlanModeOverrideSet = summary.PlanModeOverrideSet
+	view.Config.PlanModeUsesLocalRequested = summary.PlanModeUsesLocalRequested
 	switch flow.CommandID {
 	case control.FeishuCommandCodexProfile:
 		view.Config.FormOptions = s.codexProfileCommandOptions(true)

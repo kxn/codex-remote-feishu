@@ -56,6 +56,8 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 		return result, nil
 	case "session/new", "session/resume", "session/fork":
 		return t.observeSessionReady(pending, payload, result)
+	case "session/set_config_option":
+		return t.observeSetConfigOptionResponse(pending, result)
 	case "session/prompt":
 		return t.observePromptResponse(pending, payload, result), nil
 	case "session/list":
@@ -108,6 +110,51 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 }
 
 func (t *Translator) startPromptForSession(sessionID string, command agentproto.Command) (Result, error) {
+	if mode, ok, err := opencodeACPModeForPlanOverride(command.Overrides.PlanMode); err != nil {
+		return Result{}, err
+	} else if ok {
+		return t.setModeBeforePrompt(sessionID, mode, command)
+	}
+	return t.startPromptForSessionNow(sessionID, command)
+}
+
+func (t *Translator) setModeBeforePrompt(sessionID, mode string, command agentproto.Command) (Result, error) {
+	requestID := t.NextRequest("session-set-config")
+	t.pendingRPC[requestID] = pendingRPC{Kind: "session/set_config_option", Command: command, SessionID: sessionID}
+	frame, err := marshalLine(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      requestID,
+		"method":  "session/set_config_option",
+		"params": map[string]any{
+			"sessionId": sessionID,
+			"configId":  "mode",
+			"value":     mode,
+		},
+	})
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{OutboundToChild: [][]byte{frame}}, nil
+}
+
+func (t *Translator) observeSetConfigOptionResponse(pending pendingRPC, result Result) (Result, error) {
+	sessionID := strings.TrimSpace(pending.SessionID)
+	if sessionID == "" {
+		sessionID = strings.TrimSpace(pending.Command.Target.ThreadID)
+	}
+	if sessionID == "" {
+		return result, fmt.Errorf("%s response missing sessionId", pending.Kind)
+	}
+	promptResult, err := t.startPromptForSessionNow(sessionID, pending.Command)
+	if err != nil {
+		return Result{}, err
+	}
+	result.Events = append(result.Events, promptResult.Events...)
+	result.OutboundToChild = append(result.OutboundToChild, promptResult.OutboundToChild...)
+	return result, nil
+}
+
+func (t *Translator) startPromptForSessionNow(sessionID string, command agentproto.Command) (Result, error) {
 	turn := t.newTurn(sessionID, command)
 	content, err := t.buildPromptContent(command.Prompt.Inputs)
 	if err != nil {
@@ -291,7 +338,7 @@ func (t *Translator) observeRPCError(pending pendingRPC, errorPayload any, resul
 		Stage:     "observe_server",
 		Operation: pending.Kind,
 		CommandID: pending.Command.CommandID,
-		ThreadID:  pending.Command.Target.ThreadID,
+		ThreadID:  xutil.FirstNonEmpty(pending.SessionID, pending.Command.Target.ThreadID),
 		TurnID:    pending.Command.Target.TurnID,
 	})
 	if pending.Turn != nil {
@@ -710,10 +757,20 @@ func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[stri
 	session.ModelOptions, session.CurrentModel, session.CurrentMode = parseConfigOptions(session.ConfigOptions)
 	t.sessions[sessionID] = session
 	t.Debugf("opencode config_option_update session=%s option=%s", sessionID, xutil.CompactJSON(option))
-	if strings.TrimSpace(xutil.LookupStringFromAny(option["id"])) != "model" || strings.TrimSpace(session.CurrentModel) == "" {
+	switch strings.TrimSpace(xutil.LookupStringFromAny(option["id"])) {
+	case "model":
+		if strings.TrimSpace(session.CurrentModel) == "" {
+			return agentproto.Event{}, false
+		}
+		return threadSettingsEventForCurrentModel(sessionID, session)
+	case "mode":
+		if strings.TrimSpace(session.CurrentMode) == "" {
+			return agentproto.Event{}, false
+		}
+		return threadSettingsEventForCurrentMode(sessionID, session)
+	default:
 		return agentproto.Event{}, false
 	}
-	return threadSettingsEventForCurrentModel(sessionID, session)
 }
 
 func threadSettingsEventForCurrentModel(sessionID string, session sessionState) (agentproto.Event, bool) {
@@ -729,6 +786,30 @@ func threadSettingsEventForCurrentModel(sessionID string, session sessionState) 
 		ThreadID:       sessionID,
 		ThreadSettings: settings,
 	}, true
+}
+
+func threadSettingsEventForCurrentMode(sessionID string, session sessionState) (agentproto.Event, bool) {
+	planMode := feishuPlanModeForOpenCodeACPMode(session.CurrentMode)
+	if planMode == "" {
+		return agentproto.Event{}, false
+	}
+	return agentproto.Event{
+		Kind:     agentproto.EventThreadSettingsUpdated,
+		ThreadID: sessionID,
+		PlanMode: planMode,
+	}, true
+}
+
+func feishuPlanModeForOpenCodeACPMode(value string) string {
+	trimmed := strings.TrimSpace(value)
+	switch strings.ToLower(trimmed) {
+	case "plan", "on":
+		return "on"
+	case "build", "off":
+		return "off"
+	default:
+		return trimmed
+	}
 }
 
 func (t *Translator) observeCurrentModeUpdate(sessionID string, update map[string]any) {

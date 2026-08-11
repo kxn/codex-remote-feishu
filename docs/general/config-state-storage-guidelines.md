@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-11`
-> Summary: 记录 OpenCode `/access` 的 relaunch-backed runtime desired owner；profile `permissionMode` 不再是用户可见运行时权限 SSOT。
+> Summary: 记录 OpenCode `/access` 的 relaunch-backed runtime desired owner，以及 OpenCode `/plan` 的 ACP session mode 动态切换 owner；profile `permissionMode` 不再是用户可见运行时权限 SSOT。
 
 ## 1. 适用范围
 
@@ -230,7 +230,7 @@ workspace/path identity 只能通过 canonical helper 得到：
 | Claude access | Backend Behavior With Shared Authority | 作为 `workspace+profile` 快照持久化显式飞书 override；不写 workspace default | thread observed state + surface override + `workspace+profile` snapshot + prompt frozen override | `set_permission_mode` 仍是当前 session runtime state；无显式 `/access` override 时，下条 prompt 仍优先跟随 thread/runtime observed access。只有用户显式设置的飞书 override 才会写入和恢复 `workspace+profile` 快照。 |
 | Claude plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume，也不作为 workspace/profile 快照持久化 | live surface runtime + thread observed state + prompt frozen override | Claude 可通过 `ExitPlanMode` 主动退出，本地不能强行恢复旧 plan；`request.resolved(plan_confirmation + accept)` 后 surface 也应同步清掉旧 plan override。 |
 | OpenCode access | Backend Behavior With Local SSOT / relaunch-backed runtime desired | 是 | gateway `BotCapabilitySettings.PromptOverride.AccessMode` 或 non-canonical `surface.PromptOverride.AccessMode`；queue item 冻结该字段 | 只允许 `full_access` / `confirm`；dispatch 不发送 ACP per-turn access override。空闲 workspace 内立即按 `HeadlessLaunchContract.OpenCodeRuntimeAccessMode` 重启，不空闲时标记后续 dispatch preflight 收敛。 |
-| OpenCode plan mode | Backend Behavior With Shared Authority（#874 待实现） | 暂不持久化为 OpenCode owner | 当前仍 hidden/reject；#874 调研 `session/set_config_option mode` | 不复用 profile `permissionMode`，也不把 plan 写入 OpenCode permission map。 |
+| OpenCode plan mode | Backend Behavior With Shared Authority | 不持久化为 OpenCode owner；只持久化飞书显式 override | gateway `BotCapabilitySettings.PlanMode + PlanModeOverrideSet` 或 non-canonical `surface.PlanMode + PlanModeOverrideSet`；queue item 冻结显式 override；ACP `session/set_config_option configId=mode` | `/plan on` -> `mode=plan`，`/plan off` -> `mode=build`；`/plan clear` 清掉飞书 override，后续 prompt 不再强制 mode，跟随 OpenCode 当前/默认状态。不复用 profile `permissionMode`，也不把 plan 写入 OpenCode permission map。 |
 | VS Code 下 model / reasoning / access / plan | Backend Behavior With Shared Authority | 默认不作为本地 SSOT | observed state + local requested per-turn override | VS Code 端也可能修改；没有飞书显式 override 时，只展示 observed state，不把 observed/default 值重新下发给 backend。 |
 
 ## 5. 新增配置项决策流程

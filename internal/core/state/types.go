@@ -270,6 +270,7 @@ type ThreadRecord struct {
 	ObservedPermission       *agentproto.ObservedPermissionState
 	ObservedAccessMode       string
 	ObservedPlanMode         PlanModeSetting
+	ObservedPlanModeRaw      string
 	LastModelReroute         *agentproto.TurnModelReroute
 	LastModelVerification    *agentproto.TurnModelVerification
 	LastModelSafetyBuffering *agentproto.TurnModelSafetyBuffering

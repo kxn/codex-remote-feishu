@@ -70,9 +70,10 @@ type modelOption struct {
 }
 
 type pendingRPC struct {
-	Kind    string
-	Command agentproto.Command
-	Turn    *turnState
+	Kind      string
+	Command   agentproto.Command
+	SessionID string
+	Turn      *turnState
 }
 
 type pendingPermission struct {

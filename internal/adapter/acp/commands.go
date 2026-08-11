@@ -53,6 +53,19 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 	return t.startPromptForSession(threadID, command)
 }
 
+func opencodeACPModeForPlanOverride(value string) (string, bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return "", false, nil
+	case "on", "plan":
+		return "plan", true, nil
+	case "off", "build":
+		return "build", true, nil
+	default:
+		return "", false, fmt.Errorf("unsupported OpenCode plan mode override %q", value)
+	}
+}
+
 func (t *Translator) translatePromptFork(command agentproto.Command) (Result, error) {
 	sourceThreadID := xutil.FirstNonEmpty(command.Target.SourceThreadID, command.Target.ThreadID)
 	if sourceThreadID == "" {

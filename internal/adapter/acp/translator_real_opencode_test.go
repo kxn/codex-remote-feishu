@@ -197,6 +197,137 @@ func TestRealOpenCodeACPPromptSmoke(t *testing.T) {
 	}
 }
 
+func TestRealOpenCodeACPPlanModeSmoke(t *testing.T) {
+	binary := strings.TrimSpace(os.Getenv("OPENCODE_ACP_SMOKE_BIN"))
+	if binary == "" {
+		t.Skip("set OPENCODE_ACP_SMOKE_BIN to run the real OpenCode ACP smoke")
+	}
+	home := t.TempDir()
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "README.md"), []byte("# OpenCode ACP plan smoke\n"), 0o644); err != nil {
+		t.Fatalf("write workspace file: %v", err)
+	}
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		body := map[string]any{}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if strings.Contains(mustCompactJSON(t, body), "Generate a title for this conversation") {
+			writeSSE(t, w, chatChunk(map[string]any{"role": "assistant"}, "", nil))
+			writeSSE(t, w, chatChunk(map[string]any{"content": "Plan Mode Title"}, "", nil))
+			writeSSE(t, w, chatChunk(map[string]any{}, "stop", map[string]int{"input": 1, "output": 1}))
+			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+			return
+		}
+		writeSSE(t, w, chatChunk(map[string]any{"role": "assistant"}, "", nil))
+		writeSSE(t, w, chatChunk(map[string]any{"content": "mode ok"}, "", nil))
+		writeSSE(t, w, chatChunk(map[string]any{}, "stop", map[string]int{"input": 3, "output": 2}))
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer llm.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, binary, "acp", "--cwd", workspace)
+	cmd.Dir = workspace
+	cmd.Env = realOpenCodeSmokeEnv(t, home, workspace, llm.URL+"/v1")
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatalf("StdinPipe: %v", err)
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatalf("StdoutPipe: %v", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		t.Fatalf("StderrPipe: %v", err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start opencode: %v", err)
+	}
+	stderrDone := make(chan string, 1)
+	go func() {
+		var builder strings.Builder
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			builder.WriteString(scanner.Text())
+			builder.WriteByte('\n')
+		}
+		stderrDone <- builder.String()
+	}()
+	scanner := bufio.NewScanner(stdout)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	tr := NewTranslator("inst-plan-smoke", workspace)
+	initializeFrame, err := tr.BuildInitializeFrame()
+	if err != nil {
+		t.Fatalf("BuildInitializeFrame: %v", err)
+	}
+	writeFrame(t, stdin, initializeFrame)
+	observeUntil(t, scanner, tr, func(result Result) bool { return false }, "initialize response")
+
+	sendPromptAndWait := func(command agentproto.Command, label string) {
+		t.Helper()
+		result, err := tr.TranslateCommand(command)
+		if err != nil {
+			t.Fatalf("TranslateCommand(%s): %v", label, err)
+		}
+		for _, frame := range result.OutboundToChild {
+			writeFrame(t, stdin, frame)
+		}
+		completed := observeUntil(t, scanner, tr, func(result Result) bool {
+			for _, frame := range result.OutboundToChild {
+				writeFrame(t, stdin, frame)
+			}
+			for _, event := range result.Events {
+				if event.Kind == agentproto.EventSystemError {
+					t.Fatalf("%s failed with system error: %#v", label, event.Problem)
+				}
+				if event.Kind == agentproto.EventTurnCompleted {
+					if event.Status != "completed" {
+						t.Fatalf("%s completed with status %q problem=%#v", label, event.Status, event.Problem)
+					}
+					return true
+				}
+			}
+			return false
+		}, label)
+		if !completed {
+			t.Fatalf("%s did not complete", label)
+		}
+	}
+
+	sendPromptAndWait(agentproto.Command{
+		CommandID: "cmd-plan-mode-on-smoke",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-plan-smoke"},
+		Target: agentproto.Target{
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           workspace,
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "Use plan mode."}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on"},
+	}, "plan mode prompt")
+
+	sessionID := tr.currentSessionID
+	if strings.TrimSpace(sessionID) == "" {
+		t.Fatal("translator did not retain current OpenCode session id")
+	}
+	sendPromptAndWait(agentproto.Command{
+		CommandID: "cmd-plan-mode-off-smoke",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-plan-smoke"},
+		Target:    agentproto.Target{ThreadID: sessionID, CWD: workspace},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "Use build mode."}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "off"},
+	}, "build mode prompt")
+
+	_ = stdin.Close()
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("opencode exited with error: %v; stderr=%s", err, <-stderrDone)
+	}
+}
+
 func TestRealOpenCodeACPToolPermissionEditSmoke(t *testing.T) {
 	binary := strings.TrimSpace(os.Getenv("OPENCODE_ACP_SMOKE_BIN"))
 	if binary == "" {

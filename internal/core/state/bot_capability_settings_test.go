@@ -101,7 +101,7 @@ func TestNormalizeBotCapabilitySettingsRecordCarriesOpenCodeProfile(t *testing.T
 	}
 }
 
-func TestNormalizeBotCapabilitySettingsRecordKeepsOnlyOpenCodeRuntimeAccess(t *testing.T) {
+func TestNormalizeBotCapabilitySettingsRecordKeepsOpenCodeRuntimeAccessAndPlan(t *testing.T) {
 	record, ok := NormalizeBotCapabilitySettingsRecord(BotCapabilitySettingsRecord{
 		GatewayID:         "app-1",
 		ProductMode:       ProductModeNormal,
@@ -121,8 +121,8 @@ func TestNormalizeBotCapabilitySettingsRecordKeepsOnlyOpenCodeRuntimeAccess(t *t
 	if record.PromptOverride != (ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
 		t.Fatalf("opencode prompt override = %#v, want runtime access only", record.PromptOverride)
 	}
-	if record.PlanMode != PlanModeSettingOff || record.PlanModeOverrideSet {
-		t.Fatalf("opencode plan override = %s/%v, want off/false", record.PlanMode, record.PlanModeOverrideSet)
+	if record.PlanMode != PlanModeSettingOn || !record.PlanModeOverrideSet {
+		t.Fatalf("opencode plan override = %s/%v, want on/true", record.PlanMode, record.PlanModeOverrideSet)
 	}
 	if record.Backend != agentproto.BackendOpenCode || record.OpenCodeProfileID != "op_team" {
 		t.Fatalf("opencode contract fields changed unexpectedly: %#v", record)
@@ -173,7 +173,7 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing
 	}
 }
 
-func TestEffectiveSurfaceCapabilitySettingsKeepsOnlyOpenCodeRuntimeAccess(t *testing.T) {
+func TestEffectiveSurfaceCapabilitySettingsKeepsOpenCodeRuntimeAccessAndPlan(t *testing.T) {
 	root := NewRoot()
 	root.BotCapabilitySettings["feishu:gateway:app-1"] = BotCapabilitySettingsRecord{
 		GatewayID:         "app-1",
@@ -209,8 +209,8 @@ func TestEffectiveSurfaceCapabilitySettingsKeepsOnlyOpenCodeRuntimeAccess(t *tes
 	if effective.PromptOverride != (ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
 		t.Fatalf("effective opencode prompt override = %#v, want runtime access only", effective.PromptOverride)
 	}
-	if effective.PlanMode != PlanModeSettingOff || effective.PlanModeOverrideSet {
-		t.Fatalf("effective opencode plan = %s/%v, want off/false", effective.PlanMode, effective.PlanModeOverrideSet)
+	if effective.PlanMode != PlanModeSettingOn || !effective.PlanModeOverrideSet {
+		t.Fatalf("effective opencode plan = %s/%v, want on/true", effective.PlanMode, effective.PlanModeOverrideSet)
 	}
 }
 

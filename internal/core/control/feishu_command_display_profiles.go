@@ -176,7 +176,7 @@ func newOpenCodeFeishuCommandDisplayProfile() FeishuCommandDisplayProfile {
 		commandSupportHiddenReject(FeishuCommandModel, FeishuCommandSupportReject, "OpenCode 模型请在 OpenCode profile 或原生配置里设置，当前飞书会话不支持临时切换模型。"),
 		commandSupportHiddenReject(FeishuCommandReasoning, FeishuCommandSupportReject, "OpenCode 推理强度请在 OpenCode profile 或原生配置里设置，当前飞书会话不支持临时切换。"),
 		commandSupportVisible(FeishuCommandAccess),
-		commandSupportHiddenReject(FeishuCommandPlan, FeishuCommandSupportReject, "OpenCode Plan mode 由 OpenCode runtime 自身决定，当前飞书会话不支持临时切换。"),
+		commandSupportVisible(FeishuCommandPlan),
 		commandSupportVisible(FeishuCommandVerbose),
 		commandSupportVisible(FeishuCommandOpenCodeProfile),
 		commandSupportVisible(FeishuCommandWorkspace),

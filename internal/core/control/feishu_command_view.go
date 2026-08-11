@@ -29,6 +29,7 @@ type FeishuCatalogConfigView struct {
 	OverrideExtraValue          string
 	UsesLocalRequestedOverrides bool
 	PlanModeOverrideSet         bool
+	PlanModeUsesLocalRequested  bool
 	FormDefaultValue            string
 	FormOptions                 []CommandCatalogFormFieldOption
 	FormCursor                  int

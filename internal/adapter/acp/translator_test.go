@@ -255,6 +255,159 @@ func TestPromptSendExistingSessionResumesWithoutReturnedSessionID(t *testing.T) 
 	}
 }
 
+func TestPromptSendCurrentSessionSetsOpenCodePlanModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "plan this"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan prompt): %v", err)
+	}
+	if len(result.Events) != 0 {
+		t.Fatalf("set mode should not start the turn before OpenCode confirms mode, got %#v", result.Events)
+	}
+	if len(result.OutboundToChild) != 1 {
+		t.Fatalf("outbound = %d frames, want set_config_option", len(result.OutboundToChild))
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+	assertSetModeFrame(t, setFrame, "ses_1", "plan")
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode response): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_1" {
+		t.Fatalf("prompt frame after set mode = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendNewSessionSetsOpenCodePlanModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-new",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "start planning"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan new prompt): %v", err)
+	}
+	newFrame := decodeFrame(t, result.OutboundToChild[0])
+	if newFrame["method"] != "session/new" {
+		t.Fatalf("first method = %#v, want session/new", newFrame["method"])
+	}
+
+	observedNew, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      newFrame["id"],
+		"result":  map[string]any{"sessionId": "ses_new"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(new response): %v", err)
+	}
+	assertEventKinds(t, observedNew.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused)
+	setFrame := decodeFrame(t, observedNew.OutboundToChild[0])
+	assertSetModeFrame(t, setFrame, "ses_new", "plan")
+
+	observedSet, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode response): %v", err)
+	}
+	assertEventKinds(t, observedSet.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observedSet.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_new" {
+		t.Fatalf("prompt frame after new set mode = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendResumeSessionSetsOpenCodeBuildModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-resume",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_existing",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "resume in build"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "off"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan resume prompt): %v", err)
+	}
+	resumeFrame := decodeFrame(t, result.OutboundToChild[0])
+	if resumeFrame["method"] != "session/resume" {
+		t.Fatalf("first method = %#v, want session/resume", resumeFrame["method"])
+	}
+
+	observedResume, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      resumeFrame["id"],
+		"result":  map[string]any{"sessionId": "ses_existing"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(resume response): %v", err)
+	}
+	assertEventKinds(t, observedResume.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused)
+	setFrame := decodeFrame(t, observedResume.OutboundToChild[0])
+	assertSetModeFrame(t, setFrame, "ses_existing", "build")
+}
+
+func TestPromptSendDoesNotPromptWhenOpenCodeSetModeFails(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-error",
+		Kind:      agentproto.CommandPromptSend,
+		Target:    agentproto.Target{ThreadID: "ses_1", CWD: "/tmp/work"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "plan this"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan prompt): %v", err)
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"error":   map[string]any{"code": -32602, "message": "mode is invalid"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode error): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventSystemError)
+	if len(observed.OutboundToChild) != 0 {
+		t.Fatalf("set mode failure should not continue to prompt, got %#v", observed.OutboundToChild)
+	}
+}
+
 func TestPromptSendForkEphemeralForksThenPromptsNewSession(t *testing.T) {
 	tr := NewTranslator("inst-1", "/tmp/work")
 	result, err := tr.TranslateCommand(agentproto.Command{
@@ -1008,6 +1161,17 @@ func asSlice(t *testing.T, value any) []any {
 		t.Fatalf("value is %T, want slice: %#v", value, value)
 	}
 	return out
+}
+
+func assertSetModeFrame(t *testing.T, frame map[string]any, sessionID, mode string) {
+	t.Helper()
+	if frame["method"] != "session/set_config_option" {
+		t.Fatalf("method = %#v, want session/set_config_option; frame=%#v", frame["method"], frame)
+	}
+	params := asMap(t, frame["params"])
+	if params["sessionId"] != sessionID || params["configId"] != "mode" || params["value"] != mode {
+		t.Fatalf("set mode params = %#v, want session=%q mode=%q", params, sessionID, mode)
+	}
 }
 
 func assertEventKinds(t *testing.T, events []agentproto.Event, want ...agentproto.EventKind) {

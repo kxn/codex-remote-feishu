@@ -101,7 +101,49 @@ func (s *Service) applyThreadSettingsUpdate(instanceID string, event agentproto.
 	}
 	thread := s.ensureThread(inst, update.ThreadID)
 	thread.ThreadSettings = agentproto.CloneThreadSettingsUpdate(update)
+	if strings.TrimSpace(event.PlanMode) != "" {
+		applyObservedPlanMode(thread, event.PlanMode)
+	}
 	return nil
+}
+
+func applyObservedPlanMode(thread *state.ThreadRecord, value string) {
+	if thread == nil {
+		return
+	}
+	raw := normalizeObservedPlanModeValue(value)
+	if raw == "" {
+		return
+	}
+	thread.ObservedPlanModeRaw = raw
+	if mode, ok := observedPlanModeSetting(raw); ok {
+		thread.ObservedPlanMode = mode
+		return
+	}
+	thread.ObservedPlanMode = ""
+}
+
+func normalizeObservedPlanModeValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	switch strings.ToLower(trimmed) {
+	case "on", "plan":
+		return string(state.PlanModeSettingOn)
+	case "off", "build":
+		return string(state.PlanModeSettingOff)
+	default:
+		return trimmed
+	}
+}
+
+func observedPlanModeSetting(value string) (state.PlanModeSetting, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case string(state.PlanModeSettingOn), "plan":
+		return state.PlanModeSettingOn, true
+	case string(state.PlanModeSettingOff), "build":
+		return state.PlanModeSettingOff, true
+	default:
+		return "", false
+	}
 }
 
 func lookupIntMetadata(metadata map[string]any, key string) int {

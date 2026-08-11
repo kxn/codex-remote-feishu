@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-11`
-> Summary: 同步 OpenCode `/access` runtime desired：profile `permissionMode` 不再作为用户可见权限 owner，运行时 access 通过 relaunch-backed launch contract 生效；`/plan` 拆到 #874。
+> Summary: 同步 OpenCode `/access` runtime desired 与 `/plan` dynamic ACP session mode：profile `permissionMode` 不再作为用户可见权限 owner，运行时 access 通过 relaunch-backed launch contract 生效，plan 通过 `session/set_config_option mode` 生效。
 
 ## 1. 结论
 
@@ -337,7 +337,7 @@ OpenCode 分支注入：
 OpenCode prompt override：
 
 - `/access` 是 relaunch-backed runtime desired：合法私聊写 gateway/bot `PromptOverride.AccessMode`，non-canonical surface 写本地 projection；queue item 入队时冻结 access，但 dispatch command 不发送 ACP per-turn `AccessMode` override。空闲 workspace 内立即按 `HeadlessLaunchContract.OpenCodeRuntimeAccessMode` 重启；正在执行、排队、pending headless 或有 route gate 时不硬杀，后续 prompt dispatch preflight 比较 desired launch contract 与 wrapper hello 的 `OpenCodeRuntimeAccessMode`，不一致则进入 `PendingHeadless(Purpose=prompt_dispatch_restart)` 后自动继续原 dispatch。
-- model/reasoning 暂不作为 OpenCode 飞书 runtime override；`/plan` 单独由 #874 调研 ACP `session/set_config_option mode` 后实现。
+- model/reasoning 暂不作为 OpenCode 飞书 runtime override；`/plan on|off` 作为 OpenCode ACP session mode 动态切换实现，分别映射 `mode=plan` / `mode=build`，`/plan clear` 清除飞书本地 override 后不再强制 mode。
 - profile secret/baseURL/provider/project config/data isolation 改变必须重启 child。
 - 如果当前 session 缺少动态 config option，命令应走 backend command profile reject/diagnostic，而不是改 surface 但不生效。
 
@@ -436,7 +436,7 @@ response 必须按 JSON-RPC id 关联，不能按 stdout 顺序；黑盒已观�
 
 1. 归一化 dispatch plan，确定 session/thread。
 2. 如果需要新 session，发送 `session/new`，带 cwd、client capabilities、MCP servers。
-3. 根据 prompt override 尝试 `session/set_config_option`：model、effort、mode。
+3. 如果 prompt override 带有 `PlanMode`，发送 `session/set_config_option` 设置 `configId=mode`；`on` 映射 `plan`，`off` 映射 `build`。
 4. 任一 required option set 失败，停止 prompt 并返回产品可读 error；不要半应用后继续。
 5. 发送 `session/prompt`。
 6. 建立 `jsonrpc id -> turnState`，后续 stream chunk 归入该 turn。
@@ -500,10 +500,11 @@ turn close：
 | MCP tools | `other` | 保留 server/tool display name，不强行归类 |
 | unknown | `other` | debug trace 记录 raw kind |
 
-Plan 策略（#874 待实现）：
+Plan 策略（#874 已实现）：
 
-- 目标是把 OpenCode `/plan on|off|clear` 映射为 ACP `session/set_config_option mode`，其中 `mode=plan` 只是 session config，不生成 `TurnPlanSnapshot`。
-- #866 结束时 `/plan` 仍在 OpenCode command profile 下 hidden/reject，避免在底层动态 mode path 未接通前保存一个不会生效的 desired state。
+- OpenCode `/plan on|off|clear` 映射为 ACP session mode 动态切换，其中 `mode=plan` 只是 session config，不生成 `TurnPlanSnapshot`。
+- `/plan on` 冻结到后续新 prompt 并在 prompt 前发送 `session/set_config_option configId=mode value=plan`；`/plan off` 同理发送 `value=build`；`/plan clear` 只清飞书本地 override，后续 prompt 不发送 mode，跟随 OpenCode 当前/默认状态。
+- `config_option_update id=mode` 会投影最近观察到的 plan 状态：`plan -> on`、`build -> off`，自定义 mode 原样展示，不折算成 off。
 - 普通计划正文按 assistant text。
 - todo/tool 结构稳定时才合成 plan snapshot。
 - 确认请求按 request card；不展示“OpenCode 不支持 Plan snapshot”这类内部提示。
@@ -557,7 +558,7 @@ errors：
 | `/workspace*` | visible/native | 产品层工作区逻辑仍归我们 |
 | `/model` | hidden/reject | OpenCode 模型来自 profile 或原生配置 |
 | `/reasoning` | hidden/reject | OpenCode 推理强度来自 profile 或原生配置 |
-| `/plan` | hidden/reject until #874 | #874 单独实现 `mode` config option，不造 plan snapshot |
+| `/plan` | visible/native session mode | `/plan on|off` 通过 ACP `session/set_config_option configId=mode` 切换 `plan/build`；`/plan clear` 不再强制 mode；不造 plan snapshot |
 | `/access` | visible/native surface intent | 保存 runtime desired access；通过 relaunch-backed launch contract 映射 OpenCode permission map，文案避免 sandbox 承诺 |
 | `/opencodeprofile` | visible/native | 新增 profile switch |
 | `/claudeprofile` `/codexprofile` | hidden reject | 指引切回对应 backend |
