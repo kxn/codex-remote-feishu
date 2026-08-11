@@ -1,6 +1,8 @@
 package state
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,7 +16,7 @@ func TestNormalizeBotCapabilitySettingsRecord(t *testing.T) {
 		GatewayID:       " app-1 ",
 		ProductMode:     ProductModeNormal,
 		Backend:         agentproto.BackendClaude,
-		CodexProviderID: " team-proxy ",
+		CodexProfileID:  " team-proxy ",
 		ClaudeProfileID: " devseek ",
 		PromptOverride: ModelConfigRecord{
 			Model:           " gpt-5.5 ",
@@ -35,8 +37,8 @@ func TestNormalizeBotCapabilitySettingsRecord(t *testing.T) {
 	if record.ProductMode != ProductModeNormal || record.Backend != agentproto.BackendClaude {
 		t.Fatalf("contract = %s/%s, want normal/claude", record.ProductMode, record.Backend)
 	}
-	if record.CodexProviderID != "team-proxy" || record.ClaudeProfileID != "devseek" {
-		t.Fatalf("provider/profile = %q/%q, want team-proxy/devseek", record.CodexProviderID, record.ClaudeProfileID)
+	if record.CodexProfileID != "team-proxy" || record.ClaudeProfileID != "devseek" {
+		t.Fatalf("profiles = %q/%q, want team-proxy/devseek", record.CodexProfileID, record.ClaudeProfileID)
 	}
 	if record.PromptOverride.Model != "gpt-5.5" || record.PromptOverride.ReasoningEffort != "high" || record.PromptOverride.AccessMode != "confirm" {
 		t.Fatalf("PromptOverride = %#v, want compact normalized values", record.PromptOverride)
@@ -52,12 +54,35 @@ func TestNormalizeBotCapabilitySettingsRecord(t *testing.T) {
 	}
 }
 
+func TestBotCapabilitySettingsRecordWritesOnlyCodexProfileSelection(t *testing.T) {
+	record, ok := NormalizeBotCapabilitySettingsRecord(BotCapabilitySettingsRecord{
+		GatewayID:      "app-1",
+		ProductMode:    ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "team-proxy",
+	})
+	if !ok {
+		t.Fatal("expected record to normalize")
+	}
+	raw, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := string(raw)
+	if strings.Contains(payload, "CodexProviderID") || strings.Contains(payload, "codexProviderID") {
+		t.Fatalf("bot capability settings wrote legacy provider field: %s", payload)
+	}
+	if !strings.Contains(payload, "CodexProfileID") {
+		t.Fatalf("bot capability settings did not write canonical profile field: %s", payload)
+	}
+}
+
 func TestNormalizeBotCapabilitySettingsRecordCarriesOpenCodeProfile(t *testing.T) {
 	record, ok := NormalizeBotCapabilitySettingsRecord(BotCapabilitySettingsRecord{
 		GatewayID:         " app-1 ",
 		ProductMode:       ProductModeNormal,
 		Backend:           agentproto.BackendOpenCode,
-		CodexProviderID:   " team-proxy ",
+		CodexProfileID:    " team-proxy ",
 		ClaudeProfileID:   " devseek ",
 		OpenCodeProfileID: " op_team ",
 	})
@@ -71,7 +96,7 @@ func TestNormalizeBotCapabilitySettingsRecordCarriesOpenCodeProfile(t *testing.T
 	if contract.Backend != agentproto.BackendOpenCode || contract.OpenCodeProfileID != "op_team" {
 		t.Fatalf("opencode bot capability contract = %#v, want opencode/op_team", contract)
 	}
-	if contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+	if contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("opencode bot capability contract retained inactive profile fields: %#v", contract)
 	}
 }
@@ -131,7 +156,7 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing
 		ChatID:           "oc_room",
 		ProductMode:      ProductModeNormal,
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  "team-proxy",
+		CodexProfileID:   "team-proxy",
 		PromptOverride:   ModelConfigRecord{Model: "gpt-5.5"},
 		PlanMode:         PlanModeSettingOff,
 	}
@@ -171,7 +196,7 @@ func TestEffectiveSurfaceCapabilitySettingsSanitizesOpenCodeBotPromptAndPlanOver
 		ActorUserID:      "ou_user",
 		ProductMode:      ProductModeNormal,
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  "team-proxy",
+		CodexProfileID:   "team-proxy",
 	}
 
 	effective := EffectiveSurfaceCapabilitySettings(root, surface)
@@ -205,7 +230,7 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuPrivate(t *test
 		ActorUserID:      "ou_user",
 		ProductMode:      ProductModeNormal,
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  "team-proxy",
+		CodexProfileID:   "team-proxy",
 	}
 
 	effective := EffectiveSurfaceCapabilitySettings(root, surface)
@@ -232,14 +257,14 @@ func TestEffectiveSurfaceCapabilitySettingsRejectsMalformedFeishuRoomIdentity(t 
 		ChatID:           "oc_room",
 		ProductMode:      ProductModeNormal,
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  "team-proxy",
+		CodexProfileID:   "team-proxy",
 	}
 
 	effective := EffectiveSurfaceCapabilitySettings(root, surface)
 	if effective.Source != SurfaceCapabilitySettingsSourceSurface {
 		t.Fatalf("source = %q, want local surface settings", effective.Source)
 	}
-	if effective.Contract.Backend != agentproto.BackendCodex || effective.Contract.CodexProviderID != "team-proxy" {
+	if effective.Contract.Backend != agentproto.BackendCodex || effective.Contract.CodexProfileID != "team-proxy" {
 		t.Fatalf("effective contract = %#v, want malformed identity to stay local", effective.Contract)
 	}
 }
@@ -259,14 +284,14 @@ func TestEffectiveSurfaceCapabilitySettingsRejectsGatewayIdentityMismatch(t *tes
 		ChatID:           "ou_user",
 		ProductMode:      ProductModeNormal,
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  "team-proxy",
+		CodexProfileID:   "team-proxy",
 	}
 
 	effective := EffectiveSurfaceCapabilitySettings(root, surface)
 	if effective.Source != SurfaceCapabilitySettingsSourceSurface {
 		t.Fatalf("source = %q, want gateway-mismatched identity to stay local", effective.Source)
 	}
-	if effective.Contract.Backend != agentproto.BackendCodex || effective.Contract.CodexProviderID != "team-proxy" {
+	if effective.Contract.Backend != agentproto.BackendCodex || effective.Contract.CodexProfileID != "team-proxy" {
 		t.Fatalf("effective contract = %#v, want gateway-mismatched identity to stay local", effective.Contract)
 	}
 }

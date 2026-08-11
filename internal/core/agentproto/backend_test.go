@@ -48,7 +48,7 @@ func TestParseBackendDistinguishesEmptyLegacyDefaultFromUnknown(t *testing.T) {
 }
 
 func TestEffectiveHelloBackendPreservesUnknownBackend(t *testing.T) {
-	hello := Hello{Instance: InstanceHello{Backend: Backend(" mystery "), CodexProviderID: "team-proxy"}}
+	hello := Hello{Instance: InstanceHello{Backend: Backend(" mystery "), CodexProfileID: "team-proxy"}}
 	if got := EffectiveHelloBackend(hello); got != Backend("mystery") {
 		t.Fatalf("EffectiveHelloBackend unknown = %q, want mystery", got)
 	}

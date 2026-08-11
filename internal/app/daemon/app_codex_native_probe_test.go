@@ -72,9 +72,9 @@ func TestCodexNativeConfigProbeRunsOnceAndReservesConfiguredProviderIDs(t *testi
 	if calls.Load() != 1 {
 		t.Fatalf("native config probe calls = %d, want 1", calls.Load())
 	}
-	_, args, err := app.applyCodexHeadlessProviderConfig(nil, []string{"app-server"}, agentproto.BackendCodex, record.ID)
+	_, args, err := app.applyCodexHeadlessProfileConfig(nil, []string{"app-server"}, agentproto.BackendCodex, record.ID)
 	if err != nil {
-		t.Fatalf("applyCodexHeadlessProviderConfig: %v", err)
+		t.Fatalf("applyCodexHeadlessProfileConfig: %v", err)
 	}
 	if strings.Contains(strings.Join(args, "\n"), `model_provider="`+collidingProviderID+`"`) {
 		t.Fatalf("API launch reused native provider ID %q: %#v", collidingProviderID, args)
@@ -106,7 +106,7 @@ func TestCodexNativeConfigProbeFailureUsesConservativeLifecycleEvidence(t *testi
 		t.Fatalf("lifecycle generations = %d, %d", firstGeneration, secondGeneration)
 	}
 
-	env, args, err := first.applyCodexHeadlessProviderConfig(
+	env, args, err := first.applyCodexHeadlessProfileConfig(
 		[]string{"OPENAI_API_KEY=native-key"},
 		[]string{"app-server"},
 		agentproto.BackendCodex,
@@ -148,7 +148,7 @@ func TestCodexNativeConfigProbeFailureDoesNotBlockAPIProfileLaunch(t *testing.T)
 	}
 
 	app.ensureCodexNativeConnectionEvidence(context.Background())
-	env, args, err := app.applyCodexHeadlessProviderConfig(
+	env, args, err := app.applyCodexHeadlessProfileConfig(
 		[]string{"CUSTOM_API_KEY=native-secret"},
 		[]string{"app-server"},
 		agentproto.BackendCodex,

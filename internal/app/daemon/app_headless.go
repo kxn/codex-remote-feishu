@@ -163,7 +163,7 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 		env = append(env, config.ResumeThreadIDEnv+"="+strings.TrimSpace(command.ThreadID))
 	}
 	if backend == agentproto.BackendCodex {
-		env = append(env, config.CodexRuntimeProviderIDEnv+"="+state.NormalizeCodexProviderID(command.CodexProviderID))
+		env = append(env, config.CodexRuntimeProfileIDEnv+"="+state.NormalizeCodexProfileID(command.CodexProfileID))
 	}
 	if backend == agentproto.BackendClaude {
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
@@ -172,14 +172,14 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 		env = append(env, config.OpenCodeRuntimeProfileIDEnv+"="+state.NormalizeOpenCodeProfileID(command.OpenCodeProfileID))
 	}
 	launchArgs := append([]string{}, cfg.LaunchArgs...)
-	env, launchArgs, codexProjection, err := a.applyCodexHeadlessProviderConfigLocked(env, launchArgs, backend, command.CodexProviderID, command.CodexAdmissionRef)
+	env, launchArgs, codexProjection, err := a.applyCodexHeadlessProfileConfigLocked(env, launchArgs, backend, command.CodexProfileID, command.CodexAdmissionRef)
 	if err != nil {
 		return a.handleManagedHeadlessLaunchFailure(command, codexHeadlessLaunchProblem(err, agentproto.ErrorInfo{
-			Code:             "codex_provider_prepare_failed",
+			Code:             "codex_profile_prepare_failed",
 			Layer:            "daemon",
 			Stage:            "headless_start",
 			Operation:        "start_headless",
-			Message:          "Codex Provider 准备失败。",
+			Message:          "Codex Profile 准备失败。",
 			SurfaceSessionID: command.SurfaceSessionID,
 			ThreadID:         command.ThreadID,
 			Retryable:        true,

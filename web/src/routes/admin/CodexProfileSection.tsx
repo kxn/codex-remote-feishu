@@ -35,7 +35,7 @@ import {
   requiredProfileFieldMessage,
 } from "./ProfileEditorShared";
 
-type CodexProviderDraft = {
+type CodexProfileDraft = {
   name: string;
   baseURL: string;
   apiKey: string;
@@ -47,29 +47,29 @@ type CodexProviderDraft = {
   contextMode: string;
 };
 
-type CodexProviderSectionProps = {
-  providers: CodexProfileSummary[];
+type CodexProfileSectionProps = {
+  profiles: CodexProfileSummary[];
   loadError: string;
-  setProviders: Dispatch<SetStateAction<CodexProfileSummary[]>>;
+  setProfiles: Dispatch<SetStateAction<CodexProfileSummary[]>>;
   onReload: () => Promise<void>;
 };
 
-const newCodexProviderID = "new-codex-profile";
+const newCodexProfileID = "new-codex-profile";
 const codexReasoningOptions = ["low", "medium", "high", "xhigh"] as const;
 const codexContextModeDefault = "codex_default";
 const codexInstructionMaxChars = 16000;
 
-export function CodexProviderSection(props: CodexProviderSectionProps) {
-  const { providers, loadError, setProviders, onReload } = props;
+export function CodexProfileSection(props: CodexProfileSectionProps) {
+  const { profiles, loadError, setProfiles, onReload } = props;
   const [deleteReferences, setDeleteReferences] = useState<CodexProfileReference[]>([]);
-  const editor = useConfigEditorSection<CodexProfileSummary, CodexProviderDraft>({
-    items: providers,
-    newItemID: newCodexProviderID,
+  const editor = useConfigEditorSection<CodexProfileSummary, CodexProfileDraft>({
+    items: profiles,
+    newItemID: newCodexProfileID,
     createEmptyDraft,
-    createDraftFromItem: createDraftFromProvider,
+    createDraftFromItem: createDraftFromProfile,
   });
   const {
-    activeItem: activeProvider,
+    activeItem: activeProfile,
     activeItemID,
     actionBusy,
     applyNextItems,
@@ -89,7 +89,7 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
 
   async function handleSave(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const validationError = validateDraft(draft, editorMode, activeProvider);
+    const validationError = validateDraft(draft, editorMode, activeProfile);
     if (validationError) {
       setDetailNotice({ tone: "warn", message: validationError });
       return;
@@ -108,13 +108,13 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         if (draft.contextMode !== codexContextModeDefault) {
           nextProfile = await saveContextPreference(nextProfile, draft.contextMode);
         }
-        setProviders((current) => appendOrReplaceProfileItem(current, nextProfile));
+        setProfiles((current) => appendOrReplaceProfileItem(current, nextProfile));
         selectPersistedItem(nextProfile);
         setDetailNotice({ tone: "good", message: "Codex 配置已创建。" });
         return;
       }
 
-      if (!activeProvider) {
+      if (!activeProfile) {
         setDetailNotice({
           tone: "danger",
           message: "当前配置不存在，请重新选择后再试。",
@@ -122,23 +122,23 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         return;
       }
 
-      let nextProfile = activeProvider;
-      const connectionEditable = activeProvider.kind === "api" && activeProvider.editable;
+      let nextProfile = activeProfile;
+      const connectionEditable = activeProfile.kind === "api" && activeProfile.editable;
       if (connectionEditable) {
         nextProfile = (
           await sendJSONWithHeaders<CodexProfileResponse>(
-            `/api/admin/codex/profiles/${encodeURIComponent(activeProvider.id)}`,
+            `/api/admin/codex/profiles/${encodeURIComponent(activeProfile.id)}`,
             "PUT",
             buildUpdatePayload(draft),
-            { "If-Match": activeProvider.etag ?? "" },
+            { "If-Match": activeProfile.etag ?? "" },
           )
         ).profile;
       }
-      if (activeProvider.contextEditable && draft.contextMode !== contextMode(activeProvider)) {
+      if (activeProfile.contextEditable && draft.contextMode !== contextMode(activeProfile)) {
         nextProfile = await saveContextPreference(nextProfile, draft.contextMode);
       }
-      setProviders((current) =>
-        appendOrReplaceProfileItem(current, nextProfile, activeProvider.id),
+      setProfiles((current) =>
+        appendOrReplaceProfileItem(current, nextProfile, activeProfile.id),
       );
       selectPersistedItem(nextProfile);
       setDetailNotice({
@@ -179,8 +179,8 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
       return;
     }
 
-    const provider = providers.find((item) => item.id === deleteTargetID) ?? null;
-    if (!provider || !provider.deletable) {
+    const profile = profiles.find((item) => item.id === deleteTargetID) ?? null;
+    if (!profile || !profile.deletable) {
       setDeleteTargetID(null);
       setDetailNotice({
         tone: "warn",
@@ -196,14 +196,14 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         `/api/admin/codex/profiles/${encodeURIComponent(deleteTargetID)}`,
         {
           method: "DELETE",
-          headers: { "If-Match": provider.etag ?? "" },
+          headers: { "If-Match": profile.etag ?? "" },
         },
       );
-      const nextProviders = removeProfileItem(providers, deleteTargetID);
-      setProviders(nextProviders);
+      const nextProfiles = removeProfileItem(profiles, deleteTargetID);
+      setProfiles(nextProfiles);
       setDeleteTargetID(null);
       setDeleteReferences([]);
-      applyNextItems(nextProviders);
+      applyNextItems(nextProfiles);
       setDetailNotice({ tone: "good", message: "Codex 配置已删除。" });
     } catch (error) {
       setDetailNotice({
@@ -223,19 +223,19 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
         emptyLoadErrorTitle="当前还不能读取 Codex 配置"
         loadError={loadError}
         onReload={onReload}
-        items={providers}
+        items={profiles}
         activeItemID={activeItemID}
-        newItemID={newCodexProviderID}
+        newItemID={newCodexProfileID}
         onItemSelect={handleItemSelect}
         onStartCreate={startCreateBlank}
-        getItemTitle={providerTitle}
-        getItemSummary={providerCardSummary}
-        getItemTag={providerKindLabel}
+        getItemTitle={profileTitle}
+        getItemSummary={profileCardSummary}
+        getItemTag={profileKindLabel}
         newItemTitle="新增配置"
         newItemSummary="新建 API 配置"
-        detailCard={renderCodexProviderDetailCard({
+        detailCard={renderCodexProfileDetailCard({
           actionBusy,
-          activeProvider,
+          activeProfile,
           deleteTargetID,
           detailNotice,
           draft,
@@ -250,10 +250,10 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
 
       <ConfigDeleteConfirmModal
         targetID={deleteTargetID}
-        items={providers}
+        items={profiles}
         dialogTitle="确认删除 Codex 配置"
         confirmDisabled={actionBusy === "delete-codex-profile"}
-        getItemTitle={providerTitle}
+        getItemTitle={profileTitle}
         onCancel={() => {
           setDeleteTargetID(null);
           setDeleteReferences([]);
@@ -295,21 +295,21 @@ export function CodexProviderSection(props: CodexProviderSectionProps) {
 }
 
 type CodexDetailCardProps = Pick<
-  ConfigEditorSectionState<CodexProfileSummary, CodexProviderDraft>,
+  ConfigEditorSectionState<CodexProfileSummary, CodexProfileDraft>,
   "actionBusy" | "deleteTargetID" | "detailNotice" | "draft" | "editorMode"
 > & {
-  activeProvider: CodexProfileSummary | null;
+  activeProfile: CodexProfileSummary | null;
   onCancelCreate: () => void;
   onDeleteTargetChange: (value: string | null) => void;
-  onDraftChange: Dispatch<SetStateAction<CodexProviderDraft>>;
+  onDraftChange: Dispatch<SetStateAction<CodexProfileDraft>>;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
   onStartCreate: () => void;
 };
 
-function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
+function renderCodexProfileDetailCard(props: CodexDetailCardProps) {
   const {
     actionBusy,
-    activeProvider,
+    activeProfile,
     deleteTargetID,
     detailNotice,
     draft,
@@ -320,14 +320,14 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
     onSave,
   } = props;
 
-  const isConnectionEditable = editorMode === "create" || Boolean(activeProvider?.editable);
-  const canSave = isConnectionEditable || Boolean(activeProvider?.contextEditable);
+  const isConnectionEditable = editorMode === "create" || Boolean(activeProfile?.editable);
+  const canSave = isConnectionEditable || Boolean(activeProfile?.contextEditable);
   const title =
     editorMode === "create"
       ? draft.name.trim()
         ? `新增配置：${draft.name.trim()}`
         : "新增 Codex 配置"
-      : providerTitle(activeProvider);
+      : profileTitle(activeProfile);
   const description =
     editorMode === "create"
       ? "填写 API 连接信息"
@@ -357,12 +357,12 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
           >
             取消
           </button>
-        ) : activeProvider?.deletable ? (
+        ) : activeProfile?.deletable ? (
           <button
             className="danger-button"
             disabled={Boolean(deleteTargetID) || actionBusy !== ""}
             type="button"
-            onClick={() => onDeleteTargetChange(activeProvider.id)}
+            onClick={() => onDeleteTargetChange(activeProfile.id)}
           >
             删除配置
           </button>
@@ -512,15 +512,15 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
         </div>
       ) : (
         <div className="hero-card">
-          <h3>{providerKindLabel(activeProvider)}</h3>
-          <p>{readOnlyProfileDescription(activeProvider)}</p>
+          <h3>{profileKindLabel(activeProfile)}</h3>
+          <p>{readOnlyProfileDescription(activeProfile)}</p>
         </div>
       )}
       <label className="field form-grid-span-2 stack-top">
         <span className="sr-only">上下文大小</span>
         <select
           aria-label="上下文大小"
-          disabled={editorMode !== "create" && !activeProvider?.contextEditable}
+          disabled={editorMode !== "create" && !activeProfile?.contextEditable}
           value={draft.contextMode}
           onChange={(event) =>
             onDraftChange((current) => ({
@@ -534,14 +534,14 @@ function renderCodexProviderDetailCard(props: CodexDetailCardProps) {
           <option value="extended_1m">1M（长上下文）</option>
         </select>
         <span className="field-hint">
-          {contextStatusDescription(draft.contextMode, activeProvider)}
+          {contextStatusDescription(draft.contextMode, activeProfile)}
         </span>
       </label>
     </ConfigFormDetailCard>
   );
 }
 
-function createEmptyDraft(): CodexProviderDraft {
+function createEmptyDraft(): CodexProfileDraft {
   return {
     name: "",
     baseURL: "",
@@ -555,26 +555,26 @@ function createEmptyDraft(): CodexProviderDraft {
   };
 }
 
-function createDraftFromProvider(provider: CodexProfileSummary): CodexProviderDraft {
+function createDraftFromProfile(profile: CodexProfileSummary): CodexProfileDraft {
   return {
-    name: providerTitle(provider),
-    baseURL: provider.baseURL?.trim() || "",
+    name: profileTitle(profile),
+    baseURL: profile.baseURL?.trim() || "",
     apiKey: "",
-    model: provider.model?.trim() || "",
-    reviewModel: provider.reviewModel?.trim() || "",
-    subagentModel: provider.subagentModel?.trim() || "",
-    instruction: provider.instruction?.trim() || "",
-    reasoningEffort: normalizeCodexReasoningEffort(provider.reasoningEffort),
-    contextMode: contextMode(provider),
+    model: profile.model?.trim() || "",
+    reviewModel: profile.reviewModel?.trim() || "",
+    subagentModel: profile.subagentModel?.trim() || "",
+    instruction: profile.instruction?.trim() || "",
+    reasoningEffort: normalizeCodexReasoningEffort(profile.reasoningEffort),
+    contextMode: contextMode(profile),
   };
 }
 
 function validateDraft(
-  draft: CodexProviderDraft,
+  draft: CodexProfileDraft,
   editorMode: EditorMode,
-  activeProvider: CodexProfileSummary | null,
+  activeProfile: CodexProfileSummary | null,
 ): string {
-  if (editorMode !== "create" && activeProvider && !activeProvider.editable) {
+  if (editorMode !== "create" && activeProfile && !activeProfile.editable) {
     return "";
   }
   const nameError = requiredProfileFieldMessage(draft.name, "名称");
@@ -609,7 +609,7 @@ function validateDraft(
   return "";
 }
 
-function buildCreatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest {
+function buildCreatePayload(draft: CodexProfileDraft): CodexProfileWriteRequest {
   return {
     name: draft.name.trim(),
     baseURL: draft.baseURL.trim(),
@@ -622,7 +622,7 @@ function buildCreatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest
   };
 }
 
-function buildUpdatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest {
+function buildUpdatePayload(draft: CodexProfileDraft): CodexProfileWriteRequest {
   const payload: CodexProfileWriteRequest = {
     name: draft.name.trim(),
     baseURL: draft.baseURL.trim(),
@@ -638,29 +638,29 @@ function buildUpdatePayload(draft: CodexProviderDraft): CodexProfileWriteRequest
   return payload;
 }
 
-function providerTitle(provider: CodexProfileSummary | null): string {
-  if (!provider) {
+function profileTitle(profile: CodexProfileSummary | null): string {
+  if (!profile) {
     return "当前配置";
   }
-  return provider.name?.trim() || "未命名配置";
+  return profile.name?.trim() || "未命名配置";
 }
 
-function providerCardSummary(provider: CodexProfileSummary): string {
+function profileCardSummary(profile: CodexProfileSummary): string {
   const parts = [
-    providerKindLabel(provider),
-    provider.available ? "" : statusLabel(provider.statusCode),
-    provider.baseURL?.trim() || "",
-    provider.model?.trim() ? `模型 ${provider.model.trim()}` : "",
-    normalizeCodexReasoningEffort(provider.reasoningEffort)
-      ? `推理 ${normalizeCodexReasoningEffort(provider.reasoningEffort)}`
+    profileKindLabel(profile),
+    profile.available ? "" : statusLabel(profile.statusCode),
+    profile.baseURL?.trim() || "",
+    profile.model?.trim() ? `模型 ${profile.model.trim()}` : "",
+    normalizeCodexReasoningEffort(profile.reasoningEffort)
+      ? `推理 ${normalizeCodexReasoningEffort(profile.reasoningEffort)}`
       : "",
-    contextLabel(contextMode(provider)),
+    contextLabel(contextMode(profile)),
   ].filter(Boolean);
   return parts.join(" · ");
 }
 
-function providerKindLabel(provider: CodexProfileSummary | null): string {
-  switch (provider?.kind) {
+function profileKindLabel(profile: CodexProfileSummary | null): string {
+  switch (profile?.kind) {
     case "native":
       return "本机默认";
     case "oauth":
@@ -672,8 +672,8 @@ function providerKindLabel(provider: CodexProfileSummary | null): string {
   }
 }
 
-function readOnlyProfileDescription(provider: CodexProfileSummary | null): string {
-  if (provider?.kind === "oauth") {
+function readOnlyProfileDescription(profile: CodexProfileSummary | null): string {
+  if (profile?.kind === "oauth") {
     return "连接身份由 Codex 登录管理。";
   }
   return "连接身份由本机 Codex 管理。";
@@ -707,13 +707,13 @@ function contextLabel(mode: string): string {
   }
 }
 
-function contextMode(provider: CodexProfileSummary): string {
-  return provider.contextPreference?.mode || codexContextModeDefault;
+function contextMode(profile: CodexProfileSummary): string {
+  return profile.contextPreference?.mode || codexContextModeDefault;
 }
 
 function contextStatusDescription(
   mode: string,
-  provider: CodexProfileSummary | null,
+  profile: CodexProfileSummary | null,
 ): string {
   if (mode === "codex_default") {
     return "不覆盖 Codex 默认上下文。";
@@ -721,13 +721,13 @@ function contextStatusDescription(
   if (mode === "price_guard_272k") {
     return "按费用优先请求 272K；这不是单次请求费用硬上限。";
   }
-  if (provider?.contextStatus === "context_preference_clamped") {
-    return provider.effectiveContextWindow
-      ? `目标模型限制为约 ${formatContextWindow(provider.effectiveContextWindow)}。`
+  if (profile?.contextStatus === "context_preference_clamped") {
+    return profile.effectiveContextWindow
+      ? `目标模型限制为约 ${formatContextWindow(profile.effectiveContextWindow)}。`
       : "目标模型限制了可用上下文。";
   }
-  if (provider?.effectiveContextWindow) {
-    return `已观察到约 ${formatContextWindow(provider.effectiveContextWindow)} 可用上下文。`;
+  if (profile?.effectiveContextWindow) {
+    return `已观察到约 ${formatContextWindow(profile.effectiveContextWindow)} 可用上下文。`;
   }
   return "新会话开始后确认实际生效值；可能受模型上限影响。";
 }
@@ -746,27 +746,20 @@ function describeCodexProfileError(error: unknown): string {
   if (error instanceof APIRequestError) {
     switch (error.code) {
       case "codex_profile_name_required":
-      case "codex_provider_name_required":
         return "请填写名称。";
       case "codex_profile_base_url_required":
-      case "codex_provider_base_url_required":
         return "请填写端点地址。";
       case "codex_profile_api_key_required":
-      case "codex_provider_api_key_required":
         return "请填写 API Key。";
       case "codex_profile_reasoning_effort_invalid":
-      case "codex_provider_reasoning_effort_invalid":
         return "推理强度不可用，请重新选择。";
       case "codex_profile_reserved_name":
-      case "codex_provider_reserved_name":
         return "这个名称不能使用，请换一个名字。";
       case "duplicate_codex_profile_name":
-      case "duplicate_codex_provider_name":
         return "这个名称已经存在，请换一个名字。";
       case "codex_profile_read_only":
         return "这个配置的连接身份不能直接修改。";
       case "codex_profile_not_found":
-      case "codex_provider_not_found":
         return "当前配置已经不存在，请重新读取后再试。";
       case "profile_revision_required":
       case "profile_preference_revision_required":

@@ -93,9 +93,9 @@ func MigrateLegacyCodexProviders(cfg AppConfig) (AppConfig, bool, []CodexProfile
 	}
 	profiles := make([]CodexAPIProfileRecord, 0, len(cfg.Codex.Providers))
 	diagnostics := make([]CodexProfileMigrationDiagnostic, 0)
-	used := map[string]struct{}{CodexDefaultProviderID: {}}
+	used := map[string]struct{}{legacyCodexDefaultProviderID: {}}
 	for _, provider := range cfg.Codex.Providers {
-		id := nextCodexProviderID(provider.ID, provider.Name, used)
+		id := nextLegacyCodexProviderID(provider.ID, provider.Name, used)
 		name := strings.TrimSpace(provider.Name)
 		if name == "" {
 			name = id

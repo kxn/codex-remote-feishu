@@ -15,7 +15,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 		ProductMode:      string(s.normalizeSurfaceProductMode(surface)),
 		Backend:          s.surfaceBackend(surface),
 		WorkspaceKey:     s.surfaceCurrentWorkspaceKey(surface),
-		CodexProviderID:  s.surfaceCodexProviderID(surface),
+		CodexProfileID:   s.surfaceCodexProfileID(surface),
 		AutoWhip:         snapshotAutoWhipSummary(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),
 	}
@@ -32,7 +32,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			WorkspaceKey:          pending.WorkspaceKey,
 			ThreadCWD:             pending.ThreadCWD,
 			Backend:               pending.Backend,
-			CodexProviderID:       pending.CodexProviderID,
+			CodexProfileID:        pending.CodexProfileID,
 			ClaudeProfileID:       pending.ClaudeProfileID,
 			ClaudeReasoningEffort: pending.ClaudeReasoningEffort,
 			Status:                string(pending.Status),

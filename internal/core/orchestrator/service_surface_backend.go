@@ -43,7 +43,7 @@ func (s *Service) setSurfaceDesiredContract(surface *state.SurfaceConsoleRecord,
 	case contract.Backend == agentproto.BackendOpenCode:
 		surface.OpenCodeProfileID = contract.OpenCodeProfileID
 	default:
-		surface.CodexProviderID = contract.CodexProviderID
+		surface.CodexProfileID = contract.CodexProfileID
 	}
 }
 
@@ -60,7 +60,7 @@ func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) st
 			launch.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
 		}
 	default:
-		launch = state.HeadlessCodexLaunchContract(state.EffectiveSurfaceCodexProviderID(contract))
+		launch = state.HeadlessCodexLaunchContract(state.EffectiveSurfaceCodexProfileID(contract))
 	}
 	if launch.Backend == agentproto.BackendCodex && surface != nil {
 		launch.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef)
@@ -87,7 +87,7 @@ func (s *Service) applyHeadlessLaunchContract(command *control.DaemonCommand, co
 	}
 	contract = state.NormalizeHeadlessLaunchContract(contract)
 	command.Backend = contract.Backend
-	command.CodexProviderID = contract.CodexProviderID
+	command.CodexProfileID = contract.CodexProfileID
 	command.CodexAdmissionRef = state.NormalizeCodexAdmissionRef(contract.CodexAdmissionRef)
 	command.CodexConnectionContract = state.CloneCodexConnectionContract(contract.CodexConnectionContract)
 	command.CodexThreadPolicy = state.CloneCodexThreadPolicy(contract.CodexThreadPolicy)
@@ -165,8 +165,8 @@ func (s *Service) surfaceWorkspaceDefaultsContract(surface *state.SurfaceConsole
 			}
 			return state.OpenCodeInstanceBackendContract("")
 		default:
-			if desired.Backend == agentproto.BackendCodex && state.EffectiveSurfaceCodexProviderID(desired) != "" {
-				return state.CodexInstanceBackendContract(state.EffectiveSurfaceCodexProviderID(desired))
+			if desired.Backend == agentproto.BackendCodex && state.EffectiveSurfaceCodexProfileID(desired) != "" {
+				return state.CodexInstanceBackendContract(state.EffectiveSurfaceCodexProfileID(desired))
 			}
 			if observed.Backend == agentproto.BackendCodex {
 				return observed

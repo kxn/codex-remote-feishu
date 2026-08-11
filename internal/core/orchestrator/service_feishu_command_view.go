@@ -62,7 +62,7 @@ func (s *Service) buildConfigCommandViewState(
 	view.Config.UsesLocalRequestedOverrides = summary.UsesLocalRequestedOverrides
 	view.Config.PlanModeOverrideSet = summary.PlanModeOverrideSet
 	switch flow.CommandID {
-	case control.FeishuCommandCodexProvider:
+	case control.FeishuCommandCodexProfile:
 		view.Config.FormOptions = s.codexProfileCommandOptions(true)
 		view.Config.FormPagination = true
 		if strings.TrimSpace(view.Config.StatusText) == "" {
@@ -165,7 +165,7 @@ func (s *Service) resolveConfigFlowValue(
 	case control.FeishuConfigFlowValueSurfaceProductMode:
 		normalized := control.NormalizeCatalogContext(ctx)
 		return state.SurfaceModeAlias(state.ProductMode(normalized.ProductMode), normalized.Backend)
-	case control.FeishuConfigFlowValueSurfaceCodexProvider:
+	case control.FeishuConfigFlowValueSurfaceCodexProfile:
 		if surface != nil {
 			return s.surfaceCodexProfileID(surface)
 		}

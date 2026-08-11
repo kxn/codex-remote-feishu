@@ -149,9 +149,6 @@ func mergedCodexProfileSelectionStatus(candidates []feishuP2PSurfaceResumeCandid
 			continue
 		}
 		profileID := strings.TrimSpace(entry.CodexProfileID)
-		if profileID == "" {
-			profileID = state.CodexProfileIDFromLegacyProviderID(entry.CodexProviderID)
-		}
 		profileIDs[profileID] = struct{}{}
 	}
 	if len(profileIDs) > 1 {

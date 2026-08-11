@@ -40,7 +40,7 @@ func TestSurfaceDesiredBackendContractProjectsOpenCodeBinding(t *testing.T) {
 	surface := &SurfaceConsoleRecord{
 		ProductMode:       ProductModeNormal,
 		Backend:           agentproto.BackendOpenCode,
-		CodexProviderID:   "team-proxy",
+		CodexProfileID:    "team-proxy",
 		ClaudeProfileID:   "devseek",
 		OpenCodeProfileID: "op_team",
 	}
@@ -48,7 +48,7 @@ func TestSurfaceDesiredBackendContractProjectsOpenCodeBinding(t *testing.T) {
 	if contract.Backend != agentproto.BackendOpenCode {
 		t.Fatalf("unexpected backend: %#v", contract)
 	}
-	if contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+	if contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("expected inactive backend bindings to stay hidden, got %#v", contract)
 	}
 	if contract.OpenCodeProfileID != "op_team" {
@@ -67,7 +67,7 @@ func TestHeadlessLaunchContractCarriesOpenCodeAdmissionRef(t *testing.T) {
 		OpenCodeProfileID:      "op_team",
 		OpenCodeAdmissionRef:   ref,
 		CodexAdmissionRef:      &CodexAdmissionRef{ProfileRef: CodexProfileRef{ID: "cp_team", Revision: 1}, ContextPreferenceRef: CodexContextPreferenceRef{ProfileID: "cp_team", Revision: 1}},
-		CodexProviderID:        "team-proxy",
+		CodexProfileID:         "team-proxy",
 		ClaudeProfileID:        "devseek",
 		ContractRefreshPending: true,
 	}
@@ -81,7 +81,7 @@ func TestHeadlessLaunchContractCarriesOpenCodeAdmissionRef(t *testing.T) {
 	if contract.OpenCodeAdmissionRef == nil || contract.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
 		t.Fatalf("expected opencode admission ref to be cloned into launch contract, got %#v", contract)
 	}
-	if contract.CodexAdmissionRef != nil || contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+	if contract.CodexAdmissionRef != nil || contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("expected inactive backend launch fields to be hidden, got %#v", contract)
 	}
 }
@@ -104,26 +104,26 @@ func TestSurfaceDesiredBackendContractProjectsOnlyActiveBackendBinding(t *testin
 	surface := &SurfaceConsoleRecord{
 		ProductMode:     ProductModeNormal,
 		Backend:         agentproto.BackendClaude,
-		CodexProviderID: "team-proxy",
+		CodexProfileID:  "team-proxy",
 		ClaudeProfileID: "devseek",
 	}
 	contract := SurfaceDesiredBackendContract(surface)
 	if contract.Backend != agentproto.BackendClaude {
 		t.Fatalf("unexpected backend: %#v", contract)
 	}
-	if contract.CodexProviderID != "" {
-		t.Fatalf("expected inactive codex provider to stay hidden in active contract, got %#v", contract)
+	if contract.CodexProfileID != "" {
+		t.Fatalf("expected inactive codex profile to stay hidden in active contract, got %#v", contract)
 	}
 	if contract.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected claude profile storage to stay intact, got %#v", contract)
 	}
-	if got := EffectiveSurfaceCodexProviderID(contract); got != "" {
-		t.Fatalf("expected inactive codex provider projection to stay hidden, got %q", got)
+	if got := EffectiveSurfaceCodexProfileID(contract); got != "" {
+		t.Fatalf("expected inactive codex profile projection to stay hidden, got %q", got)
 	}
 	if got := EffectiveSurfaceClaudeProfileID(contract); got != "devseek" {
 		t.Fatalf("expected active claude profile projection, got %q", got)
 	}
-	if surface.CodexProviderID != "team-proxy" || surface.ClaudeProfileID != "devseek" {
+	if surface.CodexProfileID != "team-proxy" || surface.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected source surface storage to remain intact, got %#v", surface)
 	}
 }
@@ -136,8 +136,8 @@ func TestPersistedSurfaceBackendContractCanonicalizesLegacyClaudeProfileProjecti
 	if contract.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected claude profile to survive canonicalization, got %#v", contract)
 	}
-	if contract.CodexProviderID != "" {
-		t.Fatalf("expected inactive codex provider projection to stay hidden, got %#v", contract)
+	if contract.CodexProfileID != "" {
+		t.Fatalf("expected inactive codex profile projection to stay hidden, got %#v", contract)
 	}
 }
 

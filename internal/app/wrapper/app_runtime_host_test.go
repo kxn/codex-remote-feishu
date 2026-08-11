@@ -125,7 +125,7 @@ func TestWrapperOpenCodeHelloCarriesProfileID(t *testing.T) {
 	if hello.Instance.OpenCodeProfileID != "op_team" {
 		t.Fatalf("hello opencode profile id = %q", hello.Instance.OpenCodeProfileID)
 	}
-	if hello.Instance.CodexProviderID != "" || hello.Instance.ClaudeProfileID != "" {
+	if hello.Instance.CodexProfileID != "" || hello.Instance.ClaudeProfileID != "" {
 		t.Fatalf("hello leaked inactive backend profile fields: %#v", hello.Instance)
 	}
 	if !hello.Capabilities.SessionCatalog || !hello.Capabilities.RequestRespond || !hello.Capabilities.RequiresCWDForResume {

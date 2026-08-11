@@ -31,8 +31,8 @@ func modePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageV
 	}})
 }
 
-func codexProviderPageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
-	def, _ := FeishuCommandDefinitionByID(FeishuCommandCodexProvider)
+func codexProfilePageViewFromCommandConfigView(view FeishuCatalogConfigView) FeishuPageView {
+	def, _ := FeishuCommandDefinitionByID(FeishuCommandCodexProfile)
 	bodySections := BuildFeishuCommandConfigBodySections(def, view)
 	noticeSections := BuildFeishuCommandConfigNoticeSections(def, view)
 	if view.Sealed {
@@ -49,7 +49,7 @@ func codexProviderPageViewFromCommandConfigView(view FeishuCatalogConfigView) Fe
 		Title: "立即切换",
 		Entries: []CommandCatalogEntry{{
 			Form: &CommandCatalogForm{
-				CommandID:   FeishuCommandCodexProvider,
+				CommandID:   FeishuCommandCodexProfile,
 				CommandText: "/codexprofile",
 				SubmitLabel: "切换",
 				Paginated:   view.FormPagination,

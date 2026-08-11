@@ -300,12 +300,12 @@ func TestSurfaceResumeStoreDefaultsLegacyMissingBackendToCodex(t *testing.T) {
 	}
 }
 
-func TestSurfaceResumeStatePersistsCodexProviderID(t *testing.T) {
+func TestSurfaceResumeStatePersistsCodexProfileID(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
 	app := newRestoreHintTestApp(stateDir)
-	app.service.MaterializeSurfaceResumeWithCodexProvider(
+	app.service.MaterializeSurfaceResumeWithCodexProfile(
 		"surface-1",
 		"app-1",
 		"chat-1",
@@ -323,13 +323,13 @@ func TestSurfaceResumeStatePersistsCodexProviderID(t *testing.T) {
 	app.mu.Unlock()
 
 	entry := app.SurfaceResumeState("surface-1")
-	if entry == nil || entry.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected persisted codex provider id, got %#v", entry)
+	if entry == nil || entry.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected persisted codex profile id, got %#v", entry)
 	}
 
 	restarted := newRestoreHintTestApp(stateDir)
-	if got := restarted.service.SurfaceCodexProviderID("surface-1"); got != "team-proxy" {
-		t.Fatalf("expected codex provider id restored after restart, got %q", got)
+	if got := restarted.service.SurfaceCodexProfileID("surface-1"); got != "team-proxy" {
+		t.Fatalf("expected codex profile id restored after restart, got %q", got)
 	}
 }
 
@@ -347,7 +347,7 @@ func TestDaemonDoesNotRestoreCodexPlanModeAcrossRestart(t *testing.T) {
 				ActorUserID:      "user-1",
 				ProductMode:      "normal",
 				Backend:          "codex",
-				CodexProviderID:  "team-proxy",
+				CodexProfileID:   "team-proxy",
 				PlanMode:         "on",
 			},
 		},
@@ -423,29 +423,32 @@ func TestDaemonDoesNotRestoreClaudePlanModeAcrossRestart(t *testing.T) {
 	}
 }
 
-func TestSurfaceResumeStoreCanonicalizesLegacyCodexBackendWithClaudeProfile(t *testing.T) {
+func TestSurfaceResumeStoreDoesNotInferBackendFromInactiveClaudeProfile(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
 	path := surfaceresume.StatePath(stateDir)
 	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\",\n      \"backend\": \"codex\",\n      \"claudeProfileID\": \"mimo\",\n      \"resumeThreadID\": \"ca0c6c4c-4ba1-4729-b5cf-3cd7c299add1\",\n      \"resumeThreadTitle\": \"Claude 会话\",\n      \"resumeThreadCWD\": \"/data/dl/ds4debug\",\n      \"resumeWorkspaceKey\": \"/data/dl/ds4debug\",\n      \"resumeRouteMode\": \"pinned\",\n      \"resumeHeadless\": true\n    }\n  }\n}\n")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatalf("write legacy surface resume state: %v", err)
+		t.Fatalf("write mixed surface resume state: %v", err)
 	}
 
 	store, err := surfaceresume.LoadStore(path)
 	if err != nil {
-		t.Fatalf("load legacy store: %v", err)
+		t.Fatalf("load mixed store: %v", err)
 	}
 	entry, ok := store.Get("surface-1")
 	if !ok {
 		t.Fatal("expected canonicalized surface resume entry after reload")
 	}
-	if entry.Backend != "claude" {
-		t.Fatalf("expected claude profile to canonicalize backend back to claude, got %#v", entry)
+	if entry.Backend != "codex" {
+		t.Fatalf("expected explicit backend to remain codex, got %#v", entry)
 	}
-	if entry.ClaudeProfileID != "mimo" {
-		t.Fatalf("expected claude profile id to be preserved, got %#v", entry)
+	if entry.CodexProfileID != state.NativeCodexProfileID {
+		t.Fatalf("expected missing codex profile to normalize to native, got %#v", entry)
+	}
+	if entry.ClaudeProfileID != "" {
+		t.Fatalf("expected inactive claude profile projection to be cleared, got %#v", entry)
 	}
 	if entry.ResumeThreadID != "ca0c6c4c-4ba1-4729-b5cf-3cd7c299add1" || entry.ResumeWorkspaceKey != "/data/dl/ds4debug" || !entry.ResumeHeadless {
 		t.Fatalf("expected resume target to survive canonicalization, got %#v", entry)
@@ -457,7 +460,7 @@ func TestSurfaceResumeStoreKeepsExplicitBackendEvenWhenInactiveProfileStorageExi
 
 	stateDir := t.TempDir()
 	path := surfaceresume.StatePath(stateDir)
-	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\",\n      \"backend\": \"codex\",\n      \"codexProviderID\": \"team-proxy\",\n      \"claudeProfileID\": \"devseek\"\n    }\n  }\n}\n")
+	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\",\n      \"backend\": \"codex\",\n      \"codexProfileID\": \"team-proxy\",\n      \"claudeProfileID\": \"devseek\"\n    }\n  }\n}\n")
 	if err := os.WriteFile(path, raw, 0o600); err != nil {
 		t.Fatalf("write mixed backend state: %v", err)
 	}
@@ -473,8 +476,8 @@ func TestSurfaceResumeStoreKeepsExplicitBackendEvenWhenInactiveProfileStorageExi
 	if entry.Backend != "codex" {
 		t.Fatalf("expected explicit backend to win, got %#v", entry)
 	}
-	if entry.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected active codex provider to be preserved, got %#v", entry)
+	if entry.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected active codex profile to be preserved, got %#v", entry)
 	}
 	if entry.ClaudeProfileID != "" {
 		t.Fatalf("expected inactive claude profile projection to stay hidden, got %#v", entry)
@@ -1548,7 +1551,7 @@ func TestDaemonHeadlessResumeProviderPrepareFailureUsesRevisionUnavailableNotice
 		ActorUserID:        "user-1",
 		ProductMode:        "normal",
 		Backend:            "codex",
-		CodexProviderID:    "team-proxy",
+		CodexProfileID:     "team-proxy",
 		ResumeThreadID:     "thread-1",
 		ResumeThreadTitle:  "修复登录流程",
 		ResumeThreadCWD:    "/data/dl/droid",
@@ -1602,7 +1605,7 @@ func TestDaemonHeadlessResumeDoesNotReplaceLaunchFailureWithLaterWorkspaceBusy(t
 		ActorUserID:        "user-1",
 		ProductMode:        "normal",
 		Backend:            "codex",
-		CodexProviderID:    "team-proxy",
+		CodexProfileID:     "team-proxy",
 		ResumeThreadID:     "thread-1",
 		ResumeThreadTitle:  "修复登录流程",
 		ResumeThreadCWD:    "/data/dl/droid",
@@ -1689,7 +1692,7 @@ func TestSurfaceResumeRecoverySyncPreservesBackoffForSameRecoveryTarget(t *testi
 		ActorUserID:        "user-1",
 		ProductMode:        "normal",
 		Backend:            "codex",
-		CodexProviderID:    "default",
+		CodexProfileID:     "default",
 		Verbosity:          "normal",
 		ResumeThreadID:     "thread-1",
 		ResumeThreadTitle:  "修复登录流程",
@@ -1743,7 +1746,7 @@ func TestSurfaceResumeRecoverySyncPreservesBackoffWhenHeadlessInstanceHintChange
 		ActorUserID:        "user-1",
 		ProductMode:        "normal",
 		Backend:            "codex",
-		CodexProviderID:    "default",
+		CodexProfileID:     "default",
 		Verbosity:          "normal",
 		ResumeInstanceID:   "inst-old",
 		ResumeThreadID:     "thread-1",

@@ -668,11 +668,11 @@ func headlessRestoreFailureNotice(code string) *control.Notice {
 			Title: "Codex Profile 已变化",
 			Text:  "这个任务引用的 Codex Profile 版本已经不可用，请重新选择 Profile。",
 		}
-	case "headless_restore_provider_unavailable":
+	case "headless_restore_profile_unavailable":
 		return &control.Notice{
-			Code:  "headless_restore_provider_unavailable",
+			Code:  "headless_restore_profile_unavailable",
 			Title: "恢复失败",
-			Text:  "当前 Codex Provider 配置不可用，暂时无法恢复之前会话。请检查 Provider 设置后重试。",
+			Text:  "当前 Codex Profile 配置不可用，暂时无法恢复之前会话。请检查 Profile 设置后重试。",
 		}
 	case "headless_restore_claude_profile_unavailable":
 		return &control.Notice{
@@ -737,8 +737,8 @@ func HeadlessRestoreLaunchFailureCode(err error) string {
 		"managed_model_catalog_missing",
 		"profile_revision_unavailable":
 		return strings.TrimSpace(problem.Code)
-	case "codex_provider_prepare_failed":
-		return "headless_restore_provider_unavailable"
+	case "codex_profile_prepare_failed":
+		return "headless_restore_profile_unavailable"
 	case "claude_profile_prepare_failed", "claude_settings_prepare_failed":
 		return "headless_restore_claude_profile_unavailable"
 	case "headless_binary_missing", "headless_backend_missing":

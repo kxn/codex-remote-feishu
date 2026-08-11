@@ -42,7 +42,7 @@ func (a *App) runProfileCatalogMigrationLocked() error {
 	}
 	if loaded.Config.Codex.ProfileCatalogMigrationVersion >= profileCatalogMigrationVersion {
 		if len(loaded.Config.Codex.Providers) != 0 {
-			return fmt.Errorf("migration marker conflicts with legacy codex providers")
+			return fmt.Errorf("migration marker conflicts with legacy codex profiles")
 		}
 		if err := a.verifyProfileMigrationStoresWritable(); err != nil {
 			return err
@@ -54,14 +54,14 @@ func (a *App) runProfileCatalogMigrationLocked() error {
 			return err
 		}
 		a.mu.Lock()
-		a.syncCodexProvidersCatalogLocked(loaded.Config)
+		a.syncCodexProfilesCatalogLocked(loaded.Config)
 		a.syncClaudeProfilesCatalogLocked(loaded.Config)
 		a.syncOpenCodeProfilesCatalogLocked(loaded.Config)
 		a.mu.Unlock()
 		return nil
 	}
 	if len(loaded.Config.Codex.Providers) > 0 && len(loaded.Config.Codex.Profiles) > 0 {
-		return fmt.Errorf("legacy codex providers conflict with canonical profiles")
+		return fmt.Errorf("legacy codex profiles conflict with canonical profiles")
 	}
 	if err := a.verifyProfileMigrationStoresWritable(); err != nil {
 		return err
@@ -109,7 +109,7 @@ func (a *App) runProfileCatalogMigrationLocked() error {
 		return fmt.Errorf("commit profile catalog migration: %w", err)
 	}
 	a.mu.Lock()
-	a.syncCodexProvidersCatalogLocked(planned)
+	a.syncCodexProfilesCatalogLocked(planned)
 	a.syncClaudeProfilesCatalogLocked(planned)
 	a.syncOpenCodeProfilesCatalogLocked(planned)
 	a.materializeBotCapabilitySettingsStateLocked()
@@ -218,8 +218,8 @@ func (a *App) migrateDurableProfileSelections(knownRevisions map[string]uint64) 
 	botEntries := a.botCapabilitySettingsState.store.Entries()
 	botRecords := make([]state.BotCapabilitySettingsRecord, 0, len(botEntries))
 	for _, record := range botEntries {
-		record.CodexProfileID = selectedCodexProfileID(record.CodexProfileID, record.CodexProviderID)
-		record.CodexProviderID = state.LegacyCodexProviderIDFromProfileID(record.CodexProfileID)
+		record.CodexProfileID = state.NormalizeCodexProfileID(record.CodexProfileID)
+		record.LegacyCodexProviderID = ""
 		if _, ok := knownRevisions[record.CodexProfileID]; !ok {
 			diagnostics = append(diagnostics, config.CodexProfileMigrationDiagnostic{ProfileID: record.CodexProfileID, Code: "profile_not_found"})
 		}
@@ -231,8 +231,8 @@ func (a *App) migrateDurableProfileSelections(knownRevisions map[string]uint64) 
 
 	surfaceEntries := a.surfaceResumeRuntime.store.Entries()
 	for key, entry := range surfaceEntries {
-		entry.CodexProfileID = selectedCodexProfileID(entry.CodexProfileID, entry.CodexProviderID)
-		entry.CodexProviderID = state.LegacyCodexProviderIDFromProfileID(entry.CodexProfileID)
+		entry.CodexProfileID = state.NormalizeCodexProfileID(entry.CodexProfileID)
+		entry.LegacyCodexProviderID = ""
 		revision, known := knownRevisions[entry.CodexProfileID]
 		if !known {
 			diagnostics = append(diagnostics, config.CodexProfileMigrationDiagnostic{ProfileID: entry.CodexProfileID, Code: "profile_not_found"})
@@ -255,14 +255,6 @@ func (a *App) migrateDurableProfileSelections(knownRevisions map[string]uint64) 
 		return nil, fmt.Errorf("migrate surface profile selections: %w", err)
 	}
 	return diagnostics, nil
-}
-
-func selectedCodexProfileID(profileID, providerID string) string {
-	profileID = strings.TrimSpace(profileID)
-	if profileID != "" {
-		return profileID
-	}
-	return state.CodexProfileIDFromLegacyProviderID(providerID)
 }
 
 func currentConfigVersionValue() int {

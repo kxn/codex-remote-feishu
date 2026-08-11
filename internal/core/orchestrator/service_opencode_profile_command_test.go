@@ -311,7 +311,7 @@ func TestOpenCodeProfileSwitchReconcilesOtherGatewaySurfacesWithAdmissionRef(t *
 func TestOpenCodeProfileCommandRejectedOutsideOpenCodeMode(t *testing.T) {
 	now := time.Date(2026, 8, 9, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	materializeTestOpenCodeProfiles(svc, state.OpenCodeProfileSummary{ID: "op_team", Revision: 7, Name: "Team OpenCode"})
 
 	events := svc.ApplySurfaceAction(control.Action{

@@ -184,11 +184,11 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 	if codex.IncludesFamily(FeishuCommandVSCodeMigrate) {
 		t.Fatal("expected codex profile to hide vscode migrate")
 	}
-	if !codex.IncludesFamily(FeishuCommandCodexProvider) {
-		t.Fatal("expected codex profile to include codex provider")
+	if !codex.IncludesFamily(FeishuCommandCodexProfile) {
+		t.Fatal("expected codex profile to include codex profile")
 	}
-	if vscode.IncludesFamily(FeishuCommandCodexProvider) {
-		t.Fatal("expected vscode profile to hide codex provider")
+	if vscode.IncludesFamily(FeishuCommandCodexProfile) {
+		t.Fatal("expected vscode profile to hide codex profile")
 	}
 }
 
@@ -199,7 +199,7 @@ func TestGroupCatalogContextHidesBotCapabilitySettings(t *testing.T) {
 	})
 	for _, familyID := range []string{
 		FeishuCommandMode,
-		FeishuCommandCodexProvider,
+		FeishuCommandCodexProfile,
 		FeishuCommandClaudeProfile,
 		FeishuCommandOpenCodeProfile,
 		FeishuCommandModel,
@@ -220,7 +220,7 @@ func TestGroupCatalogContextHidesBotCapabilitySettings(t *testing.T) {
 		ProductMode:                   "normal",
 		BotCapabilitySettingsReadOnly: true,
 	})
-	for _, command := range []string{"/mode", "/codexprovider", "/opencodeprofile", "/model", "/reasoning", "/access", "/plan"} {
+	for _, command := range []string{"/mode", "/codexprofile", "/opencodeprofile", "/model", "/reasoning", "/access", "/plan"} {
 		if catalogContainsCommand(page, command) {
 			t.Fatalf("group send settings menu should hide %q: %#v", command, page.Sections)
 		}
@@ -348,7 +348,7 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 			t.Fatalf("opencode send_settings should include %q, got %#v", command, resolvedDisplayCommands(sendSettings))
 		}
 	}
-	for _, command := range []string{"/model", "/reasoning", "/access", "/plan", "/codexprovider", "/claudeprofile"} {
+	for _, command := range []string{"/model", "/reasoning", "/access", "/plan", "/codexprofile", "/claudeprofile"} {
 		if containsCommandSlash(sendSettings, command) {
 			t.Fatalf("opencode send_settings should hide %q, got %#v", command, resolvedDisplayCommands(sendSettings))
 		}
@@ -367,7 +367,7 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 		{familyID: FeishuCommandPatch, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandAutoWhip, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandAutoContinue, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
-		{familyID: FeishuCommandCodexProvider, kind: FeishuCommandSupportReject, notePart: "/mode codex"},
+		{familyID: FeishuCommandCodexProfile, kind: FeishuCommandSupportReject, notePart: "/mode codex"},
 		{familyID: FeishuCommandClaudeProfile, kind: FeishuCommandSupportReject, notePart: "/mode claude"},
 		{familyID: FeishuCommandOpenCodeProfile, kind: FeishuCommandSupportNative, notePart: ""},
 	} {

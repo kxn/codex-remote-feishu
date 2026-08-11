@@ -176,7 +176,6 @@ type Root struct {
 	FeishuRoomContexts              map[string]*FeishuRoomContextRecord
 	BotCapabilitySettings           map[string]BotCapabilitySettingsRecord
 	WorkspaceDefaults               map[string]ModelConfigRecord
-	CodexProviders                  map[string]CodexProviderRecord
 	CodexProfiles                   map[string]CodexProfileSummary
 	ClaudeProfiles                  map[string]ClaudeProfileRecord
 	OpenCodeProfiles                map[string]OpenCodeProfileSummary
@@ -195,18 +194,18 @@ type ClaudeWorkspaceProfileSnapshotRecord struct {
 }
 
 type BotCapabilitySettingsRecord struct {
-	GatewayID           string
-	ProductMode         ProductMode
-	Backend             agentproto.Backend
-	CodexProviderID     string
-	CodexProfileID      string
-	ClaudeProfileID     string
-	OpenCodeProfileID   string
-	PromptOverride      ModelConfigRecord
-	PlanMode            PlanModeSetting
-	PlanModeOverrideSet bool
-	UpdatedBy           string
-	UpdatedAt           time.Time
+	GatewayID             string
+	ProductMode           ProductMode
+	Backend               agentproto.Backend
+	CodexProfileID        string
+	LegacyCodexProviderID string `json:"CodexProviderID,omitempty"`
+	ClaudeProfileID       string
+	OpenCodeProfileID     string
+	PromptOverride        ModelConfigRecord
+	PlanMode              PlanModeSetting
+	PlanModeOverrideSet   bool
+	UpdatedBy             string
+	UpdatedAt             time.Time
 }
 
 type SurfaceCapabilitySettings struct {
@@ -224,7 +223,7 @@ type InstanceRecord struct {
 	WorkspaceKey            string
 	ShortName               string
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
@@ -314,7 +313,7 @@ type SurfaceConsoleRecord struct {
 	// Backend carries the inner provider choice inside that shape.
 	ProductMode             ProductMode
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
@@ -601,7 +600,7 @@ type HeadlessLaunchRecord struct {
 	WorkspaceKey            string
 	ThreadCWD               string
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
@@ -804,7 +803,6 @@ func NewRoot() *Root {
 		FeishuRoomContexts:              map[string]*FeishuRoomContextRecord{},
 		BotCapabilitySettings:           map[string]BotCapabilitySettingsRecord{},
 		WorkspaceDefaults:               map[string]ModelConfigRecord{},
-		CodexProviders:                  map[string]CodexProviderRecord{},
 		CodexProfiles:                   map[string]CodexProfileSummary{},
 		ClaudeProfiles:                  map[string]ClaudeProfileRecord{},
 		OpenCodeProfiles:                map[string]OpenCodeProfileSummary{},

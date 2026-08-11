@@ -8,12 +8,12 @@ import (
 )
 
 func TestBuildCodexChildLaunchForwardsDaemonResolvedProfileWithoutReadingConfig(t *testing.T) {
-	t.Setenv(codexprofile.CodexProfileAPIKeyEnv, "provider-secret")
+	t.Setenv(codexprofile.CodexProfileAPIKeyEnv, "profile-secret")
 	app := New(Config{
-		Backend:         "codex",
-		CodexProviderID: "team-proxy",
-		ConfigPath:      "/missing/app-config.json",
-		Source:          "vscode",
+		Backend:        "codex",
+		CodexProfileID: "team-proxy",
+		ConfigPath:     "/missing/app-config.json",
+		Source:         "vscode",
 	})
 
 	baseArgs := []string{"app-server", "-c", `model_provider="codex_remote_profile_1234"`}
@@ -21,7 +21,7 @@ func TestBuildCodexChildLaunchForwardsDaemonResolvedProfileWithoutReadingConfig(
 	if strings.Join(args, "\x00") != strings.Join(baseArgs, "\x00") {
 		t.Fatalf("wrapper changed daemon-resolved args: %#v", args)
 	}
-	if got := lookupEnv(env, codexprofile.CodexProfileAPIKeyEnv); got != "provider-secret" {
-		t.Fatalf("expected provider secret env, got %q", got)
+	if got := lookupEnv(env, codexprofile.CodexProfileAPIKeyEnv); got != "profile-secret" {
+		t.Fatalf("expected profile secret env, got %q", got)
 	}
 }

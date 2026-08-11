@@ -10,7 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
-func TestResolveCodexProviderEnvUsesConfiguredProfile(t *testing.T) {
+func TestResolveCodexModelProviderEnvUsesConfiguredProfile(t *testing.T) {
 	homeDir := t.TempDir()
 	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
 profile = "team"
@@ -24,9 +24,9 @@ name = "Custom"
 env_key = "CUSTOM_API_KEY"
 `)
 
-	info, err := ResolveCodexProviderEnv([]string{"app-server"}, []string{"HOME=" + homeDir})
+	info, err := ResolveCodexModelProviderEnv([]string{"app-server"}, []string{"HOME=" + homeDir})
 	if err != nil {
-		t.Fatalf("ResolveCodexProviderEnv: %v", err)
+		t.Fatalf("ResolveCodexModelProviderEnv: %v", err)
 	}
 	if got, want := info.ConfigPath, filepath.Join(homeDir, ".codex", codexConfigFileName); got != want {
 		t.Fatalf("ConfigPath = %q, want %q", got, want)
@@ -42,7 +42,7 @@ env_key = "CUSTOM_API_KEY"
 	}
 }
 
-func TestResolveCodexProviderEnvHonorsCLIOverrides(t *testing.T) {
+func TestResolveCodexModelProviderEnvHonorsCLIOverrides(t *testing.T) {
 	codexHome := t.TempDir()
 	writeCodexConfigForTest(t, codexHome, `
 profile = "team"
@@ -63,9 +63,9 @@ env_key = "CUSTOM_API_KEY"
 		"-c", `profiles.beta.model_provider="beta-provider"`,
 		"--config=model_providers.cli-provider.env_key=\"CLI_KEY\"",
 	}
-	info, err := ResolveCodexProviderEnv(args, []string{"CODEX_HOME=" + codexHome})
+	info, err := ResolveCodexModelProviderEnv(args, []string{"CODEX_HOME=" + codexHome})
 	if err != nil {
-		t.Fatalf("ResolveCodexProviderEnv: %v", err)
+		t.Fatalf("ResolveCodexModelProviderEnv: %v", err)
 	}
 	if got, want := info.ActiveProfile, "beta"; got != want {
 		t.Fatalf("ActiveProfile = %q, want %q", got, want)
@@ -78,7 +78,7 @@ env_key = "CUSTOM_API_KEY"
 	}
 }
 
-func TestResolveCodexProviderEnvReturnsErrorForMissingProfile(t *testing.T) {
+func TestResolveCodexModelProviderEnvReturnsErrorForMissingProfile(t *testing.T) {
 	homeDir := t.TempDir()
 	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
 profile = "missing"
@@ -89,13 +89,13 @@ name = "Custom"
 env_key = "CUSTOM_API_KEY"
 `)
 
-	_, err := ResolveCodexProviderEnv([]string{"app-server"}, []string{"HOME=" + homeDir})
+	_, err := ResolveCodexModelProviderEnv([]string{"app-server"}, []string{"HOME=" + homeDir})
 	if err == nil {
 		t.Fatal("expected missing profile error")
 	}
 }
 
-func TestSupplementCodexProviderEnvInjectsMissingKeyFromShell(t *testing.T) {
+func TestSupplementCodexModelProviderEnvInjectsMissingKeyFromShell(t *testing.T) {
 	homeDir := t.TempDir()
 	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
 model_provider = "custom"
@@ -115,16 +115,16 @@ env_key = "CUSTOM_API_KEY"
 	}
 
 	env := []string{"HOME=" + homeDir, "PATH=/usr/bin"}
-	got, err := supplementCodexProviderEnv(env, []string{"app-server"})
+	got, err := supplementCodexModelProviderEnv(env, []string{"app-server"})
 	if err != nil {
-		t.Fatalf("supplementCodexProviderEnv: %v", err)
+		t.Fatalf("supplementCodexModelProviderEnv: %v", err)
 	}
 	if value, ok := lookupEnvValue(got, "CUSTOM_API_KEY"); !ok || value != "from-shell" {
 		t.Fatalf("CUSTOM_API_KEY = %q ok=%v, want from-shell", value, ok)
 	}
 }
 
-func TestSupplementCodexProviderEnvKeepsExistingValue(t *testing.T) {
+func TestSupplementCodexModelProviderEnvKeepsExistingValue(t *testing.T) {
 	homeDir := t.TempDir()
 	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
 model_provider = "custom"
@@ -143,9 +143,9 @@ env_key = "CUSTOM_API_KEY"
 	}
 
 	env := []string{"HOME=" + homeDir, "CUSTOM_API_KEY=already-set"}
-	got, err := supplementCodexProviderEnv(env, []string{"app-server"})
+	got, err := supplementCodexModelProviderEnv(env, []string{"app-server"})
 	if err != nil {
-		t.Fatalf("supplementCodexProviderEnv: %v", err)
+		t.Fatalf("supplementCodexModelProviderEnv: %v", err)
 	}
 	if lookupCalled {
 		t.Fatal("expected shell lookup to be skipped")

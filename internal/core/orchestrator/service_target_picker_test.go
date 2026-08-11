@@ -109,14 +109,14 @@ func TestTargetPickerUseShowsCodexSessionDespiteProviderMismatch(t *testing.T) {
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("team-proxy"), "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-codex",
-		DisplayName:     "repo",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
-		Online:          true,
+		InstanceID:     "inst-codex",
+		DisplayName:    "repo",
+		WorkspaceRoot:  "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		ShortName:      "repo",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		Online:         true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-codex": {ThreadID: "thread-codex", Name: "Codex 会话", CWD: "/data/dl/repo", LastUsedAt: now},
 		},

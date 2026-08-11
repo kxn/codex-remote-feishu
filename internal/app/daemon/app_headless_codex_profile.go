@@ -48,14 +48,14 @@ func codexHeadlessLaunchProblem(err error, defaults agentproto.ErrorInfo) agentp
 	return problem.Normalize()
 }
 
-func (a *App) applyCodexHeadlessProviderConfig(baseEnv, baseArgs []string, backend agentproto.Backend, providerID string) ([]string, []string, error) {
+func (a *App) applyCodexHeadlessProfileConfig(baseEnv, baseArgs []string, backend agentproto.Backend, profileID string) ([]string, []string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	env, args, _, err := a.applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs, backend, providerID, nil)
+	env, args, _, err := a.applyCodexHeadlessProfileConfigLocked(baseEnv, baseArgs, backend, profileID, nil)
 	return env, args, err
 }
 
-func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string, backend agentproto.Backend, providerID string, admissionRef *state.CodexAdmissionRef) ([]string, []string, *codexprofile.RuntimeProjection, error) {
+func (a *App) applyCodexHeadlessProfileConfigLocked(baseEnv, baseArgs []string, backend agentproto.Backend, profileID string, admissionRef *state.CodexAdmissionRef) ([]string, []string, *codexprofile.RuntimeProjection, error) {
 	env := append([]string{}, baseEnv...)
 	args := append([]string{}, baseArgs...)
 	if agentproto.NormalizeBackend(backend) != agentproto.BackendCodex {
@@ -66,15 +66,15 @@ func (a *App) applyCodexHeadlessProviderConfigLocked(baseEnv, baseArgs []string,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	profileID := state.CodexProfileIDFromLegacyProviderID(providerID)
+	profileID = state.NormalizeCodexProfileID(profileID)
 	profileRevision := uint64(1)
 	ref := state.NormalizeCodexAdmissionRef(admissionRef)
 	if ref != nil {
-		if state.CodexProfileIDFromLegacyProviderID(ref.ProfileRef.ID) == profileID {
+		if state.NormalizeCodexProfileID(ref.ProfileRef.ID) == profileID {
 			profileRevision = ref.ProfileRef.Revision
 		} else {
 			// admission ref 属于另一个 profile（例如 bot 级 Profile 切换后 surface
-			// 缓存未刷新）：以期望 provider 为准，丢弃过期 ref 并按当前 revision 解析。
+			// 缓存未刷新）：以期望 Profile 为准，丢弃过期 ref 并按当前 revision 解析。
 			ref = nil
 		}
 	}

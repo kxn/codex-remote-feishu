@@ -222,6 +222,7 @@ func WriteAppConfig(path string, cfg AppConfig) error {
 		return err
 	}
 	cfg = cfg.normalized()
+	cfg.Codex.Providers = nil
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -422,7 +423,7 @@ func (cfg AppConfig) normalized() AppConfig {
 		cfg.Wrapper.IntegrationMode = defaults.Wrapper.IntegrationMode
 	}
 
-	cfg.Codex.Providers = NormalizeCodexProviders(cfg.Codex.Providers)
+	cfg.Codex.Providers = NormalizeLegacyCodexProviders(cfg.Codex.Providers)
 	cfg.Codex.Profiles = NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles)
 	cfg.Claude.Profiles = NormalizeClaudeProfiles(cfg.Claude.Profiles)
 	cfg.OpenCode.BinaryPath = strings.TrimSpace(cfg.OpenCode.BinaryPath)

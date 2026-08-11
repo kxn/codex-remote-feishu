@@ -1,8 +1,8 @@
 # OpenCode ACP Backend 实现设计
 
 > Type: `inprogress`
-> Updated: `2026-08-10`
-> Summary: 收敛 OpenCode profile 子代理模型设计：放弃 review model，subagentModel 投影到内置 general/explore agent model。
+> Updated: `2026-08-11`
+> Summary: 同步 Codex headless profile compiler 的当前函数名，并保留 OpenCode profile 子代理模型设计。
 
 ## 1. 结论
 
@@ -307,7 +307,7 @@ OAuth/API overlay 结论：
 
 修改 `startManagedHeadlessLocked`：
 
-- 后端是 Codex 时走现有 `applyCodexHeadlessProviderConfigLocked`。
+- 后端是 Codex 时走现有 `applyCodexHeadlessProfileConfigLocked`。
 - 后端是 Claude 时走现有 `applyClaudeHeadlessProfileEnv`。
 - 后端是 OpenCode 时走新增 `applyOpenCodeHeadlessProfileConfigLocked`。
 

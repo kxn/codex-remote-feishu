@@ -1,8 +1,8 @@
 # Feishu Group Context Multi-Bot Design
 
 > Type: `draft`
-> Updated: `2026-08-08`
-> Summary: 补充机器人进群自动成为唯一主机器人的权限、事件与竞争收口设计。
+> Updated: `2026-08-11`
+> Summary: 同步当前 Codex Profile-only 命令名，并保留群聊机器人上下文隔离设计。
 
 ## 1. 背景
 
@@ -249,7 +249,7 @@ room context 至少需要支持：
 
 ### 9.3 Command 层
 
-群聊中的机器人级设置命令需要改为只读或拒绝修改。现有 `/mode`、`/codexprovider`、`/claudeprofile`、`/model`、`/reasoning` 都是 surface 级命令，需要改成：
+群聊中的机器人级设置命令需要改为只读或拒绝修改。现有 `/mode`、`/codexprofile`、`/claudeprofile`、`/model`、`/reasoning` 都是 surface 级命令，需要改成：
 
 1. 私聊：允许修改机器人级设置。
 2. 群聊：展示当前值或提示私聊修改。

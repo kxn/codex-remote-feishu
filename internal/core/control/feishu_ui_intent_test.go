@@ -32,9 +32,9 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowClaudeProfileCatalog, RawText: "/claudeprofile"},
 		},
 		{
-			name:   "bare codex provider",
-			action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprovider"},
-			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowCodexProviderCatalog, RawText: "/codexprovider"},
+			name:   "bare codex profile",
+			action: Action{Kind: ActionCodexProfileCommand, Text: "/codexprofile"},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowCodexProfileCatalog, RawText: "/codexprofile"},
 		},
 		{
 			name:   "bare opencode profile",
@@ -62,8 +62,8 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want:   nil,
 		},
 		{
-			name:   "codex provider apply stays product owned",
-			action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprovider team-proxy"},
+			name:   "codex profile apply stays product owned",
+			action: Action{Kind: ActionCodexProfileCommand, Text: "/codexprofile team-proxy"},
 			want:   nil,
 		},
 		{

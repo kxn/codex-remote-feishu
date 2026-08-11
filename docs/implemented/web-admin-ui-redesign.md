@@ -1,8 +1,8 @@
 # Web 管理界面重设计
 
 > Type: `implemented`
-> Updated: `2026-08-01`
-> Summary: 当前 admin 页面以 `v1.7.0` 主结构为基线，默认保留机器人管理、系统集成、Claude 配置、Codex Profile、存储管理五块；新增机器人入口与 setup 共用当前飞书接入边界，不再保留旧的权限/事件/回调分步合同。
+> Updated: `2026-08-11`
+> Summary: 同步 Codex Profile-only 管理合同：admin 只使用 `/api/admin/codex/profiles`，不再保留旧 Provider API。
 
 ## 1. 文档定位
 
@@ -81,7 +81,7 @@ admin 继续保持 `v1.7.0` 的默认主结构，当前固定顺序为：
 - 对 API Profile 编辑名称、端点地址、API Key、模型和推理配置
 - 对只读连接 Profile 保留上下文偏好修改入口
 - 保留一个只读连接身份的 `本机默认`
-- 旧 `/api/admin/codex/providers` 仅作为兼容 transport，由 canonical Profile API 派生
+- admin 只使用 `/api/admin/codex/profiles`；旧 `/api/admin/codex/providers` 已移除
 
 ## 8. 当前结论
 

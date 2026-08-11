@@ -30,17 +30,17 @@ func TestClaudeSteerAllReachesCommandHandler(t *testing.T) {
 	}
 }
 
-func TestBareCodexProviderIntentRejectedInClaudeBeforeOpeningCatalog(t *testing.T) {
+func TestBareCodexProfileIntentRejectedInClaudeBeforeOpeningCatalog(t *testing.T) {
 	now := time.Date(2026, 5, 1, 12, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/codexprovider",
+		Text:             "/codexprofile",
 	})
 	if len(events) != 1 || events[0].Notice == nil {
 		t.Fatalf("expected single rejection notice, got %#v", events)
@@ -70,17 +70,17 @@ func TestBareReviewIntentRejectedInClaudeBeforeOpeningPage(t *testing.T) {
 	}
 }
 
-func TestBareCodexProviderIntentRejectedInOpenCodeBeforeOpeningCatalog(t *testing.T) {
+func TestBareCodexProfileIntentRejectedInOpenCodeBeforeOpeningCatalog(t *testing.T) {
 	now := time.Date(2026, 5, 1, 12, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendOpenCode, "", "", "")
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/codexprovider",
+		Text:             "/codexprofile",
 	})
 	if len(events) != 1 || events[0].Notice == nil {
 		t.Fatalf("expected single rejection notice, got %#v", events)

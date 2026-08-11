@@ -193,7 +193,7 @@ func (s *Service) startWorkspaceHeadlessLaunchWithOverlayCleanup(surface *state.
 		WorkspaceKey:            workspaceKey,
 		ThreadCWD:               workspaceKey,
 		Backend:                 launchContract.Backend,
-		CodexProviderID:         launchContract.CodexProviderID,
+		CodexProfileID:          launchContract.CodexProfileID,
 		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(launchContract.CodexAdmissionRef),
 		CodexConnectionContract: state.CloneCodexConnectionContract(launchContract.CodexConnectionContract),
 		CodexThreadPolicy:       state.CloneCodexThreadPolicy(launchContract.CodexThreadPolicy),

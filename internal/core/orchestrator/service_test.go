@@ -334,8 +334,8 @@ func TestApplySurfaceActionBuildsConfigCatalogsFromRegistry(t *testing.T) {
 			switch flow.CommandID {
 			case control.FeishuCommandClaudeProfile:
 				svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "", "", "")
-			case control.FeishuCommandCodexProvider:
-				svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "", "", "", "")
+			case control.FeishuCommandCodexProfile:
+				svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "", "", "", "")
 			case control.FeishuCommandOpenCodeProfile:
 				svc.MaterializeSurfaceResumeWithOpenCodeProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendOpenCode, "", "", "")
 			}

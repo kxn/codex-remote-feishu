@@ -265,7 +265,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 			record.ProductMode = state.ProductModeNormal
 			record.Backend = agentproto.BackendCodex
 		}, func(local *state.SurfaceConsoleRecord) {
-			s.setSurfaceDesiredContract(local, state.HeadlessCodexSurfaceBackendContract(local.CodexProviderID))
+			s.setSurfaceDesiredContract(local, state.HeadlessCodexSurfaceBackendContract(local.CodexProfileID))
 		})
 	}
 	if currentWorkspaceKey != "" && state.IsHeadlessProductMode(target.ProductMode) {

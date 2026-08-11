@@ -12,7 +12,7 @@ import (
 
 func (s *Service) resolveCodexProfileSelection(value string) (state.CodexProfileSummary, bool) {
 	targetID := strings.TrimSpace(value)
-	if strings.EqualFold(targetID, state.DefaultCodexProviderID) {
+	if strings.EqualFold(targetID, state.DefaultCodexProfileID) {
 		targetID = state.NativeCodexProfileID
 	}
 	for _, profile := range s.CodexProfiles() {
@@ -23,7 +23,7 @@ func (s *Service) resolveCodexProfileSelection(value string) (state.CodexProfile
 	return state.CodexProfileSummary{}, false
 }
 
-func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
+func (s *Service) handleCodexProfileCommand(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	if !s.surfaceIsHeadless(surface) || s.surfaceBackend(surface) != agentproto.BackendCodex {
 		text := "当前不在 Codex 模式，暂时不能切换 Codex Profile。请先 `/mode codex`。"
 		if commandCardOwnsInlineResult(action) {
@@ -32,7 +32,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 				StatusText: text,
 			})
 		}
-		return notice(surface, "codex_provider_mode_required", text)
+		return notice(surface, "codex_profile_mode_required", text)
 	}
 
 	parts := strings.Fields(strings.TrimSpace(action.Text))
@@ -64,7 +64,6 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 		})
 	}
 
-	targetProviderID := state.LegacyCodexProviderIDFromProfileID(target.ID)
 	currentProfileID := s.surfaceCodexProfileID(surface)
 	currentWorkspaceKey := normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface))
 	targetLabel := codexProfileDisplayName(target)
@@ -72,13 +71,12 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 	applySelection := func() {
 		s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
 			record.CodexProfileID = target.ID
-			record.CodexProviderID = targetProviderID
 			if targetFixedModel {
 				record.PromptOverride.Model = ""
 				record.PromptOverride.ReasoningEffort = ""
 			}
 		}, func(local *state.SurfaceConsoleRecord) {
-			s.setSurfaceCodexProviderID(local, targetProviderID)
+			s.setSurfaceCodexProfileID(local, target.ID)
 			if targetFixedModel {
 				local.PromptOverride.Model = ""
 				local.PromptOverride.ReasoningEffort = ""
@@ -95,7 +93,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 				StatusText: text,
 			})
 		}
-		return notice(surface, "codex_provider_current", text)
+		return notice(surface, "codex_profile_current", text)
 	}
 
 	if blocked := s.blockRouteMutation(surface); blocked != nil {
@@ -121,7 +119,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 				StatusText: text,
 			})
 		}
-		return notice(surface, "codex_provider_busy", text)
+		return notice(surface, "codex_profile_busy", text)
 	}
 
 	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendCodex)
@@ -144,7 +142,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 				StatusText: text,
 			}, append(events, reconcileEvents...)...)
 		}
-		return append(append(events, reconcileEvents...), notice(surface, "codex_provider_switched", text)...)
+		return append(append(events, reconcileEvents...), notice(surface, "codex_profile_switched", text)...)
 	}
 
 	s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{WorkspaceKey: currentWorkspaceKey})
@@ -161,7 +159,7 @@ func (s *Service) handleCodexProviderCommand(surface *state.SurfaceConsoleRecord
 			StatusText: statusText,
 		}, append(append(events, reconcileEvents...), resumeEvents...)...)
 	}
-	events = append(append(events, reconcileEvents...), notice(surface, "codex_provider_switched", statusText)...)
+	events = append(append(events, reconcileEvents...), notice(surface, "codex_profile_switched", statusText)...)
 	return append(events, resumeEvents...)
 }
 

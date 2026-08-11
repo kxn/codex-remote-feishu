@@ -9,39 +9,25 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
-func materializeCodexProviderRecords(cfg config.AppConfig) []state.CodexProviderRecord {
-	providers := config.ListCodexProviders(cfg)
-	records := make([]state.CodexProviderRecord, 0, len(providers))
-	for _, provider := range providers {
-		records = append(records, state.NormalizeCodexProviderRecord(state.CodexProviderRecord{
-			ID:      strings.TrimSpace(provider.ID),
-			Name:    strings.TrimSpace(provider.Name),
-			BuiltIn: provider.BuiltIn,
-		}))
-	}
-	return records
-}
-
-func (a *App) syncCodexProvidersCatalogLocked(cfg config.AppConfig) {
+func (a *App) syncCodexProfilesCatalogLocked(cfg config.AppConfig) {
 	if a == nil || a.service == nil {
 		return
 	}
-	a.service.MaterializeCodexProviders(materializeCodexProviderRecords(cfg))
 	a.service.MaterializeCodexProfiles(a.materializeCodexProfileSummariesLocked(cfg))
 }
 
-func (a *App) syncCodexProvidersCatalogFromConfig() {
+func (a *App) syncCodexProfilesCatalogFromConfig() {
 	if a == nil {
 		return
 	}
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
-		log.Printf("load codex providers catalog failed: err=%v", err)
+		log.Printf("load codex profiles catalog failed: err=%v", err)
 		return
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.syncCodexProvidersCatalogLocked(loaded.Config)
+	a.syncCodexProfilesCatalogLocked(loaded.Config)
 }
 
 func (a *App) materializeCodexProfileSummariesLocked(cfg config.AppConfig) []state.CodexProfileSummary {

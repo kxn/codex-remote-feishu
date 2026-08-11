@@ -33,7 +33,7 @@ const (
 	FeishuCommandAccess               = "access"
 	FeishuCommandPlan                 = "plan"
 	FeishuCommandVerbose              = "verbose"
-	FeishuCommandCodexProvider        = "codex_provider"
+	FeishuCommandCodexProfile         = "codex_profile"
 	FeishuCommandClaudeProfile        = "claude_profile"
 	FeishuCommandOpenCodeProfile      = "opencode_profile"
 	FeishuCommandHelp                 = "help"
@@ -420,7 +420,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	},
 	{
 		definition: FeishuCommandDefinition{
-			ID:               FeishuCommandCodexProvider,
+			ID:               FeishuCommandCodexProfile,
 			GroupID:          FeishuCommandGroupSendSettings,
 			Title:            "切换 Codex Profile",
 			CanonicalSlash:   "/codexprofile",
@@ -434,12 +434,10 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ShowInMenu:       true,
 		},
 		textPrefixes: []feishuCommandPrefixMatch{
-			{alias: "/codexprofile", kind: ActionCodexProviderCommand},
-			{alias: "/codexprovider", kind: ActionCodexProviderCommand},
+			{alias: "/codexprofile", kind: ActionCodexProfileCommand},
 		},
 		menuExact: []feishuCommandMatch{
-			{alias: "codex_profile", action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprofile"}},
-			{alias: "codex_provider", action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprovider"}},
+			{alias: "codex_profile", action: Action{Kind: ActionCodexProfileCommand, Text: "/codexprofile"}},
 		},
 	},
 	{

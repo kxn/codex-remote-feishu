@@ -179,18 +179,10 @@ func OpenCodeProfileDefinitionETag(profileID string, revision uint64) string {
 
 func CodexProfileIDFromLegacyProviderID(providerID string) string {
 	providerID = strings.TrimSpace(providerID)
-	if providerID == "" || strings.EqualFold(providerID, DefaultCodexProviderID) {
+	if providerID == "" || strings.EqualFold(providerID, LegacyDefaultCodexProviderID) {
 		return NativeCodexProfileID
 	}
 	return providerID
-}
-
-func LegacyCodexProviderIDFromProfileID(profileID string) string {
-	profileID = strings.TrimSpace(profileID)
-	if profileID == "" || profileID == NativeCodexProfileID {
-		return DefaultCodexProviderID
-	}
-	return profileID
 }
 
 func profileItemETag(namespace, profileID string, revision uint64) string {

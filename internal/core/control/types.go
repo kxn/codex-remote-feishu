@@ -45,7 +45,7 @@ const (
 	ActionPlanCommand                 ActionKind = "surface.command.plan"
 	ActionPlanProposalDecision        ActionKind = "surface.command.plan_proposal_decision"
 	ActionVerboseCommand              ActionKind = "surface.command.verbose"
-	ActionCodexProviderCommand        ActionKind = "surface.command.codex_provider"
+	ActionCodexProfileCommand         ActionKind = "surface.command.codex_profile"
 	ActionAutoWhipCommand             ActionKind = "surface.command.auto_whip"
 	ActionAutoContinueCommand         ActionKind = "surface.command.auto_continue"
 	ActionModeCommand                 ActionKind = "surface.command.mode"
@@ -201,7 +201,7 @@ type Snapshot struct {
 	ProductMode       string
 	Backend           agentproto.Backend
 	WorkspaceKey      string
-	CodexProviderID   string
+	CodexProfileID    string
 	ClaudeProfileID   string
 	ClaudeProfileName string
 	Attachment        AttachmentSummary
@@ -252,7 +252,7 @@ type PendingHeadlessSummary struct {
 	WorkspaceKey            string
 	ThreadCWD               string
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *state.CodexAdmissionRef
 	CodexConnectionContract *state.CodexConnectionContract
 	CodexThreadPolicy       *state.CodexThreadPolicy
@@ -663,7 +663,7 @@ type DaemonCommand struct {
 	ThreadTitle             string
 	ThreadCWD               string
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *state.CodexAdmissionRef
 	CodexConnectionContract *state.CodexConnectionContract
 	CodexThreadPolicy       *state.CodexThreadPolicy

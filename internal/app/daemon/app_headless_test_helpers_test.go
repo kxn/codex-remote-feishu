@@ -54,7 +54,7 @@ func authorizePendingHeadlessForTest(t *testing.T, app *App, command control.Dae
 		WorkspaceKey:          strings.TrimSpace(command.WorkspaceKey),
 		ThreadCWD:             strings.TrimSpace(command.ThreadCWD),
 		Backend:               agentproto.NormalizeBackend(command.Backend),
-		CodexProviderID:       state.NormalizeCodexProviderID(command.CodexProviderID),
+		CodexProfileID:        state.NormalizeCodexProfileID(command.CodexProfileID),
 		ClaudeProfileID:       state.NormalizeClaudeProfileID(command.ClaudeProfileID),
 		ClaudeReasoningEffort: strings.TrimSpace(command.ClaudeReasoningEffort),
 		OpenCodeProfileID:     state.NormalizeOpenCodeProfileID(command.OpenCodeProfileID),

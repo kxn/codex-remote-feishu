@@ -8,13 +8,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
-func (s *Service) MaterializeCodexProviders(records []state.CodexProviderRecord) {
-	if s.root == nil {
-		return
-	}
-	s.root.CodexProviders = materializeProfileCatalogRecords(records, defaultCodexProviderRecord(), state.NormalizeCodexProviderRecord, codexProviderRecordID)
-}
-
 func (s *Service) MaterializeCodexProfiles(records []state.CodexProfileSummary) {
 	if s.root == nil {
 		return
@@ -105,29 +98,6 @@ func (s *Service) CodexProfileContextEvidence(profileID string, preferenceRevisi
 	return effective.RequestedContextWindow, effective.EffectiveContextWindow, strings.TrimSpace(effective.ContextStatus), true
 }
 
-func (s *Service) CodexProviders() []state.CodexProviderRecord {
-	if s.root == nil || len(s.root.CodexProviders) == 0 {
-		return []state.CodexProviderRecord{defaultCodexProviderRecord()}
-	}
-	return sortedProfileCatalogRecords(s.root.CodexProviders, state.NormalizeCodexProviderRecord, codexProviderCatalogSortKey)
-}
-
-func defaultCodexProviderRecord() state.CodexProviderRecord {
-	return state.NormalizeCodexProviderRecord(state.CodexProviderRecord{
-		ID:      state.DefaultCodexProviderID,
-		Name:    state.DefaultCodexProviderName,
-		BuiltIn: true,
-	})
-}
-
-func codexProviderRecordID(record state.CodexProviderRecord) string {
-	return record.ID
-}
-
-func codexProviderCatalogSortKey(record state.CodexProviderRecord) profileCatalogSortKey {
-	return profileCatalogSortKey{BuiltIn: record.BuiltIn, Name: record.Name, ID: record.ID}
-}
-
 func normalizeCodexProfileSummary(value state.CodexProfileSummary) state.CodexProfileSummary {
 	value.ID = strings.TrimSpace(value.ID)
 	value.Name = strings.TrimSpace(value.Name)
@@ -165,7 +135,7 @@ func codexProfileKindRank(kind state.CodexProfileKind) int {
 	}
 }
 
-func (s *Service) SurfaceCodexProviderID(surfaceID string) string {
+func (s *Service) SurfaceCodexProfileID(surfaceID string) string {
 	if s.root == nil {
 		return ""
 	}
@@ -173,11 +143,7 @@ func (s *Service) SurfaceCodexProviderID(surfaceID string) string {
 	if surface == nil {
 		return ""
 	}
-	return s.surfaceCodexProviderID(surface)
-}
-
-func (s *Service) surfaceCodexProviderID(surface *state.SurfaceConsoleRecord) string {
-	return state.EffectiveSurfaceCodexProviderID(s.surfaceDesiredContract(surface))
+	return s.surfaceCodexProfileID(surface)
 }
 
 func (s *Service) surfaceCodexProfileID(surface *state.SurfaceConsoleRecord) string {
@@ -188,7 +154,7 @@ func (s *Service) surfaceCodexProfileID(surface *state.SurfaceConsoleRecord) str
 			}
 		}
 	}
-	return state.CodexProfileIDFromLegacyProviderID(s.surfaceCodexProviderID(surface))
+	return state.EffectiveSurfaceCodexProfileID(s.surfaceDesiredContract(surface))
 }
 
 func (s *Service) codexProfileSummaryByID(profileID string) (state.CodexProfileSummary, bool) {
@@ -248,9 +214,9 @@ func isDynamicCodexProfileModel(baseURL, model string) bool {
 	return false
 }
 
-func (s *Service) setSurfaceCodexProviderID(surface *state.SurfaceConsoleRecord, providerID string) {
+func (s *Service) setSurfaceCodexProfileID(surface *state.SurfaceConsoleRecord, profileID string) {
 	if surface == nil {
 		return
 	}
-	surface.CodexProviderID = state.NormalizeDesiredCodexProviderID(providerID)
+	surface.CodexProfileID = state.NormalizeDesiredCodexProfileID(profileID)
 }

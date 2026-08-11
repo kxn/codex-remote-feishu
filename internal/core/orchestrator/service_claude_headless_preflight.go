@@ -58,7 +58,7 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 		WorkspaceKey:            workspaceKey,
 		ThreadCWD:               threadCWD,
 		Backend:                 launchContract.Backend,
-		CodexProviderID:         launchContract.CodexProviderID,
+		CodexProfileID:          launchContract.CodexProfileID,
 		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(launchContract.CodexAdmissionRef),
 		CodexConnectionContract: state.CloneCodexConnectionContract(launchContract.CodexConnectionContract),
 		CodexThreadPolicy:       state.CloneCodexThreadPolicy(launchContract.CodexThreadPolicy),

@@ -50,7 +50,7 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 			singleValueCardSection("当前模式", commandDisplayValue(view.CurrentValue, "未设置")),
 			singleValueCardSection("兼容说明", "`/mode normal` 仍兼容，但它等价于 `/mode codex`。"),
 		}
-	case FeishuCommandCodexProvider:
+	case FeishuCommandCodexProfile:
 		return []FeishuCardTextSection{
 			singleValueCardSection("当前 Profile", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, "本机默认"))),
 			singleValueCardSection("切换方式", "切换后会重启当前工作区，并按新的 Codex Profile 重新准备当前会话。"),

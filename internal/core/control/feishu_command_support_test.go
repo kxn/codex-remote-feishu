@@ -74,12 +74,12 @@ func TestResolveFeishuCommandSupportRejectsWrongProviderSwitcherForBackend(t *te
 		t.Fatalf("expected claude mode guidance, got %q", codexSupport.Note)
 	}
 
-	claudeSupport, ok := ResolveFeishuCommandSupport(CatalogContext{Backend: agentproto.BackendClaude}, FeishuCommandCodexProvider)
+	claudeSupport, ok := ResolveFeishuCommandSupport(CatalogContext{Backend: agentproto.BackendClaude}, FeishuCommandCodexProfile)
 	if !ok {
-		t.Fatal("expected codex provider support to resolve in claude")
+		t.Fatal("expected codex profile support to resolve in claude")
 	}
 	if claudeSupport.DispatchAllowed || claudeSupport.Visible {
-		t.Fatalf("expected claude backend to reject codex provider command, got %#v", claudeSupport)
+		t.Fatalf("expected claude backend to reject codex profile command, got %#v", claudeSupport)
 	}
 	if !containsNormalized(claudeSupport.Note, "/mode codex") {
 		t.Fatalf("expected codex mode guidance, got %q", claudeSupport.Note)

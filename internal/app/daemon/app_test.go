@@ -962,7 +962,7 @@ func TestDaemonHelloRecordsOpenCodeProfile(t *testing.T) {
 			WorkspaceRoot:     "/tmp/repo",
 			WorkspaceKey:      "/tmp/repo",
 			Backend:           agentproto.BackendOpenCode,
-			CodexProviderID:   "team-proxy",
+			CodexProfileID:    "team-proxy",
 			ClaudeProfileID:   "devseek",
 			OpenCodeProfileID: "op_team",
 			Source:            "headless",
@@ -978,7 +978,7 @@ func TestDaemonHelloRecordsOpenCodeProfile(t *testing.T) {
 	if inst.Backend != agentproto.BackendOpenCode || inst.OpenCodeProfileID != "op_team" {
 		t.Fatalf("unexpected OpenCode instance backend contract: %#v", inst)
 	}
-	if inst.CodexProviderID != "" || inst.ClaudeProfileID != "" {
+	if inst.CodexProfileID != "" || inst.ClaudeProfileID != "" {
 		t.Fatalf("expected inactive backend profile fields to be cleared, got %#v", inst)
 	}
 	if got := state.ObservedInstanceBackendContract(inst); got.Backend != agentproto.BackendOpenCode || got.OpenCodeProfileID != "op_team" {
@@ -996,7 +996,7 @@ func TestDaemonHelloRecordsUnknownBackendWithoutCodexFallback(t *testing.T) {
 			WorkspaceKey:      "/tmp/mystery",
 			ShortName:         "mystery",
 			Backend:           agentproto.Backend("mystery"),
-			CodexProviderID:   "team-proxy",
+			CodexProfileID:    "team-proxy",
 			ClaudeProfileID:   "devseek",
 			OpenCodeProfileID: "op_team",
 		},
@@ -1009,7 +1009,7 @@ func TestDaemonHelloRecordsUnknownBackendWithoutCodexFallback(t *testing.T) {
 	if inst.Backend != agentproto.Backend("mystery") {
 		t.Fatalf("unknown backend was not preserved: %#v", inst)
 	}
-	if inst.CodexProviderID != "" || inst.ClaudeProfileID != "" || inst.OpenCodeProfileID != "" {
+	if inst.CodexProfileID != "" || inst.ClaudeProfileID != "" || inst.OpenCodeProfileID != "" {
 		t.Fatalf("unknown backend retained inactive profile fields: %#v", inst)
 	}
 	if inst.Capabilities.VSCodeMode || inst.Capabilities.ThreadsRefresh {

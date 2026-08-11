@@ -14,21 +14,21 @@ func TestProfileSwitchReconcilesOtherGatewayHeadlessSurfaces(t *testing.T) {
 	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
 	workspaceKey := t.TempDir()
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-b",
-		DisplayName:     "repo",
-		WorkspaceRoot:   workspaceKey,
-		WorkspaceKey:    workspaceKey,
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
-		Source:          "headless",
-		Managed:         true,
-		Online:          true,
+		InstanceID:     "inst-b",
+		DisplayName:    "repo",
+		WorkspaceRoot:  workspaceKey,
+		WorkspaceKey:   workspaceKey,
+		ShortName:      "repo",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		Source:         "headless",
+		Managed:        true,
+		Online:         true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: workspaceKey, Loaded: true},
 		},
@@ -48,7 +48,7 @@ func TestProfileSwitchReconcilesOtherGatewayHeadlessSurfaces(t *testing.T) {
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "feishu:app-1:user:ou_a",
 		GatewayID:        "app-1",
 		ChatID:           "ou_a",
@@ -69,7 +69,7 @@ func TestProfileSwitchReconcilesOtherGatewayHeadlessSurfaces(t *testing.T) {
 			}
 		case control.DaemonCommandStartHeadless:
 			if event.DaemonCommand.SurfaceSessionID == surfaceB.SurfaceSessionID &&
-				event.DaemonCommand.CodexProviderID == "team-proxy" {
+				event.DaemonCommand.CodexProfileID == "team-proxy" {
 				foundStart = true
 			}
 		}
@@ -77,7 +77,7 @@ func TestProfileSwitchReconcilesOtherGatewayHeadlessSurfaces(t *testing.T) {
 	if !foundKill || !foundStart {
 		t.Fatalf("expected other gateway surface to restart under new provider, kill=%t start=%t events=%#v", foundKill, foundStart, events)
 	}
-	if surfaceB.PendingHeadless == nil || surfaceB.PendingHeadless.CodexProviderID != "team-proxy" {
+	if surfaceB.PendingHeadless == nil || surfaceB.PendingHeadless.CodexProfileID != "team-proxy" {
 		t.Fatalf("expected pending headless on other surface with new provider, got %#v", surfaceB.PendingHeadless)
 	}
 }
@@ -86,18 +86,18 @@ func TestProfileSwitchDefersBusySurfaceContractRefresh(t *testing.T) {
 	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
 	workspaceKey := t.TempDir()
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-b",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
-		Source:          "headless",
-		Managed:         true,
-		Online:          true,
-		WorkspaceKey:    workspaceKey,
+		InstanceID:     "inst-b",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		Source:         "headless",
+		Managed:        true,
+		Online:         true,
+		WorkspaceKey:   workspaceKey,
 	})
 	surfaceB := svc.root.Surfaces["feishu:app-1:user:ou_b"]
 	surfaceB.AttachedInstanceID = "inst-b"
@@ -108,7 +108,7 @@ func TestProfileSwitchDefersBusySurfaceContractRefresh(t *testing.T) {
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "feishu:app-1:user:ou_a",
 		GatewayID:        "app-1",
 		ChatID:           "ou_a",
@@ -130,17 +130,17 @@ func TestHandleTextConvergesPendingContractRefresh(t *testing.T) {
 	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "team-proxy", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "team-proxy", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
 	workspaceKey := t.TempDir()
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-b",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
-		Source:          "headless",
-		Managed:         true,
-		Online:          true,
-		WorkspaceKey:    workspaceKey,
+		InstanceID:     "inst-b",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		Source:         "headless",
+		Managed:        true,
+		Online:         true,
+		WorkspaceKey:   workspaceKey,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: workspaceKey, Loaded: true},
 		},
@@ -172,21 +172,21 @@ func TestHandleTextConvergesPendingContractRefresh(t *testing.T) {
 	if surfaceB.PendingTextInput == nil || surfaceB.PendingTextInput.Text != "继续" {
 		t.Fatalf("expected pending text input to be saved for replay, got %#v", surfaceB.PendingTextInput)
 	}
-	if surfaceB.PendingHeadless == nil || surfaceB.PendingHeadless.CodexProviderID != "team-proxy" {
+	if surfaceB.PendingHeadless == nil || surfaceB.PendingHeadless.CodexProfileID != "team-proxy" {
 		t.Fatalf("expected pending contract refresh to start headless with new provider, got %#v", surfaceB.PendingHeadless)
 	}
 	foundStart := false
 	for _, event := range events {
 		if event.DaemonCommand != nil && event.DaemonCommand.Kind == control.DaemonCommandStartHeadless &&
 			event.DaemonCommand.SurfaceSessionID == surfaceB.SurfaceSessionID &&
-			event.DaemonCommand.CodexProviderID == "team-proxy" {
+			event.DaemonCommand.CodexProfileID == "team-proxy" {
 			foundStart = true
 		}
 	}
 	if !foundStart {
 		t.Fatalf("expected text action to trigger contract refresh start, events=%#v", events)
 	}
-	if strings.TrimSpace(surfaceB.CodexProviderID) != "team-proxy" {
-		t.Fatalf("expected surface provider to remain team-proxy, got %q", surfaceB.CodexProviderID)
+	if strings.TrimSpace(surfaceB.CodexProfileID) != "team-proxy" {
+		t.Fatalf("expected surface profile to remain team-proxy, got %q", surfaceB.CodexProfileID)
 	}
 }

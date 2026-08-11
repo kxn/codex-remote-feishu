@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-11`
-> Summary: 补充 workspace/path identity 的 canonical helper 边界，并保留配置 owner、冻结边界、Profile definition、上下文偏好、desired selection 和 admission revision 的独立存储合同。
+> Summary: 同步 Codex Profile-only 存储合同：旧 Provider 配置/状态字段只作为加载迁移输入，canonical writer 只写 Profile。
 
 ## 1. 适用范围
 
@@ -65,14 +65,14 @@
 - backend: `codex` / `claude`
 - product mode: headless / VS Code
 - `workspaceKey`
-- Codex `providerID`
+- Codex `profileID`
 - Claude `profileID`
 
-如果某个配置值可能只对某个 provider 或 profile 有效，key 里必须包含 provider/profile 维度。不要只用 `backend + workspaceKey` 存模型名或 reasoning 档位，否则切换 provider/profile 后可能复用不兼容的默认值。
+如果某个配置值可能只对某个 backend profile 有效，key 里必须包含 profile 维度。不要只用 `backend + workspaceKey` 存模型名或 reasoning 档位，否则切换 profile 后可能复用不兼容的默认值。
 
 当前 `Root.WorkspaceDefaults` 的持久化 key 必须按 backend 身份隔离：
 
-- Codex: `codex + codexProviderID + workspaceKey`
+- Codex: `codex + codexProfileID + workspaceKey`
 - Claude: `claude + claudeProfileID + workspaceKey`
 
 旧版 `backend + workspaceKey` 只能作为兼容读取或迁移来源，不应作为新写入目标。
@@ -136,20 +136,20 @@ workspace/path identity 只能通过 canonical helper 得到：
 
 - 持久化 desired state
 - 默认 key 为 `surfaceSessionID`
-- provider/profile 配置本体按 `providerID` 或 `profileID` 保存
+- profile 配置本体按 `profileID` 保存
 - backend hello 上报只作为 actual state，用于确认、显示和排障，不应反向覆盖 desired state
 
 当前例子：
 
 - `/mode`
-- `/codexprofile`（旧 `/codexprovider` 只作为兼容 alias）
+- `/codexprofile`
 - `/claudeprofile`
 
 设计要求：
 
 - 这类配置是 Codex Remote Feishu 的启动合同，系统应作为 SSOT
 - 如果 desired state 与 backend actual state 不一致，应进入重启、重连、重新准备或错误提示流程
-- 不应把 provider/profile 切换混入 prompt override 语义
+- 不应把 profile 切换混入 prompt override 语义
 
 ### 3.4 Backend Behavior With Local SSOT
 
@@ -160,7 +160,7 @@ workspace/path identity 只能通过 canonical helper 得到：
 - 持久化 desired state
 - key 必须包含 backend、workspace 和 backend 配置维度
 - 推荐 key 结构：
-  - Codex: `codex + codexProviderID + workspaceKey`
+  - Codex: `codex + codexProfileID + workspaceKey`
   - Claude: `claude + claudeProfileID + workspaceKey`
 - backend 上报用于校验 actual state，不应直接覆盖 desired state
 
@@ -215,7 +215,7 @@ workspace/path identity 只能通过 canonical helper 得到：
 | AutoContinue | Local Only With Side Effects | 否 | runtime memory only | 当前不持久化是合理行为。 |
 | AutoWhip | Local Only With Side Effects | 否 | runtime memory only | 当前不持久化是合理行为。 |
 | `/mode` | Local Routing / Launch Contract | 是 | `surfaceSessionID` | desired state 应由本系统持有。 |
-| `/codexprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | Profile 定义和 surface 选择应分开；旧 `/codexprovider` 只作为兼容 transport alias。 |
+| `/codexprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | Profile 定义和 surface 选择应分开；旧 `/codexprovider` 不再作为 transport alias。 |
 | `/claudeprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | profile 定义和 surface 选择应分开。 |
 | Codex headless model | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `model` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
 | Codex headless reasoning | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `reasoning` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
@@ -235,7 +235,7 @@ workspace/path identity 只能通过 canonical helper 得到：
    - 是：归入 Display Only，可按 `surfaceSessionID` 持久化。
 2. 它是否会自动发起动作、自动发送 prompt 或自动改变执行流？
    - 是：归入 Local Only With Side Effects，默认不持久化。
-3. 它是否决定 backend 类型、provider、profile 或启动参数？
+3. 它是否决定 backend 类型、profile 或启动参数？
    - 是：归入 Local Routing / Launch Contract，持久化 desired state，并用 backend hello 校验 actual state。
 4. 它是否改变 backend 行为？
    - 否：不要放进 prompt/backend 配置路径。
@@ -272,7 +272,7 @@ Profile 不是单一配置对象。连接定义、运行偏好、路由选择和
 
 - Secret-bearing definition 与 HTTP、orchestrator、surface DTO 必须分型；API Key 不能进入 summary、日志、引用清单或 persisted runtime state。旧配置中的 Base URL 即使为保留迁移证据，也只有满足无 userinfo/query/fragment 的绝对 HTTP(S) 合同才能进入公开 summary；不安全原值继续只留在 secret definition，公开端点留空并标记 definition incomplete。
 - Profile 名称、模型或上下文偏好更新不能改写已经冻结的 admission。删除和历史 GC 必须以完整 Reference Index 为准，且 current revision 永不被历史清理删除。
-- `codex.providers[]` 只允许作为旧配置迁移输入；迁移完成后 canonical writer 只写 `codex.profiles[]`。旧 API 可以做 transport adapter，但不能保留第二套校验或双写。
-- bot/surface desired 以 `CodexProfileID` 为 canonical owner，`CodexProviderID` 只由它派生供兼容 transport 消费。legacy writer 必须原子更新 canonical ID 与兼容投影，normalization 遇到双字段不一致时不能让 Provider 反向覆盖 Profile。
+- `codex.providers[]` 只允许作为旧配置迁移输入；迁移完成后 canonical writer 只写 `codex.profiles[]`。旧 `/api/admin/codex/providers` API 不再保留。
+- bot/surface desired 以 `CodexProfileID` 为 canonical owner。旧 `CodexProviderID/codexProviderID` 字段只允许作为加载旧状态文件时的单向迁移输入；normalization 必须清空旧字段，持久化不再写回 Provider 选择。
 - admin config owner 配置后，每次相关 runtime/store readiness 变化都必须 reconcile Profile migration；context preference、bot capability、surface resume 任一 store 未就绪或损坏时记录 degraded gate，而不是跳过 coordinator。只有三个 store 均 ready 才执行写入：先写 preference 与真实 durable selection/recovery owner，最后提交 app config migration marker。marker 未提交或任一 store 损坏时，Profile mutation 与 managed Codex launch 都 fail closed，不把损坏状态解释为空 Catalog；后续 store 修复并重新配置时由成功 reconcile 清除临时 gate。P2P canonicalization 遇到不同 Codex 选择时保留 `profile_selection_conflict`，不生成精确 admission，并阻止对应 surface 启动直到用户显式重选。
 - Claude 模型名中的终止 `[1m]` 只作为旧配置迁移输入；canonical definition 保存 base model，上下文选择保存在独立 preference revision。managed launch 必须从 preference 重建 custom model 的终止 `[1m]`；内建 default 的 1M 偏好固定投影为 `sonnet[1m]`，不能把拆分后的 base model 直接启动而改变升级前行为。

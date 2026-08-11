@@ -16,9 +16,9 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
-func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T) {
+func TestDaemonStartsCodexHeadlessWithMigratedAPIProfileLaunchOverrides(t *testing.T) {
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID:              "team-proxy",
 		Name:            "Team Proxy",
 		BaseURL:         "https://proxy.example/v1",
@@ -27,9 +27,7 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 		ReasoningEffort: "xhigh",
 	}}
 	configPath := filepath.Join(t.TempDir(), "config.json")
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 
 	app := New(":0", ":0", &recordingGateway{}, agentproto.ServerIdentity{})
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
@@ -55,7 +53,7 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 		return codexprofile.NativeConfigObservation{ProviderEnvKeys: []string{"CUSTOM_API_KEY"}}, nil
 	}
 	app.ensureCodexNativeConnectionEvidence(context.Background())
-	app.service.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, "team-proxy", "", "", "")
+	app.service.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, "team-proxy", "", "", "")
 
 	var captured relayruntime.HeadlessLaunchOptions
 	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
@@ -66,10 +64,10 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 	command := control.DaemonCommand{
 		Kind:             control.DaemonCommandStartHeadless,
 		SurfaceSessionID: "surface-1",
-		InstanceID:       "inst-codex-provider",
+		InstanceID:       "inst-codex-profile",
 		ThreadCWD:        evalSymlinkForTest(t, t.TempDir()),
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  "team-proxy",
+		CodexProfileID:   "team-proxy",
 	}
 	authorizePendingHeadlessForTest(t, app, command)
 	app.startManagedHeadless(command)
@@ -77,13 +75,13 @@ func TestDaemonStartsCodexHeadlessWithCustomProviderLaunchOverrides(t *testing.T
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=codex") {
 		t.Fatalf("expected codex backend env, got %#v", captured.Env)
 	}
-	if !containsEnvEntry(captured.Env, config.CodexRuntimeProviderIDEnv+"=team-proxy") {
-		t.Fatalf("expected runtime provider id env, got %#v", captured.Env)
+	if !containsEnvEntry(captured.Env, config.CodexRuntimeProfileIDEnv+"=team-proxy") {
+		t.Fatalf("expected runtime profile id env, got %#v", captured.Env)
 	}
 	if !containsEnvEntry(captured.Env, codexprofile.CodexProfileAPIKeyEnv+"=provider-secret") {
-		t.Fatalf("expected provider api key env, got %#v", captured.Env)
+		t.Fatalf("expected profile api key env, got %#v", captured.Env)
 	}
-	if containsEnvEntry(captured.Env, "OPENAI_API_KEY=") || containsEnvEntry(captured.Env, config.CodexProviderAPIKeyEnv+"=") {
+	if containsEnvEntry(captured.Env, "OPENAI_API_KEY=") || containsEnvEntry(captured.Env, "CODEX_REMOTE_CODEX_PROVIDER_API_KEY=") {
 		t.Fatalf("expected conflicting auth env to be cleared, got %#v", captured.Env)
 	}
 	if containsEnvEntry(captured.Env, "CUSTOM_API_KEY=native-secret") {
@@ -145,7 +143,7 @@ func TestDaemonStartsDeepSeekCodexHeadlessWithManagedModelCatalog(t *testing.T) 
 		return codexprofile.NativeConfigObservation{}, nil
 	}
 	app.ensureCodexNativeConnectionEvidence(context.Background())
-	app.service.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, record.ID, "", "", "")
+	app.service.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendCodex, record.ID, "", "", "")
 
 	var captured relayruntime.HeadlessLaunchOptions
 	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
@@ -158,7 +156,7 @@ func TestDaemonStartsDeepSeekCodexHeadlessWithManagedModelCatalog(t *testing.T) 
 		InstanceID:       "inst-deepseek-profile",
 		ThreadCWD:        root,
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  record.ID,
+		CodexProfileID:   record.ID,
 	}
 	authorizePendingHeadlessForTest(t, app, command)
 	app.startManagedHeadless(command)
@@ -225,9 +223,9 @@ func TestDaemonStartsCodexHeadlessWithCanonicalProfileID(t *testing.T) {
 
 	app.startManagedHeadless(control.DaemonCommand{
 		Kind: control.DaemonCommandStartHeadless, InstanceID: "inst-canonical-profile", ThreadCWD: root,
-		Backend: agentproto.BackendCodex, CodexProviderID: record.ID,
+		Backend: agentproto.BackendCodex, CodexProfileID: record.ID,
 	})
-	if !containsEnvEntry(captured.Env, config.CodexRuntimeProviderIDEnv+"="+record.ID) {
+	if !containsEnvEntry(captured.Env, config.CodexRuntimeProfileIDEnv+"="+record.ID) {
 		t.Fatalf("canonical profile did not reach launcher: env=%#v args=%#v", captured.Env, captured.Args)
 	}
 	args := strings.Join(captured.Args, "\n")
@@ -299,11 +297,11 @@ func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
 	}
 
 	app.startManagedHeadless(control.DaemonCommand{
-		Kind:            control.DaemonCommandStartHeadless,
-		InstanceID:      "inst-frozen-profile",
-		ThreadCWD:       root,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: record.ID,
+		Kind:           control.DaemonCommandStartHeadless,
+		InstanceID:     "inst-frozen-profile",
+		ThreadCWD:      root,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: record.ID,
 		CodexAdmissionRef: &state.CodexAdmissionRef{
 			ProfileRef:           state.CodexProfileRef{ID: record.ID, Revision: 1},
 			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: record.ID, Revision: 1},
@@ -329,7 +327,7 @@ func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
 	}
 }
 
-func TestDaemonStartsCodexHeadlessWithDefaultProviderKeepsLaunchArgsClean(t *testing.T) {
+func TestDaemonStartsCodexHeadlessWithNativeProfileKeepsLaunchArgsClean(t *testing.T) {
 	configPath := filepath.Join(t.TempDir(), "config.json")
 	if err := config.WriteAppConfig(configPath, config.DefaultAppConfig()); err != nil {
 		t.Fatalf("WriteAppConfig: %v", err)
@@ -362,18 +360,18 @@ func TestDaemonStartsCodexHeadlessWithDefaultProviderKeepsLaunchArgsClean(t *tes
 	}
 
 	app.startManagedHeadless(control.DaemonCommand{
-		Kind:            control.DaemonCommandStartHeadless,
-		InstanceID:      "inst-codex-default",
-		ThreadCWD:       evalSymlinkForTest(t, t.TempDir()),
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: config.CodexDefaultProviderID,
+		Kind:           control.DaemonCommandStartHeadless,
+		InstanceID:     "inst-codex-default",
+		ThreadCWD:      evalSymlinkForTest(t, t.TempDir()),
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: config.CodexNativeProfileID,
 	})
 
 	if strings.Contains(strings.Join(captured.Args, "\n"), "model_provider=") {
-		t.Fatalf("expected built-in default provider to avoid provider overrides, got %#v", captured.Args)
+		t.Fatalf("expected native profile to avoid API profile overrides, got %#v", captured.Args)
 	}
 	if containsEnvEntry(captured.Env, codexprofile.CodexProfileAPIKeyEnv+"=") {
-		t.Fatalf("expected built-in default provider to avoid provider key env, got %#v", captured.Env)
+		t.Fatalf("expected native profile to avoid profile key env, got %#v", captured.Env)
 	}
 }
 
@@ -382,12 +380,10 @@ func TestDaemonRejectsIncompleteMigratedCodexProfileBeforeLaunch(t *testing.T) {
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID: "incomplete", Name: "Incomplete", BaseURL: "https://proxy.example/v1", APIKey: "secret",
 	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{})
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
@@ -402,10 +398,10 @@ func TestDaemonRejectsIncompleteMigratedCodexProfileBeforeLaunch(t *testing.T) {
 	}
 
 	app.handleDaemonCommand(control.DaemonCommand{
-		Kind:            control.DaemonCommandStartHeadless,
-		InstanceID:      "headless-incomplete",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "incomplete",
+		Kind:           control.DaemonCommandStartHeadless,
+		InstanceID:     "headless-incomplete",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "incomplete",
 	})
 	if launched {
 		t.Fatal("incomplete migrated Codex Profile reached the launcher")
@@ -416,8 +412,8 @@ func TestCodexHeadlessLaunchProblemPreservesStableRuntimeReason(t *testing.T) {
 	problem := codexHeadlessLaunchProblem(
 		&codexprofile.RuntimeError{Code: codexprofile.ErrorProfileSecretMissing},
 		agentproto.ErrorInfo{
-			Code:      "codex_provider_prepare_failed",
-			Message:   "Codex Provider 准备失败。",
+			Code:      "codex_profile_prepare_failed",
+			Message:   "Codex Profile 准备失败。",
 			Retryable: true,
 		},
 	)
@@ -446,7 +442,7 @@ func TestCodexHeadlessLaunchProblemClassifiesProbeFailures(t *testing.T) {
 	for _, test := range tests {
 		problem := codexHeadlessLaunchProblem(
 			&codexprofile.RuntimeError{Code: test.code, Stage: test.stage},
-			agentproto.ErrorInfo{Code: "codex_provider_prepare_failed", Message: "Codex Provider 准备失败。", Retryable: true},
+			agentproto.ErrorInfo{Code: "codex_profile_prepare_failed", Message: "Codex Profile 准备失败。", Retryable: true},
 		)
 		if problem.Code != test.code {
 			t.Fatalf("problem code = %q, want %q", problem.Code, test.code)
@@ -463,7 +459,7 @@ func TestCodexHeadlessLaunchProblemClassifiesProbeFailures(t *testing.T) {
 	}
 }
 
-func TestDaemonIgnoresStaleAdmissionRefForDifferentProvider(t *testing.T) {
+func TestDaemonIgnoresStaleAdmissionRefForDifferentProfile(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
@@ -493,7 +489,7 @@ func TestDaemonIgnoresStaleAdmissionRefForDifferentProvider(t *testing.T) {
 	}
 	app.ensureCodexNativeConnectionEvidence(context.Background())
 
-	_, _, _, err = app.applyCodexHeadlessProviderConfigLocked(
+	_, _, _, err = app.applyCodexHeadlessProfileConfigLocked(
 		[]string{"HOME=/tmp/test"},
 		[]string{"app-server"},
 		agentproto.BackendCodex,
@@ -504,6 +500,6 @@ func TestDaemonIgnoresStaleAdmissionRefForDifferentProvider(t *testing.T) {
 		},
 	)
 	if err != nil {
-		t.Fatalf("stale admission ref for a different provider must not block launch: %v", err)
+		t.Fatalf("stale admission ref for a different profile must not block launch: %v", err)
 	}
 }

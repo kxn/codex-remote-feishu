@@ -20,12 +20,51 @@ import (
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
+func writeLegacyCodexProvidersConfig(t *testing.T, configPath string, cfg config.AppConfig) {
+	t.Helper()
+	providers := append([]config.LegacyCodexProviderConfig(nil), cfg.Codex.Providers...)
+	cfg.Codex.Providers = nil
+	if err := config.WriteAppConfig(configPath, cfg); err != nil {
+		t.Fatalf("WriteAppConfig: %v", err)
+	}
+	raw, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("Unmarshal written config: %v", err)
+	}
+	codex, _ := payload["codex"].(map[string]any)
+	if codex == nil {
+		codex = map[string]any{}
+		payload["codex"] = codex
+	}
+	providersRaw, err := json.Marshal(providers)
+	if err != nil {
+		t.Fatalf("Marshal legacy providers: %v", err)
+	}
+	var providersPayload any
+	if err := json.Unmarshal(providersRaw, &providersPayload); err != nil {
+		t.Fatalf("Unmarshal legacy providers: %v", err)
+	}
+	codex["providers"] = providersPayload
+	raw, err = json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent legacy config: %v", err)
+	}
+	raw = append(raw, '\n')
+	if err := os.WriteFile(configPath, raw, 0o600); err != nil {
+		t.Fatalf("WriteFile legacy config: %v", err)
+	}
+}
+
 func TestProfileCatalogStartupMigrationIsIdempotentAndCommitsLast(t *testing.T) {
 	root := t.TempDir()
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID:              "team-proxy",
 		Name:            "Team Proxy",
 		BaseURL:         "https://proxy.example/v1",
@@ -38,15 +77,13 @@ func TestProfileCatalogStartupMigrationIsIdempotentAndCommitsLast(t *testing.T) 
 		Name:  "DevSeek",
 		Model: "claude-sonnet-4-5[1m]",
 	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 	botStore := botcapabilitysettings.NewStore(botcapabilitysettings.StatePath(stateDir))
 	if err := botStore.Put(state.BotCapabilitySettingsRecord{
-		GatewayID:       "main",
-		ProductMode:     state.ProductModeNormal,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "team-proxy",
+		GatewayID:      "main",
+		ProductMode:    state.ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "team-proxy",
 	}); err != nil {
 		t.Fatalf("write legacy bot settings: %v", err)
 	}
@@ -55,7 +92,7 @@ func TestProfileCatalogStartupMigrationIsIdempotentAndCommitsLast(t *testing.T) 
 		SurfaceSessionID: "surface-1",
 		ProductMode:      string(state.ProductModeNormal),
 		Backend:          string(agentproto.BackendCodex),
-		CodexProviderID:  "team-proxy",
+		CodexProfileID:   "team-proxy",
 	}); err != nil {
 		t.Fatalf("write legacy surface resume: %v", err)
 	}
@@ -151,18 +188,16 @@ func TestProfileCatalogMigrationPreservesSurfaceAdmissionRefAfterProjection(t *t
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 	surfaceStore := surfaceresume.NewStore(surfaceresume.StatePath(stateDir))
 	if err := surfaceStore.Put(surfaceresume.Entry{
 		SurfaceSessionID:   "surface-1",
 		ProductMode:        string(state.ProductModeNormal),
 		Backend:            string(agentproto.BackendCodex),
-		CodexProviderID:    "team-proxy",
+		CodexProfileID:     "team-proxy",
 		ResumeThreadID:     "thread-1",
 		ResumeThreadCWD:    "/data/dl/repo",
 		ResumeWorkspaceKey: "/data/dl/repo",
@@ -191,7 +226,7 @@ func TestProfileCatalogMigrationRedactsUnsafeLegacyEndpointFromPublicSummary(t *
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID:              "unsafe-proxy",
 		Name:            "Unsafe Proxy",
 		BaseURL:         "https://visible-user:visible-pass@proxy.example/v1?token=url-secret",
@@ -199,9 +234,7 @@ func TestProfileCatalogMigrationRedactsUnsafeLegacyEndpointFromPublicSummary(t *
 		Model:           "gpt-5.5",
 		ReasoningEffort: "high",
 	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 	app := startProfileMigrationTestApp(t, configPath, stateDir)
 
 	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/codex/profiles", "")
@@ -228,23 +261,21 @@ func TestProfileCatalogMigrationRecordsCanonicalSurfaceSelectionConflict(t *test
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{
 		{ID: "proxy-a", Name: "Proxy A", BaseURL: "https://a.example/v1", APIKey: "a", Model: "gpt-5.5", ReasoningEffort: "high"},
 		{ID: "proxy-b", Name: "Proxy B", BaseURL: "https://b.example/v1", APIKey: "b", Model: "gpt-5.5", ReasoningEffort: "high"},
 	}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 	surfaceStore := surfaceresume.NewStore(surfaceresume.StatePath(stateDir))
 	if err := surfaceStore.ReplaceAll(map[string]surfaceresume.Entry{
 		"feishu:main:user:ou_old": {
 			SurfaceSessionID: "feishu:main:user:ou_old", GatewayID: "main", ChatID: "oc_chat", ActorUserID: "ou_old",
-			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProviderID: "proxy-a",
+			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProfileID: "proxy-a",
 			UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		},
 		"feishu:main:user:ou_new": {
 			SurfaceSessionID: "feishu:main:user:ou_new", GatewayID: "main", ChatID: "oc_chat", ActorUserID: "ou_new",
-			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProviderID: "proxy-b",
+			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProfileID: "proxy-b",
 			UpdatedAt: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC),
 		},
 	}); err != nil {
@@ -286,19 +317,19 @@ func TestProfileCatalogMigrationRecordsCanonicalSurfaceSelectionConflict(t *test
 	}
 	app.handleDaemonCommand(control.DaemonCommand{
 		Kind: control.DaemonCommandStartHeadless, SurfaceSessionID: conflicted.SurfaceSessionID, InstanceID: "instance-conflict",
-		Backend: agentproto.BackendCodex, CodexProviderID: conflicted.CodexProviderID,
+		Backend: agentproto.BackendCodex, CodexProfileID: conflicted.CodexProfileID,
 	})
 	if launched {
 		t.Fatal("profile selection conflict did not fail closed before Codex launch")
 	}
 
 	app.service.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: conflicted.SurfaceSessionID,
 		GatewayID:        conflicted.GatewayID,
 		ChatID:           conflicted.ChatID,
 		ActorUserID:      conflicted.ActorUserID,
-		Text:             "/codexprovider " + conflicted.CodexProviderID,
+		Text:             "/codexprofile " + conflicted.CodexProfileID,
 	})
 	app.mu.Lock()
 	app.syncSurfaceResumeStateLocked(nil)
@@ -318,12 +349,10 @@ func TestProfileCatalogMigrationRunsWhenStoresBecomeReadyAfterAdmin(t *testing.T
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{})
 	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
@@ -346,13 +375,13 @@ func TestProfileCatalogMigrationRunsWhenStoresBecomeReadyAfterAdmin(t *testing.T
 
 func TestSetHeadlessRuntimeDoesNotReadCatalogBeforeAdminConfigured(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{})
-	app.service.MaterializeCodexProviders([]state.CodexProviderRecord{{ID: "sentinel-profile", Name: "Sentinel"}})
+	app.service.MaterializeCodexProfiles([]state.CodexProfileSummary{{ID: "sentinel-profile", Name: "Sentinel"}})
 
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{Paths: relayruntime.Paths{StateDir: t.TempDir()}})
 
 	found := false
-	for _, provider := range app.service.CodexProviders() {
-		if provider.ID == "sentinel-profile" {
+	for _, profile := range app.service.CodexProfiles() {
+		if profile.ID == "sentinel-profile" {
 			found = true
 			break
 		}
@@ -404,14 +433,14 @@ func TestConfigureAdminProjectsCommittedCatalogAfterHeadlessRuntime(t *testing.T
 	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
 
 	found := false
-	for _, provider := range app.service.CodexProviders() {
-		if provider.ID == record.ID {
+	for _, profile := range app.service.CodexProfiles() {
+		if profile.ID == record.ID {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("committed catalog was not projected after admin configuration: %#v", app.service.CodexProviders())
+		t.Fatalf("committed catalog was not projected after admin configuration: %#v", app.service.CodexProfiles())
 	}
 }
 
@@ -479,12 +508,10 @@ func TestProfileCatalogMigrationFailsClosedWhenPreferenceStateIsCorrupt(t *testi
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 	if err := os.MkdirAll(stateDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -518,7 +545,7 @@ func TestProfileCatalogMigrationFailsClosedWhenPreferenceStateIsCorrupt(t *testi
 	}
 	app.handleDaemonCommand(control.DaemonCommand{
 		Kind: control.DaemonCommandStartHeadless, InstanceID: "corrupt-preference", Backend: agentproto.BackendCodex,
-		CodexProviderID: "team-proxy",
+		CodexProfileID: "team-proxy",
 	})
 	if launched {
 		t.Fatal("corrupt preference state did not block managed Codex launch")
@@ -539,12 +566,10 @@ func TestProfileCatalogMigrationFailsClosedWhenSelectionStateIsCorrupt(t *testin
 			configPath := filepath.Join(root, "config.json")
 			stateDir := filepath.Join(root, "state")
 			cfg := config.DefaultAppConfig()
-			cfg.Codex.Providers = []config.CodexProviderConfig{{
+			cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 				ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 			}}
-			if err := config.WriteAppConfig(configPath, cfg); err != nil {
-				t.Fatalf("WriteAppConfig: %v", err)
-			}
+			writeLegacyCodexProvidersConfig(t, configPath, cfg)
 			if err := os.MkdirAll(stateDir, 0o755); err != nil {
 				t.Fatalf("MkdirAll: %v", err)
 			}
@@ -571,7 +596,7 @@ func TestProfileCatalogMigrationFailsClosedWhenSelectionStateIsCorrupt(t *testin
 			}
 			app.handleDaemonCommand(control.DaemonCommand{
 				Kind: control.DaemonCommandStartHeadless, InstanceID: "corrupt-selection", Backend: agentproto.BackendCodex,
-				CodexProviderID: "team-proxy",
+				CodexProfileID: "team-proxy",
 			})
 			if launched {
 				t.Fatal("corrupt selection state did not block managed Codex launch")
@@ -585,18 +610,16 @@ func TestProfileCatalogMigrationPreservesDanglingSelectionDiagnostic(t *testing.
 	configPath := filepath.Join(root, "config.json")
 	stateDir := filepath.Join(root, "state")
 	cfg := config.DefaultAppConfig()
-	cfg.Codex.Providers = []config.CodexProviderConfig{{
+	cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
 		ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
 	}}
-	if err := config.WriteAppConfig(configPath, cfg); err != nil {
-		t.Fatalf("WriteAppConfig: %v", err)
-	}
+	writeLegacyCodexProvidersConfig(t, configPath, cfg)
 	botStore := botcapabilitysettings.NewStore(botcapabilitysettings.StatePath(stateDir))
 	if err := botStore.Put(state.BotCapabilitySettingsRecord{
-		GatewayID:       "main",
-		ProductMode:     state.ProductModeNormal,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "removed-provider",
+		GatewayID:      "main",
+		ProductMode:    state.ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "removed-provider",
 	}); err != nil {
 		t.Fatalf("write dangling bot settings: %v", err)
 	}

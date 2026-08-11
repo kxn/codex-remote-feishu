@@ -319,7 +319,7 @@ func (s *Service) attachHeadlessInstance(surface *state.SurfaceConsoleRecord, in
 			s.setSurfaceDesiredContract(surface, state.HeadlessOpenCodeSurfaceBackendContract(pendingContract.OpenCodeProfileID))
 			surface.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(pendingContract.OpenCodeAdmissionRef)
 		default:
-			s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
+			s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProfileID))
 		}
 		workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
 		if pending.PrepareNewThread {
@@ -389,7 +389,7 @@ func (s *Service) attachHeadlessWorkspaceRouteRestart(surface *state.SurfaceCons
 		s.setSurfaceDesiredContract(surface, state.HeadlessOpenCodeSurfaceBackendContract(pendingContract.OpenCodeProfileID))
 		surface.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(pendingContract.OpenCodeAdmissionRef)
 	default:
-		s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProviderID))
+		s.setSurfaceDesiredContract(surface, state.HeadlessCodexSurfaceBackendContract(pendingContract.CodexProfileID))
 	}
 	workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
 	if workspaceKey == "" {

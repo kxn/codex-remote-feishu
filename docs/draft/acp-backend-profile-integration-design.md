@@ -1,8 +1,8 @@
 # ACP 后端与实例 profile 接入设计调研
 
 > Type: `draft`
-> Updated: `2026-08-08`
-> Summary: 补充实例级临时 profile / 配置继承硬门槛，并对比 Kimi Code 与 OpenCode 的 ACP 接入适配性。
+> Updated: `2026-08-11`
+> Summary: 同步当前 Codex Profile-only 基线：核心合同使用 `CodexProfileID`，不再以 `CodexProviderID` 描述当前状态。
 
 ## 1. 文档定位
 
@@ -81,7 +81,7 @@ OpenCode ACP 对我们额外有利的地方：
 
 - `internal/core/agentproto/backend.go` 现在只有 `codex` / `claude`，未知值默认归 Codex。
 - `internal/app/wrapper/backend_runtime.go` 把 native translator、child launch、restart/resume 逻辑绑在一个 backend-specific runtime 里。
-- `internal/core/state/surface_backend.go` 的 surface contract 只有 `CodexProviderID` 和 `ClaudeProfileID` 两条 profile 轨道。
+- `internal/core/state/surface_backend.go` 的 surface contract 已有 `CodexProfileID`、`ClaudeProfileID` 和 `OpenCodeProfileID` 这些 profile 轨道。
 - `internal/core/control/feishu_command_display_profiles.go` 是按 visible mode / backend profile 写死命令暴露规则。
 
 这些不是错误，只是说明当前抽象层级是“产品 backend”，不是“协议 backend + agent profile”。
@@ -714,11 +714,11 @@ OpenCode 作为第一候选，不代表它要 100% 复刻 Codex/Claude 每个 pr
 - 新增 `BackendACP`，并让 unknown backend 明确失败或保留为 unsupported diagnostic，而不是默认 Codex。
 - 新增 `ACPProfileID` / `ACPProfileSummary`，用于表达 `opencode-default`、`opencode-team-proxy`、后续 `kimi-*` 等 profile。
 - 保留 vendor display name：backend 是协议族 `acp`，用户看到的是 profile display name，例如 `OpenCode`。
-- 现有 `CodexProfiles`、`ClaudeProfiles`、workspace profile snapshot 都是专用轨道；ACP profile catalog 需要单独状态和管理 API，不能塞进 Codex provider 或 Claude profile。
+- 现有 `CodexProfiles`、`ClaudeProfiles`、`OpenCodeProfiles`、workspace profile snapshot 都是专用轨道；通用 ACP profile catalog 如未来需要抽象，不能塞进 Codex Profile 或 Claude profile。
 
 ### 9.2 Surface / instance / launch contract
 
-当前核心合同有三层：`SurfaceBackendContract`、`InstanceBackendContract`、`HeadlessLaunchContract`。它们都只有 `CodexProviderID` 和 `ClaudeProfileID`，并且 surface resume 会把持久化记录 materialize 回这些字段。
+当前核心合同有三层：`SurfaceBackendContract`、`InstanceBackendContract`、`HeadlessLaunchContract`。它们已使用 `CodexProfileID` / `ClaudeProfileID` / `OpenCodeProfileID`，surface resume 会把持久化记录 materialize 回这些字段。
 
 缺口：
 

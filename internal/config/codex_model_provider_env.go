@@ -16,7 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
-type CodexProviderEnvInfo struct {
+type CodexModelProviderEnvInfo struct {
 	ConfigPath     string
 	ActiveProfile  string
 	ActiveProvider string
@@ -79,7 +79,7 @@ func buildCodexChildEnv(currentEnv, proxyEnv, args []string, supplementProvider 
 	env = append(env, proxyEnv...)
 	env = SupplementDetachedPATH(env)
 	if supplementProvider {
-		supplemented, _ := supplementCodexProviderEnv(env, args)
+		supplemented, _ := supplementCodexModelProviderEnv(env, args)
 		return supplemented
 	}
 	return env
@@ -99,7 +99,7 @@ func SupplementDetachedPATH(env []string) []string {
 	return upsertEnvValue(env, "PATH", strings.Join(current, string(os.PathListSeparator)))
 }
 
-func ResolveCodexProviderEnv(args []string, env []string) (CodexProviderEnvInfo, error) {
+func ResolveCodexModelProviderEnv(args []string, env []string) (CodexModelProviderEnvInfo, error) {
 	overrides := parseCodexLaunchOverrides(args)
 	cfg := codexConfigToml{
 		Profiles:       map[string]codexProfileToml{},
@@ -118,7 +118,7 @@ func ResolveCodexProviderEnv(args []string, env []string) (CodexProviderEnvInfo,
 	}
 	applyCodexLaunchOverrides(&cfg, overrides)
 
-	info := CodexProviderEnvInfo{ConfigPath: configPath}
+	info := CodexModelProviderEnvInfo{ConfigPath: configPath}
 	info.ActiveProfile = chooseNonEmpty(overrides.Profile, cfg.Profile)
 
 	profileProvider, err := activeProfileProvider(cfg, info.ActiveProfile)
@@ -133,8 +133,8 @@ func ResolveCodexProviderEnv(args []string, env []string) (CodexProviderEnvInfo,
 	return info, pathErr
 }
 
-func supplementCodexProviderEnv(env, args []string) ([]string, error) {
-	info, err := ResolveCodexProviderEnv(args, env)
+func supplementCodexModelProviderEnv(env, args []string) ([]string, error) {
+	info, err := ResolveCodexModelProviderEnv(args, env)
 	requiredKey := strings.TrimSpace(info.RequiredEnvKey)
 	if requiredKey == "" {
 		return env, nil

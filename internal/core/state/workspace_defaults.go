@@ -27,6 +27,6 @@ func WorkspaceDefaultsIdentity(contract InstanceBackendContract) string {
 	case agentproto.BackendOpenCode:
 		return NormalizeOpenCodeProfileID(contract.OpenCodeProfileID)
 	default:
-		return NormalizeCodexProviderID(contract.CodexProviderID)
+		return NormalizeCodexProfileID(contract.CodexProfileID)
 	}
 }

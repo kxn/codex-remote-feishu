@@ -15,7 +15,7 @@ func TestFeishuConfigFlowRegistryRoundTrip(t *testing.T) {
 		intentKind  FeishuUIIntentKind
 	}{
 		{commandID: FeishuCommandMode, actionKind: ActionModeCommand, bareCommand: "/mode", intentKind: FeishuUIIntentShowModeCatalog},
-		{commandID: FeishuCommandCodexProvider, actionKind: ActionCodexProviderCommand, bareCommand: "/codexprofile", intentKind: FeishuUIIntentShowCodexProviderCatalog},
+		{commandID: FeishuCommandCodexProfile, actionKind: ActionCodexProfileCommand, bareCommand: "/codexprofile", intentKind: FeishuUIIntentShowCodexProfileCatalog},
 		{commandID: FeishuCommandClaudeProfile, actionKind: ActionClaudeProfileCommand, bareCommand: "/claudeprofile", intentKind: FeishuUIIntentShowClaudeProfileCatalog},
 		{commandID: FeishuCommandOpenCodeProfile, actionKind: ActionOpenCodeProfileCommand, bareCommand: "/opencodeprofile", intentKind: FeishuUIIntentShowOpenCodeProfileCatalog},
 		{commandID: FeishuCommandAutoWhip, actionKind: ActionAutoWhipCommand, bareCommand: "/autowhip", intentKind: FeishuUIIntentShowAutoWhipCatalog},
@@ -169,8 +169,8 @@ func TestFeishuConfigFlowIntentOnlyMatchesBareCommands(t *testing.T) {
 		},
 		{
 			name:   "page local pagination keeps default argument as config catalog state",
-			action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprofile profile-5", LocalPageAction: true, Cursor: 10},
-			want:   FeishuUIIntentShowCodexProviderCatalog,
+			action: Action{Kind: ActionCodexProfileCommand, Text: "/codexprofile profile-5", LocalPageAction: true, Cursor: 10},
+			want:   FeishuUIIntentShowCodexProfileCatalog,
 			ok:     true,
 		},
 	}

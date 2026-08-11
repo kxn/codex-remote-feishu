@@ -11,7 +11,7 @@ import (
 func TestSurfaceInstanceCompatibilityPrefersExpectedProviderOverStaleCache(t *testing.T) {
 	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user",
 		state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "team-proxy",
 		state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
@@ -26,7 +26,7 @@ func TestSurfaceInstanceCompatibilityPrefersExpectedProviderOverStaleCache(t *te
 	inst := &state.InstanceRecord{
 		InstanceID:              "inst-old",
 		Backend:                 agentproto.BackendCodex,
-		CodexProviderID:         "default",
+		CodexProfileID:          "default",
 		CodexAdmissionRef:       oldRef,
 		CodexConnectionContract: oldContract,
 		Online:                  true,
@@ -39,7 +39,7 @@ func TestSurfaceInstanceCompatibilityPrefersExpectedProviderOverStaleCache(t *te
 func TestSurfaceInstanceCompatibilityKeepsSameProviderRevisionPrecision(t *testing.T) {
 	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user",
 		state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "team-proxy",
 		state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
@@ -53,7 +53,7 @@ func TestSurfaceInstanceCompatibilityKeepsSameProviderRevisionPrecision(t *testi
 	inst := &state.InstanceRecord{
 		InstanceID:              "inst-new",
 		Backend:                 agentproto.BackendCodex,
-		CodexProviderID:         "team-proxy",
+		CodexProfileID:          "team-proxy",
 		CodexAdmissionRef:       &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "team-proxy", Revision: 1}},
 		CodexConnectionContract: &state.CodexConnectionContract{ConnectionContractID: "old-contract"},
 		Online:                  true,

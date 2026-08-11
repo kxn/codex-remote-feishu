@@ -41,7 +41,7 @@ func TestLoadAppConfigRejectsCorruptCodexProfileCatalog(t *testing.T) {
 
 func TestMigrateLegacyCodexProvidersCreatesRevisionOneProfiles(t *testing.T) {
 	cfg := DefaultAppConfig()
-	cfg.Codex.Providers = []CodexProviderConfig{{
+	cfg.Codex.Providers = []LegacyCodexProviderConfig{{
 		ID:              "team-proxy",
 		Name:            " Team Proxy ",
 		BaseURL:         " https://proxy.example/v1 ",
@@ -77,7 +77,7 @@ func TestMigrateLegacyCodexProvidersCreatesRevisionOneProfiles(t *testing.T) {
 
 func TestMigrateLegacyCodexProvidersKeepsIncompleteProfileVisible(t *testing.T) {
 	cfg := DefaultAppConfig()
-	cfg.Codex.Providers = []CodexProviderConfig{{
+	cfg.Codex.Providers = []LegacyCodexProviderConfig{{
 		ID:      "legacy",
 		Name:    "Legacy",
 		BaseURL: "https://proxy.example/v1",

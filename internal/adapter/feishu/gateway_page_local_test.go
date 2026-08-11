@@ -56,7 +56,7 @@ func TestParseCardActionTriggerEventBuildsLocalPageActionWithCursor(t *testing.T
 			Action: &larkcallback.CallBackAction{
 				Value: map[string]interface{}{
 					"kind":        "page_local_action",
-					"action_kind": string(control.ActionCodexProviderCommand),
+					"action_kind": string(control.ActionCodexProfileCommand),
 					"cursor":      30,
 				},
 			},
@@ -71,7 +71,7 @@ func TestParseCardActionTriggerEventBuildsLocalPageActionWithCursor(t *testing.T
 	if !ok {
 		t.Fatal("expected page_local_action callback to be parsed")
 	}
-	if action.Kind != control.ActionCodexProviderCommand || action.Text != "/codexprofile" || action.Cursor != 30 {
+	if action.Kind != control.ActionCodexProfileCommand || action.Text != "/codexprofile" || action.Cursor != 30 {
 		t.Fatalf("unexpected paginated local action: %#v", action)
 	}
 	if !action.LocalPageAction {

@@ -173,7 +173,7 @@ func TestCodexOAuthProbeRefreshesMaterializedProfileCatalog(t *testing.T) {
 		Paths:           relayruntime.Paths{StateDir: filepath.Join(root, "state")},
 	})
 	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
-	app.syncCodexProvidersCatalogFromConfig()
+	app.syncCodexProfilesCatalogFromConfig()
 	if _, ok := findServiceCodexProfile(app, state.OAuthCodexProfileID); ok {
 		t.Fatal("OAuth profile should not be materialized before the probe")
 	}
@@ -285,7 +285,7 @@ func TestFailedCodexCapabilityPreflightBlocksAllProfileKinds(t *testing.T) {
 	waitForCodexOAuthState(t, app, codexprofile.OAuthProbeStatusDetected)
 
 	for _, profileID := range []string{state.NativeCodexProfileID, record.ID, state.OAuthCodexProfileID} {
-		_, _, err := app.applyCodexHeadlessProviderConfig(nil, []string{"app-server"}, agentproto.BackendCodex, profileID)
+		_, _, err := app.applyCodexHeadlessProfileConfig(nil, []string{"app-server"}, agentproto.BackendCodex, profileID)
 		if got := codexprofile.RuntimeErrorCode(err); got != codexprofile.ErrorCodexCapabilityUnsupported {
 			t.Fatalf("profile %q error = %q, want %q (err=%v)", profileID, got, codexprofile.ErrorCodexCapabilityUnsupported, err)
 		}
@@ -319,7 +319,7 @@ func TestCurrentCapabilityFailureOverridesStaleOAuthDescriptor(t *testing.T) {
 		errorCode: codexprofile.ErrorCodexCapabilityUnsupported,
 	}
 	app.mu.Unlock()
-	_, _, err := app.applyCodexHeadlessProviderConfig(nil, []string{"app-server"}, agentproto.BackendCodex, state.OAuthCodexProfileID)
+	_, _, err := app.applyCodexHeadlessProfileConfig(nil, []string{"app-server"}, agentproto.BackendCodex, state.OAuthCodexProfileID)
 	if got := codexprofile.RuntimeErrorCode(err); got != codexprofile.ErrorCodexCapabilityUnsupported {
 		t.Fatalf("error code = %q, want %q (err=%v)", got, codexprofile.ErrorCodexCapabilityUnsupported, err)
 	}
@@ -355,7 +355,7 @@ func TestOAuthProfileLaunchRunsFreshAuthProbeBeforeResolving(t *testing.T) {
 		}, nil
 	}
 
-	_, _, err := app.applyCodexHeadlessProviderConfig(nil, []string{"app-server"}, agentproto.BackendCodex, state.OAuthCodexProfileID)
+	_, _, err := app.applyCodexHeadlessProfileConfig(nil, []string{"app-server"}, agentproto.BackendCodex, state.OAuthCodexProfileID)
 	if got := codexprofile.RuntimeErrorCode(err); got != codexprofile.ErrorOAuthMissing {
 		t.Fatalf("launch error = %q, want %q (err=%v)", got, codexprofile.ErrorOAuthMissing, err)
 	}
@@ -389,7 +389,7 @@ func TestPersistedOAuthDescriptorRequiresCurrentLifecycleProbe(t *testing.T) {
 		CodexRealBinary: "fake-codex", ConfigPath: configPath, Paths: relayruntime.Paths{StateDir: stateDir},
 	})
 	second.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
-	_, _, err := second.applyCodexHeadlessProviderConfig(nil, []string{"app-server"}, agentproto.BackendCodex, state.OAuthCodexProfileID)
+	_, _, err := second.applyCodexHeadlessProfileConfig(nil, []string{"app-server"}, agentproto.BackendCodex, state.OAuthCodexProfileID)
 	if got := codexprofile.RuntimeErrorCode(err); got != codexprofile.ErrorOAuthProbeUnknown {
 		t.Fatalf("stale descriptor error = %q, want %q (err=%v)", got, codexprofile.ErrorOAuthProbeUnknown, err)
 	}
@@ -440,7 +440,7 @@ func TestDetectedOAuthProfileLaunchUsesIsolatedBuiltInOpenAI(t *testing.T) {
 	}
 	app.startManagedHeadless(control.DaemonCommand{
 		Kind: control.DaemonCommandStartHeadless, InstanceID: "inst-oauth", ThreadCWD: root,
-		Backend: agentproto.BackendCodex, CodexProviderID: state.OAuthCodexProfileID,
+		Backend: agentproto.BackendCodex, CodexProfileID: state.OAuthCodexProfileID,
 	})
 	if captured.BinaryPath == "" {
 		t.Fatal("detected OAuth profile did not reach launcher")
@@ -718,19 +718,19 @@ func newOAuthLaunchAuthorizationTestApp(t *testing.T) (*App, control.DaemonComma
 		return codexprofile.NativeConfigObservation{}, nil
 	}
 	app.ensureCodexNativeConnectionEvidence(context.Background())
-	app.service.MaterializeSurfaceResumeWithCodexProvider("surface-oauth", root, "chat-1", "user-1", "normal", agentproto.BackendCodex, state.OAuthCodexProfileID, "", "", "")
+	app.service.MaterializeSurfaceResumeWithCodexProfile("surface-oauth", root, "chat-1", "user-1", "normal", agentproto.BackendCodex, state.OAuthCodexProfileID, "", "", "")
 	surface := app.service.Surface("surface-oauth")
 	if surface == nil {
 		t.Fatal("expected surface")
 	}
 	surface.PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-oauth",
-		WorkspaceKey:    root,
-		ThreadCWD:       root,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.OAuthCodexProfileID,
-		Status:          state.HeadlessLaunchStarting,
-		Purpose:         state.HeadlessLaunchPurposeThreadRestore,
+		InstanceID:     "inst-oauth",
+		WorkspaceKey:   root,
+		ThreadCWD:      root,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: state.OAuthCodexProfileID,
+		Status:         state.HeadlessLaunchStarting,
+		Purpose:        state.HeadlessLaunchPurposeThreadRestore,
 	}
 	return app, control.DaemonCommand{
 		Kind:             control.DaemonCommandStartHeadless,
@@ -739,7 +739,7 @@ func newOAuthLaunchAuthorizationTestApp(t *testing.T) (*App, control.DaemonComma
 		WorkspaceKey:     root,
 		ThreadCWD:        root,
 		Backend:          agentproto.BackendCodex,
-		CodexProviderID:  state.OAuthCodexProfileID,
+		CodexProfileID:   state.OAuthCodexProfileID,
 	}
 }
 

@@ -35,21 +35,21 @@ func NormalizeBotCapabilitySettingsRecord(record BotCapabilitySettingsRecord) (B
 	if record.GatewayID == "" {
 		return BotCapabilitySettingsRecord{}, false
 	}
-	record.CodexProviderID = NormalizeDesiredCodexProviderID(record.CodexProviderID)
+	record.CodexProfileID = NormalizeDesiredCodexProfileID(record.CodexProfileID)
 	record = CanonicalizeBotCapabilityProfileSelection(record)
-	codexProviderID := record.CodexProviderID
+	codexProfileID := record.CodexProfileID
 	claudeProfileID := NormalizeDesiredClaudeProfileID(record.ClaudeProfileID)
 	openCodeProfileID := NormalizeDesiredOpenCodeProfileID(record.OpenCodeProfileID)
 	contract := NormalizeSurfaceBackendContract(SurfaceBackendContract{
 		ProductMode:       record.ProductMode,
 		Backend:           record.Backend,
-		CodexProviderID:   codexProviderID,
+		CodexProfileID:    codexProfileID,
 		ClaudeProfileID:   claudeProfileID,
 		OpenCodeProfileID: openCodeProfileID,
 	})
 	record.ProductMode = contract.ProductMode
 	record.Backend = contract.Backend
-	record.CodexProviderID = codexProviderID
+	record.CodexProfileID = codexProfileID
 	record.ClaudeProfileID = claudeProfileID
 	record.OpenCodeProfileID = openCodeProfileID
 	record.PromptOverride = NormalizePromptOverrideForBackend(record.Backend, record.PromptOverride)
@@ -64,9 +64,10 @@ func NormalizeBotCapabilitySettingsRecord(record BotCapabilitySettingsRecord) (B
 func CanonicalizeBotCapabilityProfileSelection(record BotCapabilitySettingsRecord) BotCapabilitySettingsRecord {
 	record.CodexProfileID = strings.TrimSpace(record.CodexProfileID)
 	if record.CodexProfileID == "" {
-		record.CodexProfileID = CodexProfileIDFromLegacyProviderID(record.CodexProviderID)
+		record.CodexProfileID = CodexProfileIDFromLegacyProviderID(record.LegacyCodexProviderID)
 	}
-	record.CodexProviderID = LegacyCodexProviderIDFromProfileID(record.CodexProfileID)
+	record.CodexProfileID = NormalizeDesiredCodexProfileID(record.CodexProfileID)
+	record.LegacyCodexProviderID = ""
 	return record
 }
 
@@ -119,7 +120,7 @@ func BotCapabilitySettingsContract(record BotCapabilitySettingsRecord) SurfaceBa
 	return NormalizeSurfaceBackendContract(SurfaceBackendContract{
 		ProductMode:       normalized.ProductMode,
 		Backend:           normalized.Backend,
-		CodexProviderID:   normalized.CodexProviderID,
+		CodexProfileID:    normalized.CodexProfileID,
 		ClaudeProfileID:   normalized.ClaudeProfileID,
 		OpenCodeProfileID: normalized.OpenCodeProfileID,
 	})

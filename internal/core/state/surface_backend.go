@@ -9,21 +9,21 @@ import (
 type SurfaceBackendContract struct {
 	ProductMode       ProductMode
 	Backend           agentproto.Backend
-	CodexProviderID   string
+	CodexProfileID    string
 	ClaudeProfileID   string
 	OpenCodeProfileID string
 }
 
 type InstanceBackendContract struct {
 	Backend           agentproto.Backend
-	CodexProviderID   string
+	CodexProfileID    string
 	ClaudeProfileID   string
 	OpenCodeProfileID string
 }
 
 type HeadlessLaunchContract struct {
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
@@ -40,11 +40,11 @@ func VSCodeSurfaceBackendContract() SurfaceBackendContract {
 	}
 }
 
-func HeadlessCodexSurfaceBackendContract(providerID string) SurfaceBackendContract {
+func HeadlessCodexSurfaceBackendContract(profileID string) SurfaceBackendContract {
 	return SurfaceBackendContract{
-		ProductMode:     ProductModeNormal,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: NormalizeDesiredCodexProviderID(providerID),
+		ProductMode:    ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: NormalizeDesiredCodexProfileID(profileID),
 	}
 }
 
@@ -64,31 +64,31 @@ func HeadlessOpenCodeSurfaceBackendContract(profileID string) SurfaceBackendCont
 	}
 }
 
-func PersistedSurfaceBackendContract(mode ProductMode, backend agentproto.Backend, codexProviderID, claudeProfileID, openCodeProfileID string) SurfaceBackendContract {
+func PersistedSurfaceBackendContract(mode ProductMode, backend agentproto.Backend, codexProfileID, claudeProfileID, openCodeProfileID string) SurfaceBackendContract {
 	mode = NormalizeProductMode(mode)
-	codexProviderID = strings.TrimSpace(codexProviderID)
+	codexProfileID = strings.TrimSpace(codexProfileID)
 	claudeProfileID = strings.TrimSpace(claudeProfileID)
 	openCodeProfileID = strings.TrimSpace(openCodeProfileID)
 	normalizedBackend := agentproto.NormalizeBackend(backend)
 	if IsHeadlessProductMode(mode) &&
 		claudeProfileID != "" &&
 		(strings.TrimSpace(string(backend)) == "" ||
-			(normalizedBackend == agentproto.BackendCodex && codexProviderID == "")) {
+			(normalizedBackend == agentproto.BackendCodex && codexProfileID == "")) {
 		return HeadlessClaudeSurfaceBackendContract(claudeProfileID)
 	}
 	return NormalizeSurfaceBackendContract(SurfaceBackendContract{
 		ProductMode:       mode,
 		Backend:           backend,
-		CodexProviderID:   codexProviderID,
+		CodexProfileID:    codexProfileID,
 		ClaudeProfileID:   claudeProfileID,
 		OpenCodeProfileID: openCodeProfileID,
 	})
 }
 
-func CodexInstanceBackendContract(providerID string) InstanceBackendContract {
+func CodexInstanceBackendContract(profileID string) InstanceBackendContract {
 	return InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: NormalizeCodexProviderID(providerID),
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: NormalizeCodexProfileID(profileID),
 	}
 }
 
@@ -106,10 +106,10 @@ func OpenCodeInstanceBackendContract(profileID string) InstanceBackendContract {
 	}
 }
 
-func HeadlessCodexLaunchContract(providerID string) HeadlessLaunchContract {
+func HeadlessCodexLaunchContract(profileID string) HeadlessLaunchContract {
 	return HeadlessLaunchContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: NormalizeCodexProviderID(providerID),
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: NormalizeCodexProfileID(profileID),
 	}
 }
 
@@ -150,7 +150,7 @@ func NormalizeSurfaceBackendContract(contract SurfaceBackendContract) SurfaceBac
 	case agentproto.BackendOpenCode:
 		return HeadlessOpenCodeSurfaceBackendContract(contract.OpenCodeProfileID)
 	default:
-		return HeadlessCodexSurfaceBackendContract(contract.CodexProviderID)
+		return HeadlessCodexSurfaceBackendContract(contract.CodexProfileID)
 	}
 }
 
@@ -161,7 +161,7 @@ func SurfaceDesiredBackendContract(surface *SurfaceConsoleRecord) SurfaceBackend
 	return NormalizeSurfaceBackendContract(SurfaceBackendContract{
 		ProductMode:       surface.ProductMode,
 		Backend:           surface.Backend,
-		CodexProviderID:   surface.CodexProviderID,
+		CodexProfileID:    surface.CodexProfileID,
 		ClaudeProfileID:   surface.ClaudeProfileID,
 		OpenCodeProfileID: surface.OpenCodeProfileID,
 	})
@@ -175,7 +175,7 @@ func NormalizeObservedInstanceBackendContract(contract InstanceBackendContract) 
 	case agentproto.BackendOpenCode:
 		return OpenCodeInstanceBackendContract(contract.OpenCodeProfileID)
 	default:
-		return CodexInstanceBackendContract(contract.CodexProviderID)
+		return CodexInstanceBackendContract(contract.CodexProfileID)
 	}
 }
 
@@ -185,7 +185,7 @@ func ObservedInstanceBackendContract(inst *InstanceRecord) InstanceBackendContra
 	}
 	return NormalizeObservedInstanceBackendContract(InstanceBackendContract{
 		Backend:           inst.Backend,
-		CodexProviderID:   inst.CodexProviderID,
+		CodexProfileID:    inst.CodexProfileID,
 		ClaudeProfileID:   inst.ClaudeProfileID,
 		OpenCodeProfileID: inst.OpenCodeProfileID,
 	})
@@ -201,7 +201,7 @@ func NormalizeHeadlessLaunchContract(contract HeadlessLaunchContract) HeadlessLa
 		normalized.OpenCodeAdmissionRef = NormalizeOpenCodeAdmissionRef(contract.OpenCodeAdmissionRef)
 		return normalized
 	default:
-		normalized := HeadlessCodexLaunchContract(contract.CodexProviderID)
+		normalized := HeadlessCodexLaunchContract(contract.CodexProfileID)
 		normalized.CodexAdmissionRef = NormalizeCodexAdmissionRef(contract.CodexAdmissionRef)
 		normalized.CodexConnectionContract = CloneCodexConnectionContract(contract.CodexConnectionContract)
 		normalized.CodexThreadPolicy = CloneCodexThreadPolicy(contract.CodexThreadPolicy)
@@ -225,7 +225,7 @@ func HeadlessLaunchContractFromSurface(surface *SurfaceConsoleRecord) HeadlessLa
 		}
 		return NormalizeHeadlessLaunchContract(launch)
 	}
-	return HeadlessCodexLaunchContract(EffectiveSurfaceCodexProviderID(desired))
+	return HeadlessCodexLaunchContract(EffectiveSurfaceCodexProfileID(desired))
 }
 
 func HeadlessLaunchContractFromPending(pending *HeadlessLaunchRecord) HeadlessLaunchContract {
@@ -234,7 +234,7 @@ func HeadlessLaunchContractFromPending(pending *HeadlessLaunchRecord) HeadlessLa
 	}
 	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
 		Backend:                 pending.Backend,
-		CodexProviderID:         pending.CodexProviderID,
+		CodexProfileID:          pending.CodexProfileID,
 		CodexAdmissionRef:       pending.CodexAdmissionRef,
 		CodexConnectionContract: pending.CodexConnectionContract,
 		CodexThreadPolicy:       pending.CodexThreadPolicy,
@@ -251,7 +251,7 @@ func HeadlessLaunchContractFromInstance(inst *InstanceRecord) HeadlessLaunchCont
 	}
 	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
 		Backend:                 inst.Backend,
-		CodexProviderID:         inst.CodexProviderID,
+		CodexProfileID:          inst.CodexProfileID,
 		CodexAdmissionRef:       inst.CodexAdmissionRef,
 		CodexConnectionContract: inst.CodexConnectionContract,
 		CodexThreadPolicy:       inst.CodexThreadPolicy,
@@ -262,15 +262,15 @@ func HeadlessLaunchContractFromInstance(inst *InstanceRecord) HeadlessLaunchCont
 	})
 }
 
-func EffectiveSurfaceCodexProviderID(contract SurfaceBackendContract) string {
+func EffectiveSurfaceCodexProfileID(contract SurfaceBackendContract) string {
 	contract = NormalizeSurfaceBackendContract(contract)
 	if !IsHeadlessProductMode(contract.ProductMode) || contract.Backend != agentproto.BackendCodex {
 		return ""
 	}
-	if strings.TrimSpace(contract.CodexProviderID) == "" {
-		return DefaultCodexProviderID
+	if strings.TrimSpace(contract.CodexProfileID) == "" {
+		return DefaultCodexProfileID
 	}
-	return NormalizeCodexProviderID(contract.CodexProviderID)
+	return NormalizeCodexProfileID(contract.CodexProfileID)
 }
 
 func EffectiveSurfaceClaudeProfileID(contract SurfaceBackendContract) string {
@@ -306,12 +306,12 @@ func EffectiveSurfaceBackend(surface *SurfaceConsoleRecord, inst *InstanceRecord
 	return desired.Backend
 }
 
-func NormalizeDesiredCodexProviderID(providerID string) string {
-	providerID = strings.TrimSpace(providerID)
-	if providerID == "" {
+func NormalizeDesiredCodexProfileID(profileID string) string {
+	profileID = strings.TrimSpace(profileID)
+	if profileID == "" {
 		return ""
 	}
-	return NormalizeCodexProviderID(providerID)
+	return NormalizeCodexProfileID(profileID)
 }
 
 func NormalizeDesiredClaudeProfileID(profileID string) string {

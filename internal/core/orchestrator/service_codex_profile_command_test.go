@@ -25,26 +25,26 @@ func materializeTestCodexProfiles(svc *Service, profiles ...state.CodexProfileSu
 	svc.MaterializeCodexProfiles(records)
 }
 
-func TestCodexProviderCommandSwitchesDetachedSurface(t *testing.T) {
+func TestCodexProfileCommandSwitchesDetachedSurface(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	surface := svc.root.Surfaces["surface-1"]
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/codexprovider team-proxy",
+		Text:             "/codexprofile team-proxy",
 	})
 
-	if surface.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected provider switch to team-proxy, got %#v", surface)
+	if surface.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected profile switch to team-proxy, got %#v", surface)
 	}
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_switched" {
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_profile_switched" {
 		t.Fatalf("expected single switched notice, got %#v", events)
 	}
 	if !strings.Contains(events[0].Notice.Text, "Team Proxy") || !strings.Contains(events[0].Notice.Text, "没有接管中的工作区") {
@@ -59,21 +59,21 @@ func TestCodexProfileCommandCanonicalSlashSwitchesBotProfile(t *testing.T) {
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
 		state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
 	)
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind: control.ActionCodexProviderCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
+		Kind: control.ActionCodexProfileCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
 		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile team-proxy",
 	})
 
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.CodexProfileID != "team-proxy" || record.CodexProviderID != "team-proxy" {
-		t.Fatalf("bot codex profile/provider = %q/%q, want team-proxy/team-proxy", record.CodexProfileID, record.CodexProviderID)
+	if record.CodexProfileID != "team-proxy" {
+		t.Fatalf("bot codex profile = %q, want team-proxy", record.CodexProfileID)
 	}
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_switched" ||
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_profile_switched" ||
 		!strings.Contains(events[0].Notice.Text, "Codex Profile") {
 		t.Fatalf("expected codex profile switched notice, got %#v", events)
 	}
@@ -86,7 +86,7 @@ func TestCodexProfileCommandClearsModelOverrideWhenSwitchingToFixedAPIProfile(t 
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "custom-profile", Kind: state.CodexProfileKindAPI, Name: "Custom API", Model: "provider-custom", ReasoningEffort: "high", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
 		state.ProductModeNormal, agentproto.BackendCodex, state.OAuthCodexProfileID, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
 	)
@@ -98,19 +98,19 @@ func TestCodexProfileCommandClearsModelOverrideWhenSwitchingToFixedAPIProfile(t 
 	}
 	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
 		GatewayID: "app-1", ProductMode: state.ProductModeNormal, Backend: agentproto.BackendCodex,
-		CodexProviderID: state.OAuthCodexProfileID, CodexProfileID: state.OAuthCodexProfileID,
+		CodexProfileID: state.OAuthCodexProfileID,
 		PromptOverride: surface.PromptOverride,
 		UpdatedAt:      now.Add(-time.Minute),
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind: control.ActionCodexProviderCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
+		Kind: control.ActionCodexProfileCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
 		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile custom-profile",
 	})
 
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.CodexProfileID != "custom-profile" || record.CodexProviderID != "custom-profile" {
-		t.Fatalf("bot codex profile/provider = %q/%q, want custom-profile", record.CodexProfileID, record.CodexProviderID)
+	if record.CodexProfileID != "custom-profile" {
+		t.Fatalf("bot codex profile = %q, want custom-profile", record.CodexProfileID)
 	}
 	if record.PromptOverride.Model != "" || record.PromptOverride.ReasoningEffort != "" || record.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("expected fixed profile switch to clear model/reasoning only, got %#v", record.PromptOverride)
@@ -118,7 +118,7 @@ func TestCodexProfileCommandClearsModelOverrideWhenSwitchingToFixedAPIProfile(t 
 	if surface.PromptOverride.Model != "" || surface.PromptOverride.ReasoningEffort != "" || surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("expected surface projection to clear model/reasoning only, got %#v", surface.PromptOverride)
 	}
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_switched" {
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_profile_switched" {
 		t.Fatalf("expected switched notice, got %#v", events)
 	}
 }
@@ -130,19 +130,19 @@ func TestCodexProfileCommandRejectsUnavailableOAuthProfile(t *testing.T) {
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: state.OAuthCodexProfileID, Kind: state.CodexProfileKindOAuth, Name: "ChatGPT 登录", Available: false, StatusCode: "missing"},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		Text:             "/codexprofile " + state.OAuthCodexProfileID,
 	})
 
-	if surface.CodexProviderID != state.DefaultCodexProviderID {
-		t.Fatalf("unavailable profile changed provider: %#v", surface)
+	if surface.CodexProfileID != state.DefaultCodexProfileID {
+		t.Fatalf("unavailable profile changed selected profile: %#v", surface)
 	}
 	if len(events) != 1 || events[0].PageView == nil ||
 		!containsPageSectionLine(events[0].PageView.NoticeSections, "未检测到 ChatGPT 登录") {
@@ -157,19 +157,19 @@ func TestCodexProfileCommandRejectsUnavailableAPIProfileWithFriendlyReason(t *te
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "expensivecodex", Kind: state.CodexProfileKindAPI, Name: "expensivecodex", Available: false, StatusCode: "profile_definition_incomplete"},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		Text:             "/codexprofile expensivecodex",
 	})
 
-	if surface.CodexProviderID != state.DefaultCodexProviderID {
-		t.Fatalf("unavailable profile changed provider: %#v", surface)
+	if surface.CodexProfileID != state.DefaultCodexProfileID {
+		t.Fatalf("unavailable profile changed selected profile: %#v", surface)
 	}
 	if len(events) != 1 || events[0].PageView == nil ||
 		!containsPageSectionLine(events[0].PageView.NoticeSections, "配置不完整") ||
@@ -189,36 +189,36 @@ func containsPageSectionLine(sections []control.FeishuCardTextSection, fragment 
 	return false
 }
 
-func TestCodexProviderCommandExplicitCurrentSelectionWritesCanonicalBotProfile(t *testing.T) {
+func TestCodexProfileCommandExplicitCurrentSelectionWritesCanonicalBotProfile(t *testing.T) {
 	now := time.Date(2026, 7, 31, 18, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
 		state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
 	)
 	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
 		GatewayID: "app-1", ProductMode: state.ProductModeNormal, Backend: agentproto.BackendCodex,
-		CodexProviderID: "team-proxy", UpdatedAt: now.Add(-time.Minute),
+		CodexProfileID: "team-proxy", UpdatedAt: now.Add(-time.Minute),
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind: control.ActionCodexProviderCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
-		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprovider team-proxy",
+		Kind: control.ActionCodexProfileCommand, SurfaceSessionID: "feishu:app-1:user:ou_user",
+		GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile team-proxy",
 	})
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.CodexProviderID != "team-proxy" || record.CodexProfileID != "team-proxy" || !record.UpdatedAt.Equal(now) {
+	if record.CodexProfileID != "team-proxy" || !record.UpdatedAt.Equal(now) {
 		t.Fatalf("explicit current selection did not write canonical profile evidence: %#v", record)
 	}
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_current" {
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_profile_current" {
 		t.Fatalf("explicit current selection should remain a runtime no-op: %#v", events)
 	}
 }
 
-func TestCodexProviderCommandRejectsBusySurface(t *testing.T) {
+func TestCodexProfileCommandRejectsBusySurface(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	surface := svc.root.Surfaces["surface-1"]
@@ -231,25 +231,25 @@ func TestCodexProviderCommandRejectsBusySurface(t *testing.T) {
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/codexprovider team-proxy",
+		Text:             "/codexprofile team-proxy",
 	})
 
-	if surface.CodexProviderID != state.DefaultCodexProviderID {
-		t.Fatalf("expected busy switch to keep current provider, got %#v", surface)
+	if surface.CodexProfileID != state.DefaultCodexProfileID {
+		t.Fatalf("expected busy switch to keep current profile, got %#v", surface)
 	}
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "headless_starting" {
 		t.Fatalf("expected busy rejection notice, got %#v", events)
 	}
 }
 
-func TestCodexProviderCommandRestartsWorkspace(t *testing.T) {
+func TestCodexProfileCommandRestartsWorkspace(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", state.PlanModeSettingOff)
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	workspaceKey := "/data/dl/repo"
@@ -259,28 +259,28 @@ func TestCodexProviderCommandRestartsWorkspace(t *testing.T) {
 	surface.PreparedThreadCWD = workspaceKey
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/codexprovider team-proxy",
+		Text:             "/codexprofile team-proxy",
 	})
 
-	if surface.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected switched provider, got %#v", surface)
+	if surface.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected switched profile, got %#v", surface)
 	}
 	if surface.PendingHeadless == nil {
 		t.Fatalf("expected workspace restart to schedule pending headless, got %#v", surface)
 	}
 	if surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
-		surface.PendingHeadless.CodexProviderID != "team-proxy" ||
+		surface.PendingHeadless.CodexProfileID != "team-proxy" ||
 		!surface.PendingHeadless.PrepareNewThread {
-		t.Fatalf("expected pending headless to carry provider and preserve new-thread-ready, got %#v", surface.PendingHeadless)
+		t.Fatalf("expected pending headless to carry profile and preserve new-thread-ready, got %#v", surface.PendingHeadless)
 	}
 	if len(events) != 3 {
 		t.Fatalf("expected switch notice + workspace restart notice + daemon command, got %#v", events)
 	}
-	if events[0].Notice == nil || events[0].Notice.Code != "codex_provider_switched" {
+	if events[0].Notice == nil || events[0].Notice.Code != "codex_profile_switched" {
 		t.Fatalf("expected switched notice first, got %#v", events)
 	}
 	if events[1].Notice == nil || events[1].Notice.Code != "workspace_route_restart_starting" {
@@ -289,27 +289,27 @@ func TestCodexProviderCommandRestartsWorkspace(t *testing.T) {
 	if events[2].DaemonCommand == nil || events[2].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
 		t.Fatalf("expected start headless daemon command third, got %#v", events)
 	}
-	if events[2].DaemonCommand.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected daemon command to carry switched provider, got %#v", events[2].DaemonCommand)
+	if events[2].DaemonCommand.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected daemon command to carry switched profile, got %#v", events[2].DaemonCommand)
 	}
 }
 
-func TestCodexProviderCommandRestartsPinnedCodexThread(t *testing.T) {
+func TestCodexProfileCommandRestartsPinnedCodexThread(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-visible",
-		DisplayName:     "repo",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
-		Source:          "headless",
-		Managed:         true,
-		Online:          true,
+		InstanceID:     "inst-visible",
+		DisplayName:    "repo",
+		WorkspaceRoot:  "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		ShortName:      "repo",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		Source:         "headless",
+		Managed:        true,
+		Online:         true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/repo", Loaded: true},
 		},
@@ -330,24 +330,24 @@ func TestCodexProviderCommandRestartsPinnedCodexThread(t *testing.T) {
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/codexprovider team-proxy",
+		Text:             "/codexprofile team-proxy",
 	})
 
-	if surface.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected switched provider, got %#v", surface)
+	if surface.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected switched profile, got %#v", surface)
 	}
 	if surface.PendingHeadless == nil {
 		t.Fatalf("expected pending headless restart, got %#v", surface)
 	}
-	if surface.PendingHeadless.ThreadID != "thread-1" || surface.PendingHeadless.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected pending headless to preserve thread and new provider, got %#v", surface.PendingHeadless)
+	if surface.PendingHeadless.ThreadID != "thread-1" || surface.PendingHeadless.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected pending headless to preserve thread and new profile, got %#v", surface.PendingHeadless)
 	}
 	if surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeThreadRestore {
-		t.Fatalf("expected exact-thread restart after provider switch, got %#v", surface.PendingHeadless)
+		t.Fatalf("expected exact-thread restart after profile switch, got %#v", surface.PendingHeadless)
 	}
 	if len(events) != 4 {
 		t.Fatalf("expected kill old headless + switch notice + restart notice + restart command, got %#v", events)
@@ -355,7 +355,7 @@ func TestCodexProviderCommandRestartsPinnedCodexThread(t *testing.T) {
 	if events[0].DaemonCommand == nil || events[0].DaemonCommand.Kind != control.DaemonCommandKillHeadless {
 		t.Fatalf("expected first event to kill old managed headless, got %#v", events)
 	}
-	if events[1].Notice == nil || events[1].Notice.Code != "codex_provider_switched" {
+	if events[1].Notice == nil || events[1].Notice.Code != "codex_profile_switched" {
 		t.Fatalf("expected switched notice second, got %#v", events)
 	}
 	if events[2].Notice == nil || events[2].Notice.Code != "headless_starting" {
@@ -364,8 +364,8 @@ func TestCodexProviderCommandRestartsPinnedCodexThread(t *testing.T) {
 	if events[3].DaemonCommand == nil || events[3].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
 		t.Fatalf("expected start headless fourth, got %#v", events)
 	}
-	if events[3].DaemonCommand.ThreadID != "thread-1" || events[3].DaemonCommand.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected start headless to resume original thread under new provider, got %#v", events[3].DaemonCommand)
+	if events[3].DaemonCommand.ThreadID != "thread-1" || events[3].DaemonCommand.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected start headless to resume original thread under new profile, got %#v", events[3].DaemonCommand)
 	}
 }
 
@@ -376,18 +376,18 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 		{ID: "custom-profile", Kind: state.CodexProfileKindAPI, Name: "Custom API", Model: "provider-custom", ReasoningEffort: "high", Available: true},
 		{ID: "gpt-profile", Kind: state.CodexProfileKindAPI, Name: "GPT", Model: "gpt-5.5", ReasoningEffort: "xhigh", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-custom",
-		DisplayName:     "repo",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "custom-profile",
-		Source:          "headless",
-		Managed:         true,
-		Online:          true,
+		InstanceID:     "inst-custom",
+		DisplayName:    "repo",
+		WorkspaceRoot:  "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		ShortName:      "repo",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "custom-profile",
+		Source:         "headless",
+		Managed:        true,
+		Online:         true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-1": {ThreadID: "thread-1", Name: "旧自定义模型会话", CWD: "/tmp/other-repo", Loaded: true},
 		},
@@ -403,14 +403,14 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
 		Text:             "/codexprofile gpt-profile",
 	})
 
-	if surface.CodexProviderID != "gpt-profile" {
+	if surface.CodexProfileID != "gpt-profile" {
 		t.Fatalf("expected switched profile, got %#v", surface)
 	}
 	if surface.PendingHeadless == nil {
@@ -422,7 +422,7 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 		!surface.PendingHeadless.PrepareNewThread {
 		t.Fatalf("expected cross-model profile switch to restart current workspace route for a new thread, got %#v", surface.PendingHeadless)
 	}
-	if surface.PendingHeadless.CodexProviderID != "gpt-profile" {
+	if surface.PendingHeadless.CodexProfileID != "gpt-profile" {
 		t.Fatalf("expected pending headless to carry target profile, got %#v", surface.PendingHeadless)
 	}
 	if surface.PendingHeadless.WorkspaceKey != "/data/dl/repo" || surface.PendingHeadless.ThreadCWD != "/data/dl/repo" || surface.ClaimedWorkspaceKey != "/data/dl/repo" {
@@ -434,7 +434,7 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 	if events[0].DaemonCommand == nil || events[0].DaemonCommand.Kind != control.DaemonCommandKillHeadless {
 		t.Fatalf("expected first event to kill old managed headless, got %#v", events)
 	}
-	if events[1].Notice == nil || events[1].Notice.Code != "codex_provider_switched" {
+	if events[1].Notice == nil || events[1].Notice.Code != "codex_profile_switched" {
 		t.Fatalf("expected switched notice second, got %#v", events)
 	}
 	if events[2].Notice == nil || events[2].Notice.Code != "codex_model_group_new_thread" {
@@ -446,7 +446,7 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 	if events[4].DaemonCommand == nil ||
 		events[4].DaemonCommand.Kind != control.DaemonCommandStartHeadless ||
 		events[4].DaemonCommand.ThreadID != "" ||
-		events[4].DaemonCommand.CodexProviderID != "gpt-profile" ||
+		events[4].DaemonCommand.CodexProfileID != "gpt-profile" ||
 		events[4].DaemonCommand.WorkspaceKey != "/data/dl/repo" ||
 		events[4].DaemonCommand.ThreadCWD != "/data/dl/repo" {
 		t.Fatalf("expected start headless to create a new thread under target profile, got %#v", events[4])
@@ -454,17 +454,17 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 
 	svc.root.Instances["inst-custom"].Online = false
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      pending.InstanceID,
-		DisplayName:     "repo",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "gpt-profile",
-		Source:          "headless",
-		Managed:         true,
-		Online:          true,
-		Threads:         map[string]*state.ThreadRecord{},
+		InstanceID:     pending.InstanceID,
+		DisplayName:    "repo",
+		WorkspaceRoot:  "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		ShortName:      "repo",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "gpt-profile",
+		Source:         "headless",
+		Managed:        true,
+		Online:         true,
+		Threads:        map[string]*state.ThreadRecord{},
 	})
 	connectEvents := svc.ApplyInstanceConnected(pending.InstanceID)
 	if surface.PendingHeadless != nil ||
@@ -500,27 +500,27 @@ func TestCodexProfileCommandCrossModelGroupRestartsSameWorkspaceForNewThread(t *
 		command.Target.CWD != "/data/dl/repo" {
 		t.Fatalf("expected next text to start a new thread in the same workspace under target profile, got events=%#v command=%#v", textEvents, command)
 	}
-	if got := svc.root.Instances[pending.InstanceID].CodexProviderID; got != "gpt-profile" {
+	if got := svc.root.Instances[pending.InstanceID].CodexProfileID; got != "gpt-profile" {
 		t.Fatalf("expected connected headless instance to keep target profile, got %q", got)
 	}
 }
 
-func TestCodexProviderCommandRejectedInVSCodeMode(t *testing.T) {
+func TestCodexProfileCommandRejectedInVSCodeMode(t *testing.T) {
 	now := time.Date(2026, 5, 1, 11, 25, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeVSCodeSurfaceForTest(svc, "surface-vscode")
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-vscode",
 		ChatID:           "chat-vscode",
 		ActorUserID:      "user-vscode",
-		Text:             "/codexprovider team-proxy",
+		Text:             "/codexprofile team-proxy",
 	})
 
-	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_provider_mode_required" {
-		t.Fatalf("expected vscode mode to reject codex provider switch, got %#v", events)
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "codex_profile_mode_required" {
+		t.Fatalf("expected vscode mode to reject codex profile switch, got %#v", events)
 	}
 	if !strings.Contains(events[0].Notice.Text, "/mode codex") {
 		t.Fatalf("expected guidance to switch to codex mode, got %#v", events[0].Notice)

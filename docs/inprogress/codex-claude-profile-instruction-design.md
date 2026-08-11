@@ -1,8 +1,8 @@
 # Codex / Claude Profile instruction（角色提示词）配置设计
 
 > Type: `inprogress`
-> Updated: `2026-08-08`
-> Summary: Codex 侧改用 app-server `thread/start` / `thread/resume` 的 `developerInstructions` 承载 profile instruction，不再通过 managed models.json 修改 `instructions_template`；Claude 侧继续通过 SDK 初始化控制消息追加 `appendSystemPrompt`。对应 issue #823/#839。
+> Updated: `2026-08-11`
+> Summary: 同步 Codex Profile UI 文件名，并保留 profile instruction 当前承载设计。
 
 ## 1. 背景
 
@@ -131,7 +131,7 @@
 
 - `web/src/lib/types.ts`：`ClaudeProfileSummary` / `ClaudeProfileWriteRequest` / `CodexProfileSummary` / `CodexProfileWriteRequest` 增加 `instruction?`。
 - `web/src/routes/admin/ClaudeProfileSection.tsx`：draft、textarea、计数、校验、payload。
-- `web/src/routes/admin/CodexProviderSection.tsx`：同上。
+- `web/src/routes/admin/CodexProfileSection.tsx`：同上。
 - 组件测试：两个 Section 的渲染、计数、超限阻止、保存 payload。
 
 ## 7. 测试计划

@@ -187,7 +187,7 @@ func instCodexProfileID(inst *state.InstanceRecord) string {
 	if contract := state.CloneCodexConnectionContract(inst.CodexConnectionContract); contract != nil && strings.TrimSpace(contract.ProfileRef.ID) != "" {
 		return strings.TrimSpace(contract.ProfileRef.ID)
 	}
-	return state.CodexProfileIDFromLegacyProviderID(inst.CodexProviderID)
+	return state.NormalizeCodexProfileID(inst.CodexProfileID)
 }
 
 func codexModelGroup(model string) string {

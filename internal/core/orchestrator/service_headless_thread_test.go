@@ -86,13 +86,13 @@ func TestDetachedUseFreezesHeadlessLaunchContractIntoPendingAndCommand(t *testin
 	if pending == nil {
 		t.Fatalf("expected pending headless launch, got %#v", svc.root.Surfaces["surface-1"])
 	}
-	if pending.Backend != agentproto.BackendClaude || pending.CodexProviderID != "" || pending.ClaudeProfileID != "devseek" {
+	if pending.Backend != agentproto.BackendClaude || pending.CodexProfileID != "" || pending.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected pending launch to freeze claude launch contract, got %#v", pending)
 	}
 	if pending.WorkspaceKey != "/data/dl/repo" || pending.ThreadCWD != "/data/dl/repo/web" {
 		t.Fatalf("expected pending launch to separate workspace root from last active cwd, got %#v", pending)
 	}
-	if got := events[1].DaemonCommand; got.Backend != agentproto.BackendClaude || got.CodexProviderID != "" || got.ClaudeProfileID != "devseek" {
+	if got := events[1].DaemonCommand; got.Backend != agentproto.BackendClaude || got.CodexProfileID != "" || got.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected daemon command to match frozen launch contract, got %#v", got)
 	} else if got.WorkspaceKey != "/data/dl/repo" || got.ThreadCWD != "/data/dl/repo/web" {
 		t.Fatalf("expected daemon command to launch from stable workspace root while preserving last active cwd, got %#v", got)
@@ -132,7 +132,7 @@ func TestDetachedUseFreezesCodexAdmissionRefIntoPendingAndCommand(t *testing.T) 
 		t.Fatalf("expected detached /use to start headless launch, got %#v", events)
 	}
 	surface := svc.root.Surfaces["surface-1"]
-	surface.CodexProviderID = "other-profile"
+	surface.CodexProfileID = "other-profile"
 	surface.CodexAdmissionRef = &state.CodexAdmissionRef{
 		ProfileRef:           state.CodexProfileRef{ID: "other-profile", Revision: 1},
 		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "other-profile", Revision: 1},
@@ -195,13 +195,13 @@ func TestDetachedUseFreezesOpenCodeAdmissionRefIntoPendingAndCommand(t *testing.
 	if pending == nil || pending.Backend != agentproto.BackendOpenCode || pending.OpenCodeProfileID != "op_team" || pending.OpenCodeAdmissionRef == nil || *pending.OpenCodeAdmissionRef != want {
 		t.Fatalf("expected pending launch to freeze opencode profile/admission ref, got %#v", pending)
 	}
-	if pending.CodexProviderID != "" || pending.CodexAdmissionRef != nil || pending.ClaudeProfileID != "" {
+	if pending.CodexProfileID != "" || pending.CodexAdmissionRef != nil || pending.ClaudeProfileID != "" {
 		t.Fatalf("expected pending launch to clear inactive backend fields, got %#v", pending)
 	}
 	if got := events[1].DaemonCommand; got.Backend != agentproto.BackendOpenCode || got.OpenCodeProfileID != "op_team" || got.OpenCodeAdmissionRef == nil || *got.OpenCodeAdmissionRef != want {
 		t.Fatalf("expected daemon command to carry frozen opencode launch contract, got %#v", got)
 	}
-	if got := events[1].DaemonCommand; got.CodexProviderID != "" || got.CodexAdmissionRef != nil || got.ClaudeProfileID != "" {
+	if got := events[1].DaemonCommand; got.CodexProfileID != "" || got.CodexAdmissionRef != nil || got.ClaudeProfileID != "" {
 		t.Fatalf("expected daemon command to clear inactive backend fields, got %#v", got)
 	}
 }
@@ -223,11 +223,11 @@ func TestCodexInstanceCompatibilityRequiresMatchingConnectionContract(t *testing
 	}
 
 	compatible := svc.surfaceInstanceCompatibleForAttach(svc.root.Surfaces["surface-1"], &state.InstanceRecord{
-		InstanceID:      "inst-old",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "team-proxy",
+		InstanceID:     "inst-old",
+		WorkspaceRoot:  "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "team-proxy",
 		CodexAdmissionRef: &state.CodexAdmissionRef{
 			ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
 			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},

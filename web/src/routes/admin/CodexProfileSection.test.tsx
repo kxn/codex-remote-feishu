@@ -2,11 +2,11 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
-import { CodexProviderSection } from "./CodexProviderSection";
+import { CodexProfileSection } from "./CodexProfileSection";
 import { makeCodexProfile } from "../../test/fixtures";
 import { installMockFetch } from "../../test/http";
 
-describe("CodexProviderSection", () => {
+describe("CodexProfileSection", () => {
   it("uses canonical profile APIs, etags, review model, and context preference", async () => {
     const user = userEvent.setup();
     const initialProfiles = [
@@ -78,10 +78,10 @@ describe("CodexProviderSection", () => {
     function Harness() {
       const [profiles, setProfiles] = useState(initialProfiles);
       return (
-        <CodexProviderSection
-          providers={profiles}
+        <CodexProfileSection
+          profiles={profiles}
           loadError=""
-          setProviders={setProfiles}
+          setProfiles={setProfiles}
           onReload={async () => {}}
         />
       );
@@ -214,10 +214,10 @@ describe("CodexProviderSection", () => {
     function Harness() {
       const [profiles, setProfiles] = useState(initialProfiles);
       return (
-        <CodexProviderSection
-          providers={profiles}
+        <CodexProfileSection
+          profiles={profiles}
           loadError=""
-          setProviders={setProfiles}
+          setProfiles={setProfiles}
           onReload={async () => {}}
         />
       );
@@ -320,10 +320,10 @@ describe("CodexProviderSection", () => {
     function Harness() {
       const [profiles, setProfiles] = useState(initialProfiles);
       return (
-        <CodexProviderSection
-          providers={profiles}
+        <CodexProfileSection
+          profiles={profiles}
           loadError=""
-          setProviders={setProfiles}
+          setProfiles={setProfiles}
           onReload={async () => {}}
         />
       );
@@ -342,8 +342,8 @@ describe("CodexProviderSection", () => {
 
   it("does not offer a no-op save for readonly profiles without context editing", async () => {
     render(
-      <CodexProviderSection
-        providers={[
+      <CodexProfileSection
+        profiles={[
           makeCodexProfile({
             id: "old-codex",
             name: "旧版 Codex",
@@ -355,7 +355,7 @@ describe("CodexProviderSection", () => {
           }),
         ]}
         loadError=""
-        setProviders={() => {}}
+        setProfiles={() => {}}
         onReload={async () => {}}
       />,
     );
@@ -403,8 +403,8 @@ describe("CodexProviderSection", () => {
     });
 
     render(
-      <CodexProviderSection
-        providers={[
+      <CodexProfileSection
+        profiles={[
           makeCodexProfile(),
           makeCodexProfile({
             id: "team-proxy",
@@ -417,7 +417,7 @@ describe("CodexProviderSection", () => {
           }),
         ]}
         loadError=""
-        setProviders={() => {}}
+        setProfiles={() => {}}
         onReload={async () => {}}
       />,
     );
@@ -439,8 +439,8 @@ describe("CodexProviderSection", () => {
   it("shows context request and observed clamp feedback without guessing effect", async () => {
     const user = userEvent.setup();
     render(
-      <CodexProviderSection
-        providers={[
+      <CodexProfileSection
+        profiles={[
           makeCodexProfile({
             id: "long-context",
             name: "Long Context",
@@ -473,7 +473,7 @@ describe("CodexProviderSection", () => {
           }),
         ]}
         loadError=""
-        setProviders={() => {}}
+        setProfiles={() => {}}
         onReload={async () => {}}
       />,
     );
@@ -490,10 +490,10 @@ describe("CodexProviderSection", () => {
   it("requires model and open reasoning for API profiles", async () => {
     const user = userEvent.setup();
     render(
-      <CodexProviderSection
-        providers={[makeCodexProfile()]}
+      <CodexProfileSection
+        profiles={[makeCodexProfile()]}
         loadError=""
-        setProviders={() => {}}
+        setProfiles={() => {}}
         onReload={async () => {}}
       />,
     );
@@ -573,10 +573,10 @@ describe("CodexProviderSection", () => {
     function Harness() {
       const [profiles, setProfiles] = useState(initialProfiles);
       return (
-        <CodexProviderSection
-          providers={profiles}
+        <CodexProfileSection
+          profiles={profiles}
           loadError=""
-          setProviders={setProfiles}
+          setProfiles={setProfiles}
           onReload={async () => {}}
         />
       );
@@ -658,10 +658,10 @@ describe("CodexProviderSection", () => {
     function Harness() {
       const [profiles, setProfiles] = useState(initialProfiles);
       return (
-        <CodexProviderSection
-          providers={profiles}
+        <CodexProfileSection
+          profiles={profiles}
           loadError=""
-          setProviders={setProfiles}
+          setProfiles={setProfiles}
           onReload={async () => {}}
         />
       );

@@ -217,10 +217,6 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/desktop-session/quit", a.requireAdmin(a.handleDesktopSessionQuit))
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
-	mux.HandleFunc("GET /api/admin/codex/providers", a.requireAdmin(a.handleCodexProvidersList))
-	mux.HandleFunc("POST /api/admin/codex/providers", a.requireAdmin(a.handleCodexProviderCreate))
-	mux.HandleFunc("PUT /api/admin/codex/providers/{id}", a.requireAdmin(a.handleCodexProviderUpdate))
-	mux.HandleFunc("DELETE /api/admin/codex/providers/{id}", a.requireAdmin(a.handleCodexProviderDelete))
 	mux.HandleFunc("GET /api/admin/codex/profiles", a.requireAdmin(a.handleCodexProfilesList))
 	mux.HandleFunc("POST /api/admin/codex/profiles", a.requireAdmin(a.handleCodexProfileCreate))
 	mux.HandleFunc("PUT /api/admin/codex/profiles/{id}", a.requireAdmin(a.handleCodexProfileUpdate))
@@ -273,6 +269,9 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/admin/vscode/apply", a.requireAdmin(a.handleVSCodeApply))
 	mux.HandleFunc("POST /api/admin/vscode/disable", a.requireAdmin(a.handleVSCodeDisable))
 	mux.HandleFunc("POST /api/admin/vscode/reinstall-shim", a.requireAdmin(a.handleVSCodeReinstallShim))
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		mux.HandleFunc(method+" /api/", handleUnknownAPIPath)
+	}
 	mux.HandleFunc("GET /v1/status", a.requireAdmin(a.handleStatus))
 }
 
@@ -357,6 +356,13 @@ func (a *App) handleRootPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeRootHelpPage(w)
+}
+
+func handleUnknownAPIPath(w http.ResponseWriter, _ *http.Request) {
+	writeAPIError(w, http.StatusNotFound, apiError{
+		Code:    "api_not_found",
+		Message: "api endpoint not found",
+	})
 }
 
 func (a *App) handleAdminPage(w http.ResponseWriter, r *http.Request) {

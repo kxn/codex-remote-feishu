@@ -56,7 +56,7 @@ type Config struct {
 	WorkspaceKey          string
 	ShortName             string
 	Backend               agentproto.Backend
-	CodexProviderID       string
+	CodexProfileID        string
 	ClaudeProfileID       string
 	ClaudeReasoningEffort string
 	OpenCodeProfileID     string
@@ -153,7 +153,7 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 		WorkspaceKey:          state.ResolveWorkspaceKey(workspaceRoot),
 		ShortName:             shortName,
 		Backend:               backend,
-		CodexProviderID:       state.NormalizeCodexProviderID(os.Getenv(config.CodexRuntimeProviderIDEnv)),
+		CodexProfileID:        state.NormalizeCodexProfileID(os.Getenv(config.CodexRuntimeProfileIDEnv)),
 		ClaudeProfileID:       state.NormalizeClaudeProfileID(os.Getenv(config.ClaudeRuntimeProfileIDEnv)),
 		ClaudeReasoningEffort: state.NormalizeReasoningEffort(os.Getenv(config.ClaudeEffortLevelEnv)),
 		OpenCodeProfileID:     state.NormalizeOpenCodeProfileID(os.Getenv(config.OpenCodeRuntimeProfileIDEnv)),
@@ -530,7 +530,7 @@ func (a *App) relayHello() agentproto.Hello {
 	case agentproto.BackendOpenCode:
 		instance.OpenCodeProfileID = strings.TrimSpace(a.config.OpenCodeProfileID)
 	default:
-		instance.CodexProviderID = strings.TrimSpace(a.config.CodexProviderID)
+		instance.CodexProfileID = strings.TrimSpace(a.config.CodexProfileID)
 	}
 	return agentproto.Hello{
 		Protocol:             agentproto.WireProtocol,

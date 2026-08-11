@@ -77,14 +77,14 @@ func TestBuildConfigCommandViewStatePopulatesClaudeProfileOptions(t *testing.T) 
 func TestBuildConfigCommandViewStatePopulatesCodexProfileOptions(t *testing.T) {
 	now := time.Date(2026, 5, 1, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 		{ID: "team-proxy-2", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 	})
 
-	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProfile)
 	if !ok {
 		t.Fatal("expected codex profile config flow")
 	}
@@ -187,14 +187,14 @@ func TestApplySurfaceActionRejectsOpenCodePromptSettingCommands(t *testing.T) {
 func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableStatus(t *testing.T) {
 	now := time.Date(2026, 8, 1, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "ignored", Available: true},
 		{ID: state.OAuthCodexProfileID, Kind: state.CodexProfileKindOAuth, Name: "ChatGPT 登录", Available: false, StatusCode: "missing"},
 		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 	})
 
-	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProfile)
 	if !ok {
 		t.Fatal("expected codex profile config flow")
 	}
@@ -223,13 +223,13 @@ func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableSt
 func TestBuildConfigCommandViewStateMapsUnavailableAPIProfileReason(t *testing.T) {
 	now := time.Date(2026, 8, 1, 10, 35, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "expensivecodex", Kind: state.CodexProfileKindAPI, Name: "expensivecodex", Available: false, StatusCode: "profile_definition_incomplete"},
 	})
 
-	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProfile)
 	if !ok {
 		t.Fatal("expected codex profile config flow")
 	}
@@ -333,7 +333,7 @@ func TestBuildConfigCommandViewStateUsesFixedCodexAPIProfileModelOptions(t *test
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "custom-profile", Kind: state.CodexProfileKindAPI, Name: "Custom API", Model: "provider-custom", ReasoningEffort: "high", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -372,7 +372,7 @@ func TestBuildConfigCommandViewStateUsesDynamicCatalogForDeepSeekCodexAPIProfile
 			BaseURL: "https://api.deepseek.com/", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true,
 		},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -405,7 +405,7 @@ func TestBuildConfigCommandViewStateKeepsDynamicCatalogForGPTCodexAPIProfile(t *
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "gpt-profile", Kind: state.CodexProfileKindAPI, Name: "GPT Proxy", Model: "gpt-5.5", ReasoningEffort: "high", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "gpt-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "gpt-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
 	svc.UpsertInstance(&state.InstanceRecord{
