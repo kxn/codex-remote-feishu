@@ -206,13 +206,13 @@ func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifec
 func targetPickerWorktreeElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	lane := targetPickerWorktreeWorkspaceLane(view)
 	plan := targetPickerPlanSingleLaneForm(view, daemonLifecycleID, lane, func(page paginatedSelectPage) []map[string]any {
-		form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, page))
+		form := targetPickerWorktreeFormElement(view, daemonLifecycleID, lane.renderElements(daemonLifecycleID, page))
 		if len(form) == 0 {
 			return nil
 		}
 		return []map[string]any{form}
 	})
-	form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, plan.Page))
+	form := targetPickerWorktreeFormElement(view, daemonLifecycleID, lane.renderElements(daemonLifecycleID, plan.Page))
 	if len(form) == 0 {
 		return nil
 	}

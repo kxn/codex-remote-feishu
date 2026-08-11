@@ -96,10 +96,6 @@ func pathPickerFileLane(view control.FeishuPathPickerView) paginatedSelectFlowLa
 	}
 }
 
-func pathPickerPaginatedLaneElements(lane paginatedSelectFlowLane, daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
-	return lane.renderElements(daemonLifecycleID, page)
-}
-
 func pathPickerPlanSingleLane(
 	view control.FeishuPathPickerView,
 	lane paginatedSelectFlowLane,
@@ -185,11 +181,11 @@ func pathPickerFileModeElementsWithPages(
 
 	directoryLane := pathPickerDirectoryLane(view)
 	if directoryPage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(directoryLane, daemonLifecycleID, *directoryPage)...)
+		elements = append(elements, directoryLane.renderElements(daemonLifecycleID, *directoryPage)...)
 	}
 	fileLane := pathPickerFileLane(view)
 	if filePage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(fileLane, daemonLifecycleID, *filePage)...)
+		elements = append(elements, fileLane.renderElements(daemonLifecycleID, *filePage)...)
 	}
 
 	if len(directoryLane.Options) == 0 {
@@ -238,7 +234,7 @@ func pathPickerDirectoryModeElementsWithPage(
 
 	directoryLane := pathPickerDirectoryLane(view)
 	if directoryPage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(directoryLane, daemonLifecycleID, *directoryPage)...)
+		elements = append(elements, directoryLane.renderElements(daemonLifecycleID, *directoryPage)...)
 	}
 	if len(directoryLane.Options) == 0 {
 		elements = append(elements, map[string]any{
@@ -283,7 +279,7 @@ func pathPickerOwnerSubpageDirectoryModeElementsWithPage(
 	}
 	directoryLane := pathPickerDirectoryLane(view)
 	if directoryPage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(directoryLane, daemonLifecycleID, *directoryPage)...)
+		elements = append(elements, directoryLane.renderElements(daemonLifecycleID, *directoryPage)...)
 	}
 	if len(directoryLane.Options) == 0 {
 		elements = append(elements, map[string]any{

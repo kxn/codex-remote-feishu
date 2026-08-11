@@ -556,7 +556,7 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 		}
 	}
 	events := s.enterTargetPickerNewThread(surface, finalPath)
-	filtered := targetPickerFilteredFollowupEvents(events)
+	filtered := filterPickerFollowupEvents(events)
 	if targetPickerNewThreadReady(surface, finalPath) {
 		return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "工作区已经准备完成，下一条文本会直接开启新会话。", false, filtered)
 	}
@@ -577,7 +577,7 @@ func (s *Service) confirmTargetPickerLocalDirectory(surface *state.SurfaceConsol
 		)
 		return append(processing, filtered...)
 	}
-	failureText := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), "当前目录暂时无法接入为工作区，请重新选择后再试。"))
+	failureText := strings.TrimSpace(xutil.FirstNonEmpty(firstNoticeText(events), "当前目录暂时无法接入为工作区，请重新选择后再试。"))
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "接入失败", failureText, false, filtered)
 }
 

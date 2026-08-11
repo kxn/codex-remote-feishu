@@ -132,7 +132,7 @@ func (s *Service) confirmTargetPickerWorktree(surface *state.SurfaceConsoleRecor
 	}
 	finalPath := strings.TrimSpace(worktreeState.FinalPath)
 	if blocked := s.preflightFeishuRoomWorkspaceChange(surface, finalPath); blocked != nil {
-		message := strings.TrimSpace(targetPickerFirstNoticeText(blocked))
+		message := strings.TrimSpace(firstNoticeText(blocked))
 		if message == "" {
 			message = "当前群 workspace 暂时不能切换，请稍后重试。"
 		}
@@ -191,7 +191,7 @@ func (s *Service) CompleteTargetPickerWorktreeCreate(surfaceSessionID, pickerID,
 	record.WorktreeFinalPath = workspaceKey
 	pendingText := s.takePendingTextInput(surface)
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
-	filtered := targetPickerFilteredFollowupEvents(events)
+	filtered := filterPickerFollowupEvents(events)
 	if targetPickerNewThreadReady(surface, workspaceKey) {
 		status := targetPickerWorktreeCreateSuccessStatus(workspaceKey)
 		result := s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
@@ -204,7 +204,7 @@ func (s *Service) CompleteTargetPickerWorktreeCreate(surfaceSessionID, pickerID,
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingWorktreeCreate, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)
 		return append(processing, filtered...)
 	}
-	reason := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("worktree 已创建到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“从目录新建”继续接入。", workspaceKey)))
+	reason := strings.TrimSpace(xutil.FirstNonEmpty(firstNoticeText(events), fmt.Sprintf("worktree 已创建到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“从目录新建”继续接入。", workspaceKey)))
 	status := targetPickerWorktreeCreatePostCreateFailureStatus(workspaceKey, reason)
 	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "创建失败", "", status.Sections, status.Footer, false, filtered)
 }

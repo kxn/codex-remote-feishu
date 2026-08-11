@@ -38,7 +38,7 @@ func (s *Service) CompleteTargetPickerGitImport(surfaceSessionID, pickerID, work
 	}
 	record.GitFinalPath = workspaceKey
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
-	filtered := targetPickerFilteredFollowupEvents(events)
+	filtered := filterPickerFollowupEvents(events)
 	if targetPickerNewThreadReady(surface, workspaceKey) {
 		status := targetPickerGitImportSuccessStatus(workspaceKey)
 		return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
@@ -49,7 +49,7 @@ func (s *Service) CompleteTargetPickerGitImport(surfaceSessionID, pickerID, work
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingGitImport, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)
 		return append(processing, filtered...)
 	}
-	reason := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("仓库已拉取到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“添加工作区 / 本地目录”继续接入。", workspaceKey)))
+	reason := strings.TrimSpace(xutil.FirstNonEmpty(firstNoticeText(events), fmt.Sprintf("仓库已拉取到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“添加工作区 / 本地目录”继续接入。", workspaceKey)))
 	status := targetPickerGitImportPostCloneFailureStatus(workspaceKey, reason)
 	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "导入失败", "", status.Sections, status.Footer, false, filtered)
 }
