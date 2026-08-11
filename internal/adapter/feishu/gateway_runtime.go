@@ -157,7 +157,7 @@ func (g *LiveGateway) emitState(state GatewayState, err error) {
 func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
 	for i := range operations {
 		operation := &operations[i]
-		if operation.GatewayID != "" && normalizeGatewayID(operation.GatewayID) != g.config.GatewayID {
+		if operation.GatewayID != "" && gatewaypkg.NormalizeGatewayID(operation.GatewayID) != g.config.GatewayID {
 			return fmt.Errorf("gateway apply mismatch: operation gateway=%s gateway=%s", operation.GatewayID, g.config.GatewayID)
 		}
 		if err := g.applyOne(ctx, operation); err != nil {

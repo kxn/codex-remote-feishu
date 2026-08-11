@@ -3,6 +3,7 @@ package feishu
 import (
 	"fmt"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
@@ -80,7 +81,7 @@ func (c *MultiGatewayController) resolveGatewayTarget(target eventcontract.Targe
 		case eventcontract.GatewaySelectionAllowSoleGatewayFallback:
 			gatewayID = c.soleGatewayID()
 		case eventcontract.GatewaySelectionAllowSurfaceDerived:
-			gatewayID = normalizeGatewayID(gatewayIDFromSurface(target.SurfaceSessionID))
+			gatewayID = gatewaypkg.NormalizeGatewayID(gatewayIDFromSurface(target.SurfaceSessionID))
 		}
 	}
 

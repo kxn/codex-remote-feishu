@@ -8,6 +8,7 @@ import (
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
@@ -100,7 +101,7 @@ type feishuPostNode struct {
 }
 
 func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
-	config.GatewayID = normalizeGatewayID(config.GatewayID)
+	config.GatewayID = gatewaypkg.NormalizeGatewayID(config.GatewayID)
 	client := NewLarkClientWithOpenBaseURL(config.AppID, config.AppSecret, config.Domain)
 	gateway := &LiveGateway{
 		config:    config,

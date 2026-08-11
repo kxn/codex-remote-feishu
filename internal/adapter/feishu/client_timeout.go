@@ -1,7 +1,6 @@
 package feishu
 
 import (
-	"context"
 	"strings"
 	"time"
 
@@ -36,15 +35,4 @@ func NewLarkClientWithOpenBaseURL(appID, appSecret, openBaseURL string) *lark.Cl
 		options = append(options, lark.WithOpenBaseUrl(openBaseURL))
 	}
 	return NewLarkClient(appID, appSecret, options...)
-}
-
-func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	base := context.Background()
-	if parent != nil {
-		base = parent
-	}
-	if timeout <= 0 {
-		return context.WithCancel(base)
-	}
-	return context.WithTimeout(base, timeout)
 }

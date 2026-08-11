@@ -3,6 +3,7 @@ package preview
 import (
 	"context"
 	"fmt"
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"os"
 	"regexp"
 	"strings"
@@ -138,7 +139,7 @@ type PreviewDriveCleanupResult struct {
 	Summary                     PreviewDriveSummary `json:"summary"`
 }
 
-type driveAPIError struct {
+type DriveAPIError struct {
 	API       string
 	Code      int
 	Msg       string
@@ -146,7 +147,7 @@ type driveAPIError struct {
 	LogID     string
 }
 
-func (e *driveAPIError) Error() string {
+func (e *DriveAPIError) Error() string {
 	if e == nil {
 		return ""
 	}
@@ -157,7 +158,7 @@ func (e *driveAPIError) Error() string {
 }
 
 func NewDriveMarkdownPreviewer(api previewDriveAPI, cfg MarkdownPreviewConfig) *DriveMarkdownPreviewer {
-	cfg.GatewayID = normalizeGatewayID(cfg.GatewayID)
+	cfg.GatewayID = gatewaypkg.NormalizeGatewayID(cfg.GatewayID)
 	if cfg.MaxFileBytes <= 0 {
 		cfg.MaxFileBytes = defaultPreviewMaxFileBytes
 	}

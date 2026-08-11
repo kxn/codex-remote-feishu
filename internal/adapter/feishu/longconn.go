@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	"github.com/larksuite/oapi-sdk-go/v3/event/dispatcher"
 	larkws "github.com/larksuite/oapi-sdk-go/v3/ws"
@@ -85,7 +86,7 @@ type gatewayWSRunner struct {
 }
 
 func newGatewayWSRunner(config LiveGatewayConfig, dispatcher *dispatcher.EventDispatcher, onState func(GatewayState, error)) *gatewayWSRunner {
-	config.GatewayID = normalizeGatewayID(config.GatewayID)
+	config.GatewayID = gatewaypkg.NormalizeGatewayID(config.GatewayID)
 	if strings.TrimSpace(config.Domain) == "" {
 		config.Domain = lark.FeishuBaseUrl
 	}

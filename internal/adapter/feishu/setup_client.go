@@ -3,6 +3,7 @@ package feishu
 import (
 	"strings"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 )
 
@@ -41,7 +42,7 @@ func (c SetupClientConfig) liveGatewayConfig() LiveGatewayConfig {
 }
 
 func NewSetupClient(config SetupClientConfig) *SetupClient {
-	config.GatewayID = normalizeGatewayID(config.GatewayID)
+	config.GatewayID = gatewaypkg.NormalizeGatewayID(config.GatewayID)
 	sdkClient := NewLarkClientWithOpenBaseURL(config.AppID, config.AppSecret, setupHTTPDomain(config))
 	return &SetupClient{
 		config:    config,

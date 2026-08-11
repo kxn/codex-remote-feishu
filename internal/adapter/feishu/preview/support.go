@@ -1,8 +1,6 @@
 package preview
 
 import (
-	"context"
-	"strings"
 	"time"
 )
 
@@ -22,18 +20,3 @@ const (
 type DriveAPI = previewDriveAPI
 type RemoteNode = previewRemoteNode
 type Principal = previewPrincipal
-
-func normalizeGatewayID(gatewayID string) string {
-	return strings.TrimSpace(gatewayID)
-}
-
-func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	base := context.Background()
-	if parent != nil {
-		base = parent
-	}
-	if timeout <= 0 {
-		return context.WithCancel(base)
-	}
-	return context.WithTimeout(base, timeout)
-}

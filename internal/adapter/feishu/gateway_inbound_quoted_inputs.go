@@ -28,10 +28,10 @@ func (g *LiveGateway) quotedMessageInputs(ctx context.Context, message *larkim.E
 	if message == nil || g.fetchMessageFn == nil {
 		return gatewaypkg.QuotedMessageInputs{}
 	}
-	ctx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
+	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
 	defer cancel()
 
-	targetMessageID := referencedMessageID(message)
+	targetMessageID := gatewaypkg.ReferencedMessageID(message)
 	if targetMessageID == "" {
 		return gatewaypkg.QuotedMessageInputs{}
 	}
@@ -124,17 +124,6 @@ func (g *LiveGateway) inputsFromReferencedMessage(ctx context.Context, reference
 	default:
 		return gatewaypkg.QuotedMessageInputs{}
 	}
-}
-
-func referencedMessageID(message *larkim.EventMessage) string {
-	if message == nil {
-		return ""
-	}
-	targetMessageID := strings.TrimSpace(xutil.StringValue(message.ParentId))
-	if targetMessageID == "" {
-		targetMessageID = strings.TrimSpace(xutil.StringValue(message.RootId))
-	}
-	return targetMessageID
 }
 
 func quotedTextInput(text string) agentproto.Input {
@@ -241,7 +230,7 @@ func compactQuotedCardPayloadLines(lines []string) []string {
 }
 
 func (g *LiveGateway) parsePostInputs(ctx context.Context, messageID, rawContent string) ([]agentproto.Input, string, error) {
-	ctx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
+	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
 	defer cancel()
 
 	var content feishuPostContent

@@ -65,14 +65,14 @@ func (e *IMVideoSendError) Unwrap() error {
 }
 
 func (g *LiveGateway) SendIMVideo(ctx context.Context, req IMVideoSendRequest) (IMVideoSendResult, error) {
-	ctx, cancel := newFeishuTimeoutContext(ctx, sendIMFileTimeout)
+	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, sendIMFileTimeout)
 	defer cancel()
 
 	result := IMVideoSendResult{
 		GatewayID:        g.config.GatewayID,
 		SurfaceSessionID: strings.TrimSpace(req.SurfaceSessionID),
 	}
-	if gatewayID := normalizeGatewayID(req.GatewayID); gatewayID != "" && gatewayID != g.config.GatewayID {
+	if gatewayID := gatewaypkg.NormalizeGatewayID(req.GatewayID); gatewayID != "" && gatewayID != g.config.GatewayID {
 		return result, &IMVideoSendError{
 			Code: IMVideoSendErrorGatewayNotRunning,
 			Err:  fmt.Errorf("send video failed: gateway mismatch: request=%s gateway=%s", gatewayID, g.config.GatewayID),

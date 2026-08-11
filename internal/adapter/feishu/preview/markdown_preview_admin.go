@@ -3,6 +3,7 @@ package preview
 import (
 	"context"
 	"fmt"
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"strings"
 	"time"
 )
@@ -14,7 +15,7 @@ func (p *DriveMarkdownPreviewer) CleanupBefore(ctx context.Context, cutoff time.
 	if p.api == nil {
 		return PreviewDriveCleanupResult{}, fmt.Errorf("preview drive api is not available")
 	}
-	ctx, cancel := newFeishuTimeoutContext(ctx, previewDriveCleanupTimeout)
+	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, previewDriveCleanupTimeout)
 	defer cancel()
 
 	result, err := p.cleanupManagedPreviewFiles(ctx, cutoff)
@@ -50,7 +51,7 @@ func (p *DriveMarkdownPreviewer) Summary(ctx context.Context) (PreviewDriveSumma
 	if p == nil {
 		return PreviewDriveSummary{}, nil
 	}
-	ctx, cancel := newFeishuTimeoutContext(ctx, previewDriveSummaryTimeout)
+	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, previewDriveSummaryTimeout)
 	defer cancel()
 
 	p.stateMu.Lock()
@@ -65,7 +66,7 @@ func (p *DriveMarkdownPreviewer) Summary(ctx context.Context) (PreviewDriveSumma
 
 	summary, root, err := p.summarizeManagedInventory(ctx)
 	if err != nil {
-		if isPreviewDriveAccessDeniedError(err) {
+		if IsDriveAccessDeniedError(err) {
 			p.stateMu.Lock()
 			fallback := previewAdminFallbackSummary(p.loadStateLocked(), strings.TrimSpace(p.config.StatePath), "permission_required", "当前机器人还没有开通飞书云盘权限。如需 Markdown 预览，请为应用开通 `drive:drive` 权限。")
 			p.stateMu.Unlock()

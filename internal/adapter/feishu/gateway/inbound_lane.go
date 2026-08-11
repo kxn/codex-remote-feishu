@@ -237,7 +237,7 @@ func (w *QueuedMessageWork) run(ctx context.Context, env InboundEnv, dispatch Ac
 	if w == nil || dispatch == nil {
 		return
 	}
-	parseCtx, cancel := newFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
+	parseCtx, cancel := NewFeishuTimeoutContext(ctx, inboundMessageParseTimeout)
 	defer cancel()
 
 	action, ok, err := w.parseAction(parseCtx, env)
@@ -270,7 +270,7 @@ func (w *QueuedMessageWork) parseAction(ctx context.Context, env InboundEnv) (co
 		MessageID:        w.messageID,
 		Inbound:          cloneInboundMeta(w.inbound),
 	}
-	replyTargetMessageID := referencedMessageID(message)
+	replyTargetMessageID := ReferencedMessageID(message)
 	if replyTargetMessageID != "" {
 		action.TargetMessageID = replyTargetMessageID
 	}
@@ -467,7 +467,7 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 		MessageID:        messageID,
 		Inbound:          cloneInboundMeta(inbound),
 	}
-	if replyTargetMessageID := referencedMessageID(message); replyTargetMessageID != "" {
+	if replyTargetMessageID := ReferencedMessageID(message); replyTargetMessageID != "" {
 		baseAction.TargetMessageID = replyTargetMessageID
 	}
 
