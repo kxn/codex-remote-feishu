@@ -73,6 +73,199 @@ func TestWorkspaceAttachProjectsUnboundSnapshot(t *testing.T) {
 	}
 }
 
+func TestHeadlessAttachInstanceCallbackIsRejected(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 3, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-vscode",
+		DisplayName:             "vscode",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Source:                  "vscode",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "旧 VS Code 焦点", CWD: "/data/dl/droid"},
+		},
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-vscode",
+		Inbound:          &control.ActionInboundMeta{CardCallback: true, CardDaemonLifecycleID: "life-1"},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound || surface.ClaimedWorkspaceKey != "" {
+		t.Fatalf("expected headless attach_instance callback to leave surface detached, got %#v", surface)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "attach_instance_headless_rejected" {
+		t.Fatalf("expected headless attach_instance rejection notice, got %#v", events)
+	}
+}
+
+func TestHeadlessAttachInstanceCallbackDoesNotOverrideWorkspaceClaim(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 3, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-headless",
+		DisplayName:   "headless",
+		WorkspaceRoot: "/data/dl/droid",
+		WorkspaceKey:  "/data/dl/droid",
+		ShortName:     "droid",
+		Source:        "headless",
+		Managed:       true,
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-headless": {ThreadID: "thread-headless", Name: "当前工作区会话", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-vscode",
+		DisplayName:             "vscode",
+		WorkspaceRoot:           "/data/dl/other",
+		WorkspaceKey:            "/data/dl/other",
+		ShortName:               "other",
+		Source:                  "vscode",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-vscode",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-vscode": {ThreadID: "thread-vscode", Name: "旧 VS Code 焦点", CWD: "/data/dl/other"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-vscode",
+		Inbound:          &control.ActionInboundMeta{CardCallback: true, CardDaemonLifecycleID: "life-1"},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.AttachedInstanceID != "inst-headless" || surface.ClaimedWorkspaceKey != "/data/dl/droid" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected old instance callback to preserve current workspace claim, got %#v", surface)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "attach_instance_headless_rejected" {
+		t.Fatalf("expected headless attach_instance rejection notice, got %#v", events)
+	}
+}
+
+func TestHeadlessAttachInstanceCallbackPreservesActiveTargetPicker(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 3, 45, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-vscode",
+		DisplayName:             "vscode",
+		WorkspaceRoot:           "/data/dl/other",
+		WorkspaceKey:            "/data/dl/other",
+		ShortName:               "other",
+		Source:                  "vscode",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-vscode",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-vscode": {ThreadID: "thread-vscode", Name: "旧 VS Code 焦点", CWD: "/data/dl/other"},
+		},
+	})
+	surface := svc.ensureSurface(control.Action{
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	})
+	picker := &activeTargetPickerRecord{
+		PickerID:             "picker-1",
+		OwnerUserID:          "user-1",
+		Source:               control.TargetPickerRequestSourceList,
+		Stage:                control.FeishuTargetPickerStageEditing,
+		Page:                 control.FeishuTargetPickerPageTarget,
+		SelectedWorkspaceKey: "/data/dl/current",
+	}
+	flow := newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, picker.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseEditing)
+	svc.setActiveTargetPicker(surface, picker)
+	svc.setActiveOwnerCardFlow(surface, flow)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-vscode",
+		Inbound:          &control.ActionInboundMeta{CardCallback: true, CardDaemonLifecycleID: "life-1"},
+	})
+
+	if got := svc.activeTargetPicker(surface); got != picker {
+		t.Fatalf("expected old instance callback to preserve active target picker, got %#v", got)
+	}
+	if got := svc.activeOwnerCardFlow(surface); got != flow {
+		t.Fatalf("expected old instance callback to preserve active owner-card flow, got %#v", got)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "attach_instance_headless_rejected" {
+		t.Fatalf("expected headless attach_instance rejection notice, got %#v", events)
+	}
+}
+
+func TestOldVSCodeAttachInstanceCardIsRejectedAfterSwitchingToHeadless(t *testing.T) {
+	now := time.Date(2026, 4, 9, 11, 4, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-vscode",
+		DisplayName:             "vscode",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Source:                  "vscode",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "旧 VS Code 焦点", CWD: "/data/dl/droid"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-vscode",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionModeCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/mode codex",
+	})
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-vscode",
+		Inbound:          &control.ActionInboundMeta{CardCallback: true, CardDaemonLifecycleID: "life-1"},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.ProductMode != state.ProductModeNormal || surface.Backend != "codex" || surface.AttachedInstanceID != "" || surface.SelectedThreadID != "" || surface.RouteMode != state.RouteModeUnbound {
+		t.Fatalf("expected old VS Code instance card to leave switched headless surface detached, got %#v", surface)
+	}
+	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "attach_instance_headless_rejected" {
+		t.Fatalf("expected headless attach_instance rejection notice, got %#v", events)
+	}
+}
+
 func TestAttachWorkspaceCanonicalizesWorkspaceKey(t *testing.T) {
 	now := time.Date(2026, 4, 9, 13, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

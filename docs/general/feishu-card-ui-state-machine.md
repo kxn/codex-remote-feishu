@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-08`
-> Summary: 当前 live 的 Feishu 卡片 UI 已把 workspace/page/request/review 等 owner-flow 收口到稳定的 page / picker / request substrate；immediate `select_static` callback 的取值规则统一落在 `internal/adapter/feishu/selectflow`，按 `payload value -> form_value[field_name] -> option/options` 恢复，避免群聊回调把旧 option 误当成新选择；卡片 callback surface identity 现在按 `open_message_id` 记录优先、`surface_session_id` carrier 次之、无法证明则 fail closed，不再按 `open_chat_id + operator` 猜 scope；`/workspace list` 与 alias `/list` 在工作区已确定后也会把 `新建会话` 作为合法 session 选项，并默认选中它；Git workspace 还会在“会话 / 操作”下拉中暴露 `worktree_create`，busy Git workspace 只能作为 Worktree base 并通过 `target_picker_back` 从 Worktree 子页回到原 target 页；bare `/model` 的下拉候选在 fixed Codex API Profile 下只来自 Profile 配置模型，DeepSeek/MiMo catalog-backed API Profile 与其它 Codex/VS Code 动态场景来自当前 instance 的动态 `model/list` 缓存，普通 GPT/OpenAI-like profile 不生成 generic managed catalog；Codex/VS Code 下 bare `/reasoning` 现在以当前模型的动态 `supportedReasoningEfforts` 投影快捷项，fixed API Profile 则只展示自动与 Profile 配置推理强度；Feishu 群聊菜单会隐藏 bot 能力设置项，手输或卡片回调尝试修改 `/mode`、provider/profile、model/reasoning/access/plan 时同卡或 notice 提示到私聊修改；`/primary on/off/status/refresh` 已接入统一 command family，群聊工具菜单按当前 room primary 状态投影设置/取消/切换/查看和刷新按钮；`/codexprofile` 下拉会展示可用与不可用 Profile，不可用项带“不可用”标记并在提交时同卡拒绝；显式表单提交家族仍保持各自既有 submit 语义；`mcpServer/elicitation/request` 承载 MCP tool approval 时会归一成 `mcp_server_elicitation_approval`，飞书卡只开放本次/本会话授权，`persist=always` 仅提示暂不支持跨会话持久允许；`/mcpoauth <server>` 当前只发起 MCP OAuth RPC lifecycle，并用 append-only notice 展示授权链接与完成/失败结果，不进入 request card 或菜单 owner-flow。
+> Updated: `2026-08-11`
+> Summary: 同步旧 `attach_instance` 卡片回调在 headless surface 上只能触发产品层 fail-closed notice、不得改变 route 的边界，并保留当前 live 的 workspace/page/request/review owner-flow、`select_static` 取值规则、callback surface identity、workspace target picker、动态模型/推理菜单、群聊菜单能力边界、Profile 下拉、MCP elicitation 与 `/mcpoauth` 等既有 UI 状态机合同。
 
 ## 1. 文档定位
 
@@ -139,7 +139,7 @@
 | bare `/cron` / `/upgrade` / `/debug` | `mixed` | 参数不足时当前统一打开 `FeishuPageView` 根页，不再顺手展示独立状态卡；根页现在只保留实际菜单入口，不再混入“快捷操作 / 手动输入 / 说明文案”，其中 `/debug` 根页当前只保留迁移到系统管理后的入口按钮：`打开系统管理`、`打开管理页`、`查看网络模式`；`/upgrade track` 子页当前仅保留 track 切换按钮；`/upgrade` 根页会在当前 Codex 是 standalone-upgradeable 安装时额外显示 `Codex 升级` 按钮，bundle-backed 或其他不可升级安装则静默隐藏；`/upgrade dev` 与 `开发构建` 按钮当前会在允许 dev feed 的 flavor（源码 `dev` 与 release `alpha`）下暴露，`/upgrade local` 与 `本地升级` 只会在源码 `dev` flavor 下暴露。若来自带 `daemon_lifecycle_id` 的当前 page callback，且动作属于“不立即执行”的根页 / 子页 / 非法参数回显路径，daemon 会走 page result replacement，把下一张 page 继续同位替回当前卡；真正立即执行的动作（如 `/cron reload`、`/cron repair`、`/cron run <id>`、`/upgrade latest`、`/upgrade codex`、允许 dev feed 的 flavor 下的 `/upgrade dev`、源码 `dev` flavor 下的 `/upgrade local`）仍进入各自原有执行流。`/debug admin` 当前不再执行旧流，而是直接拒绝并提示改用 `/admin web`。文本或表单输入的非法参数当前不会外跳 notice，而是继续留在同一张 page 上显示错误并保留表单默认值 |
 | stamped `/vscode-migrate` / `vscode_migrate_owner_flow` | `mixed` | `/vscode-migrate` 当前先打开 `FeishuPageView` root page；若入口来自带 `daemon_lifecycle_id` 的当前卡 callback，daemon 会走 page-result replacement，把 root page / 校验失败页 / `仅 VS Code 模式可用` 页同位替回当前卡。真正执行迁移的按钮当前发 `vscode_migrate_owner_flow` callback，迁移结果与后续 `/list` / open VS Code / 恢复提示都会继续 patch 在同一张 guidance card 上，不再经由旧文本重解析回调或 bare continuation |
 | `request approve` / `approval_command` / `approval_file_change` / `approval_network` / `approval_can_use_tool` / `request_user_input` / `tool_callback` / `permissions_request_approval` / `mcp_server_elicitation` / `mcp_server_elicitation_approval` / `captureFeedback` / `revise` | `mixed` | 卡片按钮、表单字段、`request_control` payload、lifecycle stamp 属于 Feishu UI；request gate、反馈 capture、request family 统一的 `editing -> waiting_dispatch -> resolved/restore` 生命周期，以及由 orchestrator 单点 request presentation owner 基于 `requestType/rawType/metadata` 归一化出的 `SemanticKind + Title/Sections/Options/Questions/HintText` contract，属于产品状态机。`mcp_server_elicitation_approval` 仍沿用 `mcp_server_elicitation` request type 与 `request_respond` transport，只是卡面语义和 response `_meta.persist=session` 由 orchestrator 单点决定；`tool_callback` 当前也走同一 owner，但落成只读 fail-closed auto-dispatch；projector 当前只消费 `FeishuRequestView`，不再自己回猜 approval / permissions / MCP subtype |
-| `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
+| `attach_instance` / `attach_workspace` / `use_thread` | `product-owned` | 卡片只负责把选择结果送入产品层；`attach_instance` 是 VS Code instance 兼容入口，headless 收到旧卡回调会由 orchestrator 拒绝且不改变 route；是否允许接管、是否跨 workspace、接管后进入什么 route 都由 orchestrator 决定 |
 | `/follow` | `product-owned` | 是否可用、是否被冻结、跟随到哪个 thread、headless/vscode 主分叉差异都属于 core 状态机 |
 | `/new` | `product-owned` | 是否进入 `new_thread_ready`、何时消耗第一条消息、request gate 是否阻断都属于 core 状态机 |
 
@@ -218,7 +218,7 @@
 
 | `kind` | 关键字段 | 当前含义 |
 | --- | --- | --- |
-| `attach_instance` | `instance_id` | 接管指定实例 |
+| `attach_instance` | `instance_id` | VS Code instance 接管兼容入口；headless 旧卡回调只会触发拒绝 notice，不改变产品状态 |
 | `attach_workspace` | `workspace_key` | 接管指定工作区 |
 | `use_thread` | `thread_id`、`field_name`、`allow_cross_workspace` | 选择 thread；VS Code 结构化 thread dropdown 走 `field_name` + `form_value/option` 取值，其余按钮路径仍可直接带 `thread_id` |
 | `thread_selection_page` | `view_mode`、`cursor` | VS Code 结构化 thread dropdown 的 byte-budget 翻页回调；`view_mode` 指明当前是 recent / all / scoped_all 哪条 direct selection flow，`cursor` 是候选项 start-index。服务端只重建当前 selection view，不持久化 owner runtime；projector 若发现当前 thread 不在新页，会清空 `initial_option` |
@@ -462,7 +462,7 @@ MCP request 卡片当前新增的可视语义：
     - daemon 统一按 `eventcontract` handoff class 过滤 followup，而不是再按 payload/kind 做散落判断
     - `control` action contract 与 `eventcontract` 当前共享同一套 handoff taxonomy，不再各自维护一套 notice/thread-selection 枚举真相
   - `/stop`、`/new`、`/follow`、`/detach` 落地后会抑制重复终态 notice append
-  - `attach_instance` 若后续带 thread-selection announce，daemon 也会抑制这类重复 append，避免菜单卡收口后又补一张同义结果卡
+  - VS Code `attach_instance` 若后续带 thread-selection announce，daemon 也会抑制这类重复 append，避免菜单卡收口后又补一张同义结果卡；headless 收到旧 `attach_instance` 卡片回调时只返回拒绝 notice，不会进入 attach / thread-selection followup
 4. active picker 阻断例外
   - 当事件流只有 `path_picker_active` / `target_picker_processing` 阻断 notice 时，daemon 不做首结果替换，保持当前卡可继续在原 owner 子步骤里完成
 
