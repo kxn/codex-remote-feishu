@@ -3,9 +3,10 @@ package preview
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 )
 
 func (p *DriveMarkdownPreviewer) loadStateLocked() *previewState {
@@ -34,18 +35,11 @@ func (p *DriveMarkdownPreviewer) saveStateLocked() error {
 	if strings.TrimSpace(p.config.StatePath) == "" || p.state == nil {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(p.config.StatePath), 0o755); err != nil {
-		return err
-	}
 	raw, err := json.MarshalIndent(p.state, "", "  ")
 	if err != nil {
 		return err
 	}
-	tempPath := p.config.StatePath + ".tmp"
-	if err := os.WriteFile(tempPath, raw, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tempPath, p.config.StatePath)
+	return atomicfile.Write(p.config.StatePath, raw, 0o600)
 }
 
 func newPreviewState() *previewState {

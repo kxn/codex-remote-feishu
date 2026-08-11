@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/codexcatalog"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -98,32 +99,9 @@ func ensureLaunchManagedFile(file LaunchManagedFile) error {
 	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, file.Content) {
 		return nil
 	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("create managed launch temp file: %w", err)
-	}
-	tmpPath := tmp.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmpPath)
-		}
-	}()
-	if _, err := tmp.Write(file.Content); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("write managed launch temp file: %w", err)
-	}
-	if err := tmp.Chmod(0o600); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("chmod managed launch temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("close managed launch temp file: %w", err)
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := atomicfile.Write(path, file.Content, 0o600); err != nil {
 		return fmt.Errorf("replace managed launch file: %w", err)
 	}
-	cleanup = false
 	return nil
 }
 

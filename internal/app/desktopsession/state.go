@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -78,11 +79,10 @@ func WriteStatusFile(path string, status Status) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	tempPath := path + ".tmp"
-	if err := os.WriteFile(tempPath, raw, 0o644); err != nil {
+	if err := atomicfile.Write(path, raw, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tempPath, path)
+	return nil
 }
 
 func RemoveStatusFile(path string) error {

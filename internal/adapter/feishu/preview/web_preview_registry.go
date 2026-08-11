@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -377,18 +378,11 @@ func (p *DriveMarkdownPreviewer) saveWebPreviewScopeManifest(manifest *webPrevie
 		return nil
 	}
 	path := p.previewScopeManifestPath(manifest.ScopePublicID)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	raw, err := json.MarshalIndent(manifest, "", "  ")
 	if err != nil {
 		return err
 	}
-	tempPath := path + ".tmp"
-	if err := os.WriteFile(tempPath, raw, 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tempPath, path)
+	return atomicfile.Write(path, raw, 0o600)
 }
 
 func (p *DriveMarkdownPreviewer) ensurePreviewBlob(blobKey string, content []byte) error {
@@ -396,16 +390,9 @@ func (p *DriveMarkdownPreviewer) ensurePreviewBlob(blobKey string, content []byt
 	if _, err := os.Stat(blobPath); err == nil {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(blobPath), 0o755); err != nil {
-		return err
-	}
-	tempPath := blobPath + ".tmp"
-	if err := os.WriteFile(tempPath, content, 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tempPath, blobPath); err != nil {
+	if err := atomicfile.Write(blobPath, content, 0o600); err != nil {
+		// A concurrent writer may have won the rename; treat that as success.
 		if os.IsExist(err) {
-			_ = os.Remove(tempPath)
 			return nil
 		}
 		return err

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -53,9 +54,6 @@ func WriteState(path string, state InstallState) error {
 	if err := pathscope.EnsureWritePath(path); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	// Layout facts (baseDir / configPath / statePath / versionsRoot) are
 	// derived from the state file location at load time (LoadState +
 	// ApplyStateMetadata). Persisting snapshots of them is the stale-fact
@@ -77,11 +75,10 @@ func WriteState(path string, state InstallState) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	tempPath := path + ".tmp"
-	if err := os.WriteFile(tempPath, raw, 0o644); err != nil {
+	if err := atomicfile.Write(path, raw, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tempPath, path)
+	return nil
 }
 
 // defaultConfigPathForState derives the default config.json path for the

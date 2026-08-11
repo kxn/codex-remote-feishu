@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -140,19 +141,12 @@ func WriteSidecar(path string, sidecar Sidecar, mode Mode) error {
 		}
 		return fmt.Errorf("upgrade shim sidecar requires installStatePath")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	raw, err := json.MarshalIndent(sidecar, "", "  ")
 	if err != nil {
 		return err
 	}
 	raw = append(raw, '\n')
-	tmpPath := path + ".tmp"
-	if err := os.WriteFile(tmpPath, raw, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return atomicfile.Write(path, raw, 0o644)
 }
 
 // SamePath reports whether two cleaned paths refer to the same file, using

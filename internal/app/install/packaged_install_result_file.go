@@ -2,10 +2,9 @@ package install
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -15,12 +14,6 @@ func writePackagedInstallResultFile(path string, result PackagedInstallResult) e
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil
-	}
-	dir := filepath.Dir(path)
-	if strings.TrimSpace(dir) != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
 	}
 
 	var builder strings.Builder
@@ -41,7 +34,7 @@ func writePackagedInstallResultFile(path string, result PackagedInstallResult) e
 	writePackagedInstallResultLine(&builder, "logPath", result.LogPath)
 	writePackagedInstallResultLine(&builder, "error", result.Error)
 
-	return os.WriteFile(path, []byte(builder.String()), 0o644)
+	return atomicfile.Write(path, []byte(builder.String()), 0o644)
 }
 
 func writePackagedInstallResultLine(builder *strings.Builder, key, value string) {

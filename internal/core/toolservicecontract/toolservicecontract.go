@@ -15,9 +15,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 )
 
 // CallerInstanceIDQueryParam 是 MCP 工具调用 URL 上标识调用方 remote turn
@@ -77,30 +78,10 @@ func WriteJSONFileAtomic(path string, payload any, mode os.FileMode) error {
 	if path == "" {
 		return fmt.Errorf("json file path is empty")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	raw, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
 		return err
 	}
 	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(mode); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return atomicfile.Write(path, raw, mode)
 }
