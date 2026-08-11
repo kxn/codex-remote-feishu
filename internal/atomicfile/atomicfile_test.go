@@ -3,6 +3,7 @@ package atomicfile
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -21,12 +22,14 @@ func TestWriteCreatesFileWithContentAndPerm(t *testing.T) {
 	if string(got) != "hello" {
 		t.Fatalf("content = %q, want %q", got, "hello")
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatalf("Stat: %v", err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("perm = %v, want 0600", info.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("Stat: %v", err)
+		}
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("perm = %v, want 0600", info.Mode().Perm())
+		}
 	}
 }
 

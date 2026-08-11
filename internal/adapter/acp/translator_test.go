@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestBuildInitializeFrameMatchesOpenCodeACPHandshake(t *testing.T) {
@@ -58,7 +59,7 @@ func TestPromptSendStartNewCreatesSessionThenPromptsAfterResponse(t *testing.T) 
 		t.Fatalf("method = %q, want session/new", newFrame["method"])
 	}
 	newParams := asMap(t, newFrame["params"])
-	if newParams["cwd"] != "/tmp/work" {
+	if newParams["cwd"] != pathcanon.Native("/tmp/work") {
 		t.Fatalf("cwd = %#v", newParams["cwd"])
 	}
 	if _, ok := newParams["mcpServers"].([]any); !ok {

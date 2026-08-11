@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestCompilerBuiltInProfileInheritsSystemOpenCodeConfig(t *testing.T) {
@@ -25,7 +26,7 @@ func TestCompilerBuiltInProfileInheritsSystemOpenCodeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CompileLaunchMaterial(default): %v", err)
 	}
-	if strings.Join(material.Args, "\x00") != strings.Join([]string{"acp", "--cwd", "/repo"}, "\x00") {
+	if strings.Join(material.Args, "\x00") != strings.Join([]string{"acp", "--cwd", pathcanon.Native("/repo")}, "\x00") {
 		t.Fatalf("unexpected default args: %#v", material.Args)
 	}
 	if value, ok := lookupEnv(material.Env, "KEEP_ME"); !ok || value != "1" {

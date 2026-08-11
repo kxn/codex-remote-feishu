@@ -32,9 +32,9 @@ func TestModeForManager(t *testing.T) {
 
 func TestRealBinaryPath(t *testing.T) {
 	tests := map[string]string{
-		"/tmp/codex":     "/tmp/codex.real",
+		"/tmp/codex":     filepath.Join(string(filepath.Separator), "tmp", "codex.real"),
 		`C:\tmp\codex`:   `C:\tmp\codex.real`,
-		"/tmp/codex.exe": "/tmp/codex.real.exe",
+		"/tmp/codex.exe": filepath.Join(string(filepath.Separator), "tmp", "codex.real.exe"),
 	}
 	for input, want := range tests {
 		if got := RealBinaryPath(input); got != want {
@@ -45,9 +45,9 @@ func TestRealBinaryPath(t *testing.T) {
 
 func TestSidecarPath(t *testing.T) {
 	tests := map[string]string{
-		"/tmp/codex":     "/tmp/codex.remote.json",
+		"/tmp/codex":     filepath.Join(string(filepath.Separator), "tmp", "codex.remote.json"),
 		`C:\tmp\codex`:   `C:\tmp\codex.remote.json`,
-		"/tmp/codex.exe": "/tmp/codex.remote.json",
+		"/tmp/codex.exe": filepath.Join(string(filepath.Separator), "tmp", "codex.remote.json"),
 	}
 	for input, want := range tests {
 		if got := SidecarPath(input); got != want {

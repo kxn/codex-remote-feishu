@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestBuildChildRestartRestoreFrameReturnsNilWithoutFocusedThread(t *testing.T) {
@@ -40,7 +41,7 @@ func TestBuildChildRestartRestoreFrameSuppressesRestoreResponseAndThreadStarted(
 		t.Fatalf("expected thread/resume restore frame, got %#v", payload)
 	}
 	params, _ := payload["params"].(map[string]any)
-	if params["threadId"] != "thread-1" || params["cwd"] != "/tmp/project" {
+	if params["threadId"] != "thread-1" || params["cwd"] != pathcanon.Native("/tmp/project") {
 		t.Fatalf("unexpected restore params: %#v", params)
 	}
 
@@ -65,7 +66,7 @@ func TestBuildChildRestartRestoreFrameSuppressesRestoreResponseAndThreadStarted(
 	if tr.currentThreadID != "thread-1" {
 		t.Fatalf("expected focused thread to stay restored, got %q", tr.currentThreadID)
 	}
-	if tr.knownThreadCWD["thread-1"] != "/tmp/project" {
+	if tr.knownThreadCWD["thread-1"] != pathcanon.Native("/tmp/project") {
 		t.Fatalf("expected cwd to stay restored, got %#v", tr.knownThreadCWD)
 	}
 }

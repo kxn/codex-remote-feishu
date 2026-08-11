@@ -4,6 +4,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestRepairRuntimeStateUpdatesBinaryVersionAndPromotesLiveSystemdUnit(t *testing.T) {
@@ -50,13 +52,13 @@ func TestRepairRuntimeStateUpdatesBinaryVersionAndPromotesLiveSystemdUnit(t *tes
 	if state.ServiceUnitPath != filepath.Join(homeDir, ".config", "systemd", "user", "codex-remote-beta.service") {
 		t.Fatalf("ServiceUnitPath = %q", state.ServiceUnitPath)
 	}
-	if state.CurrentBinaryPath != "/new/bin/codex-remote" {
+	if state.CurrentBinaryPath != pathcanon.Native("/new/bin/codex-remote") {
 		t.Fatalf("CurrentBinaryPath = %q", state.CurrentBinaryPath)
 	}
 	if state.CurrentVersion != "v1.5.0-beta.9" {
 		t.Fatalf("CurrentVersion = %q", state.CurrentVersion)
 	}
-	if state.ConfigPath != "/new/config.json" {
+	if state.ConfigPath != pathcanon.Native("/new/config.json") {
 		t.Fatalf("ConfigPath = %q", state.ConfigPath)
 	}
 }

@@ -1,6 +1,9 @@
 package xutil
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestTruncateRunesPlainCut(t *testing.T) {
 	t.Parallel()
@@ -112,11 +115,11 @@ func TestCleanPath(t *testing.T) {
 	if got := CleanPath("   "); got != "" {
 		t.Fatalf("CleanPath(blank) = %q, want empty", got)
 	}
-	if got := CleanPath("/tmp/../bin/codex"); got != "/bin/codex" {
-		t.Fatalf("CleanPath(clean) = %q, want %q", got, "/bin/codex")
+	if got, want := CleanPath("/tmp/../bin/codex"), filepath.Clean("/bin/codex"); got != want {
+		t.Fatalf("CleanPath(clean) = %q, want %q", got, want)
 	}
-	if got := CleanPath("  /tmp/x  "); got != "/tmp/x" {
-		t.Fatalf("CleanPath(trim) = %q, want %q", got, "/tmp/x")
+	if got, want := CleanPath("  /tmp/x  "), filepath.Clean("/tmp/x"); got != want {
+		t.Fatalf("CleanPath(trim) = %q, want %q", got, want)
 	}
 }
 

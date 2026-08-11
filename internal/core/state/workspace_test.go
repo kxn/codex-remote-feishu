@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
@@ -23,8 +24,12 @@ func TestWorkspaceShortName(t *testing.T) {
 	if got := WorkspaceShortName(testutil.WorkspacePath("data", "dl", "work", "..", "droid") + "/"); got != "droid" {
 		t.Fatalf("WorkspaceShortName() = %q, want %q", got, "droid")
 	}
-	if got := WorkspaceShortName("/"); got != "/" {
-		t.Fatalf("WorkspaceShortName(root) = %q, want /", got)
+	root, wantRoot := "/", "/"
+	if runtime.GOOS == "windows" {
+		root, wantRoot = `C:\`, "C:"
+	}
+	if got := WorkspaceShortName(root); got != wantRoot {
+		t.Fatalf("WorkspaceShortName(root) = %q, want %q", got, wantRoot)
 	}
 }
 

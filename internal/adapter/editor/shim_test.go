@@ -58,9 +58,9 @@ func TestPatchBundleEntrypoint(t *testing.T) {
 
 func TestManagedShimRealBinaryPath(t *testing.T) {
 	tests := map[string]string{
-		"/tmp/codex":     "/tmp/codex.real",
+		"/tmp/codex":     filepath.Join(string(filepath.Separator), "tmp", "codex.real"),
 		`C:\tmp\codex`:   `C:\tmp\codex.real`,
-		"/tmp/codex.exe": "/tmp/codex.real.exe",
+		"/tmp/codex.exe": filepath.Join(string(filepath.Separator), "tmp", "codex.real.exe"),
 	}
 	for input, want := range tests {
 		if got := ManagedShimRealBinaryPath(input); got != want {

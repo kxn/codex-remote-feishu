@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestTranslateThreadCompactStart(t *testing.T) {
@@ -61,7 +62,7 @@ func TestTranslateThreadCompactStartResumesTargetThreadWhenNotCurrent(t *testing
 		t.Fatalf("expected thread/resume payload, got %#v", resumePayload)
 	}
 	resumeParams, _ := resumePayload["params"].(map[string]any)
-	if resumeParams["threadId"] != "thread-1" || resumeParams["cwd"] != "/tmp/project" {
+	if resumeParams["threadId"] != "thread-1" || resumeParams["cwd"] != pathcanon.Native("/tmp/project") {
 		t.Fatalf("unexpected resume params: %#v", resumeParams)
 	}
 

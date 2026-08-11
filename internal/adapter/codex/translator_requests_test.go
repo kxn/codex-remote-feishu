@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestObserveServerRequestStartedProducesApprovalEvent(t *testing.T) {
@@ -1082,7 +1083,7 @@ func TestTranslateThreadsRefreshUsesThreadListAndBuildsSnapshot(t *testing.T) {
 	if secondRead.Events[0].Kind != agentproto.EventThreadsSnapshot || len(secondRead.Events[0].Threads) != 2 {
 		t.Fatalf("unexpected snapshot payload: %#v", secondRead.Events[0])
 	}
-	if secondRead.Events[0].Threads[0].ThreadID != "thread-2" || secondRead.Events[0].Threads[0].CWD != "/data/dl/droid" {
+	if secondRead.Events[0].Threads[0].ThreadID != "thread-2" || secondRead.Events[0].Threads[0].CWD != pathcanon.Native("/data/dl/droid") {
 		t.Fatalf("expected snapshot to preserve thread/list order, got %#v", secondRead.Events[0].Threads)
 	}
 	if secondRead.Events[0].Threads[1].ThreadID != "thread-1" || secondRead.Events[0].Threads[1].Name != "修复登录流程" {
