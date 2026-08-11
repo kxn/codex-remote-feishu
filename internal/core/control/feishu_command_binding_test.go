@@ -124,6 +124,32 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 	}
 }
 
+func TestResolveFeishuCommandDisplayFromActionUsesBindingDefinition(t *testing.T) {
+	display, ok := ResolveFeishuCommandDisplayFromAction(Action{Kind: ActionStop})
+	if !ok {
+		t.Fatal("expected stop action to resolve command display")
+	}
+	if display.Title != "停止推理" || display.CanonicalSlash != "/stop" || display.FamilyID != FeishuCommandStop {
+		t.Fatalf("unexpected stop display: %#v", display)
+	}
+}
+
+func TestResolveFeishuCommandDisplayFromActionUsesRouteTitle(t *testing.T) {
+	display, ok := ResolveFeishuCommandDisplayFromAction(Action{Kind: ActionTurnPatchRollback})
+	if !ok {
+		t.Fatal("expected turn patch rollback action to resolve command display")
+	}
+	if display.Title != "回滚最近一次修补" || display.CanonicalSlash != "/bendtomywill rollback" || display.FamilyID != FeishuCommandPatch {
+		t.Fatalf("unexpected rollback display: %#v", display)
+	}
+}
+
+func TestResolveFeishuCommandDisplayFromActionRejectsLocalOwnerCardAction(t *testing.T) {
+	if display, ok := ResolveFeishuCommandDisplayFromAction(Action{Kind: ActionReviewApply}); ok {
+		t.Fatalf("local review apply action resolved as catalog display: %#v", display)
+	}
+}
+
 func TestResolveFeishuCommandBindingIntentBuilder(t *testing.T) {
 	tests := []struct {
 		name   string

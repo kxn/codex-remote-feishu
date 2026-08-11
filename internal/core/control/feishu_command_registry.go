@@ -4,6 +4,7 @@ import "strings"
 
 type feishuCommandActionRoute struct {
 	kind           ActionKind
+	title          string
 	canonicalSlash string
 }
 
@@ -72,6 +73,7 @@ func feishuCommandPrimaryActionRoute(spec feishuCommandSpec) (feishuCommandActio
 	}
 	return feishuCommandActionRoute{
 		kind:           kind,
+		title:          strings.TrimSpace(spec.definition.Title),
 		canonicalSlash: canonicalSlash,
 	}, true
 }
@@ -92,6 +94,9 @@ func feishuCommandActionRouteByKind(kind ActionKind) (string, feishuCommandActio
 			current := route
 			if strings.TrimSpace(current.canonicalSlash) == "" {
 				current.canonicalSlash = strings.TrimSpace(spec.definition.CanonicalSlash)
+			}
+			if strings.TrimSpace(current.title) == "" {
+				current.title = strings.TrimSpace(spec.definition.Title)
 			}
 			return spec.definition.ID, current, true
 		}

@@ -961,7 +961,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "patch", action: Action{Kind: ActionTurnPatchCommand, Text: "/bendtomywill"}},
 		},
 		extraActionRoutes: []feishuCommandActionRoute{
-			{kind: ActionTurnPatchRollback, canonicalSlash: "/bendtomywill rollback"},
+			{kind: ActionTurnPatchRollback, title: "回滚最近一次修补", canonicalSlash: "/bendtomywill rollback"},
 		},
 	},
 	{

@@ -1,14 +1,16 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-11`
-> Summary: 同步 Codex Profile-only 卡片合同：旧 `/codexprovider`/`codex_provider` 不再作为命令或 callback 入口；并保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、`select_static`、callback surface identity、动态模型/推理菜单、群聊菜单、Profile 下拉、MCP elicitation、`/mcpoauth` 与 detached room workspace `/status` 投影等既有 UI 状态机合同；并记录 worktree picker 的 preview / final path / 失败文案已收口到 `gitmeta.PreviewWorktree` / `WorktreeCreateErrorText`。
+> Updated: `2026-08-12`
+> Summary: 同步 Codex Profile-only 卡片合同与 rejected action label owner：旧 `/codexprovider`/`codex_provider` 不再作为命令或 callback 入口；旧卡/旧动作拒绝提示里的 command 类动作 label 来自 `FeishuCommandBinding` + command catalog，owner-card 私有动作保留 UI-only local label；并保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、`select_static`、callback surface identity、动态模型/推理菜单、群聊菜单、Profile 下拉、MCP elicitation、`/mcpoauth` 与 detached room workspace `/status` 投影等既有 UI 状态机合同；并记录 worktree picker 的 preview / final path / 失败文案已收口到 `gitmeta.PreviewWorktree` / `WorktreeCreateErrorText`。
 
 ## 1. 文档定位
 
 这份文档描述的是 **当前代码已经实现** 的 Feishu 卡片 UI / callback 层行为。
 
 2026-08-11 #873 补充：Codex Profile 配置卡的可见入口是 `/codexprofile`；旧 `/codexprovider` 文本命令和 `codex_provider` 菜单 action 均拒绝解析，不再作为 hidden alias。配置卡以 canonical Profile catalog 为 read model，legacy Provider catalog 不再反向合成 Profile 候选；分页 `select_static` 会放入可用与不可用 Profile，不可用项在 label 上追加“不可用”，并在 notice 区显示用户可读原因。不可用 OAuth/API Profile 可被选中提交，但 submit 阶段会同卡拒绝，不会写入 `CodexProfileID`，也不会启动或重启实例。分页按钮走 `page_local_action + cursor` 并 inline replace 当前卡，submit 成功只写 canonical `CodexProfileID`。
+
+2026-08-12 #872 补充：旧卡/旧动作拒绝提示不再维护 command 类 action-to-label 副本；能解析到 `FeishuCommandBinding` 与 `FeishuCommandDefinition` 的动作，其用户可读标题与 canonical slash 以 command catalog 为 owner；`/review uncommitted`、`/bendtomywill rollback` 等 extra action route 可在 catalog route 上声明更精确的标题。review final-card 的 `放弃审阅` / `按审阅意见继续修改`、owner-flow 与 picker 内部动作等不属于 command catalog 的 callback 仍保留 UI-only local label；这些 label 只能说明本地按钮语义，不得反向扩展 command catalog 矩阵。
 
 它关注的是：
 
@@ -78,6 +80,7 @@
   - 对 `/menu`、bare `/admin`，以及 bare `/mode` `/autowhip` `/autocontinue` `/reasoning` `/access` `/plan` `/model` `/verbose` `/claudeprofile` `/codexprofile`，当前统一产出 `FeishuPageView` read model，并连同 `FeishuPageContext` 走 `UIEventFeishuPageView` 边界（配置页内部仍复用 catalog-to-page builder 生成 page 内容）
   - 这组 bare config-card 的 open intent、launcher keep contract、controller 分发与 config page builder 当前已通过 `FeishuConfigFlowDefinition` registry 收口，不再分别在 intent / lifecycle / controller / config catalog 多层平行枚举
   - 命令入口类型当前还额外通过 `FeishuCommandBinding` 统一建模为 `config_flow / workspace_session / inline_page / terminal_page / daemon_command / owner_entry` 六类；`FeishuUIIntentFromAction(...)`、launcher handoff 与 direct daemon dispatch 都优先读取这份 binding，而不再各自维护平行的 command/action 分类
+  - old-card / old-message / unsupported inbound 这类 rejected notice 的 command 类动作展示也读取同一份 binding/catalog：标题取 action route title 或 `FeishuCommandDefinition.Title`，命令取 `CanonicalSlash` 或 action route 的具体 slash；review exit/apply、owner-flow 与 picker 内部动作等 UI-only local action 仍只使用本地 label，不作为 command catalog 的第二套定义
   - 对 approval / `request_user_input` / `tool_callback` / MCP request cards，当前先产出 `FeishuRequestView`，再连同 `FeishuRequestContext` 穿过 `UIEvent` 边界；`unsupported_server_request` 例外，它不生成可交互 request card，只由 orchestrator 自动回写 fail-closed response，并把 pending record 保留到上游 `serverRequest/resolved`
   - request view 的 header subtitle contract 当前不再只服务 detour/review temporary-session：request runtime 若自带 `SourceContextLabel`（例如 Claude delegated task 的 `来自 Task (Explore)`），也会沿同一条 request header subtitle 车道投影
   - 对飞书文件/目录选择器，当前先产出 `FeishuPathPickerView` read model，再连同 `FeishuPathPickerContext` 穿过 `UIEvent` 边界；进入目录、返回上一级、文件选择属于 controller 内 pure navigation，confirm/cancel 则转到 picker consumer handoff
@@ -737,6 +740,8 @@ MCP request 卡片当前新增的可视语义：
 | `current` | 未命中旧消息窗口，且满足以下之一：`daemon_lifecycle_id` 匹配；或这不是 card callback；或这是当前仍保留兼容的非-`FeishuUIIntent` 未打标 card callback | 正常继续处理 |
 | `old` | `message_create_time` 或 `menu_click_time` 落在旧窗口外 | 发“旧动作已忽略” notice，不进入产品处理 |
 | `old_card` | callback 带 `daemon_lifecycle_id` 且与当前 daemon 不匹配；或 callback 命中 `FeishuUIIntent` 但缺少 `daemon_lifecycle_id` | 发“旧卡片已过期” notice，不进入产品处理，也不会 replace 当前卡；review final card 的 `Review 待提交内容` / `放弃审阅` / `按审阅意见继续修改` 也完全复用这条拒绝路径 |
+
+拒绝提示里的动作详情只负责解释“哪次旧动作被忽略”，不参与 product mutation。command 类动作的 label/command 由 `FeishuCommandBinding` 与 command catalog 统一提供；无法解析到 catalog 的 owner-card、picker、request 或 review exit/apply 等本地 callback 使用 UI-only local label。
 
 通过 lifecycle gate 的当前 callback 若命中 room workspace 恢复冲突，会在 frontstage contract / owner mutation 之前停止：daemon append 一张独立冲突提示并返回 `nil` action result，原卡保持不变。这个 gate 不得提前到 lifecycle 判定之前，否则旧卡会被错误解释为当前 room 操作；也不得进入 inline replacement，否则会把诊断提示伪装成菜单或 owner card 的业务结果。
 

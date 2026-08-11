@@ -29,8 +29,8 @@ func reviewCommandSpec() feishuCommandSpec {
 			{alias: "reviewuncommitted", action: Action{Kind: ActionReviewCommand, Text: "/review uncommitted"}},
 		},
 		extraActionRoutes: []feishuCommandActionRoute{
-			{kind: ActionReviewStartUncommitted, canonicalSlash: "/review uncommitted"},
-			{kind: ActionReviewOpenCommitPicker, canonicalSlash: "/review commit"},
+			{kind: ActionReviewStartUncommitted, title: "审阅待提交内容", canonicalSlash: "/review uncommitted"},
+			{kind: ActionReviewOpenCommitPicker, title: "选择审阅提交记录", canonicalSlash: "/review commit"},
 		},
 	}
 }
