@@ -112,6 +112,99 @@ func TestCompilerBuiltInProfileProjectsRecentSystemModelForACP(t *testing.T) {
 	}
 }
 
+func TestCompilerBuiltInProfileProjectsRuntimeAccessMode(t *testing.T) {
+	material, err := CompileLaunchMaterial(CompileInput{
+		Profile:           config.BuiltInOpenCodeProfile(),
+		WorkspaceRoot:     "/repo",
+		RuntimeAccessMode: "confirm",
+		BaseEnv: []string{
+			"KEEP_ME=1",
+			config.OpenCodeConfigContentEnv + "=old-config",
+			config.OpenCodeAuthContentEnv + "=old-auth",
+			config.OpenCodeDisableProjectConfigEnv + "=1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(default): %v", err)
+	}
+	configOverlayRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("missing projected runtime access config overlay in %#v", material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configOverlayRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v\n%s", err, configOverlayRaw)
+	}
+	permission, ok := configDoc["permission"].(map[string]any)
+	if !ok || permission["*"] != "ask" {
+		t.Fatalf("runtime access mode permission = %#v, want ask in %#v", configDoc["permission"], configDoc)
+	}
+	if _, ok := lookupEnv(material.Env, config.OpenCodeAuthContentEnv); ok {
+		t.Fatalf("built-in profile must not project auth overlay, got %#v", material.Env)
+	}
+	if _, ok := lookupEnv(material.Env, config.OpenCodeDisableProjectConfigEnv); ok {
+		t.Fatalf("built-in profile must not retain project config disable overlay, got %#v", material.Env)
+	}
+	if value, ok := lookupEnv(material.Env, "KEEP_ME"); !ok || value != "1" {
+		t.Fatalf("expected unrelated env to survive, got %#v", material.Env)
+	}
+}
+
+func TestCompilerBuiltInProfileMergesRecentModelWithRuntimeAccessMode(t *testing.T) {
+	root := t.TempDir()
+	configHome := filepath.Join(root, ".config")
+	stateHome := filepath.Join(root, ".local", "state")
+	if err := os.MkdirAll(filepath.Join(configHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(stateHome, "opencode"), 0o755); err != nil {
+		t.Fatalf("MkdirAll state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configHome, "opencode", "opencode.jsonc"), []byte(`{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "mimo": {
+      "models": {
+        "mimo-v2.5-pro": { "name": "mimo-v2.5-pro" }
+      }
+    }
+  }
+}`), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateHome, "opencode", "model.json"), []byte(`{"recent":[{"providerID":"mimo","modelID":"mimo-v2.5-pro"}]}`), 0o644); err != nil {
+		t.Fatalf("WriteFile state: %v", err)
+	}
+
+	material, err := CompileLaunchMaterial(CompileInput{
+		Profile:           config.BuiltInOpenCodeProfile(),
+		WorkspaceRoot:     "/repo",
+		RuntimeAccessMode: "confirm",
+		BaseEnv: []string{
+			"XDG_CONFIG_HOME=" + configHome,
+			"XDG_STATE_HOME=" + stateHome,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(default): %v", err)
+	}
+	configOverlayRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("missing projected config overlay in %#v", material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configOverlayRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v\n%s", err, configOverlayRaw)
+	}
+	if configDoc["model"] != "mimo/mimo-v2.5-pro" {
+		t.Fatalf("projected model = %#v, want mimo/mimo-v2.5-pro in %#v", configDoc["model"], configDoc)
+	}
+	permission, ok := configDoc["permission"].(map[string]any)
+	if !ok || permission["*"] != "ask" {
+		t.Fatalf("runtime access mode permission = %#v, want ask in %#v", configDoc["permission"], configDoc)
+	}
+}
+
 func TestCompilerBuiltInProfileKeepsExplicitSystemModelAuthoritative(t *testing.T) {
 	root := t.TempDir()
 	configHome := filepath.Join(root, ".config")
