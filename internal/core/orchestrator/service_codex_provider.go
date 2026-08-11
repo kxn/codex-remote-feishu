@@ -12,20 +12,7 @@ func (s *Service) MaterializeCodexProviders(records []state.CodexProviderRecord)
 	if s.root == nil {
 		return
 	}
-	s.root.CodexProviders = map[string]state.CodexProviderRecord{}
-	defaultRecord := state.NormalizeCodexProviderRecord(state.CodexProviderRecord{
-		ID:      state.DefaultCodexProviderID,
-		Name:    state.DefaultCodexProviderName,
-		BuiltIn: true,
-	})
-	s.root.CodexProviders[defaultRecord.ID] = defaultRecord
-	for _, record := range records {
-		current := state.NormalizeCodexProviderRecord(record)
-		if current.ID == "" {
-			continue
-		}
-		s.root.CodexProviders[current.ID] = current
-	}
+	s.root.CodexProviders = materializeProfileCatalogRecords(records, defaultCodexProviderRecord(), state.NormalizeCodexProviderRecord, codexProviderRecordID)
 }
 
 func (s *Service) MaterializeCodexProfiles(records []state.CodexProfileSummary) {
@@ -120,28 +107,25 @@ func (s *Service) CodexProfileContextEvidence(profileID string, preferenceRevisi
 
 func (s *Service) CodexProviders() []state.CodexProviderRecord {
 	if s.root == nil || len(s.root.CodexProviders) == 0 {
-		return []state.CodexProviderRecord{state.NormalizeCodexProviderRecord(state.CodexProviderRecord{
-			ID:      state.DefaultCodexProviderID,
-			Name:    state.DefaultCodexProviderName,
-			BuiltIn: true,
-		})}
+		return []state.CodexProviderRecord{defaultCodexProviderRecord()}
 	}
-	providers := make([]state.CodexProviderRecord, 0, len(s.root.CodexProviders))
-	for _, record := range s.root.CodexProviders {
-		providers = append(providers, state.NormalizeCodexProviderRecord(record))
-	}
-	sort.SliceStable(providers, func(i, j int) bool {
-		left := providers[i]
-		right := providers[j]
-		if left.BuiltIn != right.BuiltIn {
-			return left.BuiltIn
-		}
-		if left.Name != right.Name {
-			return left.Name < right.Name
-		}
-		return left.ID < right.ID
+	return sortedProfileCatalogRecords(s.root.CodexProviders, state.NormalizeCodexProviderRecord, codexProviderCatalogSortKey)
+}
+
+func defaultCodexProviderRecord() state.CodexProviderRecord {
+	return state.NormalizeCodexProviderRecord(state.CodexProviderRecord{
+		ID:      state.DefaultCodexProviderID,
+		Name:    state.DefaultCodexProviderName,
+		BuiltIn: true,
 	})
-	return providers
+}
+
+func codexProviderRecordID(record state.CodexProviderRecord) string {
+	return record.ID
+}
+
+func codexProviderCatalogSortKey(record state.CodexProviderRecord) profileCatalogSortKey {
+	return profileCatalogSortKey{BuiltIn: record.BuiltIn, Name: record.Name, ID: record.ID}
 }
 
 func normalizeCodexProfileSummary(value state.CodexProfileSummary) state.CodexProfileSummary {
