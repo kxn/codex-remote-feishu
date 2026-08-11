@@ -395,6 +395,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 	case control.ActionReviewApply:
 		events = s.applyReviewSessionResult(surface, action)
 	case control.ActionAttachInstance:
+		if s.surfaceIsHeadless(surface) && action.IsCardAction() {
+			events = notice(surface, "attach_instance_headless_rejected", "这个旧实例入口已失效。请重新发送 /list，从当前工作区/会话选择器继续。")
+			break
+		}
 		events = s.attachInstance(surface, action.InstanceID)
 	case control.ActionAttachWorkspace:
 		events = s.attachWorkspace(surface, action.WorkspaceKey)

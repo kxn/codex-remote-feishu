@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-10`
-> Summary: 同步群主机器人无群 workspace 文本打开 target picker 并保留 pending 输入的例外，并保留既有 OpenCode headless backend mode/profile/restart/command 状态机合同、workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、群聊 room workspace data-plane gate / room-level detach、queued->dispatching 用户可见回复提示、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
+> Updated: `2026-08-11`
+> Summary: 同步 headless 收到旧 `attach_instance` 卡片回调时 fail closed 的状态机边界，并保留既有群主机器人无群 workspace 文本打开 target picker 并保留 pending 输入的例外、OpenCode headless backend mode/profile/restart/command 状态机合同、workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、群聊 room workspace data-plane gate / room-level detach、queued->dispatching 用户可见回复提示、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`（含 hidden alias `/codexprovider`）、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -804,7 +804,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    3. 其他实例按“可接管 / 其他状态”分组，按钮使用全宽动作前缀文案，例如 `接管 · web`、`切换 · admin`、`不可接管 · ops`。
    4. 每个实例的第二行状态压缩为短元信息，例如 `2分前 · 当前焦点可跟随`、`1小时前 · 等待 VS Code 焦点`、`30分前 · 当前被其他飞书会话接管`。
    5. 组内排序优先 `ObservedFocusedThreadID` 非空的实例，再按该实例可见 thread 的最近活跃时间倒序；无时间时再回退到 `InstanceID`。
-3. 卡片按钮仍走 `attach_instance -> ActionAttachInstance`。
+3. 卡片按钮仍走 `attach_instance -> ActionAttachInstance`，但这条 action 当前只允许作为 VS Code instance 兼容入口改变 route。若同一张旧卡片回调到已经切回 headless 的 surface，orchestrator 会返回 `attach_instance_headless_rejected` notice，并保持当前 workspace claim、attached instance、selected thread 与 route mode 不变。
 4. attach / switch 成功后，surface 仍会进入既有的 follow-local 语义：有 observed focus 时进入 `R4 FollowBound`，否则进入 `R3 FollowWaiting`。
 5. 若 `attach_instance` 来自 stamped 菜单卡 callback，attach 成功 / 失败结果会直接替换当前实例选择卡；若同一动作后面还带 thread-selection follow-up，daemon 会抑制这张重复 append，避免菜单卡已经收口后又补第二张卡。
 
@@ -883,7 +883,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 1. attach/use/kick confirm 都改成**直达动作**。
 2. Feishu 卡片按钮直接携带：
    1. `attach_workspace`
-   2. `attach_instance`
+   2. `attach_instance`（VS Code instance 兼容入口；headless 收到旧卡回调时 fail closed）
    3. `use_thread`
    4. `show_scoped_threads`
    5. `show_workspace_threads`
@@ -1223,6 +1223,7 @@ R0 Detached
   -- target picker confirm(new_thread，headless 且 workspace 仅 recoverable-only) --> R0 + G1 PendingHeadlessStarting
   -- /list -> attach_instance(vscode 且 observed focus 可接管) --> R4 FollowBound
   -- /list -> attach_instance(vscode 且尚无可接管 observed focus) --> R3 FollowWaiting
+  -- stale attach_instance card callback(headless) --> 保持当前 route/claim/selection，返回 attach_instance_headless_rejected
   -- /use(thread，vscode) --> 拒绝 + migration to /list
   -- daemon startup latent headless surface + exact visible thread restore --> R2 AttachedPinned
   -- daemon startup latent headless surface + workspace fallback --> R1 AttachedUnbound
@@ -1813,7 +1814,7 @@ retained-offline overlay 额外规则：
 | `show_all_workspaces` | `ActionShowAllWorkspaces` | headless 主链下重新打开 `/workspace list` 切换卡（兼容旧分页导航动作） |
 | `show_recent_workspaces` | `ActionShowRecentWorkspaces` | headless 主链下重新打开 `/workspace list` 切换卡（兼容旧分页返回动作） |
 | `show_workspace_threads` | `ActionShowWorkspaceThreads` | headless 主链下以指定 workspace 为默认项重新打开 `/workspace list` 切换卡（兼容旧 recoverable-workspace 入口） |
-| `attach_instance` | `ActionAttachInstance` | 直达 attach |
+| `attach_instance` | `ActionAttachInstance` | VS Code instance attach；headless 收到旧卡回调时拒绝并要求重新打开 `/list` |
 | `use_thread` | `ActionUseThread` | 直达 thread 切换 |
 | `show_threads` | `ActionShowThreads` | headless 主链下重新打开 `/workspace list` 切换卡；`vscode` 下仍是当前实例最近会话视图；两条路径当前都会默认排除 `source=review` 的 detached review thread |
 | `show_all_threads` | `ActionShowAllThreads` | headless 主链下重新打开 `/workspace list` 切换卡；`vscode` 下仍是当前实例全部会话视图；两条路径当前都会默认排除 `source=review` 的 detached review thread |
