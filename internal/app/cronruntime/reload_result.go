@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/bitablevalue"
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type WorkspaceRow struct {
@@ -105,7 +106,7 @@ func ReloadTaskPreviewFromRecord(record *larkbitable.AppTableRecord, workspacesB
 	if record == nil {
 		return item
 	}
-	item.RecordID = strings.TrimSpace(stringValue(record.RecordId))
+	item.RecordID = strings.TrimSpace(xutil.StringValue(record.RecordId))
 	item.Name = strings.TrimSpace(bitablevalue.String(record.Fields["任务名"]))
 	if item.Name == "" {
 		item.Name = item.RecordID
@@ -153,7 +154,7 @@ func NewReloadError(record *larkbitable.AppTableRecord, tableName string, rowNum
 	return &ReloadError{
 		TableName: strings.TrimSpace(tableName),
 		RowNumber: rowNumber,
-		RecordID:  strings.TrimSpace(stringValue(record.RecordId)),
+		RecordID:  strings.TrimSpace(xutil.StringValue(record.RecordId)),
 		TaskName:  strings.TrimSpace(taskName),
 		FieldName: strings.TrimSpace(fieldName),
 		Message:   strings.TrimSpace(message),
@@ -166,7 +167,7 @@ func JobFromReloadRecord(record *larkbitable.AppTableRecord, workspacesByRecord 
 	}
 	name := strings.TrimSpace(bitablevalue.String(record.Fields["任务名"]))
 	if name == "" {
-		name = strings.TrimSpace(stringValue(record.RecordId))
+		name = strings.TrimSpace(xutil.StringValue(record.RecordId))
 	}
 	enabled, valid := bitablevalue.Bool(record.Fields["启用"])
 	if !enabled && valid {
@@ -193,7 +194,7 @@ func JobFromReloadRecord(record *larkbitable.AppTableRecord, workspacesByRecord 
 	maxConcurrency := DefaultMaxConcurrency(bitablevalue.Int(record.Fields[TaskConcurrencyField]))
 	timeoutMinutes := DefaultTimeoutMinutes(bitablevalue.Int(record.Fields["超时（分钟）"]))
 	job := JobState{
-		RecordID:       strings.TrimSpace(stringValue(record.RecordId)),
+		RecordID:       strings.TrimSpace(xutil.StringValue(record.RecordId)),
 		Name:           name,
 		ScheduleType:   scheduleType,
 		SourceType:     sourceType,

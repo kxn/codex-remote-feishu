@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/shim"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type launchPlan struct {
@@ -84,13 +85,13 @@ func loadInstallState(path string) (installState, error) {
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return installState{}, err
 	}
-	state.ConfigPath = cleanNonEmpty(state.ConfigPath)
-	state.InstalledBinary = cleanNonEmpty(state.InstalledBinary)
-	state.InstalledWrapperBinary = cleanNonEmpty(state.InstalledWrapperBinary)
+	state.ConfigPath = xutil.CleanPath(state.ConfigPath)
+	state.InstalledBinary = xutil.CleanPath(state.InstalledBinary)
+	state.InstalledWrapperBinary = xutil.CleanPath(state.InstalledWrapperBinary)
 	// Legacy states recorded the installed binary under installedBinary /
 	// installedWrapperBinary; promote to the canonical current-binary path.
 	state.CurrentBinaryPath = firstNonEmpty(
-		cleanNonEmpty(state.CurrentBinaryPath),
+		xutil.CleanPath(state.CurrentBinaryPath),
 		state.InstalledBinary,
 		state.InstalledWrapperBinary,
 	)
@@ -98,7 +99,7 @@ func loadInstallState(path string) (installState, error) {
 }
 
 func usableConfigPath(path string) bool {
-	path = cleanNonEmpty(path)
+	path = xutil.CleanPath(path)
 	if path == "" {
 		return false
 	}
@@ -107,7 +108,7 @@ func usableConfigPath(path string) bool {
 }
 
 func usableLaunchTarget(path, entrypointPath, realBinaryPath string) bool {
-	path = cleanNonEmpty(path)
+	path = xutil.CleanPath(path)
 	if path == "" {
 		return false
 	}
@@ -119,7 +120,7 @@ func usableLaunchTarget(path, entrypointPath, realBinaryPath string) bool {
 }
 
 func usableFallbackTarget(path string) bool {
-	path = cleanNonEmpty(path)
+	path = xutil.CleanPath(path)
 	if path == "" {
 		return false
 	}
@@ -129,8 +130,8 @@ func usableFallbackTarget(path string) bool {
 
 func withManagedShimEnv(baseEnv []string, configPath, realBinaryPath string) []string {
 	env := append([]string(nil), baseEnv...)
-	env = upsertEnv(env, "CODEX_REMOTE_CONFIG", cleanNonEmpty(configPath))
-	env = upsertEnv(env, "CODEX_REAL_BINARY", cleanNonEmpty(realBinaryPath))
+	env = upsertEnv(env, "CODEX_REMOTE_CONFIG", xutil.CleanPath(configPath))
+	env = upsertEnv(env, "CODEX_REAL_BINARY", xutil.CleanPath(realBinaryPath))
 	return env
 }
 
@@ -156,17 +157,9 @@ func upsertEnv(env []string, key, value string) []string {
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
-		if cleaned := cleanNonEmpty(value); cleaned != "" {
+		if cleaned := xutil.CleanPath(value); cleaned != "" {
 			return cleaned
 		}
 	}
 	return ""
-}
-
-func cleanNonEmpty(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	return filepath.Clean(path)
 }

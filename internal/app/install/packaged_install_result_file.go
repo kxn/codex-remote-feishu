@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const packagedInstallResultSection = "result"
@@ -23,7 +25,7 @@ func writePackagedInstallResultFile(path string, result PackagedInstallResult) e
 
 	var builder strings.Builder
 	builder.WriteString("[" + packagedInstallResultSection + "]\n")
-	writePackagedInstallResultLine(&builder, "ok", boolString(result.OK))
+	writePackagedInstallResultLine(&builder, "ok", xutil.BoolString(result.OK))
 	writePackagedInstallResultLine(&builder, "mode", result.Mode)
 	writePackagedInstallResultLine(&builder, "statePath", result.StatePath)
 	writePackagedInstallResultLine(&builder, "configPath", result.ConfigPath)
@@ -35,7 +37,7 @@ func writePackagedInstallResultFile(path string, result PackagedInstallResult) e
 	writePackagedInstallResultLine(&builder, "currentSlot", result.CurrentSlot)
 	writePackagedInstallResultLine(&builder, "adminURL", result.AdminURL)
 	writePackagedInstallResultLine(&builder, "setupURL", result.SetupURL)
-	writePackagedInstallResultLine(&builder, "setupRequired", boolString(result.SetupRequired))
+	writePackagedInstallResultLine(&builder, "setupRequired", xutil.BoolString(result.SetupRequired))
 	writePackagedInstallResultLine(&builder, "logPath", result.LogPath)
 	writePackagedInstallResultLine(&builder, "error", result.Error)
 

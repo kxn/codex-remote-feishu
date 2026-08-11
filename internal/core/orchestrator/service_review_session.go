@@ -184,9 +184,9 @@ func threadSourceFromMetadata(metadata map[string]any) *agentproto.ThreadSourceR
 		return &copied
 	case map[string]any:
 		record := &agentproto.ThreadSourceRecord{
-			Kind:           agentproto.ThreadSourceKind(strings.TrimSpace(metadataString(typed, "kind"))),
-			Name:           strings.TrimSpace(metadataString(typed, "name")),
-			ParentThreadID: strings.TrimSpace(metadataString(typed, "parentThreadId")),
+			Kind:           agentproto.ThreadSourceKind(strings.TrimSpace(xutil.MetadataString(typed, "kind"))),
+			Name:           strings.TrimSpace(xutil.MetadataString(typed, "name")),
+			ParentThreadID: strings.TrimSpace(xutil.MetadataString(typed, "parentThreadId")),
 		}
 		if record.Kind == "" && record.Name == "" && record.ParentThreadID == "" {
 			return nil
@@ -251,7 +251,7 @@ func (s *Service) maybeApplyReviewLifecycleItem(instanceID string, event agentpr
 		return true
 	}
 	session = s.activateReviewSessionRecord(surface, thread, event)
-	if review := strings.TrimSpace(metadataString(event.Metadata, "review")); review != "" {
+	if review := strings.TrimSpace(xutil.MetadataString(event.Metadata, "review")); review != "" {
 		if event.ItemKind == "entered_review_mode" {
 			session.TargetLabel = review
 		} else {

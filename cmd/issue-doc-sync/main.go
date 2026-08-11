@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/ghclient"
 	"github.com/kxn/codex-remote-feishu/internal/issuedocsync"
 )
 
@@ -52,7 +53,7 @@ func runPlan(ctx context.Context, args []string) error {
 		return usageError("plan requires --repo")
 	}
 
-	repo, err := issuedocsync.ParseRepo(*repoValue)
+	repo, err := ghclient.ParseRepo(*repoValue)
 	if err != nil {
 		return err
 	}
@@ -82,7 +83,7 @@ func runNext(ctx context.Context, args []string) error {
 		return usageError("next requires --repo")
 	}
 
-	repo, err := issuedocsync.ParseRepo(*repoValue)
+	repo, err := ghclient.ParseRepo(*repoValue)
 	if err != nil {
 		return err
 	}
@@ -149,7 +150,7 @@ func runInspect(ctx context.Context, args []string) error {
 		return usageError("inspect requires --issue")
 	}
 
-	repo, err := issuedocsync.ParseRepo(*repoValue)
+	repo, err := ghclient.ParseRepo(*repoValue)
 	if err != nil {
 		return err
 	}
@@ -219,7 +220,7 @@ func runRecord(ctx context.Context, args []string) error {
 	if *reason == "" {
 		return usageError("record requires --reason")
 	}
-	repo, err := issuedocsync.ParseRepo(*repoValue)
+	repo, err := ghclient.ParseRepo(*repoValue)
 	if err != nil {
 		return err
 	}

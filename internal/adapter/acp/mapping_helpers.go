@@ -118,7 +118,7 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 	if kind != "" {
 		metadata["kind"] = kind
 	}
-	effectiveKind := xutil.FirstNonEmpty(kind, metadataString(metadata, "kind"))
+	effectiveKind := xutil.FirstNonEmpty(kind, xutil.MetadataString(metadata, "kind"))
 	rawInput := opencodeRawInput(update, metadata)
 	if rawInput != nil {
 		metadata["rawInput"] = xutil.CloneMap(rawInput)
@@ -173,7 +173,7 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 
 func opencodeToolCompletionMetadata(metadata map[string]any, update map[string]any) map[string]any {
 	out := opencodeToolMetadata(update, metadata)
-	effectiveKind := xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["kind"]), metadataString(out, "kind"))
+	effectiveKind := xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["kind"]), xutil.MetadataString(out, "kind"))
 	rawInput := opencodeRawInput(update, out)
 	itemKind := toolItemKind(map[string]any{"kind": effectiveKind, "rawInput": rawInput})
 	if itemKind == "" && effectiveKind == "" {
@@ -280,13 +280,6 @@ func firstMapString(values map[string]any, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func metadataString(values map[string]any, key string) string {
-	if values == nil {
-		return ""
-	}
-	return strings.TrimSpace(xutil.LookupStringFromAny(values[key]))
 }
 
 func (t *Translator) todoPlanEvent(turn *turnState, sessionID string, item *itemState, update map[string]any) (agentproto.Event, bool) {

@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/appserverargs"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
@@ -190,7 +191,7 @@ func matchOpenCodeBootstrapInitializeResponse(line []byte, requestID string) (bo
 	if lookupStringFromMap(message, "id") != requestID {
 		return false, nil
 	}
-	if errMsg := strings.TrimSpace(extractJSONRPCErrorMessage(message)); errMsg != "" {
+	if errMsg := strings.TrimSpace(jsonrpcutil.ExtractErrorMessage(message)); errMsg != "" {
 		return true, fmt.Errorf("opencode bootstrap initialize failed: %s", errMsg)
 	}
 	if _, ok := message["result"]; !ok {

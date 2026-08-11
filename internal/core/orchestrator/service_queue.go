@@ -679,7 +679,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 	thread := (*state.ThreadRecord)(nil)
 	if inst != nil && strings.TrimSpace(event.ThreadID) != "" {
 		thread = s.ensureThread(inst, event.ThreadID)
-		preview := strings.TrimSpace(metadataString(event.Metadata, "revisedPrompt"))
+		preview := strings.TrimSpace(xutil.MetadataString(event.Metadata, "revisedPrompt"))
 		if preview == "" {
 			preview = "已生成图片"
 		}
@@ -699,8 +699,8 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 		TurnID:    event.TurnID,
 		ItemID:    event.ItemID,
 	}
-	savedPath := strings.TrimSpace(metadataString(event.Metadata, "savedPath"))
-	imageBase64 := strings.TrimSpace(metadataString(event.Metadata, "imageBase64"))
+	savedPath := strings.TrimSpace(xutil.MetadataString(event.Metadata, "savedPath"))
+	imageBase64 := strings.TrimSpace(xutil.MetadataString(event.Metadata, "imageBase64"))
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
 	if surface == nil {
 		if inst != nil && (savedPath == "" && imageBase64 == "") && strings.TrimSpace(event.ThreadID) != "" {
@@ -730,7 +730,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 			ThreadID:    event.ThreadID,
 			TurnID:      event.TurnID,
 			ItemID:      event.ItemID,
-			Prompt:      metadataString(event.Metadata, "revisedPrompt"),
+			Prompt:      xutil.MetadataString(event.Metadata, "revisedPrompt"),
 			SavedPath:   savedPath,
 			ImageBase64: imageBase64,
 		},

@@ -45,7 +45,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		if cwd != "" {
 			t.knownThreadCWD[threadID] = cwd
 		}
-		t.debugf("observe client thread/resume: thread=%s cwd=%s", threadID, cwd)
+		t.Debugf("observe client thread/resume: thread=%s cwd=%s", threadID, cwd)
 		return Result{Events: []agentproto.Event{{
 			Kind:        agentproto.EventThreadFocused,
 			ThreadID:    threadID,
@@ -68,7 +68,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 			if requestID, ok := message["id"]; ok {
 				t.pendingInternalTurnSet[fmt.Sprint(requestID)] = true
 			}
-			t.debugf("observe client turn/start internal-helper: thread=%s cwd=%s", threadID, cwd)
+			t.Debugf("observe client turn/start internal-helper: thread=%s cwd=%s", threadID, cwd)
 			return Result{Events: []agentproto.Event{{
 				Kind:         agentproto.EventLocalInteractionObserved,
 				ThreadID:     threadID,
@@ -93,7 +93,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		if !isNull(template["approvalPolicy"]) || !isNull(template["sandboxPolicy"]) {
 			t.newThreadTurnTemplate = xutil.CloneMap(template)
 		}
-		t.debugf("observe client turn/start: thread=%s cwd=%s newThread=%t", threadID, cwd, threadID == "")
+		t.Debugf("observe client turn/start: thread=%s cwd=%s newThread=%t", threadID, cwd, threadID == "")
 		events := configObservedEvents(threadID, cwd, params, threadID == "")
 		if threadID != "" && !configObservedEventsContainThreadPlan(events, threadID) {
 			events = append(events, agentproto.Event{
@@ -123,7 +123,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		if threadID != "" {
 			t.pendingLocalTurnByThread[threadID] = true
 		}
-		t.debugf("observe client turn/steer: thread=%s", threadID)
+		t.Debugf("observe client turn/steer: thread=%s", threadID)
 		return Result{Events: []agentproto.Event{{
 			Kind:         agentproto.EventLocalInteractionObserved,
 			ThreadID:     threadID,
@@ -168,7 +168,7 @@ func (t *Translator) observeClientThreadList(requestID string, params map[string
 		return Result{}
 	}
 	if observation.Suppress {
-		t.debugf(
+		t.Debugf(
 			"observe client thread/list joined inflight owner=%s alias=%s key=%s visible=%t aliases=%d",
 			observation.OwnerRequestID,
 			requestID,
@@ -179,7 +179,7 @@ func (t *Translator) observeClientThreadList(requestID string, params map[string
 		return Result{Suppress: true}
 	}
 	if observation.NewOwner {
-		t.debugf("observe client thread/list owner=%s key=%s", requestID, observation.Key)
+		t.Debugf("observe client thread/list owner=%s key=%s", requestID, observation.Key)
 	}
 	return Result{}
 }

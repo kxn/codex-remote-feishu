@@ -257,70 +257,133 @@ func (a *App) sendIMFileTool(ctx context.Context, arguments map[string]any) (map
 }
 
 func (a *App) sendIMImageTool(ctx context.Context, arguments map[string]any) (map[string]any, *toolError) {
+	result, toolErr := a.sendIMMediaTool(ctx, arguments, imMediaToolSpec{
+		toolName:       feishuSendIMImageToolName,
+		unavailableMsg: "Feishu IM image sending is not available in this runtime",
+		validate:       validateSendImagePath,
+		send: func(ctx context.Context, args imMediaSendArgs) (imMediaSendResult, *toolError) {
+			sender, ok := a.gateway.(feishu.IMImageSender)
+			if !ok {
+				return imMediaSendResult{}, &toolError{
+					Code:    "tool_unavailable",
+					Message: "Feishu IM image sending is not available in this runtime",
+				}
+			}
+			result, err := sender.SendIMImage(ctx, feishu.IMImageSendRequest{
+				GatewayID:        args.GatewayID,
+				SurfaceSessionID: args.SurfaceSessionID,
+				ChatID:           args.ChatID,
+				ActorUserID:      args.ActorUserID,
+				Path:             args.Path,
+			})
+			if err != nil {
+				_ = a.observeFeishuPermissionError(args.GatewayID, err)
+				var sendErr *feishu.IMImageSendError
+				if errors.As(err, &sendErr) {
+					switch sendErr.Code {
+					case feishu.IMImageSendErrorUploadFailed:
+						return imMediaSendResult{}, &toolError{Code: "upload_failed", Message: sendErr.Error()}
+					case feishu.IMImageSendErrorSendFailed, feishu.IMImageSendErrorMissingReceiveTarget, feishu.IMImageSendErrorGatewayNotRunning:
+						return imMediaSendResult{}, &toolError{Code: "send_failed", Message: sendErr.Error(), Retryable: true}
+					}
+				}
+				return imMediaSendResult{}, &toolError{
+					Code:      "send_failed",
+					Message:   err.Error(),
+					Retryable: true,
+				}
+			}
+			return imMediaSendResult{
+				GatewayID:        result.GatewayID,
+				SurfaceSessionID: result.SurfaceSessionID,
+				Name:             result.ImageName,
+				Key:              result.ImageKey,
+				MessageID:        result.MessageID,
+			}, nil
+		},
+	})
+	if toolErr != nil {
+		return nil, toolErr
+	}
+	return map[string]any{
+		"surface_session_id": result.SurfaceSessionID,
+		"gateway_id":         result.GatewayID,
+		"image_name":         result.Name,
+		"image_key":          result.Key,
+		"message_id":         result.MessageID,
+	}, nil
+}
+
+// imMediaSendArgs carries the resolved surface context shared by IM media
+// send tools.
+type imMediaSendArgs struct {
+	GatewayID        string
+	SurfaceSessionID string
+	ChatID           string
+	ActorUserID      string
+	Path             string
+}
+
+// imMediaSendResult is the normalized send result consumed by the shared
+// sendIMMediaTool pipeline.
+type imMediaSendResult struct {
+	GatewayID        string
+	SurfaceSessionID string
+	Name             string
+	Key              string
+	MessageID        string
+}
+
+// imMediaToolSpec describes one IM media send tool (image or video). The
+// send callback owns the type-specific sender assertion, request mapping and
+// send-error classification; everything else is shared.
+type imMediaToolSpec struct {
+	toolName       string
+	unavailableMsg string
+	validate       func(string) *toolError
+	send           func(context.Context, imMediaSendArgs) (imMediaSendResult, *toolError)
+}
+
+// sendIMMediaTool is the shared pipeline for IM image/video send tools: path
+// validation, surface context resolution, attached check, send, and logging.
+func (a *App) sendIMMediaTool(ctx context.Context, arguments map[string]any, spec imMediaToolSpec) (imMediaSendResult, *toolError) {
 	path, _ := arguments["path"].(string)
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return nil, &toolError{
+		return imMediaSendResult{}, &toolError{
 			Code:    "path_required",
 			Message: "path is required",
 		}
 	}
-	if apiErr := validateSendImagePath(path); apiErr != nil {
-		return nil, apiErr
+	if apiErr := spec.validate(path); apiErr != nil {
+		return imMediaSendResult{}, apiErr
 	}
 
 	a.mu.Lock()
 	resolved, apiErr := a.resolveToolCallerSurfaceContextLocked(toolCallerInstanceIDFromContext(ctx))
 	a.mu.Unlock()
 	if apiErr != nil {
-		return nil, apiErr
+		return imMediaSendResult{}, apiErr
 	}
 	if !resolved.Attached {
-		return nil, &toolError{
+		return imMediaSendResult{}, &toolError{
 			Code:    "surface_not_attached",
 			Message: "surface is not attached to a workspace",
 		}
 	}
 
-	sender, ok := a.gateway.(feishu.IMImageSender)
-	if !ok {
-		return nil, &toolError{
-			Code:    "tool_unavailable",
-			Message: "Feishu IM image sending is not available in this runtime",
-		}
-	}
-	result, err := sender.SendIMImage(ctx, feishu.IMImageSendRequest{
+	result, toolErr := spec.send(ctx, imMediaSendArgs{
 		GatewayID:        resolved.GatewayID,
 		SurfaceSessionID: resolved.SurfaceSessionID,
 		ChatID:           resolved.ChatID,
 		ActorUserID:      resolved.ActorUserID,
 		Path:             path,
 	})
-	if err != nil {
-		_ = a.observeFeishuPermissionError(resolved.GatewayID, err)
-		var sendErr *feishu.IMImageSendError
-		if errors.As(err, &sendErr) {
-			switch sendErr.Code {
-			case feishu.IMImageSendErrorUploadFailed:
-				return nil, &toolError{Code: "upload_failed", Message: sendErr.Error()}
-			case feishu.IMImageSendErrorSendFailed, feishu.IMImageSendErrorMissingReceiveTarget, feishu.IMImageSendErrorGatewayNotRunning:
-				return nil, &toolError{Code: "send_failed", Message: sendErr.Error(), Retryable: true}
-			}
-		}
-		return nil, &toolError{
-			Code:      "send_failed",
-			Message:   err.Error(),
-			Retryable: true,
-		}
+	if toolErr != nil {
+		return imMediaSendResult{}, toolErr
 	}
-	log.Printf("tool call: tool=%s surface=%s path=%s status=ok message=%s", feishuSendIMImageToolName, resolved.SurfaceSessionID, path, result.MessageID)
-	return map[string]any{
-		"surface_session_id": result.SurfaceSessionID,
-		"gateway_id":         result.GatewayID,
-		"image_name":         result.ImageName,
-		"image_key":          result.ImageKey,
-		"message_id":         result.MessageID,
-	}, nil
+	log.Printf("tool call: tool=%s surface=%s path=%s status=ok message=%s", spec.toolName, resolved.SurfaceSessionID, path, result.MessageID)
+	return result, nil
 }
 
 func validateSendImagePath(path string) *toolError {

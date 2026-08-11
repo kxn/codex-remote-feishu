@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 // Mode selects the shim role a unified binary takes when invoked.
@@ -80,8 +82,8 @@ func SidecarPath(entrypointPath string) string {
 func NormalizeSidecar(sidecar Sidecar, mode Mode) Sidecar {
 	sidecar.SchemaVersion = SidecarSchemaVersion
 	sidecar.Manager = mode.Manager()
-	sidecar.InstallStatePath = cleanNonEmpty(sidecar.InstallStatePath)
-	sidecar.ConfigPath = cleanNonEmpty(sidecar.ConfigPath)
+	sidecar.InstallStatePath = xutil.CleanPath(sidecar.InstallStatePath)
+	sidecar.ConfigPath = xutil.CleanPath(sidecar.ConfigPath)
 	sidecar.InstanceID = strings.TrimSpace(sidecar.InstanceID)
 	return sidecar
 }
@@ -156,8 +158,8 @@ func WriteSidecar(path string, sidecar Sidecar, mode Mode) error {
 // SamePath reports whether two cleaned paths refer to the same file, using
 // case-insensitive comparison on Windows.
 func SamePath(left, right string) bool {
-	left = cleanNonEmpty(left)
-	right = cleanNonEmpty(right)
+	left = xutil.CleanPath(left)
+	right = xutil.CleanPath(right)
 	if left == "" || right == "" {
 		return false
 	}
@@ -165,12 +167,4 @@ func SamePath(left, right string) bool {
 		return strings.EqualFold(left, right)
 	}
 	return left == right
-}
-
-func cleanNonEmpty(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	return filepath.Clean(path)
 }

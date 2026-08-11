@@ -8,6 +8,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const ExplorationBlockID = "exploration"
@@ -234,7 +235,7 @@ func sameExecCommandProgressBlockRow(left, right state.ExecCommandProgressBlockR
 }
 
 func parseDynamicToolExplorationAction(metadata map[string]any) (explorationAction, bool) {
-	tool := strings.ToLower(strings.TrimSpace(metadataString(metadata, "tool")))
+	tool := strings.ToLower(strings.TrimSpace(xutil.MetadataString(metadata, "tool")))
 	switch tool {
 	case "read":
 		items := dynamicToolProgressArguments(metadata)

@@ -46,13 +46,13 @@ func TestEnsureCronBitableTaskSchemaMatchesProductOrder(t *testing.T) {
 		if field == nil {
 			continue
 		}
-		name := stringValue(field.FieldName)
+		name := xutil.StringValue(field.FieldName)
 		gotNames = append(gotNames, name)
 		if name == "启用" && field.Type != nil {
 			enableType = *field.Type
 		}
 		if name == "最近运行时间" && field.Property != nil {
-			recentRunFormatter = stringValue(field.Property.DateFormatter)
+			recentRunFormatter = xutil.StringValue(field.Property.DateFormatter)
 		}
 	}
 	wantNames := []string{
@@ -153,12 +153,12 @@ func TestEnsureCronBitableRepairsExistingDateFieldFormatter(t *testing.T) {
 	} {
 		found := false
 		for _, field := range api.fieldsByTable[check.tableID] {
-			if field == nil || stringValue(field.FieldName) != check.name {
+			if field == nil || xutil.StringValue(field.FieldName) != check.name {
 				continue
 			}
 			found = true
-			if field.Property == nil || stringValue(field.Property.DateFormatter) != "yyyy/MM/dd HH:mm" {
-				t.Fatalf("%s/%s formatter = %q, want yyyy/MM/dd HH:mm", check.tableID, check.name, stringValue(field.Property.DateFormatter))
+			if field.Property == nil || xutil.StringValue(field.Property.DateFormatter) != "yyyy/MM/dd HH:mm" {
+				t.Fatalf("%s/%s formatter = %q, want yyyy/MM/dd HH:mm", check.tableID, check.name, xutil.StringValue(field.Property.DateFormatter))
 			}
 		}
 		if !found {
@@ -221,7 +221,7 @@ func TestEnsureCronBitableRepairsExistingFieldTypeMismatch(t *testing.T) {
 	defer api.mu.Unlock()
 	found := false
 	for _, field := range api.fieldsByTable["tbl-tasks"] {
-		if field == nil || stringValue(field.FieldName) != cronrt.TaskGitRepoInputField {
+		if field == nil || xutil.StringValue(field.FieldName) != cronrt.TaskGitRepoInputField {
 			continue
 		}
 		found = true

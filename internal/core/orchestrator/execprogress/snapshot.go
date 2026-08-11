@@ -212,10 +212,10 @@ func UpsertEntry(progress *state.ExecCommandProgressRecord, entry state.ExecComm
 }
 
 func WebSearchEntry(metadata map[string]any, final bool) state.ExecCommandProgressEntryRecord {
-	actionType := strings.TrimSpace(metadataString(metadata, "actionType"))
-	query := strings.TrimSpace(metadataString(metadata, "query"))
-	url := strings.TrimSpace(metadataString(metadata, "url"))
-	pattern := strings.TrimSpace(metadataString(metadata, "pattern"))
+	actionType := strings.TrimSpace(xutil.MetadataString(metadata, "actionType"))
+	query := strings.TrimSpace(xutil.MetadataString(metadata, "query"))
+	url := strings.TrimSpace(xutil.MetadataString(metadata, "url"))
+	pattern := strings.TrimSpace(xutil.MetadataString(metadata, "pattern"))
 	queries := metadataStringSlice(metadata, "queries")
 	fallbackQuery := xutil.FirstNonEmpty(query, xutil.FirstNonEmpty(queries...))
 	status := NormalizeStatus("", final)
@@ -263,7 +263,7 @@ func UpsertDynamicToolProgressEntry(progress *state.ExecCommandProgressRecord, e
 	if progress == nil {
 		return state.ExecCommandProgressEntryRecord{}, "", false
 	}
-	tool := strings.TrimSpace(metadataString(event.Metadata, "tool"))
+	tool := strings.TrimSpace(xutil.MetadataString(event.Metadata, "tool"))
 	label := dynamicToolProgressLabel(tool)
 	arguments := dynamicToolProgressArguments(event.Metadata)
 	summary := strings.TrimSpace(dynamicToolProgressSummaryFromMetadata(event.Metadata))
@@ -373,14 +373,6 @@ func NormalizeStatus(status string, final bool) string {
 	}
 }
 
-func metadataString(metadata map[string]any, key string) string {
-	if len(metadata) == 0 {
-		return ""
-	}
-	value, _ := metadata[key].(string)
-	return strings.TrimSpace(value)
-}
-
 func metadataStringSlice(metadata map[string]any, key string) []string {
 	if len(metadata) == 0 {
 		return nil
@@ -444,7 +436,7 @@ func dynamicToolProgressLabel(tool string) string {
 
 func dynamicToolProgressSummaryFromMetadata(metadata map[string]any) string {
 	if value, ok := metadata["suppressFinalText"].(bool); !ok || !value {
-		summary := strings.TrimSpace(metadataString(metadata, "text"))
+		summary := strings.TrimSpace(xutil.MetadataString(metadata, "text"))
 		if summary != "" {
 			return summary
 		}

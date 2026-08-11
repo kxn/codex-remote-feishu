@@ -530,7 +530,7 @@ func validateIssueRequest(req IssueRequest) (*url.URL, string, error) {
 		return nil, "", ErrInvalidTargetURL
 	}
 	host := target.Hostname()
-	if !isLoopbackHost(host) {
+	if !netutil.IsLoopbackHost(host) {
 		return nil, "", ErrTargetNotLoopback
 	}
 	target.Path = normalizeURLPath(target.Path)
@@ -738,10 +738,6 @@ func cloneGrant(value *grantRecord) *grantRecord {
 	copied := *value
 	copied.target = cloneURL(value.target)
 	return &copied
-}
-
-func isLoopbackHost(host string) bool {
-	return netutil.IsLoopbackHost(host)
 }
 
 func sameOrigin(left, right *url.URL) bool {

@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const execCommandProgressMinInterval = 300 * time.Millisecond
@@ -190,10 +191,10 @@ func (s *Service) handleDelegatedTaskProgressUpdated(instanceID string, event ag
 		ItemID:  strings.TrimSpace(event.ItemID),
 		Kind:    "delegated_task",
 		Label:   "Task",
-		Summary: strings.TrimSpace(metadataString(event.Metadata, "description")),
+		Summary: strings.TrimSpace(xutil.MetadataString(event.Metadata, "description")),
 		Status:  execprogress.NormalizeStatus(event.Status, event.Kind == agentproto.EventItemCompleted),
 	}
-	subagentType := strings.TrimSpace(metadataString(event.Metadata, "subagentType"))
+	subagentType := strings.TrimSpace(xutil.MetadataString(event.Metadata, "subagentType"))
 	switch {
 	case entry.Summary != "" && subagentType != "":
 		entry.Summary = subagentType + " · " + entry.Summary
@@ -261,10 +262,10 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 }
 
 func dynamicToolCallAwaitingExplorationDetails(event agentproto.Event) bool {
-	if strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "semanticKind")), "exploration") {
+	if strings.EqualFold(strings.TrimSpace(xutil.MetadataString(event.Metadata, "semanticKind")), "exploration") {
 		return true
 	}
-	return strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "tool")), "read")
+	return strings.EqualFold(strings.TrimSpace(xutil.MetadataString(event.Metadata, "tool")), "read")
 }
 
 func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnID, turnStatus, finalText string) []eventcontract.Event {

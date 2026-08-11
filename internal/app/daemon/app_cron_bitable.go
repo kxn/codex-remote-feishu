@@ -134,16 +134,16 @@ func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI
 			return cronrt.BitableState{}, err
 		}
 	}
-	if app == nil || strings.TrimSpace(stringValue(app.AppToken)) == "" {
+	if app == nil || strings.TrimSpace(xutil.StringValue(app.AppToken)) == "" {
 		return cronrt.BitableState{}, fmt.Errorf("缺少 Cron 多维表格 app token")
 	}
-	binding.AppToken = stringValue(app.AppToken)
-	binding.AppURL = xutil.FirstNonEmpty(strings.TrimSpace(binding.AppURL), strings.TrimSpace(stringValue(app.Url)))
+	binding.AppToken = xutil.StringValue(app.AppToken)
+	binding.AppURL = xutil.FirstNonEmpty(strings.TrimSpace(binding.AppURL), strings.TrimSpace(xutil.StringValue(app.Url)))
 	binding.TimeZone = xutil.FirstNonEmpty(
-		cronrt.NormalizeTimeZone(stringValue(app.TimeZone)),
+		cronrt.NormalizeTimeZone(xutil.StringValue(app.TimeZone)),
 		desiredTimeZone,
 	)
-	binding.DefaultTable = xutil.FirstNonEmpty(strings.TrimSpace(binding.DefaultTable), strings.TrimSpace(stringValue(app.DefaultTableId)))
+	binding.DefaultTable = xutil.FirstNonEmpty(strings.TrimSpace(binding.DefaultTable), strings.TrimSpace(xutil.StringValue(app.DefaultTableId)))
 	if binding.CreatedAt.IsZero() {
 		binding.CreatedAt = time.Now().UTC()
 	}
@@ -214,25 +214,25 @@ func (a *App) ensureCronBitableRemote(ctx context.Context, api feishu.BitableAPI
 
 func (a *App) ensureCronNamedTable(ctx context.Context, api feishu.BitableAPI, appToken string, byID map[string]*larkbitable.AppTable, byName map[string]*larkbitable.AppTable, currentID, desiredName, primaryFieldName, reusableTableID string) (string, error) {
 	if table := byID[strings.TrimSpace(currentID)]; table != nil {
-		if strings.TrimSpace(stringValue(table.Name)) != desiredName {
-			if err := api.RenameTable(ctx, appToken, strings.TrimSpace(stringValue(table.TableId)), desiredName); err != nil {
+		if strings.TrimSpace(xutil.StringValue(table.Name)) != desiredName {
+			if err := api.RenameTable(ctx, appToken, strings.TrimSpace(xutil.StringValue(table.TableId)), desiredName); err != nil {
 				return "", err
 			}
 		}
-		if err := a.ensureCronPrimaryFieldName(ctx, api, appToken, strings.TrimSpace(stringValue(table.TableId)), primaryFieldName); err != nil {
+		if err := a.ensureCronPrimaryFieldName(ctx, api, appToken, strings.TrimSpace(xutil.StringValue(table.TableId)), primaryFieldName); err != nil {
 			return "", err
 		}
-		return strings.TrimSpace(stringValue(table.TableId)), nil
+		return strings.TrimSpace(xutil.StringValue(table.TableId)), nil
 	}
 	if table := byName[desiredName]; table != nil {
-		tableID := strings.TrimSpace(stringValue(table.TableId))
+		tableID := strings.TrimSpace(xutil.StringValue(table.TableId))
 		if err := a.ensureCronPrimaryFieldName(ctx, api, appToken, tableID, primaryFieldName); err != nil {
 			return "", err
 		}
 		return tableID, nil
 	}
 	if table := byID[strings.TrimSpace(reusableTableID)]; table != nil {
-		tableID := strings.TrimSpace(stringValue(table.TableId))
+		tableID := strings.TrimSpace(xutil.StringValue(table.TableId))
 		if err := api.RenameTable(ctx, appToken, tableID, desiredName); err != nil {
 			return "", err
 		}
@@ -253,7 +253,7 @@ func (a *App) ensureCronNamedTable(ctx context.Context, api feishu.BitableAPI, a
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(stringValue(created.TableId)), nil
+	return strings.TrimSpace(xutil.StringValue(created.TableId)), nil
 }
 
 func (a *App) ensureCronPrimaryFieldName(ctx context.Context, api feishu.BitableAPI, appToken, tableID, desiredName string) error {
@@ -265,7 +265,7 @@ func (a *App) ensureCronPrimaryFieldName(ctx context.Context, api feishu.Bitable
 		if field == nil {
 			continue
 		}
-		if strings.TrimSpace(stringValue(field.FieldName)) == desiredName {
+		if strings.TrimSpace(xutil.StringValue(field.FieldName)) == desiredName {
 			return nil
 		}
 	}
@@ -273,7 +273,7 @@ func (a *App) ensureCronPrimaryFieldName(ctx context.Context, api feishu.Bitable
 		if field == nil || field.IsPrimary == nil || !*field.IsPrimary {
 			continue
 		}
-		_, err := api.UpdateField(ctx, appToken, tableID, strings.TrimSpace(stringValue(field.FieldId)), larkbitable.NewAppTableFieldBuilder().
+		_, err := api.UpdateField(ctx, appToken, tableID, strings.TrimSpace(xutil.StringValue(field.FieldId)), larkbitable.NewAppTableFieldBuilder().
 			FieldName(desiredName).
 			Type(1).
 			Build())
@@ -332,7 +332,7 @@ func (a *App) ensureCronFields(ctx context.Context, api feishu.BitableAPI, appTo
 		if field == nil {
 			continue
 		}
-		name := strings.TrimSpace(stringValue(field.FieldName))
+		name := strings.TrimSpace(xutil.StringValue(field.FieldName))
 		if name == "" {
 			continue
 		}
@@ -341,7 +341,7 @@ func (a *App) ensureCronFields(ctx context.Context, api feishu.BitableAPI, appTo
 	for _, spec := range specs {
 		if field := existing[spec.Name]; field != nil {
 			if cronFieldNeedsSchemaUpdate(spec, field) {
-				fieldID := strings.TrimSpace(stringValue(field.FieldId))
+				fieldID := strings.TrimSpace(xutil.StringValue(field.FieldId))
 				if fieldID == "" {
 					return fmt.Errorf("Cron 表 `%s` 字段 `%s` 缺少 field id，无法修正 schema", tableID, spec.Name)
 				}
@@ -392,7 +392,7 @@ func cronFieldLinkTableMatches(spec cronrt.FieldSpec, field *larkbitable.AppTabl
 	if field == nil || field.Property == nil || field.Property.TableId == nil {
 		return false
 	}
-	return strings.TrimSpace(stringValue(field.Property.TableId)) == strings.TrimSpace(stringValue(spec.Property.TableId))
+	return strings.TrimSpace(xutil.StringValue(field.Property.TableId)) == strings.TrimSpace(xutil.StringValue(spec.Property.TableId))
 }
 
 func cronFieldNeedsPropertyUpdate(spec cronrt.FieldSpec, field *larkbitable.AppTableField) bool {
@@ -401,7 +401,7 @@ func cronFieldNeedsPropertyUpdate(spec cronrt.FieldSpec, field *larkbitable.AppT
 	}
 	switch spec.Type {
 	case 5:
-		return strings.TrimSpace(stringValue(cronFieldDateFormatter(field.Property))) != strings.TrimSpace(stringValue(cronFieldDateFormatter(spec.Property)))
+		return strings.TrimSpace(xutil.StringValue(cronFieldDateFormatter(field.Property))) != strings.TrimSpace(xutil.StringValue(cronFieldDateFormatter(spec.Property)))
 	default:
 		return false
 	}
@@ -439,7 +439,7 @@ func (a *App) ensureCronMetaRecord(ctx context.Context, api feishu.BitableAPI, b
 		if currentKey != "" && currentKey != scopeKey {
 			return "", fmt.Errorf("当前 Cron 多维表格已绑定到其他实例：%s", currentKey)
 		}
-		recordID := strings.TrimSpace(stringValue(record.RecordId))
+		recordID := strings.TrimSpace(xutil.StringValue(record.RecordId))
 		if recordID == "" {
 			continue
 		}
@@ -452,7 +452,7 @@ func (a *App) ensureCronMetaRecord(ctx context.Context, api feishu.BitableAPI, b
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(stringValue(created.RecordId)), nil
+	return strings.TrimSpace(xutil.StringValue(created.RecordId)), nil
 }
 
 func (a *App) ensureCronUserPermission(ctx context.Context, api feishu.BitableAPI, appToken, actorUserID string) error {
@@ -510,7 +510,7 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 			"当前状态":  row.Status,
 		}
 		if record := existing[row.Key]; record != nil {
-			recordID := strings.TrimSpace(stringValue(record.RecordId))
+			recordID := strings.TrimSpace(xutil.StringValue(record.RecordId))
 			if recordID != "" {
 				result[row.Key] = recordID
 				if bitablevalue.String(record.Fields["工作区名称"]) == row.Name && bitablevalue.String(record.Fields["当前状态"]) == row.Status {
@@ -527,7 +527,7 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 		if _, ok := desired[key]; ok {
 			continue
 		}
-		recordID := strings.TrimSpace(stringValue(record.RecordId))
+		recordID := strings.TrimSpace(xutil.StringValue(record.RecordId))
 		if recordID == "" {
 			continue
 		}
@@ -550,7 +550,7 @@ func (a *App) syncCronWorkspaceTable(ctx context.Context, api feishu.BitableAPI,
 		for i, key := range pendingCreateKeys {
 			recordID := ""
 			if created[i] != nil {
-				recordID = strings.TrimSpace(stringValue(created[i].RecordId))
+				recordID = strings.TrimSpace(xutil.StringValue(created[i].RecordId))
 			}
 			if recordID == "" {
 				return nil, fmt.Errorf("cron workspace batch create missing record id for key %q", key)
@@ -576,7 +576,7 @@ func (a *App) loadCronWorkspaceIndex(ctx context.Context, api feishu.BitableAPI,
 		if record == nil {
 			continue
 		}
-		recordID := strings.TrimSpace(stringValue(record.RecordId))
+		recordID := strings.TrimSpace(xutil.StringValue(record.RecordId))
 		if recordID == "" {
 			continue
 		}
@@ -647,8 +647,8 @@ func cronIndexTables(tables []*larkbitable.AppTable) (map[string]*larkbitable.Ap
 		if table == nil {
 			continue
 		}
-		tableID := strings.TrimSpace(stringValue(table.TableId))
-		name := strings.TrimSpace(stringValue(table.Name))
+		tableID := strings.TrimSpace(xutil.StringValue(table.TableId))
+		name := strings.TrimSpace(xutil.StringValue(table.Name))
 		if tableID != "" {
 			byID[tableID] = table
 		}
@@ -680,11 +680,4 @@ func cronJobFromRecord(record *larkbitable.AppTableRecord, workspacesByRecord ma
 		return cronrt.JobState{}, false, reloadErr
 	}
 	return job, disabled, nil
-}
-
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

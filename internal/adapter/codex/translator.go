@@ -1,11 +1,13 @@
 package codex
 
-import "github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+import (
+	"github.com/kxn/codex-remote-feishu/internal/adapter/adapterkit"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+)
 
 type Translator struct {
+	adapterkit.TranslatorBase
 	instanceID                 string
-	nextID                     int
-	debugLog                   func(string, ...any)
 	currentThreadID            string
 	knownThreadCWD             map[string]string
 	observedThreads            map[string]codexObservedThread
@@ -142,15 +144,5 @@ func NewTranslator(instanceID string) *Translator {
 		pendingMCPOAuthLogins:      map[string]pendingMCPOAuthLogin{},
 		pendingMCPOAuthLoginKeys:   map[string]string{},
 		pendingModelList:           map[string]pendingModelList{},
-	}
-}
-
-func (t *Translator) SetDebugLogger(debugLog func(string, ...any)) {
-	t.debugLog = debugLog
-}
-
-func (t *Translator) debugf(format string, args ...any) {
-	if t.debugLog != nil {
-		t.debugLog(format, args...)
 	}
 }

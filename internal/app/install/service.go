@@ -180,13 +180,6 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	return state, nil
 }
 
-func boolString(value bool) string {
-	if value {
-		return "true"
-	}
-	return "false"
-}
-
 func choosePreservedValue(incoming, existing string) string {
 	if strings.TrimSpace(incoming) != "" {
 		return incoming

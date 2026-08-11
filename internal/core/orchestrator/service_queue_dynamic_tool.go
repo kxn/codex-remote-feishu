@@ -106,8 +106,8 @@ func dynamicToolImageLinksFromMetadata(metadata map[string]any) []string {
 }
 
 func dynamicToolSummaryTextFromMetadata(metadata map[string]any, imageCount int, imageLinks []string) string {
-	text := strings.TrimSpace(metadataString(metadata, "text"))
-	tool := strings.TrimSpace(metadataString(metadata, "tool"))
+	text := strings.TrimSpace(xutil.MetadataString(metadata, "text"))
+	tool := strings.TrimSpace(xutil.MetadataString(metadata, "tool"))
 	linkSummary := ""
 	if len(imageLinks) != 0 {
 		linkSummary = "\n\n图片链接：\n" + strings.Join(imageLinks, "\n")

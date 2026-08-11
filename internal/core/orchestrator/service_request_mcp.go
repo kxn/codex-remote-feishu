@@ -27,12 +27,12 @@ const (
 func buildPermissionsRequestSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	body := strings.TrimSpace(xutil.FirstNonEmpty(
 		promptBody(prompt),
-		metadataString(metadata, "body"),
-		metadataString(metadata, "reason"),
+		xutil.MetadataString(metadata, "body"),
+		xutil.MetadataString(metadata, "reason"),
 		requestLocalBackendDisplayName(backend)+" 正在等待授予附加权限。",
 	))
 	sections := appendRequestPromptSection(nil, "", body)
-	if reason := strings.TrimSpace(xutil.FirstNonEmpty(metadataString(metadata, "reason"), promptPermissionsReason(prompt))); reason != "" && !strings.Contains(body, reason) {
+	if reason := strings.TrimSpace(xutil.FirstNonEmpty(xutil.MetadataString(metadata, "reason"), promptPermissionsReason(prompt))); reason != "" && !strings.Contains(body, reason) {
 		sections = appendRequestPromptSection(sections, "", "原因："+reason)
 	}
 	permissions := promptPermissionsList(prompt, metadata)
@@ -80,11 +80,11 @@ func buildPermissionsRequestResponse(request *state.RequestPromptRecord, action 
 func buildMCPElicitationApprovalSections(backend agentproto.Backend, prompt *agentproto.RequestPrompt, metadata map[string]any) []state.RequestPromptTextSectionRecord {
 	sections := []state.RequestPromptTextSectionRecord(nil)
 	lines := []string{}
-	if body := strings.TrimSpace(xutil.FirstNonEmpty(promptBody(prompt), metadataString(metadata, "body"), promptMCPElicitationMessage(prompt), metadataString(metadata, "elicitationMessage"))); body != "" {
+	if body := strings.TrimSpace(xutil.FirstNonEmpty(promptBody(prompt), xutil.MetadataString(metadata, "body"), promptMCPElicitationMessage(prompt), xutil.MetadataString(metadata, "elicitationMessage"))); body != "" {
 		lines = append(lines, body)
 	}
 	meta := promptMCPElicitationMeta(prompt, metadata)
-	if serverName := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationServerName(prompt), metadataString(metadata, "serverName"))); serverName != "" {
+	if serverName := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationServerName(prompt), xutil.MetadataString(metadata, "serverName"))); serverName != "" {
 		lines = append(lines, "MCP 服务："+serverName)
 	}
 	if toolTitle := strings.TrimSpace(mcpElicitationApprovalMetaString(meta, "tool_title", "toolTitle")); toolTitle != "" {
@@ -141,15 +141,15 @@ func buildMCPElicitationSections(backend agentproto.Backend, prompt *agentproto.
 	mode := mcpElicitationMode(prompt, metadata)
 	sections := []state.RequestPromptTextSectionRecord(nil)
 	lines := []string{}
-	if body := strings.TrimSpace(xutil.FirstNonEmpty(promptBody(prompt), metadataString(metadata, "body"))); body != "" {
+	if body := strings.TrimSpace(xutil.FirstNonEmpty(promptBody(prompt), xutil.MetadataString(metadata, "body"))); body != "" {
 		lines = append(lines, body)
 	}
-	if serverName := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationServerName(prompt), metadataString(metadata, "serverName"))); serverName != "" {
+	if serverName := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationServerName(prompt), xutil.MetadataString(metadata, "serverName"))); serverName != "" {
 		lines = append(lines, "MCP 服务："+serverName)
 	}
 	switch mode {
 	case "url":
-		url := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationURL(prompt), metadataString(metadata, "url")))
+		url := strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationURL(prompt), xutil.MetadataString(metadata, "url")))
 		if url != "" {
 			lines = append(lines, "授权页面："+url)
 			lines = append(lines, "完成外部授权后，再点击“继续”。")
@@ -203,7 +203,7 @@ func buildMCPElicitationOptions(prompt *agentproto.RequestPrompt, metadata map[s
 		}
 	}
 	continueLabel := "继续"
-	if strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationURL(prompt), metadataString(metadata, "url"))) != "" {
+	if strings.TrimSpace(xutil.FirstNonEmpty(promptMCPElicitationURL(prompt), xutil.MetadataString(metadata, "url"))) != "" {
 		continueLabel = "我已完成，继续"
 	}
 	return []state.RequestPromptOptionRecord{
@@ -668,7 +668,7 @@ func coerceMCPElicitationAnswer(property map[string]any, answer string) (any, er
 func mcpElicitationMode(prompt *agentproto.RequestPrompt, metadata map[string]any) string {
 	mode := strings.TrimSpace(xutil.FirstNonEmpty(
 		promptMCPElicitationMode(prompt),
-		metadataString(metadata, "elicitationMode"),
+		xutil.MetadataString(metadata, "elicitationMode"),
 	))
 	switch mode {
 	case "url":

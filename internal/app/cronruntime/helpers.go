@@ -7,13 +7,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
 
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return strings.TrimSpace(*value)
-}
-
 func intervalMinutesForLabel(label string) (int, bool) {
 	label = strings.TrimSpace(label)
 	for _, item := range IntervalChoices {

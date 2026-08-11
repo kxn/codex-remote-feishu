@@ -113,10 +113,10 @@ func mcpToolCallProgressRecordFromEvent(surfaceID, instanceID string, event agen
 		ThreadID:         event.ThreadID,
 		TurnID:           event.TurnID,
 		ItemID:           strings.TrimSpace(event.ItemID),
-		Server:           metadataString(event.Metadata, "server"),
-		Tool:             metadataString(event.Metadata, "tool"),
+		Server:           xutil.MetadataString(event.Metadata, "server"),
+		Tool:             xutil.MetadataString(event.Metadata, "tool"),
 		Status:           status,
-		ErrorMessage:     metadataString(event.Metadata, "errorMessage"),
+		ErrorMessage:     xutil.MetadataString(event.Metadata, "errorMessage"),
 		DurationMS:       durationMS,
 	}
 }
@@ -135,7 +135,7 @@ func normalizeMCPToolCallProgressStatus(event agentproto.Event) string {
 		case "inprogress", "in_progress", "running":
 			return "started"
 		default:
-			if strings.TrimSpace(metadataString(event.Metadata, "errorMessage")) != "" {
+			if strings.TrimSpace(xutil.MetadataString(event.Metadata, "errorMessage")) != "" {
 				return "failed"
 			}
 			return "completed"

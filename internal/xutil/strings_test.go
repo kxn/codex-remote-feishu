@@ -93,3 +93,48 @@ func TestTruncateRunesUnicode(t *testing.T) {
 		t.Fatalf("unicode cut = %q, want %q", got, "一二三...")
 	}
 }
+
+func TestBoolString(t *testing.T) {
+	t.Parallel()
+	if got := BoolString(true); got != "true" {
+		t.Fatalf("BoolString(true) = %q", got)
+	}
+	if got := BoolString(false); got != "false" {
+		t.Fatalf("BoolString(false) = %q", got)
+	}
+}
+
+func TestCleanPath(t *testing.T) {
+	t.Parallel()
+	if got := CleanPath(""); got != "" {
+		t.Fatalf("CleanPath(empty) = %q, want empty", got)
+	}
+	if got := CleanPath("   "); got != "" {
+		t.Fatalf("CleanPath(blank) = %q, want empty", got)
+	}
+	if got := CleanPath("/tmp/../bin/codex"); got != "/bin/codex" {
+		t.Fatalf("CleanPath(clean) = %q, want %q", got, "/bin/codex")
+	}
+	if got := CleanPath("  /tmp/x  "); got != "/tmp/x" {
+		t.Fatalf("CleanPath(trim) = %q, want %q", got, "/tmp/x")
+	}
+}
+
+func TestMetadataString(t *testing.T) {
+	t.Parallel()
+	if got := MetadataString(nil, "k"); got != "" {
+		t.Fatalf("MetadataString(nil) = %q, want empty", got)
+	}
+	if got := MetadataString(map[string]any{}, "k"); got != "" {
+		t.Fatalf("MetadataString(empty) = %q, want empty", got)
+	}
+	if got := MetadataString(map[string]any{"k": "  v  "}, "k"); got != "v" {
+		t.Fatalf("MetadataString(trim) = %q, want %q", got, "v")
+	}
+	if got := MetadataString(map[string]any{"k": 42}, "k"); got != "" {
+		t.Fatalf("MetadataString(non-string) = %q, want empty", got)
+	}
+	if got := MetadataString(map[string]any{"other": "x"}, "k"); got != "" {
+		t.Fatalf("MetadataString(missing) = %q, want empty", got)
+	}
+}

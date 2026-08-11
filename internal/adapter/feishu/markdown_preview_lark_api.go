@@ -10,6 +10,7 @@ import (
 	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
 
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type larkDrivePreviewAPI struct {
@@ -65,8 +66,8 @@ func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToke
 		return previewpkg.RemoteNode{}, fmt.Errorf("missing create folder response data")
 	}
 	return previewpkg.RemoteNode{
-		Token: stringValue(resp.Data.Token),
-		URL:   stringValue(resp.Data.Url),
+		Token: xutil.StringValue(resp.Data.Token),
+		URL:   xutil.StringValue(resp.Data.Url),
 		Type:  previewpkg.FolderType,
 		Name:  name,
 	}, nil
@@ -112,7 +113,7 @@ func (a *larkDrivePreviewAPI) UploadFile(ctx context.Context, parentToken, fileN
 	if resp.Data == nil {
 		return "", fmt.Errorf("missing upload file response data")
 	}
-	return stringValue(resp.Data.FileToken), nil
+	return xutil.StringValue(resp.Data.FileToken), nil
 }
 
 func (a *larkDrivePreviewAPI) QueryMetaURL(ctx context.Context, token, docType string) (string, error) {
@@ -157,7 +158,7 @@ func (a *larkDrivePreviewAPI) QueryMetaURL(ctx context.Context, token, docType s
 	if resp.Data == nil || len(resp.Data.Metas) == 0 || resp.Data.Metas[0] == nil {
 		return "", fmt.Errorf("missing meta url for token %s", token)
 	}
-	return stringValue(resp.Data.Metas[0].Url), nil
+	return xutil.StringValue(resp.Data.Metas[0].Url), nil
 }
 
 func (a *larkDrivePreviewAPI) GrantPermission(ctx context.Context, token, docType string, principal previewpkg.Principal) error {
@@ -280,16 +281,16 @@ func (a *larkDrivePreviewAPI) ListFiles(ctx context.Context, folderToken string)
 					continue
 				}
 				values = append(values, previewpkg.RemoteNode{
-					Token:        stringValue(file.Token),
-					URL:          stringValue(file.Url),
-					Type:         strings.TrimSpace(stringValue(file.Type)),
-					Name:         strings.TrimSpace(stringValue(file.Name)),
-					CreatedTime:  parsePreviewRemoteTime(stringValue(file.CreatedTime)),
-					ModifiedTime: parsePreviewRemoteTime(stringValue(file.ModifiedTime)),
+					Token:        xutil.StringValue(file.Token),
+					URL:          xutil.StringValue(file.Url),
+					Type:         strings.TrimSpace(xutil.StringValue(file.Type)),
+					Name:         strings.TrimSpace(xutil.StringValue(file.Name)),
+					CreatedTime:  parsePreviewRemoteTime(xutil.StringValue(file.CreatedTime)),
+					ModifiedTime: parsePreviewRemoteTime(xutil.StringValue(file.ModifiedTime)),
 				})
 			}
-			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(stringValue(resp.Data.NextPageToken)) != "" {
-				pageToken = stringValue(resp.Data.NextPageToken)
+			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(xutil.StringValue(resp.Data.NextPageToken)) != "" {
+				pageToken = xutil.StringValue(resp.Data.NextPageToken)
 				continue
 			}
 		}
@@ -338,19 +339,12 @@ func (a *larkDrivePreviewAPI) ListPermissionMembers(ctx context.Context, token, 
 		if item == nil {
 			continue
 		}
-		memberType := strings.TrimSpace(stringValue(item.MemberType))
-		memberID := strings.TrimSpace(stringValue(item.MemberId))
+		memberType := strings.TrimSpace(xutil.StringValue(item.MemberType))
+		memberID := strings.TrimSpace(xutil.StringValue(item.MemberId))
 		if memberType == "" || memberID == "" {
 			continue
 		}
 		values[memberType+":"+memberID] = true
 	}
 	return values, nil
-}
-
-func stringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

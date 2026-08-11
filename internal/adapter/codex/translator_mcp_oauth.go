@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -16,7 +17,7 @@ func (t *Translator) observeMCPOAuthLoginResponse(requestID string, message map[
 	if !exists {
 		return Result{}, false
 	}
-	if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
+	if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 		t.clearPendingMCPOAuthLogin(requestID, pending)
 		return Result{
 			Suppress: true,
@@ -90,7 +91,7 @@ func (t *Translator) observeMCPOAuthLoginCompleted(message map[string]any) (Resu
 	}
 	requestID, exists := t.pendingMCPOAuthLoginKeys[mcpOAuthLoginFlowKey(serverName, threadID)]
 	if !exists {
-		t.debugf("observe mcp oauth login completed without pending flow: server=%s thread=%s", serverName, threadID)
+		t.Debugf("observe mcp oauth login completed without pending flow: server=%s thread=%s", serverName, threadID)
 		return t.observeCapabilityState("mcpServer/oauthLogin/completed", message), true
 	}
 	pending := t.pendingMCPOAuthLogins[requestID]

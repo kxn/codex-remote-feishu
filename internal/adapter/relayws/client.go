@@ -86,7 +86,7 @@ func newClientWithQueueSizes(url string, hello agentproto.Hello, callbacks Clien
 		dataCapacity = defaultDataOutboxCapacity
 	}
 	client := &Client{
-		url:           normalizeRelayURL(url),
+		url:           relayurl.NormalizeAgentURL(url),
 		hello:         hello,
 		callbacks:     callbacks,
 		closed:        make(chan struct{}),
@@ -143,10 +143,6 @@ func (e FatalError) Error() string {
 
 func (e FatalError) Unwrap() error {
 	return e.Err
-}
-
-func normalizeRelayURL(raw string) string {
-	return relayurl.NormalizeAgentURL(raw)
 }
 
 func (c *Client) Close() {

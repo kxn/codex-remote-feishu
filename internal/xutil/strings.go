@@ -1,6 +1,40 @@
 package xutil
 
-import "strings"
+import (
+	"path/filepath"
+	"strings"
+)
+
+// BoolString renders value as "true" or "false", consolidating the copies
+// previously living in install/service.go and config/envfile.go.
+func BoolString(value bool) string {
+	if value {
+		return "true"
+	}
+	return "false"
+}
+
+// CleanPath trims and cleans path with filepath.Clean, returning "" for empty
+// or whitespace-only input. It consolidates the cleanNonEmpty copies in
+// vscodeshim and shim.
+func CleanPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	return filepath.Clean(path)
+}
+
+// MetadataString returns the trimmed string value for key in metadata, or ""
+// when the key is absent or holds a non-string value. It consolidates the
+// metadataString copies in adapter/acp, orchestrator and execprogress.
+func MetadataString(metadata map[string]any, key string) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	value, _ := metadata[key].(string)
+	return strings.TrimSpace(value)
+}
 
 // TruncateOptions controls TruncateRunes behavior. Zero value matches the
 // "plain rune cut + ..." shape used by most callers.

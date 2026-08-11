@@ -7,6 +7,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func buildRequestPromptBodySections(body, fallback string) []state.RequestPromptTextSectionRecord {
@@ -84,7 +85,7 @@ func requestToolCallbackToolName(prompt *agentproto.RequestPrompt, metadata map[
 			return value
 		}
 	}
-	return strings.TrimSpace(metadataString(metadata, "tool"))
+	return strings.TrimSpace(xutil.MetadataString(metadata, "tool"))
 }
 
 func requestToolCallbackCallID(prompt *agentproto.RequestPrompt, metadata map[string]any) string {
@@ -93,7 +94,7 @@ func requestToolCallbackCallID(prompt *agentproto.RequestPrompt, metadata map[st
 			return value
 		}
 	}
-	return strings.TrimSpace(metadataString(metadata, "callId"))
+	return strings.TrimSpace(xutil.MetadataString(metadata, "callId"))
 }
 
 func requestToolCallbackArgumentsPreview(prompt *agentproto.RequestPrompt, metadata map[string]any) string {

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/adapterkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -36,10 +37,9 @@ type ResolvedCommandResponse struct {
 }
 
 type Translator struct {
+	adapterkit.TranslatorBase
 	instanceID    string
 	workspaceRoot string
-	nextID        int
-	debugLog      func(string, ...any)
 	mcpServers    []MCPServer
 
 	currentSessionID string
@@ -131,10 +131,9 @@ type historyItemRef struct {
 }
 
 func NewTranslator(instanceID, workspaceRoot string) *Translator {
-	return &Translator{
+	translator := &Translator{
 		instanceID:         strings.TrimSpace(instanceID),
 		workspaceRoot:      strings.TrimSpace(workspaceRoot),
-		nextID:             1,
 		sessions:           map[string]sessionState{},
 		activeTurns:        map[string]*turnState{},
 		messageItems:       map[string]*itemState{},
@@ -144,20 +143,12 @@ func NewTranslator(instanceID, workspaceRoot string) *Translator {
 		writeApprovals:     map[string]writeApproval{},
 		historyHydrations:  map[string]*historyHydrationState{},
 	}
-}
-
-func (t *Translator) SetDebugLogger(debugLog func(string, ...any)) {
-	t.debugLog = debugLog
-}
-
-func (t *Translator) debugf(format string, args ...any) {
-	if t.debugLog != nil {
-		t.debugLog(format, args...)
-	}
+	translator.InitNextID(1)
+	return translator
 }
 
 func (t *Translator) BuildInitializeFrame() ([]byte, error) {
-	requestID := t.nextRequest("initialize")
+	requestID := t.NextRequest("initialize")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "initialize"}
 	return marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -252,8 +243,7 @@ func (t *Translator) upsertSession(sessionID, cwd string, payload map[string]any
 }
 
 func (t *Translator) newTurn(sessionID string, command agentproto.Command) *turnState {
-	turnID := "opencode-turn-" + strconv.Itoa(t.nextID)
-	t.nextID++
+	turnID := "opencode-turn-" + strconv.Itoa(t.NextID())
 	initiator := commandInitiator(command)
 	traffic := agentproto.TrafficClass("")
 	if command.Target.InternalHelper {
@@ -280,10 +270,9 @@ func (t *Translator) ensureTurnForSession(sessionID string) *turnState {
 	turn := &turnState{
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 		ThreadID:  sessionID,
-		TurnID:    "opencode-observed-turn-" + strconv.Itoa(t.nextID),
+		TurnID:    "opencode-observed-turn-" + strconv.Itoa(t.NextID()),
 		StartedAt: time.Now().UTC(),
 	}
-	t.nextID++
 	t.activeTurns[sessionID] = turn
 	return turn
 }
@@ -497,12 +486,6 @@ func simpleTextDiff(path, oldText, newText string) string {
 		builder.WriteByte('\n')
 	}
 	return builder.String()
-}
-
-func (t *Translator) nextRequest(prefix string) string {
-	value := fmt.Sprintf("relay-%s-%d", prefix, t.nextID)
-	t.nextID++
-	return value
 }
 
 func commandInitiator(command agentproto.Command) agentproto.Initiator {

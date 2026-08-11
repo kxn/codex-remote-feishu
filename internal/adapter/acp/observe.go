@@ -43,7 +43,7 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 	requestID := idKey(frame["id"])
 	pending, ok := t.pendingRPC[requestID]
 	if !ok {
-		t.debugf("opencode unknown response id=%s payload=%s", requestID, xutil.CompactJSON(frame))
+		t.Debugf("opencode unknown response id=%s payload=%s", requestID, xutil.CompactJSON(frame))
 		return result, nil
 	}
 	delete(t.pendingRPC, requestID)
@@ -113,7 +113,7 @@ func (t *Translator) startPromptForSession(sessionID string, command agentproto.
 	if err != nil {
 		return Result{}, err
 	}
-	requestID := t.nextRequest("session-prompt")
+	requestID := t.NextRequest("session-prompt")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "session/prompt", Command: command, Turn: turn}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -345,7 +345,7 @@ func (t *Translator) observeSessionUpdate(params map[string]any, result Result) 
 	case "current_mode_update":
 		t.observeCurrentModeUpdate(sessionID, update)
 	case "available_commands_update":
-		t.debugf("opencode available_commands_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
+		t.Debugf("opencode available_commands_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
 		return result, nil
 	}
 	return result, nil
@@ -681,7 +681,7 @@ func (t *Translator) observeUsageUpdate(sessionID string, update map[string]any)
 	if used == 0 && size == 0 {
 		return
 	}
-	t.debugf("opencode usage_update session=%s used=%d size=%d payload=%s", sessionID, used, size, xutil.CompactJSON(update))
+	t.Debugf("opencode usage_update session=%s used=%d size=%d payload=%s", sessionID, used, size, xutil.CompactJSON(update))
 }
 
 func (t *Translator) observeSessionInfoUpdate(sessionID string, update map[string]any) {
@@ -700,7 +700,7 @@ func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[stri
 		option, _ = update["option"].(map[string]any)
 	}
 	if option == nil {
-		t.debugf("opencode config_option_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
+		t.Debugf("opencode config_option_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
 		return agentproto.Event{}, false
 	}
 	session := t.sessions[sessionID]
@@ -709,7 +709,7 @@ func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[stri
 	session.ConfigOptions = upsertConfigOption(session.ConfigOptions, option)
 	session.ModelOptions, session.CurrentModel, session.CurrentMode = parseConfigOptions(session.ConfigOptions)
 	t.sessions[sessionID] = session
-	t.debugf("opencode config_option_update session=%s option=%s", sessionID, xutil.CompactJSON(option))
+	t.Debugf("opencode config_option_update session=%s option=%s", sessionID, xutil.CompactJSON(option))
 	if strings.TrimSpace(xutil.LookupStringFromAny(option["id"])) != "model" || strings.TrimSpace(session.CurrentModel) == "" {
 		return agentproto.Event{}, false
 	}
@@ -744,7 +744,7 @@ func (t *Translator) observeCurrentModeUpdate(sessionID string, update map[strin
 		session.CurrentMode = mode
 		t.sessions[sessionID] = session
 	}
-	t.debugf("opencode current_mode_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
+	t.Debugf("opencode current_mode_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
 }
 
 func (t *Translator) updateUsage(sessionID string, last agentproto.TokenUsageBreakdown) agentproto.Event {

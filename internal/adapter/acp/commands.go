@@ -16,7 +16,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 		return t.translatePromptFork(command)
 	}
 	if mode == agentproto.PromptExecutionModeStartNew || mode == agentproto.PromptExecutionModeStartEphemeral || threadID == "" {
-		requestID := t.nextRequest("session-new")
+		requestID := t.NextRequest("session-new")
 		t.pendingRPC[requestID] = pendingRPC{Kind: "session/new", Command: command}
 		frame, err := marshalLine(map[string]any{
 			"jsonrpc": "2.0",
@@ -33,7 +33,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 		return Result{OutboundToChild: [][]byte{frame}}, nil
 	}
 	if t.currentSessionID != threadID {
-		requestID := t.nextRequest("session-resume")
+		requestID := t.NextRequest("session-resume")
 		t.pendingRPC[requestID] = pendingRPC{Kind: "session/resume", Command: command}
 		frame, err := marshalLine(map[string]any{
 			"jsonrpc": "2.0",
@@ -58,7 +58,7 @@ func (t *Translator) translatePromptFork(command agentproto.Command) (Result, er
 	if sourceThreadID == "" {
 		return Result{}, fmt.Errorf("prompt.send fork_ephemeral requires source thread id")
 	}
-	requestID := t.nextRequest("session-fork")
+	requestID := t.NextRequest("session-fork")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "session/fork", Command: command}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -154,7 +154,7 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) (Result
 }
 
 func (t *Translator) translateThreadsRefresh(command agentproto.Command) (Result, error) {
-	requestID := t.nextRequest("session-list")
+	requestID := t.NextRequest("session-list")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "session/list", Command: command}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -176,7 +176,7 @@ func (t *Translator) translateThreadHistoryRead(command agentproto.Command) (Res
 		return Result{}, fmt.Errorf("thread.history.read requires thread id")
 	}
 	t.historyHydrations[sessionID] = newHistoryHydration(command, t.commandCWD(command))
-	requestID := t.nextRequest("session-load")
+	requestID := t.NextRequest("session-load")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "session/load", Command: command}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",

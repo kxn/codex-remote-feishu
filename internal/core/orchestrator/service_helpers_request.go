@@ -582,11 +582,11 @@ func buildApprovalRequestOptions(backend agentproto.Backend, semanticKind string
 		add(option.OptionID, option.Label, option.Style)
 	}
 	if len(upstreamOptions) == 0 {
-		add("accept", xutil.FirstNonEmpty(metadataString(metadata, "acceptLabel"), "允许一次"), "primary")
+		add("accept", xutil.FirstNonEmpty(xutil.MetadataString(metadata, "acceptLabel"), "允许一次"), "primary")
 		if approvalRequestSupportsSessionGrant(semanticKind, metadata) {
 			add("acceptForSession", "本会话允许", "default")
 		}
-		add("decline", xutil.FirstNonEmpty(metadataString(metadata, "declineLabel"), "拒绝"), "default")
+		add("decline", xutil.FirstNonEmpty(xutil.MetadataString(metadata, "declineLabel"), "拒绝"), "default")
 		if approvalRequestSupportsCancel(semanticKind) {
 			add("cancel", "取消", "default")
 		}

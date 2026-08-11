@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -63,10 +62,6 @@ func lookupMapFromAny(value any) map[string]any {
 		return map[string]any{}
 	}
 	return xutil.CloneMap(current)
-}
-
-func extractJSONRPCErrorMessage(message map[string]any) string {
-	return jsonrpcutil.ExtractErrorMessage(message)
 }
 
 func choose(values ...string) string {

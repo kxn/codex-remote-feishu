@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -25,9 +26,9 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, ok := t.pendingSuppressedResponse[requestID]; ok {
 			delete(t.pendingSuppressedResponse, requestID)
-			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
+			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 				delete(t.pendingRemoteTurnByThread, pending.ThreadID)
-				t.debugf("observe server suppressed response error: request=%s action=%s thread=%s error=%s", requestID, pending.Action, pending.ThreadID, errMsg)
+				t.Debugf("observe server suppressed response error: request=%s action=%s thread=%s error=%s", requestID, pending.Action, pending.ThreadID, errMsg)
 				if pending.Action == "turn/start" {
 					return Result{Events: []agentproto.Event{{
 						Kind:                 agentproto.EventTurnCompleted,
@@ -51,7 +52,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}
 				return Result{}, nil
 			}
-			t.debugf("observe server suppressed response: request=%s", requestID)
+			t.Debugf("observe server suppressed response: request=%s", requestID)
 			return Result{Suppress: true}, nil
 		}
 		if t.pendingInternalTurnSet[requestID] {
@@ -68,8 +69,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, exists := t.pendingChildRestartRestore[requestID]; exists {
 			delete(t.pendingChildRestartRestore, requestID)
-			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
-				t.debugf("observe server child restart restore error: request=%s thread=%s error=%s", requestID, pending.ThreadID, errMsg)
+			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
+				t.Debugf("observe server child restart restore error: request=%s thread=%s error=%s", requestID, pending.ThreadID, errMsg)
 				return Result{
 					Suppress: true,
 					Events: []agentproto.Event{agentproto.NewChildRestartUpdatedEvent(
@@ -94,7 +95,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				t.knownThreadCWD[pending.ThreadID] = pending.CWD
 			}
 			t.suppressedThreadStarted[pending.ThreadID] = true
-			t.debugf("observe server child restart restore result: request=%s thread=%s", requestID, pending.ThreadID)
+			t.Debugf("observe server child restart restore result: request=%s thread=%s", requestID, pending.ThreadID)
 			return Result{
 				Suppress: true,
 				Events: []agentproto.Event{agentproto.NewChildRestartUpdatedEvent(
@@ -107,8 +108,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, exists := t.pendingReviewStart[requestID]; exists {
 			delete(t.pendingReviewStart, requestID)
-			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
-				t.debugf("observe server review/start error: request=%s thread=%s error=%s", requestID, pending.ThreadID, errMsg)
+			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
+				t.Debugf("observe server review/start error: request=%s thread=%s error=%s", requestID, pending.ThreadID, errMsg)
 				return Result{
 					Suppress: true,
 					Events: []agentproto.Event{agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
@@ -139,7 +140,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 					Initiator:      pending.Initiator,
 				}
 			}
-			t.debugf("observe server review/start result: request=%s parentThread=%s reviewThread=%s turn=%s initiator=%s", requestID, pending.ThreadID, reviewThreadID, turnID, pending.Initiator.Kind)
+			t.Debugf("observe server review/start result: request=%s parentThread=%s reviewThread=%s turn=%s initiator=%s", requestID, pending.ThreadID, reviewThreadID, turnID, pending.Initiator.Kind)
 			events := []agentproto.Event(nil)
 			if explicitReviewThreadID != "" {
 				if event, ok := pendingReviewThreadDiscoveredEvent(explicitReviewThreadID, turnID, pending); ok {
@@ -150,10 +151,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, exists := t.pendingThreadCreate[requestID]; exists {
 			delete(t.pendingThreadCreate, requestID)
-			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
+			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 				delete(t.pendingInternalThreadSet, requestID)
 				action := choose(strings.TrimSpace(pending.Action), "thread/start")
-				t.debugf("observe server %s error: request=%s error=%s", action, requestID, errMsg)
+				t.Debugf("observe server %s error: request=%s error=%s", action, requestID, errMsg)
 				return Result{Events: []agentproto.Event{{
 					Kind:                 agentproto.EventTurnCompleted,
 					Status:               "failed",
@@ -180,7 +181,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				return Result{}, err
 			}
 			action := choose(strings.TrimSpace(pending.Action), "thread/start")
-			t.debugf("observe server %s result: request=%s thread=%s followup=%s", action, requestID, threadID, followupID)
+			t.Debugf("observe server %s result: request=%s thread=%s followup=%s", action, requestID, threadID, followupID)
 			return Result{
 				Suppress:        true,
 				OutboundToCodex: [][]byte{followup},
@@ -199,8 +200,8 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, exists := t.pendingThreadResume[requestID]; exists {
 			delete(t.pendingThreadResume, requestID)
-			if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
-				t.debugf("observe server thread/resume error: request=%s thread=%s kind=%s error=%s", requestID, pending.ThreadID, pending.Command.Kind, errMsg)
+			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
+				t.Debugf("observe server thread/resume error: request=%s thread=%s kind=%s error=%s", requestID, pending.ThreadID, pending.Command.Kind, errMsg)
 				if pending.Command.Kind == agentproto.CommandThreadCompactStart {
 					return Result{Events: []agentproto.Event{agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
 						Code:             "compact_start_failed",
@@ -231,7 +232,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				if err != nil {
 					return Result{}, err
 				}
-				t.debugf("observe server thread/resume result: request=%s thread=%s compactFollowup=%s", requestID, pending.ThreadID, followupID)
+				t.Debugf("observe server thread/resume result: request=%s thread=%s compactFollowup=%s", requestID, pending.ThreadID, followupID)
 				return Result{
 					Suppress:        true,
 					OutboundToCodex: [][]byte{followup},
@@ -241,7 +242,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				if err != nil {
 					return Result{}, err
 				}
-				t.debugf("observe server thread/resume result: request=%s thread=%s followup=%s", requestID, pending.ThreadID, followupID)
+				t.Debugf("observe server thread/resume result: request=%s thread=%s followup=%s", requestID, pending.ThreadID, followupID)
 				return Result{
 					Suppress:        true,
 					OutboundToCodex: [][]byte{followup},
@@ -283,7 +284,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			refresh.ownerVisible = false
 			refresh.order = nil
 			threads := parseThreadList(message["result"])
-			t.debugf(
+			t.Debugf(
 				"observe server thread/list refresh: request=%s borrowed=%t threads=%d currentThread=%s",
 				requestID,
 				borrowed,
@@ -309,7 +310,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				if !threadRefreshNeedsRead(thread) {
 					continue
 				}
-				readID := t.nextRequest("thread-read")
+				readID := t.NextRequest("thread-read")
 				refresh.pendingReads[readID] = thread.ThreadID
 				payload := map[string]any{
 					"id":     readID,
@@ -325,7 +326,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				outbound = append(outbound, append(bytes, '\n'))
 			}
 			if len(outbound) == 0 {
-				t.debugf(
+				t.Debugf(
 					"observe server thread/list refresh satisfied from list: request=%s borrowed=%t threads=%d",
 					requestID,
 					borrowed,
@@ -335,7 +336,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				result.OutboundToParent = threadListAliasResponses
 				return result, nil
 			}
-			t.debugf(
+			t.Debugf(
 				"observe server thread/list refresh followups: request=%s borrowed=%t threadReads=%d firstThread=%s",
 				requestID,
 				borrowed,
@@ -376,7 +377,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				delete(t.threadListRefresh.pendingReads, requestID)
 				if len(t.threadListRefresh.pendingReads) == 0 {
 					result := t.finishThreadListRefresh(true)
-					t.debugf(
+					t.Debugf(
 						"observe server thread refresh completed: request=%s records=%d currentThread=%s",
 						requestID,
 						len(result.Events[0].Threads),
@@ -422,7 +423,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		if problem.TurnID != "" {
 			t.pendingTurnProblems[problem.TurnID] = *problem
 			if t.threadListRefreshActive() {
-				t.debugf(
+				t.Debugf(
 					"observe server error during thread refresh: thread=%s turn=%s code=%s pendingThreadList=%t pendingThreadReads=%d currentThread=%s",
 					problem.ThreadID,
 					problem.TurnID,
@@ -432,7 +433,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 					t.currentThreadID,
 				)
 			}
-			t.debugf(
+			t.Debugf(
 				"observe server error: thread=%s turn=%s code=%s retryable=%t message=%s",
 				problem.ThreadID,
 				problem.TurnID,
@@ -444,7 +445,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			// Feishu receives one precise failure card instead of duplicate alerts.
 			return Result{}, nil
 		}
-		t.debugf("observe server error without turn: code=%s message=%s", problem.Code, problem.Message)
+		t.Debugf("observe server error without turn: code=%s message=%s", problem.Code, problem.Message)
 		return Result{Events: []agentproto.Event{agentproto.NewSystemErrorEvent(*problem)}}, nil
 	case "thread/started":
 		return t.observeThreadStarted(message), nil

@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func writePackagedInstallProbeResultFile(path string, result PackagedInstallProbeResult) error {
@@ -21,17 +23,17 @@ func writePackagedInstallProbeResultFile(path string, result PackagedInstallProb
 
 	var builder strings.Builder
 	builder.WriteString("[" + packagedInstallResultSection + "]\n")
-	writePackagedInstallProbeResultLine(&builder, "ok", boolString(result.OK))
+	writePackagedInstallProbeResultLine(&builder, "ok", xutil.BoolString(result.OK))
 	writePackagedInstallProbeResultLine(&builder, "mode", result.Mode)
 	writePackagedInstallProbeResultLine(&builder, "statePath", result.StatePath)
 	writePackagedInstallProbeResultLine(&builder, "configPath", result.ConfigPath)
 	writePackagedInstallProbeResultLine(&builder, "currentVersion", result.CurrentVersion)
 	writePackagedInstallProbeResultLine(&builder, "currentTrack", result.CurrentTrack)
 	writePackagedInstallProbeResultLine(&builder, "installerVersion", result.InstallerVersion)
-	writePackagedInstallProbeResultLine(&builder, "sameVersion", boolString(result.SameVersion))
+	writePackagedInstallProbeResultLine(&builder, "sameVersion", xutil.BoolString(result.SameVersion))
 	writePackagedInstallProbeResultLine(&builder, "currentInstallBinDir", result.CurrentInstallBinDir)
 	writePackagedInstallProbeResultLine(&builder, "suggestedInstallBinDir", result.SuggestedInstallBinDir)
-	writePackagedInstallProbeResultLine(&builder, "installLocationEditable", boolString(result.InstallLocationEditable))
+	writePackagedInstallProbeResultLine(&builder, "installLocationEditable", xutil.BoolString(result.InstallLocationEditable))
 	writePackagedInstallProbeResultLine(&builder, "serviceManager", result.ServiceManager)
 	writePackagedInstallProbeResultLine(&builder, "startupMode", result.StartupMode)
 	writePackagedInstallProbeResultLine(&builder, "error", result.Error)

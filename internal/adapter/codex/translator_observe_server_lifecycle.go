@@ -33,7 +33,7 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 			t.knownThreadCWD[threadID] = cwd
 		}
 		t.mergeObservedThread(threadID, threadRecord.ModelProviderID, threadRecord.Model, threadRecord.ReasoningEffort)
-		t.debugf("observe server suppressed thread/started after child restart: thread=%s cwd=%s", threadID, cwd)
+		t.Debugf("observe server suppressed thread/started after child restart: thread=%s cwd=%s", threadID, cwd)
 		return Result{Suppress: true}
 	}
 	if t.internalThreadIDs[threadID] {
@@ -143,7 +143,7 @@ func (t *Translator) observeTurnStarted(message map[string]any) Result {
 	if turnID != "" {
 		t.turnInitiators[turnID] = initiator
 	}
-	t.debugf(
+	t.Debugf(
 		"observe server turn/started: thread=%s turn=%s initiator=%s traffic=%s pendingRemoteSurface=%s pendingLocal=%t",
 		threadID,
 		turnID,
@@ -289,7 +289,7 @@ func (t *Translator) observeTurnCompleted(message map[string]any) Result {
 	}
 	delete(t.turnInitiators, turnID)
 	delete(t.internalTurnIDs, turnID)
-	t.debugf("observe server turn/completed: thread=%s turn=%s status=%s initiator=%s", threadID, turnID, status, initiator.Kind)
+	t.Debugf("observe server turn/completed: thread=%s turn=%s status=%s initiator=%s", threadID, turnID, status, initiator.Kind)
 	event := agentproto.Event{
 		Kind:                 agentproto.EventTurnCompleted,
 		ThreadID:             threadID,

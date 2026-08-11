@@ -115,7 +115,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	}
 	backend := s.surfaceBackend(surface)
 	definition, unsupportedText := buildRequestPromptPresentationDefinition(backend, event.RequestPrompt, event.Metadata)
-	requestType := normalizeRequestType(xutil.FirstNonEmpty(definition.RequestType, promptType, metadataString(event.Metadata, "requestType")))
+	requestType := normalizeRequestType(xutil.FirstNonEmpty(definition.RequestType, promptType, xutil.MetadataString(event.Metadata, "requestType")))
 	if requestType == "" {
 		requestType = "approval"
 	}
@@ -141,7 +141,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 			sourceMessageID, _ := s.replyAnchorForTurn(instanceID, event.ThreadID, event.TurnID)
 			return sourceMessageID
 		}(),
-		ItemID:               strings.TrimSpace(metadataString(event.Metadata, "itemId")),
+		ItemID:               strings.TrimSpace(xutil.MetadataString(event.Metadata, "itemId")),
 		Title:                definition.Title,
 		Sections:             definition.Sections,
 		Options:              definition.Options,
@@ -157,7 +157,7 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 	}
 	adoptRequestOwner(record, surface)
 	record.SourceContextLabel = joinRequestSourceContextLabels(
-		metadataString(event.Metadata, "sourceContextLabel"),
+		xutil.MetadataString(event.Metadata, "sourceContextLabel"),
 		s.requestTemporarySessionLabel(record),
 	)
 	normalizeRequestPromptRecord(record)
@@ -234,7 +234,7 @@ func (s *Service) handleResolvedRequestPrompt(surface *state.SurfaceConsoleRecor
 	if requestPromptSemanticKind(request) != control.RequestSemanticPlanConfirmation {
 		return nil
 	}
-	if !strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "decision")), "accept") {
+	if !strings.EqualFold(strings.TrimSpace(xutil.MetadataString(event.Metadata, "decision")), "accept") {
 		return nil
 	}
 	if !s.clearLifecyclePlanModeOverride(surface) {
@@ -608,7 +608,7 @@ func buildUnsupportedToolCallbackResponse(request *state.RequestPromptRecord) ma
 func requestPromptLocalMeta(metadata map[string]any) map[string]string {
 	localMeta := map[string]string{}
 	for _, key := range []string{"requestMethod", "requestKind", "requestType"} {
-		if value := strings.TrimSpace(metadataString(metadata, key)); value != "" {
+		if value := strings.TrimSpace(xutil.MetadataString(metadata, key)); value != "" {
 			localMeta[key] = value
 		}
 	}

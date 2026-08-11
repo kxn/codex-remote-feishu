@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type Config struct {
@@ -539,7 +540,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)
 		thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
-		if forkedFromID := strings.TrimSpace(metadataString(event.Metadata, "forkedFromId")); forkedFromID != "" {
+		if forkedFromID := strings.TrimSpace(xutil.MetadataString(event.Metadata, "forkedFromId")); forkedFromID != "" {
 			thread.ForkedFromID = forkedFromID
 		}
 		if source := threadSourceFromMetadata(event.Metadata); source != nil {
