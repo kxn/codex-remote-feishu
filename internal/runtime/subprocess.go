@@ -3,7 +3,6 @@ package relayruntime
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
@@ -36,11 +35,10 @@ func StartDetachedCommand(opts DetachedCommandOptions) (int, error) {
 		defer stderr.Close()
 	}
 
-	binaryPath := strings.TrimSpace(opts.BinaryPath)
+	binaryPath := normalizeDetachedCommandPath(opts.BinaryPath)
 	if binaryPath == "" {
 		return 0, os.ErrNotExist
 	}
-	binaryPath = filepath.Clean(binaryPath)
 	cmd := execlaunch.Command(binaryPath, opts.Args...)
 	cmd.Stdin = devNull
 	cmd.Stdout = stdout
@@ -61,8 +59,8 @@ func StartDetachedCommand(opts DetachedCommandOptions) (int, error) {
 }
 
 func detachedCommandOutputs(stdoutPath, stderrPath string) (*os.File, *os.File, error) {
-	stdoutPath = filepath.Clean(pathcanon.Native(stdoutPath))
-	stderrPath = filepath.Clean(pathcanon.Native(stderrPath))
+	stdoutPath = normalizeDetachedCommandPath(stdoutPath)
+	stderrPath = normalizeDetachedCommandPath(stderrPath)
 	if stdoutPath == "." || stdoutPath == "" {
 		stdoutPath = os.DevNull
 	}
@@ -88,4 +86,8 @@ func detachedCommandOutputs(stdoutPath, stderrPath string) (*os.File, *os.File, 
 		return nil, nil, err
 	}
 	return stdout, stderr, nil
+}
+
+func normalizeDetachedCommandPath(path string) string {
+	return pathcanon.Native(path)
 }

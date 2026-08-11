@@ -3,11 +3,11 @@ package install
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -38,14 +38,16 @@ var upgradeHelperStartDetachedCommandFunc = relayruntime.StartDetachedCommand
 var upgradeHelperStartSystemdUserTransientFunc = startSystemdUserTransientCommand
 
 func StartUpgradeHelperProcess(ctx context.Context, opts UpgradeHelperLaunchOptions) (UpgradeHelperLaunchResult, error) {
-	helperBinary := filepath.Clean(strings.TrimSpace(opts.HelperBinary))
+	helperBinary := normalizeUpgradeHelperLaunchPath(opts.HelperBinary)
 	if helperBinary == "" {
 		return UpgradeHelperLaunchResult{}, fmt.Errorf("helper binary path is required")
 	}
-	statePath := filepath.Clean(strings.TrimSpace(opts.StatePath))
+	statePath := normalizeUpgradeHelperLaunchPath(opts.StatePath)
 	if statePath == "" {
 		return UpgradeHelperLaunchResult{}, fmt.Errorf("state path is required")
 	}
+	workDir := normalizeUpgradeHelperLaunchPath(opts.WorkDir)
+	logPath := normalizeUpgradeHelperLaunchPath(opts.LogPath)
 
 	args := []string{"upgrade-helper", "-state-path", statePath}
 	if opts.DirectExec {
@@ -58,8 +60,8 @@ func StartUpgradeHelperProcess(ctx context.Context, opts UpgradeHelperLaunchOpti
 			BinaryPath: helperBinary,
 			Args:       args,
 			Env:        append([]string(nil), opts.Env...),
-			WorkDir:    strings.TrimSpace(opts.WorkDir),
-			LogPath:    strings.TrimSpace(opts.LogPath),
+			WorkDir:    workDir,
+			LogPath:    logPath,
 		})
 		if err != nil {
 			return UpgradeHelperLaunchResult{}, err
@@ -71,9 +73,9 @@ func StartUpgradeHelperProcess(ctx context.Context, opts UpgradeHelperLaunchOpti
 		BinaryPath: helperBinary,
 		Args:       args,
 		Env:        append([]string(nil), opts.Env...),
-		WorkDir:    strings.TrimSpace(opts.WorkDir),
-		StdoutPath: strings.TrimSpace(opts.LogPath),
-		StderrPath: strings.TrimSpace(opts.LogPath),
+		WorkDir:    workDir,
+		StdoutPath: logPath,
+		StderrPath: logPath,
 	})
 	if err != nil {
 		return UpgradeHelperLaunchResult{}, err
@@ -82,6 +84,8 @@ func StartUpgradeHelperProcess(ctx context.Context, opts UpgradeHelperLaunchOpti
 }
 
 func startSystemdUserTransientCommand(ctx context.Context, opts systemdUserTransientCommandOptions) (string, error) {
+	workDir := normalizeUpgradeHelperLaunchPath(opts.WorkDir)
+	logPath := normalizeUpgradeHelperLaunchPath(opts.LogPath)
 	args := []string{
 		"--user",
 		"--no-block",
@@ -91,11 +95,10 @@ func startSystemdUserTransientCommand(ctx context.Context, opts systemdUserTrans
 		"--unit", strings.TrimSpace(opts.UnitName),
 		"--description", "codex-remote upgrade helper",
 	}
-	if strings.TrimSpace(opts.WorkDir) != "" {
-		args = append(args, "--working-directory", strings.TrimSpace(opts.WorkDir))
+	if workDir != "" {
+		args = append(args, "--working-directory", workDir)
 	}
-	if strings.TrimSpace(opts.LogPath) != "" {
-		logPath := strings.TrimSpace(opts.LogPath)
+	if logPath != "" {
 		args = append(args,
 			"--property", "StandardOutput=append:"+logPath,
 			"--property", "StandardError=append:"+logPath,
@@ -108,7 +111,7 @@ func startSystemdUserTransientCommand(ctx context.Context, opts systemdUserTrans
 		}
 		args = append(args, "--setenv="+entry)
 	}
-	args = append(args, filepath.Clean(opts.BinaryPath))
+	args = append(args, normalizeUpgradeHelperLaunchPath(opts.BinaryPath))
 	args = append(args, opts.Args...)
 
 	cmd := execlaunch.CommandContext(ctx, "systemd-run", args...)
@@ -125,4 +128,8 @@ func startSystemdUserTransientCommand(ctx context.Context, opts systemdUserTrans
 
 func uniqueUpgradeHelperUnitName() string {
 	return fmt.Sprintf("codex-remote-upgrade-helper-%d.service", time.Now().UTC().UnixNano())
+}
+
+func normalizeUpgradeHelperLaunchPath(path string) string {
+	return pathcanon.Native(path)
 }

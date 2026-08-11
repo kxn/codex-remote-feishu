@@ -133,7 +133,7 @@ type historyItemRef struct {
 func NewTranslator(instanceID, workspaceRoot string) *Translator {
 	translator := &Translator{
 		instanceID:         strings.TrimSpace(instanceID),
-		workspaceRoot:      strings.TrimSpace(workspaceRoot),
+		workspaceRoot:      pathcanon.Native(workspaceRoot),
 		sessions:           map[string]sessionState{},
 		activeTurns:        map[string]*turnState{},
 		messageItems:       map[string]*itemState{},
@@ -232,7 +232,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) (Result, error
 func (t *Translator) upsertSession(sessionID, cwd string, payload map[string]any) sessionState {
 	session := t.sessions[sessionID]
 	session.ID = sessionID
-	session.CWD = xutil.FirstNonEmpty(cwd, session.CWD, t.workspaceRoot)
+	session.CWD = t.canonicalCWD(cwd, session.CWD, t.workspaceRoot)
 	session.Title = xutil.FirstNonEmpty(xutil.LookupStringFromAny(payload["title"]), session.Title)
 	if options := xutil.MapsFromAny(payload["configOptions"]); len(options) != 0 {
 		session.ConfigOptions = options
@@ -349,12 +349,16 @@ func buildImageContent(input agentproto.Input) (map[string]any, error) {
 }
 
 func (t *Translator) commandCWD(command agentproto.Command) string {
-	return xutil.FirstNonEmpty(command.Target.CWD, t.workspaceRoot)
+	return t.canonicalCWD(command.Target.CWD, t.workspaceRoot)
 }
 
 func (t *Translator) sessionWorkspace(sessionID string) string {
 	session := t.sessions[sessionID]
-	return xutil.FirstNonEmpty(session.CWD, t.workspaceRoot)
+	return t.canonicalCWD(session.CWD, t.workspaceRoot)
+}
+
+func (t *Translator) canonicalCWD(values ...string) string {
+	return pathcanon.Native(xutil.FirstNonEmpty(values...))
 }
 
 func resolveWorkspaceWritePath(workspaceRoot, target string) (string, string, error) {

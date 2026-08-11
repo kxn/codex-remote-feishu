@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 )
 
 // Mode selects the shim role a unified binary takes when invoked.
@@ -62,6 +62,7 @@ type Sidecar struct {
 // RealBinaryPath returns the path of the renamed original binary next to a
 // managed shim entrypoint (e.g. /tmp/codex -> /tmp/codex.real).
 func RealBinaryPath(entrypointPath string) string {
+	entrypointPath = pathcanon.Native(entrypointPath)
 	ext := filepath.Ext(entrypointPath)
 	if ext == "" {
 		return entrypointPath + ".real"
@@ -72,6 +73,7 @@ func RealBinaryPath(entrypointPath string) string {
 // SidecarPath returns the sidecar path for a shim entrypoint
 // (e.g. /tmp/codex -> /tmp/codex.remote.json).
 func SidecarPath(entrypointPath string) string {
+	entrypointPath = pathcanon.Native(entrypointPath)
 	ext := filepath.Ext(entrypointPath)
 	if ext == "" {
 		return entrypointPath + ".remote.json"
@@ -83,8 +85,8 @@ func SidecarPath(entrypointPath string) string {
 func NormalizeSidecar(sidecar Sidecar, mode Mode) Sidecar {
 	sidecar.SchemaVersion = SidecarSchemaVersion
 	sidecar.Manager = mode.Manager()
-	sidecar.InstallStatePath = xutil.CleanPath(sidecar.InstallStatePath)
-	sidecar.ConfigPath = xutil.CleanPath(sidecar.ConfigPath)
+	sidecar.InstallStatePath = pathcanon.Native(sidecar.InstallStatePath)
+	sidecar.ConfigPath = pathcanon.Native(sidecar.ConfigPath)
 	sidecar.InstanceID = strings.TrimSpace(sidecar.InstanceID)
 	return sidecar
 }
@@ -149,16 +151,7 @@ func WriteSidecar(path string, sidecar Sidecar, mode Mode) error {
 	return atomicfile.Write(path, raw, 0o644)
 }
 
-// SamePath reports whether two cleaned paths refer to the same file, using
-// case-insensitive comparison on Windows.
+// SamePath reports whether two cleaned platform paths refer to the same file.
 func SamePath(left, right string) bool {
-	left = xutil.CleanPath(left)
-	right = xutil.CleanPath(right)
-	if left == "" || right == "" {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(left, right)
-	}
-	return left == right
+	return pathcompare.SameCleanPlatformPath(left, right)
 }

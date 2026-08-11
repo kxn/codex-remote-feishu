@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/shim"
 )
 
@@ -37,7 +37,7 @@ func RunMain(args []string) int {
 }
 
 func resolveStatePath(entrypointPath string) (string, error) {
-	entrypointPath = filepath.Clean(strings.TrimSpace(entrypointPath))
+	entrypointPath = pathcanon.Native(entrypointPath)
 	if entrypointPath == "" {
 		return "", fmt.Errorf("entrypoint path is empty")
 	}
@@ -49,5 +49,5 @@ func resolveStatePath(entrypointPath string) (string, error) {
 	if !shim.SidecarValid(sidecar, shim.ModeUpgrade) {
 		return "", fmt.Errorf("upgrade shim sidecar is invalid")
 	}
-	return filepath.Clean(strings.TrimSpace(sidecar.InstallStatePath)), nil
+	return pathcanon.Native(sidecar.InstallStatePath), nil
 }

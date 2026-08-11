@@ -52,6 +52,44 @@ func TestResolveLaunchPlanUsesStateBinding(t *testing.T) {
 	}
 }
 
+func TestLoadInstallStateCanonicalizesWindowsExtendedPaths(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "install-state.json")
+	writeInstallStateFile(t, statePath, map[string]string{
+		"configPath":             `//?/C:/repo/config/config.json`,
+		"currentBinaryPath":      `\\?\C:\repo\bin\codex-remote.exe`,
+		"installedBinary":        `//?/C:/legacy/bin/codex-remote.exe`,
+		"installedWrapperBinary": `\\?\C:\legacy\wrapper\codex-remote.exe`,
+	})
+
+	state, err := loadInstallState(statePath)
+	if err != nil {
+		t.Fatalf("loadInstallState: %v", err)
+	}
+	if state.ConfigPath != `C:\repo\config\config.json` {
+		t.Fatalf("ConfigPath = %q, want native extended-prefix-free path", state.ConfigPath)
+	}
+	if state.CurrentBinaryPath != `C:\repo\bin\codex-remote.exe` {
+		t.Fatalf("CurrentBinaryPath = %q, want native extended-prefix-free path", state.CurrentBinaryPath)
+	}
+	if state.InstalledBinary != `C:\legacy\bin\codex-remote.exe` {
+		t.Fatalf("InstalledBinary = %q, want native extended-prefix-free path", state.InstalledBinary)
+	}
+	if state.InstalledWrapperBinary != `C:\legacy\wrapper\codex-remote.exe` {
+		t.Fatalf("InstalledWrapperBinary = %q, want native extended-prefix-free path", state.InstalledWrapperBinary)
+	}
+}
+
+func TestManagedShimEnvCanonicalizesWindowsExtendedPaths(t *testing.T) {
+	env := withManagedShimEnv([]string{"PATH=/bin"}, `//?/C:/repo/config/config.json`, `\\?\C:\repo\bin\codex.real.exe`)
+	if got := envValue(env, "CODEX_REMOTE_CONFIG"); got != `C:\repo\config\config.json` {
+		t.Fatalf("CODEX_REMOTE_CONFIG = %q, want native extended-prefix-free path", got)
+	}
+	if got := envValue(env, "CODEX_REAL_BINARY"); got != `C:\repo\bin\codex.real.exe` {
+		t.Fatalf("CODEX_REAL_BINARY = %q, want native extended-prefix-free path", got)
+	}
+}
+
 func TestResolveLaunchPlanFallsBackWhenConfigIsMissing(t *testing.T) {
 	dir := t.TempDir()
 	entrypoint := filepath.Join(dir, "bundle", "codex")

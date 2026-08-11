@@ -5,9 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/shim"
 	shimembed "github.com/kxn/codex-remote-feishu/internal/shim/embed"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -29,7 +29,7 @@ func UpgradeShimSidecarPath(entrypointPath string) string {
 // WriteUpgradeShimEntrypoint releases the embedded upgrade shim binary to
 // entrypointPath and writes the sidecar that binds it to InstallStatePath.
 func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
-	entrypointPath := strings.TrimSpace(opts.EntrypointPath)
+	entrypointPath := pathcanon.Native(opts.EntrypointPath)
 	if entrypointPath == "" {
 		return fmt.Errorf("upgrade shim entrypoint path is required")
 	}
@@ -52,7 +52,7 @@ func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
 // PrepareUpgradeHelperShim releases a uniquely-named upgrade shim next to the
 // install-state file (under <stateDir>/upgrade-helper/) and returns its path.
 func PrepareUpgradeHelperShim(statePath, instanceID string) (string, error) {
-	statePath = filepath.Clean(strings.TrimSpace(statePath))
+	statePath = pathcanon.Native(statePath)
 	if statePath == "" {
 		return "", fmt.Errorf("state path is required")
 	}

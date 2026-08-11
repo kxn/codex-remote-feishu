@@ -97,6 +97,48 @@ func TestStartUpgradeHelperProcessUsesDetachedCommandForDetachedService(t *testi
 	}
 }
 
+func TestStartUpgradeHelperProcessCanonicalizesExtendedLaunchPaths(t *testing.T) {
+	originalDetached := upgradeHelperStartDetachedCommandFunc
+	originalSystemd := upgradeHelperStartSystemdUserTransientFunc
+	defer func() {
+		upgradeHelperStartDetachedCommandFunc = originalDetached
+		upgradeHelperStartSystemdUserTransientFunc = originalSystemd
+	}()
+
+	var detached relayruntime.DetachedCommandOptions
+	upgradeHelperStartDetachedCommandFunc = func(opts relayruntime.DetachedCommandOptions) (int, error) {
+		detached = opts
+		return 123, nil
+	}
+	upgradeHelperStartSystemdUserTransientFunc = func(context.Context, systemdUserTransientCommandOptions) (string, error) {
+		t.Fatal("unexpected systemd-run launcher")
+		return "", nil
+	}
+
+	_, err := StartUpgradeHelperProcess(context.Background(), UpgradeHelperLaunchOptions{
+		State:        InstallState{ServiceManager: ServiceManagerDetached},
+		HelperBinary: `//?/C:/repo/helper.exe`,
+		StatePath:    `\\?\C:\repo\install-state.json`,
+		LogPath:      `//?/C:/repo/helper.log`,
+		WorkDir:      `\\?\C:\repo`,
+	})
+	if err != nil {
+		t.Fatalf("StartUpgradeHelperProcess: %v", err)
+	}
+	if detached.BinaryPath != `C:\repo\helper.exe` {
+		t.Fatalf("BinaryPath = %q, want native extended-prefix-free path", detached.BinaryPath)
+	}
+	if len(detached.Args) != 3 || detached.Args[2] != `C:\repo\install-state.json` {
+		t.Fatalf("Args = %#v, want canonical state path", detached.Args)
+	}
+	if detached.WorkDir != `C:\repo` {
+		t.Fatalf("WorkDir = %q, want native extended-prefix-free path", detached.WorkDir)
+	}
+	if detached.StdoutPath != `C:\repo\helper.log` || detached.StderrPath != `C:\repo\helper.log` {
+		t.Fatalf("stdout/stderr = %q/%q, want native extended-prefix-free log path", detached.StdoutPath, detached.StderrPath)
+	}
+}
+
 func TestStartUpgradeHelperProcessUsesSystemdRunForSystemdUser(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("systemd user service is linux-only")

@@ -11,6 +11,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 )
 
@@ -376,11 +377,7 @@ func servicePathListSeparator() string {
 }
 
 func normalizeServicePathValue(value string) string {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return ""
-	}
-	value = filepath.Clean(value)
+	value = pathcanon.NativeForGOOS(serviceRuntimeGOOS, value)
 	if serviceRuntimeGOOS != "windows" {
 		value = filepath.ToSlash(value)
 	}

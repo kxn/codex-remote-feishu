@@ -52,6 +52,20 @@ func TestTaskSchedulerTaskNameForInstance(t *testing.T) {
 	}
 }
 
+func TestNormalizeServicePathValueStripsWindowsExtendedPrefix(t *testing.T) {
+	withWindowsGOOS(t)
+	tests := map[string]string{
+		`\\?\C:\Codex Remote\bin\codex-remote.exe`:      `C:\Codex Remote\bin\codex-remote.exe`,
+		`//?/C:/Codex Remote/bin/codex-remote.exe`:      `C:\Codex Remote\bin\codex-remote.exe`,
+		`\\?\UNC\server\share\Codex Remote\config.json`: `\\server\share\Codex Remote\config.json`,
+	}
+	for input, want := range tests {
+		if got := normalizeServicePathValue(input); got != want {
+			t.Fatalf("normalizeServicePathValue(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestRenderTaskSchedulerLogonXMLContainsLogonTriggerAndDaemonArgs(t *testing.T) {
 	withWindowsGOOS(t)
 	baseDir := filepath.Join(t.TempDir(), "Codex Remote")
@@ -79,11 +93,11 @@ func TestRenderTaskSchedulerLogonXMLContainsLogonTriggerAndDaemonArgs(t *testing
 		`<LogonTrigger>`,
 		`<LogonType>InteractiveToken</LogonType>`,
 		`<RunLevel>LeastPrivilege</RunLevel>`,
-		`<Command>` + xmlEscape(binaryPath) + `</Command>`,
-		`<WorkingDirectory>` + xmlEscape(baseDir) + `</WorkingDirectory>`,
+		`<Command>` + xmlEscape(normalizeServicePathValue(binaryPath)) + `</Command>`,
+		`<WorkingDirectory>` + xmlEscape(normalizeServicePathValue(baseDir)) + `</WorkingDirectory>`,
 		`<Arguments>daemon `,
 		`-config`,
-		xmlEscape(state.ConfigPath),
+		xmlEscape(normalizeServicePathValue(state.ConfigPath)),
 		`-xdg-config-home`,
 		`-xdg-data-home`,
 		`-xdg-state-home`,

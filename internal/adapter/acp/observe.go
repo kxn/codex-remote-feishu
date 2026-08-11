@@ -239,11 +239,11 @@ func (t *Translator) observeSessionListResponse(pending pendingRPC, payload map[
 		}
 		cwd := xutil.LookupStringFromAny(item["cwd"])
 		title := xutil.LookupStringFromAny(item["title"])
-		t.upsertSession(sessionID, cwd, map[string]any{"title": title})
+		session := t.upsertSession(sessionID, cwd, map[string]any{"title": title})
 		threads = append(threads, agentproto.ThreadSnapshotRecord{
 			ThreadID:  sessionID,
 			Name:      title,
-			CWD:       cwd,
+			CWD:       session.CWD,
 			Loaded:    sessionID == t.currentSessionID,
 			ListOrder: i,
 		})
@@ -689,7 +689,7 @@ func (t *Translator) observeSessionInfoUpdate(sessionID string, update map[strin
 	session.ID = sessionID
 	if info, _ := update["sessionInfo"].(map[string]any); info != nil {
 		session.Title = xutil.FirstNonEmpty(xutil.LookupStringFromAny(info["title"]), session.Title)
-		session.CWD = xutil.FirstNonEmpty(xutil.LookupStringFromAny(info["cwd"]), session.CWD)
+		session.CWD = t.canonicalCWD(xutil.LookupStringFromAny(info["cwd"]), session.CWD, t.workspaceRoot)
 	}
 	t.sessions[sessionID] = session
 }
@@ -705,7 +705,7 @@ func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[stri
 	}
 	session := t.sessions[sessionID]
 	session.ID = sessionID
-	session.CWD = xutil.FirstNonEmpty(session.CWD, t.workspaceRoot)
+	session.CWD = t.canonicalCWD(session.CWD, t.workspaceRoot)
 	session.ConfigOptions = upsertConfigOption(session.ConfigOptions, option)
 	session.ModelOptions, session.CurrentModel, session.CurrentMode = parseConfigOptions(session.ConfigOptions)
 	t.sessions[sessionID] = session
@@ -740,7 +740,7 @@ func (t *Translator) observeCurrentModeUpdate(sessionID string, update map[strin
 	if mode != "" {
 		session := t.sessions[sessionID]
 		session.ID = sessionID
-		session.CWD = xutil.FirstNonEmpty(session.CWD, t.workspaceRoot)
+		session.CWD = t.canonicalCWD(session.CWD, t.workspaceRoot)
 		session.CurrentMode = mode
 		t.sessions[sessionID] = session
 	}
