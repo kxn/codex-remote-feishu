@@ -201,6 +201,7 @@ type Snapshot struct {
 	ProductMode       string
 	Backend           agentproto.Backend
 	WorkspaceKey      string
+	RoomWorkspaceKey  string
 	CodexProfileID    string
 	ClaudeProfileID   string
 	ClaudeProfileName string

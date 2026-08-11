@@ -1233,6 +1233,33 @@ func TestProjectSnapshotShowsClaimedWorkspace(t *testing.T) {
 	}
 }
 
+func TestProjectSnapshotShowsDetachedRoomWorkspaceBinding(t *testing.T) {
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind: eventcontract.KindSnapshot,
+		Snapshot: &control.Snapshot{
+			ProductMode:      "normal",
+			WorkspaceKey:     "/data/dl/droid",
+			RoomWorkspaceKey: "/data/dl/droid",
+		},
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationSendCard {
+		t.Fatalf("unexpected ops: %#v", ops)
+	}
+	rendered := renderedV2CardText(t, ops[0])
+	if !containsAll(rendered,
+		"群绑定目录：/data/dl/droid",
+		"接管对象类型：无",
+		"已接管：无",
+		"解除群绑定：/workspace detach",
+	) {
+		t.Fatalf("unexpected snapshot rendering with room workspace binding: %q", rendered)
+	}
+	if strings.Contains(rendered, "当前目录：/data/dl/droid") {
+		t.Fatalf("room workspace binding must not render as current directory: %q", rendered)
+	}
+}
+
 func TestProjectSnapshotShowsAttachedWorkspaceWithoutThread(t *testing.T) {
 	projector := NewProjector()
 	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
