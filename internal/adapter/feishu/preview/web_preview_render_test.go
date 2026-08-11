@@ -167,6 +167,12 @@ func TestDriveMarkdownPreviewerServesTurnDiffPreviewWithDedicatedPage(t *testing
 	if !strings.Contains(body, `class="mobile-bar"`) || !strings.Contains(body, `class="file-rail"`) || !strings.Contains(body, `class="diff-scroll"`) {
 		t.Fatalf("expected dedicated turn diff layout, got %q", body)
 	}
+	if !strings.Contains(body, `class="diff-safety-note"`) ||
+		!strings.Contains(body, "本机临时外链") ||
+		!strings.Contains(body, "不会上传整个仓库") ||
+		!strings.Contains(body, "持有链接的人可以查看本次变更快照") {
+		t.Fatalf("expected turn diff preview to explain temporary link exposure, got %q", body)
+	}
 	if !strings.Contains(body, "internal/main.go") || !strings.Contains(body, "const FILES = [{") {
 		t.Fatalf("expected turn diff viewer content, got %q", body)
 	}
