@@ -190,6 +190,27 @@
         overflow: hidden;
       }
 
+      .diff-safety-note {
+        flex: 0 0 auto;
+        display: grid;
+        gap: 3px;
+        padding: 10px 16px;
+        border-bottom: 1px solid rgba(185, 214, 207, 0.92);
+        background: #eef8f5;
+        color: #18453f;
+        font-size: 12.5px;
+        line-height: 1.5;
+      }
+
+      .diff-safety-note strong {
+        font-size: 13px;
+        line-height: 1.4;
+      }
+
+      .diff-safety-note span {
+        color: #42675f;
+      }
+
       .diff-scroll {
         min-height: 0;
         flex: 1 1 auto;
@@ -589,6 +610,10 @@
               <div class="file-list"></div>
             </aside>
             <section class="diff-panel">
+              <div class="diff-safety-note">
+                <strong>本机临时外链</strong>
+                <span>此页只展示本次变更快照，不会上传整个仓库到 Cloudflare 或外部站点；有效期内，持有链接的人可以查看本次变更快照，请勿转发给不可信对象。</span>
+              </div>
               <div class="diff-scroll">
                 <div class="diff-stack"></div>
               </div>
