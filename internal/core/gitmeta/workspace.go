@@ -92,7 +92,7 @@ func InspectWorkspace(path string, opts InspectOptions) (WorkspaceInfo, error) {
 	if !opts.IncludeStatus {
 		return info, nil
 	}
-	output, err := runGit(commandDir, timeout, "status", "--porcelain", "--untracked-files=all")
+	output, err := runGit(commandDir, timeout, "status", "--porcelain", "--untracked-files=normal")
 	if err != nil {
 		return info, err
 	}
