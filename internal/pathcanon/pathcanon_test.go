@@ -13,7 +13,7 @@ func TestStripExtendedPrefix(t *testing.T) {
 		{"plain drive", `C:\repo`, `C:\repo`},
 		{"plain slash drive", `C:/repo`, `C:/repo`},
 		{"plain UNC", `\\server\share`, `\\server\share`},
-		{"unix path", `/home/user/repo`, `/home/user/repo`},
+		{"unix path", `/home/test/repo`, `/home/test/repo`},
 		{"no prefix", `repo`, `repo`},
 	}
 	for _, tc := range cases {
@@ -45,7 +45,7 @@ func TestWorkspaceKeyForGOOSWindows(t *testing.T) {
 		{"mixed separators", `C:\repo/sub`, `C:/repo/sub`},
 		{"relative path", `work\..\src`, `src`},
 		{"leading dotdot", `..\repo`, `../repo`},
-		{"unix absolute", `/home/user/repo`, `/home/user/repo`},
+		{"unix absolute", `/home/test/repo`, `/home/test/repo`},
 		{"empty", `  `, ``},
 		{"dot", `.`, ``},
 	}
@@ -62,8 +62,8 @@ func TestWorkspaceKeyForGOOSUnix(t *testing.T) {
 	cases := []struct {
 		name, input, want string
 	}{
-		{"unix absolute", `/home/user/repo`, `/home/user/repo`},
-		{"unix clean", `/home/user/work/../repo`, `/home/user/repo`},
+		{"unix absolute", `/home/test/repo`, `/home/test/repo`},
+		{"unix clean", `/home/test/work/../repo`, `/home/test/repo`},
 		{"extended drive still stripped", `//?/C:/repo`, `C:/repo`},
 		{"extended UNC still stripped", `\\?\UNC\server\share`, `//server/share`},
 		{"windows drive form", `C:\repo`, `C:/repo`},
@@ -150,7 +150,7 @@ func TestIsWindowsLikePath(t *testing.T) {
 		{`//server/share`, true},
 		{`\\?\C:\repo`, true},
 		{`//?/C:/repo`, true},
-		{`/home/user`, false},
+		{`/home/test`, false},
 		{`repo`, false},
 	}
 	for _, tc := range cases {
@@ -174,8 +174,8 @@ func TestContainmentForGOOS(t *testing.T) {
 		{"UNC containment", "windows", `\\server\share`, `\\server\share\repo`, true},
 		{"extended UNC", "windows", `\\?\UNC\server\share`, `//?/UNC/server/share/repo`, true},
 		{"UNC outside", "windows", `\\server\share`, `\\other\share\repo`, false},
-		{"unix descendant", "linux", `/home/u/repo`, `/home/u/repo/pkg`, true},
-		{"unix sibling", "linux", `/home/u/repo`, `/home/u/repo2`, false},
+		{"unix descendant", "linux", `/home/test/repo`, `/home/test/repo/pkg`, true},
+		{"unix sibling", "linux", `/home/test/repo`, `/home/test/repo2`, false},
 		{"empty root", "windows", ``, `C:\repo`, false},
 	}
 	for _, tc := range cases {
