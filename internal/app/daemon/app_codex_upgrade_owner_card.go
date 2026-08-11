@@ -112,33 +112,21 @@ func codexUpgradeOwnerButton(label, flowID, optionID, style string) control.Comm
 }
 
 func codexUpgradeOwnerFlowTrackingKey(flow *codexupgraderuntime.OwnerCardFlowRecord) string {
-	if flow == nil || strings.TrimSpace(flow.MessageID) != "" {
+	if flow == nil {
 		return ""
 	}
-	return strings.TrimSpace(flow.FlowID)
+	return ownerCardFlowTrackingKey(flow.FlowID, flow.MessageID)
 }
 
 func codexUpgradeOwnerFlowMessageID(flow *codexupgraderuntime.OwnerCardFlowRecord) string {
 	if flow == nil {
 		return ""
 	}
-	return strings.TrimSpace(flow.MessageID)
+	return ownerCardFlowMessageID(flow.MessageID)
 }
 
 func codexUpgradeOwnerCardEvent(surfaceID string, flow *codexupgraderuntime.OwnerCardFlowRecord, title, theme string, bodySections, noticeSections []control.FeishuCardTextSection, buttons []control.CommandCatalogButton, sealed bool) eventcontract.Event {
-	view := control.NormalizeFeishuPageView(control.FeishuPageView{
-		Title:          strings.TrimSpace(title),
-		MessageID:      codexUpgradeOwnerFlowMessageID(flow),
-		TrackingKey:    codexUpgradeOwnerFlowTrackingKey(flow),
-		ThemeKey:       strings.TrimSpace(theme),
-		Patchable:      true,
-		BodySections:   append([]control.FeishuCardTextSection(nil), bodySections...),
-		NoticeSections: append([]control.FeishuCardTextSection(nil), noticeSections...),
-		Interactive:    len(buttons) > 0 && !sealed,
-		Sealed:         sealed,
-		RelatedButtons: append([]control.CommandCatalogButton(nil), buttons...),
-	})
-	return surfacePagePayloadEvent(surfaceID, eventcontract.PagePayload{View: view}, false)
+	return ownerCardPageEvent(surfaceID, codexUpgradeOwnerFlowMessageID(flow), codexUpgradeOwnerFlowTrackingKey(flow), title, theme, bodySections, noticeSections, buttons, sealed)
 }
 
 func codexUpgradeOwnerContextSections(flow *codexupgraderuntime.OwnerCardFlowRecord) []control.FeishuCardTextSection {
