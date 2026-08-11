@@ -59,7 +59,7 @@ func buildExecCommandProgressFileChange(change agentproto.FileChangeRecord) (*st
 	if path == "" && movePath == "" {
 		return nil, false
 	}
-	added, removed := fileChangeLineCounts(change)
+	added, removed := FileChangeLineCounts(change)
 	return &state.ExecCommandProgressFileChangeRecord{
 		Path:         path,
 		MovePath:     movePath,
@@ -100,22 +100,22 @@ func fileChangeProgressSummary(change state.ExecCommandProgressFileChangeRecord)
 	}
 }
 
-func fileChangeLineCounts(change agentproto.FileChangeRecord) (int, int) {
-	added, removed := unifiedDiffLineCounts(change.Diff)
+func FileChangeLineCounts(change agentproto.FileChangeRecord) (int, int) {
+	added, removed := UnifiedDiffLineCounts(change.Diff)
 	if added != 0 || removed != 0 {
 		return added, removed
 	}
 	switch change.Kind {
 	case agentproto.FileChangeAdd:
-		return logicalLineCount(change.Diff), 0
+		return LogicalLineCount(change.Diff), 0
 	case agentproto.FileChangeDelete:
-		return 0, logicalLineCount(change.Diff)
+		return 0, LogicalLineCount(change.Diff)
 	default:
 		return 0, 0
 	}
 }
 
-func logicalLineCount(text string) int {
+func LogicalLineCount(text string) int {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return 0
@@ -123,7 +123,7 @@ func logicalLineCount(text string) int {
 	return strings.Count(text, "\n") + 1
 }
 
-func unifiedDiffLineCounts(diff string) (int, int) {
+func UnifiedDiffLineCounts(diff string) (int, int) {
 	if strings.TrimSpace(diff) == "" {
 		return 0, 0
 	}
