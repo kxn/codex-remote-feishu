@@ -220,7 +220,7 @@ func (s *Service) FailTargetPickerWorktreeCreate(surfaceSessionID, pickerID stri
 	flow := s.activeOwnerCardFlow(surface)
 	record := s.activeTargetPicker(surface)
 	if flow == nil || flow.Kind != ownerCardFlowKindTargetPicker || record == nil || strings.TrimSpace(record.PickerID) != strings.TrimSpace(pickerID) {
-		return notice(surface, string(createErr.Code), targetPickerWorktreeErrorText(createErr))
+		return notice(surface, string(createErr.Code), gitmeta.WorktreeCreateErrorText(createErr))
 	}
 	if destination := strings.TrimSpace(createErr.DestinationPath); destination != "" {
 		record.WorktreeFinalPath = normalizeWorkspaceClaimKey(destination)
@@ -301,28 +301,6 @@ func targetPickerWorktreePreviewErrorText(err *gitmeta.WorktreeCreateError) stri
 	}
 }
 
-func targetPickerWorktreeErrorText(err *gitmeta.WorktreeCreateError) string {
-	if err == nil {
-		return "worktree 创建失败，请稍后重试。"
-	}
-	switch err.Code {
-	case gitmeta.WorktreeCreateErrorGitMissing:
-		return "当前机器未检测到 `git`，暂时不能创建 worktree 工作区。"
-	case gitmeta.WorktreeCreateErrorBaseWorkspaceNotGit:
-		return "当前选择的工作区不是 Git 工作区，不能从它创建 worktree。"
-	case gitmeta.WorktreeCreateErrorInvalidBranchName:
-		return "新分支名无效，请检查后重试。"
-	case gitmeta.WorktreeCreateErrorBranchExists:
-		return "这个分支已经存在，请换一个新的分支名后重试。"
-	case gitmeta.WorktreeCreateErrorInvalidDirectoryName:
-		return "本地目录名无效，请改成不含路径分隔符的普通目录名。"
-	case gitmeta.WorktreeCreateErrorDestinationExists:
-		return "目标目录已经存在，请换一个目录名或基准工作区后重试。"
-	default:
-		return "worktree 创建失败，请稍后重试。"
-	}
-}
-
 func targetPickerWorktreeCreateSuccessStatus(workspaceKey string) feishuCardStatusPayload {
 	sections := []control.FeishuCardTextSection{}
 	if strings.TrimSpace(workspaceKey) != "" {
@@ -344,7 +322,7 @@ func targetPickerWorktreeCreateFailureStatus(createErr *gitmeta.WorktreeCreateEr
 	sections := targetPickerGitImportObjectSections("", normalizeWorkspaceClaimKey(createErr.DestinationPath))
 	sections = append(sections,
 		control.FeishuCardTextSection{Label: "停在阶段", Lines: []string{"创建 worktree"}},
-		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{targetPickerWorktreeErrorText(createErr)}},
+		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{gitmeta.WorktreeCreateErrorText(createErr)}},
 		control.FeishuCardTextSection{Label: "最近输出", Lines: targetPickerGitImportOutputLines(createErr.Stderr)},
 		control.FeishuCardTextSection{Label: "下一步", Lines: []string{"请检查基准工作区、分支名和本地目录名后重试。"}},
 	)

@@ -65,7 +65,7 @@ func (s *Service) FailTargetPickerGitImport(surfaceSessionID, pickerID string, i
 	flow := s.activeOwnerCardFlow(surface)
 	record := s.activeTargetPicker(surface)
 	if flow == nil || flow.Kind != ownerCardFlowKindTargetPicker || record == nil || strings.TrimSpace(record.PickerID) != strings.TrimSpace(pickerID) {
-		return notice(surface, string(importErr.Code), targetPickerGitImportErrorText(importErr))
+		return notice(surface, string(importErr.Code), workspaceimport.ErrorText(importErr))
 	}
 	if destination := strings.TrimSpace(importErr.DestinationPath); destination != "" {
 		record.GitFinalPath = normalizeWorkspaceClaimKey(destination)
@@ -161,7 +161,7 @@ func targetPickerGitImportCloneFailureStatus(importErr *workspaceimport.ImportEr
 	sections := targetPickerGitImportObjectSections(repoURL, finalPath)
 	sections = append(sections,
 		control.FeishuCardTextSection{Label: "停在阶段", Lines: []string{"克隆仓库"}},
-		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{targetPickerGitImportErrorText(importErr)}},
+		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{workspaceimport.ErrorText(importErr)}},
 		control.FeishuCardTextSection{Label: "最近输出", Lines: targetPickerGitImportOutputLines(importErr.Stderr)},
 		control.FeishuCardTextSection{Label: "下一步", Lines: []string{targetPickerGitImportNextStep(importErr)}},
 	)
@@ -278,27 +278,5 @@ func targetPickerGitImportNextStep(importErr *workspaceimport.ImportError) strin
 		return "检查仓库权限、Git 凭据或网络后，再重新发起一次导入。"
 	default:
 		return "检查 Git URL、目标目录、权限或网络后，再重新发起一次导入。"
-	}
-}
-
-func targetPickerGitImportErrorText(importErr *workspaceimport.ImportError) string {
-	if importErr == nil {
-		return "Git 仓库导入失败，请稍后重试。"
-	}
-	switch importErr.Code {
-	case workspaceimport.ImportErrorGitMissing:
-		return "当前机器未检测到 `git`，暂时不能直接从 Git URL 导入。"
-	case workspaceimport.ImportErrorInvalidURL:
-		return "Git 仓库地址无效，请检查地址格式后重试。"
-	case workspaceimport.ImportErrorInvalidDirectoryName:
-		return "目标目录名无效，请改成不含路径分隔符的普通目录名。"
-	case workspaceimport.ImportErrorDestinationExists:
-		return "目标目录已经存在，请换一个父目录或目录名后重试。"
-	case workspaceimport.ImportErrorRefNotFound:
-		return "指定的分支或标签不存在，请检查后重试。"
-	case workspaceimport.ImportErrorAuthFailed:
-		return "无法访问这个仓库，请确认当前机器上的 Git 凭据或仓库权限后重试。"
-	default:
-		return "Git 仓库导入失败，请稍后重试。"
 	}
 }

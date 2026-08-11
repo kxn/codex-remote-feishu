@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/statestore"
 	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -48,11 +49,7 @@ type Store struct {
 }
 
 func StatePath(stateDir string) string {
-	stateDir = strings.TrimSpace(stateDir)
-	if stateDir == "" {
-		return ""
-	}
-	return filepath.Join(stateDir, StateFileName)
+	return statestore.StatePath(stateDir, StateFileName)
 }
 
 func NewStore(path string) *Store {

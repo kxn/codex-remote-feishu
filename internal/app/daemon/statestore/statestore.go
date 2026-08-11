@@ -245,6 +245,24 @@ func (s *Store[T]) Replace(entries map[string]T) error {
 	return nil
 }
 
+// Delete removes the record under key and persists the change. A nil store,
+// a blank key, or a missing record are no-ops.
+func (s *Store[T]) Delete(key string) error {
+	if s == nil {
+		return nil
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	if _, ok := s.Get(key); !ok {
+		return nil
+	}
+	entries := s.Entries()
+	delete(entries, key)
+	return s.Replace(entries)
+}
+
 // Save atomically writes the entries to disk with the current version.
 func (s *Store[T]) Save() error {
 	if s == nil || s.path == "" {
