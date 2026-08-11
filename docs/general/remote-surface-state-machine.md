@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-11`
-> Summary: 同步 Codex Profile-only 状态机合同：旧 `/codexprovider`/`codex_provider` 不再作为命令入口，旧 Provider 字段只作为加载迁移输入；并保留 workspace/path identity、route core、旧 `attach_instance` fail-closed、target picker、OpenCode backend、room workspace、headless recovery、动态模型菜单、prompt override、跨模型组 route restart、typed Codex resume policy 等既有合同。
+> Summary: 同步 Codex Profile-only 状态机合同：旧 `/codexprovider`/`codex_provider` 不再作为命令入口，旧 Provider 字段只作为加载迁移输入；并保留 workspace/path identity、route core、旧 `attach_instance` fail-closed、target picker、OpenCode backend、room workspace、headless recovery、动态模型菜单、prompt override、跨模型组 route restart、typed Codex resume policy 等既有合同；并记录 worktree picker 的 preview / final path / 失败文案已收口到 `gitmeta.PreviewWorktree` / `WorktreeCreateErrorText`（picker 与 daemon 只投影 core 输出）。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -295,6 +295,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
       13. `从 Worktree 新建` 的主卡 confirm 会先 dry-run 检查群 workspace change gate；primary/busy 不满足时只在同卡回写错误，不下发 daemon create。通过后才下发 daemon-side `workspace.git_worktree.create` 命令；真正的 `git worktree add` 在 daemon 持锁外执行，不阻塞主锁。
       14. confirm 后 owner card 立即进入 processing：先显示“正在创建 Worktree 工作区”，创建成功且 flow 仍有效时继续 patch 成“正在接入工作区”；success / failure / cancel 都封回同卡 terminal。
       15. `取消创建` 会优先停止业务流，并对 `git worktree add` / fresh-workspace prepare 做 best-effort 取消；若本地目录已经留下，不自动清理，只在 terminal card 提醒用户按需手动处理。
+      16. worktree 的目标路径预览 / 最终路径 / 失败文案当前统一由 `gitmeta.PreviewWorktree`（含空 branch 草稿态，草稿只给 destination 预览且 `CanConfirm=false`）与 `gitmeta.WorktreeCreateErrorText` 提供：target picker 只投影 core 输出，不再重复 `InspectWorkspace` / `filepath.Join` / `os.Stat` / 错误文案推导；daemon 入口只保留 `WorkspaceKey` / `BranchName` 缺失等 protocol 校验，业务错误 notice 的 code 与 text 均直接来自 `gitmeta.WorktreeCreateError` / `WorktreeCreateErrorText`。`internal/app/gitworkspace.CreateWorktree` 也完全消费 core preview 结果（含 `CanConfirm` 守卫），实际 `git worktree add` 的 cwd / branch / destination 与 preview 一致。
    5. `target_picker_select_workspace` / `target_picker_select_session` / `target_picker_open_path_picker` / `target_picker_back` 都只刷新同一张卡或其子步骤，不会立即 attach 或 switch；其中 `target_picker_back` 只服务 `/workspace list` 内部 Worktree 子页返回 target 页。旧 `target_picker_select_mode` / `target_picker_select_source` 回调与 mode/source 中间页已删除，不再是 transport contract。
    6. `target_picker_cancel` 是当前四张工作会话业务卡的显式退出路径：编辑态会把当前卡封成 `已取消` 终态；若 Git / Worktree 长链路正处于 processing，则会封成 `已取消导入` / `已取消创建` 并执行 best-effort cancel。
    7. `show_threads` / `show_all_threads` / `show_scoped_threads` / `show_workspace_threads` / `show_all_workspaces` / `show_recent_workspaces` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 在 headless 主链下当前都只负责“重新打开或刷新 `/workspace list` 切换卡”，不再维持旧的分页 selection-card 主路径。

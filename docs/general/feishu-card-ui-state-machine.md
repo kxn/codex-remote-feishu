@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-11`
-> Summary: 同步 Codex Profile-only 卡片合同：旧 `/codexprovider`/`codex_provider` 不再作为命令或 callback 入口；并保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、`select_static`、callback surface identity、动态模型/推理菜单、群聊菜单、Profile 下拉、MCP elicitation 与 `/mcpoauth` 等既有 UI 状态机合同。
+> Summary: 同步 Codex Profile-only 卡片合同：旧 `/codexprovider`/`codex_provider` 不再作为命令或 callback 入口；并保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、`select_static`、callback surface identity、动态模型/推理菜单、群聊菜单、Profile 下拉、MCP elicitation 与 `/mcpoauth` 等既有 UI 状态机合同；并记录 worktree picker 的 preview / final path / 失败文案已收口到 `gitmeta.PreviewWorktree` / `WorktreeCreateErrorText`。
 
 ## 1. 文档定位
 
@@ -579,6 +579,7 @@ MCP request 卡片当前新增的可视语义：
   - target picker 的 processing / terminal 阶段当前也不再把整张卡覆写成纯状态块；`工作区 / 会话 / 目录 / 仓库 / 落地目录 / 目标路径` 等业务上下文会继续保留在业务区，状态推进与终态结果统一进入 notice 区
   - `从目录新建` 的主按钮当前仍会前置阻塞已知必败条件；只有目录可接入时，`接入并继续` 才会启用
   - `从 GIT URL 新建` 与 `从 Worktree 新建` 因依赖 Feishu 文本输入，当前不再把 `克隆并继续` / `创建并进入` 的可点击性绑定到 live preview；按钮保持可点，提交后再由服务端做 repo / branch / 目录名 / 基准工作区 / 最终路径 / 环境检查，并把阻塞原因保留在同卡提示区
+  - Worktree 卡的目标路径预览、最终路径与失败文案的单一来源是 `gitmeta.PreviewWorktree`（空 branch 草稿态只给 destination 预览且 `CanConfirm=false`）与 `gitmeta.WorktreeCreateErrorText`：picker 只投影 core 输出，daemon 只保留 `WorkspaceKey` / `BranchName` 缺失等 protocol 校验，业务错误 notice 的 code / text 直接来自 `gitmeta.WorktreeCreateError` / `WorktreeCreateErrorText`，不再各自维护路径拼接或错误文案副本
   - 若当前机器缺少 `git`，`从 GIT URL 新建` 与 `从 Worktree 新建` 仍可直接打开；相关不可用说明会先显示在卡面上，用户点击确认后若仍不可执行，服务端会继续把错误留在同一张卡片里
   - `/workspace list`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree` confirm 成功时，不再 append 一张新的主结果卡；当前 owner card 会直接进入 processing，并在后续 headless / daemon 结果到达时继续 `message.patch` 到同卡终态
   - Git import / worktree processing 期间，卡内只保留结构化阶段、最近状态摘要与 `取消导入` / `取消创建`；阶段块标题当前固定为 `当前阶段`，并用 `✅ / 🔄 / ⚪` 这类 emoji 标记当前推进位置；普通输入会被显式拒绝，提示用户等待完成、取消，或使用 `/status`

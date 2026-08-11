@@ -3,15 +3,12 @@ package orchestrator
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -27,56 +24,19 @@ func (s *Service) buildTargetPickerWorktreeState(record *activeTargetPickerRecor
 		return worktreeState
 	}
 	baseWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.SelectedWorkspaceKey)
-	branchName := strings.TrimSpace(record.WorktreeBranchName)
-	directoryName := strings.TrimSpace(record.WorktreeDirectoryName)
-	if !s.config.GitAvailable {
-		worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "当前机器未检测到 `git`，暂时不能创建 worktree 工作区。",
-		})
-		return worktreeState
-	}
 	if baseWorkspaceKey == "" {
-		return worktreeState
-	}
-	info, err := gitmeta.InspectWorkspace(baseWorkspaceKey, gitmeta.InspectOptions{})
-	if err != nil {
-		worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "无法读取基准工作区的 Git 信息，请稍后重试。",
-		})
-		return worktreeState
-	}
-	if !info.InRepo() {
-		worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "当前选择的工作区不是 Git 工作区，不能从它创建 worktree。",
-		})
-		return worktreeState
-	}
-	if branchName == "" {
-		finalPath, message := targetPickerWorktreePreviewWithoutBranch(baseWorkspaceKey, directoryName)
-		if finalPath != "" {
-			worktreeState.FinalPath = normalizeWorkspaceClaimKey(finalPath)
-		} else if message == "" {
-			return worktreeState
-		}
-		if message != "" {
-			worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-				Level: control.FeishuTargetPickerMessageDanger,
-				Text:  message,
-			})
-		}
 		return worktreeState
 	}
 	preview, err := gitmeta.PreviewWorktree(gitmeta.WorktreeCreateRequest{
 		BaseWorkspacePath: baseWorkspaceKey,
-		BranchName:        branchName,
-		DirectoryName:     directoryName,
+		BranchName:        strings.TrimSpace(record.WorktreeBranchName),
+		DirectoryName:     strings.TrimSpace(record.WorktreeDirectoryName),
 	})
 	if err == nil {
-		worktreeState.FinalPath = normalizeWorkspaceClaimKey(preview.DestinationPath)
-		worktreeState.CanConfirm = true
+		if strings.TrimSpace(preview.DestinationPath) != "" {
+			worktreeState.FinalPath = normalizeWorkspaceClaimKey(preview.DestinationPath)
+		}
+		worktreeState.CanConfirm = preview.CanConfirm
 		return worktreeState
 	}
 	var worktreeErr *gitmeta.WorktreeCreateError
@@ -92,27 +52,9 @@ func (s *Service) buildTargetPickerWorktreeState(record *activeTargetPickerRecor
 	}
 	worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
 		Level: control.FeishuTargetPickerMessageDanger,
-		Text:  targetPickerWorktreePreviewErrorText(worktreeErr),
+		Text:  gitmeta.WorktreeCreateErrorText(worktreeErr),
 	})
 	return worktreeState
-}
-
-func targetPickerWorktreePreviewWithoutBranch(baseWorkspaceKey, directoryName string) (string, string) {
-	baseWorkspaceKey = normalizeWorkspaceClaimKey(baseWorkspaceKey)
-	directoryName = strings.TrimSpace(directoryName)
-	if baseWorkspaceKey == "" || directoryName == "" {
-		return "", ""
-	}
-	if err := workspaceimport.ValidateDirectoryName(directoryName); err != nil {
-		return "", "本地目录名无效，请改成不含路径分隔符的普通目录名。"
-	}
-	finalPath := filepath.Join(filepath.Dir(baseWorkspaceKey), directoryName)
-	if _, err := os.Stat(finalPath); err == nil {
-		return finalPath, fmt.Sprintf("目标目录已存在：%s。请更换目录名或基准工作区。", normalizeWorkspaceClaimKey(finalPath))
-	} else if !os.IsNotExist(err) {
-		return "", "无法预检查最终路径，请重新确认基准工作区和目录名。"
-	}
-	return finalPath, ""
 }
 
 func (s *Service) confirmTargetPickerWorktree(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, record *activeTargetPickerRecord, view control.FeishuTargetPickerView) []eventcontract.Event {
@@ -278,26 +220,6 @@ func targetPickerWorktreeValidationMessage(record *activeTargetPickerRecord, mes
 		return "请先填写新分支名。"
 	default:
 		return "当前 worktree 配置还不能执行，请先修正阻塞项。"
-	}
-}
-
-func targetPickerWorktreePreviewErrorText(err *gitmeta.WorktreeCreateError) string {
-	if err == nil {
-		return "无法预检查最终路径，请重新确认基准工作区、分支名和目录名。"
-	}
-	switch err.Code {
-	case gitmeta.WorktreeCreateErrorBaseWorkspaceNotGit:
-		return "当前选择的工作区不是 Git 工作区，不能从它创建 worktree。"
-	case gitmeta.WorktreeCreateErrorInvalidBranchName:
-		return "新分支名无效，请使用 Git 允许的分支名。"
-	case gitmeta.WorktreeCreateErrorBranchExists:
-		return "这个分支已经存在，请换一个新的分支名。"
-	case gitmeta.WorktreeCreateErrorInvalidDirectoryName:
-		return "本地目录名无效，请改成不含路径分隔符的普通目录名。"
-	case gitmeta.WorktreeCreateErrorDestinationExists:
-		return fmt.Sprintf("目标目录已存在：%s。请更换目录名或基准工作区。", normalizeWorkspaceClaimKey(err.DestinationPath))
-	default:
-		return "无法预检查最终路径，请重新确认基准工作区、分支名和目录名。"
 	}
 }
 
