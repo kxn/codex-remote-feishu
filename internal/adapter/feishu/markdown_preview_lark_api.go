@@ -54,7 +54,7 @@ func (a *larkDrivePreviewAPI) CreateFolder(ctx context.Context, name, parentToke
 		return previewpkg.RemoteNode{}, err
 	}
 	if !resp.Success() {
-		return previewpkg.RemoteNode{}, &driveAPIError{
+		return previewpkg.RemoteNode{}, &previewpkg.DriveAPIError{
 			API:       "drive.v1.file.create_folder",
 			Code:      resp.Code,
 			Msg:       resp.Msg,
@@ -102,7 +102,7 @@ func (a *larkDrivePreviewAPI) UploadFile(ctx context.Context, parentToken, fileN
 		return "", err
 	}
 	if !resp.Success() {
-		return "", &driveAPIError{
+		return "", &previewpkg.DriveAPIError{
 			API:       "drive.v1.file.upload_all",
 			Code:      resp.Code,
 			Msg:       resp.Msg,
@@ -147,7 +147,7 @@ func (a *larkDrivePreviewAPI) QueryMetaURL(ctx context.Context, token, docType s
 		return "", err
 	}
 	if !resp.Success() {
-		return "", &driveAPIError{
+		return "", &previewpkg.DriveAPIError{
 			API:       "drive.v1.meta.batch_query",
 			Code:      resp.Code,
 			Msg:       resp.Msg,
@@ -191,7 +191,7 @@ func (a *larkDrivePreviewAPI) GrantPermission(ctx context.Context, token, docTyp
 		return err
 	}
 	if !resp.Success() {
-		return &driveAPIError{
+		return &previewpkg.DriveAPIError{
 			API:       "drive.v1.permission_member.create",
 			Code:      resp.Code,
 			Msg:       resp.Msg,
@@ -226,7 +226,7 @@ func (a *larkDrivePreviewAPI) DeleteFile(ctx context.Context, token, docType str
 		return err
 	}
 	if !resp.Success() {
-		return &driveAPIError{
+		return &previewpkg.DriveAPIError{
 			API:       "drive.v1.file.delete",
 			Code:      resp.Code,
 			Msg:       resp.Msg,
@@ -267,7 +267,7 @@ func (a *larkDrivePreviewAPI) ListFiles(ctx context.Context, folderToken string)
 			return nil, err
 		}
 		if !resp.Success() {
-			return nil, &driveAPIError{
+			return nil, &previewpkg.DriveAPIError{
 				API:       "drive.v1.file.list",
 				Code:      resp.Code,
 				Msg:       resp.Msg,
@@ -323,7 +323,7 @@ func (a *larkDrivePreviewAPI) ListPermissionMembers(ctx context.Context, token, 
 		return nil, err
 	}
 	if !resp.Success() {
-		return nil, &driveAPIError{
+		return nil, &previewpkg.DriveAPIError{
 			API:       "drive.v1.permission_member.list",
 			Code:      resp.Code,
 			Msg:       resp.Msg,

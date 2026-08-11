@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"net"
 	"os"
 	"os/exec"
@@ -128,11 +129,11 @@ func TestTryCloudflareProviderClearsSnapshotWhenTunnelExits(t *testing.T) {
 
 func TestTryCloudflareProviderResolveBinaryPathUsesBundledExtractor(t *testing.T) {
 	dir := t.TempDir()
-	currentBinary := filepath.Join(dir, executableName("codex-remote"))
+	currentBinary := filepath.Join(dir, xutil.EnsureWindowsExecutable("codex-remote"))
 	if err := os.WriteFile(currentBinary, []byte("codex-remote"), 0o755); err != nil {
 		t.Fatalf("seed current binary: %v", err)
 	}
-	bundledPath := filepath.Join(dir, executableName("cloudflared"))
+	bundledPath := filepath.Join(dir, xutil.EnsureWindowsExecutable("cloudflared"))
 	provider := NewTryCloudflareProvider(TryCloudflareOptions{
 		CurrentBinary: currentBinary,
 		EnsureBundledBinary: func(path string) (string, bool, error) {
@@ -157,7 +158,7 @@ func TestTryCloudflareProviderResolveBinaryPathUsesBundledExtractor(t *testing.T
 
 func TestTryCloudflareProviderResolveBinaryPathReportsBundledError(t *testing.T) {
 	dir := t.TempDir()
-	currentBinary := filepath.Join(dir, executableName("codex-remote"))
+	currentBinary := filepath.Join(dir, xutil.EnsureWindowsExecutable("codex-remote"))
 	if err := os.WriteFile(currentBinary, []byte("codex-remote"), 0o755); err != nil {
 		t.Fatalf("seed current binary: %v", err)
 	}

@@ -1,6 +1,7 @@
 package install
 
 import (
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -12,7 +13,7 @@ func TestCanonicalInstallBinDirForMigrationReturnsCanonicalDirForVersionScopedPa
 	state := InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
-		CurrentBinaryPath: filepath.Join(versionsRoot, "v1.8.4", executableName(runtime.GOOS)),
+		CurrentBinaryPath: filepath.Join(versionsRoot, "v1.8.4", xutil.ExecutableName(runtime.GOOS)),
 		VersionsRoot:      versionsRoot,
 	}
 	canonicalDir, needsMigration := canonicalInstallBinDirForMigration(runtime.GOOS, state)
@@ -31,7 +32,7 @@ func TestCanonicalInstallBinDirForMigrationReturnsFalseForCustomDir(t *testing.T
 	state := InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
-		CurrentBinaryPath: filepath.Join(customBinDir, executableName(runtime.GOOS)),
+		CurrentBinaryPath: filepath.Join(customBinDir, xutil.ExecutableName(runtime.GOOS)),
 		VersionsRoot:      filepath.Join(baseDir, "releases"),
 	}
 	_, needsMigration := canonicalInstallBinDirForMigration(runtime.GOOS, state)
@@ -46,7 +47,7 @@ func TestCanonicalInstallBinDirForMigrationReturnsFalseForAlreadyCanonicalPath(t
 	state := InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
-		CurrentBinaryPath: filepath.Join(canonicalDir, executableName(runtime.GOOS)),
+		CurrentBinaryPath: filepath.Join(canonicalDir, xutil.ExecutableName(runtime.GOOS)),
 		VersionsRoot:      filepath.Join(baseDir, "releases"),
 	}
 	_, needsMigration := canonicalInstallBinDirForMigration(runtime.GOOS, state)
@@ -73,7 +74,7 @@ func TestCanonicalInstallBinDirForMigrationReturnsFalseWhenVersionsRootEmpty(t *
 	state := InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
-		CurrentBinaryPath: filepath.Join(baseDir, "releases", "v1.8.4", executableName(runtime.GOOS)),
+		CurrentBinaryPath: filepath.Join(baseDir, "releases", "v1.8.4", xutil.ExecutableName(runtime.GOOS)),
 	}
 	_, needsMigration := canonicalInstallBinDirForMigration(runtime.GOOS, state)
 	if needsMigration {
@@ -88,7 +89,7 @@ func TestCanonicalInstallBinDirForMigrationHandlesNonDefaultInstance(t *testing.
 	state := InstallState{
 		InstanceID:        instanceID,
 		BaseDir:           baseDir,
-		CurrentBinaryPath: filepath.Join(versionsRoot, "v2.0.0", executableName(runtime.GOOS)),
+		CurrentBinaryPath: filepath.Join(versionsRoot, "v2.0.0", xutil.ExecutableName(runtime.GOOS)),
 		VersionsRoot:      versionsRoot,
 	}
 	canonicalDir, needsMigration := canonicalInstallBinDirForMigration(runtime.GOOS, state)
@@ -108,7 +109,7 @@ func TestCanonicalInstallBinDirForMigrationReturnsFalseWhenVersionsRootIsCustom(
 	state := InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
-		CurrentBinaryPath: filepath.Join(customVersionsRoot, "v1.8.4", executableName(runtime.GOOS)),
+		CurrentBinaryPath: filepath.Join(customVersionsRoot, "v1.8.4", xutil.ExecutableName(runtime.GOOS)),
 		VersionsRoot:      customVersionsRoot,
 	}
 	// This should still return true because binaryWithinVersionsRoot checks
@@ -148,7 +149,7 @@ func TestCanonicalInstallBinDirForMigrationCrossPlatform(t *testing.T) {
 			state := InstallState{
 				InstanceID:        defaultInstanceID,
 				BaseDir:           baseDir,
-				CurrentBinaryPath: filepath.Join(versionsRoot, "v1.8.4", executableName(p.goos)),
+				CurrentBinaryPath: filepath.Join(versionsRoot, "v1.8.4", xutil.ExecutableName(p.goos)),
 				VersionsRoot:      versionsRoot,
 			}
 			canonicalDir, needsMigration := canonicalInstallBinDirForMigration(p.goos, state)
@@ -168,7 +169,7 @@ func TestCanonicalInstallBinDirForMigrationCrossPlatform(t *testing.T) {
 			state := InstallState{
 				InstanceID:        defaultInstanceID,
 				BaseDir:           baseDir,
-				CurrentBinaryPath: filepath.Join(customBinDir, executableName(p.goos)),
+				CurrentBinaryPath: filepath.Join(customBinDir, xutil.ExecutableName(p.goos)),
 				VersionsRoot:      filepath.Join(baseDir, "releases"),
 			}
 			_, needsMigration := canonicalInstallBinDirForMigration(p.goos, state)
@@ -184,7 +185,7 @@ func TestCanonicalInstallBinDirForMigrationCrossPlatform(t *testing.T) {
 			state := InstallState{
 				InstanceID:        defaultInstanceID,
 				BaseDir:           baseDir,
-				CurrentBinaryPath: filepath.Join(canonicalDir, executableName(p.goos)),
+				CurrentBinaryPath: filepath.Join(canonicalDir, xutil.ExecutableName(p.goos)),
 				VersionsRoot:      filepath.Join(baseDir, "releases"),
 			}
 			_, needsMigration := canonicalInstallBinDirForMigration(p.goos, state)

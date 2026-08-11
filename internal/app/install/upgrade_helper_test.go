@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -59,8 +60,8 @@ func TestRunUpgradeHelperWithStatePathSystemdUserUsesSystemctlStopStart(t *testi
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "install-state.json")
 	configPath := filepath.Join(dir, ".config", "codex-remote", "config.json")
-	currentBinary := seedBinary(t, filepath.Join(dir, "bin", executableName(runtime.GOOS)), "old-binary")
-	targetBinary := seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	targetBinary := seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 
 	cfg := config.DefaultAppConfig()
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -148,8 +149,8 @@ func TestRunUpgradeHelperWithStatePathLaunchdUserRebootstrapsBeforeStart(t *test
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "install-state.json")
 	configPath := filepath.Join(dir, ".config", "codex-remote", "config.json")
-	currentBinary := seedBinary(t, filepath.Join(dir, "bin", executableName(runtime.GOOS)), "old-binary")
-	targetBinary := seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	targetBinary := seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 
 	cfg := config.DefaultAppConfig()
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -339,8 +340,8 @@ func TestRunUpgradeHelperWithStatePathDebugInstanceUsesDebugSystemdUnit(t *testi
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, ".local", "share", "codex-remote-debug", "codex-remote", "install-state.json")
 	configPath := filepath.Join(dir, ".config", "codex-remote-debug", "codex-remote", "config.json")
-	currentBinary := seedBinary(t, filepath.Join(dir, "bin", executableName(runtime.GOOS)), "old-binary")
-	seedBinary(t, filepath.Join(dir, ".local", "share", "codex-remote-debug", "codex-remote", "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	seedBinary(t, filepath.Join(dir, ".local", "share", "codex-remote-debug", "codex-remote", "releases", "v1.1.0", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 
 	cfg := config.DefaultAppConfig()
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -405,8 +406,8 @@ func TestRunUpgradeHelperWithStatePathSystemdUserRollsBackOnObserveFailure(t *te
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "install-state.json")
 	configPath := filepath.Join(dir, ".config", "codex-remote", "config.json")
-	currentBinary := seedBinary(t, filepath.Join(dir, "bin", executableName(runtime.GOOS)), "old-binary")
-	seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 
 	cfg := config.DefaultAppConfig()
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -493,8 +494,8 @@ func TestRunUpgradeHelperWithStatePathFailsWhenRollbackStopFails(t *testing.T) {
 	dir := t.TempDir()
 	statePath := filepath.Join(dir, "install-state.json")
 	configPath := filepath.Join(dir, ".config", "codex-remote", "config.json")
-	currentBinary := seedBinary(t, filepath.Join(dir, "bin", executableName(runtime.GOOS)), "old-binary")
-	seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+	currentBinary := seedBinary(t, filepath.Join(dir, "bin", xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 
 	cfg := config.DefaultAppConfig()
 	if err := config.WriteAppConfig(configPath, cfg); err != nil {
@@ -581,8 +582,8 @@ func TestSwitchUpgradeBinaryMigratesVersionScopedPath(t *testing.T) {
 	dir := t.TempDir()
 	versionsRoot := filepath.Join(dir, "releases")
 	// Live binary is in a version-scoped legacy slot.
-	currentBinary := seedBinary(t, filepath.Join(versionsRoot, "v1.8.4", executableName(runtime.GOOS)), "old-binary")
-	seedBinary(t, filepath.Join(versionsRoot, "v1.9.0", executableName(runtime.GOOS)), "new-binary")
+	currentBinary := seedBinary(t, filepath.Join(versionsRoot, "v1.8.4", xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	seedBinary(t, filepath.Join(versionsRoot, "v1.9.0", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 
 	stateValue := InstallState{
 		BaseDir:           dir,
@@ -601,7 +602,7 @@ func TestSwitchUpgradeBinaryMigratesVersionScopedPath(t *testing.T) {
 
 	// After switch, CurrentBinaryPath should be migrated to canonical bin dir.
 	wantBinDir := defaultInstallBinDirForInstance(runtime.GOOS, dir, defaultInstanceID)
-	wantBinaryPath := filepath.Join(wantBinDir, executableName(runtime.GOOS))
+	wantBinaryPath := filepath.Join(wantBinDir, xutil.ExecutableName(runtime.GOOS))
 	if stateValue.CurrentBinaryPath != wantBinaryPath {
 		t.Fatalf("CurrentBinaryPath = %q, want %q", stateValue.CurrentBinaryPath, wantBinaryPath)
 	}
@@ -618,8 +619,8 @@ func TestSwitchUpgradeBinaryMigratesVersionScopedPath(t *testing.T) {
 func TestSwitchUpgradeBinaryPreservesCustomDir(t *testing.T) {
 	dir := t.TempDir()
 	customBinDir := filepath.Join(dir, "custom-bin")
-	currentBinary := seedBinary(t, filepath.Join(customBinDir, executableName(runtime.GOOS)), "old-binary")
-	seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", executableName(runtime.GOOS)), "new-binary")
+	currentBinary := seedBinary(t, filepath.Join(customBinDir, xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	seedBinary(t, filepath.Join(dir, "releases", "v1.1.0", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 
 	stateValue := InstallState{
 		BaseDir:           dir,

@@ -753,7 +753,7 @@ func TestDriveMarkdownPreviewerRecreatesMissingScopeFolder(t *testing.T) {
 	}
 	api.grantPermissionFunc = func(_ context.Context, token, _ string, _ previewPrincipal) error {
 		if token == "fld-stale" {
-			return &driveAPIError{Code: 1063005, Msg: "resource deleted"}
+			return &DriveAPIError{Code: 1063005, Msg: "resource deleted"}
 		}
 		return nil
 	}
@@ -1032,7 +1032,7 @@ func TestDriveMarkdownPreviewerSummaryReturnsPermissionRequiredFallback(t *testi
 	api := newFakePreviewAPI()
 	api.listFilesFunc = func(_ context.Context, folderToken string) ([]previewRemoteNode, error) {
 		if folderToken == "" {
-			return nil, &driveAPIError{Code: 99991672, Msg: "Access denied"}
+			return nil, &DriveAPIError{Code: 99991672, Msg: "Access denied"}
 		}
 		return nil, nil
 	}

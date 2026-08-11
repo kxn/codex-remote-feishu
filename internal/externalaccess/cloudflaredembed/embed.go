@@ -9,11 +9,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type Asset struct {
@@ -50,7 +51,7 @@ func EnsureSibling(currentBinary string) (string, bool, error) {
 	if currentBinary == "" {
 		return "", false, nil
 	}
-	targetPath := filepath.Join(filepath.Dir(currentBinary), executableName("cloudflared"))
+	targetPath := filepath.Join(filepath.Dir(currentBinary), xutil.EnsureWindowsExecutable("cloudflared"))
 	if info, err := os.Stat(targetPath); err == nil && info.Mode().IsRegular() {
 		return targetPath, true, nil
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -114,11 +115,4 @@ func EnsureSibling(currentBinary string) (string, bool, error) {
 func normalizeSHA256(value string) string {
 	value = strings.TrimSpace(strings.TrimPrefix(value, "sha256:"))
 	return strings.ToLower(value)
-}
-
-func executableName(name string) string {
-	if runtime.GOOS == "windows" {
-		return name + ".exe"
-	}
-	return name
 }

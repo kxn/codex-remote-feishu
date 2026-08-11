@@ -1,43 +1,10 @@
 package feishu
 
 import (
-	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
 )
-
-type driveAPIError struct {
-	API       string
-	Code      int
-	Msg       string
-	RequestID string
-	LogID     string
-}
-
-func (e *driveAPIError) Error() string {
-	if e == nil {
-		return ""
-	}
-	if strings.TrimSpace(e.Msg) == "" {
-		return fmt.Sprintf("feishu drive api error %d", e.Code)
-	}
-	return fmt.Sprintf("feishu drive api error %d: %s", e.Code, strings.TrimSpace(e.Msg))
-}
-
-func isPreviewDriveAccessDeniedError(err error) bool {
-	var apiErr *driveAPIError
-	if !errors.As(err, &apiErr) {
-		return false
-	}
-	switch apiErr.Code {
-	case 99991672:
-		return true
-	default:
-		return false
-	}
-}
 
 func parsePreviewRemoteTime(raw string) time.Time {
 	raw = strings.TrimSpace(raw)

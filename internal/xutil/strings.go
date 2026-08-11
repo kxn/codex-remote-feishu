@@ -2,6 +2,7 @@ package xutil
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -34,6 +35,29 @@ func MetadataString(metadata map[string]any, key string) string {
 	}
 	value, _ := metadata[key].(string)
 	return strings.TrimSpace(value)
+}
+
+// ExecutableName returns the product binary name for the given GOOS value
+// ("codex-remote.exe" on windows, "codex-remote" otherwise). It consolidates
+// the executableName copies previously living in install/entry.go and
+// installshim/shim.go.
+func ExecutableName(goos string) string {
+	if goos == "windows" {
+		return "codex-remote.exe"
+	}
+	return "codex-remote"
+}
+
+// EnsureWindowsExecutable returns name with a .exe suffix on windows, or name
+// unchanged otherwise. When name already ends in .exe it is returned as-is.
+// It consolidates the executableName copies previously living in
+// externalaccess/cloudflaredembed and externalaccess/service.go, using the
+// suffix-guarded variant.
+func EnsureWindowsExecutable(name string) string {
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
+		return name + ".exe"
+	}
+	return name
 }
 
 // TruncateOptions controls TruncateRunes behavior. Zero value matches the

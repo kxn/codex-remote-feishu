@@ -3,6 +3,7 @@ package feishu
 import (
 	"errors"
 	"fmt"
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -142,7 +143,7 @@ func ExtractPermissionGap(err error) (PermissionGapEvidence, bool) {
 			return gap, true
 		}
 	}
-	var driveErr *driveAPIError
+	var driveErr *previewpkg.DriveAPIError
 	if errors.As(err, &driveErr) {
 		if gap, ok := permissionGapFromDriveAPIError(driveErr); ok {
 			return gap, true
@@ -213,11 +214,11 @@ func permissionGapFromAPIError(err *APIError) (PermissionGapEvidence, bool) {
 	return gap, true
 }
 
-func permissionGapFromDriveAPIError(err *driveAPIError) (PermissionGapEvidence, bool) {
+func permissionGapFromDriveAPIError(err *previewpkg.DriveAPIError) (PermissionGapEvidence, bool) {
 	if err == nil {
 		return PermissionGapEvidence{}, false
 	}
-	if !isPreviewDriveAccessDeniedError(err) {
+	if !previewpkg.IsDriveAccessDeniedError(err) {
 		return PermissionGapEvidence{}, false
 	}
 	return PermissionGapEvidence{

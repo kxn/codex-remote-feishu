@@ -187,7 +187,7 @@ func switchUpgradeBinary(stateValue *InstallState) error {
 	targetBinary := strings.TrimSpace(stateValue.PendingUpgrade.TargetBinaryPath)
 	if targetBinary == "" {
 		targetSlot := xutil.FirstNonEmpty(strings.TrimSpace(stateValue.PendingUpgrade.TargetSlot), strings.TrimSpace(stateValue.PendingUpgrade.TargetVersion))
-		targetBinary = filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), targetSlot, executableName(runtime.GOOS))
+		targetBinary = filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), targetSlot, xutil.ExecutableName(runtime.GOOS))
 	}
 	if _, err := os.Stat(targetBinary); err != nil {
 		return err

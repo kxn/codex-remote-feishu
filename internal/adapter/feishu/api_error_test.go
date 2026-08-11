@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"net/http"
 	"testing"
 	"time"
@@ -36,7 +37,7 @@ func TestExtractPermissionGapFromAPIError(t *testing.T) {
 }
 
 func TestExtractPermissionGapFromDriveAPIError(t *testing.T) {
-	gap, ok := ExtractPermissionGap(&driveAPIError{
+	gap, ok := ExtractPermissionGap(&previewpkg.DriveAPIError{
 		API:       "drive.v1.file.upload_all",
 		Code:      99991672,
 		Msg:       "Access denied",

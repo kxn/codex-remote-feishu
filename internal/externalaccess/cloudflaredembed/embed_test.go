@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -31,7 +32,7 @@ func TestEnsureSiblingExtractsEmbeddedAsset(t *testing.T) {
 	})
 
 	dir := t.TempDir()
-	currentBinary := filepath.Join(dir, executableName("codex-remote"))
+	currentBinary := filepath.Join(dir, xutil.EnsureWindowsExecutable("codex-remote"))
 	if err := os.WriteFile(currentBinary, []byte("codex-remote"), 0o755); err != nil {
 		t.Fatalf("seed current binary: %v", err)
 	}
@@ -43,7 +44,7 @@ func TestEnsureSiblingExtractsEmbeddedAsset(t *testing.T) {
 	if !ok {
 		t.Fatal("EnsureSibling reported no embedded asset")
 	}
-	if targetPath != filepath.Join(dir, executableName("cloudflared")) {
+	if targetPath != filepath.Join(dir, xutil.EnsureWindowsExecutable("cloudflared")) {
 		t.Fatalf("targetPath = %q, want sibling path", targetPath)
 	}
 	content, err := os.ReadFile(targetPath)
@@ -81,11 +82,11 @@ func TestEnsureSiblingReusesExistingFile(t *testing.T) {
 	})
 
 	dir := t.TempDir()
-	currentBinary := filepath.Join(dir, executableName("codex-remote"))
+	currentBinary := filepath.Join(dir, xutil.EnsureWindowsExecutable("codex-remote"))
 	if err := os.WriteFile(currentBinary, []byte("codex-remote"), 0o755); err != nil {
 		t.Fatalf("seed current binary: %v", err)
 	}
-	existingPath := filepath.Join(dir, executableName("cloudflared"))
+	existingPath := filepath.Join(dir, xutil.EnsureWindowsExecutable("cloudflared"))
 	if err := os.WriteFile(existingPath, []byte("existing-binary"), 0o755); err != nil {
 		t.Fatalf("seed existing asset: %v", err)
 	}

@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -823,12 +822,5 @@ func ResolveBundledCloudflaredPath(currentBinaryPath string) string {
 	if currentBinaryPath == "" {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(currentBinaryPath), executableName("cloudflared"))
-}
-
-func executableName(name string) string {
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
-		return name + ".exe"
-	}
-	return name
+	return filepath.Join(filepath.Dir(currentBinaryPath), xutil.EnsureWindowsExecutable("cloudflared"))
 }

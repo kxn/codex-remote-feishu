@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"context"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,8 +19,8 @@ import (
 func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testing.T) {
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePath(baseDir)
-	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
-	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", executableName(runtime.GOOS)), "local-build")
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "stable-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", xutil.ExecutableName(runtime.GOOS)), "local-build")
 
 	stateValue := InstallState{
 		BaseDir:           baseDir,
@@ -54,7 +55,7 @@ func TestRunLocalBinaryUpgradeWithStatePathImportsBinaryAndStartsHelper(t *testi
 		t.Fatalf("slot = %q, want local-*", slot)
 	}
 
-	targetBinary := filepath.Join(stateValue.VersionsRoot, slot, executableName(runtime.GOOS))
+	targetBinary := filepath.Join(stateValue.VersionsRoot, slot, xutil.ExecutableName(runtime.GOOS))
 	targetRaw, err := os.ReadFile(targetBinary)
 	if err != nil {
 		t.Fatalf("ReadFile target: %v", err)
@@ -114,8 +115,8 @@ func TestRunLocalBinaryUpgradeWithStatePathRepairsCrossPlatformServiceManager(t 
 	baseDir := t.TempDir()
 	homeDir := t.TempDir()
 	statePath := defaultInstallStatePath(baseDir)
-	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
-	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", executableName(runtime.GOOS)), "local-build")
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "stable-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", xutil.ExecutableName(runtime.GOOS)), "local-build")
 	systemdUnitPath := filepath.Join(homeDir, ".config", "systemd", "user", "codex-remote.service")
 	if err := os.MkdirAll(filepath.Dir(systemdUnitPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll systemd unit dir: %v", err)
@@ -187,8 +188,8 @@ func TestRunLocalBinaryUpgradeWithStatePathRepairsCrossPlatformServiceManager(t 
 func TestRunLocalBinaryUpgradeWithStatePathRejectsBusyPendingUpgrade(t *testing.T) {
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePath(baseDir)
-	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
-	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", executableName(runtime.GOOS)), "local-build")
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "stable-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "source-bin", xutil.ExecutableName(runtime.GOOS)), "local-build")
 
 	stateValue := InstallState{
 		BaseDir:           baseDir,
@@ -219,8 +220,8 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePath(baseDir)
-	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
-	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote", "local-upgrade", executableName(runtime.GOOS)), "local-build")
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "stable-binary")
+	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote", "local-upgrade", xutil.ExecutableName(runtime.GOOS)), "local-build")
 
 	stateValue := InstallState{
 		BaseDir:           baseDir,
@@ -281,8 +282,8 @@ func TestRunLocalUpgradeStartsLocalUpgradeTransaction(t *testing.T) {
 func TestRunLocalUpgradeDebugInstanceUsesDebugStatePath(t *testing.T) {
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePathForInstance(baseDir, debugInstanceID)
-	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
-	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "local-upgrade", executableName(runtime.GOOS)), "local-build")
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "stable-binary")
+	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote-debug", "codex-remote", "local-upgrade", xutil.ExecutableName(runtime.GOOS)), "local-build")
 
 	stateValue := InstallState{
 		InstanceID:        debugInstanceID,
@@ -337,8 +338,8 @@ func TestRunLocalUpgradeUsesWorkspaceBindingWhenFlagsOmitted(t *testing.T) {
 	repoRoot := t.TempDir()
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePathForInstance(baseDir, "master")
-	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "stable-binary")
-	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote-master", "codex-remote", "local-upgrade", executableName(runtime.GOOS)), "local-build")
+	currentBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "stable-binary")
+	artifactBinary := seedBinary(t, filepath.Join(baseDir, ".local", "share", "codex-remote-master", "codex-remote", "local-upgrade", xutil.ExecutableName(runtime.GOOS)), "local-build")
 
 	stateValue := InstallState{
 		InstanceID:        "master",

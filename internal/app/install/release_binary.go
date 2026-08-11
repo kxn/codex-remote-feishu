@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"io"
 	"net/http"
 	"os"
@@ -105,7 +106,7 @@ func ensureBinaryArchive(ctx context.Context, opts binaryArchiveOptions) (string
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 	targetDir := filepath.Join(versionsRoot, targetSlot)
-	targetBinary := filepath.Join(targetDir, executableName(goos))
+	targetBinary := filepath.Join(targetDir, xutil.ExecutableName(goos))
 	if info, err := os.Stat(targetBinary); err == nil && info.Mode().IsRegular() {
 		return targetBinary, nil
 	}

@@ -193,7 +193,7 @@ func runPackagedFirstInstall(ctx context.Context, opts packagedInstallOptions) (
 			Error:     err.Error(),
 		}, err
 	}
-	stagedBinary := filepath.Join(versionsRoot, targetSlot, executableName(runtime.GOOS))
+	stagedBinary := filepath.Join(versionsRoot, targetSlot, xutil.ExecutableName(runtime.GOOS))
 	serviceManager := packagedInstallFirstInstallServiceManager(opts.GOOS)
 	service := NewService()
 	state, err := service.Bootstrap(Options{
@@ -282,7 +282,7 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 		result.Error = err.Error()
 		return result, err
 	}
-	stagedBinary := filepath.Join(state.VersionsRoot, targetSlot, executableName(runtime.GOOS))
+	stagedBinary := filepath.Join(state.VersionsRoot, targetSlot, xutil.ExecutableName(runtime.GOOS))
 
 	if err := stopInstallStateProcess(ctx, state, RuntimePathsForState(state), stopInstallStateOptions{
 		StopGrace:    packagedInstallStopGrace,

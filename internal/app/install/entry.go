@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 var executablePath = os.Executable
@@ -212,7 +213,7 @@ func preserveInstallOptionsFromExistingState(flagSet *flag.FlagSet, statePath st
 }
 
 func defaultBinaryPath(goos string) string {
-	name := executableName(goos)
+	name := xutil.ExecutableName(goos)
 	path, err := executablePath()
 	if err == nil {
 		path = filepath.Clean(strings.TrimSpace(path))
@@ -260,11 +261,4 @@ func resolveTargetInstallBinDir(selection installInstanceSelection, explicitValu
 		}
 	}
 	return selection.InstallBinDir
-}
-
-func executableName(goos string) string {
-	if goos == "windows" {
-		return "codex-remote.exe"
-	}
-	return "codex-remote"
 }
