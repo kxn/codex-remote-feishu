@@ -563,9 +563,11 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	}
 	if backend == agentproto.BackendOpenCode {
 		inst.OpenCodeProfileID = state.NormalizeOpenCodeProfileID(hello.Instance.OpenCodeProfileID)
+		inst.OpenCodeRuntimeAccessMode = state.NormalizeOpenCodeRuntimeAccessMode(hello.Instance.OpenCodeRuntimeAccessMode)
 	} else {
 		inst.OpenCodeProfileID = ""
 		inst.OpenCodeAdmissionRef = nil
+		inst.OpenCodeRuntimeAccessMode = ""
 	}
 	inst.Source = xutil.FirstNonEmpty(strings.TrimSpace(hello.Instance.Source), string(state.InstanceSourceVSCode))
 	inst.Capabilities = capabilities

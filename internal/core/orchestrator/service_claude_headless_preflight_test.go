@@ -115,6 +115,76 @@ func TestDispatchNextRestartsClaudeHeadlessForQueuedReasoningMismatch(t *testing
 	}
 }
 
+func TestDispatchNextRestartsOpenCodeHeadlessForQueuedRuntimeAccessMismatch(t *testing.T) {
+	now := time.Date(2026, 8, 11, 12, 30, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := &state.InstanceRecord{
+		InstanceID:                "inst-opencode-1",
+		DisplayName:               "repo",
+		WorkspaceRoot:             "/data/dl/repo",
+		WorkspaceKey:              "/data/dl/repo",
+		ShortName:                 "repo",
+		Backend:                   agentproto.BackendOpenCode,
+		OpenCodeProfileID:         "op_team",
+		OpenCodeAdmissionRef:      &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7}},
+		OpenCodeRuntimeAccessMode: agentproto.AccessModeFullAccess,
+		Source:                    "headless",
+		Managed:                   true,
+		Online:                    true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {
+				ThreadID: "thread-1",
+				Name:     "主线程",
+				CWD:      "/data/dl/repo",
+				Loaded:   true,
+			},
+		},
+	}
+	svc.UpsertInstance(inst)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	surface := svc.root.Surfaces["surface-1"]
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7}}
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: inst.InstanceID})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ThreadID: "thread-1"})
+	surface.QueueItems["queue-1"] = &state.QueueItemRecord{
+		ID:                    "queue-1",
+		SurfaceSessionID:      surface.SurfaceSessionID,
+		ActorUserID:           surface.ActorUserID,
+		SourceKind:            state.QueueItemSourceUser,
+		SourceMessageID:       "msg-1",
+		SourceMessagePreview:  "继续处理",
+		ReplyToMessageID:      "msg-1",
+		ReplyToMessagePreview: "继续处理",
+		Inputs:                []agentproto.Input{{Type: agentproto.InputText, Text: "继续处理"}},
+		FrozenDispatchPlan:    testPromptDispatchPlan(agentproto.PromptExecutionModeResumeExisting, "thread-1", "/data/dl/repo", "", agentproto.SurfaceBindingPolicyFollowExecutionThread),
+		FrozenOverride:        state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm},
+		FrozenPlanMode:        state.PlanModeSettingOff,
+		OpenCodeAdmissionRef:  state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef),
+		RouteModeAtEnqueue:    state.RouteModePinned,
+		Status:                state.QueueItemQueued,
+	}
+	surface.QueuedQueueItemIDs = []string{"queue-1"}
+
+	events := svc.dispatchNext(surface)
+
+	if surface.ActiveQueueItemID != "" {
+		t.Fatalf("expected queue item to stay queued during restart preflight, got active %q", surface.ActiveQueueItemID)
+	}
+	if surface.PendingHeadless == nil || surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposePromptDispatchRestart {
+		t.Fatalf("expected prompt dispatch restart pending headless, got %#v", surface.PendingHeadless)
+	}
+	if surface.PendingHeadless.OpenCodeRuntimeAccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected pending headless to carry queued runtime access, got %#v", surface.PendingHeadless)
+	}
+	if len(events) != 3 || events[0].Notice == nil || events[1].DaemonCommand == nil || events[2].DaemonCommand == nil {
+		t.Fatalf("expected restart notice + kill + start, got %#v", events)
+	}
+	if events[2].DaemonCommand.Kind != control.DaemonCommandStartHeadless ||
+		events[2].DaemonCommand.OpenCodeRuntimeAccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("unexpected start command: %#v", events[2].DaemonCommand)
+	}
+}
+
 func TestClaudePromptRestartHoldsRoomReservationUntilLaunchFailure(t *testing.T) {
 	svc, surface, _ := newClaudeHeadlessPreflightService(t)
 	delete(svc.root.Surfaces, surface.SurfaceSessionID)

@@ -15,6 +15,7 @@ const (
 
 	OpenCodeBinaryEnv               = "OPENCODE_BIN"
 	OpenCodeRuntimeProfileIDEnv     = "CODEX_REMOTE_OPENCODE_PROFILE_ID"
+	OpenCodeRuntimeAccessModeEnv    = "CODEX_REMOTE_OPENCODE_RUNTIME_ACCESS_MODE"
 	OpenCodeLaunchJSONEnv           = "CODEX_REMOTE_OPENCODE_LAUNCH_JSON"
 	OpenCodeConfigContentEnv        = "OPENCODE_CONFIG_CONTENT"
 	OpenCodeAuthContentEnv          = "OPENCODE_AUTH_CONTENT"

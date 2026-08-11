@@ -101,7 +101,7 @@ func TestNormalizeBotCapabilitySettingsRecordCarriesOpenCodeProfile(t *testing.T
 	}
 }
 
-func TestNormalizeBotCapabilitySettingsRecordClearsOpenCodePromptAndPlanOverrides(t *testing.T) {
+func TestNormalizeBotCapabilitySettingsRecordKeepsOnlyOpenCodeRuntimeAccess(t *testing.T) {
 	record, ok := NormalizeBotCapabilitySettingsRecord(BotCapabilitySettingsRecord{
 		GatewayID:         "app-1",
 		ProductMode:       ProductModeNormal,
@@ -118,8 +118,8 @@ func TestNormalizeBotCapabilitySettingsRecordClearsOpenCodePromptAndPlanOverride
 	if !ok {
 		t.Fatal("expected normalized record")
 	}
-	if record.PromptOverride != (ModelConfigRecord{}) {
-		t.Fatalf("opencode prompt override = %#v, want empty", record.PromptOverride)
+	if record.PromptOverride != (ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
+		t.Fatalf("opencode prompt override = %#v, want runtime access only", record.PromptOverride)
 	}
 	if record.PlanMode != PlanModeSettingOff || record.PlanModeOverrideSet {
 		t.Fatalf("opencode plan override = %s/%v, want off/false", record.PlanMode, record.PlanModeOverrideSet)
@@ -173,7 +173,7 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing
 	}
 }
 
-func TestEffectiveSurfaceCapabilitySettingsSanitizesOpenCodeBotPromptAndPlanOverrides(t *testing.T) {
+func TestEffectiveSurfaceCapabilitySettingsKeepsOnlyOpenCodeRuntimeAccess(t *testing.T) {
 	root := NewRoot()
 	root.BotCapabilitySettings["feishu:gateway:app-1"] = BotCapabilitySettingsRecord{
 		GatewayID:         "app-1",
@@ -206,8 +206,8 @@ func TestEffectiveSurfaceCapabilitySettingsSanitizesOpenCodeBotPromptAndPlanOver
 	if effective.Contract.Backend != agentproto.BackendOpenCode || effective.Contract.OpenCodeProfileID != "op_team" {
 		t.Fatalf("effective contract = %#v, want opencode profile", effective.Contract)
 	}
-	if effective.PromptOverride != (ModelConfigRecord{}) {
-		t.Fatalf("effective opencode prompt override = %#v, want empty", effective.PromptOverride)
+	if effective.PromptOverride != (ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
+		t.Fatalf("effective opencode prompt override = %#v, want runtime access only", effective.PromptOverride)
 	}
 	if effective.PlanMode != PlanModeSettingOff || effective.PlanModeOverrideSet {
 		t.Fatalf("effective opencode plan = %s/%v, want off/false", effective.PlanMode, effective.PlanModeOverrideSet)

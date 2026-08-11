@@ -295,7 +295,7 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	}
 }
 
-func TestCompilerAPIProfileMapsSupportedPermissionMode(t *testing.T) {
+func TestCompilerAPIProfileIgnoresLegacyPermissionMode(t *testing.T) {
 	material, err := CompileLaunchMaterial(CompileInput{
 		Profile: config.OpenCodeProfile{
 			OpenCodeAPIProfileSecretConfig: config.OpenCodeAPIProfileSecretConfig{
@@ -321,9 +321,40 @@ func TestCompilerAPIProfileMapsSupportedPermissionMode(t *testing.T) {
 	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
 		t.Fatalf("config overlay is not JSON: %v\n%s", err, configRaw)
 	}
+	if _, ok := configDoc["permission"]; ok {
+		t.Fatalf("legacy profile permission mode must not be projected into OpenCode config: %#v", configDoc)
+	}
+}
+
+func TestCompilerRuntimeAccessModeProjectsPermissionOverlay(t *testing.T) {
+	material, err := CompileLaunchMaterial(CompileInput{
+		Profile: config.OpenCodeProfile{
+			OpenCodeAPIProfileSecretConfig: config.OpenCodeAPIProfileSecretConfig{
+				ID:       "op_team",
+				Revision: 7,
+				Name:     "Team OpenCode",
+				BaseURL:  "https://proxy.example/v1",
+				APIKey:   "secret-token",
+				Model:    "kimi-k2",
+			},
+		},
+		WorkspaceRoot:     "/repo",
+		RuntimeAccessMode: "confirm",
+	})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(api): %v", err)
+	}
+	configRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("missing %s in %#v", config.OpenCodeConfigContentEnv, material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v\n%s", err, configRaw)
+	}
 	permission, ok := configDoc["permission"].(map[string]any)
 	if !ok || permission["*"] != "ask" {
-		t.Fatalf("permission mode = %#v, want ask in %#v", configDoc["permission"], configDoc)
+		t.Fatalf("runtime access mode permission = %#v, want ask in %#v", configDoc["permission"], configDoc)
 	}
 }
 

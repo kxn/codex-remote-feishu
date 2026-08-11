@@ -57,8 +57,12 @@ func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleReco
 		if desiredAdmissionRef := state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef); desiredAdmissionRef != nil {
 			observedAdmissionRef := state.NormalizeOpenCodeAdmissionRef(inst.OpenCodeAdmissionRef)
 			result.Compatible = observedAdmissionRef != nil && *desiredAdmissionRef == *observedAdmissionRef
-			break
+			if !result.Compatible {
+				break
+			}
 		}
+		desiredAccess := state.NormalizeOpenCodeRuntimeAccessMode(state.EffectiveSurfaceCapabilitySettings(s.root, surface).PromptOverride.AccessMode)
+		result.Compatible = state.NormalizeOpenCodeRuntimeAccessMode(inst.OpenCodeRuntimeAccessMode) == desiredAccess
 	}
 	return result
 }

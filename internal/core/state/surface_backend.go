@@ -22,15 +22,16 @@ type InstanceBackendContract struct {
 }
 
 type HeadlessLaunchContract struct {
-	Backend                 agentproto.Backend
-	CodexProfileID          string
-	CodexAdmissionRef       *CodexAdmissionRef
-	CodexConnectionContract *CodexConnectionContract
-	CodexThreadPolicy       *CodexThreadPolicy
-	ClaudeProfileID         string
-	ClaudeReasoningEffort   string
-	OpenCodeProfileID       string
-	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
+	Backend                   agentproto.Backend
+	CodexProfileID            string
+	CodexAdmissionRef         *CodexAdmissionRef
+	CodexConnectionContract   *CodexConnectionContract
+	CodexThreadPolicy         *CodexThreadPolicy
+	ClaudeProfileID           string
+	ClaudeReasoningEffort     string
+	OpenCodeProfileID         string
+	OpenCodeAdmissionRef      *OpenCodeAdmissionRef
+	OpenCodeRuntimeAccessMode string
 }
 
 func VSCodeSurfaceBackendContract() SurfaceBackendContract {
@@ -121,10 +122,15 @@ func HeadlessClaudeLaunchContract(profileID, reasoningEffort string) HeadlessLau
 	}
 }
 
-func HeadlessOpenCodeLaunchContract(profileID string) HeadlessLaunchContract {
+func HeadlessOpenCodeLaunchContract(profileID string, runtimeAccessMode ...string) HeadlessLaunchContract {
+	accessMode := ""
+	if len(runtimeAccessMode) != 0 {
+		accessMode = NormalizeOpenCodeRuntimeAccessMode(runtimeAccessMode[0])
+	}
 	return HeadlessLaunchContract{
-		Backend:           agentproto.BackendOpenCode,
-		OpenCodeProfileID: NormalizeOpenCodeProfileID(profileID),
+		Backend:                   agentproto.BackendOpenCode,
+		OpenCodeProfileID:         NormalizeOpenCodeProfileID(profileID),
+		OpenCodeRuntimeAccessMode: accessMode,
 	}
 }
 
@@ -197,7 +203,7 @@ func NormalizeHeadlessLaunchContract(contract HeadlessLaunchContract) HeadlessLa
 	case agentproto.BackendClaude:
 		return HeadlessClaudeLaunchContract(contract.ClaudeProfileID, contract.ClaudeReasoningEffort)
 	case agentproto.BackendOpenCode:
-		normalized := HeadlessOpenCodeLaunchContract(contract.OpenCodeProfileID)
+		normalized := HeadlessOpenCodeLaunchContract(contract.OpenCodeProfileID, contract.OpenCodeRuntimeAccessMode)
 		normalized.OpenCodeAdmissionRef = NormalizeOpenCodeAdmissionRef(contract.OpenCodeAdmissionRef)
 		return normalized
 	default:
@@ -219,7 +225,11 @@ func HeadlessLaunchContractFromSurface(surface *SurfaceConsoleRecord) HeadlessLa
 		return HeadlessClaudeLaunchContract(EffectiveSurfaceClaudeProfileID(desired), reasoning)
 	}
 	if desired.Backend == agentproto.BackendOpenCode {
-		launch := HeadlessOpenCodeLaunchContract(EffectiveSurfaceOpenCodeProfileID(desired))
+		accessMode := ""
+		if surface != nil {
+			accessMode = surface.PromptOverride.AccessMode
+		}
+		launch := HeadlessOpenCodeLaunchContract(EffectiveSurfaceOpenCodeProfileID(desired), accessMode)
 		if surface != nil {
 			launch.OpenCodeAdmissionRef = NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
 		}
@@ -233,15 +243,16 @@ func HeadlessLaunchContractFromPending(pending *HeadlessLaunchRecord) HeadlessLa
 		return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{})
 	}
 	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
-		Backend:                 pending.Backend,
-		CodexProfileID:          pending.CodexProfileID,
-		CodexAdmissionRef:       pending.CodexAdmissionRef,
-		CodexConnectionContract: pending.CodexConnectionContract,
-		CodexThreadPolicy:       pending.CodexThreadPolicy,
-		ClaudeProfileID:         pending.ClaudeProfileID,
-		ClaudeReasoningEffort:   pending.ClaudeReasoningEffort,
-		OpenCodeProfileID:       pending.OpenCodeProfileID,
-		OpenCodeAdmissionRef:    pending.OpenCodeAdmissionRef,
+		Backend:                   pending.Backend,
+		CodexProfileID:            pending.CodexProfileID,
+		CodexAdmissionRef:         pending.CodexAdmissionRef,
+		CodexConnectionContract:   pending.CodexConnectionContract,
+		CodexThreadPolicy:         pending.CodexThreadPolicy,
+		ClaudeProfileID:           pending.ClaudeProfileID,
+		ClaudeReasoningEffort:     pending.ClaudeReasoningEffort,
+		OpenCodeProfileID:         pending.OpenCodeProfileID,
+		OpenCodeAdmissionRef:      pending.OpenCodeAdmissionRef,
+		OpenCodeRuntimeAccessMode: pending.OpenCodeRuntimeAccessMode,
 	})
 }
 
@@ -250,16 +261,28 @@ func HeadlessLaunchContractFromInstance(inst *InstanceRecord) HeadlessLaunchCont
 		return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{})
 	}
 	return NormalizeHeadlessLaunchContract(HeadlessLaunchContract{
-		Backend:                 inst.Backend,
-		CodexProfileID:          inst.CodexProfileID,
-		CodexAdmissionRef:       inst.CodexAdmissionRef,
-		CodexConnectionContract: inst.CodexConnectionContract,
-		CodexThreadPolicy:       inst.CodexThreadPolicy,
-		ClaudeProfileID:         inst.ClaudeProfileID,
-		ClaudeReasoningEffort:   inst.ClaudeReasoningEffort,
-		OpenCodeProfileID:       inst.OpenCodeProfileID,
-		OpenCodeAdmissionRef:    inst.OpenCodeAdmissionRef,
+		Backend:                   inst.Backend,
+		CodexProfileID:            inst.CodexProfileID,
+		CodexAdmissionRef:         inst.CodexAdmissionRef,
+		CodexConnectionContract:   inst.CodexConnectionContract,
+		CodexThreadPolicy:         inst.CodexThreadPolicy,
+		ClaudeProfileID:           inst.ClaudeProfileID,
+		ClaudeReasoningEffort:     inst.ClaudeReasoningEffort,
+		OpenCodeProfileID:         inst.OpenCodeProfileID,
+		OpenCodeAdmissionRef:      inst.OpenCodeAdmissionRef,
+		OpenCodeRuntimeAccessMode: inst.OpenCodeRuntimeAccessMode,
 	})
+}
+
+func NormalizeOpenCodeRuntimeAccessMode(value string) string {
+	switch agentproto.NormalizeAccessMode(value) {
+	case agentproto.AccessModeFullAccess:
+		return agentproto.AccessModeFullAccess
+	case agentproto.AccessModeConfirm:
+		return agentproto.AccessModeConfirm
+	default:
+		return ""
+	}
 }
 
 func EffectiveSurfaceCodexProfileID(contract SurfaceBackendContract) string {

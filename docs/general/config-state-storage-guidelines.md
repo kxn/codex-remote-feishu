@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-11`
-> Summary: 同步 Codex Profile-only 存储合同：旧 Provider 配置/状态字段只作为加载迁移输入，canonical writer 只写 Profile。
+> Summary: 记录 OpenCode `/access` 的 relaunch-backed runtime desired owner；profile `permissionMode` 不再是用户可见运行时权限 SSOT。
 
 ## 1. 适用范围
 
@@ -62,11 +62,12 @@
 常见维度包括：
 
 - `surfaceSessionID`
-- backend: `codex` / `claude`
+- backend: `codex` / `claude` / `opencode`
 - product mode: headless / VS Code
 - `workspaceKey`
 - Codex `profileID`
 - Claude `profileID`
+- OpenCode `profileID`
 
 如果某个配置值可能只对某个 backend profile 有效，key 里必须包含 profile 维度。不要只用 `backend + workspaceKey` 存模型名或 reasoning 档位，否则切换 profile 后可能复用不兼容的默认值。
 
@@ -144,6 +145,7 @@ workspace/path identity 只能通过 canonical helper 得到：
 - `/mode`
 - `/codexprofile`
 - `/claudeprofile`
+- `/opencodeprofile`
 
 设计要求：
 
@@ -169,6 +171,7 @@ workspace/path identity 只能通过 canonical helper 得到：
 - Codex headless 默认 model
 - Codex headless 默认 reasoning
 - Codex headless 默认 access
+- OpenCode `/access` runtime desired，当前以 gateway/bot capability 或 non-canonical surface override 为 owner，并通过 headless relaunch 合同让 child 生效
 - Claude headless profile 默认 reasoning，前提是该默认值作为 profile 或 profile/workspace 默认值实现
 
 设计要求：
@@ -217,6 +220,7 @@ workspace/path identity 只能通过 canonical helper 得到：
 | `/mode` | Local Routing / Launch Contract | 是 | `surfaceSessionID` | desired state 应由本系统持有。 |
 | `/codexprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | Profile 定义和 surface 选择应分开；旧 `/codexprovider` 不再作为 transport alias。 |
 | `/claudeprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | profile 定义和 surface 选择应分开。 |
+| `/opencodeprofile` | Local Routing / Launch Contract | 是 | surface: `surfaceSessionID`; config: `profileID` | Profile 定义和 surface 选择应分开；profile 只拥有 endpoint/auth/model/project/data-isolation 等启动合同。 |
 | Codex headless model | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `model` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
 | Codex headless reasoning | Backend Behavior With Shared Authority | 本地不从 observed config 持久化 workspace default | Codex thread metadata + prompt frozen override | `reasoning` 可由 Codex thread metadata 维持；本系统只记录 thread observed state 和入队冻结值。 |
 | Codex headless access | Backend Behavior With Shared Authority | 否 | surface override + prompt frozen override | 不按 model/reasoning 同级别推断为 thread persisted default，不写 `Root.WorkspaceDefaults`。 |
@@ -225,6 +229,8 @@ workspace/path identity 只能通过 canonical helper 得到：
 | Claude profile reasoning 默认值 | Backend Behavior With Local SSOT | 是 | `profileID` 或 `claude + claudeProfileID + workspaceKey` | 若作为全局 profile 默认，用 `profileID`；若允许工作区覆盖，再加 `workspaceKey`。 |
 | Claude access | Backend Behavior With Shared Authority | 作为 `workspace+profile` 快照持久化显式飞书 override；不写 workspace default | thread observed state + surface override + `workspace+profile` snapshot + prompt frozen override | `set_permission_mode` 仍是当前 session runtime state；无显式 `/access` override 时，下条 prompt 仍优先跟随 thread/runtime observed access。只有用户显式设置的飞书 override 才会写入和恢复 `workspace+profile` 快照。 |
 | Claude plan mode | Backend Behavior With Shared Authority | 不跨 daemon resume，也不作为 workspace/profile 快照持久化 | live surface runtime + thread observed state + prompt frozen override | Claude 可通过 `ExitPlanMode` 主动退出，本地不能强行恢复旧 plan；`request.resolved(plan_confirmation + accept)` 后 surface 也应同步清掉旧 plan override。 |
+| OpenCode access | Backend Behavior With Local SSOT / relaunch-backed runtime desired | 是 | gateway `BotCapabilitySettings.PromptOverride.AccessMode` 或 non-canonical `surface.PromptOverride.AccessMode`；queue item 冻结该字段 | 只允许 `full_access` / `confirm`；dispatch 不发送 ACP per-turn access override。空闲 workspace 内立即按 `HeadlessLaunchContract.OpenCodeRuntimeAccessMode` 重启，不空闲时标记后续 dispatch preflight 收敛。 |
+| OpenCode plan mode | Backend Behavior With Shared Authority（#874 待实现） | 暂不持久化为 OpenCode owner | 当前仍 hidden/reject；#874 调研 `session/set_config_option mode` | 不复用 profile `permissionMode`，也不把 plan 写入 OpenCode permission map。 |
 | VS Code 下 model / reasoning / access / plan | Backend Behavior With Shared Authority | 默认不作为本地 SSOT | observed state + local requested per-turn override | VS Code 端也可能修改；没有飞书显式 override 时，只展示 observed state，不把 observed/default 值重新下发给 backend。 |
 
 ## 5. 新增配置项决策流程
@@ -254,6 +260,7 @@ workspace/path identity 只能通过 canonical helper 得到：
 - VS Code 端修改 model / reasoning / access / plan 时，wrapper 是否能完整观测并上报
 - Claude access 当前持久化的是“显式飞书 override 的 workspace+profile 快照”，不是 Claude profile 默认值；若未来要做成真正 profile 默认值，仍需单独确认 settings/profile 侧的稳定配置入口，不能直接复用 `set_permission_mode` runtime state
 - Claude reasoning 若未来要支持运行中无损切换，需要先确认不再依赖 Claude launch-time managed settings pin（当前仍会把 `CLAUDE_CODE_EFFORT_LEVEL` 等键冻结进启动合同并在 restart 后生效）
+- OpenCode profile `permissionMode` 只作为 legacy/reserved schema 兼容输入保留；compiler 不从 profile 读取它。运行时权限的唯一用户入口是 `/access`，由 bot/surface desired state 进入 launch contract。
 
 在这些调研完成前，对应配置不得直接做成强持久 SSOT。
 

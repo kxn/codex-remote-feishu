@@ -462,6 +462,7 @@ func (s *Service) applyPendingHeadlessRuntimeToInstance(surface *state.SurfaceCo
 		}
 		inst.OpenCodeProfileID = profileID
 		inst.OpenCodeAdmissionRef = admissionRef
+		inst.OpenCodeRuntimeAccessMode = state.NormalizeOpenCodeRuntimeAccessMode(pending.OpenCodeRuntimeAccessMode)
 		surface.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(admissionRef)
 	}
 }

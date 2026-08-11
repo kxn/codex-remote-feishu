@@ -66,7 +66,7 @@ func TestOpenCodeHeadlessObservedConfigDoesNotPersistWorkspaceDefaults(t *testin
 	}
 }
 
-func TestOpenCodePromptSummaryAndDispatchIgnoreCodexPromptDefaultsAndOverrides(t *testing.T) {
+func TestOpenCodePromptSummaryAndDispatchCarryRuntimeAccessButIgnoreCodexPromptDefaults(t *testing.T) {
 	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	workspaceKey := "/data/dl/droid"
@@ -99,11 +99,16 @@ func TestOpenCodePromptSummaryAndDispatchIgnoreCodexPromptDefaultsAndOverrides(t
 	if snapshot == nil {
 		t.Fatal("expected surface snapshot")
 	}
-	if snapshot.NextPrompt.EffectiveModel != "" || snapshot.NextPrompt.EffectiveReasoningEffort != "" || snapshot.NextPrompt.EffectiveAccessMode != "" {
+	if snapshot.NextPrompt.EffectiveModel != "" || snapshot.NextPrompt.EffectiveReasoningEffort != "" {
 		t.Fatalf("opencode prompt summary inherited Codex prompt config: %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.OverrideModel != "" || snapshot.NextPrompt.OverrideReasoningEffort != "" || snapshot.NextPrompt.OverrideAccessMode != "" {
+	if snapshot.NextPrompt.OverrideModel != "" || snapshot.NextPrompt.OverrideReasoningEffort != "" {
 		t.Fatalf("opencode prompt summary retained unsupported overrides: %#v", snapshot.NextPrompt)
+	}
+	if snapshot.NextPrompt.OverrideAccessMode != agentproto.AccessModeConfirm ||
+		snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeConfirm ||
+		snapshot.NextPrompt.EffectiveAccessModeSource != "surface_override" {
+		t.Fatalf("opencode prompt summary did not retain runtime access override: %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectivePlanMode != string(state.PlanModeSettingOff) || snapshot.NextPrompt.PlanModeOverrideSet {
 		t.Fatalf("opencode prompt summary retained plan override: %#v", snapshot.NextPrompt)
@@ -122,12 +127,108 @@ func TestOpenCodePromptSummaryAndDispatchIgnoreCodexPromptDefaultsAndOverrides(t
 	if item == nil {
 		t.Fatal("expected queued item")
 	}
-	if item.FrozenOverride != (state.ModelConfigRecord{}) || item.FrozenPlanMode != "" {
-		t.Fatalf("opencode queue item froze unsupported overrides: override=%#v plan=%q", item.FrozenOverride, item.FrozenPlanMode)
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm || item.FrozenPlanMode != "" {
+		t.Fatalf("opencode queue item should freeze runtime access only: override=%#v plan=%q", item.FrozenOverride, item.FrozenPlanMode)
 	}
 	command := svc.promptSendCommandFromQueueItem(surface, item, "user-1", "msg-1")
 	if command.Overrides != (agentproto.PromptOverrides{}) {
-		t.Fatalf("opencode dispatch sent unsupported prompt overrides: %#v", command.Overrides)
+		t.Fatalf("opencode dispatch should not send runtime access as ACP per-turn override: %#v", command.Overrides)
+	}
+}
+
+func TestOpenCodeAccessCommandStoresDesiredRuntimePermissionWhileDetached(t *testing.T) {
+	now := time.Date(2026, 8, 11, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAccessCommand,
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		ChatID:           "ou_user",
+		ActorUserID:      "ou_user",
+		Text:             "/access confirm",
+	})
+
+	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
+	if surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("surface runtime access = %q, want confirm", surface.PromptOverride.AccessMode)
+	}
+	record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
+	if !ok || record.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("bot runtime access = %#v, want confirm", record)
+	}
+	for _, event := range events {
+		if event.DaemonCommand != nil {
+			t.Fatalf("detached access update should only save desired state, got daemon command %#v", event.DaemonCommand)
+		}
+	}
+}
+
+func TestOpenCodeAccessCommandRestartsIdleHeadlessForCurrentWorkspace(t *testing.T) {
+	now := time.Date(2026, 8, 11, 12, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	workspaceKey := "/data/dl/droid"
+	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:                "inst-1",
+		DisplayName:               "droid",
+		WorkspaceRoot:             workspaceKey,
+		WorkspaceKey:              workspaceKey,
+		ShortName:                 "droid",
+		Backend:                   agentproto.BackendOpenCode,
+		OpenCodeProfileID:         "op_team",
+		OpenCodeRuntimeAccessMode: agentproto.AccessModeFullAccess,
+		Source:                    "headless",
+		Managed:                   true,
+		Online:                    true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "默认会话", CWD: workspaceKey, Loaded: true},
+		},
+	})
+	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
+	surface.AttachedInstanceID = "inst-1"
+	surface.ClaimedWorkspaceKey = workspaceKey
+	surface.SelectedThreadID = "thread-1"
+	surface.RouteMode = state.RouteModePinned
+	surface.LastSelection = &state.SelectionAnnouncementRecord{
+		ThreadID:  "thread-1",
+		RouteMode: string(state.RouteModePinned),
+		Title:     "默认会话",
+	}
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-1"], "thread-1") {
+		t.Fatal("expected test setup to claim thread")
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAccessCommand,
+		SurfaceSessionID: "feishu:app-1:user:ou_user",
+		ChatID:           "ou_user",
+		ActorUserID:      "ou_user",
+		Text:             "/access confirm",
+	})
+
+	if surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("surface runtime access = %q, want confirm", surface.PromptOverride.AccessMode)
+	}
+	if surface.PendingHeadless == nil ||
+		surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeThreadRestore ||
+		surface.PendingHeadless.OpenCodeRuntimeAccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected runtime access restart pending launch, got %#v", surface.PendingHeadless)
+	}
+	if len(events) != 4 {
+		t.Fatalf("expected kill + access notice + restart notice + start, got %#v", events)
+	}
+	if events[0].DaemonCommand == nil ||
+		events[0].DaemonCommand.Kind != control.DaemonCommandKillHeadless ||
+		events[0].DaemonCommand.InstanceID != "inst-1" {
+		t.Fatalf("expected first event to kill old headless, got %#v", events)
+	}
+	start := events[3].DaemonCommand
+	if start == nil ||
+		start.Kind != control.DaemonCommandStartHeadless ||
+		start.ThreadID != "thread-1" ||
+		start.OpenCodeRuntimeAccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected restart command to carry runtime access, got %#v", start)
 	}
 }
 

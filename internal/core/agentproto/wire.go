@@ -40,23 +40,24 @@ type BinaryIdentity struct {
 }
 
 type InstanceHello struct {
-	InstanceID            string  `json:"instanceId"`
-	DisplayName           string  `json:"displayName,omitempty"`
-	WorkspaceRoot         string  `json:"workspaceRoot,omitempty"`
-	WorkspaceKey          string  `json:"workspaceKey,omitempty"`
-	ShortName             string  `json:"shortName,omitempty"`
-	Backend               Backend `json:"backend,omitempty"`
-	CodexProfileID        string  `json:"codexProfileId,omitempty"`
-	ClaudeProfileID       string  `json:"claudeProfileId,omitempty"`
-	ClaudeReasoningEffort string  `json:"claudeReasoningEffort,omitempty"`
-	OpenCodeProfileID     string  `json:"openCodeProfileId,omitempty"`
-	Source                string  `json:"source,omitempty"`
-	Managed               bool    `json:"managed,omitempty"`
-	Version               string  `json:"version,omitempty"`
-	Branch                string  `json:"branch,omitempty"`
-	BuildFingerprint      string  `json:"buildFingerprint,omitempty"`
-	BinaryPath            string  `json:"binaryPath,omitempty"`
-	PID                   int     `json:"pid,omitempty"`
+	InstanceID                string  `json:"instanceId"`
+	DisplayName               string  `json:"displayName,omitempty"`
+	WorkspaceRoot             string  `json:"workspaceRoot,omitempty"`
+	WorkspaceKey              string  `json:"workspaceKey,omitempty"`
+	ShortName                 string  `json:"shortName,omitempty"`
+	Backend                   Backend `json:"backend,omitempty"`
+	CodexProfileID            string  `json:"codexProfileId,omitempty"`
+	ClaudeProfileID           string  `json:"claudeProfileId,omitempty"`
+	ClaudeReasoningEffort     string  `json:"claudeReasoningEffort,omitempty"`
+	OpenCodeProfileID         string  `json:"openCodeProfileId,omitempty"`
+	OpenCodeRuntimeAccessMode string  `json:"openCodeRuntimeAccessMode,omitempty"`
+	Source                    string  `json:"source,omitempty"`
+	Managed                   bool    `json:"managed,omitempty"`
+	Version                   string  `json:"version,omitempty"`
+	Branch                    string  `json:"branch,omitempty"`
+	BuildFingerprint          string  `json:"buildFingerprint,omitempty"`
+	BinaryPath                string  `json:"binaryPath,omitempty"`
+	PID                       int     `json:"pid,omitempty"`
 }
 
 type Hello struct {

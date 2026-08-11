@@ -287,6 +287,9 @@ func (s *Service) dispatchAutoContinueEpisode(surface *state.SurfaceConsoleRecor
 	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, episode.FrozenOverride, autoContinueEpisodePromptDispatchPlan(episode).CWD); restarting {
 		return events
 	}
+	if events, restarting := s.maybeRestartOpenCodeHeadlessForPrompt(surface, inst, episode.FrozenOverride, autoContinueEpisodePromptDispatchPlan(episode).CWD); restarting {
+		return events
+	}
 	s.nextQueueItemID++
 	itemID := fmt.Sprintf("queue-%d", s.nextQueueItemID)
 	dispatchPlan := autoContinueEpisodePromptDispatchPlan(episode)

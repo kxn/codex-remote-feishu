@@ -126,6 +126,12 @@ func (s *Service) resolveFrozenPromptOverride(inst *state.InstanceRecord, surfac
 	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
 	backend := s.promptConfigBackend(inst, surface)
 	if !state.BackendAcceptsFeishuPromptOverrides(backend) {
+		if agentproto.NormalizeBackend(backend) == agentproto.BackendOpenCode {
+			if promptOverrideIsEmpty(override) && surface != nil {
+				override = settings.PromptOverride
+			}
+			return state.NormalizePromptOverrideForBackend(backend, compactPromptOverride(override))
+		}
 		return state.ModelConfigRecord{}
 	}
 	if s.surfaceUsesLocalRequestedPromptOverrides(surface) {

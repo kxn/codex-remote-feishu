@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-11`
-> Summary: 同步 Codex headless profile compiler 的当前函数名，并保留 OpenCode profile 子代理模型设计。
+> Summary: 同步 OpenCode `/access` runtime desired：profile `permissionMode` 不再作为用户可见权限 owner，运行时 access 通过 relaunch-backed launch contract 生效；`/plan` 拆到 #874。
 
 ## 1. 结论
 
@@ -180,7 +180,7 @@ type OpenCodeAPIProfileSecretConfig struct {
     ReasoningEffort      string `json:"reasoningEffort,omitempty"`
     ProjectConfigMode    string `json:"projectConfigMode,omitempty"`
     DataIsolationMode    string `json:"dataIsolationMode,omitempty"`
-    PermissionMode       string `json:"permissionMode,omitempty"`
+    PermissionMode       string `json:"permissionMode,omitempty"` // legacy/reserved; compiler ignores profile permission
 }
 ```
 
@@ -196,9 +196,9 @@ API profile：
 
 - ID 建议前缀 `op_`，例如 `op_team_proxy`。
 - 必填：name、baseURL、apiKey、model。
-- 可选：small/subagent/instruction/reasoning、project config mode、data isolation mode、permission mode。
+- 可选：small/subagent/instruction/reasoning、project config mode、data isolation mode。`permissionMode` 仅保留为 legacy/reserved 字段，当前 WebUI 不展示，compiler 不把它投影到 OpenCode config。
 - `subagentModel` 不是 OpenCode 顶层 `subagent_model`。OpenCode v1.18.15 的 Task tool 按 `subagent_type` 精确选择 agent，agent 没有 model 时回退父会话模型；`general.model` 不会成为其它 subagent 的 fallback。因此第一版只把 `subagentModel` 投影为内置 `agent.general.model` 和 `agent.explore.model`，自定义 subagent 继续按用户自己的 OpenCode agent 配置处理。
-- `reviewModel` 不进入第一版 profile schema/WebUI/compiler。OpenCode v1.18.15 没有顶层 `review_model`；内置 `/review` 是 `subtask` command，如需指定 review model 必须覆盖 `command.review.model` 且同时承担内置 review template 版本耦合。
+- `reviewModel` 保留为 schema/API reserved 字段，但当前 WebUI 不展示、compiler 不投影。OpenCode v1.18.15 没有顶层 `review_model`；内置 `/review` 是 `subtask` command，如需指定 review model 必须覆盖 `command.review.model` 且同时承担内置 review template 版本耦合。
 - 只要 apiKey/baseURL/model 不完整，`Available=false`，启动失败信息要可操作。
 - API profile 不允许 fallback 到系统 OAuth。请求未命中 profile provider 时视为 compiler/runtime 错误。
 
@@ -289,7 +289,7 @@ OpenCode config content 的建议形状由 golden test 固定，不能靠字符�
 - `small_model = "<providerID>/<smallModel>"`，当 profile 配置了轻量模型时写入。
 - `agent.general.model = "<providerID>/<subagentModel>"` 和 `agent.explore.model = "<providerID>/<subagentModel>"`，当 profile 配置了子代理模型时写入；不要写不存在的顶层 `subagent_model`。
 - instructions/agent/mode 相关字段
-- `permission` 只写 OpenCode 原生 map，例如 `{"*":"ask"}` / `allow` / `deny`。产品侧 `plan` 等非 OpenCode 原生 permission intent 不写入 config，避免生成无效配置。
+- `permission` 只由 runtime `/access` desired state 写 OpenCode 原生 map：`confirm -> {"*":"ask"}`，`full_access -> {"*":"allow"}`，`clear/empty` 不写 overlay。profile `permissionMode` 不再作为 config owner，产品侧 `plan` 等非 OpenCode 原生 permission intent 也不写入 config，避免生成无效配置。
 - `reasoningEffort` 不能写成 top-level `reasoning`，OpenCode 1.18.15 会拒绝该字段；当前只能通过模型 `variants` 做最接近的注入。
 - `review_model` 不写入第一版 config overlay；如后续要支持 review model，需要单独设计 command override，不能复用 profile 顶层模型字段。
 
@@ -315,6 +315,7 @@ OpenCode 分支注入：
 
 - `CODEX_REMOTE_INSTANCE_BACKEND=opencode`
 - `CODEX_REMOTE_OPENCODE_PROFILE_ID=<profileID>`
+- `CODEX_REMOTE_OPENCODE_RUNTIME_ACCESS_MODE=<full_access|confirm>`，仅当 surface/bot runtime desired 非空时注入；`clear` 后不注入，让 OpenCode 继承本机默认。
 - `CODEX_REMOTE_OPENCODE_LAUNCH_JSON=<redacted-free launch material JSON>` 或仅注入 compiler 输出的 `OPENCODE_*` env。
 
 如果 launch material 比较复杂，优先走 settings JSON env，再由 wrapper 写临时文件或展开 env；不要把长 JSON 作为命令行参数。
@@ -335,7 +336,8 @@ OpenCode 分支注入：
 
 OpenCode prompt override：
 
-- model/reasoning/plan 如果能通过 ACP `session/set_config_option` 表达，不触发 child restart。
+- `/access` 是 relaunch-backed runtime desired：合法私聊写 gateway/bot `PromptOverride.AccessMode`，non-canonical surface 写本地 projection；queue item 入队时冻结 access，但 dispatch command 不发送 ACP per-turn `AccessMode` override。空闲 workspace 内立即按 `HeadlessLaunchContract.OpenCodeRuntimeAccessMode` 重启；正在执行、排队、pending headless 或有 route gate 时不硬杀，后续 prompt dispatch preflight 比较 desired launch contract 与 wrapper hello 的 `OpenCodeRuntimeAccessMode`，不一致则进入 `PendingHeadless(Purpose=prompt_dispatch_restart)` 后自动继续原 dispatch。
+- model/reasoning 暂不作为 OpenCode 飞书 runtime override；`/plan` 单独由 #874 调研 ACP `session/set_config_option mode` 后实现。
 - profile secret/baseURL/provider/project config/data isolation 改变必须重启 child。
 - 如果当前 session 缺少动态 config option，命令应走 backend command profile reject/diagnostic，而不是改 surface 但不生效。
 
@@ -498,9 +500,10 @@ turn close：
 | MCP tools | `other` | 保留 server/tool display name，不强行归类 |
 | unknown | `other` | debug trace 记录 raw kind |
 
-Plan 策略：
+Plan 策略（#874 待实现）：
 
-- OpenCode `mode=plan` 只是 session config，不生成 `TurnPlanSnapshot`。
+- 目标是把 OpenCode `/plan on|off|clear` 映射为 ACP `session/set_config_option mode`，其中 `mode=plan` 只是 session config，不生成 `TurnPlanSnapshot`。
+- #866 结束时 `/plan` 仍在 OpenCode command profile 下 hidden/reject，避免在底层动态 mode path 未接通前保存一个不会生效的 desired state。
 - 普通计划正文按 assistant text。
 - todo/tool 结构稳定时才合成 plan snapshot。
 - 确认请求按 request card；不展示“OpenCode 不支持 Plan snapshot”这类内部提示。
@@ -552,10 +555,10 @@ errors：
 | `/new` | visible/approximation | 新建 OpenCode session |
 | `/list` `/use` `/history` | hidden allowed 或 visible 取决于现有菜单 | 走 session list/load/resume |
 | `/workspace*` | visible/native | 产品层工作区逻辑仍归我们 |
-| `/model` | visible/best_effort | 仅当 configOptions 暴露 model |
-| `/reasoning` | visible/best_effort | 仅当 configOptions 暴露 effort |
-| `/plan` | visible/native intent | 映射 mode=config option，不造 plan snapshot |
-| `/access` | visible/approximation | 映射 OpenCode permission/mode，文案避免 sandbox 承诺 |
+| `/model` | hidden/reject | OpenCode 模型来自 profile 或原生配置 |
+| `/reasoning` | hidden/reject | OpenCode 推理强度来自 profile 或原生配置 |
+| `/plan` | hidden/reject until #874 | #874 单独实现 `mode` config option，不造 plan snapshot |
+| `/access` | visible/native surface intent | 保存 runtime desired access；通过 relaunch-backed launch contract 映射 OpenCode permission map，文案避免 sandbox 承诺 |
 | `/opencodeprofile` | visible/native | 新增 profile switch |
 | `/claudeprofile` `/codexprofile` | hidden reject | 指引切回对应 backend |
 | `/review` | hidden/allowed only if available command | 语义是 OpenCode task/sub-session |
@@ -672,9 +675,9 @@ errors：
 - 自定义/API profile launch 必须带匹配的 `OpenCodeAdmissionRef`；缺失或 stale revision fail-closed。默认 `op_default` inherit profile 可以无 ref 启动。
 - OpenCode observed config 不写回 workspace/default model/reasoning 配置，避免把某个 OpenCode 实例的 runtime snapshot 污染 Codex/Claude 默认值。
 - `OPENCODE_AUTH_CONTENT` 真实 schema 是顶层 provider id map；旧 nested provider/apiKey 设计已废弃。
-- `OPENCODE_CONFIG_CONTENT` 不能写 top-level `reasoning`；profile reasoning effort 只通过 provider model variant 近似注入，动态 `/reasoning` 仍取决于 OpenCode ACP `configOptions` 是否暴露 effort。
+- `OPENCODE_CONFIG_CONTENT` 不能写 top-level `reasoning`；profile reasoning effort 只通过 provider model variant 近似注入，OpenCode `/reasoning` 当前保持 hidden/reject，后续如要开放必须先重新确认 ACP `configOptions` 的 effort 行为。
 - OpenCode edit tool 的模型侧参数名是 `filePath`，不是 `path`；测试按真实 schema 固定。
-- profile `permissionMode` 只映射 OpenCode 原生 `ask` / `allow` / `deny`；`plan` 等产品侧意图不写入 OpenCode config，也不对用户提示“Plan snapshot 不支持”。
+- profile `permissionMode` 当前只作为 legacy/reserved 字段保留，不再映射 OpenCode config；`/access` 才是用户可见 runtime 权限入口，只映射 `confirm -> ask` 与 `full_access -> allow`，不暴露 `deny`。`plan` 等产品侧意图不写入 OpenCode permission map，也不对用户提示“Plan snapshot 不支持”。
 - `process.exit` / stop / detach 不主动发送 ACP `session/close`；关闭仍走 wrapper child lifecycle 和 turn tracker reconciliation，不把内部 session close 暴露成用户能力。
 - OAuth 管理、OAuth refresh、多 OAuth profile 和 OpenCode MCP OAuth 不进入第一版产品面；API-key overlay 已验证，系统 OAuth 只作为默认 inherit profile 的本机状态存在。
 

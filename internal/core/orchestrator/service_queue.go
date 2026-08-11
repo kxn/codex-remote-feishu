@@ -351,6 +351,9 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
 		return events
 	}
+	if events, restarting := s.maybeRestartOpenCodeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
+		return events
+	}
 	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 	s.activateSurfaceQueueItemDispatch(surface, inst, item)
 	originMessageID := xutil.FirstNonEmpty(item.SourceMessageID, item.ReplyToMessageID)

@@ -9,15 +9,17 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 type CompileInput struct {
-	Profile       config.OpenCodeProfile
-	WorkspaceRoot string
-	RuntimeDir    string
-	BaseEnv       []string
+	Profile           config.OpenCodeProfile
+	WorkspaceRoot     string
+	RuntimeDir        string
+	BaseEnv           []string
+	RuntimeAccessMode string
 }
 
 type LaunchMaterial struct {
@@ -130,7 +132,7 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		SmallModel:   prefixedModel(providerID, profile.SmallModel),
 		Agent:        openCodeAgentModelOverrides(providerID, profile.SubagentModel),
 		Instructions: strings.TrimSpace(profile.Instruction),
-		Permission:   openCodePermissionMode(profile.PermissionMode),
+		Permission:   openCodePermissionMode(input.RuntimeAccessMode),
 	})
 	if err != nil {
 		return LaunchMaterial{}, err
@@ -231,9 +233,11 @@ func openCodeAgentModelOverrides(providerID, subagentModel string) map[string]ag
 }
 
 func openCodePermissionMode(value string) map[string]string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "ask", "allow", "deny":
-		return map[string]string{"*": strings.ToLower(strings.TrimSpace(value))}
+	switch state.NormalizeOpenCodeRuntimeAccessMode(value) {
+	case agentproto.AccessModeConfirm:
+		return map[string]string{"*": "ask"}
+	case agentproto.AccessModeFullAccess:
+		return map[string]string{"*": "allow"}
 	default:
 		return nil
 	}

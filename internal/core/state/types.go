@@ -217,34 +217,35 @@ type SurfaceCapabilitySettings struct {
 }
 
 type InstanceRecord struct {
-	InstanceID              string
-	DisplayName             string
-	WorkspaceRoot           string
-	WorkspaceKey            string
-	ShortName               string
-	Backend                 agentproto.Backend
-	CodexProfileID          string
-	CodexAdmissionRef       *CodexAdmissionRef
-	CodexConnectionContract *CodexConnectionContract
-	CodexThreadPolicy       *CodexThreadPolicy
-	ClaudeProfileID         string
-	ClaudeReasoningEffort   string
-	OpenCodeProfileID       string
-	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
-	Source                  string
-	Capabilities            agentproto.Capabilities
-	CapabilitiesDeclared    bool
-	Managed                 bool
-	PID                     int
-	Online                  bool
-	ObservedFocusedThreadID string
-	ActiveThreadID          string
-	ActiveTurnID            string
-	ModelCatalog            *agentproto.ModelCatalogSnapshot
-	LastCapabilityState     *agentproto.CapabilityStateUpdate
-	ProtocolNotices         []agentproto.ProtocolNotice
-	CWDDefaults             map[string]ModelConfigRecord
-	Threads                 map[string]*ThreadRecord
+	InstanceID                string
+	DisplayName               string
+	WorkspaceRoot             string
+	WorkspaceKey              string
+	ShortName                 string
+	Backend                   agentproto.Backend
+	CodexProfileID            string
+	CodexAdmissionRef         *CodexAdmissionRef
+	CodexConnectionContract   *CodexConnectionContract
+	CodexThreadPolicy         *CodexThreadPolicy
+	ClaudeProfileID           string
+	ClaudeReasoningEffort     string
+	OpenCodeProfileID         string
+	OpenCodeAdmissionRef      *OpenCodeAdmissionRef
+	OpenCodeRuntimeAccessMode string
+	Source                    string
+	Capabilities              agentproto.Capabilities
+	CapabilitiesDeclared      bool
+	Managed                   bool
+	PID                       int
+	Online                    bool
+	ObservedFocusedThreadID   string
+	ActiveThreadID            string
+	ActiveTurnID              string
+	ModelCatalog              *agentproto.ModelCatalogSnapshot
+	LastCapabilityState       *agentproto.CapabilityStateUpdate
+	ProtocolNotices           []agentproto.ProtocolNotice
+	CWDDefaults               map[string]ModelConfigRecord
+	Threads                   map[string]*ThreadRecord
 }
 
 type ThreadRecord struct {
@@ -594,30 +595,31 @@ const (
 )
 
 type HeadlessLaunchRecord struct {
-	InstanceID              string
-	ThreadID                string
-	ThreadTitle             string
-	WorkspaceKey            string
-	ThreadCWD               string
-	Backend                 agentproto.Backend
-	CodexProfileID          string
-	CodexAdmissionRef       *CodexAdmissionRef
-	CodexConnectionContract *CodexConnectionContract
-	CodexThreadPolicy       *CodexThreadPolicy
-	ClaudeProfileID         string
-	ClaudeReasoningEffort   string
-	OpenCodeProfileID       string
-	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
-	ThreadName              string
-	ThreadPreview           string
-	RequestedAt             time.Time
-	ExpiresAt               time.Time
-	Status                  HeadlessLaunchStatus
-	Purpose                 HeadlessLaunchPurpose
-	PrepareNewThread        bool
-	PID                     int
-	SourceInstanceID        string
-	AutoRestore             bool
+	InstanceID                string
+	ThreadID                  string
+	ThreadTitle               string
+	WorkspaceKey              string
+	ThreadCWD                 string
+	Backend                   agentproto.Backend
+	CodexProfileID            string
+	CodexAdmissionRef         *CodexAdmissionRef
+	CodexConnectionContract   *CodexConnectionContract
+	CodexThreadPolicy         *CodexThreadPolicy
+	ClaudeProfileID           string
+	ClaudeReasoningEffort     string
+	OpenCodeProfileID         string
+	OpenCodeAdmissionRef      *OpenCodeAdmissionRef
+	OpenCodeRuntimeAccessMode string
+	ThreadName                string
+	ThreadPreview             string
+	RequestedAt               time.Time
+	ExpiresAt                 time.Time
+	Status                    HeadlessLaunchStatus
+	Purpose                   HeadlessLaunchPurpose
+	PrepareNewThread          bool
+	PID                       int
+	SourceInstanceID          string
+	AutoRestore               bool
 }
 
 type SelectionAnnouncementRecord struct {

@@ -887,6 +887,9 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}
+	if s.surfaceBackend(surface) == agentproto.BackendOpenCode {
+		return s.handleOpenCodeAccessCommand(surface, action, parts)
+	}
 	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
 	if blocked != nil {
 		return blocked

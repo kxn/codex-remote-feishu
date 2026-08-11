@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
@@ -74,6 +75,10 @@ func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *
 	if surface == nil {
 		return nil
 	}
+	preservedOpenCodeRuntimeOverride := state.ModelConfigRecord{}
+	if agentproto.NormalizeBackend(state.SurfaceDesiredBackendContract(surface).Backend) == agentproto.BackendOpenCode {
+		preservedOpenCodeRuntimeOverride = state.NormalizePromptOverrideForBackend(agentproto.BackendOpenCode, surface.PromptOverride)
+	}
 	events := s.discardDrafts(surface)
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		events = append(events, s.finalizeDetachedSurfaceWithOverlayCleanup(surface, cleanup)...)
@@ -86,7 +91,7 @@ func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *
 		clearSurfaceRequests(surface)
 		s.clearPreparedNewThreadRouteCore(surface)
 	}
-	surface.PromptOverride = state.ModelConfigRecord{}
+	surface.PromptOverride = preservedOpenCodeRuntimeOverride
 	s.consumeSurfacePendingHeadlessLaunch(surface, "")
 	s.clearSurfaceActiveQueueItem(surface, "")
 	s.resetSurfaceExecutionGates(surface)

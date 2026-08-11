@@ -55,7 +55,7 @@ func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) st
 	case agentproto.BackendClaude:
 		launch = state.HeadlessClaudeLaunchContract(state.EffectiveSurfaceClaudeProfileID(contract), settings.PromptOverride.ReasoningEffort)
 	case agentproto.BackendOpenCode:
-		launch = state.HeadlessOpenCodeLaunchContract(state.EffectiveSurfaceOpenCodeProfileID(contract))
+		launch = state.HeadlessOpenCodeLaunchContract(state.EffectiveSurfaceOpenCodeProfileID(contract), settings.PromptOverride.AccessMode)
 		if surface != nil {
 			launch.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
 		}
@@ -78,6 +78,9 @@ func (s *Service) headlessLaunchContractWithOverride(surface *state.SurfaceConso
 	if contract.Backend == agentproto.BackendClaude {
 		contract.ClaudeReasoningEffort = s.effectiveClaudeReasoningEffort(surface, override)
 	}
+	if contract.Backend == agentproto.BackendOpenCode {
+		contract.OpenCodeRuntimeAccessMode = state.NormalizeOpenCodeRuntimeAccessMode(override.AccessMode)
+	}
 	return state.NormalizeHeadlessLaunchContract(contract)
 }
 
@@ -95,6 +98,7 @@ func (s *Service) applyHeadlessLaunchContract(command *control.DaemonCommand, co
 	command.ClaudeReasoningEffort = contract.ClaudeReasoningEffort
 	command.OpenCodeProfileID = contract.OpenCodeProfileID
 	command.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(contract.OpenCodeAdmissionRef)
+	command.OpenCodeRuntimeAccessMode = contract.OpenCodeRuntimeAccessMode
 }
 
 func (s *Service) surfaceModeAlias(surface *state.SurfaceConsoleRecord) string {

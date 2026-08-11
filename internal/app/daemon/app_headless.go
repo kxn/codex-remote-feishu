@@ -170,6 +170,9 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 	}
 	if backend == agentproto.BackendOpenCode {
 		env = append(env, config.OpenCodeRuntimeProfileIDEnv+"="+state.NormalizeOpenCodeProfileID(command.OpenCodeProfileID))
+		if accessMode := state.NormalizeOpenCodeRuntimeAccessMode(command.OpenCodeRuntimeAccessMode); accessMode != "" {
+			env = config.UpsertEnvValue(env, config.OpenCodeRuntimeAccessModeEnv, accessMode)
+		}
 	}
 	launchArgs := append([]string{}, cfg.LaunchArgs...)
 	env, launchArgs, codexProjection, err := a.applyCodexHeadlessProfileConfigLocked(env, launchArgs, backend, command.CodexProfileID, command.CodexAdmissionRef)
@@ -432,10 +435,11 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 	}
 	workspaceRoot := headlessCommandWorkspaceKey(command)
 	material, err := opencodeprofile.CompileLaunchMaterial(opencodeprofile.CompileInput{
-		Profile:       profile,
-		WorkspaceRoot: workspaceRoot,
-		RuntimeDir:    filepath.Join(a.headlessRuntime.Paths.StateDir, "opencode", strings.TrimSpace(command.InstanceID)),
-		BaseEnv:       env,
+		Profile:           profile,
+		WorkspaceRoot:     workspaceRoot,
+		RuntimeDir:        filepath.Join(a.headlessRuntime.Paths.StateDir, "opencode", strings.TrimSpace(command.InstanceID)),
+		BaseEnv:           env,
+		RuntimeAccessMode: command.OpenCodeRuntimeAccessMode,
 	})
 	if err != nil {
 		return nil, nil, nil, err

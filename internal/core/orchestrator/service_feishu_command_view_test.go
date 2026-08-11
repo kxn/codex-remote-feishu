@@ -151,7 +151,7 @@ func TestBuildConfigCommandViewStatePopulatesOpenCodeProfileOptions(t *testing.T
 	}
 }
 
-func TestApplySurfaceActionRejectsOpenCodePromptSettingCommands(t *testing.T) {
+func TestApplySurfaceActionRejectsUnsupportedOpenCodePromptSettingCommands(t *testing.T) {
 	now := time.Date(2026, 8, 9, 12, 30, 0, 0, time.UTC)
 	for _, tt := range []struct {
 		name string
@@ -159,7 +159,6 @@ func TestApplySurfaceActionRejectsOpenCodePromptSettingCommands(t *testing.T) {
 		text string
 	}{
 		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning high"},
-		{name: "access", kind: control.ActionAccessCommand, text: "/access confirm"},
 		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

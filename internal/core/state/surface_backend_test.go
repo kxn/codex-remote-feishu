@@ -66,6 +66,7 @@ func TestHeadlessLaunchContractCarriesOpenCodeAdmissionRef(t *testing.T) {
 		Backend:                agentproto.BackendOpenCode,
 		OpenCodeProfileID:      "op_team",
 		OpenCodeAdmissionRef:   ref,
+		PromptOverride:         ModelConfigRecord{AccessMode: " CONFIRM "},
 		CodexAdmissionRef:      &CodexAdmissionRef{ProfileRef: CodexProfileRef{ID: "cp_team", Revision: 1}, ContextPreferenceRef: CodexContextPreferenceRef{ProfileID: "cp_team", Revision: 1}},
 		CodexProfileID:         "team-proxy",
 		ClaudeProfileID:        "devseek",
@@ -81,8 +82,30 @@ func TestHeadlessLaunchContractCarriesOpenCodeAdmissionRef(t *testing.T) {
 	if contract.OpenCodeAdmissionRef == nil || contract.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
 		t.Fatalf("expected opencode admission ref to be cloned into launch contract, got %#v", contract)
 	}
+	if contract.OpenCodeRuntimeAccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected opencode runtime access in launch contract, got %#v", contract)
+	}
 	if contract.CodexAdmissionRef != nil || contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("expected inactive backend launch fields to be hidden, got %#v", contract)
+	}
+
+	inst := &InstanceRecord{
+		Backend:                   agentproto.BackendOpenCode,
+		OpenCodeProfileID:         "op_team",
+		OpenCodeAdmissionRef:      ref,
+		OpenCodeRuntimeAccessMode: " CONFIRM ",
+		ClaudeReasoningEffort:     "high",
+		CodexProfileID:            "team-proxy",
+		CodexAdmissionRef:         &CodexAdmissionRef{ProfileRef: CodexProfileRef{ID: "cp_team", Revision: 1}, ContextPreferenceRef: CodexContextPreferenceRef{ProfileID: "cp_team", Revision: 1}},
+		CodexConnectionContract:   &CodexConnectionContract{ConnectionContractID: "codex"},
+		CodexThreadPolicy:         &CodexThreadPolicy{ThreadPolicyID: "policy-1"},
+	}
+	observed := HeadlessLaunchContractFromInstance(inst)
+	if observed.OpenCodeRuntimeAccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected opencode runtime access from instance, got %#v", observed)
+	}
+	if observed.CodexAdmissionRef != nil || observed.CodexConnectionContract != nil || observed.CodexThreadPolicy != nil || observed.ClaudeReasoningEffort != "" {
+		t.Fatalf("expected inactive backend launch fields to stay hidden in observed OpenCode contract, got %#v", observed)
 	}
 }
 
