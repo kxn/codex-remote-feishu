@@ -1,8 +1,6 @@
 package config
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -251,28 +249,7 @@ func NormalizeOpenCodeProfileID(value string) string {
 }
 
 func CanonicalOpenCodeProfileID(value string) string {
-	value = strings.TrimSpace(strings.ToLower(value))
-	if value == "" {
-		return ""
-	}
-	var builder strings.Builder
-	lastSeparator := false
-	for _, r := range value {
-		switch {
-		case r >= 'a' && r <= 'z':
-			builder.WriteRune(r)
-			lastSeparator = false
-		case r >= '0' && r <= '9':
-			builder.WriteRune(r)
-			lastSeparator = false
-		default:
-			if builder.Len() > 0 && !lastSeparator {
-				builder.WriteByte('_')
-				lastSeparator = true
-			}
-		}
-	}
-	return strings.Trim(builder.String(), "_")
+	return canonicalProfileID(value, '_')
 }
 
 func NormalizeOpenCodeAPIProfileRecords(records []OpenCodeAPIProfileRecord) []OpenCodeAPIProfileRecord {
@@ -486,15 +463,5 @@ func newOpenCodeProfileID(existing []OpenCodeAPIProfileRecord) (string, error) {
 			used[id] = struct{}{}
 		}
 	}
-	for attempt := 0; attempt < 4; attempt++ {
-		raw := make([]byte, 16)
-		if _, err := rand.Read(raw); err != nil {
-			return "", fmt.Errorf("generate opencode profile id: %w", err)
-		}
-		candidate := "op_" + hex.EncodeToString(raw)
-		if _, exists := used[candidate]; !exists {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("generate unique opencode profile id")
+	return newRandomProfileID("opencode", "op_", used)
 }

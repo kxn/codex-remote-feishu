@@ -3,8 +3,9 @@ package config
 import (
 	"crypto/sha1"
 	"encoding/hex"
-	"fmt"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 const (
@@ -83,13 +84,7 @@ func NormalizeClaudeAuthMode(value string) string {
 }
 
 func NormalizeClaudeReasoningEffort(value string) string {
-	effort := strings.ToLower(strings.TrimSpace(value))
-	switch effort {
-	case "low", "medium", "high", "max":
-		return effort
-	default:
-		return ""
-	}
+	return state.NormalizeClaudeReasoningEffort(value)
 }
 
 func SplitClaudeExtendedContextSuffix(model string) (string, bool) {
@@ -103,28 +98,7 @@ func SplitClaudeExtendedContextSuffix(model string) (string, bool) {
 }
 
 func CanonicalClaudeProfileID(value string) string {
-	value = strings.TrimSpace(strings.ToLower(value))
-	if value == "" {
-		return ""
-	}
-	var builder strings.Builder
-	lastDash := false
-	for _, r := range value {
-		switch {
-		case r >= 'a' && r <= 'z':
-			builder.WriteRune(r)
-			lastDash = false
-		case r >= '0' && r <= '9':
-			builder.WriteRune(r)
-			lastDash = false
-		default:
-			if builder.Len() > 0 && !lastDash {
-				builder.WriteByte('-')
-				lastDash = true
-			}
-		}
-	}
-	return strings.Trim(builder.String(), "-")
+	return canonicalProfileID(value, '-')
 }
 
 func IsBuiltInClaudeProfileID(value string) bool {
@@ -225,18 +199,7 @@ func ApplyClaudeReasoningLaunchEnv(baseEnv []string, effort string) []string {
 }
 
 func nextClaudeProfileID(id, name string, used map[string]struct{}) string {
-	base := CanonicalClaudeProfileID(chooseNonEmpty(id, name, "profile"))
-	if base == "" {
-		base = "profile"
-	}
-	candidate := base
-	for suffix := 2; ; suffix++ {
-		if _, exists := used[candidate]; !exists {
-			used[candidate] = struct{}{}
-			return candidate
-		}
-		candidate = fmt.Sprintf("%s-%d", base, suffix)
-	}
+	return nextCatalogID(CanonicalClaudeProfileID, "profile", id, name, used)
 }
 
 func removeEnvKeys(env []string, keys ...string) []string {

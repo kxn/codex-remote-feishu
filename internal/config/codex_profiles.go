@@ -1,8 +1,6 @@
 package config
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"strings"
 	"unicode"
@@ -402,15 +400,5 @@ func newCodexProfileID(existing []CodexAPIProfileRecord) (string, error) {
 	for _, record := range existing {
 		used[record.ID] = struct{}{}
 	}
-	for attempt := 0; attempt < 4; attempt++ {
-		raw := make([]byte, 16)
-		if _, err := rand.Read(raw); err != nil {
-			return "", fmt.Errorf("generate codex profile id: %w", err)
-		}
-		candidate := "cp_" + hex.EncodeToString(raw)
-		if _, exists := used[candidate]; !exists {
-			return candidate, nil
-		}
-	}
-	return "", fmt.Errorf("generate unique codex profile id")
+	return newRandomProfileID("codex", "cp_", used)
 }

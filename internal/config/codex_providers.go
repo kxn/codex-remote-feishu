@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -45,28 +44,7 @@ func BuiltInCodexProvider() CodexProvider {
 }
 
 func CanonicalCodexProviderID(value string) string {
-	value = strings.TrimSpace(strings.ToLower(value))
-	if value == "" {
-		return ""
-	}
-	var builder strings.Builder
-	lastDash := false
-	for _, r := range value {
-		switch {
-		case r >= 'a' && r <= 'z':
-			builder.WriteRune(r)
-			lastDash = false
-		case r >= '0' && r <= '9':
-			builder.WriteRune(r)
-			lastDash = false
-		default:
-			if builder.Len() > 0 && !lastDash {
-				builder.WriteByte('-')
-				lastDash = true
-			}
-		}
-	}
-	return strings.Trim(builder.String(), "-")
+	return canonicalProfileID(value, '-')
 }
 
 func NormalizeCodexProviderID(value string) string {
@@ -147,16 +125,5 @@ func codexProviderConfigFromAPIProfile(profile CodexAPIProfileSecretConfig) Code
 }
 
 func nextCodexProviderID(id, name string, used map[string]struct{}) string {
-	base := CanonicalCodexProviderID(chooseNonEmpty(id, name, "provider"))
-	if base == "" {
-		base = "provider"
-	}
-	candidate := base
-	for suffix := 2; ; suffix++ {
-		if _, exists := used[candidate]; !exists {
-			used[candidate] = struct{}{}
-			return candidate
-		}
-		candidate = fmt.Sprintf("%s-%d", base, suffix)
-	}
+	return nextCatalogID(CanonicalCodexProviderID, "provider", id, name, used)
 }
