@@ -252,7 +252,7 @@ func ConfigLinkButton(stateValue *StateFile, configReady bool) (control.CommandC
 	if value == "" {
 		return control.CommandCatalogButton{}, false
 	}
-	return openURLButton("打开 Cron 配置表", value, "", false), true
+	return control.OpenURLButton("打开 Cron 配置表", value, "", false), true
 }
 
 func RunsLinkButton(stateValue *StateFile, configReady bool) (control.CommandCatalogButton, bool) {
@@ -263,7 +263,7 @@ func RunsLinkButton(stateValue *StateFile, configReady bool) (control.CommandCat
 	if value == "" {
 		return control.CommandCatalogButton{}, false
 	}
-	return openURLButton("打开运行记录", value, "", false), true
+	return control.OpenURLButton("打开运行记录", value, "", false), true
 }
 
 func BitableTableURL(appURL, tableID string) string {

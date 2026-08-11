@@ -147,19 +147,19 @@ func codexUpgradeOwnerContextSections(flow *codexupgraderuntime.OwnerCardFlowRec
 	}
 	sections := make([]control.FeishuCardTextSection, 0, 2)
 	if current := strings.TrimSpace(flow.CurrentVersion); current != "" {
-		sections = append(sections, commandCatalogTextSection("当前版本", current))
+		sections = append(sections, control.CommandCatalogTextSection("当前版本", current))
 	}
 	switch {
 	case flow.HasUpdate && strings.TrimSpace(flow.TargetVersion) != "":
-		sections = append(sections, commandCatalogTextSection("目标版本", strings.TrimSpace(flow.TargetVersion)))
+		sections = append(sections, control.CommandCatalogTextSection("目标版本", strings.TrimSpace(flow.TargetVersion)))
 	case flow.Checked && strings.TrimSpace(flow.LatestVersion) != "":
-		sections = append(sections, commandCatalogTextSection("最新版本", strings.TrimSpace(flow.LatestVersion)))
+		sections = append(sections, control.CommandCatalogTextSection("最新版本", strings.TrimSpace(flow.LatestVersion)))
 	}
 	return sections
 }
 
 func codexUpgradeOwnerNoticeSections(lines ...string) []control.FeishuCardTextSection {
-	return commandCatalogSummarySections(lines...)
+	return control.CommandCatalogSummarySections(lines...)
 }
 
 func codexUpgradeBusyNoticeLines(check codexUpgradeCheckResult) []string {

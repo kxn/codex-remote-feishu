@@ -247,7 +247,7 @@ func turnPatchRequestView(flow *turnpatchruntime.FlowRecord) control.FeishuReque
 		ThreadID:        strings.TrimSpace(flow.ThreadID),
 		ThreadTitle:     strings.TrimSpace(flow.ThreadTitle),
 		Sections: []control.FeishuCardTextSection{
-			commandCatalogTextSection(
+			control.CommandCatalogTextSection(
 				"",
 				"只会替换当前会话最新一轮助手回复中命中的文本。",
 				"已发出的旧消息不会被回改；提交后会自动备份，并在恢复同一会话后继续使用。",
@@ -368,8 +368,8 @@ func turnPatchStatePageView(flow *turnpatchruntime.FlowRecord, title, theme stri
 		if threadTitle == "" {
 			threadTitle = strings.TrimSpace(flow.ThreadID)
 		}
-		body = append(body, commandCatalogTextSection("当前会话", threadTitle))
-		body = append(body, commandCatalogTextSection("目标范围", fmt.Sprintf("最新一轮助手回复 · %d 个候选点", len(flow.Candidates))))
+		body = append(body, control.CommandCatalogTextSection("当前会话", threadTitle))
+		body = append(body, control.CommandCatalogTextSection("目标范围", fmt.Sprintf("最新一轮助手回复 · %d 个候选点", len(flow.Candidates))))
 		if strings.TrimSpace(flow.MessageID) == "" {
 			trackingKey = strings.TrimSpace(flow.FlowID)
 		}
@@ -382,7 +382,7 @@ func turnPatchStatePageView(flow *turnpatchruntime.FlowRecord, title, theme stri
 		TrackingKey:    trackingKey,
 		Patchable:      patchable,
 		BodySections:   body,
-		NoticeSections: commandCatalogSummarySections(lines...),
+		NoticeSections: control.CommandCatalogSummarySections(lines...),
 		Interactive:    len(buttons) != 0 && !sealed,
 		RelatedButtons: buttons,
 		Sealed:         sealed,

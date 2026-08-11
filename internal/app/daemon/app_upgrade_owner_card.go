@@ -167,13 +167,13 @@ func upgradeOwnerCardEvent(surfaceID string, flow *upgraderuntime.OwnerCardFlowR
 func upgradeOwnerContextSections(currentVersion, targetVersion, track string) []control.FeishuCardTextSection {
 	sections := make([]control.FeishuCardTextSection, 0, 3)
 	if currentVersion = strings.TrimSpace(currentVersion); currentVersion != "" {
-		sections = append(sections, commandCatalogTextSection("当前版本", currentVersion))
+		sections = append(sections, control.CommandCatalogTextSection("当前版本", currentVersion))
 	}
 	if targetVersion = strings.TrimSpace(targetVersion); targetVersion != "" {
-		sections = append(sections, commandCatalogTextSection("目标版本", targetVersion))
+		sections = append(sections, control.CommandCatalogTextSection("目标版本", targetVersion))
 	}
 	if track = strings.TrimSpace(track); track != "" {
-		sections = append(sections, commandCatalogTextSection("当前 track", track))
+		sections = append(sections, control.CommandCatalogTextSection("当前 track", track))
 	}
 	if len(sections) == 0 {
 		return nil
@@ -182,7 +182,7 @@ func upgradeOwnerContextSections(currentVersion, targetVersion, track string) []
 }
 
 func upgradeOwnerNoticeSections(lines ...string) []control.FeishuCardTextSection {
-	return commandCatalogSummarySections(lines...)
+	return control.CommandCatalogSummarySections(lines...)
 }
 
 func flowMessageID(flow *upgraderuntime.OwnerCardFlowRecord) string {

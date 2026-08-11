@@ -167,11 +167,11 @@ func vscodeMigrationButtonsForNotice(notice *control.Notice) []control.CommandCa
 	switch strings.TrimSpace(notice.Code) {
 	case "not_attached_vscode", "surface_resume_instance_busy", "surface_resume_instance_not_found":
 		return []control.CommandCatalogButton{
-			runCommandButton("选择实例", "/list", "primary", false),
+			control.FeishuLocalPageCommandButton("选择实例", "/list", "primary", false),
 		}
 	case "surface_resume_instance_attached":
 		return []control.CommandCatalogButton{
-			runCommandButton("选择会话", "/use", "primary", false),
+			control.FeishuLocalPageCommandButton("选择会话", "/use", "primary", false),
 		}
 	default:
 		return nil
@@ -209,7 +209,7 @@ func buildVSCodeMigrationPageView(flow *vscodeMigrationFlowRecord, inlineReplace
 		ThemeKey:       strings.TrimSpace(theme),
 		Patchable:      true,
 		Breadcrumbs:    control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandVSCodeMigrate),
-		BodySections:   commandCatalogSummarySections(summary...),
+		BodySections:   control.CommandCatalogSummarySections(summary...),
 		NoticeSections: vscodeMigrationNoticeSections(statusText, theme),
 		Interactive:    interactive,
 		Sealed:         !interactive,
@@ -243,7 +243,7 @@ func vscodeMigrationNoticeSections(statusText, theme string) []control.FeishuCar
 	if statusKindFromThemeKey(theme) == "error" {
 		label = "错误"
 	}
-	return []control.FeishuCardTextSection{commandCatalogTextSection(label, statusText)}
+	return []control.FeishuCardTextSection{control.CommandCatalogTextSection(label, statusText)}
 }
 
 func statusKindFromThemeKey(theme string) string {
