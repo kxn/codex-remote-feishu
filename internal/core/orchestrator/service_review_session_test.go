@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -111,6 +112,39 @@ func commitReviewSessionRepoFile(t *testing.T, root, relativePath, content, mess
 		t.Fatalf("expected latest commit after %q, got %#v", message, commits)
 	}
 	return commits[0]
+}
+
+func fakeReviewSessionGitLogMarkerForTest(t *testing.T, marker string) string {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not available")
+	}
+	t.Setenv("REVIEW_SESSION_REAL_GIT_FOR_TEST", realGit)
+	bin := t.TempDir()
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(bin, "git.bat")
+		body := "@echo off\r\n" +
+			"if \"%1\"==\"log\" echo invoked>>\"" + marker + "\"\r\n" +
+			"\"%REVIEW_SESSION_REAL_GIT_FOR_TEST%\" %*\r\n" +
+			"exit /b %ERRORLEVEL%\r\n"
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+		return bin
+	}
+	path := filepath.Join(bin, "git")
+	body := "#!/bin/sh\n" +
+		"if [ \"$1\" = \"log\" ]; then printf 'invoked\\n' >> " + shellQuoteForReviewSessionTest(marker) + "; fi\n" +
+		"exec \"$REVIEW_SESSION_REAL_GIT_FOR_TEST\" \"$@\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	return bin
+}
+
+func shellQuoteForReviewSessionTest(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func activateReviewSessionForTest(t *testing.T, svc *Service, surface *state.SurfaceConsoleRecord, sourceMessageID, turnID string) {
@@ -1154,6 +1188,28 @@ func TestStartCommitReviewCommandUsesParentWhenSelectionIsReviewThread(t *testin
 	}
 	if surface.ReviewSession == nil || surface.ReviewSession.ParentThreadID != "thread-main" {
 		t.Fatalf("expected pending commit review session to store parent thread, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestResolveFinalBlockCommitReviewTargetsSkipsGitLogWithoutCommitCandidate(t *testing.T) {
+	svc, surface, repoRoot := newReviewSessionService(t)
+	_ = commitReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "guide\n", "review target commit")
+	marker := filepath.Join(t.TempDir(), "git-log-invoked")
+	t.Setenv("PATH", fakeReviewSessionGitLogMarkerForTest(t, marker))
+
+	commits := svc.ResolveFinalBlockCommitReviewTargets(surface.SurfaceSessionID, render.Block{
+		Kind:       render.BlockAssistantMarkdown,
+		InstanceID: "inst-1",
+		ThreadID:   "thread-main",
+		Text:       "这是一条普通最终答复，没有提交记录。",
+		Final:      true,
+	}, "这是一条普通最终答复，没有提交记录。")
+
+	if len(commits) != 0 {
+		t.Fatalf("did not expect commit review targets, got %#v", commits)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("expected final block without commit candidate to skip git log, marker err=%v", err)
 	}
 }
 

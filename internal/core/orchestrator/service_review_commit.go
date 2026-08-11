@@ -295,6 +295,10 @@ func (s *Service) ResolveFinalBlockCommitReviewTargets(surfaceID string, block r
 	if rawBody == "" {
 		return nil
 	}
+	candidates := reviewCommitCandidatePattern.FindAllString(rawBody, -1)
+	if len(candidates) == 0 {
+		return nil
+	}
 	surface := s.root.Surfaces[strings.TrimSpace(surfaceID)]
 	if !s.reviewCommandAllowedForSurface(surface, block.InstanceID) {
 		return nil
@@ -305,10 +309,6 @@ func (s *Service) ResolveFinalBlockCommitReviewTargets(surfaceID string, block r
 	}
 	commits, code, _ := s.listRecentReviewCommits(entry.ThreadCWD)
 	if code != "" || len(commits) == 0 {
-		return nil
-	}
-	candidates := reviewCommitCandidatePattern.FindAllString(rawBody, -1)
-	if len(candidates) == 0 {
 		return nil
 	}
 	seenPrefix := map[string]bool{}

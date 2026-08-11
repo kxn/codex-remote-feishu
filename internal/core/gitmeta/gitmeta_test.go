@@ -200,6 +200,26 @@ func TestInspectWorkspaceUnbornHeadRepo(t *testing.T) {
 	}
 }
 
+func TestInspectWorkspaceStatusAvoidsRecursiveUntrackedExpansion(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+	if err := os.MkdirAll(filepath.Join(repoRoot, "scratch", "nested"), 0o755); err != nil {
+		t.Fatalf("mkdir scratch dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "scratch", "nested", "note.txt"), []byte("note\n"), 0o644); err != nil {
+		t.Fatalf("write scratch file: %v", err)
+	}
+	t.Setenv("PATH", fakeGitBlockingStatusAllForTest(t))
+
+	info, err := InspectWorkspace(repoRoot, InspectOptions{IncludeStatus: true})
+	if err != nil {
+		t.Fatalf("InspectWorkspace() error = %v", err)
+	}
+	if !info.Status.Dirty || info.Status.UntrackedCount == 0 {
+		t.Fatalf("expected untracked directory to mark status dirty, got %#v", info.Status)
+	}
+}
+
 func TestPreviewWorktreeInfersDirectoryNameFromBranch(t *testing.T) {
 	ensureGitForTest(t)
 	repoRoot := createGitRepoForTest(t)
@@ -354,6 +374,53 @@ func fakeFailingGitBinForTest(t *testing.T, marker string) string {
 	}
 	path := filepath.Join(bin, "git")
 	body := fmt.Sprintf("#!/bin/sh\nprintf 'invoked\\n' >> %q\nexit 1\n", marker)
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	return bin
+}
+
+func fakeGitBlockingStatusAllForTest(t *testing.T) string {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not available")
+	}
+	t.Setenv("GITMETA_REAL_GIT_FOR_TEST", realGit)
+	bin := t.TempDir()
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(bin, "git.bat")
+		body := "@echo off\r\n" +
+			"set saw_status=\r\n" +
+			"set saw_all=\r\n" +
+			"for %%A in (%*) do (\r\n" +
+			"  if \"%%~A\"==\"status\" set saw_status=1\r\n" +
+			"  if \"%%~A\"==\"--untracked-files=all\" set saw_all=1\r\n" +
+			")\r\n" +
+			"if \"%saw_status%%saw_all%\"==\"11\" (\r\n" +
+			"  echo git status all blocked 1>&2\r\n" +
+			"  exit /b 99\r\n" +
+			")\r\n" +
+			"\"%GITMETA_REAL_GIT_FOR_TEST%\" %*\r\n" +
+			"exit /b %ERRORLEVEL%\r\n"
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+		return bin
+	}
+	path := filepath.Join(bin, "git")
+	body := "#!/bin/sh\n" +
+		"saw_status=0\n" +
+		"saw_all=0\n" +
+		"for arg in \"$@\"; do\n" +
+		"  if [ \"$arg\" = \"status\" ]; then saw_status=1; fi\n" +
+		"  if [ \"$arg\" = \"--untracked-files=all\" ]; then saw_all=1; fi\n" +
+		"done\n" +
+		"if [ \"$saw_status\" = \"1\" ] && [ \"$saw_all\" = \"1\" ]; then\n" +
+		"  echo 'git status all blocked' >&2\n" +
+		"  exit 99\n" +
+		"fi\n" +
+		"exec \"$GITMETA_REAL_GIT_FOR_TEST\" \"$@\"\n"
 	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
 		t.Fatalf("write fake git: %v", err)
 	}

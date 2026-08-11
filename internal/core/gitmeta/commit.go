@@ -63,15 +63,7 @@ func ListRecentCommits(path string, limit int) ([]CommitSummary, error) {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		parts := strings.SplitN(line, "\x1f", 3)
-		if len(parts) < 3 {
-			continue
-		}
-		commit := CommitSummary{
-			SHA:      parts[0],
-			ShortSHA: parts[1],
-			Subject:  parts[2],
-		}.Normalized()
+		commit := parseCommitSummaryLine(line)
 		if commit.SHA == "" {
 			continue
 		}
@@ -89,44 +81,80 @@ func ResolveCommitPrefix(path, prefix string) (CommitResolveResult, error) {
 	if prefix == "" {
 		return CommitResolveResult{Status: CommitResolveNotFound}, nil
 	}
-	output, err := runGitCommandOutput(commandDir, defaultCommitInspectTimeout, "log", "--all", "--no-show-signature", "--format=%H%x1f%h%x1f%s")
+	if len(prefix) < 4 {
+		return CommitResolveResult{Status: CommitResolveAmbiguous}, nil
+	}
+	matches, err := resolveCommitPrefixObjectMatches(commandDir, prefix)
 	if err != nil {
 		if hasHead, headErr := repoHasCommittedHEAD(commandDir); headErr == nil && !hasHead {
 			return CommitResolveResult{Status: CommitResolveNotFound}, nil
 		}
 		return CommitResolveResult{}, err
 	}
-	lines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
-	matches := make([]CommitSummary, 0, 4)
-	for _, line := range lines {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		parts := strings.SplitN(line, "\x1f", 3)
-		if len(parts) < 3 {
-			continue
-		}
-		commit := CommitSummary{
-			SHA:      parts[0],
-			ShortSHA: parts[1],
-			Subject:  parts[2],
-		}.Normalized()
-		if !strings.HasPrefix(commit.SHA, prefix) {
-			continue
-		}
-		matches = append(matches, commit)
-	}
 	switch len(matches) {
 	case 0:
 		return CommitResolveResult{Status: CommitResolveNotFound}, nil
 	case 1:
+		commit, err := loadCommitSummary(commandDir, matches[0])
+		if err != nil {
+			return CommitResolveResult{}, err
+		}
 		return CommitResolveResult{
 			Status: CommitResolveFound,
-			Commit: matches[0],
+			Commit: commit,
 		}, nil
 	default:
 		return CommitResolveResult{Status: CommitResolveAmbiguous}, nil
 	}
+}
+
+func resolveCommitPrefixObjectMatches(commandDir, prefix string) ([]string, error) {
+	output, err := runGitCommandOutput(commandDir, defaultCommitInspectTimeout, "rev-parse", "--disambiguate="+prefix)
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.ReplaceAll(output, "\r\n", "\n"), "\n")
+	matches := make([]string, 0, 2)
+	seen := map[string]bool{}
+	for _, line := range lines {
+		oid := strings.TrimSpace(strings.ToLower(line))
+		if oid == "" || seen[oid] {
+			continue
+		}
+		seen[oid] = true
+		typ, err := runGitCommandOutput(commandDir, defaultCommitInspectTimeout, "cat-file", "-t", oid)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(typ) != "commit" {
+			continue
+		}
+		matches = append(matches, oid)
+		if len(matches) > 1 {
+			return matches, nil
+		}
+	}
+	return matches, nil
+}
+
+func loadCommitSummary(commandDir, sha string) (CommitSummary, error) {
+	output, err := runGitCommandOutput(commandDir, defaultCommitInspectTimeout, "show", "-s", "--no-show-signature", "--format=%H%x1f%h%x1f%s", sha)
+	if err != nil {
+		return CommitSummary{}, err
+	}
+	return parseCommitSummaryLine(output), nil
+}
+
+func parseCommitSummaryLine(line string) CommitSummary {
+	parts := strings.SplitN(line, "\x1f", 3)
+	if len(parts) < 3 {
+		return CommitSummary{}
+	}
+	return CommitSummary{
+		SHA:      parts[0],
+		ShortSHA: parts[1],
+		Subject:  parts[2],
+	}.Normalized()
 }
 
 func MatchRecentCommitPrefix(commits []CommitSummary, prefix string) (CommitSummary, bool) {

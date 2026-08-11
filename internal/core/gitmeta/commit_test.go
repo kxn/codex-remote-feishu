@@ -3,7 +3,9 @@ package gitmeta
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -41,6 +43,31 @@ func TestResolveCommitPrefixFound(t *testing.T) {
 		t.Fatalf("expected one commit, got %#v", commits)
 	}
 
+	result, err := ResolveCommitPrefix(repoRoot, commits[0].ShortSHA)
+	if err != nil {
+		t.Fatalf("ResolveCommitPrefix() error = %v", err)
+	}
+	if result.Status != CommitResolveFound {
+		t.Fatalf("ResolveCommitPrefix() status = %q, want %q", result.Status, CommitResolveFound)
+	}
+	if result.Commit.SHA != commits[0].SHA || result.Commit.Subject != "review target" {
+		t.Fatalf("unexpected resolved commit: %#v", result.Commit)
+	}
+}
+
+func TestResolveCommitPrefixDoesNotScanAllHistory(t *testing.T) {
+	ensureGitForTest(t)
+	repoRoot := createGitRepoForTest(t)
+	gitmetaWriteAndCommitFile(t, repoRoot, "docs/guide.md", "guide\n", "review target")
+	commits, err := ListRecentCommits(repoRoot, 1)
+	if err != nil {
+		t.Fatalf("ListRecentCommits() error = %v", err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("expected one commit, got %#v", commits)
+	}
+
+	t.Setenv("PATH", fakeGitBlockingLogAllForTest(t))
 	result, err := ResolveCommitPrefix(repoRoot, commits[0].ShortSHA)
 	if err != nil {
 		t.Fatalf("ResolveCommitPrefix() error = %v", err)
@@ -134,4 +161,51 @@ func gitmetaEnsureAmbiguousPrefix(t *testing.T, repoRoot string, prefixLen int) 
 	}
 	t.Fatal("failed to create ambiguous commit prefix")
 	return ""
+}
+
+func fakeGitBlockingLogAllForTest(t *testing.T) string {
+	t.Helper()
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not available")
+	}
+	t.Setenv("GITMETA_REAL_GIT_FOR_TEST", realGit)
+	bin := t.TempDir()
+	if runtime.GOOS == "windows" {
+		path := filepath.Join(bin, "git.bat")
+		body := "@echo off\r\n" +
+			"set saw_log=\r\n" +
+			"set saw_all=\r\n" +
+			"for %%A in (%*) do (\r\n" +
+			"  if \"%%~A\"==\"log\" set saw_log=1\r\n" +
+			"  if \"%%~A\"==\"--all\" set saw_all=1\r\n" +
+			")\r\n" +
+			"if \"%saw_log%%saw_all%\"==\"11\" (\r\n" +
+			"  echo git log --all blocked 1>&2\r\n" +
+			"  exit /b 99\r\n" +
+			")\r\n" +
+			"\"%GITMETA_REAL_GIT_FOR_TEST%\" %*\r\n" +
+			"exit /b %ERRORLEVEL%\r\n"
+		if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+		return bin
+	}
+	path := filepath.Join(bin, "git")
+	body := "#!/bin/sh\n" +
+		"saw_log=0\n" +
+		"saw_all=0\n" +
+		"for arg in \"$@\"; do\n" +
+		"  if [ \"$arg\" = \"log\" ]; then saw_log=1; fi\n" +
+		"  if [ \"$arg\" = \"--all\" ]; then saw_all=1; fi\n" +
+		"done\n" +
+		"if [ \"$saw_log\" = \"1\" ] && [ \"$saw_all\" = \"1\" ]; then\n" +
+		"  echo 'git log --all blocked' >&2\n" +
+		"  exit 99\n" +
+		"fi\n" +
+		"exec \"$GITMETA_REAL_GIT_FOR_TEST\" \"$@\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	return bin
 }
