@@ -128,7 +128,11 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 	if itemKind == "" && effectiveKind == "" {
 		itemKind = toolItemKind(update)
 	}
-	toolName := opencodeToolDisplayName(effectiveKind, rawInput)
+	opencodeToolName := opencodeToolIdentity(update, metadata, effectiveKind, itemKind)
+	if opencodeToolName != "" {
+		metadata["opencodeToolName"] = opencodeToolName
+	}
+	toolName := opencodeToolDisplayName(effectiveKind, opencodeToolName, rawInput)
 	if toolName != "" {
 		metadata["tool"] = toolName
 	}
@@ -162,7 +166,7 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 		}
 	case "dynamic_tool_call":
 		metadata["suppressFinalText"] = true
-		if isExplorationToolKind(effectiveKind) {
+		if isExplorationToolKind(xutil.FirstNonEmpty(opencodeToolName, effectiveKind)) {
 			metadata["semanticKind"] = "exploration"
 		} else {
 			metadata["semanticKind"] = "generic_tool"
@@ -220,10 +224,11 @@ func opencodeToolExploration(metadata map[string]any) *agentproto.ExplorationAct
 	if toolItemKind(map[string]any{"kind": kind, "rawInput": rawInput}) != "dynamic_tool_call" {
 		return nil
 	}
-	if !isExplorationToolKind(kind) {
+	explorationKind := xutil.FirstNonEmpty(xutil.MetadataString(metadata, "opencodeToolName"), kind)
+	if !isExplorationToolKind(explorationKind) {
 		return nil
 	}
-	action, ok := opencodeExplorationAction(kind, rawInput)
+	action, ok := opencodeExplorationAction(explorationKind, rawInput)
 	if !ok {
 		return nil
 	}
@@ -304,10 +309,36 @@ func opencodeRawInput(update map[string]any, metadata map[string]any) map[string
 	return nil
 }
 
-func opencodeToolDisplayName(kind string, rawInput map[string]any) string {
+func opencodeToolIdentity(update, metadata map[string]any, effectiveKind, itemKind string) string {
+	if itemKind == "mcp_tool_call" {
+		return ""
+	}
+	if existing := normalizeToolKind(xutil.MetadataString(metadata, "opencodeToolName")); existing != "" {
+		return existing
+	}
+	kind := normalizeToolKind(effectiveKind)
+	if kind != "search" {
+		return ""
+	}
+	status := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(update["status"])))
+	if status != "pending" && status != "in_progress" {
+		return ""
+	}
+	title := normalizeToolKind(xutil.LookupStringFromAny(update["title"]))
+	switch title {
+	case "grep", "glob":
+		return title
+	}
+	return ""
+}
+
+func opencodeToolDisplayName(kind, opencodeToolName string, rawInput map[string]any) string {
 	kind = strings.TrimSpace(kind)
 	if tool := firstMapString(rawInput, "tool", "toolName", "name"); tool != "" && strings.HasPrefix(normalizeToolKind(kind), "mcp") {
 		return tool
+	}
+	if opencodeToolName != "" {
+		return opencodeToolName
 	}
 	if kind != "" {
 		return kind

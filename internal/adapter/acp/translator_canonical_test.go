@@ -320,6 +320,130 @@ func TestOpenCodeExplorationToolActionsMapStructuredInput(t *testing.T) {
 	}
 }
 
+func TestOpenCodeBroadSearchKindLocksExplorationToolIdentity(t *testing.T) {
+	cases := []struct {
+		name          string
+		title         string
+		terminalTitle string
+		rawInput      map[string]any
+		wantKind      agentproto.ExplorationActionKind
+		wantSummary   string
+		wantSecondary string
+	}{
+		{
+			name:          "grep",
+			title:         "grep",
+			terminalTitle: "g_page_valid",
+			rawInput:      map[string]any{"pattern": "g_page_valid", "path": "internal"},
+			wantKind:      agentproto.ExplorationActionSearch,
+			wantSummary:   "g_page_valid",
+			wantSecondary: "internal",
+		},
+		{
+			name:          "glob",
+			title:         "glob",
+			terminalTitle: "internal/adapter/acp",
+			rawInput:      map[string]any{"pattern": "**/*.go", "path": "internal/adapter/acp"},
+			wantKind:      agentproto.ExplorationActionList,
+			wantSummary:   "**/*.go",
+			wantSecondary: "internal/adapter/acp",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, _ := startPromptedSession(t)
+			started, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call",
+				"toolCallId":    tc.name + "_1",
+				"title":         tc.title,
+				"kind":          "search",
+				"status":        "pending",
+				"rawInput":      tc.rawInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call): %v", err)
+			}
+			assertEventKinds(t, started.Events, agentproto.EventItemStarted)
+			if started.Events[0].ItemKind != "dynamic_tool_call" || started.Events[0].Metadata["kind"] != "search" {
+				t.Fatalf("broad ACP taxonomy changed: %#v", started.Events[0])
+			}
+			if started.Events[0].Metadata["opencodeToolName"] != tc.title || started.Events[0].Metadata["tool"] != tc.title {
+				t.Fatalf("tool identity not locked from broad search title: %#v", started.Events[0].Metadata)
+			}
+			startAction := assertSingleExplorationAction(t, started.Events[0])
+			if startAction.Kind != tc.wantKind || startAction.Summary != tc.wantSummary || startAction.Secondary != tc.wantSecondary {
+				t.Fatalf("started action = %#v, want kind=%q summary=%q secondary=%q", startAction, tc.wantKind, tc.wantSummary, tc.wantSecondary)
+			}
+
+			completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call_update",
+				"toolCallId":    tc.name + "_1",
+				"title":         tc.terminalTitle,
+				"status":        "completed",
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call_update): %v", err)
+			}
+			assertEventKinds(t, completed.Events, agentproto.EventItemCompleted)
+			if completed.Events[0].Metadata["opencodeToolName"] != tc.title || completed.Events[0].Metadata["tool"] != tc.title {
+				t.Fatalf("terminal title overwrote sticky identity: %#v", completed.Events[0].Metadata)
+			}
+			completeAction := assertSingleExplorationAction(t, completed.Events[0])
+			if completeAction.Kind != tc.wantKind || completeAction.Summary != tc.wantSummary || completeAction.Secondary != tc.wantSecondary {
+				t.Fatalf("completed action = %#v, want kind=%q summary=%q secondary=%q", completeAction, tc.wantKind, tc.wantSummary, tc.wantSecondary)
+			}
+		})
+	}
+}
+
+func TestOpenCodeBroadSearchIdentityFailsClosedForUnknownAndMCPTools(t *testing.T) {
+	t.Run("unknown title keeps broad search semantics", func(t *testing.T) {
+		tr, _ := startPromptedSession(t)
+		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			"sessionUpdate": "tool_call",
+			"toolCallId":    "context_1",
+			"title":         "context7_get_library_docs",
+			"kind":          "search",
+			"status":        "pending",
+			"rawInput":      map[string]any{"query": "ACP", "path": "docs"},
+		})))
+		if err != nil {
+			t.Fatalf("ObserveServer(tool_call): %v", err)
+		}
+		assertEventKinds(t, result.Events, agentproto.EventItemStarted)
+		if _, ok := result.Events[0].Metadata["opencodeToolName"]; ok {
+			t.Fatalf("unknown title must not become a locked tool identity: %#v", result.Events[0].Metadata)
+		}
+		action := assertSingleExplorationAction(t, result.Events[0])
+		if action.Kind != agentproto.ExplorationActionSearch || action.Summary != "ACP" || action.Secondary != "docs" {
+			t.Fatalf("unknown broad search fallback = %#v", action)
+		}
+	})
+
+	t.Run("MCP tool named glob stays MCP", func(t *testing.T) {
+		tr, _ := startPromptedSession(t)
+		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			"sessionUpdate": "tool_call",
+			"toolCallId":    "mcp_glob_1",
+			"title":         "glob",
+			"kind":          "search",
+			"status":        "pending",
+			"rawInput":      map[string]any{"server": "docs", "tool": "glob", "pattern": "**/*.md"},
+		})))
+		if err != nil {
+			t.Fatalf("ObserveServer(tool_call): %v", err)
+		}
+		assertEventKinds(t, result.Events, agentproto.EventItemStarted)
+		if result.Events[0].ItemKind != "mcp_tool_call" || result.Events[0].Exploration != nil {
+			t.Fatalf("MCP tool was misclassified as exploration: %#v", result.Events[0])
+		}
+		if _, ok := result.Events[0].Metadata["opencodeToolName"]; ok {
+			t.Fatalf("MCP title must not populate OpenCode built-in identity: %#v", result.Events[0].Metadata)
+		}
+	})
+}
+
 func TestOpenCodeExplorationToolLifecycleMergesRawInput(t *testing.T) {
 	tr, _ := startPromptedSession(t)
 	started, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
