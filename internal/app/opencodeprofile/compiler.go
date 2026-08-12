@@ -121,6 +121,11 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		return LaunchMaterial{}, fmt.Errorf("%s", status)
 	}
 	providerID := generatedProviderID(profile.ID)
+	providerNPM := openCodeProviderNPM(profile.ProviderType)
+	if providerNPM == "" {
+		return LaunchMaterial{}, fmt.Errorf("opencode profile providerType is invalid")
+	}
+	providerOptions := openCodeProviderOptions(profile.BaseURL)
 	models := make(map[string]modelOverlay)
 	addModelOverlay(models, profile.Model, profile.ReasoningEffort)
 	addModelOverlay(models, profile.SmallModel, "")
@@ -128,14 +133,12 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	configRaw, err := json.Marshal(configOverlay{
 		Provider: map[string]providerOverlay{
 			providerID: {
-				Name:   "Codex Remote " + profile.Name,
-				ID:     providerID,
-				Env:    []string{},
-				NPM:    "@ai-sdk/openai-compatible",
-				Models: models,
-				Options: map[string]any{
-					"baseURL": strings.TrimSpace(profile.BaseURL),
-				},
+				Name:    "Codex Remote " + profile.Name,
+				ID:      providerID,
+				Env:     []string{},
+				NPM:     providerNPM,
+				Models:  models,
+				Options: providerOptions,
 			},
 		},
 		Model:        providerID + "/" + strings.TrimSpace(profile.Model),
@@ -170,6 +173,25 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	material.Env = env
 	material.RedactedSummary = "opencode profile " + profile.ID + " provider=" + providerID + " apiKey=<redacted>"
 	return material, nil
+}
+
+func openCodeProviderNPM(providerType string) string {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "", config.OpenCodeProviderTypeOpenAICompatibleChat:
+		return "@ai-sdk/openai-compatible"
+	case config.OpenCodeProviderTypeGoogleGemini:
+		return "@ai-sdk/google"
+	default:
+		return ""
+	}
+}
+
+func openCodeProviderOptions(baseURL string) map[string]any {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return nil
+	}
+	return map[string]any{"baseURL": baseURL}
 }
 
 func removeOpenCodeOverlayEnv(env []string) []string {

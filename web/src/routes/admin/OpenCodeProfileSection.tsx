@@ -37,6 +37,7 @@ import {
 
 type OpenCodeProfileDraft = {
   name: string;
+  providerType: string;
   baseURL: string;
   apiKey: string;
   model: string;
@@ -54,6 +55,8 @@ type OpenCodeProfileSectionProps = {
 };
 
 const newOpenCodeProfileID = "new-opencode-profile";
+const openCodeProviderTypeOpenAICompatibleChat = "openai_compatible_chat";
+const openCodeProviderTypeGoogleGemini = "google_gemini";
 const openCodeReasoningOptions = ["low", "medium", "high", "xhigh"] as const;
 const openCodeInstructionMaxChars = 16000;
 
@@ -340,7 +343,7 @@ function renderOpenCodeProfileDetailCard(props: OpenCodeDetailCardProps) {
       }
     >
       <div className="form-grid stack-top">
-        <label className="field form-grid-span-2">
+        <label className="field">
           <span>
             名称 <em className="field-required">*</em>
           </span>
@@ -359,10 +362,37 @@ function renderOpenCodeProfileDetailCard(props: OpenCodeDetailCardProps) {
 
         <label className="field">
           <span>
-            端点地址 <em className="field-required">*</em>
+            协议类型 <em className="field-required">*</em>
+          </span>
+          <select
+            required
+            aria-label="协议类型"
+            value={normalizeOpenCodeProviderType(draft.providerType)}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                providerType: event.target.value,
+              }))
+            }
+          >
+            <option value={openCodeProviderTypeOpenAICompatibleChat}>OpenAI 兼容</option>
+            <option value={openCodeProviderTypeGoogleGemini}>Gemini</option>
+          </select>
+        </label>
+
+        <label className="field">
+          <span>
+            端点地址{" "}
+            {normalizeOpenCodeProviderType(draft.providerType) ===
+            openCodeProviderTypeOpenAICompatibleChat ? (
+              <em className="field-required">*</em>
+            ) : null}
           </span>
           <input
-            required
+            required={
+              normalizeOpenCodeProviderType(draft.providerType) ===
+              openCodeProviderTypeOpenAICompatibleChat
+            }
             value={draft.baseURL}
             placeholder="例如：https://api.example.com/v1"
             onChange={(event) =>
@@ -490,6 +520,7 @@ function renderOpenCodeProfileDetailCard(props: OpenCodeDetailCardProps) {
 function createEmptyDraft(): OpenCodeProfileDraft {
   return {
     name: "",
+    providerType: openCodeProviderTypeOpenAICompatibleChat,
     baseURL: "",
     apiKey: "",
     model: "",
@@ -503,6 +534,7 @@ function createEmptyDraft(): OpenCodeProfileDraft {
 function createDraftFromProfile(profile: OpenCodeProfileSummary): OpenCodeProfileDraft {
   return {
     name: profileTitle(profile),
+    providerType: normalizeOpenCodeProviderType(profile.providerType),
     baseURL: profile.baseURL?.trim() || "",
     apiKey: "",
     model: profile.model?.trim() || "",
@@ -522,7 +554,11 @@ function validateDraft(draft: OpenCodeProfileDraft, editorMode: EditorMode): str
     return nameError;
   }
   const baseURLError = requiredProfileFieldMessage(draft.baseURL, "端点地址");
-  if (baseURLError) {
+  if (
+    normalizeOpenCodeProviderType(draft.providerType) ===
+      openCodeProviderTypeOpenAICompatibleChat &&
+    baseURLError
+  ) {
     return baseURLError;
   }
   const apiKeyError =
@@ -548,6 +584,7 @@ function validateDraft(draft: OpenCodeProfileDraft, editorMode: EditorMode): str
 function buildCreatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRequest {
   return {
     name: draft.name.trim(),
+    providerType: normalizeOpenCodeProviderType(draft.providerType),
     baseURL: draft.baseURL.trim(),
     apiKey: draft.apiKey,
     model: draft.model.trim(),
@@ -561,6 +598,7 @@ function buildCreatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRe
 function buildUpdatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRequest {
   const payload: OpenCodeProfileWriteRequest = {
     name: draft.name.trim(),
+    providerType: normalizeOpenCodeProviderType(draft.providerType),
     baseURL: draft.baseURL.trim(),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
@@ -580,6 +618,15 @@ function optionalString(value: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function normalizeOpenCodeProviderType(value: string | undefined): string {
+  switch (value?.trim()) {
+    case openCodeProviderTypeGoogleGemini:
+      return openCodeProviderTypeGoogleGemini;
+    default:
+      return openCodeProviderTypeOpenAICompatibleChat;
+  }
+}
+
 function normalizeOpenCodeReasoningEffort(value: string | undefined): string {
   return value?.trim() ?? "";
 }
@@ -597,7 +644,7 @@ function profileCardSummary(profile: OpenCodeProfileSummary): string {
   }
   const parts = [
     profile.available ? "" : statusLabel(profile.statusCode),
-    profile.baseURL?.trim() || "API 配置",
+    profile.baseURL?.trim() || openCodeProviderTypeLabel(profile.providerType),
     profile.model?.trim() ? `模型 ${profile.model.trim()}` : "",
     profile.smallModel?.trim() ? `轻量 ${profile.smallModel.trim()}` : "",
     profile.subagentModel?.trim() ? `子代理 ${profile.subagentModel.trim()}` : "",
@@ -610,6 +657,15 @@ function profileCardSummary(profile: OpenCodeProfileSummary): string {
 
 function profileTag(profile: OpenCodeProfileSummary): string {
   return profile.builtIn ? "默认" : "API";
+}
+
+function openCodeProviderTypeLabel(value: string | undefined): string {
+  switch (normalizeOpenCodeProviderType(value)) {
+    case openCodeProviderTypeGoogleGemini:
+      return "Gemini";
+    default:
+      return "OpenAI 兼容";
+  }
 }
 
 function statusLabel(statusCode?: string): string {

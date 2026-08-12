@@ -144,5 +144,7 @@ var openCodeGenerationAccessors = apiGenerationAccessors[OpenCodeAPIProfileSecre
 	CredGenOf:  func(p OpenCodeAPIProfileSecretConfig) uint64 { return p.CredentialGeneration },
 	ConnGenOf:  func(p OpenCodeAPIProfileSecretConfig) uint64 { return p.ConnectionGeneration },
 	APIKeyOf:   func(p OpenCodeAPIProfileSecretConfig) string { return p.APIKey },
-	BaseURLOf:  func(p OpenCodeAPIProfileSecretConfig) string { return p.BaseURL },
+	BaseURLOf: func(p OpenCodeAPIProfileSecretConfig) string {
+		return normalizeOpenCodeProviderType(p.ProviderType) + "\x00" + strings.TrimSpace(p.BaseURL)
+	},
 }

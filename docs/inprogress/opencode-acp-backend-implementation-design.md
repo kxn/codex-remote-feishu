@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-12`
-> Summary: 同步 OpenCode persisted thread catalog：daemon 读取 OpenCode 本地 SQLite session/project 历史，不再把 durable history catalog 记为缺口。
+> Summary: 同步 OpenCode API profile provider 类型：默认 OpenAI-compatible，Gemini 使用 `@ai-sdk/google` 并允许省略端点。
 
 ## 1. 结论
 
@@ -282,8 +282,8 @@ env 策略：
 
 OpenCode config content 的建议形状由 golden test 固定，不能靠字符串拼接；使用结构体 marshal。字段大致包括：
 
-- `provider.<generatedProviderID>.npm = "@ai-sdk/openai-compatible"`
-- `provider.<generatedProviderID>.options.baseURL`
+- `provider.<generatedProviderID>.npm` 由受控 provider 类型映射：空值 / `openai_compatible_chat` -> `@ai-sdk/openai-compatible`，`google_gemini` -> `@ai-sdk/google`。
+- `provider.<generatedProviderID>.options.baseURL` 只在 profile 填写端点时写入；OpenAI-compatible profile 仍要求端点，Gemini profile 默认继承 `@ai-sdk/google` 的 Google Generative Language API 端点，可选填 override。
 - `provider.<generatedProviderID>.models.<model>`：必须写入当前 profile 模型的最小 metadata；`OPENCODE_DISABLE_MODELS_FETCH=1` 下不能只写 provider/model 字符串。
 - `model = "<providerID>/<model>"`
 - `small_model = "<providerID>/<smallModel>"`，当 profile 配置了轻量模型时写入。

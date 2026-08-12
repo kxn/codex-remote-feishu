@@ -177,6 +177,7 @@ export function makeOpenCodeProfile(
     revision: 1,
     etag: '"opencode-profile-definition:op_default:1"',
     name: "本机默认",
+    providerType: "openai_compatible_chat",
     hasAPIKey: false,
     available: true,
     builtIn: true,

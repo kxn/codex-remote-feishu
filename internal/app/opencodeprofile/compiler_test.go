@@ -422,6 +422,103 @@ func TestCompilerAPIProfileIgnoresLegacyPermissionMode(t *testing.T) {
 	}
 }
 
+func TestCompilerGoogleGeminiProfileProjectsGoogleProvider(t *testing.T) {
+	profile := config.OpenCodeProfile{
+		OpenCodeAPIProfileSecretConfig: config.OpenCodeAPIProfileSecretConfig{
+			ID:           "op_gemini",
+			Revision:     3,
+			Name:         "Gemini",
+			ProviderType: " GOOGLE_GEMINI ",
+			APIKey:       "gemini-secret",
+			Model:        "gemini-2.5-pro",
+			SmallModel:   "gemini-2.5-flash",
+		},
+	}
+	material, err := CompileLaunchMaterial(CompileInput{
+		Profile:       profile,
+		WorkspaceRoot: "/repo",
+	})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(gemini): %v", err)
+	}
+	configRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("missing %s in %#v", config.OpenCodeConfigContentEnv, material.Env)
+	}
+	authRaw, ok := lookupEnv(material.Env, config.OpenCodeAuthContentEnv)
+	if !ok {
+		t.Fatalf("missing %s in %#v", config.OpenCodeAuthContentEnv, material.Env)
+	}
+	if strings.Contains(configRaw, "gemini-secret") {
+		t.Fatalf("config overlay leaked API key: %s", configRaw)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v\n%s", err, configRaw)
+	}
+	if configDoc["model"] != "codex_remote_opencode_op_gemini/gemini-2.5-pro" {
+		t.Fatalf("unexpected model projection: %#v", configDoc)
+	}
+	provider, ok := configDoc["provider"].(map[string]any)["codex_remote_opencode_op_gemini"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing generated provider config: %#v", configDoc)
+	}
+	if provider["npm"] != "@ai-sdk/google" {
+		t.Fatalf("provider npm = %#v, want @ai-sdk/google in %#v", provider["npm"], provider)
+	}
+	options, ok := provider["options"].(map[string]any)
+	if ok {
+		if _, exists := options["baseURL"]; exists {
+			t.Fatalf("Gemini provider without baseURL must not project baseURL option: %#v", provider)
+		}
+	}
+	var authDoc map[string]any
+	if err := json.Unmarshal([]byte(authRaw), &authDoc); err != nil {
+		t.Fatalf("auth overlay is not JSON: %v\n%s", err, authRaw)
+	}
+	authProvider, ok := authDoc["codex_remote_opencode_op_gemini"].(map[string]any)
+	if !ok {
+		t.Fatalf("auth overlay must be keyed by provider id, got %#v", authDoc)
+	}
+	if authProvider["type"] != "api" || authProvider["key"] != "gemini-secret" {
+		t.Fatalf("unexpected auth provider overlay: %#v", authProvider)
+	}
+}
+
+func TestCompilerGoogleGeminiProfileProjectsOptionalBaseURLOverride(t *testing.T) {
+	profile := config.OpenCodeProfile{
+		OpenCodeAPIProfileSecretConfig: config.OpenCodeAPIProfileSecretConfig{
+			ID:           "op_gemini",
+			Revision:     3,
+			Name:         "Gemini",
+			ProviderType: config.OpenCodeProviderTypeGoogleGemini,
+			BaseURL:      "https://generativelanguage.googleapis.com/v1beta",
+			APIKey:       "gemini-secret",
+			Model:        "gemini-2.5-pro",
+		},
+	}
+	material, err := CompileLaunchMaterial(CompileInput{Profile: profile})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(gemini): %v", err)
+	}
+	configRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("missing %s in %#v", config.OpenCodeConfigContentEnv, material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v\n%s", err, configRaw)
+	}
+	provider, ok := configDoc["provider"].(map[string]any)["codex_remote_opencode_op_gemini"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing generated provider config: %#v", configDoc)
+	}
+	options, ok := provider["options"].(map[string]any)
+	if !ok || options["baseURL"] != "https://generativelanguage.googleapis.com/v1beta" {
+		t.Fatalf("Gemini baseURL override options = %#v, want baseURL override", provider["options"])
+	}
+}
+
 func TestCompilerRuntimeAccessModeProjectsPermissionOverlay(t *testing.T) {
 	material, err := CompileLaunchMaterial(CompileInput{
 		Profile: config.OpenCodeProfile{

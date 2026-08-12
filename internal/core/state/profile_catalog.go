@@ -52,18 +52,19 @@ type OpenCodeAdmissionRef struct {
 }
 
 type OpenCodeProfileSummary struct {
-	ID         string `json:"id"`
-	Revision   uint64 `json:"revision,omitempty"`
-	ETag       string `json:"etag,omitempty"`
-	Name       string `json:"name"`
-	BaseURL    string `json:"baseURL,omitempty"`
-	Model      string `json:"model,omitempty"`
-	StatusCode string `json:"statusCode,omitempty"`
-	Available  bool   `json:"available"`
-	BuiltIn    bool   `json:"builtIn,omitempty"`
-	Editable   bool   `json:"editable"`
-	Deletable  bool   `json:"deletable"`
-	HasAPIKey  bool   `json:"hasAPIKey,omitempty"`
+	ID           string `json:"id"`
+	Revision     uint64 `json:"revision,omitempty"`
+	ETag         string `json:"etag,omitempty"`
+	Name         string `json:"name"`
+	ProviderType string `json:"providerType,omitempty"`
+	BaseURL      string `json:"baseURL,omitempty"`
+	Model        string `json:"model,omitempty"`
+	StatusCode   string `json:"statusCode,omitempty"`
+	Available    bool   `json:"available"`
+	BuiltIn      bool   `json:"builtIn,omitempty"`
+	Editable     bool   `json:"editable"`
+	Deletable    bool   `json:"deletable"`
+	HasAPIKey    bool   `json:"hasAPIKey,omitempty"`
 }
 
 func NormalizeCodexAdmissionRef(value *CodexAdmissionRef) *CodexAdmissionRef {

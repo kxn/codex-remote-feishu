@@ -210,6 +210,7 @@ export interface OpenCodeProfileSummary {
   revision?: number;
   etag?: string;
   name?: string;
+  providerType?: string;
   baseURL?: string;
   apiKey?: string;
   hasAPIKey: boolean;
@@ -250,6 +251,7 @@ export interface OpenCodeProfileReferencesResponse {
 
 export interface OpenCodeProfileWriteRequest {
   name?: string;
+  providerType?: string;
   baseURL?: string;
   apiKey?: string;
   model?: string;
