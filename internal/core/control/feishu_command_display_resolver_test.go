@@ -338,7 +338,7 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 	}
 
 	currentWork := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupCurrentWork, true, ctx)
-	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/steerall", "/new", "/status"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/new", "/status"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("opencode current_work menu commands = %#v, want %#v", got, want)
 	}
 
@@ -360,6 +360,7 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 		notePart string
 	}{
 		{familyID: FeishuCommandNew, kind: FeishuCommandSupportApproximation, notePart: "OpenCode"},
+		{familyID: FeishuCommandSteerAll, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandReasoning, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandAccess, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandPlan, kind: FeishuCommandSupportReject, notePart: "OpenCode"},

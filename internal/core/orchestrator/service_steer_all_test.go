@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +51,79 @@ func TestSteerAllMenuActionNoEligibleQueueSealsCurrentCard(t *testing.T) {
 	}
 	if !catalog.Sealed || len(catalog.NoticeSections) != 1 {
 		t.Fatalf("expected menu noop owner card to seal with a notice section, got %#v", catalog)
+	}
+}
+
+func TestOpenCodeSteerAllCommandReturnsUnsupportedNotice(t *testing.T) {
+	now := time.Date(2026, 8, 12, 15, 25, 0, 0, time.UTC)
+	svc := newSteerAllServiceFixture(&now)
+	inst := svc.root.Instances["inst-1"]
+	inst.Backend = agentproto.BackendOpenCode
+	surface := svc.root.Surfaces["surface-1"]
+	surface.Backend = agentproto.BackendOpenCode
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionSteerAll,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "msg-steer-all-opencode",
+		Text:             "/steerall",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected single unsupported notice, got %#v", events)
+	}
+	if events[0].Notice.Code != "command_rejected" || !strings.Contains(events[0].Notice.Text, "OpenCode") || !strings.Contains(events[0].Notice.Text, "暂不支持") {
+		t.Fatalf("unexpected unsupported notice: %#v", events[0].Notice)
+	}
+	for _, event := range events {
+		if event.Command != nil {
+			t.Fatalf("opencode steerall must not dispatch steer command: %#v", events)
+		}
+	}
+	if got := surface.QueuedQueueItemIDs; len(got) != 2 || got[0] != "queue-2" || got[1] != "queue-3" {
+		t.Fatalf("opencode rejected steerall must leave queue untouched, got %#v", got)
+	}
+	if binding := svc.pendingSteerBinding("queue-2"); binding != nil {
+		t.Fatalf("opencode rejected steerall must not create pending steer binding: %#v", binding)
+	}
+}
+
+func TestOpenCodeReactionCreatedReturnsUnsupportedNotice(t *testing.T) {
+	now := time.Date(2026, 8, 12, 16, 10, 0, 0, time.UTC)
+	svc := newSteerAllServiceFixture(&now)
+	inst := svc.root.Instances["inst-1"]
+	inst.Backend = agentproto.BackendOpenCode
+	surface := svc.root.Surfaces["surface-1"]
+	surface.Backend = agentproto.BackendOpenCode
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReactionCreated,
+		SurfaceSessionID: "surface-1",
+		TargetMessageID:  "msg-queued-1",
+		ReactionType:     "ThumbsUp",
+	})
+
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected unsupported notice, got %#v", events)
+	}
+	if events[0].Notice.Code != "opencode_steer_not_supported" || !strings.Contains(events[0].Notice.Text, "OpenCode") || !strings.Contains(events[0].Notice.Text, "暂不支持") {
+		t.Fatalf("unexpected unsupported notice: %#v", events[0].Notice)
+	}
+	for _, event := range events {
+		if event.Command != nil {
+			t.Fatalf("opencode reaction steer must not dispatch steer command: %#v", events)
+		}
+	}
+	if got := surface.QueuedQueueItemIDs; len(got) != 2 || got[0] != "queue-2" || got[1] != "queue-3" {
+		t.Fatalf("opencode rejected reaction steer must leave queue untouched, got %#v", got)
+	}
+	if item := surface.QueueItems["queue-2"]; item == nil || item.Status != state.QueueItemQueued {
+		t.Fatalf("opencode rejected reaction steer must leave item queued, got %#v", item)
+	}
+	if binding := svc.pendingSteerBinding("queue-2"); binding != nil {
+		t.Fatalf("opencode rejected reaction steer must not create pending steer binding: %#v", binding)
 	}
 }
 

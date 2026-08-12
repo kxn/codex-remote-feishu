@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-11`
-> Summary: 同步 headless 收到旧 `attach_instance` 卡片回调时 fail closed 的状态机边界，并保留既有群主机器人无群 workspace 文本打开 target picker 并保留 pending 输入的例外、OpenCode headless backend mode/profile/restart/command 状态机合同、workspace-aware headless / VS Code 主链、Profile-first Codex 配置、Feishu room/context 协调、机器人进群自动 primary bootstrap、群聊 room workspace data-plane gate / room-level detach、queued->dispatching 用户可见回复提示、headless lazy recovery、DeepSeek/MiMo catalog-backed 动态模型菜单、固定模型菜单、prompt override guard、跨模型组 same-workspace route restart 自动新会话、typed Codex resume policy 与 profile instruction 的 `developerInstructions` 投影；详细历史补充保留在正文各日期段落。
+> Updated: `2026-08-14`
+> Summary: 同步 headless 旧 `attach_instance` 卡片回调的 fail-closed 边界，以及 OpenCode ACP 不支持 steer 时对 `/steerall`、queued 点赞和 reply auto-steer 的明确拒绝；并保留既有 workspace-aware headless / VS Code 主链、Profile-first 配置、Feishu room/context 协调、workspace target picker、request/review owner-flow 与其他当前状态机合同。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`（含 hidden alias `/codexprovider`）、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -467,6 +467,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. 或者用户 reply 当前 processing 的 source message，且 reply 内容属于当前 v1 支持的文本 / 本地图片输入时，会创建一个临时 steering item；独立文件 reply 当前不会走 steering，而是保留为 staged file
    3. 该 item 进入 `QueueItemStatus=steering`
    4. 相关命令记录在 `pendingSteers`
+   5. OpenCode backend 当前不进入这层 overlay：`/steerall` hidden + reject，queued 点赞或 reply auto-steer 命中时返回 `opencode_steer_not_supported`，不创建 steering item、不发送 `turn.steer`
 2. 这个 overlay 不占用 `ActiveQueueItemID`，所以可以与 `E3 Running` 并存。
 3. steering ack 成功后，item 进入 `steered`；失败时恢复回普通语义：
    1. 文本 / 图文 reply 恢复为普通 queued item
@@ -773,8 +774,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 对应实现里：
 
 1. command display profile 当前固定为：
-   1. `current_work` 显示 `/stop`、`/new`、`/status`；`/new` 与 `/steerall` 标为 approximation，沿用现有会话控制壳。
-   2. `send_settings` 显示 `/reasoning`、`/access`、`/plan`、`/verbose`、`/opencodeprofile`；`/model` hidden + reject，OpenCode 模型来自 profile 或原生配置，不提供飞书临时模型切换。
+   1. `current_work` 显示 `/stop`、`/new`、`/status`；`/new` 标为 approximation，沿用现有会话控制壳；`/steerall` hidden + reject，OpenCode ACP 当前不支持把补充输入并入当前执行。
+   2. `send_settings` 显示 `/access`、`/plan`、`/verbose`、`/opencodeprofile`；`/model`、`/reasoning` hidden + reject，OpenCode 模型/推理强度来自 profile 或原生配置，`/plan` 通过 ACP session mode 动态切换。
    3. `switch_target` 显示 `workspace` 命令族；`/list`、`/use`、`/useall`、裸 `/detach` hidden + allow，继续作为旧 slash / target picker 回退入口。
    4. `/history`、`/sendfile`、`/mode`、`/admin`、`/upgrade`、`/debug`、`/help`、`/menu` 继续显示；`/compact`、`/review`、`/bendtomywill`、`/autowhip`、`/autocontinue`、`/follow`、`/cron` hidden + reject，不伪装成 OpenCode 原生能力。
 2. OpenCode target picker 候选只合并 `Backend=opencode` 的在线实例和可恢复 metadata；第一版不读 Codex SQLite 历史，也不把 Codex/Claude 会话混进 `/list` / `/use`。
@@ -918,10 +919,12 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    1. 只有 `ThumbsUp` 才会触发。
    2. 只有 queued item 的主文本 `SourceMessageID` 能触发。
    3. 图片消息上的点赞不会单独触发任何状态迁移。
+   4. OpenCode backend 命中这些条件时只返回不支持提示，不把 queued item 移出普通队列。
 2. reply 自动 steering 入口：
    1. 只有 reply 目标命中**当前 surface 正在 processing 的 source message**时才会触发。
    2. 必须命中当前 surface 自己的 active running turn；仅 instance 有 active turn 但 surface 不拥有该 running item 时不会触发。
    3. 当前只支持文本 / 本地图片内容；被 reply 的原消息不会再作为 quoted input 重新 steer 进去。
+   4. OpenCode backend 命中这些条件时只返回不支持提示，不创建 fallback steering item。
 3. 无论哪种入口：
    1. 目标 item / reply fallback item 都必须和当前 active running turn 属于同一 `FrozenThreadID`。
    2. 命中后不会改写其他 queued item 的相对顺序，也不会跨 thread 偷偷 retarget。
@@ -1359,8 +1362,8 @@ E0 Idle
   -- /compact(当前已绑定 thread，且无 queued/dispatching/running/steering/其他 compact) --> `CompactPending` overlay
 
 E1 Queued
-  -- queued 主文本被 `ThumbsUp`，且当前有同 thread active turn --> `SteerPending` overlay
-  -- `/steerall` 命中且存在同 thread queued 项 --> `SteerPending` overlay
+  -- queued 主文本被 `ThumbsUp`，且当前有同 thread active turn（OpenCode 除外） --> `SteerPending` overlay
+  -- `/steerall` 命中且存在同 thread queued 项（OpenCode 除外） --> `SteerPending` overlay
 
 E2 Dispatching
   -- turn.started(remote_surface) --> E3 Running
@@ -1368,7 +1371,7 @@ E2 Dispatching
 
 E3 Running
   -- turn.completed(remote_surface) --> E0 Idle
-  -- reply 当前 processing source message（文本 / 本地图片，且命中当前 surface active running item） --> `SteerPending` overlay
+  -- reply 当前 processing source message（文本 / 本地图片，且命中当前 surface active running item，OpenCode 除外） --> `SteerPending` overlay
 
 `CompactPending` overlay
   -- 显式 `/compact` 已提交 --> 同时创建前台 compact owner-card，首卡阶段为 `dispatching`
@@ -1419,7 +1422,7 @@ E3 Running
    3. 后续 running / terminal 都继续 patch 同一张卡
    4. 这条显式 owner-card 不受 verbosity 影响
 11. 只要 compact 仍在 pending/running，`dispatchNext` 就不会再把后续 queued 输入发给同一实例。
-12. `/steerall` 当前会把同一 active thread 下所有 queued 项聚合为一次 `turn.steer`；若没有可并入项，只返回 noop 提示，不改队列状态；compact turn 本身不会成为 steer 目标。
+12. `/steerall` 当前会把同一 active thread 下所有 queued 项聚合为一次 `turn.steer`；若没有可并入项，只返回 noop 提示，不改队列状态；compact turn 本身不会成为 steer 目标。OpenCode backend 例外：该命令 hidden + reject，不触发 `turn.steer`。
 13. compact pending/running 也属于 `surfaceHasLiveRemoteWork`：
    1. `/mode` 会直接拒绝
    2. `/detach` 会进入 delayed detach / abandoning
@@ -1752,7 +1755,7 @@ transport degraded retained attachment
 | `/autocontinue` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/help` `/menu` `/debug` `/upgrade` | 允许 | 允许 | 允许 | 允许 | 允许 | 允许 |
 | `/primary on/off/status/refresh` | 允许；私聊只提示只能在群聊使用，群聊中设置/取消/查看 room primary gateway | 允许；私聊只提示只能在群聊使用，群聊中设置/取消/查看 room primary gateway | 允许；私聊只提示只能在群聊使用，群聊中设置/取消/查看 room primary gateway | 允许；私聊只提示只能在群聊使用，群聊中设置/取消/查看 room primary gateway | 允许；私聊只提示只能在群聊使用，群聊中设置/取消/查看 room primary gateway | 允许；私聊只提示只能在群聊使用，群聊中设置/取消/查看 room primary gateway |
-| `/steerall` | 允许；通常返回 noop 提示 | 允许；通常返回 noop 提示 | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop | 允许；通常返回 noop 提示 | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop | 允许；通常返回 noop 提示 |
+| `/steerall` | 允许；通常返回 noop 提示；OpenCode hidden + reject | 允许；通常返回 noop 提示；OpenCode hidden + reject | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop；OpenCode hidden + reject | 允许；通常返回 noop 提示；OpenCode hidden + reject | 允许；仅在存在同 thread queued + running turn 时并入，否则 noop；OpenCode hidden + reject | 允许；通常返回 noop 提示；OpenCode hidden + reject |
 | 文本 | 一般拒绝；Feishu 群 headless 若同 room 已绑定 workspace，则先继承 room workspace 并接管/启动当前 bot context，再按 `R1` 文本规则进入新会话首条输入；同 room 无 workspace 时返回 `room_workspace_required` | `headless`: 允许并隐式进入新会话首条输入；`vscode`: 拒绝 | 允许 | 拒绝 | 允许 | 允许首条；首条 queued/dispatching/running 后拒绝第二条 |
 | 图片 | 一般拒绝；Feishu 群 headless 若同 room 已绑定 workspace，则先继承 room workspace 并接管/启动当前 bot context，再 stage 到当前 bot；同 room 无 workspace 时返回 `room_workspace_required` | `headless`: 允许并隐式进入 `R5` 后暂存；`vscode`: 拒绝 | 允许 | 拒绝 | 允许 | 仅在首条文本尚未入队前允许 |
 | 文件 | 一般拒绝；Feishu 群 headless 若同 room 已绑定 workspace，则先继承 room workspace 并接管/启动当前 bot context，再 stage 到当前 bot；同 room 无 workspace 时返回 `room_workspace_required` | `headless`: 允许并隐式进入 `R5` 后暂存；`vscode`: 拒绝 | 允许 | 拒绝 | 允许 | 仅在首条文本尚未入队前允许 |

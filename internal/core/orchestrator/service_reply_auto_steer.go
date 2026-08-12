@@ -11,6 +11,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
+const opencodeSteerUnsupportedNoticeText = "OpenCode ACP 当前暂不支持把补充输入并入当前执行；请等本轮结束后再发送。"
+
 func queueItemSteerInputs(item *state.QueueItemRecord) []agentproto.Input {
 	if item == nil {
 		return nil
@@ -33,6 +35,9 @@ func (s *Service) maybeAutoSteerReply(surface *state.SurfaceConsoleRecord, actio
 	inst, activeThreadID, activeTurnID, ok := s.activeReplySteerTarget(surface, replyTargetMessageID)
 	if !ok {
 		return nil
+	}
+	if state.EffectiveInstanceBackend(inst) == agentproto.BackendOpenCode {
+		return notice(surface, "opencode_steer_not_supported", opencodeSteerUnsupportedNoticeText)
 	}
 
 	fullInputs := append([]agentproto.Input(nil), action.Inputs...)

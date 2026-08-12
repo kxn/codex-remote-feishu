@@ -75,6 +75,47 @@ func TestReplyToActiveRunningSourceAutoSteersText(t *testing.T) {
 	}
 }
 
+func TestOpenCodeReplyToActiveRunningSourceReturnsUnsupportedNotice(t *testing.T) {
+	now := time.Date(2026, 8, 12, 15, 30, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	svc.root.Instances["inst-1"].Backend = agentproto.BackendOpenCode
+	svc.root.Surfaces["surface-1"].Backend = agentproto.BackendOpenCode
+	startReplyAutoSteerTurn(svc)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-reply-opencode",
+		TargetMessageID:  "msg-active",
+		Text:             "请重点看最后一段",
+		Inputs: []agentproto.Input{
+			{Type: agentproto.InputText, Text: "<被引用内容>\n原始消息\n</被引用内容>"},
+			{Type: agentproto.InputText, Text: "请重点看最后一段"},
+		},
+		SteerInputs: []agentproto.Input{
+			{Type: agentproto.InputText, Text: "请重点看最后一段"},
+		},
+	})
+
+	if len(events) != 1 || events[0].Notice == nil {
+		t.Fatalf("expected unsupported notice, got %#v", events)
+	}
+	if events[0].Notice.Code != "opencode_steer_not_supported" || !strings.Contains(events[0].Notice.Text, "OpenCode") || !strings.Contains(events[0].Notice.Text, "暂不支持") {
+		t.Fatalf("unexpected unsupported notice: %#v", events[0].Notice)
+	}
+	for _, event := range events {
+		if event.Command != nil {
+			t.Fatalf("opencode reply auto-steer must not dispatch steer command: %#v", events)
+		}
+	}
+	if item := svc.root.Surfaces["surface-1"].QueueItems["queue-2"]; item != nil {
+		t.Fatalf("opencode reply auto-steer must not create steering queue item: %#v", item)
+	}
+	if got := svc.pendingSteerBinding("queue-2"); got != nil {
+		t.Fatalf("opencode reply auto-steer must not create pending steer binding: %#v", got)
+	}
+}
+
 func TestReplyToActiveRunningSourceSteerRejectedRestoresQueueOrder(t *testing.T) {
 	now := time.Date(2026, 4, 14, 13, 5, 0, 0, time.UTC)
 	svc := newReplyAutoSteerServiceFixture(&now)
