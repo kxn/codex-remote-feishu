@@ -1,6 +1,8 @@
 package feishu
 
 import (
+	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -813,9 +815,13 @@ func TestProjectExecCommandProgressTruncatesSingleReasoningLineOnlyAtCardBudget(
 			ThreadID: "thread-1",
 			TurnID:   "turn-1",
 			ItemID:   "reasoning-1",
-			Timeline: []control.ExecCommandProgressTimelineItem{
-				timelineItem("reasoning-1", "reasoning_summary", "", summary, "", 1),
-			},
+			Timeline: []control.ExecCommandProgressTimelineItem{{
+				ID:        "reasoning-1::latest",
+				Kind:      "reasoning_summary",
+				Summary:   summary,
+				Status:    "running",
+				Transient: true,
+			}},
 		}, "om-progress-1", 1),
 	})
 	if len(ops) != 1 {
@@ -911,6 +917,136 @@ func TestProjectExecCommandProgressKeepsMergedReadFilenamesVisible(t *testing.T)
 	if strings.Contains(body, "...") || !strings.Contains(body, "alpha-really-long-file-name.md") || !strings.Contains(body, "beta-really-long-file-name.md") || !strings.Contains(body, "gamma-really-long-file-name.md") {
 		t.Fatalf("expected merged read filenames to stay fully visible, got %#v", ops[0])
 	}
+}
+
+func TestProjectExecCommandProgressDoesNotSilentlyTruncateLargeMergedRead(t *testing.T) {
+	items := make([]string, 0, 1200)
+	for index := 0; index < 1200; index++ {
+		items = append(items, fmt.Sprintf("/workspace/target-%03d-with-a-distinct-name.go", index))
+	}
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		SourceMessageID:  "om-source-1",
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			ItemID:   "read-1",
+			Timeline: []control.ExecCommandProgressTimelineItem{timelineReadItem("read-1", items, "completed", 1)},
+		}),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if strings.Contains(body, "...") {
+		t.Fatalf("expected structured read rendering instead of plain string truncation, got %#v", ops[0])
+	}
+	missing := 0
+	for _, item := range items {
+		if !strings.Contains(body, filepath.Base(item)) {
+			missing++
+		}
+	}
+	if missing != 0 && !strings.Contains(body, fmt.Sprintf("另有 %d 个读取目标", missing)) {
+		t.Fatalf("expected all read targets or an explicit omitted-target count, missing=%d, got %#v", missing, ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressKeepsOmittedCountWithVeryLongReadNames(t *testing.T) {
+	items := make([]string, 0, 140)
+	for index := 0; index < 140; index++ {
+		items = append(items, "/workspace/"+fmt.Sprintf("target-%03d-", index)+strings.Repeat("x", 420)+".go")
+	}
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		ExecCommandProgress: progressWithTimeline(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			Timeline: []control.ExecCommandProgressTimelineItem{timelineReadItem("read-1", items, "completed", 1)},
+		}),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one operation, got %#v", ops)
+	}
+	body := ops[0].CardBody
+	if strings.Contains(body, "...") || !strings.Contains(body, "个读取目标") {
+		t.Fatalf("expected explicit omitted-target count to survive transport budgeting, body bytes=%d", len(body))
+	}
+}
+
+func TestProjectExecCommandProgressVerboseTailDoesNotAdvancePersistentWindow(t *testing.T) {
+	projector := NewProjector()
+	progress := progressWithActiveSegment(control.ExecCommandProgress{
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		Timeline: []control.ExecCommandProgressTimelineItem{{
+			ID:        "reasoning-1::latest",
+			Kind:      "reasoning_summary",
+			Summary:   "Checking",
+			Status:    "running",
+			Transient: true,
+		}},
+	}, "om-progress-1", 1)
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:                eventcontract.KindExecCommandProgress,
+		SurfaceSessionID:    "surface-1",
+		ExecCommandProgress: progress,
+	})
+	if len(ops) != 1 || ops[0].Kind != OperationUpdateCard {
+		t.Fatalf("expected transient verbose tail to patch the active card, got %#v", ops)
+	}
+	if ops[0].ProgressCardStartSeq != 1 || ops[0].ProgressCardEndSeq != 0 {
+		t.Fatalf("expected transient tail not to invent a persistent seq window, got %#v", ops[0])
+	}
+}
+
+func TestProjectExecCommandProgressKeepsVerboseTailWhenHistoryFillsCard(t *testing.T) {
+	entries := make([]control.ExecCommandProgressTimelineItem, 0, 481)
+	for index := 1; index <= 480; index++ {
+		entries = append(entries, timelineItem("cmd-"+strconv.Itoa(index), "command_execution", "执行", "go test ./pkg/"+strconv.Itoa(index), "completed", index))
+	}
+	entries = append(entries, control.ExecCommandProgressTimelineItem{
+		ID:        "reasoning-1::latest",
+		Kind:      "reasoning_summary",
+		Summary:   strings.Repeat("Checking current results ", 800),
+		Status:    "running",
+		Transient: true,
+	})
+	projector := NewProjector()
+	ops := projector.ProjectEvent("chat-1", eventcontract.Event{
+		Kind:             eventcontract.KindExecCommandProgress,
+		SurfaceSessionID: "surface-1",
+		ExecCommandProgress: progressWithActiveSegment(control.ExecCommandProgress{
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			Timeline: entries,
+		}, "om-progress-1", 1),
+	})
+	if len(ops) != 1 {
+		t.Fatalf("expected one progress operation, got %#v", ops)
+	}
+	if !strings.Contains(ops[0].CardBody, "Checking current results") {
+		t.Fatalf("expected verbose reasoning tail to remain visible, got body bytes=%d", len(ops[0].CardBody))
+	}
+	if !strings.HasSuffix(strings.TrimSpace(ops[0].CardBody), "...") {
+		t.Fatalf("expected oversized verbose tail to be budget-truncated at the end, got body suffix %q", lastNRunes(ops[0].CardBody, 80))
+	}
+	payload := renderOperationCard(ops[0], ops[0].effectiveCardEnvelope())
+	if size, err := feishuInteractiveMessageTransportSize(payload); err != nil || size > feishuCardTransportLimitBytes {
+		t.Fatalf("expected sendable progress payload, size=%d err=%v", size, err)
+	}
+}
+
+func lastNRunes(value string, count int) string {
+	runes := []rune(value)
+	if len(runes) <= count {
+		return value
+	}
+	return string(runes[len(runes)-count:])
 }
 
 func TestProjectExecCommandProgressTruncatesLongCommandSummary(t *testing.T) {

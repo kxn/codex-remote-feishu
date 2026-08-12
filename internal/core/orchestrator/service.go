@@ -835,6 +835,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemStarted(instanceID, event)...))
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
+		if strings.TrimSpace(event.ItemKind) == "agent_message" && strings.TrimSpace(event.Delta) != "" {
+			preface = append(preface, s.flushAndSealExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)...)
+		}
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemDelta(instanceID, event)...))
 	case agentproto.EventItemTerminalInteraction, agentproto.EventItemReasoningSummaryPartAdded:
 		return s.filterEventsForSurfaceVisibility(preface)
@@ -856,7 +859,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventRequestResolved:
 		return s.filterEventsForSurfaceVisibility(append(preface, s.resolveRequestPrompt(instanceID, event)...))
 	case agentproto.EventProtocolNotice:
-		return s.filterEventsForSurfaceVisibility(append(preface, s.recordProtocolNotice(instanceID, event)...))
+		events := append(preface, s.recordProtocolNotice(instanceID, event)...)
+		events = s.insertExecCommandProgressBoundary(instanceID, event.ThreadID, event.TurnID, events)
+		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventSystemError:
 		problem := problemFromEvent(event)
 		events := append(preface, s.handleCompactProblem(instanceID, problem)...)

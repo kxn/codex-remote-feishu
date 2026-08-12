@@ -752,8 +752,12 @@ func TestCommandExecutionExplorationProgressBuildsSharedBlock(t *testing.T) {
 			"command": `bash -lc "cat internal/core/control/types.go"`,
 		},
 	})
-	if len(completed) != 0 {
-		t.Fatalf("expected first exploration completion without visible block change to stay quiet, got %#v", completed)
+	if len(completed) != 1 || completed[0].ExecCommandProgress == nil {
+		t.Fatalf("expected first exploration completion to update its row status, got %#v", completed)
+	}
+	completedRows := completed[0].ExecCommandProgress.Timeline
+	if len(completedRows) != 2 || completedRows[0].Status != "completed" || completedRows[1].Status != "running" {
+		t.Fatalf("expected per-row exploration lifecycle, got %#v", completedRows)
 	}
 
 	finished := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -940,7 +944,7 @@ func TestCommandExecutionExplorationProgressDoesNotMergeReadAcrossExecEntry(t *t
 	}
 }
 
-func TestCommandExecutionExplorationProgressOnlyMergesSameReadCommand(t *testing.T) {
+func TestCommandExecutionExplorationProgressMergesReadAcrossShellCommands(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -982,15 +986,12 @@ func TestCommandExecutionExplorationProgressOnlyMergesSameReadCommand(t *testing
 		t.Fatalf("expected second read update, got %#v", second)
 	}
 	progress = second[0].ExecCommandProgress
-	if len(progress.Timeline) != 2 {
-		t.Fatalf("expected different read commands to stay separated, got %#v", progress.Timeline)
+	if len(progress.Timeline) != 1 {
+		t.Fatalf("expected visible read semantics to merge across shell commands, got %#v", progress.Timeline)
 	}
 	rows := progress.Timeline
-	if rows[0].Kind != "read" || len(rows[0].Items) != 1 || rows[0].Items[0] != "foo.txt" {
-		t.Fatalf("unexpected first read row: %#v", rows)
-	}
-	if rows[1].Kind != "read" || len(rows[1].Items) != 1 || rows[1].Items[0] != "bar.txt" {
-		t.Fatalf("unexpected second read row: %#v", rows)
+	if rows[0].Kind != "read" || len(rows[0].Items) != 2 || rows[0].Items[0] != "foo.txt" || rows[0].Items[1] != "bar.txt" {
+		t.Fatalf("unexpected merged read row: %#v", rows)
 	}
 }
 
@@ -1077,7 +1078,7 @@ func TestParseCommandExecutionExplorationActionRejectsPipelineSearch(t *testing.
 	}
 }
 
-func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
+func TestExecCommandProgressSealsOnFirstAssistantTextDelta(t *testing.T) {
 	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -1118,8 +1119,8 @@ func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 	}); len(events) != 0 {
 		t.Fatalf("expected no progress card event once assistant text starts, got %#v", events)
 	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
-		t.Fatalf("expected assistant text delta to keep exec progress active until visible flush, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected first non-empty assistant text delta to seal exec progress immediately, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 
 	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -1131,8 +1132,8 @@ func TestExecCommandProgressStopsAfterAssistantTextAppears(t *testing.T) {
 	}); len(events) != 0 {
 		t.Fatalf("expected assistant text completion to stay pending until next visible event, got %#v", events)
 	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
-		t.Fatalf("expected pending assistant text to keep exec progress active until flush, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
+	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
+		t.Fatalf("expected assistant text completion to leave the old progress sealed, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
 	}
 
 	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -1252,739 +1253,43 @@ func TestExecCommandProgressFinalizesOnTurnCompletionWithoutAssistantText(t *tes
 	}
 }
 
-func TestReasoningSummaryProgressChattyEmitsEnglishTimelineEntry(t *testing.T) {
-	now := time.Date(2026, 4, 17, 10, 0, 0, 0, time.UTC)
+func TestExplorationProgressRowsFinalizeOnTurnFailure(t *testing.T) {
+	now := time.Date(2026, 8, 12, 15, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "**Considering Git commands**",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(events) != 1 || events[0].Kind != eventcontract.KindExecCommandProgress || events[0].ExecCommandProgress == nil {
-		t.Fatalf("expected one reasoning progress event, got %#v", events)
-	}
-	progress := events[0].ExecCommandProgress
-	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "reasoning_summary" || progress.Timeline[0].Summary != "Considering Git commands" {
-		t.Fatalf("expected reasoning timeline item, got %#v", progress.Timeline)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
-		t.Fatal("expected reasoning to retain shared progress state")
-	}
-	record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning
-	if record == nil || record.Text != "Considering Git commands" {
-		t.Fatalf("expected reasoning record to keep raw english text, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning)
-	}
-}
-
-func TestReasoningSummaryProgressChattyAccumulatesPlainTextDeltas(t *testing.T) {
-	now := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Considering",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected first reasoning delta event, got %#v", first)
-	}
-	if got := first[0].ExecCommandProgress.Timeline[0].Summary; got != "Considering" {
-		t.Fatalf("expected first reasoning frame to surface first fragment, got %#v", first[0].ExecCommandProgress.Timeline)
-	}
-
-	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    " possible fixes",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(second) != 0 {
-		t.Fatalf("expected second reasoning delta inside throttle window to be coalesced, got %#v", second)
-	}
-	if record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning; record == nil || record.Text != "Considering possible fixes" {
-		t.Fatalf("expected reasoning record to keep accumulated plain-text summary, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning)
-	}
-
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-	now = now.Add(execCommandProgressReasoningFlushInterval)
-	tick := svc.Tick(now)
-	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
-		t.Fatalf("expected tick to flush coalesced reasoning delta after throttle window, got %#v", tick)
-	}
-	progress := tick[0].ExecCommandProgress
-	if activeProgressMessageID(progress) != "om-progress-1" {
-		t.Fatalf("expected tick flush to update existing progress card, got %#v", progress)
-	}
-	if got := progress.Timeline[0].Summary; got != "Considering possible fixes" {
-		t.Fatalf("expected coalesced reasoning summary on tick flush, got %#v", progress.Timeline)
-	}
-}
-
-func TestReasoningSummaryProgressChattyKeepsCheckingPhraseInEnglish(t *testing.T) {
-	now := time.Date(2026, 4, 17, 10, 5, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "**Checking workflow progress**",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(events) != 1 || events[0].ExecCommandProgress == nil {
-		t.Fatalf("expected english checking progress event, got %#v", events)
-	}
-	if len(events[0].ExecCommandProgress.Timeline) != 1 || events[0].ExecCommandProgress.Timeline[0].Summary != "Checking workflow progress" {
-		t.Fatalf("expected checking phrase to stay in english timeline, got %#v", events[0].ExecCommandProgress.Timeline)
-	}
-}
-
-func TestReasoningSummaryProgressChattyKeepsDifferentSummaryIndexesAsTimelineRows(t *testing.T) {
-	now := time.Date(2026, 5, 1, 12, 5, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Reviewing existing flow",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected first reasoning summary event, got %#v", first)
-	}
-	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Planning a safer update",
-		Metadata: map[string]any{
-			"summaryIndex": 2,
-		},
-	})
-	if len(second) != 0 {
-		t.Fatalf("expected second reasoning summary inside throttle window to be coalesced, got %#v", second)
-	}
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-	now = now.Add(execCommandProgressReasoningFlushInterval)
-	tick := svc.Tick(now)
-	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
-		t.Fatalf("expected tick to flush second reasoning row, got %#v", tick)
-	}
-	timeline := tick[0].ExecCommandProgress.Timeline
-	if len(timeline) != 2 ||
-		timeline[0].Kind != "reasoning_summary" ||
-		timeline[0].Summary != "Reviewing existing flow" ||
-		timeline[1].Kind != "reasoning_summary" ||
-		timeline[1].Summary != "Planning a safer update" {
-		t.Fatalf("expected separate summary indexes to persist as separate timeline rows, got %#v", timeline)
-	}
-}
-
-func TestReasoningSummaryProgressChattyDoesNotAnimateWithoutNewDelta(t *testing.T) {
-	now := time.Date(2026, 4, 17, 10, 6, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "**Thinking**",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected initial reasoning timeline event, got %#v", first)
-	}
-	if len(first[0].ExecCommandProgress.Timeline) != 1 || first[0].ExecCommandProgress.Timeline[0].Summary != "Thinking" {
-		t.Fatalf("expected reasoning timeline to keep raw text, got %#v", first[0].ExecCommandProgress.Timeline)
-	}
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-
-	now = now.Add(10 * time.Second)
-	if tick := svc.Tick(now); len(tick) != 0 {
-		t.Fatalf("expected no synthetic reasoning animation update, got %#v", tick)
-	}
-}
-
-func TestReasoningSummaryProgressChattyClaudeKeepsRawThinkingInsteadOfFirstBold(t *testing.T) {
-	now := time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-	surface.Backend = agentproto.BackendClaude
-	svc.root.Instances["inst-1"].Backend = agentproto.BackendClaude
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "**prefix** raw thinking continues",
-	})
-	if len(events) != 1 || events[0].ExecCommandProgress == nil {
-		t.Fatalf("expected Claude reasoning progress event, got %#v", events)
-	}
-	progress := events[0].ExecCommandProgress
-	if len(progress.Timeline) != 1 || progress.Timeline[0].Summary != "**prefix** raw thinking continues" {
-		t.Fatalf("expected Claude reasoning to keep raw text, got %#v", progress.Timeline)
-	}
-}
-
-func TestReasoningSummaryProgressChattyClaudeAccumulatesWithoutSummaryIndex(t *testing.T) {
-	now := time.Date(2026, 5, 2, 10, 5, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-	surface.Backend = agentproto.BackendClaude
-	svc.root.Instances["inst-1"].Backend = agentproto.BackendClaude
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Before ",
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected first Claude reasoning event, got %#v", first)
-	}
-	if got := first[0].ExecCommandProgress.Timeline[0].Summary; got != "Before" {
-		t.Fatalf("expected first Claude reasoning fragment, got %#v", first[0].ExecCommandProgress.Timeline)
-	}
-
-	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "after",
-	})
-	if len(second) != 0 {
-		t.Fatalf("expected coalesced Claude reasoning delta inside throttle window, got %#v", second)
-	}
-	record := svc.root.Surfaces["surface-1"].ActiveExecProgress.Reasoning
-	if record == nil || record.Text != "Before after" {
-		t.Fatalf("expected Claude reasoning record to accumulate plain text without summaryIndex, got %#v", record)
-	}
-
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-	now = now.Add(execCommandProgressReasoningFlushInterval)
-	tick := svc.Tick(now)
-	if len(tick) != 1 || tick[0].ExecCommandProgress == nil {
-		t.Fatalf("expected tick to flush accumulated Claude reasoning, got %#v", tick)
-	}
-	if got := tick[0].ExecCommandProgress.Timeline[0].Summary; got != "Before after" {
-		t.Fatalf("expected accumulated Claude reasoning summary, got %#v", tick[0].ExecCommandProgress.Timeline)
-	}
-}
-
-func TestReasoningSummaryProgressChattyPersistsBeforeOrdinaryProgressEntries(t *testing.T) {
-	now := time.Date(2026, 4, 17, 10, 10, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Planning",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected initial reasoning progress event, got %#v", first)
-	}
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-
-	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    " changes",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(coalesced) != 0 {
-		t.Fatalf("expected dirty reasoning delta to be coalesced before ordinary progress, got %#v", coalesced)
-	}
-
-	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemStarted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "cmd-1",
-		ItemKind: "command_execution",
-		Metadata: map[string]any{
-			"command": "npm test",
-		},
-	})
-	if len(second) != 1 || second[0].ExecCommandProgress == nil {
-		t.Fatalf("expected ordinary progress update, got %#v", second)
-	}
-	progress := second[0].ExecCommandProgress
-	if activeProgressMessageID(progress) != "om-progress-1" {
-		t.Fatalf("expected ordinary progress to reuse the same card, got %#v", progress)
-	}
-	if len(progress.Timeline) != 2 ||
-		progress.Timeline[0].Kind != "reasoning_summary" ||
-		progress.Timeline[0].Summary != "Planning changes" ||
-		progress.Timeline[1].Kind != "command_execution" ||
-		progress.Timeline[1].Summary != "npm test" {
-		t.Fatalf("expected reasoning timeline entry to persist before command progress, got %#v", progress.Timeline)
-	}
-}
-
-func TestReasoningSummaryProgressChattyPersistsBeforeExplorationRows(t *testing.T) {
-	now := time.Date(2026, 5, 1, 12, 10, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Planning",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected initial reasoning progress event, got %#v", first)
-	}
-
-	second := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemStarted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "cmd-1",
-		ItemKind: "command_execution",
-		Metadata: map[string]any{
-			"command": "cat docs/README.md",
-		},
-	})
-	if len(second) != 1 || second[0].ExecCommandProgress == nil {
-		t.Fatalf("expected exploration progress update, got %#v", second)
-	}
-	timeline := second[0].ExecCommandProgress.Timeline
-	if len(timeline) != 2 ||
-		timeline[0].Kind != "reasoning_summary" ||
-		timeline[0].Summary != "Planning" ||
-		timeline[1].Kind != "read" ||
-		len(timeline[1].Items) != 1 ||
-		timeline[1].Items[0] != "docs/README.md" {
-		t.Fatalf("expected reasoning timeline entry to persist before exploration row, got %#v", timeline)
-	}
-}
-
-func TestReasoningSummaryProgressChattyIsNotClearedBeforeAssistantTextStartsNewCard(t *testing.T) {
-	now := time.Date(2026, 4, 17, 10, 20, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Thinking",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected initial reasoning progress event, got %#v", first)
-	}
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-
-	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    " about response shape",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(coalesced) != 0 {
-		t.Fatalf("expected dirty reasoning delta before assistant text to be coalesced, got %#v", coalesced)
-	}
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "查看代码", "turn-1")
 
 	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventItemStarted,
 		ThreadID: "thread-1",
 		TurnID:   "turn-1",
-		ItemID:   "msg-1",
-		ItemKind: "agent_message",
-	})
-	if len(started) != 0 {
-		t.Fatalf("expected assistant message start not to retract reasoning progress, got %#v", started)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
-		t.Fatal("expected progress state to remain until assistant text is emitted")
-	}
-
-	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "msg-1",
-		ItemKind: "agent_message",
-		Delta:    "先给你结论。",
-	}); len(events) != 0 {
-		t.Fatalf("expected assistant text delta to stay buffered until visible flush, got %#v", events)
-	}
-	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemCompleted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "msg-1",
-		ItemKind: "agent_message",
-	}); len(events) != 0 {
-		t.Fatalf("expected assistant text completion to stay pending until next visible event, got %#v", events)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress == nil {
-		t.Fatal("expected shared progress state to remain until pending assistant text is flushed")
-	}
-
-	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemCompleted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
 		ItemID:   "cmd-1",
 		ItemKind: "command_execution",
-		Status:   "completed",
-		Metadata: map[string]any{
-			"command": "npm test",
-		},
+		Exploration: &agentproto.ExplorationActions{Actions: []agentproto.ExplorationAction{{
+			Kind:  agentproto.ExplorationActionRead,
+			Items: []string{"a.go"},
+		}}},
 	})
-	if len(events) != 2 || events[0].Kind != eventcontract.KindExecCommandProgress || events[0].ExecCommandProgress == nil || events[1].Kind != eventcontract.KindBlockCommitted || events[1].Block == nil {
-		t.Fatalf("expected visible assistant text flush to emit reasoning snapshot then assistant block, got %#v", events)
-	}
-	if progress := events[0].ExecCommandProgress; activeProgressMessageID(progress) != "om-progress-1" ||
-		len(progress.Timeline) != 1 ||
-		progress.Timeline[0].Summary != "Thinking about response shape" {
-		t.Fatalf("expected visible assistant text flush to emit latest reasoning snapshot, got %#v", progress)
-	}
-	if events[1].Block.Text != "先给你结论。" {
-		t.Fatalf("unexpected assistant text block flush: %#v", events[1].Block)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
-		t.Fatalf("expected visible assistant text flush to terminate shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
-	}
-}
-
-func TestReasoningSummaryProgressChattyPersistsOnTurnCompletion(t *testing.T) {
-	now := time.Date(2026, 4, 17, 10, 30, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityChatty
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Planning",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected initial reasoning progress event, got %#v", first)
-	}
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-
-	coalesced := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    " final answer",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(coalesced) != 0 {
-		t.Fatalf("expected dirty reasoning delta before turn completion to be coalesced, got %#v", coalesced)
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected exploration progress, got %#v", started)
 	}
 
 	finished := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnCompleted,
 		ThreadID:  "thread-1",
 		TurnID:    "turn-1",
-		Status:    "completed",
+		Status:    "failed",
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 	})
-	var progressEvent *control.ExecCommandProgress
 	for _, event := range finished {
-		if event.Kind == eventcontract.KindExecCommandProgress {
-			progressEvent = event.ExecCommandProgress
-			break
+		if event.ExecCommandProgress == nil {
+			continue
 		}
+		if len(event.ExecCommandProgress.Timeline) != 1 || event.ExecCommandProgress.Timeline[0].Status != "failed" {
+			t.Fatalf("expected active exploration row to finalize failed, got %#v", event.ExecCommandProgress)
+		}
+		return
 	}
-	if progressEvent == nil {
-		t.Fatalf("expected turn completion to finalize reasoning progress, got %#v", finished)
-	}
-	progress := progressEvent
-	if activeProgressMessageID(progress) != "om-progress-1" {
-		t.Fatalf("expected final progress snapshot on completion, got %#v", progress)
-	}
-	if len(progress.Timeline) != 1 ||
-		progress.Timeline[0].Kind != "reasoning_summary" ||
-		progress.Timeline[0].Summary != "Planning final answer" ||
-		progress.Timeline[0].Status != "completed" {
-		t.Fatalf("expected reasoning entry to persist and finalize on completion, got %#v", progress.Timeline)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
-		t.Fatalf("expected turn completion to clear shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
-	}
-}
-
-func TestReasoningSummaryProgressVerboseShowsPlaceholder(t *testing.T) {
-	now := time.Date(2026, 5, 4, 10, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "**Considering Git commands**",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(events) != 1 || events[0].ExecCommandProgress == nil {
-		t.Fatalf("expected one reasoning progress event, got %#v", events)
-	}
-	progress := events[0].ExecCommandProgress
-	if len(progress.Timeline) != 1 || progress.Timeline[0].Kind != "reasoning_placeholder" || progress.Timeline[0].Summary != "思考中..." {
-		t.Fatalf("expected verbose reasoning to project a placeholder only, got %#v", progress.Timeline)
-	}
-	active := svc.root.Surfaces["surface-1"].ActiveExecProgress
-	if active == nil || len(active.Entries) != 1 || active.Entries[0].Kind != "reasoning_summary" || active.Entries[0].Summary != "Considering Git commands" {
-		t.Fatalf("expected raw reasoning carrier to stay in shared progress state, got %#v", active)
-	}
-	if reasoning := svc.root.Surfaces["surface-1"].ActiveReasoning; reasoning == nil || reasoning.Reasoning == nil || !reasoning.Reasoning.Active {
-		t.Fatalf("expected surface reasoning state to stay active, got %#v", svc.root.Surfaces["surface-1"].ActiveReasoning)
-	}
-}
-
-func TestReasoningSummaryProgressVerboseReattachesPlaceholderOnNextProgressCard(t *testing.T) {
-	now := time.Date(2026, 5, 4, 10, 5, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Thinking",
-		Metadata: map[string]any{
-			"summaryIndex": 1,
-		},
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected initial reasoning progress event, got %#v", first)
-	}
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-
-	_ = svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemStarted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "msg-1",
-		ItemKind: "agent_message",
-	})
-	_ = svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "msg-1",
-		ItemKind: "agent_message",
-		Delta:    "先给你结论。",
-	})
-	_ = svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemCompleted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "msg-1",
-		ItemKind: "agent_message",
-	})
-
-	flushed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemCompleted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "cmd-flush",
-		ItemKind: "command_execution",
-		Status:   "completed",
-		Metadata: map[string]any{
-			"command": "npm test",
-		},
-	})
-	if len(flushed) != 1 || flushed[0].Block == nil {
-		t.Fatalf("expected assistant text flush to seal the current progress card, got %#v", flushed)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveExecProgress != nil {
-		t.Fatalf("expected assistant text flush to terminate shared progress state, got %#v", svc.root.Surfaces["surface-1"].ActiveExecProgress)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveReasoning == nil {
-		t.Fatal("expected active reasoning to survive after the old shared progress card was sealed")
-	}
-
-	next := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemStarted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "cmd-2",
-		ItemKind: "command_execution",
-		Metadata: map[string]any{
-			"command": "go test ./...",
-		},
-	})
-	if len(next) != 1 || next[0].ExecCommandProgress == nil {
-		t.Fatalf("expected new shared progress to reopen after interruption, got %#v", next)
-	}
-	progress := next[0].ExecCommandProgress
-	if len(progress.Timeline) != 2 ||
-		progress.Timeline[0].Kind != "command_execution" ||
-		progress.Timeline[1].Kind != "reasoning_placeholder" ||
-		progress.Timeline[1].Summary != "思考中..." {
-		t.Fatalf("expected placeholder to reattach at the end of the new progress card, got %#v", progress.Timeline)
-	}
-}
-
-func TestReasoningSummaryProgressVerbosePlaceholderCompletionDoesNotRequestCardDeletion(t *testing.T) {
-	now := time.Date(2026, 5, 4, 10, 10, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	surface := setupAutoWhipSurface(t, svc)
-	surface.Verbosity = state.SurfaceVerbosityVerbose
-
-	startRemoteTurnForAutoWhipTest(t, svc, "msg-1", "继续", "turn-1")
-
-	first := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemDelta,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Delta:    "Thinking",
-	})
-	if len(first) != 1 || first[0].ExecCommandProgress == nil {
-		t.Fatalf("expected initial reasoning placeholder event, got %#v", first)
-	}
-	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
-
-	completed := svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:     agentproto.EventItemCompleted,
-		ThreadID: "thread-1",
-		TurnID:   "turn-1",
-		ItemID:   "reasoning-1",
-		ItemKind: "reasoning_summary",
-		Status:   "completed",
-	})
-	if len(completed) != 1 || completed[0].ExecCommandProgress == nil {
-		t.Fatalf("expected reasoning completion to emit one progress update, got %#v", completed)
-	}
-	progress := completed[0].ExecCommandProgress
-	if len(progress.Timeline) != 0 {
-		t.Fatalf("expected verbose placeholder completion to leave the old card in place, got %#v", progress)
-	}
-	if svc.root.Surfaces["surface-1"].ActiveReasoning != nil {
-		t.Fatalf("expected active reasoning state to clear on completion, got %#v", svc.root.Surfaces["surface-1"].ActiveReasoning)
-	}
+	t.Fatalf("expected final exploration progress event, got %#v", finished)
 }

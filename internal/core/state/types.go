@@ -443,6 +443,7 @@ type ExecCommandProgressEntryRecord struct {
 	Status     string
 	FileChange *ExecCommandProgressFileChangeRecord
 	LastSeq    int
+	Transient  bool
 }
 
 type ExecCommandProgressFileChangeRecord struct {
@@ -461,6 +462,7 @@ type ExecCommandProgressBlockRowRecord struct {
 	Summary   string
 	Secondary string
 	MergeKey  string
+	Status    string
 	LastSeq   int
 }
 
@@ -474,6 +476,8 @@ type ExecCommandProgressBlockRecord struct {
 type ExecCommandProgressExplorationRecord struct {
 	Block         ExecCommandProgressBlockRecord
 	ActiveItemIDs map[string]bool
+	FailedItemIDs map[string]bool
+	ItemRowIDs    map[string][]string
 	Failed        bool
 }
 
@@ -504,6 +508,10 @@ type ExecCommandProgressRecord struct {
 
 type ExecCommandProgressReasoningRecord struct {
 	ItemID              string
+	VisibleEntryID      string
+	VisibleSegment      int
+	VisibleAfterSeq     int
+	VisibleVerbosity    SurfaceVerbosity
 	Active              bool
 	Text                string
 	VisibleSummaryIndex int
@@ -518,17 +526,18 @@ type SurfaceReasoningProgressRecord struct {
 	InstanceID string
 	ThreadID   string
 	TurnID     string
-	Entries    []ExecCommandProgressEntryRecord
 	Reasoning  *ExecCommandProgressReasoningRecord
 }
 
 type DynamicToolProgressGroupRecord struct {
-	GroupKey string
-	Tool     string
-	Label    string
-	Args     []string
-	Summary  string
-	Status   string
+	GroupKey      string
+	Tool          string
+	Label         string
+	Args          []string
+	Summary       string
+	Status        string
+	ActiveItemIDs map[string]bool
+	Failed        bool
 }
 
 type AutoWhipRuntimeRecord struct {

@@ -163,8 +163,14 @@ func resolveExplorationProgress(progress *state.ExecCommandProgressRecord, itemI
 	case explorationCandidateStructured:
 		exploration := ensureExplorationProgress(progress)
 		before := cloneExplorationBlock(exploration.Block)
+		rowIDs := make([]string, 0, len(actions))
 		for _, action := range actions {
-			appendExplorationRow(progress, &exploration.Block, action)
+			if rowID := appendExplorationRow(progress, &exploration.Block, action); rowID != "" {
+				rowIDs = appendUniquePreserveOrder(rowIDs, rowID)
+			}
+		}
+		if itemID != "" && len(rowIDs) != 0 {
+			exploration.ItemRowIDs[itemID] = append([]string(nil), rowIDs...)
 		}
 		setExplorationItemDisposition(progress, itemID, ExplorationDispositionStructured)
 		updateExplorationItemLifecycle(progress, itemID, status, final)
@@ -210,6 +216,9 @@ func updateExplorationItemLifecycle(progress *state.ExecCommandProgressRecord, i
 	if exploration.ActiveItemIDs == nil {
 		exploration.ActiveItemIDs = map[string]bool{}
 	}
+	if exploration.FailedItemIDs == nil {
+		exploration.FailedItemIDs = map[string]bool{}
+	}
 	if itemID != "" {
 		if final {
 			delete(exploration.ActiveItemIDs, itemID)
@@ -219,7 +228,11 @@ func updateExplorationItemLifecycle(progress *state.ExecCommandProgressRecord, i
 	}
 	if status == "failed" {
 		exploration.Failed = true
+		if itemID != "" {
+			exploration.FailedItemIDs[itemID] = true
+		}
 	}
+	refreshExplorationRowStatuses(exploration)
 	exploration.Block.Status = explorationBlockStatus(exploration)
 	return !sameExecCommandProgressBlock(before, exploration.Block)
 }
@@ -254,6 +267,8 @@ func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state
 				Status:  "running",
 			},
 			ActiveItemIDs: map[string]bool{},
+			FailedItemIDs: map[string]bool{},
+			ItemRowIDs:    map[string][]string{},
 		}
 	}
 	if progress.Exploration.Block.BlockID == "" {
@@ -265,6 +280,12 @@ func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state
 	if progress.Exploration.ActiveItemIDs == nil {
 		progress.Exploration.ActiveItemIDs = map[string]bool{}
 	}
+	if progress.Exploration.FailedItemIDs == nil {
+		progress.Exploration.FailedItemIDs = map[string]bool{}
+	}
+	if progress.Exploration.ItemRowIDs == nil {
+		progress.Exploration.ItemRowIDs = map[string][]string{}
+	}
 	for itemID, disposition := range progress.ExplorationItems {
 		if ExplorationDisposition(disposition) == ExplorationDispositionPending {
 			progress.Exploration.ActiveItemIDs[itemID] = true
@@ -273,9 +294,9 @@ func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state
 	return progress.Exploration
 }
 
-func appendExplorationRow(progress *state.ExecCommandProgressRecord, block *state.ExecCommandProgressBlockRecord, action explorationAction) {
+func appendExplorationRow(progress *state.ExecCommandProgressRecord, block *state.ExecCommandProgressBlockRecord, action explorationAction) string {
 	if progress == nil || block == nil {
-		return
+		return ""
 	}
 	action.Kind = strings.TrimSpace(action.Kind)
 	action.Summary = strings.TrimSpace(action.Summary)
@@ -288,19 +309,18 @@ func appendExplorationRow(progress *state.ExecCommandProgressRecord, block *stat
 		}
 	}
 	if action.Kind == "" {
-		return
+		return ""
 	}
+	FreezeReasoningForVisibleAction(progress)
 	if action.Kind == "read" {
 		if len(items) == 0 {
-			return
+			return ""
 		}
-		if len(block.Rows) > 0 && canMergeReadExplorationRow(progress, block.Rows[len(block.Rows)-1], action.MergeKey) {
-			last := &block.Rows[len(block.Rows)-1]
-			last.Items = appendUniquePreserveOrder(last.Items, items...)
-			last.MergeKey = normalizeExplorationMergeKey(action.Kind, action.MergeKey)
-			progress.LastVisibleSeq++
-			last.LastSeq = progress.LastVisibleSeq
-			return
+		if index := currentVisibleExplorationRowIndex(progress, block); index >= 0 && canMergeReadExplorationRow(progress, block.Rows[index], action.MergeKey) {
+			current := &block.Rows[index]
+			current.Items = appendUniquePreserveOrder(current.Items, items...)
+			current.MergeKey = normalizeExplorationMergeKey(action.Kind, action.MergeKey)
+			return current.RowID
 		}
 		progress.LastVisibleSeq++
 		block.Rows = append(block.Rows, state.ExecCommandProgressBlockRowRecord{
@@ -310,7 +330,7 @@ func appendExplorationRow(progress *state.ExecCommandProgressRecord, block *stat
 			MergeKey: normalizeExplorationMergeKey(action.Kind, action.MergeKey),
 			LastSeq:  progress.LastVisibleSeq,
 		})
-		return
+		return block.Rows[len(block.Rows)-1].RowID
 	}
 	progress.LastVisibleSeq++
 	block.Rows = append(block.Rows, state.ExecCommandProgressBlockRowRecord{
@@ -322,6 +342,56 @@ func appendExplorationRow(progress *state.ExecCommandProgressRecord, block *stat
 		MergeKey:  normalizeExplorationMergeKey(action.Kind, action.MergeKey),
 		LastSeq:   progress.LastVisibleSeq,
 	})
+	return block.Rows[len(block.Rows)-1].RowID
+}
+
+func currentVisibleExplorationRowIndex(progress *state.ExecCommandProgressRecord, block *state.ExecCommandProgressBlockRecord) int {
+	if progress == nil || block == nil {
+		return -1
+	}
+	for index := len(block.Rows) - 1; index >= 0; index-- {
+		if block.Rows[index].LastSeq == progress.LastVisibleSeq {
+			return index
+		}
+	}
+	return -1
+}
+
+func refreshExplorationRowStatuses(exploration *state.ExecCommandProgressExplorationRecord) {
+	if exploration == nil {
+		return
+	}
+	for index := range exploration.Block.Rows {
+		row := &exploration.Block.Rows[index]
+		hasOwner := false
+		active := false
+		failed := false
+		for itemID, rowIDs := range exploration.ItemRowIDs {
+			if !containsString(rowIDs, row.RowID) {
+				continue
+			}
+			hasOwner = true
+			active = active || exploration.ActiveItemIDs[itemID]
+			failed = failed || exploration.FailedItemIDs[itemID]
+		}
+		switch {
+		case active:
+			row.Status = "running"
+		case failed:
+			row.Status = "failed"
+		case hasOwner:
+			row.Status = "completed"
+		}
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func canMergeReadExplorationRow(progress *state.ExecCommandProgressRecord, row state.ExecCommandProgressBlockRowRecord, mergeKey string) bool {
@@ -339,6 +409,9 @@ func canMergeReadExplorationRow(progress *state.ExecCommandProgressRecord, row s
 
 func normalizeExplorationMergeKey(kind, mergeKey string) string {
 	kind = strings.TrimSpace(kind)
+	if kind == "read" {
+		return kind
+	}
 	mergeKey = strings.TrimSpace(mergeKey)
 	if mergeKey != "" {
 		return mergeKey
@@ -365,6 +438,27 @@ func explorationBlockStatus(exploration *state.ExecCommandProgressExplorationRec
 	return "completed"
 }
 
+func FinalizeExploration(progress *state.ExecCommandProgressRecord, status string) {
+	if progress == nil || progress.Exploration == nil {
+		return
+	}
+	status = NormalizeStatus(status, true)
+	for itemID := range progress.Exploration.ActiveItemIDs {
+		delete(progress.Exploration.ActiveItemIDs, itemID)
+		if status == "failed" {
+			progress.Exploration.FailedItemIDs[itemID] = true
+		}
+	}
+	for index := range progress.Exploration.Block.Rows {
+		row := &progress.Exploration.Block.Rows[index]
+		if strings.TrimSpace(row.Status) == "" || row.Status == "running" || row.Status == "started" {
+			row.Status = status
+		}
+	}
+	progress.Exploration.Failed = status == "failed"
+	progress.Exploration.Block.Status = status
+}
+
 func cloneExplorationBlock(block state.ExecCommandProgressBlockRecord) state.ExecCommandProgressBlockRecord {
 	clone := state.ExecCommandProgressBlockRecord{
 		BlockID: block.BlockID,
@@ -379,6 +473,9 @@ func cloneExplorationBlock(block state.ExecCommandProgressBlockRecord) state.Exe
 			Items:     append([]string(nil), row.Items...),
 			Summary:   row.Summary,
 			Secondary: row.Secondary,
+			MergeKey:  row.MergeKey,
+			Status:    row.Status,
+			LastSeq:   row.LastSeq,
 		})
 	}
 	return clone
@@ -397,7 +494,7 @@ func sameExecCommandProgressBlock(left, right state.ExecCommandProgressBlockReco
 }
 
 func sameExecCommandProgressBlockRow(left, right state.ExecCommandProgressBlockRowRecord) bool {
-	if left.RowID != right.RowID || left.Kind != right.Kind || left.Summary != right.Summary || left.Secondary != right.Secondary {
+	if left.RowID != right.RowID || left.Kind != right.Kind || left.Summary != right.Summary || left.Secondary != right.Secondary || left.MergeKey != right.MergeKey || left.Status != right.Status || left.LastSeq != right.LastSeq {
 		return false
 	}
 	return sameStringSlice(left.Items, right.Items)

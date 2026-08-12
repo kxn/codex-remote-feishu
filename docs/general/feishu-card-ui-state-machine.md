@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-12`
-> Summary: 同步 OpenCode pending 延迟首发与 terminal generic fallback 经 typed exploration carrier 投影到 Feishu 过程卡的边界；保留 Codex/Claude typed action、Profile-only 卡片合同、callback freshness 与既有 owner-flow。
+> Summary: 统一共享过程卡的连续工具分组、四档 reasoning 投影、前台内容边界与 capacity rollover 活动项接管规则。
 
 ## 1. 文档定位
 
@@ -680,7 +680,7 @@ MCP request 卡片当前新增的可视语义：
 - 共享过程卡（当前承载 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction` / `reasoning_summary`）不走 callback replace，也不属于旧卡 freshness 判定面：
   - 第一次当前固定顶层 append，不继承当前 turn 的 `SourceMessageID`
   - 若同一 turn 内继续收到新的可见过程项，则优先对当前 active progress segment card 做 `message.patch`；当前会把 `exec_command`、`web_search`、`mcp_tool_call`、`dynamic_tool_call`、`file_change`、`context_compaction` 与 `reasoning_summary` 累积到同一条共享“工作中”时间线里
-  - assistant 正文这条路径当前以“真正要对用户发出可见文本块”的边界切段：`agent_message delta/completed` 只会累计 pending text，不会单独终止共享过程；真正 flush 成 `block.committed` 前会先 flush dirty reasoning，再 seal 当前 active progress，后续过程项必须重新开新段
+  - assistant 正文在首个非空 `agent_message delta` 到达时就形成逻辑边界：文本仍可继续按 pending text 策略缓冲，但 orchestrator 会立即 flush dirty reasoning 并 seal 当前 active progress；后续过程项不得再进入文本之前的旧卡，必须重新开新段
   - 非重复 `turn.plan.updated + planSnapshot` 会单独 append `当前计划` 卡，并成为共享过程卡的产品分段边界：发计划卡前先 flush dirty reasoning，再终止当前 active progress；后续过程项必须重新开“工作中”卡，不能继续 patch 计划卡之前的旧共享过程卡
   - 除 assistant 正文与 plan 之外，当前其余 turn-owned append-only 前台输出也统一共享这条边界规则：`request prompt`、图片输出、`steer_user_supplement` reply-thread 文本、以及 turn 内直接抛出的可见 notice，在真正投递这些结果前也会先 seal 当前 active progress；后续过程项必须重新开“工作中”卡，而不是继续 patch 这些前台结果之前的旧 progress card
   - 这条“前台边界先切 progress”规则只作用于 turn-owned append-only 结果；inline replace request/page 刷新、pending input 状态、selection/path/target/history 这类 UI 导航/状态反馈不算共享过程卡边界
@@ -688,11 +688,16 @@ MCP request 卡片当前新增的可视语义：
     - 当前 active segment 就地 seal，不再继续 patch 旧卡
     - 直接新开下一张共享过程卡，形成同一 turn 下的 progress-card family
     - 新 segment 默认从当前仍需展示的较晚 seq 开始，不回搬旧段里已经 seal 的历史内容
-    - 对仍处于活动态的可变过程项（例如 running 的 reasoning / tool / file change / exploration block 行），owner 会把它们的当前快照接管到新 segment，保证后续状态更新继续落在 active segment，而不是回写 sealed 旧卡
+    - 对仍处于活动态的可变过程项（例如 running 的 reasoning / tool / file change / exploration row），owner 会把它们的当前快照接管到新 segment；exploration 使用 per-row item ownership，已完成的历史 read/list/search 行不会因同 block 仍有其它活动 item 而被一起搬入新卡
     - daemon 会把每个 segment 的 `message_id + start_seq + end_seq` 回写进 active progress owner；后续 patch 只面向当前 active segment
-  - 这条多段 family 当前不做业务级跨段重排；只有单条可见行本身就无法放入单卡时，projector 才会按 Feishu transport 预算对这一行做最小必要裁剪，避免整张共享过程卡无法发送
+  - 这条多段 family 当前不做业务级跨段重排；单条普通行本身无法放入单卡时，projector 才按 Feishu transport 预算做最小必要裁剪。merged read 会先按结构化 Items 生成预算内摘要，无法完整展示时明确写出“另有 N 个读取目标”，不再用整行 `...` 静默丢文件名
   - gateway 层的 oversized card trim 仍保留为最后一道兜底，但共享过程卡当前不应以它作为主路径
-- `reasoning_summary` 当前进入普通 timeline：verbose 下 Codex reasoning summary 与 Claude thinking 都按真实发生顺序沉淀为过程行；同一 item + summary index 的 delta 原地累计更新，不同 summary index 保留为不同历史行。reasoning/thinking delta 会先更新 active progress 内存行并标记 dirty；第一段会立即建卡，之后同一工作中卡因 reasoning/thinking 主动 patch 时按约 1 秒窗口合并。普通工具/文件/搜索等过程事件若本来要 patch，会自然携带最新 reasoning/thinking 行并刷新水位；`reasoning_summary` item completed、assistant 正文真正 flush 为可见 `block.committed` 前，以及 turn completed finalization 前都会强制 flush dirty reasoning，避免最后一段 thinking 丢失。
+- `reasoning_summary` 只展示 backend 明确提供的 summary/thinking 文本，不推导或暴露未提供的模型内部推理；四档投影合同为：
+  - `quiet` / `normal`：不投影 reasoning；运行中切到可见档只处理切换后到达的新 delta，不回放隐藏期间内容
+  - `verbose`：当前过程卡只有一个真实 reasoning 尾槽，内容是最新 summary，始终位于卡片最后一行；新 summary 替换该槽，不保留 reasoning 历史。工具到来时排在尾槽之前，因此 verbose 尾槽不截断连续工具分组
+  - `chatty`：保留完整可见 reasoning 历史；同一连续段的 delta 只更新当前活动行。可见工具到来时冻结当前 reasoning 段，工具之后的新 reasoning 另起活动段，即使上游复用同一 item/summary index 也不会回头改写旧行；活动段始终位于卡片最后一行
+  - 运行中切换档位只影响未来 reasoning；已经投影的可见历史按产生时的模式冻结保留。切到 quiet/normal 会冻结旧可见段，新隐藏 delta 不写入当前卡
+  - reasoning delta 先更新 active progress 并标记 dirty；第一段立即建卡，之后主动 patch 按约 1 秒窗口合并。item completed、内容边界和 turn finalization 会落定活动状态；内容边界后不会自动把旧 reasoning 重挂到新卡
 - 共享过程卡的 projector 不再把整段 timeline 压成单个 markdown body；当前改成“每个可见行一个 markdown element”，避免单行语法异常把后续行一起污染
   - adapter 可以在 `agentproto.Event.Exploration` 提供有序 `read / list / search` actions，但 projector 不读取该 carrier，也不解析 backend metadata；orchestrator 会先完成权威分类、整体校验、fallback 与 item 生命周期合并，再把最终 timeline 交给 projector
   - typed carrier 非 nil 时是权威输入：空 carrier、unknown/malformed 或 completion 最终仍缺详情会走 generic command/tool 行，不允许旧 shell/dynamic parser 二次猜测；carrier nil 时才保留 legacy parser 兼容
@@ -701,15 +706,16 @@ MCP request 卡片当前新增的可视语义：
   - OpenCode 的 `tool_call/pending` 只在 adapter 内累计 kind、稳定工具身份和 rawInput，不发送共享 `ItemStarted`；`in_progress` 首次具备完整可展示参数时才下发唯一 started。若工具未补全就直接 terminal，同批下发安全的 started/completed，并携带非 nil 空 exploration carrier 明确拒绝 legacy parser，最终只形成非空 generic tool 行
   - start 参数不完整时不会投影空行或空括号；completion 补详情、completion-only 和 final-empty fallback 都按 item 维持单一 structured/generic 表示，避免同一次调用重复成两行
   - exploration action 只使用 adapter 提供的安全字段；tool result、stdout/stderr 与 `rawOutput` 不用于生成 read/list/search 摘要
-  - reasoning 行是历史记录；普通进度继续追加时不会清掉它，assistant 正文真正 flush 成可见文本块时才终结 active progress 生命周期，不再额外 patch 旧卡撤回 reasoning 行；verbose 下若这张卡一度只有尾部 `思考中...` 占位，thinking 结束后也不会再主动撤回整张旧卡；turn 完成/失败/中断时若仍有 active progress，会把 running 行按最终状态封口后再清理内存态。
+  - 工具分组只合并连续且可见语义兼容的动作：read 会跨 typed command、typed dynamic tool 与 legacy `cat` / `sed` 等 fallback 统一成同一可见语义；`read A -> read B -> list -> read C` 投影为 read(A,B)、list、read(C)。list/search 继续每个动作一行，不新增批量文案
+  - started 创建动作所属组；后续 delta/completed 只更新该 item 已绑定的组，不移动历史行，也不形成新 barrier。generic dynamic tool 只合并当前末尾连续的同名调用；中间出现异类工具或 chatty reasoning 后，同名工具会新建组。一个 merged group 只有在全部成员结束后才进入 terminal 状态
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要
   - `mcp_tool_call` 会以 `MCP：server.tool` 的行级摘要进入同一张卡；完成态会补耗时，失败态会内联失败原因
-  - `dynamic_tool_call` 会按 `tool + 参数` 的形式进入同一张卡；若同一 turn 内连续出现同名 tool，则会复用同一行并按首次出现顺序持续追加参数（例如 `Read：a.cpp` -> `Read：a.cpp b.cpp`）；失败态会在该行内补 `（失败）`
+  - `dynamic_tool_call` 会按 `tool + 参数` 的形式进入同一张卡；仅当前末尾连续出现同名 tool 时复用同一行并按首次出现顺序追加参数（例如 `fetch:first` -> `fetch:first second`）；失败态会在该组全部结束后落定
   - `file_change` 现在会以“修改 + 文件路径 + 绿色/红色 `+/-` 行数统计”的形式进入同一张卡；quiet 保持静默，normal 就会显示这一层文件行，verbose 则会在该文件行下面继续内联一个 diff fenced code block。这里仍是过程观察，不承担 final summary / authoritative diff 的最终审阅语义
   - `context_compaction` 不再单独 append 一张 notice 卡；attached surface 命中 normal / verbose 时，会以 `整理：上下文已整理。` 单行并入共享过程卡
   - 对没有用户可展示文本或图片结果的 `dynamic_tool_call`，当前实现保持静默，不再额外发“空结果”notice
-  - 可见性当前分两层：`file_change` / `mcp_tool_call` / `context_compaction` 在 normal / verbose 可见，quiet 静默；`exec_command` / `web_search` / `dynamic_tool_call` 以及 exploration / reasoning timeline 行仍只在 verbose 可见。normal 继续保留 plan、final reply，以及会影响当前状态的共享过程项；若 compact 完成发生在无 attached surface 时，replay 到 normal / verbose surface 会继续显示，quiet 仍保持静默
-  - 一旦 assistant 正文真正 flush 成可见块，orchestrator 会终结这张进度卡的生命周期，后续不再继续 patch，避免“正文已出现但进度卡还在跳”的并发偏移
+  - 可见性当前分两层：`file_change` / `mcp_tool_call` / `context_compaction` 在 normal / verbose / chatty 可见，quiet 静默；`exec_command` / `web_search` / `dynamic_tool_call` 与 exploration 在 verbose / chatty 可见；reasoning 按上述四档独立投影。normal 继续保留 plan、final reply，以及会影响当前状态的共享过程项
+  - 一旦首个非空 assistant 正文 delta 到达，orchestrator 就终结旧进度卡生命周期；文本即使尚未 flush 成可见块，后续工具也不会再 patch 文本之前的旧卡
 
 ### 5.4 当前保留的独立例外
 
@@ -910,7 +916,7 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_codex_upgrade_owner_card_test.go](../../internal/app/daemon/app_codex_upgrade_owner_card_test.go)
   - 锁定 `/upgrade codex` owner-card 的即时打开、重复检查、confirm-time 重校验回退、旧卡失效，以及 running / terminal 只留在 initiator surface 的语义
 - [internal/adapter/feishu/projector_exec_command_progress_test.go](../../internal/adapter/feishu/projector_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `mcp_tool_call` / `dynamic_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 行级摘要的投影边界、首卡顶层 append / active segment patch 语义、超预算时改为新开 progress segment card、running 项在新段中的 carry-over 快照、`file_change` 在 normal/verbose/chatty 下的分层投影、单条可见行超预算时的预算裁剪，以及 reasoning 在 `chatty` 下保留明细、在 `verbose` 下收口成尾部 `思考中...` 占位但不因占位消失而自动撤卡的投影规则
+  - 锁定共享过程卡的行级摘要、首卡顶层 append / active segment patch、超预算新开 segment、running 项 carry-over、merged read 的明确遗漏计数，以及 verbose transient reasoning 尾槽不制造持久 segment seq 的投影规则
 - [internal/adapter/codex/translator_requests_test.go](../../internal/adapter/codex/translator_requests_test.go)
   - 锁定 `web_search` item started/completed 的 kind 归一化与 `query` / `actionType` / `queries` / `url` / `pattern` 提取，以及 `dynamic_tool_call` 的 `tool` / `arguments` / 结构化摘要提取
 - [internal/adapter/feishu/gateway_delete_message_test.go](../../internal/adapter/feishu/gateway_delete_message_test.go)
@@ -922,13 +928,15 @@ MCP request 卡片当前新增的可视语义：
 - [internal/core/orchestrator/service_thread_selection_test.go](../../internal/core/orchestrator/service_thread_selection_test.go)
   - 锁定 VS Code direct selection 会用 `thread_selection_page` 按当前 surface 状态重建 `FeishuThreadSelectionView`，而不是引入新的 owner runtime
 - [internal/core/orchestrator/service_exec_command_progress_test.go](../../internal/core/orchestrator/service_exec_command_progress_test.go)
-  - 锁定共享过程卡对 `exec_command` / `web_search` / `dynamic_tool_call` / `mcp_tool_call` / `file_change` / `context_compaction` / `reasoning_summary` 的可见性分档、首卡顶层 append、active segment 复用、超预算后的 segment rollover 与 running 项接管、`file_change` / `mcp_tool_call` / `context_compaction` 在 normal 下也会进入共享过程卡、正文真正 flush 成可见块后终止、同类 tool 行级聚合、失败态行内标记，以及 reasoning 在 `chatty` 下的明细累计/顺序、`verbose` 下的占位重挂载、正文可见 flush 不撤回和 turn 完成封口语义
+  - 锁定四档 reasoning 可见性、运行中档位切换 future-only、verbose 真实尾槽、chatty reasoning-tool-reasoning 分段、连续工具分组、per-row exploration lifecycle、首个非空 assistant delta 封口，以及 turn completion 终态落定
 - [internal/core/orchestrator/service_plan_update_test.go](../../internal/core/orchestrator/service_plan_update_test.go)
   - 锁定 `turn.plan.updated + planSnapshot` 会投影为 append-only `当前计划` 卡、同内容快照去重、pending assistant text 在计划卡前 flush，以及非重复计划更新会切断当前 active shared-progress segment，确保后续过程重新开“工作中”卡而不是 patch 旧卡
 - [internal/app/daemon/app_ui_progress_test.go](../../internal/app/daemon/app_ui_progress_test.go)
-  - 锁定共享过程卡在 `message.patch` / 新 segment send 回来时都会把 active progress 的 `segment message_id + start_seq + end_seq` 回写到当前 owner，并在 progress 卡被 `message.delete` 后及时摘掉旧 `message_id`，保证后续同一 active segment 可以安全重发；同时在 rollover 时把仍在 running 的项接到新 active segment
+  - 锁定共享过程卡只在 gateway delivery 成功后回写 `segment message_id + start_seq + end_seq`，delete 后摘掉旧 message id，rollover 时只接管仍活动的持久项；verbose transient 尾槽不进入这组持久 window
 - [internal/core/orchestrator/service_mcp_tool_call_progress_test.go](../../internal/core/orchestrator/service_mcp_tool_call_progress_test.go)
-  - 锁定 `mcp_tool_call` 已并入共享过程卡：started/failed 的同卡复用、去重与行级摘要更新语义
+  - 锁定 `mcp_tool_call` 已并入共享过程卡：started/failed 的同卡复用、去重、行级摘要，以及首个 assistant text delta 后不复活旧卡
+- [internal/core/orchestrator/service_protocol_notice_test.go](../../internal/core/orchestrator/service_protocol_notice_test.go)
+  - 锁定 turn 内真实投影的 append-only protocol notice 会切断 active progress，而仅记录状态、没有可见 UI event 的普通 warning 不形成边界
 - [internal/core/orchestrator/service_compact_notice_test.go](../../internal/core/orchestrator/service_compact_notice_test.go)
   - 锁定 `context_compaction` 已并入共享过程卡：attached normal / verbose 都会进入 `整理` 行，quiet 保持静默；无 surface 时的 replay 也只在 normal / verbose attach 下可见，并继续保持顶层 append-only
 - [internal/core/orchestrator/service_image_output_test.go](../../internal/core/orchestrator/service_image_output_test.go)

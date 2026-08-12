@@ -2,6 +2,7 @@ package control
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -70,6 +71,23 @@ func TestFeishuConfigFlowRegistryRoundTrip(t *testing.T) {
 				t.Fatalf("BuildFeishuCommandConfigPageView(%q) returned %#v", tt.commandID, page)
 			}
 		})
+	}
+}
+
+func TestVerboseCommandOptionsDescribeCurrentReasoningProjection(t *testing.T) {
+	definition, ok := FeishuCommandDefinitionByID(FeishuCommandVerbose)
+	if !ok {
+		t.Fatal("expected verbose command definition")
+	}
+	descriptions := map[string]string{}
+	for _, option := range definition.Options {
+		descriptions[option.Value] = option.Description
+	}
+	if !strings.Contains(descriptions["verbose"], "真实") || !strings.Contains(descriptions["verbose"], "末行") || strings.Contains(descriptions["verbose"], "思考中") {
+		t.Fatalf("unexpected verbose reasoning description: %q", descriptions["verbose"])
+	}
+	if !strings.Contains(descriptions["chatty"], "完整") || !strings.Contains(descriptions["chatty"], "历史") {
+		t.Fatalf("unexpected chatty reasoning description: %q", descriptions["chatty"])
 	}
 }
 

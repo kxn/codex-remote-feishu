@@ -314,9 +314,7 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 		}
 	}
 	finalizeExecCommandProgressReasoning(progress, status)
-	if progress.Exploration != nil && strings.TrimSpace(progress.Exploration.Block.Status) == "running" {
-		progress.Exploration.Block.Status = status
-	}
+	execprogress.FinalizeExploration(progress, status)
 	_ = finalText
 	if status == "" {
 		return nil
@@ -396,7 +394,6 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	if progress.Reasoning != nil {
 		progress.Reasoning.LastEmittedRevision = progress.Reasoning.Revision
 	}
-	syncSurfaceReasoningProgressFromExec(surface, progress)
 	sourceMessageID, _ := s.replyAnchorForTurn(progress.InstanceID, threadID, turnID)
 	snapshot := execprogress.Snapshot(progress)
 	if snapshot == nil {

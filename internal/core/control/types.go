@@ -611,6 +611,7 @@ type ExecCommandProgressTimelineItem struct {
 	Status     string
 	FileChange *ExecCommandProgressFileChange
 	LastSeq    int
+	Transient  bool
 }
 
 type ExecCommandProgressSegment struct {

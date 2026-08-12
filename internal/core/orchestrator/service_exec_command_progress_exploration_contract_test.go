@@ -119,7 +119,7 @@ func TestCommandExecutionTypedEmptyCarrierCompletionForcesGenericFallback(t *tes
 	}
 }
 
-func TestCommandExecutionTypedPendingKeepsExistingExplorationRunning(t *testing.T) {
+func TestCommandExecutionTypedPendingDoesNotReviveCompletedExplorationRow(t *testing.T) {
 	now := time.Date(2026, 8, 12, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
@@ -175,8 +175,8 @@ func TestCommandExecutionTypedPendingKeepsExistingExplorationRunning(t *testing.
 		t.Fatalf("expected pending details not to emit a new row, got %#v", pending)
 	}
 	progress := execprogress.Snapshot(surface.ActiveExecProgress)
-	if progress == nil || len(progress.Timeline) != 1 || progress.Timeline[0].Status != "running" {
-		t.Fatalf("expected pending item to keep existing exploration block running, got %#v", progress)
+	if progress == nil || len(progress.Timeline) != 1 || progress.Timeline[0].Status != "completed" {
+		t.Fatalf("expected pending invisible item not to revive completed exploration history, got %#v", progress)
 	}
 }
 

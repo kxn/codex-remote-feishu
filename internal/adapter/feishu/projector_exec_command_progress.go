@@ -1,6 +1,7 @@
 package feishu
 
 import (
+	"fmt"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -96,13 +97,16 @@ func normalizedExecProgressTimeline(progress control.ExecCommandProgress) []cont
 	}
 	nextFallbackSeq := maxSeq
 	for i := range items {
-		if items[i].LastSeq > 0 {
+		if items[i].LastSeq > 0 || items[i].Transient {
 			continue
 		}
 		nextFallbackSeq++
 		items[i].LastSeq = nextFallbackSeq
 	}
 	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Transient != items[j].Transient {
+			return !items[i].Transient
+		}
 		return items[i].LastSeq < items[j].LastSeq
 	})
 	return items
@@ -179,7 +183,7 @@ func renderExecProgressTimelineItem(item control.ExecCommandProgressTimelineItem
 func renderExecProgressExplorationItem(item control.ExecCommandProgressTimelineItem) string {
 	switch strings.ToLower(strings.TrimSpace(item.Kind)) {
 	case "read":
-		return execProgressPrefixedMarkdown("读取", strings.Join(execProgressReadNames(item.Items), "、"))
+		return execProgressPrefixedMarkdown("读取", renderExecProgressReadSummary(execProgressReadNames(item.Items)))
 	case "list":
 		return execProgressPrefixedMarkdown("列目录", renderExecProgressEntitySummary(item.Summary, 60))
 	case "search":
@@ -191,6 +195,23 @@ func renderExecProgressExplorationItem(item control.ExecCommandProgressTimelineI
 		}
 		return truncateExecProgressSummary(text, 60)
 	}
+}
+
+func renderExecProgressReadSummary(names []string) string {
+	const maxRunes = 6000
+	if len(names) == 0 {
+		return ""
+	}
+	for visibleCount := len(names); visibleCount > 0; visibleCount-- {
+		summary := strings.Join(names[:visibleCount], "、")
+		if omitted := len(names) - visibleCount; omitted > 0 {
+			summary += fmt.Sprintf("；另有 %d 个读取目标", omitted)
+		}
+		if len([]rune(summary)) <= maxRunes {
+			return summary
+		}
+	}
+	return fmt.Sprintf("另有 %d 个读取目标", len(names))
 }
 
 func execProgressReadNames(items []string) []string {
