@@ -164,13 +164,14 @@ const (
 	claudeDefaultRejectNote   = "当前 Claude 模式暂不支持这个命令。"
 	opencodeApproxNote        = "OpenCode 当前按现有会话控制近似处理。"
 	opencodeDefaultRejectNote = "当前 OpenCode 模式暂不支持这个命令。"
+	opencodeSteerRejectNote   = "OpenCode ACP 当前暂不支持把补充输入并入当前执行。"
 )
 
 func newOpenCodeFeishuCommandDisplayProfile() FeishuCommandDisplayProfile {
 	profile := newFeishuCommandDisplayProfile("opencode", false,
 		commandSupportVisible(FeishuCommandStop),
 		commandSupportHiddenReject(FeishuCommandCompact, FeishuCommandSupportReject, opencodeDefaultRejectNote),
-		commandSupportVisibleAs(FeishuCommandSteerAll, FeishuCommandSupportApproximation, opencodeApproxNote),
+		commandSupportHiddenReject(FeishuCommandSteerAll, FeishuCommandSupportReject, opencodeSteerRejectNote),
 		commandSupportVisibleAs(FeishuCommandNew, FeishuCommandSupportApproximation, opencodeApproxNote),
 		commandSupportVisible(FeishuCommandStatus),
 		commandSupportHiddenReject(FeishuCommandModel, FeishuCommandSupportReject, "OpenCode 模型请在 OpenCode profile 或原生配置里设置，当前飞书会话不支持临时切换模型。"),

@@ -527,6 +527,9 @@ func (s *Service) handleReactionCreated(surface *state.SurfaceConsoleRecord, act
 		if !queueItemHasSourceMessage(candidate.Item, targetMessageID) {
 			continue
 		}
+		if state.EffectiveInstanceBackend(inst) == agentproto.BackendOpenCode {
+			return notice(surface, "opencode_steer_not_supported", opencodeSteerUnsupportedNoticeText)
+		}
 		return s.dispatchSteerCandidates(surface, inst, activeThreadID, activeTurnID, []steerCandidate{candidate}, targetMessageID, "")
 	}
 	return nil
