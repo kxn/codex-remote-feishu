@@ -109,7 +109,7 @@ func TestCanonicalToolTaxonomyMapsOpenCodeKindsToExistingItemKinds(t *testing.T)
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
 				"sessionUpdate": "tool_call",
 				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
 				"title":         tc.name,
@@ -119,6 +119,20 @@ func TestCanonicalToolTaxonomyMapsOpenCodeKindsToExistingItemKinds(t *testing.T)
 			})))
 			if err != nil {
 				t.Fatalf("ObserveServer(tool_call): %v", err)
+			}
+			if len(pending.Events) != 0 {
+				t.Fatalf("pending emitted shared events: %#v", pending.Events)
+			}
+			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call_update",
+				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
+				"title":         tc.name,
+				"kind":          tc.kind,
+				"status":        "in_progress",
+				"rawInput":      tc.rawInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call_update): %v", err)
 			}
 			assertEventKinds(t, result.Events, agentproto.EventItemStarted)
 			event := result.Events[0]
@@ -161,12 +175,12 @@ func TestCanonicalToolUpdatesUseHumanTextAndKeepTerminalMetadata(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer(tool progress): %v", err)
 	}
-	assertEventKinds(t, progress.Events, agentproto.EventItemDelta)
-	if progress.Events[0].ItemKind != "command_execution_output" {
-		t.Fatalf("tool progress item kind = %q, want command_execution_output; event=%#v", progress.Events[0].ItemKind, progress.Events[0])
+	assertEventKinds(t, progress.Events, agentproto.EventItemStarted, agentproto.EventItemDelta)
+	if progress.Events[1].ItemKind != "command_execution_output" {
+		t.Fatalf("tool progress item kind = %q, want command_execution_output; event=%#v", progress.Events[1].ItemKind, progress.Events[1])
 	}
-	if progress.Events[0].Delta != "PASS\n" {
-		t.Fatalf("tool progress delta = %q, want human text", progress.Events[0].Delta)
+	if progress.Events[1].Delta != "PASS\n" {
+		t.Fatalf("tool progress delta = %q, want human text", progress.Events[1].Delta)
 	}
 
 	completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
@@ -210,8 +224,8 @@ func TestOpenCodeDynamicToolCompletionKeepsRawOutputNonVisible(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer(tool completed): %v", err)
 	}
-	assertEventKinds(t, completed.Events, agentproto.EventItemCompleted)
-	event := completed.Events[0]
+	assertEventKinds(t, completed.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
+	event := completed.Events[1]
 	if event.ItemKind != "dynamic_tool_call" {
 		t.Fatalf("completion item kind = %q, want dynamic_tool_call; event=%#v", event.ItemKind, event)
 	}
@@ -300,7 +314,7 @@ func TestOpenCodeExplorationToolActionsMapStructuredInput(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tr, _ := startPromptedSession(t)
-			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
 				"sessionUpdate": "tool_call",
 				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
 				"title":         tc.kind,
@@ -310,6 +324,20 @@ func TestOpenCodeExplorationToolActionsMapStructuredInput(t *testing.T) {
 			})))
 			if err != nil {
 				t.Fatalf("ObserveServer(tool_call): %v", err)
+			}
+			if len(pending.Events) != 0 {
+				t.Fatalf("pending emitted shared events: %#v", pending.Events)
+			}
+			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call_update",
+				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
+				"title":         tc.kind,
+				"kind":          tc.kind,
+				"status":        "in_progress",
+				"rawInput":      tc.rawInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call_update): %v", err)
 			}
 			assertEventKinds(t, result.Events, agentproto.EventItemStarted)
 			action := assertSingleExplorationAction(t, result.Events[0])
@@ -353,7 +381,7 @@ func TestOpenCodeBroadSearchKindLocksExplorationToolIdentity(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tr, _ := startPromptedSession(t)
-			started, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
 				"sessionUpdate": "tool_call",
 				"toolCallId":    tc.name + "_1",
 				"title":         tc.title,
@@ -363,6 +391,20 @@ func TestOpenCodeBroadSearchKindLocksExplorationToolIdentity(t *testing.T) {
 			})))
 			if err != nil {
 				t.Fatalf("ObserveServer(tool_call): %v", err)
+			}
+			if len(pending.Events) != 0 {
+				t.Fatalf("pending emitted shared events: %#v", pending.Events)
+			}
+			started, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call_update",
+				"toolCallId":    tc.name + "_1",
+				"title":         tc.title,
+				"kind":          "search",
+				"status":        "in_progress",
+				"rawInput":      tc.rawInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call_update): %v", err)
 			}
 			assertEventKinds(t, started.Events, agentproto.EventItemStarted)
 			if started.Events[0].ItemKind != "dynamic_tool_call" || started.Events[0].Metadata["kind"] != "search" {
@@ -400,7 +442,7 @@ func TestOpenCodeBroadSearchKindLocksExplorationToolIdentity(t *testing.T) {
 func TestOpenCodeBroadSearchIdentityFailsClosedForUnknownAndMCPTools(t *testing.T) {
 	t.Run("unknown title keeps broad search semantics", func(t *testing.T) {
 		tr, _ := startPromptedSession(t)
-		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
 			"sessionUpdate": "tool_call",
 			"toolCallId":    "context_1",
 			"title":         "context7_get_library_docs",
@@ -410,6 +452,20 @@ func TestOpenCodeBroadSearchIdentityFailsClosedForUnknownAndMCPTools(t *testing.
 		})))
 		if err != nil {
 			t.Fatalf("ObserveServer(tool_call): %v", err)
+		}
+		if len(pending.Events) != 0 {
+			t.Fatalf("pending emitted shared events: %#v", pending.Events)
+		}
+		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			"sessionUpdate": "tool_call_update",
+			"toolCallId":    "context_1",
+			"title":         "context7_get_library_docs",
+			"kind":          "search",
+			"status":        "in_progress",
+			"rawInput":      map[string]any{"query": "ACP", "path": "docs"},
+		})))
+		if err != nil {
+			t.Fatalf("ObserveServer(tool_call_update): %v", err)
 		}
 		assertEventKinds(t, result.Events, agentproto.EventItemStarted)
 		if _, ok := result.Events[0].Metadata["opencodeToolName"]; ok {
@@ -423,7 +479,7 @@ func TestOpenCodeBroadSearchIdentityFailsClosedForUnknownAndMCPTools(t *testing.
 
 	t.Run("MCP tool named glob stays MCP", func(t *testing.T) {
 		tr, _ := startPromptedSession(t)
-		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
 			"sessionUpdate": "tool_call",
 			"toolCallId":    "mcp_glob_1",
 			"title":         "glob",
@@ -434,6 +490,20 @@ func TestOpenCodeBroadSearchIdentityFailsClosedForUnknownAndMCPTools(t *testing.
 		if err != nil {
 			t.Fatalf("ObserveServer(tool_call): %v", err)
 		}
+		if len(pending.Events) != 0 {
+			t.Fatalf("pending emitted shared events: %#v", pending.Events)
+		}
+		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			"sessionUpdate": "tool_call_update",
+			"toolCallId":    "mcp_glob_1",
+			"title":         "glob",
+			"kind":          "search",
+			"status":        "in_progress",
+			"rawInput":      map[string]any{"server": "docs", "tool": "glob", "pattern": "**/*.md"},
+		})))
+		if err != nil {
+			t.Fatalf("ObserveServer(tool_call_update): %v", err)
+		}
 		assertEventKinds(t, result.Events, agentproto.EventItemStarted)
 		if result.Events[0].ItemKind != "mcp_tool_call" || result.Events[0].Exploration != nil {
 			t.Fatalf("MCP tool was misclassified as exploration: %#v", result.Events[0])
@@ -442,6 +512,249 @@ func TestOpenCodeBroadSearchIdentityFailsClosedForUnknownAndMCPTools(t *testing.
 			t.Fatalf("MCP title must not populate OpenCode built-in identity: %#v", result.Events[0].Metadata)
 		}
 	})
+}
+
+func TestOpenCodeToolLifecycleDelaysFirstEventUntilRunningInputIsDisplayable(t *testing.T) {
+	cases := []struct {
+		name         string
+		kind         string
+		title        string
+		pendingInput map[string]any
+		runningInput map[string]any
+		wantItemKind string
+		wantTool     string
+		wantCommand  string
+		wantAction   agentproto.ExplorationActionKind
+		wantSummary  string
+	}{
+		{
+			name:         "read",
+			kind:         "read",
+			title:        "read",
+			pendingInput: map[string]any{},
+			runningInput: map[string]any{"filePath": "internal/adapter/acp/observe.go"},
+			wantItemKind: "dynamic_tool_call",
+			wantTool:     "read",
+			wantAction:   agentproto.ExplorationActionRead,
+		},
+		{
+			name:         "grep",
+			kind:         "search",
+			title:        "grep",
+			pendingInput: map[string]any{},
+			runningInput: map[string]any{"pattern": "needle", "path": "internal"},
+			wantItemKind: "dynamic_tool_call",
+			wantTool:     "grep",
+			wantAction:   agentproto.ExplorationActionSearch,
+			wantSummary:  "needle",
+		},
+		{
+			name:         "glob",
+			kind:         "search",
+			title:        "glob",
+			pendingInput: map[string]any{},
+			runningInput: map[string]any{"pattern": "**/*.go", "path": "internal"},
+			wantItemKind: "dynamic_tool_call",
+			wantTool:     "glob",
+			wantAction:   agentproto.ExplorationActionList,
+			wantSummary:  "**/*.go",
+		},
+		{
+			name:         "execute",
+			kind:         "execute",
+			title:        "bash",
+			pendingInput: map[string]any{"cwd": "/tmp/work"},
+			runningInput: map[string]any{"command": "go test ./...", "cwd": "/tmp/work"},
+			wantItemKind: "command_execution",
+			wantTool:     "execute",
+			wantCommand:  "go test ./...",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, _ := startPromptedSession(t)
+			pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call",
+				"toolCallId":    tc.name + "_1",
+				"title":         tc.title,
+				"kind":          tc.kind,
+				"status":        "pending",
+				"rawInput":      tc.pendingInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(pending): %v", err)
+			}
+			if len(pending.Events) != 0 {
+				t.Fatalf("pending emitted shared events: %#v", pending.Events)
+			}
+
+			running, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call_update",
+				"toolCallId":    tc.name + "_1",
+				"title":         tc.title,
+				"kind":          tc.kind,
+				"status":        "in_progress",
+				"rawInput":      tc.runningInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(in_progress): %v", err)
+			}
+			assertEventKinds(t, running.Events, agentproto.EventItemStarted)
+			event := running.Events[0]
+			if event.ItemKind != tc.wantItemKind || event.Status != "in_progress" || event.Metadata["tool"] != tc.wantTool {
+				t.Fatalf("running start = %#v", event)
+			}
+			if tc.wantCommand != "" {
+				if event.Metadata["command"] != tc.wantCommand || event.Exploration != nil {
+					t.Fatalf("command start missing completed input: %#v", event)
+				}
+				return
+			}
+			action := assertSingleExplorationAction(t, event)
+			if action.Kind != tc.wantAction || (tc.wantSummary != "" && action.Summary != tc.wantSummary) {
+				t.Fatalf("running action = %#v, want kind=%q summary=%q", action, tc.wantAction, tc.wantSummary)
+			}
+		})
+	}
+}
+
+func TestOpenCodeToolLifecycleKeepsIncompleteRunningInternal(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	for index, update := range []map[string]any{
+		{
+			"sessionUpdate": "tool_call",
+			"toolCallId":    "read_1",
+			"title":         "read",
+			"kind":          "read",
+			"status":        "pending",
+			"rawInput":      map[string]any{},
+		},
+		{
+			"sessionUpdate": "tool_call_update",
+			"toolCallId":    "read_1",
+			"title":         "read",
+			"kind":          "read",
+			"status":        "in_progress",
+			"rawInput":      map[string]any{},
+		},
+	} {
+		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", update)))
+		if err != nil {
+			t.Fatalf("ObserveServer(frame %d): %v", index, err)
+		}
+		if len(result.Events) != 0 {
+			t.Fatalf("incomplete frame %d emitted shared events: %#v", index, result.Events)
+		}
+	}
+}
+
+func TestOpenCodeToolLifecycleKeepsPendingUpdatesInternal(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	for index, update := range []map[string]any{
+		{
+			"sessionUpdate": "tool_call",
+			"toolCallId":    "read_1",
+			"title":         "read",
+			"kind":          "read",
+			"status":        "pending",
+			"rawInput":      map[string]any{},
+		},
+		{
+			"sessionUpdate": "tool_call_update",
+			"toolCallId":    "read_1",
+			"title":         "read",
+			"kind":          "read",
+			"status":        "pending",
+			"rawInput":      map[string]any{"filePath": "README.md"},
+		},
+	} {
+		result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", update)))
+		if err != nil {
+			t.Fatalf("ObserveServer(frame %d): %v", index, err)
+		}
+		if len(result.Events) != 0 {
+			t.Fatalf("pending frame %d emitted shared events: %#v", index, result.Events)
+		}
+	}
+}
+
+func TestOpenCodeToolLifecycleDropsUnstartedPendingStateAtTurnCompletion(t *testing.T) {
+	tr, promptID := startPromptedSession(t)
+	if _, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call",
+		"toolCallId":    "read_1",
+		"title":         "read",
+		"kind":          "read",
+		"status":        "pending",
+		"rawInput":      map[string]any{},
+	}))); err != nil {
+		t.Fatalf("ObserveServer(pending): %v", err)
+	}
+	key := "ses_1\x00tool\x00read_1"
+	if tr.messageItems[key] == nil {
+		t.Fatalf("pending item state was not recorded")
+	}
+
+	completed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      promptID,
+		"result":  map[string]any{"stopReason": "end_turn"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(prompt response): %v", err)
+	}
+	assertEventKinds(t, completed.Events, agentproto.EventTurnCompleted)
+	if tr.messageItems[key] != nil {
+		t.Fatalf("unstarted pending item leaked past turn completion: %#v", tr.messageItems[key])
+	}
+}
+
+func TestOpenCodeToolLifecycleDirectTerminalUsesSafeGenericFallback(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call",
+		"toolCallId":    "read_1",
+		"title":         "read",
+		"kind":          "read",
+		"status":        "pending",
+		"rawInput":      map[string]any{},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(pending): %v", err)
+	}
+	if len(pending.Events) != 0 {
+		t.Fatalf("pending emitted shared events: %#v", pending.Events)
+	}
+
+	completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call_update",
+		"toolCallId":    "read_1",
+		"title":         "README.md",
+		"status":        "failed",
+		"rawOutput":     map[string]any{"output": "RAW_FILE_CONTENT", "error": "read failed"},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(failed): %v", err)
+	}
+	assertEventKinds(t, completed.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
+	for _, event := range completed.Events {
+		if event.ItemKind != "dynamic_tool_call" || event.Exploration == nil || len(event.Exploration.Actions) != 0 || event.Metadata["semanticKind"] != "generic_tool" {
+			t.Fatalf("terminal fallback stayed incomplete exploration: %#v", event)
+		}
+		if event.Metadata["tool"] != "read" || event.Metadata["text"] != "OpenCode tool call" {
+			t.Fatalf("terminal fallback is not stable and non-empty: %#v", event.Metadata)
+		}
+		if _, ok := event.Metadata["arguments"]; ok {
+			t.Fatalf("terminal fallback exposed empty arguments: %#v", event.Metadata)
+		}
+		if text := event.Metadata["text"]; strings.Contains(fmt.Sprint(text), "RAW_FILE_CONTENT") {
+			t.Fatalf("terminal fallback leaked raw output: %#v", event.Metadata)
+		}
+	}
+	if completed.Events[0].Status != "in_progress" || completed.Events[1].Status != "failed" || completed.Events[1].Metadata["errorMessage"] != "read failed" {
+		t.Fatalf("terminal fallback lifecycle/status mismatch: %#v", completed.Events)
+	}
 }
 
 func TestOpenCodeExplorationToolLifecycleMergesRawInput(t *testing.T) {
@@ -457,10 +770,8 @@ func TestOpenCodeExplorationToolLifecycleMergesRawInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer(empty start): %v", err)
 	}
-	assertEventKinds(t, started.Events, agentproto.EventItemStarted)
-	startAction := assertSingleExplorationAction(t, started.Events[0])
-	if startAction.Kind != agentproto.ExplorationActionRead || len(startAction.Items) != 0 {
-		t.Fatalf("empty start action = %#v, want incomplete read action", startAction)
+	if len(started.Events) != 0 {
+		t.Fatalf("empty pending start emitted shared events: %#v", started.Events)
 	}
 
 	completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
@@ -472,8 +783,12 @@ func TestOpenCodeExplorationToolLifecycleMergesRawInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer(completion): %v", err)
 	}
-	assertEventKinds(t, completed.Events, agentproto.EventItemCompleted)
-	completeAction := assertSingleExplorationAction(t, completed.Events[0])
+	assertEventKinds(t, completed.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
+	startAction := assertSingleExplorationAction(t, completed.Events[0])
+	completeAction := assertSingleExplorationAction(t, completed.Events[1])
+	if startAction.Kind != agentproto.ExplorationActionRead || strings.Join(startAction.Items, "\x00") != "internal/adapter/acp/observe.go" {
+		t.Fatalf("synthetic start action = %#v, want completed read path", startAction)
+	}
 	if completeAction.Kind != agentproto.ExplorationActionRead || strings.Join(completeAction.Items, "\x00") != "internal/adapter/acp/observe.go" {
 		t.Fatalf("completion action = %#v, want completed read path", completeAction)
 	}
@@ -497,8 +812,8 @@ func TestOpenCodeExplorationToolLifecycleMergesRawInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer(grep completion): %v", err)
 	}
-	assertEventKinds(t, grepCompleted.Events, agentproto.EventItemCompleted)
-	grepAction := assertSingleExplorationAction(t, grepCompleted.Events[0])
+	assertEventKinds(t, grepCompleted.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
+	grepAction := assertSingleExplorationAction(t, grepCompleted.Events[1])
 	if grepAction.Kind != agentproto.ExplorationActionSearch || grepAction.Summary != "needle" || grepAction.Secondary != "internal" {
 		t.Fatalf("completion lost started rawInput: %#v", grepAction)
 	}
@@ -518,10 +833,10 @@ func TestOpenCodeExplorationToolFallbackAndRawOutputIsolation(t *testing.T) {
 		t.Fatalf("ObserveServer(failed grep): %v", err)
 	}
 	assertEventKinds(t, completed.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
-	startAction := assertSingleExplorationAction(t, completed.Events[0])
-	completeAction := assertSingleExplorationAction(t, completed.Events[1])
-	if startAction.Kind != agentproto.ExplorationActionSearch || completeAction.Kind != agentproto.ExplorationActionSearch {
-		t.Fatalf("failed empty grep actions = %#v / %#v, want incomplete search actions", startAction, completeAction)
+	for _, event := range completed.Events {
+		if event.Exploration == nil || len(event.Exploration.Actions) != 0 || event.Metadata["semanticKind"] != "generic_tool" || event.Metadata["text"] != "OpenCode tool call" {
+			t.Fatalf("failed empty grep did not use safe generic fallback: %#v", event)
+		}
 	}
 	if completed.Events[0].Status != "in_progress" {
 		t.Fatalf("update-first synthetic start status = %q, want in_progress", completed.Events[0].Status)
@@ -529,12 +844,8 @@ func TestOpenCodeExplorationToolFallbackAndRawOutputIsolation(t *testing.T) {
 	if completed.Events[1].Status != "failed" || completed.Events[1].Metadata["errorMessage"] != "grep failed" {
 		t.Fatalf("failed status/error metadata missing: %#v", completed.Events[1])
 	}
-	visible := completeAction.Summary + " " + completeAction.Secondary + " " + strings.Join(completeAction.Items, " ")
-	if strings.Contains(visible, "RAW_OUTPUT_SECRET") {
-		t.Fatalf("raw output leaked into exploration action: %#v", completeAction)
-	}
-	if text, ok := completed.Events[1].Metadata["text"]; ok {
-		t.Fatalf("raw output must not be promoted to text metadata: %#v", text)
+	if strings.Contains(fmt.Sprint(completed.Events[1].Metadata["text"]), "RAW_OUTPUT_SECRET") {
+		t.Fatalf("raw output leaked into generic fallback: %#v", completed.Events[1].Metadata)
 	}
 }
 
@@ -571,7 +882,7 @@ func TestOpenCodeMCPAndUnknownToolsDoNotBecomeExploration(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			tr, _ := startPromptedSession(t)
-			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+			pending, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
 				"sessionUpdate": "tool_call",
 				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
 				"title":         tc.kind,
@@ -581,6 +892,20 @@ func TestOpenCodeMCPAndUnknownToolsDoNotBecomeExploration(t *testing.T) {
 			})))
 			if err != nil {
 				t.Fatalf("ObserveServer(tool_call): %v", err)
+			}
+			if len(pending.Events) != 0 {
+				t.Fatalf("pending emitted shared events: %#v", pending.Events)
+			}
+			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call_update",
+				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
+				"title":         tc.kind,
+				"kind":          tc.kind,
+				"status":        "in_progress",
+				"rawInput":      tc.rawInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call_update): %v", err)
 			}
 			assertEventKinds(t, result.Events, agentproto.EventItemStarted)
 			if result.Events[0].ItemKind != tc.wantKind {
@@ -615,8 +940,8 @@ func TestOpenCodeFileChangeCompletionSuppressesRawOutputText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ObserveServer(tool completed): %v", err)
 	}
-	assertEventKinds(t, completed.Events, agentproto.EventItemCompleted)
-	event := completed.Events[0]
+	assertEventKinds(t, completed.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
+	event := completed.Events[1]
 	if event.ItemKind != "file_change" {
 		t.Fatalf("completion item kind = %q, want file_change; event=%#v", event.ItemKind, event)
 	}
@@ -1028,7 +1353,13 @@ func TestCanonicalRawJSONLFixtureMatchesGoldenProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal projected events: %v", err)
 	}
-	want, err := os.ReadFile(filepath.Join("testdata", "canonical_session_updates.golden.json"))
+	goldenPath := filepath.Join("testdata", "canonical_session_updates.golden.json")
+	if os.Getenv("UPDATE_GOLDEN") == "1" {
+		if err := os.WriteFile(goldenPath, append(got, '\n'), 0o644); err != nil {
+			t.Fatalf("update golden: %v", err)
+		}
+	}
+	want, err := os.ReadFile(goldenPath)
 	if err != nil {
 		t.Fatalf("read golden: %v", err)
 	}

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-12`
-> Summary: 同步 Codex、Claude Code、OpenCode typed exploration action 经共享 resolver 投影到 Feishu 过程卡的边界，以及 Codex Profile-only 卡片合同与 rejected action label owner；保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、callback freshness、动态模型/推理菜单、Profile 下拉、MCP elicitation 与 detached workspace `/status` 等既有合同。
+> Summary: 同步 OpenCode pending 延迟首发与 terminal generic fallback 经 typed exploration carrier 投影到 Feishu 过程卡的边界；保留 Codex/Claude typed action、Profile-only 卡片合同、callback freshness 与既有 owner-flow。
 
 ## 1. 文档定位
 
@@ -698,6 +698,7 @@ MCP request 卡片当前新增的可视语义：
   - typed carrier 非 nil 时是权威输入：空 carrier、unknown/malformed 或 completion 最终仍缺详情会走 generic command/tool 行，不允许旧 shell/dynamic parser 二次猜测；carrier nil 时才保留 legacy parser 兼容
   - 当前 producer 映射包括 Codex `commandActions` 的 `read / search / listFiles`、Claude Code `Read / Glob / Grep`，以及 OpenCode ACP `read / glob / list / ls / grep / search`；各 adapter 只提交 canonical action，projector 不感知原生字段名
   - Codex 混入 unknown/malformed action 时整条 generic fallback；Claude completion 只复用原始 tool input；OpenCode 以 MCP canonical 分类优先并从累计 rawInput 补详情，MCP 同名 tool 不会误入 exploration
+  - OpenCode 的 `tool_call/pending` 只在 adapter 内累计 kind、稳定工具身份和 rawInput，不发送共享 `ItemStarted`；`in_progress` 首次具备完整可展示参数时才下发唯一 started。若工具未补全就直接 terminal，同批下发安全的 started/completed，并携带非 nil 空 exploration carrier 明确拒绝 legacy parser，最终只形成非空 generic tool 行
   - start 参数不完整时不会投影空行或空括号；completion 补详情、completion-only 和 final-empty fallback 都按 item 维持单一 structured/generic 表示，避免同一次调用重复成两行
   - exploration action 只使用 adapter 提供的安全字段；tool result、stdout/stderr 与 `rawOutput` 不用于生成 read/list/search 摘要
   - reasoning 行是历史记录；普通进度继续追加时不会清掉它，assistant 正文真正 flush 成可见文本块时才终结 active progress 生命周期，不再额外 patch 旧卡撤回 reasoning 行；verbose 下若这张卡一度只有尾部 `思考中...` 占位，thinking 结束后也不会再主动撤回整张旧卡；turn 完成/失败/中断时若仍有 active progress，会把 running 行按最终状态封口后再清理内存态。

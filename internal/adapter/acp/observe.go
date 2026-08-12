@@ -256,8 +256,21 @@ func (t *Translator) observePromptResponse(pending pendingRPC, payload map[strin
 	}
 	result.Events = append(result.Events, completed)
 	turn.Completed = true
+	t.dropUnstartedTurnItems(turn)
 	delete(t.activeTurns, turn.ThreadID)
 	return result
+}
+
+func (t *Translator) dropUnstartedTurnItems(turn *turnState) {
+	if turn == nil {
+		return
+	}
+	for key, item := range t.messageItems {
+		if item == nil || item.Started || item.ThreadID != turn.ThreadID || item.TurnID != turn.TurnID {
+			continue
+		}
+		delete(t.messageItems, key)
+	}
 }
 
 func (t *Translator) completeOpenTextItems(turn *turnState) []agentproto.Event {
@@ -515,24 +528,14 @@ func (t *Translator) observeToolCall(sessionID string, update map[string]any) []
 		Kind:     kind,
 		ThreadID: sessionID,
 		TurnID:   turn.TurnID,
-		Started:  kind != "",
 		Metadata: opencodeToolMetadata(update, nil),
 	}
 	t.messageItems[key] = item
-	if kind == "" {
-		return nil
+	status := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(update["status"])))
+	if status != "" && status != "pending" {
+		return t.observeToolCallUpdate(sessionID, update)
 	}
-	return []agentproto.Event{t.annotateTurnEvent(turn, agentproto.Event{
-		Kind:        agentproto.EventItemStarted,
-		ThreadID:    sessionID,
-		TurnID:      turn.TurnID,
-		ItemID:      item.ItemID,
-		ItemKind:    kind,
-		Name:        xutil.LookupStringFromAny(update["title"]),
-		Status:      opencodeToolStartStatus(update, "pending"),
-		Exploration: opencodeToolExploration(item.Metadata),
-		Metadata:    xutil.CloneMap(item.Metadata),
-	})}
+	return nil
 }
 
 func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]any) []agentproto.Event {
@@ -566,37 +569,55 @@ func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]a
 		}
 		return nil
 	}
+	status := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(update["status"])))
+	terminal := status == "completed" || status == "failed"
+	if status == "pending" {
+		return nil
+	}
+	eventMetadata := item.Metadata
+	if terminal {
+		eventMetadata = opencodeToolCompletionMetadata(item.Metadata, update)
+	}
+	eventItemKind := item.Kind
+	eventExploration := opencodeToolExploration(eventMetadata)
+	if !item.Started && !opencodeToolDisplayable(eventItemKind, eventMetadata) {
+		if !terminal {
+			return nil
+		}
+		eventItemKind = "dynamic_tool_call"
+		eventMetadata = opencodeToolFallbackMetadata(eventMetadata)
+		eventExploration = &agentproto.ExplorationActions{}
+	}
 	events := make([]agentproto.Event, 0, 2)
 	if !item.Started {
 		item.Started = true
+		item.Kind = eventItemKind
 		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
 			Kind:        agentproto.EventItemStarted,
 			ThreadID:    sessionID,
 			TurnID:      turn.TurnID,
 			ItemID:      item.ItemID,
-			ItemKind:    item.Kind,
-			Name:        xutil.LookupStringFromAny(update["title"]),
+			ItemKind:    eventItemKind,
+			Name:        opencodeToolEventName(eventMetadata),
 			Status:      opencodeToolStartStatus(update, "in_progress"),
-			Exploration: opencodeToolExploration(item.Metadata),
-			Metadata:    xutil.CloneMap(item.Metadata),
+			Exploration: eventExploration,
+			Metadata:    xutil.CloneMap(eventMetadata),
 		}))
 	}
-	status := xutil.LookupStringFromAny(update["status"])
-	if status == "completed" || status == "failed" {
+	if terminal {
 		if item.Completed {
 			return events
 		}
 		item.Completed = true
-		completionMetadata := opencodeToolCompletionMetadata(item.Metadata, update)
 		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
 			Kind:        agentproto.EventItemCompleted,
 			ThreadID:    sessionID,
 			TurnID:      turn.TurnID,
 			ItemID:      item.ItemID,
-			ItemKind:    item.Kind,
+			ItemKind:    eventItemKind,
 			Status:      status,
-			Exploration: opencodeToolExploration(completionMetadata),
-			Metadata:    completionMetadata,
+			Exploration: eventExploration,
+			Metadata:    xutil.CloneMap(eventMetadata),
 		}))
 		return events
 	}

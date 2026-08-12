@@ -62,21 +62,21 @@
     "kind": "item.started",
     "metadata": {
       "arguments": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
       "command": "go test ./internal/adapter/acp",
       "cwd": "/tmp/work",
-      "kind": "bash",
+      "kind": "execute",
       "rawInput": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
-      "tool": "bash",
+      "tool": "execute",
       "toolCallId": "shell_1"
     },
-    "name": "go test",
-    "status": "pending",
+    "name": "execute",
+    "status": "in_progress",
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"
   },
@@ -104,22 +104,22 @@
     "kind": "item.completed",
     "metadata": {
       "arguments": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
       "command": "go test ./internal/adapter/acp",
       "cwd": "/tmp/work",
       "exitCode": 0,
-      "kind": "bash",
+      "kind": "execute",
       "rawInput": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
       "rawOutput": {
         "exitCode": 0,
         "output": "PASS\n"
       },
-      "tool": "bash",
+      "tool": "execute",
       "toolCallId": "shell_1"
     },
     "status": "completed",
@@ -131,7 +131,10 @@
     "exploration": {
       "actions": [
         {
-          "kind": "read"
+          "kind": "read",
+          "items": [
+            "internal/adapter/acp/observe.go"
+          ]
         }
       ]
     },
@@ -143,16 +146,20 @@
     "itemKind": "dynamic_tool_call",
     "kind": "item.started",
     "metadata": {
-      "arguments": {},
+      "arguments": {
+        "filePath": "internal/adapter/acp/observe.go"
+      },
       "kind": "read",
-      "rawInput": {},
+      "rawInput": {
+        "filePath": "internal/adapter/acp/observe.go"
+      },
       "semanticKind": "exploration",
       "suppressFinalText": true,
       "tool": "read",
       "toolCallId": "read_1"
     },
     "name": "read",
-    "status": "pending",
+    "status": "in_progress",
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"
   },
@@ -218,7 +225,8 @@
         "path": "internal/adapter/acp",
         "pattern": "opencodeToolMetadata"
       },
-      "kind": "grep",
+      "kind": "search",
+      "opencodeToolName": "grep",
       "rawInput": {
         "path": "internal/adapter/acp",
         "pattern": "opencodeToolMetadata"
@@ -229,7 +237,7 @@
       "toolCallId": "grep_1"
     },
     "name": "grep",
-    "status": "pending",
+    "status": "in_progress",
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"
   },
@@ -257,7 +265,8 @@
         "pattern": "opencodeToolMetadata"
       },
       "errorMessage": "grep failed",
-      "kind": "grep",
+      "kind": "search",
+      "opencodeToolName": "grep",
       "rawInput": {
         "path": "internal/adapter/acp",
         "pattern": "opencodeToolMetadata"
@@ -298,7 +307,8 @@
         "path": "internal/adapter/acp",
         "pattern": "**/*.go"
       },
-      "kind": "glob",
+      "kind": "search",
+      "opencodeToolName": "glob",
       "rawInput": {
         "path": "internal/adapter/acp",
         "pattern": "**/*.go"
@@ -308,6 +318,7 @@
       "tool": "glob",
       "toolCallId": "glob_1"
     },
+    "name": "glob",
     "status": "in_progress",
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"
@@ -335,7 +346,8 @@
         "path": "internal/adapter/acp",
         "pattern": "**/*.go"
       },
-      "kind": "glob",
+      "kind": "search",
+      "opencodeToolName": "glob",
       "rawInput": {
         "path": "internal/adapter/acp",
         "pattern": "**/*.go"
@@ -382,6 +394,7 @@
       "tool": "ls",
       "toolCallId": "ls_1"
     },
+    "name": "ls",
     "status": "in_progress",
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"

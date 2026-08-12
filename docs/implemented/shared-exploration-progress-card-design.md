@@ -2,7 +2,7 @@
 
 > Type: `implemented`
 > Updated: `2026-08-12`
-> Summary: 记录共用探索过程卡的已落地边界：adapter 可通过 typed `agentproto.Event.Exploration` 提供权威 `read/list/search` 动作，共享 resolver 负责安全回退与 item 生命周期；reasoning/thinking 作为飞书“工作中”卡内持久 timeline 行展示，超预算后由多段 progress-card family 承接。
+> Summary: 记录 OpenCode pending 延迟首发、displayable running 首次展示与 terminal 安全 generic fallback；保留 typed exploration、共享 resolver 和多段 progress-card family 的既有边界。
 
 ## 背景
 
@@ -52,6 +52,7 @@
 14. Codex adapter 已优先把原生 `commandExecution.commandActions` 整组映射为 carrier：支持 `read / search / listFiles` 并保持顺序，混入 `unknown` 或 malformed action 时发送非 nil 空 carrier，使整条命令走 generic fallback；字段缺失时保持 nil，继续兼容旧 shell parser。
 15. Claude Code adapter 已把 `Read / Glob / Grep` 映射为 `read / list / search`；started 与 completed 都只从原始 tool input 生成 action，tool result 不参与摘要。关键参数暂缺时仍发送 known-but-incomplete action，由共享 resolver 处理 pending 与 final fallback。
 16. OpenCode ACP adapter 已把 `read / glob / list / ls / grep / search` 的累计 `kind + rawInput` 映射为 carrier，并支持 completion/update-first 补详情；MCP canonical 分类优先，即使 MCP tool 名为 `read` 或 `grep` 也不会误判。`rawOutput` 只保留为诊断/状态 metadata。
+17. OpenCode `tool_call/pending` 只建立 adapter item state，不发送共享事件；`in_progress` 首次具备完整 read path、list/search summary、command、file path 或 MCP identity 时才发送唯一 `ItemStarted`。未补全直接 terminal 时，同批发送安全 started/completed；fallback 使用固定非空 text，并携带非 nil 空 `Exploration` carrier 阻止 legacy read parser，不从 terminal title 或 `rawOutput` 生成摘要。
 
 当前仍然刻意保留的边界：
 
@@ -192,7 +193,7 @@
 共享模型、resolver、三类 adapter 与 Feishu 投影已经落地；原生字段到 canonical carrier 的当前边界是：
 
 1. Codex `commandActions` 整组映射；混入 `unknown` 或 malformed action 时发送非 nil 空 carrier，保留原 command 供 generic fallback。
-2. Claude Code `Read / Glob / Grep` 与 OpenCode ACP `kind/rawInput` 在各自 adapter 边界归一成 `read / list / search`；completion 复用原始/累计 input，不读取 result/raw output 生成摘要。
+2. Claude Code `Read / Glob / Grep` 与 OpenCode ACP `kind/rawInput` 在各自 adapter 边界归一成 `read / list / search`；OpenCode pending 仅内部累计，running 参数完整后才首次下发，terminal 参数仍不足时发送带非 nil 空 carrier 的安全 generic started/completed。completion 复用原始/累计 input，不读取 result/raw output 生成摘要。
 3. projector 继续只消费最终 timeline，不理解 backend、tool 名、raw input 或 raw output。
 
 对应代码：
@@ -396,6 +397,7 @@ typed carrier 的 resolver 优先级固定为：
 4. adapter 到 orchestrator 的 typed exploration carrier、nil/empty 权威语义、atomic multi-action 校验与 sticky item resolution 已落地
 5. completion-only、final-empty generic fallback、legacy parser 兼容与 raw output 隔离已有回归测试
 6. Codex `commandActions`、Claude `Read / Glob / Grep` 与 OpenCode ACP exploration tools 已接入 typed carrier，并覆盖真实 frame/golden、参数补全和来源侧 fail-closed 边界
+7. OpenCode pending 延迟首发、running displayable gate、turn 结束清理与 direct-terminal generic fallback 已在 adapter 单测及 adapter 到 orchestrator 的真实事件链测试中锁定
 
 ### 后续可继续扩展
 
@@ -415,12 +417,14 @@ typed carrier 的 resolver 优先级固定为：
 7. nil carrier 继续走 legacy fallback，非 nil 空 carrier 阻止 legacy 二次猜测
 8. start 空参数、completion 补详情、纯 completion-only 与 final-empty generic fallback 均保持单一可见表示
 9. raw output/result 中的文件内容或路径不会进入探索行
+10. OpenCode pending 不创建共享进度；running 参数完整后首次出现进度；direct terminal 形成非空且已完成/失败的 generic 行，并且 terminal title/raw output 不进入展示
 
 ### 建议测试面
 
 - `internal/core/orchestrator/service_exec_command_progress_test.go`
 - `internal/core/orchestrator/service_exec_command_progress_exploration_contract_test.go`
 - `internal/core/orchestrator/service_exec_command_progress_dynamic_tool_test.go`
+- `internal/core/orchestrator/service_opencode_tool_lifecycle_integration_test.go`
 - `internal/core/agentproto/wire_test.go`
 - `internal/adapter/codex/translator_requests_test.go`
 - `internal/adapter/claude/translator_exploration_test.go`

@@ -215,6 +215,75 @@ func opencodeToolStartStatus(update map[string]any, fallback string) string {
 	}
 }
 
+func opencodeToolDisplayable(itemKind string, metadata map[string]any) bool {
+	if metadata == nil {
+		return false
+	}
+	switch itemKind {
+	case "command_execution":
+		return strings.TrimSpace(xutil.MetadataString(metadata, "command")) != ""
+	case "file_change":
+		return strings.TrimSpace(xutil.MetadataString(metadata, "filePath")) != ""
+	case "mcp_tool_call":
+		return strings.TrimSpace(xutil.MetadataString(metadata, "server")) != "" && strings.TrimSpace(xutil.MetadataString(metadata, "tool")) != ""
+	case "dynamic_tool_call":
+		if exploration := opencodeToolExploration(metadata); exploration != nil {
+			return opencodeExplorationDisplayable(exploration)
+		}
+		return strings.TrimSpace(xutil.MetadataString(metadata, "tool")) != ""
+	default:
+		return strings.TrimSpace(xutil.MetadataString(metadata, "tool")) != ""
+	}
+}
+
+func opencodeExplorationDisplayable(exploration *agentproto.ExplorationActions) bool {
+	if exploration == nil || len(exploration.Actions) == 0 {
+		return false
+	}
+	for _, action := range exploration.Actions {
+		switch action.Kind {
+		case agentproto.ExplorationActionRead:
+			if len(action.Items) == 0 {
+				return false
+			}
+		case agentproto.ExplorationActionList, agentproto.ExplorationActionSearch:
+			if strings.TrimSpace(action.Summary) == "" {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func opencodeToolFallbackMetadata(metadata map[string]any) map[string]any {
+	out := xutil.CloneMap(metadata)
+	if out == nil {
+		out = map[string]any{}
+	}
+	tool := xutil.FirstNonEmpty(xutil.MetadataString(out, "opencodeToolName"), xutil.MetadataString(out, "tool"), "OpenCode")
+	out["tool"] = tool
+	out["semanticKind"] = "generic_tool"
+	out["suppressFinalText"] = false
+	out["text"] = "OpenCode tool call"
+	if rawInput, _ := out["rawInput"].(map[string]any); len(rawInput) == 0 {
+		delete(out, "rawInput")
+	}
+	if arguments, _ := out["arguments"].(map[string]any); len(arguments) == 0 {
+		delete(out, "arguments")
+	}
+	return out
+}
+
+func opencodeToolEventName(metadata map[string]any) string {
+	return xutil.FirstNonEmpty(
+		xutil.MetadataString(metadata, "opencodeToolName"),
+		xutil.MetadataString(metadata, "tool"),
+		"OpenCode tool",
+	)
+}
+
 func opencodeToolExploration(metadata map[string]any) *agentproto.ExplorationActions {
 	if metadata == nil {
 		return nil
