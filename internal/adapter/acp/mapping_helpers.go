@@ -199,6 +199,66 @@ func opencodeToolCompletionMetadata(metadata map[string]any, update map[string]a
 	return out
 }
 
+func opencodeToolStartStatus(update map[string]any, fallback string) string {
+	status := strings.TrimSpace(xutil.LookupStringFromAny(update["status"]))
+	switch status {
+	case "":
+		return fallback
+	case "completed", "failed":
+		return "in_progress"
+	default:
+		return status
+	}
+}
+
+func opencodeToolExploration(metadata map[string]any) *agentproto.ExplorationActions {
+	if metadata == nil {
+		return nil
+	}
+	kind := xutil.MetadataString(metadata, "kind")
+	rawInput := opencodeRawInput(nil, metadata)
+	if toolItemKind(map[string]any{"kind": kind, "rawInput": rawInput}) != "dynamic_tool_call" {
+		return nil
+	}
+	if !isExplorationToolKind(kind) {
+		return nil
+	}
+	action, ok := opencodeExplorationAction(kind, rawInput)
+	if !ok {
+		return nil
+	}
+	return &agentproto.ExplorationActions{Actions: []agentproto.ExplorationAction{action}}
+}
+
+func opencodeExplorationAction(kind string, rawInput map[string]any) (agentproto.ExplorationAction, bool) {
+	switch normalizeToolKind(kind) {
+	case "read":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionRead}
+		if path := firstMapString(rawInput, "filePath", "file_path", "path"); path != "" {
+			action.Items = []string{path}
+		}
+		return action, true
+	case "glob":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionList}
+		action.Summary = firstMapString(rawInput, "pattern", "glob", "query", "path")
+		if path := firstMapString(rawInput, "path", "cwd", "directory", "dir"); path != "" && path != action.Summary {
+			action.Secondary = path
+		}
+		return action, true
+	case "list", "ls":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionList}
+		action.Summary = firstMapString(rawInput, "path", "directory", "dir", "cwd", "pattern")
+		return action, true
+	case "grep", "search":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionSearch}
+		action.Summary = firstMapString(rawInput, "pattern", "query", "regex", "needle")
+		action.Secondary = firstMapString(rawInput, "path", "directory", "dir", "cwd", "include", "glob")
+		return action, true
+	default:
+		return agentproto.ExplorationAction{}, false
+	}
+}
+
 func mergeOpenCodeMCPResultMetadata(metadata map[string]any, output map[string]any) {
 	if metadata == nil || output == nil {
 		return

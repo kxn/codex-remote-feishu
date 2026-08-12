@@ -523,14 +523,15 @@ func (t *Translator) observeToolCall(sessionID string, update map[string]any) []
 		return nil
 	}
 	return []agentproto.Event{t.annotateTurnEvent(turn, agentproto.Event{
-		Kind:     agentproto.EventItemStarted,
-		ThreadID: sessionID,
-		TurnID:   turn.TurnID,
-		ItemID:   item.ItemID,
-		ItemKind: kind,
-		Name:     xutil.LookupStringFromAny(update["title"]),
-		Status:   xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["status"]), "pending"),
-		Metadata: xutil.CloneMap(item.Metadata),
+		Kind:        agentproto.EventItemStarted,
+		ThreadID:    sessionID,
+		TurnID:      turn.TurnID,
+		ItemID:      item.ItemID,
+		ItemKind:    kind,
+		Name:        xutil.LookupStringFromAny(update["title"]),
+		Status:      opencodeToolStartStatus(update, "pending"),
+		Exploration: opencodeToolExploration(item.Metadata),
+		Metadata:    xutil.CloneMap(item.Metadata),
 	})}
 }
 
@@ -569,14 +570,15 @@ func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]a
 	if !item.Started {
 		item.Started = true
 		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
-			Kind:     agentproto.EventItemStarted,
-			ThreadID: sessionID,
-			TurnID:   turn.TurnID,
-			ItemID:   item.ItemID,
-			ItemKind: item.Kind,
-			Name:     xutil.LookupStringFromAny(update["title"]),
-			Status:   xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["status"]), "in_progress"),
-			Metadata: xutil.CloneMap(item.Metadata),
+			Kind:        agentproto.EventItemStarted,
+			ThreadID:    sessionID,
+			TurnID:      turn.TurnID,
+			ItemID:      item.ItemID,
+			ItemKind:    item.Kind,
+			Name:        xutil.LookupStringFromAny(update["title"]),
+			Status:      opencodeToolStartStatus(update, "in_progress"),
+			Exploration: opencodeToolExploration(item.Metadata),
+			Metadata:    xutil.CloneMap(item.Metadata),
 		}))
 	}
 	status := xutil.LookupStringFromAny(update["status"])
@@ -585,14 +587,16 @@ func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]a
 			return events
 		}
 		item.Completed = true
+		completionMetadata := opencodeToolCompletionMetadata(item.Metadata, update)
 		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
-			Kind:     agentproto.EventItemCompleted,
-			ThreadID: sessionID,
-			TurnID:   turn.TurnID,
-			ItemID:   item.ItemID,
-			ItemKind: item.Kind,
-			Status:   status,
-			Metadata: opencodeToolCompletionMetadata(item.Metadata, update),
+			Kind:        agentproto.EventItemCompleted,
+			ThreadID:    sessionID,
+			TurnID:      turn.TurnID,
+			ItemID:      item.ItemID,
+			ItemKind:    item.Kind,
+			Status:      status,
+			Exploration: opencodeToolExploration(completionMetadata),
+			Metadata:    completionMetadata,
 		}))
 		return events
 	}

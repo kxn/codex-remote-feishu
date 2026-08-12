@@ -226,6 +226,249 @@ func TestOpenCodeDynamicToolCompletionKeepsRawOutputNonVisible(t *testing.T) {
 	}
 }
 
+func TestOpenCodeExplorationToolActionsMapStructuredInput(t *testing.T) {
+	cases := []struct {
+		name          string
+		kind          string
+		rawInput      map[string]any
+		wantKind      agentproto.ExplorationActionKind
+		wantItems     []string
+		wantSummary   string
+		wantSecondary string
+	}{
+		{
+			name:      "read filePath",
+			kind:      "read",
+			rawInput:  map[string]any{"filePath": "internal/adapter/acp/observe.go"},
+			wantKind:  agentproto.ExplorationActionRead,
+			wantItems: []string{"internal/adapter/acp/observe.go"},
+		},
+		{
+			name:      "read file_path",
+			kind:      "read",
+			rawInput:  map[string]any{"file_path": "internal/adapter/acp/history.go"},
+			wantKind:  agentproto.ExplorationActionRead,
+			wantItems: []string{"internal/adapter/acp/history.go"},
+		},
+		{
+			name:      "read path",
+			kind:      "read",
+			rawInput:  map[string]any{"path": "README.md"},
+			wantKind:  agentproto.ExplorationActionRead,
+			wantItems: []string{"README.md"},
+		},
+		{
+			name:          "grep pattern path",
+			kind:          "grep",
+			rawInput:      map[string]any{"pattern": "opencodeToolMetadata", "path": "internal/adapter/acp"},
+			wantKind:      agentproto.ExplorationActionSearch,
+			wantSummary:   "opencodeToolMetadata",
+			wantSecondary: "internal/adapter/acp",
+		},
+		{
+			name:          "search query path",
+			kind:          "search",
+			rawInput:      map[string]any{"query": "ExplorationAction", "path": "internal/core"},
+			wantKind:      agentproto.ExplorationActionSearch,
+			wantSummary:   "ExplorationAction",
+			wantSecondary: "internal/core",
+		},
+		{
+			name:          "glob pattern path",
+			kind:          "glob",
+			rawInput:      map[string]any{"pattern": "**/*.go", "path": "internal/adapter/acp"},
+			wantKind:      agentproto.ExplorationActionList,
+			wantSummary:   "**/*.go",
+			wantSecondary: "internal/adapter/acp",
+		},
+		{
+			name:        "list path",
+			kind:        "list",
+			rawInput:    map[string]any{"path": "internal/adapter/acp"},
+			wantKind:    agentproto.ExplorationActionList,
+			wantSummary: "internal/adapter/acp",
+		},
+		{
+			name:        "ls path",
+			kind:        "ls",
+			rawInput:    map[string]any{"path": "internal/adapter"},
+			wantKind:    agentproto.ExplorationActionList,
+			wantSummary: "internal/adapter",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, _ := startPromptedSession(t)
+			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call",
+				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
+				"title":         tc.kind,
+				"kind":          tc.kind,
+				"status":        "pending",
+				"rawInput":      tc.rawInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call): %v", err)
+			}
+			assertEventKinds(t, result.Events, agentproto.EventItemStarted)
+			action := assertSingleExplorationAction(t, result.Events[0])
+			if action.Kind != tc.wantKind || strings.Join(action.Items, "\x00") != strings.Join(tc.wantItems, "\x00") || action.Summary != tc.wantSummary || action.Secondary != tc.wantSecondary {
+				t.Fatalf("exploration action = %#v, want kind=%q items=%#v summary=%q secondary=%q", action, tc.wantKind, tc.wantItems, tc.wantSummary, tc.wantSecondary)
+			}
+		})
+	}
+}
+
+func TestOpenCodeExplorationToolLifecycleMergesRawInput(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	started, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call",
+		"toolCallId":    "read_1",
+		"title":         "read",
+		"kind":          "read",
+		"status":        "pending",
+		"rawInput":      map[string]any{},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(empty start): %v", err)
+	}
+	assertEventKinds(t, started.Events, agentproto.EventItemStarted)
+	startAction := assertSingleExplorationAction(t, started.Events[0])
+	if startAction.Kind != agentproto.ExplorationActionRead || len(startAction.Items) != 0 {
+		t.Fatalf("empty start action = %#v, want incomplete read action", startAction)
+	}
+
+	completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call_update",
+		"toolCallId":    "read_1",
+		"status":        "completed",
+		"rawInput":      map[string]any{"filePath": "internal/adapter/acp/observe.go"},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(completion): %v", err)
+	}
+	assertEventKinds(t, completed.Events, agentproto.EventItemCompleted)
+	completeAction := assertSingleExplorationAction(t, completed.Events[0])
+	if completeAction.Kind != agentproto.ExplorationActionRead || strings.Join(completeAction.Items, "\x00") != "internal/adapter/acp/observe.go" {
+		t.Fatalf("completion action = %#v, want completed read path", completeAction)
+	}
+
+	tr, _ = startPromptedSession(t)
+	if _, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call",
+		"toolCallId":    "grep_1",
+		"title":         "grep",
+		"kind":          "grep",
+		"status":        "pending",
+		"rawInput":      map[string]any{"pattern": "needle", "path": "internal"},
+	}))); err != nil {
+		t.Fatalf("ObserveServer(grep start): %v", err)
+	}
+	grepCompleted, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call_update",
+		"toolCallId":    "grep_1",
+		"status":        "completed",
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(grep completion): %v", err)
+	}
+	assertEventKinds(t, grepCompleted.Events, agentproto.EventItemCompleted)
+	grepAction := assertSingleExplorationAction(t, grepCompleted.Events[0])
+	if grepAction.Kind != agentproto.ExplorationActionSearch || grepAction.Summary != "needle" || grepAction.Secondary != "internal" {
+		t.Fatalf("completion lost started rawInput: %#v", grepAction)
+	}
+}
+
+func TestOpenCodeExplorationToolFallbackAndRawOutputIsolation(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	completed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "tool_call_update",
+		"toolCallId":    "grep_1",
+		"kind":          "grep",
+		"status":        "failed",
+		"rawInput":      map[string]any{},
+		"rawOutput":     map[string]any{"output": "RAW_OUTPUT_SECRET", "error": "grep failed"},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(failed grep): %v", err)
+	}
+	assertEventKinds(t, completed.Events, agentproto.EventItemStarted, agentproto.EventItemCompleted)
+	startAction := assertSingleExplorationAction(t, completed.Events[0])
+	completeAction := assertSingleExplorationAction(t, completed.Events[1])
+	if startAction.Kind != agentproto.ExplorationActionSearch || completeAction.Kind != agentproto.ExplorationActionSearch {
+		t.Fatalf("failed empty grep actions = %#v / %#v, want incomplete search actions", startAction, completeAction)
+	}
+	if completed.Events[0].Status != "in_progress" {
+		t.Fatalf("update-first synthetic start status = %q, want in_progress", completed.Events[0].Status)
+	}
+	if completed.Events[1].Status != "failed" || completed.Events[1].Metadata["errorMessage"] != "grep failed" {
+		t.Fatalf("failed status/error metadata missing: %#v", completed.Events[1])
+	}
+	visible := completeAction.Summary + " " + completeAction.Secondary + " " + strings.Join(completeAction.Items, " ")
+	if strings.Contains(visible, "RAW_OUTPUT_SECRET") {
+		t.Fatalf("raw output leaked into exploration action: %#v", completeAction)
+	}
+	if text, ok := completed.Events[1].Metadata["text"]; ok {
+		t.Fatalf("raw output must not be promoted to text metadata: %#v", text)
+	}
+}
+
+func TestOpenCodeMCPAndUnknownToolsDoNotBecomeExploration(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		rawInput map[string]any
+		wantKind string
+	}{
+		{
+			name:     "mcp first",
+			kind:     "mcp",
+			rawInput: map[string]any{"server": "feishu", "tool": "search"},
+			wantKind: "mcp_tool_call",
+		},
+		{
+			name:     "kindless mcp read same name",
+			rawInput: map[string]any{"server": "docs", "tool": "read"},
+			wantKind: "mcp_tool_call",
+		},
+		{
+			name:     "kindless mcp grep same name",
+			rawInput: map[string]any{"server": "docs", "tool": "grep"},
+			wantKind: "mcp_tool_call",
+		},
+		{
+			name:     "unknown generic",
+			kind:     "custom_tool",
+			rawInput: map[string]any{"pattern": "needle", "path": "internal"},
+			wantKind: "dynamic_tool_call",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tr, _ := startPromptedSession(t)
+			result, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+				"sessionUpdate": "tool_call",
+				"toolCallId":    "tool_" + strings.ReplaceAll(tc.name, " ", "_"),
+				"title":         tc.kind,
+				"kind":          tc.kind,
+				"status":        "pending",
+				"rawInput":      tc.rawInput,
+			})))
+			if err != nil {
+				t.Fatalf("ObserveServer(tool_call): %v", err)
+			}
+			assertEventKinds(t, result.Events, agentproto.EventItemStarted)
+			if result.Events[0].ItemKind != tc.wantKind {
+				t.Fatalf("item kind = %q, want %q; event=%#v", result.Events[0].ItemKind, tc.wantKind, result.Events[0])
+			}
+			if result.Events[0].Exploration != nil {
+				t.Fatalf("non-exploration tool got exploration carrier: %#v", result.Events[0])
+			}
+		})
+	}
+}
+
 func TestOpenCodeFileChangeCompletionSuppressesRawOutputText(t *testing.T) {
 	tr, _ := startPromptedSession(t)
 	if _, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
@@ -676,6 +919,17 @@ func normalizeGoldenLineEndings(value string) string {
 	return strings.TrimSpace(value)
 }
 
+func assertSingleExplorationAction(t *testing.T, event agentproto.Event) agentproto.ExplorationAction {
+	t.Helper()
+	if event.Exploration == nil {
+		t.Fatalf("event exploration carrier missing: %#v", event)
+	}
+	if len(event.Exploration.Actions) != 1 {
+		t.Fatalf("exploration actions = %#v, want exactly one action", event.Exploration.Actions)
+	}
+	return event.Exploration.Actions[0]
+}
+
 func TestRPCErrorNormalizerClassifiesKnownOpenCodeFailures(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -1002,6 +1256,9 @@ func stableEventProjection(event agentproto.Event) map[string]any {
 	}
 	if event.ThreadSettings != nil {
 		out["threadSettings"] = event.ThreadSettings
+	}
+	if event.Exploration != nil {
+		out["exploration"] = event.Exploration
 	}
 	return out
 }
