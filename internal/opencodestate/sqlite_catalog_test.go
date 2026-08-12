@@ -10,11 +10,12 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func TestSQLiteThreadCatalogReadsRecentOpenCodeThreadsAndWorkspaces(t *testing.T) {
-	dbPath := createOpenCodeCatalogTestDB(t)
-	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
+	fixture := createOpenCodeCatalogTestDB(t)
+	catalog := NewSQLiteThreadCatalog(fixture.dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
 
 	threads, err := catalog.RecentThreads(10)
 	if err != nil {
@@ -23,13 +24,13 @@ func TestSQLiteThreadCatalogReadsRecentOpenCodeThreadsAndWorkspaces(t *testing.T
 	if len(threads) != 3 {
 		t.Fatalf("expected three root non-archived threads, got %#v", threads)
 	}
-	if threads[0].ThreadID != "ses_empty" || threads[0].WorkspaceKey != "/data/dl/repo-b" {
+	if threads[0].ThreadID != "ses_empty" || threads[0].WorkspaceKey != fixture.repoB {
 		t.Fatalf("unexpected first thread: %#v", threads[0])
 	}
 	if threads[1].ThreadID != "ses_new" || threads[1].Name != "New OpenCode session" {
 		t.Fatalf("unexpected second thread: %#v", threads[1])
 	}
-	if threads[1].CWD != "/data/dl/repo-b" || threads[1].WorkspaceKey != "/data/dl/repo-b" {
+	if threads[1].CWD != fixture.repoB || threads[1].WorkspaceKey != fixture.repoB {
 		t.Fatalf("unexpected workspace fields: %#v", threads[1])
 	}
 	if !threads[1].LastUsedAt.Equal(time.UnixMilli(1_700_000_300_000).UTC()) {
@@ -49,7 +50,7 @@ func TestSQLiteThreadCatalogReadsRecentOpenCodeThreadsAndWorkspaces(t *testing.T
 	if len(workspaces) != 2 {
 		t.Fatalf("expected two workspaces, got %#v", workspaces)
 	}
-	if !workspaces["/data/dl/repo-b"].Equal(time.UnixMilli(1_700_000_600_000).UTC()) {
+	if !workspaces[fixture.repoB].Equal(time.UnixMilli(1_700_000_600_000).UTC()) {
 		t.Fatalf("unexpected repo-b recency: %#v", workspaces)
 	}
 
@@ -57,7 +58,7 @@ func TestSQLiteThreadCatalogReadsRecentOpenCodeThreadsAndWorkspaces(t *testing.T
 	if err != nil {
 		t.Fatalf("ThreadByID: %v", err)
 	}
-	if thread == nil || thread.ThreadID != "ses_old" || thread.WorkspaceKey != "/data/dl/repo-a" {
+	if thread == nil || thread.ThreadID != "ses_old" || thread.WorkspaceKey != fixture.repoA {
 		t.Fatalf("unexpected thread by id: %#v", thread)
 	}
 
@@ -87,8 +88,8 @@ func TestSQLiteThreadCatalogReadsRecentOpenCodeThreadsAndWorkspaces(t *testing.T
 }
 
 func TestNewDefaultSQLiteThreadCatalogUsesOpenCodeDBEnv(t *testing.T) {
-	dbPath := createOpenCodeCatalogTestDB(t)
-	t.Setenv(OpenCodeDBEnv, dbPath)
+	fixture := createOpenCodeCatalogTestDB(t)
+	t.Setenv(OpenCodeDBEnv, fixture.dbPath)
 
 	catalog, err := NewDefaultSQLiteThreadCatalog(SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
 	if err != nil {
@@ -164,9 +165,17 @@ func TestDefaultSQLiteStatePathUsesXDGDataHome(t *testing.T) {
 	}
 }
 
-func createOpenCodeCatalogTestDB(t *testing.T) string {
+type openCodeCatalogTestFixture struct {
+	dbPath string
+	repoA  string
+	repoB  string
+}
+
+func createOpenCodeCatalogTestDB(t *testing.T) openCodeCatalogTestFixture {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "opencode.db")
+	repoA := state.ResolveWorkspaceKey(t.TempDir())
+	repoB := state.ResolveWorkspaceKey(t.TempDir())
 	db, err := sql.Open("sqlite", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("open test sqlite: %v", err)
@@ -201,25 +210,25 @@ CREATE TABLE session (
 		t.Fatalf("create schema: %v", err)
 	}
 	mustExecOpenCodeCatalogTest(t, db, `INSERT INTO project (id, worktree, name, time_created, time_updated) VALUES
-('proj_a', '/data/dl/repo-a', 'Repo A', 1700000000000, 1700000200000),
-('proj_b', '/data/dl/repo-b', 'Repo B', 1700000000000, 1700000300000)`)
+('proj_a', ?, 'Repo A', 1700000000000, 1700000200000),
+('proj_b', ?, 'Repo B', 1700000000000, 1700000300000)`, repoA, repoB)
 	mustExecOpenCodeCatalogTest(t, db, `INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, model, time_created, time_updated, time_archived) VALUES
-('ses_old', 'proj_a', NULL, 'old', '/data/dl/repo-a', 'Old OpenCode session', '1.0.0', '{"providerID":"anthropic","id":"claude-sonnet-4"}', 1700000000000, 1700000200000, NULL),
-('ses_new', 'proj_b', NULL, 'new', '/data/dl/repo-b', 'New OpenCode session', '1.0.0', '{"providerID":"mimo","id":"kimi-k2"}', 1700000000000, 1700000300000, NULL),
-('ses_child', 'proj_b', 'ses_new', 'child', '/data/dl/repo-b', 'Child OpenCode session', '1.0.0', NULL, 1700000000000, 1700000400000, NULL),
-('ses_archived', 'proj_b', NULL, 'archived', '/data/dl/repo-b', 'Archived OpenCode session', '1.0.0', NULL, 1700000000000, 1700000500000, 1700000600000),
+('ses_old', 'proj_a', NULL, 'old', ?, 'Old OpenCode session', '1.0.0', '{"providerID":"anthropic","id":"claude-sonnet-4"}', 1700000000000, 1700000200000, NULL),
+('ses_new', 'proj_b', NULL, 'new', ?, 'New OpenCode session', '1.0.0', '{"providerID":"mimo","id":"kimi-k2"}', 1700000000000, 1700000300000, NULL),
+('ses_child', 'proj_b', 'ses_new', 'child', ?, 'Child OpenCode session', '1.0.0', NULL, 1700000000000, 1700000400000, NULL),
+('ses_archived', 'proj_b', NULL, 'archived', ?, 'Archived OpenCode session', '1.0.0', NULL, 1700000000000, 1700000500000, 1700000600000),
 ('ses_empty', 'proj_b', NULL, 'empty', '', 'Empty directory', '1.0.0', NULL, 1700000000000, 1700000600000, NULL),
-('ses_archived_zero', 'proj_b', NULL, 'archived-zero', '/data/dl/repo-b', 'Zero archived OpenCode session', '1.0.0', NULL, 1700000000000, 1700000700000, 0),
-('ses_relative', 'proj_b', NULL, 'relative', 'relative/repo', 'Relative directory', '1.0.0', NULL, 1700000000000, 1700000800000, NULL)`)
+('ses_archived_zero', 'proj_b', NULL, 'archived-zero', ?, 'Zero archived OpenCode session', '1.0.0', NULL, 1700000000000, 1700000700000, 0),
+('ses_relative', 'proj_b', NULL, 'relative', 'relative/repo', 'Relative directory', '1.0.0', NULL, 1700000000000, 1700000800000, NULL)`, repoA, repoB, repoB, repoB, repoB)
 	if _, err := os.Stat(dbPath); err != nil {
 		t.Fatalf("stat test DB: %v", err)
 	}
-	return dbPath
+	return openCodeCatalogTestFixture{dbPath: dbPath, repoA: repoA, repoB: repoB}
 }
 
-func mustExecOpenCodeCatalogTest(t *testing.T, db *sql.DB, stmt string) {
+func mustExecOpenCodeCatalogTest(t *testing.T, db *sql.DB, stmt string, args ...any) {
 	t.Helper()
-	if _, err := db.Exec(stmt); err != nil {
+	if _, err := db.Exec(stmt, args...); err != nil {
 		t.Fatalf("exec fixture SQL: %v", err)
 	}
 }

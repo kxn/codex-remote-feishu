@@ -140,6 +140,7 @@ INSERT INTO threads (
 func createDaemonOpenCodeThreadCatalogTestDB(t *testing.T) string {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "opencode.db")
+	workspace := t.TempDir()
 	db, err := sql.Open("sqlite", "file:"+dbPath)
 	if err != nil {
 		t.Fatalf("open test sqlite: %v", err)
@@ -171,10 +172,10 @@ CREATE TABLE session (
 	time_archived INTEGER
 );
 INSERT INTO project (id, worktree, name, time_created, time_updated)
-VALUES ('proj-opencode', '/data/dl/opencode', 'OpenCode', 1700000000000, 1700000000000);
+VALUES ('proj-opencode', ?, 'OpenCode', 1700000000000, 1700000000000);
 INSERT INTO session (id, project_id, parent_id, slug, directory, title, version, time_created, time_updated, time_archived)
-VALUES ('opencode-session-1', 'proj-opencode', NULL, 'one', '/data/dl/opencode', 'OpenCode session', '1.0.0', 1700000000000, 1700000000000, NULL);
-`); err != nil {
+VALUES ('opencode-session-1', 'proj-opencode', NULL, 'one', ?, 'OpenCode session', '1.0.0', 1700000000000, 1700000000000, NULL);
+`, workspace, workspace); err != nil {
 		t.Fatalf("create opencode schema: %v", err)
 	}
 	return dbPath
