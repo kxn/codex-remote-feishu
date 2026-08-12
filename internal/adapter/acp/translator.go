@@ -59,8 +59,10 @@ type sessionState struct {
 	CWD           string
 	Title         string
 	ModelOptions  []modelOption
+	EffortOptions []reasoningEffortOption
 	CurrentModel  string
 	CurrentMode   string
+	CurrentEffort string
 	ConfigOptions []map[string]any
 }
 
@@ -69,11 +71,31 @@ type modelOption struct {
 	Name  string
 }
 
+type reasoningEffortOption struct {
+	Value string
+	Name  string
+}
+
+type configOptionState struct {
+	ModelOptions  []modelOption
+	EffortOptions []reasoningEffortOption
+	CurrentModel  string
+	CurrentMode   string
+	CurrentEffort string
+}
+
 type pendingRPC struct {
-	Kind      string
-	Command   agentproto.Command
-	SessionID string
-	Turn      *turnState
+	Kind           string
+	Command        agentproto.Command
+	SessionID      string
+	Turn           *turnState
+	ConfigSequence []configOptionSet
+	ConfigIndex    int
+}
+
+type configOptionSet struct {
+	ID    string
+	Value string
 }
 
 type pendingPermission struct {
@@ -237,7 +259,12 @@ func (t *Translator) upsertSession(sessionID, cwd string, payload map[string]any
 	session.Title = xutil.FirstNonEmpty(xutil.LookupStringFromAny(payload["title"]), session.Title)
 	if options := xutil.MapsFromAny(payload["configOptions"]); len(options) != 0 {
 		session.ConfigOptions = options
-		session.ModelOptions, session.CurrentModel, session.CurrentMode = parseConfigOptions(options)
+		state := parseConfigOptions(options)
+		session.ModelOptions = state.ModelOptions
+		session.EffortOptions = state.EffortOptions
+		session.CurrentModel = state.CurrentModel
+		session.CurrentMode = state.CurrentMode
+		session.CurrentEffort = state.CurrentEffort
 	}
 	t.sessions[sessionID] = session
 	return session
@@ -539,20 +566,21 @@ func promptUsage(value any) (agentproto.TokenUsageBreakdown, bool) {
 	return usage, usage.InputTokens != 0 || usage.OutputTokens != 0 || usage.TotalTokens != 0
 }
 
-func parseConfigOptions(options []map[string]any) ([]modelOption, string, string) {
-	var models []modelOption
-	currentModel := ""
-	currentMode := ""
+func parseConfigOptions(options []map[string]any) configOptionState {
+	var state configOptionState
 	for _, option := range options {
 		switch xutil.LookupStringFromAny(option["id"]) {
 		case "model":
-			currentModel = xutil.LookupStringFromAny(option["currentValue"])
-			models = parseModelOptions(option["options"])
+			state.CurrentModel = xutil.LookupStringFromAny(option["currentValue"])
+			state.ModelOptions = parseModelOptions(option["options"])
 		case "mode":
-			currentMode = xutil.LookupStringFromAny(option["currentValue"])
+			state.CurrentMode = xutil.LookupStringFromAny(option["currentValue"])
+		case "effort":
+			state.CurrentEffort = normalizeOpenCodeReasoningEffort(xutil.LookupStringFromAny(option["currentValue"]))
+			state.EffortOptions = parseReasoningEffortOptions(option["options"])
 		}
 	}
-	return models, currentModel, currentMode
+	return state
 }
 
 func parseModelOptions(value any) []modelOption {
@@ -567,6 +595,30 @@ func parseModelOptions(value any) []modelOption {
 		}
 	}
 	return out
+}
+
+func parseReasoningEffortOptions(value any) []reasoningEffortOption {
+	var out []reasoningEffortOption
+	for _, item := range flattenOptionItems(value) {
+		option := reasoningEffortOption{
+			Value: normalizeOpenCodeReasoningEffort(xutil.LookupStringFromAny(item["value"])),
+			Name:  xutil.LookupStringFromAny(item["name"]),
+		}
+		if option.Value != "" {
+			out = append(out, option)
+		}
+	}
+	return out
+}
+
+func normalizeOpenCodeReasoningEffort(value string) string {
+	effort := strings.ToLower(strings.TrimSpace(value))
+	switch effort {
+	case "low", "medium", "high", "xhigh", "max":
+		return effort
+	default:
+		return ""
+	}
 }
 
 func flattenOptionItems(value any) []map[string]any {

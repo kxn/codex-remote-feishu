@@ -258,5 +258,11 @@ func openCodeReasoningVariants(value string) map[string]map[string]any {
 	if value == "" {
 		return nil
 	}
-	return map[string]map[string]any{value: {}}
+	return map[string]map[string]any{
+		"low":    {},
+		"medium": {},
+		"high":   {},
+		"xhigh":  {},
+		"max":    {},
+	}
 }

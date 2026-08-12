@@ -371,8 +371,10 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing generated reasoning variants: %#v", model)
 	}
-	if _, ok := variants["high"]; !ok {
-		t.Fatalf("reasoning effort was not represented as a model variant: %#v", variants)
+	for _, effort := range []string{"low", "medium", "high", "xhigh", "max"} {
+		if _, ok := variants[effort]; !ok {
+			t.Fatalf("reasoning effort %q was not represented as a model variant: %#v", effort, variants)
+		}
 	}
 	if _, ok := configDoc["reasoning"]; ok {
 		t.Fatalf("OpenCode 1.18.15 rejects top-level reasoning config: %#v", configDoc)

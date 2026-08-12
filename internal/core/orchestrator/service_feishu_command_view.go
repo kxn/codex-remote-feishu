@@ -90,13 +90,13 @@ func (s *Service) buildConfigCommandViewState(
 		if len(options) != 0 {
 			view.Config.FormOptions = options
 		}
-		if kind, text := s.maybeModelCatalogStatusText(surface, inst, truncated); text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
+		if kind, text := s.maybeModelCatalogStatusText(surface, inst, view.Config.CatalogBackend, truncated); text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
 			view.Config.StatusKind = kind
 			view.Config.StatusText = text
 		}
 	case control.FeishuCommandReasoning:
 		if view.Config.CatalogBackend != agentproto.BackendClaude {
-			options, kind, text := s.modelReasoningCommandOptions(surface, inst, summary.EffectiveModel)
+			options, kind, text := s.modelReasoningCommandOptions(surface, inst, view.Config.CatalogBackend, summary.EffectiveModel)
 			view.Config.FormOptions = options
 			if text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
 				view.Config.StatusKind = kind

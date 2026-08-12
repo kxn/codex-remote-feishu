@@ -66,6 +66,17 @@ func opencodeACPModeForPlanOverride(value string) (string, bool, error) {
 	}
 }
 
+func opencodeACPEffortForReasoningOverride(value string) (string, bool, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", false, nil
+	}
+	effort := normalizeOpenCodeReasoningEffort(value)
+	if effort == "" {
+		return "", false, fmt.Errorf("unsupported OpenCode reasoning effort override %q", value)
+	}
+	return effort, true, nil
+}
+
 func (t *Translator) translatePromptFork(command agentproto.Command) (Result, error) {
 	sourceThreadID := xutil.FirstNonEmpty(command.Target.SourceThreadID, command.Target.ThreadID)
 	if sourceThreadID == "" {
@@ -209,28 +220,66 @@ func (t *Translator) translateThreadHistoryRead(command agentproto.Command) (Res
 
 func (t *Translator) translateModelList(command agentproto.Command) (Result, error) {
 	session := t.sessions[t.currentSessionID]
+	event, _ := modelCatalogEventForConfigOptions(session, command.CommandID)
+	if event.ModelCatalog == nil {
+		event = agentproto.Event{
+			Kind:      agentproto.EventModelCatalogUpdated,
+			CommandID: command.CommandID,
+			ModelCatalog: &agentproto.ModelCatalogSnapshot{
+				IncludeHidden: command.ModelList.IncludeHidden,
+				Unsupported:   true,
+				ErrorMessage:  "OpenCode 尚未返回可用模型配置。",
+				RefreshedAt:   time.Now().UTC(),
+			},
+		}
+	} else {
+		event.ModelCatalog.IncludeHidden = command.ModelList.IncludeHidden
+	}
+	return Result{Events: []agentproto.Event{event}}, nil
+}
+
+func modelCatalogEventForConfigOptions(session sessionState, commandID string) (agentproto.Event, bool) {
 	snapshot := agentproto.ModelCatalogSnapshot{
-		IncludeHidden: command.ModelList.IncludeHidden,
-		RefreshedAt:   time.Now().UTC(),
+		RefreshedAt: time.Now().UTC(),
 	}
 	for _, option := range session.ModelOptions {
 		if strings.TrimSpace(option.Value) == "" {
 			continue
 		}
+		reasoningEfforts := openCodeReasoningEffortCatalogOptions(session.EffortOptions)
 		snapshot.Entries = append(snapshot.Entries, agentproto.ModelCatalogEntry{
-			ID:          option.Value,
-			Model:       option.Value,
-			DisplayName: xutil.FirstNonEmpty(option.Name, option.Value),
-			IsDefault:   option.Value == session.CurrentModel,
+			ID:                        option.Value,
+			Model:                     option.Value,
+			DisplayName:               xutil.FirstNonEmpty(option.Name, option.Value),
+			SupportedReasoningEfforts: reasoningEfforts,
+			DefaultReasoningEffort:    session.CurrentEffort,
+			IsDefault:                 option.Value == session.CurrentModel,
 		})
 	}
 	if len(snapshot.Entries) == 0 {
-		snapshot.Unsupported = true
-		snapshot.ErrorMessage = "OpenCode 尚未返回可用模型配置。"
+		return agentproto.Event{}, false
 	}
-	return Result{Events: []agentproto.Event{{
+	return agentproto.Event{
 		Kind:         agentproto.EventModelCatalogUpdated,
-		CommandID:    command.CommandID,
+		CommandID:    commandID,
 		ModelCatalog: &snapshot,
-	}}}, nil
+	}, true
+}
+
+func openCodeReasoningEffortCatalogOptions(options []reasoningEffortOption) []agentproto.ReasoningEffortOption {
+	if len(options) == 0 {
+		return nil
+	}
+	out := make([]agentproto.ReasoningEffortOption, 0, len(options))
+	for _, option := range options {
+		effort := normalizeOpenCodeReasoningEffort(option.Value)
+		if effort == "" {
+			continue
+		}
+		out = append(out, agentproto.ReasoningEffortOption{
+			ReasoningEffort: effort,
+			Description:     strings.TrimSpace(option.Name),
+		})
+	}
+	return out
 }

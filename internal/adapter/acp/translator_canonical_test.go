@@ -754,6 +754,141 @@ func TestConfigOptionUpdateRefreshesModelCatalogState(t *testing.T) {
 	}
 }
 
+func TestConfigOptionUpdateAddsReasoningEffortsToModelCatalog(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	for _, update := range []map[string]any{
+		{
+			"sessionUpdate": "config_option_update",
+			"configOption": map[string]any{
+				"id":           "model",
+				"type":         "select",
+				"currentValue": "test/default",
+				"options": []any{
+					map[string]any{"value": "test/default", "name": "Default Model"},
+					map[string]any{"value": "test/large", "name": "Large Model"},
+				},
+			},
+		},
+		{
+			"sessionUpdate": "config_option_update",
+			"configOption": map[string]any{
+				"id":           "effort",
+				"type":         "select",
+				"currentValue": "high",
+				"options": []any{
+					map[string]any{"value": "low", "name": "Low"},
+					map[string]any{"value": "high", "name": "High"},
+					map[string]any{"value": "max", "name": "Max"},
+				},
+			},
+		},
+	} {
+		if _, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", update))); err != nil {
+			t.Fatalf("ObserveServer(config option): %v", err)
+		}
+	}
+
+	models, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-models",
+		Kind:      agentproto.CommandModelList,
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(model.list): %v", err)
+	}
+	assertEventKinds(t, models.Events, agentproto.EventModelCatalogUpdated)
+	catalog := models.Events[0].ModelCatalog
+	if catalog == nil || len(catalog.Entries) != 2 {
+		t.Fatalf("model catalog = %#v", catalog)
+	}
+	got := catalog.Entries[0].SupportedReasoningEfforts
+	if len(got) != 3 || got[0].ReasoningEffort != "low" || got[1].ReasoningEffort != "high" || got[2].ReasoningEffort != "max" {
+		t.Fatalf("reasoning efforts = %#v, want low/high/max", got)
+	}
+	if catalog.Entries[0].DefaultReasoningEffort != "high" {
+		t.Fatalf("default reasoning = %q, want high", catalog.Entries[0].DefaultReasoningEffort)
+	}
+}
+
+func TestConfigOptionUpdatePublishesReasoningModelCatalogWithoutModelListCommand(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+	for _, update := range []map[string]any{
+		{
+			"sessionUpdate": "config_option_update",
+			"configOption": map[string]any{
+				"id":           "model",
+				"type":         "select",
+				"currentValue": "test/default",
+				"options": []any{
+					map[string]any{"value": "test/default", "name": "Default Model"},
+				},
+			},
+		},
+		{
+			"sessionUpdate": "config_option_update",
+			"configOption": map[string]any{
+				"id":           "effort",
+				"type":         "select",
+				"currentValue": "high",
+				"options": []any{
+					map[string]any{"value": "low", "name": "Low"},
+					map[string]any{"value": "high", "name": "High"},
+				},
+			},
+		},
+	} {
+		if _, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", update))); err != nil {
+			t.Fatalf("ObserveServer(config option): %v", err)
+		}
+	}
+
+	observed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "config_option_update",
+		"configOption": map[string]any{
+			"id":           "effort",
+			"type":         "select",
+			"currentValue": "low",
+			"options": []any{
+				map[string]any{"value": "low", "name": "Low"},
+				map[string]any{"value": "high", "name": "High"},
+			},
+		},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(config option): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadSettingsUpdated, agentproto.EventModelCatalogUpdated)
+	catalog := observed.Events[1].ModelCatalog
+	if catalog == nil || len(catalog.Entries) != 1 {
+		t.Fatalf("model catalog = %#v", catalog)
+	}
+	if catalog.Entries[0].Model != "test/default" || catalog.Entries[0].DefaultReasoningEffort != "low" {
+		t.Fatalf("catalog entry = %#v, want current model/default effort", catalog.Entries[0])
+	}
+	if got := catalog.Entries[0].SupportedReasoningEfforts; len(got) != 2 || got[0].ReasoningEffort != "low" || got[1].ReasoningEffort != "high" {
+		t.Fatalf("reasoning efforts = %#v, want low/high", got)
+	}
+}
+
+func TestConfigOptionUpdateRefreshesOpenCodeReasoningEffort(t *testing.T) {
+	tr, _ := startPromptedSession(t)
+
+	observed, err := tr.ObserveServer(mustLine(t, sessionUpdate("ses_1", map[string]any{
+		"sessionUpdate": "config_option_update",
+		"configOption": map[string]any{
+			"id":           "effort",
+			"type":         "select",
+			"currentValue": "high",
+		},
+	})))
+	if err != nil {
+		t.Fatalf("ObserveServer(reasoning effort config option): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadSettingsUpdated)
+	if settings := observed.Events[0].ThreadSettings; settings == nil || settings.ThreadID != "ses_1" || settings.ReasoningEffort != "high" {
+		t.Fatalf("reasoning effort settings event = %#v, want high", observed.Events[0])
+	}
+}
+
 func TestConfigOptionUpdateRefreshesOpenCodePlanMode(t *testing.T) {
 	tr, _ := startPromptedSession(t)
 

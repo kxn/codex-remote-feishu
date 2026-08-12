@@ -99,6 +99,9 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 	if settingsEvent, ok := threadSettingsEventForCurrentModel(sessionID, session); ok {
 		events = append(events, settingsEvent)
 	}
+	if settingsEvent, ok := threadSettingsEventForCurrentEffort(sessionID, session); ok {
+		events = append(events, settingsEvent)
+	}
 	promptResult, err := t.startPromptForSession(sessionID, command)
 	if err != nil {
 		return Result{}, err
@@ -110,25 +113,52 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 }
 
 func (t *Translator) startPromptForSession(sessionID string, command agentproto.Command) (Result, error) {
-	if mode, ok, err := opencodeACPModeForPlanOverride(command.Overrides.PlanMode); err != nil {
+	sequence, err := promptConfigSequence(command)
+	if err != nil {
 		return Result{}, err
-	} else if ok {
-		return t.setModeBeforePrompt(sessionID, mode, command)
+	}
+	if len(sequence) != 0 {
+		return t.setConfigBeforePrompt(sessionID, command, sequence, 0)
 	}
 	return t.startPromptForSessionNow(sessionID, command)
 }
 
-func (t *Translator) setModeBeforePrompt(sessionID, mode string, command agentproto.Command) (Result, error) {
+func promptConfigSequence(command agentproto.Command) ([]configOptionSet, error) {
+	sequence := []configOptionSet{}
+	if mode, ok, err := opencodeACPModeForPlanOverride(command.Overrides.PlanMode); err != nil {
+		return nil, err
+	} else if ok {
+		sequence = append(sequence, configOptionSet{ID: "mode", Value: mode})
+	}
+	if effort, ok, err := opencodeACPEffortForReasoningOverride(command.Overrides.ReasoningEffort); err != nil {
+		return nil, err
+	} else if ok {
+		sequence = append(sequence, configOptionSet{ID: "effort", Value: effort})
+	}
+	return sequence, nil
+}
+
+func (t *Translator) setConfigBeforePrompt(sessionID string, command agentproto.Command, sequence []configOptionSet, index int) (Result, error) {
+	if index < 0 || index >= len(sequence) {
+		return t.startPromptForSessionNow(sessionID, command)
+	}
+	config := sequence[index]
 	requestID := t.NextRequest("session-set-config")
-	t.pendingRPC[requestID] = pendingRPC{Kind: "session/set_config_option", Command: command, SessionID: sessionID}
+	t.pendingRPC[requestID] = pendingRPC{
+		Kind:           "session/set_config_option",
+		Command:        command,
+		SessionID:      sessionID,
+		ConfigSequence: append([]configOptionSet(nil), sequence...),
+		ConfigIndex:    index,
+	}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",
 		"id":      requestID,
 		"method":  "session/set_config_option",
 		"params": map[string]any{
 			"sessionId": sessionID,
-			"configId":  "mode",
-			"value":     mode,
+			"configId":  config.ID,
+			"value":     config.Value,
 		},
 	})
 	if err != nil {
@@ -144,6 +174,16 @@ func (t *Translator) observeSetConfigOptionResponse(pending pendingRPC, result R
 	}
 	if sessionID == "" {
 		return result, fmt.Errorf("%s response missing sessionId", pending.Kind)
+	}
+	nextIndex := pending.ConfigIndex + 1
+	if nextIndex < len(pending.ConfigSequence) {
+		nextResult, err := t.setConfigBeforePrompt(sessionID, pending.Command, pending.ConfigSequence, nextIndex)
+		if err != nil {
+			return Result{}, err
+		}
+		result.Events = append(result.Events, nextResult.Events...)
+		result.OutboundToChild = append(result.OutboundToChild, nextResult.OutboundToChild...)
+		return result, nil
 	}
 	promptResult, err := t.startPromptForSessionNow(sessionID, pending.Command)
 	if err != nil {
@@ -386,9 +426,7 @@ func (t *Translator) observeSessionUpdate(params map[string]any, result Result) 
 	case "session_info_update":
 		t.observeSessionInfoUpdate(sessionID, update)
 	case "config_option_update":
-		if event, ok := t.observeConfigOptionUpdate(sessionID, update); ok {
-			result.Events = append(result.Events, event)
-		}
+		result.Events = append(result.Events, t.observeConfigOptionUpdate(sessionID, update)...)
 	case "current_mode_update":
 		t.observeCurrentModeUpdate(sessionID, update)
 	case "available_commands_update":
@@ -741,42 +779,69 @@ func (t *Translator) observeSessionInfoUpdate(sessionID string, update map[strin
 	t.sessions[sessionID] = session
 }
 
-func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[string]any) (agentproto.Event, bool) {
+func (t *Translator) observeConfigOptionUpdate(sessionID string, update map[string]any) []agentproto.Event {
 	option, _ := update["configOption"].(map[string]any)
 	if option == nil {
 		option, _ = update["option"].(map[string]any)
 	}
 	if option == nil {
 		t.Debugf("opencode config_option_update session=%s payload=%s", sessionID, xutil.CompactJSON(update))
-		return agentproto.Event{}, false
+		return nil
 	}
 	session := t.sessions[sessionID]
 	session.ID = sessionID
 	session.CWD = t.canonicalCWD(session.CWD, t.workspaceRoot)
 	session.ConfigOptions = upsertConfigOption(session.ConfigOptions, option)
-	session.ModelOptions, session.CurrentModel, session.CurrentMode = parseConfigOptions(session.ConfigOptions)
+	state := parseConfigOptions(session.ConfigOptions)
+	session.ModelOptions = state.ModelOptions
+	session.EffortOptions = state.EffortOptions
+	session.CurrentModel = state.CurrentModel
+	session.CurrentMode = state.CurrentMode
+	session.CurrentEffort = state.CurrentEffort
 	t.sessions[sessionID] = session
 	t.Debugf("opencode config_option_update session=%s option=%s", sessionID, xutil.CompactJSON(option))
+	var events []agentproto.Event
 	switch strings.TrimSpace(xutil.LookupStringFromAny(option["id"])) {
 	case "model":
-		if strings.TrimSpace(session.CurrentModel) == "" {
-			return agentproto.Event{}, false
+		if settingsEvent, ok := threadSettingsEventForCurrentModel(sessionID, session); ok {
+			events = append(events, settingsEvent)
 		}
-		return threadSettingsEventForCurrentModel(sessionID, session)
 	case "mode":
-		if strings.TrimSpace(session.CurrentMode) == "" {
-			return agentproto.Event{}, false
+		if settingsEvent, ok := threadSettingsEventForCurrentMode(sessionID, session); ok {
+			events = append(events, settingsEvent)
 		}
-		return threadSettingsEventForCurrentMode(sessionID, session)
-	default:
-		return agentproto.Event{}, false
+	case "effort":
+		if settingsEvent, ok := threadSettingsEventForCurrentEffort(sessionID, session); ok {
+			events = append(events, settingsEvent)
+		}
 	}
+	if len(openCodeReasoningEffortCatalogOptions(session.EffortOptions)) > 0 {
+		if catalogEvent, ok := modelCatalogEventForConfigOptions(session, ""); ok {
+			events = append(events, catalogEvent)
+		}
+	}
+	return events
 }
 
 func threadSettingsEventForCurrentModel(sessionID string, session sessionState) (agentproto.Event, bool) {
 	settings := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
 		ThreadID: sessionID,
 		Model:    session.CurrentModel,
+	})
+	if settings == nil {
+		return agentproto.Event{}, false
+	}
+	return agentproto.Event{
+		Kind:           agentproto.EventThreadSettingsUpdated,
+		ThreadID:       sessionID,
+		ThreadSettings: settings,
+	}, true
+}
+
+func threadSettingsEventForCurrentEffort(sessionID string, session sessionState) (agentproto.Event, bool) {
+	settings := agentproto.NormalizeThreadSettingsUpdate(&agentproto.ThreadSettingsUpdate{
+		ThreadID:        sessionID,
+		ReasoningEffort: session.CurrentEffort,
 	})
 	if settings == nil {
 		return agentproto.Event{}, false

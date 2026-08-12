@@ -73,7 +73,7 @@ func CanonicalizeBotCapabilityProfileSelection(record BotCapabilitySettingsRecor
 
 func NormalizeModelConfigRecord(record ModelConfigRecord) ModelConfigRecord {
 	record.Model = strings.TrimSpace(record.Model)
-	record.ReasoningEffort = NormalizeClaudeReasoningEffort(record.ReasoningEffort)
+	record.ReasoningEffort = NormalizeReasoningEffort(record.ReasoningEffort)
 	record.AccessMode = agentproto.NormalizeAccessMode(record.AccessMode)
 	return record
 }
@@ -90,10 +90,16 @@ func BackendAcceptsFeishuPromptOverrides(backend agentproto.Backend) bool {
 func NormalizePromptOverrideForBackend(backend agentproto.Backend, record ModelConfigRecord) ModelConfigRecord {
 	record = NormalizeModelConfigRecord(record)
 	if agentproto.NormalizeBackend(backend) == agentproto.BackendOpenCode {
-		return ModelConfigRecord{AccessMode: NormalizeOpenCodeRuntimeAccessMode(record.AccessMode)}
+		return ModelConfigRecord{
+			ReasoningEffort: NormalizeOpenCodeReasoningEffort(record.ReasoningEffort),
+			AccessMode:      NormalizeOpenCodeRuntimeAccessMode(record.AccessMode),
+		}
 	}
 	if !BackendAcceptsFeishuPromptOverrides(backend) {
 		return ModelConfigRecord{}
+	}
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
+		record.ReasoningEffort = NormalizeClaudeReasoningEffort(record.ReasoningEffort)
 	}
 	return record
 }

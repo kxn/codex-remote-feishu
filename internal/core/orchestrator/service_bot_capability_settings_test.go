@@ -114,14 +114,14 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 	if contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("opencode desired contract retained inactive profile fields: %#v", contract)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) ||
+	if surface.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
 		surface.PlanMode != state.PlanModeSettingOn ||
 		!surface.PlanModeOverrideSet {
-		t.Fatalf("opencode bot projection should retain runtime access and plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+		t.Fatalf("opencode bot projection should retain runtime reasoning/access and plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
-func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndKeepsRuntimeAccessAndPlan(t *testing.T) {
+func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndKeepsRuntimeReasoningAccessAndPlan(t *testing.T) {
 	now := time.Date(2026, 8, 9, 12, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
@@ -158,15 +158,15 @@ func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndKeepsRuntim
 	if record.Backend != agentproto.BackendOpenCode {
 		t.Fatalf("bot backend = %q, want opencode", record.Backend)
 	}
-	if record.PromptOverride != (state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) ||
+	if record.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
 		record.PlanMode != state.PlanModeSettingOn ||
 		!record.PlanModeOverrideSet {
-		t.Fatalf("bot opencode settings should retain runtime access and plan: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
+		t.Fatalf("bot opencode settings should retain runtime reasoning/access and plan: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) ||
+	if surface.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
 		surface.PlanMode != state.PlanModeSettingOn ||
 		!surface.PlanModeOverrideSet {
-		t.Fatalf("surface opencode projection should retain runtime access and plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+		t.Fatalf("surface opencode projection should retain runtime reasoning/access and plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 

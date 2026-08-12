@@ -298,6 +298,121 @@ func TestPromptSendCurrentSessionSetsOpenCodePlanModeBeforePrompt(t *testing.T) 
 	}
 }
 
+func TestPromptSendCurrentSessionSetsOpenCodeReasoningEffortBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-effort",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "think hard"}}},
+		Overrides: agentproto.PromptOverrides{ReasoningEffort: "high"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(reasoning prompt): %v", err)
+	}
+	if len(result.Events) != 0 {
+		t.Fatalf("set effort should not start the turn before OpenCode confirms effort, got %#v", result.Events)
+	}
+	if len(result.OutboundToChild) != 1 {
+		t.Fatalf("outbound = %d frames, want set_config_option", len(result.OutboundToChild))
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+	assertSetConfigFrame(t, setFrame, "ses_1", "effort", "high")
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set effort response): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_1" {
+		t.Fatalf("prompt frame after set effort = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendCurrentSessionRejectsUnknownOpenCodeReasoningEffort(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	_, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-effort",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "think hard"}}},
+		Overrides: agentproto.PromptOverrides{ReasoningEffort: "turbo"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported OpenCode reasoning effort override") {
+		t.Fatalf("TranslateCommand(invalid effort) err = %v, want unsupported effort", err)
+	}
+}
+
+func TestPromptSendCurrentSessionSetsOpenCodePlanModeThenReasoningBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-effort",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "plan deeply"}}},
+		Overrides: agentproto.PromptOverrides{
+			PlanMode:        "on",
+			ReasoningEffort: "max",
+		},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan+reasoning prompt): %v", err)
+	}
+	setModeFrame := decodeFrame(t, result.OutboundToChild[0])
+	assertSetConfigFrame(t, setModeFrame, "ses_1", "mode", "plan")
+
+	observedMode, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setModeFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode response): %v", err)
+	}
+	if len(observedMode.Events) != 0 {
+		t.Fatalf("set mode should not start the turn while effort is pending, got %#v", observedMode.Events)
+	}
+	setEffortFrame := decodeFrame(t, observedMode.OutboundToChild[0])
+	assertSetConfigFrame(t, setEffortFrame, "ses_1", "effort", "max")
+
+	observedEffort, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setEffortFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set effort response): %v", err)
+	}
+	assertEventKinds(t, observedEffort.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observedEffort.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_1" {
+		t.Fatalf("prompt frame after set mode+effort = %#v", promptFrame)
+	}
+}
+
 func TestPromptSendNewSessionSetsOpenCodePlanModeBeforePrompt(t *testing.T) {
 	tr := NewTranslator("inst-1", "/tmp/work")
 	result, err := tr.TranslateCommand(agentproto.Command{
@@ -1166,12 +1281,17 @@ func asSlice(t *testing.T, value any) []any {
 
 func assertSetModeFrame(t *testing.T, frame map[string]any, sessionID, mode string) {
 	t.Helper()
+	assertSetConfigFrame(t, frame, sessionID, "mode", mode)
+}
+
+func assertSetConfigFrame(t *testing.T, frame map[string]any, sessionID, configID string, value any) {
+	t.Helper()
 	if frame["method"] != "session/set_config_option" {
 		t.Fatalf("method = %#v, want session/set_config_option; frame=%#v", frame["method"], frame)
 	}
 	params := asMap(t, frame["params"])
-	if params["sessionId"] != sessionID || params["configId"] != "mode" || params["value"] != mode {
-		t.Fatalf("set mode params = %#v, want session=%q mode=%q", params, sessionID, mode)
+	if params["sessionId"] != sessionID || params["configId"] != configID || params["value"] != value {
+		t.Fatalf("set config params = %#v, want session=%q config=%q value=%#v", params, sessionID, configID, value)
 	}
 }
 

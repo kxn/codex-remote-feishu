@@ -135,6 +135,21 @@ func TestBuildFeishuReasoningConfigPageUsesBackendSpecificOptions(t *testing.T) 
 	}) {
 		t.Fatalf("unexpected claude reasoning options: %#v", got)
 	}
+
+	openCodePage := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:      FeishuCommandReasoning,
+		CatalogBackend: agentproto.BackendOpenCode,
+	})
+	if got := commandTextsForFirstButtonRow(openCodePage); !reflect.DeepEqual(got, []string{
+		"/reasoning low",
+		"/reasoning medium",
+		"/reasoning high",
+		"/reasoning xhigh",
+		"/reasoning max",
+		"/reasoning clear",
+	}) {
+		t.Fatalf("unexpected opencode reasoning options: %#v", got)
+	}
 }
 
 func commandTextsForFirstButtonRow(page FeishuPageView) []string {

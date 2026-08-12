@@ -343,12 +343,12 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 	}
 
 	sendSettings := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSendSettings, false, ctx)
-	for _, command := range []string{"/access", "/plan", "/verbose", "/opencodeprofile", "/mode"} {
+	for _, command := range []string{"/reasoning", "/access", "/plan", "/verbose", "/opencodeprofile", "/mode"} {
 		if !containsCommandSlash(sendSettings, command) {
 			t.Fatalf("opencode send_settings should include %q, got %#v", command, resolvedDisplayCommands(sendSettings))
 		}
 	}
-	for _, command := range []string{"/model", "/reasoning", "/codexprofile", "/claudeprofile"} {
+	for _, command := range []string{"/model", "/codexprofile", "/claudeprofile"} {
 		if containsCommandSlash(sendSettings, command) {
 			t.Fatalf("opencode send_settings should hide %q, got %#v", command, resolvedDisplayCommands(sendSettings))
 		}
@@ -361,7 +361,7 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 	}{
 		{familyID: FeishuCommandNew, kind: FeishuCommandSupportApproximation, notePart: "OpenCode"},
 		{familyID: FeishuCommandSteerAll, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
-		{familyID: FeishuCommandReasoning, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
+		{familyID: FeishuCommandReasoning, kind: FeishuCommandSupportNative, notePart: ""},
 		{familyID: FeishuCommandAccess, kind: FeishuCommandSupportNative, notePart: ""},
 		{familyID: FeishuCommandPlan, kind: FeishuCommandSupportNative, notePart: ""},
 		{familyID: FeishuCommandModel, kind: FeishuCommandSupportReject, notePart: "OpenCode"},

@@ -15,3 +15,13 @@ func NormalizeClaudeReasoningEffort(value string) string {
 		return ""
 	}
 }
+
+func NormalizeOpenCodeReasoningEffort(value string) string {
+	effort := NormalizeReasoningEffort(value)
+	switch effort {
+	case "low", "medium", "high", "xhigh", "max":
+		return effort
+	default:
+		return ""
+	}
+}

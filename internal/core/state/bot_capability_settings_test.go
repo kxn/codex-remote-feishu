@@ -101,7 +101,7 @@ func TestNormalizeBotCapabilitySettingsRecordCarriesOpenCodeProfile(t *testing.T
 	}
 }
 
-func TestNormalizeBotCapabilitySettingsRecordKeepsOpenCodeRuntimeAccessAndPlan(t *testing.T) {
+func TestNormalizeBotCapabilitySettingsRecordKeepsOpenCodeRuntimeReasoningAccessAndPlan(t *testing.T) {
 	record, ok := NormalizeBotCapabilitySettingsRecord(BotCapabilitySettingsRecord{
 		GatewayID:         "app-1",
 		ProductMode:       ProductModeNormal,
@@ -118,8 +118,8 @@ func TestNormalizeBotCapabilitySettingsRecordKeepsOpenCodeRuntimeAccessAndPlan(t
 	if !ok {
 		t.Fatal("expected normalized record")
 	}
-	if record.PromptOverride != (ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
-		t.Fatalf("opencode prompt override = %#v, want runtime access only", record.PromptOverride)
+	if record.PromptOverride != (ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) {
+		t.Fatalf("opencode prompt override = %#v, want runtime reasoning/access only", record.PromptOverride)
 	}
 	if record.PlanMode != PlanModeSettingOn || !record.PlanModeOverrideSet {
 		t.Fatalf("opencode plan override = %s/%v, want on/true", record.PlanMode, record.PlanModeOverrideSet)
@@ -206,8 +206,8 @@ func TestEffectiveSurfaceCapabilitySettingsKeepsOpenCodeRuntimeAccessAndPlan(t *
 	if effective.Contract.Backend != agentproto.BackendOpenCode || effective.Contract.OpenCodeProfileID != "op_team" {
 		t.Fatalf("effective contract = %#v, want opencode profile", effective.Contract)
 	}
-	if effective.PromptOverride != (ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
-		t.Fatalf("effective opencode prompt override = %#v, want runtime access only", effective.PromptOverride)
+	if effective.PromptOverride != (ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) {
+		t.Fatalf("effective opencode prompt override = %#v, want runtime reasoning/access only", effective.PromptOverride)
 	}
 	if effective.PlanMode != PlanModeSettingOn || !effective.PlanModeOverrideSet {
 		t.Fatalf("effective opencode plan = %s/%v, want on/true", effective.PlanMode, effective.PlanModeOverrideSet)
