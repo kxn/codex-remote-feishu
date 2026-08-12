@@ -1,8 +1,8 @@
 # OpenCode ACP Backend 实现设计
 
 > Type: `inprogress`
-> Updated: `2026-08-11`
-> Summary: 同步 OpenCode `/access` runtime desired 与 `/plan` dynamic ACP session mode：profile `permissionMode` 不再作为用户可见权限 owner，运行时 access 通过 relaunch-backed launch contract 生效，plan 通过 `session/set_config_option mode` 生效。
+> Updated: `2026-08-12`
+> Summary: 同步 OpenCode persisted thread catalog：daemon 读取 OpenCode 本地 SQLite session/project 历史，不再把 durable history catalog 记为缺口。
 
 ## 1. 结论
 
@@ -672,7 +672,7 @@ errors：
 
 首版偏离/边界：
 
-- OpenCode persisted thread catalog 第一版不读取 Codex SQLite 历史，也暂不提供 OpenCode durable history catalog；`/use` 等历史入口只能看到在线/当前 runtime 可见会话，避免跨 backend 误曝。
+- OpenCode persisted thread catalog 读取 OpenCode 本地 SQLite 的 `session/project` 历史，`session.directory` 优先、`project.worktree` 兜底，用于 daemon 重启后的 `/workspace list` / `/use` 候选；它不启动 OpenCode instance，也不读取 Codex SQLite 或 Claude session store，避免跨 backend 误曝。
 - 自定义/API profile launch 必须带匹配的 `OpenCodeAdmissionRef`；缺失或 stale revision fail-closed。默认 `op_default` inherit profile 可以无 ref 启动。
 - OpenCode observed config 不写回 workspace/default model/reasoning 配置，避免把某个 OpenCode 实例的 runtime snapshot 污染 Codex/Claude 默认值。
 - `OPENCODE_AUTH_CONTENT` 真实 schema 是顶层 provider id map；旧 nested provider/apiKey 设计已废弃。

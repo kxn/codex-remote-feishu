@@ -124,3 +124,64 @@ func TestTargetPickerConfirmPersistedCrossWorkspaceThreadStartsHeadlessRestore(t
 		t.Fatalf("expected target picker cross-workspace restore to start headless launch, got %#v", events)
 	}
 }
+
+func TestOpenCodeTargetPickerListsPersistedOnlyWorkspaceAndSession(t *testing.T) {
+	now := time.Date(2026, 8, 12, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	svc.SetPersistedThreadCatalog(&fakePersistedThreadCatalog{
+		recentByBackend: map[agentproto.Backend][]state.ThreadRecord{
+			agentproto.BackendOpenCode: {
+				{
+					ThreadID:      "opencode-thread",
+					Name:          "OpenCode persisted session",
+					Preview:       "from opencode sqlite",
+					WorkspaceKey:  "/data/dl/opencode-only",
+					CWD:           "/data/dl/opencode-only",
+					State:         string(agentproto.ThreadRuntimeStatusTypeNotLoaded),
+					RuntimeStatus: &agentproto.ThreadRuntimeStatus{Type: agentproto.ThreadRuntimeStatusTypeNotLoaded},
+					LastUsedAt:    now.Add(-1 * time.Minute),
+				},
+			},
+			agentproto.BackendClaude: {
+				{
+					ThreadID:     "claude-thread",
+					Name:         "Claude persisted session",
+					WorkspaceKey: "/data/dl/claude-only",
+					CWD:          "/data/dl/claude-only",
+					LastUsedAt:   now,
+				},
+			},
+		},
+		byIDByBackend: map[agentproto.Backend]map[string]state.ThreadRecord{
+			agentproto.BackendOpenCode: {
+				"opencode-thread": {
+					ThreadID:      "opencode-thread",
+					Name:          "OpenCode persisted session",
+					Preview:       "from opencode sqlite",
+					WorkspaceKey:  "/data/dl/opencode-only",
+					CWD:           "/data/dl/opencode-only",
+					State:         string(agentproto.ThreadRuntimeStatusTypeNotLoaded),
+					RuntimeStatus: &agentproto.ThreadRuntimeStatus{Type: agentproto.ThreadRuntimeStatusTypeNotLoaded},
+					LastUsedAt:    now.Add(-1 * time.Minute),
+				},
+			},
+		},
+	})
+
+	view := singleTargetPickerEvent(t, svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionListInstances,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+	}))
+	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/opencode-only"); !ok {
+		t.Fatalf("expected opencode persisted-only workspace, got %#v", view.WorkspaceOptions)
+	}
+	if _, ok := targetPickerWorkspaceOption(view, "/data/dl/claude-only"); ok {
+		t.Fatalf("opencode picker must not show claude persisted workspace, got %#v", view.WorkspaceOptions)
+	}
+	if _, ok := targetPickerSessionOption(view, targetPickerThreadValue("opencode-thread")); !ok {
+		t.Fatalf("expected opencode persisted session option, got %#v", view.SessionOptions)
+	}
+}

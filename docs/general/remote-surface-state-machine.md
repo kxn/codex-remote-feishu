@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-11`
-> Summary: 同步 OpenCode `/access` 的 relaunch-backed runtime desired 合同、OpenCode `/plan` 基于 ACP `session/set_config_option mode` 的动态切换合同，以及群聊 room workspace binding 在 detached surface 上的 `/status` / `/detach` 展示边界。
+> Updated: `2026-08-12`
+> Summary: 同步 OpenCode persisted catalog 来源：daemon 读取 OpenCode 本地 SQLite 历史，并继续按 backend 分区暴露 workspace/session 候选。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -183,7 +183,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
 | --- | --- | --- |
 | `M0 HeadlessCodex` | `ProductMode=normal`，`Backend=codex` | headless 主链的 Codex 分支；也是新 surface 默认值。当前会开启 workspace claim 仲裁，并把已占用 workspace 投影到 `/status` |
 | `M1 HeadlessClaude` | `ProductMode=normal`，`Backend=claude` | headless 主链的 Claude 分支。workspace defaults、surface resume 与 detached catalog context 都按 Claude backend 分区；surface 还会额外携带当前 `ClaudeProfileID`，并按 `workspace+profile` 恢复飞书显式 `reasoning / access` override；`plan` 不从这套快照恢复；不进入 VS Code 语义，但已经共享 headless exact-thread 恢复主链，并在需要时通过 Claude 原生 `--resume` 恢复旧 session |
-| `M2 HeadlessOpenCode` | `ProductMode=normal`，`Backend=opencode` | headless 主链的 OpenCode 分支。workspace defaults、surface resume 与 detached catalog context 按 OpenCode backend 分区；surface 携带当前 `OpenCodeProfileID`、可选 `OpenCodeAdmissionRef` 与 `/access` desired runtime access；API profile 启动必须匹配 frozen revision；不进入 VS Code 语义，复用 headless workspace/session route contract |
+| `M2 HeadlessOpenCode` | `ProductMode=normal`，`Backend=opencode` | headless 主链的 OpenCode 分支。workspace defaults、surface resume 与 detached catalog context 按 OpenCode backend 分区；detached catalog context 会读取 OpenCode 本地 SQLite persisted session/project metadata，而不是启动 OpenCode instance 后调用 ACP `session/list`；surface 携带当前 `OpenCodeProfileID`、可选 `OpenCodeAdmissionRef` 与 `/access` desired runtime access；API profile 启动必须匹配 frozen revision；不进入 VS Code 语义，复用 headless workspace/session route contract |
 | `M3 VSCode` | `ProductMode=vscode`，`Backend=codex` | VS Code 专属分支；只能显式 `/mode vscode` 进入。当前不参与 workspace claim，仍保留既有 instance/thread-first 路由语义 |
 
 补充说明：
@@ -204,7 +204,7 @@ surface 不是单一枚举，而是五层正交状态叠加。
       5. 若 persisted route 本身就是 workspace-owned 的 `ResumeRouteMode=unbound|new_thread_ready`，则会优先按同 backend workspace 继续恢复：已有同 workspace 兼容实例时直接回到 `R1 AttachedUnbound` 或 `R5 NewThreadReady`；若只剩 incompatible managed headless，则先 restart 成匹配合同；若还没有兼容实例，则会 fresh-start managed headless，并保留同一条 workspace route intent。
       6. 若 persisted target 是普通 pinned thread 且当前 visible thread 不可见，则允许降级回原 workspace 的 same-backend 续接语义：已有同 workspace 兼容实例时 attach 回 `R1 AttachedUnbound`；若只剩 incompatible managed headless，则 restart 成 matching headless；若还没有兼容实例，则会 fresh-start managed headless，并进入 `new_thread_ready`。
       7. 只有 `ResumeHeadless=true` 且 `ResumeThreadID != ""` 的 concrete managed-headless thread-restore 目标，visible exact-thread 路径没恢复成功时才会继续留在 exact-thread continuation，而不是降级进 workspace fallback。
-      8. 这条 managed-headless exact-thread continuation 当前仍按 backend 生效：Codex 继续走 sqlite/persisted-thread + child-restore 语义；Claude 会把同 backend persisted session metadata 转成 launch-time `ResumeThreadID`，最终由 wrapper 用 `claude --resume <session_id>` 恢复旧 session。
+      8. 这条 managed-headless exact-thread continuation 当前仍按 backend 生效：Codex 继续走 sqlite/persisted-thread + child-restore 语义；Claude 会把同 backend persisted session metadata 转成 launch-time `ResumeThreadID`，最终由 wrapper 用 `claude --resume <session_id>` 恢复旧 session；OpenCode 会从 OpenCode 本地 SQLite catalog 取得同 backend persisted session metadata，再由 OpenCode ACP load/resume 路径恢复。
       8. 若持久化目标里包含 `ResumeThreadID`，则在 daemon 启动后的首轮 `threads.refresh -> threads.snapshot` 完成前，会先保持 detached 并静默等待，避免过早降级或过早报失败。
       9. 若同时带着 `ResumeHeadless=true` 且 `ResumeInstanceID` 指向一个已连回的 visible instance，managed-headless exact-thread continuation 也会让出这一轮 startup refresh，先给 exact visible thread 恢复机会，避免刚收到 snapshot 前就抢先拉起新的 headless。
       10. 同一条 persisted target 的 auto-resume 当前已经具备 episode 级失败 provenance：
@@ -782,7 +782,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. `send_settings` 显示 `/access`、`/plan`、`/verbose`、`/opencodeprofile`；`/model`、`/reasoning` hidden + reject，OpenCode 模型/推理强度来自 profile 或原生配置，`/plan` 通过 ACP session mode 动态切换。
    3. `switch_target` 显示 `workspace` 命令族；`/list`、`/use`、`/useall`、裸 `/detach` hidden + allow，继续作为旧 slash / target picker 回退入口。
    4. `/history`、`/sendfile`、`/mode`、`/admin`、`/upgrade`、`/debug`、`/help`、`/menu` 继续显示；`/compact`、`/review`、`/bendtomywill`、`/autowhip`、`/autocontinue`、`/follow`、`/cron` hidden + reject，不伪装成 OpenCode 原生能力。
-2. OpenCode target picker 候选只合并 `Backend=opencode` 的在线实例和可恢复 metadata；第一版不读 Codex SQLite 历史，也不把 Codex/Claude 会话混进 `/list` / `/use`。
+2. OpenCode target picker 候选只合并 `Backend=opencode` 的在线实例和 OpenCode 本地 SQLite catalog 可恢复 metadata；不会读取 Codex SQLite 或 Claude session store，也不会把 Codex/Claude 会话混进 `/list` / `/use`。
 3. `/mode opencode` 若切换前已有当前 workspace，不会只留下 detached surface：
    1. 优先 attach 同 workspace 的在线 OpenCode instance。
    2. 若当前没有可 attach 的 OpenCode instance，则直接起 fresh managed headless，`PendingHeadless.Backend=opencode`，`OpenCodeProfileID` 和 `OpenCodeAdmissionRef` 来自当前 effective bot contract，并保留 workspace route intent。

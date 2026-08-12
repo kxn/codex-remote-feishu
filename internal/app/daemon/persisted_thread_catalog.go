@@ -8,11 +8,13 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
+	"github.com/kxn/codex-remote-feishu/internal/opencodestate"
 )
 
 type daemonPersistedThreadCatalog struct {
-	codex  *codexstate.SQLiteThreadCatalog
-	claude *claudestate.SessionCatalog
+	codex    *codexstate.SQLiteThreadCatalog
+	claude   *claudestate.SessionCatalog
+	opencode *opencodestate.SQLiteThreadCatalog
 }
 
 var _ threadcatalogcontract.BackendAwarePersistedThreadCatalog = (*daemonPersistedThreadCatalog)(nil)
@@ -22,9 +24,14 @@ func newDaemonPersistedThreadCatalog(logf func(string, ...any)) (*daemonPersiste
 	if err != nil {
 		return nil, err
 	}
+	opencodeCatalog, err := opencodestate.NewDefaultSQLiteThreadCatalog(opencodestate.SQLiteThreadCatalogOptions{Logf: logf})
+	if err != nil {
+		return nil, err
+	}
 	return &daemonPersistedThreadCatalog{
-		codex:  codexCatalog,
-		claude: claudestate.NewSessionCatalog(claudestate.SessionCatalogOptions{Logf: logf}),
+		codex:    codexCatalog,
+		claude:   claudestate.NewSessionCatalog(claudestate.SessionCatalogOptions{Logf: logf}),
+		opencode: opencodeCatalog,
 	}, nil
 }
 
@@ -48,7 +55,10 @@ func (c *daemonPersistedThreadCatalog) RecentThreadsForBackend(backend agentprot
 		}
 		return c.claude.RecentThreads(limit)
 	case agentproto.BackendOpenCode:
-		return nil, nil
+		if c == nil || c.opencode == nil {
+			return nil, nil
+		}
+		return c.opencode.RecentThreads(limit)
 	default:
 		if c == nil || c.codex == nil {
 			return nil, nil
@@ -65,7 +75,10 @@ func (c *daemonPersistedThreadCatalog) RecentWorkspacesForBackend(backend agentp
 		}
 		return c.claude.RecentWorkspaces(limit)
 	case agentproto.BackendOpenCode:
-		return nil, nil
+		if c == nil || c.opencode == nil {
+			return nil, nil
+		}
+		return c.opencode.RecentWorkspaces(limit)
 	default:
 		if c == nil || c.codex == nil {
 			return nil, nil
@@ -82,7 +95,10 @@ func (c *daemonPersistedThreadCatalog) ThreadByIDForBackend(backend agentproto.B
 		}
 		return c.claude.ThreadByID(threadID)
 	case agentproto.BackendOpenCode:
-		return nil, nil
+		if c == nil || c.opencode == nil {
+			return nil, nil
+		}
+		return c.opencode.ThreadByID(threadID)
 	default:
 		if c == nil || c.codex == nil {
 			return nil, nil
