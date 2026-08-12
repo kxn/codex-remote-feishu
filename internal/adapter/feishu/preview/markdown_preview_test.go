@@ -1671,19 +1671,20 @@ func TestDriveMarkdownPreviewerSupportsRegisteredHandlerPublisherChain(t *testin
 
 func TestSplitPreviewLocationSuffixSupportsGenericFileLocations(t *testing.T) {
 	tests := []struct {
+		name       string
 		target     string
 		wantBase   string
 		wantLine   int
 		wantColumn int
 		wantSuffix string
 	}{
-		{target: "docs/design.md:50", wantBase: "docs/design.md", wantLine: 50, wantSuffix: ":50"},
-		{target: "internal/main.go:92:5", wantBase: "internal/main.go", wantLine: 92, wantColumn: 5, wantSuffix: ":92:5"},
-		{target: "internal/main.go#L92C5", wantBase: "internal/main.go", wantLine: 92, wantColumn: 5, wantSuffix: "#L92C5"},
-		{target: "internal/main.go:", wantBase: "internal/main.go:", wantLine: 0, wantColumn: 0, wantSuffix: ""},
+		{name: "line suffix", target: "docs/design.md:50", wantBase: "docs/design.md", wantLine: 50, wantSuffix: ":50"},
+		{name: "line and column suffix", target: "internal/main.go:92:5", wantBase: "internal/main.go", wantLine: 92, wantColumn: 5, wantSuffix: ":92:5"},
+		{name: "fragment suffix", target: "internal/main.go#L92C5", wantBase: "internal/main.go", wantLine: 92, wantColumn: 5, wantSuffix: "#L92C5"},
+		{name: "trailing colon without location", target: "internal/main.go:", wantBase: "internal/main.go:", wantLine: 0, wantColumn: 0, wantSuffix: ""},
 	}
 	for _, tt := range tests {
-		t.Run(tt.target, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			base, location, suffix := splitPreviewLocationSuffix(tt.target)
 			if base != tt.wantBase || location.Line != tt.wantLine || location.Column != tt.wantColumn || suffix != tt.wantSuffix {
 				t.Fatalf("splitPreviewLocationSuffix(%q) = (%q, %#v, %q), want (%q, line=%d col=%d, %q)",
