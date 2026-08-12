@@ -735,6 +735,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
 			Metadata:     metadata,
+			Exploration:  extractCommandExecutionExploration(itemKind, item),
 			FileChanges:  extractFileChangeRecords(itemKind, item),
 		}}}, nil
 	case "item/started":
@@ -759,6 +760,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
 			Metadata:     extractItemMetadata(itemKind, item),
+			Exploration:  extractCommandExecutionExploration(itemKind, item),
 			FileChanges:  extractFileChangeRecords(itemKind, item),
 		}}}, nil
 	case "item/agentMessage/delta":
