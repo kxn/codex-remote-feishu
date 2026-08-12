@@ -49,11 +49,14 @@
 11. carrier 的 `nil` 与非 nil 空对象语义不同：nil 表示 producer 未提供权威分类，允许 command shell parser / legacy dynamic read 兼容；非 nil 空对象表示 producer 已判定该调用不是纯探索，禁止旧 parser 二次猜测。
 12. item resolution 在一个 turn 内保持 `pending / structured / generic` 的 sticky 结果。start 参数不完整时可等待 completion 补齐；一旦已经显示 structured 或 generic，completion 不会改投另一种表示。typed completion-only event 也可以在无 start 事件时创建对应进度行。
 13. 原始 command、tool 参数和 raw output 不进入 typed action contract。`MergeKey` 由 orchestrator 根据来源和 kind 本地派生；tool result、stdout/stderr 与 `rawOutput` 永远不用于生成探索摘要。
+14. Codex adapter 已优先把原生 `commandExecution.commandActions` 整组映射为 carrier：支持 `read / search / listFiles` 并保持顺序，混入 `unknown` 或 malformed action 时发送非 nil 空 carrier，使整条命令走 generic fallback；字段缺失时保持 nil，继续兼容旧 shell parser。
+15. Claude Code adapter 已把 `Read / Glob / Grep` 映射为 `read / list / search`；started 与 completed 都只从原始 tool input 生成 action，tool result 不参与摘要。关键参数暂缺时仍发送 known-but-incomplete action，由共享 resolver 处理 pending 与 final fallback。
+16. OpenCode ACP adapter 已把 `read / glob / list / ls / grep / search` 的累计 `kind + rawInput` 映射为 carrier，并支持 completion/update-first 补详情；MCP canonical 分类优先，即使 MCP tool 名为 `read` 或 `grep` 也不会误判。`rawOutput` 只保留为诊断/状态 metadata。
 
 当前仍然刻意保留的边界：
 
 1. 管理页与 admin runtime API 都不再承担共享探索过程的正式展示职责；当前用户可见展示面只保留 Feishu 侧共用状态卡。
-2. typed carrier 已支持任意 adapter 映射 `read / list / search`；尚未接入 typed carrier 的 dynamic tool 当前只有 legacy `read` 进入 exploration block，其他 tool 继续走 generic progress。
+2. typed carrier 已覆盖 Codex、Claude Code 与 OpenCode ACP 的已知探索动作；其他 adapter 或未知 dynamic tool 继续走 generic progress，carrier nil 的 legacy shell/read parser 仍作为兼容路径。
 3. 更广覆盖率的 shell parsing 与最近一次 exploration 摘要复用，留待后续迭代。
 
 ## 目标
@@ -184,12 +187,12 @@
 - `internal/core/orchestrator/service_exec_command_progress.go`
 - `internal/core/orchestrator/service_exec_command_progress_test.go`
 
-### 3. 当前扩展边界
+### 3. 当前 adapter 边界
 
-共享模型、resolver 与 Feishu 投影已经落地；当前扩展边界集中在各 adapter 如何把原生字段转换为 canonical carrier：
+共享模型、resolver、三类 adapter 与 Feishu 投影已经落地；原生字段到 canonical carrier 的当前边界是：
 
-1. Codex `commandActions` 需要整组映射；混入 `unknown` 时 producer 应发送非 nil 空 carrier，保留原 command 供 generic fallback。
-2. Claude Code `Read / Glob / Grep` 与 OpenCode ACP `kind/rawInput` 需要在各自 adapter 边界归一成 `read / list / search`，不能把原生字段名泄漏到共享 resolver。
+1. Codex `commandActions` 整组映射；混入 `unknown` 或 malformed action 时发送非 nil 空 carrier，保留原 command 供 generic fallback。
+2. Claude Code `Read / Glob / Grep` 与 OpenCode ACP `kind/rawInput` 在各自 adapter 边界归一成 `read / list / search`；completion 复用原始/累计 input，不读取 result/raw output 生成摘要。
 3. projector 继续只消费最终 timeline，不理解 backend、tool 名、raw input 或 raw output。
 
 对应代码：
@@ -392,10 +395,11 @@ typed carrier 的 resolver 优先级固定为：
 3. active / completed / failed 生命周期与兼容回退测试已补齐
 4. adapter 到 orchestrator 的 typed exploration carrier、nil/empty 权威语义、atomic multi-action 校验与 sticky item resolution 已落地
 5. completion-only、final-empty generic fallback、legacy parser 兼容与 raw output 隔离已有回归测试
+6. Codex `commandActions`、Claude `Read / Glob / Grep` 与 OpenCode ACP exploration tools 已接入 typed carrier，并覆盖真实 frame/golden、参数补全和来源侧 fail-closed 边界
 
 ### 后续可继续扩展
 
-1. 在 Codex、Claude Code、OpenCode adapter 中接入各自原生 exploration 字段
+1. 评估其他 adapter 或新增原生 tool 是否有足够稳定、安全的字段可映射为 canonical action
 2. 视需要把最近一次 exploration block 摘要复用到 snapshot / status 视图
 
 ## 验证参考
@@ -418,6 +422,9 @@ typed carrier 的 resolver 优先级固定为：
 - `internal/core/orchestrator/service_exec_command_progress_exploration_contract_test.go`
 - `internal/core/orchestrator/service_exec_command_progress_dynamic_tool_test.go`
 - `internal/core/agentproto/wire_test.go`
+- `internal/adapter/codex/translator_requests_test.go`
+- `internal/adapter/claude/translator_exploration_test.go`
+- `internal/adapter/acp/translator_canonical_test.go`
 - `internal/adapter/feishu/projector_exec_command_progress_test.go`
 
 ## 实现参考
@@ -430,6 +437,9 @@ typed carrier 的 resolver 优先级固定为：
 - `internal/core/control/types.go`
 - `internal/core/state/types.go`
 - `internal/adapter/codex/translator_helpers.go`
+- `internal/claudeutil/claude.go`
+- `internal/adapter/claude/observe.go`
+- `internal/adapter/acp/mapping_helpers.go`
 - `internal/adapter/feishu/projector_exec_command_progress.go`
 
 ### 上游参考文件
