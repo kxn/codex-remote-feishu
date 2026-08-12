@@ -140,6 +140,7 @@ type Event struct {
 	ThreadGoal           *ThreadGoalUpdate             `json:"threadGoal,omitempty"`
 	ThreadSettings       *ThreadSettingsUpdate         `json:"threadSettings,omitempty"`
 	CapabilityState      *CapabilityStateUpdate        `json:"capabilityState,omitempty"`
+	Exploration          *ExplorationActions           `json:"exploration,omitempty"`
 	Metadata             map[string]any                `json:"metadata,omitempty"`
 	Threads              []ThreadSnapshotRecord        `json:"threads,omitempty"`
 	FileChanges          []FileChangeRecord            `json:"fileChanges,omitempty"`

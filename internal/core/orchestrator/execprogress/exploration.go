@@ -13,6 +13,29 @@ import (
 
 const ExplorationBlockID = "exploration"
 
+type ExplorationDisposition string
+
+const (
+	ExplorationDispositionPending    ExplorationDisposition = "pending"
+	ExplorationDispositionStructured ExplorationDisposition = "structured"
+	ExplorationDispositionGeneric    ExplorationDisposition = "generic"
+)
+
+type ExplorationProgressResult struct {
+	Disposition         ExplorationDisposition
+	Changed             bool
+	ForceGenericOnFinal bool
+}
+
+type explorationCandidate string
+
+const (
+	explorationCandidateUnavailable explorationCandidate = "unavailable"
+	explorationCandidatePending     explorationCandidate = "pending"
+	explorationCandidateStructured  explorationCandidate = "structured"
+	explorationCandidateRejected    explorationCandidate = "rejected"
+)
+
 type explorationAction struct {
 	Kind      string
 	Items     []string
@@ -25,45 +48,165 @@ type ExplorationAction = explorationAction
 
 var explorationShellLCCommandPattern = regexp.MustCompile(`^(?:/usr/bin/|/bin/)?(?:bash|sh|zsh)\s+-lc\s+(.+)$`)
 
-func UpsertExplorationProgressForCommandExecution(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) (bool, bool) {
-	command, _ := CommandMetadata(event)
-	action, ok := parseCommandExecutionExplorationAction(command)
-	if !ok {
-		return false, false
-	}
-	return upsertExplorationProgress(progress, strings.TrimSpace(event.ItemID), action, NormalizeStatus(event.Status, final), final), true
+func ResolveExplorationProgressForCommandExecution(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) ExplorationProgressResult {
+	actions, disposition := explorationActionsForCommandExecution(event, final)
+	return resolveExplorationProgress(progress, event.ItemID, actions, disposition, NormalizeStatus(event.Status, final), final)
 }
 
-func UpsertExplorationProgressForDynamicTool(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) (bool, bool) {
-	action, ok := parseDynamicToolExplorationAction(event.Metadata)
-	if !ok {
-		return false, false
-	}
+func ResolveExplorationProgressForDynamicTool(progress *state.ExecCommandProgressRecord, event agentproto.Event, final bool) ExplorationProgressResult {
+	actions, disposition := explorationActionsForDynamicTool(event, final)
 	status := NormalizeDynamicToolProgressStatus(event)
 	if final && status == "" {
 		status = "completed"
 	}
-	return upsertExplorationProgress(progress, strings.TrimSpace(event.ItemID), action, status, final), true
+	return resolveExplorationProgress(progress, event.ItemID, actions, disposition, status, final)
 }
 
 func ParseCommandExecutionExplorationAction(command string) (ExplorationAction, bool) {
 	return parseCommandExecutionExplorationAction(command)
 }
 
-func upsertExplorationProgress(progress *state.ExecCommandProgressRecord, itemID string, action explorationAction, status string, final bool) bool {
+func explorationActionsForCommandExecution(event agentproto.Event, final bool) ([]explorationAction, explorationCandidate) {
+	if event.Exploration != nil {
+		return normalizeTypedExplorationActions(event.Exploration, "command_execution", final)
+	}
+	command, _ := CommandMetadata(event)
+	action, ok := parseCommandExecutionExplorationAction(command)
+	if !ok {
+		return nil, explorationCandidateUnavailable
+	}
+	return []explorationAction{action}, explorationCandidateStructured
+}
+
+func explorationActionsForDynamicTool(event agentproto.Event, final bool) ([]explorationAction, explorationCandidate) {
+	if event.Exploration != nil {
+		return normalizeTypedExplorationActions(event.Exploration, "dynamic_tool_call", final)
+	}
+	action, ok := parseDynamicToolExplorationAction(event.Metadata)
+	if ok {
+		return []explorationAction{action}, explorationCandidateStructured
+	}
+	if strings.EqualFold(strings.TrimSpace(xutil.MetadataString(event.Metadata, "tool")), "read") {
+		if final {
+			return nil, explorationCandidateRejected
+		}
+		return nil, explorationCandidatePending
+	}
+	return nil, explorationCandidateUnavailable
+}
+
+func normalizeTypedExplorationActions(contract *agentproto.ExplorationActions, source string, final bool) ([]explorationAction, explorationCandidate) {
+	if contract == nil || len(contract.Actions) == 0 {
+		return nil, explorationCandidateRejected
+	}
+	actions := make([]explorationAction, 0, len(contract.Actions))
+	incomplete := false
+	for _, raw := range contract.Actions {
+		action := explorationAction{
+			Kind:      strings.ToLower(strings.TrimSpace(string(raw.Kind))),
+			Items:     appendUniquePreserveOrder(nil, trimmedNonEmptyStrings(raw.Items)...),
+			Summary:   strings.TrimSpace(raw.Summary),
+			Secondary: strings.TrimSpace(raw.Secondary),
+		}
+		switch action.Kind {
+		case "read":
+			incomplete = incomplete || len(action.Items) == 0
+		case "list", "search":
+			incomplete = incomplete || action.Summary == ""
+		default:
+			return nil, explorationCandidateRejected
+		}
+		action.MergeKey = strings.TrimSpace(source) + ":" + action.Kind
+		actions = append(actions, action)
+	}
+	if incomplete {
+		if final {
+			return nil, explorationCandidateRejected
+		}
+		return nil, explorationCandidatePending
+	}
+	return actions, explorationCandidateStructured
+}
+
+func trimmedNonEmptyStrings(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func resolveExplorationProgress(progress *state.ExecCommandProgressRecord, itemID string, actions []explorationAction, candidate explorationCandidate, status string, final bool) ExplorationProgressResult {
+	if progress == nil {
+		return ExplorationProgressResult{Disposition: ExplorationDispositionGeneric}
+	}
+	itemID = strings.TrimSpace(itemID)
+	existing := explorationItemDisposition(progress, itemID)
+	switch existing {
+	case ExplorationDispositionStructured:
+		changed := updateExplorationItemLifecycle(progress, itemID, status, final)
+		return ExplorationProgressResult{Disposition: existing, Changed: changed}
+	case ExplorationDispositionGeneric:
+		return ExplorationProgressResult{Disposition: existing}
+	}
+	if itemID == "" && candidate != explorationCandidateUnavailable && candidate != explorationCandidateRejected {
+		candidate = explorationCandidateRejected
+	}
+	forceGenericOnFinal := final && (candidate == explorationCandidateRejected || existing == ExplorationDispositionPending)
+	switch candidate {
+	case explorationCandidatePending:
+		setExplorationItemDisposition(progress, itemID, ExplorationDispositionPending)
+		markPendingExplorationItemActive(progress, itemID)
+		return ExplorationProgressResult{Disposition: ExplorationDispositionPending}
+	case explorationCandidateStructured:
+		exploration := ensureExplorationProgress(progress)
+		before := cloneExplorationBlock(exploration.Block)
+		for _, action := range actions {
+			appendExplorationRow(progress, &exploration.Block, action)
+		}
+		setExplorationItemDisposition(progress, itemID, ExplorationDispositionStructured)
+		updateExplorationItemLifecycle(progress, itemID, status, final)
+		return ExplorationProgressResult{
+			Disposition: ExplorationDispositionStructured,
+			Changed:     !sameExecCommandProgressBlock(before, exploration.Block),
+		}
+	case explorationCandidateRejected, explorationCandidateUnavailable:
+		changed := clearPendingExplorationItem(progress, itemID, status)
+		setExplorationItemDisposition(progress, itemID, ExplorationDispositionGeneric)
+		return ExplorationProgressResult{
+			Disposition:         ExplorationDispositionGeneric,
+			Changed:             changed,
+			ForceGenericOnFinal: forceGenericOnFinal,
+		}
+	}
+	return ExplorationProgressResult{Disposition: ExplorationDispositionGeneric}
+}
+
+func explorationItemDisposition(progress *state.ExecCommandProgressRecord, itemID string) ExplorationDisposition {
+	if progress == nil || itemID == "" || progress.ExplorationItems == nil {
+		return ""
+	}
+	return ExplorationDisposition(progress.ExplorationItems[itemID])
+}
+
+func setExplorationItemDisposition(progress *state.ExecCommandProgressRecord, itemID string, disposition ExplorationDisposition) {
+	if progress == nil || itemID == "" || disposition == "" {
+		return
+	}
+	if progress.ExplorationItems == nil {
+		progress.ExplorationItems = map[string]string{}
+	}
+	progress.ExplorationItems[itemID] = string(disposition)
+}
+
+func updateExplorationItemLifecycle(progress *state.ExecCommandProgressRecord, itemID, status string, final bool) bool {
 	if progress == nil {
 		return false
 	}
 	exploration := ensureExplorationProgress(progress)
 	before := cloneExplorationBlock(exploration.Block)
-
-	if final {
-		if len(exploration.Block.Rows) == 0 {
-			appendExplorationRow(progress, &exploration.Block, action)
-		}
-	} else {
-		appendExplorationRow(progress, &exploration.Block, action)
-	}
 	if exploration.ActiveItemIDs == nil {
 		exploration.ActiveItemIDs = map[string]bool{}
 	}
@@ -79,6 +222,27 @@ func upsertExplorationProgress(progress *state.ExecCommandProgressRecord, itemID
 	}
 	exploration.Block.Status = explorationBlockStatus(exploration)
 	return !sameExecCommandProgressBlock(before, exploration.Block)
+}
+
+func markPendingExplorationItemActive(progress *state.ExecCommandProgressRecord, itemID string) {
+	if progress == nil || progress.Exploration == nil || strings.TrimSpace(itemID) == "" {
+		return
+	}
+	progress.Exploration.ActiveItemIDs[strings.TrimSpace(itemID)] = true
+	progress.Exploration.Block.Status = explorationBlockStatus(progress.Exploration)
+}
+
+func clearPendingExplorationItem(progress *state.ExecCommandProgressRecord, itemID, status string) bool {
+	if progress == nil || progress.Exploration == nil {
+		return false
+	}
+	before := cloneExplorationBlock(progress.Exploration.Block)
+	delete(progress.Exploration.ActiveItemIDs, strings.TrimSpace(itemID))
+	if status == "failed" && len(progress.Exploration.Block.Rows) != 0 {
+		progress.Exploration.Failed = true
+	}
+	progress.Exploration.Block.Status = explorationBlockStatus(progress.Exploration)
+	return !sameExecCommandProgressBlock(before, progress.Exploration.Block)
 }
 
 func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state.ExecCommandProgressExplorationRecord {
@@ -100,6 +264,11 @@ func ensureExplorationProgress(progress *state.ExecCommandProgressRecord) *state
 	}
 	if progress.Exploration.ActiveItemIDs == nil {
 		progress.Exploration.ActiveItemIDs = map[string]bool{}
+	}
+	for itemID, disposition := range progress.ExplorationItems {
+		if ExplorationDisposition(disposition) == ExplorationDispositionPending {
+			progress.Exploration.ActiveItemIDs[itemID] = true
+		}
 	}
 	return progress.Exploration
 }

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-12`
-> Summary: 同步 Codex Profile-only 卡片合同与 rejected action label owner：旧 `/codexprovider`/`codex_provider` 不再作为命令或 callback 入口；旧卡/旧动作拒绝提示里的 command 类动作 label 来自 `FeishuCommandBinding` + command catalog，owner-card 私有动作保留 UI-only local label；并保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、`select_static`、callback surface identity、动态模型/推理菜单、群聊菜单、Profile 下拉、MCP elicitation、`/mcpoauth` 与 detached room workspace `/status` 投影等既有 UI 状态机合同；并记录 worktree picker 的 preview / final path / 失败文案已收口到 `gitmeta.PreviewWorktree` / `WorktreeCreateErrorText`。
+> Summary: 同步 typed exploration action 经共享 resolver 投影到 Feishu 过程卡的边界，以及 Codex Profile-only 卡片合同与 rejected action label owner；保留旧 `attach_instance` headless fail-closed、workspace/page/request/review owner-flow、callback freshness、动态模型/推理菜单、Profile 下拉、MCP elicitation 与 detached workspace `/status` 等既有合同。
 
 ## 1. 文档定位
 
@@ -694,6 +694,10 @@ MCP request 卡片当前新增的可视语义：
   - gateway 层的 oversized card trim 仍保留为最后一道兜底，但共享过程卡当前不应以它作为主路径
 - `reasoning_summary` 当前进入普通 timeline：verbose 下 Codex reasoning summary 与 Claude thinking 都按真实发生顺序沉淀为过程行；同一 item + summary index 的 delta 原地累计更新，不同 summary index 保留为不同历史行。reasoning/thinking delta 会先更新 active progress 内存行并标记 dirty；第一段会立即建卡，之后同一工作中卡因 reasoning/thinking 主动 patch 时按约 1 秒窗口合并。普通工具/文件/搜索等过程事件若本来要 patch，会自然携带最新 reasoning/thinking 行并刷新水位；`reasoning_summary` item completed、assistant 正文真正 flush 为可见 `block.committed` 前，以及 turn completed finalization 前都会强制 flush dirty reasoning，避免最后一段 thinking 丢失。
 - 共享过程卡的 projector 不再把整段 timeline 压成单个 markdown body；当前改成“每个可见行一个 markdown element”，避免单行语法异常把后续行一起污染
+  - adapter 可以在 `agentproto.Event.Exploration` 提供有序 `read / list / search` actions，但 projector 不读取该 carrier，也不解析 backend metadata；orchestrator 会先完成权威分类、整体校验、fallback 与 item 生命周期合并，再把最终 timeline 交给 projector
+  - typed carrier 非 nil 时是权威输入：空 carrier、unknown/malformed 或 completion 最终仍缺详情会走 generic command/tool 行，不允许旧 shell/dynamic parser 二次猜测；carrier nil 时才保留 legacy parser 兼容
+  - start 参数不完整时不会投影空行或空括号；completion 补详情、completion-only 和 final-empty fallback 都按 item 维持单一 structured/generic 表示，避免同一次调用重复成两行
+  - exploration action 只使用 adapter 提供的安全字段；tool result、stdout/stderr 与 `rawOutput` 不用于生成 read/list/search 摘要
   - reasoning 行是历史记录；普通进度继续追加时不会清掉它，assistant 正文真正 flush 成可见文本块时才终结 active progress 生命周期，不再额外 patch 旧卡撤回 reasoning 行；verbose 下若这张卡一度只有尾部 `思考中...` 占位，thinking 结束后也不会再主动撤回整张旧卡；turn 完成/失败/中断时若仍有 active progress，会把 running 行按最终状态封口后再清理内存态。
   - `web_search` 会按动作类型显示行级摘要（例如“搜索 / 打开网页 / 页内查找”），其中 begin 阶段先用“正在搜索网络”占位，end 阶段再把对应行改写成具体摘要
   - `mcp_tool_call` 会以 `MCP：server.tool` 的行级摘要进入同一张卡；完成态会补耗时，失败态会内联失败原因

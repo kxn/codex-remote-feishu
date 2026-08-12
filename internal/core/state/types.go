@@ -494,6 +494,7 @@ type ExecCommandProgressRecord struct {
 	Verbosity            SurfaceVerbosity
 	Entries              []ExecCommandProgressEntryRecord
 	Exploration          *ExecCommandProgressExplorationRecord
+	ExplorationItems     map[string]string
 	Reasoning            *ExecCommandProgressReasoningRecord
 	DynamicToolItemGroup map[string]string
 	DynamicToolGroups    map[string]*DynamicToolProgressGroupRecord

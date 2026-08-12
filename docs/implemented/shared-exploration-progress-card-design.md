@@ -1,8 +1,8 @@
 # 共享探索过程卡设计
 
 > Type: `implemented`
-> Updated: `2026-05-02`
-> Summary: 记录共用探索过程卡的已落地边界：后端输出结构化 exploration block，reasoning/thinking 作为飞书“工作中”卡内持久 timeline 行展示；共享过程卡超预算后改为多段 progress-card family，旧段 seal 保留，新段承接后续过程与 running 项快照。
+> Updated: `2026-08-12`
+> Summary: 记录共用探索过程卡的已落地边界：adapter 可通过 typed `agentproto.Event.Exploration` 提供权威 `read/list/search` 动作，共享 resolver 负责安全回退与 item 生命周期；reasoning/thinking 作为飞书“工作中”卡内持久 timeline 行展示，超预算后由多段 progress-card family 承接。
 
 ## 背景
 
@@ -45,11 +45,15 @@
 7. Feishu projector 当前按“每个可见行一个 markdown element”出站共享过程卡，而不是把整段 timeline 压成单个 markdown body，避免某一行的 inline 语法把后续行一起污染。
 8. Web admin 已停止展示共享探索过程，admin runtime API 也不再额外暴露这类运行中进度，避免继续把管理页视为目标展示面。
 9. 原有 `Entries` 仍保留为兼容回退，因此未进入 exploration block 的普通过程不会丢失。
+10. `agentproto.Event` 已增加 typed `Exploration` carrier，adapter 可以提供有序 `read / list / search` actions；共享 resolver 在写 state 前整体规范化与校验，unknown 或 final 时仍缺必填详情会整组 generic 回退，不产生部分探索行。
+11. carrier 的 `nil` 与非 nil 空对象语义不同：nil 表示 producer 未提供权威分类，允许 command shell parser / legacy dynamic read 兼容；非 nil 空对象表示 producer 已判定该调用不是纯探索，禁止旧 parser 二次猜测。
+12. item resolution 在一个 turn 内保持 `pending / structured / generic` 的 sticky 结果。start 参数不完整时可等待 completion 补齐；一旦已经显示 structured 或 generic，completion 不会改投另一种表示。typed completion-only event 也可以在无 start 事件时创建对应进度行。
+13. 原始 command、tool 参数和 raw output 不进入 typed action contract。`MergeKey` 由 orchestrator 根据来源和 kind 本地派生；tool result、stdout/stderr 与 `rawOutput` 永远不用于生成探索摘要。
 
 当前仍然刻意保留的边界：
 
 1. 管理页与 admin runtime API 都不再承担共享探索过程的正式展示职责；当前用户可见展示面只保留 Feishu 侧共用状态卡。
-2. `dynamic_tool_call` 只有语义最明确的 `read` 进入 exploration block，其他 tool 继续走 generic progress。
+2. typed carrier 已支持任意 adapter 映射 `read / list / search`；尚未接入 typed carrier 的 dynamic tool 当前只有 legacy `read` 进入 exploration block，其他 tool 继续走 generic progress。
 3. 更广覆盖率的 shell parsing 与最近一次 exploration 摘要复用，留待后续迭代。
 
 ## 目标
@@ -180,16 +184,13 @@
 - `internal/core/orchestrator/service_exec_command_progress.go`
 - `internal/core/orchestrator/service_exec_command_progress_test.go`
 
-### 3. 当前主要缺口
+### 3. 当前扩展边界
 
-真正的缺口主要有三个：
+共享模型、resolver 与 Feishu 投影已经落地；当前扩展边界集中在各 adapter 如何把原生字段转换为 canonical carrier：
 
-1. `command_execution` 只有原始 `command / cwd / exitCode`
-   - 还没有等价于上游 `ParsedCommand` 的结构化语义
-2. 当前 `ExecCommandProgress` 只有扁平 `Entries`
-   - 不足以表达“一个探索块 + 块内多行 + 活动/完成状态”
-3. 前端只能拿到字符串摘要
-   - 很难稳定渲染出上游那种效果
+1. Codex `commandActions` 需要整组映射；混入 `unknown` 时 producer 应发送非 nil 空 carrier，保留原 command 供 generic fallback。
+2. Claude Code `Read / Glob / Grep` 与 OpenCode ACP `kind/rawInput` 需要在各自 adapter 边界归一成 `read / list / search`，不能把原生字段名泄漏到共享 resolver。
+3. projector 继续只消费最终 timeline，不理解 backend、tool 名、raw input 或 raw output。
 
 对应代码：
 
@@ -331,6 +332,13 @@ block 至少应表达：
 2. 同一 block 内不存在 `unknown`
 3. 来源和 turn 归属一致
 
+typed carrier 的 resolver 优先级固定为：
+
+1. `Exploration != nil` 时由 carrier 权威决定 structured / pending / rejected，不再运行 legacy parser。
+2. `Exploration == nil` 时，command execution 才运行既有 shell parser；dynamic tool 暂时只运行 legacy read parser。
+3. producer 明确拒绝、unknown/malformed 或 completion 最终仍缺详情时，显示 generic command/tool 行；不会生成空括号，也不会因 `semanticKind=exploration` 永久静默。
+4. actions 在写 state 前整体校验，保证一组 actions 要么按原顺序全部写入，要么一条都不写。
+
 ### 2. 连续读取合并
 
 连续纯 `read` 行应合并为一行，尽量贴近上游：
@@ -382,10 +390,12 @@ block 至少应表达：
 1. 结构化 block 模型已落到 `control/state/orchestrator`
 2. Feishu 已接上 exploration block；Web admin 的同构展示已下线
 3. active / completed / failed 生命周期与兼容回退测试已补齐
+4. adapter 到 orchestrator 的 typed exploration carrier、nil/empty 权威语义、atomic multi-action 校验与 sticky item resolution 已落地
+5. completion-only、final-empty generic fallback、legacy parser 兼容与 raw output 隔离已有回归测试
 
 ### 后续可继续扩展
 
-1. 补更多 dynamic tool 语义映射
+1. 在 Codex、Claude Code、OpenCode adapter 中接入各自原生 exploration 字段
 2. 视需要把最近一次 exploration block 摘要复用到 snapshot / status 视图
 
 ## 验证参考
@@ -398,18 +408,25 @@ block 至少应表达：
 4. active exploration block 不会被无关过程覆盖
 5. completed exploration block 在最终答案出来前不会立刻丢失
 6. Feishu 侧展示保持可用；Web admin 不再承担探索过程展示职责
+7. nil carrier 继续走 legacy fallback，非 nil 空 carrier 阻止 legacy 二次猜测
+8. start 空参数、completion 补详情、纯 completion-only 与 final-empty generic fallback 均保持单一可见表示
+9. raw output/result 中的文件内容或路径不会进入探索行
 
 ### 建议测试面
 
 - `internal/core/orchestrator/service_exec_command_progress_test.go`
+- `internal/core/orchestrator/service_exec_command_progress_exploration_contract_test.go`
+- `internal/core/orchestrator/service_exec_command_progress_dynamic_tool_test.go`
+- `internal/core/agentproto/wire_test.go`
 - `internal/adapter/feishu/projector_exec_command_progress_test.go`
-- Web 共用状态卡对应的前端测试
 
 ## 实现参考
 
 ### 本仓库关键文件
 
 - `internal/core/orchestrator/service_exec_command_progress.go`
+- `internal/core/orchestrator/execprogress/exploration.go`
+- `internal/core/agentproto/exploration.go`
 - `internal/core/control/types.go`
 - `internal/core/state/types.go`
 - `internal/adapter/codex/translator_helpers.go`
@@ -425,5 +442,5 @@ block 至少应表达：
 
 ## 待讨论取舍
 
-1. `dynamic_tool_call` 除 `read` 外，哪些 tool 能被稳定映射为 `list / search`。
+1. 各 adapter 除已知 read/glob/grep/list/search 外，哪些原生 tool 能被稳定映射为 canonical `list / search`。
 2. `/status` snapshot 是否要额外展示“最近一次探索摘要”，还是只在过程卡里可见。
