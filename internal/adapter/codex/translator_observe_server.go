@@ -713,31 +713,7 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			Metadata:     metadata,
 		}}}, nil
 	case "item/completed":
-		threadID := lookupString(message, "params", "threadId")
-		turnID := lookupString(message, "params", "turnId")
-		item := lookupMap(message, "params", "item")
-		itemID := choose(
-			xutil.LookupStringFromAny(item["id"]),
-			lookupString(message, "params", "itemId"),
-		)
-		itemKind := normalizeItemKind(choose(
-			xutil.LookupStringFromAny(item["type"]),
-			lookupString(message, "params", "itemType"),
-		))
-		metadata := extractItemMetadata(itemKind, item)
-		return Result{Events: []agentproto.Event{{
-			Kind:         agentproto.EventItemCompleted,
-			ThreadID:     threadID,
-			TurnID:       turnID,
-			ItemID:       itemID,
-			ItemKind:     itemKind,
-			Status:       extractItemStatus(item),
-			TrafficClass: t.trafficClassForTurn(threadID, turnID),
-			Initiator:    t.initiatorForTurn(threadID, turnID),
-			Metadata:     metadata,
-			Exploration:  extractCommandExecutionExploration(itemKind, item),
-			FileChanges:  extractFileChangeRecords(itemKind, item),
-		}}}, nil
+		return t.observeItemCompleted(message), nil
 	case "item/started":
 		threadID := lookupString(message, "params", "threadId")
 		turnID := lookupString(message, "params", "turnId")
@@ -792,16 +768,21 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 	case "item/reasoning/summaryTextDelta":
 		threadID := lookupString(message, "params", "threadId")
 		turnID := lookupString(message, "params", "turnId")
+		itemID := lookupString(message, "params", "itemId")
+		summaryIndex := xutil.LookupIntFromAny(lookupAny(message, "params", "summaryIndex"))
+		if strings.TrimSpace(lookupString(message, "params", "delta")) != "" {
+			t.markReasoningSummaryIndexSeen(threadID, turnID, itemID, summaryIndex)
+		}
 		return Result{Events: []agentproto.Event{{
 			Kind:         agentproto.EventItemDelta,
 			ThreadID:     threadID,
 			TurnID:       turnID,
-			ItemID:       lookupString(message, "params", "itemId"),
+			ItemID:       itemID,
 			ItemKind:     "reasoning_summary",
 			Delta:        lookupString(message, "params", "delta"),
 			TrafficClass: t.trafficClassForTurn(threadID, turnID),
 			Initiator:    t.initiatorForTurn(threadID, turnID),
-			Metadata:     map[string]any{"summaryIndex": xutil.LookupIntFromAny(lookupAny(message, "params", "summaryIndex"))},
+			Metadata:     map[string]any{"summaryIndex": summaryIndex},
 		}}}, nil
 	case "item/reasoning/textDelta":
 		threadID := lookupString(message, "params", "threadId")

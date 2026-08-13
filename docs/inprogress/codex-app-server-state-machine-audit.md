@@ -1,8 +1,8 @@
 # Codex App Server 状态机遵循度审计
 
 > Type: `inprogress`
-> Updated: `2026-07-17`
-> Summary: 对照 OpenAI 官方 Codex App Server 页面与 `openai/codex` 最新源码/schema（当前 protocol coverage 快照复核到 HEAD `315195492c80fdade38e917c18f9584efd599304`），按 VS Code 透传、relay/Feishu 归一化、headless 主动驱动三层审计当前仓库对各类状态机的遵循程度；本轮补记 capability/account/app/MCP status passive notifications 已进入 state-only `capability.state.updated` carrier，主动账号/app/skills 管理 UI 与完整 OAuth lifecycle 仍后置。
+> Updated: `2026-08-13`
+> Summary: 修正 headless reasoning 订阅边界：`summaryTextDelta` 作为 verbose/chatty 可见摘要持续订阅并合并投影，`textDelta` 继续 opt-out，completion `summary[]` 只对缺失 index 做去重后备。
 
 ## 1. 审计范围与判定口径
 
@@ -106,7 +106,7 @@
   - 同步 bootstrap 期间如果提前读到其他 stdout 帧，会缓冲并回放给后续 `stdoutLoop`，避免吞掉非握手数据。
   - 证据：`internal/app/wrapper/app_headless.go`、`internal/app/wrapper/app_headless_test.go`、`internal/app/wrapper/app_test.go`
 - `relay/Feishu 归一化层`：
-  - **仍未产品化连接级初始化状态**，但 headless / cron synthetic initialize 已显式携带 `optOutNotificationMethods` allowlist，用于关闭飞书不消费的高频 item delta。
+  - **仍未产品化连接级初始化状态**，但 headless / cron synthetic initialize 已显式携带 `optOutNotificationMethods` allowlist，用于关闭飞书不消费的高频 item delta。`item/reasoning/summaryTextDelta` 不在该 allowlist，因为 `/verbose` 可在连接存活期间动态切换，verbose/chatty 必须一直能消费后续摘要 delta。
   - 但 headless 已不再依赖“未初始化也能继续发业务请求”的侥幸行为。
 
 结论：
@@ -308,12 +308,12 @@ Headless / cron synthetic initialize 当前 opt-out：
 - `item/agentMessage/delta`
 - `item/plan/delta`
 - `item/reasoning/textDelta`
-- `item/reasoning/summaryTextDelta`
 - `item/commandExecution/outputDelta`
 - `item/fileChange/outputDelta`
 
 不 opt-out 的相邻方法：
 
+- `item/reasoning/summaryTextDelta`：是 verbose/chatty 展示的 backend-provided summary text，translator 归一化为 `item.delta(reasoning_summary)`，orchestrator 按飞书 patch 窗口合并。Native `item/completed(type=reasoning)` 中的 `summary[]` 只为未收到 delta 的 `summaryIndex` 合成后备 delta，然后发 canonical `item.completed(reasoning_summary)` 封口；已观测 index 不重复投影。
 - `item/fileChange/patchUpdated`：当前作为 latest-only file-change snapshot 输入 final summary。
 - `command/exec/outputDelta` / `process/outputDelta`：standalone process stream 没有 final duplicate。
 

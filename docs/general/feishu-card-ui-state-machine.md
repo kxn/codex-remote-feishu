@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-13`
-> Summary: Claude/OpenCode `/review` 均已开放为独立只读 fork session，并与 Codex 复用审阅入口、结果卡和显式追问/退出/应用动作。
+> Summary: 补齐 Codex reasoning 投影契约：持续订阅 summary delta，completion 仅后备缺失 index，chatty 在 summary index 变化时冻结前一段。
 
 ## 1. 文档定位
 
@@ -700,6 +700,7 @@ MCP request 卡片当前新增的可视语义：
   - `quiet` / `normal`：不投影 reasoning；运行中切到可见档只处理切换后到达的新 delta，不回放隐藏期间内容
   - `verbose`：当前过程卡只有一个真实 reasoning 尾槽，内容是最新 summary，始终位于卡片最后一行；新 summary 替换该槽，不保留 reasoning 历史。工具到来时排在尾槽之前，因此 verbose 尾槽不截断连续工具分组
   - `chatty`：保留完整可见 reasoning 历史；同一连续段的 delta 只更新当前活动行。可见工具到来时冻结当前 reasoning 段，工具之后的新 reasoning 另起活动段，即使上游复用同一 item/summary index 也不会回头改写旧行；活动段始终位于卡片最后一行
+  - 同一 reasoning item 的 `summaryIndex` 变化也会先冻结 chatty 上一段，再为新 index 建立活动行。Codex completion `summary[]` 仅对未收到 delta 的 index 合成后备 reasoning delta，已收 index 不重复；completion 随后封口当前活动段
   - 运行中切换档位只影响未来 reasoning；已经投影的可见历史按产生时的模式冻结保留。切到 quiet/normal 会冻结旧可见段，新隐藏 delta 不写入当前卡
   - reasoning delta 先更新 active progress 并标记 dirty；第一段立即建卡，之后主动 patch 按约 1 秒窗口合并。item completed、内容边界和 turn finalization 会落定活动状态；内容边界后不会自动把旧 reasoning 重挂到新卡
 - 共享过程卡的 projector 不再把整段 timeline 压成单个 markdown body；当前改成“每个可见行一个 markdown element”，避免单行语法异常把后续行一起污染

@@ -22,7 +22,6 @@ func headlessNotificationOptOutMethods() []string {
 		"item/agentMessage/delta",
 		"item/plan/delta",
 		"item/reasoning/textDelta",
-		"item/reasoning/summaryTextDelta",
 		"item/commandExecution/outputDelta",
 		"item/fileChange/outputDelta",
 	}

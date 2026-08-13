@@ -43,6 +43,7 @@ type Translator struct {
 	pendingMCPOAuthLogins     map[string]pendingMCPOAuthLogin
 	pendingMCPOAuthLoginKeys  map[string]string
 	pendingModelList          map[string]pendingModelList
+	reasoningSummaryIndexes   map[string]map[int]bool
 }
 
 type pendingThreadCreate struct {
@@ -144,5 +145,6 @@ func NewTranslator(instanceID string) *Translator {
 		pendingMCPOAuthLogins:      map[string]pendingMCPOAuthLogin{},
 		pendingMCPOAuthLoginKeys:   map[string]string{},
 		pendingModelList:           map[string]pendingModelList{},
+		reasoningSummaryIndexes:    map[string]map[int]bool{},
 	}
 }

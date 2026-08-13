@@ -169,6 +169,10 @@ func TestReasoningSummaryProgressChattyKeepsDifferentSummaryIndexesAsTimelineRow
 	if len(second) != 0 {
 		t.Fatalf("expected second reasoning summary inside throttle window to be coalesced, got %#v", second)
 	}
+	intermediate := execprogress.Snapshot(surface.ActiveExecProgress).Timeline
+	if len(intermediate) != 2 || intermediate[0].Status != "completed" || intermediate[1].Status != "running" {
+		t.Fatalf("expected a new summary index to freeze the previous row, got %#v", intermediate)
+	}
 	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "reasoning-1", "om-progress-1")
 	now = now.Add(execCommandProgressReasoningFlushInterval)
 	tick := svc.Tick(now)

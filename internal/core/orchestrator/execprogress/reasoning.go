@@ -33,6 +33,9 @@ func UpsertReasoning(progress *state.ExecCommandProgressRecord, event agentproto
 	if verbosity == state.SurfaceVerbosityChatty && !startSegment {
 		startSegment = reasoningEntrySeq(progress, record.VisibleEntryID) != progress.LastVisibleSeq
 	}
+	if verbosity == state.SurfaceVerbosityChatty && startSegment && !modeChanged {
+		freezeReasoningProjection(progress, record, verbosity)
+	}
 	if startSegment {
 		record.Buffer = ""
 		record.BufferSummaryIndex = xutil.LookupIntFromAny(event.Metadata["summaryIndex"])

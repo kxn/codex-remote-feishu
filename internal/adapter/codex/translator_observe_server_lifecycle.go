@@ -290,6 +290,7 @@ func (t *Translator) observeTurnCompleted(message map[string]any) Result {
 	}
 	delete(t.turnInitiators, turnID)
 	delete(t.internalTurnIDs, turnID)
+	t.clearReasoningSummaryIndexesForTurn(threadID, turnID)
 	t.Debugf("observe server turn/completed: thread=%s turn=%s status=%s initiator=%s", threadID, turnID, status, initiator.Kind)
 	event := agentproto.Event{
 		Kind:                 agentproto.EventTurnCompleted,
