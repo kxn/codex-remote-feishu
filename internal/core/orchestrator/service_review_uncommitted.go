@@ -103,8 +103,8 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 	if surface == nil {
 		return nil
 	}
-	if active := s.activeReviewSession(surface); active != nil {
-		return notice(surface, "review_session_active", "当前已经在审阅中；请直接继续提问，或使用“放弃审阅”/“按审阅意见继续修改”退出。")
+	if surface.ReviewSession != nil {
+		return notice(surface, "review_session_active", "当前已经在审阅中；请在最新结果卡上选择继续追问、退出审阅或按审阅意见继续修改。")
 	}
 	if !start.Ready {
 		return notice(surface, start.FailureCode, start.FailureText)

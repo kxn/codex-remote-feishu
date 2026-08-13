@@ -204,6 +204,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 	if pending := activePendingRequest(surface); pending != nil {
 		return notice(surface, "request_pending", pendingRequestNoticeText(pending))
 	}
+	if events, handled := s.handleReviewSessionText(surface, action, text); handled {
+		return events
+	}
 
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil {
@@ -245,10 +248,6 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
 		return events
 	}
-	reviewSession := s.activeReviewSession(surface)
-	if reviewSession != nil {
-		s.ensureReviewSessionParentSelection(surface, reviewSession)
-	}
 	detour, detourProblem := s.resolveDetourDirective(surface, inst, text)
 	if detourProblem != "" {
 		return notice(surface, "detour_invalid", detourProblem)
@@ -268,20 +267,18 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		return blocked
 	}
 	if !detour.Triggered {
-		if reviewSession == nil {
-			if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
-				// Save the message for replay after the user resolves the
-				// blocking condition (e.g., selects a thread from the picker).
-				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
-				return blocked
-			}
-			if blocked := s.unboundInputBlocked(surface); blocked != nil {
-				s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
-				return blocked
-			}
-			if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
-				return notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；请等待它落地后再继续发送。")
-			}
+		if blocked := s.maybePrepareImplicitNewThreadFromUnboundText(surface, inst, text); blocked != nil {
+			// Save the message for replay after the user resolves the
+			// blocking condition (e.g., selects a thread from the picker).
+			s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
+			return blocked
+		}
+		if blocked := s.unboundInputBlocked(surface); blocked != nil {
+			s.storePendingTextInput(surface, text, action.Inputs, action.MessageID, action.ActorUserID, action.MessageID, nil)
+			return blocked
+		}
+		if surface.RouteMode == state.RouteModeNewThreadReady && s.preparedNewThreadHasPendingCreate(surface) {
+			return notice(surface, "new_thread_first_input_pending", "当前新会话的首条消息已经在排队或发送中；请等待它落地后再继续发送。")
 		}
 	}
 
@@ -305,16 +302,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 		}
 	}
 	inputs = append(inputs, messageInputs...)
-	if !detour.Triggered && reviewSession != nil {
-		threadID = strings.TrimSpace(reviewSession.ReviewThreadID)
-		cwd = reviewSessionCWD(inst, reviewSession)
-		createThread = false
-		if threadID == "" || strings.TrimSpace(cwd) == "" {
-			s.restoreStagedInputs(surface, stagedMessageIDs)
-			return notice(surface, "review_thread_not_ready", "当前审阅会话不可继续使用，请重新进入审阅。")
-		}
-	}
-	if !detour.Triggered && reviewSession == nil && !createThread && threadID == "" {
+	if !detour.Triggered && !createThread && threadID == "" {
 		s.restoreStagedInputs(surface, stagedMessageIDs)
 		return notice(surface, "thread_not_ready", "当前还没有可发送的目标会话。请先 /use 重新选择会话；headless 模式可直接发送文本开启新会话（也可 /new 先进入待命），如需跟随 VS Code 请先 /mode vscode 再 /follow。")
 	}
@@ -346,23 +334,6 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			false,
 		)...)
 	}
-	if reviewSession != nil {
-		return append(events, s.enqueueQueueItemWithTarget(
-			surface,
-			action.MessageID,
-			text,
-			stagedMessageIDs,
-			inputs,
-			threadID,
-			cwd,
-			routeMode,
-			surface.PromptOverride,
-			agentproto.PromptExecutionModeResumeExisting,
-			reviewSession.ParentThreadID,
-			agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
-			false,
-		)...)
-	}
 	// Clear any saved pending input — the user sent a new message that is
 	// being processed, so the old pending is stale.
 	s.clearPendingTextInput(surface)
@@ -370,6 +341,9 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 }
 
 func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
+	if blocked := s.blockNonTextReviewSessionInput(surface); blocked != nil {
+		return blocked
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	events := []eventcontract.Event{}
 	if inst == nil {
@@ -430,6 +404,9 @@ func (s *Service) stageImage(surface *state.SurfaceConsoleRecord, action control
 }
 
 func (s *Service) stageFile(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
+	if blocked := s.blockNonTextReviewSessionInput(surface); blocked != nil {
+		return blocked
+	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	events := []eventcontract.Event{}
 	if inst == nil {
@@ -756,7 +733,16 @@ func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []eventcontra
 		Text:     "当前没有正在运行的推理。",
 		ThemeKey: "system",
 	}
-	if inst != nil && !inst.Online && surface.ActiveQueueItemID != "" {
+	if surface.ReviewSession != nil && surface.ReviewSession.AwaitingFollowUpText && !reviewSessionTurnActive(surface, surface.ReviewSession) {
+		surface.ReviewSession.AwaitingFollowUpText = false
+		surface.ReviewSession.LastUpdatedAt = s.now()
+		notice = control.Notice{
+			Code:     "review_follow_up_cancelled",
+			Title:    "已取消追问输入",
+			Text:     "已取消本次审阅追问输入；当前审阅结果仍可继续处理。",
+			ThemeKey: "system",
+		}
+	} else if inst != nil && !inst.Online && surface.ActiveQueueItemID != "" {
 		notice = s.stopOfflineNotice(surface)
 	} else if threadID, turnID, ok := s.interruptibleSurfaceTurn(surface); ok {
 		if strings.TrimSpace(surface.AttachedInstanceID) != "" {

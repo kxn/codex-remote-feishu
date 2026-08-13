@@ -132,7 +132,14 @@ func reviewCommitButtonSHA(value string) string {
 func reviewExitButtons(daemonLifecycleID string) []map[string]any {
 	return []map[string]any{
 		localCurrentCardActionButton(
-			"放弃审阅",
+			"继续追问审阅",
+			"default",
+			daemonLifecycleID,
+			control.ActionReviewFollowUp,
+			"",
+		),
+		localCurrentCardActionButton(
+			"退出审阅",
 			"default",
 			daemonLifecycleID,
 			control.ActionReviewDiscard,

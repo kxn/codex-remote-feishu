@@ -204,6 +204,7 @@ func feishuRoomActionRequiresWorkspace(action control.Action) bool {
 		control.ActionReviewCommand,
 		control.ActionReviewStart,
 		control.ActionReviewStartUncommitted,
+		control.ActionReviewFollowUp,
 		control.ActionReviewApply,
 		control.ActionRespondRequest,
 		control.ActionControlRequest:

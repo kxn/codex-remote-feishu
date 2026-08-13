@@ -63,6 +63,7 @@ const (
 	ActionReviewStart                 ActionKind = "surface.button.review_start"
 	ActionReviewStartUncommitted      ActionKind = "surface.button.review_start_uncommitted"
 	ActionReviewOpenCommitPicker      ActionKind = "surface.button.review_open_commit_picker"
+	ActionReviewFollowUp              ActionKind = "surface.button.review_follow_up"
 	ActionReviewDiscard               ActionKind = "surface.button.review_discard"
 	ActionReviewApply                 ActionKind = "surface.button.review_apply"
 	ActionAttachInstance              ActionKind = "surface.button.attach_instance"

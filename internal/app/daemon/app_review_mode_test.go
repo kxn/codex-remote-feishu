@@ -283,6 +283,9 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewDiscard)) {
 		t.Fatalf("expected discard button, got %#v", ops[0].CardElements)
 	}
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewFollowUp)) {
+		t.Fatalf("expected explicit follow-up button, got %#v", ops[0].CardElements)
+	}
 	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewApply)) {
 		t.Fatalf("expected apply button, got %#v", ops[0].CardElements)
 	}

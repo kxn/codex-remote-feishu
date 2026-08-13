@@ -4,6 +4,8 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -26,6 +28,10 @@ func (s *Service) validReviewSession(surface *state.SurfaceConsoleRecord) *state
 		return nil
 	}
 	if strings.TrimSpace(surface.AttachedInstanceID) == "" {
+		return nil
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	if s.surfaceBackend(surface) != agentproto.BackendCodex || inst == nil || state.EffectiveInstanceBackend(inst) != agentproto.BackendCodex {
 		return nil
 	}
 	return session
@@ -106,6 +112,102 @@ func clearIdleReviewSession(surface *state.SurfaceConsoleRecord) {
 		return
 	}
 	surface.ReviewSession = nil
+}
+
+func (s *Service) blockReviewSessionBackendMismatch(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	if surface == nil || surface.ReviewSession == nil {
+		return nil
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	if s.surfaceBackend(surface) == agentproto.BackendCodex && inst != nil && state.EffectiveInstanceBackend(inst) == agentproto.BackendCodex {
+		return nil
+	}
+	if !reviewSessionTurnActive(surface, surface.ReviewSession) {
+		s.releaseFeishuRoomReviewReservations(surface)
+		s.clearPendingReviewStart(surface)
+		surface.ReviewSession = nil
+	}
+	return notice(surface, "review_backend_mismatch", "当前审阅会话与已连接的服务类型不一致，已停止继续路由；请重新进入 Codex 审阅。")
+}
+
+func (s *Service) blockNonTextReviewSessionInput(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	if surface == nil || surface.ReviewSession == nil {
+		return nil
+	}
+	if blocked := s.blockReviewSessionBackendMismatch(surface); blocked != nil {
+		return blocked
+	}
+	session := surface.ReviewSession
+	if session.AwaitingFollowUpText {
+		return notice(surface, "review_follow_up_waiting_text", "当前正在等待一条文字追问；图片和文件不会加入审阅会话。")
+	}
+	if session.Phase == state.ReviewSessionPhasePending {
+		return notice(surface, "review_thread_not_ready", "当前正在进入审阅，请等待审阅会话建立；如需退出，可使用 `/new` 或 `/detach`。")
+	}
+	if reviewSessionTurnActive(surface, session) || session.Phase == state.ReviewSessionPhaseActive {
+		return notice(surface, "review_turn_active", "当前审阅仍在处理中，请等待完成或使用 `/stop`。")
+	}
+	return notice(surface, "review_follow_up_not_requested", "当前审阅结果仍待处理。请在最新结果卡上选择继续追问、退出审阅或按审阅意见继续修改。")
+}
+
+func (s *Service) handleReviewSessionText(surface *state.SurfaceConsoleRecord, action control.Action, text string) ([]eventcontract.Event, bool) {
+	if surface == nil || surface.ReviewSession == nil {
+		return nil, false
+	}
+	if blocked := s.blockReviewSessionBackendMismatch(surface); blocked != nil {
+		return blocked, true
+	}
+	session := s.validReviewSession(surface)
+	if session == nil {
+		return notice(surface, "review_thread_not_ready", "当前正在进入审阅，请等待审阅会话建立；如需退出，可使用 `/new` 或 `/detach`。"), true
+	}
+	s.ensureReviewSessionParentSelection(surface, session)
+	if !session.AwaitingFollowUpText {
+		if reviewSessionTurnActive(surface, session) || session.Phase == state.ReviewSessionPhaseActive {
+			return notice(surface, "review_turn_active", "当前审阅仍在处理中，请等待完成或使用 `/stop`。"), true
+		}
+		return notice(surface, "review_follow_up_not_requested", "当前审阅结果仍待处理。请在最新结果卡上选择继续追问、退出审阅或按审阅意见继续修改。"), true
+	}
+	if strings.TrimSpace(text) == "" || reviewFollowUpHasNonTextInput(action.Inputs) {
+		return notice(surface, "review_follow_up_waiting_text", "当前反馈模式只接受一条纯文字追问；图片和文件不会加入审阅会话。"), true
+	}
+
+	// The explicit capture is one-shot even if dispatch later fails.
+	session.AwaitingFollowUpText = false
+	session.LastUpdatedAt = s.now()
+	if reviewSessionTurnActive(surface, session) || session.Phase != state.ReviewSessionPhaseReady {
+		return notice(surface, "review_turn_active", "当前审阅仍在处理中，请等本轮完成后再继续追问。"), true
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	cwd := reviewSessionCWD(inst, session)
+	if strings.TrimSpace(cwd) == "" {
+		return notice(surface, "review_thread_not_ready", "当前审阅会话缺少可用的工作目录，请退出后重新进入审阅。"), true
+	}
+	inputs := []agentproto.Input{{Type: agentproto.InputText, Text: text}}
+	return s.enqueueQueueItemWithTarget(
+		surface,
+		action.MessageID,
+		text,
+		nil,
+		inputs,
+		strings.TrimSpace(session.ReviewThreadID),
+		cwd,
+		surface.RouteMode,
+		surface.PromptOverride,
+		agentproto.PromptExecutionModeResumeExisting,
+		strings.TrimSpace(session.ParentThreadID),
+		agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+		false,
+	), true
+}
+
+func reviewFollowUpHasNonTextInput(inputs []agentproto.Input) bool {
+	for _, input := range inputs {
+		if input.Type != agentproto.InputText {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) ReviewSession(surfaceID string) *state.ReviewSessionRecord {
@@ -312,7 +414,9 @@ func (s *Service) maybeApplyReviewLifecycleItem(instanceID string, event agentpr
 		if event.ItemKind == "entered_review_mode" {
 			session.TargetLabel = review
 		} else {
-			session.LastReviewText = review
+			if strings.TrimSpace(session.LastReviewText) == "" {
+				session.LastReviewText = review
+			}
 			if event.Kind == agentproto.EventItemCompleted {
 				session.Phase = state.ReviewSessionPhaseReady
 			}

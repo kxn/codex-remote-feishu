@@ -58,6 +58,10 @@ func (s *Service) RecordFinalCardMessage(surfaceID string, block render.Block, s
 		retained = append([]*state.FinalCardRecord(nil), retained[len(retained)-maxRetainedFinalCardsPerSurface:]...)
 	}
 	surface.RecentFinalCards = retained
+	if session := surface.ReviewSession; session != nil && strings.TrimSpace(session.ReviewThreadID) == record.ThreadID {
+		session.ActionMessageID = record.MessageID
+		session.LastUpdatedAt = s.now()
+	}
 }
 
 func (s *Service) LookupFinalCard(surfaceID, instanceID, threadID, turnID, itemID, daemonLifecycleID string) *state.FinalCardRecord {

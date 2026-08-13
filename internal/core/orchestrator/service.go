@@ -390,8 +390,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.openReviewCommitPicker(surface, action)
 	case control.ActionReviewStart:
 		events = s.startReviewFromFinalCard(surface, action)
+	case control.ActionReviewFollowUp:
+		events = s.beginReviewSessionFollowUp(surface, action)
 	case control.ActionReviewDiscard:
-		events = s.discardReviewSession(surface)
+		events = s.discardReviewSession(surface, action)
 	case control.ActionReviewApply:
 		events = s.applyReviewSessionResult(surface, action)
 	case control.ActionAttachInstance:

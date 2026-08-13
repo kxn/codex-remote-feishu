@@ -424,18 +424,20 @@ type PendingTextInputRecord struct {
 }
 
 type ReviewSessionRecord struct {
-	Phase             ReviewSessionPhase
-	ParentThreadID    string
-	ReviewThreadID    string
-	InitialTurnID     string
-	ActiveTurnID      string
-	ThreadCWD         string
-	SourceMessageID   string
-	TargetLabel       string
-	PendingReviewText string
-	LastReviewText    string
-	StartedAt         time.Time
-	LastUpdatedAt     time.Time
+	Phase                ReviewSessionPhase
+	ParentThreadID       string
+	ReviewThreadID       string
+	InitialTurnID        string
+	ActiveTurnID         string
+	ThreadCWD            string
+	SourceMessageID      string
+	TargetLabel          string
+	PendingReviewText    string
+	LastReviewText       string
+	AwaitingFollowUpText bool
+	ActionMessageID      string
+	StartedAt            time.Time
+	LastUpdatedAt        time.Time
 }
 
 type ExecCommandProgressEntryRecord struct {
