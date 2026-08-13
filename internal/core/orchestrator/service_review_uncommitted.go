@@ -128,17 +128,29 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 	if backend == agentproto.BackendCodex && !s.reserveFeishuRoomActiveSlot(surface, "review_start") {
 		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
 	}
+	frozenAccessMode := ""
+	if backend == agentproto.BackendCodex {
+		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+		frozenAccessMode = agentproto.NormalizeAccessMode(s.resolveFrozenPromptOverride(
+			inst,
+			surface,
+			strings.TrimSpace(start.ParentThreadID),
+			strings.TrimSpace(start.ThreadCWD),
+			surface.PromptOverride,
+		).AccessMode)
+	}
 	s.clearReviewCommitPickerRuntime(surface)
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhasePending,
-		Backend:         backend,
-		ExecutorKind:    executor,
-		ParentThreadID:  strings.TrimSpace(start.ParentThreadID),
-		ThreadCWD:       strings.TrimSpace(start.ThreadCWD),
-		SourceMessageID: strings.TrimSpace(start.SourceMessageID),
-		TargetLabel:     strings.TrimSpace(start.TargetLabel),
-		StartedAt:       s.now(),
-		LastUpdatedAt:   s.now(),
+		Phase:            state.ReviewSessionPhasePending,
+		Backend:          backend,
+		ExecutorKind:     executor,
+		FrozenAccessMode: frozenAccessMode,
+		ParentThreadID:   strings.TrimSpace(start.ParentThreadID),
+		ThreadCWD:        strings.TrimSpace(start.ThreadCWD),
+		SourceMessageID:  strings.TrimSpace(start.SourceMessageID),
+		TargetLabel:      strings.TrimSpace(start.TargetLabel),
+		StartedAt:        s.now(),
+		LastUpdatedAt:    s.now(),
 	}
 	noticeEvent := eventcontract.Event{
 		Kind:             eventcontract.KindNotice,

@@ -152,12 +152,13 @@ func activateReviewSessionForTest(t *testing.T, svc *Service, surface *state.Sur
 	if surface == nil {
 		t.Fatal("expected surface")
 	}
-	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhasePending,
-		ParentThreadID:  "thread-main",
-		ReviewThreadID:  "thread-review",
-		SourceMessageID: sourceMessageID,
+	if surface.ReviewSession == nil {
+		surface.ReviewSession = &state.ReviewSessionRecord{}
 	}
+	surface.ReviewSession.Phase = state.ReviewSessionPhasePending
+	surface.ReviewSession.ParentThreadID = "thread-main"
+	surface.ReviewSession.ReviewThreadID = "thread-review"
+	surface.ReviewSession.SourceMessageID = sourceMessageID
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnStarted,
 		ThreadID:  "thread-review",

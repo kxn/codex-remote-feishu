@@ -161,6 +161,9 @@ func (s *Service) presentRequestPrompt(instanceID string, event agentproto.Event
 		s.requestTemporarySessionLabel(record),
 	)
 	normalizeRequestPromptRecord(record)
+	if events, handled := s.maybeAutoApproveCodexReviewRequest(surface, record); handled {
+		return events
+	}
 	enqueuePendingRequest(surface, record)
 	if !pendingRequestIsActive(surface, record.RequestID) {
 		markRequestQueuedInactive(record)

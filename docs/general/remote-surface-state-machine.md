@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-13`
-> Summary: detached review 以 typed purpose 和 backend/executor 关联；Claude 与 OpenCode 分别通过只读 fork session 复用统一 review overlay，Codex 保持原生 detached review。
+> Summary: Codex detached review 冻结启动时 access；full_access 仅静默批准严格白名单权限请求，其他交互和异常路径保持 fail closed。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -462,6 +462,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    9. `LastReviewText`
    10. `AwaitingFollowUpText`
    11. `ActionMessageID`
+   12. `FrozenAccessMode`
 2. review thread 当前必须有显式 `ThreadRecord.Source.Kind=review`；parent thread 关系优先来自 `ForkedFromID`，其次来自 `ThreadSourceRecord.ParentThreadID`。Codex 原生 review 若先发出不带 `threadSource` 的 `thread/started`，随后 `review/start` result 再带回 `reviewThreadId` / `turn.id`，translator 会补发一条只承载 review metadata 的 `thread.discovered(remote_surface)`，由 orchestrator merge 到同一个 thread record。Claude/OpenCode review 则通过 queue item / `PromptDispatchPlan` / remote binding 上的 typed `Purpose=review` 物化相同 provenance；OpenCode 的 fork response 在 prompt/config gate 前就携带原 command/initiator correlation，因此 `thread.discovered` 阶段已经标记 `source=review`，即使后续 mode gate 失败也不会混进普通 picker。普通 `fork_ephemeral` 不会被推断成 review。
 3. 当前激活条件不是“点了某个前台按钮”，而是更底层的 runtime 事实：
    1. 同一 attached instance 上已知某个 review thread
@@ -481,6 +482,9 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 14. OpenCode `/review` 使用同样的 typed fork plan。ACP 必须先收到 `session/fork` 的新 session，再确认其 `configOptions.mode` 含 `review`，依次发送 `session/set_config_option mode=review`、可选 `effort`，全部成功后才发送 `session/prompt`；review intent 忽略普通 plan override，不能把 fork 切回 `plan/build`。mode 缺失、set-config RPC error 或 prompt 前其他关联 `system.error` 都按 command id 回滚 dispatching queue item、ReviewSession、remote ownership 与 room reservation，不留下半死 overlay。
 15. OpenCode profile compiler 始终生成 `agent.review(mode=primary)`；API profile 的 `ReviewModel` 仅映射到 `agent.review.model`，空值继承主模型，不生成顶层 `review_model`。review agent 的 tools/permission 均默认 deny，只显式允许 Read/Glob/Grep；translator 还会对 typed review session 的 permission request 与 `fs/write_text_file` 直接 fail closed，旧写授权也不能旁路。
 16. Claude/OpenCode 类 reviewer 不依赖 shell 读取 target。orchestrator 生成受控上下文：未提交 target 包含完整 changed-file manifest、staged/unstaged patch 与 untracked 内容；commit target 包含 manifest、元信息与 patch。超限时显式标注截断，manifest 保持完整，reviewer 可用只读工具补读文件。
+17. Codex 原生 detached review 在启动时按 parent thread、review CWD 与 surface capability settings 复用普通 prompt 的有效配置解析，并把结果写入 `FrozenAccessMode`；后续 `/access` 只改变新 prompt 的 desired state，不追溯正在执行或 ready 后追问的该次 Review。旧/人工状态缺少冻结值时 fail closed。`ReviewSession` 是 daemon 内临时 overlay，当前 surface resume store 不跨 daemon 重启恢复它，本规则不新增持久化迁移。
+18. 只有 `Backend=codex + ExecutorKind=codex_native_detached + FrozenAccessMode=full_access`，且 instance、`ReviewThreadID`、当前非空 `ActiveTurnID` 与 request 精确匹配时，orchestrator 才可能在 request 入队前进入静默批准分支。白名单仅含 typed `approval_command`、`approval_file_change`、`approval_network`、`permissions_request_approval`，以及 request method 明确为 `execCommandApproval` / `applyPatchApproval` 的 legacy approval；typed approval 还必须实际暴露 `accept`。泛化 approval、plan confirmation、`request_user_input`、MCP elicitation、tool callback、Claude `can_use_tool` 和未知类型均按普通 request 路径展示或 fail closed。
+19. 静默批准不绕过 request lifecycle：approval 返回 `decision=accept`，permissions 返回原请求权限集合与 `scope=turn`；record 仍进入 pending/submitting 并等待 command ack 与上游 `request.resolved`，只是正常路径不生成 Feishu request card。surface 已有另一条 pending request 时不抢占，回退普通队列。若自动 response 的 command 被 translator/transport 拒绝，现有 restore 路径会把同一 request 转回可见 editing card 并追加失败 notice，因此不会形成无 UI 的永久 request gate。
 
 补充说明：
 

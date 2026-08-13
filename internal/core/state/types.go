@@ -435,6 +435,7 @@ type ReviewSessionRecord struct {
 	Phase                ReviewSessionPhase
 	Backend              agentproto.Backend
 	ExecutorKind         ReviewExecutorKind
+	FrozenAccessMode     string
 	ParentThreadID       string
 	ReviewThreadID       string
 	InitialTurnID        string
