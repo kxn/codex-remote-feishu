@@ -771,7 +771,6 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			thread = s.ensureThread(inst, event.ThreadID)
 			s.touchThread(thread)
 		}
-		s.maybeCompleteReviewSessionTurn(instanceID, event)
 		surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
 		if clearTrackedTurn && surface != nil {
 			surface.ActiveTurnOrigin = ""
@@ -780,6 +779,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		summary := s.progress.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
 		turnDiff := s.progress.takeTurnDiffSnapshot(instanceID, event.ThreadID, event.TurnID)
 		finalText := s.pendingTurnTextValue(instanceID, event.ThreadID, event.TurnID)
+		s.maybeCompleteReviewSessionTurn(instanceID, event)
 		finalizeTurnOutput := shouldMaterializeFinalTurnOutput(event, finalText)
 		finalRenderSummary := (*control.FileChangeSummary)(nil)
 		finalRenderTurnDiff := (*control.TurnDiffSnapshot)(nil)

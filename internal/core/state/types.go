@@ -405,6 +405,7 @@ type ReviewSessionPhase string
 const (
 	ReviewSessionPhasePending ReviewSessionPhase = "pending"
 	ReviewSessionPhaseActive  ReviewSessionPhase = "active"
+	ReviewSessionPhaseReady   ReviewSessionPhase = "ready"
 )
 
 // PendingTextInputRecord holds a user text message that could not be processed
@@ -423,16 +424,18 @@ type PendingTextInputRecord struct {
 }
 
 type ReviewSessionRecord struct {
-	Phase           ReviewSessionPhase
-	ParentThreadID  string
-	ReviewThreadID  string
-	ActiveTurnID    string
-	ThreadCWD       string
-	SourceMessageID string
-	TargetLabel     string
-	LastReviewText  string
-	StartedAt       time.Time
-	LastUpdatedAt   time.Time
+	Phase             ReviewSessionPhase
+	ParentThreadID    string
+	ReviewThreadID    string
+	InitialTurnID     string
+	ActiveTurnID      string
+	ThreadCWD         string
+	SourceMessageID   string
+	TargetLabel       string
+	PendingReviewText string
+	LastReviewText    string
+	StartedAt         time.Time
+	LastUpdatedAt     time.Time
 }
 
 type ExecCommandProgressEntryRecord struct {

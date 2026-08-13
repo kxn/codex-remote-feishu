@@ -180,7 +180,7 @@ func TestReviewSessionTurnStartActivatesWithoutStealingSelection(t *testing.T) {
 	if session == nil || session.Phase != state.ReviewSessionPhaseActive {
 		t.Fatalf("expected active review session, got %#v", session)
 	}
-	if session.ParentThreadID != "thread-main" || session.ReviewThreadID != "thread-review" || session.ActiveTurnID != "turn-review-1" {
+	if session.ParentThreadID != "thread-main" || session.ReviewThreadID != "thread-review" || session.InitialTurnID != "turn-review-1" || session.ActiveTurnID != "turn-review-1" {
 		t.Fatalf("unexpected review session runtime: %#v", session)
 	}
 	if surface.SelectedThreadID != "thread-main" {
@@ -416,6 +416,171 @@ func TestReviewSessionFinalRenderDoesNotStealSelection(t *testing.T) {
 	}
 	if surface.SelectedThreadID != "thread-main" {
 		t.Fatalf("expected follow-up review prompt to keep parent selection, got %q", surface.SelectedThreadID)
+	}
+}
+
+func TestDetachedReviewTurnCompletionMakesResultReadyForParentApply(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "建议修复 detached review 的结果状态。"},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-compaction",
+		ItemKind:  "context_compaction",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	session := surface.ReviewSession
+	if session == nil || session.Phase != state.ReviewSessionPhaseReady || session.ActiveTurnID != "" {
+		t.Fatalf("expected ready detached review session, got %#v", session)
+	}
+	if session.LastReviewText != "建议修复 detached review 的结果状态。" {
+		t.Fatalf("unexpected detached review result: %#v", session)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+	var command *agentproto.Command
+	for _, event := range events {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			command = event.Command
+			break
+		}
+	}
+	if command == nil {
+		t.Fatalf("expected ready review result to dispatch to parent, got %#v", events)
+	}
+	if command.Target.ThreadID != "thread-main" || len(command.Prompt.Inputs) != 1 || command.Prompt.Inputs[0].Text != reviewApplyPromptPrefix+"建议修复 detached review 的结果状态。" {
+		t.Fatalf("unexpected detached review apply command: %#v", command)
+	}
+}
+
+func TestDetachedReviewFollowUpDoesNotReplaceReadyReviewResult(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+	surface.ReviewSession.LastReviewText = "初始审阅意见"
+	surface.ReviewSession.Phase = state.ReviewSessionPhaseReady
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	followUpEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-follow-up",
+		Text:             "现在改好了吗",
+	})
+	if len(followUpEvents) != 3 || followUpEvents[2].Command == nil {
+		t.Fatalf("expected follow-up prompt on review thread, got %#v", followUpEvents)
+	}
+	blockedBeforeTurnStart := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-follow-up-dispatching",
+	})
+	if noticeCode(blockedBeforeTurnStart, "review_turn_active") == "" {
+		t.Fatalf("expected apply to wait while review follow-up is dispatching, got %#v", blockedBeforeTurnStart)
+	}
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	blocked := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-follow-up-running",
+	})
+	if noticeCode(blocked, "review_turn_active") == "" {
+		t.Fatalf("expected apply to wait for active review follow-up, got %#v", blocked)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		ItemID:    "follow-up-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "还没有，这只是一次追问。"},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	if surface.ReviewSession == nil || surface.ReviewSession.Phase != state.ReviewSessionPhaseReady || surface.ReviewSession.LastReviewText != "初始审阅意见" {
+		t.Fatalf("expected follow-up completion to preserve ready review result, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestDetachedReviewFollowUpCannotReplaceFailedInitialResult(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventTurnCompleted,
+		ThreadID:     "thread-review",
+		TurnID:       "turn-review-1",
+		Status:       "failed",
+		ErrorMessage: "review failed",
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		ItemID:    "follow-up-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "这是失败后的普通追问答复。"},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	if surface.ReviewSession == nil || surface.ReviewSession.Phase == state.ReviewSessionPhaseReady || surface.ReviewSession.LastReviewText != "" {
+		t.Fatalf("failed initial review must not use a follow-up as its result, got %#v", surface.ReviewSession)
 	}
 }
 
@@ -1004,7 +1169,7 @@ func TestReviewApplyKeepsSessionWhenRoomAdmissionIsFull(t *testing.T) {
 	surface.ChatID = "oc_review"
 	svc.root.Surfaces[surface.SurfaceSessionID] = surface
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhaseActive,
+		Phase:           state.ReviewSessionPhaseReady,
 		ParentThreadID:  "thread-main",
 		ReviewThreadID:  "thread-review",
 		LastReviewText:  "请继续修改",
@@ -1036,7 +1201,7 @@ func TestReviewApplyReplacesItsOwnReservationWithPromptDispatch(t *testing.T) {
 	surface.ChatID = "oc_review"
 	svc.root.Surfaces[surface.SurfaceSessionID] = surface
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhaseActive,
+		Phase:           state.ReviewSessionPhaseReady,
 		ParentThreadID:  "thread-main",
 		ReviewThreadID:  "thread-review",
 		ThreadCWD:       "/data/dl/droid",
@@ -1495,7 +1660,7 @@ func TestStartReviewCommitFromPickerRejectsInstanceSwitch(t *testing.T) {
 func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:          state.ReviewSessionPhaseActive,
+		Phase:          state.ReviewSessionPhaseReady,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
 		ThreadCWD:      "/data/dl/droid",
@@ -1535,10 +1700,37 @@ func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T
 	}
 }
 
-func TestApplyReviewSessionResultRecoversReviewThreadSelection(t *testing.T) {
+func TestApplyReviewSessionResultRequiresReadyPhase(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
 		Phase:          state.ReviewSessionPhaseActive,
+		ParentThreadID: "thread-main",
+		ReviewThreadID: "thread-review",
+		ThreadCWD:      "/data/dl/droid",
+		LastReviewText: "尚未固化的审阅文本",
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-active",
+	})
+
+	if noticeCode(events, "review_result_not_ready") == "" {
+		t.Fatalf("expected active review session to reject apply, got %#v", events)
+	}
+	if hasAgentCommand(events) {
+		t.Fatalf("active review session must not dispatch parent prompt, got %#v", events)
+	}
+	if surface.ReviewSession == nil {
+		t.Fatal("active review session must remain available after rejected apply")
+	}
+}
+
+func TestApplyReviewSessionResultRecoversReviewThreadSelection(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhaseReady,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
 		ThreadCWD:      "/data/dl/droid",

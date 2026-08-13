@@ -53,7 +53,10 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 	if parentThreadID == "" {
 		return notice(surface, "review_parent_thread_missing", "当前审阅会话缺少原始会话上下文，请重新进入审阅后再试。")
 	}
-	if reviewText == "" {
+	if reviewSessionTurnActive(surface, session) {
+		return notice(surface, "review_turn_active", "当前审阅仍在处理中，请等本轮完成后再继续修改。")
+	}
+	if session.Phase != state.ReviewSessionPhaseReady || reviewText == "" {
 		return notice(surface, "review_result_not_ready", "当前审阅结果尚未就绪，请等本轮审阅完成后再继续修改。")
 	}
 	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]

@@ -685,7 +685,7 @@ func TestHandleGatewayActionAppliesReviewResultBackToParentThread(t *testing.T) 
 	}
 	surface := app.service.Surfaces()[0]
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:          state.ReviewSessionPhaseActive,
+		Phase:          state.ReviewSessionPhaseReady,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
 		ThreadCWD:      "/data/dl/droid",

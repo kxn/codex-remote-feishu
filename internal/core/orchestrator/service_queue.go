@@ -828,6 +828,7 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []even
 			buf.ItemKind = "agent_message"
 		}
 	}
+	s.maybeCaptureReviewSessionResultCandidate(instanceID, event, buf.ItemKind, bufferText)
 	s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 	if !rendersTextItem(buf.ItemKind) || strings.TrimSpace(bufferText) == "" {
 		if buf.ItemKind == "plan" && strings.TrimSpace(bufferText) != "" {
