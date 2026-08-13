@@ -32,10 +32,26 @@ func TestCompilerBuiltInProfileInheritsSystemOpenCodeConfig(t *testing.T) {
 	if value, ok := lookupEnv(material.Env, "KEEP_ME"); !ok || value != "1" {
 		t.Fatalf("expected unrelated env to survive, got %#v", material.Env)
 	}
-	for _, key := range []string{config.OpenCodeConfigContentEnv, config.OpenCodeAuthContentEnv, config.OpenCodeDisableProjectConfigEnv} {
+	for _, key := range []string{config.OpenCodeAuthContentEnv, config.OpenCodeDisableProjectConfigEnv} {
 		if _, ok := lookupEnv(material.Env, key); ok {
 			t.Fatalf("built-in profile should inherit system OpenCode config and clear stale %s, got %#v", key, material.Env)
 		}
+	}
+	configRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("built-in profile must install the review agent overlay, got %#v", material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
+		t.Fatalf("review agent overlay is not JSON: %v", err)
+	}
+	if _, ok := configDoc["model"]; ok {
+		t.Fatalf("built-in review overlay must not override the system model: %#v", configDoc)
+	}
+	agent, _ := configDoc["agent"].(map[string]any)
+	review, _ := agent["review"].(map[string]any)
+	if review["mode"] != "primary" {
+		t.Fatalf("built-in review agent = %#v", review)
 	}
 	if material.AdmissionRef == nil || material.AdmissionRef.ProfileRef.ID != state.DefaultOpenCodeProfileID || material.AdmissionRef.ProfileRef.Revision != 1 {
 		t.Fatalf("unexpected built-in admission ref: %#v", material.AdmissionRef)
@@ -233,8 +249,16 @@ func TestCompilerBuiltInProfileKeepsExplicitSystemModelAuthoritative(t *testing.
 	if err != nil {
 		t.Fatalf("CompileLaunchMaterial(default): %v", err)
 	}
-	if _, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv); ok {
-		t.Fatalf("explicit system model should remain authoritative without overlay, got %#v", material.Env)
+	configRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("explicit system model should remain authoritative with review-only overlay, got %#v", material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
+		t.Fatalf("review-only overlay is not JSON: %v", err)
+	}
+	if _, ok := configDoc["model"]; ok {
+		t.Fatalf("explicit system model must not be projected into the overlay: %#v", configDoc)
 	}
 }
 
@@ -342,13 +366,41 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	}
 	agent, ok := configDoc["agent"].(map[string]any)
 	if !ok {
-		t.Fatalf("missing subagent model agent overrides: %#v", configDoc)
+		t.Fatalf("missing agent overrides: %#v", configDoc)
 	}
 	for _, agentName := range []string{"general", "explore"} {
 		entry, ok := agent[agentName].(map[string]any)
 		if !ok || entry["model"] != "codex_remote_opencode_op_team/kimi-subagent" {
 			t.Fatalf("agent.%s model override = %#v in %#v", agentName, agent[agentName], agent)
 		}
+	}
+	review, ok := agent["review"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing dedicated review agent: %#v", agent)
+	}
+	if review["mode"] != "primary" || review["model"] != "codex_remote_opencode_op_team/kimi-review" {
+		t.Fatalf("review agent mode/model = %#v", review)
+	}
+	tools, ok := review["tools"].(map[string]any)
+	if !ok {
+		t.Fatalf("review agent tools = %#v, want explicit tool restrictions", review["tools"])
+	}
+	if tools["*"] != false {
+		t.Fatalf("review agent tools wildcard = %#v, want false in %#v", tools["*"], tools)
+	}
+	for _, tool := range []string{"bash", "edit", "write", "task"} {
+		if tools[tool] != false {
+			t.Fatalf("review agent tool %q = %#v, want false in %#v", tool, tools[tool], tools)
+		}
+	}
+	for _, tool := range []string{"read", "glob", "grep"} {
+		if tools[tool] != true {
+			t.Fatalf("review agent tool %q = %#v, want true in %#v", tool, tools[tool], tools)
+		}
+	}
+	permission, ok := review["permission"].(map[string]any)
+	if !ok || permission["*"] != "deny" {
+		t.Fatalf("review agent permission = %#v, want default deny", review["permission"])
 	}
 	provider, ok := configDoc["provider"].(map[string]any)["codex_remote_opencode_op_team"].(map[string]any)
 	if !ok {
@@ -358,7 +410,7 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing provider model metadata: %#v", provider)
 	}
-	for _, modelID := range []string{"kimi-k2", "kimi-small", "kimi-subagent"} {
+	for _, modelID := range []string{"kimi-k2", "kimi-small", "kimi-review", "kimi-subagent"} {
 		if _, ok := models[modelID].(map[string]any); !ok {
 			t.Fatalf("missing generated metadata for %s: %#v", modelID, models)
 		}
@@ -388,6 +440,39 @@ func TestCompilerAPIProfileProjectsOverlayAndRedactsSecrets(t *testing.T) {
 	}
 	if material.AdmissionRef == nil || material.AdmissionRef.ProfileRef.ID != "op_team" || material.AdmissionRef.ProfileRef.Revision != 7 {
 		t.Fatalf("unexpected admission ref: %#v", material.AdmissionRef)
+	}
+}
+
+func TestCompilerReviewAgentInheritsMainModelWhenReviewModelIsEmpty(t *testing.T) {
+	profile := config.OpenCodeProfile{OpenCodeAPIProfileSecretConfig: config.OpenCodeAPIProfileSecretConfig{
+		ID:                   "op_review_default",
+		Revision:             2,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Name:                 "Review Default",
+		BaseURL:              "https://proxy.example/v1",
+		APIKey:               "secret-token",
+		Model:                "main-model",
+	}}
+	material, err := CompileLaunchMaterial(CompileInput{Profile: profile, WorkspaceRoot: "/repo"})
+	if err != nil {
+		t.Fatalf("CompileLaunchMaterial(api): %v", err)
+	}
+	configRaw, ok := lookupEnv(material.Env, config.OpenCodeConfigContentEnv)
+	if !ok {
+		t.Fatalf("missing config overlay: %#v", material.Env)
+	}
+	var configDoc map[string]any
+	if err := json.Unmarshal([]byte(configRaw), &configDoc); err != nil {
+		t.Fatalf("config overlay is not JSON: %v", err)
+	}
+	agent, _ := configDoc["agent"].(map[string]any)
+	review, _ := agent["review"].(map[string]any)
+	if review["mode"] != "primary" {
+		t.Fatalf("review agent = %#v", review)
+	}
+	if _, ok := review["model"]; ok {
+		t.Fatalf("empty ReviewModel must inherit the profile main model: %#v", review)
 	}
 }
 

@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-13`
-> Summary: Claude `/review` 已开放为独立只读 fork session，并与 Codex 复用审阅入口、结果卡和显式追问/退出/应用动作。
+> Summary: Claude/OpenCode `/review` 均已开放为独立只读 fork session，并与 Codex 复用审阅入口、结果卡和显式追问/退出/应用动作。
 
 ## 1. 文档定位
 
@@ -14,7 +14,7 @@
 
 2026-08-13 #887 补充：review final card 现在按 `继续追问审阅`、`退出审阅`、`按审阅意见继续修改` 提供三个显式动作。`继续追问审阅` 只开启一次性纯文字 capture，本次 callback 保持 append-only，不替换仍需继续操作的结果卡；下一条纯文字才发往 review thread。每次 review final card 真正发送后，orchestrator 会把它的 `message_id` 记录为当前 `ActionMessageID`；同一 daemon 下更早结果卡的三个动作统一返回 `review_action_card_expired`，不能继续改写当前 ReviewSession。
 
-2026-08-13 #888 补充：Claude `/review` 已从 hidden reject 改为 common tools 可见的 approximation；bare `/review`、review 页面和 final-card 待提交/commit 按钮复用与 Codex 相同的卡片交互，底层改走独立 Claude fork session。结果卡、一次性追问 capture、退出和应用动作保持 backend-neutral；active turn 上的退出动作先发送一次 interrupt，并在匹配终态后才清 overlay，不能提前释放并发 ownership。OpenCode 在 #889 落地前仍隐藏并拒绝。
+2026-08-13 #888/#889 补充：Claude 与 OpenCode `/review` 均从 hidden reject 改为 common tools 可见的 approximation；bare `/review`、review 页面和 final-card 待提交/commit 按钮复用与 Codex 相同的卡片交互，底层分别走独立 Claude fork session 与 OpenCode ACP fork/review mode。结果卡、一次性追问 capture、退出和应用动作保持 backend-neutral；active turn 上的退出动作先发送一次 interrupt，并在匹配终态后才清 overlay，不能提前释放并发 ownership。OpenCode fork 在 review mode gate 前已经按 typed binding 标记 `source=review`，mode/config 失败会清 overlay 与 active queue，不产生可操作结果卡。
 
 它关注的是：
 
@@ -986,9 +986,9 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_menu_handoff_test.go](../../internal/app/daemon/app_menu_handoff_test.go)
   - 锁定 `/list` 在 `codex` / `claude` / `vscode` 三条菜单路径下都改走同卡 handoff；其中 Claude `/list` / `/use` 的 target picker 刷新与结果也会留在原菜单卡，vscode `/list` / `/use` / `/useall` 的空态、attach 结果与 `use_thread` 结果同样继续收口在原菜单卡；同时 `/help`、`/coworkers status`、`/steerall`、`/compact`、`/sendfile` 会直接把菜单卡交给后续结果/owner/picker 卡继续收口，`/stop`、`/new`、`/follow`、`/workspace detach` 也会直接 seal 当前菜单卡
 - [internal/core/control/feishu_command_support_test.go](../../internal/core/control/feishu_command_support_test.go)
-  - 锁定 command support profile 的命令矩阵：`/new`、`/list`、`/use`、`/steerall` 现在是 visible + allow approximation；`/workspace new dir` 与 `/workspace detach` 在 Claude 下 visible + allow；裸 `/detach` 与其余 `workspace*`、`/useall` 继续 hidden + allow；`/sendfile` 与 `/plan` 在 Claude 下 visible + allow；`/plan` 在 OpenCode 下 visible + native session mode；`/model` 在 Claude/OpenCode 下 hidden + reject；`/reasoning` 在 OpenCode 下 hidden + reject；`/review`、`/bendtomywill`、`/autocontinue` 继续 hidden + reject
+  - 锁定 command support profile 的命令矩阵：`/new`、`/list`、`/use`、`/steerall` 现在是 visible + allow approximation；`/workspace new dir` 与 `/workspace detach` 在 Claude 下 visible + allow；裸 `/detach` 与其余 `workspace*`、`/useall` 继续 hidden + allow；`/sendfile` 与 `/plan` 在 Claude 下 visible + allow；`/plan`、`/reasoning` 在 OpenCode 下 visible 并走 ACP config option；`/model` 在 Claude/OpenCode 下 hidden + reject；`/review` 在 Claude/OpenCode 下 visible approximation，`/bendtomywill`、`/autocontinue` 继续 hidden + reject
 - [internal/core/control/feishu_command_display_resolver_test.go](../../internal/core/control/feishu_command_display_resolver_test.go)
-  - 锁定 Claude `current_work` / `switch_target` / `send_settings` / `common_tools` / `maintenance` 的 help/menu projection，以及 OpenCode `send_settings` 显示 `/mode`、`/access`、`/plan`、`/verbose`、`/opencodeprofile` 并隐藏 `/model`、`/reasoning`。
+  - 锁定 Claude `current_work` / `switch_target` / `send_settings` / `common_tools` / `maintenance` 的 help/menu projection，以及 OpenCode `send_settings` 显示 `/mode`、`/reasoning`、`/access`、`/plan`、`/verbose`、`/opencodeprofile`，`common_tools` 显示 `/review`，并隐藏 `/model`。
 - [internal/core/orchestrator/service_mode_backend_test.go](../../internal/core/orchestrator/service_mode_backend_test.go)
   - 锁定 `/mode claude` 从已有工作区切入时，会保留 workspace claim 并直接进入 Claude workspace prepare，而不是停在 detached idle
 - [internal/core/orchestrator/service_workspace_selection_model_test.go](../../internal/core/orchestrator/service_workspace_selection_model_test.go)

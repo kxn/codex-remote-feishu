@@ -545,6 +545,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)
+		thread = s.materializeReviewThreadDiscovery(instanceID, inst, event, thread)
 		thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
 		if forkedFromID := strings.TrimSpace(xutil.MetadataString(event.Metadata, "forkedFromId")); forkedFromID != "" {
 			thread.ForkedFromID = forkedFromID

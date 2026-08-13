@@ -567,6 +567,235 @@ func TestPromptSendForkEphemeralForksThenPromptsNewSession(t *testing.T) {
 	}
 }
 
+func TestReviewForkSelectsReviewModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-review-fork",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-review"},
+		Target: agentproto.Target{
+			ExecutionMode:  agentproto.PromptExecutionModeForkEphemeral,
+			SourceThreadID: "ses_source",
+			CWD:            "/tmp/work",
+			Purpose:        agentproto.PromptPurposeReview,
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review this"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(review fork): %v", err)
+	}
+	forkFrame := decodeFrame(t, result.OutboundToChild[0])
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      forkFrame["id"],
+		"result": map[string]any{
+			"sessionId": "ses_review",
+			"configOptions": []any{
+				map[string]any{
+					"id":           "mode",
+					"type":         "select",
+					"currentValue": "build",
+					"options": []any{
+						map[string]any{"value": "build", "name": "Build"},
+						map[string]any{"value": "review", "name": "Review"},
+					},
+				},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review fork response): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused)
+	for _, event := range observed.Events {
+		if event.CommandID != "cmd-review-fork" || event.Initiator.Kind != agentproto.InitiatorRemoteSurface || event.Initiator.SurfaceSessionID != "surface-review" {
+			t.Fatalf("review session-ready event lost command correlation: %#v", event)
+		}
+	}
+	if len(observed.OutboundToChild) != 1 {
+		t.Fatalf("review fork response outbound = %d, want set mode", len(observed.OutboundToChild))
+	}
+	setFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if setFrame["method"] != "session/set_config_option" {
+		t.Fatalf("review fork followup method = %#v, want session/set_config_option", setFrame["method"])
+	}
+	setParams := asMap(t, setFrame["params"])
+	if setParams["sessionId"] != "ses_review" || setParams["configId"] != "mode" || setParams["value"] != "review" {
+		t.Fatalf("review mode params = %#v", setParams)
+	}
+
+	promptResult, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review mode response): %v", err)
+	}
+	assertEventKinds(t, promptResult.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, promptResult.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_review" {
+		t.Fatalf("review prompt frame = %#v", promptFrame)
+	}
+}
+
+func TestReviewForkRejectsMissingReviewModeWithoutPrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-review-no-mode",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target: agentproto.Target{
+			ExecutionMode:  agentproto.PromptExecutionModeForkEphemeral,
+			SourceThreadID: "ses_source",
+			CWD:            "/tmp/work",
+			Purpose:        agentproto.PromptPurposeReview,
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review this"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(review fork): %v", err)
+	}
+	forkFrame := decodeFrame(t, result.OutboundToChild[0])
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      forkFrame["id"],
+		"result": map[string]any{
+			"sessionId":     "ses_review",
+			"configOptions": []any{},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("missing review mode should be a correlated protocol event, got %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused, agentproto.EventSystemError)
+	if len(observed.OutboundToChild) != 0 {
+		t.Fatalf("missing review mode must not send prompt: %#v", observed.OutboundToChild)
+	}
+	problem := observed.Events[len(observed.Events)-1].Problem
+	if problem == nil || problem.CommandID != "cmd-review-no-mode" || problem.SurfaceSessionID != "surface-1" || problem.ThreadID != "ses_review" {
+		t.Fatalf("missing review mode problem lost correlation: %#v", problem)
+	}
+}
+
+func TestReviewPromptSetsReviewModeBeforeReasoningAndIgnoresPlanOverride(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	command := agentproto.Command{
+		CommandID: "cmd-review-config-order",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_review",
+			CWD:      "/tmp/work",
+			Purpose:  agentproto.PromptPurposeReview,
+		},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on", ReasoningEffort: "high"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "follow up"}}},
+	}
+	tr.sessions["ses_review"] = sessionState{ID: "ses_review", CWD: "/tmp/work", ModeOptions: []string{"build", "review"}}
+	tr.currentSessionID = "ses_review"
+
+	result, err := tr.TranslateCommand(command)
+	if err != nil {
+		t.Fatalf("TranslateCommand(review follow-up): %v", err)
+	}
+	modeFrame := decodeFrame(t, result.OutboundToChild[0])
+	modeParams := asMap(t, modeFrame["params"])
+	if modeParams["configId"] != "mode" || modeParams["value"] != "review" {
+		t.Fatalf("first review config = %#v, want mode=review", modeParams)
+	}
+
+	effortResult, err := tr.ObserveServer(mustLine(t, map[string]any{"jsonrpc": "2.0", "id": modeFrame["id"], "result": map[string]any{}}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review mode): %v", err)
+	}
+	effortFrame := decodeFrame(t, effortResult.OutboundToChild[0])
+	effortParams := asMap(t, effortFrame["params"])
+	if effortParams["configId"] != "effort" || effortParams["value"] != "high" {
+		t.Fatalf("second review config = %#v, want effort=high", effortParams)
+	}
+
+	promptResult, err := tr.ObserveServer(mustLine(t, map[string]any{"jsonrpc": "2.0", "id": effortFrame["id"], "result": map[string]any{}}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review effort): %v", err)
+	}
+	promptFrame := decodeFrame(t, promptResult.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" {
+		t.Fatalf("review config sequence did not end in prompt: %#v", promptFrame)
+	}
+}
+
+func TestReviewTurnRejectsPermissionAndWriteRequests(t *testing.T) {
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "target.txt")
+	if err := os.WriteFile(target, []byte("unchanged\n"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	tr := NewTranslator("inst-1", workspace)
+	tr.sessions["ses_review"] = sessionState{ID: "ses_review", CWD: workspace, ModeOptions: []string{"build", "review"}}
+	tr.currentSessionID = "ses_review"
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-review-runtime-guard",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-review"},
+		Target:    agentproto.Target{ThreadID: "ses_review", CWD: workspace, Purpose: agentproto.PromptPurposeReview},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(review): %v", err)
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+	permission, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "perm-review",
+		"method":  "session/request_permission",
+		"params": map[string]any{
+			"sessionId": "ses_review",
+			"toolCall":  map[string]any{"toolCallId": "tool-write", "title": "Write file", "kind": "edit"},
+			"options":   []any{map[string]any{"optionId": "once", "kind": "allow_once", "name": "Allow once"}},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review permission): %v", err)
+	}
+	if len(permission.Events) != 0 || len(permission.OutboundToChild) != 1 {
+		t.Fatalf("review permission must fail closed without user request: %#v", permission)
+	}
+	permissionFrame := decodeFrame(t, permission.OutboundToChild[0])
+	if permissionFrame["id"] != "perm-review" || permissionFrame["error"] == nil {
+		t.Fatalf("review permission rejection = %#v", permissionFrame)
+	}
+	promptResult, err := tr.ObserveServer(mustLine(t, map[string]any{"jsonrpc": "2.0", "id": setFrame["id"], "result": map[string]any{}}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review mode): %v", err)
+	}
+	if len(promptResult.OutboundToChild) != 1 || decodeFrame(t, promptResult.OutboundToChild[0])["method"] != "session/prompt" {
+		t.Fatalf("review prompt was not started: %#v", promptResult.OutboundToChild)
+	}
+
+	tr.activeTurns["ses_review"].Completed = true
+	tr.writeApprovals["ses_review"] = writeApproval{Remaining: 1}
+	write, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "write-review",
+		"method":  "fs/write_text_file",
+		"params": map[string]any{
+			"sessionId": "ses_review",
+			"path":      target,
+			"content":   "modified\n",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review write): %v", err)
+	}
+	writeFrame := decodeFrame(t, write.OutboundToChild[0])
+	if writeFrame["id"] != "write-review" || writeFrame["error"] == nil {
+		t.Fatalf("review write rejection = %#v", writeFrame)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "unchanged\n" {
+		t.Fatalf("review write changed fixture: %q, %v", string(got), err)
+	}
+}
+
 func TestResponsesCorrelateByJSONRPCIDOutOfOrder(t *testing.T) {
 	tr := NewTranslator("inst-1", "/tmp/work")
 	listResult, err := tr.TranslateCommand(agentproto.Command{

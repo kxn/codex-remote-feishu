@@ -58,10 +58,12 @@ type sessionState struct {
 	ID            string
 	CWD           string
 	Title         string
+	Purpose       agentproto.PromptPurpose
 	ModelOptions  []modelOption
 	EffortOptions []reasoningEffortOption
 	CurrentModel  string
 	CurrentMode   string
+	ModeOptions   []string
 	CurrentEffort string
 	ConfigOptions []map[string]any
 }
@@ -78,6 +80,7 @@ type reasoningEffortOption struct {
 
 type configOptionState struct {
 	ModelOptions  []modelOption
+	ModeOptions   []string
 	EffortOptions []reasoningEffortOption
 	CurrentModel  string
 	CurrentMode   string
@@ -120,6 +123,7 @@ type writeApproval struct {
 type turnState struct {
 	CommandID  string
 	Initiator  agentproto.Initiator
+	Purpose    agentproto.PromptPurpose
 	ThreadID   string
 	TurnID     string
 	StartedAt  time.Time
@@ -264,6 +268,7 @@ func (t *Translator) upsertSession(sessionID, cwd string, payload map[string]any
 		session.EffortOptions = state.EffortOptions
 		session.CurrentModel = state.CurrentModel
 		session.CurrentMode = state.CurrentMode
+		session.ModeOptions = state.ModeOptions
 		session.CurrentEffort = state.CurrentEffort
 	}
 	t.sessions[sessionID] = session
@@ -280,6 +285,7 @@ func (t *Translator) newTurn(sessionID string, command agentproto.Command) *turn
 	return &turnState{
 		CommandID:  command.CommandID,
 		Initiator:  initiator,
+		Purpose:    command.Target.Purpose,
 		ThreadID:   sessionID,
 		TurnID:     turnID,
 		StartedAt:  time.Now().UTC(),
@@ -575,12 +581,23 @@ func parseConfigOptions(options []map[string]any) configOptionState {
 			state.ModelOptions = parseModelOptions(option["options"])
 		case "mode":
 			state.CurrentMode = xutil.LookupStringFromAny(option["currentValue"])
+			state.ModeOptions = parseConfigOptionValues(option["options"])
 		case "effort":
 			state.CurrentEffort = normalizeOpenCodeReasoningEffort(xutil.LookupStringFromAny(option["currentValue"]))
 			state.EffortOptions = parseReasoningEffortOptions(option["options"])
 		}
 	}
 	return state
+}
+
+func parseConfigOptionValues(value any) []string {
+	var out []string
+	for _, item := range flattenOptionItems(value) {
+		if option := strings.TrimSpace(xutil.LookupStringFromAny(item["value"])); option != "" {
+			out = append(out, option)
+		}
+	}
+	return out
 }
 
 func parseModelOptions(value any) []modelOption {

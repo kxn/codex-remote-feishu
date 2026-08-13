@@ -80,6 +80,13 @@ func (s *Service) HandleProblem(instanceID string, problem agentproto.ErrorInfo)
 func (s *Service) handleProblem(instanceID string, problem agentproto.ErrorInfo) []eventcontract.Event {
 	problem = problem.Normalize()
 	notice := NoticeForProblem(problem)
+	if binding := s.pendingRemoteBindingByCommandForInstance(instanceID, problem.CommandID); binding != nil {
+		if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
+			if item := surface.QueueItems[binding.QueueItemID]; item != nil && item.Status == state.QueueItemDispatching {
+				return s.failSurfaceActiveQueueItem(surface, item, &notice, true)
+			}
+		}
+	}
 	surfaces := s.problemTargets(instanceID, problem)
 	if len(surfaces) == 0 {
 		if inst := s.root.Instances[instanceID]; inst != nil && strings.TrimSpace(problem.ThreadID) != "" {

@@ -392,6 +392,18 @@ func (s *Service) maybeActivateReviewSession(instanceID string, event agentproto
 	s.activateReviewSessionRecord(surface, thread, event)
 }
 
+func (s *Service) materializeReviewThreadDiscovery(instanceID string, inst *state.InstanceRecord, event agentproto.Event, thread *state.ThreadRecord) *state.ThreadRecord {
+	binding := s.pendingRemoteBindingForEvent(instanceID, event)
+	if binding == nil || remoteBindingPromptDispatchPlan(binding).Purpose != agentproto.PromptPurposeReview {
+		return thread
+	}
+	var item *state.QueueItemRecord
+	if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
+		item = surface.QueueItems[binding.QueueItemID]
+	}
+	return s.materializeRemoteTurnThread(inst, event.ThreadID, event.CWD, binding, item)
+}
+
 func (s *Service) maybeCaptureReviewSessionResultCandidate(instanceID string, event agentproto.Event, itemKind, text string) {
 	_, session := s.reviewSessionSurface(instanceID, event.ThreadID)
 	if session == nil || strings.TrimSpace(itemKind) != "agent_message" || strings.TrimSpace(event.TurnID) == "" || strings.TrimSpace(session.InitialTurnID) != strings.TrimSpace(event.TurnID) || strings.TrimSpace(session.LastReviewText) != "" {

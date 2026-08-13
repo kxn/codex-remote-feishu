@@ -150,6 +150,7 @@ func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord
 	item.Status = state.QueueItemFailed
 	if queuedItemPromptDispatchPlan(item).Purpose == agentproto.PromptPurposeReview && surface.ReviewSession != nil && surface.ReviewSession.Phase == state.ReviewSessionPhasePending {
 		s.clearPendingReviewStart(surface)
+		s.releaseFeishuRoomReviewReservations(surface)
 		surface.ReviewSession = nil
 	}
 	s.clearSurfaceActiveQueueItem(surface, item.ID)

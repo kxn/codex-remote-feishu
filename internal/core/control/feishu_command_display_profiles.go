@@ -190,7 +190,7 @@ func newOpenCodeFeishuCommandDisplayProfile() FeishuCommandDisplayProfile {
 		commandSupportVisible(FeishuCommandPrimary),
 		commandSupportVisible(FeishuCommandCoworkers),
 		commandSupportVisible(FeishuCommandHistory),
-		commandSupportHiddenReject(FeishuCommandReview, FeishuCommandSupportReject, opencodeDefaultRejectNote),
+		commandSupportVisibleAs(FeishuCommandReview, FeishuCommandSupportApproximation, "OpenCode `/review` 使用独立 ACP fork session 执行只读审阅。"),
 		commandSupportVisible(FeishuCommandSendFile),
 		commandSupportVisible(FeishuCommandMode),
 		commandSupportVisible(FeishuCommandAdmin),

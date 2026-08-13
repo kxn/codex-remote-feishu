@@ -82,18 +82,23 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 	}
 	session := t.upsertSession(sessionID, t.commandCWD(command), payload)
 	t.currentSessionID = sessionID
+	initiator := commandInitiator(command)
 	events := []agentproto.Event{
 		{
-			Kind:     agentproto.EventThreadDiscovered,
-			ThreadID: sessionID,
-			CWD:      session.CWD,
-			Name:     session.Title,
+			CommandID: command.CommandID,
+			Kind:      agentproto.EventThreadDiscovered,
+			ThreadID:  sessionID,
+			CWD:       session.CWD,
+			Name:      session.Title,
+			Initiator: initiator,
 		},
 		{
+			CommandID:   command.CommandID,
 			Kind:        agentproto.EventThreadFocused,
 			ThreadID:    sessionID,
 			CWD:         session.CWD,
 			FocusSource: "opencode_acp",
+			Initiator:   initiator,
 		},
 	}
 	if settingsEvent, ok := threadSettingsEventForCurrentModel(sessionID, session); ok {
@@ -104,7 +109,25 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 	}
 	promptResult, err := t.startPromptForSession(sessionID, command)
 	if err != nil {
-		return Result{}, err
+		problem := agentproto.ErrorInfo{
+			Code:             "opencode_prompt_config_invalid",
+			Layer:            "wrapper",
+			Stage:            "prepare_prompt",
+			Operation:        "session/prompt",
+			Message:          "OpenCode 无法为当前请求准备所需的会话配置。",
+			Details:          err.Error(),
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         sessionID,
+		}.Normalize()
+		result.Events = append(result.Events, events...)
+		result.Events = append(result.Events, agentproto.Event{
+			Kind:      agentproto.EventSystemError,
+			CommandID: command.CommandID,
+			ThreadID:  sessionID,
+			Problem:   &problem,
+		})
+		return result, nil
 	}
 	result.Events = append(result.Events, events...)
 	result.Events = append(result.Events, promptResult.Events...)
@@ -113,6 +136,12 @@ func (t *Translator) observeSessionReady(pending pendingRPC, payload map[string]
 }
 
 func (t *Translator) startPromptForSession(sessionID string, command agentproto.Command) (Result, error) {
+	session := t.sessions[sessionID]
+	session.Purpose = command.Target.Purpose
+	t.sessions[sessionID] = session
+	if command.Target.Purpose == agentproto.PromptPurposeReview && !containsConfigOption(t.sessions[sessionID].ModeOptions, "review") {
+		return Result{}, fmt.Errorf("OpenCode session does not expose required review mode")
+	}
 	sequence, err := promptConfigSequence(command)
 	if err != nil {
 		return Result{}, err
@@ -125,7 +154,9 @@ func (t *Translator) startPromptForSession(sessionID string, command agentproto.
 
 func promptConfigSequence(command agentproto.Command) ([]configOptionSet, error) {
 	sequence := []configOptionSet{}
-	if mode, ok, err := opencodeACPModeForPlanOverride(command.Overrides.PlanMode); err != nil {
+	if command.Target.Purpose == agentproto.PromptPurposeReview {
+		sequence = append(sequence, configOptionSet{ID: "mode", Value: "review"})
+	} else if mode, ok, err := opencodeACPModeForPlanOverride(command.Overrides.PlanMode); err != nil {
 		return nil, err
 	} else if ok {
 		sequence = append(sequence, configOptionSet{ID: "mode", Value: mode})
@@ -136,6 +167,15 @@ func promptConfigSequence(command agentproto.Command) ([]configOptionSet, error)
 		sequence = append(sequence, configOptionSet{ID: "effort", Value: effort})
 	}
 	return sequence, nil
+}
+
+func containsConfigOption(options []string, want string) bool {
+	for _, option := range options {
+		if strings.EqualFold(strings.TrimSpace(option), strings.TrimSpace(want)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (t *Translator) setConfigBeforePrompt(sessionID string, command agentproto.Command, sequence []configOptionSet, index int) (Result, error) {
@@ -650,6 +690,9 @@ func (t *Translator) observePermissionRequest(frame map[string]any, result Resul
 	requestID := idKey(frame["id"])
 	params, _ := frame["params"].(map[string]any)
 	sessionID := strings.TrimSpace(xutil.LookupStringFromAny(params["sessionId"]))
+	if t.reviewSessionReadOnly(sessionID) {
+		return t.rejectClientRequest(frame, result, -32000, "review session does not allow permission requests")
+	}
 	toolCall, _ := params["toolCall"].(map[string]any)
 	toolID := xutil.LookupStringFromAny(toolCall["toolCallId"])
 	options := parsePermissionOptions(params["options"])
@@ -697,6 +740,9 @@ func (t *Translator) observePermissionRequest(frame map[string]any, result Resul
 func (t *Translator) observeWriteTextFile(frame map[string]any, result Result) (Result, error) {
 	params, _ := frame["params"].(map[string]any)
 	sessionID := strings.TrimSpace(xutil.LookupStringFromAny(params["sessionId"]))
+	if t.reviewSessionReadOnly(sessionID) {
+		return t.rejectClientRequest(frame, result, -32000, "review session is read-only")
+	}
 	rawPath := strings.TrimSpace(xutil.LookupStringFromAny(params["path"]))
 	content := xutil.LookupStringFromAny(params["content"])
 	if !t.hasWriteApproval(sessionID) {
@@ -749,6 +795,15 @@ func (t *Translator) observeWriteTextFile(frame map[string]any, result Result) (
 	result.OutboundToChild = append(result.OutboundToChild, response)
 	result.Events = append(result.Events, event)
 	return result, nil
+}
+
+func (t *Translator) reviewSessionReadOnly(sessionID string) bool {
+	sessionID = strings.TrimSpace(sessionID)
+	if t.sessions[sessionID].Purpose == agentproto.PromptPurposeReview {
+		return true
+	}
+	turn := t.activeTurns[sessionID]
+	return turn != nil && turn.Purpose == agentproto.PromptPurposeReview
 }
 
 func (t *Translator) hasWriteApproval(sessionID string) bool {

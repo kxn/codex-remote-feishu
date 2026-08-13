@@ -62,7 +62,12 @@ type modelOverlay struct {
 }
 
 type agentOverlay struct {
-	Model string `json:"model,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Mode        string            `json:"mode,omitempty"`
+	Model       string            `json:"model,omitempty"`
+	Prompt      string            `json:"prompt,omitempty"`
+	Tools       map[string]bool   `json:"tools,omitempty"`
+	Permission  map[string]string `json:"permission,omitempty"`
 }
 
 type authOverlay map[string]authProviderOverlay
@@ -97,9 +102,10 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	if profile.BuiltIn || profile.ID == config.OpenCodeDefaultProfileID {
 		overlay := configOverlay{
 			Model:      systemOpenCodeRecentModelForACP(env),
+			Agent:      openCodeAgentOverrides("", "", ""),
 			Permission: openCodePermissionMode(input.RuntimeAccessMode),
 		}
-		if overlay.Model != "" || len(overlay.Permission) > 0 {
+		if overlay.Model != "" || len(overlay.Agent) > 0 || len(overlay.Permission) > 0 {
 			configRaw, err := json.Marshal(overlay)
 			if err != nil {
 				return LaunchMaterial{}, err
@@ -129,6 +135,7 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	models := make(map[string]modelOverlay)
 	addModelOverlay(models, profile.Model, profile.ReasoningEffort)
 	addModelOverlay(models, profile.SmallModel, "")
+	addModelOverlay(models, profile.ReviewModel, "")
 	addModelOverlay(models, profile.SubagentModel, "")
 	configRaw, err := json.Marshal(configOverlay{
 		Provider: map[string]providerOverlay{
@@ -143,7 +150,7 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		},
 		Model:        providerID + "/" + strings.TrimSpace(profile.Model),
 		SmallModel:   prefixedModel(providerID, profile.SmallModel),
-		Agent:        openCodeAgentModelOverrides(providerID, profile.SubagentModel),
+		Agent:        openCodeAgentOverrides(providerID, profile.ReviewModel, profile.SubagentModel),
 		Instructions: strings.TrimSpace(profile.Instruction),
 		Permission:   openCodePermissionMode(input.RuntimeAccessMode),
 	})
@@ -253,15 +260,36 @@ func prefixedModel(providerID, model string) string {
 	return providerID + "/" + model
 }
 
-func openCodeAgentModelOverrides(providerID, subagentModel string) map[string]agentOverlay {
-	model := prefixedModel(providerID, subagentModel)
-	if model == "" {
-		return nil
+func openCodeAgentOverrides(providerID, reviewModel, subagentModel string) map[string]agentOverlay {
+	agents := map[string]agentOverlay{
+		"review": {
+			Description: "Strict read-only code reviewer",
+			Mode:        "primary",
+			Model:       prefixedModel(providerID, reviewModel),
+			Prompt:      "Review the supplied changes carefully. Report concrete findings with file and line references. Do not modify files or run shell commands.",
+			Tools: map[string]bool{
+				"*":     false,
+				"bash":  false,
+				"edit":  false,
+				"glob":  true,
+				"grep":  true,
+				"read":  true,
+				"write": false,
+				"task":  false,
+			},
+			Permission: map[string]string{
+				"*":    "deny",
+				"glob": "allow",
+				"grep": "allow",
+				"read": "allow",
+			},
+		},
 	}
-	return map[string]agentOverlay{
-		"general": {Model: model},
-		"explore": {Model: model},
+	if model := prefixedModel(providerID, subagentModel); model != "" {
+		agents["general"] = agentOverlay{Model: model}
+		agents["explore"] = agentOverlay{Model: model}
 	}
+	return agents
 }
 
 func openCodePermissionMode(value string) map[string]string {

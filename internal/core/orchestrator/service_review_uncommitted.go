@@ -151,7 +151,7 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 			ThemeKey:              "system",
 		},
 	}
-	if backend == agentproto.BackendClaude {
+	if backend == agentproto.BackendClaude || backend == agentproto.BackendOpenCode {
 		events := []eventcontract.Event{noticeEvent}
 		return append(events, s.enqueueQueueItemWithTarget(
 			surface,
@@ -201,6 +201,8 @@ func reviewExecutorForBackend(backend agentproto.Backend) state.ReviewExecutorKi
 		return state.ReviewExecutorCodexNative
 	case agentproto.BackendClaude:
 		return state.ReviewExecutorClaudeForkSession
+	case agentproto.BackendOpenCode:
+		return state.ReviewExecutorOpenCodeACPFork
 	default:
 		return ""
 	}

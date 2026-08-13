@@ -336,6 +336,9 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 	if profile.VisibleMode != "opencode" {
 		t.Fatalf("VisibleMode = %q, want opencode", profile.VisibleMode)
 	}
+	if !profile.IncludesFamily(FeishuCommandReview) {
+		t.Fatalf("expected OpenCode profile to expose review, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools))
+	}
 
 	currentWork := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupCurrentWork, true, ctx)
 	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/new", "/status"}; !reflect.DeepEqual(got, want) {

@@ -1,8 +1,8 @@
 # OpenCode ACP Backend 实现设计
 
 > Type: `inprogress`
-> Updated: `2026-08-12`
-> Summary: 同步 OpenCode API profile provider 类型：默认 OpenAI-compatible，Gemini 使用 `@ai-sdk/google` 并允许省略端点。
+> Updated: `2026-08-13`
+> Summary: OpenCode `/review` 已落地 ACP fork/review mode、专用只读 reviewer、typed failure cleanup 与真实 1.18.15 smoke。
 
 ## 1. 结论
 
@@ -190,7 +190,7 @@ Built-in default profile：
 - name：`本机默认`
 - auth mode：inherit
 - editable/deletable：false
-- 行为：不写 `OPENCODE_CONFIG_CONTENT` / `OPENCODE_AUTH_CONTENT`，继承系统 global/project/auth。
+- 行为：不写 auth/model/provider override，继承系统 global/project/auth；仅写 `agent.review` overlay 以提供统一只读 review mode。
 
 API profile：
 
@@ -198,7 +198,7 @@ API profile：
 - 必填：name、baseURL、apiKey、model。
 - 可选：small/subagent/instruction/reasoning、project config mode、data isolation mode。`permissionMode` 仅保留为 legacy/reserved 字段，当前 WebUI 不展示，compiler 不把它投影到 OpenCode config。
 - `subagentModel` 不是 OpenCode 顶层 `subagent_model`。OpenCode v1.18.15 的 Task tool 按 `subagent_type` 精确选择 agent，agent 没有 model 时回退父会话模型；`general.model` 不会成为其它 subagent 的 fallback。因此第一版只把 `subagentModel` 投影为内置 `agent.general.model` 和 `agent.explore.model`，自定义 subagent 继续按用户自己的 OpenCode agent 配置处理。
-- `reviewModel` 保留为 schema/API reserved 字段，但当前 WebUI 不展示、compiler 不投影。OpenCode v1.18.15 没有顶层 `review_model`；内置 `/review` 是 `subtask` command，如需指定 review model 必须覆盖 `command.review.model` 且同时承担内置 review template 版本耦合。
+- `reviewModel` 当前 WebUI 不展示，但 compiler 会把非空值投影到专用 `agent.review.model`；空值由 agent 继承主模型。OpenCode v1.18.15 没有顶层 `review_model`，也不覆盖其内置 `/review` command/template。
 - 只要 apiKey/baseURL/model 不完整，`Available=false`，启动失败信息要可操作。
 - API profile 不允许 fallback 到系统 OAuth。请求未命中 profile provider 时视为 compiler/runtime 错误。
 
@@ -268,7 +268,7 @@ env 策略：
 
 - API profile 写 `OPENCODE_CONFIG_CONTENT`，只覆盖 provider/model/instruction/permission 等需要字段。
 - API profile 写 `OPENCODE_AUTH_CONTENT={"<providerID>":{"type":"api","key":"..."}}`，注入 profile API key；旧的 `{"provider":{...}}` / `apiKey` 形状不是 OpenCode `v1.18.15` 的真实 auth schema。
-- 默认 inherit profile 不写 config/auth overlay。
+- 默认 inherit profile 不写 auth/model/provider overlay，但写入统一 `agent.review` overlay；系统模型与认证保持权威。
 - `ProjectConfigMode=disable` 时写 `OPENCODE_DISABLE_PROJECT_CONFIG=1`；默认继承 project config。
 - 默认不写 `OPENCODE_CONFIG_DIR`，因为它会改变 global config path 并产生 `.gitignore` 等副作用。
 - `DataIsolationMode=process` 才设置临时 `XDG_DATA_HOME` / `XDG_STATE_HOME` / `XDG_CACHE_HOME`；第一版默认不启用，以免失去系统 session/OAuth 继承。
@@ -288,10 +288,11 @@ OpenCode config content 的建议形状由 golden test 固定，不能靠字符�
 - `model = "<providerID>/<model>"`
 - `small_model = "<providerID>/<smallModel>"`，当 profile 配置了轻量模型时写入。
 - `agent.general.model = "<providerID>/<subagentModel>"` 和 `agent.explore.model = "<providerID>/<subagentModel>"`，当 profile 配置了子代理模型时写入；不要写不存在的顶层 `subagent_model`。
+- `agent.review` 始终生成：`mode=primary`，tools/permission 默认 deny，只显式允许 Read/Glob/Grep；`reviewModel` 非空时写 `agent.review.model`，空值不写 model 以继承主模型。
 - instructions/agent/mode 相关字段
 - `permission` 只由 runtime `/access` desired state 写 OpenCode 原生 map：`confirm -> {"*":"ask"}`，`full_access -> {"*":"allow"}`，`clear/empty` 不写 overlay。profile `permissionMode` 不再作为 config owner，产品侧 `plan` 等非 OpenCode 原生 permission intent 也不写入 config，避免生成无效配置。
 - `reasoningEffort` 不能写成 top-level `reasoning`，OpenCode 1.18.15 会拒绝该字段；当前只能通过模型 `variants` 做最接近的注入。
-- `review_model` 不写入第一版 config overlay；如后续要支持 review model，需要单独设计 command override，不能复用 profile 顶层模型字段。
+- 不写顶层 `review_model`，也不覆盖 `command.review`；review model 只属于 `agent.review.model`。
 
 具体字段名以 `opencode-ai@1.18.15` 黑盒 fixture 为准。
 
@@ -436,10 +437,11 @@ response 必须按 JSON-RPC id 关联，不能按 stdout 顺序；黑盒已观�
 
 1. 归一化 dispatch plan，确定 session/thread。
 2. 如果需要新 session，发送 `session/new`，带 cwd、client capabilities、MCP servers。
-3. 如果 prompt override 带有 `PlanMode`，发送 `session/set_config_option` 设置 `configId=mode`；`on` 映射 `plan`，`off` 映射 `build`。
-4. 任一 required option set 失败，停止 prompt 并返回产品可读 error；不要半应用后继续。
-5. 发送 `session/prompt`。
-6. 建立 `jsonrpc id -> turnState`，后续 stream chunk 归入该 turn。
+3. typed `Purpose=review` 必须来自 queue/dispatch/remote binding；fork response 的新 session 必须声明 `configOptions.mode` 含 `review`，随后先发送 `session/set_config_option mode=review`。review intent 忽略普通 `PlanMode`，避免把 reviewer 切回 `plan/build`。
+4. 非 review prompt 若带 `PlanMode`，发送 `session/set_config_option` 设置 `configId=mode`；`on` 映射 `plan`，`off` 映射 `build`。mode 后再设置可选 reasoning `effort`。
+5. 任一 required option set 失败，停止 prompt，并以原 command/surface/thread correlation 返回产品可读 `system.error`；orchestrator 回滚 dispatching queue、ReviewSession、remote ownership 与 room reservation。
+6. 发送 `session/prompt`。
+7. 建立 `jsonrpc id -> turnState`，保留 typed purpose；active review turn 的 permission request 与 `fs/write_text_file` 直接 fail closed，后续 stream chunk 归入该 turn。
 
 prompt input 映射：
 
@@ -562,7 +564,7 @@ errors：
 | `/access` | visible/native surface intent | 保存 runtime desired access；通过 relaunch-backed launch contract 映射 OpenCode permission map，文案避免 sandbox 承诺 |
 | `/opencodeprofile` | visible/native | 新增 profile switch |
 | `/claudeprofile` `/codexprofile` | hidden reject | 指引切回对应 backend |
-| `/review` | hidden/allowed only if available command | 语义是 OpenCode task/sub-session |
+| `/review` | visible/approximation | 产品层通过 ACP `session/fork -> mode=review -> prompt` 创建独立只读 session；不调用 OpenCode 内置 `/review` command |
 | `/compact` | hidden/allowed only if available command | usage 可为空 |
 | `/patch` `/auto-continue` `/auto-whip` | hidden reject | OpenCode 会空吞，必须我们侧 preflight |
 | `/cron` `/follow` VS Code migrate | hidden reject | 与 Claude 类似 |
@@ -593,7 +595,7 @@ errors：
 完成标准：
 
 - OpenCode profile CRUD/revision/ETag/reference check。
-- compiler golden 覆盖 config/auth/project/data/permission/MCP、`small_model`、`subagentModel -> agent.general/explore.model`，并断言不生成顶层 `review_model` / `subagent_model`。
+- compiler golden 覆盖 config/auth/project/data/permission/MCP、`small_model`、`subagentModel -> agent.general/explore.model`、`reviewModel -> agent.review.model` 与只读工具合同，并断言不生成顶层 `review_model` / `subagent_model`。
 - binary resolver 和 runtime requirements 测试。
 - daemon launch material 不泄漏 secret。
 - API-key overlay 已由 #849 真实 smoke 补证；OAuth 管理保持 out of scope。
@@ -667,7 +669,7 @@ errors：
 - `/mode opencode`、`/opencodeprofile`、detached/fresh workspace/workspace-route restart 和 pending headless connect 已补 orchestrator/control/daemon 测试，OpenCode surface 不再在 connect 时退回 Codex。
 - OpenCode profile catalog 会同步到 Service，profile switch 会冻结 `OpenCodeAdmissionRef`；同 profile 只有 revision 未变时才 no-op，revision 变化会刷新当前 profile。
 - API profile daemon launch 会注入 `opencode-acp` launch mode、`CODEX_REMOTE_INSTANCE_BACKEND=opencode`、profile id、`OPENCODE_CONFIG_CONTENT` 和 `OPENCODE_AUTH_CONTENT`，且 config env 不泄漏 API key。
-- 真实 OpenCode guarded smoke 已覆盖 prompt/thought/text/load、API-key auth/model overlay、permission/edit/file preview、cancel 和 ACP `mcpServers` HTTP MCP publication。
+- 真实 OpenCode guarded smoke 已覆盖 prompt/thought/text/load、API-key auth/model overlay、permission/edit/file preview、cancel、ACP `mcpServers` HTTP MCP publication，以及 review fork/session mode/只读工具面与 fixture 不变性。
 - raw frame log 已补递归 redaction，避免 OpenCode ACP MCP header 中的 bearer token 落盘。
 
 首版偏离/边界：
@@ -676,7 +678,7 @@ errors：
 - 自定义/API profile launch 必须带匹配的 `OpenCodeAdmissionRef`；缺失或 stale revision fail-closed。默认 `op_default` inherit profile 可以无 ref 启动。
 - OpenCode observed config 不写回 workspace/default model/reasoning 配置，避免把某个 OpenCode 实例的 runtime snapshot 污染 Codex/Claude 默认值。
 - `OPENCODE_AUTH_CONTENT` 真实 schema 是顶层 provider id map；旧 nested provider/apiKey 设计已废弃。
-- `OPENCODE_CONFIG_CONTENT` 不能写 top-level `reasoning`；profile reasoning effort 只通过 provider model variant 近似注入，OpenCode `/reasoning` 当前保持 hidden/reject，后续如要开放必须先重新确认 ACP `configOptions` 的 effort 行为。
+- `OPENCODE_CONFIG_CONTENT` 不能写 top-level `reasoning`；profile reasoning effort 只通过 provider model variant 近似注入。OpenCode `/reasoning` 已基于 ACP `configOptions id=effort` 开放，只有当前 session/model 明确声明支持时才允许写入 runtime override。
 - OpenCode edit tool 的模型侧参数名是 `filePath`，不是 `path`；测试按真实 schema 固定。
 - profile `permissionMode` 当前只作为 legacy/reserved 字段保留，不再映射 OpenCode config；`/access` 才是用户可见 runtime 权限入口，只映射 `confirm -> ask` 与 `full_access -> allow`，不暴露 `deny`。`plan` 等产品侧意图不写入 OpenCode permission map，也不对用户提示“Plan snapshot 不支持”。
 - `process.exit` / stop / detach 不主动发送 ACP `session/close`；关闭仍走 wrapper child lifecycle 和 turn tracker reconciliation，不把内部 session close 暴露成用户能力。

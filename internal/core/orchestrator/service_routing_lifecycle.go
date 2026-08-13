@@ -138,6 +138,9 @@ func (s *Service) followLocalWouldRetarget(surface *state.SurfaceConsoleRecord, 
 		return false
 	}
 	targetThreadID := strings.TrimSpace(inst.ObservedFocusedThreadID)
+	if threadIsReview(inst.Threads[targetThreadID]) {
+		return false
+	}
 	if targetThreadID == "" || !threadVisible(inst.Threads[targetThreadID]) {
 		return surface.SelectedThreadID != ""
 	}
@@ -176,6 +179,9 @@ func (s *Service) reevaluateFollowSurface(surface *state.SurfaceConsoleRecord) [
 		return nil
 	}
 	targetThreadID := strings.TrimSpace(inst.ObservedFocusedThreadID)
+	if threadIsReview(inst.Threads[targetThreadID]) {
+		return nil
+	}
 	if targetThreadID == "" || !threadVisible(inst.Threads[targetThreadID]) {
 		if surface.SelectedThreadID == "" {
 			return nil
