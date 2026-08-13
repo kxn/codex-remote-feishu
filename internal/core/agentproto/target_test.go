@@ -5,6 +5,7 @@ import "testing"
 func TestPromptDispatchPlanFromTargetPrefersExplicitMode(t *testing.T) {
 	plan := PromptDispatchPlanFromTarget(Target{
 		ExecutionMode:         PromptExecutionModeForkEphemeral,
+		Purpose:               PromptPurposeReview,
 		ThreadID:              "thread-main",
 		SourceThreadID:        "",
 		CreateThreadIfMissing: true,
@@ -15,6 +16,9 @@ func TestPromptDispatchPlanFromTargetPrefersExplicitMode(t *testing.T) {
 	}
 	if plan.ExecutionThreadID != "thread-main" {
 		t.Fatalf("expected explicit execution thread to be preserved, got %#v", plan)
+	}
+	if plan.Purpose != PromptPurposeReview {
+		t.Fatalf("expected review purpose to survive target translation, got %#v", plan)
 	}
 }
 
@@ -124,12 +128,14 @@ func TestPromptDispatchPlanLegacyTargetCarriesCanonicalSemantics(t *testing.T) {
 			name: "fork retry keeps execution thread and source thread",
 			plan: PromptDispatchPlan{
 				ExecutionMode:        PromptExecutionModeForkEphemeral,
+				Purpose:              PromptPurposeReview,
 				ExecutionThreadID:    "thread-detour",
 				SourceThreadID:       "thread-main",
 				SurfaceBindingPolicy: SurfaceBindingPolicyKeepSurfaceSelection,
 			},
 			want: Target{
 				ExecutionMode:         PromptExecutionModeForkEphemeral,
+				Purpose:               PromptPurposeReview,
 				ThreadID:              "thread-detour",
 				SourceThreadID:        "thread-main",
 				SurfaceBindingPolicy:  SurfaceBindingPolicyKeepSurfaceSelection,

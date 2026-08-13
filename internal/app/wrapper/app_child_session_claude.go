@@ -2,6 +2,7 @@ package wrapper
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 
@@ -78,9 +79,46 @@ func (a *App) buildClaudeChildLaunch(resume *claudeLaunchResumeTarget) ([]string
 	if resume != nil && strings.TrimSpace(resume.ThreadID) != "" {
 		args = append(args, "--resume", strings.TrimSpace(resume.ThreadID))
 	}
+	if resume != nil && resume.ForkEphemeral {
+		args = append(args, "--fork-session")
+	}
+	if resume != nil && strings.TrimSpace(resume.ReviewerAgent) != "" {
+		agents, _ := json.Marshal(map[string]any{
+			strings.TrimSpace(resume.ReviewerAgent): map[string]any{
+				"description": "Strict read-only code reviewer",
+				"prompt":      "Review the supplied change for correctness, regressions, security, and missing tests. Do not modify files or run commands. Use only Read, Glob, and Grep when more context is needed.",
+				"tools":       []string{"Read", "Glob", "Grep"},
+			},
+		})
+		args = append(args,
+			"--agents", string(agents),
+			"--agent", strings.TrimSpace(resume.ReviewerAgent),
+			"--tools", "Read,Glob,Grep",
+			"--disallowedTools", "Edit,Write,MultiEdit,NotebookEdit,Task,Bash",
+			"--permission-mode", "plan",
+		)
+		args = removeArgWithOptionalValue(args, "--allow-dangerously-skip-permissions")
+	}
 	env := config.FilterEnvWithoutProxy(append([]string{}, os.Environ()...))
 	env = append(env, a.config.ChildProxyEnv...)
 	args, env = a.applyClaudeRuntimeSettingsOverlay(args, env)
 	args, env = a.applyClaudeFeishuMCPPublication(args, env)
 	return args, env
+}
+
+func removeArgWithOptionalValue(args []string, key string) []string {
+	if key == "" || len(args) == 0 {
+		return args
+	}
+	filtered := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] != key {
+			filtered = append(filtered, args[i])
+			continue
+		}
+		if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			i++
+		}
+	}
+	return filtered
 }

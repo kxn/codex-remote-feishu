@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -147,6 +148,10 @@ func (s *Service) failSurfaceActiveQueueItem(surface *state.SurfaceConsoleRecord
 		return nil
 	}
 	item.Status = state.QueueItemFailed
+	if queuedItemPromptDispatchPlan(item).Purpose == agentproto.PromptPurposeReview && surface.ReviewSession != nil && surface.ReviewSession.Phase == state.ReviewSessionPhasePending {
+		s.clearPendingReviewStart(surface)
+		surface.ReviewSession = nil
+	}
 	s.clearSurfaceActiveQueueItem(surface, item.ID)
 	binding := s.remoteBindingForSurface(surface)
 	if binding != nil {

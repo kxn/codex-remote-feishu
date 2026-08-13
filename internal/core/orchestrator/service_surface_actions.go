@@ -331,6 +331,7 @@ func (s *Service) handleText(surface *state.SurfaceConsoleRecord, action control
 			detour.ExecutionMode,
 			detour.SourceThreadID,
 			detour.SurfaceBindingPolicy,
+			"",
 			false,
 		)...)
 	}

@@ -82,6 +82,18 @@ func (s *Service) materializeRemoteTurnThread(inst *state.InstanceRecord, thread
 	if thread.TrafficClass == "" || thread.TrafficClass == agentproto.TrafficClassInternalHelper {
 		thread.TrafficClass = agentproto.TrafficClassPrimary
 	}
+	if binding != nil {
+		plan := remoteBindingPromptDispatchPlan(binding)
+		if plan.Purpose == agentproto.PromptPurposeReview {
+			parentThreadID := strings.TrimSpace(plan.SourceThreadID)
+			thread.ForkedFromID = parentThreadID
+			thread.Source = &agentproto.ThreadSourceRecord{
+				Kind:           agentproto.ThreadSourceKindReview,
+				Name:           "review",
+				ParentThreadID: parentThreadID,
+			}
+		}
+	}
 	thread.Loaded = true
 	return thread
 }

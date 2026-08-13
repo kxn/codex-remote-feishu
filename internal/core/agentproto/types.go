@@ -304,6 +304,7 @@ type Target struct {
 	// - these fields remain on Target for queue/runtime compatibility until the
 	//   later carrier migration lands.
 	ExecutionMode          PromptExecutionMode  `json:"executionMode,omitempty"`
+	Purpose                PromptPurpose        `json:"purpose,omitempty"`
 	SourceThreadID         string               `json:"sourceThreadId,omitempty"`
 	SurfaceBindingPolicy   SurfaceBindingPolicy `json:"surfaceBindingPolicy,omitempty"`
 	ThreadID               string               `json:"threadId,omitempty"`

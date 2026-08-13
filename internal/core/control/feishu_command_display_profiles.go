@@ -111,7 +111,7 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		commandSupportHiddenAllowed(FeishuCommandUse),
 		commandSupportHiddenAllowed(FeishuCommandDetach),
 		commandSupportHiddenReject(FeishuCommandCompact, FeishuCommandSupportPassthrough, "Claude `/compact` 目前只作为后续 passthrough 候选；在 runtime host 收口前保持隐藏并拒绝直接执行。"),
-		commandSupportHiddenReject(FeishuCommandReview, FeishuCommandSupportApproximation, "Claude `/review` 当前不纳入 visible MVP；在 detached review contract 补齐前保持隐藏并拒绝直接执行。"),
+		commandSupportVisibleAs(FeishuCommandReview, FeishuCommandSupportApproximation, "Claude `/review` 使用独立 fork session 执行只读审阅。"),
 		commandSupportHiddenReject(FeishuCommandPatch, FeishuCommandSupportApproximation, "Claude `/bendtomywill` 当前不纳入 visible MVP；在 turn patch contract 补齐前保持隐藏并拒绝直接执行。"),
 		commandSupportHiddenAllowed(FeishuCommandUseAll),
 		commandSupportVisibleAs(FeishuCommandSteerAll, FeishuCommandSupportApproximation, "Claude 当前支持把文本与本地图片补充并入当前轮；远程图片与 document 输入仍需等待本轮结束或改走新消息。"),

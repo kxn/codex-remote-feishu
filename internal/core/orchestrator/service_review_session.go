@@ -31,10 +31,41 @@ func (s *Service) validReviewSession(surface *state.SurfaceConsoleRecord) *state
 		return nil
 	}
 	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
-	if s.surfaceBackend(surface) != agentproto.BackendCodex || inst == nil || state.EffectiveInstanceBackend(inst) != agentproto.BackendCodex {
+	if inst == nil {
+		return nil
+	}
+	if !s.reviewSessionBackendMatches(surface, session) {
 		return nil
 	}
 	return session
+}
+
+func (s *Service) reviewSessionBackendMatches(surface *state.SurfaceConsoleRecord, session *state.ReviewSessionRecord) bool {
+	if surface == nil || session == nil {
+		return false
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	if inst == nil {
+		return false
+	}
+	backend := agentproto.NormalizeBackend(session.Backend)
+	return s.surfaceBackend(surface) == backend && state.EffectiveInstanceBackend(inst) == backend && reviewExecutorMatchesBackend(session.ExecutorKind, backend)
+}
+
+func reviewExecutorMatchesBackend(executor state.ReviewExecutorKind, backend agentproto.Backend) bool {
+	if executor == "" {
+		return backend == agentproto.BackendCodex
+	}
+	switch backend {
+	case agentproto.BackendCodex:
+		return executor == state.ReviewExecutorCodexNative
+	case agentproto.BackendClaude:
+		return executor == state.ReviewExecutorClaudeForkSession
+	case agentproto.BackendOpenCode:
+		return executor == state.ReviewExecutorOpenCodeACPFork
+	default:
+		return false
+	}
 }
 
 func (s *Service) activeReviewSession(surface *state.SurfaceConsoleRecord) *state.ReviewSessionRecord {
@@ -118,8 +149,7 @@ func (s *Service) blockReviewSessionBackendMismatch(surface *state.SurfaceConsol
 	if surface == nil || surface.ReviewSession == nil {
 		return nil
 	}
-	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
-	if s.surfaceBackend(surface) == agentproto.BackendCodex && inst != nil && state.EffectiveInstanceBackend(inst) == agentproto.BackendCodex {
+	if s.reviewSessionBackendMatches(surface, surface.ReviewSession) {
 		return nil
 	}
 	if !reviewSessionTurnActive(surface, surface.ReviewSession) {
@@ -127,7 +157,7 @@ func (s *Service) blockReviewSessionBackendMismatch(surface *state.SurfaceConsol
 		s.clearPendingReviewStart(surface)
 		surface.ReviewSession = nil
 	}
-	return notice(surface, "review_backend_mismatch", "当前审阅会话与已连接的服务类型不一致，已停止继续路由；请重新进入 Codex 审阅。")
+	return notice(surface, "review_backend_mismatch", "当前审阅会话与已连接的服务类型不一致，已停止继续路由；请重新进入审阅。")
 }
 
 func (s *Service) blockNonTextReviewSessionInput(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
@@ -197,6 +227,7 @@ func (s *Service) handleReviewSessionText(surface *state.SurfaceConsoleRecord, a
 		agentproto.PromptExecutionModeResumeExisting,
 		strings.TrimSpace(session.ParentThreadID),
 		agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+		agentproto.PromptPurposeReview,
 		false,
 	), true
 }
@@ -341,6 +372,13 @@ func (s *Service) maybeActivateReviewSession(instanceID string, event agentproto
 		return
 	}
 	thread := inst.Threads[strings.TrimSpace(event.ThreadID)]
+	if binding := s.pendingRemoteBindingForEvent(instanceID, event); binding != nil && remoteBindingPromptDispatchPlan(binding).Purpose == agentproto.PromptPurposeReview {
+		var item *state.QueueItemRecord
+		if surface := s.root.Surfaces[binding.SurfaceSessionID]; surface != nil {
+			item = surface.QueueItems[binding.QueueItemID]
+		}
+		thread = s.materializeRemoteTurnThread(inst, event.ThreadID, event.CWD, binding, item)
+	}
 	if !threadIsReview(thread) {
 		return
 	}
@@ -360,7 +398,20 @@ func (s *Service) maybeCaptureReviewSessionResultCandidate(instanceID string, ev
 		return
 	}
 	if candidate := strings.TrimSpace(text); candidate != "" {
-		session.PendingReviewText = candidate
+		itemID := strings.TrimSpace(event.ItemID)
+		for _, capturedItemID := range session.PendingReviewItemIDs {
+			if capturedItemID == itemID && itemID != "" {
+				return
+			}
+		}
+		if itemID != "" {
+			session.PendingReviewItemIDs = append(session.PendingReviewItemIDs, itemID)
+		}
+		if strings.TrimSpace(session.PendingReviewText) == "" {
+			session.PendingReviewText = candidate
+		} else {
+			session.PendingReviewText = strings.TrimSpace(session.PendingReviewText) + "\n\n" + candidate
+		}
 		session.LastUpdatedAt = s.now()
 	}
 }
@@ -372,6 +423,7 @@ func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentp
 	}
 	completedActiveTurn := strings.TrimSpace(event.TurnID) == "" || strings.TrimSpace(session.ActiveTurnID) == strings.TrimSpace(event.TurnID)
 	completedInitialTurn := strings.TrimSpace(event.TurnID) != "" && strings.TrimSpace(session.InitialTurnID) == strings.TrimSpace(event.TurnID)
+	exitRequested := session.ExitRequested && completedActiveTurn
 	if completedActiveTurn && completedInitialTurn && strings.TrimSpace(session.LastReviewText) == "" && turnCompletedSuccessfully(event) {
 		if reviewText := strings.TrimSpace(session.PendingReviewText); reviewText != "" {
 			session.LastReviewText = reviewText
@@ -379,6 +431,7 @@ func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentp
 	}
 	if completedInitialTurn {
 		session.PendingReviewText = ""
+		session.PendingReviewItemIDs = nil
 	}
 	if completedActiveTurn {
 		session.ActiveTurnID = ""
@@ -389,6 +442,10 @@ func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentp
 	session.LastUpdatedAt = s.now()
 	if strings.TrimSpace(session.ActiveTurnID) == "" {
 		s.releaseFeishuRoomReviewReservations(surface)
+	}
+	if exitRequested || completedInitialTurn && strings.TrimSpace(session.LastReviewText) == "" {
+		s.clearPendingReviewStart(surface)
+		surface.ReviewSession = nil
 	}
 }
 

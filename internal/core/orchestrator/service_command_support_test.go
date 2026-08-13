@@ -50,7 +50,7 @@ func TestBareCodexProfileIntentRejectedInClaudeBeforeOpeningCatalog(t *testing.T
 	}
 }
 
-func TestBareReviewIntentRejectedInClaudeBeforeOpeningPage(t *testing.T) {
+func TestBareReviewIntentOpensClaudeReviewPage(t *testing.T) {
 	now := time.Date(2026, 5, 1, 12, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", "normal", agentproto.BackendClaude, "", "", "")
@@ -62,11 +62,11 @@ func TestBareReviewIntentRejectedInClaudeBeforeOpeningPage(t *testing.T) {
 		ActorUserID:      "user-1",
 		Text:             "/review",
 	})
-	if len(events) != 1 || events[0].Notice == nil {
-		t.Fatalf("expected single rejection notice, got %#v", events)
+	if len(events) != 1 || events[0].PageView == nil {
+		t.Fatalf("expected Claude review page, got %#v", events)
 	}
-	if events[0].Notice.Code != "command_rejected" || !strings.Contains(events[0].Notice.Text, "/review") {
-		t.Fatalf("unexpected rejection notice: %#v", events[0].Notice)
+	if events[0].PageView.CommandID != control.FeishuCommandReview || events[0].PageView.CatalogBackend != agentproto.BackendClaude {
+		t.Fatalf("unexpected Claude review page: %#v", events[0].PageView)
 	}
 }
 

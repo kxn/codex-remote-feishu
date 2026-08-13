@@ -92,7 +92,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(commonTools), []string{"/coworkers", "/history", "/sendfile"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(commonTools), []string{"/review", "/coworkers", "/history", "/sendfile"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude common_tools help commands = %#v, want %#v", got, want)
 	}
 
@@ -321,8 +321,8 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesClaudeVisibleProfile(t 
 	if profile.IncludesFamily(FeishuCommandModel) {
 		t.Fatalf("expected claude visible profile to hide model, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSendSettings))
 	}
-	if profile.IncludesFamily(FeishuCommandReview) {
-		t.Fatalf("expected claude visible profile to hide review, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools))
+	if !profile.IncludesFamily(FeishuCommandReview) {
+		t.Fatalf("expected claude visible profile to include review, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools))
 	}
 }
 

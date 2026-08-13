@@ -2,8 +2,24 @@ package agentproto
 
 import "strings"
 
+type PromptPurpose string
+
+const (
+	PromptPurposeReview PromptPurpose = "review"
+)
+
+func NormalizePromptPurpose(value PromptPurpose) PromptPurpose {
+	switch strings.ToLower(strings.TrimSpace(string(value))) {
+	case string(PromptPurposeReview):
+		return PromptPurposeReview
+	default:
+		return ""
+	}
+}
+
 type PromptDispatchPlan struct {
 	ExecutionMode        PromptExecutionMode
+	Purpose              PromptPurpose
 	ExecutionThreadID    string
 	SourceThreadID       string
 	SurfaceBindingPolicy SurfaceBindingPolicy
@@ -13,6 +29,7 @@ type PromptDispatchPlan struct {
 
 func NormalizePromptDispatchPlan(plan PromptDispatchPlan) PromptDispatchPlan {
 	plan.ExecutionMode = NormalizePromptExecutionMode(plan.ExecutionMode)
+	plan.Purpose = NormalizePromptPurpose(plan.Purpose)
 	plan.ExecutionThreadID = strings.TrimSpace(plan.ExecutionThreadID)
 	plan.SourceThreadID = strings.TrimSpace(plan.SourceThreadID)
 	plan.SurfaceBindingPolicy = EffectiveSurfaceBindingPolicy(plan.SurfaceBindingPolicy)
@@ -35,6 +52,7 @@ func NormalizePromptDispatchPlan(plan PromptDispatchPlan) PromptDispatchPlan {
 func PromptDispatchPlanFromTarget(target Target) PromptDispatchPlan {
 	return NormalizePromptDispatchPlan(PromptDispatchPlan{
 		ExecutionMode:        target.ExecutionMode,
+		Purpose:              target.Purpose,
 		ExecutionThreadID:    target.ThreadID,
 		SourceThreadID:       target.SourceThreadID,
 		SurfaceBindingPolicy: target.SurfaceBindingPolicy,
@@ -62,6 +80,7 @@ func (plan PromptDispatchPlan) LegacyTarget() Target {
 	normalized := NormalizePromptDispatchPlan(plan)
 	return Target{
 		ExecutionMode:         normalized.ExecutionMode,
+		Purpose:               normalized.Purpose,
 		SourceThreadID:        normalized.SourceThreadID,
 		SurfaceBindingPolicy:  normalized.SurfaceBindingPolicy,
 		ThreadID:              normalized.ExecutionThreadID,

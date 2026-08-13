@@ -567,7 +567,7 @@ func TestDetachedReviewFollowUpLifecycleDoesNotReplaceReadyReviewResult(t *testi
 	}
 }
 
-func TestDetachedReviewFollowUpCannotReplaceFailedInitialResult(t *testing.T) {
+func TestFailedInitialReviewClearsSessionInsteadOfLeavingDeadOverlay(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
 
@@ -579,31 +579,8 @@ func TestDetachedReviewFollowUpCannotReplaceFailedInitialResult(t *testing.T) {
 		ErrorMessage: "review failed",
 		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
 	})
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:      agentproto.EventTurnStarted,
-		ThreadID:  "thread-review",
-		TurnID:    "turn-review-2",
-		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
-	})
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:      agentproto.EventItemCompleted,
-		ThreadID:  "thread-review",
-		TurnID:    "turn-review-2",
-		ItemID:    "follow-up-result",
-		ItemKind:  "agent_message",
-		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
-		Metadata:  map[string]any{"text": "这是失败后的普通追问答复。"},
-	})
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:      agentproto.EventTurnCompleted,
-		ThreadID:  "thread-review",
-		TurnID:    "turn-review-2",
-		Status:    "completed",
-		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
-	})
-
-	if surface.ReviewSession == nil || surface.ReviewSession.Phase == state.ReviewSessionPhaseReady || surface.ReviewSession.LastReviewText != "" {
-		t.Fatalf("failed initial review must not use a follow-up as its result, got %#v", surface.ReviewSession)
+	if surface.ReviewSession != nil {
+		t.Fatalf("failed initial review must clear the blocking overlay, got %#v", surface.ReviewSession)
 	}
 }
 
@@ -1268,7 +1245,7 @@ func TestReviewApplyReplacesItsOwnReservationWithPromptDispatch(t *testing.T) {
 	}
 }
 
-func TestStartReviewFromFinalCardRejectedInClaudeMode(t *testing.T) {
+func TestStartReviewFromFinalCardDispatchesClaudeReviewFork(t *testing.T) {
 	svc, surface, repoRoot := newReviewSessionService(t)
 	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
 	svc.MaterializeSurfaceResume(surface.SurfaceSessionID, surface.GatewayID, surface.ChatID, surface.ActorUserID, state.ProductModeNormal, agentproto.BackendClaude, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
@@ -1292,14 +1269,20 @@ func TestStartReviewFromFinalCardRejectedInClaudeMode(t *testing.T) {
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 
-	if len(events) != 1 || events[0].Notice == nil {
-		t.Fatalf("expected single rejection notice, got %#v", events)
+	if noticeCode(events, "review_start_requested") == "" || !hasAgentCommand(events) {
+		t.Fatalf("expected Claude review fork dispatch, got %#v", events)
 	}
-	if events[0].Notice.Code != "command_rejected" || !strings.Contains(events[0].Notice.Text, "/review") {
-		t.Fatalf("unexpected rejection notice: %#v", events[0].Notice)
+	if surface.ReviewSession == nil || surface.ReviewSession.Backend != agentproto.BackendClaude || surface.ReviewSession.ExecutorKind != state.ReviewExecutorClaudeForkSession {
+		t.Fatalf("expected Claude review session, got %#v", surface.ReviewSession)
 	}
-	if surface.ReviewSession != nil {
-		t.Fatalf("did not expect review session to start in claude mode, got %#v", surface.ReviewSession)
+	var command *agentproto.Command
+	for i := range events {
+		if events[i].Command != nil {
+			command = events[i].Command
+		}
+	}
+	if command == nil || command.Kind != agentproto.CommandPromptSend || command.Target.Purpose != agentproto.PromptPurposeReview || command.Target.ExecutionMode != agentproto.PromptExecutionModeForkEphemeral {
+		t.Fatalf("unexpected Claude review command: %#v", command)
 	}
 }
 
@@ -1825,6 +1808,70 @@ func TestDiscardReviewSessionClearsRuntime(t *testing.T) {
 	}
 	if surface.ReviewSession != nil {
 		t.Fatalf("expected review session to clear, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestDiscardActiveReviewInterruptsBeforeClearingSession(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewDiscard,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+	if len(events) != 2 || events[0].Command == nil || events[0].Command.Kind != agentproto.CommandTurnInterrupt || noticeCode(events, "review_discard_requested") == "" {
+		t.Fatalf("active discard must request interrupt before exit, got %#v", events)
+	}
+	if events[0].Command.Target.ThreadID != "thread-review" || events[0].Command.Target.TurnID != "turn-review-1" {
+		t.Fatalf("active discard interrupt target = %#v", events[0].Command.Target)
+	}
+	if surface.ReviewSession == nil || !surface.ReviewSession.ExitRequested {
+		t.Fatalf("active discard must keep session until terminal turn, got %#v", surface.ReviewSession)
+	}
+	repeated := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewDiscard,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+	if len(repeated) != 1 || repeated[0].Command != nil || noticeCode(repeated, "review_discard_requested") == "" {
+		t.Fatalf("repeated active discard must not send another interrupt, got %#v", repeated)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "interrupted",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	if surface.ReviewSession != nil {
+		t.Fatalf("terminal interrupted turn must finish requested discard, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestDiscardDispatchingReviewWaitsForInterruptibleTurn(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhasePending,
+		ParentThreadID: "thread-main",
+	}
+	surface.ActiveQueueItemID = "queue-review"
+	surface.QueueItems["queue-review"] = &state.QueueItemRecord{
+		ID:     "queue-review",
+		Status: state.QueueItemDispatching,
+		FrozenDispatchPlan: agentproto.PromptDispatchPlan{
+			ExecutionMode:  agentproto.PromptExecutionModeForkEphemeral,
+			SourceThreadID: "thread-main",
+			Purpose:        agentproto.PromptPurposeReview,
+		},
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewDiscard,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+	if noticeCode(events, "review_result_not_ready") == "" || surface.ReviewSession == nil {
+		t.Fatalf("pre-start discard must wait rather than orphan dispatch, events=%#v session=%#v", events, surface.ReviewSession)
 	}
 }
 

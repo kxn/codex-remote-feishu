@@ -346,17 +346,21 @@ func (r *codexBackendRuntime) SetDebugLogger(debugLog func(string, ...any)) {
 }
 
 type claudeBackendRuntime struct {
-	mu                   sync.Mutex
-	translator           *claude.Translator
-	workspaceRoot        string
-	initialLaunchResume  *claudeLaunchResumeTarget
-	pendingLaunchResume  *claudeLaunchResumeTarget
-	expectedResumeThread *claudeLaunchResumeTarget
+	mu                        sync.Mutex
+	translator                *claude.Translator
+	workspaceRoot             string
+	initialLaunchResume       *claudeLaunchResumeTarget
+	pendingLaunchResume       *claudeLaunchResumeTarget
+	pendingRestartCommandID   string
+	completedRestartCommandID string
+	expectedResumeThread      *claudeLaunchResumeTarget
 }
 
 type claudeLaunchResumeTarget struct {
-	ThreadID string
-	CWD      string
+	ThreadID      string
+	CWD           string
+	ForkEphemeral bool
+	ReviewerAgent string
 }
 
 func (r *claudeBackendRuntime) Backend() agentproto.Backend {
@@ -630,7 +634,7 @@ func newTurnSteerResponseGate(command agentproto.Command, frame []byte) (*runtim
 	}, nil
 }
 
-func (r *claudeBackendRuntime) PrepareChildRestart(_ string, dispatchPlan agentproto.PromptDispatchPlan, _ *agentproto.CodexResumePolicy) error {
+func (r *claudeBackendRuntime) PrepareChildRestart(commandID string, dispatchPlan agentproto.PromptDispatchPlan, _ *agentproto.CodexResumePolicy) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	resume, err := r.resolveLaunchResumeTarget(dispatchPlan)
@@ -638,6 +642,7 @@ func (r *claudeBackendRuntime) PrepareChildRestart(_ string, dispatchPlan agentp
 		return err
 	}
 	r.pendingLaunchResume = resume
+	r.pendingRestartCommandID = strings.TrimSpace(commandID)
 	return nil
 }
 
@@ -663,7 +668,29 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 	if command.Kind != agentproto.CommandPromptSend {
 		return nil, nil
 	}
+	if commandID := strings.TrimSpace(command.CommandID); commandID != "" && commandID == r.completedRestartCommandID {
+		r.completedRestartCommandID = ""
+		return nil, nil
+	}
 	dispatchPlan := agentproto.PromptDispatchPlanFromTarget(command.Target)
+	if dispatchPlan.ExecutionMode == agentproto.PromptExecutionModeForkEphemeral {
+		sourceThreadID := strings.TrimSpace(dispatchPlan.SourceThreadID)
+		if sourceThreadID == "" {
+			return nil, nil
+		}
+		resume, found, err := r.lookupForkSourceTarget(dispatchPlan)
+		if err != nil {
+			return nil, err
+		}
+		if !found || resume == nil {
+			return nil, nil
+		}
+		dispatchPlan.SourceThreadID = resume.ThreadID
+		if strings.TrimSpace(dispatchPlan.CWD) == "" {
+			dispatchPlan.CWD = resume.CWD
+		}
+		return &runtimeCommandRestart{DispatchPlan: dispatchPlan}, nil
+	}
 	targetThreadID := strings.TrimSpace(dispatchPlan.ExecutionThreadID)
 	current := r.currentResumeTarget()
 	if dispatchPlan.ExecutionMode == agentproto.PromptExecutionModeStartNew && targetThreadID == "" {
@@ -700,6 +727,27 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 
 func (r *claudeBackendRuntime) resolveLaunchResumeTarget(dispatchPlan agentproto.PromptDispatchPlan) (*claudeLaunchResumeTarget, error) {
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
+	if dispatchPlan.ExecutionMode == agentproto.PromptExecutionModeForkEphemeral {
+		resume, found, err := r.lookupForkSourceTarget(dispatchPlan)
+		if err != nil {
+			return nil, err
+		}
+		if !found || resume == nil {
+			return nil, agentproto.ErrorInfo{
+				Code:      "claude_fork_source_thread_not_found",
+				Layer:     "wrapper",
+				Stage:     "prepare_child_restart",
+				Operation: string(agentproto.CommandPromptSend),
+				Message:   "目标 Claude 会话当前不可 fork，当前不能直接从这个会话创建临时分支。",
+				ThreadID:  strings.TrimSpace(dispatchPlan.SourceThreadID),
+			}
+		}
+		resume.ForkEphemeral = true
+		if dispatchPlan.Purpose == agentproto.PromptPurposeReview {
+			resume.ReviewerAgent = "reviewer"
+		}
+		return resume, nil
+	}
 	threadID := strings.TrimSpace(dispatchPlan.ExecutionThreadID)
 	cwd := strings.TrimSpace(dispatchPlan.CWD)
 	if threadID == "" {
@@ -734,6 +782,19 @@ func (r *claudeBackendRuntime) resolveLaunchResumeTarget(dispatchPlan agentproto
 		ThreadID: threadID,
 		CWD:      cwd,
 	}, nil
+}
+
+func (r *claudeBackendRuntime) lookupForkSourceTarget(dispatchPlan agentproto.PromptDispatchPlan) (*claudeLaunchResumeTarget, bool, error) {
+	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
+	sourceThreadID := strings.TrimSpace(dispatchPlan.SourceThreadID)
+	if sourceThreadID == "" {
+		return nil, false, nil
+	}
+	sourcePlan := dispatchPlan
+	sourcePlan.ExecutionMode = agentproto.PromptExecutionModeResumeExisting
+	sourcePlan.ExecutionThreadID = sourceThreadID
+	sourcePlan.SourceThreadID = ""
+	return r.lookupStoredResumeTarget(sourcePlan)
 }
 
 func (r *claudeBackendRuntime) lookupStoredResumeTarget(dispatchPlan agentproto.PromptDispatchPlan) (*claudeLaunchResumeTarget, bool, error) {
@@ -786,6 +847,8 @@ func (r *claudeBackendRuntime) consumeLaunchResumeTarget() *claudeLaunchResumeTa
 	if r.pendingLaunchResume != nil {
 		resume := r.pendingLaunchResume
 		r.pendingLaunchResume = nil
+		r.completedRestartCommandID = r.pendingRestartCommandID
+		r.pendingRestartCommandID = ""
 		return resume
 	}
 	if r.initialLaunchResume != nil {

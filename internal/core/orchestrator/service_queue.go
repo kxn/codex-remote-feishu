@@ -73,11 +73,12 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 		"",
 		"",
 		"",
+		"",
 		front,
 	)
 }
 
-func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, front bool) []eventcontract.Event {
+func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, purpose agentproto.PromptPurpose, front bool) []eventcontract.Event {
 	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
 		return blocked
 	}
@@ -87,12 +88,17 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		dispatchPlan.ExecutionMode = mode
 	}
 	dispatchPlan.SourceThreadID = strings.TrimSpace(sourceThreadID)
+	dispatchPlan.Purpose = purpose
 	if policy := agentproto.NormalizeSurfaceBindingPolicy(bindingPolicy); policy != "" {
 		dispatchPlan.SurfaceBindingPolicy = policy
 	}
 	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	frozenOverride := s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides)
+	frozenPlanMode := s.freezePlanModeForPrompt(surface)
+	if dispatchPlan.Purpose == agentproto.PromptPurposeReview && s.surfaceBackend(surface) == agentproto.BackendClaude {
+		frozenPlanMode = state.PlanModeSettingOn
+	}
 	codexAdmissionRef := s.freezeCodexAdmissionRefForPrompt(surface)
 	codexConnectionContract := s.freezeCodexConnectionContractForPrompt(surface)
 	codexThreadPolicy := s.freezeCodexThreadPolicyForPrompt(surface)
@@ -119,7 +125,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		Inputs:                  inputs,
 		FrozenDispatchPlan:      dispatchPlan,
 		FrozenOverride:          frozenOverride,
-		FrozenPlanMode:          s.freezePlanModeForPrompt(surface),
+		FrozenPlanMode:          frozenPlanMode,
 		CodexAdmissionRef:       codexAdmissionRef,
 		CodexConnectionContract: codexConnectionContract,
 		CodexThreadPolicy:       codexThreadPolicy,

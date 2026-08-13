@@ -408,6 +408,14 @@ const (
 	ReviewSessionPhaseReady   ReviewSessionPhase = "ready"
 )
 
+type ReviewExecutorKind string
+
+const (
+	ReviewExecutorCodexNative       ReviewExecutorKind = "codex_native_detached"
+	ReviewExecutorClaudeForkSession ReviewExecutorKind = "claude_fork_session"
+	ReviewExecutorOpenCodeACPFork   ReviewExecutorKind = "opencode_acp_fork"
+)
+
 // PendingTextInputRecord holds a user text message that could not be processed
 // immediately (e.g., implicit thread preparation failed). The message is saved
 // and replayed when the blocking condition is resolved (e.g., user selects a
@@ -425,6 +433,8 @@ type PendingTextInputRecord struct {
 
 type ReviewSessionRecord struct {
 	Phase                ReviewSessionPhase
+	Backend              agentproto.Backend
+	ExecutorKind         ReviewExecutorKind
 	ParentThreadID       string
 	ReviewThreadID       string
 	InitialTurnID        string
@@ -433,8 +443,10 @@ type ReviewSessionRecord struct {
 	SourceMessageID      string
 	TargetLabel          string
 	PendingReviewText    string
+	PendingReviewItemIDs []string
 	LastReviewText       string
 	AwaitingFollowUpText bool
+	ExitRequested        bool
 	ActionMessageID      string
 	StartedAt            time.Time
 	LastUpdatedAt        time.Time

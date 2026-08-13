@@ -65,6 +65,44 @@ func (s *Service) discardReviewSession(surface *state.SurfaceConsoleRecord, acti
 	if blocked := reviewSessionActionCardExpired(surface, session, action); blocked != nil {
 		return blocked
 	}
+	if reviewSessionTurnActive(surface, session) {
+		if session.ExitRequested {
+			return notice(surface, "review_discard_requested", "正在停止当前审阅；完成后会自动退出。")
+		}
+		threadID := strings.TrimSpace(session.ReviewThreadID)
+		turnID := strings.TrimSpace(session.ActiveTurnID)
+		if threadID == "" || turnID == "" {
+			return notice(surface, "review_turn_active", "当前审阅仍在启动或处理中，请等待进入可停止状态后重试，或使用 `/stop`。")
+		}
+		session.ExitRequested = true
+		session.LastUpdatedAt = s.now()
+		s.markRemoteTurnInterruptRequested(surface.AttachedInstanceID, threadID, turnID)
+		return []eventcontract.Event{
+			{
+				Kind:             eventcontract.KindAgentCommand,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Command: &agentproto.Command{
+					Kind: agentproto.CommandTurnInterrupt,
+					Origin: agentproto.Origin{
+						Surface: surface.SurfaceSessionID,
+						UserID:  surface.ActorUserID,
+						ChatID:  surface.ChatID,
+					},
+					Target: agentproto.Target{ThreadID: threadID, TurnID: turnID},
+				},
+			},
+			{
+				Kind:             eventcontract.KindNotice,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				Notice: &control.Notice{
+					Code:     "review_discard_requested",
+					Title:    "正在退出审阅",
+					Text:     "已发送停止请求；当前审阅结束后会自动退出。",
+					ThemeKey: "system",
+				},
+			},
+		}
+	}
 	s.ensureReviewSessionParentSelection(surface, session)
 	s.releaseFeishuRoomReviewReservations(surface)
 	s.clearPendingReviewStart(surface)
@@ -151,6 +189,7 @@ func (s *Service) applyReviewSessionResult(surface *state.SurfaceConsoleRecord, 
 		agentproto.PromptExecutionModeResumeExisting,
 		"",
 		agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+		"",
 		true,
 	)...)
 }

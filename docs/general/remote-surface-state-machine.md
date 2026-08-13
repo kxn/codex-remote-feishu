@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-13`
-> Summary: detached review 使用 `pending -> active -> ready` 三态；普通输入保持主线程语义，只有结果卡显式开启的一次性文字 capture 才续发 review thread。
+> Summary: detached review 以 typed purpose 和 backend/executor 关联；Claude 通过只读 fork session 复用统一 review overlay，Codex 保持原生 detached review。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -462,21 +462,23 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    9. `LastReviewText`
    10. `AwaitingFollowUpText`
    11. `ActionMessageID`
-2. review thread 当前必须有显式 `ThreadRecord.Source.Kind=review`；parent thread 关系优先来自 `ForkedFromID`，其次来自 `ThreadSourceRecord.ParentThreadID`。若 Codex 先发出不带 `threadSource` 的 `thread/started`，随后 `review/start` result 再带回 `reviewThreadId` / `turn.id`，translator 会补发一条只承载 review metadata 的 `thread.discovered(remote_surface)`，由 orchestrator merge 到同一个 thread record。
+2. review thread 当前必须有显式 `ThreadRecord.Source.Kind=review`；parent thread 关系优先来自 `ForkedFromID`，其次来自 `ThreadSourceRecord.ParentThreadID`。Codex 原生 review 若先发出不带 `threadSource` 的 `thread/started`，随后 `review/start` result 再带回 `reviewThreadId` / `turn.id`，translator 会补发一条只承载 review metadata 的 `thread.discovered(remote_surface)`，由 orchestrator merge 到同一个 thread record。Claude review 则通过 queue item / `PromptDispatchPlan` / remote binding 上的 typed `Purpose=review`，按同一 command id 在 `turn.started` 前物化相同 provenance；普通 `fork_ephemeral` 不会被推断成 review。
 3. 当前激活条件不是“点了某个前台按钮”，而是更底层的 runtime 事实：
    1. 同一 attached instance 上已知某个 review thread
    2. 该 review thread 命中了当前 surface 的 review runtime 事件：优先是 `turn.started(remote_surface)`；若 `review/start` result 晚于无 source 的 `thread/started`，则带 `reviewThreadId` / `turn.id` 的 late `thread.discovered(remote_surface)` 也能把 pending session 提升成 active；若上游这轮 `turn.started` 还没带回 surface 归属，则 `entered_review_mode` / `exited_review_mode` 生命周期 item 也会把 pending session 提升成 active
 4. 结果就绪有两种明确合同，不能互相替代：
-   1. detached review 是 review thread 上的普通 item / turn 流；首次激活时固化 `InitialTurnID`，该 turn 的非空 `agent_message item.completed` 会把最后结果候选写入 review session 自己的 `PendingReviewText`，不依赖可被 plan / request / tool / compaction 提前消费的 UI pending-text buffer。只有同一 turn 成功 `turn.completed`，服务端才把候选固化为 `LastReviewText` 并进入 `V2 Ready`；失败完成会清掉候选。初始 turn 失败后，后续追问的成功回答不能替代初始审阅结果
+   1. detached review 是 review thread 上的普通 item / turn 流；首次激活时固化 `InitialTurnID`，该 turn 的非空 `agent_message item.completed` 会按 item id 去重并有序聚合到 review session 自己的 `PendingReviewText`，不依赖可被 plan / request / tool / compaction 提前消费的 UI pending-text buffer。只有同一 turn 成功 `turn.completed`，服务端才把聚合结果固化为 `LastReviewText` 并进入 `V2 Ready`；初始 turn 失败、中断或无结果完成会释放 reservation 并清掉 overlay，不留下 dead session
    2. inline review 才消费 `entered_review_mode` / `exited_review_mode`；completed `exited_review_mode` 携带的非空 `review` 只在 `LastReviewText` 尚未固化时写入，后续追问 lifecycle 不得覆盖初始 apply payload
 5. `SelectedThreadID == ParentThreadID` 是 detached review session 的选择不变量，不再是判断 `ReviewSession` 是否存在的唯一依据。若旧版本或异常投影曾把 `SelectedThreadID` 污染成 `ReviewThreadID`，显式追问、`退出审阅`、`按审阅意见继续修改` 会先尝试恢复 parent selection，再继续处理。
 6. 新发起 review 时，若当前候选线程本身是 `source=review`，服务端必须先回溯到它的 parent thread，再把 `review.start` 发给 parent；review thread 不能作为新的 review 启动目标。
 7. `V1 Active` / `V2 Ready` 都不会把 surface route 从 `pinned/follow` 改成新的 route 值。普通聊天框始终属于主线程；Review overlay 只负责在未显式选择动作时阻断普通文字/图片/文件，以及在 `AwaitingFollowUpText=true` 时消费恰好一条纯文字。图片和文件在 staging 前拒绝，不会变成后续主线程草稿。
 8. `继续追问审阅` 只接受最新 `ActionMessageID` 对应结果卡、ready 且无 queued / dispatching / running review work 的 session；按钮本身不发送 prompt，只设置一次性 capture。下一条纯文字冻结为 `resume_existing + ReviewThreadID + SourceThreadID=ParentThreadID + keep_surface_selection`，随后立即清 capture；capture 尚未消费时可用 `/stop` 取消本次追问输入并保留 ReviewSession。追问结果和 lifecycle 都不会覆盖初始 `LastReviewText`。
-9. `退出审阅` 在 active / ready 都可直接退出；`按审阅意见继续修改` 只接受 ready 且 review work 全部为空的 session，随后清理 overlay，并以新的 `prompt.send(resume_existing)` 把固化结果发回 parent thread。三个结果卡动作都要求命中最新 `ActionMessageID`；同 daemon 下的旧结果卡返回 `review_action_card_expired`，不能再改写当前 session。
-10. Review overlay 只允许 Codex surface + Codex attached instance。backend mismatch 的文字、图片、文件和结果卡动作统一 fail closed；idle mismatch 会释放 reservation 并清 overlay，不把残留 review thread 路由给 Claude/OpenCode。
+9. `退出审阅` 在 ready 时直接退出；active turn 上会先按 review thread / turn 发送一次 interrupt，并保持 overlay 与 room reservation，直到匹配终态到达后再清理。queued / dispatching 但尚无可中断 turn id 时拒绝提前清理，避免孤儿 review child。`按审阅意见继续修改` 只接受 ready 且 review work 全部为空的 session，随后清理 overlay，并以新的 `prompt.send(resume_existing)` 把固化结果发回 parent thread。三个结果卡动作都要求命中最新 `ActionMessageID`；同 daemon 下的旧结果卡返回 `review_action_card_expired`，不能再改写当前 session。
+10. `ReviewSession` 明确记录 `Backend` 与 `ExecutorKind`，当前允许 `codex_native_detached` 和 `claude_fork_session`；surface backend、attached instance backend、session backend/executor 必须一致。backend mismatch 的文字、图片、文件和结果卡动作统一 fail closed；idle mismatch 会释放 reservation 并清 overlay。OpenCode 的 executor carrier 已预留，但在其独立实现完成前 `/review` 仍隐藏并拒绝。
 11. 当前 review session 没有独立的 attach/list 暴露语义，也不会自动把 review thread 变成 surface 默认选中 thread；普通 attach/list/use 候选现在会显式过滤 `source=review` 的 detached review thread。
 12. 当 `ReviewSession.ActiveTurnID` 非空时，这层 overlay 还会进入统一 route-mutation blocker seam：`/use`、`/follow`、`/new`、`/claudeprofile`、`/codexprofile`、`/compact` 等会改工作目标的动作都会直接拒绝，并返回 `review_running`；只有 idle review session 会在 detach-like cleanup 或 route change 时被自动清掉。
+13. Claude `/review` 复用普通 queue/dispatch 生命周期，但启动 plan 固定为 `fork_ephemeral + SourceThreadID=parent + keep_surface_selection + Purpose=review`。wrapper 按同一 command id 重启 child，并以 `--resume parent --fork-session` 创建新 session；restart 后同一 command 的第二次翻译只发送 prompt，不会重复 fork。review child 使用专用 reviewer agent，工具面只开放 `Read/Glob/Grep`，明确禁用 Bash/Edit/Write/Task 等写入或任意执行能力；普通 Claude start/resume/fork 不继承 reviewer flags。
+14. Claude/OpenCode 类 reviewer 不依赖 shell 读取 target。orchestrator 生成受控上下文：未提交 target 包含完整 changed-file manifest、staged/unstaged patch 与 untracked 内容；commit target 包含 manifest、元信息与 patch。超限时显式标注截断，manifest 保持完整，reviewer 可用只读工具补读文件。
 
 补充说明：
 

@@ -447,7 +447,7 @@ func TestDeliverUIEventAddsCommitReviewButtonWhenFinalBodyMentionsRecentCommit(t
 	}
 }
 
-func TestDeliverUIEventDoesNotAddReviewButtonsInClaudeMode(t *testing.T) {
+func TestDeliverUIEventAddsReviewButtonsInClaudeMode(t *testing.T) {
 	app, gateway, repoRoot := newReviewModeAppForTest(t)
 	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
 	writeReviewModeRepoFile(t, repoRoot, "docs/pending.md", "pending review change\n")
@@ -476,11 +476,11 @@ func TestDeliverUIEventDoesNotAddReviewButtonsInClaudeMode(t *testing.T) {
 	if len(ops) != 1 {
 		t.Fatalf("expected one final card, got %#v", ops)
 	}
-	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
-		t.Fatalf("did not expect uncommitted review button in claude mode, got %#v", ops[0].CardElements)
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
+		t.Fatalf("expected uncommitted review button in claude mode, got %#v", ops[0].CardElements)
 	}
-	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewCommand)) {
-		t.Fatalf("did not expect commit review button in claude mode, got %#v", ops[0].CardElements)
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewCommand)) {
+		t.Fatalf("expected commit review button in claude mode, got %#v", ops[0].CardElements)
 	}
 }
 

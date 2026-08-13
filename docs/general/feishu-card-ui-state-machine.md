@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-13`
-> Summary: detached review 结果卡提供显式追问、退出、应用三种动作；追问使用 append-only 的一次性纯文字 capture，并绑定最新结果卡 identity。
+> Summary: Claude `/review` 已开放为独立只读 fork session，并与 Codex 复用审阅入口、结果卡和显式追问/退出/应用动作。
 
 ## 1. 文档定位
 
@@ -13,6 +13,8 @@
 2026-08-12 #872 补充：旧卡/旧动作拒绝提示不再维护 command 类 action-to-label 副本；能解析到 `FeishuCommandBinding` 与 `FeishuCommandDefinition` 的动作，其用户可读标题与 canonical slash 以 command catalog 为 owner；`/review uncommitted`、`/bendtomywill rollback` 等 extra action route 可在 catalog route 上声明更精确的标题。review final-card 的 `退出审阅` / `按审阅意见继续修改`、owner-flow 与 picker 内部动作等不属于 command catalog 的 callback 仍保留 UI-only local label；这些 label 只能说明本地按钮语义，不得反向扩展 command catalog 矩阵。
 
 2026-08-13 #887 补充：review final card 现在按 `继续追问审阅`、`退出审阅`、`按审阅意见继续修改` 提供三个显式动作。`继续追问审阅` 只开启一次性纯文字 capture，本次 callback 保持 append-only，不替换仍需继续操作的结果卡；下一条纯文字才发往 review thread。每次 review final card 真正发送后，orchestrator 会把它的 `message_id` 记录为当前 `ActionMessageID`；同一 daemon 下更早结果卡的三个动作统一返回 `review_action_card_expired`，不能继续改写当前 ReviewSession。
+
+2026-08-13 #888 补充：Claude `/review` 已从 hidden reject 改为 common tools 可见的 approximation；bare `/review`、review 页面和 final-card 待提交/commit 按钮复用与 Codex 相同的卡片交互，底层改走独立 Claude fork session。结果卡、一次性追问 capture、退出和应用动作保持 backend-neutral；active turn 上的退出动作先发送一次 interrupt，并在匹配终态后才清 overlay，不能提前释放并发 ownership。OpenCode 在 #889 落地前仍隐藏并拒绝。
 
 它关注的是：
 
