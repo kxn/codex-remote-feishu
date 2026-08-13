@@ -119,7 +119,11 @@ func TestCodexReviewFreezesEffectiveAccessAtStart(t *testing.T) {
 
 func TestCodexReviewFreezesWorkspaceDefaultAccess(t *testing.T) {
 	svc, surface, cwd := newReviewSessionService(t)
-	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(cwd, state.InstanceBackendContract{
+	workspaceKey := svc.surfaceCurrentWorkspaceKey(surface)
+	if workspaceKey == "" {
+		t.Fatal("expected attached headless surface workspace key")
+	}
+	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
 		Backend:        agentproto.BackendCodex,
 		CodexProfileID: state.DefaultCodexProfileID,
 	})] = state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}
