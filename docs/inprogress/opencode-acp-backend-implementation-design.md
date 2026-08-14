@@ -1,8 +1,8 @@
 # OpenCode ACP Backend 实现设计
 
 > Type: `inprogress`
-> Updated: `2026-08-13`
-> Summary: OpenCode `/review` 已落地 ACP fork/review mode、专用只读 reviewer、typed failure cleanup 与真实 1.18.15 smoke。
+> Updated: `2026-08-14`
+> Summary: 明确 OpenCode Profile/revision 切换保留 workspace 但新建 session，避免恢复绑定旧 provider/model 的会话。
 
 ## 1. 结论
 
@@ -333,7 +333,7 @@ OpenCode 分支注入：
 
 - surface desired `OpenCodeProfileID` 与 observed instance `OpenCodeProfileID` 一致才能复用。
 - `OpenCodeAdmissionRef.ProfileRef.Revision` 不一致时，如果 active queue/pending prompt 指向旧 revision，不要静默升级；按 admission ref 编译旧 revision，或失败要求重新发送。
-- `/mode opencode`、`/opencodeprofile`、bot default 切换都要触发和 Claude/Codex 一样的 workspace route restart / fresh workspace / exact-thread restore。
+- `/mode opencode` 与 bot default/backend 切换复用通用 workspace route restart / fresh workspace / exact-thread restore；`/opencodeprofile` 的 Profile ID 或 revision 变化不能 exact-thread restore，因为 OpenCode session 持久化了创建时的 provider/model，必须保留 workspace 并以 `PrepareNewThread=true` 进入新 session 待命。
 
 OpenCode prompt override：
 
@@ -659,7 +659,7 @@ errors：
 
 完成标准：
 
-- `/mode opencode` / profile switch / workspace restart / exact-thread resume。
+- `/mode opencode` / workspace restart / exact-thread resume；Profile ID/revision 切换保留 workspace 并新建 session。
 - command profile 行为和 Claude-like 降级。
 - real OpenCode black-box：initialize、API-key profile overlay、prompt/cancel/resume/load、HTTP MCP、permission/edit。
 - API-key profile overlay 测试完成并回写结论；OAuth 管理/refresh/多 OAuth profile 明确 out of scope。

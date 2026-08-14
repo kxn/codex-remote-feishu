@@ -154,7 +154,7 @@ func TestOpenCodeProfileCommandRefreshesCurrentProfileWhenRevisionChanged(t *tes
 	}
 }
 
-func TestOpenCodeProfileCommandRestartsPinnedThreadWithTargetAdmissionRef(t *testing.T) {
+func TestOpenCodeProfileCommandRestartsPinnedWorkspaceForNewThread(t *testing.T) {
 	now := time.Date(2026, 8, 9, 10, 7, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_old"), "", state.PlanModeSettingOff)
@@ -204,12 +204,13 @@ func TestOpenCodeProfileCommandRestartsPinnedThreadWithTargetAdmissionRef(t *tes
 	if surface.PendingHeadless == nil {
 		t.Fatalf("expected pending headless restart, got %#v", surface)
 	}
-	if surface.PendingHeadless.ThreadID != "thread-1" ||
-		surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeThreadRestore ||
+	if surface.PendingHeadless.ThreadID != "" ||
+		surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
+		!surface.PendingHeadless.PrepareNewThread ||
 		surface.PendingHeadless.OpenCodeProfileID != "op_team" ||
 		surface.PendingHeadless.OpenCodeAdmissionRef == nil ||
 		surface.PendingHeadless.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
-		t.Fatalf("expected exact-thread restart under target profile, got %#v", surface.PendingHeadless)
+		t.Fatalf("expected current-workspace restart for a new thread under target profile, got %#v", surface.PendingHeadless)
 	}
 	if len(events) != 4 {
 		t.Fatalf("expected kill old headless + switch notice + restart notice + restart command, got %#v", events)
@@ -219,11 +220,65 @@ func TestOpenCodeProfileCommandRestartsPinnedThreadWithTargetAdmissionRef(t *tes
 	}
 	if events[3].DaemonCommand == nil ||
 		events[3].DaemonCommand.Kind != control.DaemonCommandStartHeadless ||
-		events[3].DaemonCommand.ThreadID != "thread-1" ||
+		events[3].DaemonCommand.ThreadID != "" ||
+		events[3].DaemonCommand.WorkspaceKey != "/data/dl/repo" ||
 		events[3].DaemonCommand.OpenCodeProfileID != "op_team" ||
 		events[3].DaemonCommand.OpenCodeAdmissionRef == nil ||
 		events[3].DaemonCommand.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
-		t.Fatalf("expected start headless to resume original thread under target profile, got %#v", events[3].DaemonCommand)
+		t.Fatalf("expected start headless to create a new thread under target profile, got %#v", events[3].DaemonCommand)
+	}
+}
+
+func TestOpenCodeProfileCommandRevisionRefreshStartsNewThreadForPinnedWorkspace(t *testing.T) {
+	now := time.Date(2026, 8, 9, 10, 7, 30, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	materializeTestOpenCodeProfiles(svc, state.OpenCodeProfileSummary{ID: "op_team", Revision: 7, Name: "Team OpenCode"})
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:        "inst-visible",
+		WorkspaceRoot:     "/data/dl/repo",
+		WorkspaceKey:      "/data/dl/repo",
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_team",
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 6},
+		},
+		Source:  "headless",
+		Managed: true,
+		Online:  true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "旧模型会话", CWD: "/data/dl/repo", Loaded: true},
+		},
+	})
+
+	surface := svc.root.Surfaces["surface-1"]
+	surface.AttachedInstanceID = "inst-visible"
+	surface.ClaimedWorkspaceKey = "/data/dl/repo"
+	surface.SelectedThreadID = "thread-1"
+	surface.RouteMode = state.RouteModePinned
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 6}}
+	if !svc.claimKnownThread(surface, svc.root.Instances["inst-visible"], "thread-1") {
+		t.Fatal("expected test setup to claim thread")
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionOpenCodeProfileCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/opencodeprofile op_team",
+	})
+
+	if surface.PendingHeadless == nil ||
+		surface.PendingHeadless.ThreadID != "" ||
+		surface.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
+		!surface.PendingHeadless.PrepareNewThread ||
+		surface.PendingHeadless.OpenCodeAdmissionRef == nil ||
+		surface.PendingHeadless.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected revision refresh to prepare a new session, got %#v", surface.PendingHeadless)
+	}
+	if got := events[len(events)-1].DaemonCommand; got == nil || got.ThreadID != "" || got.WorkspaceKey != "/data/dl/repo" {
+		t.Fatalf("expected revision refresh start command to omit the old thread, got %#v", got)
 	}
 }
 
@@ -290,6 +345,7 @@ func TestOpenCodeProfileSwitchReconcilesOtherGatewaySurfacesWithAdmissionRef(t *
 			}
 		case control.DaemonCommandStartHeadless:
 			if event.DaemonCommand.SurfaceSessionID == surfaceB.SurfaceSessionID &&
+				event.DaemonCommand.ThreadID == "" &&
 				event.DaemonCommand.OpenCodeProfileID == "op_team" &&
 				event.DaemonCommand.OpenCodeAdmissionRef != nil &&
 				event.DaemonCommand.OpenCodeAdmissionRef.ProfileRef.Revision == 7 {
@@ -301,10 +357,102 @@ func TestOpenCodeProfileSwitchReconcilesOtherGatewaySurfacesWithAdmissionRef(t *
 		t.Fatalf("expected other gateway surface restart under target opencode profile/admission, kill=%t start=%t events=%#v", foundKill, foundStart, events)
 	}
 	if surfaceB.PendingHeadless == nil ||
+		surfaceB.PendingHeadless.ThreadID != "" ||
+		surfaceB.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
+		!surfaceB.PendingHeadless.PrepareNewThread ||
 		surfaceB.PendingHeadless.OpenCodeProfileID != "op_team" ||
 		surfaceB.PendingHeadless.OpenCodeAdmissionRef == nil ||
 		surfaceB.PendingHeadless.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
 		t.Fatalf("expected pending headless on other surface with target profile/admission, got %#v", surfaceB.PendingHeadless)
+	}
+}
+
+func TestOpenCodeProfileSwitchDeferredReconcileStartsNewThread(t *testing.T) {
+	now := time.Date(2026, 8, 9, 10, 9, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeTestOpenCodeProfiles(svc,
+		state.OpenCodeProfileSummary{ID: "op_old", Revision: 2, Name: "Old OpenCode"},
+		state.OpenCodeProfileSummary{ID: "op_team", Revision: 7, Name: "Team OpenCode"},
+	)
+	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.HeadlessOpenCodeSurfaceBackendContract("op_old"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.HeadlessOpenCodeSurfaceBackendContract("op_old"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+
+	workspaceKey := t.TempDir()
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:        "inst-b",
+		WorkspaceRoot:     workspaceKey,
+		WorkspaceKey:      workspaceKey,
+		Backend:           agentproto.BackendOpenCode,
+		OpenCodeProfileID: "op_old",
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_old", Revision: 2},
+		},
+		Source:  "headless",
+		Managed: true,
+		Online:  true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "旧模型会话", CWD: workspaceKey, Loaded: true},
+		},
+	})
+	surfaceB := svc.root.Surfaces["feishu:app-1:user:ou_b"]
+	surfaceB.AttachedInstanceID = "inst-b"
+	surfaceB.ClaimedWorkspaceKey = workspaceKey
+	surfaceB.SelectedThreadID = "thread-1"
+	surfaceB.RouteMode = state.RouteModePinned
+	surfaceB.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_old", Revision: 2}}
+	surfaceB.ActiveQueueItemID = "q1"
+	surfaceB.QueueItems = map[string]*state.QueueItemRecord{
+		"q1": {ID: "q1", Status: state.QueueItemRunning},
+	}
+	if !svc.claimKnownThread(surfaceB, svc.root.Instances["inst-b"], "thread-1") {
+		t.Fatal("expected test setup to claim thread")
+	}
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionOpenCodeProfileCommand,
+		SurfaceSessionID: "feishu:app-1:user:ou_a",
+		GatewayID:        "app-1",
+		ChatID:           "ou_a",
+		ActorUserID:      "ou_a",
+		Text:             "/opencodeprofile op_team",
+	})
+	if !surfaceB.ContractRefreshPending {
+		t.Fatal("expected busy sibling surface to defer profile refresh")
+	}
+
+	surfaceB.ActiveQueueItemID = ""
+	surfaceB.QueueItems = nil
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surfaceB.SurfaceSessionID,
+		GatewayID:        "app-1",
+		ChatID:           "ou_b",
+		ActorUserID:      "ou_b",
+		MessageID:        "om-b-1",
+		Text:             "继续",
+	})
+
+	if surfaceB.PendingTextInput == nil || surfaceB.PendingTextInput.Text != "继续" {
+		t.Fatalf("expected input to wait for refreshed runtime, got %#v", surfaceB.PendingTextInput)
+	}
+	if surfaceB.PendingHeadless == nil ||
+		surfaceB.PendingHeadless.ThreadID != "" ||
+		surfaceB.PendingHeadless.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart ||
+		!surfaceB.PendingHeadless.PrepareNewThread ||
+		surfaceB.PendingHeadless.OpenCodeProfileID != "op_team" {
+		t.Fatalf("expected deferred profile refresh to start a new session, got %#v", surfaceB.PendingHeadless)
+	}
+	foundStart := false
+	for _, event := range events {
+		if event.DaemonCommand != nil &&
+			event.DaemonCommand.Kind == control.DaemonCommandStartHeadless &&
+			event.DaemonCommand.ThreadID == "" &&
+			event.DaemonCommand.WorkspaceKey == workspaceKey {
+			foundStart = true
+		}
+	}
+	if !foundStart {
+		t.Fatalf("expected deferred refresh to launch current workspace without the old thread, got %#v", events)
 	}
 }
 

@@ -228,11 +228,12 @@ func (s *Service) handleOpenCodeProfileCommand(surface *state.SurfaceConsoleReco
 	}
 
 	continuation := s.buildHeadlessContractSwitchContinuation(surface, currentWorkspaceKey, agentproto.BackendOpenCode)
+	continuation = s.openCodeProfileSwitchNewThreadContinuation(surface, currentWorkspaceKey, continuation)
 	events := s.discardDrafts(surface)
 	events = s.queueHeadlessContractRestart(events, surface, continuation)
 	events = append(events, s.finalizeDetachedSurface(surface)...)
 	s.applyOpenCodeProfileSelection(surface, target, currentWorkspaceKey == "")
-	reconcileEvents := s.reconcileGatewayHeadlessSurfacesAfterContractChange(surface)
+	reconcileEvents := s.reconcileGatewayHeadlessSurfacesAfterOpenCodeProfileChange(surface)
 	if currentWorkspaceKey == "" {
 		text := fmt.Sprintf("已切换到 OpenCode Profile：%s。当前没有接管中的工作区。", targetLabel)
 		if commandCardOwnsInlineResult(action) {
@@ -257,6 +258,13 @@ func (s *Service) handleOpenCodeProfileCommand(surface *state.SurfaceConsoleReco
 	}
 	events = append(append(events, reconcileEvents...), notice(surface, "opencode_profile_switched", statusText)...)
 	return append(events, resumeEvents...)
+}
+
+func (s *Service) openCodeProfileSwitchNewThreadContinuation(surface *state.SurfaceConsoleRecord, workspaceKey string, previous headlessContractSwitchContinuation) headlessContractSwitchContinuation {
+	next := s.buildHeadlessWorkspaceRouteRestartContinuation(surface, workspaceKey, agentproto.BackendOpenCode, true)
+	next.RestartManagedNow = previous.RestartManagedNow
+	next.RestartInstanceID = previous.RestartInstanceID
+	return next
 }
 
 func (s *Service) applyOpenCodeProfileSelection(surface *state.SurfaceConsoleRecord, target state.OpenCodeProfileSummary, clearDetachedRuntime bool) {

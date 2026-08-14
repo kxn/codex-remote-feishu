@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-13`
-> Summary: Codex detached review 冻结启动时 access；full_access 仅静默批准严格白名单权限请求，其他交互和异常路径保持 fail closed。
+> Updated: `2026-08-14`
+> Summary: OpenCode Profile 或 revision 变化时保留 workspace 但新建 session，避免把旧 session 的 provider/model 恢复到不兼容的新 overlay。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -147,7 +147,7 @@ Feishu 群聊 surface 之上现在还有一层 room context coordination record�
       - surface 期望值按投影更新不变；收敛只针对已 attach 的 headless 实例：`surfaceInstanceCompatibility` 判定不兼容且 surface 空闲时，复用 headless contract switch 流程杀旧实例并按新 profile 重启；
       - 正在执行 turn / 有排队消息 / pending headless / delayed detach 的 surface 不硬杀，置 `ContractRefreshPending`；下一次交互入口（文本消息）在实例空闲时自动收敛，并把本条消息存入 pending text input，等新实例连接后重放，不丢消息；
       - Codex 兼容性判定以期望 `CodexProfileID` 为权威：Profile 不一致即不兼容；Profile 一致后再用 surface 派生的 admission/connection contract 比较 revision 精度。profile 投影会清空 surface 的 Codex 派生缓存（admission ref / connection contract / thread policy）；daemon 启动时若 admission ref 与期望 Profile 不一致，以期望 Profile 为准重新解析当前 revision；
-      - OpenCode 兼容性判定以 `OpenCodeProfileID`、frozen `OpenCodeAdmissionRef` 与 `OpenCodeRuntimeAccessMode` 为权威；profile 不一致、revision stale 或 runtime access desired 不一致时不复用旧 child，workspace 内走 `workspace_route_restart` 或 prompt-dispatch restart，连回后进入原 workspace route、`R5 NewThreadReady` 或继续原 queued dispatch；
+      - OpenCode 兼容性判定以 `OpenCodeProfileID`、frozen `OpenCodeAdmissionRef` 与 `OpenCodeRuntimeAccessMode` 为权威；profile ID 或 revision 变化时不恢复旧 session，而是保留 workspace 并走 `workspace_route_restart + PrepareNewThread=true`，连回后进入 `R5 NewThreadReady`，下一条消息在新 Profile overlay 下创建 session；仅 runtime access desired 变化的 relaunch 仍可恢复原 session。忙碌 sibling surface 延迟到下一条文本收敛时也会比较当前实例与目标 Profile/revision，保持相同的新 session 规则；
       - detached surface 只更新期望值，下次 attach 自然按新契约收敛。
 18. bot capability lookup 明确区分 not-applicable / absent / valid / invalid：只有 absent 会按既定 lifecycle 语义暂用当前 surface 的 route-derived 状态；若 map 中已有 record 但无法规范化，或 storage key 与 record gateway 不一致，则进入 `BotCapabilitySettingsInvalid` gate，effective read 不回退 raw surface，配置、route lifecycle、queue 与 AutoContinue dispatch 都 fail closed。正常 store materialize 与字段级 transaction 不会产生该状态；异常时仍允许 `/stop`、`/detach` 与 `/workspace detach` 释放资源，修复持久化状态并重启后可恢复。
 19. room context 还持有群级 `PrimaryGatewayID`，作为“无 @ 普通消息由哪个 bot 承接”的 durable SSOT。daemon 的 `FeishuRoomStateRecord` 通过历史文件路径 `feishu-room-primary.json` 的 schema v2 统一持久化 room/chat、workspace/update/reset 与 primary/update durable 字段；文件名仅为原位兼容保留，不再代表 primary-only 数据模型。gateway 入站热路径只读取 daemon 维护的 copy-on-write primary snapshot，snapshot 在 room state materialize、primary sync 与 AppID identity cleanup 后刷新；`ActiveReservations`、gateway evidence、surface evidence 仍只属于运行时状态，只有 room concurrency limit 持久化。
@@ -814,7 +814,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    2. 只有 `ProductMode=normal && Backend=opencode` 时允许切换；其他 mode/backend 会直接拒绝并要求先 `/mode opencode`。
    3. request gate、`PendingHeadless`、live remote work 与 delayed-detach 会阻断 profile 切换，避免 surface 进入半重启状态。
    4. detached idle 私聊切 Profile 时，只更新 bot record 的 canonical `OpenCodeProfileID`，并把 matching `OpenCodeAdmissionRef` 投影给同 gateway surface；缺 revision 的 profile 不可被选择。
-   5. 当前 workspace 已占用时，切 Profile 会先按切换前状态规划 continuation，再 detach-like 清理旧 runtime 并重启到新 Profile：若切换前 pinned 到当前可解析的 OpenCode thread，会保留 exact-thread 恢复目标；否则按 workspace route restart 恢复原工作区意图或进入新会话待命。
+   5. 当前 workspace 已占用时，切 Profile 会先按切换前状态规划旧 managed child 的 kill，再 detach-like 清理旧 runtime 并重启到新 Profile。OpenCode session 会持久化创建时的 provider/model，因此无论切换的是 Profile ID 还是同一 Profile 的 revision，都不会把旧 exact thread 恢复到新 overlay；当前 workspace claim 会保留，并统一走 `workspace_route_restart + PrepareNewThread=true`，连回后进入 `R5 NewThreadReady`。旧 session 不删除，仍可在切回兼容 Profile 后从历史列表重新选择。
 5. `/access full|confirm|clear` 当前是 OpenCode headless 专属的 runtime desired 设置入口，只允许合法私聊修改 gateway/bot record：
    1. `full` 规范化为 `full_access`，编译成 OpenCode `permission: {"*":"allow"}`；`confirm` 编译成 `{"*":"ask"}`；`clear` 清空 desired access，不写 permission overlay。
    2. detached idle 只保存 desired state 并投影给同 gateway surface。
@@ -1990,6 +1990,8 @@ retained-offline overlay 额外规则：
 48. **已迁移 profile catalog 的 context preference state 缺少后续新增/历史遗漏的 Claude profile，导致升级后 Claude session 恢复被误判为“Claude 配置不可用”**：已修复。当前 startup 在 `ProfileCatalogMigrationVersion>=1` 且 durable stores 可读写时，会从 committed config 幂等补齐缺失的 Codex/Claude context preference，再执行 catalog verify 与 materialize；因此 `mimo`、`glm` 这类已存在于 config 的 Claude profile 不会因为 preference state 缺项而阻断 headless restore。真正损坏或不可写的 preference store 仍保持 fail-closed degraded。
 
 49. **群聊 on-demand / detached headless restore 在启动前仍可能被全局 `threads.snapshot` 拷贝到其它实例的同名 thread 误导，把恢复目标 workspace 解析成无关实例的工作区并误报 `workspace_busy` / `thread_busy`**：已修复。`mergedThreadViewForBackend` / `resolveSurfaceResumeVisibleInstance` 现在按线程真实 `CWD` 判断实例归属，忽略被快照合并改写 `WorkspaceKey` 的跨实例副本；旧实例离线后恢复会回落到 resume entry / persisted thread 的真实 workspace，再启动新的 managed headless，而不是在启动前被占用检查拦截。
+
+50. **OpenCode 切换 Profile 后仍 exact-thread 恢复旧 session，导致新实例只声明 Gemini provider/model 时，旧 DeepSeek session 在请求上游前报 `ProviderModelNotFoundError`**：已修复。Profile ID 或 revision 变化的当前 surface 与同 gateway sibling 收敛都保留 workspace、清空 continuation 的 `ThreadID` 并设置 `PrepareNewThread=true`；忙碌 sibling 的延迟收敛会从当前实例与目标 Profile/revision 的差异重新识别该语义。新实例连回后进入 `R5 NewThreadReady`，不会再把旧 session 的 provider/model 强塞进目标 overlay；单纯 `/access` runtime relaunch 不受影响，仍可恢复原 session。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 
