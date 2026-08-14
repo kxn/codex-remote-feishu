@@ -92,23 +92,13 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		},
 	}
 	if profile.BuiltIn || profile.ID == config.OpenCodeDefaultProfileID {
-		overlay := configOverlay{
-			Model:      systemOpenCodeRecentModelForACP(env),
-			Permission: openCodePermissionMode(input.RuntimeAccessMode),
-		}
-		if overlay.Model != "" || len(overlay.Permission) > 0 {
-			configRaw, err := json.Marshal(overlay)
+		if model := systemOpenCodeRecentModelForACP(env); model != "" {
+			configRaw, err := json.Marshal(configOverlay{Model: model})
 			if err != nil {
 				return LaunchMaterial{}, err
 			}
 			material.Env = config.UpsertEnvValue(material.Env, config.OpenCodeConfigContentEnv, string(configRaw))
-			material.RedactedSummary = "opencode profile op_default inherit"
-			if overlay.Model != "" {
-				material.RedactedSummary += " model=" + overlay.Model
-			}
-			if accessMode := state.NormalizeOpenCodeRuntimeAccessMode(input.RuntimeAccessMode); accessMode != "" {
-				material.RedactedSummary += " access=" + accessMode
-			}
+			material.RedactedSummary = "opencode profile op_default inherit model=" + model
 			return material, nil
 		}
 		material.RedactedSummary = "opencode profile op_default inherit"
