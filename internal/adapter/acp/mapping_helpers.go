@@ -118,7 +118,7 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 	if kind != "" {
 		metadata["kind"] = kind
 	}
-	effectiveKind := xutil.FirstNonEmpty(kind, metadataString(metadata, "kind"))
+	effectiveKind := xutil.FirstNonEmpty(kind, xutil.MetadataString(metadata, "kind"))
 	rawInput := opencodeRawInput(update, metadata)
 	if rawInput != nil {
 		metadata["rawInput"] = xutil.CloneMap(rawInput)
@@ -128,7 +128,11 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 	if itemKind == "" && effectiveKind == "" {
 		itemKind = toolItemKind(update)
 	}
-	toolName := opencodeToolDisplayName(effectiveKind, rawInput)
+	opencodeToolName := opencodeToolIdentity(update, metadata, effectiveKind, itemKind)
+	if opencodeToolName != "" {
+		metadata["opencodeToolName"] = opencodeToolName
+	}
+	toolName := opencodeToolDisplayName(effectiveKind, opencodeToolName, rawInput)
 	if toolName != "" {
 		metadata["tool"] = toolName
 	}
@@ -162,7 +166,7 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 		}
 	case "dynamic_tool_call":
 		metadata["suppressFinalText"] = true
-		if isExplorationToolKind(effectiveKind) {
+		if isExplorationToolKind(xutil.FirstNonEmpty(opencodeToolName, effectiveKind)) {
 			metadata["semanticKind"] = "exploration"
 		} else {
 			metadata["semanticKind"] = "generic_tool"
@@ -173,7 +177,7 @@ func opencodeToolMetadata(update map[string]any, previous map[string]any) map[st
 
 func opencodeToolCompletionMetadata(metadata map[string]any, update map[string]any) map[string]any {
 	out := opencodeToolMetadata(update, metadata)
-	effectiveKind := xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["kind"]), metadataString(out, "kind"))
+	effectiveKind := xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["kind"]), xutil.MetadataString(out, "kind"))
 	rawInput := opencodeRawInput(update, out)
 	itemKind := toolItemKind(map[string]any{"kind": effectiveKind, "rawInput": rawInput})
 	if itemKind == "" && effectiveKind == "" {
@@ -197,6 +201,136 @@ func opencodeToolCompletionMetadata(metadata map[string]any, update map[string]a
 		out["errorMessage"] = errorMessage
 	}
 	return out
+}
+
+func opencodeToolStartStatus(update map[string]any, fallback string) string {
+	status := strings.TrimSpace(xutil.LookupStringFromAny(update["status"]))
+	switch status {
+	case "":
+		return fallback
+	case "completed", "failed":
+		return "in_progress"
+	default:
+		return status
+	}
+}
+
+func opencodeToolDisplayable(itemKind string, metadata map[string]any) bool {
+	if metadata == nil {
+		return false
+	}
+	switch itemKind {
+	case "command_execution":
+		return strings.TrimSpace(xutil.MetadataString(metadata, "command")) != ""
+	case "file_change":
+		return strings.TrimSpace(xutil.MetadataString(metadata, "filePath")) != ""
+	case "mcp_tool_call":
+		return strings.TrimSpace(xutil.MetadataString(metadata, "server")) != "" && strings.TrimSpace(xutil.MetadataString(metadata, "tool")) != ""
+	case "dynamic_tool_call":
+		if exploration := opencodeToolExploration(metadata); exploration != nil {
+			return opencodeExplorationDisplayable(exploration)
+		}
+		return strings.TrimSpace(xutil.MetadataString(metadata, "tool")) != ""
+	default:
+		return strings.TrimSpace(xutil.MetadataString(metadata, "tool")) != ""
+	}
+}
+
+func opencodeExplorationDisplayable(exploration *agentproto.ExplorationActions) bool {
+	if exploration == nil || len(exploration.Actions) == 0 {
+		return false
+	}
+	for _, action := range exploration.Actions {
+		switch action.Kind {
+		case agentproto.ExplorationActionRead:
+			if len(action.Items) == 0 {
+				return false
+			}
+		case agentproto.ExplorationActionList, agentproto.ExplorationActionSearch:
+			if strings.TrimSpace(action.Summary) == "" {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func opencodeToolFallbackMetadata(metadata map[string]any) map[string]any {
+	out := xutil.CloneMap(metadata)
+	if out == nil {
+		out = map[string]any{}
+	}
+	tool := xutil.FirstNonEmpty(xutil.MetadataString(out, "opencodeToolName"), xutil.MetadataString(out, "tool"), "OpenCode")
+	out["tool"] = tool
+	out["semanticKind"] = "generic_tool"
+	out["suppressFinalText"] = false
+	out["text"] = "OpenCode tool call"
+	if rawInput, _ := out["rawInput"].(map[string]any); len(rawInput) == 0 {
+		delete(out, "rawInput")
+	}
+	if arguments, _ := out["arguments"].(map[string]any); len(arguments) == 0 {
+		delete(out, "arguments")
+	}
+	return out
+}
+
+func opencodeToolEventName(metadata map[string]any) string {
+	return xutil.FirstNonEmpty(
+		xutil.MetadataString(metadata, "opencodeToolName"),
+		xutil.MetadataString(metadata, "tool"),
+		"OpenCode tool",
+	)
+}
+
+func opencodeToolExploration(metadata map[string]any) *agentproto.ExplorationActions {
+	if metadata == nil {
+		return nil
+	}
+	kind := xutil.MetadataString(metadata, "kind")
+	rawInput := opencodeRawInput(nil, metadata)
+	if toolItemKind(map[string]any{"kind": kind, "rawInput": rawInput}) != "dynamic_tool_call" {
+		return nil
+	}
+	explorationKind := xutil.FirstNonEmpty(xutil.MetadataString(metadata, "opencodeToolName"), kind)
+	if !isExplorationToolKind(explorationKind) {
+		return nil
+	}
+	action, ok := opencodeExplorationAction(explorationKind, rawInput)
+	if !ok {
+		return nil
+	}
+	return &agentproto.ExplorationActions{Actions: []agentproto.ExplorationAction{action}}
+}
+
+func opencodeExplorationAction(kind string, rawInput map[string]any) (agentproto.ExplorationAction, bool) {
+	switch normalizeToolKind(kind) {
+	case "read":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionRead}
+		if path := firstMapString(rawInput, "filePath", "file_path", "path"); path != "" {
+			action.Items = []string{path}
+		}
+		return action, true
+	case "glob":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionList}
+		action.Summary = firstMapString(rawInput, "pattern", "glob", "query", "path")
+		if path := firstMapString(rawInput, "path", "cwd", "directory", "dir"); path != "" && path != action.Summary {
+			action.Secondary = path
+		}
+		return action, true
+	case "list", "ls":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionList}
+		action.Summary = firstMapString(rawInput, "path", "directory", "dir", "cwd", "pattern")
+		return action, true
+	case "grep", "search":
+		action := agentproto.ExplorationAction{Kind: agentproto.ExplorationActionSearch}
+		action.Summary = firstMapString(rawInput, "pattern", "query", "regex", "needle")
+		action.Secondary = firstMapString(rawInput, "path", "directory", "dir", "cwd", "include", "glob")
+		return action, true
+	default:
+		return agentproto.ExplorationAction{}, false
+	}
 }
 
 func mergeOpenCodeMCPResultMetadata(metadata map[string]any, output map[string]any) {
@@ -244,10 +378,36 @@ func opencodeRawInput(update map[string]any, metadata map[string]any) map[string
 	return nil
 }
 
-func opencodeToolDisplayName(kind string, rawInput map[string]any) string {
+func opencodeToolIdentity(update, metadata map[string]any, effectiveKind, itemKind string) string {
+	if itemKind == "mcp_tool_call" {
+		return ""
+	}
+	if existing := normalizeToolKind(xutil.MetadataString(metadata, "opencodeToolName")); existing != "" {
+		return existing
+	}
+	kind := normalizeToolKind(effectiveKind)
+	if kind != "search" {
+		return ""
+	}
+	status := strings.ToLower(strings.TrimSpace(xutil.LookupStringFromAny(update["status"])))
+	if status != "pending" && status != "in_progress" {
+		return ""
+	}
+	title := normalizeToolKind(xutil.LookupStringFromAny(update["title"]))
+	switch title {
+	case "grep", "glob":
+		return title
+	}
+	return ""
+}
+
+func opencodeToolDisplayName(kind, opencodeToolName string, rawInput map[string]any) string {
 	kind = strings.TrimSpace(kind)
 	if tool := firstMapString(rawInput, "tool", "toolName", "name"); tool != "" && strings.HasPrefix(normalizeToolKind(kind), "mcp") {
 		return tool
+	}
+	if opencodeToolName != "" {
+		return opencodeToolName
 	}
 	if kind != "" {
 		return kind
@@ -280,13 +440,6 @@ func firstMapString(values map[string]any, keys ...string) string {
 		}
 	}
 	return ""
-}
-
-func metadataString(values map[string]any, key string) string {
-	if values == nil {
-		return ""
-	}
-	return strings.TrimSpace(xutil.LookupStringFromAny(values[key]))
 }
 
 func (t *Translator) todoPlanEvent(turn *turnState, sessionID string, item *itemState, update map[string]any) (agentproto.Event, bool) {

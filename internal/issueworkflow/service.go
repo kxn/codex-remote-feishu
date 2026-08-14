@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/ghclient"
 )
 
 const (
@@ -472,7 +474,7 @@ func (s *Service) resolveRepo(ctx context.Context, repo Repo) (Repo, error) {
 	if err != nil {
 		return Repo{}, err
 	}
-	return RepoFromRemoteURL(remoteURL)
+	return ghclient.RepoFromRemoteURL(remoteURL)
 }
 
 func normalizedCommentsLimit(limit int) int {

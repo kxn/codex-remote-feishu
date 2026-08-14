@@ -1415,15 +1415,15 @@ func (f *flakyCronBootstrapBitableAPI) CreateTable(_ context.Context, _ string, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.createTableCalls++
-	tableID := "tbl-created-" + strings.ReplaceAll(strings.TrimSpace(stringValue(table.Name)), " ", "-")
+	tableID := "tbl-created-" + strings.ReplaceAll(strings.TrimSpace(xutil.StringValue(table.Name)), " ", "-")
 	created := &larkbitable.AppTable{
 		TableId: xutil.StringPtr(tableID),
 		Name:    table.Name,
 	}
 	f.tables[tableID] = created
 	primaryName := "主列"
-	if len(table.Fields) > 0 && table.Fields[0] != nil && strings.TrimSpace(stringValue(table.Fields[0].FieldName)) != "" {
-		primaryName = strings.TrimSpace(stringValue(table.Fields[0].FieldName))
+	if len(table.Fields) > 0 && table.Fields[0] != nil && strings.TrimSpace(xutil.StringValue(table.Fields[0].FieldName)) != "" {
+		primaryName = strings.TrimSpace(xutil.StringValue(table.Fields[0].FieldName))
 	}
 	f.fieldsByTable[tableID] = []*larkbitable.AppTableField{{
 		FieldId:   xutil.StringPtr("fld-" + tableID + "-primary"),
@@ -1462,7 +1462,7 @@ func (f *flakyCronBootstrapBitableAPI) CreateField(_ context.Context, _ string, 
 		return nil, context.DeadlineExceeded
 	}
 	cloned := &larkbitable.AppTableField{
-		FieldId:   xutil.StringPtr("fld-" + tableID + "-" + strings.TrimSpace(stringValue(field.FieldName))),
+		FieldId:   xutil.StringPtr("fld-" + tableID + "-" + strings.TrimSpace(xutil.StringValue(field.FieldName))),
 		FieldName: field.FieldName,
 		Type:      field.Type,
 		Property:  field.Property,
@@ -1476,7 +1476,7 @@ func (f *flakyCronBootstrapBitableAPI) UpdateField(_ context.Context, _ string, 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, existing := range f.fieldsByTable[tableID] {
-		if strings.TrimSpace(stringValue(existing.FieldId)) != fieldID {
+		if strings.TrimSpace(xutil.StringValue(existing.FieldId)) != fieldID {
 			continue
 		}
 		existing.FieldName = field.FieldName
@@ -1519,7 +1519,7 @@ func (f *flakyCronBootstrapBitableAPI) UpdateRecord(_ context.Context, _ string,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, record := range f.recordsByTable[tableID] {
-		if record == nil || strings.TrimSpace(stringValue(record.RecordId)) != strings.TrimSpace(recordID) {
+		if record == nil || strings.TrimSpace(xutil.StringValue(record.RecordId)) != strings.TrimSpace(recordID) {
 			continue
 		}
 		record.Fields = cloneAnyMap(fields)
@@ -1554,7 +1554,7 @@ func (f *flakyCronBootstrapBitableAPI) BatchUpdateRecords(_ context.Context, _ s
 		}
 		found := false
 		for _, record := range f.recordsByTable[tableID] {
-			if record == nil || strings.TrimSpace(stringValue(record.RecordId)) != recordID {
+			if record == nil || strings.TrimSpace(xutil.StringValue(record.RecordId)) != recordID {
 				continue
 			}
 			record.Fields = cloneAnyMap(update.Fields)
@@ -1743,9 +1743,9 @@ func TestEnsureCronBitableDoesNotLeakDefaultTemplateColumnsIntoTasksTable(t *tes
 		if field == nil {
 			continue
 		}
-		switch stringValue(field.FieldName) {
+		switch xutil.StringValue(field.FieldName) {
 		case "单选", "日期", "附件":
-			t.Fatalf("unexpected default template column leaked into tasks table: %s", stringValue(field.FieldName))
+			t.Fatalf("unexpected default template column leaked into tasks table: %s", xutil.StringValue(field.FieldName))
 		}
 	}
 }

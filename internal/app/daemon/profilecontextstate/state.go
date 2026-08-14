@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/statestore"
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -47,11 +49,7 @@ type Store struct {
 }
 
 func StatePath(stateDir string) string {
-	stateDir = strings.TrimSpace(stateDir)
-	if stateDir == "" {
-		return ""
-	}
-	return filepath.Join(stateDir, StateFileName)
+	return statestore.StatePath(stateDir, StateFileName)
 }
 
 func NewStore(path string) *Store {
@@ -216,24 +214,7 @@ func (s *Store) Save() error {
 		return err
 	}
 	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(s.path), filepath.Base(s.path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(0o600); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpPath, s.path); err != nil {
+	if err := atomicfile.Write(s.path, raw, 0o600); err != nil {
 		return err
 	}
 	s.dirty = false

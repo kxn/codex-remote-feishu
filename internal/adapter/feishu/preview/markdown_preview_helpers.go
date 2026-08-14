@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"mime"
 	"os"
 	"path/filepath"
@@ -139,7 +140,7 @@ func previewScopeKey(gatewayID, surfaceSessionID, chatID, actorUserID string) st
 	if strings.TrimSpace(surfaceSessionID) != "" {
 		return surfaceSessionID
 	}
-	gatewayID = normalizeGatewayID(gatewayID)
+	gatewayID = gatewaypkg.NormalizeGatewayID(gatewayID)
 	if strings.TrimSpace(chatID) != "" {
 		return feishuidentity.SurfaceRef{
 			Platform:  feishuidentity.PlatformFeishu,
@@ -400,7 +401,7 @@ func previewPathWithinRoot(path, root string) bool {
 }
 
 func isPreviewResourceMissingError(err error) bool {
-	var apiErr *driveAPIError
+	var apiErr *DriveAPIError
 	if !errors.As(err, &apiErr) {
 		return false
 	}
@@ -413,7 +414,7 @@ func isPreviewResourceMissingError(err error) bool {
 }
 
 func isPreviewParentMissingError(err error) bool {
-	var apiErr *driveAPIError
+	var apiErr *DriveAPIError
 	if !errors.As(err, &apiErr) {
 		return false
 	}
@@ -425,8 +426,8 @@ func isPreviewParentMissingError(err error) bool {
 	}
 }
 
-func isPreviewDriveAccessDeniedError(err error) bool {
-	var apiErr *driveAPIError
+func IsDriveAccessDeniedError(err error) bool {
+	var apiErr *DriveAPIError
 	if !errors.As(err, &apiErr) {
 		return false
 	}

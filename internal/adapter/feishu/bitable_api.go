@@ -173,8 +173,8 @@ func (a *liveBitableAPI) ListTables(ctx context.Context, appToken string) ([]*la
 		}
 		if resp.Data != nil {
 			values = append(values, resp.Data.Items...)
-			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(stringValue(resp.Data.PageToken)) != "" {
-				pageToken = stringValue(resp.Data.PageToken)
+			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(xutil.StringValue(resp.Data.PageToken)) != "" {
+				pageToken = xutil.StringValue(resp.Data.PageToken)
 				continue
 			}
 		}
@@ -206,7 +206,7 @@ func (a *liveBitableAPI) CreateTable(ctx context.Context, appToken string, table
 	if !resp.Success() {
 		return nil, newAPIError("bitable.v1.app_table.create", resp.ApiResp, resp.CodeError)
 	}
-	if resp.Data == nil || strings.TrimSpace(stringValue(resp.Data.TableId)) == "" {
+	if resp.Data == nil || strings.TrimSpace(xutil.StringValue(resp.Data.TableId)) == "" {
 		return nil, fmt.Errorf("missing bitable table id from create response")
 	}
 	return &larkbitable.AppTable{
@@ -295,8 +295,8 @@ func (a *liveBitableAPI) ListFields(ctx context.Context, appToken, tableID strin
 					IsHidden:  item.IsHidden,
 				})
 			}
-			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(stringValue(resp.Data.PageToken)) != "" {
-				pageToken = stringValue(resp.Data.PageToken)
+			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(xutil.StringValue(resp.Data.PageToken)) != "" {
+				pageToken = xutil.StringValue(resp.Data.PageToken)
 				continue
 			}
 		}
@@ -411,8 +411,8 @@ func (a *liveBitableAPI) ListRecords(ctx context.Context, appToken, tableID stri
 		}
 		if resp.Data != nil {
 			values = append(values, resp.Data.Items...)
-			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(stringValue(resp.Data.PageToken)) != "" {
-				pageToken = stringValue(resp.Data.PageToken)
+			if resp.Data.HasMore != nil && *resp.Data.HasMore && strings.TrimSpace(xutil.StringValue(resp.Data.PageToken)) != "" {
+				pageToken = xutil.StringValue(resp.Data.PageToken)
 				continue
 			}
 		}
@@ -618,14 +618,14 @@ func (a *liveBitableAPI) ListPermissionMembers(ctx context.Context, token, docTy
 		if item == nil {
 			continue
 		}
-		memberType := strings.TrimSpace(stringValue(item.MemberType))
-		memberID := strings.TrimSpace(stringValue(item.MemberId))
+		memberType := strings.TrimSpace(xutil.StringValue(item.MemberType))
+		memberID := strings.TrimSpace(xutil.StringValue(item.MemberId))
 		if memberType == "" || memberID == "" {
 			continue
 		}
 		values[memberType+":"+memberID] = BitablePermissionMember{
-			Perm:     strings.TrimSpace(stringValue(item.Perm)),
-			PermType: strings.TrimSpace(stringValue(item.PermType)),
+			Perm:     strings.TrimSpace(xutil.StringValue(item.Perm)),
+			PermType: strings.TrimSpace(xutil.StringValue(item.PermType)),
 		}
 	}
 	return values, nil

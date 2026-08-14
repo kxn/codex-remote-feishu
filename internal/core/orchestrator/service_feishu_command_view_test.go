@@ -77,14 +77,14 @@ func TestBuildConfigCommandViewStatePopulatesClaudeProfileOptions(t *testing.T) 
 func TestBuildConfigCommandViewStatePopulatesCodexProfileOptions(t *testing.T) {
 	now := time.Date(2026, 5, 1, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", "")
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 		{ID: "team-proxy-2", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 	})
 
-	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProfile)
 	if !ok {
 		t.Fatal("expected codex profile config flow")
 	}
@@ -151,50 +151,39 @@ func TestBuildConfigCommandViewStatePopulatesOpenCodeProfileOptions(t *testing.T
 	}
 }
 
-func TestApplySurfaceActionRejectsOpenCodePromptSettingCommands(t *testing.T) {
-	now := time.Date(2026, 8, 9, 12, 30, 0, 0, time.UTC)
-	for _, tt := range []struct {
-		name string
-		kind control.ActionKind
-		text string
-	}{
-		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning high"},
-		{name: "access", kind: control.ActionAccessCommand, text: "/access confirm"},
-		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			svc := newServiceForTest(&now)
-			svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
-			surface := svc.root.Surfaces["surface-1"]
+func TestApplySurfaceActionAcceptsOpenCodePlanCommand(t *testing.T) {
+	now := time.Date(2026, 8, 11, 13, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", state.PlanModeSettingOff)
+	surface := svc.root.Surfaces["surface-1"]
 
-			events := svc.ApplySurfaceAction(control.Action{
-				Kind:             tt.kind,
-				SurfaceSessionID: "surface-1",
-				ChatID:           "chat-1",
-				ActorUserID:      "user-1",
-				Text:             tt.text,
-			})
-			if !eventsContainNotice(events, "command_rejected", "OpenCode") {
-				t.Fatalf("expected OpenCode command rejection, got %#v", events)
-			}
-			if surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
-				t.Fatalf("rejected OpenCode command mutated prompt/plan state: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
-			}
-		})
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionPlanCommand,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		Text:             "/plan on",
+	})
+
+	if eventsContainNotice(events, "command_rejected", "OpenCode") {
+		t.Fatalf("OpenCode /plan should be accepted, got %#v", events)
+	}
+	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
+		t.Fatalf("OpenCode /plan did not persist override: %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
 func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableStatus(t *testing.T) {
 	now := time.Date(2026, 8, 1, 10, 30, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "ignored", Available: true},
 		{ID: state.OAuthCodexProfileID, Kind: state.CodexProfileKindOAuth, Name: "ChatGPT 登录", Available: false, StatusCode: "missing"},
 		{ID: "team-proxy", Kind: state.CodexProfileKindAPI, Name: "Team Proxy", Available: true},
 	})
 
-	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProfile)
 	if !ok {
 		t.Fatal("expected codex profile config flow")
 	}
@@ -223,13 +212,13 @@ func TestBuildConfigCommandViewStatePopulatesCodexProfileOptionsAndUnavailableSt
 func TestBuildConfigCommandViewStateMapsUnavailableAPIProfileReason(t *testing.T) {
 	now := time.Date(2026, 8, 1, 10, 35, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "expensivecodex", Kind: state.CodexProfileKindAPI, Name: "expensivecodex", Available: false, StatusCode: "profile_definition_incomplete"},
 	})
 
-	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProvider)
+	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandCodexProfile)
 	if !ok {
 		t.Fatal("expected codex profile config flow")
 	}
@@ -333,7 +322,7 @@ func TestBuildConfigCommandViewStateUsesFixedCodexAPIProfileModelOptions(t *test
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "custom-profile", Kind: state.CodexProfileKindAPI, Name: "Custom API", Model: "provider-custom", ReasoningEffort: "high", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "custom-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -372,7 +361,7 @@ func TestBuildConfigCommandViewStateUsesDynamicCatalogForDeepSeekCodexAPIProfile
 			BaseURL: "https://api.deepseek.com/", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true,
 		},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -405,7 +394,7 @@ func TestBuildConfigCommandViewStateKeepsDynamicCatalogForGPTCodexAPIProfile(t *
 		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
 		{ID: "gpt-profile", Kind: state.CodexProfileKindAPI, Name: "GPT Proxy", Model: "gpt-5.5", ReasoningEffort: "high", Available: true},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "gpt-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "gpt-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
 	svc.UpsertInstance(&state.InstanceRecord{

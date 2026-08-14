@@ -6,6 +6,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -49,7 +50,7 @@ func (r *serviceProgressRuntime) recordTurnFileChanges(instanceID string, event 
 		if movePath != "" {
 			entry.MovePath = movePath
 		}
-		added, removed := fileChangeLineCounts(change)
+		added, removed := execprogress.FileChangeLineCounts(change)
 		entry.AddedLines += added
 		entry.RemovedLines += removed
 	}
@@ -74,7 +75,7 @@ func (r *serviceProgressRuntime) recordTurnFileChangeSnapshot(instanceID string,
 		if entryKey == "" {
 			continue
 		}
-		added, removed := fileChangeLineCounts(change)
+		added, removed := execprogress.FileChangeLineCounts(change)
 		summary.Files[entryKey] = &turnFileChangeEntry{
 			Path:         path,
 			MovePath:     movePath,
@@ -148,46 +149,4 @@ func normalizeFileChangeStatus(value string) string {
 	normalized = strings.ReplaceAll(normalized, "-", "")
 	normalized = strings.ReplaceAll(normalized, "_", "")
 	return normalized
-}
-
-func fileChangeLineCounts(change agentproto.FileChangeRecord) (int, int) {
-	added, removed := unifiedDiffLineCounts(change.Diff)
-	if added != 0 || removed != 0 {
-		return added, removed
-	}
-	switch change.Kind {
-	case agentproto.FileChangeAdd:
-		return logicalLineCount(change.Diff), 0
-	case agentproto.FileChangeDelete:
-		return 0, logicalLineCount(change.Diff)
-	default:
-		return 0, 0
-	}
-}
-
-func logicalLineCount(text string) int {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return 0
-	}
-	return strings.Count(text, "\n") + 1
-}
-
-func unifiedDiffLineCounts(diff string) (int, int) {
-	if strings.TrimSpace(diff) == "" {
-		return 0, 0
-	}
-	added := 0
-	removed := 0
-	for _, line := range strings.Split(diff, "\n") {
-		switch {
-		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"), strings.HasPrefix(line, "@@"):
-			continue
-		case strings.HasPrefix(line, "+"):
-			added++
-		case strings.HasPrefix(line, "-"):
-			removed++
-		}
-	}
-	return added, removed
 }

@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type PackagedInstallProbeResult struct {
@@ -207,7 +209,7 @@ func writePackagedInstallProbeResult(stdout io.Writer, format string, result Pac
 				return err
 			}
 		}
-		if _, err := fmt.Fprintf(stdout, "install location editable: %s\nsame version: %s\n", boolString(result.InstallLocationEditable), boolString(result.SameVersion)); err != nil {
+		if _, err := fmt.Fprintf(stdout, "install location editable: %s\nsame version: %s\n", xutil.BoolString(result.InstallLocationEditable), xutil.BoolString(result.SameVersion)); err != nil {
 			return err
 		}
 		if result.ServiceManager != "" {

@@ -40,8 +40,8 @@ func TestObserveConfigVSCodeDoesNotPersistWorkspaceDefaults(t *testing.T) {
 	})
 
 	if defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey("/data/dl/droid", state.InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.DefaultCodexProviderID,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: state.DefaultCodexProfileID,
 	})]; defaults != (state.ModelConfigRecord{}) {
 		t.Fatalf("expected vscode config observation not to persist workspace defaults, got %#v", defaults)
 	}
@@ -181,8 +181,8 @@ func TestResolveWorkspaceDefaultsPartitionsByBackend(t *testing.T) {
 	svc := newServiceForTest(&now)
 	workspaceKey := "/data/dl/droid"
 	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.DefaultCodexProviderID,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: state.DefaultCodexProfileID,
 	})] = state.ModelConfigRecord{
 		Model:           "gpt-5.5",
 		ReasoningEffort: "high",
@@ -722,7 +722,7 @@ func TestQueuedMessageFreezesCodexAdmissionRefAtEnqueue(t *testing.T) {
 		WorkspaceKey:            "/data/dl/droid",
 		ShortName:               "droid",
 		Backend:                 agentproto.BackendCodex,
-		CodexProviderID:         "team-proxy",
+		CodexProfileID:          "team-proxy",
 		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(svc.root.Surfaces["surface-1"].CodexAdmissionRef),
 		Online:                  true,
 		ObservedFocusedThreadID: "thread-1",
@@ -747,7 +747,7 @@ func TestQueuedMessageFreezesCodexAdmissionRefAtEnqueue(t *testing.T) {
 		t.Fatalf("expected queued-only event while paused, got %#v", queued)
 	}
 	surface := svc.root.Surfaces["surface-1"]
-	surface.CodexProviderID = "other-profile"
+	surface.CodexProfileID = "other-profile"
 	surface.CodexAdmissionRef = &state.CodexAdmissionRef{
 		ProfileRef:           state.CodexProfileRef{ID: "other-profile", Revision: 1},
 		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "other-profile", Revision: 1},

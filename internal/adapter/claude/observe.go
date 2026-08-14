@@ -511,6 +511,7 @@ func (t *Translator) finalizeToolUse(block map[string]any) []agentproto.Event {
 		ItemKind:  itemKind,
 		Metadata:  metadata,
 	}
+	event.Exploration = claudeutil.ClaudeExplorationActions(tool.Name, tool.Input)
 	if itemKind == "file_change" {
 		event.FileChanges = claudeToolFileChanges(metadata)
 	}
@@ -576,6 +577,7 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 			ItemKind:  itemKind,
 			Metadata:  startMetadata,
 		}
+		event.Exploration = claudeutil.ClaudeExplorationActions(tool.Name, tool.Input)
 		if itemKind == "file_change" {
 			event.FileChanges = claudeToolFileChanges(startMetadata)
 		}
@@ -615,6 +617,7 @@ func (t *Translator) observeExternalToolResult(message, block map[string]any, to
 			}[isError],
 			Metadata: metadata,
 		}
+		event.Exploration = claudeutil.ClaudeExplorationActions(tool.Name, tool.Input)
 		if itemKind == "file_change" {
 			event.FileChanges = claudeToolFileChanges(metadata)
 		}

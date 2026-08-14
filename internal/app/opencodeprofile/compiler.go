@@ -9,14 +9,17 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 type CompileInput struct {
-	Profile       config.OpenCodeProfile
-	WorkspaceRoot string
-	RuntimeDir    string
-	BaseEnv       []string
+	Profile           config.OpenCodeProfile
+	WorkspaceRoot     string
+	RuntimeDir        string
+	BaseEnv           []string
+	RuntimeAccessMode string
 }
 
 type LaunchMaterial struct {
@@ -59,7 +62,12 @@ type modelOverlay struct {
 }
 
 type agentOverlay struct {
-	Model string `json:"model,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Mode        string            `json:"mode,omitempty"`
+	Model       string            `json:"model,omitempty"`
+	Prompt      string            `json:"prompt,omitempty"`
+	Tools       map[string]bool   `json:"tools,omitempty"`
+	Permission  map[string]string `json:"permission,omitempty"`
 }
 
 type authOverlay map[string]authProviderOverlay
@@ -75,7 +83,7 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	if profile.Revision == 0 {
 		profile.Revision = 1
 	}
-	workspaceRoot := strings.TrimSpace(input.WorkspaceRoot)
+	workspaceRoot := pathcanon.Native(input.WorkspaceRoot)
 	args := []string{"acp"}
 	if workspaceRoot != "" {
 		args = append(args, "--cwd", workspaceRoot)
@@ -92,13 +100,24 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		},
 	}
 	if profile.BuiltIn || profile.ID == config.OpenCodeDefaultProfileID {
-		if model := systemOpenCodeRecentModelForACP(env); model != "" {
-			configRaw, err := json.Marshal(configOverlay{Model: model})
+		overlay := configOverlay{
+			Model:      systemOpenCodeRecentModelForACP(env),
+			Agent:      openCodeAgentOverrides("", "", ""),
+			Permission: openCodePermissionMode(input.RuntimeAccessMode),
+		}
+		if overlay.Model != "" || len(overlay.Agent) > 0 || len(overlay.Permission) > 0 {
+			configRaw, err := json.Marshal(overlay)
 			if err != nil {
 				return LaunchMaterial{}, err
 			}
 			material.Env = config.UpsertEnvValue(material.Env, config.OpenCodeConfigContentEnv, string(configRaw))
-			material.RedactedSummary = "opencode profile op_default inherit model=" + model
+			material.RedactedSummary = "opencode profile op_default inherit"
+			if overlay.Model != "" {
+				material.RedactedSummary += " model=" + overlay.Model
+			}
+			if accessMode := state.NormalizeOpenCodeRuntimeAccessMode(input.RuntimeAccessMode); accessMode != "" {
+				material.RedactedSummary += " access=" + accessMode
+			}
 			return material, nil
 		}
 		material.RedactedSummary = "opencode profile op_default inherit"
@@ -108,28 +127,32 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 		return LaunchMaterial{}, fmt.Errorf("%s", status)
 	}
 	providerID := generatedProviderID(profile.ID)
+	providerNPM := openCodeProviderNPM(profile.ProviderType)
+	if providerNPM == "" {
+		return LaunchMaterial{}, fmt.Errorf("opencode profile providerType is invalid")
+	}
+	providerOptions := openCodeProviderOptions(profile.BaseURL)
 	models := make(map[string]modelOverlay)
 	addModelOverlay(models, profile.Model, profile.ReasoningEffort)
 	addModelOverlay(models, profile.SmallModel, "")
+	addModelOverlay(models, profile.ReviewModel, "")
 	addModelOverlay(models, profile.SubagentModel, "")
 	configRaw, err := json.Marshal(configOverlay{
 		Provider: map[string]providerOverlay{
 			providerID: {
-				Name:   "Codex Remote " + profile.Name,
-				ID:     providerID,
-				Env:    []string{},
-				NPM:    "@ai-sdk/openai-compatible",
-				Models: models,
-				Options: map[string]any{
-					"baseURL": strings.TrimSpace(profile.BaseURL),
-				},
+				Name:    "Codex Remote " + profile.Name,
+				ID:      providerID,
+				Env:     []string{},
+				NPM:     providerNPM,
+				Models:  models,
+				Options: providerOptions,
 			},
 		},
 		Model:        providerID + "/" + strings.TrimSpace(profile.Model),
 		SmallModel:   prefixedModel(providerID, profile.SmallModel),
-		Agent:        openCodeAgentModelOverrides(providerID, profile.SubagentModel),
+		Agent:        openCodeAgentOverrides(providerID, profile.ReviewModel, profile.SubagentModel),
 		Instructions: strings.TrimSpace(profile.Instruction),
-		Permission:   openCodePermissionMode(profile.PermissionMode),
+		Permission:   openCodePermissionMode(input.RuntimeAccessMode),
 	})
 	if err != nil {
 		return LaunchMaterial{}, err
@@ -157,6 +180,25 @@ func CompileLaunchMaterial(input CompileInput) (LaunchMaterial, error) {
 	material.Env = env
 	material.RedactedSummary = "opencode profile " + profile.ID + " provider=" + providerID + " apiKey=<redacted>"
 	return material, nil
+}
+
+func openCodeProviderNPM(providerType string) string {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "", config.OpenCodeProviderTypeOpenAICompatibleChat:
+		return "@ai-sdk/openai-compatible"
+	case config.OpenCodeProviderTypeGoogleGemini:
+		return "@ai-sdk/google"
+	default:
+		return ""
+	}
+}
+
+func openCodeProviderOptions(baseURL string) map[string]any {
+	baseURL = strings.TrimSpace(baseURL)
+	if baseURL == "" {
+		return nil
+	}
+	return map[string]any{"baseURL": baseURL}
 }
 
 func removeOpenCodeOverlayEnv(env []string) []string {
@@ -218,21 +260,44 @@ func prefixedModel(providerID, model string) string {
 	return providerID + "/" + model
 }
 
-func openCodeAgentModelOverrides(providerID, subagentModel string) map[string]agentOverlay {
-	model := prefixedModel(providerID, subagentModel)
-	if model == "" {
-		return nil
+func openCodeAgentOverrides(providerID, reviewModel, subagentModel string) map[string]agentOverlay {
+	agents := map[string]agentOverlay{
+		"review": {
+			Description: "Strict read-only code reviewer",
+			Mode:        "primary",
+			Model:       prefixedModel(providerID, reviewModel),
+			Prompt:      "Review the supplied changes carefully. Report concrete findings with file and line references. Do not modify files or run shell commands.",
+			Tools: map[string]bool{
+				"*":     false,
+				"bash":  false,
+				"edit":  false,
+				"glob":  true,
+				"grep":  true,
+				"read":  true,
+				"write": false,
+				"task":  false,
+			},
+			Permission: map[string]string{
+				"*":    "deny",
+				"glob": "allow",
+				"grep": "allow",
+				"read": "allow",
+			},
+		},
 	}
-	return map[string]agentOverlay{
-		"general": {Model: model},
-		"explore": {Model: model},
+	if model := prefixedModel(providerID, subagentModel); model != "" {
+		agents["general"] = agentOverlay{Model: model}
+		agents["explore"] = agentOverlay{Model: model}
 	}
+	return agents
 }
 
 func openCodePermissionMode(value string) map[string]string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "ask", "allow", "deny":
-		return map[string]string{"*": strings.ToLower(strings.TrimSpace(value))}
+	switch state.NormalizeOpenCodeRuntimeAccessMode(value) {
+	case agentproto.AccessModeConfirm:
+		return map[string]string{"*": "ask"}
+	case agentproto.AccessModeFullAccess:
+		return map[string]string{"*": "allow"}
 	default:
 		return nil
 	}
@@ -243,5 +308,11 @@ func openCodeReasoningVariants(value string) map[string]map[string]any {
 	if value == "" {
 		return nil
 	}
-	return map[string]map[string]any{value: {}}
+	return map[string]map[string]any{
+		"low":    {},
+		"medium": {},
+		"high":   {},
+		"xhigh":  {},
+		"max":    {},
+	}
 }

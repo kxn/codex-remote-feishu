@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"log"
 	"sort"
 	"strings"
@@ -156,7 +157,7 @@ func (p *DriveMarkdownPreviewer) RunBackgroundMaintenance(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			cleanupCtx, cancel := newFeishuTimeoutContext(ctx, previewDriveBackgroundCleanupTimeout)
+			cleanupCtx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, previewDriveBackgroundCleanupTimeout)
 			err := p.runBackgroundCleanup(cleanupCtx)
 			cancel()
 			if err != nil && ctx.Err() == nil {

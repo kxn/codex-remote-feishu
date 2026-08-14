@@ -71,13 +71,14 @@ func TestDaemonStartsOpenCodeHeadlessWithProfileOverlayAndACPLaunchMode(t *testi
 		captured = opts
 		return 4325, nil
 	}
-	workspaceDir := evalSymlinkForTest(t, t.TempDir())
+	staleWorkspace := evalSymlinkForTest(t, t.TempDir())
+	threadCWD := evalSymlinkForTest(t, t.TempDir())
 	command := control.DaemonCommand{
 		Kind:                 control.DaemonCommandStartHeadless,
 		SurfaceSessionID:     "surface-1",
 		InstanceID:           "inst-opencode",
-		ThreadCWD:            workspaceDir,
-		WorkspaceKey:         workspaceDir,
+		ThreadCWD:            threadCWD,
+		WorkspaceKey:         staleWorkspace,
 		Backend:              agentproto.BackendOpenCode,
 		OpenCodeProfileID:    profile.ID,
 		OpenCodeAdmissionRef: surface.OpenCodeAdmissionRef,
@@ -88,7 +89,7 @@ func TestDaemonStartsOpenCodeHeadlessWithProfileOverlayAndACPLaunchMode(t *testi
 	if captured.LaunchMode != relayruntime.HeadlessLaunchModeOpenCodeACP {
 		t.Fatalf("expected opencode launch mode, got %#v", captured)
 	}
-	if strings.Join(captured.Args, "\x00") != strings.Join([]string{"acp", "--cwd", workspaceDir}, "\x00") {
+	if strings.Join(captured.Args, "\x00") != strings.Join([]string{"acp", "--cwd", threadCWD}, "\x00") {
 		t.Fatalf("unexpected opencode child args: %#v", captured.Args)
 	}
 	if !containsEnvEntry(captured.Env, "CODEX_REMOTE_INSTANCE_BACKEND=opencode") {

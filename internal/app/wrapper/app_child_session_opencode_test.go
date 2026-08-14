@@ -9,6 +9,7 @@ import (
 
 	acpadapter "github.com/kxn/codex-remote-feishu/internal/adapter/acp"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestBuildOpenCodeChildLaunchStripsWrapperModeAndKeepsProfileEnv(t *testing.T) {
@@ -46,7 +47,7 @@ func TestBuildOpenCodeChildLaunchDefaultsToACPWorkspaceArgs(t *testing.T) {
 	app := &App{config: Config{WorkspaceRoot: workspaceRoot}}
 
 	args, _ := app.buildOpenCodeChildLaunch()
-	if strings.Join(args, "\x00") != strings.Join([]string{"acp", "--cwd", workspaceRoot}, "\x00") {
+	if strings.Join(args, "\x00") != strings.Join([]string{"acp", "--cwd", pathcanon.Native(workspaceRoot)}, "\x00") {
 		t.Fatalf("default opencode child args = %#v", args)
 	}
 }
@@ -75,5 +76,17 @@ func TestBootstrapOpenCodeACPWaitsForInitializeAndReplaysBufferedStdout(t *testi
 	}
 	if string(replayed) != string(bufferedLine) {
 		t.Fatalf("replayed stdout = %q, want %q", string(replayed), string(bufferedLine))
+	}
+}
+
+func TestBuildOpenCodeChildLaunchStripsWindowsExtendedWorkspace(t *testing.T) {
+	app := &App{config: Config{WorkspaceRoot: `\\?\C:\repo`}}
+	args, _ := app.buildOpenCodeChildLaunch()
+	joined := strings.Join(args, "\x00")
+	if strings.Contains(joined, `\\?\`) || strings.Contains(joined, "//?/") {
+		t.Fatalf("extended-length workspace leaked into opencode child args: %q", joined)
+	}
+	if !strings.Contains(joined, "--cwd") {
+		t.Fatalf("expected --cwd in opencode child args: %q", joined)
 	}
 }

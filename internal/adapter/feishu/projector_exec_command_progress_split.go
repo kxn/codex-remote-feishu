@@ -39,6 +39,7 @@ func execCommandProgressRenderedLines(progress control.ExecCommandProgress) []ex
 			Status:            item.Status,
 			Seq:               item.LastSeq,
 			Content:           content,
+			Transient:         item.Transient,
 			CarryoverEligible: execProgressTimelineItemCanCarryOver(item),
 		})
 	}
@@ -147,11 +148,18 @@ func execProgressCardWindow(progress control.ExecCommandProgress, lines []execPr
 		persistent = append(persistent, line)
 	}
 	if len(persistent) == 0 {
-		if len(transient) == 0 || !execProgressCardFits(transient, subtitle) {
+		if len(transient) == 0 {
 			return execProgressCardWindowState{}
 		}
+		if !execProgressCardFits(transient, subtitle) {
+			var ok bool
+			transient, ok = truncateExecProgressTransientLinesToFit(nil, transient, subtitle)
+			if !ok {
+				return execProgressCardWindowState{}
+			}
+		}
 		return execProgressCardWindowState{
-			NewCard:  activeExecCommandProgressSegmentMessageID(progress) != "",
+			NewCard:  false,
 			StartSeq: startSeq,
 			EndSeq:   startSeq - 1,
 			Lines:    append([]execProgressRenderedLine(nil), transient...),
@@ -253,6 +261,14 @@ func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLin
 				Lines:    lines,
 			}, true
 		}
+		if fittedTransient, ok := truncateExecProgressTransientLinesToFit(base, transient, subtitle); ok {
+			return execProgressCardWindowState{
+				StartSeq: persistent[windowIndex].Seq,
+				EndSeq:   persistent[len(persistent)-1].Seq,
+				Lines:    append(append([]execProgressRenderedLine(nil), base...), fittedTransient...),
+			}, true
+		}
+		return execProgressCardWindowState{}, false
 	}
 	if !execProgressCardFits(base, subtitle) {
 		return execProgressCardWindowState{}, false
@@ -262,6 +278,41 @@ func buildExecProgressCardWindow(persistent, transient []execProgressRenderedLin
 		EndSeq:   persistent[len(persistent)-1].Seq,
 		Lines:    base,
 	}, true
+}
+
+func truncateExecProgressTransientLinesToFit(base, transient []execProgressRenderedLine, subtitle string) ([]execProgressRenderedLine, bool) {
+	if len(transient) != 1 || !execProgressCardFits(base, subtitle) {
+		return nil, false
+	}
+	line := transient[0]
+	content := strings.TrimSpace(line.Content)
+	if content == "" {
+		return nil, false
+	}
+	const suffix = "..."
+	runes := []rune(content)
+	low, high := 1, len(runes)
+	var best string
+	for low <= high {
+		mid := (low + high) / 2
+		candidate := strings.TrimSpace(string(runes[:mid]))
+		if mid < len(runes) {
+			candidate += suffix
+		}
+		testLine := line
+		testLine.Content = candidate
+		if execProgressCardFits(append(append([]execProgressRenderedLine(nil), base...), testLine), subtitle) {
+			best = candidate
+			low = mid + 1
+			continue
+		}
+		high = mid - 1
+	}
+	if best == "" {
+		return nil, false
+	}
+	line.Content = best
+	return []execProgressRenderedLine{line}, true
 }
 
 func execProgressCarryoverLines(persistent []execProgressRenderedLine, windowIndex int) []execProgressRenderedLine {

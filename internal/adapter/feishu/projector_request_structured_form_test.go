@@ -3,6 +3,7 @@ package feishu
 import (
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
@@ -49,13 +50,13 @@ func TestRequestPromptStructuredFormRendersMultiSelectStatic(t *testing.T) {
 	if len(fields) < 3 {
 		t.Fatalf("expected structured request form fields plus submit button, got %#v", form)
 	}
-	if got := cardStringValue(fields[0]["tag"]); got != "select_static" {
+	if got := cardkit.StringValue(fields[0]["tag"]); got != "select_static" {
 		t.Fatalf("expected first field to be select_static, got %#v", fields[0])
 	}
-	if got := cardStringValue(fields[1]["tag"]); got != "multi_select_static" {
+	if got := cardkit.StringValue(fields[1]["tag"]); got != "multi_select_static" {
 		t.Fatalf("expected second field to be multi_select_static, got %#v", fields[1])
 	}
-	if got := cardStringValue(fields[2]["tag"]); got != "button" || cardButtonLabel(t, fields[2]) != "按以上授权继续" {
+	if got := cardkit.StringValue(fields[2]["tag"]); got != "button" || cardButtonLabel(t, fields[2]) != "按以上授权继续" {
 		t.Fatalf("expected structured submit button, got %#v", fields[2])
 	}
 	value := cardButtonPayload(t, fields[2])
@@ -67,7 +68,7 @@ func TestRequestPromptStructuredFormRendersMultiSelectStatic(t *testing.T) {
 func findCardFormByName(t *testing.T, elements []map[string]any, name string) map[string]any {
 	t.Helper()
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) == "form" && cardStringValue(element["name"]) == name {
+		if cardkit.StringValue(element["tag"]) == "form" && cardkit.StringValue(element["name"]) == name {
 			return element
 		}
 	}

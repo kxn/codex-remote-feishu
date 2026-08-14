@@ -38,6 +38,9 @@ type WorktreePreviewResult struct {
 	DirectoryName     string
 	ParentDir         string
 	DestinationPath   string
+	// CanConfirm 表示该 preview 是否满足实际创建的前置条件。空 branch 的
+	// 草稿态只能给出 destination 预览，不能直接创建。
+	CanConfirm bool
 }
 
 type WorktreeCreateError struct {
@@ -112,35 +115,55 @@ func PreviewWorktree(req WorktreeCreateRequest) (WorktreePreviewResult, error) {
 			Err:               err,
 		}
 	}
-	if err := ValidateBranchName(branchName); err != nil {
-		return WorktreePreviewResult{}, &WorktreeCreateError{
-			Code:              WorktreeCreateErrorInvalidBranchName,
-			Message:           err.Error(),
-			BaseWorkspacePath: baseWorkspacePath,
-			BranchName:        branchName,
-			DirectoryName:     directoryName,
-			Err:               err,
+	if branchName != "" {
+		if err := ValidateBranchName(branchName); err != nil {
+			return WorktreePreviewResult{}, &WorktreeCreateError{
+				Code:              WorktreeCreateErrorInvalidBranchName,
+				Message:           err.Error(),
+				BaseWorkspacePath: baseWorkspacePath,
+				BranchName:        branchName,
+				DirectoryName:     directoryName,
+				Err:               err,
+			}
+		}
+		branchExists, err := branchExists(baseWorkspacePath, branchName)
+		if err != nil {
+			return WorktreePreviewResult{}, &WorktreeCreateError{
+				Code:              WorktreeCreateErrorCreateFailed,
+				Message:           "failed to inspect branch state",
+				BaseWorkspacePath: baseWorkspacePath,
+				BranchName:        branchName,
+				DirectoryName:     directoryName,
+				Err:               err,
+			}
+		}
+		if branchExists {
+			return WorktreePreviewResult{}, &WorktreeCreateError{
+				Code:              WorktreeCreateErrorBranchExists,
+				Message:           "branch already exists",
+				BaseWorkspacePath: baseWorkspacePath,
+				BranchName:        branchName,
+				DirectoryName:     directoryName,
+			}
 		}
 	}
-	branchExists, err := branchExists(baseWorkspacePath, branchName)
-	if err != nil {
+	parentDir := filepath.Dir(baseWorkspacePath)
+	if _, err := os.ReadDir(parentDir); err != nil {
 		return WorktreePreviewResult{}, &WorktreeCreateError{
 			Code:              WorktreeCreateErrorCreateFailed,
-			Message:           "failed to inspect branch state",
+			Message:           "failed to inspect destination parent directory",
 			BaseWorkspacePath: baseWorkspacePath,
 			BranchName:        branchName,
-			DirectoryName:     directoryName,
 			Err:               err,
 		}
 	}
-	if branchExists {
-		return WorktreePreviewResult{}, &WorktreeCreateError{
-			Code:              WorktreeCreateErrorBranchExists,
-			Message:           "branch already exists",
+	if branchName == "" && directoryName == "" {
+		// 草稿态：还没有可推导的 destination，只返回基准工作区信息，禁止 confirm。
+		return WorktreePreviewResult{
 			BaseWorkspacePath: baseWorkspacePath,
-			BranchName:        branchName,
-			DirectoryName:     directoryName,
-		}
+			ParentDir:         parentDir,
+			CanConfirm:        false,
+		}, nil
 	}
 	resolvedDirName, err := resolveWorktreeDirectoryName(branchName, directoryName)
 	if err != nil {
@@ -156,17 +179,6 @@ func PreviewWorktree(req WorktreeCreateRequest) (WorktreePreviewResult, error) {
 			BaseWorkspacePath: baseWorkspacePath,
 			BranchName:        branchName,
 			DirectoryName:     directoryName,
-			Err:               err,
-		}
-	}
-	parentDir := filepath.Dir(baseWorkspacePath)
-	if _, err := os.ReadDir(parentDir); err != nil {
-		return WorktreePreviewResult{}, &WorktreeCreateError{
-			Code:              WorktreeCreateErrorCreateFailed,
-			Message:           "failed to inspect destination parent directory",
-			BaseWorkspacePath: baseWorkspacePath,
-			BranchName:        branchName,
-			DirectoryName:     resolvedDirName,
 			Err:               err,
 		}
 	}
@@ -197,6 +209,7 @@ func PreviewWorktree(req WorktreeCreateRequest) (WorktreePreviewResult, error) {
 		DirectoryName:     resolvedDirName,
 		ParentDir:         parentDir,
 		DestinationPath:   destinationPath,
+		CanConfirm:        branchName != "",
 	}, nil
 }
 

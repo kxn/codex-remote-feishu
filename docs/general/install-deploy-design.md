@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-08-05`
-> Summary: 同步当前安装、配置与部署模型；macOS packaged installer 已并入正式 GitHub Release workflow，Windows NSIS 包装层固定为 `probe + install + 结果页` 模型。
+> Updated: `2026-08-11`
+> Summary: 修正 upgrade helper 当前来源：安装文档只保留升级事务边界，完整时序以本地自升级流程文档为准。
 
 ## 1. 范围
 
@@ -455,12 +455,12 @@ Windows 下文件名为 `codex-remote.exe`。
 
 - 把目标 binary 准备到 `versionsRoot/<slot>/`
 - 写入 `PendingUpgrade` 与 rollback candidate
-- daemon 复制当前 live binary 作为 `upgrade-helper`
+- `local-upgrade` 从当前执行体释放内嵌 upgrade shim，并写入 helper sidecar
 - 在 `systemd_user` 模式下，通过独立 transient unit 启动 helper，避免 stop 旧服务时把 helper 一并杀掉
 - helper 负责 stop old service -> switch stable binary -> start new service -> observe health
 - 新版本启动或健康检查失败时，自动回滚 binary 和 live config
 
-本地自升级链路的完整时序、helper 来源、路径布局和回滚细节，单独见：
+本节只记录安装/部署视角需要知道的升级事务边界。本地自升级链路的完整时序、helper 来源、路径布局和回滚细节，单独见：
 
 - [local-self-upgrade-flow.md](./local-self-upgrade-flow.md)
 

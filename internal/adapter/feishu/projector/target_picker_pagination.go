@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -41,13 +42,13 @@ func targetPickerComposeEditingElements(view control.FeishuTargetPickerView, dae
 		elements = append(elements, messages...)
 	}
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
-		if block := cardPlainTextBlockElement(hint); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(hint); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
 	if noticeSections := targetPickerNoticeSections(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	if targetPickerUsesInlineForm(view) {
 		return elements
@@ -65,7 +66,7 @@ func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonL
 
 	pagePrefix := make([]map[string]any, 0, 2)
 	if view.WorkspaceSelectionLocked {
-		pagePrefix = appendCardTextSections(pagePrefix, targetPickerLockedWorkspaceSections(view))
+		pagePrefix = cardkit.AppendTextSections(pagePrefix, targetPickerLockedWorkspaceSections(view))
 	}
 
 	switch {
@@ -79,17 +80,17 @@ func targetPickerTargetPageElements(view control.FeishuTargetPickerView, daemonL
 		)
 		return targetPickerCombinePageElements(
 			pagePrefix,
-			targetPickerPaginatedLaneElements(targetPickerWorkspaceLane(view), daemonLifecycleID, workspacePlan.Page),
-			targetPickerPaginatedLaneElements(targetPickerSessionLane(view), daemonLifecycleID, sessionPlan.Page),
+			targetPickerWorkspaceLane(view).renderElements(daemonLifecycleID, workspacePlan.Page),
+			targetPickerSessionLane(view).renderElements(daemonLifecycleID, sessionPlan.Page),
 		)
 	case renderWorkspaceSelect:
 		lane := targetPickerWorkspaceLane(view)
 		plan := targetPickerPlanSingleLane(view, daemonLifecycleID, pagePrefix, lane)
-		return targetPickerCombinePageElements(pagePrefix, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, plan.Page))
+		return targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, plan.Page))
 	case renderSessionSelect:
 		lane := targetPickerSessionLane(view)
 		plan := targetPickerPlanSingleLane(view, daemonLifecycleID, pagePrefix, lane)
-		return targetPickerCombinePageElements(pagePrefix, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, plan.Page))
+		return targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, plan.Page))
 	default:
 		return pagePrefix
 	}
@@ -141,10 +142,6 @@ func targetPickerSessionLane(view control.FeishuTargetPickerView) paginatedSelec
 	}
 }
 
-func targetPickerPaginatedLaneElements(lane paginatedSelectFlowLane, daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
-	return lane.renderElements(daemonLifecycleID, page)
-}
-
 func targetPickerPlanSingleLane(
 	view control.FeishuTargetPickerView,
 	daemonLifecycleID string,
@@ -158,7 +155,7 @@ func targetPickerPlanSingleLane(
 			return targetPickerEditingCardSize(
 				view,
 				daemonLifecycleID,
-				targetPickerCombinePageElements(pagePrefix, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, page)),
+				targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, page)),
 			)
 		},
 	)
@@ -203,8 +200,8 @@ func targetPickerPlanDualLanes(
 				daemonLifecycleID,
 				targetPickerCombinePageElements(
 					pagePrefix,
-					targetPickerPaginatedLaneElements(leftLane, daemonLifecycleID, leftPage),
-					targetPickerPaginatedLaneElements(rightLane, daemonLifecycleID, rightPage),
+					leftLane.renderElements(daemonLifecycleID, leftPage),
+					rightLane.renderElements(daemonLifecycleID, rightPage),
 				),
 			)
 		},
@@ -227,7 +224,7 @@ func targetPickerLaneFit(
 			size, err := targetPickerEditingCardSize(
 				view,
 				daemonLifecycleID,
-				targetPickerCombinePageElements(pagePrefix, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, page)),
+				targetPickerCombinePageElements(pagePrefix, lane.renderElements(daemonLifecycleID, page)),
 			)
 			if err != nil {
 				return 0, err
@@ -272,7 +269,7 @@ func cloneCardElementSlice(elements []map[string]any) []map[string]any {
 		if len(element) == 0 {
 			continue
 		}
-		out = append(out, cloneCardMap(element))
+		out = append(out, cardkit.CloneMap(element))
 	}
 	return out
 }

@@ -439,12 +439,12 @@ func TestApplyInstanceConnectedAutoRestoreUsesConnectedInstanceThreadWorkspace(t
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.root.Surfaces["surface-1"].PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-trader",
-		ThreadID:        "thread-shared",
-		ThreadCWD:       "/data/dl/trader",
-		WorkspaceKey:    "/data/dl/trader",
-		AutoRestore:     true,
-		CodexProviderID: "default",
+		InstanceID:     "inst-trader",
+		ThreadID:       "thread-shared",
+		ThreadCWD:      "/data/dl/trader",
+		WorkspaceKey:   "/data/dl/trader",
+		AutoRestore:    true,
+		CodexProfileID: "default",
 	}
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-signal",
@@ -484,14 +484,14 @@ func TestApplyInstanceConnectedAutoRestoreMissingWorkspaceConsumesPendingAndKill
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.root.Surfaces["surface-1"].PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-headless-1",
-		ThreadID:        "thread-1",
-		ThreadTitle:     "修复登录流程",
-		RequestedAt:     now,
-		ExpiresAt:       now.Add(30 * time.Second),
-		Status:          state.HeadlessLaunchStarting,
-		AutoRestore:     true,
-		CodexProviderID: "default",
+		InstanceID:     "inst-headless-1",
+		ThreadID:       "thread-1",
+		ThreadTitle:    "修复登录流程",
+		RequestedAt:    now,
+		ExpiresAt:      now.Add(30 * time.Second),
+		Status:         state.HeadlessLaunchStarting,
+		AutoRestore:    true,
+		CodexProfileID: "default",
 	}
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-headless-1",
@@ -530,16 +530,16 @@ func TestFinishFailedAutoRestoreThreadConnectIgnoresNonRestoreNotices(t *testing
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	pending := &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-headless-1",
-		ThreadID:        "thread-1",
-		ThreadTitle:     "修复登录流程",
-		WorkspaceKey:    "/data/dl/droid",
-		ThreadCWD:       "/data/dl/droid",
-		RequestedAt:     now,
-		ExpiresAt:       now.Add(30 * time.Second),
-		Status:          state.HeadlessLaunchStarting,
-		AutoRestore:     true,
-		CodexProviderID: "default",
+		InstanceID:     "inst-headless-1",
+		ThreadID:       "thread-1",
+		ThreadTitle:    "修复登录流程",
+		WorkspaceKey:   "/data/dl/droid",
+		ThreadCWD:      "/data/dl/droid",
+		RequestedAt:    now,
+		ExpiresAt:      now.Add(30 * time.Second),
+		Status:         state.HeadlessLaunchStarting,
+		AutoRestore:    true,
+		CodexProfileID: "default",
 	}
 	svc.root.Surfaces["surface-1"].PendingHeadless = pending
 
@@ -581,16 +581,16 @@ func TestApplyInstanceConnectedAutoRestoreHeadlessFailureConsumesPendingAndKills
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.root.Surfaces["surface-1"].PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-headless-1",
-		ThreadID:        "thread-1",
-		ThreadTitle:     "修复登录流程",
-		WorkspaceKey:    "/data/dl/droid",
-		ThreadCWD:       "/data/dl/droid",
-		RequestedAt:     now,
-		ExpiresAt:       now.Add(30 * time.Second),
-		Status:          state.HeadlessLaunchStarting,
-		AutoRestore:     true,
-		CodexProviderID: "default",
+		InstanceID:     "inst-headless-1",
+		ThreadID:       "thread-1",
+		ThreadTitle:    "修复登录流程",
+		WorkspaceKey:   "/data/dl/droid",
+		ThreadCWD:      "/data/dl/droid",
+		RequestedAt:    now,
+		ExpiresAt:      now.Add(30 * time.Second),
+		Status:         state.HeadlessLaunchStarting,
+		AutoRestore:    true,
+		CodexProfileID: "default",
 	}
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-headless-1",

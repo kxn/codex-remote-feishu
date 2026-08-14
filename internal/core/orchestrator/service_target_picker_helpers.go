@@ -226,19 +226,6 @@ func targetPickerSessionOptionIndex(options []control.FeishuTargetPickerSessionO
 	return -1
 }
 
-func normalizeTargetPickerDropdownCursor(cursor int, optionCount int) int {
-	if optionCount <= 0 {
-		return 0
-	}
-	if cursor < 0 {
-		return 0
-	}
-	if cursor >= optionCount {
-		return optionCount - 1
-	}
-	return cursor
-}
-
 func targetPickerWorkspaceOptions(entries []workspaceSelectionEntry) []control.FeishuTargetPickerWorkspaceOption {
 	if len(entries) == 0 {
 		return nil

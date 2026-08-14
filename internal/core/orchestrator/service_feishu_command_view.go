@@ -61,8 +61,9 @@ func (s *Service) buildConfigCommandViewState(
 	view.Config.OverrideExtraValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.OverrideExtraValueKey)
 	view.Config.UsesLocalRequestedOverrides = summary.UsesLocalRequestedOverrides
 	view.Config.PlanModeOverrideSet = summary.PlanModeOverrideSet
+	view.Config.PlanModeUsesLocalRequested = summary.PlanModeUsesLocalRequested
 	switch flow.CommandID {
-	case control.FeishuCommandCodexProvider:
+	case control.FeishuCommandCodexProfile:
 		view.Config.FormOptions = s.codexProfileCommandOptions(true)
 		view.Config.FormPagination = true
 		if strings.TrimSpace(view.Config.StatusText) == "" {
@@ -89,13 +90,13 @@ func (s *Service) buildConfigCommandViewState(
 		if len(options) != 0 {
 			view.Config.FormOptions = options
 		}
-		if kind, text := s.maybeModelCatalogStatusText(surface, inst, truncated); text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
+		if kind, text := s.maybeModelCatalogStatusText(surface, inst, view.Config.CatalogBackend, truncated); text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
 			view.Config.StatusKind = kind
 			view.Config.StatusText = text
 		}
 	case control.FeishuCommandReasoning:
 		if view.Config.CatalogBackend != agentproto.BackendClaude {
-			options, kind, text := s.modelReasoningCommandOptions(surface, inst, summary.EffectiveModel)
+			options, kind, text := s.modelReasoningCommandOptions(surface, inst, view.Config.CatalogBackend, summary.EffectiveModel)
 			view.Config.FormOptions = options
 			if text != "" && strings.TrimSpace(view.Config.StatusText) == "" {
 				view.Config.StatusKind = kind
@@ -165,7 +166,7 @@ func (s *Service) resolveConfigFlowValue(
 	case control.FeishuConfigFlowValueSurfaceProductMode:
 		normalized := control.NormalizeCatalogContext(ctx)
 		return state.SurfaceModeAlias(state.ProductMode(normalized.ProductMode), normalized.Backend)
-	case control.FeishuConfigFlowValueSurfaceCodexProvider:
+	case control.FeishuConfigFlowValueSurfaceCodexProfile:
 		if surface != nil {
 			return s.surfaceCodexProfileID(surface)
 		}

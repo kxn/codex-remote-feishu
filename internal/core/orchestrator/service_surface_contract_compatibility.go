@@ -33,8 +33,8 @@ func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleReco
 	result := surfaceInstanceCompatibility{Visible: true, Compatible: true}
 	switch observed.Backend {
 	case agentproto.BackendCodex:
-		desiredProviderID := state.EffectiveSurfaceCodexProviderID(desired)
-		result.Compatible = state.NormalizeCodexProviderID(observed.CodexProviderID) == desiredProviderID
+		desiredCodexProfileID := state.EffectiveSurfaceCodexProfileID(desired)
+		result.Compatible = state.NormalizeCodexProfileID(observed.CodexProfileID) == desiredCodexProfileID
 		if !result.Compatible {
 			break
 		}
@@ -57,8 +57,12 @@ func (s *Service) surfaceInstanceCompatibility(surface *state.SurfaceConsoleReco
 		if desiredAdmissionRef := state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef); desiredAdmissionRef != nil {
 			observedAdmissionRef := state.NormalizeOpenCodeAdmissionRef(inst.OpenCodeAdmissionRef)
 			result.Compatible = observedAdmissionRef != nil && *desiredAdmissionRef == *observedAdmissionRef
-			break
+			if !result.Compatible {
+				break
+			}
 		}
+		desiredAccess := state.NormalizeOpenCodeRuntimeAccessMode(state.EffectiveSurfaceCapabilitySettings(s.root, surface).PromptOverride.AccessMode)
+		result.Compatible = state.NormalizeOpenCodeRuntimeAccessMode(inst.OpenCodeRuntimeAccessMode) == desiredAccess
 	}
 	return result
 }

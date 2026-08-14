@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestObserveServerRequestStartedProducesApprovalEvent(t *testing.T) {
@@ -1082,7 +1083,7 @@ func TestTranslateThreadsRefreshUsesThreadListAndBuildsSnapshot(t *testing.T) {
 	if secondRead.Events[0].Kind != agentproto.EventThreadsSnapshot || len(secondRead.Events[0].Threads) != 2 {
 		t.Fatalf("unexpected snapshot payload: %#v", secondRead.Events[0])
 	}
-	if secondRead.Events[0].Threads[0].ThreadID != "thread-2" || secondRead.Events[0].Threads[0].CWD != "/data/dl/droid" {
+	if secondRead.Events[0].Threads[0].ThreadID != "thread-2" || secondRead.Events[0].Threads[0].CWD != pathcanon.Native("/data/dl/droid") {
 		t.Fatalf("expected snapshot to preserve thread/list order, got %#v", secondRead.Events[0].Threads)
 	}
 	if secondRead.Events[0].Threads[1].ThreadID != "thread-1" || secondRead.Events[0].Threads[1].Name != "修复登录流程" {
@@ -1127,6 +1128,125 @@ func TestObserveCommandExecutionItemsCarryCommandMetadata(t *testing.T) {
 	}
 	if completedEvent.Metadata["exitCode"] != 1 {
 		t.Fatalf("expected exitCode metadata on completion, got %#v", completedEvent.Metadata)
+	}
+}
+
+func TestObserveCommandExecutionStartedMapsNativeCommandActions(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	started, err := tr.ObserveServer([]byte(`{"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"cmd-1","type":"commandExecution","status":"inProgress","command":"bash -lc 'rg pattern internal | head'","cwd":"/tmp/project","commandActions":[{"type":"search","command":"rg pattern internal | head","query":"pattern","path":"internal"},{"type":"read","command":"nl -ba internal/adapter/codex/translator_helpers.go | sed -n '1,80p'","name":"translator_helpers.go","path":"internal/adapter/codex/translator_helpers.go"},{"type":"read","command":"sed -n '1,40p' AGENTS.md","name":"AGENTS.md","path":null},{"type":"search","command":"rg TODO","query":"TODO"},{"type":"listFiles","command":"ls internal/adapter/codex","path":"internal/adapter/codex"},{"type":"listFiles","command":"ls","path":null}]}}}`))
+	if err != nil {
+		t.Fatalf("observe command execution started: %v", err)
+	}
+	if len(started.Events) != 1 {
+		t.Fatalf("expected one command execution started event, got %#v", started.Events)
+	}
+	assertCommandExecutionExploration(t, started.Events[0], []agentproto.ExplorationAction{
+		{Kind: agentproto.ExplorationActionSearch, Summary: "pattern", Secondary: "internal"},
+		{Kind: agentproto.ExplorationActionRead, Items: []string{"internal/adapter/codex/translator_helpers.go"}},
+		{Kind: agentproto.ExplorationActionRead, Items: []string{"AGENTS.md"}},
+		{Kind: agentproto.ExplorationActionSearch, Summary: "TODO"},
+		{Kind: agentproto.ExplorationActionList, Summary: "internal/adapter/codex"},
+		{Kind: agentproto.ExplorationActionList, Summary: "ls"},
+	})
+	if _, exists := started.Events[0].Metadata["commandActions"]; exists {
+		t.Fatalf("commandActions should not be copied into metadata blob: %#v", started.Events[0].Metadata)
+	}
+}
+
+func TestObserveCommandExecutionCompletedMapsNativeCommandActions(t *testing.T) {
+	tr := NewTranslator("inst-1")
+
+	completed, err := tr.ObserveServer([]byte(`{"method":"item/completed","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"cmd-1","type":"command_execution","status":"completed","command":"nl -ba internal/adapter/codex/translator_helpers.go | sed -n '1,80p'","cwd":"/tmp/project","exitCode":0,"aggregatedOutput":"must not be read","commandActions":[{"type":"read","command":"nl -ba internal/adapter/codex/translator_helpers.go | sed -n '1,80p'","name":"translator_helpers.go","path":"internal/adapter/codex/translator_helpers.go"}]}}}`))
+	if err != nil {
+		t.Fatalf("observe command execution completed: %v", err)
+	}
+	if len(completed.Events) != 1 {
+		t.Fatalf("expected one command execution completed event, got %#v", completed.Events)
+	}
+	assertCommandExecutionExploration(t, completed.Events[0], []agentproto.ExplorationAction{
+		{Kind: agentproto.ExplorationActionRead, Items: []string{"internal/adapter/codex/translator_helpers.go"}},
+	})
+	if completed.Events[0].Metadata["exitCode"] != 0 {
+		t.Fatalf("expected exitCode metadata on completion, got %#v", completed.Events[0].Metadata)
+	}
+}
+
+func TestObserveCommandExecutionNativeCommandActionsFallbackBoundaries(t *testing.T) {
+	tests := []struct {
+		name            string
+		actionJSON      string
+		wantExploration *agentproto.ExplorationActions
+	}{
+		{
+			name:            "unknown action keeps non-nil empty carrier for generic fallback",
+			actionJSON:      `[{"type":"unknown","command":"npm test"}]`,
+			wantExploration: &agentproto.ExplorationActions{},
+		},
+		{
+			name:            "malformed action keeps non-nil empty carrier for generic fallback",
+			actionJSON:      `[{"type":"search","command":"rg"}]`,
+			wantExploration: &agentproto.ExplorationActions{},
+		},
+		{
+			name:            "legacy no actions leaves carrier nil",
+			actionJSON:      ``,
+			wantExploration: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := NewTranslator("inst-1")
+			actionsField := ""
+			if tt.actionJSON != "" {
+				actionsField = `,"commandActions":` + tt.actionJSON
+			}
+			frame := `{"method":"item/started","params":{"threadId":"thread-1","turnId":"turn-1","item":{"id":"cmd-1","type":"commandExecution","status":"inProgress","command":"npm test","cwd":"/tmp/project"` + actionsField + `}}}`
+			result, err := tr.ObserveServer([]byte(frame))
+			if err != nil {
+				t.Fatalf("observe command execution: %v", err)
+			}
+			if len(result.Events) != 1 {
+				t.Fatalf("expected one command execution event, got %#v", result.Events)
+			}
+			got := result.Events[0].Exploration
+			if tt.wantExploration == nil {
+				if got != nil {
+					t.Fatalf("expected nil exploration carrier, got %#v", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("expected non-nil exploration carrier")
+			}
+			if len(got.Actions) != len(tt.wantExploration.Actions) {
+				t.Fatalf("unexpected exploration actions: got %#v want %#v", got.Actions, tt.wantExploration.Actions)
+			}
+		})
+	}
+}
+
+func assertCommandExecutionExploration(t *testing.T, event agentproto.Event, want []agentproto.ExplorationAction) {
+	t.Helper()
+	if event.Exploration == nil {
+		t.Fatalf("expected exploration carrier on event: %#v", event)
+	}
+	got := event.Exploration.Actions
+	if len(got) != len(want) {
+		t.Fatalf("unexpected exploration action count: got %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i].Kind != want[i].Kind || got[i].Summary != want[i].Summary || got[i].Secondary != want[i].Secondary {
+			t.Fatalf("unexpected exploration action %d: got %#v want %#v", i, got[i], want[i])
+		}
+		if len(got[i].Items) != len(want[i].Items) {
+			t.Fatalf("unexpected exploration items %d: got %#v want %#v", i, got[i].Items, want[i].Items)
+		}
+		for j := range want[i].Items {
+			if got[i].Items[j] != want[i].Items[j] {
+				t.Fatalf("unexpected exploration item %d/%d: got %#v want %#v", i, j, got[i].Items, want[i].Items)
+			}
+		}
 	}
 }
 

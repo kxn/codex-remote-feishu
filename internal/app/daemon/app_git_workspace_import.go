@@ -59,7 +59,7 @@ func (a *App) handleGitWorkspaceImportCommandLocked(command control.DaemonComman
 			if events := a.service.FailTargetPickerGitImport(command.SurfaceSessionID, command.PickerID, importErr); len(events) != 0 {
 				return events
 			}
-			return gitWorkspaceImportNotice(command.SurfaceSessionID, string(importErr.Code), gitWorkspaceImportErrorText(importErr))
+			return gitWorkspaceImportNotice(command.SurfaceSessionID, string(importErr.Code), workspaceimport.ErrorText(importErr))
 		}
 		log.Printf("git import failed: surface=%s picker=%s repo=%s parent=%s err=%v", command.SurfaceSessionID, command.PickerID, request.RepoURL, request.ParentDir, err)
 		return gitWorkspaceImportNotice(command.SurfaceSessionID, "git_import_clone_failed", "Git 仓库导入失败，请稍后重试。")
@@ -94,26 +94,4 @@ func gitWorkspaceImportNotice(surfaceID, code, text string) []eventcontract.Even
 			Text:  text,
 		},
 	}}
-}
-
-func gitWorkspaceImportErrorText(err *workspaceimport.ImportError) string {
-	if err == nil {
-		return "Git 仓库导入失败，请稍后重试。"
-	}
-	switch err.Code {
-	case workspaceimport.ImportErrorGitMissing:
-		return "当前机器未检测到 `git`，暂时不能直接从 Git URL 导入。"
-	case workspaceimport.ImportErrorInvalidURL:
-		return "Git 仓库地址无效，请检查地址格式后重试。"
-	case workspaceimport.ImportErrorInvalidDirectoryName:
-		return "目标目录名无效，请改成不含路径分隔符的普通目录名。"
-	case workspaceimport.ImportErrorDestinationExists:
-		return "目标目录已经存在，请换一个父目录或目录名后重试。"
-	case workspaceimport.ImportErrorRefNotFound:
-		return "指定的分支或标签不存在，请检查后重试。"
-	case workspaceimport.ImportErrorAuthFailed:
-		return "无法访问这个仓库，请确认当前机器上的 Git 凭据或仓库权限后重试。"
-	default:
-		return "Git 仓库导入失败，请稍后重试。"
-	}
 }

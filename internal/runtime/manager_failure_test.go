@@ -14,6 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 )
 
 func TestManagerEnsureReadyReturnsUnknownServiceError(t *testing.T) {
@@ -377,13 +378,13 @@ func TestProbeWelcomeClassifiesHandshakeErrors(t *testing.T) {
 }
 
 func TestRuntimeHelperUtilities(t *testing.T) {
-	if got := normalizeRelayURL("ws://127.0.0.1:9100"); got != "ws://127.0.0.1:9100/ws/agent" {
+	if got := relayurl.NormalizeAgentURL("ws://127.0.0.1:9100"); got != "ws://127.0.0.1:9100/ws/agent" {
 		t.Fatalf("normalizeRelayURL = %q", got)
 	}
-	if got := normalizeRelayURL("ws://127.0.0.1:9100/"); got != "ws://127.0.0.1:9100/ws/agent" {
+	if got := relayurl.NormalizeAgentURL("ws://127.0.0.1:9100/"); got != "ws://127.0.0.1:9100/ws/agent" {
 		t.Fatalf("normalizeRelayURL with slash = %q", got)
 	}
-	if got := normalizeRelayURL("ws://127.0.0.1:9100/ws/agent"); got != "ws://127.0.0.1:9100/ws/agent" {
+	if got := relayurl.NormalizeAgentURL("ws://127.0.0.1:9100/ws/agent"); got != "ws://127.0.0.1:9100/ws/agent" {
 		t.Fatalf("normalizeRelayURL preserved = %q", got)
 	}
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkdrive "github.com/larksuite/oapi-sdk-go/v3/service/drive/v1"
@@ -106,7 +107,7 @@ func (e *DriveFileCommentReadError) Unwrap() error {
 }
 
 func (g *LiveGateway) ReadDriveFileComments(ctx context.Context, req DriveFileCommentReadRequest) (DriveFileCommentReadResult, error) {
-	ctx, cancel := newFeishuTimeoutContext(ctx, readDriveFileCommentsTimeout)
+	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, readDriveFileCommentsTimeout)
 	defer cancel()
 
 	fileToken := strings.TrimSpace(req.FileToken)
@@ -120,7 +121,7 @@ func (g *LiveGateway) ReadDriveFileComments(ctx context.Context, req DriveFileCo
 		StatsScope: driveFileCommentStatsScopePage,
 	}
 
-	if gatewayID := normalizeGatewayID(req.GatewayID); gatewayID != "" && gatewayID != g.config.GatewayID {
+	if gatewayID := gatewaypkg.NormalizeGatewayID(req.GatewayID); gatewayID != "" && gatewayID != g.config.GatewayID {
 		return result, &DriveFileCommentReadError{
 			Code: DriveFileCommentReadErrorGatewayNotRunning,
 			Err:  fmt.Errorf("read drive comments failed: gateway mismatch: request=%s gateway=%s", gatewayID, g.config.GatewayID),

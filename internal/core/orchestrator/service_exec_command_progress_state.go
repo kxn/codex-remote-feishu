@@ -21,7 +21,6 @@ func (s *Service) ensureExecCommandProgress(surface *state.SurfaceConsoleRecord,
 		TurnID:     turnID,
 	}
 	ensureExecCommandProgressActiveSegment(surface.ActiveExecProgress)
-	syncExecCommandProgressReasoning(surface.ActiveExecProgress, surfaceReasoningProgress(surface, instanceID, threadID, turnID))
 	return surface.ActiveExecProgress
 }
 
@@ -39,6 +38,9 @@ func (s *Service) terminateExecCommandProgressForTurn(instanceID, threadID, turn
 func (s *Service) flushAndSealExecCommandProgressForTurn(instanceID, threadID, turnID string) []eventcontract.Event {
 	events := s.flushExecCommandProgressReasoning(instanceID, threadID, turnID)
 	s.terminateExecCommandProgressForTurn(instanceID, threadID, turnID)
+	if surface := s.turnSurface(instanceID, threadID, turnID); surface != nil {
+		clearSurfaceReasoningProgress(surface, instanceID, threadID, turnID)
+	}
 	return events
 }
 

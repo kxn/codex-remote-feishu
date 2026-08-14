@@ -8,6 +8,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	execprogress "github.com/kxn/codex-remote-feishu/internal/core/orchestrator/execprogress"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const execCommandProgressMinInterval = 300 * time.Millisecond
@@ -75,27 +76,29 @@ func (s *Service) handleCommandExecutionProgressStarted(instanceID string, event
 		return nil
 	}
 	command, _ := execprogress.CommandMetadata(event)
-	if command == "" {
+	if command == "" && event.Exploration == nil {
 		return nil
 	}
 	progress := s.ensureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	prevItemID := strings.TrimSpace(progress.ItemID)
 	progress.ItemID = strings.TrimSpace(event.ItemID)
 	status := execprogress.NormalizeStatus(event.Status, false)
-	explorationChanged := false
-	if changed, ok := execprogress.UpsertExplorationProgressForCommandExecution(progress, event, false); ok {
-		explorationChanged = changed
+	resolution := execprogress.ResolveExplorationProgressForCommandExecution(progress, event, false)
+	switch resolution.Disposition {
+	case execprogress.ExplorationDispositionStructured:
 		progress.ItemID = execprogress.ExplorationBlockID
-	} else {
+	case execprogress.ExplorationDispositionPending:
+		return nil
+	default:
 		execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 			ItemID:  progress.ItemID,
 			Kind:    "command_execution",
 			Label:   "执行",
-			Summary: command,
+			Summary: commandExecutionProgressSummary(command, status),
 			Status:  status,
 		})
 	}
-	if !explorationChanged && prevItemID != "" && prevItemID == progress.ItemID && !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
+	if !resolution.Changed && prevItemID != "" && prevItemID == progress.ItemID && !progress.LastEmittedAt.IsZero() && s.now().Sub(progress.LastEmittedAt) < execCommandProgressMinInterval {
 		return nil
 	}
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
@@ -125,7 +128,10 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 	}
 	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	if progress == nil {
-		return nil
+		if event.Exploration == nil || !s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
+			return nil
+		}
+		progress = s.ensureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	}
 	command, _ := execprogress.CommandMetadata(event)
 	itemID := strings.TrimSpace(event.ItemID)
@@ -136,23 +142,31 @@ func (s *Service) handleCommandExecutionProgressCompleted(instanceID string, eve
 		progress.ItemID = itemID
 	}
 	status := execprogress.NormalizeStatus(event.Status, true)
-	if changed, ok := execprogress.UpsertExplorationProgressForCommandExecution(progress, event, true); ok {
+	resolution := execprogress.ResolveExplorationProgressForCommandExecution(progress, event, true)
+	if resolution.Disposition == execprogress.ExplorationDispositionStructured {
 		progress.ItemID = execprogress.ExplorationBlockID
-		if changed && s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
+		if resolution.Changed && s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
 			return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 		}
 		return nil
 	}
-	if itemID == "" || !execprogress.HasEntry(progress, itemID, "command_execution") {
+	if resolution.Disposition == execprogress.ExplorationDispositionPending || itemID == "" {
+		return nil
+	}
+	hadEntry := execprogress.HasEntry(progress, itemID, "command_execution")
+	if !hadEntry && !resolution.ForceGenericOnFinal {
 		return nil
 	}
 	execprogress.UpsertEntry(progress, state.ExecCommandProgressEntryRecord{
 		ItemID:  itemID,
 		Kind:    "command_execution",
 		Label:   "执行",
-		Summary: command,
+		Summary: commandExecutionProgressSummary(command, status),
 		Status:  status,
 	})
+	if !hadEntry && s.surfaceAllowsProcessProgress(surface, instanceID, event.ThreadID, event.TurnID, event.ItemKind) {
+		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
+	}
 	return nil
 }
 
@@ -190,10 +204,10 @@ func (s *Service) handleDelegatedTaskProgressUpdated(instanceID string, event ag
 		ItemID:  strings.TrimSpace(event.ItemID),
 		Kind:    "delegated_task",
 		Label:   "Task",
-		Summary: strings.TrimSpace(metadataString(event.Metadata, "description")),
+		Summary: strings.TrimSpace(xutil.MetadataString(event.Metadata, "description")),
 		Status:  execprogress.NormalizeStatus(event.Status, event.Kind == agentproto.EventItemCompleted),
 	}
-	subagentType := strings.TrimSpace(metadataString(event.Metadata, "subagentType"))
+	subagentType := strings.TrimSpace(xutil.MetadataString(event.Metadata, "subagentType"))
 	switch {
 	case entry.Summary != "" && subagentType != "":
 		entry.Summary = subagentType + " · " + entry.Summary
@@ -213,14 +227,15 @@ func (s *Service) handleDynamicToolCallProgressStarted(instanceID string, event 
 		return nil
 	}
 	progress := s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
-	if changed, ok := execprogress.UpsertExplorationProgressForDynamicTool(progress, event, false); ok {
+	resolution := execprogress.ResolveExplorationProgressForDynamicTool(progress, event, false)
+	if resolution.Disposition == execprogress.ExplorationDispositionStructured {
 		progress.ItemID = execprogress.ExplorationBlockID
-		if !changed {
+		if !resolution.Changed {
 			return nil
 		}
 		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 	}
-	if dynamicToolCallAwaitingExplorationDetails(event) {
+	if resolution.Disposition == execprogress.ExplorationDispositionPending {
 		return nil
 	}
 	entry, groupKey, changed := execprogress.UpsertDynamicToolProgressEntry(progress, event)
@@ -239,16 +254,20 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 	}
 	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	if progress == nil {
-		return nil
+		if event.Exploration == nil {
+			return nil
+		}
+		progress = s.ensureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 	}
-	if changed, ok := execprogress.UpsertExplorationProgressForDynamicTool(progress, event, true); ok {
+	resolution := execprogress.ResolveExplorationProgressForDynamicTool(progress, event, true)
+	if resolution.Disposition == execprogress.ExplorationDispositionStructured {
 		progress.ItemID = execprogress.ExplorationBlockID
-		if !changed {
+		if !resolution.Changed {
 			return nil
 		}
 		return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 	}
-	if dynamicToolCallAwaitingExplorationDetails(event) {
+	if resolution.Disposition == execprogress.ExplorationDispositionPending {
 		return nil
 	}
 	entry, groupKey, changed := execprogress.UpsertDynamicToolProgressEntry(progress, event)
@@ -260,11 +279,18 @@ func (s *Service) handleDynamicToolCallProgressCompleted(instanceID string, even
 	return s.emitExecCommandProgress(surface, progress, event.ThreadID, event.TurnID, false)
 }
 
-func dynamicToolCallAwaitingExplorationDetails(event agentproto.Event) bool {
-	if strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "semanticKind")), "exploration") {
-		return true
+func commandExecutionProgressSummary(command, status string) string {
+	if command = strings.TrimSpace(command); command != "" {
+		return command
 	}
-	return strings.EqualFold(strings.TrimSpace(metadataString(event.Metadata, "tool")), "read")
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "failed":
+		return "命令执行失败"
+	case "completed":
+		return "命令已完成"
+	default:
+		return "命令执行中"
+	}
 }
 
 func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnID, turnStatus, finalText string) []eventcontract.Event {
@@ -288,9 +314,7 @@ func (s *Service) finalizeExecCommandProgressForTurn(instanceID, threadID, turnI
 		}
 	}
 	finalizeExecCommandProgressReasoning(progress, status)
-	if progress.Exploration != nil && strings.TrimSpace(progress.Exploration.Block.Status) == "running" {
-		progress.Exploration.Block.Status = status
-	}
+	execprogress.FinalizeExploration(progress, status)
 	_ = finalText
 	if status == "" {
 		return nil
@@ -370,7 +394,6 @@ func (s *Service) emitExecCommandProgress(surface *state.SurfaceConsoleRecord, p
 	if progress.Reasoning != nil {
 		progress.Reasoning.LastEmittedRevision = progress.Reasoning.Revision
 	}
-	syncSurfaceReasoningProgressFromExec(surface, progress)
 	sourceMessageID, _ := s.replyAnchorForTurn(progress.InstanceID, threadID, turnID)
 	snapshot := execprogress.Snapshot(progress)
 	if snapshot == nil {

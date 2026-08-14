@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/renderer"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type Config struct {
@@ -389,8 +390,10 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.openReviewCommitPicker(surface, action)
 	case control.ActionReviewStart:
 		events = s.startReviewFromFinalCard(surface, action)
+	case control.ActionReviewFollowUp:
+		events = s.beginReviewSessionFollowUp(surface, action)
 	case control.ActionReviewDiscard:
-		events = s.discardReviewSession(surface)
+		events = s.discardReviewSession(surface, action)
 	case control.ActionReviewApply:
 		events = s.applyReviewSessionResult(surface, action)
 	case control.ActionAttachInstance:
@@ -449,8 +452,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handleAutoContinueCommand(surface, action)
 	case control.ActionModeCommand:
 		events = s.handleModeCommand(surface, action)
-	case control.ActionCodexProviderCommand:
-		events = s.handleCodexProviderCommand(surface, action)
+	case control.ActionCodexProfileCommand:
+		events = s.handleCodexProfileCommand(surface, action)
 	case control.ActionClaudeProfileCommand:
 		events = s.handleClaudeProfileCommand(surface, action)
 	case control.ActionOpenCodeProfileCommand:
@@ -542,8 +545,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventThreadDiscovered:
 		s.maybePromoteWorkspaceRoot(inst, event.CWD)
 		thread := s.ensureThread(inst, event.ThreadID)
+		thread = s.materializeReviewThreadDiscovery(instanceID, inst, event, thread)
 		thread.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
-		if forkedFromID := strings.TrimSpace(metadataString(event.Metadata, "forkedFromId")); forkedFromID != "" {
+		if forkedFromID := strings.TrimSpace(xutil.MetadataString(event.Metadata, "forkedFromId")); forkedFromID != "" {
 			thread.ForkedFromID = forkedFromID
 		}
 		if source := threadSourceFromMetadata(event.Metadata); source != nil {
@@ -574,7 +578,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			thread.ObservedAccessMode = agentproto.NormalizeAccessMode(event.AccessMode)
 		}
 		if event.PlanMode != "" {
-			thread.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(event.PlanMode))
+			applyObservedPlanMode(thread, event.PlanMode)
 		}
 		if event.ObservedPermission != nil {
 			thread.ObservedPermission = agentproto.CloneObservedPermissionState(event.ObservedPermission)
@@ -661,7 +665,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 				current.Source = agentproto.CloneThreadSourceRecord(thread.Source)
 			}
 			if thread.PlanMode != "" {
-				current.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(thread.PlanMode))
+				applyObservedPlanMode(current, thread.PlanMode)
 			}
 			if thread.ObservedPermission != nil {
 				current.ObservedPermission = agentproto.CloneObservedPermissionState(thread.ObservedPermission)
@@ -770,7 +774,6 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			thread = s.ensureThread(inst, event.ThreadID)
 			s.touchThread(thread)
 		}
-		s.maybeCompleteReviewSessionTurn(instanceID, event)
 		surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
 		if clearTrackedTurn && surface != nil {
 			surface.ActiveTurnOrigin = ""
@@ -779,6 +782,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		summary := s.progress.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
 		turnDiff := s.progress.takeTurnDiffSnapshot(instanceID, event.ThreadID, event.TurnID)
 		finalText := s.pendingTurnTextValue(instanceID, event.ThreadID, event.TurnID)
+		s.maybeCompleteReviewSessionTurn(instanceID, event)
 		finalizeTurnOutput := shouldMaterializeFinalTurnOutput(event, finalText)
 		finalRenderSummary := (*control.FileChangeSummary)(nil)
 		finalRenderTurnDiff := (*control.TurnDiffSnapshot)(nil)
@@ -834,6 +838,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemStarted(instanceID, event)...))
 	case agentproto.EventItemDelta:
 		s.trackItemDelta(instanceID, event)
+		if strings.TrimSpace(event.ItemKind) == "agent_message" && strings.TrimSpace(event.Delta) != "" {
+			preface = append(preface, s.flushAndSealExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID)...)
+		}
 		return s.filterEventsForSurfaceVisibility(append(preface, s.handleProcessProgressItemDelta(instanceID, event)...))
 	case agentproto.EventItemTerminalInteraction, agentproto.EventItemReasoningSummaryPartAdded:
 		return s.filterEventsForSurfaceVisibility(preface)
@@ -855,7 +862,9 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 	case agentproto.EventRequestResolved:
 		return s.filterEventsForSurfaceVisibility(append(preface, s.resolveRequestPrompt(instanceID, event)...))
 	case agentproto.EventProtocolNotice:
-		return s.filterEventsForSurfaceVisibility(append(preface, s.recordProtocolNotice(instanceID, event)...))
+		events := append(preface, s.recordProtocolNotice(instanceID, event)...)
+		events = s.insertExecCommandProgressBoundary(instanceID, event.ThreadID, event.TurnID, events)
+		return s.filterEventsForSurfaceVisibility(events)
 	case agentproto.EventSystemError:
 		problem := problemFromEvent(event)
 		events := append(preface, s.handleCompactProblem(instanceID, problem)...)

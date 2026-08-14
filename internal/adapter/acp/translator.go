@@ -8,12 +8,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/adapterkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -36,10 +37,9 @@ type ResolvedCommandResponse struct {
 }
 
 type Translator struct {
+	adapterkit.TranslatorBase
 	instanceID    string
 	workspaceRoot string
-	nextID        int
-	debugLog      func(string, ...any)
 	mcpServers    []MCPServer
 
 	currentSessionID string
@@ -58,9 +58,13 @@ type sessionState struct {
 	ID            string
 	CWD           string
 	Title         string
+	Purpose       agentproto.PromptPurpose
 	ModelOptions  []modelOption
+	EffortOptions []reasoningEffortOption
 	CurrentModel  string
 	CurrentMode   string
+	ModeOptions   []string
+	CurrentEffort string
 	ConfigOptions []map[string]any
 }
 
@@ -69,10 +73,32 @@ type modelOption struct {
 	Name  string
 }
 
+type reasoningEffortOption struct {
+	Value string
+	Name  string
+}
+
+type configOptionState struct {
+	ModelOptions  []modelOption
+	ModeOptions   []string
+	EffortOptions []reasoningEffortOption
+	CurrentModel  string
+	CurrentMode   string
+	CurrentEffort string
+}
+
 type pendingRPC struct {
-	Kind    string
-	Command agentproto.Command
-	Turn    *turnState
+	Kind           string
+	Command        agentproto.Command
+	SessionID      string
+	Turn           *turnState
+	ConfigSequence []configOptionSet
+	ConfigIndex    int
+}
+
+type configOptionSet struct {
+	ID    string
+	Value string
 }
 
 type pendingPermission struct {
@@ -95,14 +121,16 @@ type writeApproval struct {
 }
 
 type turnState struct {
-	CommandID  string
-	Initiator  agentproto.Initiator
-	ThreadID   string
-	TurnID     string
-	StartedAt  time.Time
-	Completed  bool
-	Traffic    agentproto.TrafficClass
-	MessageIDs map[string]bool
+	CommandID           string
+	Initiator           agentproto.Initiator
+	Purpose             agentproto.PromptPurpose
+	ThreadID            string
+	TurnID              string
+	StartedAt           time.Time
+	Completed           bool
+	HasObservableOutput bool
+	Traffic             agentproto.TrafficClass
+	MessageIDs          map[string]bool
 }
 
 type itemState struct {
@@ -131,10 +159,9 @@ type historyItemRef struct {
 }
 
 func NewTranslator(instanceID, workspaceRoot string) *Translator {
-	return &Translator{
+	translator := &Translator{
 		instanceID:         strings.TrimSpace(instanceID),
-		workspaceRoot:      strings.TrimSpace(workspaceRoot),
-		nextID:             1,
+		workspaceRoot:      pathcanon.Native(workspaceRoot),
 		sessions:           map[string]sessionState{},
 		activeTurns:        map[string]*turnState{},
 		messageItems:       map[string]*itemState{},
@@ -144,20 +171,12 @@ func NewTranslator(instanceID, workspaceRoot string) *Translator {
 		writeApprovals:     map[string]writeApproval{},
 		historyHydrations:  map[string]*historyHydrationState{},
 	}
-}
-
-func (t *Translator) SetDebugLogger(debugLog func(string, ...any)) {
-	t.debugLog = debugLog
-}
-
-func (t *Translator) debugf(format string, args ...any) {
-	if t.debugLog != nil {
-		t.debugLog(format, args...)
-	}
+	translator.InitNextID(1)
+	return translator
 }
 
 func (t *Translator) BuildInitializeFrame() ([]byte, error) {
-	requestID := t.nextRequest("initialize")
+	requestID := t.NextRequest("initialize")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "initialize"}
 	return marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -241,19 +260,24 @@ func (t *Translator) TranslateCommand(command agentproto.Command) (Result, error
 func (t *Translator) upsertSession(sessionID, cwd string, payload map[string]any) sessionState {
 	session := t.sessions[sessionID]
 	session.ID = sessionID
-	session.CWD = xutil.FirstNonEmpty(cwd, session.CWD, t.workspaceRoot)
+	session.CWD = t.canonicalCWD(cwd, session.CWD, t.workspaceRoot)
 	session.Title = xutil.FirstNonEmpty(xutil.LookupStringFromAny(payload["title"]), session.Title)
 	if options := xutil.MapsFromAny(payload["configOptions"]); len(options) != 0 {
 		session.ConfigOptions = options
-		session.ModelOptions, session.CurrentModel, session.CurrentMode = parseConfigOptions(options)
+		state := parseConfigOptions(options)
+		session.ModelOptions = state.ModelOptions
+		session.EffortOptions = state.EffortOptions
+		session.CurrentModel = state.CurrentModel
+		session.CurrentMode = state.CurrentMode
+		session.ModeOptions = state.ModeOptions
+		session.CurrentEffort = state.CurrentEffort
 	}
 	t.sessions[sessionID] = session
 	return session
 }
 
 func (t *Translator) newTurn(sessionID string, command agentproto.Command) *turnState {
-	turnID := "opencode-turn-" + strconv.Itoa(t.nextID)
-	t.nextID++
+	turnID := "opencode-turn-" + strconv.Itoa(t.NextID())
 	initiator := commandInitiator(command)
 	traffic := agentproto.TrafficClass("")
 	if command.Target.InternalHelper {
@@ -262,6 +286,7 @@ func (t *Translator) newTurn(sessionID string, command agentproto.Command) *turn
 	return &turnState{
 		CommandID:  command.CommandID,
 		Initiator:  initiator,
+		Purpose:    command.Target.Purpose,
 		ThreadID:   sessionID,
 		TurnID:     turnID,
 		StartedAt:  time.Now().UTC(),
@@ -280,10 +305,9 @@ func (t *Translator) ensureTurnForSession(sessionID string) *turnState {
 	turn := &turnState{
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
 		ThreadID:  sessionID,
-		TurnID:    "opencode-observed-turn-" + strconv.Itoa(t.nextID),
+		TurnID:    "opencode-observed-turn-" + strconv.Itoa(t.NextID()),
 		StartedAt: time.Now().UTC(),
 	}
-	t.nextID++
 	t.activeTurns[sessionID] = turn
 	return turn
 }
@@ -360,17 +384,21 @@ func buildImageContent(input agentproto.Input) (map[string]any, error) {
 }
 
 func (t *Translator) commandCWD(command agentproto.Command) string {
-	return xutil.FirstNonEmpty(command.Target.CWD, t.workspaceRoot)
+	return t.canonicalCWD(command.Target.CWD, t.workspaceRoot)
 }
 
 func (t *Translator) sessionWorkspace(sessionID string) string {
 	session := t.sessions[sessionID]
-	return xutil.FirstNonEmpty(session.CWD, t.workspaceRoot)
+	return t.canonicalCWD(session.CWD, t.workspaceRoot)
+}
+
+func (t *Translator) canonicalCWD(values ...string) string {
+	return pathcanon.Native(xutil.FirstNonEmpty(values...))
 }
 
 func resolveWorkspaceWritePath(workspaceRoot, target string) (string, string, error) {
-	workspaceRoot = strings.TrimSpace(workspaceRoot)
-	target = strings.TrimSpace(target)
+	workspaceRoot = pathcanon.Native(workspaceRoot)
+	target = pathcanon.Native(target)
 	if workspaceRoot == "" {
 		return "", "", fmt.Errorf("workspace root is required")
 	}
@@ -445,27 +473,7 @@ func resolveExistingWritePathComponent(targetAbs string) (string, error) {
 }
 
 func pathWithinWorkspaceRoot(rootPath, targetPath string) bool {
-	rootPath = canonicalWorkspaceComparePath(rootPath)
-	targetPath = canonicalWorkspaceComparePath(targetPath)
-	if rootPath == "" || targetPath == "" {
-		return false
-	}
-	rel, err := filepath.Rel(rootPath, targetPath)
-	if err != nil {
-		return false
-	}
-	return rel == "." || rel == "" || (!strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != "..")
-}
-
-func canonicalWorkspaceComparePath(path string) string {
-	path = filepath.Clean(strings.TrimSpace(path))
-	if path == "" || path == "." {
-		return ""
-	}
-	if runtime.GOOS == "windows" {
-		path = strings.ToLower(path)
-	}
-	return path
+	return pathcanon.Containment(rootPath, targetPath)
 }
 
 func simpleTextDiff(path, oldText, newText string) string {
@@ -497,12 +505,6 @@ func simpleTextDiff(path, oldText, newText string) string {
 		builder.WriteByte('\n')
 	}
 	return builder.String()
-}
-
-func (t *Translator) nextRequest(prefix string) string {
-	value := fmt.Sprintf("relay-%s-%d", prefix, t.nextID)
-	t.nextID++
-	return value
 }
 
 func commandInitiator(command agentproto.Command) agentproto.Initiator {
@@ -555,6 +557,15 @@ func statusFromStopReason(reason string) string {
 	}
 }
 
+func unknownStopReason(reason string) bool {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled":
+		return false
+	default:
+		return true
+	}
+}
+
 func promptUsage(value any) (agentproto.TokenUsageBreakdown, bool) {
 	raw, _ := value.(map[string]any)
 	if raw == nil {
@@ -571,20 +582,32 @@ func promptUsage(value any) (agentproto.TokenUsageBreakdown, bool) {
 	return usage, usage.InputTokens != 0 || usage.OutputTokens != 0 || usage.TotalTokens != 0
 }
 
-func parseConfigOptions(options []map[string]any) ([]modelOption, string, string) {
-	var models []modelOption
-	currentModel := ""
-	currentMode := ""
+func parseConfigOptions(options []map[string]any) configOptionState {
+	var state configOptionState
 	for _, option := range options {
 		switch xutil.LookupStringFromAny(option["id"]) {
 		case "model":
-			currentModel = xutil.LookupStringFromAny(option["currentValue"])
-			models = parseModelOptions(option["options"])
+			state.CurrentModel = xutil.LookupStringFromAny(option["currentValue"])
+			state.ModelOptions = parseModelOptions(option["options"])
 		case "mode":
-			currentMode = xutil.LookupStringFromAny(option["currentValue"])
+			state.CurrentMode = xutil.LookupStringFromAny(option["currentValue"])
+			state.ModeOptions = parseConfigOptionValues(option["options"])
+		case "effort":
+			state.CurrentEffort = normalizeOpenCodeReasoningEffort(xutil.LookupStringFromAny(option["currentValue"]))
+			state.EffortOptions = parseReasoningEffortOptions(option["options"])
 		}
 	}
-	return models, currentModel, currentMode
+	return state
+}
+
+func parseConfigOptionValues(value any) []string {
+	var out []string
+	for _, item := range flattenOptionItems(value) {
+		if option := strings.TrimSpace(xutil.LookupStringFromAny(item["value"])); option != "" {
+			out = append(out, option)
+		}
+	}
+	return out
 }
 
 func parseModelOptions(value any) []modelOption {
@@ -599,6 +622,30 @@ func parseModelOptions(value any) []modelOption {
 		}
 	}
 	return out
+}
+
+func parseReasoningEffortOptions(value any) []reasoningEffortOption {
+	var out []reasoningEffortOption
+	for _, item := range flattenOptionItems(value) {
+		option := reasoningEffortOption{
+			Value: normalizeOpenCodeReasoningEffort(xutil.LookupStringFromAny(item["value"])),
+			Name:  xutil.LookupStringFromAny(item["name"]),
+		}
+		if option.Value != "" {
+			out = append(out, option)
+		}
+	}
+	return out
+}
+
+func normalizeOpenCodeReasoningEffort(value string) string {
+	effort := strings.ToLower(strings.TrimSpace(value))
+	switch effort {
+	case "low", "medium", "high", "xhigh", "max":
+		return effort
+	default:
+		return ""
+	}
 }
 
 func flattenOptionItems(value any) []map[string]any {

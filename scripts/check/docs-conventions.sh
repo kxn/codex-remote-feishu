@@ -10,10 +10,31 @@ trim_metadata_value() {
   printf '%s' "${value}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
+docs_lifecycle_dir() {
+  local file="$1"
+  case "${file}" in
+    docs/draft/*) printf '%s' "draft" ;;
+    docs/inprogress/*) printf '%s' "inprogress" ;;
+    docs/implemented/*) printf '%s' "implemented" ;;
+    docs/general/*) printf '%s' "general" ;;
+    docs/obsoleted/*) printf '%s' "obsoleted" ;;
+    *) return 1 ;;
+  esac
+}
+
+docs_metadata_required() {
+  local file="$1"
+  [[ "${file}" == "docs/README.md" ]] && return 0
+  docs_lifecycle_dir "${file}" >/dev/null
+}
+
 failures=()
 while IFS= read -r file; do
   [[ -n "${file}" ]] || continue
   [[ "${file}" == *.md ]] || continue
+  if ! docs_metadata_required "${file}"; then
+    continue
+  fi
 
   mapfile -t header_lines < <(git show ":${file}" | awk 'NF { print; count++; if (count == 4) exit }')
   title="${header_lines[0]:-}"
@@ -51,9 +72,17 @@ while IFS= read -r file; do
     failures+=("${file}: Summary metadata is empty")
   fi
 
-  IFS='/' read -r docs_dir lifecycle_dir remainder <<< "${file}"
-  if [[ "${docs_dir}" == "docs" && -n "${lifecycle_dir}" && -n "${remainder}" && "${type_value}" != "${lifecycle_dir}" ]]; then
-    failures+=("${file}: Type ${type_value} does not match docs/${lifecycle_dir}")
+  if lifecycle_dir="$(docs_lifecycle_dir "${file}")"; then
+    if [[ "${type_value}" != "${lifecycle_dir}" ]]; then
+      failures+=("${file}: Type ${type_value} does not match docs/${lifecycle_dir}")
+    fi
+    if [[ "${lifecycle_dir}" == "obsoleted" ]]; then
+      superseded_line="$(git show ":${file}" | awk '/^> Superseded By:/ { print; exit }')"
+      superseded_value="$(trim_metadata_value "${superseded_line#> Superseded By:}")"
+      if [[ -z "${superseded_value}" ]]; then
+        failures+=("${file}: missing metadata line > Superseded By:")
+      fi
+    fi
   fi
 done < <(git diff --cached --name-only --diff-filter=ACMR -- docs)
 
@@ -62,7 +91,9 @@ while IFS=$'\t' read -r status source_path target_path; do
   [[ -n "${status}" ]] || continue
   case "${status:0:1}" in
     A|D|R|C)
-      index_required=1
+      if docs_lifecycle_dir "${source_path}" >/dev/null || docs_lifecycle_dir "${target_path}" >/dev/null; then
+        index_required=1
+      fi
       ;;
   esac
 done < <(git diff --cached --name-status --find-renames -- docs)

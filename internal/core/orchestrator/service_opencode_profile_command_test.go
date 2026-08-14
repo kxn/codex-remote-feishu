@@ -377,7 +377,7 @@ func TestOpenCodeProfileSwitchDeferredReconcileStartsNewThread(t *testing.T) {
 	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.HeadlessOpenCodeSurfaceBackendContract("op_old"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.HeadlessOpenCodeSurfaceBackendContract("op_old"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
-	workspaceKey := t.TempDir()
+	workspaceKey := normalizeWorkspaceClaimKey(t.TempDir())
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:        "inst-b",
 		WorkspaceRoot:     workspaceKey,
@@ -459,7 +459,7 @@ func TestOpenCodeProfileSwitchDeferredReconcileStartsNewThread(t *testing.T) {
 func TestOpenCodeProfileCommandRejectedOutsideOpenCodeMode(t *testing.T) {
 	now := time.Date(2026, 8, 9, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", "", "")
 	materializeTestOpenCodeProfiles(svc, state.OpenCodeProfileSummary{ID: "op_team", Revision: 7, Name: "Team OpenCode"})
 
 	events := svc.ApplySurfaceAction(control.Action{

@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -185,7 +186,7 @@ func renderPaginatedSelectElements(spec paginatedSelectRenderSpec) []map[string]
 		if hint == "" {
 			hint = "选项过多，如未找到请翻页。"
 		}
-		if block := cardPlainTextBlockElement(hint); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(hint); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
@@ -221,7 +222,7 @@ func (lane paginatedSelectFlowLane) renderElements(daemonLifecycleID string, pag
 	elements = append(elements, renderPaginatedSelectElements(paginatedSelectRenderSpec{
 		Name:           lane.Flow.FieldName,
 		Placeholder:    lane.Placeholder,
-		SelectPayload:  stampActionValue(cloneCardMap(lane.SelectPayload), daemonLifecycleID),
+		SelectPayload:  stampActionValue(cardkit.CloneMap(lane.SelectPayload), daemonLifecycleID),
 		PrevPayload:    stampActionValue(prevPayload, daemonLifecycleID),
 		NextPayload:    stampActionValue(nextPayload, daemonLifecycleID),
 		Page:           page,
@@ -242,7 +243,7 @@ func paginatedSelectRowColumns(selectElement map[string]any, spec paginatedSelec
 		"width":          "weighted",
 		"weight":         5,
 		"vertical_align": "top",
-		"elements":       []map[string]any{cloneCardMap(selectElement)},
+		"elements":       []map[string]any{cardkit.CloneMap(selectElement)},
 	})
 	if spec.Page.HasNext && len(spec.NextPayload) != 0 {
 		columns = append(columns, paginatedSelectButtonColumn(
@@ -359,10 +360,10 @@ func buildPaginatedSelectPage(spec paginatedSelectPageSpec, cursor, prevCursor, 
 
 	visibleOptions := make([]map[string]any, 0, len(spec.FixedOptions)+pageCount)
 	for _, option := range spec.FixedOptions {
-		visibleOptions = append(visibleOptions, cloneCardMap(option))
+		visibleOptions = append(visibleOptions, cardkit.CloneMap(option))
 	}
 	for _, option := range spec.CandidateOptions[cursor : cursor+pageCount] {
-		visibleOptions = append(visibleOptions, cloneCardMap(option))
+		visibleOptions = append(visibleOptions, cardkit.CloneMap(option))
 	}
 
 	nextCursor := cursor + pageCount
@@ -406,11 +407,11 @@ func selectStaticElement(name, placeholder string, payload map[string]any, optio
 	element := map[string]any{
 		"tag":         "select_static",
 		"name":        strings.TrimSpace(name),
-		"placeholder": cardPlainText(placeholder),
-		"options":     cloneCardAny(options),
+		"placeholder": cardkit.PlainText(placeholder),
+		"options":     cardkit.CloneAny(options),
 		"behaviors": []map[string]any{{
 			"type":  "callback",
-			"value": cloneCardMap(payload),
+			"value": cardkit.CloneMap(payload),
 		}},
 	}
 	if initial := visibleSelectOptionValue(options, initialOption); initial != "" {
@@ -420,5 +421,5 @@ func selectStaticElement(name, placeholder string, payload map[string]any, optio
 }
 
 func selectOptionValue(option map[string]any) string {
-	return strings.TrimSpace(cardStringValue(option["value"]))
+	return strings.TrimSpace(cardkit.StringValue(option["value"]))
 }

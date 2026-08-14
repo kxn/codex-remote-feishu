@@ -64,6 +64,7 @@ func (s *Service) OpenCodeProfiles() []state.OpenCodeProfileSummary {
 func normalizeOpenCodeProfileSummary(value state.OpenCodeProfileSummary) state.OpenCodeProfileSummary {
 	value.ID = state.NormalizeOpenCodeProfileID(value.ID)
 	value.Name = strings.TrimSpace(value.Name)
+	value.ProviderType = strings.TrimSpace(value.ProviderType)
 	value.BaseURL = strings.TrimSpace(value.BaseURL)
 	value.Model = strings.TrimSpace(value.Model)
 	value.StatusCode = strings.TrimSpace(value.StatusCode)

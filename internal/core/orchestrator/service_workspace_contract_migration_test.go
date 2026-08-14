@@ -16,17 +16,17 @@ func TestAttachWorkspaceReusesCompatibleManagedHeadless(t *testing.T) {
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), "", "")
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-headless-1",
-		DisplayName:     "repo",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
-		Source:          "headless",
-		Managed:         true,
-		Online:          true,
-		Threads:         map[string]*state.ThreadRecord{},
+		InstanceID:     "inst-headless-1",
+		DisplayName:    "repo",
+		WorkspaceRoot:  "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		ShortName:      "repo",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		Source:         "headless",
+		Managed:        true,
+		Online:         true,
+		Threads:        map[string]*state.ThreadRecord{},
 	})
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -61,15 +61,15 @@ func TestModeCommandSwitchesCurrentWorkspaceToClaudeAndRestartsManagedMismatch(t
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-codex",
-		DisplayName:     "repo-codex",
-		WorkspaceRoot:   "/data/dl/repo",
-		WorkspaceKey:    "/data/dl/repo",
-		ShortName:       "repo-codex",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
-		Online:          true,
-		Threads:         map[string]*state.ThreadRecord{},
+		InstanceID:     "inst-codex",
+		DisplayName:    "repo-codex",
+		WorkspaceRoot:  "/data/dl/repo",
+		WorkspaceKey:   "/data/dl/repo",
+		ShortName:      "repo-codex",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		Online:         true,
+		Threads:        map[string]*state.ThreadRecord{},
 	})
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:      "inst-claude-old",

@@ -41,6 +41,14 @@ func RolloverCarryoverEntries(progress *state.ExecCommandProgressRecord, startSe
 		maxSeq++
 		progress.Entries[candidate.Index].LastSeq = maxSeq
 	}
+	if progress.Reasoning != nil && strings.TrimSpace(progress.Reasoning.VisibleEntryID) != "" {
+		for _, entry := range progress.Entries {
+			if entry.ItemID == progress.Reasoning.VisibleEntryID {
+				progress.Reasoning.VisibleAfterSeq = entry.LastSeq
+				break
+			}
+		}
+	}
 	if maxSeq > progress.LastVisibleSeq {
 		progress.LastVisibleSeq = maxSeq
 	}
@@ -98,6 +106,9 @@ func carryoverEligibleEntry(entry state.ExecCommandProgressEntryRecord) bool {
 }
 
 func carryoverEligibleBlockRow(row state.ExecCommandProgressBlockRowRecord) bool {
+	if status := strings.ToLower(strings.TrimSpace(row.Status)); status != "" && status != "running" && status != "started" {
+		return false
+	}
 	switch strings.TrimSpace(row.Kind) {
 	case "read", "list", "search":
 		return true

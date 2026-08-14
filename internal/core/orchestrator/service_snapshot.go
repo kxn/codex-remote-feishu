@@ -9,13 +9,15 @@ import (
 )
 
 func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Snapshot {
+	workspaceKey := s.surfaceCurrentWorkspaceKey(surface)
 	snapshot := &control.Snapshot{
 		SurfaceSessionID: surface.SurfaceSessionID,
 		ActorUserID:      surface.ActorUserID,
 		ProductMode:      string(s.normalizeSurfaceProductMode(surface)),
 		Backend:          s.surfaceBackend(surface),
-		WorkspaceKey:     s.surfaceCurrentWorkspaceKey(surface),
-		CodexProviderID:  s.surfaceCodexProviderID(surface),
+		WorkspaceKey:     workspaceKey,
+		RoomWorkspaceKey: s.surfaceRoomWorkspaceBindingKey(surface),
+		CodexProfileID:   s.surfaceCodexProfileID(surface),
 		AutoWhip:         snapshotAutoWhipSummary(surface),
 		AutoContinue:     snapshotAutoContinueSummary(surface),
 	}
@@ -32,7 +34,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			WorkspaceKey:          pending.WorkspaceKey,
 			ThreadCWD:             pending.ThreadCWD,
 			Backend:               pending.Backend,
-			CodexProviderID:       pending.CodexProviderID,
+			CodexProfileID:        pending.CodexProfileID,
 			ClaudeProfileID:       pending.ClaudeProfileID,
 			ClaudeReasoningEffort: pending.ClaudeReasoningEffort,
 			Status:                string(pending.Status),

@@ -1,6 +1,7 @@
 package install
 
 import (
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -67,7 +68,7 @@ func TestResolveRepoInstallTargetInfoUsesBindingAndConfig(t *testing.T) {
 	if info.StatePath != statePath {
 		t.Fatalf("StatePath = %q, want %q", info.StatePath, statePath)
 	}
-	if info.LocalUpgradeArtifactPath != filepath.Join(baseDir, ".local", "share", "codex-remote-master", "codex-remote", "local-upgrade", executableName(runtime.GOOS)) {
+	if info.LocalUpgradeArtifactPath != filepath.Join(baseDir, ".local", "share", "codex-remote-master", "codex-remote", "local-upgrade", xutil.ExecutableName(runtime.GOOS)) {
 		t.Fatalf("LocalUpgradeArtifactPath = %q", info.LocalUpgradeArtifactPath)
 	}
 	if info.LogPath != filepath.Join(baseDir, ".local", "share", "codex-remote-master", "codex-remote", "logs", "codex-remote-relayd.log") {

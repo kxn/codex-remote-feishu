@@ -32,9 +32,9 @@ func TestModeForManager(t *testing.T) {
 
 func TestRealBinaryPath(t *testing.T) {
 	tests := map[string]string{
-		"/tmp/codex":     "/tmp/codex.real",
+		"/tmp/codex":     filepath.Join(string(filepath.Separator), "tmp", "codex.real"),
 		`C:\tmp\codex`:   `C:\tmp\codex.real`,
-		"/tmp/codex.exe": "/tmp/codex.real.exe",
+		"/tmp/codex.exe": filepath.Join(string(filepath.Separator), "tmp", "codex.real.exe"),
 	}
 	for input, want := range tests {
 		if got := RealBinaryPath(input); got != want {
@@ -45,14 +45,50 @@ func TestRealBinaryPath(t *testing.T) {
 
 func TestSidecarPath(t *testing.T) {
 	tests := map[string]string{
-		"/tmp/codex":     "/tmp/codex.remote.json",
+		"/tmp/codex":     filepath.Join(string(filepath.Separator), "tmp", "codex.remote.json"),
 		`C:\tmp\codex`:   `C:\tmp\codex.remote.json`,
-		"/tmp/codex.exe": "/tmp/codex.remote.json",
+		"/tmp/codex.exe": filepath.Join(string(filepath.Separator), "tmp", "codex.remote.json"),
 	}
 	for input, want := range tests {
 		if got := SidecarPath(input); got != want {
 			t.Fatalf("SidecarPath(%q) = %q, want %q", input, got, want)
 		}
+	}
+}
+
+func TestShimDerivedPathsCanonicalizeWindowsExtendedEntrypoint(t *testing.T) {
+	if got := RealBinaryPath(`\\?\C:\repo\bin\codex.exe`); got != `C:\repo\bin\codex.real.exe` {
+		t.Fatalf("RealBinaryPath() = %q, want native extended-prefix-free path", got)
+	}
+	if got := SidecarPath(`//?/C:/repo/bin/codex.exe`); got != `C:\repo\bin\codex.remote.json` {
+		t.Fatalf("SidecarPath() = %q, want native extended-prefix-free path", got)
+	}
+}
+
+func TestSamePathCanonicalizesWindowsExtendedForms(t *testing.T) {
+	pairs := [][2]string{
+		{`\\?\C:\repo\codex.exe`, `C:\repo\codex.exe`},
+		{`//?/C:/repo/codex.exe`, `C:\repo\codex.exe`},
+		{`\\?\UNC\server\share\codex.exe`, `\\server\share\codex.exe`},
+		{`C:\Repo\codex.exe`, `c:/repo/codex.exe`},
+	}
+	for _, pair := range pairs {
+		if !SamePath(pair[0], pair[1]) {
+			t.Fatalf("SamePath(%q, %q) = false, want true", pair[0], pair[1])
+		}
+	}
+}
+
+func TestNormalizeSidecarCanonicalizesWindowsExtendedPaths(t *testing.T) {
+	got := NormalizeSidecar(Sidecar{
+		InstallStatePath: `//?/C:/repo/state/install-state.json`,
+		ConfigPath:       `\\?\C:\repo\config\config.json`,
+	}, ModeManaged)
+	if got.InstallStatePath != `C:\repo\state\install-state.json` {
+		t.Fatalf("InstallStatePath = %q, want native extended-prefix-free path", got.InstallStatePath)
+	}
+	if got.ConfigPath != `C:\repo\config\config.json` {
+		t.Fatalf("ConfigPath = %q, want native extended-prefix-free path", got.ConfigPath)
 	}
 }
 

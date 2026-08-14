@@ -45,7 +45,7 @@ const (
 	ActionPlanCommand                 ActionKind = "surface.command.plan"
 	ActionPlanProposalDecision        ActionKind = "surface.command.plan_proposal_decision"
 	ActionVerboseCommand              ActionKind = "surface.command.verbose"
-	ActionCodexProviderCommand        ActionKind = "surface.command.codex_provider"
+	ActionCodexProfileCommand         ActionKind = "surface.command.codex_profile"
 	ActionAutoWhipCommand             ActionKind = "surface.command.auto_whip"
 	ActionAutoContinueCommand         ActionKind = "surface.command.auto_continue"
 	ActionModeCommand                 ActionKind = "surface.command.mode"
@@ -63,6 +63,7 @@ const (
 	ActionReviewStart                 ActionKind = "surface.button.review_start"
 	ActionReviewStartUncommitted      ActionKind = "surface.button.review_start_uncommitted"
 	ActionReviewOpenCommitPicker      ActionKind = "surface.button.review_open_commit_picker"
+	ActionReviewFollowUp              ActionKind = "surface.button.review_follow_up"
 	ActionReviewDiscard               ActionKind = "surface.button.review_discard"
 	ActionReviewApply                 ActionKind = "surface.button.review_apply"
 	ActionAttachInstance              ActionKind = "surface.button.attach_instance"
@@ -201,7 +202,8 @@ type Snapshot struct {
 	ProductMode       string
 	Backend           agentproto.Backend
 	WorkspaceKey      string
-	CodexProviderID   string
+	RoomWorkspaceKey  string
+	CodexProfileID    string
 	ClaudeProfileID   string
 	ClaudeProfileName string
 	Attachment        AttachmentSummary
@@ -252,7 +254,7 @@ type PendingHeadlessSummary struct {
 	WorkspaceKey            string
 	ThreadCWD               string
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *state.CodexAdmissionRef
 	CodexConnectionContract *state.CodexConnectionContract
 	CodexThreadPolicy       *state.CodexThreadPolicy
@@ -281,6 +283,7 @@ type PromptRouteSummary struct {
 	OverrideAccessMode             string
 	OverridePlanMode               string
 	PlanModeOverrideSet            bool
+	PlanModeUsesLocalRequested     bool
 	UsesLocalRequestedOverrides    bool
 	EffectivePlanMode              string
 	ObservedThreadPermission       *agentproto.ObservedPermissionState
@@ -609,6 +612,7 @@ type ExecCommandProgressTimelineItem struct {
 	Status     string
 	FileChange *ExecCommandProgressFileChange
 	LastSeq    int
+	Transient  bool
 }
 
 type ExecCommandProgressSegment struct {
@@ -651,32 +655,33 @@ const (
 )
 
 type DaemonCommand struct {
-	Kind                    DaemonCommandKind
-	GatewayID               string
-	SurfaceSessionID        string
-	SourceMessageID         string
-	FromCardAction          bool
-	PickerID                string
-	OptionID                string
-	InstanceID              string
-	ThreadID                string
-	ThreadTitle             string
-	ThreadCWD               string
-	Backend                 agentproto.Backend
-	CodexProviderID         string
-	CodexAdmissionRef       *state.CodexAdmissionRef
-	CodexConnectionContract *state.CodexConnectionContract
-	CodexThreadPolicy       *state.CodexThreadPolicy
-	ClaudeProfileID         string
-	ClaudeReasoningEffort   string
-	OpenCodeProfileID       string
-	OpenCodeAdmissionRef    *state.OpenCodeAdmissionRef
-	WorkspaceKey            string
-	AutoRestore             bool
-	Text                    string
-	LocalPath               string
-	RepoURL                 string
-	RefName                 string
-	BranchName              string
-	DirectoryName           string
+	Kind                      DaemonCommandKind
+	GatewayID                 string
+	SurfaceSessionID          string
+	SourceMessageID           string
+	FromCardAction            bool
+	PickerID                  string
+	OptionID                  string
+	InstanceID                string
+	ThreadID                  string
+	ThreadTitle               string
+	ThreadCWD                 string
+	Backend                   agentproto.Backend
+	CodexProfileID            string
+	CodexAdmissionRef         *state.CodexAdmissionRef
+	CodexConnectionContract   *state.CodexConnectionContract
+	CodexThreadPolicy         *state.CodexThreadPolicy
+	ClaudeProfileID           string
+	ClaudeReasoningEffort     string
+	OpenCodeProfileID         string
+	OpenCodeAdmissionRef      *state.OpenCodeAdmissionRef
+	OpenCodeRuntimeAccessMode string
+	WorkspaceKey              string
+	AutoRestore               bool
+	Text                      string
+	LocalPath                 string
+	RepoURL                   string
+	RefName                   string
+	BranchName                string
+	DirectoryName             string
 }

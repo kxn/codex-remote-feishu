@@ -321,7 +321,7 @@ func probeWelcome(ctx context.Context, relayURL string, hello agentproto.Hello) 
 	dialCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	targetURL := normalizeRelayURL(relayURL)
+	targetURL := relayurl.NormalizeAgentURL(relayURL)
 	dialer := *websocket.DefaultDialer
 	if relayURLUsesLoopback(targetURL) {
 		dialer.Proxy = nil
@@ -382,10 +382,6 @@ func probeWelcome(ctx context.Context, relayURL string, hello agentproto.Hello) 
 		}
 	}
 	return agentproto.Welcome{}, ProbeUnknown, errors.New("relay handshake did not produce welcome")
-}
-
-func normalizeRelayURL(raw string) string {
-	return relayurl.NormalizeAgentURL(raw)
 }
 
 func relayURLUsesLoopback(raw string) bool {

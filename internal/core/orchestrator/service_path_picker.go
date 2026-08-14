@@ -14,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/owneridentity"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -263,12 +264,12 @@ func (s *Service) handlePathPickerPage(surface *state.SurfaceConsoleRecord, pick
 	}
 	switch strings.TrimSpace(fieldName) {
 	case frontstagecontract.CardPathPickerDirectorySelectFieldName:
-		record.DirectoryCursor = normalizePathPickerDropdownCursor(cursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryDirectory)))
+		record.DirectoryCursor = normalizePickerDropdownCursor(cursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryDirectory)))
 	case frontstagecontract.CardPathPickerFileSelectFieldName:
 		if record.Mode != pathPickerModeFile {
 			return notice(surface, "path_picker_invalid_page_action", "当前翻页动作无效，请重新打开路径选择器。")
 		}
-		record.FileCursor = normalizePathPickerDropdownCursor(cursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryFile)))
+		record.FileCursor = normalizePickerDropdownCursor(cursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryFile)))
 		record.SelectedPath = ""
 	default:
 		return notice(surface, "path_picker_invalid_page_action", "当前翻页动作无效，请重新打开路径选择器。")
@@ -374,13 +375,13 @@ func (s *Service) buildPathPickerView(surface *state.SurfaceConsoleRecord, recor
 	if directoryCursor < 0 {
 		directoryCursor = 0
 	}
-	directoryCursor = normalizePathPickerDropdownCursor(directoryCursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryDirectory)))
+	directoryCursor = normalizePickerDropdownCursor(directoryCursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryDirectory)))
 	record.DirectoryCursor = directoryCursor
 	fileCursor := record.FileCursor
 	if fileCursor < 0 {
 		fileCursor = pathPickerEntryIndexByKind(entries, control.PathPickerEntryFile, view.SelectedPath)
 	}
-	fileCursor = normalizePathPickerDropdownCursor(fileCursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryFile)))
+	fileCursor = normalizePickerDropdownCursor(fileCursor, len(pathPickerEntriesByKind(entries, control.PathPickerEntryFile)))
 	record.FileCursor = fileCursor
 	view.Entries = entries
 	view.DirectoryCursor = directoryCursor
@@ -587,12 +588,12 @@ func (s *Service) dispatchPathPickerConfirmed(surface *state.SurfaceConsoleRecor
 	consumer, ok := s.lookupPathPickerConsumer(result.ConsumerKind)
 	if ok {
 		if events := consumer.PathPickerConfirmed(s, surface, result); len(events) != 0 {
-			filtered := pathPickerFilteredFollowupEvents(events)
+			filtered := filterPickerFollowupEvents(events)
 			if len(filtered) != 0 {
 				s.clearSurfacePathPicker(surface)
 				return events
 			}
-			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseSucceeded, "已确认路径", xutil.FirstNonEmpty(pathPickerFirstNoticeText(events), fmt.Sprintf("已确认路径：`%s`。", result.SelectedPath)), nil, "", false, nil)
+			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseSucceeded, "已确认路径", xutil.FirstNonEmpty(firstNoticeText(events), fmt.Sprintf("已确认路径：`%s`。", result.SelectedPath)), nil, "", false, nil)
 		}
 	}
 	if strings.TrimSpace(result.ConsumerKind) != "" && !ok {
@@ -605,12 +606,12 @@ func (s *Service) dispatchPathPickerCancelled(surface *state.SurfaceConsoleRecor
 	consumer, ok := s.lookupPathPickerConsumer(result.ConsumerKind)
 	if ok {
 		if events := consumer.PathPickerCancelled(s, surface, result); len(events) != 0 {
-			filtered := pathPickerFilteredFollowupEvents(events)
+			filtered := filterPickerFollowupEvents(events)
 			if len(filtered) != 0 {
 				s.clearSurfacePathPicker(surface)
 				return events
 			}
-			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseCancelled, "已取消路径选择", xutil.FirstNonEmpty(pathPickerFirstNoticeText(events), "已取消路径选择。"), nil, "", false, nil)
+			return s.finishPathPickerWithStatus(surface, record, frontstagecontract.PhaseCancelled, "已取消路径选择", xutil.FirstNonEmpty(firstNoticeText(events), "已取消路径选择。"), nil, "", false, nil)
 		}
 	}
 	if strings.TrimSpace(result.ConsumerKind) != "" && !ok {
@@ -783,7 +784,10 @@ func pathWithinRoot(rootPath, targetPath string) bool {
 }
 
 func samePath(left, right string) bool {
-	return canonicalPathPickerPath(left) == canonicalPathPickerPath(right)
+	if pathcompare.SameCleanPlatformPath(left, right) {
+		return true
+	}
+	return pathcompare.SameCleanPlatformPath(canonicalPathPickerPath(left), canonicalPathPickerPath(right))
 }
 
 func canonicalPathPickerPath(path string) string {

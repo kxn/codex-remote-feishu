@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type WrapperConfig struct {
@@ -100,12 +101,12 @@ func LoadWrapperConfig() (WrapperConfig, error) {
 		ConfigPath: loaded.Path,
 		DebugRelayFlow: chooseBool(
 			os.Getenv(DebugRelayFlowEnv),
-			boolString(loaded.Config.Debug.RelayFlow),
+			xutil.BoolString(loaded.Config.Debug.RelayFlow),
 			false,
 		),
 		DebugRelayRaw: chooseBool(
 			os.Getenv(DebugRelayRawEnv),
-			boolString(loaded.Config.Debug.RelayRaw),
+			xutil.BoolString(loaded.Config.Debug.RelayRaw),
 			false,
 		),
 	}
@@ -137,18 +138,18 @@ func LoadServicesConfig() (ServicesConfig, error) {
 		),
 		FeishuUseSystemProxy: chooseBool(
 			os.Getenv(FeishuUseSystemProxyEnv),
-			boolString(loaded.Config.Feishu.UseSystemProxy),
+			xutil.BoolString(loaded.Config.Feishu.UseSystemProxy),
 			loaded.Config.Feishu.UseSystemProxy,
 		),
 		ConfigPath: loaded.Path,
 		DebugRelayFlow: chooseBool(
 			os.Getenv(DebugRelayFlowEnv),
-			boolString(loaded.Config.Debug.RelayFlow),
+			xutil.BoolString(loaded.Config.Debug.RelayFlow),
 			loaded.Config.Debug.RelayFlow,
 		),
 		DebugRelayRaw: chooseBool(
 			os.Getenv(DebugRelayRawEnv),
-			boolString(loaded.Config.Debug.RelayRaw),
+			xutil.BoolString(loaded.Config.Debug.RelayRaw),
 			loaded.Config.Debug.RelayRaw,
 		),
 	}
@@ -207,11 +208,4 @@ func chooseBool(primary, secondary string, fallback bool) bool {
 		}
 	}
 	return fallback
-}
-
-func boolString(value bool) string {
-	if value {
-		return "true"
-	}
-	return "false"
 }

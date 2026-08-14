@@ -94,6 +94,12 @@ func pathPickerNoticeContainsPath(view *control.FeishuPathPickerView, want strin
 	return false
 }
 
+func TestPathPickerSamePathUsesPlatformCanonicalComparison(t *testing.T) {
+	if !samePath(`\\?\C:\Users\Codex\repo`, `c:/users/codex/repo`) {
+		t.Fatal("expected path picker samePath to use platform canonical path comparison")
+	}
+}
+
 func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *testing.T) {
 	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

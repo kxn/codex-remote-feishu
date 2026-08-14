@@ -9,7 +9,7 @@ import (
 
 func surfaceResumeFailureSpecificity(code string) int {
 	switch strings.TrimSpace(code) {
-	case "headless_restore_provider_unavailable",
+	case "headless_restore_profile_unavailable",
 		"headless_restore_claude_profile_unavailable",
 		"headless_restore_workspace_missing",
 		"profile_definition_incomplete",
@@ -47,7 +47,7 @@ func isTerminalSurfaceResumeFailure(code string) bool {
 	switch strings.TrimSpace(code) {
 	case "headless_restore_workspace_missing",
 		"headless_restore_thread_cwd_missing",
-		"headless_restore_provider_unavailable",
+		"headless_restore_profile_unavailable",
 		"headless_restore_claude_profile_unavailable",
 		"headless_restore_runtime_unavailable",
 		"thread_cwd_missing",

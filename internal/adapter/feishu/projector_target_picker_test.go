@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	projectorpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/projector"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
@@ -182,7 +183,7 @@ func TestTargetPickerElementsRenderLockedWorkspaceAsReadOnlyContext(t *testing.T
 
 	selectCount := 0
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) == "select_static" {
+		if cardkit.StringValue(element["tag"]) == "select_static" {
 			selectCount++
 		}
 	}
@@ -362,7 +363,7 @@ func TestTargetPickerTerminalStageSealsCardWithoutInteractiveControls(t *testing
 		t.Fatalf("expected terminal target picker card to remove interactive controls, got %#v", elements)
 	}
 	for _, element := range elements {
-		tag := cardStringValue(element["tag"])
+		tag := cardkit.StringValue(element["tag"])
 		if tag == "select_static" || tag == "button" || tag == "form" || tag == "button_group" {
 			t.Fatalf("expected terminal target picker card to keep markdown-only body, got %#v", elements)
 		}
@@ -447,7 +448,7 @@ func TestTargetPickerElementsKeepSessionPlaceholderWhenSelectionIsEmpty(t *testi
 
 	var sessionSelect map[string]any
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) == "select_static" && element["name"] == cardTargetPickerSessionFieldName {
+		if cardkit.StringValue(element["tag"]) == "select_static" && element["name"] == cardTargetPickerSessionFieldName {
 			sessionSelect = element
 		}
 	}
@@ -547,7 +548,7 @@ func TestTargetPickerElementsRenderGitFormWithOpenPathAndSubmit(t *testing.T) {
 
 	var form map[string]any
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) == "form" {
+		if cardkit.StringValue(element["tag"]) == "form" {
 			form = element
 			break
 		}
@@ -653,7 +654,7 @@ func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *t
 
 	var form map[string]any
 	for _, element := range elements {
-		if cardStringValue(element["tag"]) == "form" {
+		if cardkit.StringValue(element["tag"]) == "form" {
 			form = element
 			break
 		}
@@ -670,7 +671,7 @@ func TestTargetPickerElementsRenderWorktreeFormWithWorkspaceSelectAndSubmit(t *t
 	}
 	var sawWorkspaceSelect bool
 	for _, element := range formElements {
-		if cardStringValue(element["tag"]) == "select_static" && element["name"] == cardTargetPickerWorkspaceFieldName {
+		if cardkit.StringValue(element["tag"]) == "select_static" && element["name"] == cardTargetPickerWorkspaceFieldName {
 			sawWorkspaceSelect = true
 			break
 		}
@@ -743,7 +744,7 @@ func TestProjectTargetPickerGitFormRendersFlatV2FormForInlineReplacement(t *test
 	rendered := renderedV2BodyElements(t, ops[0])
 	var form map[string]any
 	for _, element := range rendered {
-		if cardStringValue(element["tag"]) == "form" {
+		if cardkit.StringValue(element["tag"]) == "form" {
 			form = element
 			break
 		}

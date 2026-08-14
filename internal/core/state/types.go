@@ -176,7 +176,6 @@ type Root struct {
 	FeishuRoomContexts              map[string]*FeishuRoomContextRecord
 	BotCapabilitySettings           map[string]BotCapabilitySettingsRecord
 	WorkspaceDefaults               map[string]ModelConfigRecord
-	CodexProviders                  map[string]CodexProviderRecord
 	CodexProfiles                   map[string]CodexProfileSummary
 	ClaudeProfiles                  map[string]ClaudeProfileRecord
 	OpenCodeProfiles                map[string]OpenCodeProfileSummary
@@ -195,18 +194,18 @@ type ClaudeWorkspaceProfileSnapshotRecord struct {
 }
 
 type BotCapabilitySettingsRecord struct {
-	GatewayID           string
-	ProductMode         ProductMode
-	Backend             agentproto.Backend
-	CodexProviderID     string
-	CodexProfileID      string
-	ClaudeProfileID     string
-	OpenCodeProfileID   string
-	PromptOverride      ModelConfigRecord
-	PlanMode            PlanModeSetting
-	PlanModeOverrideSet bool
-	UpdatedBy           string
-	UpdatedAt           time.Time
+	GatewayID             string
+	ProductMode           ProductMode
+	Backend               agentproto.Backend
+	CodexProfileID        string
+	LegacyCodexProviderID string `json:"CodexProviderID,omitempty"`
+	ClaudeProfileID       string
+	OpenCodeProfileID     string
+	PromptOverride        ModelConfigRecord
+	PlanMode              PlanModeSetting
+	PlanModeOverrideSet   bool
+	UpdatedBy             string
+	UpdatedAt             time.Time
 }
 
 type SurfaceCapabilitySettings struct {
@@ -218,34 +217,35 @@ type SurfaceCapabilitySettings struct {
 }
 
 type InstanceRecord struct {
-	InstanceID              string
-	DisplayName             string
-	WorkspaceRoot           string
-	WorkspaceKey            string
-	ShortName               string
-	Backend                 agentproto.Backend
-	CodexProviderID         string
-	CodexAdmissionRef       *CodexAdmissionRef
-	CodexConnectionContract *CodexConnectionContract
-	CodexThreadPolicy       *CodexThreadPolicy
-	ClaudeProfileID         string
-	ClaudeReasoningEffort   string
-	OpenCodeProfileID       string
-	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
-	Source                  string
-	Capabilities            agentproto.Capabilities
-	CapabilitiesDeclared    bool
-	Managed                 bool
-	PID                     int
-	Online                  bool
-	ObservedFocusedThreadID string
-	ActiveThreadID          string
-	ActiveTurnID            string
-	ModelCatalog            *agentproto.ModelCatalogSnapshot
-	LastCapabilityState     *agentproto.CapabilityStateUpdate
-	ProtocolNotices         []agentproto.ProtocolNotice
-	CWDDefaults             map[string]ModelConfigRecord
-	Threads                 map[string]*ThreadRecord
+	InstanceID                string
+	DisplayName               string
+	WorkspaceRoot             string
+	WorkspaceKey              string
+	ShortName                 string
+	Backend                   agentproto.Backend
+	CodexProfileID            string
+	CodexAdmissionRef         *CodexAdmissionRef
+	CodexConnectionContract   *CodexConnectionContract
+	CodexThreadPolicy         *CodexThreadPolicy
+	ClaudeProfileID           string
+	ClaudeReasoningEffort     string
+	OpenCodeProfileID         string
+	OpenCodeAdmissionRef      *OpenCodeAdmissionRef
+	OpenCodeRuntimeAccessMode string
+	Source                    string
+	Capabilities              agentproto.Capabilities
+	CapabilitiesDeclared      bool
+	Managed                   bool
+	PID                       int
+	Online                    bool
+	ObservedFocusedThreadID   string
+	ActiveThreadID            string
+	ActiveTurnID              string
+	ModelCatalog              *agentproto.ModelCatalogSnapshot
+	LastCapabilityState       *agentproto.CapabilityStateUpdate
+	ProtocolNotices           []agentproto.ProtocolNotice
+	CWDDefaults               map[string]ModelConfigRecord
+	Threads                   map[string]*ThreadRecord
 }
 
 type ThreadRecord struct {
@@ -270,6 +270,7 @@ type ThreadRecord struct {
 	ObservedPermission       *agentproto.ObservedPermissionState
 	ObservedAccessMode       string
 	ObservedPlanMode         PlanModeSetting
+	ObservedPlanModeRaw      string
 	LastModelReroute         *agentproto.TurnModelReroute
 	LastModelVerification    *agentproto.TurnModelVerification
 	LastModelSafetyBuffering *agentproto.TurnModelSafetyBuffering
@@ -314,7 +315,7 @@ type SurfaceConsoleRecord struct {
 	// Backend carries the inner provider choice inside that shape.
 	ProductMode             ProductMode
 	Backend                 agentproto.Backend
-	CodexProviderID         string
+	CodexProfileID          string
 	CodexAdmissionRef       *CodexAdmissionRef
 	CodexConnectionContract *CodexConnectionContract
 	CodexThreadPolicy       *CodexThreadPolicy
@@ -404,6 +405,15 @@ type ReviewSessionPhase string
 const (
 	ReviewSessionPhasePending ReviewSessionPhase = "pending"
 	ReviewSessionPhaseActive  ReviewSessionPhase = "active"
+	ReviewSessionPhaseReady   ReviewSessionPhase = "ready"
+)
+
+type ReviewExecutorKind string
+
+const (
+	ReviewExecutorCodexNative       ReviewExecutorKind = "codex_native_detached"
+	ReviewExecutorClaudeForkSession ReviewExecutorKind = "claude_fork_session"
+	ReviewExecutorOpenCodeACPFork   ReviewExecutorKind = "opencode_acp_fork"
 )
 
 // PendingTextInputRecord holds a user text message that could not be processed
@@ -422,16 +432,25 @@ type PendingTextInputRecord struct {
 }
 
 type ReviewSessionRecord struct {
-	Phase           ReviewSessionPhase
-	ParentThreadID  string
-	ReviewThreadID  string
-	ActiveTurnID    string
-	ThreadCWD       string
-	SourceMessageID string
-	TargetLabel     string
-	LastReviewText  string
-	StartedAt       time.Time
-	LastUpdatedAt   time.Time
+	Phase                ReviewSessionPhase
+	Backend              agentproto.Backend
+	ExecutorKind         ReviewExecutorKind
+	FrozenAccessMode     string
+	ParentThreadID       string
+	ReviewThreadID       string
+	InitialTurnID        string
+	ActiveTurnID         string
+	ThreadCWD            string
+	SourceMessageID      string
+	TargetLabel          string
+	PendingReviewText    string
+	PendingReviewItemIDs []string
+	LastReviewText       string
+	AwaitingFollowUpText bool
+	ExitRequested        bool
+	ActionMessageID      string
+	StartedAt            time.Time
+	LastUpdatedAt        time.Time
 }
 
 type ExecCommandProgressEntryRecord struct {
@@ -442,6 +461,7 @@ type ExecCommandProgressEntryRecord struct {
 	Status     string
 	FileChange *ExecCommandProgressFileChangeRecord
 	LastSeq    int
+	Transient  bool
 }
 
 type ExecCommandProgressFileChangeRecord struct {
@@ -460,6 +480,7 @@ type ExecCommandProgressBlockRowRecord struct {
 	Summary   string
 	Secondary string
 	MergeKey  string
+	Status    string
 	LastSeq   int
 }
 
@@ -473,6 +494,8 @@ type ExecCommandProgressBlockRecord struct {
 type ExecCommandProgressExplorationRecord struct {
 	Block         ExecCommandProgressBlockRecord
 	ActiveItemIDs map[string]bool
+	FailedItemIDs map[string]bool
+	ItemRowIDs    map[string][]string
 	Failed        bool
 }
 
@@ -493,6 +516,7 @@ type ExecCommandProgressRecord struct {
 	Verbosity            SurfaceVerbosity
 	Entries              []ExecCommandProgressEntryRecord
 	Exploration          *ExecCommandProgressExplorationRecord
+	ExplorationItems     map[string]string
 	Reasoning            *ExecCommandProgressReasoningRecord
 	DynamicToolItemGroup map[string]string
 	DynamicToolGroups    map[string]*DynamicToolProgressGroupRecord
@@ -502,6 +526,10 @@ type ExecCommandProgressRecord struct {
 
 type ExecCommandProgressReasoningRecord struct {
 	ItemID              string
+	VisibleEntryID      string
+	VisibleSegment      int
+	VisibleAfterSeq     int
+	VisibleVerbosity    SurfaceVerbosity
 	Active              bool
 	Text                string
 	VisibleSummaryIndex int
@@ -516,17 +544,18 @@ type SurfaceReasoningProgressRecord struct {
 	InstanceID string
 	ThreadID   string
 	TurnID     string
-	Entries    []ExecCommandProgressEntryRecord
 	Reasoning  *ExecCommandProgressReasoningRecord
 }
 
 type DynamicToolProgressGroupRecord struct {
-	GroupKey string
-	Tool     string
-	Label    string
-	Args     []string
-	Summary  string
-	Status   string
+	GroupKey      string
+	Tool          string
+	Label         string
+	Args          []string
+	Summary       string
+	Status        string
+	ActiveItemIDs map[string]bool
+	Failed        bool
 }
 
 type AutoWhipRuntimeRecord struct {
@@ -595,30 +624,31 @@ const (
 )
 
 type HeadlessLaunchRecord struct {
-	InstanceID              string
-	ThreadID                string
-	ThreadTitle             string
-	WorkspaceKey            string
-	ThreadCWD               string
-	Backend                 agentproto.Backend
-	CodexProviderID         string
-	CodexAdmissionRef       *CodexAdmissionRef
-	CodexConnectionContract *CodexConnectionContract
-	CodexThreadPolicy       *CodexThreadPolicy
-	ClaudeProfileID         string
-	ClaudeReasoningEffort   string
-	OpenCodeProfileID       string
-	OpenCodeAdmissionRef    *OpenCodeAdmissionRef
-	ThreadName              string
-	ThreadPreview           string
-	RequestedAt             time.Time
-	ExpiresAt               time.Time
-	Status                  HeadlessLaunchStatus
-	Purpose                 HeadlessLaunchPurpose
-	PrepareNewThread        bool
-	PID                     int
-	SourceInstanceID        string
-	AutoRestore             bool
+	InstanceID                string
+	ThreadID                  string
+	ThreadTitle               string
+	WorkspaceKey              string
+	ThreadCWD                 string
+	Backend                   agentproto.Backend
+	CodexProfileID            string
+	CodexAdmissionRef         *CodexAdmissionRef
+	CodexConnectionContract   *CodexConnectionContract
+	CodexThreadPolicy         *CodexThreadPolicy
+	ClaudeProfileID           string
+	ClaudeReasoningEffort     string
+	OpenCodeProfileID         string
+	OpenCodeAdmissionRef      *OpenCodeAdmissionRef
+	OpenCodeRuntimeAccessMode string
+	ThreadName                string
+	ThreadPreview             string
+	RequestedAt               time.Time
+	ExpiresAt                 time.Time
+	Status                    HeadlessLaunchStatus
+	Purpose                   HeadlessLaunchPurpose
+	PrepareNewThread          bool
+	PID                       int
+	SourceInstanceID          string
+	AutoRestore               bool
 }
 
 type SelectionAnnouncementRecord struct {
@@ -804,7 +834,6 @@ func NewRoot() *Root {
 		FeishuRoomContexts:              map[string]*FeishuRoomContextRecord{},
 		BotCapabilitySettings:           map[string]BotCapabilitySettingsRecord{},
 		WorkspaceDefaults:               map[string]ModelConfigRecord{},
-		CodexProviders:                  map[string]CodexProviderRecord{},
 		CodexProfiles:                   map[string]CodexProfileSummary{},
 		ClaudeProfiles:                  map[string]ClaudeProfileRecord{},
 		OpenCodeProfiles:                map[string]OpenCodeProfileSummary{},

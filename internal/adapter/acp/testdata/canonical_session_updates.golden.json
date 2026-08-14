@@ -62,21 +62,21 @@
     "kind": "item.started",
     "metadata": {
       "arguments": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
       "command": "go test ./internal/adapter/acp",
       "cwd": "/tmp/work",
-      "kind": "bash",
+      "kind": "execute",
       "rawInput": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
-      "tool": "bash",
+      "tool": "execute",
       "toolCallId": "shell_1"
     },
-    "name": "go test",
-    "status": "pending",
+    "name": "execute",
+    "status": "in_progress",
     "threadId": "ses_1",
     "turnId": "opencode-turn-2"
   },
@@ -104,23 +104,330 @@
     "kind": "item.completed",
     "metadata": {
       "arguments": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
       "command": "go test ./internal/adapter/acp",
       "cwd": "/tmp/work",
       "exitCode": 0,
-      "kind": "bash",
+      "kind": "execute",
       "rawInput": {
-        "cmd": "go test ./internal/adapter/acp",
+        "command": "go test ./internal/adapter/acp",
         "cwd": "/tmp/work"
       },
       "rawOutput": {
         "exitCode": 0,
         "output": "PASS\n"
       },
-      "tool": "bash",
+      "tool": "execute",
       "toolCallId": "shell_1"
+    },
+    "status": "completed",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "read",
+          "items": [
+            "internal/adapter/acp/observe.go"
+          ]
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-read_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.started",
+    "metadata": {
+      "arguments": {
+        "filePath": "internal/adapter/acp/observe.go"
+      },
+      "kind": "read",
+      "rawInput": {
+        "filePath": "internal/adapter/acp/observe.go"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "read",
+      "toolCallId": "read_1"
+    },
+    "name": "read",
+    "status": "in_progress",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "read",
+          "items": [
+            "internal/adapter/acp/observe.go"
+          ]
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-read_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.completed",
+    "metadata": {
+      "arguments": {
+        "filePath": "internal/adapter/acp/observe.go"
+      },
+      "kind": "read",
+      "rawInput": {
+        "filePath": "internal/adapter/acp/observe.go"
+      },
+      "rawOutput": {
+        "output": "RAW_FILE_CONTENT_SHOULD_NOT_APPEAR"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "read",
+      "toolCallId": "read_1"
+    },
+    "status": "completed",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "search",
+          "summary": "opencodeToolMetadata",
+          "secondary": "internal/adapter/acp"
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-grep_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.started",
+    "metadata": {
+      "arguments": {
+        "path": "internal/adapter/acp",
+        "pattern": "opencodeToolMetadata"
+      },
+      "kind": "search",
+      "opencodeToolName": "grep",
+      "rawInput": {
+        "path": "internal/adapter/acp",
+        "pattern": "opencodeToolMetadata"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "grep",
+      "toolCallId": "grep_1"
+    },
+    "name": "grep",
+    "status": "in_progress",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "search",
+          "summary": "opencodeToolMetadata",
+          "secondary": "internal/adapter/acp"
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-grep_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.completed",
+    "metadata": {
+      "arguments": {
+        "path": "internal/adapter/acp",
+        "pattern": "opencodeToolMetadata"
+      },
+      "errorMessage": "grep failed",
+      "kind": "search",
+      "opencodeToolName": "grep",
+      "rawInput": {
+        "path": "internal/adapter/acp",
+        "pattern": "opencodeToolMetadata"
+      },
+      "rawOutput": {
+        "error": "grep failed",
+        "output": "RAW_GREP_RESULTS_SHOULD_NOT_APPEAR"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "grep",
+      "toolCallId": "grep_1"
+    },
+    "status": "failed",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "list",
+          "summary": "**/*.go",
+          "secondary": "internal/adapter/acp"
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-glob_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.started",
+    "metadata": {
+      "arguments": {
+        "path": "internal/adapter/acp",
+        "pattern": "**/*.go"
+      },
+      "kind": "search",
+      "opencodeToolName": "glob",
+      "rawInput": {
+        "path": "internal/adapter/acp",
+        "pattern": "**/*.go"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "glob",
+      "toolCallId": "glob_1"
+    },
+    "name": "glob",
+    "status": "in_progress",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "list",
+          "summary": "**/*.go",
+          "secondary": "internal/adapter/acp"
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-glob_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.completed",
+    "metadata": {
+      "arguments": {
+        "path": "internal/adapter/acp",
+        "pattern": "**/*.go"
+      },
+      "kind": "search",
+      "opencodeToolName": "glob",
+      "rawInput": {
+        "path": "internal/adapter/acp",
+        "pattern": "**/*.go"
+      },
+      "rawOutput": {
+        "output": "RAW_GLOB_RESULTS_SHOULD_NOT_APPEAR"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "glob",
+      "toolCallId": "glob_1"
+    },
+    "status": "completed",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "list",
+          "summary": "internal/adapter/acp"
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-ls_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.started",
+    "metadata": {
+      "arguments": {
+        "path": "internal/adapter/acp"
+      },
+      "kind": "ls",
+      "rawInput": {
+        "path": "internal/adapter/acp"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "ls",
+      "toolCallId": "ls_1"
+    },
+    "name": "ls",
+    "status": "in_progress",
+    "threadId": "ses_1",
+    "turnId": "opencode-turn-2"
+  },
+  {
+    "commandId": "cmd-1",
+    "exploration": {
+      "actions": [
+        {
+          "kind": "list",
+          "summary": "internal/adapter/acp"
+        }
+      ]
+    },
+    "initiator": {
+      "kind": "remote_surface",
+      "surfaceSessionId": "surface-1"
+    },
+    "itemId": "opencode-tool-ls_1",
+    "itemKind": "dynamic_tool_call",
+    "kind": "item.completed",
+    "metadata": {
+      "arguments": {
+        "path": "internal/adapter/acp"
+      },
+      "kind": "ls",
+      "rawInput": {
+        "path": "internal/adapter/acp"
+      },
+      "semanticKind": "exploration",
+      "suppressFinalText": true,
+      "tool": "ls",
+      "toolCallId": "ls_1"
     },
     "status": "completed",
     "threadId": "ses_1",

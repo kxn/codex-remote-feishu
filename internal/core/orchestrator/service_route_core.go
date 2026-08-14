@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type surfaceRouteThreadClaimPolicy int
@@ -34,13 +33,13 @@ func (s *Service) surfaceCurrentWorkspaceKeyRaw(surface *state.SurfaceConsoleRec
 	if surface == nil || !surfaceUsesWorkspaceClaimsRaw(surface) {
 		return ""
 	}
-	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
-		return key
-	}
 	if pending := surface.PendingHeadless; pending != nil {
-		if key := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)); key != "" {
+		if key := pendingHeadlessWorkspaceClaimKey(pending); key != "" {
 			return key
 		}
+	}
+	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
+		return key
 	}
 	if key := normalizeWorkspaceClaimKey(surface.PreparedThreadCWD); key != "" {
 		return key
@@ -77,6 +76,8 @@ func (s *Service) transitionSurfaceRouteCore(surface *state.SurfaceConsoleRecord
 	surface.PreparedFromThreadID = next.PreparedFromThreadID
 	if next.PreparedThreadCWD == "" {
 		surface.PreparedAt = time.Time{}
+	} else {
+		surface.PreparedAt = s.now()
 	}
 
 	switch {
@@ -98,6 +99,33 @@ func (s *Service) transitionSurfaceRouteCore(surface *state.SurfaceConsoleRecord
 		s.bindThreadClaim(surface, next.AttachedInstanceID, next.SelectedThreadID)
 	}
 	return true
+}
+
+func (s *Service) refreshPreparedNewThreadRouteCore(surface *state.SurfaceConsoleRecord) bool {
+	if surface == nil || surface.RouteMode != state.RouteModeNewThreadReady || strings.TrimSpace(surface.PreparedThreadCWD) == "" {
+		return false
+	}
+	surface.PreparedAt = s.now()
+	return true
+}
+
+func (s *Service) clearPreparedNewThreadRouteCore(surface *state.SurfaceConsoleRecord) bool {
+	if surface == nil {
+		return false
+	}
+	if instanceID := strings.TrimSpace(surface.AttachedInstanceID); instanceID != "" {
+		inst := s.root.Instances[instanceID]
+		if inst != nil {
+			return s.transitionSurfaceRouteCore(surface, inst, surfaceRouteCoreState{
+				AttachedInstanceID: instanceID,
+				WorkspaceKey:       s.surfaceCurrentWorkspaceKeyRaw(surface),
+				RouteMode:          state.RouteModeUnbound,
+			})
+		}
+	}
+	return s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{
+		WorkspaceKey: s.surfaceCurrentWorkspaceKeyRaw(surface),
+	})
 }
 
 func (s *Service) normalizeSurfaceRouteCoreState(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, next surfaceRouteCoreState) (surfaceRouteCoreState, *state.InstanceRecord, bool) {
@@ -133,7 +161,7 @@ func (s *Service) normalizeSurfaceRouteCoreState(surface *state.SurfaceConsoleRe
 	if !surfaceUsesWorkspaceClaimsRaw(surface) {
 		next.WorkspaceKey = ""
 	} else if next.WorkspaceKey == "" {
-		if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
+		if key := s.surfaceCurrentWorkspaceKeyRaw(surface); key != "" {
 			next.WorkspaceKey = key
 		}
 		if next.WorkspaceKey == "" && next.PreparedThreadCWD != "" {

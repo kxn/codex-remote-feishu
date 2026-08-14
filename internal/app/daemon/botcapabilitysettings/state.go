@@ -25,6 +25,7 @@ func NewStore(path string) *Store {
 		Equal:         func(left, right Record) bool { return left == right },
 		LoadNormalize: state.NormalizeBotCapabilitySettingsRecord,
 		LoadKey:       func(record Record) string { return state.BotCapabilitySettingsKey(record.GatewayID) },
+		LoadEqual:     func(left, right Record) bool { return left == right },
 	})}
 }
 
@@ -35,6 +36,7 @@ func LoadStore(path string) (*Store, error) {
 		Equal:         func(left, right Record) bool { return left == right },
 		LoadNormalize: state.NormalizeBotCapabilitySettingsRecord,
 		LoadKey:       func(record Record) string { return state.BotCapabilitySettingsKey(record.GatewayID) },
+		LoadEqual:     func(left, right Record) bool { return left == right },
 	})
 	if err != nil {
 		return nil, err

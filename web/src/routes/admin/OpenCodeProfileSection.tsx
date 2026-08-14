@@ -28,9 +28,16 @@ import {
   type EditorMode,
   useConfigEditorSection,
 } from "./ConfigEditorShared";
+import {
+  appendOrReplaceProfileItem,
+  maxProfileTextLengthMessage,
+  removeProfileItem,
+  requiredProfileFieldMessage,
+} from "./ProfileEditorShared";
 
 type OpenCodeProfileDraft = {
   name: string;
+  providerType: string;
   baseURL: string;
   apiKey: string;
   model: string;
@@ -48,6 +55,8 @@ type OpenCodeProfileSectionProps = {
 };
 
 const newOpenCodeProfileID = "new-opencode-profile";
+const openCodeProviderTypeOpenAICompatibleChat = "openai_compatible_chat";
+const openCodeProviderTypeGoogleGemini = "google_gemini";
 const openCodeReasoningOptions = ["low", "medium", "high", "xhigh"] as const;
 const openCodeInstructionMaxChars = 16000;
 
@@ -96,7 +105,7 @@ export function OpenCodeProfileSection(props: OpenCodeProfileSectionProps) {
           "POST",
           buildCreatePayload(draft),
         );
-        setProfiles((current) => appendOrReplaceProfile(current, response.profile));
+        setProfiles((current) => appendOrReplaceProfileItem(current, response.profile));
         selectPersistedItem(response.profile);
         setDetailNotice({ tone: "good", message: "OpenCode 配置已创建。" });
         return;
@@ -118,7 +127,7 @@ export function OpenCodeProfileSection(props: OpenCodeProfileSectionProps) {
       );
       const nextProfile = response.profile;
       setProfiles((current) =>
-        appendOrReplaceProfile(current, nextProfile, activeProfile.id),
+        appendOrReplaceProfileItem(current, nextProfile, activeProfile.id),
       );
       selectPersistedItem(nextProfile);
       setDetailNotice({ tone: "good", message: "OpenCode 配置已保存。" });
@@ -176,7 +185,7 @@ export function OpenCodeProfileSection(props: OpenCodeProfileSectionProps) {
           headers: { "If-Match": profile.etag ?? "" },
         },
       );
-      const nextProfiles = removeProfile(profiles, deleteTargetID);
+      const nextProfiles = removeProfileItem(profiles, deleteTargetID);
       setProfiles(nextProfiles);
       setDeleteTargetID(null);
       setDeleteReferences([]);
@@ -334,7 +343,7 @@ function renderOpenCodeProfileDetailCard(props: OpenCodeDetailCardProps) {
       }
     >
       <div className="form-grid stack-top">
-        <label className="field form-grid-span-2">
+        <label className="field">
           <span>
             名称 <em className="field-required">*</em>
           </span>
@@ -353,10 +362,37 @@ function renderOpenCodeProfileDetailCard(props: OpenCodeDetailCardProps) {
 
         <label className="field">
           <span>
-            端点地址 <em className="field-required">*</em>
+            协议类型 <em className="field-required">*</em>
+          </span>
+          <select
+            required
+            aria-label="协议类型"
+            value={normalizeOpenCodeProviderType(draft.providerType)}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                providerType: event.target.value,
+              }))
+            }
+          >
+            <option value={openCodeProviderTypeOpenAICompatibleChat}>OpenAI 兼容</option>
+            <option value={openCodeProviderTypeGoogleGemini}>Gemini</option>
+          </select>
+        </label>
+
+        <label className="field">
+          <span>
+            端点地址{" "}
+            {normalizeOpenCodeProviderType(draft.providerType) ===
+            openCodeProviderTypeOpenAICompatibleChat ? (
+              <em className="field-required">*</em>
+            ) : null}
           </span>
           <input
-            required
+            required={
+              normalizeOpenCodeProviderType(draft.providerType) ===
+              openCodeProviderTypeOpenAICompatibleChat
+            }
             value={draft.baseURL}
             placeholder="例如：https://api.example.com/v1"
             onChange={(event) =>
@@ -484,6 +520,7 @@ function renderOpenCodeProfileDetailCard(props: OpenCodeDetailCardProps) {
 function createEmptyDraft(): OpenCodeProfileDraft {
   return {
     name: "",
+    providerType: openCodeProviderTypeOpenAICompatibleChat,
     baseURL: "",
     apiKey: "",
     model: "",
@@ -497,6 +534,7 @@ function createEmptyDraft(): OpenCodeProfileDraft {
 function createDraftFromProfile(profile: OpenCodeProfileSummary): OpenCodeProfileDraft {
   return {
     name: profileTitle(profile),
+    providerType: normalizeOpenCodeProviderType(profile.providerType),
     baseURL: profile.baseURL?.trim() || "",
     apiKey: "",
     model: profile.model?.trim() || "",
@@ -511,20 +549,34 @@ function validateDraft(draft: OpenCodeProfileDraft, editorMode: EditorMode): str
   if (editorMode === "built-in") {
     return "";
   }
-  if (!draft.name.trim()) {
-    return "请填写名称。";
+  const nameError = requiredProfileFieldMessage(draft.name, "名称");
+  if (nameError) {
+    return nameError;
   }
-  if (!draft.baseURL.trim()) {
-    return "请填写端点地址。";
+  const baseURLError = requiredProfileFieldMessage(draft.baseURL, "端点地址");
+  if (
+    normalizeOpenCodeProviderType(draft.providerType) ===
+      openCodeProviderTypeOpenAICompatibleChat &&
+    baseURLError
+  ) {
+    return baseURLError;
   }
-  if (editorMode === "create" && !draft.apiKey.trim()) {
-    return "请填写 API Key。";
+  const apiKeyError =
+    editorMode === "create" ? requiredProfileFieldMessage(draft.apiKey, "API Key") : "";
+  if (apiKeyError) {
+    return apiKeyError;
   }
-  if (!draft.model.trim()) {
-    return "请填写主模型。";
+  const modelError = requiredProfileFieldMessage(draft.model, "主模型");
+  if (modelError) {
+    return modelError;
   }
-  if (draft.instruction.length > openCodeInstructionMaxChars) {
-    return `指令最多 ${openCodeInstructionMaxChars} 字符。`;
+  const instructionError = maxProfileTextLengthMessage(
+    draft.instruction,
+    openCodeInstructionMaxChars,
+    "指令",
+  );
+  if (instructionError) {
+    return instructionError;
   }
   return "";
 }
@@ -532,6 +584,7 @@ function validateDraft(draft: OpenCodeProfileDraft, editorMode: EditorMode): str
 function buildCreatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRequest {
   return {
     name: draft.name.trim(),
+    providerType: normalizeOpenCodeProviderType(draft.providerType),
     baseURL: draft.baseURL.trim(),
     apiKey: draft.apiKey,
     model: draft.model.trim(),
@@ -545,6 +598,7 @@ function buildCreatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRe
 function buildUpdatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRequest {
   const payload: OpenCodeProfileWriteRequest = {
     name: draft.name.trim(),
+    providerType: normalizeOpenCodeProviderType(draft.providerType),
     baseURL: draft.baseURL.trim(),
     model: draft.model.trim(),
     smallModel: draft.smallModel.trim(),
@@ -559,30 +613,18 @@ function buildUpdatePayload(draft: OpenCodeProfileDraft): OpenCodeProfileWriteRe
   return payload;
 }
 
-function appendOrReplaceProfile(
-  profiles: OpenCodeProfileSummary[],
-  profile: OpenCodeProfileSummary,
-  previousID = profile.id,
-): OpenCodeProfileSummary[] {
-  const nextProfiles = profiles
-    .filter((current) => current.id !== previousID || current.id === profile.id)
-    .map((current) => (current.id === profile.id ? profile : current));
-  if (nextProfiles.some((current) => current.id === profile.id)) {
-    return nextProfiles;
-  }
-  return [...nextProfiles, profile];
-}
-
-function removeProfile(
-  profiles: OpenCodeProfileSummary[],
-  targetID: string,
-): OpenCodeProfileSummary[] {
-  return profiles.filter((profile) => profile.id !== targetID);
-}
-
 function optionalString(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function normalizeOpenCodeProviderType(value: string | undefined): string {
+  switch (value?.trim()) {
+    case openCodeProviderTypeGoogleGemini:
+      return openCodeProviderTypeGoogleGemini;
+    default:
+      return openCodeProviderTypeOpenAICompatibleChat;
+  }
 }
 
 function normalizeOpenCodeReasoningEffort(value: string | undefined): string {
@@ -602,7 +644,7 @@ function profileCardSummary(profile: OpenCodeProfileSummary): string {
   }
   const parts = [
     profile.available ? "" : statusLabel(profile.statusCode),
-    profile.baseURL?.trim() || "API 配置",
+    profile.baseURL?.trim() || openCodeProviderTypeLabel(profile.providerType),
     profile.model?.trim() ? `模型 ${profile.model.trim()}` : "",
     profile.smallModel?.trim() ? `轻量 ${profile.smallModel.trim()}` : "",
     profile.subagentModel?.trim() ? `子代理 ${profile.subagentModel.trim()}` : "",
@@ -615,6 +657,15 @@ function profileCardSummary(profile: OpenCodeProfileSummary): string {
 
 function profileTag(profile: OpenCodeProfileSummary): string {
   return profile.builtIn ? "默认" : "API";
+}
+
+function openCodeProviderTypeLabel(value: string | undefined): string {
+  switch (normalizeOpenCodeProviderType(value)) {
+    case openCodeProviderTypeGoogleGemini:
+      return "Gemini";
+    default:
+      return "OpenAI 兼容";
+  }
 }
 
 function statusLabel(statusCode?: string): string {

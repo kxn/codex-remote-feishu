@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 	"github.com/kxn/codex-remote-feishu/internal/core/netutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/relayurl"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
@@ -221,29 +222,13 @@ func WriteAppConfig(path string, cfg AppConfig) error {
 		return err
 	}
 	cfg = cfg.normalized()
+	cfg.Codex.Providers = nil
 	raw, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(0o600); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
+	return atomicfile.Write(path, raw, 0o600)
 }
 
 func SelectRuntimeFeishuApp(apps []FeishuAppConfig) FeishuAppConfig {
@@ -438,7 +423,7 @@ func (cfg AppConfig) normalized() AppConfig {
 		cfg.Wrapper.IntegrationMode = defaults.Wrapper.IntegrationMode
 	}
 
-	cfg.Codex.Providers = NormalizeCodexProviders(cfg.Codex.Providers)
+	cfg.Codex.Providers = NormalizeLegacyCodexProviders(cfg.Codex.Providers)
 	cfg.Codex.Profiles = NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles)
 	cfg.Claude.Profiles = NormalizeClaudeProfiles(cfg.Claude.Profiles)
 	cfg.OpenCode.BinaryPath = strings.TrimSpace(cfg.OpenCode.BinaryPath)

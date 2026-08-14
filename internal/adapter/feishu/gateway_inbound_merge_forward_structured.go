@@ -302,7 +302,7 @@ func (b *mergeForwardBuilder) buildNodesFromRawContent(rawContent string) ([]for
 	if rawContent == "" {
 		return nil, fmt.Errorf("empty merge_forward content")
 	}
-	if !looksLikeJSONObject(rawContent) {
+	if !gatewaypkg.LooksLikeJSONObject(rawContent) {
 		return []forwardedChatNode{{
 			Kind:        "message",
 			MessageType: "text",
@@ -335,7 +335,7 @@ func (b *mergeForwardBuilder) buildNodesFromRawValue(value any) []forwardedChatN
 		if text == "" {
 			return nil
 		}
-		if looksLikeJSONObject(text) {
+		if gatewaypkg.LooksLikeJSONObject(text) {
 			var nested any
 			if err := json.Unmarshal([]byte(text), &nested); err == nil {
 				return b.buildNodesFromRawValue(nested)
@@ -352,12 +352,12 @@ func (b *mergeForwardBuilder) buildNodesFromRawValue(value any) []forwardedChatN
 }
 
 func (b *mergeForwardBuilder) buildNodesFromRawMap(values map[string]any) []forwardedChatNode {
-	title := firstJSONString(values, "title", "topic", "chat_name", "chat_title")
-	speaker := firstJSONString(values, "sender_name", "user_name", "name", "from_name", "sender")
-	text := firstJSONString(values, "text", "message", "summary", "description", "desc")
+	title := gatewaypkg.FirstJSONString(values, "title", "topic", "chat_name", "chat_title")
+	speaker := gatewaypkg.FirstJSONString(values, "sender_name", "user_name", "name", "from_name", "sender")
+	text := gatewaypkg.FirstJSONString(values, "text", "message", "summary", "description", "desc")
 	if text == "" {
-		content := strings.TrimSpace(firstJSONString(values, "content"))
-		if content != "" && !looksLikeJSONObject(content) {
+		content := strings.TrimSpace(gatewaypkg.FirstJSONString(values, "content"))
+		if content != "" && !gatewaypkg.LooksLikeJSONObject(content) {
 			text = content
 		}
 	}
@@ -380,7 +380,7 @@ func (b *mergeForwardBuilder) buildNodesFromRawMap(values map[string]any) []forw
 		case []any, map[string]any:
 			childNodes = append(childNodes, b.buildNodesFromRawValue(typed)...)
 		case string:
-			if looksLikeJSONObject(strings.TrimSpace(typed)) {
+			if gatewaypkg.LooksLikeJSONObject(strings.TrimSpace(typed)) {
 				childNodes = append(childNodes, b.buildNodesFromRawValue(typed)...)
 			}
 		}
@@ -406,7 +406,7 @@ func (b *mergeForwardBuilder) buildNodesFromRawMap(values map[string]any) []forw
 		if text != "" {
 			node.Items = append(node.Items, rawTextNode(text, speaker))
 		} else {
-			for _, line := range linesFromMessageIDs(values) {
+			for _, line := range gatewaypkg.LinesFromMessageIDs(values) {
 				node.Items = append(node.Items, forwardedChatNode{
 					Kind:        "message",
 					MessageType: "unsupported",
@@ -421,7 +421,7 @@ func (b *mergeForwardBuilder) buildNodesFromRawMap(values map[string]any) []forw
 	if text != "" {
 		return []forwardedChatNode{rawTextNode(text, speaker)}
 	}
-	if lines := linesFromMessageIDs(values); len(lines) > 0 {
+	if lines := gatewaypkg.LinesFromMessageIDs(values); len(lines) > 0 {
 		nodes := make([]forwardedChatNode, 0, len(lines))
 		for _, line := range lines {
 			nodes = append(nodes, forwardedChatNode{
@@ -437,8 +437,8 @@ func (b *mergeForwardBuilder) buildNodesFromRawMap(values map[string]any) []forw
 }
 
 func (b *mergeForwardBuilder) imageNodeFromRawMap(values map[string]any, speaker string) *forwardedChatNode {
-	imageKey := strings.TrimSpace(firstJSONString(values, "image_key"))
-	tag := strings.ToLower(strings.TrimSpace(firstJSONString(values, "tag")))
+	imageKey := strings.TrimSpace(gatewaypkg.FirstJSONString(values, "image_key"))
+	tag := strings.ToLower(strings.TrimSpace(gatewaypkg.FirstJSONString(values, "tag")))
 	if imageKey == "" && tag != "img" && tag != "media" {
 		return nil
 	}
@@ -454,11 +454,11 @@ func (b *mergeForwardBuilder) imageNodeFromRawMap(values map[string]any, speaker
 }
 
 func rawFileNode(values map[string]any, speaker string) *forwardedChatNode {
-	fileName := strings.TrimSpace(firstJSONString(values, "file_name"))
-	if fileName == "" && strings.TrimSpace(firstJSONString(values, "file_key")) != "" {
-		fileName = strings.TrimSpace(firstJSONString(values, "name"))
+	fileName := strings.TrimSpace(gatewaypkg.FirstJSONString(values, "file_name"))
+	if fileName == "" && strings.TrimSpace(gatewaypkg.FirstJSONString(values, "file_key")) != "" {
+		fileName = strings.TrimSpace(gatewaypkg.FirstJSONString(values, "name"))
 	}
-	if fileName == "" || strings.EqualFold(strings.TrimSpace(firstJSONString(values, "tag")), "img") {
+	if fileName == "" || strings.EqualFold(strings.TrimSpace(gatewaypkg.FirstJSONString(values, "tag")), "img") {
 		return nil
 	}
 	node := forwardedChatNode{

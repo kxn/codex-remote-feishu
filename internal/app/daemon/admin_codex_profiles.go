@@ -23,6 +23,10 @@ type codexProfileResponse struct {
 	Profile state.CodexProfileSummary `json:"profile"`
 }
 
+type adminCodexSettingsView struct {
+	Profiles []state.CodexProfileSummary `json:"profiles,omitempty"`
+}
+
 type codexContextPreferenceResponse struct {
 	ContextPreference state.ProfileContextPreference `json:"contextPreference"`
 }
@@ -415,14 +419,14 @@ func (a *App) codexProfileReferencesLocked(profileID string) []codexProfileRefer
 	references := make([]codexProfileReference, 0)
 	if a.botCapabilitySettingsState.store != nil {
 		for _, record := range a.botCapabilitySettingsState.store.Entries() {
-			if selectedCodexProfileID(record.CodexProfileID, record.CodexProviderID) == profileID {
+			if strings.TrimSpace(record.CodexProfileID) == profileID {
 				references = append(references, codexProfileReference{Kind: "bot_default", Name: record.GatewayID, Reason: "selected as bot default"})
 			}
 		}
 	}
 	if a.surfaceResumeRuntime.store != nil {
 		for _, entry := range a.surfaceResumeRuntime.store.Entries() {
-			if selectedCodexProfileID(entry.CodexProfileID, entry.CodexProviderID) == profileID {
+			if strings.TrimSpace(entry.CodexProfileID) == profileID {
 				references = append(references, codexProfileReference{Kind: "surface_desired", Name: entry.SurfaceSessionID, Reason: "selected for surface"})
 			}
 			if entry.CodexAdmissionRef != nil && entry.CodexAdmissionRef.ProfileRef.ID == profileID {
@@ -597,6 +601,31 @@ func codexAPIProfileInputFromRequest(req codexProfileWriteRequest) config.CodexA
 	}
 }
 
+func adminPersistedCodexSettingsView(cfg config.AppConfig) adminCodexSettingsView {
+	if len(cfg.Codex.Profiles) == 0 {
+		return adminCodexSettingsView{}
+	}
+	profiles := make([]state.CodexProfileSummary, 0, len(cfg.Codex.Profiles))
+	for _, record := range config.NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles) {
+		profile, ok := config.CurrentCodexAPIProfile(record)
+		if !ok {
+			continue
+		}
+		profiles = append(profiles, codexAPIProfileSummary(profile, state.ProfileContextPreference{}))
+	}
+	return adminCodexSettingsView{Profiles: profiles}
+}
+
+func findCodexProfileSummary(profiles []state.CodexProfileSummary, profileID string) (state.CodexProfileSummary, bool) {
+	profileID = strings.TrimSpace(profileID)
+	for _, profile := range profiles {
+		if profile.ID == profileID {
+			return profile, true
+		}
+	}
+	return state.CodexProfileSummary{}, false
+}
+
 func rawOptionalStringValue(value *string) string {
 	if value == nil {
 		return ""
@@ -607,7 +636,7 @@ func rawOptionalStringValue(value *string) string {
 func (a *App) syncCodexProfilesAfterMutation(cfg config.AppConfig) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.syncCodexProvidersCatalogLocked(cfg)
+	a.syncCodexProfilesCatalogLocked(cfg)
 	a.refreshCodexSurfaceRuntimeContractsLocked(cfg)
 }
 
@@ -646,7 +675,7 @@ func (a *App) refreshCodexSurfaceRuntimeContractsLocked(cfg config.AppConfig) {
 		if !state.IsHeadlessProductMode(contract.ProductMode) || contract.Backend != agentproto.BackendCodex {
 			continue
 		}
-		profileID := state.EffectiveSurfaceCodexProviderID(contract)
+		profileID := state.EffectiveSurfaceCodexProfileID(contract)
 		ref, ok := a.currentCodexAdmissionRefForProfileLocked(cfg, preferenceStore, nativeEvidence, profileID)
 		if !ok {
 			surface.CodexAdmissionRef = nil

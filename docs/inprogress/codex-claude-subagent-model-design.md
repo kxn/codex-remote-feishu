@@ -1,8 +1,8 @@
 # Codex / Claude Profile 子代理模型配置设计
 
 > Type: `inprogress`
-> Updated: `2026-08-08`
-> Summary: 明确 Codex 子代理模型优先使用 `agents.default_subagent_model` first-class override；只有 DeepSeek/MiMo 等 catalog-backed provider 注入 provider-owned models.json，普通 GPT/OpenAI-like profile 不再生成 generic managed catalog。对应 issue #822/#839。
+> Updated: `2026-08-11`
+> Summary: 同步 Codex Profile-only 管理面：旧 providers API 与旧 Provider 管理组件已移除，子代理模型后续只落 canonical Profile API/UI。
 
 ## 1. 背景
 
@@ -77,8 +77,6 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
   - `codexProfileWriteRequest` 增加 `SubagentModel *string`。
   - `codexAPIProfileInputFromRequest` 携带新字段。
   - `codexAPIProfileSummary` 输出新字段（同时补 `state.CodexProfileSummary`）。
-- `internal/app/daemon/admin_codex_providers.go`（legacy `/api/admin/codex/providers`）：
-  - legacy 更新请求没有新字段，但更新时必须保留 `current.SubagentModel`（与 ReviewModel 同样的 preserve 模式）。
 - `internal/app/daemon/admin_claude_profiles.go`：
   - `adminClaudeProfileView` 增加 `SubagentModel`。
   - `claudeProfileWriteRequest` 增加 `SubagentModel *string`。
@@ -96,15 +94,15 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
 - `internal/codexcatalog/deepseek.go`（或新文件 `internal/codexcatalog/build.go`）：
   - provider catalog builder 只服务已识别 provider；不要再新增/使用 generic GPT fallback template 或 `managed-models-v1.json` 来补未知模型。
   - provider 文件名与目录内容由各 provider owner 维护，例如 `deepseek-models-v1.json` / `mimo-models-v1.json`。
-- `internal/app/daemon/app_headless_codex_provider.go`：已统一走 `EnsureLaunchManagedFiles` + `ApplyLaunchMaterial`，无需改结构；新增字段自动随 `LaunchManagedFile` 写入。
+- `internal/app/daemon/app_headless_codex_profile.go`：已统一走 `EnsureLaunchManagedFiles` + `ApplyLaunchMaterial`，无需改结构；新增字段自动随 `LaunchManagedFile` 写入。
 
 ### 4.4 Web UI
 
 - `web/src/lib/types.ts`：
   - `CodexProfileSummary` / `CodexProfileWriteRequest` 增加 `subagentModel?: string`。
   - `ClaudeProfileSummary` / `ClaudeProfileWriteRequest` 增加 `subagentModel?: string`。
-- `web/src/routes/admin/CodexProviderSection.tsx`：
-  - draft state / createDraftFromProvider / createEmptyDraft / payload 增加 `subagentModel`。
+- `web/src/routes/admin/CodexProfileSection.tsx`：
+  - draft state / createDraftFromProfile / createEmptyDraft / payload 增加 `subagentModel`。
   - 表单在“审阅模型”之后、“推理强度”之前插入 `子代理模型` 输入框（与推理强度同排成 2×2）。
   - placeholder：`留空时子代理跟随主模型`。
 - `web/src/routes/admin/ClaudeProfileSection.tsx`：
@@ -118,13 +116,13 @@ Codex / Claude profile 目前每个只能配置一个主模型，外加一个辅
 - `internal/config/codex_profiles_test.go`：create/update 持久化、无变化比较、normalize。
 - `internal/config/claude_profiles_test.go`、`claude_runtime_settings_test.go`：新字段 normalize、env 映射、launch env 清理。
 - `internal/app/codexprofile/runtime_resolver_test.go`：子代理 override 注入、非 catalog-backed profile 不生成 managed catalog、DeepSeek/MiMo catalog-backed 分支保持、catalog-backed provider 目录缺失报错。
-- `internal/app/daemon/app_headless_codex_provider_test.go`：启动 args 包含 `agents.default_subagent_model`；仅 catalog-backed provider 额外包含 `model_catalog_json`。
-- `internal/app/daemon/admin_codex_profiles_test.go`、`admin_claude_profiles_test.go`：API create/update/read 新字段；legacy API 更新保留新字段。
+- `internal/app/daemon/app_headless_codex_profile_test.go`：启动 args 包含 `agents.default_subagent_model`；仅 catalog-backed provider 额外包含 `model_catalog_json`。
+- `internal/app/daemon/admin_codex_profiles_test.go`、`admin_claude_profiles_test.go`：API create/update/read 新字段。
 - `internal/app/daemon/profile_catalog_migration_test.go`：旧配置无字段 → 迁移后为空，凭据不受影响。
 
 Web：
 
-- `web/src/routes/admin/CodexProviderSection.test.tsx`、`ClaudeProfileSection.test.tsx`：保存 payload 含 `subagentModel`、编辑回显、清空。
+- `web/src/routes/admin/CodexProfileSection.test.tsx`、`ClaudeProfileSection.test.tsx`：保存 payload 含 `subagentModel`、编辑回显、清空。
 - `web/src/routes/AdminRoute.test.tsx` / fixtures：默认夹具补 `subagentModel`。
 
 ### 4.6 文档
@@ -169,7 +167,7 @@ Claude:
 - catalog-backed provider 需要写 managed 目录但目录缺失：复用 `ErrorManagedModelCatalogMissing`，headless 启动路径已有对应错误映射。非 catalog-backed profile 不因子代理模型要求 managed 目录。
 - 旧配置/历史 revision 无 `subagentModel` 字段：按空处理，不触发迁移写入。
 - 配置迁移只读不写；不得改变既有凭据、revision、connection generation。
-- legacy `/api/admin/codex/providers` 更新继续保留 `subagentModel`。
+- 旧 `/api/admin/codex/providers` 已移除；子代理模型不再维护 legacy API 写入语义。
 
 ## 8. 风险与取舍
 

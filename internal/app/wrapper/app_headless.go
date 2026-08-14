@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -21,7 +22,6 @@ func headlessNotificationOptOutMethods() []string {
 		"item/agentMessage/delta",
 		"item/plan/delta",
 		"item/reasoning/textDelta",
-		"item/reasoning/summaryTextDelta",
 		"item/commandExecution/outputDelta",
 		"item/fileChange/outputDelta",
 	}
@@ -134,7 +134,7 @@ func matchBootstrapInitializeResponse(line []byte) (bool, error) {
 	if lookupStringFromMap(message, "id") != relayBootstrapInitializeID {
 		return false, nil
 	}
-	if errMsg := strings.TrimSpace(extractJSONRPCErrorMessage(message)); errMsg != "" {
+	if errMsg := strings.TrimSpace(jsonrpcutil.ExtractErrorMessage(message)); errMsg != "" {
 		return true, fmt.Errorf("headless bootstrap initialize failed: %s", errMsg)
 	}
 	if _, ok := message["result"]; !ok {

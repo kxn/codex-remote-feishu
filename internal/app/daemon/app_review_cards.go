@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
@@ -87,7 +88,7 @@ func appendFooterButtons(operation *feishu.Operation, buttons []map[string]any) 
 	if len(elements) != 0 {
 		elements = append(elements, map[string]any{"tag": "hr"})
 	}
-	elements = append(elements, cardButtonGroupElement(buttons))
+	elements = append(elements, cardkit.ButtonGroupElement(buttons))
 	operation.CardElements = elements
 	feishu.InvalidateOperationCard(operation)
 }
@@ -131,7 +132,14 @@ func reviewCommitButtonSHA(value string) string {
 func reviewExitButtons(daemonLifecycleID string) []map[string]any {
 	return []map[string]any{
 		localCurrentCardActionButton(
-			"放弃审阅",
+			"继续追问审阅",
+			"default",
+			daemonLifecycleID,
+			control.ActionReviewFollowUp,
+			"",
+		),
+		localCurrentCardActionButton(
+			"退出审阅",
 			"default",
 			daemonLifecycleID,
 			control.ActionReviewDiscard,
@@ -165,48 +173,9 @@ func cloneCardElements(elements []map[string]any) []map[string]any {
 	}
 	out := make([]map[string]any, 0, len(elements))
 	for _, element := range elements {
-		out = append(out, cloneCardMap(element))
+		out = append(out, cardkit.CloneMap(element))
 	}
 	return out
-}
-
-func cloneCardMap(value map[string]any) map[string]any {
-	if len(value) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(value))
-	for key, raw := range value {
-		out[key] = cloneCardValue(raw)
-	}
-	return out
-}
-
-func cloneCardValue(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneCardMap(typed)
-	case []map[string]any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardMap(item))
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardValue(item))
-		}
-		return out
-	default:
-		return typed
-	}
-}
-
-func cardPlainText(content string) map[string]any {
-	return map[string]any{
-		"tag":     "plain_text",
-		"content": strings.TrimSpace(content),
-	}
 }
 
 func cardCallbackButton(label, buttonType string, value map[string]any) map[string]any {
@@ -216,42 +185,10 @@ func cardCallbackButton(label, buttonType string, value map[string]any) map[stri
 	return map[string]any{
 		"tag":  "button",
 		"type": buttonType,
-		"text": cardPlainText(label),
+		"text": cardkit.PlainText(label),
 		"behaviors": []map[string]any{{
 			"type":  "callback",
-			"value": cloneCardMap(value),
+			"value": cardkit.CloneMap(value),
 		}},
-	}
-}
-
-func cardButtonGroupElement(buttons []map[string]any) map[string]any {
-	filtered := make([]map[string]any, 0, len(buttons))
-	for _, button := range buttons {
-		if len(button) == 0 {
-			continue
-		}
-		filtered = append(filtered, cloneCardMap(button))
-	}
-	switch len(filtered) {
-	case 0:
-		return nil
-	case 1:
-		return filtered[0]
-	default:
-		columns := make([]map[string]any, 0, len(filtered))
-		for _, button := range filtered {
-			columns = append(columns, map[string]any{
-				"tag":            "column",
-				"width":          "auto",
-				"vertical_align": "top",
-				"elements":       []map[string]any{button},
-			})
-		}
-		return map[string]any{
-			"tag":                "column_set",
-			"flex_mode":          "flow",
-			"horizontal_spacing": "small",
-			"columns":            columns,
-		}
 	}
 }

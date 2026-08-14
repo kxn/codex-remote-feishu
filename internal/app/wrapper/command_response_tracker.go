@@ -62,7 +62,7 @@ func (t *commandResponseTracker) ResolveFrame(line []byte) (bool, bool) {
 	if strings.TrimSpace(requestID) == "" {
 		return false, false
 	}
-	return t.resolve(requestID, extractJSONRPCErrorMessage(message))
+	return t.resolve(requestID, jsonrpcutil.ExtractErrorMessage(message))
 }
 
 func (t *commandResponseTracker) ResolveRequestID(requestID, rejectMessage string) (bool, bool) {
@@ -124,10 +124,6 @@ func waitCommandResponse(ctx context.Context, ch <-chan *agentproto.ErrorInfo, t
 	case <-timer.C:
 		return timeoutProblem.Normalize()
 	}
-}
-
-func extractJSONRPCErrorMessage(message map[string]any) string {
-	return jsonrpcutil.ExtractErrorMessage(message)
 }
 
 func lookupStringFromRawFrame(line []byte, key string) string {

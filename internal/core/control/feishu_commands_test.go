@@ -179,25 +179,35 @@ func TestParseFeishuTextActionRecognizesClaudeProfileCommand(t *testing.T) {
 	}
 }
 
-func TestParseFeishuTextActionRecognizesCodexProfileCommandAndAlias(t *testing.T) {
+func TestParseFeishuTextActionRecognizesCodexProfileCommand(t *testing.T) {
 	tests := []string{
 		"/codexprofile",
 		"/codexprofile native",
 		"/codexprofile team-proxy",
-		"/codexprovider",
-		"/codexprovider default",
-		"/codexprovider team-proxy",
 	}
 	for _, input := range tests {
 		action, ok := ParseFeishuTextActionWithoutCatalog(input)
 		if !ok {
 			t.Fatalf("expected %q to be parsed", input)
 		}
-		if action.Kind != ActionCodexProviderCommand {
-			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionCodexProviderCommand)
+		if action.Kind != ActionCodexProfileCommand {
+			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionCodexProfileCommand)
 		}
 		if action.Text != input {
 			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
+		}
+	}
+}
+
+func TestParseFeishuTextActionRejectsLegacyCodexProviderAlias(t *testing.T) {
+	tests := []string{
+		"/codexprovider",
+		"/codexprovider default",
+		"/codexprovider team-proxy",
+	}
+	for _, input := range tests {
+		if action, ok := ParseFeishuTextActionWithoutCatalog(input); ok {
+			t.Fatalf("expected legacy alias %q to be rejected, got %#v", input, action)
 		}
 	}
 }
@@ -222,28 +232,25 @@ func TestParseFeishuTextActionRecognizesOpenCodeProfileCommand(t *testing.T) {
 	}
 }
 
-func TestParseFeishuMenuActionRecognizesCodexProfileCommandAndAlias(t *testing.T) {
-	tests := []struct {
-		menuKey  string
-		wantText string
-	}{
-		{menuKey: "codex_profile", wantText: "/codexprofile"},
-		{menuKey: "codex_provider", wantText: "/codexprovider"},
+func TestParseFeishuMenuActionRecognizesCodexProfileCommand(t *testing.T) {
+	action, ok := ParseFeishuMenuActionWithoutCatalog("codex_profile")
+	if !ok {
+		t.Fatal("expected codex_profile menu action to be parsed")
 	}
-	for _, tt := range tests {
-		action, ok := ParseFeishuMenuActionWithoutCatalog(tt.menuKey)
-		if !ok {
-			t.Fatalf("expected %s menu action to be parsed", tt.menuKey)
-		}
-		if action.Kind != ActionCodexProviderCommand {
-			t.Fatalf("action kind = %q, want %q", action.Kind, ActionCodexProviderCommand)
-		}
-		if action.Text != tt.wantText {
-			t.Fatalf("action text = %q, want %q", action.Text, tt.wantText)
-		}
-		if action.CommandID != FeishuCommandCodexProvider {
-			t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandCodexProvider)
-		}
+	if action.Kind != ActionCodexProfileCommand {
+		t.Fatalf("action kind = %q, want %q", action.Kind, ActionCodexProfileCommand)
+	}
+	if action.Text != "/codexprofile" {
+		t.Fatalf("action text = %q, want %q", action.Text, "/codexprofile")
+	}
+	if action.CommandID != FeishuCommandCodexProfile {
+		t.Fatalf("command id = %q, want %q", action.CommandID, FeishuCommandCodexProfile)
+	}
+}
+
+func TestParseFeishuMenuActionRejectsLegacyCodexProviderAlias(t *testing.T) {
+	if action, ok := ParseFeishuMenuActionWithoutCatalog("codex_provider"); ok {
+		t.Fatalf("expected legacy menu alias to be rejected, got %#v", action)
 	}
 }
 

@@ -21,10 +21,6 @@ func upgradeUsageEvents(surfaceID, formDefault, message string) []eventcontract.
 	return commandPageEvents(surfaceID, buildUpgradeRootPageView(install.InstallState{}, false, formDefault, "error", message))
 }
 
-func runCommandButton(label, commandText, style string, disabled bool) control.CommandCatalogButton {
-	return control.FeishuLocalPageCommandButton(label, commandText, style, disabled)
-}
-
 func debugNoticeEvent(surfaceID, code, text string) eventcontract.Event {
 	return eventcontract.Event{
 		Kind:             eventcontract.KindNotice,

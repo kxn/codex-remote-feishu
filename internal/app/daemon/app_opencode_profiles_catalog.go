@@ -19,18 +19,19 @@ func materializeOpenCodeProfileSummaries(cfg config.AppConfig) []state.OpenCodeP
 			available = status == ""
 		}
 		records = append(records, state.OpenCodeProfileSummary{
-			ID:         strings.TrimSpace(profile.ID),
-			Revision:   profile.Revision,
-			ETag:       state.OpenCodeProfileDefinitionETag(profile.ID, profile.Revision),
-			Name:       strings.TrimSpace(profile.Name),
-			BaseURL:    strings.TrimSpace(profile.BaseURL),
-			Model:      strings.TrimSpace(profile.Model),
-			StatusCode: strings.TrimSpace(status),
-			Available:  available,
-			BuiltIn:    profile.BuiltIn,
-			Editable:   !profile.BuiltIn,
-			Deletable:  !profile.BuiltIn,
-			HasAPIKey:  strings.TrimSpace(profile.APIKey) != "",
+			ID:           strings.TrimSpace(profile.ID),
+			Revision:     profile.Revision,
+			ETag:         state.OpenCodeProfileDefinitionETag(profile.ID, profile.Revision),
+			Name:         strings.TrimSpace(profile.Name),
+			ProviderType: strings.TrimSpace(profile.ProviderType),
+			BaseURL:      strings.TrimSpace(profile.BaseURL),
+			Model:        strings.TrimSpace(profile.Model),
+			StatusCode:   strings.TrimSpace(status),
+			Available:    available,
+			BuiltIn:      profile.BuiltIn,
+			Editable:     !profile.BuiltIn,
+			Deletable:    !profile.BuiltIn,
+			HasAPIKey:    strings.TrimSpace(profile.APIKey) != "",
 		})
 	}
 	return records

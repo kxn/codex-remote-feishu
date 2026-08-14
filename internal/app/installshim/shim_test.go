@@ -1,6 +1,7 @@
 package installshim
 
 import (
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,7 +18,7 @@ func TestWriteUpgradeShimEntrypointWritesExecutableAndSidecar(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	entrypoint := filepath.Join(dir, "upgrade-helper", executableName(runtime.GOOS))
+	entrypoint := filepath.Join(dir, "upgrade-helper", xutil.ExecutableName(runtime.GOOS))
 	statePath := filepath.Join(dir, "install-state.json")
 	if err := os.WriteFile(statePath, []byte("{}\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile state: %v", err)

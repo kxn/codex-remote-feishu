@@ -45,7 +45,7 @@ func persistedStateHarnesses() []persistedStateHarness {
 				app.configureSurfaceResumeStateLocked(stateDir)
 			},
 			seed: func(app *App) {
-				app.service.MaterializeSurfaceResumeWithCodexProvider(
+				app.service.MaterializeSurfaceResumeWithCodexProfile(
 					"feishu:app-1:user:ou_user",
 					"app-1",
 					"oc_chat",
@@ -59,7 +59,7 @@ func persistedStateHarnesses() []persistedStateHarness {
 				)
 			},
 			mutate: func(app *App) {
-				app.service.MaterializeSurfaceResumeWithCodexProvider(
+				app.service.MaterializeSurfaceResumeWithCodexProfile(
 					"feishu:app-1:user:ou_other",
 					"app-1",
 					"oc_other",

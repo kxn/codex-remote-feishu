@@ -2,6 +2,7 @@ package install
 
 import (
 	"bytes"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -78,7 +79,7 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 	baseDir := t.TempDir()
 	installBinDir := filepath.Join(baseDir, "installed-bin")
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
-	existingBinary := seedBinary(t, filepath.Join(installBinDir, executableName("linux")), "old-binary")
+	existingBinary := seedBinary(t, filepath.Join(installBinDir, xutil.ExecutableName("linux")), "old-binary")
 	if err := WriteState(statePath, InstallState{
 		InstanceID:         defaultInstanceID,
 		BaseDir:            baseDir,
@@ -96,7 +97,7 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 		t.Fatalf("WriteState: %v", err)
 	}
 
-	sourceBinary := seedBinary(t, filepath.Join(baseDir, "src", executableName("linux")), "new-binary")
+	sourceBinary := seedBinary(t, filepath.Join(baseDir, "src", xutil.ExecutableName("linux")), "new-binary")
 
 	originalValidator := sourceBinaryValidator
 	sourceBinaryValidator = func(string) error { return nil }
@@ -147,7 +148,7 @@ func TestRunMainDefaultsBinaryToCurrentExecutable(t *testing.T) {
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
 	installBinDir := filepath.Join(baseDir, "installed-bin")
-	selfBinary := filepath.Join(baseDir, "self", executableName(runtime.GOOS))
+	selfBinary := filepath.Join(baseDir, "self", xutil.ExecutableName(runtime.GOOS))
 	if err := os.MkdirAll(filepath.Dir(selfBinary), 0o755); err != nil {
 		t.Fatalf("mkdir self binary dir: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestRunMainDefaultsBinaryToCurrentExecutable(t *testing.T) {
 		t.Fatalf("RunMain default binary source: %v", err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(installBinDir, executableName(runtime.GOOS)))
+	raw, err := os.ReadFile(filepath.Join(installBinDir, xutil.ExecutableName(runtime.GOOS)))
 	if err != nil {
 		t.Fatalf("read installed binary: %v", err)
 	}
@@ -183,7 +184,7 @@ func TestRunMainDefaultsBinaryToCurrentExecutable(t *testing.T) {
 func TestRunMainRejectsUnrunnableBinarySource(t *testing.T) {
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
-	binaryPath := filepath.Join(baseDir, "bin", executableName(runtime.GOOS))
+	binaryPath := filepath.Join(baseDir, "bin", xutil.ExecutableName(runtime.GOOS))
 	if err := os.MkdirAll(filepath.Dir(binaryPath), 0o755); err != nil {
 		t.Fatalf("mkdir binary dir: %v", err)
 	}
@@ -248,8 +249,8 @@ func TestRunMainReusesExistingInstalledBinaryDirWhenInstallBinDirOmitted(t *test
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
 	customInstallDir := filepath.Join(baseDir, "systemd-dev", "bin")
-	existingBinaryPath := seedBinary(t, filepath.Join(customInstallDir, executableName(runtime.GOOS)), "old-binary")
-	sourceBinaryPath := seedBinary(t, filepath.Join(repoRoot, "bin", executableName(runtime.GOOS)), "new-binary")
+	existingBinaryPath := seedBinary(t, filepath.Join(customInstallDir, xutil.ExecutableName(runtime.GOOS)), "old-binary")
+	sourceBinaryPath := seedBinary(t, filepath.Join(repoRoot, "bin", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 	if err := writeRepoInstallBinding(repoRoot, repoInstallBinding{
 		InstanceID: defaultInstanceID,
 		BaseDir:    baseDir,
@@ -298,7 +299,7 @@ func TestResolveTargetInstallBinDirMigratesVersionScopedPath(t *testing.T) {
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
 	// Use the derived versions root so LoadState can re-derive it from the state path.
 	derivedVersionsRoot := defaultVersionsRootForStatePath(statePath)
-	versionScopedBinary := seedBinary(t, filepath.Join(derivedVersionsRoot, "v1.8.4", executableName(runtime.GOOS)), "old-binary")
+	versionScopedBinary := seedBinary(t, filepath.Join(derivedVersionsRoot, "v1.8.4", xutil.ExecutableName(runtime.GOOS)), "old-binary")
 	if err := WriteState(statePath, InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
@@ -326,7 +327,7 @@ func TestResolveTargetInstallBinDirPreservesCustomDir(t *testing.T) {
 	baseDir := t.TempDir()
 	customBinDir := filepath.Join(baseDir, "my-custom-bin")
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
-	existingBinary := seedBinary(t, filepath.Join(customBinDir, executableName(runtime.GOOS)), "binary")
+	existingBinary := seedBinary(t, filepath.Join(customBinDir, xutil.ExecutableName(runtime.GOOS)), "binary")
 	if err := WriteState(statePath, InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
@@ -353,7 +354,7 @@ func TestResolveTargetInstallBinDirExplicitValueOverridesMigration(t *testing.T)
 	baseDir := t.TempDir()
 	versionsRoot := filepath.Join(baseDir, "releases")
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
-	versionScopedBinary := seedBinary(t, filepath.Join(versionsRoot, "v1.8.4", executableName(runtime.GOOS)), "old-binary")
+	versionScopedBinary := seedBinary(t, filepath.Join(versionsRoot, "v1.8.4", xutil.ExecutableName(runtime.GOOS)), "old-binary")
 	if err := WriteState(statePath, InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,

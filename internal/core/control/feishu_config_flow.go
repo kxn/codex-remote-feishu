@@ -6,7 +6,7 @@ type FeishuConfigFlowValueKey string
 
 const (
 	FeishuConfigFlowValueSurfaceProductMode         FeishuConfigFlowValueKey = "surface_product_mode"
-	FeishuConfigFlowValueSurfaceCodexProvider       FeishuConfigFlowValueKey = "surface_codex_provider"
+	FeishuConfigFlowValueSurfaceCodexProfile        FeishuConfigFlowValueKey = "surface_codex_profile"
 	FeishuConfigFlowValueSurfaceClaudeProfile       FeishuConfigFlowValueKey = "surface_claude_profile"
 	FeishuConfigFlowValueSurfaceOpenCodeProfile     FeishuConfigFlowValueKey = "surface_opencode_profile"
 	FeishuConfigFlowValueSurfaceAutoWhip            FeishuConfigFlowValueKey = "surface_auto_whip"
@@ -105,12 +105,12 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 		CurrentValueKey: FeishuConfigFlowValueSurfaceProductMode,
 	},
 	{
-		CommandID:       FeishuCommandCodexProvider,
-		ActionKind:      ActionCodexProviderCommand,
+		CommandID:       FeishuCommandCodexProfile,
+		ActionKind:      ActionCodexProfileCommand,
 		BareCommand:     "/codexprofile",
-		IntentKind:      FeishuUIIntentShowCodexProviderCatalog,
-		PageBuilder:     codexProviderPageViewFromCommandConfigView,
-		CurrentValueKey: FeishuConfigFlowValueSurfaceCodexProvider,
+		IntentKind:      FeishuUIIntentShowCodexProfileCatalog,
+		PageBuilder:     codexProfilePageViewFromCommandConfigView,
+		CurrentValueKey: FeishuConfigFlowValueSurfaceCodexProfile,
 	},
 	{
 		CommandID:       FeishuCommandClaudeProfile,
@@ -279,8 +279,5 @@ func isConfigFlowOpenAction(action Action, def FeishuConfigFlowDefinition) bool 
 }
 
 func isBareConfigFlowCommand(text string, def FeishuConfigFlowDefinition) bool {
-	if isBareInlineCommand(text, def.BareCommand) {
-		return true
-	}
-	return def.CommandID == FeishuCommandCodexProvider && isBareInlineCommand(text, "/codexprovider")
+	return isBareInlineCommand(text, def.BareCommand)
 }

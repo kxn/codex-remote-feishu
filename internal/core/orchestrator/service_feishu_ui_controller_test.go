@@ -16,11 +16,11 @@ func TestApplySurfaceActionRejectsBlockedConfigCatalogByBackend(t *testing.T) {
 	svc.MaterializeSurfaceResume("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendClaude, "", "", "")
 
 	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "surface-1",
 		ChatID:           "chat-1",
 		ActorUserID:      "user-1",
-		Text:             "/codexprovider",
+		Text:             "/codexprofile",
 	})
 	if len(events) != 1 || events[0].Notice == nil {
 		t.Fatalf("expected a single rejection notice, got %#v", events)

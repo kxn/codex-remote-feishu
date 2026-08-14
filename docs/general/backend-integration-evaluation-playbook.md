@@ -1,8 +1,8 @@
 # 新 Backend 接入评估 Playbook
 
 > Type: `general`
-> Updated: `2026-08-08`
-> Summary: 新增面向任意 AI 客户端/backend 的接入评估流程、测试矩阵、能力分级和结论模板。
+> Updated: `2026-08-11`
+> Summary: 同步 Codex Profile-only 代码载体：评估清单不再引用已移除的 Provider API/文件。
 
 ## 1. 文档定位
 
@@ -135,7 +135,7 @@
 代码载体：
 
 - `internal/app/daemon/app_headless.go`
-- `internal/app/daemon/app_headless_codex_provider.go`
+- `internal/app/daemon/app_headless_codex_profile.go`
 - `internal/app/daemon/app_headless_claude_profile.go`
 - `internal/app/wrapper/app_child_session.go`
 - `internal/app/wrapper/app_child_session_claude.go`
@@ -175,11 +175,11 @@
 - `internal/core/state/bot_capability_settings.go`
 - `internal/core/state/workspace_defaults.go`
 - `internal/app/daemon/app_headless.go`
-- `internal/app/daemon/app_headless_codex_provider.go`
+- `internal/app/daemon/app_headless_codex_profile.go`
 - `internal/app/daemon/app_headless_claude_profile.go`
 - `internal/core/orchestrator/service_snapshot_prompt.go`
 - `internal/core/orchestrator/service_config_prompt*.go`
-- `internal/core/orchestrator/service_codex_provider.go`
+- `internal/core/orchestrator/service_codex_profile.go`
 - `internal/core/orchestrator/service_codex_resume_policy.go`
 - `internal/core/control/feishu_command_config_summary.go`
 - `internal/core/control/feishu_command_config_catalog.go`
@@ -655,7 +655,7 @@ backend 接入容易把 secret、代理、路径、权限做错。
 | binary discovery / runtime requirements | `config/claude_binary.go`、`wrapper/codex_binary_resolver.go`、`admin_runtime_requirements*` | binary 如何发现、冻结、校验版本和 requirements | explicit env、PATH、missing、wrong binary、admin status |
 | wrapper mode / bootstrap | `wrapper/app_headless*.go`、`wrapper/entry.go` | 是否需要专属 app-server mode、initialize frame、stdout bootstrap | bootstrap handshake、stderr pollution、wrong role |
 | capability / auth probe | `app/codexprofile/*probe*.go`、`app_codex_*_probe*` | 是否需要启动前 probe 来证明协议/config/auth 可用 | probe timeout、contract mismatch、auth missing、diagnostic |
-| profile compiler | `app_headless_codex_provider.go`、`app_headless_claude_profile.go`、`codexprofile/runtime_resolver.go` | profile intent 如何变成 launch material、contract、restart policy | compiler golden、black-box config overlay |
+| profile compiler | `app_headless_codex_profile.go`、`app_headless_claude_profile.go`、`codexprofile/runtime_resolver.go` | profile intent 如何变成 launch material、contract、restart policy | compiler golden、black-box config overlay |
 | local session store | `claudesessionstore/*`、`claudestate/session_catalog.go`、`codexstate/sqlite_threads.go` | backend thread catalog 是 native API、local DB、JSONL，还是不可读 | list/history/resume/workspace filter fixture |
 | persisted thread metadata | `persisted_thread_catalog.go`、`codexstate/sqlite_threads.go` | recent workspaces、thread title、preview、model、reasoning 从哪里来 | catalog merge、probe thread filtering、cross-backend isolation |
 | permission / access projection | `claudesessionstore/permission_mode.go`、`adapter/*/permission*`、`translator_overrides*` | native permission 与 access/plan/sandbox 是否等价 | observed permission、override、session grant、unsupported mode |
@@ -674,7 +674,7 @@ backend 接入容易把 secret、代理、路径、权限做错。
 | token usage | `translator_token_usage*`、`agentproto/token_usage.go` | usage 是 per-turn、cumulative、cache 分项还是不可得 | accumulation、cache/reasoning fields、unknown handling |
 | MCP publication / OAuth | `app_child_mcp.go`、`translator_mcp_oauth*`、`service_mcp*` | MCP config 注入和 OAuth 是否同协议可复用 | injection、bearer redaction、oauth URL/completion |
 | Feishu command/menu branding | `feishu_command_*`、`service_feishu_command_view*`、`service_command_support*` | backend-specific command 是否隐藏、改文案、改 catalog backend | menu visibility、catalog backend、unsupported reject |
-| admin/config APIs | `admin_codex_profiles*`、`admin_claude_profiles*`、`admin_codex_providers*` | profile CRUD、context preference、redaction、ETag 是否需要新 API | CRUD/redaction/ETag/migration |
+| admin/config APIs | `admin_codex_profiles*`、`admin_claude_profiles*` | profile CRUD、context preference、redaction、ETag 是否需要新 API | CRUD/redaction/ETag/migration |
 | upgrade lifecycle | `app/codexupgrade/*`、`app_codex_upgrade*` | backend binary 是否纳入 self-upgrade 或明确不支持 | upgrade entry hidden/visible、unsupported status |
 | media/final output | `service_image_output*`、`app_final_card*` | image/file/final block 依赖哪些 typed fields | image lifecycle、final card、file summary |
 

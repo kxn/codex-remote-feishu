@@ -92,7 +92,7 @@ func TestResolveFeishuCommandDisplayGroupAppliesClaudeSupportProfile(t *testing.
 		Backend:     agentproto.BackendClaude,
 		ProductMode: "normal",
 	})
-	if got, want := resolvedDisplayCommands(commonTools), []string{"/coworkers", "/history", "/sendfile"}; !reflect.DeepEqual(got, want) {
+	if got, want := resolvedDisplayCommands(commonTools), []string{"/review", "/coworkers", "/history", "/sendfile"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("claude common_tools help commands = %#v, want %#v", got, want)
 	}
 
@@ -184,11 +184,11 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 	if codex.IncludesFamily(FeishuCommandVSCodeMigrate) {
 		t.Fatal("expected codex profile to hide vscode migrate")
 	}
-	if !codex.IncludesFamily(FeishuCommandCodexProvider) {
-		t.Fatal("expected codex profile to include codex provider")
+	if !codex.IncludesFamily(FeishuCommandCodexProfile) {
+		t.Fatal("expected codex profile to include codex profile")
 	}
-	if vscode.IncludesFamily(FeishuCommandCodexProvider) {
-		t.Fatal("expected vscode profile to hide codex provider")
+	if vscode.IncludesFamily(FeishuCommandCodexProfile) {
+		t.Fatal("expected vscode profile to hide codex profile")
 	}
 }
 
@@ -199,7 +199,7 @@ func TestGroupCatalogContextHidesBotCapabilitySettings(t *testing.T) {
 	})
 	for _, familyID := range []string{
 		FeishuCommandMode,
-		FeishuCommandCodexProvider,
+		FeishuCommandCodexProfile,
 		FeishuCommandClaudeProfile,
 		FeishuCommandOpenCodeProfile,
 		FeishuCommandModel,
@@ -220,7 +220,7 @@ func TestGroupCatalogContextHidesBotCapabilitySettings(t *testing.T) {
 		ProductMode:                   "normal",
 		BotCapabilitySettingsReadOnly: true,
 	})
-	for _, command := range []string{"/mode", "/codexprovider", "/opencodeprofile", "/model", "/reasoning", "/access", "/plan"} {
+	for _, command := range []string{"/mode", "/codexprofile", "/opencodeprofile", "/model", "/reasoning", "/access", "/plan"} {
 		if catalogContainsCommand(page, command) {
 			t.Fatalf("group send settings menu should hide %q: %#v", command, page.Sections)
 		}
@@ -321,8 +321,8 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesClaudeVisibleProfile(t 
 	if profile.IncludesFamily(FeishuCommandModel) {
 		t.Fatalf("expected claude visible profile to hide model, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupSendSettings))
 	}
-	if profile.IncludesFamily(FeishuCommandReview) {
-		t.Fatalf("expected claude visible profile to hide review, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools))
+	if !profile.IncludesFamily(FeishuCommandReview) {
+		t.Fatalf("expected claude visible profile to include review, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools))
 	}
 }
 
@@ -336,6 +336,9 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 	if profile.VisibleMode != "opencode" {
 		t.Fatalf("VisibleMode = %q, want opencode", profile.VisibleMode)
 	}
+	if !profile.IncludesFamily(FeishuCommandReview) {
+		t.Fatalf("expected OpenCode profile to expose review, got %#v", profile.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools))
+	}
 
 	currentWork := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupCurrentWork, true, ctx)
 	if got, want := resolvedDisplayCommands(currentWork), []string{"/stop", "/new", "/status"}; !reflect.DeepEqual(got, want) {
@@ -343,12 +346,12 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 	}
 
 	sendSettings := ResolveFeishuCommandDisplayGroup(FeishuCommandGroupSendSettings, false, ctx)
-	for _, command := range []string{"/verbose", "/opencodeprofile", "/mode"} {
+	for _, command := range []string{"/reasoning", "/access", "/plan", "/verbose", "/opencodeprofile", "/mode"} {
 		if !containsCommandSlash(sendSettings, command) {
 			t.Fatalf("opencode send_settings should include %q, got %#v", command, resolvedDisplayCommands(sendSettings))
 		}
 	}
-	for _, command := range []string{"/model", "/reasoning", "/access", "/plan", "/codexprovider", "/claudeprofile"} {
+	for _, command := range []string{"/model", "/codexprofile", "/claudeprofile"} {
 		if containsCommandSlash(sendSettings, command) {
 			t.Fatalf("opencode send_settings should hide %q, got %#v", command, resolvedDisplayCommands(sendSettings))
 		}
@@ -361,14 +364,14 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 	}{
 		{familyID: FeishuCommandNew, kind: FeishuCommandSupportApproximation, notePart: "OpenCode"},
 		{familyID: FeishuCommandSteerAll, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
-		{familyID: FeishuCommandReasoning, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
-		{familyID: FeishuCommandAccess, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
-		{familyID: FeishuCommandPlan, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
+		{familyID: FeishuCommandReasoning, kind: FeishuCommandSupportNative, notePart: ""},
+		{familyID: FeishuCommandAccess, kind: FeishuCommandSupportNative, notePart: ""},
+		{familyID: FeishuCommandPlan, kind: FeishuCommandSupportNative, notePart: ""},
 		{familyID: FeishuCommandModel, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandPatch, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandAutoWhip, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandAutoContinue, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
-		{familyID: FeishuCommandCodexProvider, kind: FeishuCommandSupportReject, notePart: "/mode codex"},
+		{familyID: FeishuCommandCodexProfile, kind: FeishuCommandSupportReject, notePart: "/mode codex"},
 		{familyID: FeishuCommandClaudeProfile, kind: FeishuCommandSupportReject, notePart: "/mode claude"},
 		{familyID: FeishuCommandOpenCodeProfile, kind: FeishuCommandSupportNative, notePart: ""},
 	} {

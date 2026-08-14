@@ -73,7 +73,7 @@ func (s *Service) observeConfig(inst *state.InstanceRecord, threadID, cwd, scope
 				thread.ObservedAccessMode = access
 			}
 			if strings.TrimSpace(planMode) != "" {
-				thread.ObservedPlanMode = state.NormalizePlanModeSetting(state.PlanModeSetting(planMode))
+				applyObservedPlanMode(thread, planMode)
 			}
 			if observedPermission != nil {
 				thread.ObservedPermission = agentproto.CloneObservedPermissionState(observedPermission)

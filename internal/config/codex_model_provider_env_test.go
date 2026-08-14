@@ -1,0 +1,383 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathscope"
+)
+
+func TestResolveCodexModelProviderEnvUsesConfiguredProfile(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
+profile = "team"
+model_provider = "fallback"
+
+[profiles.team]
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	info, err := ResolveCodexModelProviderEnv([]string{"app-server"}, []string{"HOME=" + homeDir})
+	if err != nil {
+		t.Fatalf("ResolveCodexModelProviderEnv: %v", err)
+	}
+	if got, want := info.ConfigPath, filepath.Join(homeDir, ".codex", codexConfigFileName); got != want {
+		t.Fatalf("ConfigPath = %q, want %q", got, want)
+	}
+	if got, want := info.ActiveProfile, "team"; got != want {
+		t.Fatalf("ActiveProfile = %q, want %q", got, want)
+	}
+	if got, want := info.ActiveProvider, "custom"; got != want {
+		t.Fatalf("ActiveProvider = %q, want %q", got, want)
+	}
+	if got, want := info.RequiredEnvKey, "CUSTOM_API_KEY"; got != want {
+		t.Fatalf("RequiredEnvKey = %q, want %q", got, want)
+	}
+}
+
+func TestResolveCodexModelProviderEnvHonorsCLIOverrides(t *testing.T) {
+	codexHome := t.TempDir()
+	writeCodexConfigForTest(t, codexHome, `
+profile = "team"
+model_provider = "fallback"
+
+[profiles.team]
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	args := []string{
+		"app-server",
+		"--profile=beta",
+		"-c", `model_provider="cli-provider"`,
+		"-c", `profiles.beta.model_provider="beta-provider"`,
+		"--config=model_providers.cli-provider.env_key=\"CLI_KEY\"",
+	}
+	info, err := ResolveCodexModelProviderEnv(args, []string{"CODEX_HOME=" + codexHome})
+	if err != nil {
+		t.Fatalf("ResolveCodexModelProviderEnv: %v", err)
+	}
+	if got, want := info.ActiveProfile, "beta"; got != want {
+		t.Fatalf("ActiveProfile = %q, want %q", got, want)
+	}
+	if got, want := info.ActiveProvider, "cli-provider"; got != want {
+		t.Fatalf("ActiveProvider = %q, want %q", got, want)
+	}
+	if got, want := info.RequiredEnvKey, "CLI_KEY"; got != want {
+		t.Fatalf("RequiredEnvKey = %q, want %q", got, want)
+	}
+}
+
+func TestResolveCodexModelProviderEnvReturnsErrorForMissingProfile(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
+profile = "missing"
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	_, err := ResolveCodexModelProviderEnv([]string{"app-server"}, []string{"HOME=" + homeDir})
+	if err == nil {
+		t.Fatal("expected missing profile error")
+	}
+}
+
+func TestSupplementCodexModelProviderEnvInjectsMissingKeyFromShell(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		if got, want := key, "CUSTOM_API_KEY"; got != want {
+			t.Fatalf("lookup key = %q, want %q", got, want)
+		}
+		return "from-shell", nil
+	}
+
+	env := []string{"HOME=" + homeDir, "PATH=/usr/bin"}
+	got, err := supplementCodexModelProviderEnv(env, []string{"app-server"})
+	if err != nil {
+		t.Fatalf("supplementCodexModelProviderEnv: %v", err)
+	}
+	if value, ok := lookupEnvValue(got, "CUSTOM_API_KEY"); !ok || value != "from-shell" {
+		t.Fatalf("CUSTOM_API_KEY = %q ok=%v, want from-shell", value, ok)
+	}
+}
+
+func TestSupplementCodexModelProviderEnvKeepsExistingValue(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupCalled := false
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		lookupCalled = true
+		return "", nil
+	}
+
+	env := []string{"HOME=" + homeDir, "CUSTOM_API_KEY=already-set"}
+	got, err := supplementCodexModelProviderEnv(env, []string{"app-server"})
+	if err != nil {
+		t.Fatalf("supplementCodexModelProviderEnv: %v", err)
+	}
+	if lookupCalled {
+		t.Fatal("expected shell lookup to be skipped")
+	}
+	if value, ok := lookupEnvValue(got, "CUSTOM_API_KEY"); !ok || value != "already-set" {
+		t.Fatalf("CUSTOM_API_KEY = %q ok=%v, want already-set", value, ok)
+	}
+}
+
+func TestBuildCodexChildEnvPreservesProxyRulesAndInjectsCodexKey(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		return "from-shell", nil
+	}
+
+	currentEnv := []string{
+		"HOME=" + homeDir,
+		"PATH=/usr/bin",
+		"http_proxy=http://old-proxy",
+		"KEEP_ME=1",
+	}
+	proxyEnv := []string{
+		"http_proxy=http://restored-proxy",
+		"HTTPS_PROXY=https://restored-proxy",
+	}
+
+	got := BuildCodexChildEnv(currentEnv, proxyEnv, []string{"app-server"})
+	if value, ok := lookupEnvValue(got, "CUSTOM_API_KEY"); !ok || value != "from-shell" {
+		t.Fatalf("CUSTOM_API_KEY = %q ok=%v, want from-shell", value, ok)
+	}
+	if value, ok := lookupEnvValue(got, "http_proxy"); !ok || value != "http://restored-proxy" {
+		t.Fatalf("http_proxy = %q ok=%v, want restored proxy", value, ok)
+	}
+	if value, ok := lookupEnvValue(got, "HTTPS_PROXY"); !ok || value != "https://restored-proxy" {
+		t.Fatalf("HTTPS_PROXY = %q ok=%v, want restored proxy", value, ok)
+	}
+	if value, ok := lookupEnvValue(got, "KEEP_ME"); !ok || value != "1" {
+		t.Fatalf("KEEP_ME = %q ok=%v, want 1", value, ok)
+	}
+	if count := countEnvKey(got, "http_proxy"); count != 1 {
+		t.Fatalf("http_proxy count = %d, want 1", count)
+	}
+}
+
+func TestBuildCodexResolvedChildEnvDoesNotSupplementMissingProviderKeyFromShell(t *testing.T) {
+	previous := lookupUserShellEnvValue
+	lookupUserShellEnvValue = func(_ []string, key string) (string, error) {
+		if key == "PATH" {
+			return "/usr/bin", nil
+		}
+		return "shell-secret", nil
+	}
+	defer func() { lookupUserShellEnvValue = previous }()
+
+	args := []string{
+		"app-server",
+		"-c", `model_provider="codex_remote_profile_test"`,
+		"-c", `model_providers.codex_remote_profile_test.env_key="CODEX_REMOTE_CODEX_PROFILE_API_KEY"`,
+	}
+	got := BuildCodexResolvedChildEnv([]string{"PATH=/bin"}, nil, args)
+	if value, ok := lookupEnvValue(got, "CODEX_REMOTE_CODEX_PROFILE_API_KEY"); ok || value != "" {
+		t.Fatalf("resolved child env supplemented a missing key: %#v", got)
+	}
+}
+
+func TestSupplementDetachedPATHMergesInteractiveShellPATH(t *testing.T) {
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		if key != "PATH" {
+			t.Fatalf("lookup key = %q, want PATH", key)
+		}
+		return strings.Join([]string{
+			"/opt/homebrew/bin",
+			"/usr/local/bin",
+			"/usr/bin",
+		}, string(os.PathListSeparator)), nil
+	}
+
+	got := SupplementDetachedPATH([]string{
+		"PATH=" + strings.Join([]string{"/usr/bin", "/bin"}, string(os.PathListSeparator)),
+		"HOME=/tmp/demo",
+	})
+	value, ok := lookupEnvValue(got, "PATH")
+	if !ok {
+		t.Fatal("PATH missing after supplement")
+	}
+	want := strings.Join([]string{
+		"/usr/bin",
+		"/bin",
+		"/opt/homebrew/bin",
+		"/usr/local/bin",
+	}, string(os.PathListSeparator))
+	if value != want {
+		t.Fatalf("PATH = %q, want %q", value, want)
+	}
+}
+
+func TestSupplementDetachedPATHFallsBackToNormalizedCurrentPATH(t *testing.T) {
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		return "", fmt.Errorf("shell unavailable")
+	}
+
+	got := SupplementDetachedPATH([]string{
+		"PATH=" + strings.Join([]string{"/usr/bin", "", "/usr/bin", "/bin"}, string(os.PathListSeparator)),
+	})
+	value, ok := lookupEnvValue(got, "PATH")
+	if !ok {
+		t.Fatal("PATH missing after supplement")
+	}
+	want := strings.Join([]string{"/usr/bin", "/bin"}, string(os.PathListSeparator))
+	if value != want {
+		t.Fatalf("PATH = %q, want %q", value, want)
+	}
+}
+
+func TestBuildCodexChildEnvSupplementsDetachedPATHBeforeCodexLookup(t *testing.T) {
+	homeDir := t.TempDir()
+	writeCodexConfigForTest(t, filepath.Join(homeDir, ".codex"), `
+model_provider = "custom"
+
+[model_providers.custom]
+name = "Custom"
+env_key = "CUSTOM_API_KEY"
+`)
+
+	originalLookup := lookupUserShellEnvValue
+	defer func() { lookupUserShellEnvValue = originalLookup }()
+	lookupCalls := 0
+	lookupUserShellEnvValue = func(env []string, key string) (string, error) {
+		lookupCalls++
+		switch key {
+		case "PATH":
+			return strings.Join([]string{"/opt/homebrew/bin", "/usr/bin"}, string(os.PathListSeparator)), nil
+		case "CUSTOM_API_KEY":
+			value, ok := lookupEnvValue(env, "PATH")
+			if !ok {
+				t.Fatal("CUSTOM_API_KEY lookup env missing PATH")
+			}
+			want := strings.Join([]string{"/usr/bin", "/opt/homebrew/bin"}, string(os.PathListSeparator))
+			if value != want {
+				t.Fatalf("PATH during CUSTOM_API_KEY lookup = %q, want %q", value, want)
+			}
+			return "from-shell", nil
+		default:
+			t.Fatalf("unexpected lookup key %q", key)
+			return "", nil
+		}
+	}
+
+	got := BuildCodexChildEnv([]string{
+		"HOME=" + homeDir,
+		"PATH=/usr/bin",
+	}, nil, []string{"app-server"})
+	if lookupCalls != 2 {
+		t.Fatalf("lookup calls = %d, want 2", lookupCalls)
+	}
+	if value, ok := lookupEnvValue(got, "PATH"); !ok || value != strings.Join([]string{"/usr/bin", "/opt/homebrew/bin"}, string(os.PathListSeparator)) {
+		t.Fatalf("PATH = %q ok=%v", value, ok)
+	}
+}
+
+func TestShellLookupArgsUseInteractiveLoginShellForBash(t *testing.T) {
+	got := shellLookupArgs(codexShellBash, "PATH")
+	want := []string{"-ilc", shellLookupScript(codexShellBash, "PATH")}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("shellLookupArgs(bash) = %#v, want %#v", got, want)
+	}
+}
+
+func TestShellLookupArgsUseInteractiveLoginShellForZsh(t *testing.T) {
+	got := shellLookupArgs(codexShellZsh, "PATH")
+	want := []string{"-ilc", shellLookupScript(codexShellZsh, "PATH")}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("shellLookupArgs(zsh) = %#v, want %#v", got, want)
+	}
+}
+
+func TestShellLookupArgsKeepLoginShellForSh(t *testing.T) {
+	got := shellLookupArgs(codexShellSh, "PATH")
+	want := []string{"-lc", shellLookupScript(codexShellSh, "PATH")}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("shellLookupArgs(sh) = %#v, want %#v", got, want)
+	}
+}
+
+func TestResolveCodexConfigPathUsesFSPrefixWhenHomeMissingInEnv(t *testing.T) {
+	homeDir := t.TempDir()
+	prefix := filepath.Join(t.TempDir(), "sandbox")
+	t.Setenv("HOME", homeDir)
+	t.Setenv(pathscope.EnvFSPrefix, prefix)
+
+	got, err := resolveCodexConfigPath(nil)
+	if err != nil {
+		t.Fatalf("resolveCodexConfigPath: %v", err)
+	}
+	want := filepath.Join(pathscope.ApplyPrefix(homeDir), ".codex", codexConfigFileName)
+	if got != want {
+		t.Fatalf("resolveCodexConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func writeCodexConfigForTest(t *testing.T, codexHome string, body string) {
+	t.Helper()
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", codexHome, err)
+	}
+	path := filepath.Join(codexHome, codexConfigFileName)
+	if err := os.WriteFile(path, []byte(strings.TrimSpace(body)+"\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
+func countEnvKey(env []string, key string) int {
+	count := 0
+	for _, entry := range env {
+		currentKey, _, ok := strings.Cut(entry, "=")
+		if ok && currentKey == key {
+			count++
+		}
+	}
+	return count
+}

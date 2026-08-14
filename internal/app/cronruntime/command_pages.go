@@ -14,7 +14,7 @@ func BuildRootPageView(stateValue *StateFile, ownerView OwnerView, extraSummary 
 	canReload := CanReload(stateValue, ownerView)
 	var summarySections []control.FeishuCardTextSection
 	if line := strings.TrimSpace(extraSummary); line != "" {
-		summarySections = commandCatalogSummarySections(line)
+		summarySections = control.CommandCatalogSummarySections(line)
 	}
 	return control.FeishuPageView{
 		CommandID:       control.FeishuCommandCron,
@@ -28,9 +28,9 @@ func BuildRootPageView(stateValue *StateFile, ownerView OwnerView, extraSummary 
 				Title: "查看与编辑",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
-						runCommandButton("当前状态", "/cron status", PrimaryButtonStyle(primaryCommand, "/cron status"), false),
-						runCommandButton("当前任务", "/cron list", PrimaryButtonStyle(primaryCommand, "/cron list"), false),
-						runCommandButton("打开配置", "/cron edit", PrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
+						control.FeishuLocalPageCommandButton("当前状态", "/cron status", PrimaryButtonStyle(primaryCommand, "/cron status"), false),
+						control.FeishuLocalPageCommandButton("当前任务", "/cron list", PrimaryButtonStyle(primaryCommand, "/cron list"), false),
+						control.FeishuLocalPageCommandButton("打开配置", "/cron edit", PrimaryButtonStyle(primaryCommand, "/cron edit"), !canEdit),
 					},
 				}},
 			},
@@ -38,8 +38,8 @@ func BuildRootPageView(stateValue *StateFile, ownerView OwnerView, extraSummary 
 				Title: "应用与维护",
 				Entries: []control.CommandCatalogEntry{{
 					Buttons: []control.CommandCatalogButton{
-						runCommandButton("重新加载", "/cron reload", PrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
-						runCommandButton("修复配置", "/cron repair", PrimaryButtonStyle(primaryCommand, "/cron repair"), false),
+						control.FeishuLocalPageCommandButton("重新加载", "/cron reload", PrimaryButtonStyle(primaryCommand, "/cron reload"), !canReload),
+						control.FeishuLocalPageCommandButton("修复配置", "/cron repair", PrimaryButtonStyle(primaryCommand, "/cron repair"), false),
 					},
 				}},
 			},
@@ -88,7 +88,7 @@ func BuildStatusPageView(stateValue *StateFile, ownerView OwnerView, extraSummar
 		CommandID:       control.FeishuCommandCron,
 		Title:           "Cron 状态",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandCron, "当前状态"),
-		SummarySections: commandCatalogSummarySections(summaryLines...),
+		SummarySections: control.CommandCatalogSummarySections(summaryLines...),
 		Interactive:     len(sections) != 0,
 		DisplayStyle:    control.CommandCatalogDisplayDefault,
 		Sections:        sections,
@@ -132,7 +132,7 @@ func BuildListPageView(stateValue *StateFile, ownerView OwnerView, extraSummary 
 		CommandID:       control.FeishuCommandCron,
 		Title:           "Cron 任务",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandCron, "当前任务"),
-		SummarySections: commandCatalogSummarySections(summaryLines...),
+		SummarySections: control.CommandCatalogSummarySections(summaryLines...),
 		Interactive:     interactive,
 		DisplayStyle:    control.CommandCatalogDisplayDefault,
 		Sections:        sections,
@@ -175,7 +175,7 @@ func BuildEditPageView(stateValue *StateFile, ownerView OwnerView, extraSummary 
 		CommandID:       control.FeishuCommandCron,
 		Title:           "Cron 配置",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandCron, "打开配置"),
-		SummarySections: commandCatalogSummarySections(summaryLines...),
+		SummarySections: control.CommandCatalogSummarySections(summaryLines...),
 		Interactive:     len(sections) != 0,
 		DisplayStyle:    control.CommandCatalogDisplayDefault,
 		Sections:        sections,

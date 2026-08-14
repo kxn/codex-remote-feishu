@@ -150,6 +150,26 @@ func TestProtocolCoverageManifestShape(t *testing.T) {
 	}
 }
 
+func TestProtocolCoverageKeepsReasoningSummaryDeltaSubscribedAndCoalesced(t *testing.T) {
+	var found *ProtocolCoverageEntry
+	for _, entry := range ProtocolCoverageManifest() {
+		if entry.Direction == ProtocolDirectionServerNotification && entry.Method == "item/reasoning/summaryTextDelta" {
+			entry := entry
+			found = &entry
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("reasoning summary delta is missing from protocol coverage")
+	}
+	if found.FeishuProjectionPolicy != FeishuProjectionCoalesced {
+		t.Fatalf("reasoning summary delta projection = %q, want %q", found.FeishuProjectionPolicy, FeishuProjectionCoalesced)
+	}
+	if found.HeadlessOptOutCandidate {
+		t.Fatal("reasoning summary delta must stay subscribed for dynamic verbose/chatty projection")
+	}
+}
+
 func loadProtocolMethodSnapshot(t *testing.T) protocolMethodSnapshot {
 	t.Helper()
 	raw, err := os.ReadFile("testdata/app_server_protocol_methods_current.json")

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
-	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -63,10 +62,6 @@ func lookupMapFromAny(value any) map[string]any {
 		return map[string]any{}
 	}
 	return xutil.CloneMap(current)
-}
-
-func extractJSONRPCErrorMessage(message map[string]any) string {
-	return jsonrpcutil.ExtractErrorMessage(message)
 }
 
 func choose(values ...string) string {
@@ -325,6 +320,66 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 		}
 	}
 	return metadata
+}
+
+func extractCommandExecutionExploration(itemKind string, item map[string]any) *agentproto.ExplorationActions {
+	if itemKind != "command_execution" || item == nil {
+		return nil
+	}
+	source, exists := item["commandActions"]
+	if !exists {
+		return nil
+	}
+	rawActions, ok := source.([]any)
+	if !ok || len(rawActions) == 0 {
+		return &agentproto.ExplorationActions{}
+	}
+	actions := make([]agentproto.ExplorationAction, 0, len(rawActions))
+	for _, raw := range rawActions {
+		action, ok := raw.(map[string]any)
+		if !ok {
+			return &agentproto.ExplorationActions{}
+		}
+		mapped, ok := mapCommandExecutionExplorationAction(action)
+		if !ok {
+			return &agentproto.ExplorationActions{}
+		}
+		actions = append(actions, mapped)
+	}
+	return &agentproto.ExplorationActions{Actions: actions}
+}
+
+func mapCommandExecutionExplorationAction(action map[string]any) (agentproto.ExplorationAction, bool) {
+	actionType := strings.TrimSpace(xutil.LookupStringFromAny(action["type"]))
+	switch actionType {
+	case "read":
+		path := strings.TrimSpace(xutil.LookupStringFromAny(action["path"]))
+		name := strings.TrimSpace(xutil.LookupStringFromAny(action["name"]))
+		item := choose(path, name)
+		if item == "" {
+			return agentproto.ExplorationAction{}, false
+		}
+		return agentproto.ExplorationAction{Kind: agentproto.ExplorationActionRead, Items: []string{item}}, true
+	case "search":
+		query := strings.TrimSpace(xutil.LookupStringFromAny(action["query"]))
+		if query == "" {
+			return agentproto.ExplorationAction{}, false
+		}
+		return agentproto.ExplorationAction{
+			Kind:      agentproto.ExplorationActionSearch,
+			Summary:   query,
+			Secondary: strings.TrimSpace(xutil.LookupStringFromAny(action["path"])),
+		}, true
+	case "listFiles":
+		path := strings.TrimSpace(xutil.LookupStringFromAny(action["path"]))
+		summary := choose(path, strings.TrimSpace(xutil.LookupStringFromAny(action["command"])))
+		if summary == "" {
+			return agentproto.ExplorationAction{}, false
+		}
+		return agentproto.ExplorationAction{Kind: agentproto.ExplorationActionList, Summary: summary}, true
+	default:
+		return agentproto.ExplorationAction{}, false
+	}
 }
 
 func extractItemStatus(item map[string]any) string {

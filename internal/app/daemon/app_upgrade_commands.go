@@ -62,25 +62,25 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuP
 			confirmCommand = "/upgrade dev"
 			description = "继续升级到最新的 dev 构建。"
 			summarySections = []control.FeishuCardTextSection{
-				commandCatalogTextSection(
+				control.CommandCatalogTextSection(
 					"",
 					"检测到新的 dev 构建可用。",
 					fmt.Sprintf("当前版本：%s", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
 					fmt.Sprintf("目标版本：%s", xutil.FirstNonEmpty(targetVersion, "unknown")),
 				),
-				commandCatalogTextSection("下一步", "再次发送 /upgrade dev 继续升级流程。"),
+				control.CommandCatalogTextSection("下一步", "再次发送 /upgrade dev 继续升级流程。"),
 			}
 		}
 	}
 	if len(summarySections) == 0 {
 		summarySections = []control.FeishuCardTextSection{
-			commandCatalogTextSection(
+			control.CommandCatalogTextSection(
 				"",
 				fmt.Sprintf("检测到 %s track 有新版本可用。", xutil.FirstNonEmpty(string(stateValue.CurrentTrack), "unknown")),
 				fmt.Sprintf("当前版本：%s", xutil.FirstNonEmpty(strings.TrimSpace(stateValue.CurrentVersion), "unknown")),
 				fmt.Sprintf("目标版本：%s", xutil.FirstNonEmpty(targetVersion, "unknown")),
 			),
-			commandCatalogTextSection("下一步", "再次发送 /upgrade latest 继续升级流程。"),
+			control.CommandCatalogTextSection("下一步", "再次发送 /upgrade latest 继续升级流程。"),
 		}
 	}
 	return control.NormalizeFeishuPageView(control.FeishuPageView{
@@ -94,8 +94,8 @@ func buildUpgradePromptPageView(stateValue install.InstallState) control.FeishuP
 				Commands:    []string{confirmCommand},
 				Description: description,
 				Buttons: []control.CommandCatalogButton{
-					runCommandButton("确认升级", confirmCommand, "", false),
-					runCommandButton("查看状态", "/upgrade", "", false),
+					control.FeishuLocalPageCommandButton("确认升级", confirmCommand, "", false),
+					control.FeishuLocalPageCommandButton("查看状态", "/upgrade", "", false),
 				},
 			}},
 		}},

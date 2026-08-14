@@ -39,7 +39,7 @@ func TestResolveFeishuCommandSupportAppliesClaudeProfile(t *testing.T) {
 		{familyID: FeishuCommandList, wantKind: FeishuCommandSupportNative, wantVisible: false, wantDispatch: true},
 		{familyID: FeishuCommandUse, wantKind: FeishuCommandSupportNative, wantVisible: false, wantDispatch: true},
 		{familyID: FeishuCommandDetach, wantKind: FeishuCommandSupportNative, wantVisible: false, wantDispatch: true},
-		{familyID: FeishuCommandReview, wantKind: FeishuCommandSupportApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "隐藏"},
+		{familyID: FeishuCommandReview, wantKind: FeishuCommandSupportApproximation, wantVisible: true, wantDispatch: true, wantNoteContains: "独立 fork session"},
 		{familyID: FeishuCommandPatch, wantKind: FeishuCommandSupportApproximation, wantVisible: false, wantDispatch: false, wantNoteContains: "隐藏"},
 		{familyID: FeishuCommandModel, wantKind: FeishuCommandSupportReject, wantVisible: false, wantDispatch: false, wantNoteContains: "Claude 配置"},
 		{familyID: FeishuCommandAdminSubcommand, wantKind: FeishuCommandSupportNative, wantVisible: false, wantDispatch: true},
@@ -74,12 +74,12 @@ func TestResolveFeishuCommandSupportRejectsWrongProviderSwitcherForBackend(t *te
 		t.Fatalf("expected claude mode guidance, got %q", codexSupport.Note)
 	}
 
-	claudeSupport, ok := ResolveFeishuCommandSupport(CatalogContext{Backend: agentproto.BackendClaude}, FeishuCommandCodexProvider)
+	claudeSupport, ok := ResolveFeishuCommandSupport(CatalogContext{Backend: agentproto.BackendClaude}, FeishuCommandCodexProfile)
 	if !ok {
-		t.Fatal("expected codex provider support to resolve in claude")
+		t.Fatal("expected codex profile support to resolve in claude")
 	}
 	if claudeSupport.DispatchAllowed || claudeSupport.Visible {
-		t.Fatalf("expected claude backend to reject codex provider command, got %#v", claudeSupport)
+		t.Fatalf("expected claude backend to reject codex profile command, got %#v", claudeSupport)
 	}
 	if !containsNormalized(claudeSupport.Note, "/mode codex") {
 		t.Fatalf("expected codex mode guidance, got %q", claudeSupport.Note)

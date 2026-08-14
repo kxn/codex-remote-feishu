@@ -3,6 +3,7 @@ package state
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/testutil"
@@ -23,8 +24,12 @@ func TestWorkspaceShortName(t *testing.T) {
 	if got := WorkspaceShortName(testutil.WorkspacePath("data", "dl", "work", "..", "droid") + "/"); got != "droid" {
 		t.Fatalf("WorkspaceShortName() = %q, want %q", got, "droid")
 	}
-	if got := WorkspaceShortName("/"); got != "/" {
-		t.Fatalf("WorkspaceShortName(root) = %q, want /", got)
+	root, wantRoot := "/", "/"
+	if runtime.GOOS == "windows" {
+		root, wantRoot = `C:\`, "C:"
+	}
+	if got := WorkspaceShortName(root); got != wantRoot {
+		t.Fatalf("WorkspaceShortName(root) = %q, want %q", got, wantRoot)
 	}
 }
 
@@ -85,5 +90,39 @@ func TestShouldResolveWorkspacePathOnHostWindowsResolvesRelativeDotPaths(t *test
 func TestShouldResolveWorkspacePathOnHostWindowsResolvesVolumePaths(t *testing.T) {
 	if !ShouldResolveWorkspacePathOnHost("windows", `D:\data\dl\demo`) {
 		t.Fatal("expected volume path to resolve on host")
+	}
+}
+
+func TestNormalizeWorkspaceKeyStripsWindowsExtendedPrefix(t *testing.T) {
+	cases := []struct {
+		name, input, want string
+	}{
+		{"extended native drive", `\\?\C:\repo`, `C:/repo`},
+		{"extended slash drive", `//?/C:/repo`, `C:/repo`},
+		{"extended UNC native", `\\?\UNC\server\share\repo`, `//server/share/repo`},
+		{"extended UNC slash", `//?/UNC/server/share/repo`, `//server/share/repo`},
+		{"plain drive", `C:\repo`, `C:/repo`},
+		{"plain UNC", `\\server\share\repo`, `//server/share/repo`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NormalizeWorkspaceKey(tc.input); got != tc.want {
+				t.Fatalf("NormalizeWorkspaceKey(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestShouldResolveWorkspacePathOnHostWindowsRecognizesExtendedPrefixes(t *testing.T) {
+	cases := []string{
+		`\\?\C:\repo`,
+		`//?/C:/repo`,
+		`\\?\UNC\server\share`,
+		`//?/UNC/server/share`,
+	}
+	for _, input := range cases {
+		if !ShouldResolveWorkspacePathOnHost("windows", input) {
+			t.Fatalf("expected extended-length path to resolve on host: %q", input)
+		}
 	}
 }

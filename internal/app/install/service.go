@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -180,13 +181,6 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 	return state, nil
 }
 
-func boolString(value bool) string {
-	if value {
-		return "true"
-	}
-	return "false"
-}
-
 func choosePreservedValue(incoming, existing string) string {
 	if strings.TrimSpace(incoming) != "" {
 		return incoming
@@ -215,7 +209,7 @@ func installBinary(sourcePath, installDir string) (string, error) {
 }
 
 func samePath(left, right string) bool {
-	return filepath.Clean(left) == filepath.Clean(right)
+	return pathcompare.SameCleanPlatformPath(left, right)
 }
 
 func copyFile(sourcePath, targetPath string) error {

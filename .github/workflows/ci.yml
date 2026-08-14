@@ -72,6 +72,9 @@ jobs:
       - name: Check release readiness script
         run: bash scripts/check/release-readiness-selftest.sh
 
+      - name: Check release asset verification script
+        run: bash scripts/check/release-assets-verify-selftest.sh
+
       - name: Test web
         working-directory: web
         run: npm run test:run

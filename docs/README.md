@@ -1,12 +1,18 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-08-09`
-> Summary: 新增 OpenCode ACP backend 实现设计索引。
+> Updated: `2026-08-11`
+> Summary: 收紧 docs lifecycle 规则：排除 `docs/superpowers/**`，强制 obsoleted `Superseded By`，并同步 unified binary 文档归档。
 
 ## 1. 适用范围
 
-本规范强制适用于 `docs/**/*.md`。
+本规范强制适用于 `docs/README.md` 与以下 lifecycle 目录中的 Markdown 文档：
+
+- `docs/draft/**/*.md`
+- `docs/inprogress/**/*.md`
+- `docs/implemented/**/*.md`
+- `docs/general/**/*.md`
+- `docs/obsoleted/**/*.md`
 
 这些文档承载的是：
 
@@ -16,7 +22,12 @@
 - 长期有效的架构/协议/流程文档
 - 已废弃但仍需保留的历史设计
 
-像 `README.md`、`QUICKSTART.md`、`deploy/**/README.md` 这类与目录强绑定的共位说明文件，继续保留在原目录，不纳入生命周期归档目录；但后续如有重写，也建议补齐同样的元信息头。
+显式不纳入 lifecycle metadata 规则：
+
+- `docs/superpowers/**`
+  - 这是执行工作流产物，保留 spec/plan 自身格式，不强行套用 `Type: general|draft|inprogress|implemented|obsoleted`。
+- 像 `README.md`、`QUICKSTART.md`、`deploy/**/README.md` 这类与目录强绑定的共位说明文件
+  - 继续保留在原目录，不纳入 lifecycle 归档目录；后续如有重写，可按需要补齐同样的元信息头。
 
 ## 2. 目录结构
 
@@ -51,7 +62,7 @@
 - `Updated` 使用 `YYYY-MM-DD`
 - `Summary` 只写最近一次有效改动，不写长 changelog
 
-对 `obsoleted` 文档，建议额外补一行：
+对 `obsoleted` 文档，必须额外补一行：
 
 ```md
 > Superseded By: `docs/general/xxx.md`
@@ -82,6 +93,13 @@
 - 功能已经进入当前代码
 - 文档描述的是现有行为、取舍和已知边界
 - 它不是全局架构文档，但值得长期保留
+
+`implemented` 文档可以保留实现期的历史设计理由，但必须避免读起来像第二份当前规范：
+
+- 当前仍有效的行为放在 `当前事实`、`当前边界` 或同等含义的小节中
+- 已经落地前的方案论证放在 `历史背景`、`设计依据` 或同等含义的小节中
+- 若当前行为的 canonical source 在 `docs/general/**` 或其他文档，必须显式链接
+- 历史段落中的“当前 / 目标 / 建议”如果指的是设计期语境，应改成“当时 / 设计期 / 历史方案”
 
 ### 4.4 `general`
 
@@ -153,6 +171,7 @@
 - [cross-layer-event-contract-redesign.md](./implemented/cross-layer-event-contract-redesign.md)
 - [thread-description-unification-plan.md](./implemented/thread-description-unification-plan.md)
 - [turn-diff-frozen-preview-design.md](./implemented/turn-diff-frozen-preview-design.md)
+- [unified-binary-design.md](./implemented/unified-binary-design.md)
 - [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
 
 ### 6.3 `inprogress`
@@ -166,7 +185,6 @@
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [opencode-acp-backend-implementation-design.md](./inprogress/opencode-acp-backend-implementation-design.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
-- [unified-binary-design.md](./inprogress/unified-binary-design.md)
 
 ### 6.4 `draft`
 

@@ -184,22 +184,6 @@ func (s *Service) finishTargetPickerWithStageAndSections(
 	return append([]eventcontract.Event{event}, appendEvents...)
 }
 
-func targetPickerFilteredFollowupEvents(events []eventcontract.Event) []eventcontract.Event {
-	return filterFollowupEventsByPolicy(events, dropNoticeFollowupPolicy)
-}
-
-func targetPickerFirstNoticeText(events []eventcontract.Event) string {
-	for _, event := range events {
-		if event.Notice == nil {
-			continue
-		}
-		if text := strings.TrimSpace(event.Notice.Text); text != "" {
-			return text
-		}
-	}
-	return ""
-}
-
 func cloneFeishuCardSections(sections []control.FeishuCardTextSection) []control.FeishuCardTextSection {
 	if len(sections) == 0 {
 		return nil
@@ -248,7 +232,7 @@ func targetPickerPendingStillRunning(surface *state.SurfaceConsoleRecord, record
 		fallthrough
 	case targetPickerPendingWorktreeCreate:
 		return surface.PendingHeadless.PrepareNewThread &&
-			normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
+			pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == normalizeWorkspaceClaimKey(record.PendingWorkspaceKey)
 	default:
 		return false
 	}
@@ -271,7 +255,7 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 	if flow == nil || flow.Kind != ownerCardFlowKindTargetPicker || record == nil || record.Stage != control.FeishuTargetPickerStageProcessing {
 		return events
 	}
-	filtered := targetPickerFilteredFollowupEvents(events)
+	filtered := filterPickerFollowupEvents(events)
 	switch record.PendingKind {
 	case targetPickerPendingUseThread:
 		if targetPickerThreadReady(surface, record.PendingThreadID) {
@@ -292,7 +276,7 @@ func (s *Service) maybeFinalizePendingTargetPicker(surface *state.SurfaceConsole
 			return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
 		}
 	}
-	failureText := strings.TrimSpace(xutil.FirstNonEmpty(fallbackFailureText, targetPickerFirstNoticeText(events)))
+	failureText := strings.TrimSpace(xutil.FirstNonEmpty(fallbackFailureText, firstNoticeText(events)))
 	if failureText == "" && targetPickerPendingStillRunning(surface, record) {
 		return filtered
 	}

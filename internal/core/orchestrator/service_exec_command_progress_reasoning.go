@@ -19,22 +19,23 @@ func (s *Service) handleReasoningSummaryProgressDelta(instanceID string, event a
 	if surface == nil {
 		return nil
 	}
-	if !s.upsertSurfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID, event, s.surfaceBackend(surface), s.now()) {
+	s.upsertSurfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID, event, s.surfaceBackend(surface), s.now())
+	if !surfaceShowsVisibleReasoning(surface.Verbosity) {
+		if progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID); progress != nil {
+			execprogress.HideReasoningProjection(progress)
+		}
 		return nil
 	}
 	progress := activeExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
-	if progress != nil {
-		syncExecCommandProgressReasoning(progress, surfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID))
-	}
-	if !surfaceShowsVisibleReasoning(surface.Verbosity) {
-		return nil
-	}
 	if progress == nil {
 		progress = s.activeOrEnsureExecCommandProgress(surface, instanceID, event.ThreadID, event.TurnID)
 		if progress == nil {
 			return nil
 		}
-		syncExecCommandProgressReasoning(progress, surfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID))
+	}
+	progress.Verbosity = state.NormalizeSurfaceVerbosity(surface.Verbosity)
+	if !execprogress.UpsertReasoning(progress, event, s.surfaceBackend(surface), s.now()) {
+		return nil
 	}
 	progress.ItemID = strings.TrimSpace(event.ItemID)
 	if !s.execCommandProgressReasoningFlushDue(progress, s.now()) || !execCommandProgressReasoningCanEmit(progress) {
@@ -106,7 +107,6 @@ func (s *Service) handleReasoningSummaryProgressCompleted(instanceID string, eve
 	if progress == nil {
 		return nil
 	}
-	syncExecCommandProgressReasoning(progress, surfaceReasoningProgress(surface, instanceID, event.ThreadID, event.TurnID))
 	if !finalizeExecCommandProgressReasoning(progress, execprogress.NormalizeStatus(event.Status, true)) && !surfaceShowsVisibleReasoning(surface.Verbosity) {
 		return nil
 	}

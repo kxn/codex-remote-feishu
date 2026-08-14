@@ -10,6 +10,7 @@ import (
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 const (
@@ -84,13 +85,13 @@ func (s *autoConfigService) readSnapshot(ctx context.Context) (autoConfigSnapsho
 	if app == nil {
 		return snapshot, nil
 	}
-	if versionID := strings.TrimSpace(stringValue(app.OnlineVersionId)); versionID != "" {
+	if versionID := strings.TrimSpace(xutil.StringValue(app.OnlineVersionId)); versionID != "" {
 		snapshot.onlineVersion, err = autoConfigGetApplicationVersion(ctx, broker, sdkClient, cfg.AppID, versionID)
 		if err != nil {
 			return autoConfigSnapshot{}, err
 		}
 	}
-	if versionID := strings.TrimSpace(stringValue(app.UnauditVersionId)); versionID != "" {
+	if versionID := strings.TrimSpace(xutil.StringValue(app.UnauditVersionId)); versionID != "" {
 		snapshot.unauditVersion, err = autoConfigGetApplicationVersion(ctx, broker, sdkClient, cfg.AppID, versionID)
 		if err != nil {
 			return autoConfigSnapshot{}, err
@@ -148,8 +149,8 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 	if callbacksVerifiable {
 		diff.MissingCallbacks = subtractStrings(targetCallbackKeys, configuredCallbacks)
 		diff.ExtraCallbacks = subtractStrings(configuredCallbacks, targetCallbackKeys)
-		diff.CallbackTypeMismatch = strings.TrimSpace(stringValue(callbackField(snapshot.app, "type"))) != s.policy.CallbackType
-		diff.CallbackRequestURLMismatch = strings.TrimSpace(stringValue(callbackField(snapshot.app, "url"))) != s.policy.CallbackRequestURL
+		diff.CallbackTypeMismatch = strings.TrimSpace(xutil.StringValue(callbackField(snapshot.app, "type"))) != s.policy.CallbackType
+		diff.CallbackRequestURLMismatch = strings.TrimSpace(xutil.StringValue(callbackField(snapshot.app, "url"))) != s.policy.CallbackRequestURL
 	}
 	diff.ConfigPatchRequired = len(diff.MissingScopes) > 0 ||
 		len(diff.MissingEvents) > 0 ||
@@ -166,8 +167,8 @@ func (s *autoConfigService) buildPlan(snapshot autoConfigSnapshot) AutoConfigPla
 			ConfiguredScopes:            configuredScopes,
 			ConfiguredEvents:            configuredEvents,
 			ConfiguredCallbacks:         configuredCallbacks,
-			CallbackType:                strings.TrimSpace(stringValue(callbackField(snapshot.app, "type"))),
-			CallbackRequestURL:          strings.TrimSpace(stringValue(callbackField(snapshot.app, "url"))),
+			CallbackType:                strings.TrimSpace(xutil.StringValue(callbackField(snapshot.app, "type"))),
+			CallbackRequestURL:          strings.TrimSpace(xutil.StringValue(callbackField(snapshot.app, "url"))),
 			OnlineVersionID:             versionID(snapshot.onlineVersion),
 			OnlineVersion:               versionString(snapshot.onlineVersion),
 			OnlineVersionStatus:         versionStatusLabel(snapshot.onlineVersion),
@@ -433,7 +434,7 @@ func publishedVersion(versions []*larkapplication.ApplicationAppVersion) *larkap
 			continue
 		}
 		if intValue(item.Status) == larkapplication.AppVersionStatusAudited &&
-			strings.TrimSpace(stringValue(item.PublishTime)) != "" {
+			strings.TrimSpace(xutil.StringValue(item.PublishTime)) != "" {
 			return item
 		}
 	}
@@ -492,7 +493,7 @@ func configuredScopeRefs(app *larkapplication.Application) []AutoConfigScopeRef 
 		if item == nil {
 			continue
 		}
-		scope := strings.TrimSpace(stringValue(item.Scope))
+		scope := strings.TrimSpace(xutil.StringValue(item.Scope))
 		if scope == "" {
 			continue
 		}
@@ -526,7 +527,7 @@ func versionEventTypes(version *larkapplication.ApplicationAppVersion) []string 
 		if item == nil {
 			continue
 		}
-		if key := strings.TrimSpace(stringValue(item.EventType)); key != "" {
+		if key := strings.TrimSpace(xutil.StringValue(item.EventType)); key != "" {
 			out = append(out, key)
 		}
 	}
@@ -555,21 +556,21 @@ func observedCardCallbackURL(version *larkapplication.ApplicationAppVersion) str
 	if version == nil || version.Ability == nil || version.Ability.Bot == nil {
 		return ""
 	}
-	return stringValue(version.Ability.Bot.CardRequestUrl)
+	return xutil.StringValue(version.Ability.Bot.CardRequestUrl)
 }
 
 func versionID(version *larkapplication.ApplicationAppVersion) string {
 	if version == nil {
 		return ""
 	}
-	return strings.TrimSpace(stringValue(version.VersionId))
+	return strings.TrimSpace(xutil.StringValue(version.VersionId))
 }
 
 func versionString(version *larkapplication.ApplicationAppVersion) string {
 	if version == nil {
 		return ""
 	}
-	return strings.TrimSpace(stringValue(version.Version))
+	return strings.TrimSpace(xutil.StringValue(version.Version))
 }
 
 func versionStatusLabel(version *larkapplication.ApplicationAppVersion) string {
@@ -596,9 +597,9 @@ func encryptionField(app *larkapplication.Application, field string) string {
 	}
 	switch field {
 	case "key":
-		return stringValue(app.Encryption.EncryptionKey)
+		return xutil.StringValue(app.Encryption.EncryptionKey)
 	case "token":
-		return stringValue(app.Encryption.VerificationToken)
+		return xutil.StringValue(app.Encryption.VerificationToken)
 	default:
 		return ""
 	}
@@ -610,9 +611,9 @@ func appDefaultAbility(app *larkapplication.Application, kind string) string {
 	}
 	switch kind {
 	case "mobile":
-		return strings.TrimSpace(stringValue(app.MobileDefaultAbility))
+		return strings.TrimSpace(xutil.StringValue(app.MobileDefaultAbility))
 	case "pc":
-		return strings.TrimSpace(stringValue(app.PcDefaultAbility))
+		return strings.TrimSpace(xutil.StringValue(app.PcDefaultAbility))
 	default:
 		return ""
 	}

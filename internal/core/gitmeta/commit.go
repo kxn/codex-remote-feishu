@@ -206,11 +206,16 @@ func repoHasCommittedHEAD(commandDir string) (bool, error) {
 }
 
 func runGitCommandOutput(cwd string, timeout time.Duration, args ...string) (string, error) {
+	output, err := runGitCommandRawOutput(cwd, timeout, args...)
+	return strings.TrimSpace(output), err
+}
+
+func runGitCommandRawOutput(cwd string, timeout time.Duration, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := execlaunch.CommandContext(ctx, "git", args...)
 	cmd.Dir = cwd
 	execlaunch.Prepare(cmd)
 	output, err := cmd.CombinedOutput()
-	return strings.TrimSpace(string(output)), err
+	return string(output), err
 }

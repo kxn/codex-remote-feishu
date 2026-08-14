@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -41,25 +42,21 @@ func visibleExecCommandProgressEntries(progress *state.ExecCommandProgressRecord
 	if progress == nil {
 		return nil
 	}
-	verbosity := state.NormalizeSurfaceVerbosity(progress.Verbosity)
-	maxSeq := progress.LastVisibleSeq
 	entries := make([]state.ExecCommandProgressEntryRecord, 0, len(progress.Entries)+1)
 	for _, entry := range progress.Entries {
-		if entry.LastSeq > maxSeq {
-			maxSeq = entry.LastSeq
-		}
-		if entry.Kind == "reasoning_summary" && verbosity != state.SurfaceVerbosityChatty {
-			continue
-		}
 		entries = append(entries, CloneEntryRecord(entry))
 	}
-	if verbosity == state.SurfaceVerbosityVerbose && reasoningRecordIsActive(progress.Reasoning) {
+	if progress.Reasoning != nil && state.NormalizeSurfaceVerbosity(progress.Reasoning.VisibleVerbosity) == state.SurfaceVerbosityVerbose && strings.TrimSpace(progress.Reasoning.Text) != "" {
+		status := "completed"
+		if progress.Reasoning.Active {
+			status = "running"
+		}
 		entries = append(entries, state.ExecCommandProgressEntryRecord{
-			ItemID:  reasoningPlaceholderItemID(progress.Reasoning),
-			Kind:    "reasoning_placeholder",
-			Summary: "思考中...",
-			Status:  "running",
-			LastSeq: maxSeq + 1,
+			ItemID:    reasoningSlotItemID(progress.Reasoning),
+			Kind:      "reasoning_summary",
+			Summary:   strings.TrimSpace(progress.Reasoning.Text),
+			Status:    status,
+			Transient: true,
 		})
 	}
 	return entries
@@ -74,18 +71,8 @@ func CloneEntryRecord(entry state.ExecCommandProgressEntryRecord) state.ExecComm
 		Status:     entry.Status,
 		FileChange: CloneFileChangeRecord(entry.FileChange),
 		LastSeq:    entry.LastSeq,
+		Transient:  entry.Transient,
 	}
-}
-
-func CloneEntryRecords(entries []state.ExecCommandProgressEntryRecord) []state.ExecCommandProgressEntryRecord {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make([]state.ExecCommandProgressEntryRecord, 0, len(entries))
-	for _, entry := range entries {
-		out = append(out, CloneEntryRecord(entry))
-	}
-	return out
 }
 
 func CloneFileChangeRecord(change *state.ExecCommandProgressFileChangeRecord) *state.ExecCommandProgressFileChangeRecord {
@@ -104,43 +91,11 @@ func CloneReasoningRecord(record *state.ExecCommandProgressReasoningRecord) *sta
 	return &cloned
 }
 
-func ReplaceReasoningEntries(progress *state.ExecCommandProgressRecord, entries []state.ExecCommandProgressEntryRecord) {
-	if progress == nil {
-		return
-	}
-	filtered := make([]state.ExecCommandProgressEntryRecord, 0, len(progress.Entries)+len(entries))
-	maxSeq := progress.LastVisibleSeq
-	for _, entry := range progress.Entries {
-		if entry.Kind == "reasoning_summary" {
-			continue
-		}
-		if entry.LastSeq > maxSeq {
-			maxSeq = entry.LastSeq
-		}
-		filtered = append(filtered, entry)
-	}
-	for _, entry := range entries {
-		cloned := CloneEntryRecord(entry)
-		if cloned.LastSeq > maxSeq {
-			maxSeq = cloned.LastSeq
-		}
-		filtered = append(filtered, cloned)
-	}
-	progress.Entries = filtered
-	if maxSeq > progress.LastVisibleSeq {
-		progress.LastVisibleSeq = maxSeq
-	}
-}
-
-func reasoningRecordIsActive(record *state.ExecCommandProgressReasoningRecord) bool {
-	return record != nil && record.Active
-}
-
-func reasoningPlaceholderItemID(record *state.ExecCommandProgressReasoningRecord) string {
+func reasoningSlotItemID(record *state.ExecCommandProgressReasoningRecord) string {
 	if record == nil || strings.TrimSpace(record.ItemID) == "" {
-		return "reasoning_placeholder"
+		return "reasoning_summary::latest"
 	}
-	return strings.TrimSpace(record.ItemID) + "::placeholder"
+	return strings.TrimSpace(record.ItemID) + "::latest"
 }
 
 func CommandMetadata(event agentproto.Event) (string, string) {
@@ -206,16 +161,19 @@ func UpsertEntry(progress *state.ExecCommandProgressRecord, entry state.ExecComm
 	if entry.Summary == "" {
 		return
 	}
+	if entry.Kind != "reasoning_summary" {
+		FreezeReasoningForVisibleAction(progress)
+	}
 	progress.LastVisibleSeq++
 	entry.LastSeq = progress.LastVisibleSeq
 	progress.Entries = append(progress.Entries, entry)
 }
 
 func WebSearchEntry(metadata map[string]any, final bool) state.ExecCommandProgressEntryRecord {
-	actionType := strings.TrimSpace(metadataString(metadata, "actionType"))
-	query := strings.TrimSpace(metadataString(metadata, "query"))
-	url := strings.TrimSpace(metadataString(metadata, "url"))
-	pattern := strings.TrimSpace(metadataString(metadata, "pattern"))
+	actionType := strings.TrimSpace(xutil.MetadataString(metadata, "actionType"))
+	query := strings.TrimSpace(xutil.MetadataString(metadata, "query"))
+	url := strings.TrimSpace(xutil.MetadataString(metadata, "url"))
+	pattern := strings.TrimSpace(xutil.MetadataString(metadata, "pattern"))
 	queries := metadataStringSlice(metadata, "queries")
 	fallbackQuery := xutil.FirstNonEmpty(query, xutil.FirstNonEmpty(queries...))
 	status := NormalizeStatus("", final)
@@ -263,7 +221,7 @@ func UpsertDynamicToolProgressEntry(progress *state.ExecCommandProgressRecord, e
 	if progress == nil {
 		return state.ExecCommandProgressEntryRecord{}, "", false
 	}
-	tool := strings.TrimSpace(metadataString(event.Metadata, "tool"))
+	tool := strings.TrimSpace(xutil.MetadataString(event.Metadata, "tool"))
 	label := dynamicToolProgressLabel(tool)
 	arguments := dynamicToolProgressArguments(event.Metadata)
 	summary := strings.TrimSpace(dynamicToolProgressSummaryFromMetadata(event.Metadata))
@@ -282,18 +240,14 @@ func UpsertDynamicToolProgressEntry(progress *state.ExecCommandProgressRecord, e
 		progress.DynamicToolItemGroup[itemID] = groupKey
 	}
 	group := progress.DynamicToolGroups[groupKey]
+	created := group == nil
 	if group == nil {
 		group = &state.DynamicToolProgressGroupRecord{GroupKey: groupKey}
 		progress.DynamicToolGroups[groupKey] = group
 	}
-	before := state.DynamicToolProgressGroupRecord{
-		GroupKey: group.GroupKey,
-		Tool:     group.Tool,
-		Label:    group.Label,
-		Args:     append([]string(nil), group.Args...),
-		Summary:  group.Summary,
-		Status:   group.Status,
-	}
+	beforeLabel := xutil.FirstNonEmpty(group.Label, "工具")
+	beforeSummary := buildDynamicToolProgressSummary(group)
+	beforeStatus := group.Status
 	if strings.TrimSpace(tool) != "" {
 		group.Tool = strings.TrimSpace(tool)
 	}
@@ -306,7 +260,28 @@ func UpsertDynamicToolProgressEntry(progress *state.ExecCommandProgressRecord, e
 	if strings.TrimSpace(summary) != "" {
 		group.Summary = strings.TrimSpace(summary)
 	}
-	if strings.TrimSpace(status) != "" {
+	if group.ActiveItemIDs == nil {
+		group.ActiveItemIDs = map[string]bool{}
+	}
+	itemID := strings.TrimSpace(event.ItemID)
+	switch event.Kind {
+	case agentproto.EventItemStarted:
+		if itemID != "" {
+			group.ActiveItemIDs[itemID] = true
+		}
+	case agentproto.EventItemCompleted:
+		if itemID != "" {
+			delete(group.ActiveItemIDs, itemID)
+		}
+		if status == "failed" {
+			group.Failed = true
+		}
+	}
+	if len(group.ActiveItemIDs) != 0 {
+		group.Status = "started"
+	} else if group.Failed {
+		group.Status = "failed"
+	} else if strings.TrimSpace(status) != "" {
 		group.Status = strings.TrimSpace(status)
 	}
 	entry := state.ExecCommandProgressEntryRecord{
@@ -316,11 +291,7 @@ func UpsertDynamicToolProgressEntry(progress *state.ExecCommandProgressRecord, e
 		Summary: buildDynamicToolProgressSummary(group),
 		Status:  group.Status,
 	}
-	changed := group.Tool != before.Tool ||
-		group.Label != before.Label ||
-		group.Summary != before.Summary ||
-		group.Status != before.Status ||
-		!sameStringSlice(group.Args, before.Args)
+	changed := created || entry.Label != beforeLabel || entry.Summary != beforeSummary || entry.Status != beforeStatus
 	return entry, groupKey, changed
 }
 
@@ -373,14 +344,6 @@ func NormalizeStatus(status string, final bool) string {
 	}
 }
 
-func metadataString(metadata map[string]any, key string) string {
-	if len(metadata) == 0 {
-		return ""
-	}
-	value, _ := metadata[key].(string)
-	return strings.TrimSpace(value)
-}
-
 func metadataStringSlice(metadata map[string]any, key string) []string {
 	if len(metadata) == 0 {
 		return nil
@@ -418,14 +381,37 @@ func metadataStringSlice(metadata map[string]any, key string) []string {
 }
 
 func dynamicToolGroupKey(progress *state.ExecCommandProgressRecord, itemID, tool string) string {
-	normalizedTool := strings.ToLower(strings.TrimSpace(tool))
-	if normalizedTool != "" {
-		return "dynamic_tool_call::" + normalizedTool
-	}
 	itemID = strings.TrimSpace(itemID)
 	if itemID != "" && progress != nil && progress.DynamicToolItemGroup != nil {
 		if existing := strings.TrimSpace(progress.DynamicToolItemGroup[itemID]); existing != "" {
 			return existing
+		}
+	}
+	normalizedTool := strings.ToLower(strings.TrimSpace(tool))
+	if normalizedTool != "" {
+		baseKey := "dynamic_tool_call::" + normalizedTool
+		if progress == nil {
+			return baseKey
+		}
+		for i := len(progress.Entries) - 1; i >= 0; i-- {
+			entry := progress.Entries[i]
+			if entry.LastSeq != progress.LastVisibleSeq || entry.Kind != "dynamic_tool_call" {
+				continue
+			}
+			group := progress.DynamicToolGroups[entry.ItemID]
+			if group != nil && strings.EqualFold(strings.TrimSpace(group.Tool), normalizedTool) {
+				return entry.ItemID
+			}
+			break
+		}
+		if progress.DynamicToolGroups == nil || progress.DynamicToolGroups[baseKey] == nil {
+			return baseKey
+		}
+		for index := 2; ; index++ {
+			candidate := baseKey + "::group::" + strconv.Itoa(index)
+			if progress.DynamicToolGroups[candidate] == nil {
+				return candidate
+			}
 		}
 	}
 	if itemID != "" {
@@ -444,7 +430,7 @@ func dynamicToolProgressLabel(tool string) string {
 
 func dynamicToolProgressSummaryFromMetadata(metadata map[string]any) string {
 	if value, ok := metadata["suppressFinalText"].(bool); !ok || !value {
-		summary := strings.TrimSpace(metadataString(metadata, "text"))
+		summary := strings.TrimSpace(xutil.MetadataString(metadata, "text"))
 		if summary != "" {
 			return summary
 		}

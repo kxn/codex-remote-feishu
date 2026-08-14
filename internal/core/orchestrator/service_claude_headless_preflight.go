@@ -34,6 +34,48 @@ func (s *Service) maybeRestartClaudeHeadlessForPrompt(surface *state.SurfaceCons
 	return s.startClaudePromptDispatchRestart(surface, inst, attempt, desired), true
 }
 
+func (s *Service) maybeRestartOpenCodeHeadlessForPrompt(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, override state.ModelConfigRecord, workspaceHint string) ([]eventcontract.Event, bool) {
+	if surface == nil || inst == nil || !isHeadlessInstance(inst) {
+		return nil, false
+	}
+	if state.EffectiveInstanceBackend(inst) != agentproto.BackendOpenCode {
+		return nil, false
+	}
+	desired := s.headlessLaunchContractWithOverride(surface, override)
+	if desired.Backend != agentproto.BackendOpenCode {
+		return nil, false
+	}
+	current := state.HeadlessLaunchContractFromInstance(inst)
+	if openCodeLaunchContractMatches(current, desired) {
+		return nil, false
+	}
+	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(s.surfaceCurrentWorkspaceKey(surface), inst.WorkspaceKey, inst.WorkspaceRoot), workspaceHint)
+	attempt := s.buildCurrentHeadlessResumeAttempt(surface, workspaceKey, desired.Backend)
+	if normalizeWorkspaceClaimKey(attempt.WorkspaceKey) == "" {
+		return notice(surface, "opencode_access_restart_workspace_missing", "当前无法确定 OpenCode headless 的工作区，暂时不能自动切换执行权限。"), true
+	}
+	return s.startOpenCodePromptDispatchRestart(surface, inst, attempt, desired), true
+}
+
+func openCodeLaunchContractMatches(current, desired state.HeadlessLaunchContract) bool {
+	current = state.NormalizeHeadlessLaunchContract(current)
+	desired = state.NormalizeHeadlessLaunchContract(desired)
+	if current.Backend != agentproto.BackendOpenCode || desired.Backend != agentproto.BackendOpenCode {
+		return false
+	}
+	if state.NormalizeOpenCodeProfileID(current.OpenCodeProfileID) != state.NormalizeOpenCodeProfileID(desired.OpenCodeProfileID) {
+		return false
+	}
+	if desiredRef := state.NormalizeOpenCodeAdmissionRef(desired.OpenCodeAdmissionRef); desiredRef != nil {
+		currentRef := state.NormalizeOpenCodeAdmissionRef(current.OpenCodeAdmissionRef)
+		if currentRef == nil || *currentRef != *desiredRef {
+			return false
+		}
+	}
+	desiredAccess := state.NormalizeOpenCodeRuntimeAccessMode(desired.OpenCodeRuntimeAccessMode)
+	return state.NormalizeOpenCodeRuntimeAccessMode(current.OpenCodeRuntimeAccessMode) == desiredAccess
+}
+
 func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, attempt SurfaceResumeAttempt, launchContract state.HeadlessLaunchContract) []eventcontract.Event {
 	if surface == nil || inst == nil {
 		return nil
@@ -58,7 +100,7 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 		WorkspaceKey:            workspaceKey,
 		ThreadCWD:               threadCWD,
 		Backend:                 launchContract.Backend,
-		CodexProviderID:         launchContract.CodexProviderID,
+		CodexProfileID:          launchContract.CodexProfileID,
 		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(launchContract.CodexAdmissionRef),
 		CodexConnectionContract: state.CloneCodexConnectionContract(launchContract.CodexConnectionContract),
 		CodexThreadPolicy:       state.CloneCodexThreadPolicy(launchContract.CodexThreadPolicy),
@@ -87,6 +129,90 @@ func (s *Service) startClaudePromptDispatchRestart(surface *state.SurfaceConsole
 				Code:  "claude_runtime_restarting",
 				Title: "正在切换推理强度",
 				Text:  "当前 Claude 实例正在按下一条消息需要的推理强度重新准备；完成后会自动继续发送。",
+			},
+		},
+		{
+			Kind:             eventcontract.KindDaemonCommand,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			DaemonCommand: &control.DaemonCommand{
+				Kind:             control.DaemonCommandKillHeadless,
+				SurfaceSessionID: surface.SurfaceSessionID,
+				InstanceID:       inst.InstanceID,
+				ThreadID:         strings.TrimSpace(attempt.ThreadID),
+				ThreadTitle:      strings.TrimSpace(attempt.ThreadTitle),
+				WorkspaceKey:     workspaceKey,
+				ThreadCWD:        threadCWD,
+			},
+		},
+		{
+			Kind:             eventcontract.KindDaemonCommand,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			DaemonCommand: func() *control.DaemonCommand {
+				command := &control.DaemonCommand{
+					Kind:             control.DaemonCommandStartHeadless,
+					SurfaceSessionID: surface.SurfaceSessionID,
+					InstanceID:       instanceID,
+					ThreadID:         strings.TrimSpace(attempt.ThreadID),
+					ThreadTitle:      strings.TrimSpace(attempt.ThreadTitle),
+					WorkspaceKey:     workspaceKey,
+					ThreadCWD:        threadCWD,
+				}
+				s.applyHeadlessLaunchContract(command, launchContract)
+				return command
+			}(),
+		},
+	}
+}
+
+func (s *Service) startOpenCodePromptDispatchRestart(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, attempt SurfaceResumeAttempt, launchContract state.HeadlessLaunchContract) []eventcontract.Event {
+	if surface == nil || inst == nil {
+		return nil
+	}
+	launchContract = state.NormalizeHeadlessLaunchContract(launchContract)
+	if launchContract.Backend != agentproto.BackendOpenCode {
+		return nil
+	}
+	workspaceKey := normalizeWorkspaceClaimKey(attempt.WorkspaceKey)
+	if workspaceKey == "" {
+		return nil
+	}
+	threadCWD := strings.TrimSpace(xutil.FirstNonEmpty(attempt.ThreadCWD, workspaceKey))
+
+	s.nextHeadlessID++
+	instanceID := fmt.Sprintf("inst-headless-prompt-restart-%d-%d", s.now().UnixNano(), s.nextHeadlessID)
+	pending := &state.HeadlessLaunchRecord{
+		InstanceID:                instanceID,
+		ThreadID:                  strings.TrimSpace(attempt.ThreadID),
+		ThreadTitle:               strings.TrimSpace(attempt.ThreadTitle),
+		WorkspaceKey:              workspaceKey,
+		ThreadCWD:                 threadCWD,
+		Backend:                   launchContract.Backend,
+		OpenCodeProfileID:         launchContract.OpenCodeProfileID,
+		OpenCodeAdmissionRef:      state.NormalizeOpenCodeAdmissionRef(launchContract.OpenCodeAdmissionRef),
+		OpenCodeRuntimeAccessMode: launchContract.OpenCodeRuntimeAccessMode,
+		RequestedAt:               s.now(),
+		ExpiresAt:                 s.now().Add(s.config.HeadlessLaunchWait),
+		Status:                    state.HeadlessLaunchStarting,
+		Purpose:                   state.HeadlessLaunchPurposePromptDispatchRestart,
+		PrepareNewThread:          attempt.PrepareNewThread,
+		SourceInstanceID:          inst.InstanceID,
+	}
+	if !s.claimWorkspace(surface, workspaceKey) {
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
+	}
+	if !s.enterPromptDispatchRestartPendingRoute(surface, workspaceKey) {
+		return notice(surface, "workspace_busy", "目标 workspace 当前已被其他飞书会话接管，请等待对方 /detach。")
+	}
+	s.adoptSurfacePendingHeadlessLaunch(surface, pending)
+
+	return []eventcontract.Event{
+		{
+			Kind:             eventcontract.KindNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice: &control.Notice{
+				Code:  "opencode_runtime_restarting",
+				Title: "正在切换执行权限",
+				Text:  "当前 OpenCode 实例正在按下一条消息需要的执行权限重新准备；完成后会自动继续发送。",
 			},
 		},
 		{

@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -530,7 +529,7 @@ func validateIssueRequest(req IssueRequest) (*url.URL, string, error) {
 		return nil, "", ErrInvalidTargetURL
 	}
 	host := target.Hostname()
-	if !isLoopbackHost(host) {
+	if !netutil.IsLoopbackHost(host) {
 		return nil, "", ErrTargetNotLoopback
 	}
 	target.Path = normalizeURLPath(target.Path)
@@ -740,10 +739,6 @@ func cloneGrant(value *grantRecord) *grantRecord {
 	return &copied
 }
 
-func isLoopbackHost(host string) bool {
-	return netutil.IsLoopbackHost(host)
-}
-
 func sameOrigin(left, right *url.URL) bool {
 	return strings.EqualFold(left.Scheme, right.Scheme) && strings.EqualFold(left.Host, right.Host)
 }
@@ -827,12 +822,5 @@ func ResolveBundledCloudflaredPath(currentBinaryPath string) string {
 	if currentBinaryPath == "" {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(currentBinaryPath), executableName("cloudflared"))
-}
-
-func executableName(name string) string {
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(name), ".exe") {
-		return name + ".exe"
-	}
-	return name
+	return filepath.Join(filepath.Dir(currentBinaryPath), xutil.EnsureWindowsExecutable("cloudflared"))
 }

@@ -550,9 +550,9 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	}
 	inst.Backend = backend
 	if backend == agentproto.BackendCodex {
-		inst.CodexProviderID = state.NormalizeCodexProviderID(hello.Instance.CodexProviderID)
+		inst.CodexProfileID = state.NormalizeCodexProfileID(hello.Instance.CodexProfileID)
 	} else {
-		inst.CodexProviderID = ""
+		inst.CodexProfileID = ""
 	}
 	if backend == agentproto.BackendClaude {
 		inst.ClaudeProfileID = state.NormalizeClaudeProfileID(hello.Instance.ClaudeProfileID)
@@ -563,9 +563,11 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 	}
 	if backend == agentproto.BackendOpenCode {
 		inst.OpenCodeProfileID = state.NormalizeOpenCodeProfileID(hello.Instance.OpenCodeProfileID)
+		inst.OpenCodeRuntimeAccessMode = state.NormalizeOpenCodeRuntimeAccessMode(hello.Instance.OpenCodeRuntimeAccessMode)
 	} else {
 		inst.OpenCodeProfileID = ""
 		inst.OpenCodeAdmissionRef = nil
+		inst.OpenCodeRuntimeAccessMode = ""
 	}
 	inst.Source = xutil.FirstNonEmpty(strings.TrimSpace(hello.Instance.Source), string(state.InstanceSourceVSCode))
 	inst.Capabilities = capabilities

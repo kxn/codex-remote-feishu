@@ -139,6 +139,19 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 			},
 		},
 		{
+			Direction:              ProtocolDirectionServerNotification,
+			TargetLayer:            ProtocolTargetCanonicalized,
+			Status:                 ProtocolStatusSupported,
+			Owner:                  "codex-translator",
+			Cadence:                ProtocolCadenceStreamDelta,
+			AuthoritativeFinal:     "item/completed",
+			FeishuProjectionPolicy: FeishuProjectionCoalesced,
+			Notes:                  "Reasoning summary text is required for dynamic verbose/chatty projection and is coalesced before Feishu card patches.",
+			Methods: []string{
+				"item/reasoning/summaryTextDelta",
+			},
+		},
+		{
 			Direction:               ProtocolDirectionServerNotification,
 			TargetLayer:             ProtocolTargetCanonicalized,
 			Status:                  ProtocolStatusSupported,
@@ -165,7 +178,6 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 			Methods: []string{
 				"item/plan/delta",
 				"item/reasoning/textDelta",
-				"item/reasoning/summaryTextDelta",
 				"item/commandExecution/outputDelta",
 				"item/fileChange/outputDelta",
 			},

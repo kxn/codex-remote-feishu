@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 )
@@ -176,7 +177,7 @@ func TestProjectMCPElicitationFormPromptRendersCurrentFormFieldAsSingleStepForm(
 	}
 	var form map[string]any
 	for _, element := range ops[0].CardElements {
-		if cardStringValue(element["tag"]) == "form" {
+		if cardkit.StringValue(element["tag"]) == "form" {
 			form = element
 			break
 		}

@@ -2,6 +2,7 @@ package control
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -15,7 +16,7 @@ func TestFeishuConfigFlowRegistryRoundTrip(t *testing.T) {
 		intentKind  FeishuUIIntentKind
 	}{
 		{commandID: FeishuCommandMode, actionKind: ActionModeCommand, bareCommand: "/mode", intentKind: FeishuUIIntentShowModeCatalog},
-		{commandID: FeishuCommandCodexProvider, actionKind: ActionCodexProviderCommand, bareCommand: "/codexprofile", intentKind: FeishuUIIntentShowCodexProviderCatalog},
+		{commandID: FeishuCommandCodexProfile, actionKind: ActionCodexProfileCommand, bareCommand: "/codexprofile", intentKind: FeishuUIIntentShowCodexProfileCatalog},
 		{commandID: FeishuCommandClaudeProfile, actionKind: ActionClaudeProfileCommand, bareCommand: "/claudeprofile", intentKind: FeishuUIIntentShowClaudeProfileCatalog},
 		{commandID: FeishuCommandOpenCodeProfile, actionKind: ActionOpenCodeProfileCommand, bareCommand: "/opencodeprofile", intentKind: FeishuUIIntentShowOpenCodeProfileCatalog},
 		{commandID: FeishuCommandAutoWhip, actionKind: ActionAutoWhipCommand, bareCommand: "/autowhip", intentKind: FeishuUIIntentShowAutoWhipCatalog},
@@ -70,6 +71,23 @@ func TestFeishuConfigFlowRegistryRoundTrip(t *testing.T) {
 				t.Fatalf("BuildFeishuCommandConfigPageView(%q) returned %#v", tt.commandID, page)
 			}
 		})
+	}
+}
+
+func TestVerboseCommandOptionsDescribeCurrentReasoningProjection(t *testing.T) {
+	definition, ok := FeishuCommandDefinitionByID(FeishuCommandVerbose)
+	if !ok {
+		t.Fatal("expected verbose command definition")
+	}
+	descriptions := map[string]string{}
+	for _, option := range definition.Options {
+		descriptions[option.Value] = option.Description
+	}
+	if !strings.Contains(descriptions["verbose"], "真实") || !strings.Contains(descriptions["verbose"], "末行") || strings.Contains(descriptions["verbose"], "思考中") {
+		t.Fatalf("unexpected verbose reasoning description: %q", descriptions["verbose"])
+	}
+	if !strings.Contains(descriptions["chatty"], "完整") || !strings.Contains(descriptions["chatty"], "历史") {
+		t.Fatalf("unexpected chatty reasoning description: %q", descriptions["chatty"])
 	}
 }
 
@@ -135,6 +153,21 @@ func TestBuildFeishuReasoningConfigPageUsesBackendSpecificOptions(t *testing.T) 
 	}) {
 		t.Fatalf("unexpected claude reasoning options: %#v", got)
 	}
+
+	openCodePage := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:      FeishuCommandReasoning,
+		CatalogBackend: agentproto.BackendOpenCode,
+	})
+	if got := commandTextsForFirstButtonRow(openCodePage); !reflect.DeepEqual(got, []string{
+		"/reasoning low",
+		"/reasoning medium",
+		"/reasoning high",
+		"/reasoning xhigh",
+		"/reasoning max",
+		"/reasoning clear",
+	}) {
+		t.Fatalf("unexpected opencode reasoning options: %#v", got)
+	}
 }
 
 func commandTextsForFirstButtonRow(page FeishuPageView) []string {
@@ -169,8 +202,8 @@ func TestFeishuConfigFlowIntentOnlyMatchesBareCommands(t *testing.T) {
 		},
 		{
 			name:   "page local pagination keeps default argument as config catalog state",
-			action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprofile profile-5", LocalPageAction: true, Cursor: 10},
-			want:   FeishuUIIntentShowCodexProviderCatalog,
+			action: Action{Kind: ActionCodexProfileCommand, Text: "/codexprofile profile-5", LocalPageAction: true, Cursor: 10},
+			want:   FeishuUIIntentShowCodexProfileCatalog,
 			ok:     true,
 		},
 	}

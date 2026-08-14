@@ -114,22 +114,6 @@ func (s *Store) Put(record Record) error {
 	return s.Replace(entries)
 }
 
-func (s *Store) Delete(gatewayID string) error {
-	if s == nil {
-		return nil
-	}
-	gatewayID = strings.TrimSpace(gatewayID)
-	if gatewayID == "" {
-		return nil
-	}
-	if _, ok := s.Get(gatewayID); !ok {
-		return nil
-	}
-	entries := s.Entries()
-	delete(entries, gatewayID)
-	return s.Replace(entries)
-}
-
 func sameRecord(left, right Record) bool {
 	if left.GatewayID != right.GatewayID ||
 		left.AppID != right.AppID ||

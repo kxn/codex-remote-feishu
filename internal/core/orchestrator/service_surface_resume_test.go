@@ -381,7 +381,7 @@ func TestSurfaceResumeFailureNoticeWorkspaceBusyUsesGenericRestoreText(t *testin
 func TestTryAutoResumeHeadlessSurfaceIgnoresPollutedThreadCopyOnUnrelatedInstance(t *testing.T) {
 	now := time.Date(2026, 4, 30, 2, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"surface-1",
 		"app-1",
 		"chat-1",
@@ -393,7 +393,7 @@ func TestTryAutoResumeHeadlessSurfaceIgnoresPollutedThreadCopyOnUnrelatedInstanc
 		state.SurfaceVerbosityNormal,
 		state.PlanModeSettingOff,
 	)
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"surface-2",
 		"app-2",
 		"chat-2",
@@ -406,16 +406,16 @@ func TestTryAutoResumeHeadlessSurfaceIgnoresPollutedThreadCopyOnUnrelatedInstanc
 		state.PlanModeSettingOff,
 	)
 	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:      "inst-unrelated",
-		DisplayName:     "other",
-		WorkspaceRoot:   "/data/dl/other",
-		WorkspaceKey:    "/data/dl/other",
-		ShortName:       "other",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "other-provider",
-		Managed:         true,
-		Source:          "headless",
-		Online:          true,
+		InstanceID:     "inst-unrelated",
+		DisplayName:    "other",
+		WorkspaceRoot:  "/data/dl/other",
+		WorkspaceKey:   "/data/dl/other",
+		ShortName:      "other",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "other-provider",
+		Managed:        true,
+		Source:         "headless",
+		Online:         true,
 		Threads: map[string]*state.ThreadRecord{
 			"thread-target": {
 				ThreadID:     "thread-target",

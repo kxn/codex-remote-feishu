@@ -1071,6 +1071,66 @@ func TestRoomWorkspaceDetachByNonPrimaryRejectsWithoutMutation(t *testing.T) {
 	}
 }
 
+func TestRoomWorkspaceBareDetachReportsBindingWhenNoRuntimeAttachment(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	surface.AttachedInstanceID = ""
+	surface.SelectedThreadID = ""
+	surface.ClaimedWorkspaceKey = ""
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionDetach,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+	})
+
+	if !noticeTextContains(events, "detached", "本群仍绑定 workspace：/data/dl/droid") {
+		t.Fatalf("bare detach should report remaining room workspace binding, got %#v", events)
+	}
+	if !noticeTextContains(events, "detached", "/workspace detach") {
+		t.Fatalf("bare detach should point to workspace detach, got %#v", events)
+	}
+	room := svc.root.FeishuRoomContexts["feishu:chat:oc_room"]
+	if room.WorkspaceKey != "/data/dl/droid" || room.WorkspaceResetGeneration != 0 {
+		t.Fatalf("bare detach must not clear room workspace binding, got %#v", room)
+	}
+}
+
+func TestRoomWorkspaceSnapshotMarksDetachedRoomBinding(t *testing.T) {
+	svc := newRoomWorkspaceTestService(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachWorkspace,
+		SurfaceSessionID: "feishu:app-1:chat:oc_room",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		ActorUserID:      "ou_owner",
+		WorkspaceKey:     "/data/dl/droid",
+	})
+	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
+	surface.AttachedInstanceID = ""
+	surface.SelectedThreadID = ""
+	surface.ClaimedWorkspaceKey = ""
+
+	snapshot := svc.buildSnapshot(surface)
+
+	if snapshot.WorkspaceKey != "/data/dl/droid" || snapshot.RoomWorkspaceKey != "/data/dl/droid" {
+		t.Fatalf("snapshot should preserve room binding source, got %#v", snapshot)
+	}
+	if snapshot.Attachment.InstanceID != "" || snapshot.PendingHeadless.InstanceID != "" {
+		t.Fatalf("detached room binding snapshot must not report runtime attachment, got %#v", snapshot)
+	}
+}
+
 func TestRestoredRoomWorkspaceSwitchRejectsWithoutPrimaryWithoutReset(t *testing.T) {
 	svc := newRoomWorkspaceTestService(t)
 	svc.MaterializeFeishuRoomState([]state.FeishuRoomStateRecord{{

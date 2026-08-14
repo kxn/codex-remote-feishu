@@ -40,7 +40,11 @@ func (ctx temporarySessionContext) isReview() bool {
 
 func (s *Service) temporarySessionContext(surface *state.SurfaceConsoleRecord, instanceID, threadID, turnID string) temporarySessionContext {
 	if binding := s.lookupRemoteTurn(instanceID, threadID, turnID); binding != nil {
-		if ctx := temporarySessionContextForExecutionMode(remoteBindingPromptDispatchPlan(binding).ExecutionMode); ctx.Kind != temporarySessionKindNone {
+		plan := remoteBindingPromptDispatchPlan(binding)
+		if plan.Purpose == agentproto.PromptPurposeReview {
+			return temporarySessionContext{Kind: temporarySessionKindReview, Label: reviewTemporarySessionLabel}
+		}
+		if ctx := temporarySessionContextForExecutionMode(plan.ExecutionMode); ctx.Kind != temporarySessionKindNone {
 			return ctx
 		}
 	}

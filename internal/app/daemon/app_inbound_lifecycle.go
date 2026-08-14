@@ -184,8 +184,10 @@ func rejectedInboundActionLabel(action control.Action) (label, command string) {
 		return "响应授权请求", ""
 	case control.ActionReviewStart:
 		return "审阅待提交内容", ""
+	case control.ActionReviewFollowUp:
+		return "继续追问审阅", ""
 	case control.ActionReviewDiscard:
-		return "放弃审阅", ""
+		return "退出审阅", ""
 	case control.ActionReviewApply:
 		return "按审阅意见继续修改", ""
 	case control.ActionAttachInstance:

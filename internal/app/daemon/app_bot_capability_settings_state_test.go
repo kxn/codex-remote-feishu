@@ -29,7 +29,7 @@ func TestConfigureBotCapabilitySettingsStateMaterializesStore(t *testing.T) {
 	app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
 	app.mu.Lock()
 	app.configureBotCapabilitySettingsStateLocked(stateDir)
-	app.service.MaterializeSurfaceResumeWithCodexProvider(
+	app.service.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:chat:oc_room",
 		"app-1",
 		"oc_room",
@@ -88,7 +88,7 @@ func TestBotCapabilitySettingsDaemonRoundTripPreservesInactiveSelections(t *test
 		GatewayID:       "app-1",
 		ProductMode:     state.ProductModeNormal,
 		Backend:         agentproto.BackendClaude,
-		CodexProviderID: "team-proxy",
+		CodexProfileID:  "team-proxy",
 		ClaudeProfileID: "devseek",
 	}); err != nil {
 		t.Fatalf("put record: %v", err)
@@ -108,7 +108,7 @@ func TestBotCapabilitySettingsDaemonRoundTripPreservesInactiveSelections(t *test
 	if !ok {
 		t.Fatal("expected persisted bot capability settings")
 	}
-	if record.Backend != agentproto.BackendClaude || record.CodexProviderID != "team-proxy" || record.ClaudeProfileID != "devseek" {
+	if record.Backend != agentproto.BackendClaude || record.CodexProfileID != "team-proxy" || record.ClaudeProfileID != "devseek" {
 		t.Fatalf("round-trip bot capability selections = %#v", record)
 	}
 }

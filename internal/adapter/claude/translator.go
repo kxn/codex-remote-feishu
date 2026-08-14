@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/adapterkit"
 	"github.com/kxn/codex-remote-feishu/internal/claudeutil"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -24,8 +25,8 @@ type ResolvedCommandResponse struct {
 }
 
 type Translator struct {
+	adapterkit.DebugLogger
 	instanceID string
-	debugLog   func(string, ...any)
 
 	nextID int
 
@@ -155,10 +156,6 @@ func NewTranslator(instanceID string) *Translator {
 		pendingControlReplies: map[string]pendingControlReply{},
 		threadUsage:           map[string]*agentproto.ThreadTokenUsage{},
 	}
-}
-
-func (t *Translator) SetDebugLogger(debugLog func(string, ...any)) {
-	t.debugLog = debugLog
 }
 
 func (t *Translator) ObserveClient(_ []byte) (Result, error) {

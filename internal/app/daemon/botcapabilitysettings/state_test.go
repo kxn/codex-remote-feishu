@@ -1,6 +1,7 @@
 package botcapabilitysettings
 
 import (
+	"os"
 	"testing"
 	"time"
 
@@ -55,6 +56,29 @@ func TestStoreRoundTrip(t *testing.T) {
 	}
 	if got.UpdatedBy != "ou_user" || !got.UpdatedAt.Equal(updatedAt.UTC()) {
 		t.Fatalf("metadata = %q/%v, want ou_user/%v", got.UpdatedBy, got.UpdatedAt, updatedAt.UTC())
+	}
+}
+
+func TestLoadStoreMigratesLegacyCodexProviderIDAndMarksDirty(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := StatePath(stateDir)
+	raw := []byte(`{"version":1,"entries":{"feishu:gateway:main":{"GatewayID":"main","ProductMode":"normal","Backend":"codex","CodexProviderID":"team-proxy"}}}`)
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	record, ok := store.Get(state.BotCapabilitySettingsKey("main"))
+	if !ok || record.CodexProfileID != "team-proxy" || record.LegacyCodexProviderID != "" {
+		t.Fatalf("legacy provider selection was not migrated: %#v ok=%v", record, ok)
+	}
+	if !store.Dirty() {
+		t.Fatal("expected migrated legacy provider state to be marked dirty")
 	}
 }
 

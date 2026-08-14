@@ -114,7 +114,7 @@ func botCapabilitySettingsFromSurface(surface *state.SurfaceConsoleRecord) state
 		GatewayID:           strings.TrimSpace(surface.GatewayID),
 		ProductMode:         contract.ProductMode,
 		Backend:             contract.Backend,
-		CodexProviderID:     surface.CodexProviderID,
+		CodexProfileID:      surface.CodexProfileID,
 		ClaudeProfileID:     surface.ClaudeProfileID,
 		OpenCodeProfileID:   surface.OpenCodeProfileID,
 		PromptOverride:      surface.PromptOverride,
@@ -131,16 +131,16 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 	if !ok {
 		return
 	}
-	previousProviderID := state.NormalizeCodexProviderID(surface.CodexProviderID)
+	previousCodexProfileID := state.NormalizeCodexProfileID(surface.CodexProfileID)
 	previousOpenCodeProfileID := state.NormalizeOpenCodeProfileID(surface.OpenCodeProfileID)
 	s.setSurfaceDesiredContract(surface, state.BotCapabilitySettingsContract(normalized))
-	surface.CodexProviderID = normalized.CodexProviderID
+	surface.CodexProfileID = normalized.CodexProfileID
 	surface.ClaudeProfileID = normalized.ClaudeProfileID
 	surface.OpenCodeProfileID = normalized.OpenCodeProfileID
 	surface.PromptOverride = normalized.PromptOverride
 	surface.PlanMode = normalized.PlanMode
 	surface.PlanModeOverrideSet = normalized.PlanModeOverrideSet
-	if state.NormalizeCodexProviderID(normalized.CodexProviderID) != previousProviderID {
+	if state.NormalizeCodexProfileID(normalized.CodexProfileID) != previousCodexProfileID {
 		surface.CodexAdmissionRef = nil
 		surface.CodexConnectionContract = nil
 		surface.CodexThreadPolicy = nil
@@ -243,7 +243,7 @@ func (s *Service) rejectBotCapabilityMutationInReadOnlySurface(surface *state.Su
 func isBotCapabilitySettingsAction(kind control.ActionKind) bool {
 	switch kind {
 	case control.ActionModeCommand,
-		control.ActionCodexProviderCommand,
+		control.ActionCodexProfileCommand,
 		control.ActionClaudeProfileCommand,
 		control.ActionOpenCodeProfileCommand,
 		control.ActionModelCommand,

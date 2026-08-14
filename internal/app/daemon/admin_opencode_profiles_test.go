@@ -33,7 +33,7 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 		t.Fatalf("expected built-in OpenCode default profile, got %#v", listPayload.Profiles)
 	}
 
-	createBody := `{"name":"Team OpenCode","baseURL":"https://proxy.example/v1","apiKey":"secret-v1","model":"kimi-k2","smallModel":"kimi-small","projectConfigMode":"disable"}`
+	createBody := `{"name":"Team OpenCode","providerType":"google_gemini","apiKey":"secret-v1","model":"gemini-2.5-pro","smallModel":"gemini-2.5-flash","projectConfigMode":"disable"}`
 	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/opencode/profiles", createBody)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", rec.Code, rec.Body.String())
@@ -49,14 +49,16 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 		t.Fatalf("decode create: %v", err)
 	}
 	created := createPayload.Profile
-	if !strings.HasPrefix(created.ID, "op_") || created.Name != "Team OpenCode" || !created.HasAPIKey || created.APIKey != "" {
+	if !strings.HasPrefix(created.ID, "op_") || created.Name != "Team OpenCode" ||
+		created.ProviderType != config.OpenCodeProviderTypeGoogleGemini || created.BaseURL != "" ||
+		!created.HasAPIKey || created.APIKey != "" {
 		t.Fatalf("unexpected created profile view: %#v", created)
 	}
 	if strings.Contains(rec.Body.String(), "secret-v1") {
 		t.Fatalf("create response leaked secret: %s", rec.Body.String())
 	}
 	if profile, ok := findOpenCodeProfileSummary(app.service.OpenCodeProfiles(), created.ID); !ok ||
-		profile.Revision != 1 || profile.Name != "Team OpenCode" || profile.Model != "kimi-k2" || !profile.Available {
+		profile.Revision != 1 || profile.Name != "Team OpenCode" || profile.Model != "gemini-2.5-pro" || !profile.Available {
 		t.Fatalf("created profile was not materialized into orchestrator catalog: %#v ok=%t", profile, ok)
 	}
 
@@ -69,7 +71,7 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 		t.Fatalf("expected secret persisted in config only, got %#v ok=%t", current, ok)
 	}
 
-	updateBody := `{"name":"Team OpenCode","baseURL":"https://proxy.example/v1","model":"kimi-k2-pro","smallModel":"kimi-small","projectConfigMode":"disable"}`
+	updateBody := `{"name":"Team OpenCode","providerType":"openai_compatible_chat","baseURL":"https://proxy.example/v1","model":"kimi-k2-pro","smallModel":"kimi-small","projectConfigMode":"disable"}`
 	rec = performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/opencode/profiles/"+created.ID, updateBody, createETag)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d body=%s", rec.Code, rec.Body.String())
@@ -80,7 +82,9 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 	if err := json.NewDecoder(rec.Body).Decode(&updatePayload); err != nil {
 		t.Fatalf("decode update: %v", err)
 	}
-	if updatePayload.Profile.Revision != 2 || updatePayload.Profile.Model != "kimi-k2-pro" || !updatePayload.Profile.HasAPIKey {
+	if updatePayload.Profile.Revision != 2 ||
+		updatePayload.Profile.ProviderType != config.OpenCodeProviderTypeOpenAICompatibleChat ||
+		updatePayload.Profile.Model != "kimi-k2-pro" || !updatePayload.Profile.HasAPIKey {
 		t.Fatalf("unexpected updated profile view: %#v", updatePayload.Profile)
 	}
 	if profile, ok := findOpenCodeProfileSummary(app.service.OpenCodeProfiles(), created.ID); !ok ||
@@ -92,7 +96,8 @@ func TestAdminOpenCodeProfilesCRUDRevisionAndRedaction(t *testing.T) {
 		t.Fatalf("LoadAppConfigAtPath after update: %v", err)
 	}
 	current, ok = config.CurrentOpenCodeAPIProfile(loaded.Config.OpenCode.Profiles[0])
-	if !ok || current.APIKey != "secret-v1" || current.Revision != 2 {
+	if !ok || current.ProviderType != config.OpenCodeProviderTypeOpenAICompatibleChat ||
+		current.APIKey != "secret-v1" || current.Revision != 2 {
 		t.Fatalf("expected update to preserve secret when apiKey omitted, got %#v ok=%t", current, ok)
 	}
 }
@@ -104,7 +109,7 @@ func TestAdminOpenCodeProfileUpdatePreservesOmittedHiddenFields(t *testing.T) {
 	writeExecutableFile(t, binaryPath, "wrapper-binary")
 	app, configPath, _ := newVSCodeAdminTestApp(t, home, binaryPath, false)
 
-	createBody := `{"name":"Team OpenCode","baseURL":"https://proxy.example/v1","apiKey":"secret-v1","model":"kimi-k2","smallModel":"kimi-small","reviewModel":"kimi-review","subagentModel":"kimi-subagent","instruction":"be precise","reasoningEffort":"high","projectConfigMode":"disable","dataIsolationMode":"process","permissionMode":"ask"}`
+	createBody := `{"name":"Team OpenCode","providerType":"google_gemini","apiKey":"secret-v1","model":"gemini-2.5-pro","smallModel":"gemini-2.5-flash","reviewModel":"kimi-review","subagentModel":"gemini-agent","instruction":"be precise","reasoningEffort":"high","projectConfigMode":"disable","dataIsolationMode":"process","permissionMode":"ask"}`
 	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/opencode/profiles", createBody)
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", rec.Code, rec.Body.String())
@@ -117,7 +122,7 @@ func TestAdminOpenCodeProfileUpdatePreservesOmittedHiddenFields(t *testing.T) {
 		t.Fatalf("decode create: %v", err)
 	}
 
-	updateBody := `{"name":"Team OpenCode","baseURL":"https://proxy.example/v1","model":"kimi-k2-pro","smallModel":"kimi-small-2","subagentModel":"kimi-subagent-2","instruction":"be exact","reasoningEffort":"medium"}`
+	updateBody := `{"name":"Team OpenCode","model":"gemini-2.5-pro-latest","smallModel":"gemini-2.5-flash-2","subagentModel":"gemini-agent-2","instruction":"be exact","reasoningEffort":"medium"}`
 	rec = performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/opencode/profiles/"+createPayload.Profile.ID, updateBody, createETag)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("update status = %d body=%s", rec.Code, rec.Body.String())
@@ -134,6 +139,12 @@ func TestAdminOpenCodeProfileUpdatePreservesOmittedHiddenFields(t *testing.T) {
 	if current.APIKey != "secret-v1" {
 		t.Fatalf("APIKey = %q, want preserved secret", current.APIKey)
 	}
+	if current.ProviderType != config.OpenCodeProviderTypeGoogleGemini {
+		t.Fatalf("ProviderType = %q, want preserved google_gemini", current.ProviderType)
+	}
+	if current.BaseURL != "" {
+		t.Fatalf("BaseURL = %q, want preserved empty optional endpoint", current.BaseURL)
+	}
 	if current.ReviewModel != "kimi-review" {
 		t.Fatalf("ReviewModel = %q, want preserved hidden review model", current.ReviewModel)
 	}
@@ -146,8 +157,8 @@ func TestAdminOpenCodeProfileUpdatePreservesOmittedHiddenFields(t *testing.T) {
 	if current.PermissionMode != "ask" {
 		t.Fatalf("PermissionMode = %q, want preserved ask", current.PermissionMode)
 	}
-	if current.Model != "kimi-k2-pro" || current.SmallModel != "kimi-small-2" ||
-		current.SubagentModel != "kimi-subagent-2" || current.Instruction != "be exact" ||
+	if current.Model != "gemini-2.5-pro-latest" || current.SmallModel != "gemini-2.5-flash-2" ||
+		current.SubagentModel != "gemini-agent-2" || current.Instruction != "be exact" ||
 		current.ReasoningEffort != "medium" {
 		t.Fatalf("visible fields were not updated: %#v", current)
 	}

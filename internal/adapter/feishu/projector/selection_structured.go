@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
@@ -58,7 +59,7 @@ func selectionViewStructuredContextElements(semantics control.FeishuSelectionSem
 		})
 	}
 	if text := strings.TrimSpace(semantics.ContextText); text != "" {
-		if block := cardPlainTextBlockElement(text); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(text); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}

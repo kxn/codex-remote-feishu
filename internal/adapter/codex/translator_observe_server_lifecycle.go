@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -30,15 +31,15 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 		delete(t.suppressedThreadStarted, threadID)
 		t.currentThreadID = threadID
 		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
+			t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 		}
 		t.mergeObservedThread(threadID, threadRecord.ModelProviderID, threadRecord.Model, threadRecord.ReasoningEffort)
-		t.debugf("observe server suppressed thread/started after child restart: thread=%s cwd=%s", threadID, cwd)
+		t.Debugf("observe server suppressed thread/started after child restart: thread=%s cwd=%s", threadID, cwd)
 		return Result{Suppress: true}
 	}
 	if t.internalThreadIDs[threadID] {
 		if cwd != "" {
-			t.knownThreadCWD[threadID] = cwd
+			t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 		}
 		t.mergeObservedThread(threadID, threadRecord.ModelProviderID, threadRecord.Model, threadRecord.ReasoningEffort)
 		event := buildThreadDiscoveredEvent(threadRecord, threadID, cwd, name, status, loaded, runtimeStatus)
@@ -54,7 +55,7 @@ func (t *Translator) observeThreadStarted(message map[string]any) Result {
 		t.pendingLocalNewThreadTurn = false
 	}
 	if cwd != "" {
-		t.knownThreadCWD[threadID] = cwd
+		t.knownThreadCWD[threadID] = pathcanon.Native(cwd)
 	}
 	t.mergeObservedThread(threadID, threadRecord.ModelProviderID, threadRecord.Model, threadRecord.ReasoningEffort)
 	return Result{Events: []agentproto.Event{event}}
@@ -143,7 +144,7 @@ func (t *Translator) observeTurnStarted(message map[string]any) Result {
 	if turnID != "" {
 		t.turnInitiators[turnID] = initiator
 	}
-	t.debugf(
+	t.Debugf(
 		"observe server turn/started: thread=%s turn=%s initiator=%s traffic=%s pendingRemoteSurface=%s pendingLocal=%t",
 		threadID,
 		turnID,
@@ -289,7 +290,8 @@ func (t *Translator) observeTurnCompleted(message map[string]any) Result {
 	}
 	delete(t.turnInitiators, turnID)
 	delete(t.internalTurnIDs, turnID)
-	t.debugf("observe server turn/completed: thread=%s turn=%s status=%s initiator=%s", threadID, turnID, status, initiator.Kind)
+	t.clearReasoningSummaryIndexesForTurn(threadID, turnID)
+	t.Debugf("observe server turn/completed: thread=%s turn=%s status=%s initiator=%s", threadID, turnID, status, initiator.Kind)
 	event := agentproto.Event{
 		Kind:                 agentproto.EventTurnCompleted,
 		ThreadID:             threadID,

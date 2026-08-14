@@ -144,7 +144,7 @@ func TestAutoContinueCarriesFrozenCodexAdmissionRef(t *testing.T) {
 	svc := newServiceForTest(&now)
 	surface := setupAutoWhipSurface(t, svc)
 	surface.Backend = agentproto.BackendCodex
-	surface.CodexProviderID = "team-proxy"
+	surface.CodexProfileID = "team-proxy"
 	surface.CodexAdmissionRef = &state.CodexAdmissionRef{
 		ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 7},
 		ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 3},

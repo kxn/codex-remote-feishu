@@ -112,33 +112,21 @@ func codexUpgradeOwnerButton(label, flowID, optionID, style string) control.Comm
 }
 
 func codexUpgradeOwnerFlowTrackingKey(flow *codexupgraderuntime.OwnerCardFlowRecord) string {
-	if flow == nil || strings.TrimSpace(flow.MessageID) != "" {
+	if flow == nil {
 		return ""
 	}
-	return strings.TrimSpace(flow.FlowID)
+	return ownerCardFlowTrackingKey(flow.FlowID, flow.MessageID)
 }
 
 func codexUpgradeOwnerFlowMessageID(flow *codexupgraderuntime.OwnerCardFlowRecord) string {
 	if flow == nil {
 		return ""
 	}
-	return strings.TrimSpace(flow.MessageID)
+	return ownerCardFlowMessageID(flow.MessageID)
 }
 
 func codexUpgradeOwnerCardEvent(surfaceID string, flow *codexupgraderuntime.OwnerCardFlowRecord, title, theme string, bodySections, noticeSections []control.FeishuCardTextSection, buttons []control.CommandCatalogButton, sealed bool) eventcontract.Event {
-	view := control.NormalizeFeishuPageView(control.FeishuPageView{
-		Title:          strings.TrimSpace(title),
-		MessageID:      codexUpgradeOwnerFlowMessageID(flow),
-		TrackingKey:    codexUpgradeOwnerFlowTrackingKey(flow),
-		ThemeKey:       strings.TrimSpace(theme),
-		Patchable:      true,
-		BodySections:   append([]control.FeishuCardTextSection(nil), bodySections...),
-		NoticeSections: append([]control.FeishuCardTextSection(nil), noticeSections...),
-		Interactive:    len(buttons) > 0 && !sealed,
-		Sealed:         sealed,
-		RelatedButtons: append([]control.CommandCatalogButton(nil), buttons...),
-	})
-	return surfacePagePayloadEvent(surfaceID, eventcontract.PagePayload{View: view}, false)
+	return ownerCardPageEvent(surfaceID, codexUpgradeOwnerFlowMessageID(flow), codexUpgradeOwnerFlowTrackingKey(flow), title, theme, bodySections, noticeSections, buttons, sealed)
 }
 
 func codexUpgradeOwnerContextSections(flow *codexupgraderuntime.OwnerCardFlowRecord) []control.FeishuCardTextSection {
@@ -147,19 +135,19 @@ func codexUpgradeOwnerContextSections(flow *codexupgraderuntime.OwnerCardFlowRec
 	}
 	sections := make([]control.FeishuCardTextSection, 0, 2)
 	if current := strings.TrimSpace(flow.CurrentVersion); current != "" {
-		sections = append(sections, commandCatalogTextSection("当前版本", current))
+		sections = append(sections, control.CommandCatalogTextSection("当前版本", current))
 	}
 	switch {
 	case flow.HasUpdate && strings.TrimSpace(flow.TargetVersion) != "":
-		sections = append(sections, commandCatalogTextSection("目标版本", strings.TrimSpace(flow.TargetVersion)))
+		sections = append(sections, control.CommandCatalogTextSection("目标版本", strings.TrimSpace(flow.TargetVersion)))
 	case flow.Checked && strings.TrimSpace(flow.LatestVersion) != "":
-		sections = append(sections, commandCatalogTextSection("最新版本", strings.TrimSpace(flow.LatestVersion)))
+		sections = append(sections, control.CommandCatalogTextSection("最新版本", strings.TrimSpace(flow.LatestVersion)))
 	}
 	return sections
 }
 
 func codexUpgradeOwnerNoticeSections(lines ...string) []control.FeishuCardTextSection {
-	return commandCatalogSummarySections(lines...)
+	return control.CommandCatalogSummarySections(lines...)
 }
 
 func codexUpgradeBusyNoticeLines(check codexUpgradeCheckResult) []string {

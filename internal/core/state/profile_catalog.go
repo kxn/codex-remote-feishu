@@ -52,18 +52,19 @@ type OpenCodeAdmissionRef struct {
 }
 
 type OpenCodeProfileSummary struct {
-	ID         string `json:"id"`
-	Revision   uint64 `json:"revision,omitempty"`
-	ETag       string `json:"etag,omitempty"`
-	Name       string `json:"name"`
-	BaseURL    string `json:"baseURL,omitempty"`
-	Model      string `json:"model,omitempty"`
-	StatusCode string `json:"statusCode,omitempty"`
-	Available  bool   `json:"available"`
-	BuiltIn    bool   `json:"builtIn,omitempty"`
-	Editable   bool   `json:"editable"`
-	Deletable  bool   `json:"deletable"`
-	HasAPIKey  bool   `json:"hasAPIKey,omitempty"`
+	ID           string `json:"id"`
+	Revision     uint64 `json:"revision,omitempty"`
+	ETag         string `json:"etag,omitempty"`
+	Name         string `json:"name"`
+	ProviderType string `json:"providerType,omitempty"`
+	BaseURL      string `json:"baseURL,omitempty"`
+	Model        string `json:"model,omitempty"`
+	StatusCode   string `json:"statusCode,omitempty"`
+	Available    bool   `json:"available"`
+	BuiltIn      bool   `json:"builtIn,omitempty"`
+	Editable     bool   `json:"editable"`
+	Deletable    bool   `json:"deletable"`
+	HasAPIKey    bool   `json:"hasAPIKey,omitempty"`
 }
 
 func NormalizeCodexAdmissionRef(value *CodexAdmissionRef) *CodexAdmissionRef {
@@ -179,18 +180,10 @@ func OpenCodeProfileDefinitionETag(profileID string, revision uint64) string {
 
 func CodexProfileIDFromLegacyProviderID(providerID string) string {
 	providerID = strings.TrimSpace(providerID)
-	if providerID == "" || strings.EqualFold(providerID, DefaultCodexProviderID) {
+	if providerID == "" || strings.EqualFold(providerID, LegacyDefaultCodexProviderID) {
 		return NativeCodexProfileID
 	}
 	return providerID
-}
-
-func LegacyCodexProviderIDFromProfileID(profileID string) string {
-	profileID = strings.TrimSpace(profileID)
-	if profileID == "" || profileID == NativeCodexProfileID {
-		return DefaultCodexProviderID
-	}
-	return profileID
 }
 
 func profileItemETag(namespace, profileID string, revision uint64) string {

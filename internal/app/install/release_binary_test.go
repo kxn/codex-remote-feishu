@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -24,7 +25,7 @@ func TestEnsureReleaseBinaryDownloadsAndExtractsPackage(t *testing.T) {
 	assetName := releaseAssetName(version, goos, goarch)
 	packageDir := releasePackageDir(version, goos, goarch)
 	archivePath := filepath.Join(t.TempDir(), assetName)
-	writePlatformReleaseArchive(t, archivePath, packageDir, executableName(goos), "release-binary", goos)
+	writePlatformReleaseArchive(t, archivePath, packageDir, xutil.ExecutableName(goos), "release-binary", goos)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if filepath.Base(r.URL.Path) != assetName {
@@ -44,7 +45,7 @@ func TestEnsureReleaseBinaryDownloadsAndExtractsPackage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureReleaseBinary: %v", err)
 	}
-	if got, want := binaryPath, filepath.Join(versionsRoot, version, executableName(goos)); got != want {
+	if got, want := binaryPath, filepath.Join(versionsRoot, version, xutil.ExecutableName(goos)); got != want {
 		t.Fatalf("binary path = %q, want %q", got, want)
 	}
 	raw, err := os.ReadFile(binaryPath)
@@ -63,7 +64,7 @@ func TestEnsureReleaseBinaryFallsBackWhenRenameHitsCrossDeviceLink(t *testing.T)
 	assetName := releaseAssetName(version, goos, goarch)
 	packageDir := releasePackageDir(version, goos, goarch)
 	archivePath := filepath.Join(t.TempDir(), assetName)
-	writePlatformReleaseArchive(t, archivePath, packageDir, executableName(goos), "release-binary", goos)
+	writePlatformReleaseArchive(t, archivePath, packageDir, xutil.ExecutableName(goos), "release-binary", goos)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if filepath.Base(r.URL.Path) != assetName {
@@ -107,7 +108,7 @@ func TestEnsureDevBinaryVerifiesChecksum(t *testing.T) {
 	assetName := assetNameForVersionLabel("dev", goos, goarch)
 	packageDir := packageDirForVersionLabel("dev", goos, goarch)
 	archivePath := filepath.Join(t.TempDir(), assetName)
-	writePlatformReleaseArchive(t, archivePath, packageDir, executableName(goos), "dev-binary", goos)
+	writePlatformReleaseArchive(t, archivePath, packageDir, xutil.ExecutableName(goos), "dev-binary", goos)
 
 	archiveRaw, err := os.ReadFile(archivePath)
 	if err != nil {
@@ -174,12 +175,12 @@ func TestExtractReleaseArchiveSupportsZipForWindows(t *testing.T) {
 	targetDir := t.TempDir()
 	archivePath := filepath.Join(t.TempDir(), "release.zip")
 	packageDir := releasePackageDir("v1.2.3", "windows", "amd64")
-	writeReleaseZip(t, archivePath, packageDir, executableName("windows"), "release-binary")
+	writeReleaseZip(t, archivePath, packageDir, xutil.ExecutableName("windows"), "release-binary")
 
 	if err := extractReleaseArchive(archivePath, targetDir, "windows"); err != nil {
 		t.Fatalf("extractReleaseArchive: %v", err)
 	}
-	raw, err := os.ReadFile(filepath.Join(targetDir, packageDir, executableName("windows")))
+	raw, err := os.ReadFile(filepath.Join(targetDir, packageDir, xutil.ExecutableName("windows")))
 	if err != nil {
 		t.Fatalf("ReadFile binary: %v", err)
 	}

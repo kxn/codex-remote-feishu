@@ -6,19 +6,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
-func normalizePathPickerDropdownCursor(cursor int, optionCount int) int {
-	if optionCount <= 0 {
-		return 0
-	}
-	if cursor < 0 {
-		return 0
-	}
-	if cursor >= optionCount {
-		return optionCount - 1
-	}
-	return cursor
-}
-
 func pathPickerEntryIndexByKind(entries []control.FeishuPathPickerEntry, kind control.PathPickerEntryKind, selectedPath string) int {
 	selectedPath = strings.TrimSpace(selectedPath)
 	index := 0

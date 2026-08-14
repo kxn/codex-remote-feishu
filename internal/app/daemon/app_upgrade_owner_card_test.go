@@ -254,3 +254,61 @@ func TestUpgradeOwnerTerminalEventSealsPageContract(t *testing.T) {
 		t.Fatalf("expected terminal upgrade page to keep context plus notice, got %#v", page)
 	}
 }
+
+func TestOwnerCardPageEventNormalizesSharedFields(t *testing.T) {
+	bodySections := []control.FeishuCardTextSection{{
+		Label: " 当前版本 ",
+		Lines: []string{" v1.0.0 "},
+	}}
+	noticeSections := []control.FeishuCardTextSection{{
+		Lines: []string{" 正在处理 "},
+	}}
+	buttons := []control.CommandCatalogButton{{
+		Label: "确认",
+		Kind:  control.CommandCatalogButtonCallbackAction,
+	}}
+
+	event := ownerCardPageEvent(
+		"surface-1",
+		" msg-1 ",
+		" flow-1 ",
+		" 标题 ",
+		" progress ",
+		bodySections,
+		noticeSections,
+		buttons,
+		false,
+	)
+	bodySections[0].Lines[0] = "mutated"
+	noticeSections[0].Lines[0] = "mutated"
+	buttons[0].Label = "mutated"
+
+	page := catalogFromUIEvent(t, event)
+	if page.Title != "标题" || page.MessageID != "msg-1" || page.TrackingKey != "flow-1" || page.ThemeKey != "progress" {
+		t.Fatalf("expected shared owner-card fields to be normalized, got %#v", page)
+	}
+	if !page.Patchable || !page.Interactive || page.Sealed {
+		t.Fatalf("expected interactive patchable owner card, got %#v", page)
+	}
+	if got := page.BodySections[0].Lines[0]; got != "v1.0.0" {
+		t.Fatalf("expected body sections to be copied before caller mutation, got %q", got)
+	}
+	if got := page.NoticeSections[0].Lines[0]; got != "正在处理" {
+		t.Fatalf("expected notice sections to be copied before caller mutation, got %q", got)
+	}
+	if got := page.RelatedButtons[0].Label; got != "确认" {
+		t.Fatalf("expected buttons to be copied before caller mutation, got %q", got)
+	}
+}
+
+func TestOwnerCardFlowTrackingKeyUsesFlowIDUntilMessageIDExists(t *testing.T) {
+	if got := ownerCardFlowMessageID(" msg-1 "); got != "msg-1" {
+		t.Fatalf("owner card message id = %q, want trimmed message id", got)
+	}
+	if got := ownerCardFlowTrackingKey(" flow-1 ", " "); got != "flow-1" {
+		t.Fatalf("owner card tracking key without message id = %q, want flow id", got)
+	}
+	if got := ownerCardFlowTrackingKey(" flow-1 ", " msg-1 "); got != "" {
+		t.Fatalf("owner card tracking key with message id = %q, want empty", got)
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 func TestTargetPickerCancelWorktreeProcessingSealsCardAndDispatchesCancel(t *testing.T) {
@@ -48,5 +49,83 @@ func TestTargetPickerCancelWorktreeProcessingSealsCardAndDispatchesCancel(t *tes
 	}
 	if svc.activeTargetPicker(surface) != nil || svc.activeOwnerCardFlow(surface) != nil {
 		t.Fatalf("expected cancel to clear target picker runtime, got %#v", svc.SurfaceUIRuntime("surface-1"))
+	}
+}
+
+func TestTargetPickerCancelProcessingMatchesPendingByResolvedWorkspace(t *testing.T) {
+	tests := []struct {
+		name        string
+		source      control.TargetPickerRequestSource
+		pendingKind targetPickerPendingKind
+		cancelKind  control.DaemonCommandKind
+	}{
+		{
+			name:        "git import",
+			source:      control.TargetPickerRequestSourceGit,
+			pendingKind: targetPickerPendingGitImport,
+			cancelKind:  control.DaemonCommandGitWorkspaceImportCancel,
+		},
+		{
+			name:        "worktree create",
+			source:      control.TargetPickerRequestSourceWorktree,
+			pendingKind: targetPickerPendingWorktreeCreate,
+			cancelKind:  control.DaemonCommandGitWorkspaceWorktreeCancel,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Date(2026, 4, 14, 16, 1, 0, 0, time.UTC)
+			svc := newServiceForTest(&now)
+			surface := svc.ensureSurface(control.Action{
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+			})
+			surface.PendingHeadless = &state.HeadlessLaunchRecord{
+				InstanceID:       "inst-pending",
+				WorkspaceKey:     "/data/dl/projects/repo",
+				ThreadCWD:        "/data/dl/projects/repo-login",
+				PrepareNewThread: true,
+			}
+			record := &activeTargetPickerRecord{
+				PickerID:             "picker-1",
+				OwnerUserID:          "user-1",
+				Source:               tc.source,
+				Stage:                control.FeishuTargetPickerStageProcessing,
+				PendingKind:          tc.pendingKind,
+				PendingWorkspaceKey:  "/data/dl/projects/repo-login",
+				SelectedWorkspaceKey: "/data/dl/projects/repo",
+			}
+			svc.setActiveOwnerCardFlow(surface, newOwnerCardFlowRecord(ownerCardFlowKindTargetPicker, record.PickerID, "user-1", now, time.Minute, ownerCardFlowPhaseRunning))
+			svc.setActiveTargetPicker(surface, record)
+
+			events := svc.ApplySurfaceAction(control.Action{
+				Kind:             control.ActionTargetPickerCancel,
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				PickerID:         record.PickerID,
+			})
+
+			var sawCancel bool
+			var sawKill bool
+			for _, event := range events {
+				if event.DaemonCommand == nil {
+					continue
+				}
+				switch event.DaemonCommand.Kind {
+				case tc.cancelKind:
+					sawCancel = true
+				case control.DaemonCommandKillHeadless:
+					sawKill = event.DaemonCommand.InstanceID == "inst-pending"
+				}
+			}
+			if !sawCancel || !sawKill {
+				t.Fatalf("expected cancel and kill commands for resolved pending workspace, got %#v", events)
+			}
+			if surface.PendingHeadless != nil {
+				t.Fatalf("expected matching pending headless to be consumed on cancel, got %#v", surface.PendingHeadless)
+			}
+		})
 	}
 }

@@ -13,6 +13,7 @@ import (
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -156,7 +157,7 @@ func (g *LiveGateway) emitState(state GatewayState, err error) {
 func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
 	for i := range operations {
 		operation := &operations[i]
-		if operation.GatewayID != "" && normalizeGatewayID(operation.GatewayID) != g.config.GatewayID {
+		if operation.GatewayID != "" && gatewaypkg.NormalizeGatewayID(operation.GatewayID) != g.config.GatewayID {
 			return fmt.Errorf("gateway apply mismatch: operation gateway=%s gateway=%s", operation.GatewayID, g.config.GatewayID)
 		}
 		if err := g.applyOne(ctx, operation); err != nil {
@@ -438,7 +439,7 @@ func trimCardPayloadWithMeasure(payload map[string]any, fits func(map[string]any
 		return payload
 	}
 	for keep := len(blocks) - 1; keep >= 0; keep-- {
-		candidate := cloneCardMap(payload)
+		candidate := cardkit.CloneMap(payload)
 		trimmed := flattenCardPayloadBlocks(trimTrailingHeaderBlocks(blocks[:keep]))
 		trimmed = append(trimmed, map[string]any{
 			"tag":     "markdown",
@@ -465,7 +466,7 @@ func partitionCardPayloadBlocks(elements []map[string]any) []cardPayloadBlock {
 		}
 		block := cardPayloadBlock{Elements: make([]map[string]any, 0, len(current))}
 		for _, element := range current {
-			block.Elements = append(block.Elements, cloneCardMap(element))
+			block.Elements = append(block.Elements, cardkit.CloneMap(element))
 		}
 		blocks = append(blocks, block)
 		current = nil
@@ -474,12 +475,12 @@ func partitionCardPayloadBlocks(elements []map[string]any) []cardPayloadBlock {
 		switch {
 		case isCardSectionHeaderElement(element):
 			flush()
-			current = append(current, cloneCardMap(element))
+			current = append(current, cardkit.CloneMap(element))
 		case startsNewCardPayloadBlock(current, element):
 			flush()
-			current = append(current, cloneCardMap(element))
+			current = append(current, cardkit.CloneMap(element))
 		default:
-			current = append(current, cloneCardMap(element))
+			current = append(current, cardkit.CloneMap(element))
 		}
 	}
 	flush()
@@ -493,7 +494,7 @@ func startsNewCardPayloadBlock(current []map[string]any, next map[string]any) bo
 	if isCardSectionHeaderElement(next) {
 		return true
 	}
-	tag := strings.TrimSpace(cardStringValue(next["tag"]))
+	tag := strings.TrimSpace(cardkit.StringValue(next["tag"]))
 	if tag == "" {
 		return false
 	}
@@ -501,7 +502,7 @@ func startsNewCardPayloadBlock(current []map[string]any, next map[string]any) bo
 		return true
 	}
 	first := current[0]
-	firstTag := strings.TrimSpace(cardStringValue(first["tag"]))
+	firstTag := strings.TrimSpace(cardkit.StringValue(first["tag"]))
 	if firstTag == "" {
 		return false
 	}
@@ -534,26 +535,21 @@ func flattenCardPayloadBlocks(blocks []cardPayloadBlock) []map[string]any {
 	elements := make([]map[string]any, 0, total)
 	for _, block := range blocks {
 		for _, element := range block.Elements {
-			elements = append(elements, cloneCardMap(element))
+			elements = append(elements, cardkit.CloneMap(element))
 		}
 	}
 	return elements
 }
 
 func isCardSectionHeaderElement(element map[string]any) bool {
-	if strings.TrimSpace(cardStringValue(element["tag"])) != "markdown" {
+	if strings.TrimSpace(cardkit.StringValue(element["tag"])) != "markdown" {
 		return false
 	}
-	content := strings.TrimSpace(cardStringValue(element["content"]))
+	content := strings.TrimSpace(cardkit.StringValue(element["content"]))
 	if content == "" || strings.Contains(content, "\n") {
 		return false
 	}
 	return strings.HasPrefix(content, "**") && strings.HasSuffix(content, "**")
-}
-
-func cardStringValue(raw any) string {
-	value, _ := raw.(string)
-	return value
 }
 
 func extractCardPayloadElements(payload map[string]any) ([]map[string]any, string, bool) {
@@ -590,7 +586,7 @@ func cardPayloadElementsSlice(raw any) ([]map[string]any, bool) {
 func setCardPayloadElements(payload map[string]any, path string, elements []map[string]any) {
 	cloned := make([]map[string]any, 0, len(elements))
 	for _, element := range elements {
-		cloned = append(cloned, cloneCardMap(element))
+		cloned = append(cloned, cardkit.CloneMap(element))
 	}
 	switch path {
 	case "body.elements":
@@ -598,7 +594,7 @@ func setCardPayloadElements(payload map[string]any, path string, elements []map[
 		if len(body) == 0 {
 			body = map[string]any{}
 		} else {
-			body = cloneCardMap(body)
+			body = cardkit.CloneMap(body)
 		}
 		body["elements"] = cloned
 		payload["body"] = body

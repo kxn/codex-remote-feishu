@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -191,13 +192,7 @@ func canonicalPath(path string) string {
 func samePath(left, right string) bool {
 	left = canonicalPath(left)
 	right = canonicalPath(right)
-	if left == "" || right == "" {
-		return false
-	}
-	if runtime.GOOS == "windows" {
-		return strings.EqualFold(left, right)
-	}
-	return left == right
+	return pathcompare.SameCleanPlatformPath(left, right)
 }
 
 func pathWithinRoot(path, root string) bool {

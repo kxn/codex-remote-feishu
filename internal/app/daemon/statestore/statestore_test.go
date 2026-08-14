@@ -210,3 +210,56 @@ func TestStatePath(t *testing.T) {
 		t.Fatalf("StatePath = %q", got)
 	}
 }
+
+func TestDelete(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "state.json")
+	store := New[testRecord](path, Options[testRecord]{
+		Version: 2,
+		Name:    "test",
+		Equal:   testEqual,
+		LoadKey: testKey,
+	})
+	if err := store.Replace(map[string]testRecord{
+		"a": {ID: "a", Name: "alpha"},
+		"b": {ID: "b", Name: "beta"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// No-op cases: blank key and missing record.
+	if err := store.Delete(""); err != nil {
+		t.Fatalf("Delete('') = %v, want nil", err)
+	}
+	if err := store.Delete("missing"); err != nil {
+		t.Fatalf("Delete(missing) = %v, want nil", err)
+	}
+
+	if err := store.Delete("a"); err != nil {
+		t.Fatalf("Delete(a) = %v", err)
+	}
+	if _, ok := store.Get("a"); ok {
+		t.Fatal("record a still present after Delete")
+	}
+	if _, ok := store.Get("b"); !ok {
+		t.Fatal("record b lost after Delete")
+	}
+
+	// Persisted: reload and confirm the deletion stuck.
+	reloaded, err := Load[testRecord](path, Options[testRecord]{
+		Version: 2,
+		Name:    "test",
+		Equal:   testEqual,
+		LoadKey: testKey,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := reloaded.Get("a"); ok {
+		t.Fatal("record a still present after reload")
+	}
+	if _, ok := reloaded.Get("b"); !ok {
+		t.Fatal("record b lost after reload")
+	}
+}

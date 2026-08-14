@@ -248,7 +248,7 @@ func (s *Service) handleTargetPickerPage(surface *state.SurfaceConsoleRecord, pi
 			return []eventcontract.Event{s.targetPickerViewEvent(surface, view, true)}
 		}
 		options := targetPickerWorkspaceOptions(s.targetPickerWorkspaceEntriesForRecord(surface, record))
-		record.WorkspaceCursor = normalizeTargetPickerDropdownCursor(cursor, len(options))
+		record.WorkspaceCursor = normalizePickerDropdownCursor(cursor, len(options))
 		record.SelectedWorkspaceKey = targetPickerWorkspaceValueAtCursor(options, record.WorkspaceCursor)
 		record.SessionCursor = -1
 		record.SelectedSessionValue = targetPickerAutoSession
@@ -256,7 +256,7 @@ func (s *Service) handleTargetPickerPage(surface *state.SurfaceConsoleRecord, pi
 		workspaceEntries := s.targetPickerWorkspaceEntriesForRecord(surface, record)
 		entry, _ := targetPickerWorkspaceEntryByKey(workspaceEntries, record.SelectedWorkspaceKey)
 		options := s.targetPickerSessionOptions(surface, entry, record.Source, record.AllowNewThread)
-		record.SessionCursor = normalizeTargetPickerDropdownCursor(cursor, len(options))
+		record.SessionCursor = normalizePickerDropdownCursor(cursor, len(options))
 		record.SelectedSessionValue = ""
 	default:
 		return notice(surface, "target_picker_invalid_page_action", "当前翻页动作无效，请重新打开目标选择器。")
@@ -442,7 +442,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		return notice(surface, "target_picker_selection_missing", "当前选择的目标无效，请重新选择。")
 	}
 	if succeeded {
-		filtered := targetPickerFilteredFollowupEvents(events)
+		filtered := filterPickerFollowupEvents(events)
 		title := "已切换会话"
 		text := "当前工作目标已经切换完成。"
 		if kind == control.FeishuTargetPickerSessionNewThread {
@@ -458,7 +458,7 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		return result
 	}
 	if kind == control.FeishuTargetPickerSessionThread && surface.PendingHeadless != nil && strings.TrimSpace(surface.PendingHeadless.ThreadID) == threadID {
-		filtered := targetPickerFilteredFollowupEvents(events)
+		filtered := filterPickerFollowupEvents(events)
 		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, view.SelectedSessionLabel)
 		processing := s.startTargetPickerProcessingWithSections(
 			surface,
@@ -475,8 +475,8 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		return append(processing, filtered...)
 	}
 	if kind == control.FeishuTargetPickerSessionNewThread && surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
-		filtered := targetPickerFilteredFollowupEvents(events)
+		pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == workspaceKey {
+		filtered := filterPickerFollowupEvents(events)
 		status := targetPickerSwitchProcessingStatus(view.SelectedWorkspaceLabel, "新会话")
 		processing := s.startTargetPickerProcessingWithSections(
 			surface,
@@ -492,8 +492,8 @@ func (s *Service) dispatchTargetPickerConfirmed(surface *state.SurfaceConsoleRec
 		)
 		return append(processing, filtered...)
 	}
-	filtered := targetPickerFilteredFollowupEvents(events)
-	failureText := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), "当前工作目标切换失败，请重新发送 /list、/use 或 /useall 再试一次。"))
+	filtered := filterPickerFollowupEvents(events)
+	failureText := strings.TrimSpace(xutil.FirstNonEmpty(firstNoticeText(events), "当前工作目标切换失败，请重新发送 /list、/use 或 /useall 再试一次。"))
 	return s.finishTargetPickerWithStage(surface, flow, record, control.FeishuTargetPickerStageFailed, "切换失败", failureText, false, filtered)
 }
 
@@ -523,7 +523,7 @@ func targetPickerNewThreadSucceeded(surface *state.SurfaceConsoleRecord, workspa
 		return false
 	}
 	return (surface.RouteMode == state.RouteModeNewThreadReady && normalizeWorkspaceClaimKey(surface.PreparedThreadCWD) == workspaceKey) ||
-		(surface.PendingHeadless != nil && normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey && surface.PendingHeadless.PrepareNewThread)
+		(surface.PendingHeadless != nil && pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == workspaceKey && surface.PendingHeadless.PrepareNewThread)
 }
 
 func (s *Service) requireActiveTargetPicker(surface *state.SurfaceConsoleRecord, pickerID, actorUserID string) (*activeTargetPickerRecord, []eventcontract.Event) {
@@ -597,14 +597,14 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		if workspaceCursor < 0 {
 			workspaceCursor = targetPickerWorkspaceOptionIndex(workspaceOptions, selectedWorkspace)
 		}
-		workspaceCursor = normalizeTargetPickerDropdownCursor(workspaceCursor, len(workspaceOptions))
+		workspaceCursor = normalizePickerDropdownCursor(workspaceCursor, len(workspaceOptions))
 	}
 	record.WorkspaceCursor = workspaceCursor
 	sessionCursor := record.SessionCursor
 	if sessionCursor < 0 {
 		sessionCursor = targetPickerSessionOptionIndex(sessionOptions, selectedSession)
 	}
-	sessionCursor = normalizeTargetPickerDropdownCursor(sessionCursor, len(sessionOptions))
+	sessionCursor = normalizePickerDropdownCursor(sessionCursor, len(sessionOptions))
 	record.SessionCursor = sessionCursor
 
 	selectedWorkspaceLabel, selectedWorkspaceMeta := targetPickerSelectedWorkspaceSummary(workspaceOptions, selectedWorkspace)

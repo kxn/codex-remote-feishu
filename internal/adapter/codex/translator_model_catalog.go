@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (t *Translator) translateModelList(command agentproto.Command) ([][]byte, error) {
-	requestID := t.nextRequest("model-list")
+	requestID := t.NextRequest("model-list")
 	params := map[string]any{
 		"includeHidden": command.ModelList.IncludeHidden,
 	}
@@ -24,7 +25,7 @@ func (t *Translator) translateModelList(command agentproto.Command) ([][]byte, e
 		CommandID:     command.CommandID,
 		IncludeHidden: command.ModelList.IncludeHidden,
 	}
-	t.debugf(
+	t.Debugf(
 		"translate model list: command=%s request=%s includeHidden=%t limit=%d cursor=%s",
 		command.CommandID,
 		requestID,
@@ -54,10 +55,10 @@ func (t *Translator) observeModelListResponse(requestID string, message map[stri
 		IncludeHidden: pending.IncludeHidden,
 		RefreshedAt:   time.Now().UTC(),
 	}
-	if errMsg := extractJSONRPCErrorMessage(message); errMsg != "" {
+	if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 		snapshot.ErrorMessage = errMsg
 		snapshot.Unsupported = isModelListUnsupportedError(message, errMsg)
-		t.debugf(
+		t.Debugf(
 			"observe server model/list error: request=%s command=%s unsupported=%t error=%s",
 			requestID,
 			pending.CommandID,
@@ -79,7 +80,7 @@ func (t *Translator) observeModelListResponse(requestID string, message map[stri
 	} else {
 		snapshot = parseModelCatalogSnapshot(result, pending.IncludeHidden)
 	}
-	t.debugf(
+	t.Debugf(
 		"observe server model/list result: request=%s command=%s entries=%d nextCursor=%s error=%s",
 		requestID,
 		pending.CommandID,

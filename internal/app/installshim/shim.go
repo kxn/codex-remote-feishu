@@ -5,11 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/shim"
 	shimembed "github.com/kxn/codex-remote-feishu/internal/shim/embed"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 // UpgradeShimEntrypointOptions describes where to materialize an upgrade shim
@@ -28,7 +29,7 @@ func UpgradeShimSidecarPath(entrypointPath string) string {
 // WriteUpgradeShimEntrypoint releases the embedded upgrade shim binary to
 // entrypointPath and writes the sidecar that binds it to InstallStatePath.
 func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
-	entrypointPath := strings.TrimSpace(opts.EntrypointPath)
+	entrypointPath := pathcanon.Native(opts.EntrypointPath)
 	if entrypointPath == "" {
 		return fmt.Errorf("upgrade shim entrypoint path is required")
 	}
@@ -51,7 +52,7 @@ func WriteUpgradeShimEntrypoint(opts UpgradeShimEntrypointOptions) error {
 // PrepareUpgradeHelperShim releases a uniquely-named upgrade shim next to the
 // install-state file (under <stateDir>/upgrade-helper/) and returns its path.
 func PrepareUpgradeHelperShim(statePath, instanceID string) (string, error) {
-	statePath = filepath.Clean(strings.TrimSpace(statePath))
+	statePath = pathcanon.Native(statePath)
 	if statePath == "" {
 		return "", fmt.Errorf("state path is required")
 	}
@@ -60,7 +61,7 @@ func PrepareUpgradeHelperShim(statePath, instanceID string) (string, error) {
 		return "", err
 	}
 	name := "codex-remote-upgrade-shim"
-	ext := filepath.Ext(executableName(runtime.GOOS))
+	ext := filepath.Ext(xutil.ExecutableName(runtime.GOOS))
 	entrypointPath := filepath.Join(helperDir, fmt.Sprintf("%s-%d%s", name, time.Now().UTC().UnixNano(), ext))
 	if err := WriteUpgradeShimEntrypoint(UpgradeShimEntrypointOptions{
 		EntrypointPath:   entrypointPath,
@@ -70,14 +71,4 @@ func PrepareUpgradeHelperShim(statePath, instanceID string) (string, error) {
 		return "", err
 	}
 	return entrypointPath, nil
-}
-
-// executableName mirrors internal/app/install.executableName. Kept local so
-// this package does not import install (install depends on this package to
-// release shims, so importing back would create an import cycle).
-func executableName(goos string) string {
-	if goos == "windows" {
-		return "codex-remote.exe"
-	}
-	return "codex-remote"
 }

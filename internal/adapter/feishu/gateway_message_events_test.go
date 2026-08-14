@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -751,9 +752,9 @@ func TestParseMessageEventQuotesInteractiveFinalMessage(t *testing.T) {
 		CardTitle:    "✅ 最后答复：先看日志",
 		CardBody:     "第一段说明\n\n第二段说明",
 		CardThemeKey: cardThemeFinal,
-		CardElements: []map[string]any{cardPlainTextBlockElement("补充说明：继续看 trace")},
+		CardElements: []map[string]any{cardkit.PlainTextBlockElement("补充说明：继续看 trace")},
 		cardEnvelope: cardEnvelopeV2,
-		card:         finalReplyCardDocument("✅ 最后答复：先看日志", "", "第一段说明\n\n第二段说明", cardThemeFinal, []map[string]any{cardPlainTextBlockElement("补充说明：继续看 trace")}),
+		card:         finalReplyCardDocument("✅ 最后答复：先看日志", "", "第一段说明\n\n第二段说明", cardThemeFinal, []map[string]any{cardkit.PlainTextBlockElement("补充说明：继续看 trace")}),
 	}, cardEnvelopeV2)
 	rawPayload, err := json.Marshal(payload)
 	if err != nil {

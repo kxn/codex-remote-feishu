@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestTranslatePromptSendApplyTargetProfilePolicyUsesTypedStartPayload(t *testing.T) {
@@ -51,7 +52,7 @@ func TestTranslatePromptSendApplyTargetProfilePolicyUsesTypedStartPayload(t *tes
 	if params["developerInstructions"] != "Profile says: be precise." {
 		t.Fatalf("expected profile instruction as developerInstructions, got %#v", params)
 	}
-	if params["cwd"] != "/tmp/project" {
+	if params["cwd"] != pathcanon.Native("/tmp/project") {
 		t.Fatalf("expected target cwd, got %#v", params)
 	}
 }

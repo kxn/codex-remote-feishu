@@ -16,7 +16,7 @@ func TestFeishuMenuGroupClassificationMatchesTaskModel(t *testing.T) {
 		},
 		{
 			groupID: FeishuCommandGroupSendSettings,
-			want:    []string{FeishuCommandMode, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose, FeishuCommandAutoContinue, FeishuCommandCodexProvider, FeishuCommandClaudeProfile, FeishuCommandOpenCodeProfile},
+			want:    []string{FeishuCommandMode, FeishuCommandReasoning, FeishuCommandModel, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandVerbose, FeishuCommandAutoContinue, FeishuCommandCodexProfile, FeishuCommandClaudeProfile, FeishuCommandOpenCodeProfile},
 		},
 		{
 			groupID: FeishuCommandGroupSwitchTarget,

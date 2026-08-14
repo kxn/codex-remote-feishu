@@ -76,7 +76,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 			state.PersistedSurfaceBackendContract(
 				state.ProductMode(entry.ProductMode),
 				agentproto.Backend(entry.Backend),
-				entry.CodexProviderID,
+				entry.CodexProfileID,
 				entry.ClaudeProfileID,
 				entry.OpenCodeProfileID,
 			),
@@ -251,7 +251,7 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		ActorUserID:       strings.TrimSpace(surface.ActorUserID),
 		ProductMode:       string(state.NormalizeProductMode(surface.ProductMode)),
 		Backend:           string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
-		CodexProviderID:   strings.TrimSpace(a.service.SurfaceCodexProviderID(surface.SurfaceSessionID)),
+		CodexProfileID:    strings.TrimSpace(a.service.SurfaceCodexProfileID(surface.SurfaceSessionID)),
 		ClaudeProfileID:   strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
 		OpenCodeProfileID: strings.TrimSpace(a.service.SurfaceOpenCodeProfileID(surface.SurfaceSessionID)),
 		Verbosity:         string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
@@ -309,7 +309,7 @@ func (a *App) surfaceProfileSelectionExplicitlyUpdated(previous, current surface
 	if strings.TrimSpace(previous.CodexProfileSelectionStatus) == "" || strings.TrimSpace(previous.GatewayID) == "" {
 		return false
 	}
-	currentProfileID := state.CodexProfileIDFromLegacyProviderID(current.CodexProviderID)
+	currentProfileID := state.NormalizeCodexProfileID(current.CodexProfileID)
 	for _, record := range a.service.BotCapabilitySettings() {
 		if record.GatewayID == previous.GatewayID && record.CodexProfileID == currentProfileID && record.UpdatedAt.After(previous.UpdatedAt) {
 			return true
@@ -320,10 +320,7 @@ func (a *App) surfaceProfileSelectionExplicitlyUpdated(previous, current surface
 
 func sameCodexProfileSelection(previous, current surfaceresume.Entry) bool {
 	previousProfileID := strings.TrimSpace(previous.CodexProfileID)
-	if previousProfileID == "" {
-		previousProfileID = state.CodexProfileIDFromLegacyProviderID(previous.CodexProviderID)
-	}
-	return previousProfileID == state.CodexProfileIDFromLegacyProviderID(current.CodexProviderID)
+	return state.NormalizeCodexProfileID(previousProfileID) == state.NormalizeCodexProfileID(current.CodexProfileID)
 }
 
 func shouldPreserveCodexAdmissionRef(previous, current surfaceresume.Entry, clearResumeTarget bool) bool {
@@ -331,7 +328,7 @@ func shouldPreserveCodexAdmissionRef(previous, current surfaceresume.Entry, clea
 		strings.TrimSpace(previous.ResumeThreadID) != strings.TrimSpace(current.ResumeThreadID) {
 		return false
 	}
-	profileID := state.CodexProfileIDFromLegacyProviderID(current.CodexProviderID)
+	profileID := state.NormalizeCodexProfileID(current.CodexProfileID)
 	return previous.CodexAdmissionRef.ProfileRef.ID == profileID &&
 		previous.CodexAdmissionRef.ContextPreferenceRef.ProfileID == profileID
 }
@@ -385,7 +382,11 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 	}
 	if pending := surface.PendingHeadless; pending != nil {
 		if routeMode, ok := pendingHeadlessWorkspaceRouteMode(pending); ok {
-			if resumeWorkspaceKey := state.ResolveWorkspaceClaimKey(workspaceKey, pending.WorkspaceKey, pending.ThreadCWD); resumeWorkspaceKey != "" {
+			resumeWorkspaceKey := state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)
+			if resumeWorkspaceKey == "" {
+				resumeWorkspaceKey = state.ResolveHeadlessResumeWorkspaceKey(workspaceKey, pending.ThreadCWD)
+			}
+			if resumeWorkspaceKey != "" {
 				return surfaceResumeTarget{
 					ResumeWorkspaceKey: resumeWorkspaceKey,
 					ResumeRouteMode:    string(routeMode),
@@ -393,11 +394,15 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 			}
 			return surfaceResumeTarget{}, workspaceKey, false
 		}
+		resumeWorkspaceKey := state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)
+		if resumeWorkspaceKey == "" {
+			resumeWorkspaceKey = state.ResolveHeadlessResumeWorkspaceKey(workspaceKey, pending.ThreadCWD)
+		}
 		return surfaceResumeTarget{
 			ResumeThreadID:     strings.TrimSpace(pending.ThreadID),
 			ResumeThreadTitle:  strings.TrimSpace(pending.ThreadTitle),
 			ResumeThreadCWD:    state.ResolveWorkspaceClaimKey(pending.ThreadCWD),
-			ResumeWorkspaceKey: state.ResolveHeadlessResumeWorkspaceKey(state.ResolveWorkspaceClaimKey(workspaceKey, pending.WorkspaceKey), pending.ThreadCWD),
+			ResumeWorkspaceKey: resumeWorkspaceKey,
 			ResumeRouteMode:    string(state.RouteModePinned),
 			ResumeHeadless:     true,
 		}, workspaceKey, true
@@ -565,7 +570,7 @@ func sameSurfaceResumeRecoveryTarget(left, right surfaceresume.Entry) bool {
 	commonMatch := strings.TrimSpace(left.SurfaceSessionID) == strings.TrimSpace(right.SurfaceSessionID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
 		state.NormalizeHeadlessBackend(agentproto.Backend(left.Backend)) == state.NormalizeHeadlessBackend(agentproto.Backend(right.Backend)) &&
-		strings.TrimSpace(left.CodexProviderID) == strings.TrimSpace(right.CodexProviderID) &&
+		strings.TrimSpace(left.CodexProfileID) == strings.TrimSpace(right.CodexProfileID) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
 		strings.TrimSpace(left.OpenCodeProfileID) == strings.TrimSpace(right.OpenCodeProfileID) &&
 		strings.TrimSpace(left.ResumeRouteMode) == strings.TrimSpace(right.ResumeRouteMode) &&
@@ -887,7 +892,7 @@ func isHeadlessRestoreFailureNoticeCode(code string) bool {
 		"headless_restore_workspace_busy",
 		"headless_restore_thread_not_found",
 		"headless_restore_thread_cwd_missing",
-		"headless_restore_provider_unavailable",
+		"headless_restore_profile_unavailable",
 		"headless_restore_claude_profile_unavailable",
 		"headless_restore_runtime_unavailable",
 		"headless_restore_workspace_missing",

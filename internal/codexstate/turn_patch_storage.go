@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 )
 
 func (s *TurnPatchStorage) ResolveThreadTarget(threadID string) (PatchThreadTarget, error) {
@@ -148,7 +150,7 @@ func (s *TurnPatchStorage) RollbackLatestTurnPatch(req RollbackLatestTurnPatchRe
 	if err != nil {
 		return nil, err
 	}
-	if filepath.Clean(target.RolloutPath) != filepath.Clean(record.RolloutPath) {
+	if !sameTurnPatchRolloutPath(target.RolloutPath, record.RolloutPath) {
 		return nil, ErrTurnPatchRolloutPathDrift
 	}
 	snapshot, err := readRolloutSnapshot(record.RolloutPath)
@@ -179,6 +181,10 @@ func (s *TurnPatchStorage) RollbackLatestTurnPatch(req RollbackLatestTurnPatchRe
 		RolloutAfterDigest:  record.RolloutAfterDigest,
 		RolledBackAt:        record.RolledBackAt,
 	}, nil
+}
+
+func sameTurnPatchRolloutPath(left, right string) bool {
+	return pathcompare.SameCleanPlatformPath(left, right)
 }
 
 func (s *TurnPatchStorage) resolveRollbackLedger(req RollbackLatestTurnPatchRequest) (turnPatchLedgerRecord, error) {

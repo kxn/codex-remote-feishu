@@ -9,6 +9,7 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
@@ -185,7 +186,7 @@ func NewMultiGatewayController() *MultiGatewayController {
 }
 
 func normalizeGatewayAppConfig(cfg GatewayAppConfig) GatewayAppConfig {
-	cfg.GatewayID = normalizeGatewayID(cfg.GatewayID)
+	cfg.GatewayID = gatewaypkg.NormalizeGatewayID(cfg.GatewayID)
 	if strings.TrimSpace(cfg.PreviewRootFolderName) == "" {
 		cfg.PreviewRootFolderName = previewpkg.DefaultRootFolderName
 	}

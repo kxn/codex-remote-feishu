@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/shim"
 )
 
@@ -42,7 +42,7 @@ func RunMain(args []string) int {
 }
 
 func resolveLaunchPlan(entrypointPath string, baseEnv []string) (launchPlan, error) {
-	entrypointPath = filepath.Clean(strings.TrimSpace(entrypointPath))
+	entrypointPath = cleanShimPath(entrypointPath)
 	if entrypointPath == "" {
 		return launchPlan{}, fmt.Errorf("entrypoint path is empty")
 	}
@@ -84,13 +84,13 @@ func loadInstallState(path string) (installState, error) {
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return installState{}, err
 	}
-	state.ConfigPath = cleanNonEmpty(state.ConfigPath)
-	state.InstalledBinary = cleanNonEmpty(state.InstalledBinary)
-	state.InstalledWrapperBinary = cleanNonEmpty(state.InstalledWrapperBinary)
+	state.ConfigPath = cleanShimPath(state.ConfigPath)
+	state.InstalledBinary = cleanShimPath(state.InstalledBinary)
+	state.InstalledWrapperBinary = cleanShimPath(state.InstalledWrapperBinary)
 	// Legacy states recorded the installed binary under installedBinary /
 	// installedWrapperBinary; promote to the canonical current-binary path.
 	state.CurrentBinaryPath = firstNonEmpty(
-		cleanNonEmpty(state.CurrentBinaryPath),
+		cleanShimPath(state.CurrentBinaryPath),
 		state.InstalledBinary,
 		state.InstalledWrapperBinary,
 	)
@@ -98,7 +98,7 @@ func loadInstallState(path string) (installState, error) {
 }
 
 func usableConfigPath(path string) bool {
-	path = cleanNonEmpty(path)
+	path = cleanShimPath(path)
 	if path == "" {
 		return false
 	}
@@ -107,7 +107,7 @@ func usableConfigPath(path string) bool {
 }
 
 func usableLaunchTarget(path, entrypointPath, realBinaryPath string) bool {
-	path = cleanNonEmpty(path)
+	path = cleanShimPath(path)
 	if path == "" {
 		return false
 	}
@@ -119,7 +119,7 @@ func usableLaunchTarget(path, entrypointPath, realBinaryPath string) bool {
 }
 
 func usableFallbackTarget(path string) bool {
-	path = cleanNonEmpty(path)
+	path = cleanShimPath(path)
 	if path == "" {
 		return false
 	}
@@ -129,8 +129,8 @@ func usableFallbackTarget(path string) bool {
 
 func withManagedShimEnv(baseEnv []string, configPath, realBinaryPath string) []string {
 	env := append([]string(nil), baseEnv...)
-	env = upsertEnv(env, "CODEX_REMOTE_CONFIG", cleanNonEmpty(configPath))
-	env = upsertEnv(env, "CODEX_REAL_BINARY", cleanNonEmpty(realBinaryPath))
+	env = upsertEnv(env, "CODEX_REMOTE_CONFIG", cleanShimPath(configPath))
+	env = upsertEnv(env, "CODEX_REAL_BINARY", cleanShimPath(realBinaryPath))
 	return env
 }
 
@@ -156,17 +156,13 @@ func upsertEnv(env []string, key, value string) []string {
 
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
-		if cleaned := cleanNonEmpty(value); cleaned != "" {
+		if cleaned := cleanShimPath(value); cleaned != "" {
 			return cleaned
 		}
 	}
 	return ""
 }
 
-func cleanNonEmpty(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return ""
-	}
-	return filepath.Clean(path)
+func cleanShimPath(path string) string {
+	return pathcanon.Native(path)
 }

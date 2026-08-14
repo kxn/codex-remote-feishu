@@ -73,11 +73,12 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 		"",
 		"",
 		"",
+		"",
 		front,
 	)
 }
 
-func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, front bool) []eventcontract.Event {
+func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, purpose agentproto.PromptPurpose, front bool) []eventcontract.Event {
 	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
 		return blocked
 	}
@@ -87,12 +88,17 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		dispatchPlan.ExecutionMode = mode
 	}
 	dispatchPlan.SourceThreadID = strings.TrimSpace(sourceThreadID)
+	dispatchPlan.Purpose = purpose
 	if policy := agentproto.NormalizeSurfaceBindingPolicy(bindingPolicy); policy != "" {
 		dispatchPlan.SurfaceBindingPolicy = policy
 	}
 	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
 	frozenOverride := s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides)
+	frozenPlanMode := s.freezePlanModeForPrompt(surface)
+	if dispatchPlan.Purpose == agentproto.PromptPurposeReview && s.surfaceBackend(surface) == agentproto.BackendClaude {
+		frozenPlanMode = state.PlanModeSettingOn
+	}
 	codexAdmissionRef := s.freezeCodexAdmissionRefForPrompt(surface)
 	codexConnectionContract := s.freezeCodexConnectionContractForPrompt(surface)
 	codexThreadPolicy := s.freezeCodexThreadPolicyForPrompt(surface)
@@ -119,7 +125,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		Inputs:                  inputs,
 		FrozenDispatchPlan:      dispatchPlan,
 		FrozenOverride:          frozenOverride,
-		FrozenPlanMode:          s.freezePlanModeForPrompt(surface),
+		FrozenPlanMode:          frozenPlanMode,
 		CodexAdmissionRef:       codexAdmissionRef,
 		CodexConnectionContract: codexConnectionContract,
 		CodexThreadPolicy:       codexThreadPolicy,
@@ -351,6 +357,9 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
 		return events
 	}
+	if events, restarting := s.maybeRestartOpenCodeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
+		return events
+	}
 	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 	s.activateSurfaceQueueItemDispatch(surface, inst, item)
 	originMessageID := xutil.FirstNonEmpty(item.SourceMessageID, item.ReplyToMessageID)
@@ -385,7 +394,7 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 		return nil, nil
 	}
 	dispatchPlan := queuedItemPromptDispatchPlan(item)
-	overrides, guard := s.sanitizePromptOverridesForDispatch(surface, item.FrozenOverride)
+	overrides, guard := s.sanitizePromptOverridesForDispatch(surface, dispatchPlan, item.FrozenOverride)
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	backend := s.promptConfigBackend(inst, surface)
 	planModeOverride := frozenPlanModeOverrideValue(item.FrozenPlanMode)
@@ -420,107 +429,6 @@ func (s *Service) promptSendCommandAndGuardEventsFromQueueItem(surface *state.Su
 		guardEvents = append(guardEvents, modelReasoningGuardNoticeEvent(surface, guard))
 	}
 	return command, guardEvents
-}
-
-type promptOverrideGuardResult struct {
-	DroppedModel     bool
-	DroppedReasoning bool
-	Model            string
-	FixedModel       string
-	ReasoningEffort  string
-	SupportedEfforts []string
-}
-
-func (s *Service) sanitizePromptOverridesForDispatch(surface *state.SurfaceConsoleRecord, override state.ModelConfigRecord) (state.ModelConfigRecord, promptOverrideGuardResult) {
-	override = compactPromptOverride(override)
-	if surface == nil {
-		return override, promptOverrideGuardResult{}
-	}
-	inst := s.root.Instances[surface.AttachedInstanceID]
-	backend := s.promptConfigBackend(inst, surface)
-	if !state.BackendAcceptsFeishuPromptOverrides(backend) {
-		return state.ModelConfigRecord{}, promptOverrideGuardResult{}
-	}
-	if agentproto.NormalizeBackend(backend) == agentproto.BackendClaude {
-		return override, promptOverrideGuardResult{}
-	}
-	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
-		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
-			overrideModel := strings.TrimSpace(override.Model)
-			overrideEffort := strings.TrimSpace(override.ReasoningEffort)
-			override.Model = ""
-			override.ReasoningEffort = ""
-			if overrideModel != "" && !strings.EqualFold(overrideModel, fixedModel) {
-				return compactPromptOverride(override), promptOverrideGuardResult{
-					DroppedModel:    true,
-					Model:           overrideModel,
-					FixedModel:      fixedModel,
-					ReasoningEffort: overrideEffort,
-				}
-			}
-			return compactPromptOverride(override), promptOverrideGuardResult{}
-		}
-	}
-	if strings.TrimSpace(override.ReasoningEffort) == "" {
-		return override, promptOverrideGuardResult{}
-	}
-	validation := s.checkModelReasoningSupport(inst, override.Model, override.ReasoningEffort)
-	if validation.Support == modelReasoningUnsupported {
-		guard := promptOverrideGuardResult{
-			DroppedReasoning: true,
-			Model:            strings.TrimSpace(override.Model),
-			ReasoningEffort:  strings.TrimSpace(override.ReasoningEffort),
-			SupportedEfforts: append([]string(nil), validation.SupportedEfforts...),
-		}
-		override.ReasoningEffort = ""
-		return compactPromptOverride(override), guard
-	}
-	return compactPromptOverride(override), promptOverrideGuardResult{}
-}
-
-func modelReasoningGuardNoticeEvent(surface *state.SurfaceConsoleRecord, guard promptOverrideGuardResult) eventcontract.Event {
-	model := strings.TrimSpace(guard.Model)
-	effort := strings.TrimSpace(guard.ReasoningEffort)
-	text := "当前模型不支持已保存的推理强度覆盖，已改用模型默认思考强度。"
-	if model != "" && effort != "" {
-		text = "当前模型 " + model + " 不支持已保存的推理强度 " + effort + "，已改用模型默认思考强度。"
-	}
-	if len(guard.SupportedEfforts) != 0 {
-		text += " 当前模型支持：" + strings.Join(guard.SupportedEfforts, "、") + "。"
-	}
-	dedupKey := "prompt_override_guard:" + model + ":" + effort
-	return surfaceEventFromPayload(
-		surface,
-		eventcontract.NoticePayload{Notice: control.Notice{
-			Code:             "prompt_override_reasoning_dropped",
-			Text:             text,
-			DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
-			DeliveryFamily:   control.NoticeDeliveryFamilyPromptOverrideGuard,
-			DeliveryDedupKey: dedupKey,
-		}},
-		eventcontract.EventMeta{},
-	)
-}
-
-func modelOverrideGuardNoticeEvent(surface *state.SurfaceConsoleRecord, guard promptOverrideGuardResult) eventcontract.Event {
-	model := strings.TrimSpace(guard.Model)
-	fixedModel := strings.TrimSpace(guard.FixedModel)
-	text := "当前 Codex Profile 使用固定模型，已忽略不匹配的模型覆盖。"
-	if model != "" && fixedModel != "" {
-		text = "当前 Codex Profile 使用固定模型 " + fixedModel + "，已忽略不匹配的模型覆盖 " + model + "。"
-	}
-	dedupKey := "prompt_override_model:" + model + ":" + fixedModel
-	return surfaceEventFromPayload(
-		surface,
-		eventcontract.NoticePayload{Notice: control.Notice{
-			Code:             "prompt_override_model_dropped",
-			Text:             text,
-			DeliveryClass:    control.NoticeDeliveryClassGlobalRuntime,
-			DeliveryFamily:   control.NoticeDeliveryFamilyPromptOverrideGuard,
-			DeliveryDedupKey: dedupKey,
-		}},
-		eventcontract.EventMeta{},
-	)
 }
 
 func frozenPlanModeOverrideValue(value state.PlanModeSetting) string {
@@ -679,7 +587,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 	thread := (*state.ThreadRecord)(nil)
 	if inst != nil && strings.TrimSpace(event.ThreadID) != "" {
 		thread = s.ensureThread(inst, event.ThreadID)
-		preview := strings.TrimSpace(metadataString(event.Metadata, "revisedPrompt"))
+		preview := strings.TrimSpace(xutil.MetadataString(event.Metadata, "revisedPrompt"))
 		if preview == "" {
 			preview = "已生成图片"
 		}
@@ -699,8 +607,8 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 		TurnID:    event.TurnID,
 		ItemID:    event.ItemID,
 	}
-	savedPath := strings.TrimSpace(metadataString(event.Metadata, "savedPath"))
-	imageBase64 := strings.TrimSpace(metadataString(event.Metadata, "imageBase64"))
+	savedPath := strings.TrimSpace(xutil.MetadataString(event.Metadata, "savedPath"))
+	imageBase64 := strings.TrimSpace(xutil.MetadataString(event.Metadata, "imageBase64"))
 	surface := s.turnSurface(instanceID, event.ThreadID, event.TurnID)
 	if surface == nil {
 		if inst != nil && (savedPath == "" && imageBase64 == "") && strings.TrimSpace(event.ThreadID) != "" {
@@ -730,7 +638,7 @@ func (s *Service) renderImageItem(instanceID string, event agentproto.Event) []e
 			ThreadID:    event.ThreadID,
 			TurnID:      event.TurnID,
 			ItemID:      event.ItemID,
-			Prompt:      metadataString(event.Metadata, "revisedPrompt"),
+			Prompt:      xutil.MetadataString(event.Metadata, "revisedPrompt"),
 			SavedPath:   savedPath,
 			ImageBase64: imageBase64,
 		},
@@ -926,6 +834,7 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []even
 			buf.ItemKind = "agent_message"
 		}
 	}
+	s.maybeCaptureReviewSessionResultCandidate(instanceID, event, buf.ItemKind, bufferText)
 	s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 	if !rendersTextItem(buf.ItemKind) || strings.TrimSpace(bufferText) == "" {
 		if buf.ItemKind == "plan" && strings.TrimSpace(bufferText) != "" {

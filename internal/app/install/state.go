@@ -3,15 +3,17 @@ package install
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/pathscope"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func LoadState(path string) (InstallState, error) {
+	path = canonicalInstallStatePath(path)
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return InstallState{}, err
@@ -26,12 +28,13 @@ func LoadState(path string) (InstallState, error) {
 		return InstallState{}, err
 	}
 	state := disk.InstallState
-	state.StatePath = xutil.FirstNonEmpty(strings.TrimSpace(state.StatePath), strings.TrimSpace(path))
+	state.StatePath = canonicalInstallStatePath(xutil.FirstNonEmpty(state.StatePath, path))
 	// Legacy states recorded the installed binary under "installedBinary"
 	// (and once under three per-role fields). Promote it to the canonical
 	// CurrentBinaryPath so readers that only know the canonical field keep
 	// working with old files.
-	state.CurrentBinaryPath = xutil.FirstNonEmpty(strings.TrimSpace(state.CurrentBinaryPath), strings.TrimSpace(disk.InstalledBinary))
+	state.CurrentBinaryPath = canonicalInstallStatePath(xutil.FirstNonEmpty(state.CurrentBinaryPath, disk.InstalledBinary))
+	canonicalizeInstallStatePaths(&state)
 	state.ConfigPath = normalizeInstallStateConfigPath(
 		state.ConfigPath,
 		disk.WrapperConfigPath,
@@ -46,14 +49,13 @@ func LoadState(path string) (InstallState, error) {
 		BaseDir:        state.BaseDir,
 		ServiceManager: state.ServiceManager,
 	})
+	canonicalizeInstallStatePaths(&state)
 	return state, nil
 }
 
 func WriteState(path string, state InstallState) error {
+	path = canonicalInstallStatePath(path)
 	if err := pathscope.EnsureWritePath(path); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	// Layout facts (baseDir / configPath / statePath / versionsRoot) are
@@ -66,6 +68,7 @@ func WriteState(path string, state InstallState) error {
 	// under versionsRoot). Write only what cannot be derived; the caller's
 	// in-memory state is left untouched.
 	persisted := state
+	canonicalizeInstallStatePaths(&persisted)
 	persisted.BaseDir = ""
 	persisted.StatePath = ""
 	persisted.VersionsRoot = ""
@@ -77,11 +80,10 @@ func WriteState(path string, state InstallState) error {
 		return err
 	}
 	raw = append(raw, '\n')
-	tempPath := path + ".tmp"
-	if err := os.WriteFile(tempPath, raw, 0o644); err != nil {
+	if err := atomicfile.Write(path, raw, 0o644); err != nil {
 		return err
 	}
-	return os.Rename(tempPath, path)
+	return nil
 }
 
 // defaultConfigPathForState derives the default config.json path for the
@@ -115,22 +117,69 @@ func normalizeInstallStateConfigPath(configPath, wrapperConfigPath, servicesConf
 }
 
 func normalizeInstallStateConfigPathValue(path string) string {
-	path = strings.TrimSpace(path)
-	if path == "" {
+	cleaned := canonicalInstallStatePath(path)
+	if cleaned == "" {
 		return ""
 	}
-	cleaned := filepath.Clean(path)
 	if isLegacyInstallStateConfigPath(cleaned) {
-		return filepath.Join(filepath.Dir(cleaned), "config.json")
+		return legacyInstallStateConfigPath(cleaned)
 	}
 	return cleaned
 }
 
 func isLegacyInstallStateConfigPath(path string) bool {
-	switch filepath.Base(strings.TrimSpace(path)) {
+	switch pathBaseAnySeparator(path) {
 	case "config.env", "wrapper.env", "services.env":
 		return true
 	default:
 		return false
 	}
+}
+
+func legacyInstallStateConfigPath(path string) string {
+	idx := strings.LastIndexAny(path, `/\`)
+	if idx < 0 {
+		return "config.json"
+	}
+	return path[:idx+1] + "config.json"
+}
+
+func pathBaseAnySeparator(path string) string {
+	path = strings.TrimRight(strings.TrimSpace(path), `/\`)
+	if path == "" {
+		return ""
+	}
+	idx := strings.LastIndexAny(path, `/\`)
+	if idx < 0 {
+		return path
+	}
+	return path[idx+1:]
+}
+
+func canonicalizeInstallStatePaths(state *InstallState) {
+	if state == nil {
+		return
+	}
+	state.BaseDir = canonicalInstallStatePath(state.BaseDir)
+	state.ConfigPath = canonicalInstallStatePath(state.ConfigPath)
+	state.StatePath = canonicalInstallStatePath(state.StatePath)
+	state.ServiceUnitPath = canonicalInstallStatePath(state.ServiceUnitPath)
+	state.CurrentBinaryPath = canonicalInstallStatePath(state.CurrentBinaryPath)
+	state.VersionsRoot = canonicalInstallStatePath(state.VersionsRoot)
+	state.VSCodeSettingsPath = canonicalInstallStatePath(state.VSCodeSettingsPath)
+	state.BundleEntrypoint = canonicalInstallStatePath(state.BundleEntrypoint)
+	if state.PendingUpgrade != nil {
+		state.PendingUpgrade.TargetBinaryPath = canonicalInstallStatePath(state.PendingUpgrade.TargetBinaryPath)
+	}
+	if state.RollbackCandidate != nil {
+		state.RollbackCandidate.BinaryPath = canonicalInstallStatePath(state.RollbackCandidate.BinaryPath)
+		for i := range state.RollbackCandidate.ConfigSnapshots {
+			state.RollbackCandidate.ConfigSnapshots[i].Path = canonicalInstallStatePath(state.RollbackCandidate.ConfigSnapshots[i].Path)
+			state.RollbackCandidate.ConfigSnapshots[i].BackupPath = canonicalInstallStatePath(state.RollbackCandidate.ConfigSnapshots[i].BackupPath)
+		}
+	}
+}
+
+func canonicalInstallStatePath(path string) string {
+	return pathcanon.Native(path)
 }

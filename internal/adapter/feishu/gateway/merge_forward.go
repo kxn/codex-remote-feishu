@@ -11,7 +11,7 @@ func ParseMergeForwardContent(rawContent string) (string, error) {
 	if rawContent == "" {
 		return "", fmt.Errorf("empty merge_forward content")
 	}
-	if !looksLikeJSONObject(rawContent) {
+	if !LooksLikeJSONObject(rawContent) {
 		return rawContent, nil
 	}
 	var decoded any
@@ -86,25 +86,25 @@ func MergeForwardTitle(rawContent string) string {
 	if rawContent == "" || strings.EqualFold(rawContent, "Merged and Forwarded Message") {
 		return ""
 	}
-	if !looksLikeJSONObject(rawContent) {
+	if !LooksLikeJSONObject(rawContent) {
 		return rawContent
 	}
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(rawContent), &payload); err != nil {
 		return ""
 	}
-	return firstJSONString(payload, "title", "topic", "chat_name", "chat_title")
+	return FirstJSONString(payload, "title", "topic", "chat_name", "chat_title")
 }
 
 func collectMergeForwardLines(value any, appendLine func(string)) {
 	switch current := value.(type) {
 	case map[string]any:
-		title := firstJSONString(current, "title", "topic", "chat_name", "chat_title")
-		speaker := firstJSONString(current, "sender_name", "user_name", "name", "from_name", "sender")
-		text := firstJSONString(current, "text", "message", "summary", "description", "desc")
+		title := FirstJSONString(current, "title", "topic", "chat_name", "chat_title")
+		speaker := FirstJSONString(current, "sender_name", "user_name", "name", "from_name", "sender")
+		text := FirstJSONString(current, "text", "message", "summary", "description", "desc")
 		if text == "" {
-			content := strings.TrimSpace(firstJSONString(current, "content"))
-			if content != "" && !looksLikeJSONObject(content) {
+			content := strings.TrimSpace(FirstJSONString(current, "content"))
+			if content != "" && !LooksLikeJSONObject(content) {
 				text = content
 			}
 		}
@@ -117,8 +117,8 @@ func collectMergeForwardLines(value any, appendLine func(string)) {
 			} else {
 				appendLine(text)
 			}
-		} else if len(linesFromMessageIDs(current)) > 0 {
-			for _, line := range linesFromMessageIDs(current) {
+		} else if len(LinesFromMessageIDs(current)) > 0 {
+			for _, line := range LinesFromMessageIDs(current) {
 				appendLine(line)
 			}
 		}
@@ -149,7 +149,7 @@ func collectMergeForwardLines(value any, appendLine func(string)) {
 		if text == "" {
 			return
 		}
-		if looksLikeJSONObject(text) {
+		if LooksLikeJSONObject(text) {
 			var nested any
 			if err := json.Unmarshal([]byte(text), &nested); err == nil {
 				collectMergeForwardLines(nested, appendLine)
@@ -160,7 +160,7 @@ func collectMergeForwardLines(value any, appendLine func(string)) {
 	}
 }
 
-func linesFromMessageIDs(payload map[string]any) []string {
+func LinesFromMessageIDs(payload map[string]any) []string {
 	raw, ok := payload["message_id_list"]
 	if !ok {
 		return nil
@@ -172,7 +172,7 @@ func linesFromMessageIDs(payload map[string]any) []string {
 	return []string{fmt.Sprintf("包含 %d 条转发消息", len(items))}
 }
 
-func looksLikeJSONObject(value string) bool {
+func LooksLikeJSONObject(value string) bool {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return false
@@ -186,7 +186,7 @@ func looksLikeJSONObject(value string) bool {
 	return false
 }
 
-func firstJSONString(values map[string]any, keys ...string) string {
+func FirstJSONString(values map[string]any, keys ...string) string {
 	for _, key := range keys {
 		value, ok := values[key]
 		if !ok {

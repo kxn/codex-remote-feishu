@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 )
 
 func (c *MultiGatewayController) UpsertApp(ctx context.Context, cfg GatewayAppConfig) error {
@@ -54,7 +56,7 @@ func (c *MultiGatewayController) UpsertApp(ctx context.Context, cfg GatewayAppCo
 }
 
 func (c *MultiGatewayController) RemoveApp(_ context.Context, gatewayID string) error {
-	gatewayID = normalizeGatewayID(gatewayID)
+	gatewayID = gatewaypkg.NormalizeGatewayID(gatewayID)
 	c.lifecycleMu.Lock()
 	defer c.lifecycleMu.Unlock()
 
@@ -113,7 +115,7 @@ func (c *MultiGatewayController) Status() []GatewayStatus {
 }
 
 func (c *MultiGatewayController) SetBotOpenID(gatewayID, openID string) {
-	gatewayID = normalizeGatewayID(gatewayID)
+	gatewayID = gatewaypkg.NormalizeGatewayID(gatewayID)
 	if gatewayID == "" || strings.TrimSpace(openID) == "" {
 		return
 	}

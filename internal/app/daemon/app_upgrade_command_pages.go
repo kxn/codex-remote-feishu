@@ -15,7 +15,7 @@ func buildDebugRootPageView(stateValue install.InstallState, checkInFlight bool,
 		Title:      "调试",
 		StatusKind: strings.TrimSpace(statusKind),
 		StatusText: strings.TrimSpace(statusText),
-		SummarySections: commandCatalogSummarySections(
+		SummarySections: control.CommandCatalogSummarySections(
 			"管理页相关入口已迁移到 `/admin`。",
 			"如需管理页链接，请使用 `/admin web`；如需切换访问方式，请使用 `/admin network`。",
 		),
@@ -28,17 +28,17 @@ func buildDebugRootPageView(stateValue install.InstallState, checkInFlight bool,
 					{
 						Title:       "系统管理",
 						Description: "返回新的系统管理入口。",
-						Buttons:     []control.CommandCatalogButton{runCommandButton("打开系统管理", "/admin", "primary", false)},
+						Buttons:     []control.CommandCatalogButton{control.FeishuLocalPageCommandButton("打开系统管理", "/admin", "primary", false)},
 					},
 					{
 						Title:       "管理页",
 						Description: "按当前网络模式生成管理页链接。",
-						Buttons:     []control.CommandCatalogButton{runCommandButton("打开管理页", "/admin web", "", false)},
+						Buttons:     []control.CommandCatalogButton{control.FeishuLocalPageCommandButton("打开管理页", "/admin web", "", false)},
 					},
 					{
 						Title:       "网络模式",
 						Description: "查看或切换 WAN、LAN、本机访问模式。",
-						Buttons:     []control.CommandCatalogButton{runCommandButton("查看网络模式", "/admin network", "", false)},
+						Buttons:     []control.CommandCatalogButton{control.FeishuLocalPageCommandButton("查看网络模式", "/admin network", "", false)},
 					},
 				},
 			},
@@ -72,7 +72,7 @@ func buildUpgradeTrackPageView(stateValue install.InstallState) control.FeishuPa
 		CommandID:       control.FeishuCommandUpgrade,
 		Title:           "Upgrade Track",
 		Breadcrumbs:     control.FeishuCommandBreadcrumbsForCommand(control.FeishuCommandUpgrade, "Track"),
-		SummarySections: commandCatalogSummarySections(buildTrackSummaryLines(stateValue)...),
+		SummarySections: control.CommandCatalogSummarySections(buildTrackSummaryLines(stateValue)...),
 		Interactive:     true,
 		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{
@@ -97,7 +97,7 @@ func buildUpgradeRootButtons(showCodexUpgrade bool) []control.CommandCatalogButt
 	def, _ := control.FeishuCommandDefinitionByID(control.FeishuCommandUpgrade)
 	buttons := directSubcommandButtons(def, def.CanonicalSlash, "/upgrade latest", "")
 	if showCodexUpgrade {
-		buttons = append(buttons, runCommandButton("Codex 升级", "/upgrade codex", "", false))
+		buttons = append(buttons, control.FeishuLocalPageCommandButton("Codex 升级", "/upgrade codex", "", false))
 	}
 	return buttons
 }
@@ -138,7 +138,7 @@ func directSubcommandButtons(def control.FeishuCommandDefinition, prefix, primar
 		if commandText == strings.TrimSpace(primaryCommand) {
 			style = "primary"
 		}
-		buttons = append(buttons, runCommandButton(label, commandText, style, commandText == strings.TrimSpace(disabledCommand)))
+		buttons = append(buttons, control.FeishuLocalPageCommandButton(label, commandText, style, commandText == strings.TrimSpace(disabledCommand)))
 	}
 	return buttons
 }

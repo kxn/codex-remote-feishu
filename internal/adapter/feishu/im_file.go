@@ -65,14 +65,14 @@ func (e *IMFileSendError) Unwrap() error {
 }
 
 func (g *LiveGateway) SendIMFile(ctx context.Context, req IMFileSendRequest) (IMFileSendResult, error) {
-	ctx, cancel := newFeishuTimeoutContext(ctx, sendIMFileTimeout)
+	ctx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, sendIMFileTimeout)
 	defer cancel()
 
 	result := IMFileSendResult{
 		GatewayID:        g.config.GatewayID,
 		SurfaceSessionID: strings.TrimSpace(req.SurfaceSessionID),
 	}
-	if gatewayID := normalizeGatewayID(req.GatewayID); gatewayID != "" && gatewayID != g.config.GatewayID {
+	if gatewayID := gatewaypkg.NormalizeGatewayID(req.GatewayID); gatewayID != "" && gatewayID != g.config.GatewayID {
 		return result, &IMFileSendError{
 			Code: IMFileSendErrorGatewayNotRunning,
 			Err:  fmt.Errorf("send file failed: gateway mismatch: request=%s gateway=%s", gatewayID, g.config.GatewayID),

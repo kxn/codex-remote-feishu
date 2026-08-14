@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 )
 
@@ -105,7 +106,7 @@ func TestRenderPaginatedSelectElementsUsesSingleRowControlsAndHint(t *testing.T)
 		t.Fatalf("expected row + hint, got %#v", elements)
 	}
 	row := elements[0]
-	if got := cardStringValue(row["tag"]); got != "column_set" {
+	if got := cardkit.StringValue(row["tag"]); got != "column_set" {
 		t.Fatalf("expected pagination row column_set, got %#v", row)
 	}
 	columns, _ := row["columns"].([]map[string]any)
@@ -116,13 +117,13 @@ func TestRenderPaginatedSelectElementsUsesSingleRowControlsAndHint(t *testing.T)
 		t.Fatalf("expected previous button, got %#v", columns[0])
 	}
 	selectElement := columns[1]["elements"].([]map[string]any)[0]
-	if got := cardStringValue(selectElement["tag"]); got != "select_static" {
+	if got := cardkit.StringValue(selectElement["tag"]); got != "select_static" {
 		t.Fatalf("expected middle column to hold select_static, got %#v", selectElement)
 	}
 	if label := cardButtonLabel(t, columns[2]["elements"].([]map[string]any)[0]); label != ">" {
 		t.Fatalf("expected next button, got %#v", columns[2])
 	}
-	if block := elements[1]; cardStringValue(block["tag"]) != "div" {
+	if block := elements[1]; cardkit.StringValue(block["tag"]) != "div" {
 		t.Fatalf("expected pagination hint block, got %#v", block)
 	}
 }
@@ -177,7 +178,7 @@ func TestPlanPaginatedSelectPageFitsNearTransportLimit(t *testing.T) {
 				"tag":     "markdown",
 				"content": "**当前目录**",
 			},
-			cardPlainTextBlockElement("/workspace/alpha/beta/gamma"),
+			cardkit.PlainTextBlockElement("/workspace/alpha/beta/gamma"),
 			{
 				"tag":     "markdown",
 				"content": "**进入目录**",
@@ -244,7 +245,7 @@ func selectPaginationLongOptions(count int) []map[string]any {
 
 func selectPaginationTestOption(label, value string) map[string]any {
 	return map[string]any{
-		"text":  cardPlainText(label),
+		"text":  cardkit.PlainText(label),
 		"value": value,
 	}
 }
@@ -252,5 +253,5 @@ func selectPaginationTestOption(label, value string) map[string]any {
 func cardButtonLabel(t *testing.T, button map[string]any) string {
 	t.Helper()
 	text, _ := button["text"].(map[string]any)
-	return cardStringValue(text["content"])
+	return cardkit.StringValue(text["content"])
 }

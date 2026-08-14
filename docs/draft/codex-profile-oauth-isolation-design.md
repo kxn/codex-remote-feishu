@@ -1,8 +1,8 @@
 # Codex Profile 与 OAuth 隔离设计
 
 > Type: `draft`
-> Updated: `2026-08-01`
-> Summary: 统一 Codex/Claude 的用户可见 Profile 语义，设计 Codex OAuth 连接身份隔离、API Profile 运行认证隔离、可独立修改的上下文偏好、跨 Profile 会话恢复以及 Web/飞书管理交互，并按重构后 owner 拆分为 #763-#769 七个执行单元。
+> Updated: `2026-08-11`
+> Summary: 标记旧 Provider 兼容段落为历史迁移设计；当前实现已由 #873 收口为 Codex Profile-only，旧 `/codexprovider` 和旧 providers API 不再保留。
 
 ## 1. 文档定位
 
@@ -12,7 +12,7 @@
 2. 检测并保留 Codex 原生 ChatGPT OAuth 登录，将其投影为连接身份不可编辑、不可删除，但上下文偏好可写的内建 Profile。
 3. Profile 切换必须真正作用于 URL、认证、模型、推理强度和上下文偏好，并能安全恢复已有会话。
 
-本文是方案草案，不表示对应代码已经实现。当前代码中的 `/codexprovider` 和 `Codex Provider` 仍属于待迁移现状。
+本文保留 #763-#769 迁移期设计背景，不再作为当前实现 SSOT。当前实现已由 #873 收口为 Codex Profile-only；旧 `/codexprovider` 和旧 providers API 不再保留。
 
 ## 2. 背景与已确认问题
 
@@ -20,15 +20,15 @@
 
 - Web 管理页可保存名称、Base URL、API Key、模型和推理强度；当前尚无独立上下文偏好。
 - daemon/wrapper 可通过 Codex `-c` 参数和子进程环境变量投影自定义 Provider。
-- surface 和 managed instance 已携带 `CodexProviderID`，不同 Provider 不会被直接当作同一个启动合同复用。
-- 飞书 `/codexprovider` 已支持选择后重启当前工作区。
+- 当时 surface 和 managed instance 已携带 `CodexProviderID`，不同 Provider 不会被直接当作同一个启动合同复用。
+- 当时飞书 `/codexprovider` 已支持选择后重启当前工作区；当前已改为只支持 `/codexprofile`。
 
 但当前实现存在根因级缺口：
 
 1. Remote 生成的 `thread/resume` 没有显式携带目标 `modelProvider`。Codex 会恢复会话持久化的旧 Provider，表现为切换后仍访问旧端点，或因旧 Provider 未在新进程注册而恢复失败。
 2. orchestrator 只物化 Provider ID/名称，不知道 Profile 模型与推理默认值。当前 prompt 冻结路径可能把产品默认模型再次下发，覆盖 Profile 中配置的模型。
 3. Provider ID 没有修订号。用户编辑同一个 Provider 后，旧进程仍可能因 ID 相同而被误判为兼容。
-4. 当前 `codex_provider_env.go` 试图自行解析 Codex 原生 Profile。上游已经改变过 Profile 文件形态，继续在 Remote 内复制上游合并规则会形成永久兼容负担；目标边界应由目标 Codex 加载原生配置，Remote 只观察其有效结果。
+4. 当时 `codex_model_provider_env.go` 仍试图自行解析 Codex 原生 Profile。上游已经改变过 Profile 文件形态，继续在 Remote 内复制上游合并规则会形成永久兼容负担；目标边界应由目标 Codex 加载原生配置，Remote 只观察其有效结果。
 5. 当前产品没有区分 Codex 原生 OAuth 凭据和本系统管理的 API Key，无法向用户明确保证“自定义配置不会覆盖 OAuth”。
 
 ## 3. 目标与非目标
@@ -205,7 +205,7 @@ type CodexProfileSummary struct {
 
 - `CodexAPIProfileSecretConfig` 和 `CodexProfileSummary` 必须是不同类型，禁止通过清空 `APIKey` 后复用 secret-bearing struct 作为响应。
 - `CodexContextPreference` 是独立的非 secret 策略记录。它不能塞进 API secret definition，也不能因为 native/oauth 的连接身份只读而变成不可写。
-- API Profile 创建时在旧 `CanonicalCodexProviderID` 无法生成的保留命名空间内生成稳定 opaque ID（例如 `cp_<uuid>`）；名称可编辑但 ID 永不改变，PUT path 不能修改主键。native/oauth 同样使用该不可碰撞命名空间中的固定 ID。旧 Provider ID 可原样迁移且不会与新内建/opaque ID 碰撞，新 schema 不再把新 ID 送回旧 canonicalizer。
+- API Profile 创建时在旧 `canonicalLegacyCodexProviderID` 无法生成的保留命名空间内生成稳定 opaque ID（例如 `cp_<uuid>`）；名称可编辑但 ID 永不改变，PUT path 不能修改主键。native/oauth 同样使用该不可碰撞命名空间中的固定 ID。旧 Provider ID 可原样迁移且不会与新内建/opaque ID 碰撞，新 schema 不再把新 ID 送回旧 canonicalizer。
 - Profile 名称在 trim + Unicode case fold 后必须唯一；POST 重名返回冲突，不能沿用当前 Provider API“同名创建等于隐式更新”的行为。名称唯一性只服务人类识别，不参与引用身份。
 - 输入上限由 Catalog 与 Web 共用同一合同：名称最多 64 Unicode code points；Base URL 最多 2048 UTF-8 bytes；model/review model 最多 256 bytes；reasoning effort 最多 64 bytes；API Key 最多 16 KiB。名称/model/review/effort 禁止换行与控制字符，去除首尾空白后保存；API Key 不做 trim 或大小写规范化。创建或实际替换 Key 时拒绝空值、NUL/CR/LF 和超限值；更新请求中的 omitted/空字符串是“保留已保存 Key”的控制语义，不进入凭据值校验，避免悄悄改写真实凭据。
 - `Revision` 是 Profile 定义的单调递增版本。名称、端点、Key、模型或推理强度变化都必须递增。
@@ -749,7 +749,7 @@ Claude Profile 只提供两态 checkbox：未勾选为“模型默认”，勾�
 - canonical slash：`/codexprofile`
 - 菜单名称：`切换 Codex Profile`
 - Claude 对应文案同步为 `Claude Profile`
-- `/codexprovider` 保留为 help/menu 均隐藏的兼容 alias；功能首次发布后至少保留一个完整 minor 发布周期，再在后续 minor 删除
+- 历史迁移设计曾建议 `/codexprovider` 作为 help/menu 均隐藏的兼容 alias；当前 #873 已删除该 alias。
 
 机器人菜单只负责选择，不提供 Profile 创建、编辑、删除和 OAuth 登录。
 
@@ -799,7 +799,7 @@ PUT    /api/admin/claude/profiles/{id}/context-preference
 - API Profile secret config 继续进入权限受限的 app config；OAuth 只读描述符进入独立 runtime state store；两者不能写入同一用户可编辑数组。
 - Codex 所有现存 Profile 迁移时创建 `codex_default` context preference Revision 1；Claude 所有现存 Profile 创建“模型默认” preference Revision 1。该迁移不改写已保存模型名；若旧 Claude 自建 Profile 的模型名已带终止 `[1m]`，迁移器原子拆成无后缀 base model + 已启用 preference，保证行为不变。
 - 读取期允许旧字段作为迁移来源；新写入只写 Profile 字段，不能永久双写。
-- `/codexprovider` 和旧 admin API 只作为 transport compatibility，不继续作为内部 SSOT；两者在功能首次发布后至少保留一个完整 minor 发布周期。
+- 历史迁移设计曾建议 `/codexprovider` 和旧 admin API 只作为 transport compatibility；当前 #873 已删除两者。
 - 旧设计文档移入 `docs/obsoleted/`，本文成为新方案入口。
 
 ### 14.3 原生 Codex Profile 兼容
@@ -844,7 +844,7 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 
 兼容窗口内允许保留一份 0600 权限的迁移前备份或 frozen legacy evidence 供回滚诊断，但新写入不能更新它。旧 daemon 降级读取到陈旧 Provider 配置不属于受支持的无损路径；发布说明必须要求使用备份回退，不能通过永久双写换取降级兼容。
 
-旧 transport 的适配规则固定为：旧 Provider list 只投影 `native/default` 和 `api` 项，不伪造 OAuth 为可编辑 Provider；旧 create/update/delete 映射 canonical API Profile；隐藏 `/codexprovider` alias 将 ID 交给 canonical selection service。兼容层不得定义自己的验证、持久化或启动逻辑。
+历史迁移设计中的旧 transport 适配规则已失效：#873 删除旧 Provider list/create/update/delete API 与隐藏 `/codexprovider` alias。当前不再维护 Provider transport 兼容层。
 
 ## 15. 安全与诊断
 
@@ -895,7 +895,7 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 
 | 当前事实 | 当前 owner / carrier | 已具备能力 | 目标差距 |
 | --- | --- | --- | --- |
-| Codex/Claude secret definition | `internal/config/codex_providers.go`、`claude_profiles.go` 与对应 admin handler | app config 持久化、secret 不回填、基础 CRUD | 没有 Profile kind、immutable Revision、item ETag、retained history；Codex 仍叫 Provider，Claude context 与 definition 混合 |
+| Codex/Claude secret definition | `internal/config/codex_profiles.go`、`internal/config/codex_legacy_providers.go`、`claude_profiles.go` 与对应 admin handler | app config 持久化、secret 不回填、基础 CRUD | 历史缺口已由 canonical Profile kind、immutable Revision、item ETag 和 retained history 收口；legacy providers 仅作为迁移输入 |
 | 运行时 catalog 投影 | daemon `app_*_catalog.go` -> orchestrator `root.CodexProviders/ClaudeProfiles` | 飞书可读取稳定名称/ID 列表 | 只有显示字段，没有 OAuth/native 描述符、preference summary 或 unavailable state |
 | Feishu bot default | gateway 级 `bot-capability-settings.json` -> `BotCapabilitySettingsRecord` | 已是 mode/provider/profile/model/reasoning/access/plan 单写源；私聊 mutation 做字段级事务 | 字段仍是浮动旧 ID；没有 admission、revision 或 route actual；非 Feishu surface 仍走本地 carrier |
 | route desired 与跨 daemon 恢复 | `surface-resume-state.json` 的 backend/Profile ID、workspace/thread target | 可恢复选择和 exact-thread 目标；恢复失败 episode 已去重 | desired 与 actual/provenance 未分离；没有精确 admission ref、Connection Contract 或迁移诊断 |
@@ -903,8 +903,8 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 | 实例兼容与复用 | `surface_backend.go`、`service_surface_contract_compatibility.go`、`service_surface_contract_resolution.go` | desired/observed backend contract 与统一 workspace/thread resolver 已建立 | 兼容只比较 backend + ID，无法区分 Key/端点 generation、capability 或 actual Provider identity |
 | managed launch | `app_headless.go` -> `apply*Headless*` -> wrapper env/args | backend-aware 启动、Claude reasoning restart、实例 hello actual ID | daemon 在启动时按 ID 重新读取 current app config，已 admission 动作会漂移；公共合同与 secret launch material 未分型；OAuth/native 清理和 probe 尚不存在 |
 | Codex start/resume | `translator_commands.go`、`translator_restart_restore.go` | start 可投影 model/reasoning override，thread settings/model catalog 有部分 observed state | Remote resume、compact resume、child restart restore 均缺 `modelProvider`；start 会克隆最近本地模板；没有 Resume Policy、review/context 或 response/effective contract 校验 |
-| Web | `CodexProviderSection.tsx`、`ClaudeProfileSection.tsx` 与旧 REST API | 两套 CRUD 共用 editor shell，已有桌面/移动布局和固定 notice slot | Codex 命名、只读 preference 编辑、ETag、OAuth/native 状态、context 控件、引用预检均缺失 |
-| 飞书 config-flow | command display/config-flow + orchestrator option builder | 裸命令、菜单 handoff、同卡 replace、gateway 私聊可写已统一 | 仍为 `/codexprovider`/“Claude 配置”；普通 static select 无 Profile 分页；没有 unavailable descriptor/context 状态 |
+| Web | `CodexProfileSection.tsx`、`ClaudeProfileSection.tsx` 与 Profile REST API | 两套 CRUD 共用 editor shell，已有桌面/移动布局和固定 notice slot | 历史缺口已由 Profile-only UI/API 收口；本文仅保留迁移背景 |
+| 飞书 config-flow | command display/config-flow + orchestrator option builder | 裸命令、菜单 handoff、同卡 replace、gateway 私聊可写已统一 | 历史 `/codexprovider` 入口已删除，当前只保留 `/codexprofile` |
 
 基线结论：重构已经提供了可复用的 selection SSOT、backend contract resolver、recovery transaction、config-flow 和 persisted-store fail-closed 模式；实现不应另建平行 owner。反过来，现有 `CodexProviderRecord`、`HeadlessLaunchContract` 和 app config lookup 都不足以承载 revision-safe Profile，只做字段改名会继续保留错误边界。
 
@@ -989,7 +989,7 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 - 群聊菜单隐藏该入口，群聊手输稳定提示到私聊修改。
 - 50 个最长多字节名称 API Profile 加只读项时可通过同卡分页全部到达；每页真实 create/patch/callback envelope 均在 transport/element 预算内。
 - 动态 Profile 名称、账号提示和错误文本不进入 raw markdown，adapter 投影测试断言其位于结构化/`plain_text` carrier。
-- `/codexprovider` 隐藏 alias 在迁移期可用，但不出现在 help/menu。
+- 历史迁移期曾考虑 `/codexprovider` 隐藏 alias；当前 #873 已删除该入口。
 
 ## 18. 完成标准
 
@@ -1013,17 +1013,17 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 - `internal/app/daemon/surfaceresume/state.go`
 - `internal/app/daemon/app_surface_resume_state.go`
 - `internal/app/daemon/app_persisted_state.go`
-- `internal/config/codex_providers.go`
+- `internal/config/codex_legacy_providers.go`
 - `internal/config/claude_profiles.go`
-- `internal/config/codex_provider_env.go`
-- `internal/app/daemon/app_headless_codex_provider.go`
+- `internal/config/codex_model_provider_env.go`
+- `internal/app/daemon/app_headless_codex_profile.go`
 - `internal/app/daemon/app_headless_claude_profile.go`
 - `internal/app/daemon/app_headless.go`
-- `internal/app/daemon/admin_codex_providers.go`
+- 旧 `internal/app/daemon/admin_codex_providers.go` 已由 #873 删除
 - `internal/app/daemon/admin_claude_profiles.go`
-- `internal/core/state/codex_provider.go`
+- `internal/core/state/codex_profile.go`
 - `internal/core/state/claude_workspace_profiles.go`
-- `internal/core/orchestrator/service_codex_provider_command.go`
+- `internal/core/orchestrator/service_codex_profile_command.go`
 - `internal/core/orchestrator/service_surface_command_settings.go`
 - `internal/core/orchestrator/service_bot_capability_settings.go`
 - `internal/core/orchestrator/service_surface_contract_compatibility.go`
@@ -1034,7 +1034,7 @@ Profile Reference Index 是 definition/preference revision GC 与 Catalog 删除
 - `internal/adapter/codex/translator_restart_restore.go`
 - `internal/adapter/codex/translator_thread_state.go`
 - `internal/app/wrapper/backend_runtime.go`
-- `web/src/routes/admin/CodexProviderSection.tsx`
+- `web/src/routes/admin/CodexProfileSection.tsx`
 - `web/src/routes/admin/ClaudeProfileSection.tsx`
 - `internal/core/control/feishu_config_flow.go`
 - `internal/core/orchestrator/service_feishu_command_view.go`

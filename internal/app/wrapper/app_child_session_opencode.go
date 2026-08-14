@@ -14,8 +14,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/appserverargs"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/jsonrpcutil"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo), translator *acpadapter.Translator) (*childSession, error) {
@@ -34,7 +36,7 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	cmd.Dir = a.config.WorkspaceRoot
+	cmd.Dir = pathcanon.Native(a.config.WorkspaceRoot)
 	cmd.Env = childEnv
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)
@@ -87,7 +89,7 @@ func openCodeChildArgs(wrapperArgs []string, workspaceRoot string) []string {
 		args = append([]string{"acp"}, args...)
 	}
 	if !hasOpenCodeCWDArg(args) {
-		if cwd := strings.TrimSpace(workspaceRoot); cwd != "" {
+		if cwd := pathcanon.Native(workspaceRoot); cwd != "" {
 			args = append(args, "--cwd", cwd)
 		}
 	}
@@ -190,7 +192,7 @@ func matchOpenCodeBootstrapInitializeResponse(line []byte, requestID string) (bo
 	if lookupStringFromMap(message, "id") != requestID {
 		return false, nil
 	}
-	if errMsg := strings.TrimSpace(extractJSONRPCErrorMessage(message)); errMsg != "" {
+	if errMsg := strings.TrimSpace(jsonrpcutil.ExtractErrorMessage(message)); errMsg != "" {
 		return true, fmt.Errorf("opencode bootstrap initialize failed: %s", errMsg)
 	}
 	if _, ok := message["result"]; !ok {

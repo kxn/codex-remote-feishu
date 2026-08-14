@@ -49,6 +49,7 @@ func TestWriteAppConfigNormalizesAndResolvesOpenCodeProfiles(t *testing.T) {
 			CredentialGeneration: 1,
 			ConnectionGeneration: 1,
 			Name:                 " Team OpenCode ",
+			ProviderType:         " GOOGLE_GEMINI ",
 			BaseURL:              " https://proxy.example/v1 ",
 			APIKey:               "secret",
 			Model:                " kimi-k2 ",
@@ -82,7 +83,7 @@ func TestWriteAppConfigNormalizesAndResolvesOpenCodeProfiles(t *testing.T) {
 	if !ok {
 		t.Fatal("CurrentOpenCodeAPIProfile() did not return current revision")
 	}
-	if current.ID != "op_team" || current.Name != "Team OpenCode" || current.BaseURL != "https://proxy.example/v1" {
+	if current.ID != "op_team" || current.Name != "Team OpenCode" || current.ProviderType != OpenCodeProviderTypeGoogleGemini || current.BaseURL != "https://proxy.example/v1" {
 		t.Fatalf("unexpected normalized identity fields: %#v", current)
 	}
 	if current.Model != "kimi-k2" || current.SmallModel != "kimi-small" || current.ReviewModel != "kimi-review" || current.SubagentModel != "kimi-subagent" {
@@ -106,6 +107,59 @@ func TestWriteAppConfigNormalizesAndResolvesOpenCodeProfiles(t *testing.T) {
 	customProfile, ok := ResolveOpenCodeProfile(loaded.Config, " OP_TEAM ")
 	if !ok || customProfile.BuiltIn || customProfile.ID != "op_team" {
 		t.Fatalf("expected custom OpenCode profile resolution, got %#v ok=%t", customProfile, ok)
+	}
+}
+
+func TestOpenCodeAPIProfileDefaultsProviderTypeToOpenAICompatible(t *testing.T) {
+	record, err := PrepareOpenCodeAPIProfileCreate(nil, OpenCodeAPIProfileInput{
+		Name:    "Team OpenCode",
+		BaseURL: "https://proxy.example/v1",
+		APIKey:  "secret",
+		Model:   "kimi-k2",
+	})
+	if err != nil {
+		t.Fatalf("PrepareOpenCodeAPIProfileCreate: %v", err)
+	}
+	current, ok := CurrentOpenCodeAPIProfile(record)
+	if !ok {
+		t.Fatal("CurrentOpenCodeAPIProfile() did not return current revision")
+	}
+	if current.ProviderType != OpenCodeProviderTypeOpenAICompatibleChat {
+		t.Fatalf("ProviderType = %q, want %q", current.ProviderType, OpenCodeProviderTypeOpenAICompatibleChat)
+	}
+}
+
+func TestOpenCodeAPIProfileGoogleGeminiAllowsMissingBaseURL(t *testing.T) {
+	record, err := PrepareOpenCodeAPIProfileCreate(nil, OpenCodeAPIProfileInput{
+		Name:         "Gemini",
+		ProviderType: OpenCodeProviderTypeGoogleGemini,
+		APIKey:       "secret",
+		Model:        "gemini-2.5-pro",
+	})
+	if err != nil {
+		t.Fatalf("PrepareOpenCodeAPIProfileCreate(gemini): %v", err)
+	}
+	current, ok := CurrentOpenCodeAPIProfile(record)
+	if !ok {
+		t.Fatal("CurrentOpenCodeAPIProfile() did not return current revision")
+	}
+	if current.ProviderType != OpenCodeProviderTypeGoogleGemini || current.BaseURL != "" {
+		t.Fatalf("unexpected Gemini profile normalization: %#v", current)
+	}
+	if status := OpenCodeAPIProfileStatus(current); status != "" {
+		t.Fatalf("OpenCodeAPIProfileStatus(gemini) = %q, want available", status)
+	}
+}
+
+func TestOpenCodeAPIProfileRejectsInvalidProviderType(t *testing.T) {
+	if _, err := PrepareOpenCodeAPIProfileCreate(nil, OpenCodeAPIProfileInput{
+		Name:         "Bad Provider",
+		ProviderType: "anthropic_messages",
+		BaseURL:      "https://proxy.example/v1",
+		APIKey:       "secret",
+		Model:        "claude-sonnet",
+	}); err == nil {
+		t.Fatal("PrepareOpenCodeAPIProfileCreate accepted invalid provider type")
 	}
 }
 
@@ -182,5 +236,24 @@ func TestPrepareOpenCodeAPIProfileCreateAndUpdateTracksGenerations(t *testing.T)
 	current, _ = CurrentOpenCodeAPIProfile(baseURLUpdated)
 	if current.CredentialGeneration != 2 || current.ConnectionGeneration != 3 || current.APIKey != "secret-v2" {
 		t.Fatalf("baseURL update should advance only connection generation, got %#v", current)
+	}
+
+	providerUpdated, changed, err := PrepareOpenCodeAPIProfileUpdate(baseURLUpdated, OpenCodeAPIProfileInput{
+		Name:         "Team OpenCode",
+		ProviderType: OpenCodeProviderTypeGoogleGemini,
+		APIKey:       "secret-v2",
+		Model:        "gemini-2.5-pro",
+		SmallModel:   "gemini-2.5-flash",
+	})
+	if err != nil {
+		t.Fatalf("PrepareOpenCodeAPIProfileUpdate(providerType): %v", err)
+	}
+	if !changed {
+		t.Fatal("expected provider type update to create a new revision")
+	}
+	current, _ = CurrentOpenCodeAPIProfile(providerUpdated)
+	if current.ProviderType != OpenCodeProviderTypeGoogleGemini ||
+		current.CredentialGeneration != 2 || current.ConnectionGeneration != 4 {
+		t.Fatalf("provider type update should advance only connection generation, got %#v", current)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/ghclient"
 	"github.com/kxn/codex-remote-feishu/internal/issueworkflow"
 )
 
@@ -232,7 +233,7 @@ func parseOptionalRepo(value string) (issueworkflow.Repo, error) {
 	if value == "" {
 		return issueworkflow.Repo{}, nil
 	}
-	return issueworkflow.ParseRepo(value)
+	return ghclient.ParseRepo(value)
 }
 
 func parseWorkflowMode(value string) (issueworkflow.WorkflowMode, error) {

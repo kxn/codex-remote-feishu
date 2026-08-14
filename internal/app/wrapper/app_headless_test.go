@@ -59,7 +59,6 @@ func TestBootstrapHeadlessCodexCompletesInitializeHandshake(t *testing.T) {
 				"item/agentMessage/delta",
 				"item/plan/delta",
 				"item/reasoning/textDelta",
-				"item/reasoning/summaryTextDelta",
 				"item/commandExecution/outputDelta",
 				"item/fileChange/outputDelta",
 			}
@@ -67,6 +66,7 @@ func TestBootstrapHeadlessCodexCompletesInitializeHandshake(t *testing.T) {
 				t.Fatalf("unexpected optOutNotificationMethods: %#v", capabilities["optOutNotificationMethods"])
 			}
 			for _, disallowed := range []string{
+				"item/reasoning/summaryTextDelta",
 				"item/fileChange/patchUpdated",
 				"command/exec/outputDelta",
 				"process/outputDelta",
@@ -139,7 +139,6 @@ func TestHeadlessNotificationOptOutMethods(t *testing.T) {
 		"item/agentMessage/delta",
 		"item/plan/delta",
 		"item/reasoning/textDelta",
-		"item/reasoning/summaryTextDelta",
 		"item/commandExecution/outputDelta",
 		"item/fileChange/outputDelta",
 	}
@@ -147,6 +146,7 @@ func TestHeadlessNotificationOptOutMethods(t *testing.T) {
 		t.Fatalf("unexpected headless opt-out methods: %#v", got)
 	}
 	for _, disallowed := range []string{
+		"item/reasoning/summaryTextDelta",
 		"item/fileChange/patchUpdated",
 		"command/exec/outputDelta",
 		"process/outputDelta",

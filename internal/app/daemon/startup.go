@@ -173,7 +173,7 @@ func announcedAdminHost(bindHost string, sshSession bool, env map[string]string)
 			return detected
 		}
 	}
-	if isWildcardHost(bindHost) || isLoopbackHost(bindHost) {
+	if isWildcardHost(bindHost) || netutil.IsLoopbackHost(bindHost) {
 		return "localhost"
 	}
 	return bindHost
@@ -235,10 +235,6 @@ func normalizeIPAddress(value string) string {
 func isWildcardHost(host string) bool {
 	host = strings.TrimSpace(host)
 	return host == "" || host == "0.0.0.0" || host == "::" || host == "[::]"
-}
-
-func isLoopbackHost(host string) bool {
-	return netutil.IsLoopbackHost(host)
 }
 
 func httpURL(host, port, path string) string {

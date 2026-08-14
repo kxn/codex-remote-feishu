@@ -22,6 +22,18 @@ Do not trigger this skill for pure copy, styling, logging, tests, or refactors t
 
 Use this skill once per implementation pass, after the code and tests are mostly stable and before committing. Do not trigger it after every tiny edit.
 
+## Fast Path For `state-light`
+
+Use this path when the repo task is classified as `state-light`: it touches a remote-surface state-machine carrier, but does not change persistence format, protocol contracts, queue/recovery concurrency, permissions/security, or cross-component async lifecycle.
+
+1. Read only the canonical document section(s) that describe the touched state, command, or transition. Locate sections with headings or exact command/state names before opening excerpts.
+2. Read the touched code paths.
+3. Sync only the affected current-behavior text in the canonical document.
+4. Audit the changed path for dead or half-dead states.
+5. Run focused tests for the touched path and `scripts/check/pre-commit.sh`.
+
+Escalate to the full workflow below if the section read shows stale/conflicting state, the change crosses daemon/gateway/wrapper boundaries, the behavior depends on async recovery/queue timing, or the dead-state audit finds a bug-grade issue outside the edited path.
+
 ## Workflow
 
 1. Read the canonical state machine document and the code paths touched by the change.

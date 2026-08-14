@@ -205,6 +205,50 @@ func TestDaemonRejectsUnknownHeadlessBackendBeforeLaunch(t *testing.T) {
 	}
 }
 
+func TestDaemonStartHeadlessUsesResolvedWorkspaceForConflictingThreadCWD(t *testing.T) {
+	gateway := &recordingGateway{}
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})
+	stateDir := t.TempDir()
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
+		BinaryPath: "/tmp/codex-remote",
+		ConfigPath: "/tmp/config.json",
+		BaseEnv:    []string{"PATH=/usr/bin"},
+		Paths: relayruntime.Paths{
+			LogsDir:  t.TempDir(),
+			StateDir: stateDir,
+		},
+	})
+	staleWorkspace := evalSymlinkForTest(t, t.TempDir())
+	threadCWD := evalSymlinkForTest(t, t.TempDir())
+	app.service.MaterializeSurfaceResumeContract("surface-1", "", "chat-1", "user-1", state.HeadlessCodexSurfaceBackendContract("default"), "", "")
+
+	var captured relayruntime.HeadlessLaunchOptions
+	app.startHeadless = func(opts relayruntime.HeadlessLaunchOptions) (int, error) {
+		captured = opts
+		return 4322, nil
+	}
+	command := control.DaemonCommand{
+		Kind:             control.DaemonCommandStartHeadless,
+		SurfaceSessionID: "surface-1",
+		InstanceID:       "inst-conflict",
+		ThreadID:         "thread-1",
+		WorkspaceKey:     staleWorkspace,
+		ThreadCWD:        threadCWD,
+		Backend:          agentproto.BackendCodex,
+	}
+	authorizePendingHeadlessForTest(t, app, command)
+
+	app.startManagedHeadless(command)
+
+	if filepath.Clean(captured.WorkDir) != filepath.Clean(threadCWD) {
+		t.Fatalf("expected conflicting command to launch from resolved thread cwd %q, got %#v", threadCWD, captured)
+	}
+	managed := app.managedHeadlessRuntime.Processes["inst-conflict"]
+	if managed == nil || filepath.Clean(managed.WorkspaceRoot) != filepath.Clean(threadCWD) {
+		t.Fatalf("expected managed runtime to keep resolved workspace root %q, got %#v", threadCWD, managed)
+	}
+}
+
 func TestDaemonStartsClaudeHeadlessWithBackendEnv(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{})

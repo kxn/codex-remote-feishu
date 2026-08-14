@@ -21,17 +21,17 @@ type LocalBinaryUpgradeOptions struct {
 
 func LocalUpgradeArtifactPath(stateValue InstallState) string {
 	if strings.TrimSpace(stateValue.StatePath) != "" {
-		return filepath.Join(filepath.Dir(stateValue.StatePath), "local-upgrade", executableName(runtime.GOOS))
+		return filepath.Join(filepath.Dir(stateValue.StatePath), "local-upgrade", xutil.ExecutableName(runtime.GOOS))
 	}
 	if strings.TrimSpace(stateValue.BaseDir) != "" {
 		layout := installLayoutForInstance(stateValue.BaseDir, stateValue.InstanceID)
-		return filepath.Join(layout.StateDir, "local-upgrade", executableName(runtime.GOOS))
+		return filepath.Join(layout.StateDir, "local-upgrade", xutil.ExecutableName(runtime.GOOS))
 	}
 	paths, err := relayruntime.DefaultPaths()
 	if err == nil && strings.TrimSpace(paths.StateDir) != "" {
-		return filepath.Join(paths.StateDir, "local-upgrade", executableName(runtime.GOOS))
+		return filepath.Join(paths.StateDir, "local-upgrade", xutil.ExecutableName(runtime.GOOS))
 	}
-	return filepath.Join(os.TempDir(), "codex-remote-local-upgrade", executableName(runtime.GOOS))
+	return filepath.Join(os.TempDir(), "codex-remote-local-upgrade", xutil.ExecutableName(runtime.GOOS))
 }
 
 func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string, error) {
@@ -90,7 +90,7 @@ func RunLocalBinaryUpgradeWithStatePath(opts LocalBinaryUpgradeOptions) (string,
 		TargetTrack:      stateValue.CurrentTrack,
 		TargetVersion:    xutil.FirstNonEmpty(strings.TrimSpace(targetIdentity.Version), resolvedSlot),
 		TargetSlot:       resolvedSlot,
-		TargetBinaryPath: filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), resolvedSlot, executableName(runtime.GOOS)),
+		TargetBinaryPath: filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), resolvedSlot, xutil.ExecutableName(runtime.GOOS)),
 		RequestedAt:      &now,
 	}
 	if err := WriteState(statePath, stateValue); err != nil {
@@ -144,7 +144,7 @@ func importLocalBinaryForUpgrade(stateValue InstallState, sourceBinary, requeste
 		return "", err
 	}
 	targetDir := filepath.Join(strings.TrimSpace(stateValue.VersionsRoot), slot)
-	targetBinary := filepath.Join(targetDir, executableName(runtime.GOOS))
+	targetBinary := filepath.Join(targetDir, xutil.ExecutableName(runtime.GOOS))
 	if err := os.MkdirAll(strings.TrimSpace(stateValue.VersionsRoot), 0o755); err != nil {
 		return "", err
 	}

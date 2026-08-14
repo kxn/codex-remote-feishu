@@ -49,7 +49,7 @@ func (t *Translator) translateReviewStart(command agentproto.Command) ([][]byte,
 	if err != nil {
 		return nil, err
 	}
-	requestID := t.nextRequest("review-start")
+	requestID := t.NextRequest("review-start")
 	t.pendingReviewStart[requestID] = pendingReviewStart{
 		ThreadID:  threadID,
 		Initiator: reviewStartInitiator(command),

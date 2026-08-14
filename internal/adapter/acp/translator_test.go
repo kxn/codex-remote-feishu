@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 )
 
 func TestBuildInitializeFrameMatchesOpenCodeACPHandshake(t *testing.T) {
@@ -58,7 +59,7 @@ func TestPromptSendStartNewCreatesSessionThenPromptsAfterResponse(t *testing.T) 
 		t.Fatalf("method = %q, want session/new", newFrame["method"])
 	}
 	newParams := asMap(t, newFrame["params"])
-	if newParams["cwd"] != "/tmp/work" {
+	if newParams["cwd"] != pathcanon.Native("/tmp/work") {
 		t.Fatalf("cwd = %#v", newParams["cwd"])
 	}
 	if _, ok := newParams["mcpServers"].([]any); !ok {
@@ -255,6 +256,274 @@ func TestPromptSendExistingSessionResumesWithoutReturnedSessionID(t *testing.T) 
 	}
 }
 
+func TestPromptSendCurrentSessionSetsOpenCodePlanModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "plan this"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan prompt): %v", err)
+	}
+	if len(result.Events) != 0 {
+		t.Fatalf("set mode should not start the turn before OpenCode confirms mode, got %#v", result.Events)
+	}
+	if len(result.OutboundToChild) != 1 {
+		t.Fatalf("outbound = %d frames, want set_config_option", len(result.OutboundToChild))
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+	assertSetModeFrame(t, setFrame, "ses_1", "plan")
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode response): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_1" {
+		t.Fatalf("prompt frame after set mode = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendCurrentSessionSetsOpenCodeReasoningEffortBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-effort",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "think hard"}}},
+		Overrides: agentproto.PromptOverrides{ReasoningEffort: "high"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(reasoning prompt): %v", err)
+	}
+	if len(result.Events) != 0 {
+		t.Fatalf("set effort should not start the turn before OpenCode confirms effort, got %#v", result.Events)
+	}
+	if len(result.OutboundToChild) != 1 {
+		t.Fatalf("outbound = %d frames, want set_config_option", len(result.OutboundToChild))
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+	assertSetConfigFrame(t, setFrame, "ses_1", "effort", "high")
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set effort response): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_1" {
+		t.Fatalf("prompt frame after set effort = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendCurrentSessionRejectsUnknownOpenCodeReasoningEffort(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	_, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-effort",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "think hard"}}},
+		Overrides: agentproto.PromptOverrides{ReasoningEffort: "turbo"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "unsupported OpenCode reasoning effort override") {
+		t.Fatalf("TranslateCommand(invalid effort) err = %v, want unsupported effort", err)
+	}
+}
+
+func TestPromptSendCurrentSessionSetsOpenCodePlanModeThenReasoningBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-effort",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_1",
+			CWD:      "/tmp/work",
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "plan deeply"}}},
+		Overrides: agentproto.PromptOverrides{
+			PlanMode:        "on",
+			ReasoningEffort: "max",
+		},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan+reasoning prompt): %v", err)
+	}
+	setModeFrame := decodeFrame(t, result.OutboundToChild[0])
+	assertSetConfigFrame(t, setModeFrame, "ses_1", "mode", "plan")
+
+	observedMode, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setModeFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode response): %v", err)
+	}
+	if len(observedMode.Events) != 0 {
+		t.Fatalf("set mode should not start the turn while effort is pending, got %#v", observedMode.Events)
+	}
+	setEffortFrame := decodeFrame(t, observedMode.OutboundToChild[0])
+	assertSetConfigFrame(t, setEffortFrame, "ses_1", "effort", "max")
+
+	observedEffort, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setEffortFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set effort response): %v", err)
+	}
+	assertEventKinds(t, observedEffort.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observedEffort.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_1" {
+		t.Fatalf("prompt frame after set mode+effort = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendNewSessionSetsOpenCodePlanModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-new",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "start planning"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan new prompt): %v", err)
+	}
+	newFrame := decodeFrame(t, result.OutboundToChild[0])
+	if newFrame["method"] != "session/new" {
+		t.Fatalf("first method = %#v, want session/new", newFrame["method"])
+	}
+
+	observedNew, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      newFrame["id"],
+		"result":  map[string]any{"sessionId": "ses_new"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(new response): %v", err)
+	}
+	assertEventKinds(t, observedNew.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused)
+	setFrame := decodeFrame(t, observedNew.OutboundToChild[0])
+	assertSetModeFrame(t, setFrame, "ses_new", "plan")
+
+	observedSet, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode response): %v", err)
+	}
+	assertEventKinds(t, observedSet.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, observedSet.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_new" {
+		t.Fatalf("prompt frame after new set mode = %#v", promptFrame)
+	}
+}
+
+func TestPromptSendResumeSessionSetsOpenCodeBuildModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-resume",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_existing",
+			CWD:      "/tmp/work",
+		},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "resume in build"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "off"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan resume prompt): %v", err)
+	}
+	resumeFrame := decodeFrame(t, result.OutboundToChild[0])
+	if resumeFrame["method"] != "session/resume" {
+		t.Fatalf("first method = %#v, want session/resume", resumeFrame["method"])
+	}
+
+	observedResume, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      resumeFrame["id"],
+		"result":  map[string]any{"sessionId": "ses_existing"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(resume response): %v", err)
+	}
+	assertEventKinds(t, observedResume.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused)
+	setFrame := decodeFrame(t, observedResume.OutboundToChild[0])
+	assertSetModeFrame(t, setFrame, "ses_existing", "build")
+}
+
+func TestPromptSendDoesNotPromptWhenOpenCodeSetModeFails(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	tr.currentSessionID = "ses_1"
+	tr.sessions["ses_1"] = sessionState{ID: "ses_1", CWD: "/tmp/work"}
+
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-plan-error",
+		Kind:      agentproto.CommandPromptSend,
+		Target:    agentproto.Target{ThreadID: "ses_1", CWD: "/tmp/work"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "plan this"}}},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on"},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(plan prompt): %v", err)
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"error":   map[string]any{"code": -32602, "message": "mode is invalid"},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(set mode error): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventSystemError)
+	if len(observed.OutboundToChild) != 0 {
+		t.Fatalf("set mode failure should not continue to prompt, got %#v", observed.OutboundToChild)
+	}
+}
+
 func TestPromptSendForkEphemeralForksThenPromptsNewSession(t *testing.T) {
 	tr := NewTranslator("inst-1", "/tmp/work")
 	result, err := tr.TranslateCommand(agentproto.Command{
@@ -295,6 +564,235 @@ func TestPromptSendForkEphemeralForksThenPromptsNewSession(t *testing.T) {
 	promptFrame := decodeFrame(t, observed.OutboundToChild[0])
 	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_forked" {
 		t.Fatalf("fork followup frame = %#v", promptFrame)
+	}
+}
+
+func TestReviewForkSelectsReviewModeBeforePrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-review-fork",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-review"},
+		Target: agentproto.Target{
+			ExecutionMode:  agentproto.PromptExecutionModeForkEphemeral,
+			SourceThreadID: "ses_source",
+			CWD:            "/tmp/work",
+			Purpose:        agentproto.PromptPurposeReview,
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review this"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(review fork): %v", err)
+	}
+	forkFrame := decodeFrame(t, result.OutboundToChild[0])
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      forkFrame["id"],
+		"result": map[string]any{
+			"sessionId": "ses_review",
+			"configOptions": []any{
+				map[string]any{
+					"id":           "mode",
+					"type":         "select",
+					"currentValue": "build",
+					"options": []any{
+						map[string]any{"value": "build", "name": "Build"},
+						map[string]any{"value": "review", "name": "Review"},
+					},
+				},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review fork response): %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused)
+	for _, event := range observed.Events {
+		if event.CommandID != "cmd-review-fork" || event.Initiator.Kind != agentproto.InitiatorRemoteSurface || event.Initiator.SurfaceSessionID != "surface-review" {
+			t.Fatalf("review session-ready event lost command correlation: %#v", event)
+		}
+	}
+	if len(observed.OutboundToChild) != 1 {
+		t.Fatalf("review fork response outbound = %d, want set mode", len(observed.OutboundToChild))
+	}
+	setFrame := decodeFrame(t, observed.OutboundToChild[0])
+	if setFrame["method"] != "session/set_config_option" {
+		t.Fatalf("review fork followup method = %#v, want session/set_config_option", setFrame["method"])
+	}
+	setParams := asMap(t, setFrame["params"])
+	if setParams["sessionId"] != "ses_review" || setParams["configId"] != "mode" || setParams["value"] != "review" {
+		t.Fatalf("review mode params = %#v", setParams)
+	}
+
+	promptResult, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      setFrame["id"],
+		"result":  map[string]any{},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review mode response): %v", err)
+	}
+	assertEventKinds(t, promptResult.Events, agentproto.EventTurnStarted)
+	promptFrame := decodeFrame(t, promptResult.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" || asMap(t, promptFrame["params"])["sessionId"] != "ses_review" {
+		t.Fatalf("review prompt frame = %#v", promptFrame)
+	}
+}
+
+func TestReviewForkRejectsMissingReviewModeWithoutPrompt(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-review-no-mode",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-1"},
+		Target: agentproto.Target{
+			ExecutionMode:  agentproto.PromptExecutionModeForkEphemeral,
+			SourceThreadID: "ses_source",
+			CWD:            "/tmp/work",
+			Purpose:        agentproto.PromptPurposeReview,
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review this"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(review fork): %v", err)
+	}
+	forkFrame := decodeFrame(t, result.OutboundToChild[0])
+	observed, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      forkFrame["id"],
+		"result": map[string]any{
+			"sessionId":     "ses_review",
+			"configOptions": []any{},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("missing review mode should be a correlated protocol event, got %v", err)
+	}
+	assertEventKinds(t, observed.Events, agentproto.EventThreadDiscovered, agentproto.EventThreadFocused, agentproto.EventSystemError)
+	if len(observed.OutboundToChild) != 0 {
+		t.Fatalf("missing review mode must not send prompt: %#v", observed.OutboundToChild)
+	}
+	problem := observed.Events[len(observed.Events)-1].Problem
+	if problem == nil || problem.CommandID != "cmd-review-no-mode" || problem.SurfaceSessionID != "surface-1" || problem.ThreadID != "ses_review" {
+		t.Fatalf("missing review mode problem lost correlation: %#v", problem)
+	}
+}
+
+func TestReviewPromptSetsReviewModeBeforeReasoningAndIgnoresPlanOverride(t *testing.T) {
+	tr := NewTranslator("inst-1", "/tmp/work")
+	command := agentproto.Command{
+		CommandID: "cmd-review-config-order",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ThreadID: "ses_review",
+			CWD:      "/tmp/work",
+			Purpose:  agentproto.PromptPurposeReview,
+		},
+		Overrides: agentproto.PromptOverrides{PlanMode: "on", ReasoningEffort: "high"},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "follow up"}}},
+	}
+	tr.sessions["ses_review"] = sessionState{ID: "ses_review", CWD: "/tmp/work", ModeOptions: []string{"build", "review"}}
+	tr.currentSessionID = "ses_review"
+
+	result, err := tr.TranslateCommand(command)
+	if err != nil {
+		t.Fatalf("TranslateCommand(review follow-up): %v", err)
+	}
+	modeFrame := decodeFrame(t, result.OutboundToChild[0])
+	modeParams := asMap(t, modeFrame["params"])
+	if modeParams["configId"] != "mode" || modeParams["value"] != "review" {
+		t.Fatalf("first review config = %#v, want mode=review", modeParams)
+	}
+
+	effortResult, err := tr.ObserveServer(mustLine(t, map[string]any{"jsonrpc": "2.0", "id": modeFrame["id"], "result": map[string]any{}}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review mode): %v", err)
+	}
+	effortFrame := decodeFrame(t, effortResult.OutboundToChild[0])
+	effortParams := asMap(t, effortFrame["params"])
+	if effortParams["configId"] != "effort" || effortParams["value"] != "high" {
+		t.Fatalf("second review config = %#v, want effort=high", effortParams)
+	}
+
+	promptResult, err := tr.ObserveServer(mustLine(t, map[string]any{"jsonrpc": "2.0", "id": effortFrame["id"], "result": map[string]any{}}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review effort): %v", err)
+	}
+	promptFrame := decodeFrame(t, promptResult.OutboundToChild[0])
+	if promptFrame["method"] != "session/prompt" {
+		t.Fatalf("review config sequence did not end in prompt: %#v", promptFrame)
+	}
+}
+
+func TestReviewTurnRejectsPermissionAndWriteRequests(t *testing.T) {
+	workspace := t.TempDir()
+	target := filepath.Join(workspace, "target.txt")
+	if err := os.WriteFile(target, []byte("unchanged\n"), 0o644); err != nil {
+		t.Fatalf("seed target: %v", err)
+	}
+	tr := NewTranslator("inst-1", workspace)
+	tr.sessions["ses_review"] = sessionState{ID: "ses_review", CWD: workspace, ModeOptions: []string{"build", "review"}}
+	tr.currentSessionID = "ses_review"
+	result, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-review-runtime-guard",
+		Kind:      agentproto.CommandPromptSend,
+		Origin:    agentproto.Origin{Surface: "surface-review"},
+		Target:    agentproto.Target{ThreadID: "ses_review", CWD: workspace, Purpose: agentproto.PromptPurposeReview},
+		Prompt:    agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review"}}},
+	})
+	if err != nil {
+		t.Fatalf("TranslateCommand(review): %v", err)
+	}
+	setFrame := decodeFrame(t, result.OutboundToChild[0])
+	permission, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "perm-review",
+		"method":  "session/request_permission",
+		"params": map[string]any{
+			"sessionId": "ses_review",
+			"toolCall":  map[string]any{"toolCallId": "tool-write", "title": "Write file", "kind": "edit"},
+			"options":   []any{map[string]any{"optionId": "once", "kind": "allow_once", "name": "Allow once"}},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review permission): %v", err)
+	}
+	if len(permission.Events) != 0 || len(permission.OutboundToChild) != 1 {
+		t.Fatalf("review permission must fail closed without user request: %#v", permission)
+	}
+	permissionFrame := decodeFrame(t, permission.OutboundToChild[0])
+	if permissionFrame["id"] != "perm-review" || permissionFrame["error"] == nil {
+		t.Fatalf("review permission rejection = %#v", permissionFrame)
+	}
+	promptResult, err := tr.ObserveServer(mustLine(t, map[string]any{"jsonrpc": "2.0", "id": setFrame["id"], "result": map[string]any{}}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review mode): %v", err)
+	}
+	if len(promptResult.OutboundToChild) != 1 || decodeFrame(t, promptResult.OutboundToChild[0])["method"] != "session/prompt" {
+		t.Fatalf("review prompt was not started: %#v", promptResult.OutboundToChild)
+	}
+
+	tr.activeTurns["ses_review"].Completed = true
+	tr.writeApprovals["ses_review"] = writeApproval{Remaining: 1}
+	write, err := tr.ObserveServer(mustLine(t, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      "write-review",
+		"method":  "fs/write_text_file",
+		"params": map[string]any{
+			"sessionId": "ses_review",
+			"path":      target,
+			"content":   "modified\n",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("ObserveServer(review write): %v", err)
+	}
+	writeFrame := decodeFrame(t, write.OutboundToChild[0])
+	if writeFrame["id"] != "write-review" || writeFrame["error"] == nil {
+		t.Fatalf("review write rejection = %#v", writeFrame)
+	}
+	if got, err := os.ReadFile(target); err != nil || string(got) != "unchanged\n" {
+		t.Fatalf("review write changed fixture: %q, %v", string(got), err)
 	}
 }
 
@@ -1008,6 +1506,22 @@ func asSlice(t *testing.T, value any) []any {
 		t.Fatalf("value is %T, want slice: %#v", value, value)
 	}
 	return out
+}
+
+func assertSetModeFrame(t *testing.T, frame map[string]any, sessionID, mode string) {
+	t.Helper()
+	assertSetConfigFrame(t, frame, sessionID, "mode", mode)
+}
+
+func assertSetConfigFrame(t *testing.T, frame map[string]any, sessionID, configID string, value any) {
+	t.Helper()
+	if frame["method"] != "session/set_config_option" {
+		t.Fatalf("method = %#v, want session/set_config_option; frame=%#v", frame["method"], frame)
+	}
+	params := asMap(t, frame["params"])
+	if params["sessionId"] != sessionID || params["configId"] != configID || params["value"] != value {
+		t.Fatalf("set config params = %#v, want session=%q config=%q value=%#v", params, sessionID, configID, value)
+	}
 }
 
 func assertEventKinds(t *testing.T, events []agentproto.Event, want ...agentproto.EventKind) {

@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -58,7 +59,7 @@ func TestRunPackagedInstallProbeRepairReturnsLockedDirAndSameVersion(t *testing.
 	t.Setenv(repoRootEnvVar, t.TempDir())
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
-	liveBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "current-binary")
+	liveBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "current-binary")
 	if err := WriteState(statePath, InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
@@ -151,7 +152,7 @@ func TestRunPackagedInstallProbeWritesResultFileForRepair(t *testing.T) {
 	baseDir := t.TempDir()
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
 	resultFile := filepath.Join(baseDir, "result", "packaged-install-probe.ini")
-	liveBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", executableName(runtime.GOOS)), "current-binary")
+	liveBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "current-binary")
 	if err := WriteState(statePath, InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,

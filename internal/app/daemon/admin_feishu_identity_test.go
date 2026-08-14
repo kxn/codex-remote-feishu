@@ -121,10 +121,10 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	importCancelled := make(chan struct{})
 	worktreeCancelled := make(chan struct{})
 	app.mu.Lock()
-	app.gitWorkspaceImports[privateSurfaceID+"::picker-old"] = &gitWorkspaceImportRuntime{cancel: func() { close(importCancelled) }}
-	app.gitWorkspaceImports["feishu:other:user:ou_other::picker-other"] = &gitWorkspaceImportRuntime{}
-	app.gitWorkspaceWorktrees[groupSurfaceID+"::picker-old"] = &gitWorkspaceWorktreeRuntime{cancel: func() { close(worktreeCancelled) }}
-	app.gitWorkspaceWorktrees["feishu:other:chat:oc_other::picker-other"] = &gitWorkspaceWorktreeRuntime{}
+	app.gitWorkspaceImports[privateSurfaceID+"::picker-old"] = &cancellablePickerRuntime{cancel: func() { close(importCancelled) }}
+	app.gitWorkspaceImports["feishu:other:user:ou_other::picker-other"] = &cancellablePickerRuntime{}
+	app.gitWorkspaceWorktrees[groupSurfaceID+"::picker-old"] = &cancellablePickerRuntime{cancel: func() { close(worktreeCancelled) }}
+	app.gitWorkspaceWorktrees["feishu:other:chat:oc_other::picker-other"] = &cancellablePickerRuntime{}
 	app.mu.Unlock()
 	rec = performAdminRequest(t, app, http.MethodPut, "/api/admin/feishu/apps/main", `{"appId":"cli_new"}`)
 	if rec.Code != http.StatusOK {

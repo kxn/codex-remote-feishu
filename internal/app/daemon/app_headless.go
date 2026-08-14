@@ -19,8 +19,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (a *App) handleDaemonCommand(command control.DaemonCommand) []eventcontract.Event {
@@ -163,23 +163,26 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 		env = append(env, config.ResumeThreadIDEnv+"="+strings.TrimSpace(command.ThreadID))
 	}
 	if backend == agentproto.BackendCodex {
-		env = append(env, config.CodexRuntimeProviderIDEnv+"="+state.NormalizeCodexProviderID(command.CodexProviderID))
+		env = append(env, config.CodexRuntimeProfileIDEnv+"="+state.NormalizeCodexProfileID(command.CodexProfileID))
 	}
 	if backend == agentproto.BackendClaude {
 		env = append(env, config.ClaudeRuntimeProfileIDEnv+"="+state.NormalizeClaudeProfileID(command.ClaudeProfileID))
 	}
 	if backend == agentproto.BackendOpenCode {
 		env = append(env, config.OpenCodeRuntimeProfileIDEnv+"="+state.NormalizeOpenCodeProfileID(command.OpenCodeProfileID))
+		if accessMode := state.NormalizeOpenCodeRuntimeAccessMode(command.OpenCodeRuntimeAccessMode); accessMode != "" {
+			env = config.UpsertEnvValue(env, config.OpenCodeRuntimeAccessModeEnv, accessMode)
+		}
 	}
 	launchArgs := append([]string{}, cfg.LaunchArgs...)
-	env, launchArgs, codexProjection, err := a.applyCodexHeadlessProviderConfigLocked(env, launchArgs, backend, command.CodexProviderID, command.CodexAdmissionRef)
+	env, launchArgs, codexProjection, err := a.applyCodexHeadlessProfileConfigLocked(env, launchArgs, backend, command.CodexProfileID, command.CodexAdmissionRef)
 	if err != nil {
 		return a.handleManagedHeadlessLaunchFailure(command, codexHeadlessLaunchProblem(err, agentproto.ErrorInfo{
-			Code:             "codex_provider_prepare_failed",
+			Code:             "codex_profile_prepare_failed",
 			Layer:            "daemon",
 			Stage:            "headless_start",
 			Operation:        "start_headless",
-			Message:          "Codex Provider 准备失败。",
+			Message:          "Codex Profile 准备失败。",
 			SurfaceSessionID: command.SurfaceSessionID,
 			ThreadID:         command.ThreadID,
 			Retryable:        true,
@@ -246,9 +249,10 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 		env = append(env, "CODEX_REMOTE_INSTANCE_DISPLAY_NAME=headless")
 	}
 
-	workDir := strings.TrimSpace(xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
+	commandWorkspaceKey := headlessCommandWorkspaceKey(command)
+	workDir := pathcanon.Native(commandWorkspaceKey)
 	if workDir == "" {
-		workDir = strings.TrimSpace(cfg.Paths.StateDir)
+		workDir = pathcanon.Native(cfg.Paths.StateDir)
 	}
 	if err := validateHeadlessWorkDir(workDir); err != nil {
 		return a.handleManagedHeadlessLaunchFailure(command, agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
@@ -283,7 +287,7 @@ func (a *App) startManagedHeadlessLocked(command control.DaemonCommand) []eventc
 			command.SurfaceSessionID,
 			command.InstanceID,
 			command.ThreadID,
-			xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD),
+			commandWorkspaceKey,
 			err,
 		)
 		return a.handleManagedHeadlessLaunchFailure(command, err, now)
@@ -410,6 +414,10 @@ func headlessLaunchModeForBackend(backend agentproto.Backend) string {
 	}
 }
 
+func headlessCommandWorkspaceKey(command control.DaemonCommand) string {
+	return state.ResolveHeadlessResumeWorkspaceKey(command.WorkspaceKey, command.ThreadCWD)
+}
+
 func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []string, backend agentproto.Backend, command control.DaemonCommand) ([]string, []string, *state.OpenCodeAdmissionRef, error) {
 	env := append([]string{}, baseEnv...)
 	args := append([]string{}, baseArgs...)
@@ -425,12 +433,13 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	workspaceRoot := strings.TrimSpace(xutil.FirstNonEmpty(command.WorkspaceKey, command.ThreadCWD))
+	workspaceRoot := headlessCommandWorkspaceKey(command)
 	material, err := opencodeprofile.CompileLaunchMaterial(opencodeprofile.CompileInput{
-		Profile:       profile,
-		WorkspaceRoot: workspaceRoot,
-		RuntimeDir:    filepath.Join(a.headlessRuntime.Paths.StateDir, "opencode", strings.TrimSpace(command.InstanceID)),
-		BaseEnv:       env,
+		Profile:           profile,
+		WorkspaceRoot:     workspaceRoot,
+		RuntimeDir:        filepath.Join(a.headlessRuntime.Paths.StateDir, "opencode", strings.TrimSpace(command.InstanceID)),
+		BaseEnv:           env,
+		RuntimeAccessMode: command.OpenCodeRuntimeAccessMode,
 	})
 	if err != nil {
 		return nil, nil, nil, err

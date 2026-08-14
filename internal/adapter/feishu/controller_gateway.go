@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 )
 
@@ -80,7 +81,7 @@ func (c *MultiGatewayController) Apply(ctx context.Context, operations []Operati
 
 func (c *MultiGatewayController) SendIMFile(ctx context.Context, req IMFileSendRequest) (IMFileSendResult, error) {
 	result := IMFileSendResult{
-		GatewayID:        normalizeGatewayID(req.GatewayID),
+		GatewayID:        gatewaypkg.NormalizeGatewayID(req.GatewayID),
 		SurfaceSessionID: strings.TrimSpace(req.SurfaceSessionID),
 	}
 
@@ -109,7 +110,7 @@ func (c *MultiGatewayController) SendIMFile(ctx context.Context, req IMFileSendR
 
 func (c *MultiGatewayController) SendIMImage(ctx context.Context, req IMImageSendRequest) (IMImageSendResult, error) {
 	result := IMImageSendResult{
-		GatewayID:        normalizeGatewayID(req.GatewayID),
+		GatewayID:        gatewaypkg.NormalizeGatewayID(req.GatewayID),
 		SurfaceSessionID: strings.TrimSpace(req.SurfaceSessionID),
 	}
 
@@ -138,7 +139,7 @@ func (c *MultiGatewayController) SendIMImage(ctx context.Context, req IMImageSen
 
 func (c *MultiGatewayController) SendIMVideo(ctx context.Context, req IMVideoSendRequest) (IMVideoSendResult, error) {
 	result := IMVideoSendResult{
-		GatewayID:        normalizeGatewayID(req.GatewayID),
+		GatewayID:        gatewaypkg.NormalizeGatewayID(req.GatewayID),
 		SurfaceSessionID: strings.TrimSpace(req.SurfaceSessionID),
 	}
 
@@ -214,7 +215,7 @@ func (c *MultiGatewayController) ReadDriveFileComments(ctx context.Context, req 
 }
 
 func (c *MultiGatewayController) ClearGrantedPermissionBlocks(gatewayID string, scopes []AppScopeStatus) {
-	gatewayID = normalizeGatewayID(gatewayID)
+	gatewayID = gatewaypkg.NormalizeGatewayID(gatewayID)
 	if gatewayID == "" {
 		return
 	}

@@ -89,14 +89,14 @@ func TestBuildCatalogContextDoesNotMutateStoredCrossBackendIDs(t *testing.T) {
 		"",
 	)
 	surface := svc.root.Surfaces["surface-1"]
-	surface.CodexProviderID = "team-proxy"
+	surface.CodexProfileID = "team-proxy"
 
 	ctx := svc.buildCatalogContext(surface)
 
 	if ctx.Backend != agentproto.BackendClaude {
 		t.Fatalf("expected detached context to project claude backend, got %#v", ctx)
 	}
-	if surface.CodexProviderID != "team-proxy" || surface.ClaudeProfileID != "devseek" {
+	if surface.CodexProfileID != "team-proxy" || surface.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected read-only catalog context build to preserve desired contract storage, got %#v", surface)
 	}
 }

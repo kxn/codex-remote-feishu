@@ -159,11 +159,19 @@ func TestRejectedInboundActionDetailUsesCommandCatalogRouteTitle(t *testing.T) {
 }
 
 func TestRejectedInboundActionDetailKeepsLocalLabelForOwnerCardAction(t *testing.T) {
-	got := rejectedInboundActionDetail(control.Action{
-		Kind: control.ActionReviewApply,
-	})
-	if got != "按审阅意见继续修改" {
-		t.Fatalf("rejectedInboundActionDetail() = %q, want %q", got, "按审阅意见继续修改")
+	tests := []struct {
+		kind control.ActionKind
+		want string
+	}{
+		{kind: control.ActionReviewFollowUp, want: "继续追问审阅"},
+		{kind: control.ActionReviewDiscard, want: "退出审阅"},
+		{kind: control.ActionReviewApply, want: "按审阅意见继续修改"},
+	}
+	for _, tt := range tests {
+		got := rejectedInboundActionDetail(control.Action{Kind: tt.kind})
+		if got != tt.want {
+			t.Fatalf("rejectedInboundActionDetail(%q) = %q, want %q", tt.kind, got, tt.want)
+		}
 	}
 }
 

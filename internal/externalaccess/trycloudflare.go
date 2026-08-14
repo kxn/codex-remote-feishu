@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"io"
 	"net"
 	"net/http"
@@ -483,7 +484,7 @@ func (p *TryCloudflareProvider) resolveBinaryPath() (string, error) {
 			return pathValue, nil
 		}
 	}
-	pathValue, err := exec.LookPath(executableName("cloudflared"))
+	pathValue, err := exec.LookPath(xutil.EnsureWindowsExecutable("cloudflared"))
 	if err != nil {
 		if bundledErr != nil {
 			return "", fmt.Errorf("resolve cloudflared binary: %v; path fallback failed: %w", bundledErr, err)

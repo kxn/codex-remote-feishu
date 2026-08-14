@@ -53,16 +53,16 @@ func buildAdminNetworkPageView(networkMode, statusText string) control.FeishuPag
 		Title:           "网络模式",
 		StatusKind:      "",
 		StatusText:      strings.TrimSpace(statusText),
-		SummarySections: commandCatalogSummarySections(fmt.Sprintf("当前模式：%s", mode)),
+		SummarySections: control.CommandCatalogSummarySections(fmt.Sprintf("当前模式：%s", mode)),
 		Interactive:     true,
 		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{{
 			Title: "切换模式",
 			Entries: []control.CommandCatalogEntry{{
 				Buttons: []control.CommandCatalogButton{
-					runCommandButton("WAN", "/admin network wan", "primary", mode == "wan"),
-					runCommandButton("Local", "/admin network local", "", mode == "local"),
-					runCommandButton("LAN", "/admin network lan", "", strings.HasPrefix(mode, "lan:")),
+					control.FeishuLocalPageCommandButton("WAN", "/admin network wan", "primary", mode == "wan"),
+					control.FeishuLocalPageCommandButton("Local", "/admin network local", "", mode == "local"),
+					control.FeishuLocalPageCommandButton("LAN", "/admin network lan", "", strings.HasPrefix(mode, "lan:")),
 				},
 			}},
 		}},
@@ -166,7 +166,7 @@ func buildAdminLocalWebPageView(localURL string) control.FeishuPageView {
 	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:       control.FeishuCommandAdmin,
 		Title:           "本地管理页",
-		SummarySections: commandCatalogSummarySections("请在当前 daemon 所在机器的浏览器里打开本地管理页。", fmt.Sprintf("地址：%s", xutil.FirstNonEmpty(strings.TrimSpace(localURL), "未解析"))),
+		SummarySections: control.CommandCatalogSummarySections("请在当前 daemon 所在机器的浏览器里打开本地管理页。", fmt.Sprintf("地址：%s", xutil.FirstNonEmpty(strings.TrimSpace(localURL), "未解析"))),
 		Interactive:     true,
 		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
 		Sections: []control.CommandCatalogSection{{
@@ -175,7 +175,7 @@ func buildAdminLocalWebPageView(localURL string) control.FeishuPageView {
 				Title:       "本地管理页",
 				Description: "仅适用于当前 daemon 所在机器。",
 				Buttons: []control.CommandCatalogButton{
-					openURLButton("打开本地管理页", localURL, "primary", strings.TrimSpace(localURL) == ""),
+					control.OpenURLButton("打开本地管理页", localURL, "primary", strings.TrimSpace(localURL) == ""),
 				},
 			}},
 		}},
@@ -185,23 +185,23 @@ func buildAdminLocalWebPageView(localURL string) control.FeishuPageView {
 
 func buildAdminAutostartPageView(status install.AutostartStatus, statusKind, statusText string) control.FeishuPageView {
 	buttons := []control.CommandCatalogButton{
-		runCommandButton("刷新状态", "/admin autostart", "", false),
-		runCommandButton("启用自动启动", "/admin autostart on", "primary", !status.Supported || status.Enabled || !status.CanApply),
-		runCommandButton("关闭自动启动", "/admin autostart off", "", !status.Supported || !status.Enabled),
+		control.FeishuLocalPageCommandButton("刷新状态", "/admin autostart", "", false),
+		control.FeishuLocalPageCommandButton("启用自动启动", "/admin autostart on", "primary", !status.Supported || status.Enabled || !status.CanApply),
+		control.FeishuLocalPageCommandButton("关闭自动启动", "/admin autostart off", "", !status.Supported || !status.Enabled),
 	}
 	noticeSections := []control.FeishuCardTextSection{}
 	if warning := strings.TrimSpace(status.Warning); warning != "" {
-		noticeSections = append(noticeSections, commandCatalogTextSection("提示", warning))
+		noticeSections = append(noticeSections, control.CommandCatalogTextSection("提示", warning))
 	}
 	if lingerHint := strings.TrimSpace(status.LingerHint); lingerHint != "" {
-		noticeSections = append(noticeSections, commandCatalogTextSection("额外说明", lingerHint))
+		noticeSections = append(noticeSections, control.CommandCatalogTextSection("额外说明", lingerHint))
 	}
 	return control.NormalizeFeishuPageView(control.FeishuPageView{
 		CommandID:       control.FeishuCommandAdmin,
 		Title:           "自动启动",
 		StatusKind:      strings.TrimSpace(statusKind),
 		StatusText:      strings.TrimSpace(statusText),
-		SummarySections: commandCatalogSummarySections(adminAutostartSummaryLines(status)...),
+		SummarySections: control.CommandCatalogSummarySections(adminAutostartSummaryLines(status)...),
 		NoticeSections:  noticeSections,
 		Interactive:     true,
 		DisplayStyle:    control.CommandCatalogDisplayCompactButtons,
@@ -248,7 +248,7 @@ func adminNoticePageEvents(surfaceID, title, message string) []eventcontract.Eve
 		Title:           title,
 		StatusKind:      "error",
 		StatusText:      strings.TrimSpace(message),
-		SummarySections: commandCatalogSummarySections(strings.TrimSpace(message)),
+		SummarySections: control.CommandCatalogSummarySections(strings.TrimSpace(message)),
 		RelatedButtons:  control.FeishuCommandBackToRootButtons(control.FeishuCommandAdmin),
 	}))
 }

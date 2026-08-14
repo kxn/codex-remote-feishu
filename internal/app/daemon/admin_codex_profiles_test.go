@@ -15,6 +15,27 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func TestLegacyAdminCodexProvidersAPIRemoved(t *testing.T) {
+	app, _ := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
+
+	tests := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/api/admin/codex/providers"},
+		{method: http.MethodPost, path: "/api/admin/codex/providers", body: `{"name":"Team Proxy","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.5","reasoningEffort":"high"}`},
+		{method: http.MethodPut, path: "/api/admin/codex/providers/team-proxy", body: `{"name":"Team Proxy","baseURL":"https://proxy.example/v1","apiKey":"secret","model":"gpt-5.5","reasoningEffort":"high"}`},
+		{method: http.MethodDelete, path: "/api/admin/codex/providers/team-proxy"},
+	}
+	for _, tt := range tests {
+		rec := performAdminRequest(t, app, tt.method, tt.path, tt.body)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("%s %s status = %d body=%s, want 404", tt.method, tt.path, rec.Code, rec.Body.String())
+		}
+	}
+}
+
 func TestAdminCodexProfilesCanonicalCRUDUsesItemETagsAndRedaction(t *testing.T) {
 	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 
@@ -78,9 +99,9 @@ func TestAdminCodexProfilesCanonicalCRUDUsesItemETagsAndRedaction(t *testing.T) 
 	}
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 	app.service.Surface("surface-1").PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-headless",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: created.ID,
+		InstanceID:     "inst-headless",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: created.ID,
 		CodexAdmissionRef: &state.CodexAdmissionRef{
 			ProfileRef:           state.CodexProfileRef{ID: created.ID, Revision: created.Revision},
 			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: created.ID, Revision: created.ContextPreference.Revision},
@@ -210,7 +231,7 @@ func TestAdminCodexProfilesCanonicalCRUDUsesItemETagsAndRedaction(t *testing.T) 
 	}
 }
 
-func TestAdminCodexProfilesSubagentModelRoundTripAndLegacyPreserve(t *testing.T) {
+func TestAdminCodexProfilesSubagentModelRoundTrip(t *testing.T) {
 	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
 
 	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/profiles", `{
@@ -252,26 +273,16 @@ func TestAdminCodexProfilesSubagentModelRoundTripAndLegacyPreserve(t *testing.T)
 		t.Fatalf("updated SubagentModel = %q, want %q", updated.Profile.SubagentModel, "gpt-5.5-nano-2")
 	}
 
-	legacyUpdate := performAdminRequestWithIfMatch(t, app, http.MethodPut, "/api/admin/codex/providers/"+created.Profile.ID, `{
-  "name":"Team Proxy",
-  "baseURL":"https://proxy.example/v1",
-  "model":"gpt-5.5",
-  "reasoningEffort":"high"
-}`, updated.Profile.ETag)
-	if legacyUpdate.Code != http.StatusOK {
-		t.Fatalf("legacy update status = %d body=%s", legacyUpdate.Code, legacyUpdate.Body.String())
-	}
-
 	loaded, err := config.LoadAppConfigAtPath(configPath)
 	if err != nil {
 		t.Fatalf("LoadAppConfigAtPath: %v", err)
 	}
 	secret, ok := config.CurrentCodexAPIProfile(loaded.Config.Codex.Profiles[0])
 	if !ok {
-		t.Fatal("CurrentCodexAPIProfile() did not return profile after legacy update")
+		t.Fatal("CurrentCodexAPIProfile() did not return profile after update")
 	}
 	if secret.SubagentModel != "gpt-5.5-nano-2" {
-		t.Fatalf("legacy update did not preserve SubagentModel: %q", secret.SubagentModel)
+		t.Fatalf("persisted SubagentModel = %q, want gpt-5.5-nano-2", secret.SubagentModel)
 	}
 }
 
@@ -509,9 +520,9 @@ func TestAdminCodexProfileUpdateRetainsReferencedOldRevision(t *testing.T) {
 	created := createResponse.Profile
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 	app.service.Surface("surface-1").PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-headless",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: created.ID,
+		InstanceID:     "inst-headless",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: created.ID,
 		CodexAdmissionRef: &state.CodexAdmissionRef{
 			ProfileRef:           state.CodexProfileRef{ID: created.ID, Revision: 1},
 			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: created.ID, Revision: 1},
@@ -559,9 +570,9 @@ func TestAdminCodexProfileDeleteInUseReturnsRedactedReferences(t *testing.T) {
 	created := createResponse.Profile
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 	app.service.Surface("surface-1").PendingHeadless = &state.HeadlessLaunchRecord{
-		InstanceID:      "inst-headless",
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: created.ID,
+		InstanceID:     "inst-headless",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: created.ID,
 		CodexAdmissionRef: &state.CodexAdmissionRef{
 			ProfileRef:           state.CodexProfileRef{ID: created.ID, Revision: created.Revision},
 			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: created.ID, Revision: created.ContextPreference.Revision},
@@ -620,7 +631,7 @@ func TestAdminCodexProfileUpdateRefreshesSurfaceDesiredRuntimeContract(t *testin
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:              "inst-old",
 		Backend:                 agentproto.BackendCodex,
-		CodexProviderID:         created.ID,
+		CodexProfileID:          created.ID,
 		CodexAdmissionRef:       state.NormalizeCodexAdmissionRef(surface.CodexAdmissionRef),
 		CodexConnectionContract: state.CloneCodexConnectionContract(&oldConnection),
 		WorkspaceRoot:           "/data/dl/repo",
@@ -708,67 +719,6 @@ func TestAdminCodexProfilesRejectIncompleteNewDefinition(t *testing.T) {
 		if rec.Code != http.StatusBadRequest {
 			t.Fatalf("incomplete create status = %d body=%s", rec.Code, rec.Body.String())
 		}
-	}
-}
-
-func TestLegacyCodexProviderAPIWritesOnlyCanonicalProfileStore(t *testing.T) {
-	app, configPath := newFeishuAdminTestApp(t, config.DefaultAppConfig(), defaultFeishuServices(), &fakeAdminGatewayController{}, false, "")
-	create := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/providers", `{
-  "name":"Legacy Client Proxy",
-  "baseURL":"https://proxy.example/v1",
-  "apiKey":"secret",
-  "model":"gpt-5.5",
-  "reasoningEffort":"high"
-}`)
-	if create.Code != http.StatusCreated {
-		t.Fatalf("legacy create status = %d body=%s", create.Code, create.Body.String())
-	}
-	var response codexProviderResponse
-	if err := json.NewDecoder(create.Body).Decode(&response); err != nil {
-		t.Fatalf("decode legacy create: %v", err)
-	}
-	if !strings.HasPrefix(response.Provider.ID, "cp_") || response.Provider.ReadOnly || !response.Provider.HasAPIKey {
-		t.Fatalf("unexpected legacy create projection: %#v", response.Provider)
-	}
-	loaded, err := config.LoadAppConfigAtPath(configPath)
-	if err != nil {
-		t.Fatalf("LoadAppConfigAtPath: %v", err)
-	}
-	if len(loaded.Config.Codex.Providers) != 0 || len(loaded.Config.Codex.Profiles) != 1 {
-		t.Fatalf("legacy API created a second writer: %#v", loaded.Config.Codex)
-	}
-
-	duplicate := performAdminRequest(t, app, http.MethodPost, "/api/admin/codex/providers", `{
-  "name":"legacy client proxy",
-  "baseURL":"https://other.example/v1",
-  "apiKey":"different",
-  "model":"gpt-5.5",
-  "reasoningEffort":"high"
-}`)
-	if duplicate.Code != http.StatusConflict {
-		t.Fatalf("legacy duplicate status = %d body=%s", duplicate.Code, duplicate.Body.String())
-	}
-
-	update := performAdminRequest(t, app, http.MethodPut, "/api/admin/codex/providers/"+response.Provider.ID, `{
-  "name":"Legacy Client Proxy 2",
-  "baseURL":"https://proxy.example/v1",
-  "model":"gpt-5.5",
-  "reasoningEffort":"xhigh"
-}`)
-	if update.Code != http.StatusOK {
-		t.Fatalf("legacy update status = %d body=%s", update.Code, update.Body.String())
-	}
-	var updated codexProviderResponse
-	if err := json.NewDecoder(update.Body).Decode(&updated); err != nil {
-		t.Fatalf("decode legacy update: %v", err)
-	}
-	if updated.Provider.ID != response.Provider.ID || updated.Provider.Name != "Legacy Client Proxy 2" {
-		t.Fatalf("legacy adapter changed stable identity: %#v", updated.Provider)
-	}
-
-	deleted := performAdminRequest(t, app, http.MethodDelete, "/api/admin/codex/providers/"+response.Provider.ID, "")
-	if deleted.Code != http.StatusNoContent {
-		t.Fatalf("legacy delete status = %d body=%s", deleted.Code, deleted.Body.String())
 	}
 }
 

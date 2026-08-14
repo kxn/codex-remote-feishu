@@ -16,7 +16,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 		return t.translatePromptFork(command)
 	}
 	if mode == agentproto.PromptExecutionModeStartNew || mode == agentproto.PromptExecutionModeStartEphemeral || threadID == "" {
-		requestID := t.nextRequest("session-new")
+		requestID := t.NextRequest("session-new")
 		t.pendingRPC[requestID] = pendingRPC{Kind: "session/new", Command: command}
 		frame, err := marshalLine(map[string]any{
 			"jsonrpc": "2.0",
@@ -33,7 +33,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 		return Result{OutboundToChild: [][]byte{frame}}, nil
 	}
 	if t.currentSessionID != threadID {
-		requestID := t.nextRequest("session-resume")
+		requestID := t.NextRequest("session-resume")
 		t.pendingRPC[requestID] = pendingRPC{Kind: "session/resume", Command: command}
 		frame, err := marshalLine(map[string]any{
 			"jsonrpc": "2.0",
@@ -53,12 +53,36 @@ func (t *Translator) translatePromptSend(command agentproto.Command) (Result, er
 	return t.startPromptForSession(threadID, command)
 }
 
+func opencodeACPModeForPlanOverride(value string) (string, bool, error) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "":
+		return "", false, nil
+	case "on", "plan":
+		return "plan", true, nil
+	case "off", "build":
+		return "build", true, nil
+	default:
+		return "", false, fmt.Errorf("unsupported OpenCode plan mode override %q", value)
+	}
+}
+
+func opencodeACPEffortForReasoningOverride(value string) (string, bool, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", false, nil
+	}
+	effort := normalizeOpenCodeReasoningEffort(value)
+	if effort == "" {
+		return "", false, fmt.Errorf("unsupported OpenCode reasoning effort override %q", value)
+	}
+	return effort, true, nil
+}
+
 func (t *Translator) translatePromptFork(command agentproto.Command) (Result, error) {
 	sourceThreadID := xutil.FirstNonEmpty(command.Target.SourceThreadID, command.Target.ThreadID)
 	if sourceThreadID == "" {
 		return Result{}, fmt.Errorf("prompt.send fork_ephemeral requires source thread id")
 	}
-	requestID := t.nextRequest("session-fork")
+	requestID := t.NextRequest("session-fork")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "session/fork", Command: command}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -154,7 +178,7 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) (Result
 }
 
 func (t *Translator) translateThreadsRefresh(command agentproto.Command) (Result, error) {
-	requestID := t.nextRequest("session-list")
+	requestID := t.NextRequest("session-list")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "session/list", Command: command}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -176,7 +200,7 @@ func (t *Translator) translateThreadHistoryRead(command agentproto.Command) (Res
 		return Result{}, fmt.Errorf("thread.history.read requires thread id")
 	}
 	t.historyHydrations[sessionID] = newHistoryHydration(command, t.commandCWD(command))
-	requestID := t.nextRequest("session-load")
+	requestID := t.NextRequest("session-load")
 	t.pendingRPC[requestID] = pendingRPC{Kind: "session/load", Command: command}
 	frame, err := marshalLine(map[string]any{
 		"jsonrpc": "2.0",
@@ -196,28 +220,66 @@ func (t *Translator) translateThreadHistoryRead(command agentproto.Command) (Res
 
 func (t *Translator) translateModelList(command agentproto.Command) (Result, error) {
 	session := t.sessions[t.currentSessionID]
+	event, _ := modelCatalogEventForConfigOptions(session, command.CommandID)
+	if event.ModelCatalog == nil {
+		event = agentproto.Event{
+			Kind:      agentproto.EventModelCatalogUpdated,
+			CommandID: command.CommandID,
+			ModelCatalog: &agentproto.ModelCatalogSnapshot{
+				IncludeHidden: command.ModelList.IncludeHidden,
+				Unsupported:   true,
+				ErrorMessage:  "OpenCode 尚未返回可用模型配置。",
+				RefreshedAt:   time.Now().UTC(),
+			},
+		}
+	} else {
+		event.ModelCatalog.IncludeHidden = command.ModelList.IncludeHidden
+	}
+	return Result{Events: []agentproto.Event{event}}, nil
+}
+
+func modelCatalogEventForConfigOptions(session sessionState, commandID string) (agentproto.Event, bool) {
 	snapshot := agentproto.ModelCatalogSnapshot{
-		IncludeHidden: command.ModelList.IncludeHidden,
-		RefreshedAt:   time.Now().UTC(),
+		RefreshedAt: time.Now().UTC(),
 	}
 	for _, option := range session.ModelOptions {
 		if strings.TrimSpace(option.Value) == "" {
 			continue
 		}
+		reasoningEfforts := openCodeReasoningEffortCatalogOptions(session.EffortOptions)
 		snapshot.Entries = append(snapshot.Entries, agentproto.ModelCatalogEntry{
-			ID:          option.Value,
-			Model:       option.Value,
-			DisplayName: xutil.FirstNonEmpty(option.Name, option.Value),
-			IsDefault:   option.Value == session.CurrentModel,
+			ID:                        option.Value,
+			Model:                     option.Value,
+			DisplayName:               xutil.FirstNonEmpty(option.Name, option.Value),
+			SupportedReasoningEfforts: reasoningEfforts,
+			DefaultReasoningEffort:    session.CurrentEffort,
+			IsDefault:                 option.Value == session.CurrentModel,
 		})
 	}
 	if len(snapshot.Entries) == 0 {
-		snapshot.Unsupported = true
-		snapshot.ErrorMessage = "OpenCode 尚未返回可用模型配置。"
+		return agentproto.Event{}, false
 	}
-	return Result{Events: []agentproto.Event{{
+	return agentproto.Event{
 		Kind:         agentproto.EventModelCatalogUpdated,
-		CommandID:    command.CommandID,
+		CommandID:    commandID,
 		ModelCatalog: &snapshot,
-	}}}, nil
+	}, true
+}
+
+func openCodeReasoningEffortCatalogOptions(options []reasoningEffortOption) []agentproto.ReasoningEffortOption {
+	if len(options) == 0 {
+		return nil
+	}
+	out := make([]agentproto.ReasoningEffortOption, 0, len(options))
+	for _, option := range options {
+		effort := normalizeOpenCodeReasoningEffort(option.Value)
+		if effort == "" {
+			continue
+		}
+		out = append(out, agentproto.ReasoningEffortOption{
+			ReasoningEffort: effort,
+			Description:     strings.TrimSpace(option.Name),
+		})
+	}
+	return out
 }

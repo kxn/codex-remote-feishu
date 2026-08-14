@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -17,7 +18,7 @@ const (
 )
 
 func projectSnapshotElements(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []map[string]any {
-	return appendCardTextSections(nil, snapshotSections(snapshot, daemonBinary, currentDirectory, worktree))
+	return cardkit.AppendTextSections(nil, snapshotSections(snapshot, daemonBinary, currentDirectory, worktree))
 }
 
 func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory string, worktree *gitWorktreeSummary) []control.FeishuCardTextSection {
@@ -38,11 +39,18 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		lines = append(lines, snapshotLine("当前二进制", daemonBinary))
 	}
 	if currentDirectory = strings.TrimSpace(currentDirectory); currentDirectory != "" {
-		lines = append(lines, snapshotLine("当前目录", currentDirectory))
+		if snapshotShowsDetachedRoomWorkspaceBinding(snapshot) {
+			lines = append(lines, snapshotLine("群绑定目录", currentDirectory))
+		} else {
+			lines = append(lines, snapshotLine("当前目录", currentDirectory))
+		}
 	}
 	if snapshot.Attachment.InstanceID == "" {
 		lines = append(lines, snapshotLine("接管对象类型", "无"))
 		lines = append(lines, snapshotLine("已接管", "无"))
+		if snapshotShowsDetachedRoomWorkspaceBinding(snapshot) {
+			lines = append(lines, snapshotLine("解除群绑定", "/workspace detach"))
+		}
 	} else {
 		lines = append(lines, snapshotLine("接管对象类型", displayAttachmentObjectType(snapshot.Attachment.ObjectType)))
 		lines = append(lines, snapshotLine("已接管", formatInstanceLabel(snapshot.Attachment.DisplayName, snapshot.Attachment.Source, snapshot.Attachment.Managed)))
@@ -106,6 +114,12 @@ func snapshotSections(snapshot control.Snapshot, daemonBinary, currentDirectory 
 		})
 	}
 	return sections
+}
+
+func snapshotShowsDetachedRoomWorkspaceBinding(snapshot control.Snapshot) bool {
+	return strings.TrimSpace(snapshot.RoomWorkspaceKey) != "" &&
+		strings.TrimSpace(snapshot.Attachment.InstanceID) == "" &&
+		strings.TrimSpace(snapshot.PendingHeadless.InstanceID) == ""
 }
 
 func (p *Projector) projectSnapshotElements(snapshot control.Snapshot) []map[string]any {

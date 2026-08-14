@@ -50,13 +50,16 @@ func Timeline(progress *state.ExecCommandProgressRecord) []control.ExecCommandPr
 	}
 	nextFallbackSeq := maxSeq
 	for i := range items {
-		if items[i].item.LastSeq > 0 {
+		if items[i].item.LastSeq > 0 || items[i].item.Transient {
 			continue
 		}
 		nextFallbackSeq++
 		items[i].item.LastSeq = nextFallbackSeq
 	}
 	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].item.Transient != items[j].item.Transient {
+			return !items[i].item.Transient
+		}
 		if items[i].item.LastSeq != items[j].item.LastSeq {
 			return items[i].item.LastSeq < items[j].item.LastSeq
 		}
@@ -74,6 +77,9 @@ func timelineItemFromBlockRow(row state.ExecCommandProgressBlockRowRecord, statu
 	kind := strings.TrimSpace(row.Kind)
 	summary := strings.TrimSpace(row.Summary)
 	secondary := strings.TrimSpace(row.Secondary)
+	if rowStatus := strings.TrimSpace(row.Status); rowStatus != "" {
+		status = rowStatus
+	}
 	items := make([]string, 0, len(row.Items))
 	for _, item := range row.Items {
 		if text := strings.TrimSpace(item); text != "" {
@@ -122,5 +128,6 @@ func timelineItemFromEntry(entry state.ExecCommandProgressEntryRecord) (control.
 		Status:     status,
 		FileChange: CloneFileChange(entry.FileChange),
 		LastSeq:    entry.LastSeq,
+		Transient:  entry.Transient,
 	}, true
 }

@@ -50,7 +50,7 @@ func commandConfigBaseSummarySections(view FeishuCatalogConfigView) []FeishuCard
 			singleValueCardSection("当前模式", commandDisplayValue(view.CurrentValue, "未设置")),
 			singleValueCardSection("兼容说明", "`/mode normal` 仍兼容，但它等价于 `/mode codex`。"),
 		}
-	case FeishuCommandCodexProvider:
+	case FeishuCommandCodexProfile:
 		return []FeishuCardTextSection{
 			singleValueCardSection("当前 Profile", commandCatalogOptionLabel(view.FormOptions, view.CurrentValue, commandDisplayValue(view.CurrentValue, "本机默认"))),
 			singleValueCardSection("切换方式", "切换后会重启当前工作区，并按新的 Codex Profile 重新准备当前会话。"),
@@ -132,7 +132,7 @@ func promptOverrideDisplayValue(view FeishuCatalogConfigView) string {
 }
 
 func planValueCardSections(view FeishuCatalogConfigView) []FeishuCardTextSection {
-	if view.UsesLocalRequestedOverrides {
+	if planModeUsesLocalRequested(view) {
 		sections := []FeishuCardTextSection{
 			singleValueCardSection("飞书覆盖", planOverrideDisplayValue(view)),
 			singleValueCardSection("作用范围", "只影响后续新 turn"),
@@ -145,9 +145,13 @@ func planValueCardSections(view FeishuCatalogConfigView) []FeishuCardTextSection
 	}
 }
 
+func planModeUsesLocalRequested(view FeishuCatalogConfigView) bool {
+	return view.PlanModeUsesLocalRequested || view.UsesLocalRequestedOverrides
+}
+
 func planOverrideDisplayValue(view FeishuCatalogConfigView) string {
 	if !view.PlanModeOverrideSet {
-		return "无（跟随 VS Code 当前状态）"
+		return "无（跟随底层当前状态）"
 	}
 	return planModeDisplayValue(view.CurrentValue)
 }
@@ -210,10 +214,15 @@ func autoContinueDisplayValue(value string) string {
 }
 
 func planModeDisplayValue(value string) string {
-	if strings.EqualFold(strings.TrimSpace(value), "on") {
+	trimmed := strings.TrimSpace(value)
+	switch strings.ToLower(trimmed) {
+	case "on", "plan":
 		return "开启"
+	case "", "off", "build":
+		return "关闭"
+	default:
+		return trimmed
 	}
-	return "关闭"
 }
 
 func normalizeCommandFeedbackText(text string) string {

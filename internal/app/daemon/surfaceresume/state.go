@@ -24,7 +24,7 @@ type Entry struct {
 	ActorUserID                 string                   `json:"actorUserID,omitempty"`
 	ProductMode                 string                   `json:"productMode,omitempty"`
 	Backend                     string                   `json:"backend,omitempty"`
-	CodexProviderID             string                   `json:"codexProviderID,omitempty"`
+	LegacyCodexProviderID       string                   `json:"codexProviderID,omitempty"`
 	CodexProfileID              string                   `json:"codexProfileID,omitempty"`
 	CodexProfileSelectionStatus string                   `json:"codexProfileSelectionStatus,omitempty"`
 	CodexAdmissionRef           *state.CodexAdmissionRef `json:"codexAdmissionRef,omitempty"`
@@ -131,29 +131,30 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.ChatID = strings.TrimSpace(entry.ChatID)
 	entry.ActorUserID = strings.TrimSpace(entry.ActorUserID)
 	entry.ProductMode = string(state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode))))
-	entry.CodexProviderID = strings.TrimSpace(entry.CodexProviderID)
+	entry.LegacyCodexProviderID = strings.TrimSpace(entry.LegacyCodexProviderID)
 	entry.CodexProfileID = strings.TrimSpace(entry.CodexProfileID)
 	entry.CodexProfileSelectionStatus = strings.TrimSpace(entry.CodexProfileSelectionStatus)
 	entry.CodexAdmissionRef = normalizeCodexAdmissionRef(entry.CodexAdmissionRef)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
 	entry.OpenCodeProfileID = strings.TrimSpace(entry.OpenCodeProfileID)
-	codexProviderID := entry.CodexProviderID
-	if entry.CodexProfileID != "" {
-		codexProviderID = state.LegacyCodexProviderIDFromProfileID(entry.CodexProfileID)
+	codexProfileID := entry.CodexProfileID
+	if codexProfileID == "" {
+		codexProfileID = state.CodexProfileIDFromLegacyProviderID(entry.LegacyCodexProviderID)
 	}
 	rawContract := state.PersistedSurfaceBackendContract(
 		state.ProductMode(entry.ProductMode),
 		agentproto.Backend(strings.TrimSpace(entry.Backend)),
-		codexProviderID,
+		codexProfileID,
 		entry.ClaudeProfileID,
 		entry.OpenCodeProfileID,
 	)
 	entry.Backend = string(rawContract.Backend)
-	entry.CodexProviderID = state.EffectiveSurfaceCodexProviderID(rawContract)
+	entry.CodexProfileID = state.EffectiveSurfaceCodexProfileID(rawContract)
+	entry.LegacyCodexProviderID = ""
 	entry.ClaudeProfileID = state.EffectiveSurfaceClaudeProfileID(rawContract)
 	entry.OpenCodeProfileID = state.EffectiveSurfaceOpenCodeProfileID(rawContract)
 	entry = CanonicalizeEntryProfileSelection(entry)
-	if entry.CodexProviderID == "" {
+	if entry.CodexProfileID == "" {
 		entry.CodexProfileID = ""
 		entry.CodexProfileSelectionStatus = ""
 		entry.CodexAdmissionRef = nil
@@ -195,7 +196,6 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.ActorUserID) == strings.TrimSpace(right.ActorUserID) &&
 		strings.TrimSpace(left.ProductMode) == strings.TrimSpace(right.ProductMode) &&
 		state.NormalizeHeadlessBackend(agentproto.Backend(left.Backend)) == state.NormalizeHeadlessBackend(agentproto.Backend(right.Backend)) &&
-		strings.TrimSpace(left.CodexProviderID) == strings.TrimSpace(right.CodexProviderID) &&
 		strings.TrimSpace(left.CodexProfileID) == strings.TrimSpace(right.CodexProfileID) &&
 		strings.TrimSpace(left.CodexProfileSelectionStatus) == strings.TrimSpace(right.CodexProfileSelectionStatus) &&
 		sameCodexAdmissionRef(left.CodexAdmissionRef, right.CodexAdmissionRef) &&
@@ -216,6 +216,7 @@ func CanonicalizeEntryProfileSelection(entry Entry) Entry {
 	mode := state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode)))
 	backend := state.NormalizeSurfaceBackend(mode, agentproto.Backend(strings.TrimSpace(entry.Backend)))
 	if !state.IsHeadlessProductMode(mode) || backend != agentproto.BackendCodex {
+		entry.LegacyCodexProviderID = ""
 		entry.CodexProfileID = ""
 		entry.CodexProfileSelectionStatus = ""
 		entry.CodexAdmissionRef = nil
@@ -223,9 +224,10 @@ func CanonicalizeEntryProfileSelection(entry Entry) Entry {
 	}
 	entry.CodexProfileID = strings.TrimSpace(entry.CodexProfileID)
 	if entry.CodexProfileID == "" {
-		entry.CodexProfileID = state.CodexProfileIDFromLegacyProviderID(entry.CodexProviderID)
+		entry.CodexProfileID = state.CodexProfileIDFromLegacyProviderID(entry.LegacyCodexProviderID)
 	}
-	entry.CodexProviderID = state.LegacyCodexProviderIDFromProfileID(entry.CodexProfileID)
+	entry.CodexProfileID = state.NormalizeCodexProfileID(entry.CodexProfileID)
+	entry.LegacyCodexProviderID = ""
 	return entry
 }
 

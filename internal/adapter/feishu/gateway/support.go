@@ -34,7 +34,7 @@ type feishuPostNode struct {
 	Language  string `json:"language"`
 }
 
-func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+func NewFeishuTimeoutContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	base := context.Background()
 	if parent != nil {
 		base = parent
@@ -45,7 +45,7 @@ func newFeishuTimeoutContext(parent context.Context, timeout time.Duration) (con
 	return context.WithTimeout(base, timeout)
 }
 
-func referencedMessageID(message *larkim.EventMessage) string {
+func ReferencedMessageID(message *larkim.EventMessage) string {
 	if message == nil {
 		return ""
 	}
@@ -54,6 +54,13 @@ func referencedMessageID(message *larkim.EventMessage) string {
 		targetMessageID = strings.TrimSpace(xutil.StringValue(message.RootId))
 	}
 	return targetMessageID
+}
+
+// NormalizeGatewayID trims surrounding whitespace from a gateway id. It
+// consolidates the normalizeGatewayID copies previously living in the feishu
+// and preview packages.
+func NormalizeGatewayID(gatewayID string) string {
+	return strings.TrimSpace(gatewayID)
 }
 
 func parseFeishuEventText(rawContent string, mentions []*larkim.MentionEvent) (displayText string, commandText string, err error) {

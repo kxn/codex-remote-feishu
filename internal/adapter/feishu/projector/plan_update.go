@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
@@ -34,7 +35,7 @@ func planUpdateSections(update control.PlanUpdate) []control.FeishuCardTextSecti
 }
 
 func PlanUpdateElements(update control.PlanUpdate) []map[string]any {
-	return appendCardTextSections(nil, planUpdateSections(update))
+	return cardkit.AppendTextSections(nil, planUpdateSections(update))
 }
 
 func planUpdateStatusLabel(status agentproto.TurnPlanStepStatus) string {

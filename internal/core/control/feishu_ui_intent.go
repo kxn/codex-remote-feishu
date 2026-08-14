@@ -16,7 +16,7 @@ const (
 	FeishuUIIntentShowHistory                 FeishuUIIntentKind = "show_history"
 	FeishuUIIntentShowReviewRoot              FeishuUIIntentKind = "show_review_root"
 	FeishuUIIntentShowModeCatalog             FeishuUIIntentKind = "show_mode_catalog"
-	FeishuUIIntentShowCodexProviderCatalog    FeishuUIIntentKind = "show_codex_provider_catalog"
+	FeishuUIIntentShowCodexProfileCatalog     FeishuUIIntentKind = "show_codex_profile_catalog"
 	FeishuUIIntentShowClaudeProfileCatalog    FeishuUIIntentKind = "show_claude_profile_catalog"
 	FeishuUIIntentShowOpenCodeProfileCatalog  FeishuUIIntentKind = "show_opencode_profile_catalog"
 	FeishuUIIntentShowAutoWhipCatalog         FeishuUIIntentKind = "show_auto_whip_catalog"

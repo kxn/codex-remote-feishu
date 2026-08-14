@@ -1,6 +1,7 @@
 package install
 
 import (
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -74,7 +75,7 @@ func TestResolveCurrentDaemonTargetInfoDefaultInstance(t *testing.T) {
 	if info.Admin.URL != "http://127.0.0.1:9511" || info.Tool.URL != "http://127.0.0.1:9512" || info.ExternalAccess.URL != "http://127.0.0.1:9522" {
 		t.Fatalf("unexpected endpoint urls: %#v", info)
 	}
-	if info.LocalUpgradeArtifact != filepath.Join(filepath.Dir(statePath), "local-upgrade", executableName(runtime.GOOS)) {
+	if info.LocalUpgradeArtifact != filepath.Join(filepath.Dir(statePath), "local-upgrade", xutil.ExecutableName(runtime.GOOS)) {
 		t.Fatalf("LocalUpgradeArtifact = %q", info.LocalUpgradeArtifact)
 	}
 	wantServiceUnitPath := filepath.ToSlash(serviceUnitPathForInstallInstance(serviceRuntimeGOOS, baseDir, defaultInstanceID))
@@ -130,7 +131,7 @@ func TestResolveCurrentDaemonTargetInfoNamedInstance(t *testing.T) {
 	if info.StatePath != statePath || info.ConfigPath != configPath {
 		t.Fatalf("unexpected state/config paths: %#v", info)
 	}
-	if info.LocalUpgradeArtifact != filepath.Join(filepath.Dir(statePath), "local-upgrade", executableName(runtime.GOOS)) {
+	if info.LocalUpgradeArtifact != filepath.Join(filepath.Dir(statePath), "local-upgrade", xutil.ExecutableName(runtime.GOOS)) {
 		t.Fatalf("LocalUpgradeArtifact = %q", info.LocalUpgradeArtifact)
 	}
 	wantServiceUnitPath := filepath.ToSlash(serviceUnitPathForInstallInstance(serviceRuntimeGOOS, baseDir, instanceID))

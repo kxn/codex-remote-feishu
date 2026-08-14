@@ -54,7 +54,7 @@ import {
 import { AutoConfigRequirementList } from "./shared/AutoConfigRequirementList";
 import { runAdminStorageCleanup } from "./shared/adminStorage";
 import { ClaudeProfileSection } from "./admin/ClaudeProfileSection";
-import { CodexProviderSection } from "./admin/CodexProviderSection";
+import { CodexProfileSection } from "./admin/CodexProfileSection";
 import { OpenCodeProfileSection } from "./admin/OpenCodeProfileSection";
 import { BrandLockup, Toast } from "../components/ui";
 
@@ -111,8 +111,8 @@ export function AdminRoute() {
   );
   const [detailNotice, setDetailNotice] = useState<DetailNotice | null>(null);
   const [autoConfigCopyNotice, setAutoConfigCopyNotice] = useState<DetailNotice | null>(null);
-  const [codexProviders, setCodexProviders] = useState<CodexProfileSummary[]>([]);
-  const [codexProvidersError, setCodexProvidersError] = useState("");
+  const [codexProfiles, setCodexProfiles] = useState<CodexProfileSummary[]>([]);
+  const [codexProfilesError, setCodexProfilesError] = useState("");
   const [claudeProfiles, setClaudeProfiles] = useState<ClaudeProfileSummary[]>([]);
   const [claudeProfilesError, setClaudeProfilesError] = useState("");
   const [openCodeProfiles, setOpenCodeProfiles] = useState<OpenCodeProfileSummary[]>([]);
@@ -230,7 +230,7 @@ export function AdminRoute() {
     const [
       bootstrapState,
       appList,
-      codexProvidersResult,
+      codexProfilesResult,
       claudeProfilesResult,
       openCodeProfilesResult,
       autostartState,
@@ -277,8 +277,8 @@ export function AdminRoute() {
     setBootstrap(bootstrapState);
     setApps(appList.apps);
     setSelectedRobotID(nextSelectedRobotID);
-    setCodexProviders(codexProvidersResult.data?.profiles || []);
-    setCodexProvidersError(codexProvidersResult.error);
+    setCodexProfiles(codexProfilesResult.data?.profiles || []);
+    setCodexProfilesError(codexProfilesResult.error);
     setClaudeProfiles(claudeProfilesResult.data?.profiles || []);
     setClaudeProfilesError(claudeProfilesResult.error);
     setOpenCodeProfiles(openCodeProfilesResult.data?.profiles || []);
@@ -1360,10 +1360,10 @@ export function AdminRoute() {
             }}
           />
         ) : backendTab === "codex" ? (
-          <CodexProviderSection
-            loadError={codexProvidersError}
-            providers={codexProviders}
-            setProviders={setCodexProviders}
+          <CodexProfileSection
+            loadError={codexProfilesError}
+            profiles={codexProfiles}
+            setProfiles={setCodexProfiles}
             onReload={async () => {
               await loadAdminPage({ preferredRobotID: selectedRobotID });
             }}

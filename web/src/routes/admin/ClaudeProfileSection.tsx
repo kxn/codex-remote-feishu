@@ -17,6 +17,12 @@ import {
   type ConfigEditorSectionState,
   useConfigEditorSection,
 } from "./ConfigEditorShared";
+import {
+  appendOrReplaceProfileItem,
+  maxProfileTextLengthMessage,
+  removeProfileItem,
+  requiredProfileFieldMessage,
+} from "./ProfileEditorShared";
 
 type ClaudeProfileDraft = {
   name: string;
@@ -87,7 +93,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
           "POST",
           buildCreatePayload(draft),
         );
-        setProfiles((current) => appendOrReplaceProfile(current, response.profile));
+        setProfiles((current) => appendOrReplaceProfileItem(current, response.profile));
         selectPersistedItem(response.profile);
         setDetailNotice({ tone: "good", message: "Claude 配置已创建。" });
         return;
@@ -114,7 +120,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
         nextProfile = await saveContextPreference(nextProfile, draft.contextMode);
       }
       setProfiles((current) =>
-        appendOrReplaceProfile(current, nextProfile, activeProfile.id),
+        appendOrReplaceProfileItem(current, nextProfile, activeProfile.id),
       );
       selectPersistedItem(nextProfile);
       setDetailNotice({
@@ -155,7 +161,7 @@ export function ClaudeProfileSection(props: ClaudeProfileSectionProps) {
           method: "DELETE",
         },
       );
-      const nextProfiles = removeProfile(profiles, deleteTargetID);
+      const nextProfiles = removeProfileItem(profiles, deleteTargetID);
       setProfiles(nextProfiles);
       setDeleteTargetID(null);
       applyNextItems(nextProfiles);
@@ -493,11 +499,17 @@ function validateDraft(draft: ClaudeProfileDraft, editorMode: string): string {
   if (editorMode === "built-in") {
     return "";
   }
-  if (!draft.name.trim()) {
-    return "请填写名称。";
+  const nameError = requiredProfileFieldMessage(draft.name, "名称");
+  if (nameError) {
+    return nameError;
   }
-  if (draft.instruction.length > claudeInstructionMaxChars) {
-    return `指令最多 ${claudeInstructionMaxChars} 字符。`;
+  const instructionError = maxProfileTextLengthMessage(
+    draft.instruction,
+    claudeInstructionMaxChars,
+    "指令",
+  );
+  if (instructionError) {
+    return instructionError;
   }
   return "";
 }
@@ -530,27 +542,6 @@ function buildUpdatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     payload.authToken = authToken;
   }
   return payload;
-}
-
-function appendOrReplaceProfile(
-  profiles: ClaudeProfileSummary[],
-  profile: ClaudeProfileSummary,
-  previousID = profile.id,
-): ClaudeProfileSummary[] {
-  const nextProfiles = profiles
-    .filter((current) => current.id !== previousID || current.id === profile.id)
-    .map((current) => (current.id === profile.id ? profile : current));
-  if (nextProfiles.some((current) => current.id === profile.id)) {
-    return nextProfiles;
-  }
-  return [...profiles, profile];
-}
-
-function removeProfile(
-  profiles: ClaudeProfileSummary[],
-  targetID: string,
-): ClaudeProfileSummary[] {
-  return profiles.filter((profile) => profile.id !== targetID);
 }
 
 function optionalString(value: string): string | undefined {

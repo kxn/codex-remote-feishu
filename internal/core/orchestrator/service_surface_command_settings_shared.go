@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -27,11 +28,12 @@ func (s *Service) applyPromptOverrideChange(surface *state.SurfaceConsoleRecord,
 	s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
 		override := record.PromptOverride
 		mutate(&override)
-		record.PromptOverride = compactPromptOverride(override)
+		record.PromptOverride = state.NormalizePromptOverrideForBackend(record.Backend, compactPromptOverride(override))
 	}, func(local *state.SurfaceConsoleRecord) {
 		override := local.PromptOverride
 		mutate(&override)
-		local.PromptOverride = compactPromptOverride(override)
+		backend := agentproto.NormalizeBackend(state.SurfaceDesiredBackendContract(local).Backend)
+		local.PromptOverride = state.NormalizePromptOverrideForBackend(backend, compactPromptOverride(override))
 	})
 	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 	summary := s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})

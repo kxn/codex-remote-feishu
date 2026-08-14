@@ -55,12 +55,15 @@ func (s *Service) applyModelCatalogUpdated(inst *state.InstanceRecord, event age
 }
 
 func (s *Service) modelCatalogCommandOptions(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord) ([]control.CommandCatalogFormFieldOption, bool) {
-	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
-		if model, fixed := fixedCodexAPIProfileModel(profile); fixed {
-			return []control.CommandCatalogFormFieldOption{{
-				Label: model,
-				Value: model,
-			}}, false
+	if s.promptConfigBackend(inst, surface) == agentproto.BackendCodex {
+		profile, ok := s.surfaceCodexProfileSummary(surface)
+		if ok {
+			if model, fixed := fixedCodexAPIProfileModel(profile); fixed {
+				return []control.CommandCatalogFormFieldOption{{
+					Label: model,
+					Value: model,
+				}}, false
+			}
 		}
 	}
 	if inst == nil || inst.ModelCatalog == nil || len(inst.ModelCatalog.Entries) == 0 {
@@ -95,33 +98,50 @@ func (s *Service) modelCatalogCommandOptions(surface *state.SurfaceConsoleRecord
 	return options, len(entries) > modelCatalogMenuOptionLimit
 }
 
-func (s *Service) modelReasoningCommandOptions(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, model string) ([]control.CommandCatalogFormFieldOption, string, string) {
-	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
-		if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
-			options := modelReasoningAutomaticOptions()
-			if effort := fixedCodexAPIProfileReasoning(profile); effort != "" {
-				options = append(options, control.CommandCatalogFormFieldOption{
-					Label: effort,
-					Value: effort,
-				})
-				return options, "info", "当前 Codex Profile 使用固定模型 " + fixedModel + "；推理强度来自 Profile 配置。"
+func (s *Service) modelReasoningCommandOptions(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, backend agentproto.Backend, model string) ([]control.CommandCatalogFormFieldOption, string, string) {
+	backend = agentproto.NormalizeBackend(backend)
+	if backend == agentproto.BackendCodex {
+		profile, ok := s.surfaceCodexProfileSummary(surface)
+		if ok {
+			if fixedModel, fixed := fixedCodexAPIProfileModel(profile); fixed {
+				options := modelReasoningAutomaticOptions()
+				if effort := fixedCodexAPIProfileReasoning(profile); effort != "" {
+					options = append(options, control.CommandCatalogFormFieldOption{
+						Label: effort,
+						Value: effort,
+					})
+					return options, "info", "当前 Codex Profile 使用固定模型 " + fixedModel + "；推理强度来自 Profile 配置。"
+				}
+				return options, "info", "当前 Codex Profile 使用固定模型 " + fixedModel + "；未配置固定推理强度时将保持自动。"
 			}
-			return options, "info", "当前 Codex Profile 使用固定模型 " + fixedModel + "；未配置固定推理强度时将保持自动。"
 		}
 	}
 	model = strings.TrimSpace(model)
+	openCode := backend == agentproto.BackendOpenCode
 	if model == "" {
+		if openCode {
+			return modelReasoningAutomaticOptions(), "info", "当前 OpenCode session 还没有观察到模型；暂时不能修改推理强度。"
+		}
 		return modelReasoningAutomaticOptions(), "info", "当前模型尚未明确；卡片只提供自动，若确定底层支持，可手动发送 /reasoning <effort>。"
 	}
 	if modelReasoningCatalogUnavailable(inst) {
+		if openCode {
+			return modelReasoningAutomaticOptions(), "info", openCodeReasoningLookupStatusText(inst, model)
+		}
 		return modelReasoningAutomaticOptions(), "info", modelReasoningLookupStatusText(inst, model)
 	}
 	entry, found := modelCatalogEntryForModel(inst, model)
 	if !found {
+		if openCode {
+			return modelReasoningAutomaticOptions(), "info", openCodeReasoningLookupStatusText(inst, model)
+		}
 		return modelReasoningAutomaticOptions(), "info", modelReasoningLookupStatusText(inst, model)
 	}
 	efforts := modelReasoningSupportedEfforts(entry)
 	if len(efforts) == 0 {
+		if openCode {
+			return modelReasoningAutomaticOptions(), "info", "当前 OpenCode session/model 没有声明可用推理强度；暂时不能修改推理强度。"
+		}
 		return modelReasoningAutomaticOptions(), "info", "当前模型没有声明可用推理强度；卡片只提供自动，若确定底层支持，可手动发送 /reasoning <effort>。"
 	}
 	options := make([]control.CommandCatalogFormFieldOption, 0, len(efforts)+1)
@@ -133,9 +153,37 @@ func (s *Service) modelReasoningCommandOptions(surface *state.SurfaceConsoleReco
 		})
 	}
 	if defaultEffort := normalizeModelReasoningEffort(entry.DefaultReasoningEffort); defaultEffort != "" {
+		if openCode {
+			return options, "info", "当前 OpenCode session 默认推理强度为 " + defaultEffort + "；不设置覆盖时将保持自动。"
+		}
 		return options, "info", "当前模型默认推理强度由 Codex 决定；不设置覆盖时将保持自动。"
 	}
 	return options, "", ""
+}
+
+func openCodeReasoningLookupStatusText(inst *state.InstanceRecord, model string) string {
+	if inst == nil {
+		return "当前还没有接管 OpenCode 实例；暂时不能修改推理强度。"
+	}
+	if inst.ModelCatalog == nil {
+		return "正在等待 OpenCode ACP 上报 `effort` 配置；刷新完成前暂时不能修改推理强度。"
+	}
+	if inst.ModelCatalog.Unsupported {
+		return "当前 OpenCode session 暂不支持动态配置列表；暂时不能修改推理强度。"
+	}
+	if strings.TrimSpace(inst.ModelCatalog.ErrorMessage) != "" {
+		return "OpenCode 动态配置列表刷新失败；暂时不能修改推理强度。"
+	}
+	if len(inst.ModelCatalog.Entries) == 0 {
+		return "当前 OpenCode 动态配置列表为空；暂时不能修改推理强度。"
+	}
+	if strings.TrimSpace(model) == "" {
+		return "当前 OpenCode session 还没有观察到模型；暂时不能修改推理强度。"
+	}
+	if strings.TrimSpace(inst.ModelCatalog.NextCursor) != "" {
+		return "当前模型不在已加载的 OpenCode 动态配置列表片段中；暂时不能修改推理强度。"
+	}
+	return "当前模型没有声明 OpenCode ACP `effort` 配置；暂时不能修改推理强度。"
 }
 
 func modelReasoningAutomaticOptions() []control.CommandCatalogFormFieldOption {
@@ -178,6 +226,25 @@ func (s *Service) validateReasoningEffortForPromptModel(inst *state.InstanceReco
 			Model:   model,
 			Effort:  normalized,
 		}
+	}
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendOpenCode {
+		normalized, ok := control.NormalizeReasoningEffortForBackend(backend, effort)
+		if !ok {
+			return modelReasoningValidation{
+				Support: modelReasoningUnsupported,
+				Model:   model,
+				Effort:  effort,
+				Detail:  "推理强度建议使用 " + control.ReasoningEffortHintForBackend(backend) + "。",
+			}
+		}
+		validation := s.checkModelReasoningSupport(inst, model, normalized)
+		if validation.Support == modelReasoningUnknown {
+			validation.Support = modelReasoningUnsupported
+			if strings.TrimSpace(validation.Detail) == "" {
+				validation.Detail = "当前 OpenCode session 没有声明可用推理强度；请切换到启用了 reasoning variants 的 OpenCode profile 后再使用 /reasoning。"
+			}
+		}
+		return validation
 	}
 	validation := s.checkModelReasoningSupport(inst, model, effort)
 	if validation.Support != modelReasoningUnknown {
@@ -302,10 +369,12 @@ func modelCatalogOptionBaseLabel(entry agentproto.ModelCatalogEntry) string {
 	return label
 }
 
-func (s *Service) maybeModelCatalogStatusText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, truncated bool) (string, string) {
-	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
-		if _, fixed := fixedCodexAPIProfileModel(profile); fixed {
-			return "", ""
+func (s *Service) maybeModelCatalogStatusText(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, backend agentproto.Backend, truncated bool) (string, string) {
+	if agentproto.NormalizeBackend(backend) == agentproto.BackendCodex {
+		if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+			if _, fixed := fixedCodexAPIProfileModel(profile); fixed {
+				return "", ""
+			}
 		}
 	}
 	if truncated {

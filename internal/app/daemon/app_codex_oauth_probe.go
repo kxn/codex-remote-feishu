@@ -170,7 +170,7 @@ func (a *App) runCodexOAuthProbeTask(ctx context.Context, task codexOAuthProbeTa
 	}
 	a.codexOAuthProfileState.probeCompleted = true
 	if configErr == nil {
-		a.syncCodexProvidersCatalogLocked(loaded.Config)
+		a.syncCodexProfilesCatalogLocked(loaded.Config)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
@@ -29,7 +30,7 @@ func (g *LiveGateway) ReadChatInfo(ctx context.Context, req ChatInfoRequest) (Ch
 	if g == nil {
 		return ChatInfo{}, fmt.Errorf("im.v1.chat.get failed: gateway not configured")
 	}
-	gatewayID := normalizeGatewayID(req.GatewayID)
+	gatewayID := gatewaypkg.NormalizeGatewayID(req.GatewayID)
 	if gatewayID != "" && gatewayID != g.config.GatewayID {
 		return ChatInfo{}, fmt.Errorf("im.v1.chat.get failed: gateway mismatch: request=%s gateway=%s", gatewayID, g.config.GatewayID)
 	}

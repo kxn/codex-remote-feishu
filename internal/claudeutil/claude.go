@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -126,6 +127,35 @@ func ClaudeDynamicToolSemanticKind(toolName string) string {
 	default:
 		return "generic_tool"
 	}
+}
+
+// ClaudeExplorationActions maps Claude-native exploration tools to the shared
+// structured exploration carrier.
+func ClaudeExplorationActions(toolName string, input map[string]any) *agentproto.ExplorationActions {
+	var action agentproto.ExplorationAction
+	switch strings.TrimSpace(toolName) {
+	case "Read":
+		action.Kind = agentproto.ExplorationActionRead
+		if path := strings.TrimSpace(xutil.LookupStringFromAny(input["file_path"])); path != "" {
+			action.Items = []string{path}
+		}
+	case "Glob":
+		action.Kind = agentproto.ExplorationActionList
+		action.Summary = strings.TrimSpace(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(input["path"]),
+			xutil.LookupStringFromAny(input["pattern"]),
+		))
+	case "Grep":
+		action.Kind = agentproto.ExplorationActionSearch
+		action.Summary = strings.TrimSpace(xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(input["pattern"]),
+			xutil.LookupStringFromAny(input["query"]),
+		))
+		action.Secondary = strings.TrimSpace(xutil.LookupStringFromAny(input["path"]))
+	default:
+		return nil
+	}
+	return &agentproto.ExplorationActions{Actions: []agentproto.ExplorationAction{action}}
 }
 
 // MergeClaudeWebToolMetadata fills web_search action metadata for a claude tool.

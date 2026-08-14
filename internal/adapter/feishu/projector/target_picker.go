@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
@@ -23,13 +24,13 @@ func targetPickerStageElements(view control.FeishuTargetPickerView, daemonLifecy
 	elements := make([]map[string]any, 0, 8)
 	elements = append(elements, targetPickerHeaderElements(view.StageLabel, view.Question)...)
 	if bodySections := targetPickerBodySectionsForView(view); len(bodySections) != 0 {
-		elements = appendCardTextSections(elements, bodySections)
+		elements = cardkit.AppendTextSections(elements, bodySections)
 	}
 	if noticeSections := targetPickerNoticeSections(view); len(noticeSections) != 0 {
 		if len(targetPickerBodySectionsForView(view)) != 0 {
 			elements = append(elements, cardDividerElement())
 		}
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	if view.Phase != frontstagecontract.PhaseProcessing || view.ActionPolicy != frontstagecontract.ActionPolicyCancelOnly {
 		return elements
@@ -205,13 +206,13 @@ func targetPickerGitURLElements(view control.FeishuTargetPickerView, daemonLifec
 func targetPickerWorktreeElements(view control.FeishuTargetPickerView, daemonLifecycleID string) []map[string]any {
 	lane := targetPickerWorktreeWorkspaceLane(view)
 	plan := targetPickerPlanSingleLaneForm(view, daemonLifecycleID, lane, func(page paginatedSelectPage) []map[string]any {
-		form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, page))
+		form := targetPickerWorktreeFormElement(view, daemonLifecycleID, lane.renderElements(daemonLifecycleID, page))
 		if len(form) == 0 {
 			return nil
 		}
 		return []map[string]any{form}
 	})
-	form := targetPickerWorktreeFormElement(view, daemonLifecycleID, targetPickerPaginatedLaneElements(lane, daemonLifecycleID, plan.Page))
+	form := targetPickerWorktreeFormElement(view, daemonLifecycleID, lane.renderElements(daemonLifecycleID, plan.Page))
 	if len(form) == 0 {
 		return nil
 	}
@@ -283,7 +284,7 @@ func targetPickerGitParentDirFormRow(view control.FeishuTargetPickerView, daemon
 
 func targetPickerWorktreeFormElement(view control.FeishuTargetPickerView, daemonLifecycleID string, workspaceElements []map[string]any) map[string]any {
 	elements := make([]map[string]any, 0, len(workspaceElements)+6)
-	if intro := cardPlainTextBlockElement("从一个已接入的 Git 工作区派生新的并行工作区；创建成功后会自动接入并进入新会话。"); len(intro) != 0 {
+	if intro := cardkit.PlainTextBlockElement("从一个已接入的 Git 工作区派生新的并行工作区；创建成功后会自动接入并进入新会话。"); len(intro) != 0 {
 		elements = append(elements, intro)
 	}
 	elements = append(elements, workspaceElements...)
@@ -352,7 +353,7 @@ func targetPickerInlineFormFooterElements(view control.FeishuTargetPickerView, d
 		confirmButton["name"] = "target_picker_confirm"
 		buttons = append(buttons, confirmButton)
 	}
-	group := cardButtonGroupElement(buttons)
+	group := cardkit.ButtonGroupElement(buttons)
 	if len(group) == 0 {
 		return nil
 	}
@@ -426,7 +427,7 @@ func TargetPickerMessageElements(messages []control.FeishuTargetPickerMessage) [
 				"content": label,
 			})
 		}
-		if block := cardPlainTextBlockElement(text); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(text); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
@@ -452,7 +453,7 @@ func targetPickerWorkspaceOptions(options []control.FeishuTargetPickerWorkspaceO
 			continue
 		}
 		result = append(result, map[string]any{
-			"text":  cardPlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
+			"text":  cardkit.PlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
 			"value": value,
 		})
 	}
@@ -467,7 +468,7 @@ func targetPickerSessionOptions(options []control.FeishuTargetPickerSessionOptio
 			continue
 		}
 		result = append(result, map[string]any{
-			"text":  cardPlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
+			"text":  cardkit.PlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
 			"value": value,
 		})
 	}

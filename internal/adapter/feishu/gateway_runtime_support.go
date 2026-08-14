@@ -109,7 +109,7 @@ func (g *LiveGateway) surfaceForCardAction(lookup gatewaypkg.CardActionSurfaceLo
 
 func trustedPayloadSurfaceForCardAction(gatewayID, surfaceSessionID, chatID, operatorID string) string {
 	ref, ok := feishuidentity.ParseSurfaceRef(surfaceSessionID)
-	if !ok || ref.GatewayID != normalizeGatewayID(gatewayID) {
+	if !ok || ref.GatewayID != gatewaypkg.NormalizeGatewayID(gatewayID) {
 		return ""
 	}
 	switch {
@@ -149,7 +149,7 @@ func (g *LiveGateway) deliverAsyncInboundFailure(ctx context.Context, surfaceID,
 		cardEnvelope:     cardEnvelopeV2,
 		card:             rawCardDocument("消息未处理", body, cardThemeError, nil),
 	}
-	applyCtx, cancel := newFeishuTimeoutContext(ctx, asyncInboundFailureNoticeTimeout)
+	applyCtx, cancel := gatewaypkg.NewFeishuTimeoutContext(ctx, asyncInboundFailureNoticeTimeout)
 	defer cancel()
 	if err := g.Apply(applyCtx, []Operation{op}); err != nil {
 		log.Printf("feishu async inbound failure notice delivery failed: surface=%s reply_to=%s err=%v", surfaceID, replyToMessageID, err)

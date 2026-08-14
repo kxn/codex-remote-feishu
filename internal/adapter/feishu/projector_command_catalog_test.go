@@ -186,7 +186,7 @@ func TestProjectInteractiveCommandCatalogPaginatesCodexProfileSelect(t *testing.
 			Title: "立即切换",
 			Entries: []control.CommandCatalogEntry{{
 				Form: &control.CommandCatalogForm{
-					CommandID:   control.FeishuCommandCodexProvider,
+					CommandID:   control.FeishuCommandCodexProfile,
 					CommandText: "/codexprofile",
 					SubmitLabel: "切换",
 					Paginated:   true,
@@ -221,10 +221,10 @@ func TestProjectInteractiveCommandCatalogPaginatesCodexProfileSelect(t *testing.
 	}
 	prevValue := cardButtonPayload(t, buttons[0])
 	nextValue := cardButtonPayload(t, buttons[1])
-	if prevValue["kind"] != "page_local_action" || prevValue["action_kind"] != string(control.ActionCodexProviderCommand) || prevValue["cursor"] != 10 {
+	if prevValue["kind"] != "page_local_action" || prevValue["action_kind"] != string(control.ActionCodexProfileCommand) || prevValue["cursor"] != 10 {
 		t.Fatalf("unexpected previous payload: %#v", prevValue)
 	}
-	if nextValue["kind"] != "page_local_action" || nextValue["action_kind"] != string(control.ActionCodexProviderCommand) || nextValue["cursor"] != 30 {
+	if nextValue["kind"] != "page_local_action" || nextValue["action_kind"] != string(control.ActionCodexProfileCommand) || nextValue["cursor"] != 30 {
 		t.Fatalf("unexpected next payload: %#v", nextValue)
 	}
 	size, err := cardtransport.InteractiveMessageCardSize(ops[0].CardTitle, ops[0].CardTitleTag, cardThemeInfo, ops[0].CardElements, true)
@@ -254,7 +254,7 @@ func TestProjectInteractiveCommandCatalogPaginationPreservesOffPageSelection(t *
 		Sections: []control.CommandCatalogSection{{
 			Entries: []control.CommandCatalogEntry{{
 				Form: &control.CommandCatalogForm{
-					CommandID:   control.FeishuCommandCodexProvider,
+					CommandID:   control.FeishuCommandCodexProfile,
 					CommandText: "/codexprofile",
 					SubmitLabel: "切换",
 					Paginated:   true,

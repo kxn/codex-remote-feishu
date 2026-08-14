@@ -265,7 +265,7 @@ func (s *Service) handleModeCommand(surface *state.SurfaceConsoleRecord, action 
 			record.ProductMode = state.ProductModeNormal
 			record.Backend = agentproto.BackendCodex
 		}, func(local *state.SurfaceConsoleRecord) {
-			s.setSurfaceDesiredContract(local, state.HeadlessCodexSurfaceBackendContract(local.CodexProviderID))
+			s.setSurfaceDesiredContract(local, state.HeadlessCodexSurfaceBackendContract(local.CodexProfileID))
 		})
 	}
 	if currentWorkspaceKey != "" && state.IsHeadlessProductMode(target.ProductMode) {
@@ -886,6 +886,9 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	parts := strings.Fields(strings.TrimSpace(action.Text))
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
+	}
+	if s.surfaceBackend(surface) == agentproto.BackendOpenCode {
+		return s.handleOpenCodeAccessCommand(surface, action, parts)
 	}
 	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
 	if blocked != nil {

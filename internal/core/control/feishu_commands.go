@@ -33,7 +33,7 @@ const (
 	FeishuCommandAccess               = "access"
 	FeishuCommandPlan                 = "plan"
 	FeishuCommandVerbose              = "verbose"
-	FeishuCommandCodexProvider        = "codex_provider"
+	FeishuCommandCodexProfile         = "codex_profile"
 	FeishuCommandClaudeProfile        = "claude_profile"
 	FeishuCommandOpenCodeProfile      = "opencode_profile"
 	FeishuCommandHelp                 = "help"
@@ -401,8 +401,8 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			Options: []FeishuCommandOption{
 				commandOption("/verbose", "verbose", "quiet", "quiet", "只显示最终答复和必须可见的交互提示。"),
 				commandOption("/verbose", "verbose", "normal", "normal", "显示 plan、最终答复，以及会影响当前状态的共享过程项，例如文件修改、上下文压缩、MCP 调用。"),
-				commandOption("/verbose", "verbose", "verbose", "verbose", "显示完整共享过程卡；reasoning 进行中时只显示尾部占位“思考中...”。"),
-				commandOption("/verbose", "verbose", "chatty", "chatty", "在 verbose 基础上额外显示完整 reasoning / thinking 明细。"),
+				commandOption("/verbose", "verbose", "verbose", "verbose", "显示完整共享过程卡；卡片末行显示最新的真实 reasoning / thinking 摘要，不保留推理历史。"),
+				commandOption("/verbose", "verbose", "chatty", "chatty", "在 verbose 基础上按工具分段保留完整 reasoning / thinking 历史。"),
 			},
 			ShowInHelp: true,
 			ShowInMenu: true,
@@ -420,7 +420,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	},
 	{
 		definition: FeishuCommandDefinition{
-			ID:               FeishuCommandCodexProvider,
+			ID:               FeishuCommandCodexProfile,
 			GroupID:          FeishuCommandGroupSendSettings,
 			Title:            "切换 Codex Profile",
 			CanonicalSlash:   "/codexprofile",
@@ -434,12 +434,10 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ShowInMenu:       true,
 		},
 		textPrefixes: []feishuCommandPrefixMatch{
-			{alias: "/codexprofile", kind: ActionCodexProviderCommand},
-			{alias: "/codexprovider", kind: ActionCodexProviderCommand},
+			{alias: "/codexprofile", kind: ActionCodexProfileCommand},
 		},
 		menuExact: []feishuCommandMatch{
-			{alias: "codex_profile", action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprofile"}},
-			{alias: "codex_provider", action: Action{Kind: ActionCodexProviderCommand, Text: "/codexprovider"}},
+			{alias: "codex_profile", action: Action{Kind: ActionCodexProfileCommand, Text: "/codexprofile"}},
 		},
 	},
 	{

@@ -119,6 +119,94 @@ func TestProtocolNoticeProjectsGuardianWarningToAffectedSurface(t *testing.T) {
 	}
 }
 
+func TestProtocolNoticeVisibleWarningCutsSharedProgressSegment(t *testing.T) {
+	svc := prepareRemotePlanTurnForTest(t)
+	surface := svc.root.Surfaces["surface-1"]
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{"command": "npm test"},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial shared progress, got %#v", started)
+	}
+	svc.RecordExecCommandProgressSegment("surface-1", "thread-1", "turn-1", "cmd-1", "om-progress-1")
+
+	notice := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventProtocolNotice,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ProtocolNotice: &agentproto.ProtocolNotice{
+			Method:   "guardianWarning",
+			Kind:     "guardian",
+			Severity: agentproto.ErrorSeverityWarning,
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			Summary:  "This action was blocked by the guardian.",
+		},
+	})
+	if len(notice) != 1 || notice[0].Kind != eventcontract.KindNotice {
+		t.Fatalf("expected visible guardian notice, got %#v", notice)
+	}
+	if surface.ActiveExecProgress != nil {
+		t.Fatalf("expected visible append-only notice to seal shared progress, got %#v", surface.ActiveExecProgress)
+	}
+
+	next := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-2",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{"command": "go test ./..."},
+	})
+	if len(next) != 1 || next[0].ExecCommandProgress == nil || activeProgressMessageID(next[0].ExecCommandProgress) != "" {
+		t.Fatalf("expected post-notice tool to start a fresh progress card, got %#v", next)
+	}
+}
+
+func TestProtocolNoticeStateOnlyWarningDoesNotCutSharedProgressSegment(t *testing.T) {
+	svc := prepareRemotePlanTurnForTest(t)
+	surface := svc.root.Surfaces["surface-1"]
+	surface.Verbosity = state.SurfaceVerbosityVerbose
+
+	started := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventItemStarted,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ItemID:   "cmd-1",
+		ItemKind: "command_execution",
+		Metadata: map[string]any{"command": "npm test"},
+	})
+	if len(started) != 1 || started[0].ExecCommandProgress == nil {
+		t.Fatalf("expected initial shared progress, got %#v", started)
+	}
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:     agentproto.EventProtocolNotice,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		ProtocolNotice: &agentproto.ProtocolNotice{
+			Method:   "ordinaryWarning",
+			Severity: agentproto.ErrorSeverityWarning,
+			ThreadID: "thread-1",
+			TurnID:   "turn-1",
+			Summary:  "State only.",
+		},
+	})
+	if len(events) != 0 {
+		t.Fatalf("expected ordinary protocol warning to remain state-only, got %#v", events)
+	}
+	if surface.ActiveExecProgress == nil {
+		t.Fatal("expected invisible protocol warning not to seal shared progress")
+	}
+}
+
 func TestProtocolNoticeDoesNotProjectOrdinaryWarning(t *testing.T) {
 	now := time.Date(2026, 7, 17, 16, 15, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

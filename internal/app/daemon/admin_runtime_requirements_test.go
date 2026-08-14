@@ -22,6 +22,12 @@ func withRuntimeRequirementsClaudeResolver(t *testing.T, fn func(env []string) (
 	})
 }
 
+func TestSameExecutablePathUsesPlatformCanonicalComparison(t *testing.T) {
+	if !sameExecutablePath(`\\?\C:\Tools\Codex.exe`, `c:\tools\codex.exe`) {
+		t.Fatal("expected sameExecutablePath to use platform canonical path comparison after executable symlink resolution")
+	}
+}
+
 func TestAdminRuntimeRequirementsDetectWithAbsoluteCodexPath(t *testing.T) {
 	home := t.TempDir()
 	setTestHome(t, home)

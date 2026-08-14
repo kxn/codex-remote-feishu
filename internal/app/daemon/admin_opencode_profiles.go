@@ -18,6 +18,7 @@ type adminOpenCodeProfileView struct {
 	Revision          uint64 `json:"revision,omitempty"`
 	ETag              string `json:"etag,omitempty"`
 	Name              string `json:"name,omitempty"`
+	ProviderType      string `json:"providerType,omitempty"`
 	BaseURL           string `json:"baseURL,omitempty"`
 	APIKey            string `json:"apiKey,omitempty"`
 	HasAPIKey         bool   `json:"hasAPIKey"`
@@ -67,6 +68,7 @@ func (e *opencodeProfileInUseError) Error() string {
 
 type opencodeProfileWriteRequest struct {
 	Name              *string `json:"name"`
+	ProviderType      *string `json:"providerType"`
 	BaseURL           *string `json:"baseURL"`
 	APIKey            *string `json:"apiKey"`
 	Model             *string `json:"model"`
@@ -299,6 +301,7 @@ func adminOpenCodeProfileViewFromProfile(profile config.OpenCodeProfile) adminOp
 		Revision:          profile.Revision,
 		ETag:              state.OpenCodeProfileDefinitionETag(profile.ID, profile.Revision),
 		Name:              profile.Name,
+		ProviderType:      profile.ProviderType,
 		BaseURL:           profile.BaseURL,
 		HasAPIKey:         strings.TrimSpace(profile.APIKey) != "",
 		Model:             profile.Model,
@@ -322,6 +325,7 @@ func adminOpenCodeProfileViewFromProfile(profile config.OpenCodeProfile) adminOp
 func openCodeAPIProfileInputFromRequest(req opencodeProfileWriteRequest) config.OpenCodeAPIProfileInput {
 	return config.OpenCodeAPIProfileInput{
 		Name:              optionalStringValue(req.Name),
+		ProviderType:      optionalStringValue(req.ProviderType),
 		BaseURL:           optionalStringValue(req.BaseURL),
 		APIKey:            optionalStringValue(req.APIKey),
 		Model:             optionalStringValue(req.Model),
@@ -339,6 +343,7 @@ func openCodeAPIProfileInputFromRequest(req opencodeProfileWriteRequest) config.
 func openCodeAPIProfileUpdateInputFromRequest(current config.OpenCodeAPIProfileSecretConfig, req opencodeProfileWriteRequest) config.OpenCodeAPIProfileInput {
 	input := config.OpenCodeAPIProfileInput{
 		Name:              current.Name,
+		ProviderType:      current.ProviderType,
 		BaseURL:           current.BaseURL,
 		APIKey:            current.APIKey,
 		Model:             current.Model,
@@ -353,6 +358,9 @@ func openCodeAPIProfileUpdateInputFromRequest(current config.OpenCodeAPIProfileS
 	}
 	if req.Name != nil {
 		input.Name = *req.Name
+	}
+	if req.ProviderType != nil {
+		input.ProviderType = *req.ProviderType
 	}
 	if req.BaseURL != nil {
 		input.BaseURL = *req.BaseURL

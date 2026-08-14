@@ -243,17 +243,4 @@ jobs:
       - name: Verify dev-latest assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          mapfile -t expected_assets < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
-          mapfile -t release_assets < <(
-            gh release view dev-latest --json assets \
-              --jq '.assets[].name' |
-              sort
-          )
-
-          for expected in "${expected_assets[@]}"; do
-            if ! printf '%s\n' "${release_assets[@]}" | grep -Fx "${expected}" >/dev/null; then
-              echo "missing dev-latest asset: ${expected}" >&2
-              exit 1
-            fi
-          done
+        run: bash scripts/release/verify-release-assets.sh dev-latest dist

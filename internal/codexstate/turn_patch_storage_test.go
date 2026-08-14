@@ -106,6 +106,15 @@ func TestTurnPatchStorageApplyAndRollbackLatestTurnPatch(t *testing.T) {
 	}
 }
 
+func TestTurnPatchRolloutPathIdentityUsesPlatformCanonicalComparison(t *testing.T) {
+	if !sameTurnPatchRolloutPath(`\\?\C:\Users\Codex\sessions\rollout.jsonl`, `c:/users/codex/sessions/rollout.jsonl`) {
+		t.Fatal("expected Windows-like rollout paths to compare by canonical identity")
+	}
+	if sameTurnPatchRolloutPath("", `c:/users/codex/sessions/rollout.jsonl`) {
+		t.Fatal("did not expect empty rollout path to match a real path")
+	}
+}
+
 func TestTurnPatchStorageApplyRejectsDigestMismatch(t *testing.T) {
 	storage, _, _ := newTurnPatchStorageFixture(t, buildLatestTurnPatchRollout("thread-1"))
 

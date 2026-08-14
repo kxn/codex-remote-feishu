@@ -3,6 +3,7 @@ package feishu
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtheme"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -75,7 +76,7 @@ func rawCardDocumentWithHeader(title, titleTag, subtitle, subtitleTag, body, the
 
 func newRawCardComponent(data map[string]any) cardComponent {
 	return cardRawComponent{
-		data: cloneCardMap(data),
+		data: cardkit.CloneMap(data),
 	}
 }
 
@@ -90,7 +91,7 @@ func (c cardMarkdownComponent) renderCardComponent(_ cardEnvelopeVersion) map[st
 }
 
 func (c cardRawComponent) renderCardComponent(_ cardEnvelopeVersion) map[string]any {
-	return cloneCardMap(c.data)
+	return cardkit.CloneMap(c.data)
 }
 
 func renderOperationCard(operation Operation, version cardEnvelopeVersion) map[string]any {
@@ -243,13 +244,6 @@ func InvalidateOperationCard(operation *Operation) {
 	operation.card = nil
 }
 
-func cardPlainText(content string) map[string]any {
-	return map[string]any{
-		"tag":     "plain_text",
-		"content": strings.TrimSpace(content),
-	}
-}
-
 func withAttentionCardDocument(doc *cardDocument, attentionText, mentionUserID string) *cardDocument {
 	if doc == nil {
 		return nil
@@ -279,36 +273,4 @@ func renderCardAttentionMarkdown(attentionText, mentionUserID string) string {
 		return ""
 	}
 	return "<at id=" + mentionUserID + "></at>"
-}
-
-func cloneCardMap(value map[string]any) map[string]any {
-	if len(value) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(value))
-	for key, raw := range value {
-		out[key] = cloneCardAny(raw)
-	}
-	return out
-}
-
-func cloneCardAny(value any) any {
-	switch typed := value.(type) {
-	case map[string]any:
-		return cloneCardMap(typed)
-	case []map[string]any:
-		out := make([]map[string]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardMap(item))
-		}
-		return out
-	case []any:
-		out := make([]any, 0, len(typed))
-		for _, item := range typed {
-			out = append(out, cloneCardAny(item))
-		}
-		return out
-	default:
-		return typed
-	}
 }

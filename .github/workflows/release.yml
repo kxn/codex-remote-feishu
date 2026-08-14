@@ -396,17 +396,4 @@ jobs:
       - name: Verify Release Assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          mapfile -t expected_assets < <(find dist -maxdepth 1 -type f -printf '%f\n' | sort)
-          mapfile -t release_assets < <(
-            gh release view "${{ needs.build-release-assets.outputs.version }}" --json assets \
-              --jq '.assets[].name' |
-              sort
-          )
-
-          for expected in "${expected_assets[@]}"; do
-            if ! printf '%s\n' "${release_assets[@]}" | grep -Fx "${expected}" >/dev/null; then
-              echo "missing release asset: ${expected}" >&2
-              exit 1
-            fi
-          done
+        run: bash scripts/release/verify-release-assets.sh "${{ needs.build-release-assets.outputs.version }}" dist

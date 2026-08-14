@@ -19,6 +19,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/atomicfile"
 )
 
 // StateFile is the persisted JSON shape shared by all domain state stores.
@@ -243,6 +245,24 @@ func (s *Store[T]) Replace(entries map[string]T) error {
 	return nil
 }
 
+// Delete removes the record under key and persists the change. A nil store,
+// a blank key, or a missing record are no-ops.
+func (s *Store[T]) Delete(key string) error {
+	if s == nil {
+		return nil
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	if _, ok := s.Get(key); !ok {
+		return nil
+	}
+	entries := s.Entries()
+	delete(entries, key)
+	return s.Replace(entries)
+}
+
 // Save atomically writes the entries to disk with the current version.
 func (s *Store[T]) Save() error {
 	if s == nil || s.path == "" {
@@ -260,24 +280,7 @@ func (s *Store[T]) Save() error {
 		return err
 	}
 	raw = append(raw, '\n')
-	tmpFile, err := os.CreateTemp(filepath.Dir(s.path), filepath.Base(s.path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	if err := tmpFile.Chmod(0o600); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if _, err := tmpFile.Write(raw); err != nil {
-		_ = tmpFile.Close()
-		return err
-	}
-	if err := tmpFile.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmpPath, s.path); err != nil {
+	if err := atomicfile.Write(s.path, raw, 0o600); err != nil {
 		return err
 	}
 	s.dirty = false

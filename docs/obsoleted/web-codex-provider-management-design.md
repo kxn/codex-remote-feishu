@@ -1,8 +1,8 @@
 # Web Codex Provider 管理设计
 
 > Type: `obsoleted`
-> Updated: `2026-07-31`
-> Summary: 旧 Codex Provider 管理方案已被统一 Profile 与 OAuth 隔离设计取代，仅保留当前实现形成过程的历史背景。
+> Updated: `2026-08-11`
+> Summary: 同步历史参考中的当前文件路径；旧 Codex Provider 管理方案仍仅保留为历史背景。
 > Superseded By: `docs/draft/codex-profile-oauth-isolation-design.md`
 
 ## 1. 背景
@@ -410,7 +410,7 @@ setup 不出现任何 provider 配置入口。
   - `internal/app/daemon/app_claude_workspace_profile_state.go`
   - `internal/app/daemon/claudeworkspaceprofile/state.go`
 - 启动时子进程环境构造：
-  - `internal/config/codex_provider_env.go`
+  - `internal/config/codex_model_provider_env.go`
   - `internal/app/wrapper/app_process.go`
 
 本轮实现已经按 `Claude 配置` 的形状复用了 Web 与 admin API，并把“最终如何投影到 Codex 启动参数和 child env”接到了现有 `BuildCodexChildEnv(...)` 和 wrapper 启动链路上。

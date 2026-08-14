@@ -154,6 +154,143 @@ func TestClaudeBackendRuntimePrepareChildRestartStoresResolvedResumeTarget(t *te
 	}
 }
 
+func TestClaudeBackendRuntimeRestartPlanReviewForkUsesSourceThread(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-review-fork-plan")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "parent-session-1", []map[string]any{
+		{"type": "system", "cwd": workspaceRoot, "session_id": "parent-session-1", "model": "mimo-v2.5-pro"},
+		{"type": "session-title", "title": "Parent review source"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "review base"}},
+	})
+
+	runtime := &claudeBackendRuntime{
+		workspaceRoot: workspaceRoot,
+	}
+	plan, err := runtime.restartPlanForCommand(agentproto.Command{
+		CommandID: "cmd-prompt-claude-review-fork",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ExecutionMode:        agentproto.PromptExecutionModeForkEphemeral,
+			Purpose:              agentproto.PromptPurposeReview,
+			SourceThreadID:       "parent-session-1",
+			CWD:                  workspaceRoot,
+			SurfaceBindingPolicy: agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+		},
+		Prompt: agentproto.Prompt{
+			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review this patch"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("restartPlanForCommand: %v", err)
+	}
+	if plan == nil {
+		t.Fatal("expected review fork to require child restart")
+	}
+	if plan.DispatchPlan.ExecutionMode != agentproto.PromptExecutionModeForkEphemeral {
+		t.Fatalf("restart mode = %q, want %q", plan.DispatchPlan.ExecutionMode, agentproto.PromptExecutionModeForkEphemeral)
+	}
+	if plan.DispatchPlan.SourceThreadID != "parent-session-1" {
+		t.Fatalf("restart source thread = %q, want parent-session-1", plan.DispatchPlan.SourceThreadID)
+	}
+	if plan.DispatchPlan.CWD != workspaceRoot {
+		t.Fatalf("restart cwd = %q, want %q", plan.DispatchPlan.CWD, workspaceRoot)
+	}
+
+	if err := runtime.PrepareChildRestart("cmd-prompt-claude-review-fork", plan.DispatchPlan, nil); err != nil {
+		t.Fatalf("PrepareChildRestart: %v", err)
+	}
+	if runtime.pendingLaunchResume == nil {
+		t.Fatal("expected pending fork launch target")
+	}
+	if runtime.pendingLaunchResume.ThreadID != "parent-session-1" || runtime.pendingLaunchResume.CWD != workspaceRoot {
+		t.Fatalf("pending fork launch target = %#v, want parent-session-1 in workspace", runtime.pendingLaunchResume)
+	}
+	if !runtime.pendingLaunchResume.ForkEphemeral {
+		t.Fatalf("pending fork launch target = %#v, want ForkEphemeral", runtime.pendingLaunchResume)
+	}
+	if runtime.pendingLaunchResume.ReviewerAgent != "reviewer" {
+		t.Fatalf("pending fork launch target = %#v, want reviewer intent", runtime.pendingLaunchResume)
+	}
+}
+
+func TestClaudeBackendRuntimeReviewForkRestartConvergesForSameCommand(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	workspaceRoot := filepath.Join(t.TempDir(), "ws-review-fork-converges")
+	if err := os.MkdirAll(workspaceRoot, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "parent-session-1", []map[string]any{
+		{"type": "system", "cwd": workspaceRoot, "session_id": "parent-session-1"},
+	})
+	runtime := &claudeBackendRuntime{translator: claude.NewTranslator("inst-1"), workspaceRoot: workspaceRoot}
+	command := agentproto.Command{
+		CommandID: "cmd-review-fork-once",
+		Kind:      agentproto.CommandPromptSend,
+		Target: agentproto.Target{
+			ExecutionMode:        agentproto.PromptExecutionModeForkEphemeral,
+			Purpose:              agentproto.PromptPurposeReview,
+			SourceThreadID:       "parent-session-1",
+			CWD:                  workspaceRoot,
+			SurfaceBindingPolicy: agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+		},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "review"}}},
+	}
+
+	first, err := runtime.TranslateCommand(command)
+	if err != nil || first.Restart == nil {
+		t.Fatalf("first translation must request restart: result=%#v err=%v", first, err)
+	}
+	if err := runtime.PrepareChildRestart(command.CommandID, first.Restart.DispatchPlan, nil); err != nil {
+		t.Fatalf("PrepareChildRestart: %v", err)
+	}
+	resume := runtime.consumeLaunchResumeTarget()
+	if resume == nil || !resume.ForkEphemeral || resume.ReviewerAgent != "reviewer" {
+		t.Fatalf("unexpected prepared launch target: %#v", resume)
+	}
+	runtime.translator.PrepareForChildLaunch(resume.ThreadID)
+	if _, err := runtime.ObserveServer([]byte(`{"type":"system","subtype":"init","session_id":"review-session-1","cwd":"` + filepath.ToSlash(workspaceRoot) + `"}`)); err != nil {
+		t.Fatalf("ObserveServer init: %v", err)
+	}
+
+	second, err := runtime.TranslateCommand(command)
+	if err != nil {
+		t.Fatalf("second translation: %v", err)
+	}
+	if second.Restart != nil || len(second.Phases) == 0 {
+		t.Fatalf("same command must converge to prompt phases after fork restart: %#v", second)
+	}
+}
+
+func TestClaudeBackendRuntimePrepareChildRestartUsesCanonicalWorkspacePathIdentity(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", configDir)
+	workspaceRoot := `c:\Users\Codex\repo`
+	sessionCWD := `\\?\C:\Users\Codex\repo`
+	writeWrapperClaudeSessionFile(t, configDir, workspaceRoot, "resume-session-1", []map[string]any{
+		{"type": "system", "cwd": sessionCWD, "session_id": "resume-session-1", "model": "mimo-v2.5-pro"},
+		{"type": "session-title", "title": "Canonical path identity"},
+		{"type": "user", "message": map[string]any{"role": "user", "content": "resume me"}},
+	})
+
+	runtime := &claudeBackendRuntime{
+		workspaceRoot: workspaceRoot,
+	}
+	if err := runtime.PrepareChildRestart("cmd-prompt-claude-resume", agentproto.PromptDispatchPlan{
+		ExecutionThreadID: "resume-session-1",
+		CWD:               sessionCWD,
+	}, nil); err != nil {
+		t.Fatalf("PrepareChildRestart: %v", err)
+	}
+	if runtime.pendingLaunchResume == nil || runtime.pendingLaunchResume.CWD != sessionCWD {
+		t.Fatalf("expected canonical-equivalent resume cwd to be accepted, got %#v", runtime.pendingLaunchResume)
+	}
+}
+
 func TestCodexBackendRuntimePrepareChildRestartStoresResumePolicy(t *testing.T) {
 	runtime := &codexBackendRuntime{translator: codex.NewTranslator("inst-1")}
 	if _, err := runtime.translator.ObserveClient([]byte(`{"method":"thread/resume","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {

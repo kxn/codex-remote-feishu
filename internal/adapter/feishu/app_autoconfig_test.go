@@ -13,6 +13,7 @@ import (
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
 
 	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestV6AppAutoConfigReadRequestsIncludeRequiredLang(t *testing.T) {
@@ -55,14 +56,14 @@ func TestV6AppAutoConfigReadRequestsIncludeRequiredLang(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getApplicationConfig: %v", err)
 	}
-	if app == nil || stringValue(app.OnlineVersionId) != versionID {
+	if app == nil || xutil.StringValue(app.OnlineVersionId) != versionID {
 		t.Fatalf("unexpected app response: %#v", app)
 	}
 	version, err := getApplicationVersion(context.Background(), broker, client, appID, versionID)
 	if err != nil {
 		t.Fatalf("getApplicationVersion: %v", err)
 	}
-	if version == nil || stringValue(version.VersionId) != versionID {
+	if version == nil || xutil.StringValue(version.VersionId) != versionID {
 		t.Fatalf("unexpected version response: %#v", version)
 	}
 	if len(paths) != 2 {

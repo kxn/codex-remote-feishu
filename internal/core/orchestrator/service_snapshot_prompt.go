@@ -44,16 +44,21 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 		if thread != nil && observedThreadAccessMode == "" && agentproto.NormalizeAccessMode(thread.ObservedAccessMode) != "" {
 			observedThreadAccessMode = agentproto.NormalizeAccessMode(thread.ObservedAccessMode)
 		}
+		if thread != nil && observedThreadPlanMode == "" && strings.TrimSpace(thread.ObservedPlanModeRaw) != "" {
+			observedThreadPlanMode = strings.TrimSpace(thread.ObservedPlanModeRaw)
+		}
 		if thread != nil && observedThreadPlanMode == "" && strings.TrimSpace(string(thread.ObservedPlanMode)) != "" {
 			observedThreadPlanMode = string(state.NormalizePlanModeSetting(thread.ObservedPlanMode))
 		}
 	}
 	usesLocalRequestedOverrides := s.surfaceUsesLocalRequestedPromptOverrides(surface)
+	planModeUsesLocalRequested := surfaceUsesLocalRequestedPlanMode(settings.Contract)
 	planModeOverrideSet := settings.PlanModeOverrideSet
 	effectivePlanMode := string(state.NormalizePlanModeSetting(settings.PlanMode))
 	overridePlanMode := effectivePlanMode
-	if usesLocalRequestedOverrides && !planModeOverrideSet {
+	if planModeUsesLocalRequested && !planModeOverrideSet {
 		overridePlanMode = ""
+		effectivePlanMode = ""
 	}
 	resolution := s.resolvePromptConfig(inst, surface, threadID, cwd, override)
 	return control.PromptRouteSummary{
@@ -71,6 +76,7 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 		OverrideAccessMode:             resolution.Override.AccessMode,
 		OverridePlanMode:               overridePlanMode,
 		PlanModeOverrideSet:            planModeOverrideSet,
+		PlanModeUsesLocalRequested:     planModeUsesLocalRequested,
 		UsesLocalRequestedOverrides:    usesLocalRequestedOverrides,
 		EffectivePlanMode:              effectivePlanMode,
 		ObservedThreadPermission:       observedThreadPermission,
@@ -126,6 +132,12 @@ func (s *Service) resolveFrozenPromptOverride(inst *state.InstanceRecord, surfac
 	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
 	backend := s.promptConfigBackend(inst, surface)
 	if !state.BackendAcceptsFeishuPromptOverrides(backend) {
+		if agentproto.NormalizeBackend(backend) == agentproto.BackendOpenCode {
+			if promptOverrideIsEmpty(override) && surface != nil {
+				override = settings.PromptOverride
+			}
+			return state.NormalizePromptOverrideForBackend(backend, compactPromptOverride(override))
+		}
 		return state.ModelConfigRecord{}
 	}
 	if s.surfaceUsesLocalRequestedPromptOverrides(surface) {
@@ -153,6 +165,11 @@ func (s *Service) surfaceUsesLocalRequestedPromptOverrides(surface *state.Surfac
 	return state.IsVSCodeProductMode(state.EffectiveSurfaceCapabilitySettings(s.root, surface).Contract.ProductMode)
 }
 
+func surfaceUsesLocalRequestedPlanMode(contract state.SurfaceBackendContract) bool {
+	contract = state.NormalizeSurfaceBackendContract(contract)
+	return state.IsVSCodeProductMode(contract.ProductMode) || agentproto.NormalizeBackend(contract.Backend) == agentproto.BackendOpenCode
+}
+
 func (s *Service) freezePlanModeForPrompt(surface *state.SurfaceConsoleRecord) state.PlanModeSetting {
 	if surface == nil {
 		return ""
@@ -161,7 +178,7 @@ func (s *Service) freezePlanModeForPrompt(surface *state.SurfaceConsoleRecord) s
 	if !state.BackendAcceptsFeishuPlanOverride(settings.Contract.Backend) {
 		return ""
 	}
-	if state.IsVSCodeProductMode(settings.Contract.ProductMode) && !settings.PlanModeOverrideSet {
+	if surfaceUsesLocalRequestedPlanMode(settings.Contract) && !settings.PlanModeOverrideSet {
 		return ""
 	}
 	return state.NormalizePlanModeSetting(settings.PlanMode)

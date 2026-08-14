@@ -283,6 +283,9 @@ func TestDeliverUIEventMarksReviewFinalCardAndAddsExitButtons(t *testing.T) {
 	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewDiscard)) {
 		t.Fatalf("expected discard button, got %#v", ops[0].CardElements)
 	}
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewFollowUp)) {
+		t.Fatalf("expected explicit follow-up button, got %#v", ops[0].CardElements)
+	}
 	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewApply)) {
 		t.Fatalf("expected apply button, got %#v", ops[0].CardElements)
 	}
@@ -444,7 +447,7 @@ func TestDeliverUIEventAddsCommitReviewButtonWhenFinalBodyMentionsRecentCommit(t
 	}
 }
 
-func TestDeliverUIEventDoesNotAddReviewButtonsInClaudeMode(t *testing.T) {
+func TestDeliverUIEventAddsReviewButtonsInClaudeMode(t *testing.T) {
 	app, gateway, repoRoot := newReviewModeAppForTest(t)
 	shortSHA := commitReviewModeRepoFile(t, repoRoot, "docs/guide.md", "committed change\n", "review target commit")
 	writeReviewModeRepoFile(t, repoRoot, "docs/pending.md", "pending review change\n")
@@ -473,11 +476,11 @@ func TestDeliverUIEventDoesNotAddReviewButtonsInClaudeMode(t *testing.T) {
 	if len(ops) != 1 {
 		t.Fatalf("expected one final card, got %#v", ops)
 	}
-	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
-		t.Fatalf("did not expect uncommitted review button in claude mode, got %#v", ops[0].CardElements)
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewStart)) {
+		t.Fatalf("expected uncommitted review button in claude mode, got %#v", ops[0].CardElements)
 	}
-	if operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewCommand)) {
-		t.Fatalf("did not expect commit review button in claude mode, got %#v", ops[0].CardElements)
+	if !operationHasActionValue(ops[0], "page_local_action", "action_kind", string(control.ActionReviewCommand)) {
+		t.Fatalf("expected commit review button in claude mode, got %#v", ops[0].CardElements)
 	}
 }
 
@@ -685,7 +688,7 @@ func TestHandleGatewayActionAppliesReviewResultBackToParentThread(t *testing.T) 
 	}
 	surface := app.service.Surfaces()[0]
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:          state.ReviewSessionPhaseActive,
+		Phase:          state.ReviewSessionPhaseReady,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
 		ThreadCWD:      "/data/dl/droid",

@@ -103,8 +103,8 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 	if surface == nil {
 		return nil
 	}
-	if active := s.activeReviewSession(surface); active != nil {
-		return notice(surface, "review_session_active", "当前已经在审阅中；请直接继续提问，或使用“放弃审阅”/“按审阅意见继续修改”退出。")
+	if surface.ReviewSession != nil {
+		return notice(surface, "review_session_active", "当前已经在审阅中；请在最新结果卡上选择继续追问、退出审阅或按审阅意见继续修改。")
 	}
 	if !start.Ready {
 		return notice(surface, start.FailureCode, start.FailureText)
@@ -112,31 +112,78 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
 		return blocked
 	}
-	if !s.reserveFeishuRoomActiveSlot(surface, "review_start") {
+	backend := s.surfaceBackend(surface)
+	executor := reviewExecutorForBackend(backend)
+	if executor == "" {
+		return notice(surface, "review_backend_unsupported", "当前服务类型暂不支持独立审阅。")
+	}
+	var reviewPrompt string
+	if backend != agentproto.BackendCodex {
+		context, err := buildReviewTargetContext(start.ThreadCWD, start.Target)
+		if err != nil {
+			return notice(surface, "review_target_context_unavailable", "当前无法读取待审阅内容，请检查 Git 状态后重试。")
+		}
+		reviewPrompt = reviewPromptForTarget(start, context.Text)
+	}
+	if backend == agentproto.BackendCodex && !s.reserveFeishuRoomActiveSlot(surface, "review_start") {
 		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
+	}
+	frozenAccessMode := ""
+	if backend == agentproto.BackendCodex {
+		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+		frozenAccessMode = agentproto.NormalizeAccessMode(s.resolveFrozenPromptOverride(
+			inst,
+			surface,
+			strings.TrimSpace(start.ParentThreadID),
+			strings.TrimSpace(start.ThreadCWD),
+			surface.PromptOverride,
+		).AccessMode)
 	}
 	s.clearReviewCommitPickerRuntime(surface)
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhasePending,
-		ParentThreadID:  strings.TrimSpace(start.ParentThreadID),
-		ThreadCWD:       strings.TrimSpace(start.ThreadCWD),
-		SourceMessageID: strings.TrimSpace(start.SourceMessageID),
-		TargetLabel:     strings.TrimSpace(start.TargetLabel),
-		StartedAt:       s.now(),
-		LastUpdatedAt:   s.now(),
+		Phase:            state.ReviewSessionPhasePending,
+		Backend:          backend,
+		ExecutorKind:     executor,
+		FrozenAccessMode: frozenAccessMode,
+		ParentThreadID:   strings.TrimSpace(start.ParentThreadID),
+		ThreadCWD:        strings.TrimSpace(start.ThreadCWD),
+		SourceMessageID:  strings.TrimSpace(start.SourceMessageID),
+		TargetLabel:      strings.TrimSpace(start.TargetLabel),
+		StartedAt:        s.now(),
+		LastUpdatedAt:    s.now(),
+	}
+	noticeEvent := eventcontract.Event{
+		Kind:             eventcontract.KindNotice,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		Notice: &control.Notice{
+			Code:                  "review_start_requested",
+			Title:                 "正在进入审阅",
+			TemporarySessionLabel: reviewTemporarySessionLabel,
+			Text:                  reviewStartNoticeText(start),
+			ThemeKey:              "system",
+		},
+	}
+	if backend == agentproto.BackendClaude || backend == agentproto.BackendOpenCode {
+		events := []eventcontract.Event{noticeEvent}
+		return append(events, s.enqueueQueueItemWithTarget(
+			surface,
+			strings.TrimSpace(start.SourceMessageID),
+			reviewPrompt,
+			nil,
+			[]agentproto.Input{{Type: agentproto.InputText, Text: reviewPrompt}},
+			"",
+			strings.TrimSpace(start.ThreadCWD),
+			surface.RouteMode,
+			surface.PromptOverride,
+			agentproto.PromptExecutionModeForkEphemeral,
+			strings.TrimSpace(start.ParentThreadID),
+			agentproto.SurfaceBindingPolicyKeepSurfaceSelection,
+			agentproto.PromptPurposeReview,
+			true,
+		)...)
 	}
 	return []eventcontract.Event{
-		{
-			Kind:             eventcontract.KindNotice,
-			SurfaceSessionID: surface.SurfaceSessionID,
-			Notice: &control.Notice{
-				Code:                  "review_start_requested",
-				Title:                 "正在进入审阅",
-				TemporarySessionLabel: reviewTemporarySessionLabel,
-				Text:                  reviewStartNoticeText(start),
-				ThemeKey:              "system",
-			},
-		},
+		noticeEvent,
 		{
 			Kind:             eventcontract.KindAgentCommand,
 			SurfaceSessionID: surface.SurfaceSessionID,
@@ -158,6 +205,39 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 			},
 		},
 	}
+}
+
+func reviewExecutorForBackend(backend agentproto.Backend) state.ReviewExecutorKind {
+	switch agentproto.NormalizeBackend(backend) {
+	case agentproto.BackendCodex:
+		return state.ReviewExecutorCodexNative
+	case agentproto.BackendClaude:
+		return state.ReviewExecutorClaudeForkSession
+	case agentproto.BackendOpenCode:
+		return state.ReviewExecutorOpenCodeACPFork
+	default:
+		return ""
+	}
+}
+
+func buildReviewTargetContext(cwd string, target agentproto.ReviewTarget) (gitmeta.ReviewContext, error) {
+	target = target.Normalized()
+	switch target.Kind {
+	case agentproto.ReviewTargetKindUncommittedChanges:
+		return gitmeta.BuildUncommittedReviewContext(cwd, 0)
+	case agentproto.ReviewTargetKindCommit:
+		return gitmeta.BuildCommitReviewContext(cwd, target.CommitSHA, 0)
+	default:
+		return gitmeta.ReviewContext{}, fmt.Errorf("unsupported review target %q", target.Kind)
+	}
+}
+
+func reviewPromptForTarget(start reviewStartState, contextText string) string {
+	return strings.Join([]string{
+		"Review the following change. Report findings ordered by severity with file and line references, then note remaining test gaps. Do not modify files or run commands.",
+		"Target: " + strings.TrimSpace(start.TargetLabel),
+		strings.TrimSpace(contextText),
+	}, "\n\n")
 }
 
 func reviewStartNoticeText(start reviewStartState) string {

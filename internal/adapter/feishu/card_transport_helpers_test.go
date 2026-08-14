@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 )
@@ -43,7 +44,7 @@ func cardCallbackButtonElement(label, buttonType string, value map[string]any, d
 	button := map[string]any{
 		"tag":      "button",
 		"type":     buttonType,
-		"text":     cardPlainText(label),
+		"text":     cardkit.PlainText(label),
 		"disabled": disabled,
 	}
 	if strings.TrimSpace(width) != "" {
@@ -52,7 +53,7 @@ func cardCallbackButtonElement(label, buttonType string, value map[string]any, d
 	if len(value) != 0 {
 		button["behaviors"] = []map[string]any{{
 			"type":  "callback",
-			"value": cloneCardMap(value),
+			"value": cardkit.CloneMap(value),
 		}}
 	}
 	return button

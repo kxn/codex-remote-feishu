@@ -6,7 +6,6 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) defaultAttachThread(inst *state.InstanceRecord) string {
@@ -32,6 +31,13 @@ func (s *Service) surfaceThreadPickRouteMode(surface *state.SurfaceConsoleRecord
 
 func normalizeWorkspaceClaimKey(value string) string {
 	return state.ResolveWorkspaceClaimKey(value)
+}
+
+func pendingHeadlessWorkspaceClaimKey(pending *state.HeadlessLaunchRecord) string {
+	if pending == nil {
+		return ""
+	}
+	return state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)
 }
 
 func instanceWorkspaceClaimKey(inst *state.InstanceRecord) string {
@@ -70,15 +76,15 @@ func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord
 	if surface == nil || !s.surfaceUsesWorkspaceClaims(surface) {
 		return ""
 	}
-	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
-		surface.ClaimedWorkspaceKey = key
-		return key
-	}
 	if pending := surface.PendingHeadless; pending != nil {
-		if key := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)); key != "" {
+		if key := pendingHeadlessWorkspaceClaimKey(pending); key != "" {
 			surface.ClaimedWorkspaceKey = key
 			return key
 		}
+	}
+	if key := normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey); key != "" {
+		surface.ClaimedWorkspaceKey = key
+		return key
 	}
 	if key := normalizeWorkspaceClaimKey(surface.PreparedThreadCWD); key != "" {
 		surface.ClaimedWorkspaceKey = key
@@ -90,26 +96,39 @@ func (s *Service) surfaceCurrentWorkspaceKey(surface *state.SurfaceConsoleRecord
 			return key
 		}
 	}
-	if room := s.ensureFeishuRoomContextForSurface(surface); room != nil {
-		if key := normalizeWorkspaceClaimKey(room.WorkspaceKey); key != "" {
-			roomOwner := workspaceClaimOwner{
-				Scope:                   workspaceClaimOwnerRoom,
-				ID:                      room.RoomID,
-				DisplaySurfaceSessionID: surface.SurfaceSessionID,
-			}
-			if claim := s.workspaceClaims[key]; claim != nil {
-				if owner := s.workspaceClaimOwnerFromRecord(claim); owner.valid() && !owner.same(roomOwner) {
-					return ""
-				}
-			} else if owner := s.explicitWorkspaceClaimOwnerWithoutCurrentFallback(key); owner.valid() && !owner.same(roomOwner) {
-				return ""
-			}
-			surface.ClaimedWorkspaceKey = key
-			s.bindWorkspaceClaim(surface, key)
-			return key
-		}
+	if key := s.surfaceRoomWorkspaceBindingKey(surface); key != "" {
+		surface.ClaimedWorkspaceKey = key
+		s.bindWorkspaceClaim(surface, key)
+		return key
 	}
 	return ""
+}
+
+func (s *Service) surfaceRoomWorkspaceBindingKey(surface *state.SurfaceConsoleRecord) string {
+	if surface == nil || !s.surfaceUsesWorkspaceClaims(surface) {
+		return ""
+	}
+	room := s.ensureFeishuRoomContextForSurface(surface)
+	if room == nil {
+		return ""
+	}
+	key := normalizeWorkspaceClaimKey(room.WorkspaceKey)
+	if key == "" {
+		return ""
+	}
+	roomOwner := workspaceClaimOwner{
+		Scope:                   workspaceClaimOwnerRoom,
+		ID:                      room.RoomID,
+		DisplaySurfaceSessionID: surface.SurfaceSessionID,
+	}
+	if claim := s.workspaceClaims[key]; claim != nil {
+		if owner := s.workspaceClaimOwnerFromRecord(claim); owner.valid() && !owner.same(roomOwner) {
+			return ""
+		}
+	} else if owner := s.explicitWorkspaceClaimOwnerWithoutCurrentFallback(key); owner.valid() && !owner.same(roomOwner) {
+		return ""
+	}
+	return key
 }
 
 func (s *Service) explicitWorkspaceClaimOwnerWithoutCurrentFallback(workspaceKey string) workspaceClaimOwner {
@@ -186,10 +205,20 @@ func (s *Service) detachedText(surface *state.SurfaceConsoleRecord) string {
 }
 
 func (s *Service) detachedNoneText(surface *state.SurfaceConsoleRecord) string {
+	if text := s.detachedRoomWorkspaceBindingText(surface); text != "" {
+		return text
+	}
 	if s.surfaceUsesWorkspaceClaims(surface) {
 		return "当前没有已接管的工作区。"
 	}
 	return "当前没有已接管的实例。"
+}
+
+func (s *Service) detachedRoomWorkspaceBindingText(surface *state.SurfaceConsoleRecord) string {
+	if key := s.surfaceRoomWorkspaceBindingKey(surface); key != "" {
+		return fmt.Sprintf("当前没有运行中的接管对象；本群仍绑定 workspace：%s。解除本群绑定请使用 `/workspace detach`。", key)
+	}
+	return ""
 }
 
 func (s *Service) detachPendingText(surface *state.SurfaceConsoleRecord) string {

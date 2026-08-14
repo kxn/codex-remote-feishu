@@ -109,19 +109,3 @@ func (s *Service) finishPathPickerWithStatus(
 	s.clearSurfacePathPicker(surface)
 	return append([]eventcontract.Event{event}, appendEvents...)
 }
-
-func pathPickerFilteredFollowupEvents(events []eventcontract.Event) []eventcontract.Event {
-	return filterFollowupEventsByPolicy(events, dropNoticeFollowupPolicy)
-}
-
-func pathPickerFirstNoticeText(events []eventcontract.Event) string {
-	for _, event := range events {
-		if event.Notice == nil {
-			continue
-		}
-		if text := strings.TrimSpace(event.Notice.Text); text != "" {
-			return text
-		}
-	}
-	return ""
-}

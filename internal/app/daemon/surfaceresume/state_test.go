@@ -78,6 +78,29 @@ func TestNormalizeEntryResolvesHeadlessWorkspaceClaimKey(t *testing.T) {
 	}
 }
 
+func TestNormalizeEntryWritesOnlyCodexProfileSelection(t *testing.T) {
+	entry, ok := NormalizeEntry(Entry{
+		SurfaceSessionID: "surface-1",
+		ProductMode:      "normal",
+		Backend:          string(agentproto.BackendCodex),
+		CodexProfileID:   "team-proxy",
+	})
+	if !ok {
+		t.Fatal("expected normalized entry")
+	}
+	raw, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := string(raw)
+	if strings.Contains(payload, "codexProviderID") || strings.Contains(payload, "CodexProviderID") {
+		t.Fatalf("surface resume wrote legacy provider field: %s", payload)
+	}
+	if !strings.Contains(payload, "codexProfileID") {
+		t.Fatalf("surface resume did not write canonical profile field: %s", payload)
+	}
+}
+
 func TestLoadStoreMarksRepairedHeadlessWorkspaceDirty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), StateFileName)
 	raw := []byte(`{"version":1,"entries":{"surface-1":{"surfaceSessionID":"surface-1","productMode":"normal","resumeThreadID":"thread-1","resumeThreadCWD":"/data/projects/signal","resumeWorkspaceKey":"/data/.local/state/codex-remote","resumeHeadless":true}}}`)
@@ -97,12 +120,12 @@ func TestCanonicalizeEntriesRetainsConflictingCodexSelectionDiagnostic(t *testin
 	entries, changed := CanonicalizeEntries(map[string]Entry{
 		"feishu:main:user:ou_old": {
 			SurfaceSessionID: "feishu:main:user:ou_old", GatewayID: "main", ChatID: "oc_chat", ActorUserID: "ou_old",
-			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProviderID: "proxy-a",
+			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProfileID: "proxy-a",
 			UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		},
 		"feishu:main:user:ou_new": {
 			SurfaceSessionID: "feishu:main:user:ou_new", GatewayID: "main", ChatID: "oc_chat", ActorUserID: "ou_new",
-			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProviderID: "proxy-b",
+			ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex), CodexProfileID: "proxy-b",
 			UpdatedAt: time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC),
 		},
 	})
@@ -115,19 +138,19 @@ func TestCanonicalizeEntriesRetainsConflictingCodexSelectionDiagnostic(t *testin
 			t.Fatalf("marshal canonical entry: %v", err)
 		}
 		if !strings.Contains(string(raw), `"codexProfileSelectionStatus":"profile_selection_conflict"`) {
-			t.Fatalf("canonicalization discarded conflicting provider evidence: %s", raw)
+			t.Fatalf("canonicalization discarded conflicting profile evidence: %s", raw)
 		}
 	}
 }
 
 func TestCanonicalizeEntryProfileSelectionUsesProfileAsCanonicalOwner(t *testing.T) {
 	entry := CanonicalizeEntryProfileSelection(Entry{
-		ProductMode:     string(state.ProductModeNormal),
-		Backend:         string(agentproto.BackendCodex),
-		CodexProviderID: "legacy-new",
-		CodexProfileID:  "canonical-old",
+		ProductMode:           string(state.ProductModeNormal),
+		Backend:               string(agentproto.BackendCodex),
+		LegacyCodexProviderID: "legacy-new",
+		CodexProfileID:        "canonical-old",
 	})
-	if entry.CodexProfileID != "canonical-old" || entry.CodexProviderID != "canonical-old" {
+	if entry.CodexProfileID != "canonical-old" || entry.LegacyCodexProviderID != "" {
 		t.Fatalf("canonical profile selection drifted: %#v", entry)
 	}
 }
@@ -137,7 +160,7 @@ func TestNormalizeEntryClearsCodexProfileStateOutsideCodexBackend(t *testing.T) 
 		SurfaceSessionID:            "surface-1",
 		ProductMode:                 string(state.ProductModeNormal),
 		Backend:                     string(agentproto.BackendClaude),
-		CodexProviderID:             "team-proxy",
+		LegacyCodexProviderID:       "team-proxy",
 		CodexProfileID:              "team-proxy",
 		CodexProfileSelectionStatus: CodexProfileSelectionStatusConflict,
 		CodexAdmissionRef: &state.CodexAdmissionRef{
@@ -148,7 +171,7 @@ func TestNormalizeEntryClearsCodexProfileStateOutsideCodexBackend(t *testing.T) 
 	if !ok {
 		t.Fatal("expected normalized entry")
 	}
-	if entry.CodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexProfileSelectionStatus != "" || entry.CodexAdmissionRef != nil {
+	if entry.LegacyCodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexProfileSelectionStatus != "" || entry.CodexAdmissionRef != nil {
 		t.Fatalf("non-Codex entry retained Codex profile state: %#v", entry)
 	}
 }
@@ -158,7 +181,7 @@ func TestNormalizeEntryPreservesOpenCodeProfileForOpenCodeBackend(t *testing.T) 
 		SurfaceSessionID:   "surface-1",
 		ProductMode:        string(state.ProductModeNormal),
 		Backend:            string(agentproto.BackendOpenCode),
-		CodexProviderID:    "team-proxy",
+		CodexProfileID:     "team-proxy",
 		ClaudeProfileID:    "devseek",
 		OpenCodeProfileID:  " op_team ",
 		CodexAdmissionRef:  &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "team-proxy", Revision: 1}},
@@ -173,7 +196,7 @@ func TestNormalizeEntryPreservesOpenCodeProfileForOpenCodeBackend(t *testing.T) 
 	if entry.Backend != string(agentproto.BackendOpenCode) || entry.OpenCodeProfileID != "op_team" {
 		t.Fatalf("opencode entry normalized to %#v, want backend opencode profile op_team", entry)
 	}
-	if entry.CodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexAdmissionRef != nil || entry.ClaudeProfileID != "" {
+	if entry.LegacyCodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexAdmissionRef != nil || entry.ClaudeProfileID != "" {
 		t.Fatalf("opencode entry retained inactive backend profile state: %#v", entry)
 	}
 }

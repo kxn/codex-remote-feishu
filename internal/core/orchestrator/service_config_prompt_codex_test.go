@@ -39,8 +39,8 @@ func TestCodexHeadlessObservedCWDDefaultsDoNotPersistWorkspaceDefaults(t *testin
 	})
 
 	if defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey("/data/dl/droid", state.InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.DefaultCodexProviderID,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: state.DefaultCodexProfileID,
 	})]; defaults != (state.ModelConfigRecord{}) {
 		t.Fatalf("expected codex observed cwd defaults not to persist root workspace defaults, got %#v", defaults)
 	}
@@ -116,8 +116,8 @@ func TestCodexHeadlessThreadObservedModelReasoningFeedPromptFreeze(t *testing.T)
 	})
 
 	if defaults := svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey("/data/dl/droid", state.InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.DefaultCodexProviderID,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: state.DefaultCodexProfileID,
 	})]; defaults != (state.ModelConfigRecord{}) {
 		t.Fatalf("expected codex thread observation not to persist workspace defaults, got %#v", defaults)
 	}
@@ -186,7 +186,7 @@ func TestDynamicCodexAPIProfileModelFeedsPromptFreeze(t *testing.T) {
 			"thread-1": {ThreadID: "thread-1", Name: "默认会话", CWD: "/data/dl/repo"},
 		},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "deepseek-profile", "", "", "")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-deepseek"
 	surface.SelectedThreadID = "thread-1"

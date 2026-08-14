@@ -59,7 +59,7 @@ func (a *App) handleGitWorkspaceWorktreeCreateCommandLocked(command control.Daem
 			if events := a.service.FailTargetPickerWorktreeCreate(command.SurfaceSessionID, command.PickerID, createErr); len(events) != 0 {
 				return events
 			}
-			return gitWorkspaceWorktreeNotice(command.SurfaceSessionID, string(createErr.Code), gitWorkspaceWorktreeErrorText(createErr))
+			return gitWorkspaceWorktreeNotice(command.SurfaceSessionID, string(createErr.Code), gitmeta.WorktreeCreateErrorText(createErr))
 		}
 		log.Printf("git worktree create failed: surface=%s picker=%s base=%s branch=%s err=%v", command.SurfaceSessionID, command.PickerID, request.BaseWorkspacePath, request.BranchName, err)
 		return gitWorkspaceWorktreeNotice(command.SurfaceSessionID, "worktree_create_failed", "worktree 创建失败，请稍后重试。")
@@ -94,26 +94,4 @@ func gitWorkspaceWorktreeNotice(surfaceID, code, text string) []eventcontract.Ev
 			Text:  text,
 		},
 	}}
-}
-
-func gitWorkspaceWorktreeErrorText(err *gitmeta.WorktreeCreateError) string {
-	if err == nil {
-		return "worktree 创建失败，请稍后重试。"
-	}
-	switch err.Code {
-	case gitmeta.WorktreeCreateErrorGitMissing:
-		return "当前机器未检测到 `git`，暂时不能创建 worktree 工作区。"
-	case gitmeta.WorktreeCreateErrorBaseWorkspaceNotGit:
-		return "当前选择的工作区不是 Git 工作区，不能从它创建 worktree。"
-	case gitmeta.WorktreeCreateErrorInvalidBranchName:
-		return "新分支名无效，请检查后重试。"
-	case gitmeta.WorktreeCreateErrorBranchExists:
-		return "这个分支已经存在，请换一个新的分支名后重试。"
-	case gitmeta.WorktreeCreateErrorInvalidDirectoryName:
-		return "本地目录名无效，请改成不含路径分隔符的普通目录名。"
-	case gitmeta.WorktreeCreateErrorDestinationExists:
-		return "目标目录已经存在，请换一个目录名或基准工作区后重试。"
-	default:
-		return "worktree 创建失败，请稍后重试。"
-	}
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -26,7 +27,7 @@ func requestPromptSections(prompt control.FeishuRequestView) []control.FeishuCar
 
 func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID string) []map[string]any {
 	prompt = control.NormalizeFeishuRequestView(prompt)
-	elements := appendCardTextSections(nil, requestPromptSections(prompt))
+	elements := cardkit.AppendTextSections(nil, requestPromptSections(prompt))
 	switch requestPromptSemanticKind(prompt) {
 	case control.RequestSemanticRequestUserInput:
 		if len(prompt.Questions) != 0 {
@@ -66,7 +67,7 @@ func RequestPromptElements(prompt control.FeishuRequestView, daemonLifecycleID s
 			actions = append(actions, button)
 		}
 	}
-	if group := cardButtonGroupElement(actions); len(group) != 0 {
+	if group := cardkit.ButtonGroupElement(actions); len(group) != 0 {
 		elements = append(elements, group)
 	}
 	if hint := requestPromptHintMarkdown(prompt, defaultApprovalRequestHint(prompt, options)); hint != "" {
@@ -155,7 +156,7 @@ func appendCurrentRequestQuestionElements(elements []map[string]any, prompt cont
 		return elements
 	}
 	if section, ok := requestPromptQuestionSection(index, len(prompt.Questions), question); ok {
-		elements = appendCardTextSections(elements, []control.FeishuCardTextSection{section})
+		elements = cardkit.AppendTextSections(elements, []control.FeishuCardTextSection{section})
 	}
 	if !frontstagecontract.AllowsPrimaryInput(prompt.ActionPolicy) || !question.DirectResponse || len(question.Options) == 0 {
 		return elements
@@ -328,10 +329,10 @@ func requestPromptFormElement(prompt control.FeishuRequestView, daemonLifecycleI
 		"name": name,
 	}
 	label := xutil.FirstNonEmpty(strings.TrimSpace(question.Header), strings.TrimSpace(question.Question), name)
-	input["label"] = cardPlainText(label)
+	input["label"] = cardkit.PlainText(label)
 	input["label_position"] = "left"
 	if placeholder := strings.TrimSpace(question.Placeholder); placeholder != "" {
-		input["placeholder"] = cardPlainText(placeholder)
+		input["placeholder"] = cardkit.PlainText(placeholder)
 	}
 	if value := strings.TrimSpace(question.DefaultValue); value != "" {
 		input["default_value"] = value
@@ -412,7 +413,7 @@ func requestStructuredFormFieldElement(field control.RequestPromptFormField) map
 		element := map[string]any{
 			"tag":         "select_static",
 			"name":        name,
-			"placeholder": cardPlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
+			"placeholder": cardkit.PlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
 		}
 		if options := requestStructuredFormOptions(field.Options); len(options) != 0 {
 			element["options"] = options
@@ -425,7 +426,7 @@ func requestStructuredFormFieldElement(field control.RequestPromptFormField) map
 		element := map[string]any{
 			"tag":         "multi_select_static",
 			"name":        name,
-			"placeholder": cardPlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
+			"placeholder": cardkit.PlainText(xutil.FirstNonEmpty(strings.TrimSpace(field.Placeholder), strings.TrimSpace(field.Label), "请选择")),
 		}
 		if options := requestStructuredFormOptions(field.Options); len(options) != 0 {
 			element["options"] = options
@@ -440,11 +441,11 @@ func requestStructuredFormFieldElement(field control.RequestPromptFormField) map
 			"name": name,
 		}
 		if label := strings.TrimSpace(field.Label); label != "" {
-			element["label"] = cardPlainText(label)
+			element["label"] = cardkit.PlainText(label)
 			element["label_position"] = "left"
 		}
 		if placeholder := strings.TrimSpace(field.Placeholder); placeholder != "" {
-			element["placeholder"] = cardPlainText(placeholder)
+			element["placeholder"] = cardkit.PlainText(placeholder)
 		}
 		if value := strings.TrimSpace(field.DefaultValue); value != "" {
 			element["default_value"] = value
@@ -465,7 +466,7 @@ func requestStructuredFormOptions(options []control.RequestPromptFormFieldOption
 			continue
 		}
 		out = append(out, map[string]any{
-			"text":  cardPlainText(label),
+			"text":  cardkit.PlainText(label),
 			"value": value,
 		})
 	}
@@ -553,8 +554,8 @@ func requestPromptVerticalButtons(buttons []map[string]any) []map[string]any {
 		if len(button) == 0 {
 			continue
 		}
-		cloned := cloneCardMap(button)
-		if strings.TrimSpace(cardStringValue(cloned["width"])) == "" {
+		cloned := cardkit.CloneMap(button)
+		if strings.TrimSpace(cardkit.StringValue(cloned["width"])) == "" {
 			cloned["width"] = "fill"
 		}
 		out = append(out, cloned)

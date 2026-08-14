@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/pathcanon"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -21,12 +22,12 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 			return nil, fmt.Errorf("thread.compact.start requires thread id")
 		}
 		if t.currentThreadID == "" || threadID != t.currentThreadID {
-			requestID := t.nextRequest("thread-resume")
+			requestID := t.NextRequest("thread-resume")
 			t.pendingThreadResume[requestID] = pendingThreadResume{
 				ThreadID: threadID,
 				Command:  command,
 			}
-			t.debugf(
+			t.Debugf(
 				"translate remote compact: command=%s action=thread/resume request=%s targetThread=%s currentThread=%s knownCWD=%s surface=%s",
 				command.CommandID,
 				requestID,
@@ -37,7 +38,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 			)
 			params := map[string]any{
 				"threadId": threadID,
-				"cwd":      choose(command.Target.CWD, t.knownThreadCWD[threadID]),
+				"cwd":      pathcanon.Native(choose(command.Target.CWD, t.knownThreadCWD[threadID])),
 			}
 			applyCodexResumePolicyToThreadParams(params, command.CodexResume)
 			t.recordCodexPolicyForThread(threadID, command.CodexResume)
@@ -56,7 +57,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		if err != nil {
 			return nil, err
 		}
-		t.debugf(
+		t.Debugf(
 			"translate remote compact: command=%s action=thread/compact/start request=%s targetThread=%s currentThread=%s surface=%s",
 			command.CommandID,
 			requestID,
@@ -67,7 +68,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		return [][]byte{payload}, nil
 	case agentproto.CommandTurnInterrupt:
 		payload := map[string]any{
-			"id":     t.nextRequest("turn-interrupt"),
+			"id":     t.NextRequest("turn-interrupt"),
 			"method": "turn/interrupt",
 			"params": map[string]any{
 				"threadId": command.Target.ThreadID,
@@ -82,7 +83,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		return [][]byte{append(bytes, '\n')}, nil
 	case agentproto.CommandTurnSteer:
 		payload := map[string]any{
-			"id":     t.nextRequest("turn-steer"),
+			"id":     t.NextRequest("turn-steer"),
 			"method": "turn/steer",
 			"params": map[string]any{
 				"threadId":       command.Target.ThreadID,
@@ -99,7 +100,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		query := defaultThreadListQuery()
 		if owner, ok := t.threadListBroker.LookupOwner(query); ok {
 			t.beginThreadListRefresh(owner.RequestID, owner.Visible)
-			t.debugf(
+			t.Debugf(
 				"translate threads refresh: join inflight request=%s visible=%t currentThread=%s inflightReads=%d",
 				owner.RequestID,
 				owner.Visible,
@@ -108,10 +109,10 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 			)
 			return nil, nil
 		}
-		requestID := t.nextRequest("threads-refresh")
+		requestID := t.NextRequest("threads-refresh")
 		t.beginThreadListRefresh(requestID, false)
 		t.threadListBroker.RegisterNativeOwner(requestID, query)
-		t.debugf(
+		t.Debugf(
 			"translate threads refresh: request=%s currentThread=%s inflightReads=%d",
 			requestID,
 			t.currentThreadID,
@@ -135,7 +136,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		}
 		return [][]byte{append(bytes, '\n')}, nil
 	case agentproto.CommandThreadHistoryRead:
-		requestID := t.nextRequest("thread-history-read")
+		requestID := t.NextRequest("thread-history-read")
 		t.pendingThreadHistoryReads[requestID] = pendingThreadHistoryRead{
 			CommandID: command.CommandID,
 			ThreadID:  command.Target.ThreadID,
@@ -179,7 +180,7 @@ func (t *Translator) translateMCPOAuthLogin(command agentproto.Command) ([][]byt
 		pending := t.pendingMCPOAuthLogins[requestID]
 		return nil, fmt.Errorf("mcp oauth login already pending for server %q thread %q command %s", serverName, threadID, pending.CommandID)
 	}
-	requestID := t.nextRequest("mcp-oauth-login")
+	requestID := t.NextRequest("mcp-oauth-login")
 	params := map[string]any{
 		"name": serverName,
 	}
@@ -217,7 +218,7 @@ func (t *Translator) translateMCPOAuthLogin(command agentproto.Command) ([][]byt
 		TimeoutSecs: login.TimeoutSecs,
 	}
 	t.pendingMCPOAuthLoginKeys[flowKey] = requestID
-	t.debugf(
+	t.Debugf(
 		"translate mcp oauth login: command=%s request=%s server=%s thread=%s surface=%s",
 		command.CommandID,
 		requestID,
@@ -252,7 +253,7 @@ func (t *Translator) translatePromptSend(command agentproto.Command) ([][]byte, 
 
 func (t *Translator) translatePromptSendThreadStart(command agentproto.Command, ephemeral bool) ([][]byte, error) {
 	t.pendingLocalNewThreadTurn = false
-	requestID := t.nextRequest("thread-start")
+	requestID := t.NextRequest("thread-start")
 	t.pendingThreadCreate[requestID] = pendingThreadCreate{
 		Command: command,
 		Action:  "thread/start",
@@ -265,7 +266,7 @@ func (t *Translator) translatePromptSendThreadStart(command agentproto.Command, 
 	if command.Target.InternalHelper {
 		t.pendingInternalThreadSet[requestID] = true
 	}
-	t.debugf(
+	t.Debugf(
 		"translate remote prompt: command=%s mode=%s action=thread/start request=%s targetThread=%s sourceThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
 		command.CommandID,
 		command.Target.EffectivePromptExecutionMode(),
@@ -294,7 +295,7 @@ func (t *Translator) translatePromptSendForkEphemeral(command agentproto.Command
 	if sourceThreadID == "" {
 		return nil, fmt.Errorf("prompt.send fork_ephemeral requires source thread id")
 	}
-	requestID := t.nextRequest("thread-fork")
+	requestID := t.NextRequest("thread-fork")
 	t.pendingThreadCreate[requestID] = pendingThreadCreate{
 		Command: command,
 		Action:  "thread/fork",
@@ -302,7 +303,7 @@ func (t *Translator) translatePromptSendForkEphemeral(command agentproto.Command
 	if command.Target.InternalHelper {
 		t.pendingInternalThreadSet[requestID] = true
 	}
-	t.debugf(
+	t.Debugf(
 		"translate remote prompt: command=%s mode=%s action=thread/fork request=%s sourceThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
 		command.CommandID,
 		command.Target.EffectivePromptExecutionMode(),
@@ -334,12 +335,12 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 	}
 	delete(t.pendingLocalTurnByThread, command.Target.ThreadID)
 	if t.currentThreadID == "" || command.Target.ThreadID != t.currentThreadID {
-		requestID := t.nextRequest("thread-resume")
+		requestID := t.NextRequest("thread-resume")
 		t.pendingThreadResume[requestID] = pendingThreadResume{
 			ThreadID: command.Target.ThreadID,
 			Command:  command,
 		}
-		t.debugf(
+		t.Debugf(
 			"translate remote prompt: command=%s mode=%s action=thread/resume request=%s targetThread=%s cwd=%s currentThread=%s knownCWD=%s surface=%s inputs=%d",
 			command.CommandID,
 			command.Target.EffectivePromptExecutionMode(),
@@ -353,7 +354,7 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 		)
 		params := map[string]any{
 			"threadId": command.Target.ThreadID,
-			"cwd":      choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID]),
+			"cwd":      pathcanon.Native(choose(command.Target.CWD, t.knownThreadCWD[command.Target.ThreadID])),
 		}
 		applyCodexResumePolicyToThreadParams(params, command.CodexResume)
 		t.recordCodexPolicyForThread(command.Target.ThreadID, command.CodexResume)
@@ -372,7 +373,7 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 	if err != nil {
 		return nil, err
 	}
-	t.debugf(
+	t.Debugf(
 		"translate remote prompt: command=%s mode=%s action=turn/start request=%s targetThread=%s cwd=%s currentThread=%s surface=%s inputs=%d",
 		command.CommandID,
 		command.Target.EffectivePromptExecutionMode(),
@@ -430,7 +431,7 @@ func (t *Translator) buildThreadStartParamsWithPolicy(cwd string, overrides agen
 	if len(params) == 0 {
 		params = map[string]any{}
 	}
-	params["cwd"] = choose(cwd, xutil.LookupStringFromAny(params["cwd"]))
+	params["cwd"] = pathcanon.Native(choose(cwd, xutil.LookupStringFromAny(params["cwd"])))
 	setDefault(params, "model", nil)
 	setDefault(params, "modelProvider", nil)
 	setDefault(params, "config", map[string]any{})
@@ -452,7 +453,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	template := t.selectTurnTemplate(threadID, newThread)
 	template["threadId"] = threadID
 	template["input"] = t.buildInputs(command.Prompt.Inputs)
-	template["cwd"] = choose(command.Target.CWD, choose(xutil.LookupStringFromAny(template["cwd"]), t.knownThreadCWD[threadID]))
+	template["cwd"] = pathcanon.Native(choose(command.Target.CWD, choose(xutil.LookupStringFromAny(template["cwd"]), t.knownThreadCWD[threadID])))
 	setDefault(template, "approvalPolicy", nil)
 	setDefault(template, "sandboxPolicy", nil)
 	setDefault(template, "model", nil)
@@ -464,7 +465,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	applyCodexResumePolicyToTurnStart(template, command.CodexResume)
 	applyPromptOverridesToTurnStart(template, command.Overrides)
 	t.recordCodexPolicyForThread(threadID, command.CodexResume)
-	requestID := t.nextRequest("turn-start")
+	requestID := t.NextRequest("turn-start")
 	payload := map[string]any{
 		"id":     requestID,
 		"method": "turn/start",
@@ -496,7 +497,7 @@ func (t *Translator) directCompactStart(command agentproto.Command) ([]byte, str
 	if threadID == "" {
 		return nil, "", fmt.Errorf("thread.compact.start requires thread id")
 	}
-	requestID := t.nextRequest("thread-compact-start")
+	requestID := t.NextRequest("thread-compact-start")
 	surfaceID := choose(command.Origin.Surface, command.Origin.ChatID)
 	t.pendingRemoteTurnByThread[threadID] = surfaceID
 	payload := map[string]any{
@@ -544,10 +545,4 @@ func (t *Translator) buildInputs(inputs []agentproto.Input) []map[string]any {
 		}
 	}
 	return output
-}
-
-func (t *Translator) nextRequest(prefix string) string {
-	value := fmt.Sprintf("relay-%s-%d", prefix, t.nextID)
-	t.nextID++
-	return value
 }

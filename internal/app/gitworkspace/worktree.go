@@ -48,6 +48,18 @@ func CreateWorktree(ctx context.Context, req WorktreeRequest) (WorktreeResult, e
 	if err != nil {
 		return WorktreeResult{}, err
 	}
+	if !preview.CanConfirm {
+		// 草稿态（空 branch）不能直接创建；daemon 协议层已拦截，这里作为
+		// core preview 合同的显式守卫，避免对空 branch 发起 `git worktree add`。
+		return WorktreeResult{}, &WorktreeError{
+			Code:              WorktreeErrorInvalidBranchName,
+			Message:           "branch name is required",
+			BaseWorkspacePath: preview.BaseWorkspacePath,
+			BranchName:        preview.BranchName,
+			DirectoryName:     preview.DirectoryName,
+			DestinationPath:   preview.DestinationPath,
+		}
+	}
 	args := []string{"worktree", "add", "-b", preview.BranchName, preview.DestinationPath, "HEAD"}
 	cmd := execlaunch.CommandContext(ctx, "git", args...)
 	cmd.Dir = preview.BaseWorkspacePath

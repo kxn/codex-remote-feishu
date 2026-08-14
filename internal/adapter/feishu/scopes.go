@@ -7,6 +7,8 @@ import (
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkapplication "github.com/larksuite/oapi-sdk-go/v3/service/application/v6"
+
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type AppScopeStatus struct {
@@ -125,7 +127,7 @@ func (c *SetupClient) ListAppConfiguredScopes(ctx context.Context) ([]AppScopeSt
 		if item == nil {
 			continue
 		}
-		scope := strings.TrimSpace(stringValue(item.Scope))
+		scope := strings.TrimSpace(xutil.StringValue(item.Scope))
 		if scope == "" {
 			continue
 		}

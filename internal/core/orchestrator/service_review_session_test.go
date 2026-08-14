@@ -152,12 +152,13 @@ func activateReviewSessionForTest(t *testing.T, svc *Service, surface *state.Sur
 	if surface == nil {
 		t.Fatal("expected surface")
 	}
-	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhasePending,
-		ParentThreadID:  "thread-main",
-		ReviewThreadID:  "thread-review",
-		SourceMessageID: sourceMessageID,
+	if surface.ReviewSession == nil {
+		surface.ReviewSession = &state.ReviewSessionRecord{}
 	}
+	surface.ReviewSession.Phase = state.ReviewSessionPhasePending
+	surface.ReviewSession.ParentThreadID = "thread-main"
+	surface.ReviewSession.ReviewThreadID = "thread-review"
+	surface.ReviewSession.SourceMessageID = sourceMessageID
 	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnStarted,
 		ThreadID:  "thread-review",
@@ -180,7 +181,7 @@ func TestReviewSessionTurnStartActivatesWithoutStealingSelection(t *testing.T) {
 	if session == nil || session.Phase != state.ReviewSessionPhaseActive {
 		t.Fatalf("expected active review session, got %#v", session)
 	}
-	if session.ParentThreadID != "thread-main" || session.ReviewThreadID != "thread-review" || session.ActiveTurnID != "turn-review-1" {
+	if session.ParentThreadID != "thread-main" || session.ReviewThreadID != "thread-review" || session.InitialTurnID != "turn-review-1" || session.ActiveTurnID != "turn-review-1" {
 		t.Fatalf("unexpected review session runtime: %#v", session)
 	}
 	if surface.SelectedThreadID != "thread-main" {
@@ -284,52 +285,18 @@ func TestReviewSessionLateThreadSourceUpdateActivatesPendingSessionAndRoutesFina
 	}
 }
 
-func TestReviewSessionTextRoutesToReviewThreadAndKeepsSelection(t *testing.T) {
-	svc, surface, _ := newReviewSessionService(t)
-	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:      agentproto.EventTurnCompleted,
-		ThreadID:  "thread-review",
-		TurnID:    "turn-review-1",
-		Status:    "completed",
-		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
-	})
-
-	events := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: surface.SurfaceSessionID,
-		MessageID:        "msg-review-2",
-		Text:             "这里需要再看一下边界情况",
-	})
-
-	if len(events) != 3 {
-		t.Fatalf("expected queue-on, queue-off, and prompt command, got %#v", events)
-	}
-	if events[2].Command == nil || events[2].Command.Kind != agentproto.CommandPromptSend {
-		t.Fatalf("expected prompt send command, got %#v", events)
-	}
-	command := events[2].Command
-	if command.Target.ThreadID != "thread-review" ||
-		command.Target.ExecutionMode != agentproto.PromptExecutionModeResumeExisting ||
-		command.Target.SourceThreadID != "thread-main" ||
-		command.Target.SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
-		t.Fatalf("unexpected review session command target: %#v", command.Target)
-	}
-	item := surface.QueueItems[surface.ActiveQueueItemID]
-	if item == nil ||
-		queuedItemExecutionThreadID(item) != "thread-review" ||
-		queuedItemPromptDispatchPlan(item).SourceThreadID != "thread-main" ||
-		queuedItemPromptDispatchPlan(item).SurfaceBindingPolicy != agentproto.SurfaceBindingPolicyKeepSurfaceSelection {
-		t.Fatalf("unexpected queued review session item: %#v", item)
-	}
-	if surface.SelectedThreadID != "thread-main" {
-		t.Fatalf("expected review reply to keep parent selection, got %q", surface.SelectedThreadID)
-	}
-}
-
 func TestReviewSessionTextRecoversReviewThreadSelection(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "初始审阅意见"},
+	})
 	svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnCompleted,
 		ThreadID:  "thread-review",
@@ -342,6 +309,11 @@ func TestReviewSessionTextRecoversReviewThreadSelection(t *testing.T) {
 		t.Fatal("expected test surface to claim review thread")
 	}
 	surface.SelectedThreadID = "thread-review"
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewFollowUp,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
@@ -398,6 +370,11 @@ func TestReviewSessionFinalRenderDoesNotStealSelection(t *testing.T) {
 	if svc.ReviewSession(surface.SurfaceSessionID) == nil {
 		t.Fatalf("expected review session to remain visible for final-card exit actions")
 	}
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewFollowUp,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
 
 	replyEvents := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionTextMessage,
@@ -416,6 +393,195 @@ func TestReviewSessionFinalRenderDoesNotStealSelection(t *testing.T) {
 	}
 	if surface.SelectedThreadID != "thread-main" {
 		t.Fatalf("expected follow-up review prompt to keep parent selection, got %q", surface.SelectedThreadID)
+	}
+}
+
+func TestDetachedReviewTurnCompletionMakesResultReadyForParentApply(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "建议修复 detached review 的结果状态。"},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-compaction",
+		ItemKind:  "context_compaction",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	session := surface.ReviewSession
+	if session == nil || session.Phase != state.ReviewSessionPhaseReady || session.ActiveTurnID != "" {
+		t.Fatalf("expected ready detached review session, got %#v", session)
+	}
+	if session.LastReviewText != "建议修复 detached review 的结果状态。" {
+		t.Fatalf("unexpected detached review result: %#v", session)
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+	var command *agentproto.Command
+	for _, event := range events {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandPromptSend {
+			command = event.Command
+			break
+		}
+	}
+	if command == nil {
+		t.Fatalf("expected ready review result to dispatch to parent, got %#v", events)
+	}
+	if command.Target.ThreadID != "thread-main" || len(command.Prompt.Inputs) != 1 || command.Prompt.Inputs[0].Text != reviewApplyPromptPrefix+"建议修复 detached review 的结果状态。" {
+		t.Fatalf("unexpected detached review apply command: %#v", command)
+	}
+}
+
+func TestDetachedReviewFollowUpDoesNotReplaceReadyReviewResult(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+	surface.ReviewSession.LastReviewText = "初始审阅意见"
+	surface.ReviewSession.Phase = state.ReviewSessionPhaseReady
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	followUpEvents := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewFollowUp,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+	if noticeCode(followUpEvents, "review_follow_up_waiting_text") == "" {
+		t.Fatalf("expected follow-up capture prompt, got %#v", followUpEvents)
+	}
+	followUpEvents = svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-follow-up",
+		Text:             "现在改好了吗",
+	})
+	if len(followUpEvents) != 3 || followUpEvents[2].Command == nil {
+		t.Fatalf("expected follow-up prompt on review thread, got %#v", followUpEvents)
+	}
+	blockedBeforeTurnStart := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-follow-up-dispatching",
+	})
+	if noticeCode(blockedBeforeTurnStart, "review_turn_active") == "" {
+		t.Fatalf("expected apply to wait while review follow-up is dispatching, got %#v", blockedBeforeTurnStart)
+	}
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnStarted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	blocked := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-follow-up-running",
+	})
+	if noticeCode(blocked, "review_turn_active") == "" {
+		t.Fatalf("expected apply to wait for active review follow-up, got %#v", blocked)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		ItemID:    "follow-up-result",
+		ItemKind:  "agent_message",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"text": "还没有，这只是一次追问。"},
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+
+	if surface.ReviewSession == nil || surface.ReviewSession.Phase != state.ReviewSessionPhaseReady || surface.ReviewSession.LastReviewText != "初始审阅意见" {
+		t.Fatalf("expected follow-up completion to preserve ready review result, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestDetachedReviewFollowUpLifecycleDoesNotReplaceReadyReviewResult(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+	surface.ReviewSession.LastReviewText = "初始审阅意见"
+	surface.ReviewSession.Phase = state.ReviewSessionPhaseReady
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "completed",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewFollowUp,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "msg-review-follow-up",
+		Text:             "再检查一次",
+	})
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-2",
+		ItemID:    "review-exit-2",
+		ItemKind:  "exited_review_mode",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"review": "追问结果不能成为应用意见"},
+	})
+
+	if surface.ReviewSession == nil || surface.ReviewSession.LastReviewText != "初始审阅意见" {
+		t.Fatalf("expected lifecycle follow-up to preserve initial review text, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestFailedInitialReviewClearsSessionInsteadOfLeavingDeadOverlay(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventTurnCompleted,
+		ThreadID:     "thread-review",
+		TurnID:       "turn-review-1",
+		Status:       "failed",
+		ErrorMessage: "review failed",
+		Initiator:    agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	if surface.ReviewSession != nil {
+		t.Fatalf("failed initial review must clear the blocking overlay, got %#v", surface.ReviewSession)
 	}
 }
 
@@ -587,6 +753,15 @@ func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership
 	if session.TargetLabel != "未提交变更" {
 		t.Fatalf("expected review target label to persist, got %#v", session)
 	}
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventItemCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		ItemID:    "review-exit",
+		ItemKind:  "exited_review_mode",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+		Metadata:  map[string]any{"review": "初始审阅意见"},
+	})
 
 	svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:      agentproto.EventTurnCompleted,
@@ -594,6 +769,11 @@ func TestReviewSessionLifecycleActivatesPendingSessionWithoutRemoteTurnOwnership
 		TurnID:    "turn-review-1",
 		Status:    "completed",
 		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewFollowUp,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
 	})
 
 	replyEvents := svc.ApplySurfaceAction(control.Action{
@@ -1004,7 +1184,7 @@ func TestReviewApplyKeepsSessionWhenRoomAdmissionIsFull(t *testing.T) {
 	surface.ChatID = "oc_review"
 	svc.root.Surfaces[surface.SurfaceSessionID] = surface
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhaseActive,
+		Phase:           state.ReviewSessionPhaseReady,
 		ParentThreadID:  "thread-main",
 		ReviewThreadID:  "thread-review",
 		LastReviewText:  "请继续修改",
@@ -1036,7 +1216,7 @@ func TestReviewApplyReplacesItsOwnReservationWithPromptDispatch(t *testing.T) {
 	surface.ChatID = "oc_review"
 	svc.root.Surfaces[surface.SurfaceSessionID] = surface
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:           state.ReviewSessionPhaseActive,
+		Phase:           state.ReviewSessionPhaseReady,
 		ParentThreadID:  "thread-main",
 		ReviewThreadID:  "thread-review",
 		ThreadCWD:       "/data/dl/droid",
@@ -1066,7 +1246,7 @@ func TestReviewApplyReplacesItsOwnReservationWithPromptDispatch(t *testing.T) {
 	}
 }
 
-func TestStartReviewFromFinalCardRejectedInClaudeMode(t *testing.T) {
+func TestStartReviewFromFinalCardDispatchesClaudeReviewFork(t *testing.T) {
 	svc, surface, repoRoot := newReviewSessionService(t)
 	writeReviewSessionRepoFile(t, repoRoot, "docs/guide.md", "pending review change\n")
 	svc.MaterializeSurfaceResume(surface.SurfaceSessionID, surface.GatewayID, surface.ChatID, surface.ActorUserID, state.ProductModeNormal, agentproto.BackendClaude, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
@@ -1090,14 +1270,20 @@ func TestStartReviewFromFinalCardRejectedInClaudeMode(t *testing.T) {
 		Inbound:          &control.ActionInboundMeta{CardDaemonLifecycleID: "life-1"},
 	})
 
-	if len(events) != 1 || events[0].Notice == nil {
-		t.Fatalf("expected single rejection notice, got %#v", events)
+	if noticeCode(events, "review_start_requested") == "" || !hasAgentCommand(events) {
+		t.Fatalf("expected Claude review fork dispatch, got %#v", events)
 	}
-	if events[0].Notice.Code != "command_rejected" || !strings.Contains(events[0].Notice.Text, "/review") {
-		t.Fatalf("unexpected rejection notice: %#v", events[0].Notice)
+	if surface.ReviewSession == nil || surface.ReviewSession.Backend != agentproto.BackendClaude || surface.ReviewSession.ExecutorKind != state.ReviewExecutorClaudeForkSession {
+		t.Fatalf("expected Claude review session, got %#v", surface.ReviewSession)
 	}
-	if surface.ReviewSession != nil {
-		t.Fatalf("did not expect review session to start in claude mode, got %#v", surface.ReviewSession)
+	var command *agentproto.Command
+	for i := range events {
+		if events[i].Command != nil {
+			command = events[i].Command
+		}
+	}
+	if command == nil || command.Kind != agentproto.CommandPromptSend || command.Target.Purpose != agentproto.PromptPurposeReview || command.Target.ExecutionMode != agentproto.PromptExecutionModeForkEphemeral {
+		t.Fatalf("unexpected Claude review command: %#v", command)
 	}
 }
 
@@ -1495,7 +1681,7 @@ func TestStartReviewCommitFromPickerRejectsInstanceSwitch(t *testing.T) {
 func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
-		Phase:          state.ReviewSessionPhaseActive,
+		Phase:          state.ReviewSessionPhaseReady,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
 		ThreadCWD:      "/data/dl/droid",
@@ -1535,10 +1721,37 @@ func TestApplyReviewSessionResultBuildsParentPromptAndClearsSession(t *testing.T
 	}
 }
 
-func TestApplyReviewSessionResultRecoversReviewThreadSelection(t *testing.T) {
+func TestApplyReviewSessionResultRequiresReadyPhase(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)
 	surface.ReviewSession = &state.ReviewSessionRecord{
 		Phase:          state.ReviewSessionPhaseActive,
+		ParentThreadID: "thread-main",
+		ReviewThreadID: "thread-review",
+		ThreadCWD:      "/data/dl/droid",
+		LastReviewText: "尚未固化的审阅文本",
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewApply,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-active",
+	})
+
+	if noticeCode(events, "review_result_not_ready") == "" {
+		t.Fatalf("expected active review session to reject apply, got %#v", events)
+	}
+	if hasAgentCommand(events) {
+		t.Fatalf("active review session must not dispatch parent prompt, got %#v", events)
+	}
+	if surface.ReviewSession == nil {
+		t.Fatal("active review session must remain available after rejected apply")
+	}
+}
+
+func TestApplyReviewSessionResultRecoversReviewThreadSelection(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhaseReady,
 		ParentThreadID: "thread-main",
 		ReviewThreadID: "thread-review",
 		ThreadCWD:      "/data/dl/droid",
@@ -1596,6 +1809,70 @@ func TestDiscardReviewSessionClearsRuntime(t *testing.T) {
 	}
 	if surface.ReviewSession != nil {
 		t.Fatalf("expected review session to clear, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestDiscardActiveReviewInterruptsBeforeClearingSession(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewDiscard,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID:        "om-review-final-1",
+	})
+	if len(events) != 2 || events[0].Command == nil || events[0].Command.Kind != agentproto.CommandTurnInterrupt || noticeCode(events, "review_discard_requested") == "" {
+		t.Fatalf("active discard must request interrupt before exit, got %#v", events)
+	}
+	if events[0].Command.Target.ThreadID != "thread-review" || events[0].Command.Target.TurnID != "turn-review-1" {
+		t.Fatalf("active discard interrupt target = %#v", events[0].Command.Target)
+	}
+	if surface.ReviewSession == nil || !surface.ReviewSession.ExitRequested {
+		t.Fatalf("active discard must keep session until terminal turn, got %#v", surface.ReviewSession)
+	}
+	repeated := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewDiscard,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+	if len(repeated) != 1 || repeated[0].Command != nil || noticeCode(repeated, "review_discard_requested") == "" {
+		t.Fatalf("repeated active discard must not send another interrupt, got %#v", repeated)
+	}
+
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "interrupted",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	if surface.ReviewSession != nil {
+		t.Fatalf("terminal interrupted turn must finish requested discard, got %#v", surface.ReviewSession)
+	}
+}
+
+func TestDiscardDispatchingReviewWaitsForInterruptibleTurn(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	surface.ReviewSession = &state.ReviewSessionRecord{
+		Phase:          state.ReviewSessionPhasePending,
+		ParentThreadID: "thread-main",
+	}
+	surface.ActiveQueueItemID = "queue-review"
+	surface.QueueItems["queue-review"] = &state.QueueItemRecord{
+		ID:     "queue-review",
+		Status: state.QueueItemDispatching,
+		FrozenDispatchPlan: agentproto.PromptDispatchPlan{
+			ExecutionMode:  agentproto.PromptExecutionModeForkEphemeral,
+			SourceThreadID: "thread-main",
+			Purpose:        agentproto.PromptPurposeReview,
+		},
+	}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionReviewDiscard,
+		SurfaceSessionID: surface.SurfaceSessionID,
+	})
+	if noticeCode(events, "review_result_not_ready") == "" || surface.ReviewSession == nil {
+		t.Fatalf("pre-start discard must wait rather than orphan dispatch, events=%#v session=%#v", events, surface.ReviewSession)
 	}
 }
 

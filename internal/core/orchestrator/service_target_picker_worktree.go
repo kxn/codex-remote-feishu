@@ -3,15 +3,12 @@ package orchestrator
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/core/workspaceimport"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -21,76 +18,25 @@ type targetPickerWorktreeState struct {
 	Messages   []control.FeishuTargetPickerMessage
 }
 
-func (s *Service) filterGitWorkspaceSelectionEntries(entries []workspaceSelectionEntry) []workspaceSelectionEntry {
-	if len(entries) == 0 {
-		return nil
-	}
-	filtered := make([]workspaceSelectionEntry, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.gitInfo.InRepo() {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	return filtered
-}
-
 func (s *Service) buildTargetPickerWorktreeState(record *activeTargetPickerRecord) targetPickerWorktreeState {
 	worktreeState := targetPickerWorktreeState{}
 	if record == nil {
 		return worktreeState
 	}
 	baseWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.SelectedWorkspaceKey)
-	branchName := strings.TrimSpace(record.WorktreeBranchName)
-	directoryName := strings.TrimSpace(record.WorktreeDirectoryName)
-	if !s.config.GitAvailable {
-		worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "当前机器未检测到 `git`，暂时不能创建 worktree 工作区。",
-		})
-		return worktreeState
-	}
 	if baseWorkspaceKey == "" {
-		return worktreeState
-	}
-	info, err := gitmeta.InspectWorkspace(baseWorkspaceKey, gitmeta.InspectOptions{})
-	if err != nil {
-		worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "无法读取基准工作区的 Git 信息，请稍后重试。",
-		})
-		return worktreeState
-	}
-	if !info.InRepo() {
-		worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-			Level: control.FeishuTargetPickerMessageDanger,
-			Text:  "当前选择的工作区不是 Git 工作区，不能从它创建 worktree。",
-		})
-		return worktreeState
-	}
-	if branchName == "" {
-		finalPath, message := targetPickerWorktreePreviewWithoutBranch(baseWorkspaceKey, directoryName)
-		if finalPath != "" {
-			worktreeState.FinalPath = normalizeWorkspaceClaimKey(finalPath)
-		} else if message == "" {
-			return worktreeState
-		}
-		if message != "" {
-			worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
-				Level: control.FeishuTargetPickerMessageDanger,
-				Text:  message,
-			})
-		}
 		return worktreeState
 	}
 	preview, err := gitmeta.PreviewWorktree(gitmeta.WorktreeCreateRequest{
 		BaseWorkspacePath: baseWorkspaceKey,
-		BranchName:        branchName,
-		DirectoryName:     directoryName,
+		BranchName:        strings.TrimSpace(record.WorktreeBranchName),
+		DirectoryName:     strings.TrimSpace(record.WorktreeDirectoryName),
 	})
 	if err == nil {
-		worktreeState.FinalPath = normalizeWorkspaceClaimKey(preview.DestinationPath)
-		worktreeState.CanConfirm = true
+		if strings.TrimSpace(preview.DestinationPath) != "" {
+			worktreeState.FinalPath = normalizeWorkspaceClaimKey(preview.DestinationPath)
+		}
+		worktreeState.CanConfirm = preview.CanConfirm
 		return worktreeState
 	}
 	var worktreeErr *gitmeta.WorktreeCreateError
@@ -106,27 +52,9 @@ func (s *Service) buildTargetPickerWorktreeState(record *activeTargetPickerRecor
 	}
 	worktreeState.Messages = append(worktreeState.Messages, control.FeishuTargetPickerMessage{
 		Level: control.FeishuTargetPickerMessageDanger,
-		Text:  targetPickerWorktreePreviewErrorText(worktreeErr),
+		Text:  gitmeta.WorktreeCreateErrorText(worktreeErr),
 	})
 	return worktreeState
-}
-
-func targetPickerWorktreePreviewWithoutBranch(baseWorkspaceKey, directoryName string) (string, string) {
-	baseWorkspaceKey = normalizeWorkspaceClaimKey(baseWorkspaceKey)
-	directoryName = strings.TrimSpace(directoryName)
-	if baseWorkspaceKey == "" || directoryName == "" {
-		return "", ""
-	}
-	if err := workspaceimport.ValidateDirectoryName(directoryName); err != nil {
-		return "", "本地目录名无效，请改成不含路径分隔符的普通目录名。"
-	}
-	finalPath := filepath.Join(filepath.Dir(baseWorkspaceKey), directoryName)
-	if _, err := os.Stat(finalPath); err == nil {
-		return finalPath, fmt.Sprintf("目标目录已存在：%s。请更换目录名或基准工作区。", normalizeWorkspaceClaimKey(finalPath))
-	} else if !os.IsNotExist(err) {
-		return "", "无法预检查最终路径，请重新确认基准工作区和目录名。"
-	}
-	return finalPath, ""
 }
 
 func (s *Service) confirmTargetPickerWorktree(surface *state.SurfaceConsoleRecord, flow *activeOwnerCardFlowRecord, record *activeTargetPickerRecord, view control.FeishuTargetPickerView) []eventcontract.Event {
@@ -146,7 +74,7 @@ func (s *Service) confirmTargetPickerWorktree(surface *state.SurfaceConsoleRecor
 	}
 	finalPath := strings.TrimSpace(worktreeState.FinalPath)
 	if blocked := s.preflightFeishuRoomWorkspaceChange(surface, finalPath); blocked != nil {
-		message := strings.TrimSpace(targetPickerFirstNoticeText(blocked))
+		message := strings.TrimSpace(firstNoticeText(blocked))
 		if message == "" {
 			message = "当前群 workspace 暂时不能切换，请稍后重试。"
 		}
@@ -205,7 +133,7 @@ func (s *Service) CompleteTargetPickerWorktreeCreate(surfaceSessionID, pickerID,
 	record.WorktreeFinalPath = workspaceKey
 	pendingText := s.takePendingTextInput(surface)
 	events := s.enterTargetPickerNewThread(surface, workspaceKey)
-	filtered := targetPickerFilteredFollowupEvents(events)
+	filtered := filterPickerFollowupEvents(events)
 	if targetPickerNewThreadReady(surface, workspaceKey) {
 		status := targetPickerWorktreeCreateSuccessStatus(workspaceKey)
 		result := s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageSucceeded, "已进入新会话待命", "", status.Sections, status.Footer, false, filtered)
@@ -213,12 +141,12 @@ func (s *Service) CompleteTargetPickerWorktreeCreate(surfaceSessionID, pickerID,
 	}
 	restorePendingTextInput(surface, pendingText)
 	if surface.PendingHeadless != nil && surface.PendingHeadless.PrepareNewThread &&
-		normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.PendingHeadless.WorkspaceKey, surface.PendingHeadless.ThreadCWD)) == workspaceKey {
+		pendingHeadlessWorkspaceClaimKey(surface.PendingHeadless) == workspaceKey {
 		status := targetPickerWorktreeCreatePostCreateProcessingStatus(strings.TrimSpace(record.WorktreeBranchName), workspaceKey)
 		processing := s.startTargetPickerProcessingWithSections(surface, flow, record, targetPickerPendingWorktreeCreate, workspaceKey, "", "正在接入工作区", "", status.Sections, status.Footer)
 		return append(processing, filtered...)
 	}
-	reason := strings.TrimSpace(xutil.FirstNonEmpty(targetPickerFirstNoticeText(events), fmt.Sprintf("worktree 已创建到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“从目录新建”继续接入。", workspaceKey)))
+	reason := strings.TrimSpace(xutil.FirstNonEmpty(firstNoticeText(events), fmt.Sprintf("worktree 已创建到 `%s`，但接入工作区失败。目录已保留，你可以稍后通过“从目录新建”继续接入。", workspaceKey)))
 	status := targetPickerWorktreeCreatePostCreateFailureStatus(workspaceKey, reason)
 	return s.finishTargetPickerWithStageAndSections(surface, flow, record, control.FeishuTargetPickerStageFailed, "创建失败", "", status.Sections, status.Footer, false, filtered)
 }
@@ -234,7 +162,7 @@ func (s *Service) FailTargetPickerWorktreeCreate(surfaceSessionID, pickerID stri
 	flow := s.activeOwnerCardFlow(surface)
 	record := s.activeTargetPicker(surface)
 	if flow == nil || flow.Kind != ownerCardFlowKindTargetPicker || record == nil || strings.TrimSpace(record.PickerID) != strings.TrimSpace(pickerID) {
-		return notice(surface, string(createErr.Code), targetPickerWorktreeErrorText(createErr))
+		return notice(surface, string(createErr.Code), gitmeta.WorktreeCreateErrorText(createErr))
 	}
 	if destination := strings.TrimSpace(createErr.DestinationPath); destination != "" {
 		record.WorktreeFinalPath = normalizeWorkspaceClaimKey(destination)
@@ -257,7 +185,7 @@ func (s *Service) cancelTargetPickerWorktreeCreate(surface *state.SurfaceConsole
 		},
 	}}
 	pending := surface.PendingHeadless
-	if pending == nil || !pending.PrepareNewThread || normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(pending.WorkspaceKey, pending.ThreadCWD)) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
+	if pending == nil || !pending.PrepareNewThread || pendingHeadlessWorkspaceClaimKey(pending) != normalizeWorkspaceClaimKey(record.PendingWorkspaceKey) {
 		return events
 	}
 	events = append(events, s.finalizeDetachedSurface(surface)...)
@@ -295,48 +223,6 @@ func targetPickerWorktreeValidationMessage(record *activeTargetPickerRecord, mes
 	}
 }
 
-func targetPickerWorktreePreviewErrorText(err *gitmeta.WorktreeCreateError) string {
-	if err == nil {
-		return "无法预检查最终路径，请重新确认基准工作区、分支名和目录名。"
-	}
-	switch err.Code {
-	case gitmeta.WorktreeCreateErrorBaseWorkspaceNotGit:
-		return "当前选择的工作区不是 Git 工作区，不能从它创建 worktree。"
-	case gitmeta.WorktreeCreateErrorInvalidBranchName:
-		return "新分支名无效，请使用 Git 允许的分支名。"
-	case gitmeta.WorktreeCreateErrorBranchExists:
-		return "这个分支已经存在，请换一个新的分支名。"
-	case gitmeta.WorktreeCreateErrorInvalidDirectoryName:
-		return "本地目录名无效，请改成不含路径分隔符的普通目录名。"
-	case gitmeta.WorktreeCreateErrorDestinationExists:
-		return fmt.Sprintf("目标目录已存在：%s。请更换目录名或基准工作区。", normalizeWorkspaceClaimKey(err.DestinationPath))
-	default:
-		return "无法预检查最终路径，请重新确认基准工作区、分支名和目录名。"
-	}
-}
-
-func targetPickerWorktreeErrorText(err *gitmeta.WorktreeCreateError) string {
-	if err == nil {
-		return "worktree 创建失败，请稍后重试。"
-	}
-	switch err.Code {
-	case gitmeta.WorktreeCreateErrorGitMissing:
-		return "当前机器未检测到 `git`，暂时不能创建 worktree 工作区。"
-	case gitmeta.WorktreeCreateErrorBaseWorkspaceNotGit:
-		return "当前选择的工作区不是 Git 工作区，不能从它创建 worktree。"
-	case gitmeta.WorktreeCreateErrorInvalidBranchName:
-		return "新分支名无效，请检查后重试。"
-	case gitmeta.WorktreeCreateErrorBranchExists:
-		return "这个分支已经存在，请换一个新的分支名后重试。"
-	case gitmeta.WorktreeCreateErrorInvalidDirectoryName:
-		return "本地目录名无效，请改成不含路径分隔符的普通目录名。"
-	case gitmeta.WorktreeCreateErrorDestinationExists:
-		return "目标目录已经存在，请换一个目录名或基准工作区后重试。"
-	default:
-		return "worktree 创建失败，请稍后重试。"
-	}
-}
-
 func targetPickerWorktreeCreateSuccessStatus(workspaceKey string) feishuCardStatusPayload {
 	sections := []control.FeishuCardTextSection{}
 	if strings.TrimSpace(workspaceKey) != "" {
@@ -358,7 +244,7 @@ func targetPickerWorktreeCreateFailureStatus(createErr *gitmeta.WorktreeCreateEr
 	sections := targetPickerGitImportObjectSections("", normalizeWorkspaceClaimKey(createErr.DestinationPath))
 	sections = append(sections,
 		control.FeishuCardTextSection{Label: "停在阶段", Lines: []string{"创建 worktree"}},
-		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{targetPickerWorktreeErrorText(createErr)}},
+		control.FeishuCardTextSection{Label: "失败原因", Lines: []string{gitmeta.WorktreeCreateErrorText(createErr)}},
 		control.FeishuCardTextSection{Label: "最近输出", Lines: targetPickerGitImportOutputLines(createErr.Stderr)},
 		control.FeishuCardTextSection{Label: "下一步", Lines: []string{"请检查基准工作区、分支名和本地目录名后重试。"}},
 	)

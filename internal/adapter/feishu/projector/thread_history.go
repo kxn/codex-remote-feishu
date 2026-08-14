@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	frontstagecontract "github.com/kxn/codex-remote-feishu/internal/core/frontstagecontract"
@@ -40,7 +41,7 @@ func ThreadHistoryElements(view control.FeishuThreadHistoryView, daemonLifecycle
 		if hasBusinessContent {
 			elements = append(elements, cardDividerElement())
 		}
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return elements
 }
@@ -80,7 +81,7 @@ func ThreadHistoryListElements(view control.FeishuThreadHistoryView, daemonLifec
 	if view.Page+1 < view.TotalPages {
 		buttons = append(buttons, cardCallbackButtonElement("下一页", "default", stampActionValue(actionPayloadThreadHistory(cardActionKindHistoryPage, view.PickerID, "", view.Page+1), daemonLifecycleID), false, "fill"))
 	}
-	if group := cardButtonGroupElement(buttons); len(group) != 0 {
+	if group := cardkit.ButtonGroupElement(buttons); len(group) != 0 {
 		elements = append(elements, group)
 	}
 	return elements
@@ -105,7 +106,7 @@ func ThreadHistoryDetailElements(view control.FeishuThreadHistoryView, daemonLif
 		"tag":     "markdown",
 		"content": strings.Join(lines, "\n"),
 	}}
-	elements = appendCardTextSections(elements, threadHistoryDetailSections(detail))
+	elements = cardkit.AppendTextSections(elements, threadHistoryDetailSections(detail))
 	buttons := make([]map[string]any, 0, 3)
 	if detail.PrevTurnID != "" {
 		buttons = append(buttons, cardCallbackButtonElement("较新一轮", "default", stampActionValue(actionPayloadThreadHistory(cardActionKindHistoryDetail, view.PickerID, detail.PrevTurnID, 0), daemonLifecycleID), false, "fill"))
@@ -113,10 +114,10 @@ func ThreadHistoryDetailElements(view control.FeishuThreadHistoryView, daemonLif
 	if detail.NextTurnID != "" {
 		buttons = append(buttons, cardCallbackButtonElement("较旧一轮", "default", stampActionValue(actionPayloadThreadHistory(cardActionKindHistoryDetail, view.PickerID, detail.NextTurnID, 0), daemonLifecycleID), false, "fill"))
 	}
-	if group := cardButtonGroupElement(buttons); len(group) != 0 {
+	if group := cardkit.ButtonGroupElement(buttons); len(group) != 0 {
 		elements = append(elements, group)
 	}
-	elements = append(elements, cardButtonGroupElement([]map[string]any{
+	elements = append(elements, cardkit.ButtonGroupElement([]map[string]any{
 		cardCallbackButtonElement("返回列表", "default", stampActionValue(actionPayloadThreadHistory(cardActionKindHistoryPage, view.PickerID, "", detail.ReturnPage), daemonLifecycleID), false, "fill"),
 	}))
 	return elements
@@ -182,7 +183,7 @@ func threadHistoryTurnOptions(options []control.FeishuThreadHistoryTurnOption) [
 			continue
 		}
 		result = append(result, map[string]any{
-			"text":  cardPlainText(threadHistoryTurnOptionText(option)),
+			"text":  cardkit.PlainText(threadHistoryTurnOptionText(option)),
 			"value": value,
 		})
 	}
@@ -199,15 +200,7 @@ func threadHistoryTurnOptionText(option control.FeishuThreadHistoryTurnOption) s
 }
 
 func truncateThreadHistoryDetailText(text string, limit int) string {
-	text = strings.TrimSpace(text)
-	if limit <= 3 {
-		limit = 3
-	}
-	runes := []rune(text)
-	if len(runes) <= limit {
-		return text
-	}
-	return string(runes[:limit-3]) + "..."
+	return xutil.TruncateRunes(strings.TrimSpace(text), limit, xutil.TruncateOptions{ReserveEllipsis: true, MinLimit: 3})
 }
 
 func threadHistoryNoticeSections(view control.FeishuThreadHistoryView) []control.FeishuCardTextSection {

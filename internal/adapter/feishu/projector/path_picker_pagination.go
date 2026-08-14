@@ -3,6 +3,7 @@ package projector
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	cardtransport "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardtransport"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/selectflow"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/texttags"
@@ -60,7 +61,7 @@ func pathPickerDirectoryLane(view control.FeishuPathPickerView) paginatedSelectF
 	fixedOptions := []map[string]any{currentDirectoryPathPickerOption(view.CurrentPath)}
 	if view.CanGoUp {
 		fixedOptions = append(fixedOptions, map[string]any{
-			"text":  cardPlainText(".."),
+			"text":  cardkit.PlainText(".."),
 			"value": "..",
 		})
 	}
@@ -93,10 +94,6 @@ func pathPickerFileLane(view control.FeishuPathPickerView) paginatedSelectFlowLa
 			return actionPayloadPathPickerCursor(view.PickerID, selectflow.PathPickerFileFlow.FieldName, cursor)
 		},
 	}
-}
-
-func pathPickerPaginatedLaneElements(lane paginatedSelectFlowLane, daemonLifecycleID string, page paginatedSelectPage) []map[string]any {
-	return lane.renderElements(daemonLifecycleID, page)
 }
 
 func pathPickerPlanSingleLane(
@@ -184,11 +181,11 @@ func pathPickerFileModeElementsWithPages(
 
 	directoryLane := pathPickerDirectoryLane(view)
 	if directoryPage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(directoryLane, daemonLifecycleID, *directoryPage)...)
+		elements = append(elements, directoryLane.renderElements(daemonLifecycleID, *directoryPage)...)
 	}
 	fileLane := pathPickerFileLane(view)
 	if filePage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(fileLane, daemonLifecycleID, *filePage)...)
+		elements = append(elements, fileLane.renderElements(daemonLifecycleID, *filePage)...)
 	}
 
 	if len(directoryLane.Options) == 0 {
@@ -211,7 +208,7 @@ func pathPickerFileModeElementsWithPages(
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return appendCardFooterButtonGroup(elements, pathPickerDefaultFooterButtons(view, daemonLifecycleID))
 }
@@ -237,7 +234,7 @@ func pathPickerDirectoryModeElementsWithPage(
 
 	directoryLane := pathPickerDirectoryLane(view)
 	if directoryPage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(directoryLane, daemonLifecycleID, *directoryPage)...)
+		elements = append(elements, directoryLane.renderElements(daemonLifecycleID, *directoryPage)...)
 	}
 	if len(directoryLane.Options) == 0 {
 		elements = append(elements, map[string]any{
@@ -253,7 +250,7 @@ func pathPickerDirectoryModeElementsWithPage(
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return appendCardFooterButtonGroup(elements, pathPickerDefaultFooterButtons(view, daemonLifecycleID))
 }
@@ -276,13 +273,13 @@ func pathPickerOwnerSubpageDirectoryModeElementsWithPage(
 			"tag":     "markdown",
 			"content": "**当前位置**",
 		})
-		if block := cardPlainTextBlockElement(current); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(current); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
 	directoryLane := pathPickerDirectoryLane(view)
 	if directoryPage != nil {
-		elements = append(elements, pathPickerPaginatedLaneElements(directoryLane, daemonLifecycleID, *directoryPage)...)
+		elements = append(elements, directoryLane.renderElements(daemonLifecycleID, *directoryPage)...)
 	}
 	if len(directoryLane.Options) == 0 {
 		elements = append(elements, map[string]any{
@@ -291,13 +288,13 @@ func pathPickerOwnerSubpageDirectoryModeElementsWithPage(
 		})
 	}
 	if hint := strings.TrimSpace(view.Hint); hint != "" {
-		if block := cardPlainTextBlockElement(hint); len(block) != 0 {
+		if block := cardkit.PlainTextBlockElement(hint); len(block) != 0 {
 			elements = append(elements, block)
 		}
 	}
 	if noticeSections := pathPickerNoticeSectionsForView(view); len(noticeSections) != 0 {
 		elements = append(elements, cardDividerElement())
-		elements = appendCardTextSections(elements, noticeSections)
+		elements = cardkit.AppendTextSections(elements, noticeSections)
 	}
 	return appendCardFooterButtonGroup(elements, pathPickerOwnerSubpageFooterButtons(view, daemonLifecycleID))
 }

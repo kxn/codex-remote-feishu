@@ -49,7 +49,7 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForBackend(t *testing.T) {
 		ClaudeProfileID: "devseek",
 		PromptOverride:  state.ModelConfigRecord{Model: "claude-sonnet", ReasoningEffort: "max"},
 	}
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:chat:oc_room",
 		"app-1",
 		"oc_room",
@@ -90,7 +90,7 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 		PlanMode:            state.PlanModeSettingOn,
 		PlanModeOverrideSet: true,
 	}
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:chat:oc_room",
 		"app-1",
 		"oc_room",
@@ -111,18 +111,20 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 		t.Fatalf("group surface opencode projection = %s/%q, want opencode/op_team", surface.Backend, surface.OpenCodeProfileID)
 	}
 	contract := state.SurfaceDesiredBackendContract(surface)
-	if contract.CodexProviderID != "" || contract.ClaudeProfileID != "" {
+	if contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("opencode desired contract retained inactive profile fields: %#v", contract)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
-		t.Fatalf("opencode bot projection retained unsupported prompt/plan overrides: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+	if surface.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
+		surface.PlanMode != state.PlanModeSettingOn ||
+		!surface.PlanModeOverrideSet {
+		t.Fatalf("opencode bot projection should retain runtime reasoning/access and plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
-func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndClearsPromptPlan(t *testing.T) {
+func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndKeepsRuntimeReasoningAccessAndPlan(t *testing.T) {
 	now := time.Date(2026, 8, 9, 12, 20, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
 	surface.PromptOverride = state.ModelConfigRecord{
 		Model:           "gpt-5.5",
@@ -134,7 +136,7 @@ func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndClearsPromp
 		GatewayID:           "app-1",
 		ProductMode:         state.ProductModeNormal,
 		Backend:             agentproto.BackendCodex,
-		CodexProviderID:     "default",
+		CodexProfileID:      "default",
 		PromptOverride:      surface.PromptOverride,
 		PlanMode:            surface.PlanMode,
 		PlanModeOverrideSet: surface.PlanModeOverrideSet,
@@ -156,11 +158,15 @@ func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndClearsPromp
 	if record.Backend != agentproto.BackendOpenCode {
 		t.Fatalf("bot backend = %q, want opencode", record.Backend)
 	}
-	if record.PromptOverride != (state.ModelConfigRecord{}) || record.PlanMode != state.PlanModeSettingOff || record.PlanModeOverrideSet {
-		t.Fatalf("bot opencode settings retained unsupported prompt/plan overrides: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
+	if record.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
+		record.PlanMode != state.PlanModeSettingOn ||
+		!record.PlanModeOverrideSet {
+		t.Fatalf("bot opencode settings should retain runtime reasoning/access and plan: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
-		t.Fatalf("surface opencode projection retained unsupported prompt/plan overrides: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+	if surface.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
+		surface.PlanMode != state.PlanModeSettingOn ||
+		!surface.PlanModeOverrideSet {
+		t.Fatalf("surface opencode projection should retain runtime reasoning/access and plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
@@ -196,8 +202,8 @@ func TestPrivatePlanCommandWritesBotCapabilitySettings(t *testing.T) {
 func TestPrivateCapabilityCommandsPreserveConcurrentGatewayFields(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
 	svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModeCommand,
@@ -242,10 +248,10 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 			stale: func(surface *state.SurfaceConsoleRecord) {
 				surface.PromptOverride = state.ModelConfigRecord{}
 			},
-			secondKind: control.ActionCodexProviderCommand,
-			secondText: "/codexprovider team-proxy",
+			secondKind: control.ActionCodexProfileCommand,
+			secondText: "/codexprofile team-proxy",
 			check: func(record state.BotCapabilitySettingsRecord) bool {
-				return record.CodexProviderID == "team-proxy" && record.PromptOverride.Model == "gpt-5.5" && record.PromptOverride.ReasoningEffort == "high"
+				return record.CodexProfileID == "team-proxy" && record.PromptOverride.Model == "gpt-5.5" && record.PromptOverride.ReasoningEffort == "high"
 			},
 		},
 		{
@@ -297,7 +303,7 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 			})
 			for _, userID := range []string{"ou_a", "ou_b"} {
 				surfaceID := "feishu:app-1:user:" + userID
-				svc.MaterializeSurfaceResumeWithCodexProvider(surfaceID, "app-1", userID, userID, state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+				svc.MaterializeSurfaceResumeWithCodexProfile(surfaceID, "app-1", userID, userID, state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 				svc.root.Surfaces[surfaceID].AttachedInstanceID = "inst-1"
 			}
 
@@ -336,13 +342,13 @@ func TestPrivateBackendSwitchPreservesInactiveProviderAndProfileSelections(t *te
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{ID: "devseek", Name: "DevSeek"}})
 
-	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionCodexProviderCommand, "app-1", "ou_user", "/codexprovider team-proxy"))
+	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionCodexProfileCommand, "app-1", "ou_user", "/codexprofile team-proxy"))
 	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionModeCommand, "app-1", "ou_user", "/mode claude"))
 	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionClaudeProfileCommand, "app-1", "ou_user", "/claudeprofile devseek"))
 	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionModeCommand, "app-1", "ou_user", "/mode codex"))
 
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.Backend != agentproto.BackendCodex || record.CodexProviderID != "team-proxy" || record.ClaudeProfileID != "devseek" {
+	if record.Backend != agentproto.BackendCodex || record.CodexProfileID != "team-proxy" || record.ClaudeProfileID != "devseek" {
 		t.Fatalf("bot capability selections = %#v, want active team-proxy and remembered devseek", record)
 	}
 }
@@ -361,8 +367,8 @@ func privateCapabilityAction(kind control.ActionKind, gatewayID, userID, text st
 func TestBotCapabilityMutationRefreshesAllGatewaySurfaceProjections(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "provider-a", "profile-a", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "provider-b", "profile-b", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.ProductModeNormal, agentproto.BackendCodex, "codex-a", "profile-a", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.ProductModeNormal, agentproto.BackendCodex, "provider-b", "profile-b", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.root.Surfaces["feishu:app-1:user:ou_a"].ClaudeProfileID = "profile-a"
 	svc.root.Surfaces["feishu:app-1:user:ou_b"].ClaudeProfileID = "profile-b"
 
@@ -378,21 +384,21 @@ func TestBotCapabilityMutationRefreshesAllGatewaySurfaceProjections(t *testing.T
 	if surface.Backend != agentproto.BackendClaude {
 		t.Fatalf("private surface backend projection = %q, want claude", surface.Backend)
 	}
-	if surface.CodexProviderID != "provider-a" || surface.ClaudeProfileID != "profile-a" {
-		t.Fatalf("private surface provider/profile projection = %q/%q, want provider-a/profile-a", surface.CodexProviderID, surface.ClaudeProfileID)
+	if surface.CodexProfileID != "codex-a" || surface.ClaudeProfileID != "profile-a" {
+		t.Fatalf("private surface profile/profile projection = %q/%q, want codex-a/profile-a", surface.CodexProfileID, surface.ClaudeProfileID)
 	}
 }
 
 func TestMaterializeBotCapabilitySettingsRefreshesExistingSurfaceProjection(t *testing.T) {
 	now := time.Date(2026, 7, 31, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "provider-old", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "codex-old", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
 	svc.MaterializeBotCapabilitySettings([]state.BotCapabilitySettingsRecord{{
 		GatewayID:           "app-1",
 		ProductMode:         state.ProductModeNormal,
 		Backend:             agentproto.BackendClaude,
-		CodexProviderID:     "provider-new",
+		CodexProfileID:      "codex-new",
 		ClaudeProfileID:     "profile-new",
 		PromptOverride:      state.ModelConfigRecord{ReasoningEffort: "high"},
 		PlanMode:            state.PlanModeSettingOn,
@@ -400,8 +406,8 @@ func TestMaterializeBotCapabilitySettingsRefreshesExistingSurfaceProjection(t *t
 	}})
 
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
-	if surface.Backend != agentproto.BackendClaude || surface.CodexProviderID != "provider-new" || surface.ClaudeProfileID != "profile-new" {
-		t.Fatalf("materialized contract projection = %s/%q/%q", surface.Backend, surface.CodexProviderID, surface.ClaudeProfileID)
+	if surface.Backend != agentproto.BackendClaude || surface.CodexProfileID != "codex-new" || surface.ClaudeProfileID != "profile-new" {
+		t.Fatalf("materialized contract projection = %s/%q/%q", surface.Backend, surface.CodexProfileID, surface.ClaudeProfileID)
 	}
 	if surface.PromptOverride.ReasoningEffort != "high" || surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
 		t.Fatalf("materialized prompt/plan projection = %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
@@ -412,14 +418,14 @@ func TestProfileProjectionClearsStaleCodexDerivedCache(t *testing.T) {
 	now := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
 	surface.CodexAdmissionRef = &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "default", Revision: 1}}
 	surface.CodexConnectionContract = &state.CodexConnectionContract{ConnectionContractID: "old-contract"}
 	surface.CodexThreadPolicy = &state.CodexThreadPolicy{}
 
 	svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionCodexProviderCommand,
+		Kind:             control.ActionCodexProfileCommand,
 		SurfaceSessionID: "feishu:app-1:user:ou_user",
 		GatewayID:        "app-1",
 		ChatID:           "ou_user",
@@ -428,10 +434,10 @@ func TestProfileProjectionClearsStaleCodexDerivedCache(t *testing.T) {
 	})
 
 	if surface.CodexAdmissionRef != nil || surface.CodexConnectionContract != nil || surface.CodexThreadPolicy != nil {
-		t.Fatalf("expected stale codex derived cache to be cleared on provider projection, got %#v", surface)
+		t.Fatalf("expected stale codex derived cache to be cleared on profile projection, got %#v", surface)
 	}
-	if surface.CodexProviderID != "team-proxy" {
-		t.Fatalf("expected provider projection, got %q", surface.CodexProviderID)
+	if surface.CodexProfileID != "team-proxy" {
+		t.Fatalf("expected profile projection, got %q", surface.CodexProfileID)
 	}
 }
 
@@ -455,18 +461,18 @@ func TestSurfaceResumeMaterializeKeepsLoadedBotCapabilityProjection(t *testing.T
 		GatewayID:           "app-1",
 		ProductMode:         state.ProductModeNormal,
 		Backend:             agentproto.BackendClaude,
-		CodexProviderID:     "provider-new",
+		CodexProfileID:      "codex-new",
 		ClaudeProfileID:     "profile-new",
 		PromptOverride:      state.ModelConfigRecord{ReasoningEffort: "high"},
 		PlanMode:            state.PlanModeSettingOn,
 		PlanModeOverrideSet: true,
 	}})
 
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "provider-old", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "codex-old", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
-	if surface.Backend != agentproto.BackendClaude || surface.CodexProviderID != "provider-new" || surface.ClaudeProfileID != "profile-new" {
-		t.Fatalf("resume contract projection = %s/%q/%q", surface.Backend, surface.CodexProviderID, surface.ClaudeProfileID)
+	if surface.Backend != agentproto.BackendClaude || surface.CodexProfileID != "codex-new" || surface.ClaudeProfileID != "profile-new" {
+		t.Fatalf("resume contract projection = %s/%q/%q", surface.Backend, surface.CodexProfileID, surface.ClaudeProfileID)
 	}
 	if surface.PromptOverride.ReasoningEffort != "high" || surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
 		t.Fatalf("resume prompt/plan projection = %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
@@ -909,7 +915,7 @@ func TestPrivateAccessCommandWritesBotCapabilitySettings(t *testing.T) {
 		},
 		Threads: map[string]*state.ThreadRecord{},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:user:ou_user",
 		"app-1",
 		"ou_user",
@@ -956,10 +962,10 @@ func TestGroupPromptSummaryUsesBotCapabilitySettings(t *testing.T) {
 		Threads:       map[string]*state.ThreadRecord{},
 	})
 	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
-		GatewayID:       "app-1",
-		ProductMode:     state.ProductModeNormal,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
+		GatewayID:      "app-1",
+		ProductMode:    state.ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
 		PromptOverride: state.ModelConfigRecord{
 			Model:           "gpt-5.5",
 			ReasoningEffort: "high",
@@ -968,7 +974,7 @@ func TestGroupPromptSummaryUsesBotCapabilitySettings(t *testing.T) {
 		PlanMode:            state.PlanModeSettingOn,
 		PlanModeOverrideSet: true,
 	}
-	svc.MaterializeSurfaceResumeWithCodexProvider(
+	svc.MaterializeSurfaceResumeWithCodexProfile(
 		"feishu:app-1:chat:oc_room",
 		"app-1",
 		"oc_room",
@@ -1005,13 +1011,13 @@ func TestGroupSurfaceBotCapabilitySettingsAreGatewayScoped(t *testing.T) {
 		ClaudeProfileID: "devseek",
 	}
 	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-2")] = state.BotCapabilitySettingsRecord{
-		GatewayID:       "app-2",
-		ProductMode:     state.ProductModeNormal,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "team-proxy",
+		GatewayID:      "app-2",
+		ProductMode:    state.ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "team-proxy",
 	}
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-2:chat:oc_room", "app-2", "oc_room", "ou_2", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_1", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-2:chat:oc_room", "app-2", "oc_room", "ou_2", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
 	if got := svc.SurfaceBackend("feishu:app-1:chat:oc_room"); got != agentproto.BackendClaude {
 		t.Fatalf("app-1 SurfaceBackend = %s, want claude", got)
@@ -1019,8 +1025,8 @@ func TestGroupSurfaceBotCapabilitySettingsAreGatewayScoped(t *testing.T) {
 	if got := svc.SurfaceBackend("feishu:app-2:chat:oc_room"); got != agentproto.BackendCodex {
 		t.Fatalf("app-2 SurfaceBackend = %s, want codex", got)
 	}
-	if got := svc.SurfaceCodexProviderID("feishu:app-2:chat:oc_room"); got != "team-proxy" {
-		t.Fatalf("app-2 SurfaceCodexProviderID = %q, want team-proxy", got)
+	if got := svc.SurfaceCodexProfileID("feishu:app-2:chat:oc_room"); got != "team-proxy" {
+		t.Fatalf("app-2 SurfaceCodexProfileID = %q, want team-proxy", got)
 	}
 }
 
@@ -1029,13 +1035,13 @@ func TestPrivateProviderAndProfileCommandsWriteBotCapabilitySettings(t *testing.
 	svc := newServiceForTest(&now)
 	materializeTestCodexProfiles(svc, state.CodexProfileSummary{ID: "team-proxy", Name: "Team Proxy"})
 	svc.MaterializeClaudeProfiles([]state.ClaudeProfileRecord{{ID: "devseek", Name: "DevSeek"}})
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
 
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionCodexProviderCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprovider team-proxy"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionCodexProfileCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/codexprofile team-proxy"})
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.CodexProviderID != "team-proxy" || record.CodexProfileID != "team-proxy" {
-		t.Fatalf("bot codex provider/profile = %q/%q, want team-proxy/team-proxy", record.CodexProviderID, record.CodexProfileID)
+	if record.CodexProfileID != "team-proxy" {
+		t.Fatalf("bot codex profile = %q, want team-proxy", record.CodexProfileID)
 	}
 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/mode claude"})
@@ -1065,7 +1071,7 @@ func TestPrivateModelAndReasoningCommandsWriteBotCapabilitySettings(t *testing.T
 		},
 		Threads: map[string]*state.ThreadRecord{},
 	})
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
 	surface.AttachedInstanceID = "inst-1"
 
@@ -1090,7 +1096,7 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 		text string
 	}{
 		{name: "mode", kind: control.ActionModeCommand, text: "/mode claude"},
-		{name: "codex provider", kind: control.ActionCodexProviderCommand, text: "/codexprovider team-proxy"},
+		{name: "codex profile", kind: control.ActionCodexProfileCommand, text: "/codexprofile team-proxy"},
 		{name: "claude profile", kind: control.ActionClaudeProfileCommand, text: "/claudeprofile devseek"},
 		{name: "model", kind: control.ActionModelCommand, text: "/model gpt-5.5 high"},
 		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning low"},
@@ -1119,13 +1125,13 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 				Threads: map[string]*state.ThreadRecord{},
 			})
 			svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
-				GatewayID:       "app-1",
-				ProductMode:     state.ProductModeNormal,
-				Backend:         agentproto.BackendCodex,
-				CodexProviderID: "default",
-				PlanMode:        state.PlanModeSettingOff,
+				GatewayID:      "app-1",
+				ProductMode:    state.ProductModeNormal,
+				Backend:        agentproto.BackendCodex,
+				CodexProfileID: state.NativeCodexProfileID,
+				PlanMode:       state.PlanModeSettingOff,
 			}
-			svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+			svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, state.NativeCodexProfileID, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 			surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
 			surface.AttachedInstanceID = "inst-1"
 
@@ -1142,11 +1148,11 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 				t.Fatalf("expected private-chat rejection notice, got %#v", events)
 			}
 			record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-			if record.Backend != agentproto.BackendCodex || record.CodexProviderID != "default" || record.ClaudeProfileID != "" ||
+			if record.Backend != agentproto.BackendCodex || record.CodexProfileID != state.NativeCodexProfileID || record.ClaudeProfileID != "" ||
 				record.PromptOverride != (state.ModelConfigRecord{}) || record.PlanMode != state.PlanModeSettingOff || record.PlanModeOverrideSet {
 				t.Fatalf("bot capability settings mutated after %s: %#v", tc.text, record)
 			}
-			if surface.Backend != agentproto.BackendCodex || surface.CodexProviderID != "default" || surface.ClaudeProfileID != "" ||
+			if surface.Backend != agentproto.BackendCodex || surface.CodexProfileID != state.NativeCodexProfileID || surface.ClaudeProfileID != "" ||
 				surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
 				t.Fatalf("group surface capability state mutated after %s: %#v", tc.text, surface)
 			}
@@ -1157,7 +1163,7 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 func TestGroupContextCommandsRemainMutable(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAutoWhipCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "oc_room", ActorUserID: "ou_user", Text: "/autowhip on"})
@@ -1178,12 +1184,12 @@ func TestGroupCapabilityCardCallbackRejectsInline(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
-		GatewayID:       "app-1",
-		ProductMode:     state.ProductModeNormal,
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "default",
+		GatewayID:      "app-1",
+		ProductMode:    state.ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: state.NativeCodexProfileID,
 	}
-	svc.MaterializeSurfaceResumeWithCodexProvider("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, "default", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("feishu:app-1:chat:oc_room", "app-1", "oc_room", "ou_user", state.ProductModeNormal, agentproto.BackendCodex, state.NativeCodexProfileID, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -1206,10 +1212,10 @@ func TestGroupCapabilityCardCallbackRejectsInline(t *testing.T) {
 		t.Fatalf("expected inline rejection to mention private chat, got %#v", events[0].PageView)
 	}
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.Backend != agentproto.BackendCodex || record.CodexProviderID != "default" {
+	if record.Backend != agentproto.BackendCodex || record.CodexProfileID != state.NativeCodexProfileID {
 		t.Fatalf("bot capability settings mutated by card callback: %#v", record)
 	}
-	if surface.Backend != agentproto.BackendCodex || surface.CodexProviderID != "default" {
+	if surface.Backend != agentproto.BackendCodex || surface.CodexProfileID != state.NativeCodexProfileID {
 		t.Fatalf("group surface capability state mutated by card callback: %#v", surface)
 	}
 }

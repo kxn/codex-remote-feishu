@@ -2,6 +2,91 @@ package claudeutil
 
 import "testing"
 
+func TestClaudeExplorationActions(t *testing.T) {
+	cases := []struct {
+		name          string
+		tool          string
+		input         map[string]any
+		wantKind      string
+		wantItems     []string
+		wantSummary   string
+		wantSecondary string
+	}{
+		{
+			name:      "read uses file_path and ignores paging noise",
+			tool:      "Read",
+			input:     map[string]any{"file_path": "internal/claudeutil/claude.go", "offset": 20, "limit": 40},
+			wantKind:  "read",
+			wantItems: []string{"internal/claudeutil/claude.go"},
+		},
+		{
+			name:        "glob prefers path scope",
+			tool:        "Glob",
+			input:       map[string]any{"path": "internal/adapter/claude", "pattern": "**/*_test.go"},
+			wantKind:    "list",
+			wantSummary: "internal/adapter/claude",
+		},
+		{
+			name:        "glob pattern only keeps pattern as pattern",
+			tool:        "Glob",
+			input:       map[string]any{"pattern": "**/*.go"},
+			wantKind:    "list",
+			wantSummary: "**/*.go",
+		},
+		{
+			name:          "grep uses pattern and optional path",
+			tool:          "Grep",
+			input:         map[string]any{"pattern": "ClaudeToolMetadata", "path": "internal/claudeutil", "output_mode": "content"},
+			wantKind:      "search",
+			wantSummary:   "ClaudeToolMetadata",
+			wantSecondary: "internal/claudeutil",
+		},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ClaudeExplorationActions(tt.tool, tt.input)
+			if got == nil || len(got.Actions) != 1 {
+				t.Fatalf("ClaudeExplorationActions(%q) = %#v, want one action", tt.tool, got)
+			}
+			action := got.Actions[0]
+			if string(action.Kind) != tt.wantKind {
+				t.Fatalf("kind = %q, want %q", action.Kind, tt.wantKind)
+			}
+			if len(action.Items) != len(tt.wantItems) {
+				t.Fatalf("items = %#v, want %#v", action.Items, tt.wantItems)
+			}
+			for i := range tt.wantItems {
+				if action.Items[i] != tt.wantItems[i] {
+					t.Fatalf("items = %#v, want %#v", action.Items, tt.wantItems)
+				}
+			}
+			if action.Summary != tt.wantSummary {
+				t.Fatalf("summary = %q, want %q", action.Summary, tt.wantSummary)
+			}
+			if action.Secondary != tt.wantSecondary {
+				t.Fatalf("secondary = %q, want %q", action.Secondary, tt.wantSecondary)
+			}
+		})
+	}
+}
+
+func TestClaudeExplorationActionsIncompleteAndUnknown(t *testing.T) {
+	read := ClaudeExplorationActions("Read", map[string]any{"offset": 10})
+	if read == nil || len(read.Actions) != 1 || string(read.Actions[0].Kind) != "read" || len(read.Actions[0].Items) != 0 {
+		t.Fatalf("missing read path should produce incomplete read action, got %#v", read)
+	}
+	grep := ClaudeExplorationActions("Grep", map[string]any{"path": "internal"})
+	if grep == nil || len(grep.Actions) != 1 || string(grep.Actions[0].Kind) != "search" || grep.Actions[0].Summary != "" || grep.Actions[0].Secondary != "internal" {
+		t.Fatalf("missing grep pattern should produce incomplete search action with secondary, got %#v", grep)
+	}
+	if got := ClaudeExplorationActions("Bash", map[string]any{"command": "rg needle"}); got != nil {
+		t.Fatalf("non exploration tool should not produce actions: %#v", got)
+	}
+	if got := ClaudeExplorationActions("SomethingElse", map[string]any{"pattern": "needle"}); got != nil {
+		t.Fatalf("unknown tool should not produce actions: %#v", got)
+	}
+}
+
 func TestIsInternalInteractionTool(t *testing.T) {
 	cases := map[string]bool{
 		"AskUserQuestion": true,

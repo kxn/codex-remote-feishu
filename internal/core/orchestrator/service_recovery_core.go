@@ -4,9 +4,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func (s *Service) clearSurfaceDispatchWaits(surface *state.SurfaceConsoleRecord) {
@@ -45,7 +45,7 @@ func (s *Service) finishPromptDispatchRestartPendingRoute(surface *state.Surface
 	if surface == nil || pending == nil || pending.Purpose != state.HeadlessLaunchPurposePromptDispatchRestart {
 		return
 	}
-	workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(xutil.FirstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey), pending.ThreadCWD)
+	workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
 	if workspaceKey == "" {
 		workspaceKey = normalizeWorkspaceClaimKey(surface.ClaimedWorkspaceKey)
 	}
@@ -60,10 +60,7 @@ func (s *Service) finishWorkspaceRouteRestartPendingRoute(surface *state.Surface
 	if surface == nil || pending == nil || pending.Purpose != state.HeadlessLaunchPurposeWorkspaceRouteRestart {
 		return
 	}
-	workspaceKey := normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(surface.ClaimedWorkspaceKey, pending.WorkspaceKey))
-	if workspaceKey == "" {
-		workspaceKey = state.ResolveHeadlessResumeWorkspaceKey("", pending.ThreadCWD)
-	}
+	workspaceKey := pendingHeadlessWorkspaceClaimKey(pending)
 	if workspaceKey == "" {
 		_ = s.transitionSurfaceRouteCore(surface, nil, surfaceRouteCoreState{})
 		return
@@ -78,6 +75,10 @@ func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *
 	if surface == nil {
 		return nil
 	}
+	preservedOpenCodeRuntimeOverride := state.ModelConfigRecord{}
+	if agentproto.NormalizeBackend(state.SurfaceDesiredBackendContract(surface).Backend) == agentproto.BackendOpenCode {
+		preservedOpenCodeRuntimeOverride = state.NormalizePromptOverrideForBackend(agentproto.BackendOpenCode, surface.PromptOverride)
+	}
 	events := s.discardDrafts(surface)
 	if strings.TrimSpace(surface.AttachedInstanceID) != "" {
 		events = append(events, s.finalizeDetachedSurfaceWithOverlayCleanup(surface, cleanup)...)
@@ -88,9 +89,9 @@ func (s *Service) prepareSurfaceForExecutionReattachWithOverlayCleanup(surface *
 		})...)
 		clearAutoContinueRuntime(surface)
 		clearSurfaceRequests(surface)
-		s.clearPreparedNewThread(surface)
+		s.clearPreparedNewThreadRouteCore(surface)
 	}
-	surface.PromptOverride = state.ModelConfigRecord{}
+	surface.PromptOverride = preservedOpenCodeRuntimeOverride
 	s.consumeSurfacePendingHeadlessLaunch(surface, "")
 	s.clearSurfaceActiveQueueItem(surface, "")
 	s.resetSurfaceExecutionGates(surface)

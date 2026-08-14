@@ -16,12 +16,13 @@ describe("OpenCodeProfileSection", () => {
         revision: 7,
         etag: '"opencode-profile-definition:op_team:7"',
         name: "Team OpenCode",
+        providerType: "google_gemini",
         baseURL: "https://api.example.com/v1",
         hasAPIKey: true,
-        model: "kimi-k2",
-        smallModel: "kimi-small",
+        model: "gemini-2.5-pro",
+        smallModel: "gemini-2.5-flash",
         reviewModel: "hidden-review",
-        subagentModel: "kimi-agent",
+        subagentModel: "gemini-agent",
         instruction: "be precise",
         reasoningEffort: "high",
         projectConfigMode: "disable",
@@ -42,6 +43,7 @@ describe("OpenCodeProfileSection", () => {
               revision: 8,
               etag: '"opencode-profile-definition:op_team:8"',
               name: body.name,
+              providerType: body.providerType,
               baseURL: body.baseURL,
               hasAPIKey: true,
               model: body.model,
@@ -66,6 +68,7 @@ describe("OpenCodeProfileSection", () => {
               revision: 1,
               etag: '"opencode-profile-definition:op_created:1"',
               name: body.name,
+              providerType: body.providerType,
               baseURL: body.baseURL,
               hasAPIKey: Boolean(body.apiKey),
               model: body.model,
@@ -106,10 +109,12 @@ describe("OpenCodeProfileSection", () => {
     expect(screen.queryByText("permissionMode")).not.toBeInTheDocument();
     expect(screen.queryByText("OPENCODE_CONFIG_CONTENT")).not.toBeInTheDocument();
     expect(screen.queryByText("ACP")).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/协议类型/)).toHaveValue("google_gemini");
     expect(screen.getByPlaceholderText("输入新的 API Key")).toHaveValue("");
 
     await user.clear(screen.getByLabelText(/名称/));
     await user.type(screen.getByLabelText(/名称/), "Team OpenCode 2");
+    await user.selectOptions(screen.getByLabelText(/协议类型/), "openai_compatible_chat");
     await user.clear(screen.getByLabelText(/端点地址/));
     await user.type(screen.getByLabelText(/端点地址/), "https://proxy.second/v1");
     await user.clear(screen.getByLabelText("主模型"));
@@ -134,6 +139,7 @@ describe("OpenCodeProfileSection", () => {
     );
     expect(JSON.parse(String(updateCall?.init?.body))).toEqual({
       name: "Team OpenCode 2",
+      providerType: "openai_compatible_chat",
       baseURL: "https://proxy.second/v1",
       model: "kimi-k2-pro",
       smallModel: "kimi-small-2",
@@ -144,6 +150,7 @@ describe("OpenCodeProfileSection", () => {
 
     await user.click(screen.getByRole("button", { name: /新增配置/ }));
     await user.type(screen.getByLabelText(/名称/), "新 OpenCode");
+    expect(screen.getByLabelText(/协议类型/)).toHaveValue("openai_compatible_chat");
     await user.type(screen.getByLabelText(/端点地址/), "https://proxy.new/v1");
     await user.type(screen.getByLabelText(/API Key/), "new-secret");
     await user.type(screen.getByLabelText("主模型"), "kimi-k2");
@@ -160,6 +167,7 @@ describe("OpenCodeProfileSection", () => {
     expect(createCall).toBeDefined();
     expect(JSON.parse(String(createCall?.init?.body))).toEqual({
       name: "新 OpenCode",
+      providerType: "openai_compatible_chat",
       baseURL: "https://proxy.new/v1",
       apiKey: "new-secret",
       model: "kimi-k2",

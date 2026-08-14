@@ -13,12 +13,12 @@ func TestResolveWorkspaceDefaultsPartitionsByProviderAndProfile(t *testing.T) {
 	svc := newServiceForTest(&now)
 	workspaceKey := "/data/dl/droid"
 	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: state.DefaultCodexProviderID,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: state.DefaultCodexProfileID,
 	})] = state.ModelConfigRecord{Model: "gpt-default"}
 	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
-		Backend:         agentproto.BackendCodex,
-		CodexProviderID: "team-proxy",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "team-proxy",
 	})] = state.ModelConfigRecord{Model: "gpt-team"}
 	svc.root.WorkspaceDefaults[state.WorkspaceDefaultsStorageKey(workspaceKey, state.InstanceBackendContract{
 		Backend:         agentproto.BackendClaude,
@@ -35,13 +35,13 @@ func TestResolveWorkspaceDefaultsPartitionsByProviderAndProfile(t *testing.T) {
 		WorkspaceKey:  workspaceKey,
 		Backend:       agentproto.BackendCodex,
 	}
-	svc.MaterializeSurfaceResumeWithCodexProvider("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", state.PlanModeSettingOff)
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "team-proxy", "", "", state.PlanModeSettingOff)
 	surface := svc.root.Surfaces["surface-1"]
 	defaults, ok := svc.resolveWorkspaceDefaults(inst, surface, workspaceKey)
 	if !ok || defaults.Model != "gpt-team" {
 		t.Fatalf("expected team-proxy codex defaults, ok=%t defaults=%#v", ok, defaults)
 	}
-	surface.CodexProviderID = state.DefaultCodexProviderID
+	surface.CodexProfileID = state.DefaultCodexProfileID
 	defaults, ok = svc.resolveWorkspaceDefaults(inst, surface, workspaceKey)
 	if !ok || defaults.Model != "gpt-default" {
 		t.Fatalf("expected default codex defaults, ok=%t defaults=%#v", ok, defaults)

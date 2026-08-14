@@ -1,8 +1,8 @@
 # Feishu 确认请求增强设计
 
 > Type: `implemented`
-> Updated: `2026-05-26`
-> Summary: 标记为已实现文档并迁移到 `docs/implemented`，同步修正对 canonical 文档的引用。
+> Updated: `2026-08-11`
+> Summary: 明确本文是已落地功能的历史设计记录；当前行为以 Feishu 产品和 relay 协议 canonical 文档为准。
 
 ## 1. 文档定位
 
@@ -22,7 +22,13 @@
 - `plan_confirmation` 也不再复用 generic `captureFeedback`，而是走 `revise` 的 same-request guidance 路径。
 - 若本文与 canonical 文档冲突，以 canonical 文档为准。
 
-## 2. 背景
+阅读边界：
+
+- 下文第 2 节以后保留的是设计期正文，里面的“当前”多数指当时改造前或改造中的状态。
+- 需要判断今天的产品行为时，先看上面的 canonical 文档和本节补充说明。
+- 后续若 canonical 文档已经给出更精确行为，不要再从本文的历史方案段落派生新的当前规则。
+
+## 2. 历史背景
 
 改造前，Feishu 端的 approval request 只有两种决策：
 
@@ -52,7 +58,7 @@
    - 先拒绝当前 request
    - 再补一条 follow-up，告诉 Codex 如何调整
 
-## 3. 问题定义
+## 3. 设计期问题定义
 
 改造前，Feishu 端存在三个产品问题。
 
