@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -269,102 +268,6 @@ func (t *Translator) startPromptForSessionNow(sessionID string, command agentpro
 	return Result{Events: []agentproto.Event{event}, OutboundToChild: [][]byte{frame}}, nil
 }
 
-func (t *Translator) observePromptResponse(pending pendingRPC, payload map[string]any, result Result) Result {
-	turn := pending.Turn
-	if turn == nil {
-		turn = t.activeTurns[xutil.FirstNonEmpty(pending.Command.Target.ThreadID, t.currentSessionID)]
-	}
-	if turn == nil {
-		return result
-	}
-	if usage, ok := promptUsage(payload["usage"]); ok {
-		result.Events = append(result.Events, t.updateUsage(turn.ThreadID, usage))
-	}
-	result.Events = append(result.Events, t.completeOpenTextItems(turn)...)
-	status := statusFromStopReason(xutil.LookupStringFromAny(payload["stopReason"]))
-	completed := agentproto.Event{
-		Kind:                 agentproto.EventTurnCompleted,
-		CommandID:            turn.CommandID,
-		ThreadID:             turn.ThreadID,
-		TurnID:               turn.TurnID,
-		Status:               status,
-		TurnCompletionOrigin: agentproto.TurnCompletionOriginRuntime,
-		Initiator:            turn.Initiator,
-	}
-	if turn.Traffic != "" {
-		completed.TrafficClass = turn.Traffic
-	}
-	result.Events = append(result.Events, completed)
-	turn.Completed = true
-	t.dropUnstartedTurnItems(turn)
-	delete(t.activeTurns, turn.ThreadID)
-	return result
-}
-
-func (t *Translator) dropUnstartedTurnItems(turn *turnState) {
-	if turn == nil {
-		return
-	}
-	for key, item := range t.messageItems {
-		if item == nil || item.Started || item.ThreadID != turn.ThreadID || item.TurnID != turn.TurnID {
-			continue
-		}
-		delete(t.messageItems, key)
-	}
-}
-
-func (t *Translator) completeOpenTextItems(turn *turnState) []agentproto.Event {
-	if turn == nil {
-		return nil
-	}
-	type pendingItem struct {
-		key  string
-		item *itemState
-	}
-	var pending []pendingItem
-	for key, item := range t.messageItems {
-		if item == nil || item.ThreadID != turn.ThreadID || item.TurnID != turn.TurnID || !item.Started || item.Completed {
-			continue
-		}
-		switch item.Kind {
-		case "reasoning_summary", "agent_message":
-			pending = append(pending, pendingItem{key: key, item: item})
-		}
-	}
-	sort.Slice(pending, func(i, j int) bool {
-		left := textItemCompletionPriority(pending[i].item.Kind)
-		right := textItemCompletionPriority(pending[j].item.Kind)
-		if left != right {
-			return left < right
-		}
-		return pending[i].key < pending[j].key
-	})
-	events := make([]agentproto.Event, 0, len(pending))
-	for _, current := range pending {
-		current.item.Completed = true
-		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
-			Kind:     agentproto.EventItemCompleted,
-			ThreadID: turn.ThreadID,
-			TurnID:   turn.TurnID,
-			ItemID:   current.item.ItemID,
-			ItemKind: current.item.Kind,
-			Status:   "completed",
-		}))
-	}
-	return events
-}
-
-func textItemCompletionPriority(kind string) int {
-	switch kind {
-	case "reasoning_summary":
-		return 0
-	case "agent_message":
-		return 1
-	default:
-		return 2
-	}
-}
-
 func (t *Translator) observeSessionListResponse(pending pendingRPC, payload map[string]any, result Result) Result {
 	rawSessions, _ := payload["sessions"].([]any)
 	threads := make([]agentproto.ThreadSnapshotRecord, 0, len(rawSessions))
@@ -502,6 +405,9 @@ func (t *Translator) observeTextChunk(sessionID string, update map[string]any, k
 	if text == "" {
 		return nil
 	}
+	if strings.TrimSpace(text) != "" {
+		turn.HasObservableOutput = true
+	}
 	messageID := xutil.FirstNonEmpty(xutil.LookupStringFromAny(update["messageId"]), "message")
 	key := sessionID + "\x00" + kind + "\x00" + messageID
 	item := t.messageItems[key]
@@ -605,6 +511,7 @@ func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]a
 	item.Metadata = opencodeToolMetadata(update, item.Metadata)
 	if item.Kind == "" {
 		if event, ok := t.todoPlanEvent(turn, sessionID, item, update); ok {
+			turn.HasObservableOutput = true
 			return []agentproto.Event{event}
 		}
 		return nil
@@ -632,6 +539,7 @@ func (t *Translator) observeToolCallUpdate(sessionID string, update map[string]a
 	if !item.Started {
 		item.Started = true
 		item.Kind = eventItemKind
+		turn.HasObservableOutput = true
 		events = append(events, t.annotateTurnEvent(turn, agentproto.Event{
 			Kind:        agentproto.EventItemStarted,
 			ThreadID:    sessionID,

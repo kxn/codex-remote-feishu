@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-14`
-> Summary: 明确 OpenCode Profile/revision 切换保留 workspace 但新建 session，避免恢复绑定旧 provider/model 的会话。
+> Summary: 明确 ACP 未知停止的空轮按 typed failure 收口，有可观察输出的未知停止仍保留已展示结果。
 
 ## 1. 结论
 
@@ -476,6 +476,8 @@ turn close：
 
 - `session/prompt` response 的 `stopReason=end_turn` -> `turn.completed(status=completed)`。
 - `stopReason=cancelled` -> `turn.completed(status=cancelled)`。
+- ACP 标准停止原因为 `end_turn / max_tokens / max_turn_requests / refusal / cancelled`；状态映射保持现有语义。停止原因为空、`unknown` 或枚举外值，且本轮没有非空 assistant/reasoning 文本、可见 tool activity 或已投影 plan 时，adapter 发出 `turn.completed(status=failed)`，附带 `opencode_empty_response` typed problem，提示检查模型端点和协议配置。
+- 未知停止前已经产生上述可观察输出时，adapter 正常完成已展示内容，不把部分成功的流式回复追溯改成失败。判定只依赖本轮 ACP 协议事件，不检查 token 数量，也不识别 Gemini、`/v1beta`、供应商域名或响应正文。
 - JSON-RPC error -> `turn.completed(status=failed)` + normalized `system.error`。
 - permission reject 后如果 OpenCode 仍 `end_turn`，turn 按 completed，tool item failed。
 - child exit / process exit 时用现有 runtime turn tracker 做 reconciliation；不把 wrapper stop/detach 映射成 ACP `session/close`。

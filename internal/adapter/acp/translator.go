@@ -121,15 +121,16 @@ type writeApproval struct {
 }
 
 type turnState struct {
-	CommandID  string
-	Initiator  agentproto.Initiator
-	Purpose    agentproto.PromptPurpose
-	ThreadID   string
-	TurnID     string
-	StartedAt  time.Time
-	Completed  bool
-	Traffic    agentproto.TrafficClass
-	MessageIDs map[string]bool
+	CommandID           string
+	Initiator           agentproto.Initiator
+	Purpose             agentproto.PromptPurpose
+	ThreadID            string
+	TurnID              string
+	StartedAt           time.Time
+	Completed           bool
+	HasObservableOutput bool
+	Traffic             agentproto.TrafficClass
+	MessageIDs          map[string]bool
 }
 
 type itemState struct {
@@ -553,6 +554,15 @@ func statusFromStopReason(reason string) string {
 		return "failed"
 	default:
 		return "completed"
+	}
+}
+
+func unknownStopReason(reason string) bool {
+	switch strings.ToLower(strings.TrimSpace(reason)) {
+	case "end_turn", "max_tokens", "max_turn_requests", "refusal", "cancelled":
+		return false
+	default:
+		return true
 	}
 }
 
