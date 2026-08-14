@@ -377,7 +377,7 @@ func TestOpenCodeProfileSwitchDeferredReconcileStartsNewThread(t *testing.T) {
 	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_a", "app-1", "ou_a", "ou_a", state.HeadlessOpenCodeSurfaceBackendContract("op_old"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 	svc.MaterializeSurfaceResumeContract("feishu:app-1:user:ou_b", "app-1", "ou_b", "ou_b", state.HeadlessOpenCodeSurfaceBackendContract("op_old"), state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
 
-	workspaceKey := t.TempDir()
+	workspaceKey := normalizeWorkspaceClaimKey(t.TempDir())
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:        "inst-b",
 		WorkspaceRoot:     workspaceKey,
