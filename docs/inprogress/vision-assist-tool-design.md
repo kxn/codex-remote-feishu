@@ -88,24 +88,28 @@ vision_assist:
 - 端点配置（协议、base URL、API key、模型名、默认提示词）放“辅助模型”tab：它是独立的辅助服务端点，不绑定 Claude / Codex / OpenCode 任一主后端。
 - “主模型支持直接看图”开关放 profile 级（三个主后端各自的 profile 配置里）：它描述的是该 profile 使用的主模型能力，与辅助端点无关。
 
-## 协议适配层
+## 协议适配层（独立通用单次推理包）
 
-抽象一个极薄的单次推理接口，四种协议各一个 adapter：
+单次推理适配器**单独放一个通用包**（建议 `internal/singleturn`），不绑定视觉语义——它以后在其它地方（翻译、摘要、文本分类等单次推理）也要复用。视觉只是它的一个输入形态（消息里含图片）。
 
 ```go
-type VisionProvider interface {
-    // 单次推理：把图片+提示词发给视觉模型，返回纯文本回答。
-    Complete(ctx context.Context, req VisionRequest) (string, error)
+// 通用单次推理接口：请求 = 模型名 + 消息列表（文本/图片），返回纯文本。
+type Provider interface {
+    Complete(ctx context.Context, req Request) (string, error)
 }
 
-type VisionRequest struct {
-    Model  string
-    Images []VisionImage // 内部已统一为 base64 + MIME
-    Prompt string
+type Request struct {
+    Model    string
+    Messages []Message
 }
 
-type VisionImage struct {
-    ID       string // img1/img2，用于消息里声明映射
+type Message struct {
+    Text   string
+    Images []Image // 内部已统一为 base64 + MIME
+}
+
+type Image struct {
+    ID       string // 可选；多图时用于消息里声明 id 映射
     Data     []byte
     MIMEType string
 }
@@ -120,7 +124,7 @@ type VisionImage struct {
 | Anthropic Messages | `messages[{role, content:[text, image]}]` | `image.source` = base64 + media_type | `content[0].text` |
 | Gemini | `contents[{parts:[text, inline_data]}]` | `inline_data` = base64 + mime_type | `candidates[0].content.parts[0].text` |
 
-公共逻辑（读文件、id 映射声明、超时、错误转文本）只实现一份，adapter 只负责协议形状与响应提取。
+`describe_image` 在 daemon 侧使用该包：把用户 prompt 拼成一条文本消息 + 图片列表，调用 `Provider.Complete`。公共逻辑（读文件、id 映射声明、超时、错误转文本）在调用侧只实现一份，adapter 只负责协议形状与响应提取；包内不引入对话状态、不依赖 MCP/飞书。
 
 ## 内部流程
 
@@ -139,7 +143,7 @@ type VisionImage struct {
 ## 安全边界
 
 - 工具**不接受 URL**、不做下载：模型没有网络能力时不应通过工具获得任意 URL 抓取能力；权限边界保持“模型负责拿图，工具负责看图”。
-- 本地路径读取限制：默认只允许读取**对话输入中引用过的图片路径**（飞书 staging 的 `local_image` 路径）或配置的白名单目录，防止通过工具把机器上任意文件读给外部视觉模型。
+- **路径白名单**：工具只允许读取“本次对话中用户实际发来的图片”——即当前 surface `StagedImages` 里的本地路径（飞书 staging 的 `local_image` 路径）。模型传给工具的 `image` 必须命中这个集合，其它任意路径一律拒绝。原因：如果不限制，模型可以拿这个工具去读机器上任意文件（如 `/etc/passwd`、用户私人照片）并发送给外部视觉模型，等于任意文件外带通道。白名单把工具的可读范围锁死在“用户这次发来的图”，实现时确认图片合并进输入后 `StagedImages` 是否保留，需覆盖“已随输入派发”的图片。
 - API key 通过环境变量注入，不落管理页明文（与现有 profile 密钥处理一致）。
 
 ## 管理页 UI 位置
@@ -157,6 +161,12 @@ type VisionImage struct {
 
 - 开关“该 profile 使用的主模型支持直接看图，不注入图片描述辅助工具”放在“对话后端”各 profile 编辑器里（Claude / Codex / OpenCode profile 项各一个）。
 - “辅助模型”tab 命名比“看图模型”宽，未来可承载其它辅助用途（如翻译、OCR 增强）而不新增位置。
+
+### UI 样式约束
+
+- **禁止创造样式**：视觉能力勾选与“辅助模型”tab 页面只使用现有样式体系——`.form-grid` / `.field` / `.field-hint` / `.card` / 现有按钮类等（`web/src/styles.css`），不新增 CSS 规则、不发明自定义组件样式。
+- 勾选用 `<label className="field">` + `<input type="checkbox">` + `<span className="field-hint">` 的既有布局表达，不复刻其它页面的视觉。
+- 若实现时发现现有样式无法表达 checkbox（当前 styles.css 无 checkbox 专用规则），先停下来与用户确认是否允许在现有样式体系内补充最小规则，默认不自行新增。
 
 ## 非目标
 
@@ -206,7 +216,7 @@ type VisionImage struct {
 
 ### 5. 视觉推理适配器
 
-- 新包（建议 `internal/visionprovider`）：`VisionProvider` 接口 + OpenAI Chat / Responses / Anthropic / Gemini 四个 adapter，只做单次推理（请求组装 + 响应文本提取 + 错误归一）。
+- 新包（`internal/singleturn`）：通用单次推理 `Provider` 接口 + OpenAI Chat / Responses / Anthropic / Gemini 四个 adapter，不绑定视觉语义，未来其它单次推理复用；只做单次推理（请求组装 + 响应文本提取 + 错误归一），不引入对话状态。
 - 配置读取与调用集中在 daemon 层；API key 按设计走环境变量（`apiKeyEnv`），Web 只填 env 名。
 
 ### 6. 工具内部流程与安全
