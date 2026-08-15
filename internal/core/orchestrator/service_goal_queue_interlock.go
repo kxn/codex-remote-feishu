@@ -121,6 +121,9 @@ func (s *Service) ReconcileGoalInterlocks() []eventcontract.Event {
 
 func (s *Service) resendGoalPause(lease *GoalInterlockLease) []eventcontract.Event {
 	commandID := s.nextAgentCommandID()
+	if s.goalInterlockByCommand != nil && lease.PauseCommandID != "" {
+		delete(s.goalInterlockByCommand, lease.PauseCommandID)
+	}
 	lease.PauseCommandID = commandID
 	if s.goalInterlockByCommand == nil {
 		s.goalInterlockByCommand = map[string]string{}
@@ -143,6 +146,9 @@ func (s *Service) resendGoalPause(lease *GoalInterlockLease) []eventcontract.Eve
 
 func (s *Service) resendGoalGet(lease *GoalInterlockLease) []eventcontract.Event {
 	commandID := s.nextAgentCommandID()
+	if s.goalGetByCommand != nil && lease.GetCommandID != "" {
+		delete(s.goalGetByCommand, lease.GetCommandID)
+	}
 	lease.GetCommandID = commandID
 	if s.goalGetByCommand == nil {
 		s.goalGetByCommand = map[string]string{}
@@ -203,6 +209,32 @@ func (s *Service) clearGoalInterlockLease(instanceID, threadID string) {
 	delete(s.goalInterlocks, key)
 }
 
+func (s *Service) revokeGoalInterlockForSurface(surfaceID string) {
+	if s == nil || len(s.goalInterlocks) == 0 {
+		return
+	}
+	surfaceID = strings.TrimSpace(surfaceID)
+	for key, lease := range s.goalInterlocks {
+		if lease != nil && strings.TrimSpace(lease.TriggerSurfaceID) == surfaceID {
+			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+			_ = key
+		}
+	}
+}
+
+func (s *Service) revokeGoalInterlockForInstance(instanceID string) {
+	if s == nil || len(s.goalInterlocks) == 0 {
+		return
+	}
+	instanceID = strings.TrimSpace(instanceID)
+	for key, lease := range s.goalInterlocks {
+		if lease != nil && strings.TrimSpace(lease.InstanceID) == instanceID {
+			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+			_ = key
+		}
+	}
+}
+
 // beginGoalInterlock 创建 pause_pending lease 并发 thread/goal/set(paused)，
 // 用于让普通用户队列优先于 Goal continuation。
 func (s *Service) beginGoalInterlock(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, item *state.QueueItemRecord) []eventcontract.Event {
@@ -261,6 +293,16 @@ func (s *Service) maybeBeginGoalInterlockForQueueItem(surface *state.SurfaceCons
 	if threadID == "" || s.goalInterlockLease(inst.InstanceID, threadID) != nil {
 		return nil
 	}
+	key := goalInterlockKey(inst.InstanceID, threadID)
+	if until, ok := s.goalPauseBackoff[key]; ok && s.now().Before(until) {
+		if noticeAt := s.goalPauseNoticeAt[key]; noticeAt.IsZero() || s.now().After(noticeAt) {
+			s.goalPauseNoticeAt[key] = s.now().Add(time.Minute)
+			return goalInterlockDiagnosticNotice(surface.SurfaceSessionID, "goal_pause_backoff", "Goal 暂停失败", "Codex 暂停 Goal 失败，队列暂缓派发。请稍后重试，或先手动暂停/清除 Goal。")
+		}
+		return nil
+	}
+	delete(s.goalPauseBackoff, key)
+	delete(s.goalPauseNoticeAt, key)
 	return s.beginGoalInterlock(surface, inst, item)
 }
 
@@ -284,6 +326,21 @@ func itoa(value int) string {
 }
 
 func (s *Service) applyGoalCommandResult(instanceID string, event agentproto.Event) []eventcontract.Event {
+	if inst := s.root.Instances[instanceID]; inst != nil {
+		switch {
+		case event.ThreadGoal != nil:
+			if update := agentproto.NormalizeThreadGoalUpdate(event.ThreadGoal); update != nil {
+				thread := s.ensureThread(inst, update.ThreadID)
+				thread.ThreadGoal = agentproto.CloneThreadGoalUpdate(update)
+				s.touchThread(thread)
+			}
+		case event.GoalCleared:
+			if thread := inst.Threads[event.ThreadID]; thread != nil {
+				thread.ThreadGoal = nil
+				s.touchThread(thread)
+			}
+		}
+	}
 	if event.CommandID == "" {
 		return nil
 	}
@@ -317,6 +374,13 @@ func (s *Service) applyGoalInterlockCommandResult(key string, event agentproto.E
 	lease.UpdatedAt = s.now()
 	if event.ErrorMessage != "" {
 		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_pause_failed", "Goal 暂停失败", "Codex 未能暂停当前 Goal，队列暂不派发。请稍后重试或检查 Codex 状态。")
+		if s.goalPauseBackoff == nil {
+			s.goalPauseBackoff = map[string]time.Time{}
+		}
+		if s.goalPauseNoticeAt == nil {
+			s.goalPauseNoticeAt = map[string]time.Time{}
+		}
+		s.goalPauseBackoff[key] = s.now().Add(time.Minute)
 		s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
 		return events
 	}
@@ -345,6 +409,9 @@ func (s *Service) applyGoalInterlockCommandResult(key string, event agentproto.E
 
 func (s *Service) probeGoalThreadIdle(lease *GoalInterlockLease) []eventcontract.Event {
 	commandID := s.nextAgentCommandID()
+	if s.goalProbeByCommand != nil && lease.ProbeCommandID != "" {
+		delete(s.goalProbeByCommand, lease.ProbeCommandID)
+	}
 	lease.ProbeCommandID = commandID
 	lease.Phase = GoalInterlockQuiescing
 	if s.goalProbeByCommand == nil {

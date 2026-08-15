@@ -45,6 +45,7 @@ type Translator struct {
 	pendingModelList          map[string]pendingModelList
 	pendingGoalRequests       map[string]pendingGoalRequest
 	pendingThreadReads        map[string]pendingThreadRead
+	lastOwnedGoalMutations    map[string]ownedGoalMutation
 	reasoningSummaryIndexes   map[string]map[int]bool
 }
 
@@ -111,6 +112,11 @@ type pendingThreadRead struct {
 	ThreadID  string
 }
 
+type ownedGoalMutation struct {
+	UpdatedAt int64
+	Cleared   bool
+}
+
 type codexObservedThread struct {
 	ModelProviderID string
 	Model           string
@@ -161,6 +167,7 @@ func NewTranslator(instanceID string) *Translator {
 		pendingModelList:           map[string]pendingModelList{},
 		pendingGoalRequests:        map[string]pendingGoalRequest{},
 		pendingThreadReads:         map[string]pendingThreadRead{},
+		lastOwnedGoalMutations:     map[string]ownedGoalMutation{},
 		reasoningSummaryIndexes:    map[string]map[int]bool{},
 	}
 }

@@ -272,3 +272,78 @@ func TestObserveThreadReadResponseError(t *testing.T) {
 		t.Fatalf("expected thread read error event, got %#v", result.Events)
 	}
 }
+
+func TestObserveServerGoalNotificationAfterResponseIsNotExternal(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	payload, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-goal-set",
+		Kind:      agentproto.CommandThreadGoalSet,
+		Target:    agentproto.Target{ThreadID: "thread-1"},
+		Goal: agentproto.GoalCommand{
+			Status:  "paused",
+			Purpose: "queue_interlock",
+		},
+	})
+	if err != nil {
+		t.Fatalf("translate: %v", err)
+	}
+	requestID := decodeGoalRequest(t, payload[0])["id"].(string)
+	if _, err := tr.ObserveServer([]byte(`{"id":"` + requestID + `","result":{"goal":{"threadId":"thread-1","status":"paused","createdAt":1710000000123,"updatedAt":1710000000999}}}`)); err != nil {
+		t.Fatalf("observe response: %v", err)
+	}
+
+	result, err := tr.ObserveServer([]byte(`{"method":"thread/goal/updated","params":{"threadId":"thread-1","goal":{"objective":"mine","status":"paused","createdAt":1710000000123,"updatedAt":1710000000999}}}`))
+	if err != nil {
+		t.Fatalf("observe late notification: %v", err)
+	}
+	if len(result.Events) != 1 || result.Events[0].ThreadGoal == nil || result.Events[0].ThreadGoal.ExternalMutation {
+		t.Fatalf("late notification of owned mutation must not be external, got %#v", result.Events)
+	}
+}
+
+func TestObserveServerGoalClearedNotificationAfterResponseIsNotExternal(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	payload, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-goal-clear",
+		Kind:      agentproto.CommandThreadGoalClear,
+		Target:    agentproto.Target{ThreadID: "thread-1"},
+	})
+	if err != nil {
+		t.Fatalf("translate: %v", err)
+	}
+	requestID := decodeGoalRequest(t, payload[0])["id"].(string)
+	if _, err := tr.ObserveServer([]byte(`{"id":"` + requestID + `","result":{"cleared":true}}`)); err != nil {
+		t.Fatalf("observe response: %v", err)
+	}
+
+	result, err := tr.ObserveServer([]byte(`{"method":"thread/goal/cleared","params":{"threadId":"thread-1"}}`))
+	if err != nil {
+		t.Fatalf("observe late cleared notification: %v", err)
+	}
+	if len(result.Events) != 1 || result.Events[0].ThreadGoal == nil || !result.Events[0].ThreadGoal.Cleared ||
+		result.Events[0].ThreadGoal.ExternalMutation {
+		t.Fatalf("late cleared notification of owned mutation must not be external, got %#v", result.Events)
+	}
+}
+
+func TestObserveServerGoalGetPreservesZeroTokenBudget(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	payload, err := tr.TranslateCommand(agentproto.Command{
+		CommandID: "cmd-goal-get",
+		Kind:      agentproto.CommandThreadGoalGet,
+		Target:    agentproto.Target{ThreadID: "thread-1"},
+	})
+	if err != nil {
+		t.Fatalf("translate: %v", err)
+	}
+	requestID := decodeGoalRequest(t, payload[0])["id"].(string)
+
+	result, err := tr.ObserveServer([]byte(`{"id":"` + requestID + `","result":{"goal":{"threadId":"thread-1","status":"active","tokenBudget":0,"tokensUsed":0,"timeUsedSeconds":0,"createdAt":1710000000123,"updatedAt":1710000000999}}}`))
+	if err != nil {
+		t.Fatalf("observe get response: %v", err)
+	}
+	if len(result.Events) != 1 || result.Events[0].ThreadGoal == nil ||
+		result.Events[0].ThreadGoal.TokenBudget == nil || *result.Events[0].ThreadGoal.TokenBudget != 0 {
+		t.Fatalf("explicit zero token budget must be preserved, got %#v", result.Events)
+	}
+}

@@ -136,7 +136,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
 	}
-	goalEvents := s.beginGoalInterlock(surface, inst, item)
+	goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item)
 	return append(routeAdjustmentEvents, append(goalEvents, s.enqueuePreparedQueueItem(surface, item, front)...)...)
 }
 

@@ -56,3 +56,38 @@ func TestStoreReplaceAllClearsMissingLeases(t *testing.T) {
 		t.Fatalf("expected cleared leases, got %#v", leases)
 	}
 }
+
+func TestStorePersistsLeaseContentChanges(t *testing.T) {
+	path := filepath.Join(t.TempDir(), StateFileName)
+	store := NewStore(path)
+	lease := orchestrator.GoalInterlockLease{
+		InstanceID:       "inst-1",
+		ThreadID:         "thread-1",
+		Phase:            orchestrator.GoalInterlockPausePending,
+		Objective:        "ship it",
+		TriggerSurfaceID: "surface-1",
+	}
+	if err := store.ReplaceAll([]orchestrator.GoalInterlockLease{lease}); err != nil {
+		t.Fatalf("ReplaceAll initial: %v", err)
+	}
+
+	lease.Phase = orchestrator.GoalInterlockDraining
+	lease.ExternalMutationSeen = true
+	lease.PausedUpdatedAt = 1710000000999
+	if err := store.ReplaceAll([]orchestrator.GoalInterlockLease{lease}); err != nil {
+		t.Fatalf("ReplaceAll update: %v", err)
+	}
+
+	loaded, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	leases := loaded.Leases()
+	if len(leases) != 1 {
+		t.Fatalf("expected one lease, got %#v", leases)
+	}
+	got := leases[0]
+	if got.Phase != orchestrator.GoalInterlockDraining || !got.ExternalMutationSeen || got.PausedUpdatedAt != 1710000000999 {
+		t.Fatalf("lease content change not persisted: %#v", got)
+	}
+}

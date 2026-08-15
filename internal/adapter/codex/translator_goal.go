@@ -73,6 +73,9 @@ func (t *Translator) observeThreadGoalCommandResponse(pending pendingGoalRequest
 	switch pending.Operation {
 	case string(agentproto.CommandThreadGoalClear):
 		event.GoalCleared = xutil.LookupBoolFromAny(result["cleared"]) || len(result) == 0
+		if event.GoalCleared {
+			t.lastOwnedGoalMutations[pending.ThreadID] = ownedGoalMutation{Cleared: true}
+		}
 	case string(agentproto.CommandThreadGoalGet):
 		if goal := lookupMap(result, "goal"); len(goal) > 0 {
 			event.ThreadGoal = parseThreadGoal(pending.ThreadID, goal)
@@ -88,17 +91,40 @@ func (t *Translator) observeThreadGoalCommandResponse(pending pendingGoalRequest
 			goal = result
 		}
 		event.ThreadGoal = parseThreadGoal(pending.ThreadID, goal)
+		if event.ThreadGoal != nil {
+			t.lastOwnedGoalMutations[pending.ThreadID] = ownedGoalMutation{UpdatedAt: event.ThreadGoal.UpdatedAt}
+		}
 	}
 	return Result{Events: []agentproto.Event{event}}
+}
+
+func (t *Translator) ownsLastGoalMutation(threadID string, update *agentproto.ThreadGoalUpdate) bool {
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return false
+	}
+	owned, ok := t.lastOwnedGoalMutations[threadID]
+	if !ok {
+		return false
+	}
+	if update != nil && !update.Cleared && update.UpdatedAt != 0 && owned.UpdatedAt == update.UpdatedAt {
+		delete(t.lastOwnedGoalMutations, threadID)
+		return true
+	}
+	if update != nil && update.Cleared && owned.Cleared {
+		delete(t.lastOwnedGoalMutations, threadID)
+		return true
+	}
+	return false
 }
 
 func parseThreadGoal(threadID string, goal map[string]any) *agentproto.ThreadGoalUpdate {
 	if threadID == "" || len(goal) == 0 {
 		return nil
 	}
-	budget := lookupGoalInt64(goal["tokenBudget"])
 	var budgetPtr *int64
-	if budget != 0 {
+	if raw, ok := goal["tokenBudget"]; ok && raw != nil {
+		budget := lookupGoalInt64(raw)
 		budgetPtr = &budget
 	}
 	return agentproto.NormalizeThreadGoalUpdate(&agentproto.ThreadGoalUpdate{

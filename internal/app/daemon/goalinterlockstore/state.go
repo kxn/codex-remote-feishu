@@ -1,6 +1,7 @@
 package goalinterlockstore
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/statestore"
@@ -25,9 +26,7 @@ func NewStore(path string) *Store {
 	return &Store{Store: statestore.New[Entry](path, statestore.Options[Entry]{
 		Version: StateVersion,
 		Name:    "goal queue interlock state",
-		Equal: func(left, right Entry) bool {
-			return left.Key == right.Key
-		},
+		Equal:   sameEntry,
 		LoadKey: func(entry Entry) string { return entry.Key },
 	})}
 }
@@ -36,15 +35,17 @@ func LoadStore(path string) (*Store, error) {
 	store, err := statestore.Load[Entry](path, statestore.Options[Entry]{
 		Version: StateVersion,
 		Name:    "goal queue interlock state",
-		Equal: func(left, right Entry) bool {
-			return left.Key == right.Key
-		},
+		Equal:   sameEntry,
 		LoadKey: func(entry Entry) string { return entry.Key },
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &Store{Store: store}, nil
+}
+
+func sameEntry(left, right Entry) bool {
+	return left.Key == right.Key && reflect.DeepEqual(left.Lease, right.Lease)
 }
 
 type Store struct {

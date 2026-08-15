@@ -800,6 +800,7 @@ func (s *Service) RemoveInstance(instanceID string) {
 	if strings.TrimSpace(instanceID) == "" {
 		return
 	}
+	s.revokeGoalInterlockForInstance(instanceID)
 	if inst := s.root.Instances[instanceID]; inst != nil {
 		inst.Online = false
 		inst.ActiveTurnID = ""

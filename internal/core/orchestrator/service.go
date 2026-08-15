@@ -70,6 +70,8 @@ type Service struct {
 	goalInterlockByCommand    map[string]string
 	goalProbeByCommand        map[string]string
 	goalGetByCommand          map[string]string
+	goalPauseBackoff          map[string]time.Time
+	goalPauseNoticeAt         map[string]time.Time
 }
 
 type itemBuffer struct {

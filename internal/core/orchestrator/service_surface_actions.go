@@ -846,6 +846,9 @@ func (s *Service) cancelPendingHeadlessLaunch(surface *state.SurfaceConsoleRecor
 }
 
 func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
+	if surface != nil {
+		s.revokeGoalInterlockForSurface(surface.SurfaceSessionID)
+	}
 	if s.pendingSurfaceHeadlessLaunch(surface, "") != nil {
 		return s.cancelPendingHeadlessLaunch(surface, &control.Notice{
 			Code:  "detached",

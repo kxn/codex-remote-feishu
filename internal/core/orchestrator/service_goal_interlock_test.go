@@ -260,3 +260,168 @@ func TestGoalInterlockReconcileResendsPause(t *testing.T) {
 		t.Fatalf("expected refreshed pause command id, got %#v", lease)
 	}
 }
+
+func TestGoalInterlockCommandResultWritesBackThreadGoal(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-1",
+		Text:             "普通消息",
+	})
+	pause := findAgentCommand(events, agentproto.CommandThreadGoalSet)
+	if pause == nil {
+		t.Fatal("expected pause command")
+	}
+	svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadGoalCommandResult,
+		CommandID: pause.CommandID,
+		ThreadID:  "thread-1",
+		ThreadGoal: &agentproto.ThreadGoalUpdate{
+			ThreadID:  "thread-1",
+			Status:    "paused",
+			CreatedAt: 1710000000123,
+			UpdatedAt: 1710000000999,
+		},
+	})
+	thread := svc.root.Instances[instanceID].Threads["thread-1"]
+	if thread.ThreadGoal == nil || thread.ThreadGoal.Status != "paused" {
+		t.Fatalf("expected command result to write back thread goal, got %#v", thread.ThreadGoal)
+	}
+}
+
+func TestGoalInterlockRevokedOnDetach(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-1",
+		Text:             "普通消息",
+	})
+	if svc.goalInterlockLease(instanceID, "thread-1") == nil {
+		t.Fatal("expected lease before detach")
+	}
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionDetach, SurfaceSessionID: surfaceID, ChatID: "chat-1", ActorUserID: "user-1"})
+	if svc.goalInterlockLease(instanceID, "thread-1") != nil {
+		t.Fatal("expected lease revoked on detach")
+	}
+}
+
+func TestGoalInterlockRevokedOnInstanceRemove(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-1",
+		Text:             "普通消息",
+	})
+	if svc.goalInterlockLease(instanceID, "thread-1") == nil {
+		t.Fatal("expected lease before remove")
+	}
+	svc.RemoveInstance(instanceID)
+	if svc.goalInterlockLease(instanceID, "thread-1") != nil {
+		t.Fatal("expected lease revoked on instance remove")
+	}
+}
+
+func TestGoalInterlockPauseFailureBackoffBlocksRetry(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := threadLifecycleInstance()
+	inst.Threads = goalActiveThread()
+	svc.UpsertInstance(inst)
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+	first := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-1",
+		Text:             "普通消息",
+	})
+	pause := findAgentCommand(first, agentproto.CommandThreadGoalSet)
+	if pause == nil {
+		t.Fatal("expected initial pause command")
+	}
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventThreadGoalCommandResult,
+		CommandID:    pause.CommandID,
+		ThreadID:     "thread-1",
+		ErrorMessage: "goal set failed",
+	})
+
+	second := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-2",
+		Text:             "再来一条",
+	})
+	if findAgentCommand(second, agentproto.CommandThreadGoalSet) != nil {
+		t.Fatalf("pause failure must not immediately retry on next message, got %#v", second)
+	}
+	foundBackoffNotice := false
+	for _, event := range second {
+		if event.Notice != nil && event.Notice.Code == "goal_pause_backoff" {
+			foundBackoffNotice = true
+		}
+	}
+	if !foundBackoffNotice {
+		t.Fatalf("expected pause backoff notice, got %#v", second)
+	}
+
+	key := goalInterlockKey("inst-1", "thread-1")
+	svc.goalPauseBackoff[key] = now.Add(-time.Second)
+	third := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-3",
+		Text:             "过期重试",
+	})
+	if findAgentCommand(third, agentproto.CommandThreadGoalSet) == nil {
+		t.Fatalf("expected pause retry after backoff expiry, got %#v", third)
+	}
+}
+
+func TestGoalInterlockReconcileClearsStaleCommandIDs(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := threadLifecycleInstance()
+	inst.Threads = goalActiveThread()
+	svc.UpsertInstance(inst)
+	svc.RestoreGoalInterlockLeases([]GoalInterlockLease{{
+		InstanceID:           "inst-1",
+		ThreadID:             "thread-1",
+		Phase:                GoalInterlockPausePending,
+		TriggerSurfaceID:     "surface-1",
+		PauseCommandID:       "stale-pause",
+		ExternalMutationSeen: false,
+		UpdatedAt:            now,
+	}})
+	first := svc.ReconcileGoalInterlocks()
+	firstPause := findAgentCommand(first, agentproto.CommandThreadGoalSet)
+	if firstPause == nil {
+		t.Fatal("expected first pause resend")
+	}
+	second := svc.ReconcileGoalInterlocks()
+	secondPause := findAgentCommand(second, agentproto.CommandThreadGoalSet)
+	if secondPause == nil || secondPause.CommandID == firstPause.CommandID {
+		t.Fatalf("expected second pause resend with new id, got %#v", second)
+	}
+	if _, exists := svc.goalInterlockByCommand[firstPause.CommandID]; exists {
+		t.Fatal("stale pause command id must be removed from correlation map")
+	}
+	if _, exists := svc.goalInterlockByCommand["stale-pause"]; exists {
+		t.Fatal("restored stale pause command id must be removed on resend")
+	}
+}

@@ -35,7 +35,7 @@ func (t *Translator) observeThreadGoalUpdated(message map[string]any) Result {
 		return Result{}
 	}
 	update.TurnID = xutil.LookupStringFromAny(params["turnId"])
-	update.ExternalMutation = !t.pendingGoalMutationForThread(threadID)
+	update.ExternalMutation = !t.pendingGoalMutationForThread(threadID) && !t.ownsLastGoalMutation(threadID, update)
 	return Result{Events: []agentproto.Event{{
 		Kind:       agentproto.EventThreadGoalUpdated,
 		ThreadID:   update.ThreadID,
@@ -49,7 +49,7 @@ func (t *Translator) observeThreadGoalCleared(message map[string]any) Result {
 	update := agentproto.NormalizeThreadGoalUpdate(&agentproto.ThreadGoalUpdate{
 		ThreadID:         threadID,
 		Cleared:          true,
-		ExternalMutation: !t.pendingGoalMutationForThread(threadID),
+		ExternalMutation: !t.pendingGoalMutationForThread(threadID) && !t.ownsLastGoalMutation(threadID, &agentproto.ThreadGoalUpdate{ThreadID: threadID, Cleared: true}),
 	})
 	if update == nil {
 		return Result{}
