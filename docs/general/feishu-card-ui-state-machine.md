@@ -18,6 +18,8 @@
 
 2026-08-15 #896 补充：`/goal` 是新增 config-flow slash command，完全复用现有命令卡体系：bare `/goal` 经现有命令解析与 freshness 校验，通过 `pageEvent` inline replace 回显 Goal 状态页；`/goal clear` 的确认/取消通过 `CommandText` 命令重放（`/goal clear --confirm`、`/goal`），不引入新 callback payload、不新增 owner 分类、不改 `daemon_lifecycle_id` stamping。状态页按钮均声明在 `FeishuCommandBinding` 上（`CommandID=goal`），走 `CommandCatalogButtonCallbackAction`，与 `/codexprofile` 等配置命令同一条路由，Goal 控制面不产生第二套卡片 carrier 或 freshness 规则。
 
+2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时服务端暂存 Goal fingerprint，命令重放执行前比对、漂移 fail closed；goal 命令发送失败会清理 pending 并回错误卡；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；错误页复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+
 它关注的是：
 
 - 飞书卡片导航、展开、返回、表单提交的 callback 协议面

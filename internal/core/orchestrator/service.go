@@ -73,6 +73,7 @@ type Service struct {
 	goalPauseBackoff          map[string]time.Time
 	goalPauseNoticeAt         map[string]time.Time
 	goalUserCommands          map[string]goalUserCommand
+	pendingGoalFingerprints   map[string]pendingGoalFingerprint
 }
 
 type itemBuffer struct {

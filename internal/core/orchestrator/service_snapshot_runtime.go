@@ -176,6 +176,9 @@ func (s *Service) BindPendingReviewStartCommand(surfaceID, commandID string) {
 }
 
 func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err error) []eventcontract.Event {
+	if events := s.failGoalUserCommand(surfaceID, commandID, err); len(events) != 0 {
+		return events
+	}
 	surface := s.root.Surfaces[surfaceID]
 	if events := s.restorePendingCompactDispatch(surfaceID, commandID, "dispatch_failed", err); len(events) != 0 {
 		return events

@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -250,12 +251,298 @@ func TestGoalCommandRejectsNonCodexOrMissingThread(t *testing.T) {
 	}
 	foundError := false
 	for _, event := range events {
-		if event.PageView != nil && event.PageView.Phase == "failed" && containsSectionLine(event.PageView, "无法操作 Goal") {
+		if event.PageView != nil && !event.PageView.Sealed && containsSectionLine(event.PageView, "无法操作 Goal") {
 			foundError = true
 		}
 	}
 	if !foundError {
 		t.Fatalf("expected error page for missing thread, got %#v", events)
+	}
+}
+
+func TestGoalCommandClearFingerprintDriftFailsClosed(t *testing.T) {
+	svc, surfaceID, _ := goalInterlockTestSetup(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-stale-1",
+		Text:             "/goal clear",
+	})
+	inst := svc.root.Instances["inst-1"]
+	inst.Threads["thread-1"].ThreadGoal = &agentproto.ThreadGoalUpdate{
+		ThreadID:  "thread-1",
+		Objective: "另一个客户端改了目标",
+		Status:    "active",
+	}
+
+	confirmed := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-stale-2",
+		Text:             "/goal clear --confirm",
+	})
+	if findAgentCommand(confirmed, agentproto.CommandThreadGoalClear) != nil {
+		t.Fatalf("stale clear confirmation must fail closed, got %#v", confirmed)
+	}
+	page := findPageEvent(confirmed)
+	if page == nil || page.Title != "Goal 已变化" {
+		t.Fatalf("expected stale goal page, got %#v", confirmed)
+	}
+	if !strings.Contains(page.StatusText, "已取消操作") {
+		t.Fatalf("expected stale guidance in page, got %#v", page)
+	}
+	if len(svc.pendingGoalFingerprints) != 0 {
+		t.Fatalf("expected stale fingerprint to be consumed, got %#v", svc.pendingGoalFingerprints)
+	}
+}
+
+func TestGoalCommandEditFingerprintDriftFailsClosed(t *testing.T) {
+	svc, surfaceID, _ := goalInterlockTestSetup(t)
+	svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-edit-stale-1",
+		Text:             "/goal edit",
+	})
+	inst := svc.root.Instances["inst-1"]
+	inst.Threads["thread-1"].ThreadGoal = &agentproto.ThreadGoalUpdate{
+		ThreadID:  "thread-1",
+		Objective: "被外部改过",
+		Status:    "paused",
+	}
+
+	submitted := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-edit-stale-2",
+		Text:             "/goal edit 新目标",
+	})
+	if findAgentCommand(submitted, agentproto.CommandThreadGoalSet) != nil {
+		t.Fatalf("stale edit submit must fail closed, got %#v", submitted)
+	}
+	page := findPageEvent(submitted)
+	if page == nil || page.Title != "Goal 已变化" {
+		t.Fatalf("expected stale goal page, got %#v", submitted)
+	}
+}
+
+func TestGoalCommandDispatchFailureCleansUpAndShowsError(t *testing.T) {
+	svc, surfaceID, _ := goalInterlockTestSetup(t)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-fail-1",
+		Text:             "/goal pause",
+	})
+	pause := findAgentCommand(events, agentproto.CommandThreadGoalSet)
+	if pause == nil || pause.Goal.Status != "paused" {
+		t.Fatalf("expected goal pause command, got %#v", events)
+	}
+	if _, ok := svc.goalUserCommands[pause.CommandID]; !ok {
+		t.Fatalf("expected pending user command, got %#v", svc.goalUserCommands)
+	}
+
+	failed := svc.HandleCommandDispatchFailure(surfaceID, pause.CommandID, fmt.Errorf("relay send failed"))
+	page := findPageEvent(failed)
+	if page == nil || page.Title != "Goal 操作失败" {
+		t.Fatalf("expected dispatch failure error page, got %#v", failed)
+	}
+	if !strings.Contains(page.StatusText, "relay send failed") {
+		t.Fatalf("expected failure reason on page, got %#v", page)
+	}
+	if len(svc.goalUserCommands) != 0 {
+		t.Fatalf("expected failed user command to be cleaned up, got %#v", svc.goalUserCommands)
+	}
+}
+
+func TestGoalCommandErrorPageDoesNotClaimNoGoal(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-err-1",
+		Text:             "/goal pause",
+	})
+	pause := findAgentCommand(events, agentproto.CommandThreadGoalSet)
+	if pause == nil {
+		t.Fatalf("expected pause command, got %#v", events)
+	}
+	result := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:         agentproto.EventThreadGoalCommandResult,
+		CommandID:    pause.CommandID,
+		ThreadID:     "thread-1",
+		ErrorMessage: "Codex 拒绝了暂停",
+	})
+	page := findPageEvent(result)
+	if page == nil || page.StatusKind != "error" {
+		t.Fatalf("expected error page, got %#v", result)
+	}
+	if containsSectionLine(page, "当前会话没有 Goal") {
+		t.Fatalf("error page must not claim no goal, got %#v", page)
+	}
+	if !strings.Contains(page.StatusText, "Codex 拒绝了暂停") {
+		t.Fatalf("expected failure reason on page, got %#v", page)
+	}
+	hasRefresh := false
+	for _, button := range page.RelatedButtons {
+		if button.Label == "刷新" && button.CommandText == "/goal" {
+			hasRefresh = true
+		}
+	}
+	if !hasRefresh {
+		t.Fatalf("expected refresh button on error page, got %#v", page.RelatedButtons)
+	}
+}
+
+func TestGoalCommandClearSuccessUsesInfoStyle(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	confirm := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-cleared-1",
+		Text:             "/goal clear",
+	})
+	if findAgentCommand(confirm, agentproto.CommandThreadGoalClear) != nil {
+		t.Fatalf("clear must require confirm, got %#v", confirm)
+	}
+	confirmed := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-cleared-2",
+		Text:             "/goal clear --confirm",
+	})
+	clear := findAgentCommand(confirmed, agentproto.CommandThreadGoalClear)
+	if clear == nil {
+		t.Fatalf("expected clear command, got %#v", confirmed)
+	}
+	result := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:        agentproto.EventThreadGoalCommandResult,
+		CommandID:   clear.CommandID,
+		ThreadID:    "thread-1",
+		GoalCleared: true,
+	})
+	page := findPageEvent(result)
+	if page == nil || page.Title != "Goal 已清除" {
+		t.Fatalf("expected cleared page, got %#v", result)
+	}
+	if page.StatusKind == "error" {
+		t.Fatalf("clear success must not use error style, got %#v", page)
+	}
+	if !containsSectionLine(page, "当前会话没有 Goal") {
+		t.Fatalf("expected cleared page to show creation entry, got %#v", page)
+	}
+}
+
+func TestGoalCommandSetResultWithoutSnapshotShowsSyncPending(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-sync-1",
+		Text:             "/goal pause",
+	})
+	pause := findAgentCommand(events, agentproto.CommandThreadGoalSet)
+	if pause == nil {
+		t.Fatalf("expected pause command, got %#v", events)
+	}
+	result := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadGoalCommandResult,
+		CommandID: pause.CommandID,
+		ThreadID:  "thread-1",
+	})
+	page := findPageEvent(result)
+	if page == nil {
+		t.Fatalf("expected result page, got %#v", result)
+	}
+	if containsSectionLine(page, "当前会话没有 Goal") {
+		t.Fatalf("set success without snapshot must not claim no goal, got %#v", page)
+	}
+	if !strings.Contains(page.StatusText, "正在同步") {
+		t.Fatalf("expected sync pending page, got %#v", page)
+	}
+}
+
+func TestGoalCommandMalformedBudgetFailsClosed(t *testing.T) {
+	svc, surfaceID, _ := goalInterlockTestSetup(t)
+	for _, text := range []string{"/goal new 完成登录 --budget abc", "/goal new 完成登录 --budget=abc"} {
+		events := svc.ApplySurfaceAction(control.Action{
+			Kind:             control.ActionGoalCommand,
+			SurfaceSessionID: surfaceID,
+			ChatID:           "chat-1",
+			ActorUserID:      "user-1",
+			MessageID:        "om-goal-budget-" + text,
+			Text:             text,
+		})
+		if findAgentCommand(events, agentproto.CommandThreadGoalSet) != nil {
+			t.Fatalf("malformed budget must fail closed, got %#v", events)
+		}
+		foundError := false
+		for _, event := range events {
+			if event.PageView != nil && containsSectionLine(event.PageView, "无法解析 --budget") {
+				foundError = true
+			}
+		}
+		if !foundError {
+			t.Fatalf("expected budget parse error page for %q, got %#v", text, events)
+		}
+	}
+}
+
+func TestGoalCommandCardFlowPatchesLoadingAndResultOnSameMessage(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-card-1",
+		Text:             "/goal pause",
+		CatalogFamilyID:  control.FeishuCommandGoal,
+		CatalogVariantID: "goal.codex.normal",
+		CatalogBackend:   agentproto.BackendCodex,
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: "lifecycle-1",
+		},
+	})
+	pause := findAgentCommand(events, agentproto.CommandThreadGoalSet)
+	if pause == nil {
+		t.Fatalf("expected pause command, got %#v", events)
+	}
+	loading := findPageEvent(events)
+	if loading == nil || loading.MessageID != "om-goal-card-1" || !loading.Patchable {
+		t.Fatalf("expected patchable loading card on source message, got %#v", loading)
+	}
+	result := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadGoalCommandResult,
+		CommandID: pause.CommandID,
+		ThreadID:  "thread-1",
+		ThreadGoal: &agentproto.ThreadGoalUpdate{
+			ThreadID:  "thread-1",
+			Objective: "ship it",
+			Status:    "paused",
+		},
+	})
+	page := findPageEvent(result)
+	if page == nil || page.MessageID != "om-goal-card-1" || !page.Patchable {
+		t.Fatalf("expected result to patch same message, got %#v", page)
 	}
 }
 

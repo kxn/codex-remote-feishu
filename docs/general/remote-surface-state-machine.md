@@ -2047,6 +2047,8 @@ retained-offline overlay 额外规则：
 
 2026-08-15 #896 补充：Codex Goal 用户控制面已接入现有命令卡体系。`/goal` 是 config-flow slash command（复用 `FeishuCatalogConfigView` / `FeishuPageView` / 菜单三态 / owner card 状态机）：bare `/goal` 发 `thread/goal/get`（`user_control` provenance）并回显 Goal 状态页；`/goal new|edit <目标> [--budget N]` 创建/编辑，`/goal pause|resume` 动态生效，`/goal clear` 先出确认卡、`--confirm` 后清除；无精确 selected thread / 非 Codex / Review/helper 会话 fail closed。用户动作携带 `user_control`，会撤销 queue interlock 的自动恢复所有权；状态页通过现有 `pageEvent` inline replace 刷新，不新建第二套卡片 carrier。
 
+2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时在服务端暂存当前 thread 的 Goal fingerprint（createdAt/objective/budget），执行 `clear --confirm` / `new|edit` 前先与最新 thread Goal 比对，漂移则取消操作并出错误卡，避免外部 mutation 窗口内的误清/误改；goal 命令 dispatch 失败会清理 pending `goalUserCommands` 并回错误卡，不再静默丢弃；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch，不残留无按钮死卡；错误卡复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+
 ## 11. 待讨论取舍
 
 1. 群聊 on-demand 恢复遇到 terminal 失败后，同一恢复目标下的后续普通文本会被静默吞掉（不重复发失败卡），直到恢复目标变化、恢复成功或用户显式重选（`/list`、`/use`、`/new`）。这是为了避免刷屏的有意取舍；风险是用户可能误以为机器人无响应，需要错误卡上的指引文案足够明确。
