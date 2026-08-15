@@ -15,8 +15,8 @@ concurrency:
 
 jobs:
   plan:
-    if: ${{ contains(join(github.event.issue.labels.*.name, ','), 'release:tracker') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       ref: ${{ steps.readiness.outputs.ref }}
       track: ${{ steps.readiness.outputs.track }}
@@ -24,13 +24,21 @@ jobs:
       should_release: ${{ steps.flag.outputs.should_release }}
 
     steps:
+      # 非 tracker issue 也至少执行一个真实 job，避免 workflow 全 skipped
+      # 时 run 不 finalize（GitHub Actions 偶发卡在 in_progress）。
+      - name: Skip non-tracker issue
+        if: ${{ !contains(join(github.event.issue.labels.*.name, ','), 'release:tracker') }}
+        run: echo "issue #${{ github.event.issue.number }} is not a release tracker; skipping release"
+
       - name: Checkout
+        if: ${{ contains(join(github.event.issue.labels.*.name, ','), 'release:tracker') }}
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Validate tracker readiness
         id: readiness
+        if: ${{ contains(join(github.event.issue.labels.*.name, ','), 'release:tracker') }}
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -41,6 +49,7 @@ jobs:
 
       - name: Mark release as approved
         id: flag
+        if: ${{ contains(join(github.event.issue.labels.*.name, ','), 'release:tracker') }}
         run: echo "should_release=true" >> "${GITHUB_OUTPUT}"
 
   release:
