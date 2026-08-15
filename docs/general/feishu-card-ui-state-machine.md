@@ -634,9 +634,10 @@ MCP request 卡片当前新增的可视语义：
     - 非 final assistant 普通文本不会为了 detour 再硬插前缀，继续保持原正文
     - detour turn 完成、失败或用户中断后，orchestrator 会再补一条 `detour_returned` notice；这条提示跟随原 turn 的 reply/top-level lane，正文固定是“临时会话已结束，已切回原会话。”
   - detached review 当前也复用同一条 temporary-session subtitle substrate：
-    - `正在进入审阅` notice、request prompt、提案计划卡、plan update、`turn_failed` notice、共享 progress card 与主 final reply card，会把 `临时会话 · 审阅` 提升为卡片 header subtitle，并以 `lark_md` 加粗显示
+    - `正在进入审阅` notice、`review_failed` notice、request prompt、提案计划卡、plan update、`turn_failed` notice、共享 progress card 与主 final reply card，会把 `临时会话 · 审阅` 提升为卡片 header subtitle，并以 `lark_md` 加粗显示
     - review final card 标题保持默认 `✅ 最后答复`；review 特有语义只由副标题与 footer follow-up 承载，不再通过 `审阅中 ·` 标题前缀旁路实现
     - review surface 上少数没有显式 thread/turn carrier 的 owner/page 卡，当前也会在 delivery fallback 中继承同一个 subtitle；这样 `自动继续`、`上下文压缩` 等 review-only owner card 不会退回成无标记普通卡
+    - 初始 detached review turn 失败时，orchestrator 会 append `review_failed` 错误 notice（带 `临时会话 · 审阅` 副标题）并清掉 overlay；失败原因直接展示在 notice 文本里，不再停在“工作中”无反馈
   - request prompt 当前还允许叠加 request 自身的来源副标题：若 request runtime 带 `SourceContextLabel`（例如 Claude delegated task 生成的 `来自 Task (Explore)`），projector 会继续沿同一条 header subtitle 车道渲染；若同时还存在 detour/review temporary-session label，则按 `source-context · temporary-session` 拼接后一起加粗显示
   - steer accept 成功后，orchestrator 现在会额外发一条 `UIEventTimelineText(type=steer_user_supplement)`；这条文本 reply 到当前 turn anchor，内容只镜像本次真正并入 turn 的用户补充，不复用 assistant block / notice 语义，也不重发图片或文件实体
   - `用户补充` 的图片计数当前只来自 steer 输入里的 `InputLocalImage` / `InputRemoteImage`；文件计数只来自结构化转发/引用文本中显式编码的 `file` 节点

@@ -791,7 +791,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 		summary := s.progress.takeTurnFileChangeSummary(instanceID, event.ThreadID, event.TurnID)
 		turnDiff := s.progress.takeTurnDiffSnapshot(instanceID, event.ThreadID, event.TurnID)
 		finalText := s.pendingTurnTextValue(instanceID, event.ThreadID, event.TurnID)
-		s.maybeCompleteReviewSessionTurn(instanceID, event)
+		reviewEvents := s.maybeCompleteReviewSessionTurn(instanceID, event)
 		finalizeTurnOutput := shouldMaterializeFinalTurnOutput(event, finalText)
 		finalRenderSummary := (*control.FileChangeSummary)(nil)
 		finalRenderTurnDiff := (*control.TurnDiffSnapshot)(nil)
@@ -810,6 +810,7 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			finalRenderTurnDiff,
 			finalRenderTurnSummary,
 		)
+		events = append(events, reviewEvents...)
 		events = append(events, s.finalizeExecCommandProgressForTurn(instanceID, event.ThreadID, event.TurnID, event.Status, finalText)...)
 		s.clearTurnPlanSnapshots(instanceID, event.ThreadID, event.TurnID)
 		s.clearMCPToolCallProgress(instanceID, event.ThreadID, event.TurnID)

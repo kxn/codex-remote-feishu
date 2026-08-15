@@ -428,14 +428,17 @@ func (s *Service) maybeCaptureReviewSessionResultCandidate(instanceID string, ev
 	}
 }
 
-func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentproto.Event) {
+func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentproto.Event) []eventcontract.Event {
 	surface, session := s.reviewSessionSurface(instanceID, event.ThreadID)
 	if session == nil {
-		return
+		return nil
 	}
 	completedActiveTurn := strings.TrimSpace(event.TurnID) == "" || strings.TrimSpace(session.ActiveTurnID) == strings.TrimSpace(event.TurnID)
 	completedInitialTurn := strings.TrimSpace(event.TurnID) != "" && strings.TrimSpace(session.InitialTurnID) == strings.TrimSpace(event.TurnID)
 	exitRequested := session.ExitRequested && completedActiveTurn
+	failedInitialReview := completedInitialTurn &&
+		strings.TrimSpace(session.LastReviewText) == "" &&
+		strings.TrimSpace(event.Status) == "failed"
 	if completedActiveTurn && completedInitialTurn && strings.TrimSpace(session.LastReviewText) == "" && turnCompletedSuccessfully(event) {
 		if reviewText := strings.TrimSpace(session.PendingReviewText); reviewText != "" {
 			session.LastReviewText = reviewText
@@ -459,6 +462,25 @@ func (s *Service) maybeCompleteReviewSessionTurn(instanceID string, event agentp
 		s.clearPendingReviewStart(surface)
 		surface.ReviewSession = nil
 	}
+	if failedInitialReview {
+		text := strings.TrimSpace(event.ErrorMessage)
+		if text == "" && event.Problem != nil {
+			text = strings.TrimSpace(event.Problem.Message)
+		}
+		if text == "" {
+			text = "审阅启动失败，请稍后重试。"
+		}
+		return []eventcontract.Event{{
+			Kind:             eventcontract.KindNotice,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Notice: &control.Notice{
+				Code:                  "review_failed",
+				Text:                  text,
+				TemporarySessionLabel: s.temporarySessionLabel(surface, instanceID, event.ThreadID, event.TurnID),
+			},
+		}}
+	}
+	return nil
 }
 
 func (s *Service) maybeApplyReviewLifecycleItem(instanceID string, event agentproto.Event) bool {

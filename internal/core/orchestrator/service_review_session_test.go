@@ -572,7 +572,7 @@ func TestFailedInitialReviewClearsSessionInsteadOfLeavingDeadOverlay(t *testing.
 	svc, surface, _ := newReviewSessionService(t)
 	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
 
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:         agentproto.EventTurnCompleted,
 		ThreadID:     "thread-review",
 		TurnID:       "turn-review-1",
@@ -582,6 +582,38 @@ func TestFailedInitialReviewClearsSessionInsteadOfLeavingDeadOverlay(t *testing.
 	})
 	if surface.ReviewSession != nil {
 		t.Fatalf("failed initial review must clear the blocking overlay, got %#v", surface.ReviewSession)
+	}
+	var failureNotice *control.Notice
+	for _, event := range events {
+		if event.Notice != nil && event.Notice.Code == "review_failed" {
+			failureNotice = event.Notice
+			break
+		}
+	}
+	if failureNotice == nil {
+		t.Fatalf("failed initial review must surface an error notice, got %#v", events)
+	}
+	if failureNotice.TemporarySessionLabel != reviewTemporarySessionLabel {
+		t.Fatalf("review failure notice must carry the review temporary session label, got %#v", failureNotice)
+	}
+}
+
+func TestInterruptedInitialReviewClearsSessionWithoutFailureNotice(t *testing.T) {
+	svc, surface, _ := newReviewSessionService(t)
+	activateReviewSessionForTest(t, svc, surface, "msg-review-start", "turn-review-1")
+
+	events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventTurnCompleted,
+		ThreadID:  "thread-review",
+		TurnID:    "turn-review-1",
+		Status:    "interrupted",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorRemoteSurface, SurfaceSessionID: surface.SurfaceSessionID},
+	})
+	if surface.ReviewSession != nil {
+		t.Fatalf("interrupted initial review must clear the blocking overlay, got %#v", surface.ReviewSession)
+	}
+	if noticeCode(events, "review_failed") != "" {
+		t.Fatalf("user-interrupted initial review must not surface review_failed, got %#v", events)
 	}
 }
 

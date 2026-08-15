@@ -97,12 +97,13 @@ func TestDaemonStartsCodexHeadlessWithMigratedAPIProfileLaunchOverrides(t *testi
 		`.requires_openai_auth=false`,
 		`.supports_websockets=false`,
 		`cli_auth_credentials_store="ephemeral"`,
+		`review_model="gpt-5.5"`,
 	} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("expected launch args to contain %q, got %#v", want, captured.Args)
 		}
 	}
-	for _, forbidden := range []string{`model="gpt-5.5"`, `model_reasoning_effort="xhigh"`, `review_model=`} {
+	for _, forbidden := range []string{"\nmodel=\"gpt-5.5\"", "\nmodel_reasoning_effort=\"xhigh\""} {
 		if strings.Contains(args, forbidden) {
 			t.Fatalf("launch args must not contain thread policy override %q: %#v", forbidden, captured.Args)
 		}
@@ -312,12 +313,12 @@ func TestDaemonStartsCodexHeadlessWithFrozenAdmissionRevision(t *testing.T) {
 		t.Fatalf("expected frozen old API key env, got %#v", captured.Env)
 	}
 	args := strings.Join(captured.Args, "\n")
-	for _, want := range []string{`.base_url="https://old.example/v1"`} {
+	for _, want := range []string{`.base_url="https://old.example/v1"`, `review_model="gpt-5.5"`} {
 		if !strings.Contains(args, want) {
 			t.Fatalf("expected frozen launch args to contain %q, got %#v", want, captured.Args)
 		}
 	}
-	for _, forbidden := range []string{`model="gpt-5.5"`, `model_reasoning_effort="high"`, `review_model=`} {
+	for _, forbidden := range []string{"\nmodel=\"gpt-5.5\"", "\nmodel_reasoning_effort=\"high\""} {
 		if strings.Contains(args, forbidden) {
 			t.Fatalf("frozen launch args must not contain thread policy override %q: %#v", forbidden, captured.Args)
 		}
