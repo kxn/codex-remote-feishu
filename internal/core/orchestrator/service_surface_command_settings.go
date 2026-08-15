@@ -101,21 +101,19 @@ func clearSurfacePlanModeOverride(surface *state.SurfaceConsoleRecord) {
 }
 
 func (s *Service) setLifecyclePlanModeOverride(surface *state.SurfaceConsoleRecord, value state.PlanModeSetting) bool {
-	return s.applySurfaceCapabilityLifecycleMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-		record.PlanMode = state.NormalizePlanModeSetting(value)
-		record.PlanModeOverrideSet = true
-	}, func(local *state.SurfaceConsoleRecord) {
-		setSurfacePlanModeOverride(local, value)
-	})
+	if surface == nil {
+		return false
+	}
+	setSurfacePlanModeOverride(surface, value)
+	return true
 }
 
 func (s *Service) clearLifecyclePlanModeOverride(surface *state.SurfaceConsoleRecord) bool {
-	return s.applySurfaceCapabilityLifecycleMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-		record.PlanMode = state.PlanModeSettingOff
-		record.PlanModeOverrideSet = false
-	}, func(local *state.SurfaceConsoleRecord) {
-		clearSurfacePlanModeOverride(local)
-	})
+	if surface == nil {
+		return false
+	}
+	clearSurfacePlanModeOverride(surface)
+	return true
 }
 
 func (s *Service) resolveClaudeProfileSelection(value string) (state.ClaudeProfileRecord, bool) {
@@ -398,8 +396,8 @@ func (s *Service) handleClaudeProfileCommand(surface *state.SurfaceConsoleRecord
 	}, func(local *state.SurfaceConsoleRecord) {
 		s.setSurfaceClaudeProfileID(local, target.ID)
 		if currentWorkspaceKey == "" {
-			local.PromptOverride = state.ModelConfigRecord{}
-			clearSurfacePlanModeOverride(local)
+			// access/plan 为会话级设置，切换 profile 不重置。
+			clearSurfacePromptRuntimeOverride(local)
 		}
 	})
 	reconcileEvents := s.reconcileGatewayHeadlessSurfacesAfterContractChange(surface)
@@ -589,12 +587,7 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 	}
 	if len(parts) == 2 && isClearCommand(parts[1]) {
 		text := "已清除飞书临时 Plan mode 覆盖。之后从飞书发送的消息将跟随底层当前状态。"
-		s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-			record.PlanMode = state.PlanModeSettingOff
-			record.PlanModeOverrideSet = false
-		}, func(local *state.SurfaceConsoleRecord) {
-			clearSurfacePlanModeOverride(local)
-		})
+		clearSurfacePlanModeOverride(surface)
 		return s.surfaceSettingFeedbackEvents(surface, action, surfaceSettingFeedback{
 			NoticeCode:     "surface_plan_mode_cleared",
 			NoticeText:     text,
@@ -632,12 +625,7 @@ func (s *Service) handlePlanCommand(surface *state.SurfaceConsoleRecord, action 
 	if surface.ActiveQueueItemID != "" || len(surface.QueuedQueueItemIDs) != 0 {
 		text += " 当前已在执行或排队的消息不受影响。"
 	}
-	s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-		record.PlanMode = target
-		record.PlanModeOverrideSet = true
-	}, func(local *state.SurfaceConsoleRecord) {
-		setSurfacePlanModeOverride(local, target)
-	})
+	setSurfacePlanModeOverride(surface, target)
 	return s.surfaceSettingFeedbackEvents(surface, action, surfaceSettingFeedback{
 		NoticeCode:     "surface_plan_mode_updated",
 		NoticeText:     text,
@@ -890,10 +878,6 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	if s.surfaceBackend(surface) == agentproto.BackendOpenCode {
 		return s.handleOpenCodeAccessCommand(surface, action, parts)
 	}
-	inst, blocked := s.instanceForPromptSettingCommand(surface, action)
-	if blocked != nil {
-		return blocked
-	}
 	if len(parts) != 2 {
 		return s.inlineCommandCardEvents(surface, action, control.FeishuCatalogConfigView{
 			StatusKind:       "error",
@@ -902,14 +886,14 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 		})
 	}
 	if isClearCommand(parts[1]) {
-		return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+		s.applySurfaceAccessModeChange(surface, func(override *state.ModelConfigRecord) {
 			override.AccessMode = ""
-		}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
-			return surfaceSettingFeedback{
-				NoticeCode:     "surface_access_reset",
-				NoticeText:     formatOverrideNotice(summary, "已恢复飞书默认执行权限。"),
-				CardStatusText: "已恢复飞书默认执行权限。",
-			}
+		})
+		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
+		return s.surfaceSettingFeedbackEvents(surface, action, surfaceSettingFeedback{
+			NoticeCode:     "surface_access_reset",
+			NoticeText:     "已恢复当前会话的默认执行权限。",
+			CardStatusText: "已恢复当前会话的默认执行权限。",
 		})
 	}
 	mode := agentproto.NormalizeAccessMode(parts[1])
@@ -920,13 +904,23 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 			FormDefaultValue: actionCommandArgumentText(action),
 		})
 	}
-	return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
+	s.applySurfaceAccessModeChange(surface, func(override *state.ModelConfigRecord) {
 		override.AccessMode = mode
-	}, func(summary control.PromptRouteSummary) surfaceSettingFeedback {
-		return surfaceSettingFeedback{
-			NoticeCode:     "surface_access_updated",
-			NoticeText:     formatOverrideNotice(summary, "已更新飞书执行权限模式。"),
-			CardStatusText: "已更新飞书执行权限模式。",
-		}
 	})
+	s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
+	return s.surfaceSettingFeedbackEvents(surface, action, surfaceSettingFeedback{
+		NoticeCode:     "surface_access_updated",
+		NoticeText:     "已更新当前会话的执行权限模式。",
+		CardStatusText: "已更新当前会话的执行权限模式。",
+	})
+}
+
+func (s *Service) applySurfaceAccessModeChange(surface *state.SurfaceConsoleRecord, mutate func(*state.ModelConfigRecord)) {
+	if surface == nil || mutate == nil {
+		return
+	}
+	override := surface.PromptOverride
+	mutate(&override)
+	backend := agentproto.NormalizeBackend(state.SurfaceDesiredBackendContract(surface).Backend)
+	surface.PromptOverride = state.NormalizePromptOverrideForBackend(backend, override)
 }

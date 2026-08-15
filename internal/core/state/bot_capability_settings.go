@@ -139,10 +139,23 @@ func EffectiveSurfaceCapabilitySettings(root *Root, surface *SurfaceConsoleRecor
 	record, status := LookupSurfaceBotCapabilitySettings(root, surface)
 	if status == BotCapabilitySettingsLookupValid {
 		contract := BotCapabilitySettingsContract(record)
-		planMode, planModeOverrideSet := NormalizePlanOverrideForBackend(contract.Backend, record.PlanMode, record.PlanModeOverrideSet)
+		promptOverride := NormalizePromptOverrideForBackend(contract.Backend, record.PromptOverride)
+		// access/plan 是会话级设置：飞书 surface 用自己的字段，bot record 只提供
+		// model/reasoning 等机器人级默认。
+		accessMode := ""
+		planMode := PlanModeSettingOff
+		planModeOverrideSet := false
+		if surface != nil {
+			accessMode = strings.TrimSpace(surface.PromptOverride.AccessMode)
+			planMode = surface.PlanMode
+			planModeOverrideSet = surface.PlanModeOverrideSet
+		}
+		promptOverride.AccessMode = accessMode
+		promptOverride = NormalizePromptOverrideForBackend(contract.Backend, promptOverride)
+		planMode, planModeOverrideSet = NormalizePlanOverrideForBackend(contract.Backend, planMode, planModeOverrideSet)
 		return SurfaceCapabilitySettings{
 			Contract:            contract,
-			PromptOverride:      NormalizePromptOverrideForBackend(contract.Backend, record.PromptOverride),
+			PromptOverride:      promptOverride,
 			PlanMode:            planMode,
 			PlanModeOverrideSet: planModeOverrideSet,
 			Source:              SurfaceCapabilitySettingsSourceBot,

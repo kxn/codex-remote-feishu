@@ -161,6 +161,22 @@ func (s *Service) MaterializeSurfaceResumeContractWithOpenCodeRef(surfaceID, gat
 	}
 }
 
+// RestoreSurfaceSessionSettings 恢复 access/plan 这两个会话级设置。
+// 必须在 MaterializeSurfaceResumeContract（含 bot settings 投影）之后调用，
+// 避免投影覆盖会话值。
+func (s *Service) RestoreSurfaceSessionSettings(surfaceID, accessMode string, planMode state.PlanModeSetting, planModeOverrideSet bool) {
+	if strings.TrimSpace(surfaceID) == "" {
+		return
+	}
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil {
+		return
+	}
+	surface.PromptOverride.AccessMode = strings.TrimSpace(accessMode)
+	surface.PlanMode = state.NormalizePlanModeSetting(planMode)
+	surface.PlanModeOverrideSet = planModeOverrideSet
+}
+
 func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 	if commandID == "" {
 		return
@@ -700,7 +716,7 @@ func (s *Service) ApplyInstanceDisconnected(instanceID string) []eventcontract.E
 
 	for _, surface := range surfaces {
 		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
-		surface.PromptOverride = state.ModelConfigRecord{}
+		clearSurfacePromptRuntimeOverride(surface)
 		s.resetSurfaceExecutionGates(surface)
 		clearSurfaceRequests(surface)
 
@@ -754,7 +770,7 @@ func (s *Service) ApplyInstanceTransportDegraded(instanceID string, emitNotice b
 	for _, surface := range surfaces {
 		noticeText = s.attachmentTransportDegradedText(surface, inst)
 		s.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
-		surface.PromptOverride = state.ModelConfigRecord{}
+		clearSurfacePromptRuntimeOverride(surface)
 		s.resetSurfaceExecutionGates(surface)
 		s.releaseFeishuRoomReviewReservations(surface)
 

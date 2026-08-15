@@ -493,9 +493,8 @@ func TestClaudePlanConfirmationAcceptClearsPlanOverrideOnlyAfterResolved(t *test
 	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
 		t.Fatalf("expected plan override to stay until request.resolved, got %#v", surface)
 	}
-	beforeResolve := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if beforeResolve.PlanMode != state.PlanModeSettingOn || !beforeResolve.PlanModeOverrideSet {
-		t.Fatalf("expected canonical plan override to stay until request.resolved, got %#v", beforeResolve)
+	if beforeResolve, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]; ok && beforeResolve.PlanModeOverrideSet {
+		t.Fatalf("session plan must not be stored in canonical record, got %#v", beforeResolve)
 	}
 
 	svc.ApplyAgentEvent("inst-1", agentproto.Event{
@@ -510,9 +509,8 @@ func TestClaudePlanConfirmationAcceptClearsPlanOverrideOnlyAfterResolved(t *test
 	if surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
 		t.Fatalf("expected request.resolved accept to clear plan override, got %#v", surface)
 	}
-	afterResolve := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if afterResolve.PlanMode != state.PlanModeSettingOff || afterResolve.PlanModeOverrideSet {
-		t.Fatalf("expected request.resolved accept to clear canonical plan override, got %#v", afterResolve)
+	if afterResolve, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]; ok && afterResolve.PlanModeOverrideSet {
+		t.Fatalf("session plan must not be stored in canonical record, got %#v", afterResolve)
 	}
 }
 

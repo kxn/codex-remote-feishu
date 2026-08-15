@@ -67,23 +67,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 	}
 	sort.Strings(surfaceIDs)
 	for _, surfaceID := range surfaceIDs {
-		entry := entries[surfaceID]
-		a.service.MaterializeSurfaceResumeContractWithOpenCodeRef(
-			entry.SurfaceSessionID,
-			entry.GatewayID,
-			entry.ChatID,
-			entry.ActorUserID,
-			state.PersistedSurfaceBackendContract(
-				state.ProductMode(entry.ProductMode),
-				agentproto.Backend(entry.Backend),
-				entry.CodexProfileID,
-				entry.ClaudeProfileID,
-				entry.OpenCodeProfileID,
-			),
-			entry.OpenCodeAdmissionRef,
-			state.SurfaceVerbosity(entry.Verbosity),
-			state.PlanModeSettingOff,
-		)
+		a.materializeSurfaceResumeEntryLocked(entries[surfaceID])
 	}
 }
 
@@ -257,6 +241,9 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		OpenCodeProfileID:    strings.TrimSpace(a.service.SurfaceOpenCodeProfileID(surface.SurfaceSessionID)),
 		OpenCodeAdmissionRef: state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef),
 		Verbosity:            string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
+		AccessMode:           strings.TrimSpace(surface.PromptOverride.AccessMode),
+		PlanMode:             string(state.NormalizePlanModeSetting(surface.PlanMode)),
+		PlanModeOverrideSet:  surface.PlanModeOverrideSet,
 	}
 	if entry.SurfaceSessionID == "" {
 		return surfaceresume.Entry{}, false

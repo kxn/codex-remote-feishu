@@ -150,15 +150,16 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing
 		PlanModeOverrideSet: true,
 	}
 	surface := &SurfaceConsoleRecord{
-		SurfaceSessionID: "feishu:app-1:chat:oc_room",
-		Platform:         "feishu",
-		GatewayID:        "app-1",
-		ChatID:           "oc_room",
-		ProductMode:      ProductModeNormal,
-		Backend:          agentproto.BackendCodex,
-		CodexProfileID:   "team-proxy",
-		PromptOverride:   ModelConfigRecord{Model: "gpt-5.5"},
-		PlanMode:         PlanModeSettingOff,
+		SurfaceSessionID:    "feishu:app-1:chat:oc_room",
+		Platform:            "feishu",
+		GatewayID:           "app-1",
+		ChatID:              "oc_room",
+		ProductMode:         ProductModeNormal,
+		Backend:             agentproto.BackendCodex,
+		CodexProfileID:      "team-proxy",
+		PromptOverride:      ModelConfigRecord{Model: "gpt-5.5", AccessMode: agentproto.AccessModeConfirm},
+		PlanMode:            PlanModeSettingOn,
+		PlanModeOverrideSet: true,
 	}
 
 	effective := EffectiveSurfaceCapabilitySettings(root, surface)
@@ -168,8 +169,11 @@ func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing
 	if effective.PromptOverride.Model != "claude-sonnet" || effective.PromptOverride.ReasoningEffort != "max" {
 		t.Fatalf("effective prompt = %#v, want bot prompt", effective.PromptOverride)
 	}
+	if effective.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("effective access = %q, want session confirm", effective.PromptOverride.AccessMode)
+	}
 	if effective.PlanMode != PlanModeSettingOn || !effective.PlanModeOverrideSet {
-		t.Fatalf("effective plan = %s/%v, want bot on/true", effective.PlanMode, effective.PlanModeOverrideSet)
+		t.Fatalf("effective plan = %s/%v, want session on/true", effective.PlanMode, effective.PlanModeOverrideSet)
 	}
 }
 
@@ -183,20 +187,23 @@ func TestEffectiveSurfaceCapabilitySettingsKeepsOpenCodeRuntimeAccessAndPlan(t *
 		PromptOverride: ModelConfigRecord{
 			Model:           "gpt-5.5",
 			ReasoningEffort: "high",
-			AccessMode:      agentproto.AccessModeConfirm,
+			AccessMode:      agentproto.AccessModeFullAccess,
 		},
 		PlanMode:            PlanModeSettingOn,
 		PlanModeOverrideSet: true,
 	}
 	surface := &SurfaceConsoleRecord{
-		SurfaceSessionID: "feishu:app-1:user:ou_user",
-		Platform:         "feishu",
-		GatewayID:        "app-1",
-		ChatID:           "ou_user",
-		ActorUserID:      "ou_user",
-		ProductMode:      ProductModeNormal,
-		Backend:          agentproto.BackendCodex,
-		CodexProfileID:   "team-proxy",
+		SurfaceSessionID:    "feishu:app-1:user:ou_user",
+		Platform:            "feishu",
+		GatewayID:           "app-1",
+		ChatID:              "ou_user",
+		ActorUserID:         "ou_user",
+		ProductMode:         ProductModeNormal,
+		Backend:             agentproto.BackendCodex,
+		CodexProfileID:      "team-proxy",
+		PromptOverride:      ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm},
+		PlanMode:            PlanModeSettingOff,
+		PlanModeOverrideSet: false,
 	}
 
 	effective := EffectiveSurfaceCapabilitySettings(root, surface)
@@ -207,10 +214,10 @@ func TestEffectiveSurfaceCapabilitySettingsKeepsOpenCodeRuntimeAccessAndPlan(t *
 		t.Fatalf("effective contract = %#v, want opencode profile", effective.Contract)
 	}
 	if effective.PromptOverride != (ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) {
-		t.Fatalf("effective opencode prompt override = %#v, want runtime reasoning/access only", effective.PromptOverride)
+		t.Fatalf("effective opencode prompt override = %#v, want bot reasoning + session access", effective.PromptOverride)
 	}
-	if effective.PlanMode != PlanModeSettingOn || !effective.PlanModeOverrideSet {
-		t.Fatalf("effective opencode plan = %s/%v, want on/true", effective.PlanMode, effective.PlanModeOverrideSet)
+	if effective.PlanMode != PlanModeSettingOff || effective.PlanModeOverrideSet {
+		t.Fatalf("effective opencode plan = %s/%v, want session off/false", effective.PlanMode, effective.PlanModeOverrideSet)
 	}
 }
 

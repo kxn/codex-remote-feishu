@@ -172,16 +172,20 @@ func TestDetachedFeishuPrivateCodexPromptCommandsCreateAndProjectBotSettings(t *
 	if !ok {
 		t.Fatal("expected first detached mutation to create bot capability settings")
 	}
-	want := state.ModelConfigRecord{
+	wantBot := state.ModelConfigRecord{
+		Model:           "gpt-5.5",
+		ReasoningEffort: "low",
+	}
+	wantSurface := state.ModelConfigRecord{
 		Model:           "gpt-5.5",
 		ReasoningEffort: "low",
 		AccessMode:      agentproto.AccessModeConfirm,
 	}
-	if record.PromptOverride != want || surface.PromptOverride != want {
-		t.Fatalf("private bot settings = %#v / %#v, want %#v", record.PromptOverride, surface.PromptOverride, want)
+	if record.PromptOverride != wantBot || surface.PromptOverride != wantSurface {
+		t.Fatalf("private bot settings = %#v / %#v, want %#v / %#v", record.PromptOverride, surface.PromptOverride, wantBot, wantSurface)
 	}
-	if group := svc.root.Surfaces["feishu:app-1:chat:oc_room"]; group.PromptOverride != want {
-		t.Fatalf("group projection = %#v, want %#v", group.PromptOverride, want)
+	if group := svc.root.Surfaces["feishu:app-1:chat:oc_room"]; group.PromptOverride != wantBot {
+		t.Fatalf("group projection = %#v, want bot-scoped %#v", group.PromptOverride, wantBot)
 	}
 
 	for _, tt := range []struct {
@@ -218,8 +222,8 @@ func TestDetachedFeishuPrivateCodexPromptCommandsCreateAndProjectBotSettings(t *
 		t.Fatalf("detached model clear was rejected: %#v", clearEvents)
 	}
 	record = svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PromptOverride != (state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
-		t.Fatalf("model clear changed unrelated access override: %#v", record.PromptOverride)
+	if record.PromptOverride != (state.ModelConfigRecord{}) {
+		t.Fatalf("model clear should leave empty bot record override, got %#v", record.PromptOverride)
 	}
 }
 
@@ -262,8 +266,11 @@ func TestDetachedFeishuPrivateClaudePromptCommandsDoNotNeedWorkspaceSnapshot(t *
 	}
 
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PromptOverride.ReasoningEffort != "max" || record.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
-		t.Fatalf("Claude bot override = %#v", record.PromptOverride)
+	if record.PromptOverride.ReasoningEffort != "max" || record.PromptOverride.AccessMode != "" {
+		t.Fatalf("Claude bot override must keep reasoning only, got %#v", record.PromptOverride)
+	}
+	if surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("session access = %q, want confirm", surface.PromptOverride.AccessMode)
 	}
 	if len(svc.root.ClaudeWorkspaceProfileSnapshots) != 0 {
 		t.Fatalf("detached settings should not invent a workspace snapshot: %#v", svc.root.ClaudeWorkspaceProfileSnapshots)

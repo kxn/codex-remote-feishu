@@ -32,7 +32,9 @@ type Entry struct {
 	OpenCodeProfileID           string                      `json:"openCodeProfileID,omitempty"`
 	OpenCodeAdmissionRef        *state.OpenCodeAdmissionRef `json:"openCodeAdmissionRef,omitempty"`
 	Verbosity                   string                      `json:"verbosity,omitempty"`
+	AccessMode                  string                      `json:"accessMode,omitempty"`
 	PlanMode                    string                      `json:"planMode,omitempty"`
+	PlanModeOverrideSet         bool                        `json:"planModeOverrideSet,omitempty"`
 	ResumeInstanceID            string                      `json:"resumeInstanceID,omitempty"`
 	ResumeThreadID              string                      `json:"resumeThreadID,omitempty"`
 	ResumeThreadTitle           string                      `json:"resumeThreadTitle,omitempty"`
@@ -162,7 +164,12 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 		entry.CodexAdmissionRef = nil
 	}
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
-	entry.PlanMode = ""
+	entry.AccessMode = strings.TrimSpace(entry.AccessMode)
+	if entry.PlanModeOverrideSet {
+		entry.PlanMode = string(state.NormalizePlanModeSetting(state.PlanModeSetting(strings.TrimSpace(entry.PlanMode))))
+	} else {
+		entry.PlanMode = ""
+	}
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
 	entry.ResumeThreadID = strings.TrimSpace(entry.ResumeThreadID)
 	entry.ResumeThreadCWD = state.ResolveWorkspaceClaimKey(entry.ResumeThreadCWD)
@@ -205,7 +212,9 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.OpenCodeProfileID) == strings.TrimSpace(right.OpenCodeProfileID) &&
 		sameOpenCodeAdmissionRef(left.OpenCodeAdmissionRef, right.OpenCodeAdmissionRef) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
+		strings.TrimSpace(left.AccessMode) == strings.TrimSpace(right.AccessMode) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&
+		left.PlanModeOverrideSet == right.PlanModeOverrideSet &&
 		strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID) &&
 		strings.TrimSpace(left.ResumeThreadID) == strings.TrimSpace(right.ResumeThreadID) &&
 		strings.TrimSpace(left.ResumeThreadTitle) == strings.TrimSpace(right.ResumeThreadTitle) &&

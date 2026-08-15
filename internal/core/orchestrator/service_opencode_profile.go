@@ -276,8 +276,8 @@ func (s *Service) applyOpenCodeProfileSelection(surface *state.SurfaceConsoleRec
 		local.OpenCodeProfileID = state.NormalizeDesiredOpenCodeProfileID(target.ID)
 		local.OpenCodeAdmissionRef = admissionRef
 		if clearDetachedRuntime {
-			local.PromptOverride = state.ModelConfigRecord{}
-			clearSurfacePlanModeOverride(local)
+			// access/plan 为会话级设置，切换 profile 不重置。
+			clearSurfacePromptRuntimeOverride(local)
 		}
 	})
 	if state.SurfaceUsesBotCapabilitySettings(surface) {

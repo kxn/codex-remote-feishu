@@ -2047,6 +2047,8 @@ retained-offline overlay 额外规则：
 
 2026-08-15 #895 review 修复补充：pause 失败进入退避窗口后，dispatch 门禁在整个退避期内保持阻塞（节流只是抑制重复提示，不会让 `maybeBeginGoalInterlockForQueueItem` 的 nil 落到派发路径）；`thread/goal/set` 响应缺失 `updatedAt`（或整体无 goal 快照）时，有序流中下一条该 thread 的 goal notification 视为本命令确认并消费一次，避免 pause 确认被误判为 external mutation 而永久放弃自动恢复；goal 命令结果只在 commandID 能关联到 pending 命令时才写回本地 thread goal，未知/stale 响应不再覆盖已更新的快照。
 
+2026-08-15 #897 补充：`/access` 与 `/plan` 改为会话级（surface 级）设置。飞书群聊与私聊各自独立持久化（surface resume state 新增 `AccessMode`，恢复 `PlanMode`/`PlanModeOverrideSet`），群聊可直接执行这两个命令，不再被“机器人设置仅私聊可改”的 gate 拦截；`EffectiveSurfaceCapabilitySettings` 对飞书 surface 的 access/plan 读 surface 字段，bot record 投影不再覆盖会话值。旧版机器人级 access/plan 在 daemon 启动恢复时一次性种子到已存在 surface 后不再作为读路径。`/mode`、profile、`/model`、`/reasoning` 仍为机器人级（仅私聊可改）。
+
 2026-08-15 #896 补充：Codex Goal 用户控制面已接入现有命令卡体系。`/goal` 是 config-flow slash command（复用 `FeishuCatalogConfigView` / `FeishuPageView` / 菜单三态 / owner card 状态机）：bare `/goal` 发 `thread/goal/get`（`user_control` provenance）并回显 Goal 状态页；`/goal new|edit <目标> [--budget N]` 创建/编辑，`/goal pause|resume` 动态生效，`/goal clear` 先出确认卡、`--confirm` 后清除；无精确 selected thread / 非 Codex / Review/helper 会话 fail closed。用户动作携带 `user_control`，会撤销 queue interlock 的自动恢复所有权；状态页通过现有 `pageEvent` inline replace 刷新，不新建第二套卡片 carrier。
 
 2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时在服务端暂存当前 thread 的 Goal fingerprint（createdAt/objective/budget），执行 `clear --confirm` / `new|edit` 前先与最新 thread Goal 比对，漂移则取消操作并出错误卡，避免外部 mutation 窗口内的误清/误改；goal 命令 dispatch 失败会清理 pending `goalUserCommands` 并回错误卡，不再静默丢弃；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch，不残留无按钮死卡；错误卡复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。

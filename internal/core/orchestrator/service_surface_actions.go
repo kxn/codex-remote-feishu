@@ -863,7 +863,7 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 	events := s.discardDrafts(surface)
 	clearSurfaceRequests(surface)
 	s.consumeSurfacePendingHeadlessLaunch(surface, "")
-	surface.PromptOverride = state.ModelConfigRecord{}
+	clearSurfacePromptRuntimeOverride(surface)
 	s.restoreSurfaceDispatchNormal(surface)
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if s.surfaceHasPreStartRemoteDispatch(surface) {

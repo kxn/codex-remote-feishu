@@ -110,6 +110,7 @@ func (s *Service) commitBotCapabilitySettingsMutation(surface *state.SurfaceCons
 
 func botCapabilitySettingsFromSurface(surface *state.SurfaceConsoleRecord) state.BotCapabilitySettingsRecord {
 	contract := state.SurfaceDesiredBackendContract(surface)
+	// access/plan 为会话级设置，不进入机器人级 record。
 	return state.BotCapabilitySettingsRecord{
 		GatewayID:            strings.TrimSpace(surface.GatewayID),
 		ProductMode:          contract.ProductMode,
@@ -118,9 +119,10 @@ func botCapabilitySettingsFromSurface(surface *state.SurfaceConsoleRecord) state
 		ClaudeProfileID:      surface.ClaudeProfileID,
 		OpenCodeProfileID:    surface.OpenCodeProfileID,
 		OpenCodeAdmissionRef: state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef),
-		PromptOverride:       surface.PromptOverride,
-		PlanMode:             surface.PlanMode,
-		PlanModeOverrideSet:  surface.PlanModeOverrideSet,
+		PromptOverride: state.ModelConfigRecord{
+			Model:           surface.PromptOverride.Model,
+			ReasoningEffort: surface.PromptOverride.ReasoningEffort,
+		},
 	}
 }
 
@@ -134,6 +136,9 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 	}
 	previousCodexProfileID := state.NormalizeCodexProfileID(surface.CodexProfileID)
 	previousOpenCodeProfileID := state.NormalizeOpenCodeProfileID(surface.OpenCodeProfileID)
+	previousAccessMode := strings.TrimSpace(surface.PromptOverride.AccessMode)
+	previousPlanMode := surface.PlanMode
+	previousPlanModeOverrideSet := surface.PlanModeOverrideSet
 	s.setSurfaceDesiredContract(surface, state.BotCapabilitySettingsContract(normalized))
 	surface.CodexProfileID = normalized.CodexProfileID
 	surface.ClaudeProfileID = normalized.ClaudeProfileID
@@ -144,8 +149,10 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 		surface.OpenCodeAdmissionRef = nil
 	}
 	surface.PromptOverride = normalized.PromptOverride
-	surface.PlanMode = normalized.PlanMode
-	surface.PlanModeOverrideSet = normalized.PlanModeOverrideSet
+	// access/plan 为会话级设置，bot record 投影不覆盖 surface 自己的值。
+	surface.PromptOverride.AccessMode = previousAccessMode
+	surface.PlanMode = previousPlanMode
+	surface.PlanModeOverrideSet = previousPlanModeOverrideSet
 	if state.NormalizeCodexProfileID(normalized.CodexProfileID) != previousCodexProfileID {
 		surface.CodexAdmissionRef = nil
 		surface.CodexConnectionContract = nil
@@ -173,6 +180,17 @@ func (s *Service) botCapabilitySettingsInvalid(surface *state.SurfaceConsoleReco
 	return status == state.BotCapabilitySettingsLookupInvalid
 }
 
+// clearSurfacePromptRuntimeOverride 清掉机器人级投影字段（model/reasoning），
+// 保留会话级 access 设置；会话级 plan 由调用方决定是否清除。
+func clearSurfacePromptRuntimeOverride(surface *state.SurfaceConsoleRecord) {
+	if surface == nil {
+		return
+	}
+	surface.PromptOverride = state.ModelConfigRecord{
+		AccessMode: strings.TrimSpace(surface.PromptOverride.AccessMode),
+	}
+}
+
 func (s *Service) botCapabilitySettingsInvalidEvents(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
 	return notice(surface, "bot_capability_settings_invalid", "机器人设置当前不可用，本次操作已暂停。请联系管理员修复后重试。")
 }
@@ -196,6 +214,9 @@ func (s *Service) rejectInvalidBotCapabilitySettings(surface *state.SurfaceConso
 	}
 	switch action.Kind {
 	case control.ActionStop, control.ActionDetach, control.ActionWorkspaceDetach:
+		return nil
+	case control.ActionPlanCommand, control.ActionAccessCommand:
+		// access/plan 为会话级设置，不依赖 canonical record。
 		return nil
 	default:
 		return s.botCapabilitySettingsInvalidEvents(surface)
@@ -250,9 +271,7 @@ func isBotCapabilitySettingsAction(kind control.ActionKind) bool {
 		control.ActionClaudeProfileCommand,
 		control.ActionOpenCodeProfileCommand,
 		control.ActionModelCommand,
-		control.ActionReasoningCommand,
-		control.ActionAccessCommand,
-		control.ActionPlanCommand:
+		control.ActionReasoningCommand:
 		return true
 	default:
 		return false
