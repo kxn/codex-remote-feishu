@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-15`
-> Summary: 为不支持视觉的主模型提供可主动调用的 `describe_image` 工具：支持多图 + id 引用、可选 prompt，背后经可配置的 OpenAI Chat / Responses / Anthropic / Gemini 协议适配器做单次视觉推理；工具默认注入、由 profile 级开关关闭。
+> Summary: 为不支持视觉的主模型提供可主动调用的 `describe_image` 工具：支持多图 + id 引用、必填 prompt（空值回退极简默认），背后经可配置的 OpenAI Chat / Responses / Anthropic / Gemini 协议适配器做单次视觉推理；工具默认注入、由 profile 级开关关闭。
 
 ## 背景与目标
 
@@ -41,10 +41,10 @@
       },
       "prompt": {
         "type": "string",
-        "description": "Optional question for the vision model; may reference ids, e.g. \"compare img1 and img2\". Defaults to the configured default prompt."
+        "description": "Required question for the vision model; may reference ids, e.g. \"compare img1 and img2\"."
       }
     },
-    "required": ["images"]
+    "required": ["images", "prompt"]
   }
 }
 ```
@@ -53,6 +53,7 @@
 
 - 单图即 `images` 长度为 1，模型只有一种调用形态。
 - `id` 由模型自由填写，prompt 可引用，覆盖对比/指定某张图等场景。
+- `prompt` 为必填：模型必须说明希望视觉模型回答什么；若模型未提供有效内容，工具回退到极简默认指令“请描述这张图片。”，不拒绝调用。
 - `maxItems: 5` 防超限；视觉模型一次看 5 张以内的对比类场景足够。
 - 工具描述使用英文（工具描述是给模型读的，与系统内其它工具保持一致），用户可见文案使用中文。
 
@@ -81,12 +82,11 @@ vision_assist:
   base_url: "https://api.example.com/v1"
   api_key_env: "VISION_API_KEY"
   model: "gpt-5.6-vision"
-  default_prompt: "请详细描述这张图片：主要对象、界面元素、文字内容（逐字转录）、背景。包含报错、代码或数字时完整保留。"
 ```
 
 配置归属：
 
-- 端点配置（协议、base URL、API key、模型名、默认提示词）放“辅助模型”tab：它是独立的辅助服务端点，不绑定 Claude / Codex / OpenCode 任一主后端。
+- 端点配置（协议、base URL、API key、模型名）放“辅助模型”tab：它是独立的辅助服务端点，不绑定 Claude / Codex / OpenCode 任一主后端。
 - “主模型支持直接看图”开关放 profile 级（三个主后端各自的 profile 配置里）：它描述的是该 profile 使用的主模型能力，与辅助端点无关。
 
 ## 协议适配层（独立通用单次推理包）
@@ -158,7 +158,6 @@ type Image struct {
                                     API Key    [________________]
                                     模型名     [________________]
                                     协议       [ OpenAI Chat ▾ ]
-                                    默认提示词 [________________]
 ```
 
 - 开关“该 profile 使用的主模型支持直接看图，不注入图片描述辅助工具”放在“对话后端”各 profile 编辑器里（Claude / Codex / OpenCode profile 项各一个）。

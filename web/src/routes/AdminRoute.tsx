@@ -1515,16 +1515,6 @@ export function AdminRoute() {
               onChange={(event) => updateVisionSetting("model", event.target.value)}
             />
           </label>
-          <label className="field form-grid-span-2 stack-top">
-            <span>默认提示词（可选）</span>
-            <textarea
-              aria-label="默认提示词"
-              rows={4}
-              placeholder="未提供 prompt 时使用的默认提示词"
-              value={settings.defaultPrompt ?? ""}
-              onChange={(event) => updateVisionSetting("defaultPrompt", event.target.value)}
-            />
-          </label>
         </div>
         <div className="button-row">
           <button

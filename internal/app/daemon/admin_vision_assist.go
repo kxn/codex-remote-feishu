@@ -43,7 +43,6 @@ func (a *App) handleVisionAssistPut(w http.ResponseWriter, r *http.Request) {
 	settings.BaseURL = strings.TrimRight(strings.TrimSpace(settings.BaseURL), "/")
 	settings.APIKeyEnv = strings.TrimSpace(settings.APIKeyEnv)
 	settings.Model = strings.TrimSpace(settings.Model)
-	settings.DefaultPrompt = strings.TrimSpace(settings.DefaultPrompt)
 	if settings.Protocol != "" {
 		switch singleturn.Protocol(settings.Protocol) {
 		case singleturn.ProtocolOpenAIChat,

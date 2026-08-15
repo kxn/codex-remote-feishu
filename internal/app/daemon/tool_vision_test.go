@@ -76,10 +76,9 @@ func TestDescribeImageToolSuccess(t *testing.T) {
 
 	cfg := config.DefaultAppConfig()
 	cfg.VisionAssist = config.VisionAssistSettings{
-		Protocol:      "openai_chat",
-		BaseURL:       server.URL,
-		Model:         "vision-model",
-		DefaultPrompt: "请描述图片",
+		Protocol: "openai_chat",
+		BaseURL:  server.URL,
+		Model:    "vision-model",
 	}
 	app, _ := visionAssistTestApp(t, cfg)
 	registerVisionTestInstance(app, agentproto.BackendCodex, "cp_native")
@@ -117,6 +116,40 @@ func TestDescribeImageToolRejectsWhenProfileSupportsVision(t *testing.T) {
 	_, toolErr := app.describeImageTool(visionToolContext(), visionArguments(imagePath, ""))
 	if toolErr == nil || toolErr.Code != "describe_image_not_needed" {
 		t.Fatalf("expected describe_image_not_needed, got %#v", toolErr)
+	}
+}
+
+func TestDescribeImageToolFallsBackToMinimalPrompt(t *testing.T) {
+	var capturedText string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		messages := payload["messages"].([]any)
+		content := messages[0].(map[string]any)["content"].([]any)
+		capturedText = content[0].(map[string]any)["text"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+	}))
+	defer server.Close()
+
+	cfg := config.DefaultAppConfig()
+	cfg.VisionAssist = config.VisionAssistSettings{
+		Protocol: "openai_chat",
+		BaseURL:  server.URL,
+		Model:    "vision-model",
+	}
+	app, _ := visionAssistTestApp(t, cfg)
+	registerVisionTestInstance(app, agentproto.BackendCodex, "cp_native")
+
+	imagePath := filepath.Join(t.TempDir(), "shot.png")
+	writePNGForTest(t, imagePath)
+	if _, toolErr := app.describeImageTool(visionToolContext(), visionArguments(imagePath, "")); toolErr != nil {
+		t.Fatalf("describe image: %v", toolErr)
+	}
+	if !strings.Contains(capturedText, "请描述这张图片") {
+		t.Fatalf("expected fallback prompt, got %q", capturedText)
 	}
 }
 

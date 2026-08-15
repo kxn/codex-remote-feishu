@@ -22,6 +22,8 @@ const (
 
 const describeImageToolDescription = "Describe one or more local images through a vision model and return its textual analysis. Call this tool when you cannot directly see image content in the conversation and need to know what an image shows. Useful for: reading text in images (errors, code, documents, numbers), describing UI / charts / objects, and comparing multiple images. Do NOT call this tool if you can view images directly; in that case answer from the image itself. Pass each image's local path (same reference as in the conversation inputs). For multiple images, give each a short id and refer to ids in prompt (e.g. \"compare img1 and img2\"). The tool returns plain text; use it to continue answering the user."
 
+const describeImageFallbackPrompt = "请描述这张图片。"
+
 func describeImageToolDefinitions() []toolDefinition {
 	return []toolDefinition{{
 		Name:        describeImageToolName,
@@ -50,10 +52,10 @@ func describeImageToolDefinitions() []toolDefinition {
 				},
 				"prompt": map[string]any{
 					"type":        "string",
-					"description": "Optional question for the vision model; may reference ids, e.g. \"compare img1 and img2\". Defaults to the configured default prompt.",
+					"description": "Required question for the vision model; may reference ids, e.g. \"compare img1 and img2\".",
 				},
 			},
-			"required": []string{"images"},
+			"required": []string{"images", "prompt"},
 		},
 	}}
 }
@@ -183,9 +185,13 @@ func (a *App) describeImageTool(ctx context.Context, arguments map[string]any) (
 		images = append(images, singleturn.Image{ID: id, Data: data, MIMEType: mimeType})
 		idMap = append(idMap, fmt.Sprintf("%s=第%d张", id, index+1))
 	}
-	prompt := strings.TrimSpace(fmt.Sprint(arguments["prompt"]))
+	prompt := ""
+	if promptValue, ok := arguments["prompt"]; ok && promptValue != nil {
+		prompt = strings.TrimSpace(fmt.Sprint(promptValue))
+	}
 	if prompt == "" {
-		prompt = strings.TrimSpace(settings.DefaultPrompt)
+		// 模型未提供有效问题时使用最简单的默认指令，避免空指令调用。
+		prompt = describeImageFallbackPrompt
 	}
 	text := "图片 ID 映射：" + strings.Join(idMap, "，") + "。请按 ID 引用图片。"
 	if prompt != "" {

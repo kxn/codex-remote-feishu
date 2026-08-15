@@ -687,7 +687,6 @@ export interface VisionAssistSettings {
   baseURL?: string;
   apiKeyEnv?: string;
   model?: string;
-  defaultPrompt?: string;
 }
 
 export interface VisionAssistResponse {

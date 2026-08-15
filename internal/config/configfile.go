@@ -89,11 +89,10 @@ type ToolSettings struct {
 
 // VisionAssistSettings 是视觉辅助（describe_image）背后的辅助模型端点配置。
 type VisionAssistSettings struct {
-	Protocol      string `json:"protocol,omitempty"`
-	BaseURL       string `json:"baseURL,omitempty"`
-	APIKeyEnv     string `json:"apiKeyEnv,omitempty"`
-	Model         string `json:"model,omitempty"`
-	DefaultPrompt string `json:"defaultPrompt,omitempty"`
+	Protocol  string `json:"protocol,omitempty"`
+	BaseURL   string `json:"baseURL,omitempty"`
+	APIKeyEnv string `json:"apiKeyEnv,omitempty"`
+	Model     string `json:"model,omitempty"`
 }
 
 type ExternalAccessSettings struct {

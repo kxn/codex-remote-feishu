@@ -27,8 +27,7 @@ func TestAdminVisionAssistReadWrite(t *testing.T) {
 		"protocol": "openai_chat",
 		"baseURL": "https://api.example.com/v1",
 		"apiKeyEnv": "VISION_API_KEY",
-		"model": "gpt-v",
-		"defaultPrompt": "请描述图片"
+		"model": "gpt-v"
 	}`)
 	if put.Code != http.StatusOK {
 		t.Fatalf("put status = %d body=%s", put.Code, put.Body.String())
