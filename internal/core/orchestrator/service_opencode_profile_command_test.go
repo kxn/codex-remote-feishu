@@ -25,6 +25,57 @@ func materializeTestOpenCodeProfiles(svc *Service, profiles ...state.OpenCodePro
 	svc.MaterializeOpenCodeProfiles(records)
 }
 
+func TestHeadlessLaunchContractRebuildsOpenCodeAdmissionRefAfterResume(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", "")
+	materializeTestOpenCodeProfiles(svc, state.OpenCodeProfileSummary{ID: "op_team", Revision: 7, Name: "Team OpenCode"})
+
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.OpenCodeAdmissionRef != nil {
+		t.Fatalf("expected resumed surface without admission ref, got %#v", surface.OpenCodeAdmissionRef)
+	}
+
+	contract := svc.headlessLaunchContract(surface)
+	if contract.Backend != agentproto.BackendOpenCode || contract.OpenCodeProfileID != "op_team" {
+		t.Fatalf("unexpected launch contract: %#v", contract)
+	}
+	if contract.OpenCodeAdmissionRef == nil || contract.OpenCodeAdmissionRef.ProfileRef.ID != "op_team" || contract.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected admission ref rebuilt from profile catalog, got %#v", contract.OpenCodeAdmissionRef)
+	}
+	if surface.OpenCodeAdmissionRef == nil || surface.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected rebuilt admission ref written back to surface, got %#v", surface.OpenCodeAdmissionRef)
+	}
+}
+
+func TestHeadlessLaunchContractKeepsExistingOpenCodeAdmissionRef(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", "")
+	materializeTestOpenCodeProfiles(svc, state.OpenCodeProfileSummary{ID: "op_team", Revision: 9, Name: "Team OpenCode"})
+
+	surface := svc.root.Surfaces["surface-1"]
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7}}
+
+	contract := svc.headlessLaunchContract(surface)
+	if contract.OpenCodeAdmissionRef == nil || contract.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected frozen admission ref to be preserved, got %#v", contract.OpenCodeAdmissionRef)
+	}
+}
+
+func TestHeadlessLaunchContractDefaultOpenCodeProfileNeedsNoAdmissionRef(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract(state.DefaultOpenCodeProfileID), "", "")
+	materializeTestOpenCodeProfiles(svc)
+
+	surface := svc.root.Surfaces["surface-1"]
+	contract := svc.headlessLaunchContract(surface)
+	if contract.OpenCodeAdmissionRef != nil {
+		t.Fatalf("default opencode profile must not require admission ref, got %#v", contract.OpenCodeAdmissionRef)
+	}
+}
+
 func TestOpenCodeProfileCommandSwitchesDetachedSurfaceAndClearsRuntime(t *testing.T) {
 	now := time.Date(2026, 8, 9, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

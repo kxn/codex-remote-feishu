@@ -56,9 +56,7 @@ func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) st
 		launch = state.HeadlessClaudeLaunchContract(state.EffectiveSurfaceClaudeProfileID(contract), settings.PromptOverride.ReasoningEffort)
 	case agentproto.BackendOpenCode:
 		launch = state.HeadlessOpenCodeLaunchContract(state.EffectiveSurfaceOpenCodeProfileID(contract), settings.PromptOverride.AccessMode)
-		if surface != nil {
-			launch.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef)
-		}
+		launch.OpenCodeAdmissionRef = s.openCodeAdmissionRefForSurface(surface, launch.OpenCodeProfileID)
 	default:
 		launch = state.HeadlessCodexLaunchContract(state.EffectiveSurfaceCodexProfileID(contract))
 	}
@@ -71,6 +69,33 @@ func (s *Service) headlessLaunchContract(surface *state.SurfaceConsoleRecord) st
 		launch.ClaudeReasoningEffort = s.effectiveClaudeReasoningEffort(surface, settings.PromptOverride)
 	}
 	return state.NormalizeHeadlessLaunchContract(launch)
+}
+
+// openCodeAdmissionRefForSurface 返回 surface 上已冻结的 OpenCode admission
+// ref；若为空且目标 profile 非默认（例如 daemon 重启后 surface 只恢复了
+// profile ID、ref 未持久化），则从当前 profile catalog 按 profile ID 重建
+// 并写回 surface，等价于再次选择该 profile。默认 profile 不需要 ref。
+func (s *Service) openCodeAdmissionRefForSurface(surface *state.SurfaceConsoleRecord, profileID string) *state.OpenCodeAdmissionRef {
+	if surface != nil {
+		if ref := state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef); ref != nil {
+			return ref
+		}
+	}
+	profileID = state.NormalizeOpenCodeProfileID(profileID)
+	if profileID == "" || profileID == state.DefaultOpenCodeProfileID {
+		return nil
+	}
+	for _, profile := range s.OpenCodeProfiles() {
+		if state.NormalizeOpenCodeProfileID(profile.ID) != profileID || profile.Revision == 0 {
+			continue
+		}
+		ref := openCodeAdmissionRefForProfile(profile)
+		if surface != nil && ref != nil {
+			surface.OpenCodeAdmissionRef = ref
+		}
+		return ref
+	}
+	return nil
 }
 
 func (s *Service) headlessLaunchContractWithOverride(surface *state.SurfaceConsoleRecord, override state.ModelConfigRecord) state.HeadlessLaunchContract {
