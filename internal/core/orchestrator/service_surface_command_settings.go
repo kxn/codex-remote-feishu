@@ -650,7 +650,7 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}
-	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
+	inst, blocked := s.instanceForPromptSettingCommand(surface, action)
 	if blocked != nil {
 		return blocked
 	}
@@ -779,7 +779,7 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 	if len(parts) <= 1 {
 		return s.openConfigCommandPageForAction(surface, action)
 	}
-	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
+	inst, blocked := s.instanceForPromptSettingCommand(surface, action)
 	if blocked != nil {
 		return blocked
 	}
@@ -890,7 +890,7 @@ func (s *Service) handleAccessCommand(surface *state.SurfaceConsoleRecord, actio
 	if s.surfaceBackend(surface) == agentproto.BackendOpenCode {
 		return s.handleOpenCodeAccessCommand(surface, action, parts)
 	}
-	inst, blocked := s.attachedInstanceForPromptSettingCommand(surface, action)
+	inst, blocked := s.instanceForPromptSettingCommand(surface, action)
 	if blocked != nil {
 		return blocked
 	}

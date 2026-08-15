@@ -33,7 +33,6 @@ type FeishuConfigFlowDefinition struct {
 	EffectiveValueKey     FeishuConfigFlowValueKey
 	OverrideValueKey      FeishuConfigFlowValueKey
 	OverrideExtraValueKey FeishuConfigFlowValueKey
-	RequiresAttachment    bool
 }
 
 func (d FeishuConfigFlowDefinition) CatalogFamilyID() string {
@@ -145,25 +144,23 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 		CurrentValueKey: FeishuConfigFlowValueSurfaceAutoContinue,
 	},
 	{
-		CommandID:          FeishuCommandReasoning,
-		ActionKind:         ActionReasoningCommand,
-		BareCommand:        "/reasoning",
-		IntentKind:         FeishuUIIntentShowReasoningCatalog,
-		PageBuilder:        reasoningPageViewFromCommandConfigView,
-		EffectiveValueKey:  FeishuConfigFlowValuePromptEffectiveReasoning,
-		OverrideValueKey:   FeishuConfigFlowValuePromptOverrideReasoning,
-		RequiresAttachment: true,
+		CommandID:         FeishuCommandReasoning,
+		ActionKind:        ActionReasoningCommand,
+		BareCommand:       "/reasoning",
+		IntentKind:        FeishuUIIntentShowReasoningCatalog,
+		PageBuilder:       reasoningPageViewFromCommandConfigView,
+		EffectiveValueKey: FeishuConfigFlowValuePromptEffectiveReasoning,
+		OverrideValueKey:  FeishuConfigFlowValuePromptOverrideReasoning,
 	},
 	{
-		CommandID:          FeishuCommandAccess,
-		ActionKind:         ActionAccessCommand,
-		BareCommand:        "/access",
-		IntentKind:         FeishuUIIntentShowAccessCatalog,
-		PageBuilder:        accessPageViewFromCommandConfigView,
-		CurrentValueKey:    FeishuConfigFlowValuePromptObservedThreadAccess,
-		EffectiveValueKey:  FeishuConfigFlowValuePromptEffectiveAccess,
-		OverrideValueKey:   FeishuConfigFlowValuePromptOverrideAccess,
-		RequiresAttachment: true,
+		CommandID:         FeishuCommandAccess,
+		ActionKind:        ActionAccessCommand,
+		BareCommand:       "/access",
+		IntentKind:        FeishuUIIntentShowAccessCatalog,
+		PageBuilder:       accessPageViewFromCommandConfigView,
+		CurrentValueKey:   FeishuConfigFlowValuePromptObservedThreadAccess,
+		EffectiveValueKey: FeishuConfigFlowValuePromptEffectiveAccess,
+		OverrideValueKey:  FeishuConfigFlowValuePromptOverrideAccess,
 	},
 	{
 		CommandID:         FeishuCommandPlan,
@@ -183,7 +180,6 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 		EffectiveValueKey:     FeishuConfigFlowValuePromptEffectiveModel,
 		OverrideValueKey:      FeishuConfigFlowValuePromptOverrideModel,
 		OverrideExtraValueKey: FeishuConfigFlowValuePromptOverrideReasoning,
-		RequiresAttachment:    true,
 	},
 	{
 		CommandID:       FeishuCommandVerbose,

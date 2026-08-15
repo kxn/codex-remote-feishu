@@ -9,17 +9,19 @@ import (
 )
 
 func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *state.SurfaceConsoleRecord, frozenThreadID, frozenCWD string, override state.ModelConfigRecord) control.PromptRouteSummary {
-	if inst == nil || surface == nil {
+	if surface == nil {
 		return control.PromptRouteSummary{}
 	}
 	threadID := frozenThreadID
 	cwd := frozenCWD
 	routeMode := surface.RouteMode
 	createThread := false
-	if threadID == "" && cwd == "" {
-		threadID, cwd, routeMode, createThread = freezeRoute(inst, surface)
-	} else {
-		createThread = threadID == ""
+	if inst != nil {
+		if threadID == "" && cwd == "" {
+			threadID, cwd, routeMode, createThread = freezeRoute(inst, surface)
+		} else {
+			createThread = threadID == ""
+		}
 	}
 	settings := state.EffectiveSurfaceCapabilitySettings(s.root, surface)
 	if promptOverrideIsEmpty(override) {
@@ -29,7 +31,7 @@ func (s *Service) resolveNextPromptSummary(inst *state.InstanceRecord, surface *
 	observedThreadAccessMode := ""
 	observedThreadPlanMode := ""
 	var observedThreadPermission *agentproto.ObservedPermissionState
-	if threadID != "" {
+	if inst != nil && threadID != "" {
 		thread := inst.Threads[threadID]
 		threadTitle = displayThreadTitle(inst, thread)
 		if thread != nil && thread.ObservedPermission != nil {

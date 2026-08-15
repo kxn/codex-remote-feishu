@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-13`
-> Summary: Codex full_access Review 的白名单权限请求正常路径不发卡；自动响应提交失败时恢复为可操作 request card。
+> Updated: `2026-08-15`
+> Summary: detached 私聊配置卡按 bot setting 所有权开放，并对 OpenCode reasoning 保留 ACP capability 门禁。
 
 ## 1. 文档定位
 
@@ -522,7 +522,8 @@ MCP request 卡片当前新增的可视语义：
   - `claude` 的 `current_work` 分组当前只保留 `/stop`、`/new`、`/status`
   - `codex` 的 `send_settings` 分组当前可见 `/mode`、`/reasoning`、`/model`、`/access`、`/plan`、`/verbose`、`/autocontinue`、`/codexprofile`
   - `claude` 的 `send_settings` 分组当前保留 `/mode`、`/reasoning`、`/access`、`/plan`、`/verbose`、`/claudeprofile`
-  - `opencode` 的 `send_settings` 分组当前保留 `/mode`、`/access`、`/plan`、`/verbose`、`/opencodeprofile`；`/model` 与 `/reasoning` 继续 hidden + reject
+  - `opencode` 的 `send_settings` 分组当前保留 `/mode`、`/reasoning`、`/access`、`/plan`、`/verbose`、`/opencodeprofile`；`/model` 继续 hidden + reject
+  - detached 合法私聊的参数卡与带参数 apply 共享 backend-aware gate：Codex `/model`、`/reasoning`、`/access`，Claude `/reasoning`、`/access`，OpenCode `/access` 不要求 attached instance；Codex 无 catalog 时展示手动输入降级，OpenCode `/reasoning` 在没有当前 ACP `effort` 证据时仍显示 attachment-required 状态。VS Code、非 Feishu surface 和群聊不进入这条放行路径
   - Feishu 群聊 context 下，`send_settings` 会隐藏 `/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 这些 bot 能力设置，只保留 `/verbose` 等 surface/context 设置；同一卡片回调若仍尝试执行这些设置，会原卡显示私聊修改提示
   - `codex` 的 `common_tools` 分组当前可见 `/autowhip`、`/history`、`/cron`、`/sendfile`，并在 Feishu 群聊 context 下额外展示状态化 `/primary` 与 `/coworkers`
   - `claude` 的 `common_tools` 分组当前显示 `/history` 与 `/sendfile`，并在 Feishu 群聊 context 下额外展示状态化 `/primary` 与 `/coworkers`

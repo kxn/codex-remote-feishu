@@ -44,13 +44,13 @@ func (s *Service) buildConfigCommandViewState(
 		view.Config.CatalogVariantID = control.FeishuCommandVariantIDForContext(view.Config.CatalogFamilyID, ctx)
 	}
 	inst := s.root.Instances[ctx.InstanceID]
-	if flow.RequiresAttachment && ctx.AttachedKind == string(control.CatalogAttachedKindDetached) {
+	if inst == nil && s.promptSettingRequiresAttachment(surface, flow.ActionKind) {
 		view.Config.RequiresAttachment = true
 		return view
 	}
 
 	var summary control.PromptRouteSummary
-	if flow.UsesPromptSummary() && inst != nil {
+	if flow.UsesPromptSummary() {
 		summary = s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
 	}
 
