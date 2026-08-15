@@ -306,6 +306,8 @@ func goalStatusPage(surface *state.SurfaceConsoleRecord, goal *agentproto.Thread
 		buttons = append(buttons, goalCommandButton("暂停", "/goal pause"))
 	case "paused":
 		buttons = append(buttons, goalCommandButton("恢复", "/goal resume"))
+	case "complete":
+		buttons = append(buttons, goalCommandButton("新建", "/goal new"))
 	}
 	buttons = append(buttons, goalCommandButton("清除", "/goal clear"))
 	page.RelatedButtons = buttons

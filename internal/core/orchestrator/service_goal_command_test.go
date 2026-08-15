@@ -140,6 +140,48 @@ func TestGoalCommandEditWithoutObjectivePrefillsCurrentGoal(t *testing.T) {
 	}
 }
 
+func TestGoalCommandCompleteStatusPageOffersNewGoalEntry(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionGoalCommand,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-goal-complete-1",
+		Text:             "/goal",
+	})
+	get := findAgentCommand(events, agentproto.CommandThreadGoalGet)
+	if get == nil {
+		t.Fatalf("expected goal get command, got %#v", events)
+	}
+	resultEvents := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadGoalCommandResult,
+		CommandID: get.CommandID,
+		ThreadID:  "thread-1",
+		ThreadGoal: &agentproto.ThreadGoalUpdate{
+			ThreadID:        "thread-1",
+			Objective:       "已完成目标",
+			Status:          "complete",
+			TokensUsed:      100,
+			TimeUsedSeconds: 42,
+			TokenBudget:     ptrInt64(200),
+		},
+	})
+	page := findPageEvent(resultEvents)
+	if page == nil {
+		t.Fatalf("expected goal status page, got %#v", resultEvents)
+	}
+	var sawNew bool
+	for _, button := range page.RelatedButtons {
+		if button.Label == "新建" && button.CommandText == "/goal new" {
+			sawNew = true
+		}
+	}
+	if !sawNew {
+		t.Fatalf("expected complete status page to offer new goal entry, got %#v", page.RelatedButtons)
+	}
+}
+
 func TestGoalCommandClearRequiresConfirm(t *testing.T) {
 	svc, surfaceID, _ := goalInterlockTestSetup(t)
 	confirmEvents := svc.ApplySurfaceAction(control.Action{
