@@ -2,7 +2,7 @@
 
 > Type: `inprogress`
 > Updated: `2026-08-15`
-> Summary: 为不支持视觉的主模型提供可主动调用的 `describe_image` 工具：支持多图 + id 引用、可选 prompt，背后经可配置的 OpenAI Chat / Responses / Anthropic / Gemini 协议适配器做单次视觉推理；工具默认注入、由机器人级开关关闭。
+> Summary: 为不支持视觉的主模型提供可主动调用的 `describe_image` 工具：支持多图 + id 引用、可选 prompt，背后经可配置的 OpenAI Chat / Responses / Anthropic / Gemini 协议适配器做单次视觉推理；工具默认注入、由 profile 级开关关闭。
 
 ## 背景与目标
 
@@ -58,17 +58,17 @@
 
 ## 触发与注入策略
 
-### 默认注入 + 显式关闭
+### 默认注入 + profile 级显式关闭
 
 - 默认注入 `describe_image`：主要用户是非视觉模型，默认可用才能开箱即用。
-- 机器人级设置提供开关“当前主模型支持直接看图，不注入图片描述辅助工具”，勾选后 daemon 构建 MCP server 时**不注册**该工具（机制级硬关闭，不是只靠提示词）。
+- 开关粒度是 **profile 级**：一个机器人可以配多种模型（不同 profile 用不同模型），有的支持视觉、有的不支持。每个 profile 声明“该 profile 使用的主模型支持直接看图”，声明后该 profile 的会话**不注入** `describe_image`（机制级硬关闭，不是只靠提示词）；未声明的 profile 默认注入。
 - 工具描述中的“能直接看图就不要调用”仅作为提示词兜底，覆盖未关闭开关的视觉模型场景。
 
 ### 注入载体
 
 - 作为新工具加入 `internal/app/daemon/tool_service.go` 的 `toolDefinitions()`，随 feishu tool-service MCP server 自动被 Codex / Claude / OpenCode 加载。
 - 鉴权沿用现有 MCP caller-instance 校验。
-- 关闭开关的实现：`newToolMCPServer` 构建时按配置决定是否添加该工具（第一版为机器人/daemon 级全局开关；MCP server 当前不按 caller 区分工具集）。
+- 关闭开关的实现：同一 daemon 下不同实例可能使用不同 profile，因此 MCP server 必须**按 caller 区分工具集**——`listTools` 根据 caller instance 解析当前生效 profile，该 profile 声明支持视觉时不返回 `describe_image`；工具调用时同样做一次防御性校验。
 
 ## 视觉模型配置（辅助模型）
 
@@ -86,7 +86,7 @@ vision_assist:
 配置归属：
 
 - 端点配置（协议、base URL、API key、模型名、默认提示词）放“辅助模型”tab：它是独立的辅助服务端点，不绑定 Claude / Codex / OpenCode 任一主后端。
-- “主模型支持直接看图”开关放机器人级设置：它描述的是主模型能力，与辅助端点无关。
+- “主模型支持直接看图”开关放 profile 级（三个主后端各自的 profile 配置里）：它描述的是该 profile 使用的主模型能力，与辅助端点无关。
 
 ## 协议适配层
 
@@ -155,7 +155,7 @@ type VisionImage struct {
                                     默认提示词 [________________]
 ```
 
-- 开关“主模型支持直接看图，不注入图片描述辅助工具”放在“机器人”区的机器人设置里。
+- 开关“该 profile 使用的主模型支持直接看图，不注入图片描述辅助工具”放在“对话后端”各 profile 编辑器里（Claude / Codex / OpenCode profile 项各一个）。
 - “辅助模型”tab 命名比“看图模型”宽，未来可承载其它辅助用途（如翻译、OCR 增强）而不新增位置。
 
 ## 非目标
@@ -163,14 +163,14 @@ type VisionImage struct {
 - 不做图片到达时的自动视觉注入（避免二次调用）。
 - 工具不接受 URL / 不做图片下载。
 - 不做 agent 化、多轮对话、流式输出。
-- 不做按 caller 动态工具集（第一版为机器人/daemon 级开关）。
+- 不做多协议之外的自动探测（profile 的视觉能力由配置声明，不自动探测模型能力）。
 - 不改变主后端（Claude / Codex / OpenCode）的工具注入机制。
 
 ## 测试计划
 
 - 工具层：路径校验、多图上限、MIME 校验、错误路径、id 映射组装。
 - 协议层：四个 adapter 各自请求形状与响应提取的单元测试（用固定 fixture）。
-- 注入层：开关关闭时 MCP server 不注册工具；开启时注册。
+- 注入层：profile 声明支持视觉时 `listTools` 不返回工具；未声明时返回；同一 daemon 不同 profile 的实例互不影响。
 - 集成：通过 feishu tool-service MCP server 调用 `describe_image` 的端到端路径（mock 视觉端点）。
 - Web：辅助模型 tab 的配置读写、协议选择、开关读写。
 - `scripts/check/pre-commit.sh` + 相关包 `go test ./...`。
@@ -178,4 +178,3 @@ type VisionImage struct {
 ## 开放问题
 
 - 视觉端点鉴权除 Bearer 外是否还有其它形态（第一版只做 Bearer）。
-- 是否需要 per-profile 的“主模型支持看图”开关（第一版机器人级，后续按需细化）。
