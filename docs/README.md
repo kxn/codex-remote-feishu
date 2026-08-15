@@ -185,6 +185,7 @@
 - [final-message-feidex-audit.md](./inprogress/final-message-feidex-audit.md)
 - [opencode-acp-backend-implementation-design.md](./inprogress/opencode-acp-backend-implementation-design.md)
 - [relay-daemon-autostart-design.md](./inprogress/relay-daemon-autostart-design.md)
+- [vision-assist-tool-design.md](./inprogress/vision-assist-tool-design.md)
 
 ### 6.4 `draft`
 
