@@ -221,6 +221,13 @@ func (r RuntimeResolver) resolveAPI(ref state.CodexAdmissionRef, preference stat
 	if subagentModel != "" {
 		launch.CLIOverrides = append(launch.CLIOverrides, "-c", codexOverride("agents.default_subagent_model", subagentModel))
 	}
+	reviewModel := strings.TrimSpace(profile.ReviewModel)
+	if reviewModel == "" {
+		reviewModel = strings.TrimSpace(profile.Model)
+	}
+	if reviewModel != "" {
+		launch.CLIOverrides = append(launch.CLIOverrides, "-c", codexOverride("review_model", reviewModel))
+	}
 	catalog, known := codexcatalog.IdentifyEmbeddedCatalog(profile.BaseURL, profile.Model)
 	if known {
 		var catalogPath string

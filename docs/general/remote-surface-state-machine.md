@@ -471,6 +471,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 4. 结果就绪有两种明确合同，不能互相替代：
    1. detached review 是 review thread 上的普通 item / turn 流；首次激活时固化 `InitialTurnID`，该 turn 的非空 `agent_message item.completed` 会按 item id 去重并有序聚合到 review session 自己的 `PendingReviewText`，不依赖可被 plan / request / tool / compaction 提前消费的 UI pending-text buffer。只有同一 turn 成功 `turn.completed`，服务端才把聚合结果固化为 `LastReviewText` 并进入 `V2 Ready`；初始 turn 失败、中断或无结果完成会释放 reservation 并清掉 overlay，不留下 dead session
    2. inline review 才消费 `entered_review_mode` / `exited_review_mode`；completed `exited_review_mode` 携带的非空 `review` 只在 `LastReviewText` 尚未固化时写入，后续追问 lifecycle 不得覆盖初始 apply payload
+   3. 2026-08-15 补充：detached 初始 review turn 失败时，orchestrator 会先向 surface 追加 `review_failed` 错误 notice（带 `临时会话 · 审阅` 标签），再释放 reservation 并清掉 overlay；没有可显示结果时不静默结束
 5. `SelectedThreadID == ParentThreadID` 是 detached review session 的选择不变量，不再是判断 `ReviewSession` 是否存在的唯一依据。若旧版本或异常投影曾把 `SelectedThreadID` 污染成 `ReviewThreadID`，显式追问、`退出审阅`、`按审阅意见继续修改` 会先尝试恢复 parent selection，再继续处理。
 6. 新发起 review 时，若当前候选线程本身是 `source=review`，服务端必须先回溯到它的 parent thread，再把 `review.start` 发给 parent；review thread 不能作为新的 review 启动目标。
 7. `V1 Active` / `V2 Ready` 都不会把 surface route 从 `pinned/follow` 改成新的 route 值。普通聊天框始终属于主线程；Review overlay 只负责在未显式选择动作时阻断普通文字/图片/文件，以及在 `AwaitingFollowUpText=true` 时消费恰好一条纯文字。图片和文件在 staging 前拒绝，不会变成后续主线程草稿。
@@ -484,6 +485,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 15. OpenCode profile compiler 始终生成 `agent.review(mode=primary)`；API profile 的 `ReviewModel` 仅映射到 `agent.review.model`，空值继承主模型，不生成顶层 `review_model`。review agent 的 tools/permission 均默认 deny，只显式允许 Read/Glob/Grep；translator 还会对 typed review session 的 permission request 与 `fs/write_text_file` 直接 fail closed，旧写授权也不能旁路。
 16. Claude/OpenCode 类 reviewer 不依赖 shell 读取 target。orchestrator 生成受控上下文：未提交 target 包含完整 changed-file manifest、staged/unstaged patch 与 untracked 内容；commit target 包含 manifest、元信息与 patch。超限时显式标注截断，manifest 保持完整，reviewer 可用只读工具补读文件。
 17. Codex 原生 detached review 在启动时按 parent thread、review CWD 与 surface capability settings 复用普通 prompt 的有效配置解析，并把结果写入 `FrozenAccessMode`；后续 `/access` 只改变新 prompt 的 desired state，不追溯正在执行或 ready 后追问的该次 Review。旧/人工状态缺少冻结值时 fail closed。`ReviewSession` 是 daemon 内临时 overlay，当前 surface resume store 不跨 daemon 重启恢复它，本规则不新增持久化迁移。
+18. 2026-08-15 补充：API profile 的 headless launch 与 thread/resume 现在都会把 `review_model` 固定下来：显式 review 模型用 `ReviewModel`，`same_as_main` 用主模型，避免底层 Codex 回退到全局默认模型导致 review 以模型不支持失败。
 18. 只有 `Backend=codex + ExecutorKind=codex_native_detached + FrozenAccessMode=full_access`，且 instance、`ReviewThreadID`、当前非空 `ActiveTurnID` 与 request 精确匹配时，orchestrator 才可能在 request 入队前进入静默批准分支。白名单仅含 typed `approval_command`、`approval_file_change`、`approval_network`、`permissions_request_approval`，以及 request method 明确为 `execCommandApproval` / `applyPatchApproval` 的 legacy approval；typed approval 还必须实际暴露 `accept`。泛化 approval、plan confirmation、`request_user_input`、MCP elicitation、tool callback、Claude `can_use_tool` 和未知类型均按普通 request 路径展示或 fail closed。
 19. 静默批准不绕过 request lifecycle：approval 返回 `decision=accept`，permissions 返回原请求权限集合与 `scope=turn`；record 仍进入 pending/submitting 并等待 command ack 与上游 `request.resolved`，只是正常路径不生成 Feishu request card。surface 已有另一条 pending request 时不抢占，回退普通队列。若自动 response 的 command 被 translator/transport 拒绝，现有 restore 路径会把同一 request 转回可见 editing card 并追加失败 notice，因此不会形成无 UI 的永久 request gate。
 
@@ -1507,7 +1509,7 @@ E3 Running
       4. `Target.SurfaceBindingPolicy=keep_surface_selection`
    6. 若某个 request / item / final turn 输出来自 review thread，但当前没有普通 `pendingRemote/activeRemote` 绑定，surface 归属与 reply anchor 会回退到 `ReviewSession` runtime，而不是丢失到 thread claim 猜测；同一路径也会让 review thread 输出等价于 `keep_surface_selection`，不会触发默认 `follow_execution_thread` 改绑
    7. inline review 的 `entered_review_mode` / `exited_review_mode` 生命周期 item 当前不会直接投影成前台卡片；它们会把 `TargetLabel` / `LastReviewText` 写回 `ReviewSession` runtime，并在需要时补齐 `ReviewThreadID` / `ParentThreadID` / `ActiveTurnID`。detached review 不等待这组 item，而是在初始 review turn 的 `agent_message item.completed` 时保存 session-owned 候选，并在该 turn 成功完成时固化结果进入 ready
-   8. review detached frontstage 现在与 detour 共用同一条 temporary-session contract：`正在进入审阅` notice、request / plan / `turn_failed` / shared progress / final card 都统一带 `TemporarySessionLabel="临时会话 · 审阅"`；review 不再依赖 app-layer 标题前缀去补可见语义
+   8. review detached frontstage 现在与 detour 共用同一条 temporary-session contract：`正在进入审阅` notice、`review_failed`、request / plan / `turn_failed` / shared progress / final card 都统一带 `TemporarySessionLabel="临时会话 · 审阅"`；review 不再依赖 app-layer 标题前缀去补可见语义
    9. `normal` verbosity 下，review 共享过程现在额外放开 `command_execution`、`dynamic_tool_call` 与 `web_search`，避免 detached review 只显示“开始/结束”而中间看起来像假死
    10. 对于没有显式 thread/turn carrier 的 review surface owner-card / page 事件，delivery fallback 也会按当前 active / ready review session 继承 `临时会话 · 审阅`；这样 auto-continue / compact 这类 review-only surface 卡不会丢失 review 语义
 
@@ -2041,7 +2043,16 @@ retained-offline overlay 额外规则：
 18. OpenCode `/plan` 是否只通过 `PlanMode + PlanModeOverrideSet` 表达飞书显式 override：`on/off` 冻结到 queue item 并在 ACP prompt 前动态设置 `mode=plan/build`，`clear` 后不冻结也不 dispatch mode；`config_option_update id=mode` 是否能投影最近观察 mode，且自定义 mode 不被折算成 off。
 19. OpenCode ACP preflight 是否在同一 prompt 中按 deterministic 顺序先设置 `mode` 再设置 `effort`，全部成功后才发送 `session/prompt`；`config_option_update id=effort` 是否刷新 observed reasoning，并且 `effort not found` / unsupported model 不会被当作成功 prompt。
 
+2026-08-15 #895 补充：Codex active Goal thread 的 backend-observed turn 与普通队列互锁已并入 dispatch/recovery 主链。`thread/goal/set|get|clear` 与 `thread/read(includeTurns=false)` 成为 typed control carrier；`turn/started` 在目标 thread 的 authoritative Goal status 为 active 且无 remote binding 时记录为 backend-observed active turn（不伪造 continuation provenance），进入 Steer target，并在 completion/error/interrupt/disconnect 时按同一 turn-lifecycle owner 清理。普通队列第一条目标消息入队即创建 durable `pause_pending` lease 并发送 `thread/goal/set(paused)`；pause 确认后以 `thread/read` 的 live `idle` 状态为屏障进入 `draining`，之后才派发普通 prompt；Goal turn 完成即使无 remote binding 也会推进命中同 instance+thread 的等待队列；队列排空且 Goal fingerprint（createdAt/objective/budget）与 lease 快照一致时自动 resume，任何外部 mutation / RPC 失败 / fingerprint 漂移都 fail-closed 放弃自动恢复。lease 持久化到 daemon state，重启后按 phase 重发 pause/probe/get。
+
+2026-08-15 #895 review 修复补充：pause 失败进入退避窗口后，dispatch 门禁在整个退避期内保持阻塞（节流只是抑制重复提示，不会让 `maybeBeginGoalInterlockForQueueItem` 的 nil 落到派发路径）；`thread/goal/set` 响应缺失 `updatedAt`（或整体无 goal 快照）时，有序流中下一条该 thread 的 goal notification 视为本命令确认并消费一次，避免 pause 确认被误判为 external mutation 而永久放弃自动恢复；goal 命令结果只在 commandID 能关联到 pending 命令时才写回本地 thread goal，未知/stale 响应不再覆盖已更新的快照。
+
+2026-08-15 #896 补充：Codex Goal 用户控制面已接入现有命令卡体系。`/goal` 是 config-flow slash command（复用 `FeishuCatalogConfigView` / `FeishuPageView` / 菜单三态 / owner card 状态机）：bare `/goal` 发 `thread/goal/get`（`user_control` provenance）并回显 Goal 状态页；`/goal new|edit <目标> [--budget N]` 创建/编辑，`/goal pause|resume` 动态生效，`/goal clear` 先出确认卡、`--confirm` 后清除；无精确 selected thread / 非 Codex / Review/helper 会话 fail closed。用户动作携带 `user_control`，会撤销 queue interlock 的自动恢复所有权；状态页通过现有 `pageEvent` inline replace 刷新，不新建第二套卡片 carrier。
+
+2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时在服务端暂存当前 thread 的 Goal fingerprint（createdAt/objective/budget），执行 `clear --confirm` / `new|edit` 前先与最新 thread Goal 比对，漂移则取消操作并出错误卡，避免外部 mutation 窗口内的误清/误改；goal 命令 dispatch 失败会清理 pending `goalUserCommands` 并回错误卡，不再静默丢弃；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch，不残留无按钮死卡；错误卡复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+
 ## 11. 待讨论取舍
 
 1. 群聊 on-demand 恢复遇到 terminal 失败后，同一恢复目标下的后续普通文本会被静默吞掉（不重复发失败卡），直到恢复目标变化、恢复成功或用户显式重选（`/list`、`/use`、`/new`）。这是为了避免刷屏的有意取舍；风险是用户可能误以为机器人无响应，需要错误卡上的指引文案足够明确。
 2. 群聊/其他 surface 在 bot 级 Profile 切换时若正在执行 turn，切换不会立即生效：surface 标记待收敛，直到下一次交互（实例空闲）才重启实例。这是为避免硬杀进行中任务的有意取舍；若用户希望立即生效，可等待当前任务完成或手动 `/detach` 后重连。
+3. Goal queue interlock 期间，普通队列先暂停 Goal continuation（`thread/goal/set(paused)`），这可能短暂停止 Goal 的 active accounting；这是上游 pause 的真实语义，且用户队列不应计入 Goal budget。pause 失败或上游未确认时保持 fail-closed（不派发普通 prompt 到可能被隐式 Steer 的 Goal turn），并给出诊断 notice；用户可显式 pause/clear Goal 或稍后重试。

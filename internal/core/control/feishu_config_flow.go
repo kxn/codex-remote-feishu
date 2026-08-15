@@ -128,6 +128,13 @@ var feishuConfigFlowDefinitions = []FeishuConfigFlowDefinition{
 		CurrentValueKey: FeishuConfigFlowValueSurfaceOpenCodeProfile,
 	},
 	{
+		CommandID:   FeishuCommandGoal,
+		ActionKind:  ActionGoalCommand,
+		BareCommand: "/goal",
+		IntentKind:  FeishuUIIntentShowGoalCatalog,
+		PageBuilder: goalPageViewFromCommandConfigView,
+	},
+	{
 		CommandID:       FeishuCommandAutoWhip,
 		ActionKind:      ActionAutoWhipCommand,
 		BareCommand:     "/autowhip",

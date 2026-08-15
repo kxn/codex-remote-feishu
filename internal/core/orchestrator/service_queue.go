@@ -136,7 +136,8 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
 	}
-	return append(routeAdjustmentEvents, s.enqueuePreparedQueueItem(surface, item, front)...)
+	_, goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item)
+	return append(routeAdjustmentEvents, append(goalEvents, s.enqueuePreparedQueueItem(surface, item, front)...)...)
 }
 
 func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
@@ -339,16 +340,25 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 		return autoContinue
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
-	if inst == nil || !inst.Online || inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) {
-		return nil
-	}
-	if s.progress.instanceHasCompact(inst.InstanceID) {
+	if inst == nil || !inst.Online {
 		return nil
 	}
 	queueID := surface.QueuedQueueItemIDs[0]
 	item := surface.QueueItems[queueID]
 	if item == nil || item.Status != state.QueueItemQueued {
 		surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
+		return nil
+	}
+	if blocked, goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item); blocked || len(goalEvents) != 0 {
+		return goalEvents
+	}
+	if inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) {
+		return nil
+	}
+	if lease := s.goalInterlockLease(inst.InstanceID, queuedItemExecutionThreadID(item)); lease != nil && lease.Phase != GoalInterlockDraining {
+		return nil
+	}
+	if s.progress.instanceHasCompact(inst.InstanceID) {
 		return nil
 	}
 	if !s.reserveFeishuRoomActiveSlotForQueueItem(surface, item, "headless_prompt_dispatch") {

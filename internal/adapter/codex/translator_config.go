@@ -95,9 +95,20 @@ func applyCodexResumePolicyToThreadParams(params map[string]any, policy *agentpr
 		delete(configMap, "model_reasoning_effort")
 		delete(configMap, "reasoning_effort")
 	}
-	if policy.ReviewModelMode == agentproto.CodexReviewModelExplicit && policy.ReviewModel != "" {
-		configMap["review_model"] = policy.ReviewModel
-	} else {
+	switch policy.ReviewModelMode {
+	case agentproto.CodexReviewModelExplicit:
+		if policy.ReviewModel != "" {
+			configMap["review_model"] = policy.ReviewModel
+		} else {
+			delete(configMap, "review_model")
+		}
+	case agentproto.CodexReviewModelSameAsMain:
+		if policy.Model != "" {
+			configMap["review_model"] = policy.Model
+		} else {
+			delete(configMap, "review_model")
+		}
+	default:
 		delete(configMap, "review_model")
 	}
 	if policy.ContextWindow > 0 {

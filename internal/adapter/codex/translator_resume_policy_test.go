@@ -57,6 +57,38 @@ func TestTranslatePromptSendApplyTargetProfilePolicyUsesTypedStartPayload(t *tes
 	}
 }
 
+func TestTranslatePromptSendApplyTargetProfileSameAsMainReviewModelPinsMainModel(t *testing.T) {
+	tr := NewTranslator("inst-1")
+	if _, err := tr.ObserveClient([]byte(`{"method":"thread/start","params":{"cwd":"/tmp/old","modelProvider":"old-provider","model":"old-model","config":{"model_reasoning_effort":"low","review_model":"old-review"}}}`)); err != nil {
+		t.Fatalf("seed local thread/start template: %v", err)
+	}
+
+	commands, err := tr.TranslateCommand(agentproto.Command{
+		Kind:   agentproto.CommandPromptSend,
+		Origin: agentproto.Origin{ChatID: "surface-1"},
+		Target: agentproto.Target{CWD: "/tmp/project"},
+		Prompt: agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "hello"}}},
+		CodexResume: &agentproto.CodexResumePolicy{
+			Mode:            agentproto.CodexResumeApplyTargetProfile,
+			ModelProviderID: "codex_remote_profile_deepseek",
+			ModelMode:       agentproto.CodexThreadValueExplicit,
+			Model:           "deepseek-v4-flash",
+			ReviewModelMode: agentproto.CodexReviewModelSameAsMain,
+			ReasoningMode:   agentproto.CodexThreadValueExplicit,
+			ReasoningEffort: "high",
+			ContextMode:     "codex_default",
+		},
+	})
+	if err != nil {
+		t.Fatalf("translate command: %v", err)
+	}
+	params := payloadParams(t, decodeSinglePayload(t, commands), "thread/start")
+	config := payloadConfig(t, params)
+	if config["review_model"] != "deepseek-v4-flash" {
+		t.Fatalf("same_as_main review policy must pin review_model to the main model, got %#v", config)
+	}
+}
+
 func TestTranslatePromptSendApplyTargetProfileDefaultPolicyOmitsModelReasoningAndTemplate(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	if _, err := tr.ObserveClient([]byte(`{"method":"thread/start","params":{"cwd":"/tmp/old","modelProvider":"old-provider","model":"old-model","config":{"model_reasoning_effort":"low","review_model":"old-review"}}}`)); err != nil {

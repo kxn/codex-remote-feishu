@@ -407,6 +407,14 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				}},
 			}, nil
 		}
+		if pending, exists := t.pendingGoalRequests[requestID]; exists {
+			delete(t.pendingGoalRequests, requestID)
+			return t.observeThreadGoalCommandResponse(pending, message), nil
+		}
+		if pending, exists := t.pendingThreadReads[requestID]; exists {
+			delete(t.pendingThreadReads, requestID)
+			return t.observeThreadReadResponse(pending, message), nil
+		}
 	}
 
 	method, _ := message["method"].(string)

@@ -19,6 +19,7 @@ func TestFeishuConfigFlowRegistryRoundTrip(t *testing.T) {
 		{commandID: FeishuCommandCodexProfile, actionKind: ActionCodexProfileCommand, bareCommand: "/codexprofile", intentKind: FeishuUIIntentShowCodexProfileCatalog},
 		{commandID: FeishuCommandClaudeProfile, actionKind: ActionClaudeProfileCommand, bareCommand: "/claudeprofile", intentKind: FeishuUIIntentShowClaudeProfileCatalog},
 		{commandID: FeishuCommandOpenCodeProfile, actionKind: ActionOpenCodeProfileCommand, bareCommand: "/opencodeprofile", intentKind: FeishuUIIntentShowOpenCodeProfileCatalog},
+		{commandID: FeishuCommandGoal, actionKind: ActionGoalCommand, bareCommand: "/goal", intentKind: FeishuUIIntentShowGoalCatalog},
 		{commandID: FeishuCommandAutoWhip, actionKind: ActionAutoWhipCommand, bareCommand: "/autowhip", intentKind: FeishuUIIntentShowAutoWhipCatalog},
 		{commandID: FeishuCommandAutoContinue, actionKind: ActionAutoContinueCommand, bareCommand: "/autocontinue", intentKind: FeishuUIIntentShowAutoContinueCatalog},
 		{commandID: FeishuCommandReasoning, actionKind: ActionReasoningCommand, bareCommand: "/reasoning", intentKind: FeishuUIIntentShowReasoningCatalog},

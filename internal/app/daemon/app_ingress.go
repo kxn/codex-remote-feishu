@@ -922,4 +922,8 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.maybeScheduleCronJobsLocked(now)
 	a.reapCronExitTargetsLocked(now)
 	a.maybeShutdownExternalAccessIdleLocked(now)
+	a.persistGoalInterlockStateLocked(now)
+	if now.Unix()%2 == 0 {
+		a.handleUIEventsLocked(ctx, a.service.ReconcileGoalInterlocks())
+	}
 }

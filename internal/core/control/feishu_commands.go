@@ -36,6 +36,7 @@ const (
 	FeishuCommandCodexProfile         = "codex_profile"
 	FeishuCommandClaudeProfile        = "claude_profile"
 	FeishuCommandOpenCodeProfile      = "opencode_profile"
+	FeishuCommandGoal                 = "goal"
 	FeishuCommandHelp                 = "help"
 	FeishuCommandMenu                 = "menu"
 	FeishuCommandDebug                = "debug"
@@ -463,6 +464,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			{alias: "claude_profile", action: Action{Kind: ActionClaudeProfileCommand, Text: "/claudeprofile"}},
 		},
 	},
+	goalCommandSpec(),
 	openCodeProfileCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{

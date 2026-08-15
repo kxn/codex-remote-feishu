@@ -89,6 +89,21 @@ func TestResolveFeishuFrontstageActionContractInlineViewActionSet(t *testing.T) 
 			want:   true,
 		},
 		{
+			name:   "bare goal",
+			action: Action{Kind: ActionGoalCommand, Text: "/goal"},
+			want:   true,
+		},
+		{
+			name:   "goal subcommand",
+			action: Action{Kind: ActionGoalCommand, Text: "/goal pause"},
+			want:   true,
+		},
+		{
+			name:   "goal owner form open",
+			action: Action{Kind: ActionGoalCommand, Text: "/goal new"},
+			want:   true,
+		},
+		{
 			name:   "bare review root page",
 			action: Action{Kind: ActionReviewCommand, Text: "/review"},
 			want:   true,

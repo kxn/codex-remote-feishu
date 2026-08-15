@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-07-17`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`thread/archived` / `thread/deleted` / `thread/unarchived` / `thread/closed` / `thread/goal/*` / `thread/settings/updated` 到 state-only thread state carrier、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`skills/changed` / `mcpServer/startupStatus/updated` / `mcpServer/oauthLogin/completed` / `app/list/updated` / `account/*` passive notifications 到 state-only `capability.state.updated` carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command。
+> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`thread/archived` / `thread/deleted` / `thread/unarchived` / `thread/closed` / `thread/goal/*` / `thread/settings/updated` 到 state-only thread state carrier、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`skills/changed` / `mcpServer/startupStatus/updated` / `mcpServer/oauthLogin/completed` / `app/list/updated` / `account/*` passive notifications 到 state-only `capability.state.updated` carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command、`thread/goal/set|get|clear` + `thread/read(includeTurns=false)` 的 Goal control carrier 与 queue interlock（#895）。
 
 ## 1. 文档定位
 
@@ -625,6 +625,16 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - deleted 会把已选中的旧 thread 清成 attached-unbound，避免后续输入继续路由到已删除 thread
 - closed 只标记 thread runtime `notLoaded`，不会 detach surface，也不会清空当前 thread selection
 - goal/settings 只保存 latest state，不默认生成 Feishu 消息或卡片
+
+### 5.4.3.1 Goal control command 与 queue interlock（#895）
+
+daemon 通过 `thread/goal/set|get|clear` 与 `thread/read(includeTurns=false)` 控制 Codex Goal：
+
+- `thread.goal.set` / `thread.goal.get` / `thread.goal.clear`：带 CommandID 关联，成功返回 `thread.goal.command.result` 事件（完整 Goal snapshot，含 `createdAt/updatedAt` 与 i64 usage；`get` 无 Goal 时 `goalMissing=true`，`clear` 成功 `goalCleared=true`，失败带 `errorMessage`）。
+- `thread.goal.updated|cleared` notification 继续作为 authoritative state；没有对应 pending 命令时标记 `externalMutation`，用于撤销 daemon 的自动恢复所有权。
+- `thread.read(includeTurns=false)`：作为 pause 确认后的 live idle barrier，返回 `thread.runtime_status.updated`（`idle|active`）。
+
+queue interlock 状态机（`pause_pending -> quiescing -> draining -> resume_pending`）由 orchestrator 持有并持久化到 daemon state；普通队列在 active Goal thread 上先 pause Goal，等 `thread/read` 确认 idle 后才派发；Goal turn 完成后推进旧队列；队列排空且 fingerprint 一致才自动 resume。
 
 ### 5.4.4 Capability / account / app / MCP status state
 

@@ -16,7 +16,9 @@
 
 2026-08-13 #888/#889 补充：Claude 与 OpenCode `/review` 均从 hidden reject 改为 common tools 可见的 approximation；bare `/review`、review 页面和 final-card 待提交/commit 按钮复用与 Codex 相同的卡片交互，底层分别走独立 Claude fork session 与 OpenCode ACP fork/review mode。结果卡、一次性追问 capture、退出和应用动作保持 backend-neutral；active turn 上的退出动作先发送一次 interrupt，并在匹配终态后才清 overlay，不能提前释放并发 ownership。OpenCode fork 在 review mode gate 前已经按 typed binding 标记 `source=review`，mode/config 失败会清 overlay 与 active queue，不产生可操作结果卡。
 
-2026-08-12 #872 补充：旧卡/旧动作拒绝提示不再维护 command 类 action-to-label 副本；能解析到 `FeishuCommandBinding` 与 `FeishuCommandDefinition` 的动作，其用户可读标题与 canonical slash 以 command catalog 为 owner；`/review uncommitted`、`/bendtomywill rollback` 等 extra action route 可在 catalog route 上声明更精确的标题。review final-card 的 `放弃审阅` / `按审阅意见继续修改`、owner-flow 与 picker 内部动作等不属于 command catalog 的 callback 仍保留 UI-only local label；这些 label 只能说明本地按钮语义，不得反向扩展 command catalog 矩阵。
+2026-08-15 #896 补充：`/goal` 是新增 config-flow slash command，完全复用现有命令卡体系：bare `/goal` 经现有命令解析与 freshness 校验，通过 `pageEvent` inline replace 回显 Goal 状态页；`/goal clear` 的确认/取消通过 `CommandText` 命令重放（`/goal clear --confirm`、`/goal`），不引入新 callback payload、不新增 owner 分类、不改 `daemon_lifecycle_id` stamping。状态页按钮均声明在 `FeishuCommandBinding` 上（`CommandID=goal`），走 `CommandCatalogButtonCallbackAction`，与 `/codexprofile` 等配置命令同一条路由，Goal 控制面不产生第二套卡片 carrier 或 freshness 规则。
+
+2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时服务端暂存 Goal fingerprint，命令重放执行前比对、漂移 fail closed；goal 命令发送失败会清理 pending 并回错误卡；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；错误页复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
 
 它关注的是：
 
@@ -636,9 +638,10 @@ MCP request 卡片当前新增的可视语义：
     - 非 final assistant 普通文本不会为了 detour 再硬插前缀，继续保持原正文
     - detour turn 完成、失败或用户中断后，orchestrator 会再补一条 `detour_returned` notice；这条提示跟随原 turn 的 reply/top-level lane，正文固定是“临时会话已结束，已切回原会话。”
   - detached review 当前也复用同一条 temporary-session subtitle substrate：
-    - `正在进入审阅` notice、request prompt、提案计划卡、plan update、`turn_failed` notice、共享 progress card 与主 final reply card，会把 `临时会话 · 审阅` 提升为卡片 header subtitle，并以 `lark_md` 加粗显示
+    - `正在进入审阅` notice、`review_failed` notice、request prompt、提案计划卡、plan update、`turn_failed` notice、共享 progress card 与主 final reply card，会把 `临时会话 · 审阅` 提升为卡片 header subtitle，并以 `lark_md` 加粗显示
     - review final card 标题保持默认 `✅ 最后答复`；review 特有语义只由副标题与 footer follow-up 承载，不再通过 `审阅中 ·` 标题前缀旁路实现
     - review surface 上少数没有显式 thread/turn carrier 的 owner/page 卡，当前也会在 delivery fallback 中继承同一个 subtitle；这样 `自动继续`、`上下文压缩` 等 review-only owner card 不会退回成无标记普通卡
+    - 初始 detached review turn 失败时，orchestrator 会 append `review_failed` 错误 notice（带 `临时会话 · 审阅` 副标题）并清掉 overlay；失败原因直接展示在 notice 文本里，不再停在“工作中”无反馈
   - request prompt 当前还允许叠加 request 自身的来源副标题：若 request runtime 带 `SourceContextLabel`（例如 Claude delegated task 生成的 `来自 Task (Explore)`），projector 会继续沿同一条 header subtitle 车道渲染；若同时还存在 detour/review temporary-session label，则按 `source-context · temporary-session` 拼接后一起加粗显示
   - steer accept 成功后，orchestrator 现在会额外发一条 `UIEventTimelineText(type=steer_user_supplement)`；这条文本 reply 到当前 turn anchor，内容只镜像本次真正并入 turn 的用户补充，不复用 assistant block / notice 语义，也不重发图片或文件实体
   - `用户补充` 的图片计数当前只来自 steer 输入里的 `InputLocalImage` / `InputRemoteImage`；文件计数只来自结构化转发/引用文本中显式编码的 `file` 节点

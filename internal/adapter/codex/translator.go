@@ -43,6 +43,9 @@ type Translator struct {
 	pendingMCPOAuthLogins     map[string]pendingMCPOAuthLogin
 	pendingMCPOAuthLoginKeys  map[string]string
 	pendingModelList          map[string]pendingModelList
+	pendingGoalRequests       map[string]pendingGoalRequest
+	pendingThreadReads        map[string]pendingThreadRead
+	lastOwnedGoalMutations    map[string]ownedGoalMutation
 	reasoningSummaryIndexes   map[string]map[int]bool
 }
 
@@ -97,6 +100,24 @@ type pendingModelList struct {
 	IncludeHidden bool
 }
 
+type pendingGoalRequest struct {
+	CommandID string
+	ThreadID  string
+	Operation string
+	Purpose   string
+}
+
+type pendingThreadRead struct {
+	CommandID string
+	ThreadID  string
+}
+
+type ownedGoalMutation struct {
+	UpdatedAt int64
+	Cleared   bool
+	AwaitNext bool
+}
+
 type codexObservedThread struct {
 	ModelProviderID string
 	Model           string
@@ -145,6 +166,9 @@ func NewTranslator(instanceID string) *Translator {
 		pendingMCPOAuthLogins:      map[string]pendingMCPOAuthLogin{},
 		pendingMCPOAuthLoginKeys:   map[string]string{},
 		pendingModelList:           map[string]pendingModelList{},
+		pendingGoalRequests:        map[string]pendingGoalRequest{},
+		pendingThreadReads:         map[string]pendingThreadRead{},
+		lastOwnedGoalMutations:     map[string]ownedGoalMutation{},
 		reasoningSummaryIndexes:    map[string]map[int]bool{},
 	}
 }

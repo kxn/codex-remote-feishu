@@ -68,12 +68,15 @@ func TestRuntimeResolverProjectsAPIConnectionThreadAndSecretSeparately(t *testin
 		`.requires_openai_auth=false`,
 		`.supports_websockets=false`,
 		`cli_auth_credentials_store="ephemeral"`,
+		codexOverride("review_model", profile.ReviewModel),
 	} {
 		if !strings.Contains(joinedArgs, required) {
 			t.Fatalf("launch overrides missing %q: %#v", required, projection.Launch.CLIOverrides)
 		}
 	}
-	if strings.Contains(joinedArgs, profile.Model) || strings.Contains(joinedArgs, profile.ReasoningEffort) || strings.Contains(joinedArgs, profile.ReviewModel) {
+	if containsCLIOverrideKey(projection.Launch.CLIOverrides, "model") ||
+		containsCLIOverrideKey(projection.Launch.CLIOverrides, "model_reasoning_effort") ||
+		containsCLIOverrideKey(projection.Launch.CLIOverrides, "reasoning_effort") {
 		t.Fatalf("connection launch overrides contain thread policy: %#v", projection.Launch.CLIOverrides)
 	}
 
@@ -89,6 +92,41 @@ func TestRuntimeResolverProjectsAPIConnectionThreadAndSecretSeparately(t *testin
 	}
 	if _, err := json.Marshal(projection.Launch); err == nil {
 		t.Fatal("secret launch material must reject JSON serialization")
+	}
+}
+
+func TestRuntimeResolverProjectsSameAsMainReviewModelOverride(t *testing.T) {
+	profile := config.CodexAPIProfileSecretConfig{
+		ID:                   "cp_deepseek_review",
+		Revision:             1,
+		CredentialGeneration: 1,
+		ConnectionGeneration: 1,
+		Kind:                 state.CodexProfileKindAPI,
+		Name:                 "DeepSeek",
+		BaseURL:              "https://api.deepseek.com/",
+		APIKey:               "secret",
+		Model:                "deepseek-v4-flash",
+		ReasoningEffort:      "high",
+	}
+	managedDir := filepath.Join(t.TempDir(), "catalogs")
+	resolver := RuntimeResolver{
+		APIProfiles: []config.CodexAPIProfileRecord{{
+			ID: profile.ID, CurrentRevision: 1, Revisions: []config.CodexAPIProfileSecretConfig{profile},
+		}},
+		Preference:             fixedPreferenceLookup(state.ProfileContextPreference{ProfileID: profile.ID, Revision: 1, Mode: state.CodexContextModeDefault}),
+		CapabilitySet:          CodexProfileCapabilitySetV1,
+		ManagedModelCatalogDir: managedDir,
+	}
+
+	projection, err := resolver.Resolve(admissionRef(profile.ID, 1, 1))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !containsCLIOverride(projection.Launch.CLIOverrides, codexOverride("review_model", profile.Model)) {
+		t.Fatalf("same_as_main review must pin review_model to the profile main model: %#v", projection.Launch.CLIOverrides)
+	}
+	if projection.Thread.ReviewModelMode != state.CodexReviewModelSameAsMain {
+		t.Fatalf("empty review model must project same_as_main, got %#v", projection.Thread)
 	}
 }
 
