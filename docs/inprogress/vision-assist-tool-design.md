@@ -129,7 +129,7 @@ type Image struct {
 ## 内部流程
 
 1. 校验 `images` 非空且 ≤ 5。
-2. 校验 `image` 是允许读取的本地路径（见安全边界），读取文件，校验 MIME 为图片格式（png/jpeg/webp/gif 等），转 base64。
+2. 按传入顺序读取本地图片文件，校验 MIME 为图片格式（png/jpeg/webp/gif 等），转 base64。
 3. 按传入顺序组装协议消息，并在文本中声明 id 映射（“img1=第1张，img2=第2张，请按 ID 回答”）。
 4. 调用所选协议的 adapter 单次推理。
 5. 返回纯文本回答（不套 JSON）。
@@ -143,7 +143,8 @@ type Image struct {
 ## 安全边界
 
 - 工具**不接受 URL**、不做下载：模型没有网络能力时不应通过工具获得任意 URL 抓取能力；权限边界保持“模型负责拿图，工具负责看图”。
-- **路径白名单**：工具只允许读取“本次对话中用户实际发来的图片”——即当前 surface `StagedImages` 里的本地路径（飞书 staging 的 `local_image` 路径）。模型传给工具的 `image` 必须命中这个集合，其它任意路径一律拒绝。原因：如果不限制，模型可以拿这个工具去读机器上任意文件（如 `/etc/passwd`、用户私人照片）并发送给外部视觉模型，等于任意文件外带通道。白名单把工具的可读范围锁死在“用户这次发来的图”，实现时确认图片合并进输入后 `StagedImages` 是否保留，需覆盖“已随输入派发”的图片。
+- **不限制路径读取范围**：工具接受任意本地图片路径（与模型自身文件读取能力一致——Codex exec / Claude Read 本来就能读这些文件）。视觉端点是管理员自行配置的可信端点，模型把文件内容发给它属于其能力范围内，不做额外路径白名单。
+- 保留基础校验：文件不存在 / 读取失败 / 非图片格式 → 明确错误；不做任意文件读取之外的“外带”假设。
 - API key 通过环境变量注入，不落管理页明文（与现有 profile 密钥处理一致）。
 
 ## 管理页 UI 位置
@@ -178,7 +179,7 @@ type Image struct {
 
 ## 测试计划
 
-- 工具层：路径校验、多图上限、MIME 校验、错误路径、id 映射组装。
+- 工具层：多图上限、MIME 校验、错误路径、id 映射组装。
 - 协议层：四个 adapter 各自请求形状与响应提取的单元测试（用固定 fixture）。
 - 注入层：profile 声明支持视觉时 `listTools` 不返回工具；未声明时返回；同一 daemon 不同 profile 的实例互不影响。
 - 集成：通过 feishu tool-service MCP server 调用 `describe_image` 的端到端路径（mock 视觉端点）。
@@ -221,8 +222,7 @@ type Image struct {
 
 ### 6. 工具内部流程与安全
 
-- 图片路径白名单：校验 `image` 属于当前 surface 的 `StagedImages` 本地路径集合（`state.StagedImageRecord.LocalPath`）；实现时确认图片合并进 queue item 输入后 `StagedImages` 是否保留，白名单需覆盖“已随输入派发”的图片。
-- 图片格式校验（png/jpeg/webp/gif 等 MIME）→ base64 组装 → id 映射声明 → 协议 adapter 调用 → 返回纯文本。
+- 读取本地图片文件 → 图片格式校验（png/jpeg/webp/gif 等 MIME）→ base64 组装 → id 映射声明 → 协议 adapter 调用 → 返回纯文本；不做路径白名单限制（与模型自身读取能力一致）。
 
 ### 7. 风险与实现注意
 
