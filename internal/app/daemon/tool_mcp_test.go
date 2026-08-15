@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -193,7 +194,7 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	listPayload := decodeToolMCPResponse(t, rec)
 	result, _ := listPayload["result"].(map[string]any)
 	tools, _ := result["tools"].([]any)
-	if len(tools) != 5 {
+	if len(tools) != 4 {
 		t.Fatalf("unexpected tools/list payload: %#v", listPayload)
 	}
 	seen := map[string]map[string]any{}
@@ -205,8 +206,8 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	if _, ok := seen[feishuSurfaceResolverToolName]; ok {
 		t.Fatalf("resolver should not be published in MCP tool list: %#v", seen[feishuSurfaceResolverToolName])
 	}
-	if _, ok := seen[describeImageToolName]; !ok {
-		t.Fatalf("describe_image should be published by default: %#v", seen)
+	if _, ok := seen[describeImageToolName]; ok {
+		t.Fatalf("describe_image should not be published without a configured vision assist endpoint: %#v", seen)
 	}
 	if strings.Contains(seen[feishuSendIMFileToolName]["description"].(string), ".codex-remote/surface-context.json") {
 		t.Fatalf("file-send description still exposes workspace context: %#v", seen[feishuSendIMFileToolName])
@@ -342,6 +343,85 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	readStructured, _ := readResult["structuredContent"].(map[string]any)
 	if readStructured["surface_session_id"] != "surface-normal" || readStructured["comment_count"] != float64(1) {
 		t.Fatalf("unexpected read comments result: %#v", readPayload)
+	}
+}
+
+func TestToolMCPDescribeImagePublicationDependsOnEndpointAndProfile(t *testing.T) {
+	visionCfg := config.DefaultAppConfig()
+	visionCfg.VisionAssist = config.VisionAssistSettings{
+		Protocol: "openai_chat",
+		BaseURL:  "http://unused",
+	}
+	tests := []struct {
+		name          string
+		cfg           config.AppConfig
+		instanceID    string
+		profileID     string
+		wantPublished bool
+	}{
+		{name: "unconfigured endpoint", cfg: config.DefaultAppConfig(), instanceID: "inst-plain", profileID: "cp_native", wantPublished: false},
+		{name: "configured endpoint default profile", cfg: visionCfg, instanceID: "inst-default", profileID: "cp_native", wantPublished: true},
+		{name: "configured endpoint vision profile", cfg: visionCfg, instanceID: "inst-vision", profileID: "cp_v3", wantPublished: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.profileID == "cp_v3" {
+				tt.cfg.Codex.Profiles = []config.CodexAPIProfileRecord{{
+					ID:              "cp_v3",
+					CurrentRevision: 1,
+					Revisions: []config.CodexAPIProfileSecretConfig{{
+						ID: "cp_v3", Revision: 1, CredentialGeneration: 1, ConnectionGeneration: 1,
+						Kind: state.CodexProfileKindAPI, Name: "Vision", BaseURL: "http://unused", APIKey: "k",
+						Model: "gpt-v", VisionSupported: true,
+					}},
+				}}
+			}
+			sender := &fakeToolSender{}
+			app, _ := newToolServiceTestApp(t, sender)
+			app.admin.loadConfig = func() (config.LoadedAppConfig, error) {
+				return config.LoadedAppConfig{Path: "/tmp/vision-test.json", Config: tt.cfg}, nil
+			}
+			if err := app.Bind(); err != nil {
+				t.Fatalf("Bind() error = %v", err)
+			}
+			defer func() {
+				_ = app.Shutdown(context.Background())
+			}()
+			app.service.UpsertInstance(&state.InstanceRecord{
+				InstanceID:     tt.instanceID,
+				Backend:        agentproto.BackendCodex,
+				CodexProfileID: tt.profileID,
+				Source:         "headless",
+				Managed:        true,
+				Online:         true,
+				Threads:        map[string]*state.ThreadRecord{},
+			})
+
+			sessionID, protocolVersion := initializeToolMCPSessionWithCaller(t, app.toolRuntime.Server.Handler, app.toolRuntime.BearerToken, tt.instanceID)
+			rec := performToolMCPRequest(t, app.toolRuntime.Server.Handler, toolMCPRequestOptions{
+				Method:           http.MethodPost,
+				Token:            app.toolRuntime.BearerToken,
+				SessionID:        sessionID,
+				ProtocolVersion:  protocolVersion,
+				CallerInstanceID: tt.instanceID,
+				Body:             toolMCPCallRequestBody(t, 2, "tools/list", map[string]any{}),
+			})
+			if rec.Code != http.StatusOK {
+				t.Fatalf("tools/list failed: code=%d body=%s", rec.Code, rec.Body.String())
+			}
+			listPayload := decodeToolMCPResponse(t, rec)
+			result, _ := listPayload["result"].(map[string]any)
+			tools, _ := result["tools"].([]any)
+			found := false
+			for _, raw := range tools {
+				if item, ok := raw.(map[string]any); ok && strings.TrimSpace(item["name"].(string)) == describeImageToolName {
+					found = true
+				}
+			}
+			if found != tt.wantPublished {
+				t.Fatalf("describe_image published = %v, want %v: %#v", found, tt.wantPublished, listPayload)
+			}
+		})
 	}
 }
 

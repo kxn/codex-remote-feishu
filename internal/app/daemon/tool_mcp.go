@@ -32,7 +32,9 @@ func (a *App) newToolRuntimeHandler() http.Handler {
 // 是否注册 describe_image：profile 声明主模型支持直接看图时不注册。
 func (a *App) newToolMCPServerForRequest(req *http.Request) *mcp.Server {
 	server := a.newToolMCPServer()
-	if req == nil || a.callerProfileVisionSupported(req) {
+	// 只有同时满足“端点已配置”和“主模型未声明支持看图”时才注入工具：
+	// 未配置端点时注入一个必失败的工具体验更糟。
+	if req == nil || a.callerProfileVisionSupported(req) || !a.visionAssistEndpointConfigured() {
 		return server
 	}
 	for _, definition := range describeImageToolDefinitions() {

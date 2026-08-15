@@ -92,6 +92,15 @@ func (a *App) callerInstanceProfileVisionSupported(instanceID string) bool {
 	}
 }
 
+// visionAssistEndpointConfigured 判断辅助模型端点是否已配置（协议 + BaseURL）。
+func (a *App) visionAssistEndpointConfigured() bool {
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return false
+	}
+	return visionAssistConfigured(loaded.Config.VisionAssist)
+}
+
 func codexProfileVisionSupported(cfg config.AppConfig, profileID string) bool {
 	profileID = state.NormalizeCodexProfileID(profileID)
 	if profileID == config.CodexNativeProfileID || profileID == config.CodexOAuthProfileID {
