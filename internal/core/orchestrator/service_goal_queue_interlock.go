@@ -341,6 +341,9 @@ func (s *Service) applyGoalCommandResult(instanceID string, event agentproto.Eve
 			}
 		}
 	}
+	if events := s.applyGoalUserCommandResult(instanceID, event); len(events) != 0 {
+		return events
+	}
 	if event.CommandID == "" {
 		return nil
 	}

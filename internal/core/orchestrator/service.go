@@ -72,6 +72,7 @@ type Service struct {
 	goalGetByCommand          map[string]string
 	goalPauseBackoff          map[string]time.Time
 	goalPauseNoticeAt         map[string]time.Time
+	goalUserCommands          map[string]goalUserCommand
 }
 
 type itemBuffer struct {
@@ -464,6 +465,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handleClaudeProfileCommand(surface, action)
 	case control.ActionOpenCodeProfileCommand:
 		events = s.handleOpenCodeProfileCommand(surface, action)
+	case control.ActionGoalCommand:
+		events = s.handleGoalCommand(surface, action)
 	case control.ActionRespondRequest:
 		events = s.respondRequest(surface, action)
 	case control.ActionControlRequest:

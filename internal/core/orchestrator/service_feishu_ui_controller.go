@@ -13,6 +13,9 @@ func (s *Service) applyFeishuUIIntent(surface *state.SurfaceConsoleRecord, actio
 		if support, ok := control.ResolveFeishuCommandSupport(s.buildCatalogContext(surface), flow.CommandID); ok && !support.DispatchAllowed {
 			return s.commandSupportNotice(surface, support)
 		}
+		if flow.CommandID == control.FeishuCommandGoal {
+			return s.handleGoalCommand(surface, action)
+		}
 		return s.openConfigCommandPageForAction(surface, action)
 	}
 	switch intent.Kind {

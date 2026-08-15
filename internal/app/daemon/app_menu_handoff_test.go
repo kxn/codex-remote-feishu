@@ -198,6 +198,108 @@ func TestHandleGatewayActionMenuConfigFlowKeepsReturnToGroupAfterApply(t *testin
 	}
 }
 
+func TestHandleGatewayActionMenuGoalDispatchesAndRendersResultCard(t *testing.T) {
+	gateway := newLifecycleGateway()
+	app := New(":0", ":0", gateway, agentproto.ServerIdentity{
+		PID:       42,
+		StartedAt: time.Date(2026, 8, 15, 10, 0, 0, 0, time.UTC),
+	})
+	workspaceDir := evalSymlinkForTest(t, t.TempDir())
+	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
+	app.service.UpsertInstance(&state.InstanceRecord{
+		InstanceID:    "inst-1",
+		DisplayName:   "proj1",
+		WorkspaceRoot: workspaceDir,
+		WorkspaceKey:  workspaceDir,
+		ShortName:     "proj1",
+		Online:        true,
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "会话1", CWD: workspaceDir, Loaded: true},
+		},
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionAttachInstance,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		InstanceID:       "inst-1",
+	})
+	app.service.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionUseThread,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		ThreadID:         "thread-1",
+	})
+
+	var captured *agentproto.Command
+	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
+		captured = &command
+		return nil
+	}
+
+	menuResult := handleGatewayActionForTest(context.Background(), app, control.Action{
+		Kind:             control.ActionShowCommandMenu,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-goal-1",
+		Text:             "/menu send_settings",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if menuResult == nil || menuResult.ReplaceCurrentCard == nil {
+		t.Fatalf("expected send_settings submenu replacement, got %#v", menuResult)
+	}
+
+	goalResult := handleGatewayActionForTest(context.Background(), app, control.Action{
+		Kind:             control.ActionGoalCommand,
+		GatewayID:        "app-1",
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-menu-goal-1",
+		Text:             "/goal",
+		Inbound: &control.ActionInboundMeta{
+			CardDaemonLifecycleID: app.daemonLifecycleID,
+		},
+	})
+	if goalResult != nil && goalResult.ReplaceCurrentCard != nil {
+		t.Fatalf("goal get is async and must not replace the menu card synchronously, got %#v", goalResult.ReplaceCurrentCard)
+	}
+	if captured == nil || captured.Kind != agentproto.CommandThreadGoalGet || captured.Goal.Purpose != "user_control" {
+		t.Fatalf("expected user_control goal get dispatched from menu, got %#v", captured)
+	}
+
+	resultEvents := app.service.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:      agentproto.EventThreadGoalCommandResult,
+		CommandID: captured.CommandID,
+		ThreadID:  "thread-1",
+		ThreadGoal: &agentproto.ThreadGoalUpdate{
+			ThreadID:   "thread-1",
+			Objective:  "完成登录流程重构",
+			Status:     "active",
+			TokensUsed: 12,
+		},
+	})
+	app.handleUIEvents(context.Background(), resultEvents)
+
+	var sawGoalCard bool
+	for _, op := range gateway.snapshotOperations() {
+		if op.CardTitle == "Goal" && strings.Contains(operationCardText(op), "完成登录流程重构") {
+			sawGoalCard = true
+			break
+		}
+	}
+	if !sawGoalCard {
+		t.Fatalf("expected goal status result card after menu dispatch, got %#v", gateway.snapshotOperations())
+	}
+}
+
 func TestHandleGatewayActionReplacesMenuCardForListHandoffInVSCodeMode(t *testing.T) {
 	gateway := &recordingGateway{}
 	app := New(":0", ":0", gateway, agentproto.ServerIdentity{

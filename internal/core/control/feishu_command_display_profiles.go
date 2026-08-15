@@ -54,6 +54,7 @@ var feishuCommandDisplayProfiles = map[string]FeishuCommandDisplayProfile{
 		commandSupportVisible(FeishuCommandPlan),
 		commandSupportVisible(FeishuCommandVerbose),
 		commandSupportVisible(FeishuCommandCodexProfile),
+		commandSupportVisible(FeishuCommandGoal),
 		commandSupportVisible(FeishuCommandAutoContinue),
 		commandSupportVisible(FeishuCommandWorkspace),
 		commandSupportVisible(FeishuCommandWorkspaceList),

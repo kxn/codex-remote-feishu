@@ -42,6 +42,11 @@ func TestFeishuUIIntentFromAction(t *testing.T) {
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowOpenCodeProfileCatalog, RawText: "/opencodeprofile"},
 		},
 		{
+			name:   "bare goal",
+			action: Action{Kind: ActionGoalCommand, Text: "/goal"},
+			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowGoalCatalog, RawText: "/goal"},
+		},
+		{
 			name:   "workspace new page",
 			action: Action{Kind: ActionWorkspaceNew, Text: "/workspace new"},
 			want:   &FeishuUIIntent{Kind: FeishuUIIntentShowWorkspaceNew, RawText: "/workspace new"},
