@@ -193,7 +193,7 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	listPayload := decodeToolMCPResponse(t, rec)
 	result, _ := listPayload["result"].(map[string]any)
 	tools, _ := result["tools"].([]any)
-	if len(tools) != 4 {
+	if len(tools) != 5 {
 		t.Fatalf("unexpected tools/list payload: %#v", listPayload)
 	}
 	seen := map[string]map[string]any{}
@@ -204,6 +204,9 @@ func TestToolMCPListAndCallTools(t *testing.T) {
 	}
 	if _, ok := seen[feishuSurfaceResolverToolName]; ok {
 		t.Fatalf("resolver should not be published in MCP tool list: %#v", seen[feishuSurfaceResolverToolName])
+	}
+	if _, ok := seen[describeImageToolName]; !ok {
+		t.Fatalf("describe_image should be published by default: %#v", seen)
 	}
 	if strings.Contains(seen[feishuSendIMFileToolName]["description"].(string), ".codex-remote/surface-context.json") {
 		t.Fatalf("file-send description still exposes workspace context: %#v", seen[feishuSendIMFileToolName])

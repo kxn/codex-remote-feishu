@@ -60,6 +60,7 @@ type codexProfileWriteRequest struct {
 	SubagentModel   *string `json:"subagentModel"`
 	Instruction     *string `json:"instruction"`
 	ReasoningEffort *string `json:"reasoningEffort"`
+	VisionSupported *bool   `json:"visionSupported"`
 }
 
 type codexContextPreferenceWriteRequest struct {
@@ -578,6 +579,7 @@ func codexAPIProfileSummary(profile config.CodexAPIProfileSecretConfig, preferen
 		SubagentModel:     profile.SubagentModel,
 		Instruction:       profile.Instruction,
 		ReasoningEffort:   profile.ReasoningEffort,
+		VisionSupported:   profile.VisionSupported,
 		StatusCode:        statusCode,
 		Available:         statusCode == "" && profile.APIKey != "",
 		HasAPIKey:         profile.APIKey != "",
@@ -598,6 +600,7 @@ func codexAPIProfileInputFromRequest(req codexProfileWriteRequest) config.CodexA
 		SubagentModel:   optionalStringValue(req.SubagentModel),
 		Instruction:     optionalStringValue(req.Instruction),
 		ReasoningEffort: optionalStringValue(req.ReasoningEffort),
+		VisionSupported: optionalBoolValue(req.VisionSupported),
 	}
 }
 

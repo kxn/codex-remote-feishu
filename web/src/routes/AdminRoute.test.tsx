@@ -1243,6 +1243,7 @@ describe("AdminRoute", () => {
       subagentModel: "",
       instruction: "",
       reasoningEffort: "max",
+      visionSupported: false,
     });
     expect(await screen.findByRole("button", { name: /DevSeek Updated/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /DevSeek$/ })).not.toBeInTheDocument();
@@ -1276,6 +1277,7 @@ describe("AdminRoute", () => {
       subagentModel: "",
       instruction: "",
       reasoningEffort: "high",
+      visionSupported: false,
     });
   });
 });

@@ -146,6 +146,7 @@ describe("OpenCodeProfileSection", () => {
       subagentModel: "kimi-agent-2",
       instruction: "be exact",
       reasoningEffort: "medium",
+      visionSupported: false,
     });
 
     await user.click(screen.getByRole("button", { name: /新增配置/ }));
@@ -175,6 +176,7 @@ describe("OpenCodeProfileSection", () => {
       subagentModel: "kimi-agent",
       instruction: "be useful",
       reasoningEffort: "high",
+      visionSupported: false,
     });
   });
 

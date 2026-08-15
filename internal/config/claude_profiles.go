@@ -54,6 +54,7 @@ type ClaudeProfileConfig struct {
 	SubagentModel   string `json:"subagentModel,omitempty"`
 	Instruction     string `json:"instruction,omitempty"`
 	ReasoningEffort string `json:"reasoningEffort,omitempty"`
+	VisionSupported bool   `json:"visionSupported,omitempty"`
 }
 
 type ClaudeProfile struct {

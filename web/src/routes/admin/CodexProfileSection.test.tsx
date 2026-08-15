@@ -130,6 +130,7 @@ describe("CodexProfileSection", () => {
       subagentModel: "",
       instruction: "",
       reasoningEffort: "xhigh",
+      visionSupported: false,
     });
     const preferenceCall = calls.find(
       (call) =>
@@ -245,6 +246,7 @@ describe("CodexProfileSection", () => {
       subagentModel: "",
       instruction: "",
       reasoningEffort: "high",
+      visionSupported: false,
     });
 
     await user.click(await screen.findByRole("button", { name: /本机默认/ }));

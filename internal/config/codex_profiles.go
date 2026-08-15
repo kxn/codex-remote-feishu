@@ -35,6 +35,7 @@ type CodexAPIProfileSecretConfig struct {
 	SubagentModel        string           `json:"subagentModel,omitempty"`
 	Instruction          string           `json:"instruction,omitempty"`
 	ReasoningEffort      string           `json:"reasoningEffort,omitempty"`
+	VisionSupported      bool             `json:"visionSupported,omitempty"`
 }
 
 type CodexAPIProfileRecord struct {
@@ -52,6 +53,7 @@ type CodexAPIProfileInput struct {
 	SubagentModel   string
 	Instruction     string
 	ReasoningEffort string
+	VisionSupported bool
 }
 
 type CodexProfileMigrationDiagnostic struct {
@@ -156,6 +158,7 @@ func PrepareCodexAPIProfileCreate(existing []CodexAPIProfileRecord, input CodexA
 		SubagentModel:        input.SubagentModel,
 		Instruction:          input.Instruction,
 		ReasoningEffort:      input.ReasoningEffort,
+		VisionSupported:      input.VisionSupported,
 	}
 	return CodexAPIProfileRecord{ID: id, CurrentRevision: 1, Revisions: []CodexAPIProfileSecretConfig{profile}}, nil
 }
@@ -174,7 +177,8 @@ func PrepareCodexAPIProfileUpdate(record CodexAPIProfileRecord, input CodexAPIPr
 	}
 	if current.Name == input.Name && current.BaseURL == input.BaseURL && current.APIKey == input.APIKey &&
 		current.Model == input.Model && current.ReviewModel == input.ReviewModel && current.SubagentModel == input.SubagentModel &&
-		current.Instruction == input.Instruction && current.ReasoningEffort == input.ReasoningEffort {
+		current.Instruction == input.Instruction && current.ReasoningEffort == input.ReasoningEffort &&
+		current.VisionSupported == input.VisionSupported {
 		return record, false, nil
 	}
 	next := current
@@ -186,6 +190,7 @@ func PrepareCodexAPIProfileUpdate(record CodexAPIProfileRecord, input CodexAPIPr
 	next.SubagentModel = input.SubagentModel
 	next.Instruction = input.Instruction
 	next.ReasoningEffort = input.ReasoningEffort
+	next.VisionSupported = input.VisionSupported
 	if current.APIKey != input.APIKey {
 		next.APIKey = input.APIKey
 		next.CredentialGeneration++

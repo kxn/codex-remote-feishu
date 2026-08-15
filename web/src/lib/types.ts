@@ -115,6 +115,7 @@ export interface ClaudeProfileSummary {
   subagentModel?: string;
   instruction?: string;
   reasoningEffort?: string;
+  visionSupported?: boolean;
   builtIn?: boolean;
   persisted: boolean;
   readOnly?: boolean;
@@ -138,6 +139,7 @@ export interface ClaudeProfileWriteRequest {
   subagentModel?: string;
   instruction?: string;
   reasoningEffort?: string;
+  visionSupported?: boolean;
 }
 
 export interface ProfileContextPreference {
@@ -159,6 +161,7 @@ export interface CodexProfileSummary {
   subagentModel?: string;
   instruction?: string;
   reasoningEffort?: string;
+  visionSupported?: boolean;
   statusCode?: string;
   available: boolean;
   hasAPIKey?: boolean;
@@ -203,6 +206,7 @@ export interface CodexProfileWriteRequest {
   subagentModel?: string;
   instruction?: string;
   reasoningEffort?: string;
+  visionSupported?: boolean;
 }
 
 export interface OpenCodeProfileSummary {
@@ -220,6 +224,7 @@ export interface OpenCodeProfileSummary {
   subagentModel?: string;
   instruction?: string;
   reasoningEffort?: string;
+  visionSupported?: boolean;
   projectConfigMode?: string;
   dataIsolationMode?: string;
   permissionMode?: string;
@@ -259,6 +264,7 @@ export interface OpenCodeProfileWriteRequest {
   subagentModel?: string;
   instruction?: string;
   reasoningEffort?: string;
+  visionSupported?: boolean;
 }
 
 export interface FeishuAppMutation {
@@ -674,4 +680,17 @@ export interface LogsStorageCleanupResponse {
   deletedBytes: number;
   remainingFileCount: number;
   remainingBytes: number;
+}
+
+export interface VisionAssistSettings {
+  protocol?: string;
+  baseURL?: string;
+  apiKeyEnv?: string;
+  model?: string;
+  defaultPrompt?: string;
+}
+
+export interface VisionAssistResponse {
+  configured: boolean;
+  settings: VisionAssistSettings;
 }

@@ -60,6 +60,7 @@ type OpenCodeAPIProfileSecretConfig struct {
 	ProjectConfigMode    string `json:"projectConfigMode,omitempty"`
 	DataIsolationMode    string `json:"dataIsolationMode,omitempty"`
 	PermissionMode       string `json:"permissionMode,omitempty"`
+	VisionSupported      bool   `json:"visionSupported,omitempty"`
 }
 
 type OpenCodeAPIProfileInput struct {
@@ -76,6 +77,7 @@ type OpenCodeAPIProfileInput struct {
 	ProjectConfigMode string
 	DataIsolationMode string
 	PermissionMode    string
+	VisionSupported   bool
 }
 
 type OpenCodeProfile struct {
@@ -183,6 +185,7 @@ func PrepareOpenCodeAPIProfileCreate(existing []OpenCodeAPIProfileRecord, input 
 		ProjectConfigMode:    input.ProjectConfigMode,
 		DataIsolationMode:    input.DataIsolationMode,
 		PermissionMode:       input.PermissionMode,
+		VisionSupported:      input.VisionSupported,
 	}
 	return OpenCodeAPIProfileRecord{ID: id, CurrentRevision: 1, Revisions: []OpenCodeAPIProfileSecretConfig{profile}}, nil
 }
@@ -204,7 +207,8 @@ func PrepareOpenCodeAPIProfileUpdate(record OpenCodeAPIProfileRecord, input Open
 		current.Model == input.Model && current.SmallModel == input.SmallModel && current.ReviewModel == input.ReviewModel &&
 		current.SubagentModel == input.SubagentModel && current.Instruction == input.Instruction &&
 		current.ReasoningEffort == input.ReasoningEffort && current.ProjectConfigMode == input.ProjectConfigMode &&
-		current.DataIsolationMode == input.DataIsolationMode && current.PermissionMode == input.PermissionMode {
+		current.DataIsolationMode == input.DataIsolationMode && current.PermissionMode == input.PermissionMode &&
+		current.VisionSupported == input.VisionSupported {
 		return record, false, nil
 	}
 	next := current
@@ -218,6 +222,7 @@ func PrepareOpenCodeAPIProfileUpdate(record OpenCodeAPIProfileRecord, input Open
 	next.SubagentModel = input.SubagentModel
 	next.Instruction = input.Instruction
 	next.ReasoningEffort = input.ReasoningEffort
+	next.VisionSupported = input.VisionSupported
 	next.ProjectConfigMode = input.ProjectConfigMode
 	next.DataIsolationMode = input.DataIsolationMode
 	next.PermissionMode = input.PermissionMode

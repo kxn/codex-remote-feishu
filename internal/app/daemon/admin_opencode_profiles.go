@@ -31,6 +31,7 @@ type adminOpenCodeProfileView struct {
 	ProjectConfigMode string `json:"projectConfigMode,omitempty"`
 	DataIsolationMode string `json:"dataIsolationMode,omitempty"`
 	PermissionMode    string `json:"permissionMode,omitempty"`
+	VisionSupported   bool   `json:"visionSupported,omitempty"`
 	Available         bool   `json:"available"`
 	StatusCode        string `json:"statusCode,omitempty"`
 	BuiltIn           bool   `json:"builtIn,omitempty"`
@@ -80,6 +81,7 @@ type opencodeProfileWriteRequest struct {
 	ProjectConfigMode *string `json:"projectConfigMode"`
 	DataIsolationMode *string `json:"dataIsolationMode"`
 	PermissionMode    *string `json:"permissionMode"`
+	VisionSupported   *bool   `json:"visionSupported"`
 }
 
 func (a *App) handleOpenCodeProfilesList(w http.ResponseWriter, _ *http.Request) {
@@ -313,6 +315,7 @@ func adminOpenCodeProfileViewFromProfile(profile config.OpenCodeProfile) adminOp
 		ProjectConfigMode: profile.ProjectConfigMode,
 		DataIsolationMode: profile.DataIsolationMode,
 		PermissionMode:    profile.PermissionMode,
+		VisionSupported:   profile.VisionSupported,
 		Available:         available,
 		StatusCode:        status,
 		BuiltIn:           profile.BuiltIn,
@@ -337,6 +340,7 @@ func openCodeAPIProfileInputFromRequest(req opencodeProfileWriteRequest) config.
 		ProjectConfigMode: optionalStringValue(req.ProjectConfigMode),
 		DataIsolationMode: optionalStringValue(req.DataIsolationMode),
 		PermissionMode:    optionalStringValue(req.PermissionMode),
+		VisionSupported:   optionalBoolValue(req.VisionSupported),
 	}
 }
 
@@ -355,6 +359,7 @@ func openCodeAPIProfileUpdateInputFromRequest(current config.OpenCodeAPIProfileS
 		ProjectConfigMode: current.ProjectConfigMode,
 		DataIsolationMode: current.DataIsolationMode,
 		PermissionMode:    current.PermissionMode,
+		VisionSupported:   current.VisionSupported,
 	}
 	if req.Name != nil {
 		input.Name = *req.Name
@@ -394,6 +399,9 @@ func openCodeAPIProfileUpdateInputFromRequest(current config.OpenCodeAPIProfileS
 	}
 	if req.PermissionMode != nil {
 		input.PermissionMode = *req.PermissionMode
+	}
+	if req.VisionSupported != nil {
+		input.VisionSupported = *req.VisionSupported
 	}
 	return input
 }
