@@ -175,6 +175,51 @@ type VisionImage struct {
 - Web：辅助模型 tab 的配置读写、协议选择、开关读写。
 - `scripts/check/pre-commit.sh` + 相关包 `go test ./...`。
 
+## 涉及代码与关键实现点（调研结论）
+
+### 1. MCP 工具注册与分派
+
+- `internal/app/daemon/tool_mcp.go`：`newToolRuntimeHandler` / `newToolMCPServer` / `handleMCPToolCall`。
+- `internal/app/daemon/tool_service.go`：`toolDefinitions()` 增加 `describe_image` 定义（name/description/inputSchema），`handleMCPToolCall` 增加分派分支。
+- 鉴权沿用 `requireToolAuth`（caller instance 已注入 request context）。
+
+### 2. 按 caller 动态工具集
+
+- go-sdk 的 `NewStreamableHTTPHandler(getServer func(*http.Request) *Server, ...)` 支持**按请求返回不同 server**；`getServer` 只在 MCP session 创建时调用一次，同一 session 复用固定 server。
+- 实现：`newToolRuntimeHandler` 的工厂函数改为 `a.newToolMCPServerForRequest(req)`：
+  1. 从 `req.URL.Query()` / request context 取 caller instance（`CallerInstanceIDQueryParam`）；
+  2. `a.service.Instance(instanceID)` 读 instance record 的 `Backend` + `CodexProfileID` / `ClaudeProfileID` / `OpenCodeProfileID`（**用 instance 而非 remote turn 解析**：MCP 初始化时 remote turn 可能尚未绑定，而 instance 直接带 profile ID）；
+  3. `a.loadAdminConfig()` 查对应 profile 的 `VisionSupported`：声明支持视觉 → server 不注册 `describe_image`；否则注册。
+- session 复用语义：profile 切换会重启实例 → 新 wrapper → 新 MCP session → 按新 profile 重新决定工具集；daemon 重启同理。`handleMCPToolCall` 内再做一次防御性校验。
+
+### 3. profile 视觉能力字段
+
+- `CodexAPIProfileSecretConfig`（`internal/config/codex_profiles.go`）、`OpenCodeAPIProfileSecretConfig`（`opencode_profiles.go`）、`ClaudeProfileConfig`（`claude_profiles.go`）各加 `VisionSupported bool`。
+- 对应 `CodexAPIProfileInput` / `OpenCodeAPIProfileInput` / Claude profile 写入请求、Web 三个 `ProfileSection` 的 draft 类型与表单（新增 checkbox）。
+- admin handlers（`handleCodexProfileUpdate` 等）走既有 If-Match + input 流程，视觉能力变更随 revision 机制持久化。
+
+### 4. 辅助模型端点配置
+
+- `config.AppConfig` 新增 `VisionAssist` 配置（protocol / baseURL / apiKeyEnv / model / defaultPrompt）。
+- admin API：`GET /api/admin/config` 已存在（redact 输出）；需新增写入入口（`PUT /api/admin/config` 或专用 `GET/PUT /api/admin/vision-assist`）。
+- Web：`AdminRoute.tsx` 对话后端区新增第四个 tab「辅助模型」，页面读写端点配置。
+
+### 5. 视觉推理适配器
+
+- 新包（建议 `internal/visionprovider`）：`VisionProvider` 接口 + OpenAI Chat / Responses / Anthropic / Gemini 四个 adapter，只做单次推理（请求组装 + 响应文本提取 + 错误归一）。
+- 配置读取与调用集中在 daemon 层；API key 按设计走环境变量（`apiKeyEnv`），Web 只填 env 名。
+
+### 6. 工具内部流程与安全
+
+- 图片路径白名单：校验 `image` 属于当前 surface 的 `StagedImages` 本地路径集合（`state.StagedImageRecord.LocalPath`）；实现时确认图片合并进 queue item 输入后 `StagedImages` 是否保留，白名单需覆盖“已随输入派发”的图片。
+- 图片格式校验（png/jpeg/webp/gif 等 MIME）→ base64 组装 → id 映射声明 → 协议 adapter 调用 → 返回纯文本。
+
+### 7. 风险与实现注意
+
+- `getServer` 在 session 创建时决定工具集，会话生命周期内不变；依赖实例重启刷新（profile 切换即重启，符合现状）。
+- profile 视觉能力走 revision：旧实例沿用旧 revision，重启后生效。
+- 辅助模型 API key 若与现有 profile 一致存 config，需要纳入 `redactAdminConfig` 打码；若走环境变量则无此问题（设计文档默认环境变量）。
+
 ## 开放问题
 
 - 视觉端点鉴权除 Bearer 外是否还有其它形态（第一版只做 Bearer）。
