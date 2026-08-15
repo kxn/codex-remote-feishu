@@ -111,15 +111,16 @@ func (s *Service) commitBotCapabilitySettingsMutation(surface *state.SurfaceCons
 func botCapabilitySettingsFromSurface(surface *state.SurfaceConsoleRecord) state.BotCapabilitySettingsRecord {
 	contract := state.SurfaceDesiredBackendContract(surface)
 	return state.BotCapabilitySettingsRecord{
-		GatewayID:           strings.TrimSpace(surface.GatewayID),
-		ProductMode:         contract.ProductMode,
-		Backend:             contract.Backend,
-		CodexProfileID:      surface.CodexProfileID,
-		ClaudeProfileID:     surface.ClaudeProfileID,
-		OpenCodeProfileID:   surface.OpenCodeProfileID,
-		PromptOverride:      surface.PromptOverride,
-		PlanMode:            surface.PlanMode,
-		PlanModeOverrideSet: surface.PlanModeOverrideSet,
+		GatewayID:            strings.TrimSpace(surface.GatewayID),
+		ProductMode:          contract.ProductMode,
+		Backend:              contract.Backend,
+		CodexProfileID:       surface.CodexProfileID,
+		ClaudeProfileID:      surface.ClaudeProfileID,
+		OpenCodeProfileID:    surface.OpenCodeProfileID,
+		OpenCodeAdmissionRef: state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef),
+		PromptOverride:       surface.PromptOverride,
+		PlanMode:             surface.PlanMode,
+		PlanModeOverrideSet:  surface.PlanModeOverrideSet,
 	}
 }
 
@@ -137,6 +138,11 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 	surface.CodexProfileID = normalized.CodexProfileID
 	surface.ClaudeProfileID = normalized.ClaudeProfileID
 	surface.OpenCodeProfileID = normalized.OpenCodeProfileID
+	if ref := state.NormalizeOpenCodeAdmissionRef(normalized.OpenCodeAdmissionRef); ref != nil {
+		surface.OpenCodeAdmissionRef = ref
+	} else if state.NormalizeOpenCodeProfileID(normalized.OpenCodeProfileID) != previousOpenCodeProfileID {
+		surface.OpenCodeAdmissionRef = nil
+	}
 	surface.PromptOverride = normalized.PromptOverride
 	surface.PlanMode = normalized.PlanMode
 	surface.PlanModeOverrideSet = normalized.PlanModeOverrideSet
@@ -144,9 +150,6 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 		surface.CodexAdmissionRef = nil
 		surface.CodexConnectionContract = nil
 		surface.CodexThreadPolicy = nil
-	}
-	if state.NormalizeOpenCodeProfileID(normalized.OpenCodeProfileID) != previousOpenCodeProfileID {
-		surface.OpenCodeAdmissionRef = nil
 	}
 }
 

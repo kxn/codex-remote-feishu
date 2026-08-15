@@ -146,6 +146,21 @@ func (s *Service) MaterializeSurfaceResumeContract(surfaceID, gatewayID, chatID,
 	s.projectLatestBotCapabilitySettingsToSurface(surface)
 }
 
+func (s *Service) MaterializeSurfaceResumeContractWithOpenCodeRef(surfaceID, gatewayID, chatID, actorUserID string, contract state.SurfaceBackendContract, openCodeAdmissionRef *state.OpenCodeAdmissionRef, verbosity state.SurfaceVerbosity, planMode state.PlanModeSetting) {
+	s.MaterializeSurfaceResumeContract(surfaceID, gatewayID, chatID, actorUserID, contract, verbosity, planMode)
+	if strings.TrimSpace(surfaceID) == "" {
+		return
+	}
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil {
+		return
+	}
+	if ref := state.NormalizeOpenCodeAdmissionRef(openCodeAdmissionRef); ref != nil &&
+		state.NormalizeOpenCodeProfileID(ref.ProfileRef.ID) == state.EffectiveSurfaceOpenCodeProfileID(contract) {
+		surface.OpenCodeAdmissionRef = ref
+	}
+}
+
 func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 	if commandID == "" {
 		return

@@ -82,6 +82,9 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 		ProductMode:       state.ProductModeNormal,
 		Backend:           agentproto.BackendOpenCode,
 		OpenCodeProfileID: "op_team",
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+		},
 		PromptOverride: state.ModelConfigRecord{
 			Model:           "gpt-5.5",
 			ReasoningEffort: "high",
@@ -109,6 +112,9 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
 	if surface.Backend != agentproto.BackendOpenCode || surface.OpenCodeProfileID != "op_team" {
 		t.Fatalf("group surface opencode projection = %s/%q, want opencode/op_team", surface.Backend, surface.OpenCodeProfileID)
+	}
+	if surface.OpenCodeAdmissionRef == nil || surface.OpenCodeAdmissionRef.ProfileRef.ID != "op_team" || surface.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("group surface opencode projection lost admission ref, got %#v", surface.OpenCodeAdmissionRef)
 	}
 	contract := state.SurfaceDesiredBackendContract(surface)
 	if contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {

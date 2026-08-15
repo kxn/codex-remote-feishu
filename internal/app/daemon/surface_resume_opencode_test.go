@@ -40,3 +40,43 @@ func TestSurfaceResumeStatePersistsOpenCodeProfileID(t *testing.T) {
 		t.Fatalf("expected latent opencode surface after restart, got %#v", snapshot)
 	}
 }
+
+func TestSurfaceResumeStatePersistsOpenCodeProfileAndAdmissionRef(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+	app.service.MaterializeSurfaceResumeWithOpenCodeProfile(
+		"surface-1",
+		"app-1",
+		"chat-1",
+		"user-1",
+		state.ProductModeNormal,
+		agentproto.BackendOpenCode,
+		"op_team",
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	app.mu.Lock()
+	surface := app.service.Surface("surface-1")
+	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	app.syncSurfaceResumeStateLocked(nil)
+	app.mu.Unlock()
+
+	entry := app.SurfaceResumeState("surface-1")
+	if entry == nil || entry.OpenCodeProfileID != "op_team" || entry.OpenCodeAdmissionRef == nil ||
+		entry.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected persisted opencode profile and admission ref, got %#v", entry)
+	}
+
+	restarted := newRestoreHintTestApp(stateDir)
+	restored := restarted.service.Surface("surface-1")
+	if restored == nil || restored.OpenCodeProfileID != "op_team" {
+		t.Fatalf("expected opencode profile restored after restart, got %#v", restored)
+	}
+	if restored.OpenCodeAdmissionRef == nil || restored.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected opencode admission ref restored after restart, got %#v", restored.OpenCodeAdmissionRef)
+	}
+}

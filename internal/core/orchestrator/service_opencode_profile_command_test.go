@@ -25,54 +25,42 @@ func materializeTestOpenCodeProfiles(svc *Service, profiles ...state.OpenCodePro
 	svc.MaterializeOpenCodeProfiles(records)
 }
 
-func TestHeadlessLaunchContractRebuildsOpenCodeAdmissionRefAfterResume(t *testing.T) {
+func TestMaterializeSurfaceResumeContractWithOpenCodeRefRestoresAdmissionRef(t *testing.T) {
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", "")
-	materializeTestOpenCodeProfiles(svc, state.OpenCodeProfileSummary{ID: "op_team", Revision: 7, Name: "Team OpenCode"})
-
+	ref := &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	svc.MaterializeSurfaceResumeContractWithOpenCodeRef(
+		"surface-1",
+		"app-1",
+		"chat-1",
+		"user-1",
+		state.HeadlessOpenCodeSurfaceBackendContract("op_team"),
+		ref,
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.OpenCodeAdmissionRef != nil {
-		t.Fatalf("expected resumed surface without admission ref, got %#v", surface.OpenCodeAdmissionRef)
-	}
-
-	contract := svc.headlessLaunchContract(surface)
-	if contract.Backend != agentproto.BackendOpenCode || contract.OpenCodeProfileID != "op_team" {
-		t.Fatalf("unexpected launch contract: %#v", contract)
-	}
-	if contract.OpenCodeAdmissionRef == nil || contract.OpenCodeAdmissionRef.ProfileRef.ID != "op_team" || contract.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
-		t.Fatalf("expected admission ref rebuilt from profile catalog, got %#v", contract.OpenCodeAdmissionRef)
-	}
 	if surface.OpenCodeAdmissionRef == nil || surface.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
-		t.Fatalf("expected rebuilt admission ref written back to surface, got %#v", surface.OpenCodeAdmissionRef)
+		t.Fatalf("expected admission ref restored on surface, got %#v", surface.OpenCodeAdmissionRef)
 	}
-}
 
-func TestHeadlessLaunchContractKeepsExistingOpenCodeAdmissionRef(t *testing.T) {
-	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract("op_team"), "", "")
-	materializeTestOpenCodeProfiles(svc, state.OpenCodeProfileSummary{ID: "op_team", Revision: 9, Name: "Team OpenCode"})
-
-	surface := svc.root.Surfaces["surface-1"]
-	surface.OpenCodeAdmissionRef = &state.OpenCodeAdmissionRef{ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7}}
-
-	contract := svc.headlessLaunchContract(surface)
-	if contract.OpenCodeAdmissionRef == nil || contract.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
-		t.Fatalf("expected frozen admission ref to be preserved, got %#v", contract.OpenCodeAdmissionRef)
-	}
-}
-
-func TestHeadlessLaunchContractDefaultOpenCodeProfileNeedsNoAdmissionRef(t *testing.T) {
-	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.MaterializeSurfaceResumeContract("surface-1", "app-1", "chat-1", "user-1", state.HeadlessOpenCodeSurfaceBackendContract(state.DefaultOpenCodeProfileID), "", "")
-	materializeTestOpenCodeProfiles(svc)
-
-	surface := svc.root.Surfaces["surface-1"]
-	contract := svc.headlessLaunchContract(surface)
-	if contract.OpenCodeAdmissionRef != nil {
-		t.Fatalf("default opencode profile must not require admission ref, got %#v", contract.OpenCodeAdmissionRef)
+	// 不匹配 profile 的 ref 不应被接受。
+	svc.MaterializeSurfaceResumeContractWithOpenCodeRef(
+		"surface-2",
+		"app-1",
+		"chat-2",
+		"user-1",
+		state.HeadlessOpenCodeSurfaceBackendContract("op_team"),
+		&state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_other", Revision: 1},
+		},
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	if surface2 := svc.root.Surfaces["surface-2"]; surface2.OpenCodeAdmissionRef != nil {
+		t.Fatalf("mismatched admission ref must not be restored, got %#v", surface2.OpenCodeAdmissionRef)
 	}
 }
 

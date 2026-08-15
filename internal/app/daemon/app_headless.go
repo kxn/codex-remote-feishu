@@ -476,7 +476,10 @@ func resolveOpenCodeLaunchProfile(cfg config.AppConfig, profileID string, admiss
 	normalizedID := state.NormalizeOpenCodeProfileID(profileID)
 	ref := state.NormalizeOpenCodeAdmissionRef(admissionRef)
 	if ref != nil && state.NormalizeOpenCodeProfileID(ref.ProfileRef.ID) != normalizedID {
-		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile admission ref mismatch: profile=%s ref=%s", normalizedID, ref.ProfileRef.ID)
+		// admission ref 属于另一个 profile（例如 bot 级 profile 切换后 surface
+		// 缓存未刷新或恢复路径缺 ref）：以期望 profile 为准，丢弃过期 ref 并按
+		// 当前 revision 解析，与 Codex 行为一致。
+		ref = nil
 	}
 	if ref != nil {
 		if normalizedID == state.DefaultOpenCodeProfileID {
@@ -497,9 +500,6 @@ func resolveOpenCodeLaunchProfile(cfg config.AppConfig, profileID string, admiss
 			}
 		}
 		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile revision %s@%d not found", normalizedID, ref.ProfileRef.Revision)
-	}
-	if normalizedID != state.DefaultOpenCodeProfileID {
-		return config.OpenCodeProfile{}, fmt.Errorf("opencode profile admission ref required for %s", normalizedID)
 	}
 	profile, ok := config.ResolveOpenCodeProfile(cfg, normalizedID)
 	if !ok {

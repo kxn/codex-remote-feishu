@@ -167,23 +167,30 @@ func TestNormalizeEntryClearsCodexProfileStateOutsideCodexBackend(t *testing.T) 
 			ProfileRef:           state.CodexProfileRef{ID: "team-proxy", Revision: 1},
 			ContextPreferenceRef: state.CodexContextPreferenceRef{ProfileID: "team-proxy", Revision: 1},
 		},
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 3},
+		},
 	})
 	if !ok {
 		t.Fatal("expected normalized entry")
 	}
-	if entry.LegacyCodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexProfileSelectionStatus != "" || entry.CodexAdmissionRef != nil {
-		t.Fatalf("non-Codex entry retained Codex profile state: %#v", entry)
+	if entry.LegacyCodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexProfileSelectionStatus != "" || entry.CodexAdmissionRef != nil ||
+		entry.OpenCodeProfileID != "" || entry.OpenCodeAdmissionRef != nil {
+		t.Fatalf("non-Codex entry retained inactive profile state: %#v", entry)
 	}
 }
 
 func TestNormalizeEntryPreservesOpenCodeProfileForOpenCodeBackend(t *testing.T) {
 	entry, ok := NormalizeEntry(Entry{
-		SurfaceSessionID:   "surface-1",
-		ProductMode:        string(state.ProductModeNormal),
-		Backend:            string(agentproto.BackendOpenCode),
-		CodexProfileID:     "team-proxy",
-		ClaudeProfileID:    "devseek",
-		OpenCodeProfileID:  " op_team ",
+		SurfaceSessionID:  "surface-1",
+		ProductMode:       string(state.ProductModeNormal),
+		Backend:           string(agentproto.BackendOpenCode),
+		CodexProfileID:    "team-proxy",
+		ClaudeProfileID:   "devseek",
+		OpenCodeProfileID: " op_team ",
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+		},
 		CodexAdmissionRef:  &state.CodexAdmissionRef{ProfileRef: state.CodexProfileRef{ID: "team-proxy", Revision: 1}},
 		ResumeThreadID:     "thread-1",
 		ResumeThreadCWD:    "/data/dl/repo",
@@ -198,5 +205,8 @@ func TestNormalizeEntryPreservesOpenCodeProfileForOpenCodeBackend(t *testing.T) 
 	}
 	if entry.LegacyCodexProviderID != "" || entry.CodexProfileID != "" || entry.CodexAdmissionRef != nil || entry.ClaudeProfileID != "" {
 		t.Fatalf("opencode entry retained inactive backend profile state: %#v", entry)
+	}
+	if entry.OpenCodeAdmissionRef == nil || entry.OpenCodeAdmissionRef.ProfileRef.ID != "op_team" || entry.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("opencode entry lost admission ref: %#v", entry.OpenCodeAdmissionRef)
 	}
 }

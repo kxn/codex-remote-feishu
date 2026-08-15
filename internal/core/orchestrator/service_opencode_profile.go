@@ -271,6 +271,7 @@ func (s *Service) applyOpenCodeProfileSelection(surface *state.SurfaceConsoleRec
 	admissionRef := openCodeAdmissionRefForProfile(target)
 	s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
 		record.OpenCodeProfileID = target.ID
+		record.OpenCodeAdmissionRef = state.NormalizeOpenCodeAdmissionRef(admissionRef)
 	}, func(local *state.SurfaceConsoleRecord) {
 		local.OpenCodeProfileID = state.NormalizeDesiredOpenCodeProfileID(target.ID)
 		local.OpenCodeAdmissionRef = admissionRef
