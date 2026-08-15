@@ -603,6 +603,7 @@ func (t *Translator) observePermissionRequest(frame map[string]any, result Resul
 	}
 	toolCall, _ := params["toolCall"].(map[string]any)
 	toolID := xutil.LookupStringFromAny(toolCall["toolCallId"])
+	mergedToolCall := mergePermissionToolCall(toolCall, t.trackedPermissionToolCall(sessionID, toolID))
 	options := parsePermissionOptions(params["options"])
 	turn := t.ensureTurnForSession(sessionID)
 	pending := pendingPermission{
@@ -623,24 +624,27 @@ func (t *Translator) observePermissionRequest(frame map[string]any, result Resul
 			Style:    permissionOptionStyle(option),
 		})
 	}
-	result.Events = append(result.Events, agentproto.Event{
-		Kind:      agentproto.EventRequestStarted,
-		ThreadID:  sessionID,
-		TurnID:    pending.TurnID,
-		RequestID: requestID,
-		Status:    "pending",
-		RequestPrompt: &agentproto.RequestPrompt{
-			Type:         agentproto.RequestTypeApproval,
-			RawType:      "session/request_permission",
-			Title:        xutil.FirstNonEmpty(xutil.LookupStringFromAny(toolCall["title"]), "OpenCode permission request"),
-			ItemID:       toolID,
-			AcceptLabel:  "Allow",
-			DeclineLabel: "Reject",
-			Options:      promptOptions,
-			Permissions: &agentproto.PermissionsRequestPrompt{
-				Permissions: []map[string]any{xutil.CloneMap(toolCall)},
-			},
+	prompt := &agentproto.RequestPrompt{
+		Type:         agentproto.RequestTypeApproval,
+		RawType:      "session/request_permission",
+		Title:        xutil.FirstNonEmpty(xutil.LookupStringFromAny(mergedToolCall["title"]), "OpenCode permission request"),
+		ItemID:       toolID,
+		AcceptLabel:  "Allow",
+		DeclineLabel: "Reject",
+		Options:      promptOptions,
+		Permissions: &agentproto.PermissionsRequestPrompt{
+			Permissions: []map[string]any{mergedToolCall},
 		},
+	}
+	prompt.Body = opencodePermissionRequestBody(mergedToolCall)
+	result.Events = append(result.Events, agentproto.Event{
+		Kind:          agentproto.EventRequestStarted,
+		ThreadID:      sessionID,
+		TurnID:        pending.TurnID,
+		RequestID:     requestID,
+		Status:        "pending",
+		RequestPrompt: prompt,
+		Metadata:      opencodePermissionRequestMetadata(mergedToolCall, prompt),
 	})
 	return result, nil
 }

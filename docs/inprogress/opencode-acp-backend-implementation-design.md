@@ -522,6 +522,7 @@ ACP `session/request_permission` 映射到现有 `RequestPrompt`：
 - 多 option 超过 Feishu 按钮限制时转 structured form。
 - unknown request kind fail-closed：返回 reject，并 emit protocol notice/debug。
 - request owner routing、old-card replacement、resolved event 沿用现有 request state machine。
+- permission 卡片展示内容必须按 `toolCallId` 合并同一工具已到达的 `tool_call` / `tool_call_update` 状态（`locations` / `rawInput` / `arguments`），`session/request_permission` 帧里的精简 `toolCall` 只做兜底；read 展示文件路径，execute 展示命令与工作目录，edit/write 展示路径与 diff 摘要，search 展示 pattern。语义归类：execute/bash → `approval_command`，edit/write/apply_patch → `approval_file_change`，fetch/web → `approval_network`，其余 → `approval_can_use_tool`。
 
 ### 9.7 `fs/write_text_file`
 

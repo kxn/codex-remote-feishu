@@ -442,6 +442,193 @@ func firstMapString(values map[string]any, keys ...string) string {
 	return ""
 }
 
+func (t *Translator) trackedPermissionToolCall(sessionID, toolID string) map[string]any {
+	if toolID == "" {
+		return nil
+	}
+	if item := t.messageItems[sessionID+"\x00tool\x00"+toolID]; item != nil {
+		return xutil.CloneMap(item.Metadata)
+	}
+	return nil
+}
+
+func mergePermissionToolCall(fallback, tracked map[string]any) map[string]any {
+	merged := xutil.CloneMap(tracked)
+	if merged == nil {
+		merged = map[string]any{}
+	}
+	for key, value := range fallback {
+		if _, exists := merged[key]; !exists {
+			merged[key] = value
+		}
+		if key == "rawInput" {
+			rawMerged, _ := merged["rawInput"].(map[string]any)
+			rawFallback, _ := value.(map[string]any)
+			if rawMerged == nil && rawFallback != nil {
+				rawMerged = map[string]any{}
+				merged["rawInput"] = rawMerged
+			}
+			for fallbackKey, fallbackValue := range rawFallback {
+				if _, exists := rawMerged[fallbackKey]; !exists {
+					rawMerged[fallbackKey] = fallbackValue
+				}
+			}
+		}
+	}
+	if _, exists := merged["toolCallId"]; !exists {
+		merged["toolCallId"] = xutil.LookupStringFromAny(fallback["toolCallId"])
+	}
+	return merged
+}
+
+func permissionRawInputMap(toolCall map[string]any) map[string]any {
+	if rawInput, _ := toolCall["rawInput"].(map[string]any); rawInput != nil {
+		return rawInput
+	}
+	if arguments, _ := toolCall["arguments"].(map[string]any); arguments != nil {
+		return arguments
+	}
+	return nil
+}
+
+func permissionLocationPath(toolCall map[string]any) string {
+	locations, _ := toolCall["locations"].([]any)
+	for _, location := range locations {
+		record, _ := location.(map[string]any)
+		if path := firstMapString(record, "path", "filePath"); path != "" {
+			return path
+		}
+	}
+	return ""
+}
+
+func opencodePermissionRequestKind(kind string) string {
+	switch normalizeToolKind(kind) {
+	case "bash", "execute", "shell", "terminal":
+		return "approval_command"
+	case "edit", "write", "apply_patch", "patch":
+		return "approval_file_change"
+	case "fetch", "web_fetch", "websearch", "web_search":
+		return "approval_network"
+	default:
+		return "approval_can_use_tool"
+	}
+}
+
+func opencodePermissionRequestBody(toolCall map[string]any) string {
+	kind := normalizeToolKind(xutil.LookupStringFromAny(toolCall["kind"]))
+	rawInput := permissionRawInputMap(toolCall)
+	title := strings.TrimSpace(xutil.LookupStringFromAny(toolCall["title"]))
+	switch kind {
+	case "bash", "execute", "shell", "terminal":
+		command := firstMapString(rawInput, "cmd", "command")
+		if command == "" {
+			command = title
+		}
+		lines := []string{"OpenCode 请求执行命令："}
+		if command != "" {
+			lines = append(lines, command)
+		}
+		if cwd := firstMapString(rawInput, "cwd"); cwd != "" {
+			lines = append(lines, "工作目录："+cwd)
+		}
+		return strings.Join(lines, "\n")
+	case "read":
+		path := firstMapString(rawInput, "filePath", "file_path", "path")
+		if path == "" {
+			path = permissionLocationPath(toolCall)
+		}
+		if path != "" {
+			return "OpenCode 请求读取文件：\n" + path
+		}
+		return "OpenCode 请求读取文件。"
+	case "grep", "glob", "list", "ls", "search":
+		pattern := firstMapString(rawInput, "pattern", "glob", "query")
+		if pattern == "" {
+			pattern = title
+		}
+		if pattern != "" {
+			return "OpenCode 请求搜索：\n" + pattern
+		}
+		return "OpenCode 请求搜索。"
+	case "edit", "write", "apply_patch", "patch":
+		path := firstMapString(rawInput, "filePath", "file_path", "path")
+		if path == "" {
+			path = permissionLocationPath(toolCall)
+		}
+		lines := []string{"OpenCode 请求修改文件："}
+		if path != "" {
+			lines = append(lines, path)
+		} else {
+			lines = []string{"OpenCode 请求修改文件。"}
+		}
+		if diff := strings.TrimSpace(firstMapString(rawInput, "diff")); diff != "" {
+			if len(diff) > 2000 {
+				diff = diff[:2000] + "\n…（diff 已截断）"
+			}
+			lines = append(lines, "", "改动内容：", diff)
+		}
+		return strings.Join(lines, "\n")
+	case "fetch", "web_fetch", "websearch", "web_search":
+		url := firstMapString(rawInput, "url", "uri")
+		if url != "" {
+			return "OpenCode 请求访问网络：\n" + url
+		}
+		return "OpenCode 请求访问网络。"
+	default:
+		toolName := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(toolCall["tool"]),
+			xutil.LookupStringFromAny(toolCall["opencodeToolName"]),
+			title,
+			kind,
+		)
+		if toolName == "" {
+			toolName = "OpenCode tool"
+		}
+		if len(rawInput) != 0 {
+			return "OpenCode 请求调用工具：" + toolName + "\n" + xutil.CompactJSON(rawInput)
+		}
+		return "OpenCode 请求调用工具：" + toolName
+	}
+}
+
+func opencodePermissionRequestMetadata(toolCall map[string]any, prompt *agentproto.RequestPrompt) map[string]any {
+	kind := normalizeToolKind(xutil.LookupStringFromAny(toolCall["kind"]))
+	rawInput := permissionRawInputMap(toolCall)
+	metadata := map[string]any{
+		"requestType":   "approval",
+		"requestKind":   opencodePermissionRequestKind(kind),
+		"requestMethod": "session/request_permission",
+		"body":          strings.TrimSpace(prompt.Body),
+	}
+	if toolName := xutil.FirstNonEmpty(
+		xutil.LookupStringFromAny(toolCall["tool"]),
+		xutil.LookupStringFromAny(toolCall["opencodeToolName"]),
+		xutil.LookupStringFromAny(toolCall["title"]),
+		kind,
+	); toolName != "" {
+		metadata["toolName"] = toolName
+	}
+	if command := firstMapString(rawInput, "cmd", "command"); command != "" {
+		metadata["command"] = command
+	}
+	if cwd := firstMapString(rawInput, "cwd"); cwd != "" {
+		metadata["cwd"] = cwd
+	}
+	path := firstMapString(rawInput, "filePath", "file_path", "path")
+	if path == "" {
+		path = permissionLocationPath(toolCall)
+	}
+	if path != "" {
+		metadata["filePath"] = path
+		metadata["blockedPath"] = path
+	}
+	if pattern := firstMapString(rawInput, "pattern", "glob", "query"); pattern != "" {
+		metadata["pattern"] = pattern
+	}
+	return metadata
+}
+
 func (t *Translator) todoPlanEvent(turn *turnState, sessionID string, item *itemState, update map[string]any) (agentproto.Event, bool) {
 	status := strings.TrimSpace(xutil.LookupStringFromAny(update["status"]))
 	if status != "completed" && status != "failed" {
