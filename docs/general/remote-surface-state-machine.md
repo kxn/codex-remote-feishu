@@ -2041,7 +2041,10 @@ retained-offline overlay 额外规则：
 18. OpenCode `/plan` 是否只通过 `PlanMode + PlanModeOverrideSet` 表达飞书显式 override：`on/off` 冻结到 queue item 并在 ACP prompt 前动态设置 `mode=plan/build`，`clear` 后不冻结也不 dispatch mode；`config_option_update id=mode` 是否能投影最近观察 mode，且自定义 mode 不被折算成 off。
 19. OpenCode ACP preflight 是否在同一 prompt 中按 deterministic 顺序先设置 `mode` 再设置 `effort`，全部成功后才发送 `session/prompt`；`config_option_update id=effort` 是否刷新 observed reasoning，并且 `effort not found` / unsupported model 不会被当作成功 prompt。
 
+2026-08-15 #895 补充：Codex active Goal thread 的 backend-observed turn 与普通队列互锁已并入 dispatch/recovery 主链。`thread/goal/set|get|clear` 与 `thread/read(includeTurns=false)` 成为 typed control carrier；`turn/started` 在目标 thread 的 authoritative Goal status 为 active 且无 remote binding 时记录为 backend-observed active turn（不伪造 continuation provenance），进入 Steer target，并在 completion/error/interrupt/disconnect 时按同一 turn-lifecycle owner 清理。普通队列第一条目标消息入队即创建 durable `pause_pending` lease 并发送 `thread/goal/set(paused)`；pause 确认后以 `thread/read` 的 live `idle` 状态为屏障进入 `draining`，之后才派发普通 prompt；Goal turn 完成即使无 remote binding 也会推进命中同 instance+thread 的等待队列；队列排空且 Goal fingerprint（createdAt/objective/budget）与 lease 快照一致时自动 resume，任何外部 mutation / RPC 失败 / fingerprint 漂移都 fail-closed 放弃自动恢复。lease 持久化到 daemon state，重启后按 phase 重发 pause/probe/get。
+
 ## 11. 待讨论取舍
 
 1. 群聊 on-demand 恢复遇到 terminal 失败后，同一恢复目标下的后续普通文本会被静默吞掉（不重复发失败卡），直到恢复目标变化、恢复成功或用户显式重选（`/list`、`/use`、`/new`）。这是为了避免刷屏的有意取舍；风险是用户可能误以为机器人无响应，需要错误卡上的指引文案足够明确。
 2. 群聊/其他 surface 在 bot 级 Profile 切换时若正在执行 turn，切换不会立即生效：surface 标记待收敛，直到下一次交互（实例空闲）才重启实例。这是为避免硬杀进行中任务的有意取舍；若用户希望立即生效，可等待当前任务完成或手动 `/detach` 后重连。
+3. Goal queue interlock 期间，普通队列先暂停 Goal continuation（`thread/goal/set(paused)`），这可能短暂停止 Goal 的 active accounting；这是上游 pause 的真实语义，且用户队列不应计入 Goal budget。pause 失败或上游未确认时保持 fail-closed（不派发普通 prompt 到可能被隐式 Steer 的 Goal turn），并给出诊断 notice；用户可显式 pause/clear Goal 或稍后重试。

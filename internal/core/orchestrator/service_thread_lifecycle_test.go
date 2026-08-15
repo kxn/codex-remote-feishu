@@ -115,6 +115,7 @@ func TestThreadGoalAndSettingsStoreLatestStateOnly(t *testing.T) {
 	now := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(threadLifecycleInstance())
+	tokenBudget := int64(1200)
 
 	if events := svc.ApplyAgentEvent("inst-1", agentproto.Event{
 		Kind:     agentproto.EventThreadGoalUpdated,
@@ -123,7 +124,7 @@ func TestThreadGoalAndSettingsStoreLatestStateOnly(t *testing.T) {
 			ThreadID:        "thread-1",
 			Objective:       "ship it",
 			Status:          "active",
-			TokenBudget:     1200,
+			TokenBudget:     &tokenBudget,
 			TokensUsed:      345,
 			TimeUsedSeconds: 67,
 		},

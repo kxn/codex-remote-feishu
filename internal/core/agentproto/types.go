@@ -42,6 +42,7 @@ const (
 	EventThreadRuntimeStatusUpdated      EventKind = "thread.runtime_status.updated"
 	EventThreadLifecycleUpdated          EventKind = "thread.lifecycle.updated"
 	EventThreadGoalUpdated               EventKind = "thread.goal.updated"
+	EventThreadGoalCommandResult         EventKind = "thread.goal.command.result"
 	EventThreadSettingsUpdated           EventKind = "thread.settings.updated"
 	EventCapabilityStateUpdated          EventKind = "capability.state.updated"
 	EventProcessChildRestartUpdated      EventKind = "process.child.restart.updated"
@@ -138,6 +139,8 @@ type Event struct {
 	RuntimeStatus        *ThreadRuntimeStatus          `json:"runtimeStatus,omitempty"`
 	ThreadLifecycle      *ThreadLifecycleUpdate        `json:"threadLifecycle,omitempty"`
 	ThreadGoal           *ThreadGoalUpdate             `json:"threadGoal,omitempty"`
+	GoalCleared          bool                          `json:"goalCleared,omitempty"`
+	GoalMissing          bool                          `json:"goalMissing,omitempty"`
 	ThreadSettings       *ThreadSettingsUpdate         `json:"threadSettings,omitempty"`
 	CapabilityState      *CapabilityStateUpdate        `json:"capabilityState,omitempty"`
 	Exploration          *ExplorationActions           `json:"exploration,omitempty"`
@@ -208,6 +211,10 @@ const (
 	CommandModelList           CommandKind = "model.list"
 	CommandProcessChildRestart CommandKind = "process.child.restart"
 	CommandProcessExit         CommandKind = "process.exit"
+	CommandThreadGoalSet       CommandKind = "thread.goal.set"
+	CommandThreadGoalGet       CommandKind = "thread.goal.get"
+	CommandThreadGoalClear     CommandKind = "thread.goal.clear"
+	CommandThreadRead          CommandKind = "thread.read"
 )
 
 type InputKind string
@@ -239,6 +246,14 @@ type Command struct {
 	ModelList   ModelListCommand   `json:"modelList,omitempty"`
 	MCP         MCPCommand         `json:"mcp,omitempty"`
 	Review      ReviewRequest      `json:"review,omitempty"`
+	Goal        GoalCommand        `json:"goal,omitempty"`
+}
+
+type GoalCommand struct {
+	Status      string `json:"status,omitempty"`
+	Objective   string `json:"objective,omitempty"`
+	TokenBudget *int64 `json:"tokenBudget,omitempty"`
+	Purpose     string `json:"purpose,omitempty"`
 }
 
 type ModelListCommand struct {

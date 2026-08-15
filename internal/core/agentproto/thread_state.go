@@ -17,14 +17,17 @@ type ThreadLifecycleUpdate struct {
 }
 
 type ThreadGoalUpdate struct {
-	ThreadID        string `json:"threadId,omitempty"`
-	TurnID          string `json:"turnId,omitempty"`
-	Objective       string `json:"objective,omitempty"`
-	Status          string `json:"status,omitempty"`
-	TokenBudget     int    `json:"tokenBudget,omitempty"`
-	TokensUsed      int    `json:"tokensUsed,omitempty"`
-	TimeUsedSeconds int    `json:"timeUsedSeconds,omitempty"`
-	Cleared         bool   `json:"cleared,omitempty"`
+	ThreadID         string `json:"threadId,omitempty"`
+	TurnID           string `json:"turnId,omitempty"`
+	Objective        string `json:"objective,omitempty"`
+	Status           string `json:"status,omitempty"`
+	TokenBudget      *int64 `json:"tokenBudget,omitempty"`
+	TokensUsed       int64  `json:"tokensUsed,omitempty"`
+	TimeUsedSeconds  int64  `json:"timeUsedSeconds,omitempty"`
+	CreatedAt        int64  `json:"createdAt,omitempty"`
+	UpdatedAt        int64  `json:"updatedAt,omitempty"`
+	Cleared          bool   `json:"cleared,omitempty"`
+	ExternalMutation bool   `json:"externalMutation,omitempty"`
 }
 
 type ThreadSettingsUpdate struct {
@@ -78,28 +81,34 @@ func NormalizeThreadGoalUpdate(update *ThreadGoalUpdate) *ThreadGoalUpdate {
 		return nil
 	}
 	normalized := &ThreadGoalUpdate{
-		ThreadID:        strings.TrimSpace(update.ThreadID),
-		TurnID:          strings.TrimSpace(update.TurnID),
-		Objective:       strings.TrimSpace(update.Objective),
-		Status:          strings.TrimSpace(update.Status),
-		TokenBudget:     update.TokenBudget,
-		TokensUsed:      update.TokensUsed,
-		TimeUsedSeconds: update.TimeUsedSeconds,
-		Cleared:         update.Cleared,
+		ThreadID:         strings.TrimSpace(update.ThreadID),
+		TurnID:           strings.TrimSpace(update.TurnID),
+		Objective:        strings.TrimSpace(update.Objective),
+		Status:           strings.TrimSpace(update.Status),
+		TokenBudget:      cloneInt64Ptr(update.TokenBudget),
+		TokensUsed:       update.TokensUsed,
+		TimeUsedSeconds:  update.TimeUsedSeconds,
+		CreatedAt:        update.CreatedAt,
+		UpdatedAt:        update.UpdatedAt,
+		Cleared:          update.Cleared,
+		ExternalMutation: update.ExternalMutation,
 	}
 	if normalized.ThreadID == "" {
 		return nil
 	}
 	if normalized.TurnID == "" && normalized.Objective == "" && normalized.Status == "" &&
-		normalized.TokenBudget == 0 && normalized.TokensUsed == 0 && normalized.TimeUsedSeconds == 0 && !normalized.Cleared {
+		normalized.TokenBudget == nil && normalized.TokensUsed == 0 && normalized.TimeUsedSeconds == 0 &&
+		normalized.CreatedAt == 0 && normalized.UpdatedAt == 0 && !normalized.Cleared && !normalized.ExternalMutation {
 		return nil
 	}
 	if normalized.Cleared {
 		normalized.Objective = ""
 		normalized.Status = ""
-		normalized.TokenBudget = 0
+		normalized.TokenBudget = nil
 		normalized.TokensUsed = 0
 		normalized.TimeUsedSeconds = 0
+		normalized.CreatedAt = 0
+		normalized.UpdatedAt = 0
 	}
 	return normalized
 }
@@ -109,6 +118,15 @@ func CloneThreadGoalUpdate(update *ThreadGoalUpdate) *ThreadGoalUpdate {
 		return nil
 	}
 	cloned := *update
+	cloned.TokenBudget = cloneInt64Ptr(update.TokenBudget)
+	return &cloned
+}
+
+func cloneInt64Ptr(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
 	return &cloned
 }
 

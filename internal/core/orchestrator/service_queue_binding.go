@@ -400,11 +400,27 @@ func (s *Service) shouldTrackInstanceActiveTurn(instanceID string, event agentpr
 	if inst := s.root.Instances[instanceID]; inst != nil && threadIsReview(inst.Threads[event.ThreadID]) {
 		return true
 	}
+	if s.threadHasActiveGoal(instanceID, event.ThreadID) {
+		return true
+	}
 	binding := s.lookupRemoteTurnForEvent(instanceID, event)
 	if binding == nil {
 		return false
 	}
 	return !remoteBindingKeepsSurfaceSelection(binding)
+}
+
+func (s *Service) threadHasActiveGoal(instanceID, threadID string) bool {
+	inst := s.root.Instances[instanceID]
+	threadID = strings.TrimSpace(threadID)
+	if inst == nil || threadID == "" {
+		return false
+	}
+	thread := inst.Threads[threadID]
+	if thread == nil || thread.ThreadGoal == nil {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(thread.ThreadGoal.Status), "active")
 }
 
 func shouldClearTrackedInstanceActiveTurn(inst *state.InstanceRecord, threadID, turnID string) bool {

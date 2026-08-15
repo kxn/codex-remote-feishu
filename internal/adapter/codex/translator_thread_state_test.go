@@ -54,8 +54,13 @@ func TestObserveServerThreadGoalAndSettingsNotificationsProduceStateEvents(t *te
 	if goalEvent.Kind != agentproto.EventThreadGoalUpdated || goalEvent.ThreadGoal == nil {
 		t.Fatalf("unexpected goal event: %#v", goalEvent)
 	}
-	if goalEvent.ThreadGoal.Objective != "ship it" || goalEvent.ThreadGoal.Status != "active" || goalEvent.ThreadGoal.TokenBudget != 1200 || goalEvent.ThreadGoal.TokensUsed != 345 || goalEvent.ThreadGoal.TimeUsedSeconds != 67 {
+	if goalEvent.ThreadGoal.Objective != "ship it" || goalEvent.ThreadGoal.Status != "active" ||
+		goalEvent.ThreadGoal.TokenBudget == nil || *goalEvent.ThreadGoal.TokenBudget != 1200 ||
+		goalEvent.ThreadGoal.TokensUsed != 345 || goalEvent.ThreadGoal.TimeUsedSeconds != 67 {
 		t.Fatalf("unexpected goal payload: %#v", goalEvent.ThreadGoal)
+	}
+	if !goalEvent.ThreadGoal.ExternalMutation {
+		t.Fatalf("goal notification without pending command must be marked external, got %#v", goalEvent.ThreadGoal)
 	}
 
 	clearedResult, err := tr.ObserveServer([]byte(`{"method":"thread/goal/cleared","params":{"threadId":"thread-1"}}`))

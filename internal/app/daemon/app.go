@@ -18,6 +18,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/codexupgrade"
 	"github.com/kxn/codex-remote-feishu/internal/app/cronrepo"
 	codexupgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/codexupgraderuntime"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/goalinterlockstore"
 	headlessruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime"
 	toolruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
 	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
@@ -159,6 +160,7 @@ type App struct {
 	codexRuntimeCapability        codexRuntimeCapabilityState
 	codexOAuthProfileState        codexOAuthProfileRuntimeState
 	codexNativeConnection         codexNativeConnectionRuntimeState
+	goalInterlockRuntime          persistedStoreRuntimeState[*goalinterlockstore.Store]
 	profileCatalogMigrationErr    error
 
 	adminAuth                  *adminauth.Manager
@@ -346,6 +348,7 @@ func (a *App) SetHeadlessRuntime(cfg HeadlessRuntimeConfig) {
 	a.configureProfileContextPreferenceStateLocked(cfg.Paths.StateDir)
 	a.configureCodexOAuthProfileStateLocked(cfg.Paths.StateDir)
 	a.configureSurfaceResumeStateLocked(cfg.Paths.StateDir)
+	a.configureGoalInterlockStateLocked(cfg.Paths.StateDir)
 	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncBotCapabilitySettingsStateLocked()
 	a.syncFeishuRoomStateLocked()

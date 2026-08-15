@@ -63,12 +63,17 @@ func (s *Service) applyThreadGoalUpdate(instanceID string, event agentproto.Even
 	}
 	update := agentproto.NormalizeThreadGoalUpdate(event.ThreadGoal)
 	if update == nil {
+		tokenBudget := lookupIntMetadata(event.Metadata, "tokenBudget")
+		var budgetPtr *int64
+		if tokenBudget != 0 {
+			budgetPtr = &tokenBudget
+		}
 		update = agentproto.NormalizeThreadGoalUpdate(&agentproto.ThreadGoalUpdate{
 			ThreadID:        event.ThreadID,
 			TurnID:          event.TurnID,
 			Objective:       event.Name,
 			Status:          event.Status,
-			TokenBudget:     lookupIntMetadata(event.Metadata, "tokenBudget"),
+			TokenBudget:     budgetPtr,
 			TokensUsed:      lookupIntMetadata(event.Metadata, "tokensUsed"),
 			TimeUsedSeconds: lookupIntMetadata(event.Metadata, "timeUsedSeconds"),
 		})
@@ -146,19 +151,19 @@ func observedPlanModeSetting(value string) (state.PlanModeSetting, bool) {
 	}
 }
 
-func lookupIntMetadata(metadata map[string]any, key string) int {
+func lookupIntMetadata(metadata map[string]any, key string) int64 {
 	if metadata == nil {
 		return 0
 	}
 	switch value := metadata[key].(type) {
 	case int:
-		return value
+		return int64(value)
 	case int32:
-		return int(value)
+		return int64(value)
 	case int64:
-		return int(value)
+		return value
 	case float64:
-		return int(value)
+		return int64(value)
 	default:
 		return 0
 	}

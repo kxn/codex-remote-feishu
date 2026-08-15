@@ -160,6 +160,10 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 		return t.translateRequestRespond(command)
 	case agentproto.CommandMCPOAuthLogin:
 		return t.translateMCPOAuthLogin(command)
+	case agentproto.CommandThreadGoalSet, agentproto.CommandThreadGoalGet, agentproto.CommandThreadGoalClear:
+		return t.translateThreadGoalCommand(command)
+	case agentproto.CommandThreadRead:
+		return t.translateThreadReadCommand(command)
 	default:
 		return nil, nil
 	}

@@ -256,7 +256,7 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 			Owner:                  "#694",
 			Cadence:                ProtocolCadenceEvent,
 			FeishuProjectionPolicy: FeishuProjectionStateOnly,
-			Notes:                  "Thread lifecycle/goal/settings are stored as state-only carriers; thread/closed is not detach.",
+			Notes:                  "Thread lifecycle/goal/settings are stored as state carriers; thread/closed is not detach. Goal state is authoritative from thread/goal/updated|cleared.",
 			Methods: []string{
 				"thread/archived",
 				"thread/deleted",
@@ -265,6 +265,20 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 				"thread/goal/updated",
 				"thread/goal/cleared",
 				"thread/settings/updated",
+			},
+		},
+		{
+			Direction:              ProtocolDirectionClientRequest,
+			TargetLayer:            ProtocolTargetHeadlessDriven,
+			Status:                 ProtocolStatusSupported,
+			Owner:                  "#895",
+			Cadence:                ProtocolCadenceRequest,
+			FeishuProjectionPolicy: FeishuProjectionProductVisible,
+			Notes:                  "Goal control carrier for queue interlock and future user control.",
+			Methods: []string{
+				"thread/goal/set",
+				"thread/goal/get",
+				"thread/goal/clear",
 			},
 		},
 		{
@@ -384,8 +398,7 @@ func ProtocolCoverageManifest() []ProtocolCoverageEntry {
 			Notes:                     "Client request exists upstream but is not a current Feishu/headless product command.",
 			Methods: []string{
 				"thread/archive", "thread/delete", "thread/unsubscribe", "thread/increment_elicitation",
-				"thread/decrement_elicitation", "thread/goal/set", "thread/goal/get", "thread/goal/clear",
-				"thread/metadata/update", "thread/settings/update", "thread/memoryMode/set", "memory/reset",
+				"thread/decrement_elicitation", "thread/metadata/update", "thread/settings/update", "thread/memoryMode/set", "memory/reset",
 				"thread/unarchive", "thread/shellCommand", "thread/approveGuardianDeniedAction",
 				"thread/backgroundTerminals/clean", "thread/backgroundTerminals/list", "thread/backgroundTerminals/terminate",
 				"thread/rollback", "thread/search", "thread/loaded/list", "thread/turns/list", "thread/items/list",

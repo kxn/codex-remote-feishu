@@ -29,18 +29,13 @@ func (t *Translator) observeThreadGoalUpdated(message map[string]any) Result {
 	if len(goal) == 0 {
 		goal = params
 	}
-	update := agentproto.NormalizeThreadGoalUpdate(&agentproto.ThreadGoalUpdate{
-		ThreadID:        xutil.LookupStringFromAny(params["threadId"]),
-		TurnID:          xutil.LookupStringFromAny(params["turnId"]),
-		Objective:       xutil.FirstNonEmpty(xutil.LookupStringFromAny(goal["objective"]), xutil.LookupStringFromAny(goal["goal"])),
-		Status:          xutil.LookupStringFromAny(goal["status"]),
-		TokenBudget:     xutil.LookupIntFromAny(goal["tokenBudget"]),
-		TokensUsed:      xutil.LookupIntFromAny(goal["tokensUsed"]),
-		TimeUsedSeconds: xutil.LookupIntFromAny(goal["timeUsedSeconds"]),
-	})
+	threadID := xutil.LookupStringFromAny(params["threadId"])
+	update := parseThreadGoal(threadID, goal)
 	if update == nil {
 		return Result{}
 	}
+	update.TurnID = xutil.LookupStringFromAny(params["turnId"])
+	update.ExternalMutation = !t.pendingGoalMutationForThread(threadID)
 	return Result{Events: []agentproto.Event{{
 		Kind:       agentproto.EventThreadGoalUpdated,
 		ThreadID:   update.ThreadID,
@@ -50,9 +45,11 @@ func (t *Translator) observeThreadGoalUpdated(message map[string]any) Result {
 }
 
 func (t *Translator) observeThreadGoalCleared(message map[string]any) Result {
+	threadID := lookupString(message, "params", "threadId")
 	update := agentproto.NormalizeThreadGoalUpdate(&agentproto.ThreadGoalUpdate{
-		ThreadID: lookupString(message, "params", "threadId"),
-		Cleared:  true,
+		ThreadID:         threadID,
+		Cleared:          true,
+		ExternalMutation: !t.pendingGoalMutationForThread(threadID),
 	})
 	if update == nil {
 		return Result{}
