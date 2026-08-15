@@ -393,6 +393,110 @@ func TestGoalInterlockPauseFailureBackoffBlocksRetry(t *testing.T) {
 	}
 }
 
+func TestGoalInterlockPauseBackoffThrottledDispatchStaysBlocked(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	inst := threadLifecycleInstance()
+	inst.Threads = goalActiveThread()
+	svc.UpsertInstance(inst)
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionUseThread, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", ThreadID: "thread-1"})
+
+	first := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-backoff-1",
+		Text:             "第一条",
+	})
+	pause := findAgentCommand(first, agentproto.CommandThreadGoalSet)
+	if pause == nil {
+		t.Fatal("expected initial pause command")
+	}
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind:         agentproto.EventThreadGoalCommandResult,
+		CommandID:    pause.CommandID,
+		ThreadID:     "thread-1",
+		ErrorMessage: "goal set failed",
+	})
+
+	second := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-backoff-2",
+		Text:             "第二条",
+	})
+	if findAgentCommand(second, agentproto.CommandPromptSend) != nil {
+		t.Fatalf("second message must not dispatch into goal thread during backoff, got %#v", second)
+	}
+
+	// 节流窗口内再触发 dispatch（模拟 turn 收尾 / tick），必须保持阻塞，
+	// 不能因为 maybeBegin 返回 nil 而直接派发普通消息。
+	throttled := svc.dispatchNext(svc.root.Surfaces["surface-1"])
+	if findAgentCommand(throttled, agentproto.CommandPromptSend) != nil {
+		t.Fatalf("throttled dispatch must not bypass goal interlock, got %#v", throttled)
+	}
+	surface := svc.root.Surfaces["surface-1"]
+	if len(surface.QueuedQueueItemIDs) != 2 {
+		t.Fatalf("expected both queue items to stay queued during backoff, got %#v", surface.QueuedQueueItemIDs)
+	}
+	if svc.goalInterlockLease("inst-1", "thread-1") != nil {
+		t.Fatalf("expected no lease during backoff, got %#v", svc.goalInterlockLease("inst-1", "thread-1"))
+	}
+
+	key := goalInterlockKey("inst-1", "thread-1")
+	svc.goalPauseBackoff[key] = now.Add(-time.Second)
+	afterExpiry := svc.dispatchNext(svc.root.Surfaces["surface-1"])
+	if findAgentCommand(afterExpiry, agentproto.CommandThreadGoalSet) == nil {
+		t.Fatalf("expected interlock pause retry after backoff expiry, got %#v", afterExpiry)
+	}
+	if findAgentCommand(afterExpiry, agentproto.CommandPromptSend) != nil {
+		t.Fatalf("queue item must not dispatch before pause completes, got %#v", afterExpiry)
+	}
+}
+
+func TestGoalCommandResultUnknownCommandIDDoesNotWriteBack(t *testing.T) {
+	svc, _, instanceID := goalInterlockTestSetup(t)
+	inst := svc.root.Instances[instanceID]
+	before := inst.Threads["thread-1"].ThreadGoal
+	if before == nil || before.Objective != "ship it" {
+		t.Fatalf("unexpected initial thread goal: %#v", before)
+	}
+
+	svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadGoalCommandResult,
+		CommandID: "unknown-goal-command",
+		ThreadID:  "thread-1",
+		ThreadGoal: &agentproto.ThreadGoalUpdate{
+			ThreadID:  "thread-1",
+			Objective: "stale overwrite",
+			Status:    "paused",
+		},
+	})
+	after := inst.Threads["thread-1"].ThreadGoal
+	if after == nil || after.Objective != "ship it" {
+		t.Fatalf("unknown command result must not write back thread goal, got %#v", after)
+	}
+
+	svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadRuntimeStatusUpdated,
+		CommandID: "unknown-probe",
+		ThreadID:  "thread-1",
+		ThreadGoal: &agentproto.ThreadGoalUpdate{
+			ThreadID:  "thread-1",
+			Objective: "stale probe overwrite",
+			Status:    "complete",
+		},
+	})
+	afterProbe := inst.Threads["thread-1"].ThreadGoal
+	if afterProbe == nil || afterProbe.Objective != "ship it" {
+		t.Fatalf("unknown runtime status result must not write back thread goal, got %#v", afterProbe)
+	}
+}
+
 func TestGoalInterlockReconcileClearsStaleCommandIDs(t *testing.T) {
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

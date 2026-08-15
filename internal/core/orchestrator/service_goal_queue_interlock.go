@@ -285,25 +285,25 @@ func (s *Service) beginGoalInterlock(surface *state.SurfaceConsoleRecord, inst *
 	}}
 }
 
-func (s *Service) maybeBeginGoalInterlockForQueueItem(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, item *state.QueueItemRecord) []eventcontract.Event {
+func (s *Service) maybeBeginGoalInterlockForQueueItem(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, item *state.QueueItemRecord) (bool, []eventcontract.Event) {
 	if surface == nil || inst == nil || item == nil {
-		return nil
+		return false, nil
 	}
 	threadID := queuedItemExecutionThreadID(item)
 	if threadID == "" || s.goalInterlockLease(inst.InstanceID, threadID) != nil {
-		return nil
+		return false, nil
 	}
 	key := goalInterlockKey(inst.InstanceID, threadID)
 	if until, ok := s.goalPauseBackoff[key]; ok && s.now().Before(until) {
 		if noticeAt := s.goalPauseNoticeAt[key]; noticeAt.IsZero() || s.now().After(noticeAt) {
 			s.goalPauseNoticeAt[key] = s.now().Add(time.Minute)
-			return goalInterlockDiagnosticNotice(surface.SurfaceSessionID, "goal_pause_backoff", "Goal 暂停失败", "Codex 暂停 Goal 失败，队列暂缓派发。请稍后重试，或先手动暂停/清除 Goal。")
+			return true, goalInterlockDiagnosticNotice(surface.SurfaceSessionID, "goal_pause_backoff", "Goal 暂停失败", "Codex 暂停 Goal 失败，队列暂缓派发。请稍后重试，或先手动暂停/清除 Goal。")
 		}
-		return nil
+		return true, nil
 	}
 	delete(s.goalPauseBackoff, key)
 	delete(s.goalPauseNoticeAt, key)
-	return s.beginGoalInterlock(surface, inst, item)
+	return false, s.beginGoalInterlock(surface, inst, item)
 }
 
 func (s *Service) nextAgentCommandID() string {
@@ -326,18 +326,20 @@ func itoa(value int) string {
 }
 
 func (s *Service) applyGoalCommandResult(instanceID string, event agentproto.Event) []eventcontract.Event {
-	if inst := s.root.Instances[instanceID]; inst != nil {
-		switch {
-		case event.ThreadGoal != nil:
-			if update := agentproto.NormalizeThreadGoalUpdate(event.ThreadGoal); update != nil {
-				thread := s.ensureThread(inst, update.ThreadID)
-				thread.ThreadGoal = agentproto.CloneThreadGoalUpdate(update)
-				s.touchThread(thread)
-			}
-		case event.GoalCleared:
-			if thread := inst.Threads[event.ThreadID]; thread != nil {
-				thread.ThreadGoal = nil
-				s.touchThread(thread)
+	if s.goalCommandResultKnown(event.CommandID) {
+		if inst := s.root.Instances[instanceID]; inst != nil {
+			switch {
+			case event.ThreadGoal != nil:
+				if update := agentproto.NormalizeThreadGoalUpdate(event.ThreadGoal); update != nil {
+					thread := s.ensureThread(inst, update.ThreadID)
+					thread.ThreadGoal = agentproto.CloneThreadGoalUpdate(update)
+					s.touchThread(thread)
+				}
+			case event.GoalCleared:
+				if thread := inst.Threads[event.ThreadID]; thread != nil {
+					thread.ThreadGoal = nil
+					s.touchThread(thread)
+				}
 			}
 		}
 	}
@@ -367,6 +369,34 @@ func (s *Service) applyGoalCommandResult(instanceID string, event agentproto.Eve
 		return s.applyGoalGetResult(key, event)
 	}
 	return nil
+}
+
+func (s *Service) goalCommandResultKnown(commandID string) bool {
+	commandID = strings.TrimSpace(commandID)
+	if commandID == "" {
+		return false
+	}
+	if s.goalUserCommands != nil {
+		if _, ok := s.goalUserCommands[commandID]; ok {
+			return true
+		}
+	}
+	if s.goalInterlockByCommand != nil {
+		if _, ok := s.goalInterlockByCommand[commandID]; ok {
+			return true
+		}
+	}
+	if s.goalProbeByCommand != nil {
+		if _, ok := s.goalProbeByCommand[commandID]; ok {
+			return true
+		}
+	}
+	if s.goalGetByCommand != nil {
+		if _, ok := s.goalGetByCommand[commandID]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) applyGoalInterlockCommandResult(key string, event agentproto.Event) []eventcontract.Event {

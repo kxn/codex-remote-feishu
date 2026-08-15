@@ -91,8 +91,13 @@ func (t *Translator) observeThreadGoalCommandResponse(pending pendingGoalRequest
 			goal = result
 		}
 		event.ThreadGoal = parseThreadGoal(pending.ThreadID, goal)
-		if event.ThreadGoal != nil {
+		if event.ThreadGoal != nil && event.ThreadGoal.UpdatedAt != 0 {
 			t.lastOwnedGoalMutations[pending.ThreadID] = ownedGoalMutation{UpdatedAt: event.ThreadGoal.UpdatedAt}
+		} else {
+			// 响应缺 updatedAt（或整体无 goal 快照）时，有序流中下一条该
+			// thread 的 goal notification 视为本命令的确认，消费一次，
+			// 避免把 pause 确认误判成 external mutation。
+			t.lastOwnedGoalMutations[pending.ThreadID] = ownedGoalMutation{AwaitNext: true}
 		}
 	}
 	return Result{Events: []agentproto.Event{event}}
@@ -106,6 +111,10 @@ func (t *Translator) ownsLastGoalMutation(threadID string, update *agentproto.Th
 	owned, ok := t.lastOwnedGoalMutations[threadID]
 	if !ok {
 		return false
+	}
+	if owned.AwaitNext {
+		delete(t.lastOwnedGoalMutations, threadID)
+		return true
 	}
 	if update != nil && !update.Cleared && update.UpdatedAt != 0 && owned.UpdatedAt == update.UpdatedAt {
 		delete(t.lastOwnedGoalMutations, threadID)

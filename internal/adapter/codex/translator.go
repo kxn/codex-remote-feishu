@@ -115,6 +115,7 @@ type pendingThreadRead struct {
 type ownedGoalMutation struct {
 	UpdatedAt int64
 	Cleared   bool
+	AwaitNext bool
 }
 
 type codexObservedThread struct {

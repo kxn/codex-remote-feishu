@@ -301,6 +301,53 @@ func TestObserveServerGoalNotificationAfterResponseIsNotExternal(t *testing.T) {
 	}
 }
 
+func TestObserveServerGoalSetResponseWithoutUpdatedAtOwnsNextNotification(t *testing.T) {
+	tests := []struct {
+		name   string
+		result string
+	}{
+		{name: "empty result", result: `"result":{}`},
+		{name: "goal without updatedAt", result: `"result":{"goal":{"threadId":"thread-1","status":"paused","objective":"mine"}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tr := NewTranslator("inst-1")
+			payload, err := tr.TranslateCommand(agentproto.Command{
+				CommandID: "cmd-goal-set",
+				Kind:      agentproto.CommandThreadGoalSet,
+				Target:    agentproto.Target{ThreadID: "thread-1"},
+				Goal: agentproto.GoalCommand{
+					Status:  "paused",
+					Purpose: "queue_interlock",
+				},
+			})
+			if err != nil {
+				t.Fatalf("translate: %v", err)
+			}
+			requestID := decodeGoalRequest(t, payload[0])["id"].(string)
+			if _, err := tr.ObserveServer([]byte(`{"id":"` + requestID + `",` + tt.result + `}`)); err != nil {
+				t.Fatalf("observe response: %v", err)
+			}
+
+			first, err := tr.ObserveServer([]byte(`{"method":"thread/goal/updated","params":{"threadId":"thread-1","goal":{"objective":"mine","status":"paused","createdAt":1710000000123,"updatedAt":1710000000999}}}`))
+			if err != nil {
+				t.Fatalf("observe first notification: %v", err)
+			}
+			if len(first.Events) != 1 || first.Events[0].ThreadGoal == nil || first.Events[0].ThreadGoal.ExternalMutation {
+				t.Fatalf("first notification after set without updatedAt must be owned, got %#v", first.Events)
+			}
+
+			second, err := tr.ObserveServer([]byte(`{"method":"thread/goal/updated","params":{"threadId":"thread-1","goal":{"objective":"mine","status":"paused","createdAt":1710000000123,"updatedAt":1710000001999}}}`))
+			if err != nil {
+				t.Fatalf("observe second notification: %v", err)
+			}
+			if len(second.Events) != 1 || second.Events[0].ThreadGoal == nil || !second.Events[0].ThreadGoal.ExternalMutation {
+				t.Fatalf("second notification after owned consumption must be external, got %#v", second.Events)
+			}
+		})
+	}
+}
+
 func TestObserveServerGoalClearedNotificationAfterResponseIsNotExternal(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	payload, err := tr.TranslateCommand(agentproto.Command{

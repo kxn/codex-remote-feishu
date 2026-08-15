@@ -136,7 +136,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	if inst != nil && strings.TrimSpace(threadID) != "" {
 		s.recordThreadUserMessage(inst, threadID, sourceMessagePreview)
 	}
-	goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item)
+	_, goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item)
 	return append(routeAdjustmentEvents, append(goalEvents, s.enqueuePreparedQueueItem(surface, item, front)...)...)
 }
 
@@ -349,7 +349,7 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 		surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 		return nil
 	}
-	if goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item); len(goalEvents) != 0 {
+	if blocked, goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item); blocked || len(goalEvents) != 0 {
 		return goalEvents
 	}
 	if inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) {
