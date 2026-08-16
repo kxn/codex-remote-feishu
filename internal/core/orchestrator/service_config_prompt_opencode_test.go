@@ -664,9 +664,8 @@ func TestOpenCodeAccessCommandStoresDesiredRuntimePermissionWhileDetached(t *tes
 	if surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("surface runtime access = %q, want confirm", surface.PromptOverride.AccessMode)
 	}
-	record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if !ok || record.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
-		t.Fatalf("bot runtime access = %#v, want confirm", record)
+	if record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]; ok && record.PromptOverride.AccessMode != "" {
+		t.Fatalf("access must not be written to bot record, got %#v", record)
 	}
 	for _, event := range events {
 		if event.DaemonCommand != nil {

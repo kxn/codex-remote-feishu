@@ -233,6 +233,8 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/admin/opencode/profiles/{id}", a.requireAdmin(a.handleOpenCodeProfileUpdate))
 	mux.HandleFunc("DELETE /api/admin/opencode/profiles/{id}", a.requireAdmin(a.handleOpenCodeProfileDelete))
 	mux.HandleFunc("GET /api/admin/opencode/profiles/{id}/references", a.requireAdmin(a.handleOpenCodeProfileReferences))
+	mux.HandleFunc("GET /api/admin/vision-assist", a.requireAdmin(a.handleVisionAssistGet))
+	mux.HandleFunc("PUT /api/admin/vision-assist", a.requireAdmin(a.handleVisionAssistPut))
 	mux.HandleFunc("GET /api/admin/external-access/status", a.requireAdmin(a.handleAdminExternalAccessStatus))
 	mux.HandleFunc("POST /api/admin/external-access/link", a.requireAdmin(a.handleAdminExternalAccessLink))
 	mux.HandleFunc("GET /api/admin/feishu/manifest", a.requireAdmin(a.handleFeishuManifest))

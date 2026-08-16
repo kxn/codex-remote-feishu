@@ -47,6 +47,7 @@ type AppConfig struct {
 	Claude         ClaudeSettings         `json:"claude,omitempty"`
 	OpenCode       OpenCodeSettings       `json:"openCode,omitempty"`
 	Feishu         FeishuSettings         `json:"feishu"`
+	VisionAssist   VisionAssistSettings   `json:"visionAssist,omitempty"`
 	Debug          DebugSettings          `json:"debug"`
 	Storage        StorageSettings        `json:"storage,omitempty"`
 }
@@ -84,6 +85,14 @@ type FeishuAppOnboardingState struct {
 type ToolSettings struct {
 	ListenHost string `json:"listenHost,omitempty"`
 	ListenPort int    `json:"listenPort,omitempty"`
+}
+
+// VisionAssistSettings 是视觉辅助（describe_image）背后的辅助模型端点配置。
+type VisionAssistSettings struct {
+	Protocol string `json:"protocol,omitempty"`
+	BaseURL  string `json:"baseURL,omitempty"`
+	APIKey   string `json:"apiKey,omitempty"`
+	Model    string `json:"model,omitempty"`
 }
 
 type ExternalAccessSettings struct {

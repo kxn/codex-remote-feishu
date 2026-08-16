@@ -26,6 +26,7 @@ type adminClaudeProfileView struct {
 	SubagentModel     string                         `json:"subagentModel,omitempty"`
 	Instruction       string                         `json:"instruction,omitempty"`
 	ReasoningEffort   string                         `json:"reasoningEffort,omitempty"`
+	VisionSupported   bool                           `json:"visionSupported,omitempty"`
 	BuiltIn           bool                           `json:"builtIn,omitempty"`
 	Persisted         bool                           `json:"persisted"`
 	ReadOnly          bool                           `json:"readOnly,omitempty"`
@@ -53,6 +54,7 @@ type claudeProfileWriteRequest struct {
 	SubagentModel   *string `json:"subagentModel"`
 	Instruction     *string `json:"instruction"`
 	ReasoningEffort *string `json:"reasoningEffort"`
+	VisionSupported *bool   `json:"visionSupported"`
 }
 
 func (a *App) handleClaudeProfilesList(w http.ResponseWriter, _ *http.Request) {
@@ -134,6 +136,7 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 		SubagentModel:   optionalStringValue(req.SubagentModel),
 		Instruction:     optionalStringValue(req.Instruction),
 		ReasoningEffort: config.NormalizeClaudeReasoningEffort(optionalStringValue(req.ReasoningEffort)),
+		VisionSupported: optionalBoolValue(req.VisionSupported),
 	}
 	if err := config.ValidateInstruction(profile.Instruction); err != nil {
 		a.adminConfigMu.Unlock()
@@ -151,6 +154,9 @@ func (a *App) handleClaudeProfileCreate(w http.ResponseWriter, r *http.Request) 
 		}
 		if req.ReasoningEffort == nil {
 			profile.ReasoningEffort = config.NormalizeClaudeReasoningEffort(current.ReasoningEffort)
+		}
+		if req.VisionSupported == nil {
+			profile.VisionSupported = current.VisionSupported
 		}
 		updated.Claude.Profiles[index] = profile
 	} else {
@@ -546,6 +552,7 @@ func adminClaudeProfileViewFromConfig(profile config.ClaudeProfile) adminClaudeP
 		SubagentModel:   strings.TrimSpace(profile.SubagentModel),
 		Instruction:     strings.TrimSpace(profile.Instruction),
 		ReasoningEffort: config.NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
+		VisionSupported: profile.VisionSupported,
 		BuiltIn:         profile.BuiltIn,
 		Persisted:       !profile.BuiltIn,
 		ReadOnly:        profile.BuiltIn,
@@ -557,6 +564,13 @@ func optionalStringValue(value *string) string {
 		return ""
 	}
 	return strings.TrimSpace(*value)
+}
+
+func optionalBoolValue(value *bool) bool {
+	if value == nil {
+		return false
+	}
+	return *value
 }
 
 func trimmedOptionalString(value *string) (string, bool) {

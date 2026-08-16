@@ -208,7 +208,7 @@ func TestDaemonStartsDefaultOpenCodeHeadlessWithRecentSystemModel(t *testing.T) 
 	}
 }
 
-func TestResolveOpenCodeLaunchProfileRequiresAdmissionRefForAPIProfile(t *testing.T) {
+func TestResolveOpenCodeLaunchProfileFallsBackToCurrentRevisionWithoutAdmissionRef(t *testing.T) {
 	record, err := config.PrepareOpenCodeAPIProfileCreate(nil, config.OpenCodeAPIProfileInput{
 		Name: "Team OpenCode", BaseURL: "https://proxy.example/v1", APIKey: "secret-v1", Model: "kimi-k2",
 	})
@@ -224,13 +224,24 @@ func TestResolveOpenCodeLaunchProfileRequiresAdmissionRefForAPIProfile(t *testin
 	cfg := config.DefaultAppConfig()
 	cfg.OpenCode.Profiles = []config.OpenCodeAPIProfileRecord{record}
 
-	if _, err := resolveOpenCodeLaunchProfile(cfg, record.ID, nil); err == nil {
-		t.Fatal("expected custom opencode profile without admission ref to fail closed")
+	profile, err := resolveOpenCodeLaunchProfile(cfg, record.ID, nil)
+	if err != nil {
+		t.Fatalf("expected custom opencode profile to resolve to current revision without admission ref: %v", err)
+	}
+	if profile.Revision == 0 || profile.APIKey == "" {
+		t.Fatalf("expected current revision profile without admission ref, got %#v", profile)
 	}
 	if _, err := resolveOpenCodeLaunchProfile(cfg, record.ID, &state.OpenCodeAdmissionRef{
 		ProfileRef: state.OpenCodeProfileRef{ID: record.ID, Revision: 1},
 	}); err != nil {
 		t.Fatalf("expected exact historical revision to resolve with admission ref: %v", err)
+	}
+	if profile, err := resolveOpenCodeLaunchProfile(cfg, record.ID, &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_some_other_profile", Revision: 1},
+	}); err != nil {
+		t.Fatalf("expected mismatched admission ref to fall back to current revision: %v", err)
+	} else if profile.Revision == 0 {
+		t.Fatalf("expected current revision profile after mismatched ref fallback, got %#v", profile)
 	}
 	if _, err := resolveOpenCodeLaunchProfile(cfg, state.DefaultOpenCodeProfileID, nil); err != nil {
 		t.Fatalf("expected default opencode profile to resolve without admission ref: %v", err)

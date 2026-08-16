@@ -150,6 +150,7 @@ type CodexProfileSummary struct {
 	SubagentModel          string                   `json:"subagentModel,omitempty"`
 	Instruction            string                   `json:"instruction,omitempty"`
 	ReasoningEffort        string                   `json:"reasoningEffort,omitempty"`
+	VisionSupported        bool                     `json:"visionSupported,omitempty"`
 	StatusCode             string                   `json:"statusCode,omitempty"`
 	Available              bool                     `json:"available"`
 	HasAPIKey              bool                     `json:"hasAPIKey,omitempty"`

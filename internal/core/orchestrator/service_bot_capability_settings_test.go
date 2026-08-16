@@ -82,6 +82,9 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 		ProductMode:       state.ProductModeNormal,
 		Backend:           agentproto.BackendOpenCode,
 		OpenCodeProfileID: "op_team",
+		OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+		},
 		PromptOverride: state.ModelConfigRecord{
 			Model:           "gpt-5.5",
 			ReasoningEffort: "high",
@@ -110,14 +113,26 @@ func TestGroupSurfaceReadsBotCapabilitySettingsForOpenCodeProfile(t *testing.T) 
 	if surface.Backend != agentproto.BackendOpenCode || surface.OpenCodeProfileID != "op_team" {
 		t.Fatalf("group surface opencode projection = %s/%q, want opencode/op_team", surface.Backend, surface.OpenCodeProfileID)
 	}
+	if surface.OpenCodeAdmissionRef == nil || surface.OpenCodeAdmissionRef.ProfileRef.ID != "op_team" || surface.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("group surface opencode projection lost admission ref, got %#v", surface.OpenCodeAdmissionRef)
+	}
 	contract := state.SurfaceDesiredBackendContract(surface)
 	if contract.CodexProfileID != "" || contract.ClaudeProfileID != "" {
 		t.Fatalf("opencode desired contract retained inactive profile fields: %#v", contract)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
+	if surface.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: ""}) ||
+		surface.PlanMode != state.PlanModeSettingOff ||
+		surface.PlanModeOverrideSet {
+		t.Fatalf("opencode bot projection should keep reasoning only; access/plan are session-scoped: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+	}
+	// 会话级 access/plan 不被后续 bot 投影覆盖。
+	surface.PromptOverride.AccessMode = agentproto.AccessModeConfirm
+	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
+	svc.projectLatestBotCapabilitySettingsToSurface(surface)
+	if surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm ||
 		surface.PlanMode != state.PlanModeSettingOn ||
 		!surface.PlanModeOverrideSet {
-		t.Fatalf("opencode bot projection should retain runtime reasoning/access and plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+		t.Fatalf("bot projection must not overwrite session access/plan: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
@@ -133,13 +148,11 @@ func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndKeepsRuntim
 	}
 	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
 	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{
-		GatewayID:           "app-1",
-		ProductMode:         state.ProductModeNormal,
-		Backend:             agentproto.BackendCodex,
-		CodexProfileID:      "default",
-		PromptOverride:      surface.PromptOverride,
-		PlanMode:            surface.PlanMode,
-		PlanModeOverrideSet: surface.PlanModeOverrideSet,
+		GatewayID:      "app-1",
+		ProductMode:    state.ProductModeNormal,
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: "default",
+		PromptOverride: state.ModelConfigRecord{Model: "gpt-5.5", ReasoningEffort: "high"},
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -158,10 +171,9 @@ func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndKeepsRuntim
 	if record.Backend != agentproto.BackendOpenCode {
 		t.Fatalf("bot backend = %q, want opencode", record.Backend)
 	}
-	if record.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
-		record.PlanMode != state.PlanModeSettingOn ||
-		!record.PlanModeOverrideSet {
-		t.Fatalf("bot opencode settings should retain runtime reasoning/access and plan: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
+	if record.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: ""}) ||
+		record.PlanModeOverrideSet {
+		t.Fatalf("bot opencode settings should keep reasoning only; access/plan are session-scoped: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
 	}
 	if surface.PromptOverride != (state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}) ||
 		surface.PlanMode != state.PlanModeSettingOn ||
@@ -170,7 +182,7 @@ func TestPrivateModeCommandSwitchesBotCapabilitySettingsToOpenCodeAndKeepsRuntim
 	}
 }
 
-func TestPrivatePlanCommandWritesBotCapabilitySettings(t *testing.T) {
+func TestPrivatePlanCommandWritesSurfaceSettings(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 
@@ -186,12 +198,8 @@ func TestPrivatePlanCommandWritesBotCapabilitySettings(t *testing.T) {
 		t.Fatalf("expected feedback event")
 	}
 
-	record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if !ok {
-		t.Fatalf("expected bot capability settings for app-1")
-	}
-	if record.PlanMode != state.PlanModeSettingOn || !record.PlanModeOverrideSet {
-		t.Fatalf("bot plan = %s/%v, want on/true", record.PlanMode, record.PlanModeOverrideSet)
+	if record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]; ok && record.PlanModeOverrideSet {
+		t.Fatalf("plan must not be written to bot capability record, got %#v", record)
 	}
 	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
 	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
@@ -226,8 +234,12 @@ func TestPrivateCapabilityCommandsPreserveConcurrentGatewayFields(t *testing.T) 
 	if record.Backend != agentproto.BackendClaude {
 		t.Fatalf("bot backend = %q, want claude after unrelated plan update", record.Backend)
 	}
-	if record.PlanMode != state.PlanModeSettingOn || !record.PlanModeOverrideSet {
-		t.Fatalf("bot plan = %s/%v, want on/true", record.PlanMode, record.PlanModeOverrideSet)
+	if record.PlanModeOverrideSet {
+		t.Fatalf("bot record must not carry session plan, got %#v", record)
+	}
+	ouB := svc.root.Surfaces["feishu:app-1:user:ou_b"]
+	if ouB.PlanMode != state.PlanModeSettingOn || !ouB.PlanModeOverrideSet {
+		t.Fatalf("ou_b surface plan = %s/%v, want on/true", ouB.PlanMode, ouB.PlanModeOverrideSet)
 	}
 }
 
@@ -276,8 +288,8 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 			},
 			secondKind: control.ActionPlanCommand,
 			secondText: "/plan on",
-			check: func(record state.BotCapabilitySettingsRecord) bool {
-				return record.PromptOverride.AccessMode == agentproto.AccessModeConfirm && record.PlanMode == state.PlanModeSettingOn && record.PlanModeOverrideSet
+			check: func(state.BotCapabilitySettingsRecord) bool {
+				return true
 			},
 		},
 	}
@@ -315,6 +327,17 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 			if !tc.check(record) {
 				t.Fatalf("interleaved bot capability record = %#v", record)
 			}
+			if record.PromptOverride.AccessMode != "" || record.PlanModeOverrideSet {
+				t.Fatalf("access/plan must not be written to bot record: %#v", record)
+			}
+			if tc.name == "access then plan" {
+				surfaceA := svc.root.Surfaces["feishu:app-1:user:ou_a"]
+				surfaceB := svc.root.Surfaces["feishu:app-1:user:ou_b"]
+				if surfaceA.PromptOverride.AccessMode != agentproto.AccessModeConfirm ||
+					surfaceB.PlanMode != state.PlanModeSettingOn || !surfaceB.PlanModeOverrideSet {
+					t.Fatalf("session access/plan not isolated: %#v / %s/%v", surfaceA.PromptOverride, surfaceB.PlanMode, surfaceB.PlanModeOverrideSet)
+				}
+			}
 		})
 	}
 }
@@ -326,13 +349,17 @@ func TestPrivateCapabilityCommandsRemainGatewayIsolated(t *testing.T) {
 	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionPlanCommand, "app-1", "ou_a", "/plan on"))
 	svc.ApplySurfaceAction(privateCapabilityAction(control.ActionModeCommand, "app-2", "ou_b", "/mode claude"))
 
-	app1 := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
+	app1, ok1 := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
 	app2 := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-2")]
-	if app1.Backend != agentproto.BackendCodex || app1.PlanMode != state.PlanModeSettingOn || !app1.PlanModeOverrideSet {
-		t.Fatalf("app-1 bot capability record = %#v", app1)
+	if ok1 {
+		t.Fatalf("session plan must not create bot capability record, got %#v", app1)
 	}
 	if app2.Backend != agentproto.BackendClaude || app2.PlanModeOverrideSet {
 		t.Fatalf("app-2 bot capability record = %#v", app2)
+	}
+	ouA := svc.root.Surfaces["feishu:app-1:user:ou_a"]
+	if ouA.PlanMode != state.PlanModeSettingOn || !ouA.PlanModeOverrideSet {
+		t.Fatalf("app-1 surface plan = %s/%v, want on/true", ouA.PlanMode, ouA.PlanModeOverrideSet)
 	}
 }
 
@@ -409,8 +436,8 @@ func TestMaterializeBotCapabilitySettingsRefreshesExistingSurfaceProjection(t *t
 	if surface.Backend != agentproto.BackendClaude || surface.CodexProfileID != "codex-new" || surface.ClaudeProfileID != "profile-new" {
 		t.Fatalf("materialized contract projection = %s/%q/%q", surface.Backend, surface.CodexProfileID, surface.ClaudeProfileID)
 	}
-	if surface.PromptOverride.ReasoningEffort != "high" || surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
-		t.Fatalf("materialized prompt/plan projection = %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+	if surface.PromptOverride.ReasoningEffort != "high" || surface.PlanModeOverrideSet {
+		t.Fatalf("materialized projection must keep reasoning only; access/plan are session-scoped: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
@@ -474,8 +501,8 @@ func TestSurfaceResumeMaterializeKeepsLoadedBotCapabilityProjection(t *testing.T
 	if surface.Backend != agentproto.BackendClaude || surface.CodexProfileID != "codex-new" || surface.ClaudeProfileID != "profile-new" {
 		t.Fatalf("resume contract projection = %s/%q/%q", surface.Backend, surface.CodexProfileID, surface.ClaudeProfileID)
 	}
-	if surface.PromptOverride.ReasoningEffort != "high" || surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
-		t.Fatalf("resume prompt/plan projection = %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+	if surface.PromptOverride.ReasoningEffort != "high" || surface.PlanModeOverrideSet {
+		t.Fatalf("resume projection must keep reasoning only; access/plan are session-scoped: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
@@ -569,12 +596,12 @@ func TestPrivateClaudeProfileSwitchWithoutWorkspacePreservesCanonicalPromptAndPl
 	if record.ClaudeProfileID != "profile-b" {
 		t.Fatalf("bot claude profile = %q, want profile-b", record.ClaudeProfileID)
 	}
-	if record.PromptOverride.AccessMode != agentproto.AccessModeConfirm || record.PlanMode != state.PlanModeSettingOn || !record.PlanModeOverrideSet {
-		t.Fatalf("profile switch overwrote canonical prompt/plan = %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
+	if record.PromptOverride.AccessMode != "" || record.PlanModeOverrideSet {
+		t.Fatalf("bot record must not carry session access/plan: %#v %s/%v", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet)
 	}
-	surfaceA := svc.root.Surfaces["feishu:app-1:user:ou_a"]
-	if surfaceA.PromptOverride.AccessMode != agentproto.AccessModeConfirm || surfaceA.PlanMode != state.PlanModeSettingOn || !surfaceA.PlanModeOverrideSet {
-		t.Fatalf("profile switch desynchronized current projection = %#v %s/%v", surfaceA.PromptOverride, surfaceA.PlanMode, surfaceA.PlanModeOverrideSet)
+	surfaceB = svc.root.Surfaces["feishu:app-1:user:ou_b"]
+	if surfaceB.PromptOverride.AccessMode != agentproto.AccessModeConfirm || surfaceB.PlanMode != state.PlanModeSettingOn || !surfaceB.PlanModeOverrideSet {
+		t.Fatalf("profile switch lost session access/plan on ou_b = %#v %s/%v", surfaceB.PromptOverride, surfaceB.PlanMode, surfaceB.PlanModeOverrideSet)
 	}
 }
 
@@ -589,10 +616,7 @@ func TestPrivateClaudeWorkspaceSnapshotRestoreUpdatesCanonicalProjection(t *test
 		PromptOverride: state.ModelConfigRecord{
 			Model:           "clear-me",
 			ReasoningEffort: "low",
-			AccessMode:      agentproto.AccessModeFullAccess,
 		},
-		PlanMode:            state.PlanModeSettingOn,
-		PlanModeOverrideSet: true,
 	}
 	surface := svc.ensureSurface(control.Action{
 		Kind:             control.ActionStatus,
@@ -611,8 +635,8 @@ func TestPrivateClaudeWorkspaceSnapshotRestoreUpdatesCanonicalProjection(t *test
 	svc.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	want := state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}
-	if record.PromptOverride != want || record.PlanMode != state.PlanModeSettingOff || record.PlanModeOverrideSet {
+	want := state.ModelConfigRecord{ReasoningEffort: "high"}
+	if record.PromptOverride != want || record.PlanModeOverrideSet {
 		t.Fatalf("bot snapshot projection = %#v %s/%v, want %#v off/false", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet, want)
 	}
 }
@@ -627,10 +651,7 @@ func TestGroupClaudeWorkspaceSnapshotRestoreUpdatesExistingCanonicalProjection(t
 		ClaudeProfileID: "profile-a",
 		PromptOverride: state.ModelConfigRecord{
 			ReasoningEffort: "low",
-			AccessMode:      agentproto.AccessModeConfirm,
 		},
-		PlanMode:            state.PlanModeSettingOn,
-		PlanModeOverrideSet: true,
 	}
 	surface := svc.ensureSurface(control.Action{
 		Kind:             control.ActionStatus,
@@ -649,12 +670,13 @@ func TestGroupClaudeWorkspaceSnapshotRestoreUpdatesExistingCanonicalProjection(t
 	svc.restoreCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	want := state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess}
-	if record.PromptOverride != want || record.PlanMode != state.PlanModeSettingOff || record.PlanModeOverrideSet {
-		t.Fatalf("bot snapshot projection = %#v %s/%v, want %#v off/false", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet, want)
+	wantRecord := state.ModelConfigRecord{ReasoningEffort: "high"}
+	if record.PromptOverride != wantRecord || record.PlanModeOverrideSet {
+		t.Fatalf("bot snapshot projection = %#v %s/%v, want %#v off/false", record.PromptOverride, record.PlanMode, record.PlanModeOverrideSet, wantRecord)
 	}
-	if surface.PromptOverride != want || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
-		t.Fatalf("group execution projection = %#v %s/%v, want canonical %#v off/false", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet, want)
+	wantSurface := state.ModelConfigRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess}
+	if surface.PromptOverride != wantSurface || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+		t.Fatalf("group execution projection = %#v %s/%v, want canonical %#v off/false", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet, wantSurface)
 	}
 }
 
@@ -710,11 +732,12 @@ func TestInvalidCanonicalRecordBlocksLifecycleAndSurfaceAction(t *testing.T) {
 		Backend:   agentproto.BackendCodex,
 	}
 
-	if svc.clearLifecyclePlanModeOverride(surface) {
-		t.Fatal("invalid canonical record unexpectedly accepted lifecycle mutation")
+	// plan 为会话级设置，与 canonical record 有效性解耦。
+	if !svc.clearLifecyclePlanModeOverride(surface) {
+		t.Fatal("expected session plan clear to succeed")
 	}
-	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
-		t.Fatalf("failed lifecycle mutation changed local projection: %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
+	if surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+		t.Fatalf("session plan clear changed projection: %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 
 	events := svc.ApplySurfaceAction(control.Action{
@@ -725,11 +748,11 @@ func TestInvalidCanonicalRecordBlocksLifecycleAndSurfaceAction(t *testing.T) {
 		ActorUserID:      "ou_user",
 		Text:             "/plan off",
 	})
-	if !eventsContainNotice(events, "bot_capability_settings_invalid", "机器人设置") {
-		t.Fatalf("expected invalid canonical state notice, got %#v", events)
+	if eventsContainNotice(events, "bot_capability_settings_invalid", "机器人设置") {
+		t.Fatalf("session plan command must not be blocked by invalid canonical record, got %#v", events)
 	}
-	if surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet {
-		t.Fatalf("blocked surface action changed local projection: %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
+	if surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+		t.Fatalf("session plan command changed projection: %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }
 
@@ -890,13 +913,13 @@ func TestPrivateClaudeWorkspaceSnapshotPersistsCanonicalProjection(t *testing.T)
 	svc.persistCurrentClaudeWorkspaceProfileSnapshot(surface)
 
 	key := state.ClaudeWorkspaceProfileSnapshotStorageKey(surface.ClaimedWorkspaceKey, agentproto.BackendClaude, "profile-a")
-	want := state.ClaudeWorkspaceProfileSnapshotRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeConfirm}
+	want := state.ClaudeWorkspaceProfileSnapshotRecord{ReasoningEffort: "high", AccessMode: agentproto.AccessModeFullAccess}
 	if got := svc.root.ClaudeWorkspaceProfileSnapshots[key]; got != want {
 		t.Fatalf("persisted snapshot = %#v, want canonical %#v", got, want)
 	}
 }
 
-func TestPrivateAccessCommandWritesBotCapabilitySettings(t *testing.T) {
+func TestPrivateAccessCommandWritesSurfaceSettings(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -942,9 +965,8 @@ func TestPrivateAccessCommandWritesBotCapabilitySettings(t *testing.T) {
 		t.Fatalf("expected feedback event")
 	}
 
-	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
-		t.Fatalf("bot access override = %q, want confirm", record.PromptOverride.AccessMode)
+	if record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]; ok && record.PromptOverride.AccessMode != "" {
+		t.Fatalf("access must not be written to bot record, got %#v", record)
 	}
 	if surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
 		t.Fatalf("private surface access override = %q, want confirm", surface.PromptOverride.AccessMode)
@@ -988,6 +1010,8 @@ func TestGroupPromptSummaryUsesBotCapabilitySettings(t *testing.T) {
 	)
 	surface := svc.root.Surfaces["feishu:app-1:chat:oc_room"]
 	surface.AttachedInstanceID = "inst-1"
+	surface.PromptOverride.AccessMode = agentproto.AccessModeConfirm
+	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
 
 	summary := svc.resolveNextPromptSummary(svc.root.Instances["inst-1"], surface, "", "", state.ModelConfigRecord{})
 	if summary.OverrideModel != "gpt-5.5" || summary.OverrideReasoningEffort != "high" {
@@ -1091,17 +1115,18 @@ func TestPrivateModelAndReasoningCommandsWriteBotCapabilitySettings(t *testing.T
 func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	cases := []struct {
-		name string
-		kind control.ActionKind
-		text string
+		name   string
+		kind   control.ActionKind
+		text   string
+		reject bool
 	}{
-		{name: "mode", kind: control.ActionModeCommand, text: "/mode claude"},
-		{name: "codex profile", kind: control.ActionCodexProfileCommand, text: "/codexprofile team-proxy"},
-		{name: "claude profile", kind: control.ActionClaudeProfileCommand, text: "/claudeprofile devseek"},
-		{name: "model", kind: control.ActionModelCommand, text: "/model gpt-5.5 high"},
-		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning low"},
-		{name: "access", kind: control.ActionAccessCommand, text: "/access confirm"},
-		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on"},
+		{name: "mode", kind: control.ActionModeCommand, text: "/mode claude", reject: true},
+		{name: "codex profile", kind: control.ActionCodexProfileCommand, text: "/codexprofile team-proxy", reject: true},
+		{name: "claude profile", kind: control.ActionClaudeProfileCommand, text: "/claudeprofile devseek", reject: true},
+		{name: "model", kind: control.ActionModelCommand, text: "/model gpt-5.5 high", reject: true},
+		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning low", reject: true},
+		{name: "access", kind: control.ActionAccessCommand, text: "/access confirm", reject: false},
+		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on", reject: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1144,22 +1169,37 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 				Text:             tc.text,
 			})
 
-			if !eventsContainNotice(events, "bot_capability_private_required", "私聊") {
-				t.Fatalf("expected private-chat rejection notice, got %#v", events)
-			}
 			record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
+			if tc.reject {
+				if !eventsContainNotice(events, "bot_capability_private_required", "私聊") {
+					t.Fatalf("expected private-chat rejection notice, got %#v", events)
+				}
+			} else if eventsContainNotice(events, "bot_capability_private_required", "私聊") {
+				t.Fatalf("session-scoped command must not be rejected in group chat, got %#v", events)
+			}
 			if record.Backend != agentproto.BackendCodex || record.CodexProfileID != state.NativeCodexProfileID || record.ClaudeProfileID != "" ||
-				record.PromptOverride != (state.ModelConfigRecord{}) || record.PlanMode != state.PlanModeSettingOff || record.PlanModeOverrideSet {
+				record.PromptOverride != (state.ModelConfigRecord{}) || record.PlanModeOverrideSet {
 				t.Fatalf("bot capability settings mutated after %s: %#v", tc.text, record)
 			}
+			if tc.reject {
+				if surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
+					t.Fatalf("rejected command mutated session state: %#v %s/%v", surface.PromptOverride, surface.PlanMode, surface.PlanModeOverrideSet)
+				}
+				return
+			}
+			if tc.kind == control.ActionAccessCommand && surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+				t.Fatalf("group access should apply to session surface, got %#v", surface.PromptOverride)
+			}
+			if tc.kind == control.ActionPlanCommand && (surface.PlanMode != state.PlanModeSettingOn || !surface.PlanModeOverrideSet) {
+				t.Fatalf("group plan should apply to session surface, got %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
+			}
 			if surface.Backend != agentproto.BackendCodex || surface.CodexProfileID != state.NativeCodexProfileID || surface.ClaudeProfileID != "" ||
-				surface.PromptOverride != (state.ModelConfigRecord{}) || surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
-				t.Fatalf("group surface capability state mutated after %s: %#v", tc.text, surface)
+				surface.PromptOverride.Model != "" || surface.PromptOverride.ReasoningEffort != "" {
+				t.Fatalf("group capability command mutated bot-scoped session fields: %#v", surface)
 			}
 		})
 	}
 }
-
 func TestGroupContextCommandsRemainMutable(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

@@ -201,6 +201,7 @@ type BotCapabilitySettingsRecord struct {
 	LegacyCodexProviderID string `json:"CodexProviderID,omitempty"`
 	ClaudeProfileID       string
 	OpenCodeProfileID     string
+	OpenCodeAdmissionRef  *OpenCodeAdmissionRef
 	PromptOverride        ModelConfigRecord
 	PlanMode              PlanModeSetting
 	PlanModeOverrideSet   bool

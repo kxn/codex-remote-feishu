@@ -178,15 +178,18 @@ func (s *Service) restoreCurrentClaudeWorkspaceProfileSnapshot(surface *state.Su
 		}
 	}
 	override = compactPromptOverride(override)
+	reasoning := override.ReasoningEffort
+	accessMode := override.AccessMode
 	if !s.applySurfaceCapabilityLifecycleMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-		record.PromptOverride = override
-		record.PlanMode = state.PlanModeSettingOff
-		record.PlanModeOverrideSet = false
+		// reasoning 仍为机器人级；access/plan 为会话级，只写 surface。
+		record.PromptOverride = state.ModelConfigRecord{ReasoningEffort: reasoning}
 	}, func(local *state.SurfaceConsoleRecord) {
-		local.PromptOverride = override
-		clearSurfacePlanModeOverride(local)
+		local.PromptOverride = state.ModelConfigRecord{ReasoningEffort: reasoning}
 	}) {
 		return s.botCapabilitySettingsInvalidEvents(surface)
 	}
+	// access/plan 会话级：无论走 bot record 还是 local 分支，都直接落在 surface。
+	surface.PromptOverride.AccessMode = accessMode
+	clearSurfacePlanModeOverride(surface)
 	return nil
 }

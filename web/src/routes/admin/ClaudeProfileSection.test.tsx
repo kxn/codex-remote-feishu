@@ -150,6 +150,7 @@ describe("ClaudeProfileSection", () => {
       subagentModel: "",
       instruction: "",
       reasoningEffort: "max",
+      visionSupported: false,
     });
     const preferenceCall = calls.find(
       (call) =>
@@ -188,6 +189,7 @@ describe("ClaudeProfileSection", () => {
       subagentModel: "",
       instruction: "",
       reasoningEffort: "medium",
+      visionSupported: false,
     });
   });
 

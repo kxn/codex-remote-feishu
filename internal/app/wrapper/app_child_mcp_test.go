@@ -70,6 +70,11 @@ func TestBuildCodexChildLaunchKeepsFeishuMCPForMimoCatalog(t *testing.T) {
 	if len(args) != 7 {
 		t.Fatalf("expected mimo catalog args plus MCP overrides, got %d args: %#v", len(args), args)
 	}
+	if args[3] != "-c" || !strings.Contains(args[4], `mcp_servers.codex_remote_feishu.url=`) ||
+		!strings.Contains(args[4], `codex_remote_instance_id=inst-1`) ||
+		!strings.Contains(args[6], `bearer_token_env_var="CODEX_REMOTE_FEISHU_MCP_BEARER"`) {
+		t.Fatalf("unexpected MCP override args: %#v", args[3:])
+	}
 	if got := lookupEnv(env, feishuMCPBearerEnvName); got != "secret-token" {
 		t.Fatalf("expected injected bearer env for mimo catalog, got %q", got)
 	}

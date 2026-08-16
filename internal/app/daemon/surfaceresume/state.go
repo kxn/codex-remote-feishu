@@ -18,28 +18,31 @@ const (
 )
 
 type Entry struct {
-	SurfaceSessionID            string                   `json:"surfaceSessionID"`
-	GatewayID                   string                   `json:"gatewayID,omitempty"`
-	ChatID                      string                   `json:"chatID,omitempty"`
-	ActorUserID                 string                   `json:"actorUserID,omitempty"`
-	ProductMode                 string                   `json:"productMode,omitempty"`
-	Backend                     string                   `json:"backend,omitempty"`
-	LegacyCodexProviderID       string                   `json:"codexProviderID,omitempty"`
-	CodexProfileID              string                   `json:"codexProfileID,omitempty"`
-	CodexProfileSelectionStatus string                   `json:"codexProfileSelectionStatus,omitempty"`
-	CodexAdmissionRef           *state.CodexAdmissionRef `json:"codexAdmissionRef,omitempty"`
-	ClaudeProfileID             string                   `json:"claudeProfileID,omitempty"`
-	OpenCodeProfileID           string                   `json:"openCodeProfileID,omitempty"`
-	Verbosity                   string                   `json:"verbosity,omitempty"`
-	PlanMode                    string                   `json:"planMode,omitempty"`
-	ResumeInstanceID            string                   `json:"resumeInstanceID,omitempty"`
-	ResumeThreadID              string                   `json:"resumeThreadID,omitempty"`
-	ResumeThreadTitle           string                   `json:"resumeThreadTitle,omitempty"`
-	ResumeThreadCWD             string                   `json:"resumeThreadCWD,omitempty"`
-	ResumeWorkspaceKey          string                   `json:"resumeWorkspaceKey,omitempty"`
-	ResumeRouteMode             string                   `json:"resumeRouteMode,omitempty"`
-	ResumeHeadless              bool                     `json:"resumeHeadless,omitempty"`
-	UpdatedAt                   time.Time                `json:"updatedAt,omitempty"`
+	SurfaceSessionID            string                      `json:"surfaceSessionID"`
+	GatewayID                   string                      `json:"gatewayID,omitempty"`
+	ChatID                      string                      `json:"chatID,omitempty"`
+	ActorUserID                 string                      `json:"actorUserID,omitempty"`
+	ProductMode                 string                      `json:"productMode,omitempty"`
+	Backend                     string                      `json:"backend,omitempty"`
+	LegacyCodexProviderID       string                      `json:"codexProviderID,omitempty"`
+	CodexProfileID              string                      `json:"codexProfileID,omitempty"`
+	CodexProfileSelectionStatus string                      `json:"codexProfileSelectionStatus,omitempty"`
+	CodexAdmissionRef           *state.CodexAdmissionRef    `json:"codexAdmissionRef,omitempty"`
+	ClaudeProfileID             string                      `json:"claudeProfileID,omitempty"`
+	OpenCodeProfileID           string                      `json:"openCodeProfileID,omitempty"`
+	OpenCodeAdmissionRef        *state.OpenCodeAdmissionRef `json:"openCodeAdmissionRef,omitempty"`
+	Verbosity                   string                      `json:"verbosity,omitempty"`
+	AccessMode                  string                      `json:"accessMode,omitempty"`
+	PlanMode                    string                      `json:"planMode,omitempty"`
+	PlanModeOverrideSet         bool                        `json:"planModeOverrideSet,omitempty"`
+	ResumeInstanceID            string                      `json:"resumeInstanceID,omitempty"`
+	ResumeThreadID              string                      `json:"resumeThreadID,omitempty"`
+	ResumeThreadTitle           string                      `json:"resumeThreadTitle,omitempty"`
+	ResumeThreadCWD             string                      `json:"resumeThreadCWD,omitempty"`
+	ResumeWorkspaceKey          string                      `json:"resumeWorkspaceKey,omitempty"`
+	ResumeRouteMode             string                      `json:"resumeRouteMode,omitempty"`
+	ResumeHeadless              bool                        `json:"resumeHeadless,omitempty"`
+	UpdatedAt                   time.Time                   `json:"updatedAt,omitempty"`
 }
 
 func StatePath(stateDir string) string {
@@ -137,6 +140,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.CodexAdmissionRef = normalizeCodexAdmissionRef(entry.CodexAdmissionRef)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
 	entry.OpenCodeProfileID = strings.TrimSpace(entry.OpenCodeProfileID)
+	entry.OpenCodeAdmissionRef = normalizeOpenCodeAdmissionRef(entry.OpenCodeAdmissionRef)
 	codexProfileID := entry.CodexProfileID
 	if codexProfileID == "" {
 		codexProfileID = state.CodexProfileIDFromLegacyProviderID(entry.LegacyCodexProviderID)
@@ -160,7 +164,12 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 		entry.CodexAdmissionRef = nil
 	}
 	entry.Verbosity = string(state.NormalizeSurfaceVerbosity(state.SurfaceVerbosity(strings.TrimSpace(entry.Verbosity))))
-	entry.PlanMode = ""
+	entry.AccessMode = strings.TrimSpace(entry.AccessMode)
+	if entry.PlanModeOverrideSet {
+		entry.PlanMode = string(state.NormalizePlanModeSetting(state.PlanModeSetting(strings.TrimSpace(entry.PlanMode))))
+	} else {
+		entry.PlanMode = ""
+	}
 	entry.ResumeInstanceID = strings.TrimSpace(entry.ResumeInstanceID)
 	entry.ResumeThreadID = strings.TrimSpace(entry.ResumeThreadID)
 	entry.ResumeThreadCWD = state.ResolveWorkspaceClaimKey(entry.ResumeThreadCWD)
@@ -201,8 +210,11 @@ func SameEntryContent(left, right Entry) bool {
 		sameCodexAdmissionRef(left.CodexAdmissionRef, right.CodexAdmissionRef) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
 		strings.TrimSpace(left.OpenCodeProfileID) == strings.TrimSpace(right.OpenCodeProfileID) &&
+		sameOpenCodeAdmissionRef(left.OpenCodeAdmissionRef, right.OpenCodeAdmissionRef) &&
 		strings.TrimSpace(left.Verbosity) == strings.TrimSpace(right.Verbosity) &&
+		strings.TrimSpace(left.AccessMode) == strings.TrimSpace(right.AccessMode) &&
 		strings.TrimSpace(left.PlanMode) == strings.TrimSpace(right.PlanMode) &&
+		left.PlanModeOverrideSet == right.PlanModeOverrideSet &&
 		strings.TrimSpace(left.ResumeInstanceID) == strings.TrimSpace(right.ResumeInstanceID) &&
 		strings.TrimSpace(left.ResumeThreadID) == strings.TrimSpace(right.ResumeThreadID) &&
 		strings.TrimSpace(left.ResumeThreadTitle) == strings.TrimSpace(right.ResumeThreadTitle) &&
@@ -215,6 +227,15 @@ func SameEntryContent(left, right Entry) bool {
 func CanonicalizeEntryProfileSelection(entry Entry) Entry {
 	mode := state.NormalizeProductMode(state.ProductMode(strings.TrimSpace(entry.ProductMode)))
 	backend := state.NormalizeSurfaceBackend(mode, agentproto.Backend(strings.TrimSpace(entry.Backend)))
+	if !state.IsHeadlessProductMode(mode) || backend != agentproto.BackendOpenCode {
+		entry.OpenCodeProfileID = ""
+		entry.OpenCodeAdmissionRef = nil
+	} else {
+		entry.OpenCodeProfileID = state.NormalizeOpenCodeProfileID(entry.OpenCodeProfileID)
+		if state.NormalizeOpenCodeProfileID(entry.OpenCodeProfileID) == state.DefaultOpenCodeProfileID {
+			entry.OpenCodeAdmissionRef = nil
+		}
+	}
 	if !state.IsHeadlessProductMode(mode) || backend != agentproto.BackendCodex {
 		entry.LegacyCodexProviderID = ""
 		entry.CodexProfileID = ""
@@ -245,9 +266,22 @@ func normalizeCodexAdmissionRef(value *state.CodexAdmissionRef) *state.CodexAdmi
 	return &normalized
 }
 
+func normalizeOpenCodeAdmissionRef(value *state.OpenCodeAdmissionRef) *state.OpenCodeAdmissionRef {
+	return state.NormalizeOpenCodeAdmissionRef(value)
+}
+
 func sameCodexAdmissionRef(left, right *state.CodexAdmissionRef) bool {
 	left = normalizeCodexAdmissionRef(left)
 	right = normalizeCodexAdmissionRef(right)
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
+}
+
+func sameOpenCodeAdmissionRef(left, right *state.OpenCodeAdmissionRef) bool {
+	left = normalizeOpenCodeAdmissionRef(left)
+	right = normalizeOpenCodeAdmissionRef(right)
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}

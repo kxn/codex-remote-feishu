@@ -25,6 +25,45 @@ func materializeTestOpenCodeProfiles(svc *Service, profiles ...state.OpenCodePro
 	svc.MaterializeOpenCodeProfiles(records)
 }
 
+func TestMaterializeSurfaceResumeContractWithOpenCodeRefRestoresAdmissionRef(t *testing.T) {
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	ref := &state.OpenCodeAdmissionRef{
+		ProfileRef: state.OpenCodeProfileRef{ID: "op_team", Revision: 7},
+	}
+	svc.MaterializeSurfaceResumeContractWithOpenCodeRef(
+		"surface-1",
+		"app-1",
+		"chat-1",
+		"user-1",
+		state.HeadlessOpenCodeSurfaceBackendContract("op_team"),
+		ref,
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	surface := svc.root.Surfaces["surface-1"]
+	if surface.OpenCodeAdmissionRef == nil || surface.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
+		t.Fatalf("expected admission ref restored on surface, got %#v", surface.OpenCodeAdmissionRef)
+	}
+
+	// 不匹配 profile 的 ref 不应被接受。
+	svc.MaterializeSurfaceResumeContractWithOpenCodeRef(
+		"surface-2",
+		"app-1",
+		"chat-2",
+		"user-1",
+		state.HeadlessOpenCodeSurfaceBackendContract("op_team"),
+		&state.OpenCodeAdmissionRef{
+			ProfileRef: state.OpenCodeProfileRef{ID: "op_other", Revision: 1},
+		},
+		state.SurfaceVerbosityNormal,
+		state.PlanModeSettingOff,
+	)
+	if surface2 := svc.root.Surfaces["surface-2"]; surface2.OpenCodeAdmissionRef != nil {
+		t.Fatalf("mismatched admission ref must not be restored, got %#v", surface2.OpenCodeAdmissionRef)
+	}
+}
+
 func TestOpenCodeProfileCommandSwitchesDetachedSurfaceAndClearsRuntime(t *testing.T) {
 	now := time.Date(2026, 8, 9, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -53,11 +92,12 @@ func TestOpenCodeProfileCommandSwitchesDetachedSurfaceAndClearsRuntime(t *testin
 	if surface.OpenCodeAdmissionRef == nil || surface.OpenCodeAdmissionRef.ProfileRef.ID != "op_team" || surface.OpenCodeAdmissionRef.ProfileRef.Revision != 7 {
 		t.Fatalf("expected profile switch to freeze target admission ref, got %#v", surface.OpenCodeAdmissionRef)
 	}
-	if surface.PlanMode != state.PlanModeSettingOff || surface.PlanModeOverrideSet {
-		t.Fatalf("expected detached switch to clear plan mode override, got %#v", surface)
+	// plan/access 为会话级设置，切换 profile 不重置。
+	if surface.PlanMode != state.PlanModeSettingOn || surface.PlanModeOverrideSet {
+		t.Fatalf("expected detached switch to keep session plan mode, got %#v", surface)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{}) {
-		t.Fatalf("expected detached switch to clear prompt override, got %#v", surface.PromptOverride)
+	if surface.PromptOverride != (state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
+		t.Fatalf("expected detached switch to clear model/reasoning and keep session access, got %#v", surface.PromptOverride)
 	}
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "opencode_profile_switched" {
 		t.Fatalf("expected single switched notice, got %#v", events)

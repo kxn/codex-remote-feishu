@@ -33,6 +33,7 @@ type ClaudeProfileDraft = {
   subagentModel: string;
   instruction: string;
   reasoningEffort: string;
+  visionSupported: boolean;
   contextMode: string;
 };
 
@@ -424,6 +425,23 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
           ))}
         </select>
         </label>
+        <label className="field">
+          <span>视觉能力</span>
+          <input
+            type="checkbox"
+            aria-label="主模型支持直接看图"
+            checked={draft.visionSupported}
+            onChange={(event) =>
+              onDraftChange((current) => ({
+                ...current,
+                visionSupported: event.target.checked,
+              }))
+            }
+          />
+          <span className="field-hint">
+            勾选后该 profile 的主模型视为支持直接看图，不再注入 describe_image 图片描述辅助工具。
+          </span>
+        </label>
         <label className="field form-grid-span-2 stack-top">
           <span>指令 / 角色提示词（可选）</span>
           <textarea
@@ -477,6 +495,7 @@ function createEmptyDraft(): ClaudeProfileDraft {
     subagentModel: "",
     instruction: "",
     reasoningEffort: "",
+    visionSupported: false,
     contextMode: claudeContextModeDefault,
   };
 }
@@ -491,6 +510,7 @@ function createDraftFromProfile(profile: ClaudeProfileSummary): ClaudeProfileDra
     subagentModel: profile.subagentModel?.trim() || "",
     instruction: profile.instruction?.trim() || "",
     reasoningEffort: normalizeClaudeReasoningEffort(profile.reasoningEffort),
+    visionSupported: profile.visionSupported ?? false,
     contextMode: contextMode(profile),
   };
 }
@@ -524,6 +544,7 @@ function buildCreatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     subagentModel: draft.subagentModel.trim(),
     instruction: draft.instruction.trim(),
     reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
+    visionSupported: draft.visionSupported,
   };
 }
 
@@ -536,6 +557,7 @@ function buildUpdatePayload(draft: ClaudeProfileDraft): ClaudeProfileWriteReques
     subagentModel: draft.subagentModel.trim(),
     instruction: draft.instruction.trim(),
     reasoningEffort: normalizeClaudeReasoningEffort(draft.reasoningEffort),
+    visionSupported: draft.visionSupported,
   };
   const authToken = optionalString(draft.authToken);
   if (authToken) {

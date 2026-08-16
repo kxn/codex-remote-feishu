@@ -88,13 +88,7 @@ func (s *Service) handleOpenCodeAccessCommand(surface *state.SurfaceConsoleRecor
 
 func (s *Service) applyOpenCodeRuntimeAccessMode(surface *state.SurfaceConsoleRecord, target string) {
 	target = state.NormalizeOpenCodeRuntimeAccessMode(target)
-	s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
-		override := record.PromptOverride
+	s.applySurfaceAccessModeChange(surface, func(override *state.ModelConfigRecord) {
 		override.AccessMode = target
-		record.PromptOverride = state.NormalizePromptOverrideForBackend(agentproto.BackendOpenCode, override)
-	}, func(local *state.SurfaceConsoleRecord) {
-		override := local.PromptOverride
-		override.AccessMode = target
-		local.PromptOverride = state.NormalizePromptOverrideForBackend(agentproto.BackendOpenCode, override)
 	})
 }

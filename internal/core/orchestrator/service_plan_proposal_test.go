@@ -1,7 +1,6 @@
 package orchestrator
 
 import (
-	"strings"
 	"testing"
 	"time"
 
@@ -371,9 +370,8 @@ func TestPlanProposalExecuteEnqueuesContinuationAndDisablesPlanMode(t *testing.T
 	if state.NormalizePlanModeSetting(surface.PlanMode) != state.PlanModeSettingOff {
 		t.Fatalf("expected execute action to disable plan mode, got %q", surface.PlanMode)
 	}
-	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PlanMode != state.PlanModeSettingOff || !record.PlanModeOverrideSet {
-		t.Fatalf("expected execute action to persist explicit plan off, got %#v", record)
+	if record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]; ok && record.PlanModeOverrideSet {
+		t.Fatalf("session plan must not be persisted to bot record, got %#v", record)
 	}
 	if svc.activePlanProposal(surface) != nil {
 		t.Fatal("expected execute action to clear active plan proposal runtime")
@@ -443,7 +441,7 @@ func TestPlanProposalExecuteStopsWhenCapabilityLifecycleMutationFails(t *testing
 	svc.setActivePlanProposal(surface, newPlanProposalRecord("proposal-1", "inst-1", "thread-1", "turn-1", "/data/dl/droid", "Implement it", "", now, defaultPlanProposalTTL))
 	svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")] = state.BotCapabilitySettingsRecord{}
 
-	events := svc.handlePlanProposalDecision(surface, control.Action{
+	svc.handlePlanProposalDecision(surface, control.Action{
 		Kind:        control.ActionPlanProposalDecision,
 		ActorUserID: "user-1",
 		MessageID:   "om-proposal-1",
@@ -451,22 +449,12 @@ func TestPlanProposalExecuteStopsWhenCapabilityLifecycleMutationFails(t *testing
 		OptionID:    planProposalActionExecute,
 	})
 
-	if surface.ActiveQueueItemID != "" || len(surface.QueuedQueueItemIDs) != 0 {
-		t.Fatalf("failed lifecycle mutation still enqueued continuation: active=%q queued=%#v", surface.ActiveQueueItemID, surface.QueuedQueueItemIDs)
+	// plan 为会话级设置，invalid canonical record 不再阻止 execute 入队；
+	// dispatch 仍由 invalid record gate 拦截。
+	if len(surface.QueuedQueueItemIDs) != 1 {
+		t.Fatalf("expected execute action to enqueue continuation despite invalid record, queued=%#v", surface.QueuedQueueItemIDs)
 	}
-	foundFeedback := eventsContainNotice(events, "bot_capability_settings_invalid", "机器人设置")
-	for _, event := range events {
-		catalog, ok := eventCommandCatalog(event)
-		if !ok || !catalog.Sealed {
-			continue
-		}
-		for _, section := range catalog.NoticeSections {
-			for _, line := range section.Lines {
-				foundFeedback = foundFeedback || strings.Contains(line, "机器人设置")
-			}
-		}
-	}
-	if !foundFeedback {
-		t.Fatalf("expected failed proposal handoff feedback, got %#v", events)
+	if surface.PlanMode != state.PlanModeSettingOff || !surface.PlanModeOverrideSet {
+		t.Fatalf("expected execute action to set session plan off, got %s/%v", surface.PlanMode, surface.PlanModeOverrideSet)
 	}
 }

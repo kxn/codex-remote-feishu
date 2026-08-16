@@ -27,7 +27,7 @@ func (s *Service) finalizeDetachedSurfaceWithOverlayCleanup(surface *state.Surfa
 		ForceClearReviewState: true,
 	})...)
 	s.resetSurfaceExecutionGates(surface)
-	surface.PromptOverride = state.ModelConfigRecord{}
+	clearSurfacePromptRuntimeOverride(surface)
 	s.consumeSurfacePendingHeadlessLaunch(surface, "")
 	s.clearSurfaceActiveQueueItem(surface, "")
 	clearSurfaceRequests(surface)

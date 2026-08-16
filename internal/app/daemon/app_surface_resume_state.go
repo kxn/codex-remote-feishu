@@ -67,22 +67,7 @@ func (a *App) materializeSurfaceResumeStateLocked() {
 	}
 	sort.Strings(surfaceIDs)
 	for _, surfaceID := range surfaceIDs {
-		entry := entries[surfaceID]
-		a.service.MaterializeSurfaceResumeContract(
-			entry.SurfaceSessionID,
-			entry.GatewayID,
-			entry.ChatID,
-			entry.ActorUserID,
-			state.PersistedSurfaceBackendContract(
-				state.ProductMode(entry.ProductMode),
-				agentproto.Backend(entry.Backend),
-				entry.CodexProfileID,
-				entry.ClaudeProfileID,
-				entry.OpenCodeProfileID,
-			),
-			state.SurfaceVerbosity(entry.Verbosity),
-			state.PlanModeSettingOff,
-		)
+		a.materializeSurfaceResumeEntryLocked(entries[surfaceID])
 	}
 }
 
@@ -245,16 +230,20 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 		return surfaceresume.Entry{}, false
 	}
 	entry := surfaceresume.Entry{
-		SurfaceSessionID:  strings.TrimSpace(surface.SurfaceSessionID),
-		GatewayID:         strings.TrimSpace(surface.GatewayID),
-		ChatID:            strings.TrimSpace(surface.ChatID),
-		ActorUserID:       strings.TrimSpace(surface.ActorUserID),
-		ProductMode:       string(state.NormalizeProductMode(surface.ProductMode)),
-		Backend:           string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
-		CodexProfileID:    strings.TrimSpace(a.service.SurfaceCodexProfileID(surface.SurfaceSessionID)),
-		ClaudeProfileID:   strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
-		OpenCodeProfileID: strings.TrimSpace(a.service.SurfaceOpenCodeProfileID(surface.SurfaceSessionID)),
-		Verbosity:         string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
+		SurfaceSessionID:     strings.TrimSpace(surface.SurfaceSessionID),
+		GatewayID:            strings.TrimSpace(surface.GatewayID),
+		ChatID:               strings.TrimSpace(surface.ChatID),
+		ActorUserID:          strings.TrimSpace(surface.ActorUserID),
+		ProductMode:          string(state.NormalizeProductMode(surface.ProductMode)),
+		Backend:              string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
+		CodexProfileID:       strings.TrimSpace(a.service.SurfaceCodexProfileID(surface.SurfaceSessionID)),
+		ClaudeProfileID:      strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
+		OpenCodeProfileID:    strings.TrimSpace(a.service.SurfaceOpenCodeProfileID(surface.SurfaceSessionID)),
+		OpenCodeAdmissionRef: state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef),
+		Verbosity:            string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
+		AccessMode:           strings.TrimSpace(surface.PromptOverride.AccessMode),
+		PlanMode:             string(state.NormalizePlanModeSetting(surface.PlanMode)),
+		PlanModeOverrideSet:  surface.PlanModeOverrideSet,
 	}
 	if entry.SurfaceSessionID == "" {
 		return surfaceresume.Entry{}, false
@@ -299,6 +288,10 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 			entry.CodexProfileID = previous.CodexAdmissionRef.ProfileRef.ID
 			admissionRef := *previous.CodexAdmissionRef
 			entry.CodexAdmissionRef = &admissionRef
+		}
+		if entry.OpenCodeAdmissionRef == nil && shouldPreserveOpenCodeAdmissionRef(previous, entry, clearResumeTarget) {
+			admissionRef := *previous.OpenCodeAdmissionRef
+			entry.OpenCodeAdmissionRef = &admissionRef
 		}
 	}
 	normalized, ok := surfaceresume.NormalizeEntry(entry)

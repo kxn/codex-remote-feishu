@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import {
   APIRequestError,
   type APIErrorShape,
+  formatError,
   requestJSON,
   requestJSONAllowHTTPError,
   sendJSON,
@@ -28,6 +29,7 @@ import type {
   OpenCodeProfileSummary,
   PreviewDriveCleanupResponse,
   PreviewDriveStatusResponse,
+  VisionAssistResponse,
   VSCodeDetectResponse,
 } from "../lib/types";
 import {
@@ -77,7 +79,7 @@ type NewRobotForm = {
 };
 
 type AdminAreaID = "overview" | "bots" | "backends" | "system";
-type BackendTabID = "claude" | "codex" | "opencode";
+type BackendTabID = "claude" | "codex" | "opencode" | "vision";
 type OverviewTodoItem = {
   id: string;
   text: string;
@@ -117,6 +119,9 @@ export function AdminRoute() {
   const [claudeProfilesError, setClaudeProfilesError] = useState("");
   const [openCodeProfiles, setOpenCodeProfiles] = useState<OpenCodeProfileSummary[]>([]);
   const [openCodeProfilesError, setOpenCodeProfilesError] = useState("");
+  const [visionAssist, setVisionAssist] = useState<VisionAssistResponse | null>(null);
+  const [visionAssistError, setVisionAssistError] = useState("");
+  const [visionAssistSaving, setVisionAssistSaving] = useState(false);
   const [newRobotForm, setNewRobotForm] = useState<NewRobotForm>({
     name: "",
     appId: "",
@@ -1349,6 +1354,18 @@ export function AdminRoute() {
           >
             OpenCode
           </button>
+          <button
+            className={backendTab === "vision" ? "on" : ""}
+            type="button"
+            onClick={() => {
+              setBackendTab("vision");
+              if (!visionAssist) {
+                void loadVisionAssist();
+              }
+            }}
+          >
+            辅助模型
+          </button>
         </div>
         {backendTab === "claude" ? (
           <ClaudeProfileSection
@@ -1368,7 +1385,7 @@ export function AdminRoute() {
               await loadAdminPage({ preferredRobotID: selectedRobotID });
             }}
           />
-        ) : (
+        ) : backendTab === "opencode" ? (
           <OpenCodeProfileSection
             loadError={openCodeProfilesError}
             profiles={openCodeProfiles}
@@ -1377,8 +1394,138 @@ export function AdminRoute() {
               await loadAdminPage({ preferredRobotID: selectedRobotID });
             }}
           />
+        ) : (
+          renderVisionAssistArea()
         )}
       </>
+    );
+  }
+
+  async function loadVisionAssist() {
+    try {
+      const data = await requestJSON<VisionAssistResponse>("/api/admin/vision-assist", {
+        method: "GET",
+      });
+      setVisionAssist(data);
+      setVisionAssistError("");
+    } catch (error) {
+      setVisionAssistError(formatError(error));
+    }
+  }
+
+  async function saveVisionAssist() {
+    if (!visionAssist) {
+      return;
+    }
+    setVisionAssistSaving(true);
+    try {
+      const saved = await sendJSON<VisionAssistResponse>(
+        "/api/admin/vision-assist",
+        "PUT",
+        visionAssist.settings,
+      );
+      setVisionAssist(saved);
+      setVisionAssistError("");
+      setDetailNotice({ tone: "good", message: "辅助模型配置已保存。" });
+    } catch (error) {
+      setVisionAssistError(formatError(error));
+    } finally {
+      setVisionAssistSaving(false);
+    }
+  }
+
+  function updateVisionSetting(key: keyof VisionAssistResponse["settings"], value: string) {
+    setVisionAssist((current) =>
+      current
+        ? { ...current, settings: { ...current.settings, [key]: value } }
+        : current,
+    );
+  }
+
+  function renderVisionAssistArea() {
+    if (visionAssistError) {
+      return (
+        <section className="card">
+          <h3>辅助模型</h3>
+          <div className="notice-banner warn">{visionAssistError}</div>
+          <div className="button-row">
+            <button className="primary-button" type="button" onClick={() => void loadVisionAssist()}>
+              重新加载
+            </button>
+          </div>
+        </section>
+      );
+    }
+    if (!visionAssist) {
+      return (
+        <section className="card">
+          <h3>辅助模型</h3>
+          <div className="button-row">
+            <button className="primary-button" type="button" onClick={() => void loadVisionAssist()}>
+              加载配置
+            </button>
+          </div>
+        </section>
+      );
+    }
+    const settings = visionAssist.settings;
+    return (
+      <section className="card">
+        <h3>图片辅助模型</h3>
+        <div className="form-grid">
+          <label className="field">
+            <span>协议</span>
+            <select
+              aria-label="协议"
+              value={settings.protocol ?? "openai_chat"}
+              onChange={(event) => updateVisionSetting("protocol", event.target.value)}
+            >
+              <option value="openai_chat">OpenAI Chat</option>
+              <option value="openai_responses">OpenAI Responses</option>
+              <option value="anthropic">Anthropic Messages</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Base URL</span>
+            <input
+              aria-label="Base URL"
+              placeholder="https://api.example.com/v1"
+              value={settings.baseURL ?? ""}
+              onChange={(event) => updateVisionSetting("baseURL", event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>API Key</span>
+            <input
+              aria-label="API Key"
+              type="password"
+              placeholder={visionAssist.hasAPIKey ? "已配置，留空保持不变" : "输入 API Key"}
+              value={settings.apiKey ?? ""}
+              onChange={(event) => updateVisionSetting("apiKey", event.target.value)}
+            />
+          </label>
+          <label className="field">
+            <span>模型名</span>
+            <input
+              aria-label="模型名"
+              placeholder="gpt-5.6-vision"
+              value={settings.model ?? ""}
+              onChange={(event) => updateVisionSetting("model", event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="button-row">
+          <button
+            className="primary-button"
+            type="button"
+            disabled={visionAssistSaving}
+            onClick={() => void saveVisionAssist()}
+          >
+            {visionAssistSaving ? "保存中…" : "保存"}
+          </button>
+        </div>
+      </section>
     );
   }
 

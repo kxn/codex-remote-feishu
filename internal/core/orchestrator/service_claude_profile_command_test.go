@@ -33,11 +33,12 @@ func TestClaudeProfileCommandSwitchesDetachedSurfaceAndClearsRuntime(t *testing.
 	if surface.ClaudeProfileID != "devseek" {
 		t.Fatalf("expected profile switch to devseek, got %#v", surface)
 	}
-	if surface.PlanMode != state.PlanModeSettingOff {
-		t.Fatalf("expected detached switch to clear plan mode, got %q", surface.PlanMode)
+	// plan/access 为会话级设置，切换 profile 不重置。
+	if surface.PlanMode != state.PlanModeSettingOn {
+		t.Fatalf("expected detached switch to keep session plan mode, got %q", surface.PlanMode)
 	}
-	if surface.PromptOverride != (state.ModelConfigRecord{}) {
-		t.Fatalf("expected detached switch to clear prompt override, got %#v", surface.PromptOverride)
+	if surface.PromptOverride != (state.ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm}) {
+		t.Fatalf("expected detached switch to clear model/reasoning and keep session access, got %#v", surface.PromptOverride)
 	}
 	if len(events) != 1 || events[0].Notice == nil || events[0].Notice.Code != "claude_profile_switched" {
 		t.Fatalf("expected single switched notice, got %#v", events)

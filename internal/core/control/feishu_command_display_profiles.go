@@ -382,8 +382,6 @@ func botCapabilitySettingsReadOnlyFamilies() []FeishuCommandDisplayFamilyProfile
 		commandSupportHiddenReject(FeishuCommandClaudeProfile, FeishuCommandSupportReject, note),
 		commandSupportHiddenReject(FeishuCommandModel, FeishuCommandSupportReject, note),
 		commandSupportHiddenReject(FeishuCommandReasoning, FeishuCommandSupportReject, note),
-		commandSupportHiddenReject(FeishuCommandAccess, FeishuCommandSupportReject, note),
-		commandSupportHiddenReject(FeishuCommandPlan, FeishuCommandSupportReject, note),
 	}
 }
 
