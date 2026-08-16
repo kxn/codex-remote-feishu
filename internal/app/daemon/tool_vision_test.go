@@ -59,6 +59,9 @@ func TestDescribeImageToolSuccess(t *testing.T) {
 		if r.URL.Path != "/chat/completions" {
 			t.Fatalf("unexpected path %s", r.URL.Path)
 		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Fatalf("authorization = %q, want Bearer test-key", got)
+		}
 		var payload map[string]any
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 			t.Fatalf("decode body: %v", err)
@@ -78,6 +81,7 @@ func TestDescribeImageToolSuccess(t *testing.T) {
 	cfg.VisionAssist = config.VisionAssistSettings{
 		Protocol: "openai_chat",
 		BaseURL:  server.URL,
+		APIKey:   "test-key",
 		Model:    "vision-model",
 	}
 	app, _ := visionAssistTestApp(t, cfg)

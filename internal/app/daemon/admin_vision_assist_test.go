@@ -24,9 +24,8 @@ func TestAdminVisionAssistReadWrite(t *testing.T) {
 	}
 
 	put := performAdminRequest(t, app, http.MethodPut, "/api/admin/vision-assist", `{
-		"protocol": "openai_chat",
 		"baseURL": "https://api.example.com/v1",
-		"apiKeyEnv": "VISION_API_KEY",
+		"apiKey": "secret-key",
 		"model": "gpt-v"
 	}`)
 	if put.Code != http.StatusOK {
@@ -43,9 +42,30 @@ func TestAdminVisionAssistReadWrite(t *testing.T) {
 	}
 	if loadedResponse.Settings.Protocol != "openai_chat" ||
 		loadedResponse.Settings.BaseURL != "https://api.example.com/v1" ||
-		loadedResponse.Settings.APIKeyEnv != "VISION_API_KEY" ||
 		loadedResponse.Settings.Model != "gpt-v" {
 		t.Fatalf("unexpected vision assist settings %#v", loadedResponse.Settings)
+	}
+	if !loadedResponse.HasAPIKey {
+		t.Fatalf("expected hasAPIKey true after saving api key, got %#v", loadedResponse)
+	}
+	if loadedResponse.Settings.APIKey != "" {
+		t.Fatalf("api key must not be echoed back, got %#v", loadedResponse.Settings)
+	}
+
+	// PUT 未提供 apiKey 时保留现有明文 key。
+	put = performAdminRequest(t, app, http.MethodPut, "/api/admin/vision-assist", `{
+		"baseURL": "https://api.example.com/v1",
+		"model": "gpt-v2"
+	}`)
+	if put.Code != http.StatusOK {
+		t.Fatalf("put without api key status = %d body=%s", put.Code, put.Body.String())
+	}
+	loaded = performAdminRequest(t, app, http.MethodGet, "/api/admin/vision-assist", "")
+	if err := json.NewDecoder(loaded.Body).Decode(&loadedResponse); err != nil {
+		t.Fatalf("decode reloaded: %v", err)
+	}
+	if !loadedResponse.HasAPIKey || loadedResponse.Settings.Model != "gpt-v2" {
+		t.Fatalf("expected api key preserved and model updated, got %#v", loadedResponse)
 	}
 }
 

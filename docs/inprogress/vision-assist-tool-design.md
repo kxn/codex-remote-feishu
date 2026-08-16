@@ -78,15 +78,15 @@
 
 ```yaml
 vision_assist:
-  protocol: "openai_chat"          # openai_chat | openai_responses | anthropic | gemini
+  protocol: "openai_chat"          # 默认 openai_chat；openai_responses | anthropic | gemini
   base_url: "https://api.example.com/v1"
-  api_key_env: "VISION_API_KEY"
+  api_key: "secret-key"             # 与其他 profile 一致明文存储
   model: "gpt-5.6-vision"
 ```
 
 配置归属：
 
-- 端点配置（协议、base URL、API key、模型名）放“辅助模型”tab：它是独立的辅助服务端点，不绑定 Claude / Codex / OpenCode 任一主后端。
+- 端点配置（协议、base URL、API key、模型名）放“辅助模型”tab：它是独立的辅助服务端点，不绑定 Claude / Codex / OpenCode 任一主后端。协议默认 `openai_chat`，保存时留空自动回退该默认。
 - “主模型支持直接看图”开关放 profile 级（三个主后端各自的 profile 配置里）：它描述的是该 profile 使用的主模型能力，与辅助端点无关。
 
 ## 协议适配层（独立通用单次推理包）
@@ -146,7 +146,7 @@ type Image struct {
 - 工具**不接受 URL**、不做下载：模型没有网络能力时不应通过工具获得任意 URL 抓取能力；权限边界保持“模型负责拿图，工具负责看图”。
 - **不限制路径读取范围**：工具接受任意本地图片路径（与模型自身文件读取能力一致——Codex exec / Claude Read 本来就能读这些文件）。视觉端点是管理员自行配置的可信端点，模型把文件内容发给它属于其能力范围内，不做额外路径白名单。
 - 保留基础校验：文件不存在 / 读取失败 / 非图片格式 → 明确错误；不做任意文件读取之外的“外带”假设。
-- API key 通过环境变量注入，不落管理页明文（与现有 profile 密钥处理一致）。
+- API key 与现有 profile 一致**明文存储**；管理页 GET 不回显密钥（`hasAPIKey` 指示已配置），编辑时留空保存保持不变。
 
 ## 管理页 UI 位置
 

@@ -685,11 +685,12 @@ export interface LogsStorageCleanupResponse {
 export interface VisionAssistSettings {
   protocol?: string;
   baseURL?: string;
-  apiKeyEnv?: string;
+  apiKey?: string;
   model?: string;
 }
 
 export interface VisionAssistResponse {
   configured: boolean;
+  hasAPIKey: boolean;
   settings: VisionAssistSettings;
 }

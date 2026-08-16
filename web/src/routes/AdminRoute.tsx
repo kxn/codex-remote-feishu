@@ -1470,22 +1470,20 @@ export function AdminRoute() {
     const settings = visionAssist.settings;
     return (
       <section className="card">
-        <h3>图片描述辅助（describe_image）</h3>
+        <h3>图片辅助模型</h3>
         <div className="form-grid">
           <label className="field">
             <span>协议</span>
             <select
               aria-label="协议"
-              value={settings.protocol ?? ""}
+              value={settings.protocol ?? "openai_chat"}
               onChange={(event) => updateVisionSetting("protocol", event.target.value)}
             >
-              <option value="">未配置</option>
               <option value="openai_chat">OpenAI Chat</option>
               <option value="openai_responses">OpenAI Responses</option>
               <option value="anthropic">Anthropic Messages</option>
               <option value="gemini">Gemini</option>
             </select>
-            <span className="field-hint">视觉辅助模型使用的协议。</span>
           </label>
           <label className="field">
             <span>Base URL</span>
@@ -1497,14 +1495,14 @@ export function AdminRoute() {
             />
           </label>
           <label className="field">
-            <span>API Key 环境变量名</span>
+            <span>API Key</span>
             <input
-              aria-label="API Key 环境变量名"
-              placeholder="VISION_API_KEY"
-              value={settings.apiKeyEnv ?? ""}
-              onChange={(event) => updateVisionSetting("apiKeyEnv", event.target.value)}
+              aria-label="API Key"
+              type="password"
+              placeholder={visionAssist.hasAPIKey ? "已配置，留空保持不变" : "输入 API Key"}
+              value={settings.apiKey ?? ""}
+              onChange={(event) => updateVisionSetting("apiKey", event.target.value)}
             />
-            <span className="field-hint">从环境变量读取密钥，不在配置中保存明文。</span>
           </label>
           <label className="field">
             <span>模型名</span>

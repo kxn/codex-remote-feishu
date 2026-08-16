@@ -153,7 +153,11 @@ func (a *App) describeImageTool(ctx context.Context, arguments map[string]any) (
 		return nil, &toolError{Code: "config_unavailable", Message: "无法读取配置：" + err.Error()}
 	}
 	settings := loaded.Config.VisionAssist
-	if strings.TrimSpace(settings.Protocol) == "" || strings.TrimSpace(settings.BaseURL) == "" {
+	protocol := strings.TrimSpace(settings.Protocol)
+	if protocol == "" {
+		protocol = string(singleturn.ProtocolOpenAIChat)
+	}
+	if strings.TrimSpace(settings.BaseURL) == "" {
 		return nil, &toolError{
 			Code:    "vision_assist_not_configured",
 			Message: "视觉辅助模型未配置，请在管理页「对话后端 → 辅助模型」中配置端点。",
@@ -197,9 +201,9 @@ func (a *App) describeImageTool(ctx context.Context, arguments map[string]any) (
 	if prompt != "" {
 		text += "\n" + prompt
 	}
-	provider, err := singleturn.NewProvider(singleturn.Protocol(strings.TrimSpace(settings.Protocol)), singleturn.Config{
+	provider, err := singleturn.NewProvider(singleturn.Protocol(protocol), singleturn.Config{
 		BaseURL:   settings.BaseURL,
-		APIKey:    os.Getenv(strings.TrimSpace(settings.APIKeyEnv)),
+		APIKey:    strings.TrimSpace(settings.APIKey),
 		Model:     strings.TrimSpace(settings.Model),
 		MaxTokens: describeImageDefaultMaxTokens,
 	})
