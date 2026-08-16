@@ -86,7 +86,7 @@ func TestSurfaceResumeOpenCodeProfileContractControlsExactThreadFallback(t *test
 			if entry.ResumeInstanceID != "" || entry.ResumeThreadID != "" || entry.ResumeThreadTitle != "" || entry.ResumeThreadCWD != "" || entry.ResumeHeadless {
 				t.Fatalf("profile mismatch must clear exact resume target, got %#v", entry)
 			}
-			if entry.ResumeWorkspaceKey != workspaceDir || entry.ResumeRouteMode != string(state.RouteModeNewThreadReady) {
+			if tempDirSuffixForTest(t, entry.ResumeWorkspaceKey) != tempDirSuffixForTest(t, workspaceDir) || entry.ResumeRouteMode != string(state.RouteModeNewThreadReady) {
 				t.Fatalf("profile mismatch must retain workspace new-thread route, got %#v", entry)
 			}
 

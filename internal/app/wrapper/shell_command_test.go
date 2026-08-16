@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"testing"
 	"time"
@@ -59,8 +60,11 @@ func TestShellCommandRuntimeWritesProtectedPayloadAndCleansIt(t *testing.T) {
 		t.Fatalf("payload directory entries = %#v, err=%v", entries, err)
 	}
 	info, err := entries[0].Info()
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("payload mode = %v, err=%v", info.Mode().Perm(), err)
+	if err != nil {
+		t.Fatalf("payload info: %v", err)
+	}
+	if goruntime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
+		t.Fatalf("payload mode = %v, want 0600", info.Mode().Perm())
 	}
 	cleanup(true)
 	entries, err = os.ReadDir(filepath.Join(stateDir, "applause-shell", "runtime-instance-1"))
