@@ -1,8 +1,8 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-07-31`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，并同步 canonical 命令清单、统一 page 入口、reply auto-steer、manual `/compact`、`autowhip`/`autocontinue`、`/cron`、结构化计划更新、共享过程卡与 callback surface carrier 的产品语义；其中 `autocontinue` 现由 orchestrator 本地 codex/gateway error-family policy 驱动，不再直接依赖 upstream `willRetry`。
+> Updated: `2026-08-16`
+> Summary: 描述当前 Go 版本的 Feishu surface 行为，并补充 queued `APPLAUSE` 到 Codex UserShell 注入的产品语义、reaction 互斥和图片引用边界。
 
 ## 1. 文档定位
 
@@ -183,6 +183,7 @@ canonical menu key 语法当前固定为：
 当前实现只把下列 reaction 当作产品动作：
 
 - 用户对 **queued 主文本消息** 加 `ThumbsUp`
+- 用户对 **queued 主文本消息** 加 `APPLAUSE`（仅 Codex 声明 `thread/shellCommand` 能力时）
 
 触发条件：
 
@@ -197,6 +198,8 @@ canonical menu key 语法当前固定为：
 - 当前没有 active running turn
 - queued item 属于别的 frozen thread
 - bot 自己补上的 reaction 回流事件
+
+`APPLAUSE` 与 `ThumbsUp` 共用 queue item 的一次性 action claim：谁先成功领取，另一种 reaction 静默 no-op。`APPLAUSE` 成功后把 item 标记为 `shell-commanded`，移除 `OneSecond` 并由机器人补同一个 `APPLAUSE`；command 明确失败时恢复原 queue 位置并提示，结果未知时标记 `shell-command-unknown`，不自动重试也不伪造成功 reaction。它只表示 UserShell command 已被接收，不表示当前 turn 已完成。
 
 ACK 语义上，reaction created 现在也会进入和普通文本共用的 per-surface FIFO lane，而不是继续单独同步直达 handler。
 
@@ -505,6 +508,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 远端 turn 完成时，移除 `THINKING`
 - 只有当前活动 queue item 有 Typing
 - steering 成功后，会移除 `OneSecond`，并给该 item 的主文本和已绑定图片统一补 `ThumbsUp`
+- `APPLAUSE` 成功后只给排队主文本补机器人 `APPLAUSE`；绑定图片不会单独收到 reaction，但会作为 `queued_input_bundle.v1` 的结构化 `type/path/mime_type` 引用随文本注入，不生成额外图片分析
 - reply 当前 processing 源消息触发 auto-steer 时，也会先给这条 reply 自己加 `OneSecond`；accepted 后移除并补 `ThumbsUp`
 - 被显式丢弃的 queued/staged 输入仍补 `ThumbsDown`
 
@@ -674,6 +678,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 若图片消息被撤回，则未绑定图片标记为 `cancelled`
 - 若被 `stop` 或 `detach` 丢弃，则标记为 `discarded`
 - 若所属 queue item 被 queued 文本点赞升级为 steering，绑定图片会跟着主文本一起 steer，并在成功后收到 bot `ThumbsUp`
+- 若所属 queue item 被主文本 `APPLAUSE` 领取，绑定图片会随结构化文件引用一起注入当前 Codex turn；图片消息自身的 `APPLAUSE` 不触发动作
 
 ## 7. 飞书输出投影
 
@@ -818,7 +823,7 @@ final `block.committed`：
 - attach/use 当前已经收敛到按钮直达交互；普通数字文本会按普通消息处理
 - reaction deleted 事件未接入
 - Feishu 输出不是流式更新卡片，而是 append-only 文本/卡片
-- queued 点赞 steering 当前只认 `ThumbsUp`，也只认主文本消息，不支持其他 emoji 和图片独立 steering
+- queued steering 当前只认 `ThumbsUp`，而 queued UserShell 注入只认 `APPLAUSE`；两者都只认主文本消息，不支持其他 emoji 和图片独立动作
 - 当前主要按 P2P 场景测试，group chat 虽有 surface id 规则，但不是主要联调路径
 
 ## 9. 与旧设计文档的关系

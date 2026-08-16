@@ -23,6 +23,7 @@ const (
 type Capabilities struct {
 	ThreadsRefresh       bool `json:"threadsRefresh,omitempty"`
 	TurnSteer            bool `json:"turnSteer,omitempty"`
+	ThreadShellCommand   bool `json:"threadShellCommand,omitempty"`
 	RequestRespond       bool `json:"requestRespond,omitempty"`
 	SessionCatalog       bool `json:"sessionCatalog,omitempty"`
 	ModelCatalog         bool `json:"modelCatalog,omitempty"`

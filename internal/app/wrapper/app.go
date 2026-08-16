@@ -209,6 +209,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	if rawLogger != nil {
 		defer rawLogger.Close()
 	}
+	defer cleanupBackendRuntime(a.runtime)
 
 	manager := relayruntime.NewManager(relayruntime.ManagerConfig{
 		RelayServerURL: a.config.RelayServerURL,

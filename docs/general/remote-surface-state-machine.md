@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-08-16`
-> Summary: 补充 OpenCode Profile/admission 变化时 startup resume 的 exact-thread 清理与 workspace 新会话语义。
+> Summary: 补充 OpenCode Profile/admission 变化时 startup resume 的 exact-thread 清理、workspace 新会话语义，以及 queued `APPLAUSE` UserShell 注入状态。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1398,6 +1398,7 @@ E0 Idle
 
 E1 Queued
   -- queued 主文本被 `ThumbsUp`，且当前有同 thread active turn（OpenCode 除外） --> `SteerPending` overlay
+  -- queued 主文本被 `APPLAUSE`，且当前 Codex instance 声明 `thread/shellCommand` --> `ShellCommandPending` overlay
   -- `/steerall` 命中且存在同 thread queued 项（OpenCode 除外） --> `SteerPending` overlay
 
 E2 Dispatching
@@ -1428,6 +1429,13 @@ E3 Running
   -- `turn.steer` command ack accepted --> 被并入的 item 逐条转 `steered`，并给对应主文本 + 已绑定图片补 `ThumbsUp`
   -- `turn.steer` dispatch failure / command rejected --> 被并入的输入按普通语义恢复（queued item 按原顺序恢复；独立图片 reply 恢复为 staged image）
   -- transport degraded / disconnect / remove instance --> 被并入的输入按普通语义恢复
+
+`ShellCommandPending` overlay
+  -- wrapper/app-server 明确接受 `thread/shellCommand` --> queue item 转为 `shell-commanded`，移除 `OneSecond`，只给主文本补机器人 `APPLAUSE`，当前 active turn 不变
+  -- dispatch failure / 明确 reject --> 按原 queue index 恢复为 `queued`，不补 `APPLAUSE`，发送短失败 notice
+  -- response timeout / accepted 后 UserShell 结果未知 --> 转为 `shell-command-unknown`，不自动重试、不补成功 reaction；payload 由 TTL 清理
+  -- `ThumbsUp` 与 `APPLAUSE` 竞争同一 queued item --> 先成功 claim 的 action 生效，另一 action 静默 no-op
+  -- queue item 带绑定图片 --> payload 使用 `queued_input_bundle.v1` 保留图片的 `type/path/mime_type` 引用；不生成额外图片分析，图片文件保留到 active turn 收口或 TTL
 ```
 
 补充说明：

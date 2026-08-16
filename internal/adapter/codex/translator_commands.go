@@ -96,6 +96,41 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 			return nil, err
 		}
 		return [][]byte{append(bytes, '\n')}, nil
+	case agentproto.CommandThreadShellCommand:
+		threadID := strings.TrimSpace(command.Target.ThreadID)
+		turnID := strings.TrimSpace(command.Target.TurnID)
+		if threadID == "" || turnID == "" {
+			return nil, fmt.Errorf("thread.shell_command requires thread and turn id")
+		}
+		if activeTurnID := strings.TrimSpace(t.activeTurnByThread[threadID]); activeTurnID == "" || activeTurnID != turnID {
+			return nil, agentproto.ErrorInfo{
+				Code:      "shell_command_active_turn_missing",
+				Layer:     "adapter",
+				Stage:     "translate_command",
+				Operation: string(command.Kind),
+				Message:   "当前 thread 没有匹配的 active turn，拒绝创建独立 shell turn。",
+				CommandID: command.CommandID,
+				ThreadID:  threadID,
+				TurnID:    turnID,
+			}
+		}
+		shellCommand := strings.TrimSpace(command.ShellCommand.Command)
+		if shellCommand == "" {
+			return nil, fmt.Errorf("thread.shell_command requires command")
+		}
+		payload := map[string]any{
+			"id":     t.NextRequest("thread-shell-command"),
+			"method": "thread/shellCommand",
+			"params": map[string]any{
+				"threadId": threadID,
+				"command":  shellCommand,
+			},
+		}
+		bytes, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		return [][]byte{append(bytes, '\n')}, nil
 	case agentproto.CommandThreadsRefresh:
 		query := defaultThreadListQuery()
 		if owner, ok := t.threadListBroker.LookupOwner(query); ok {

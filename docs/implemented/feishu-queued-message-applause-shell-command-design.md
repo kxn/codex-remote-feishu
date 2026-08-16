@@ -1,12 +1,12 @@
 # Feishu Queued Message APPLAUSE Shell Command Design
 
-> Type: `draft`
+> Type: `implemented`
 > Updated: `2026-08-16`
-> Summary: 为排队消息增加 `APPLAUSE` reaction 触发 Codex `thread/shellCommand` 注入，并收窄为同机临时文件载荷、结构化附件引用、完整清理和队列互斥语义。
+> Summary: 已落地排队消息 `APPLAUSE` reaction 到 Codex `thread/shellCommand` 的注入、互斥、恢复、未知结果和同机临时文件生命周期。
 
 ## 1. 文档定位
 
-本文是 `APPLAUSE` reaction 入口的实现设计。它描述产品语义、queue item 状态、relay/app-server 命令边界、Feishu 投影和验证要求；当前尚未实现。
+本文是 `APPLAUSE` reaction 入口的实现说明。它描述当前产品语义、queue item 状态、relay/app-server 命令边界、Feishu 投影和验证要求；当前实现以本文与 canonical 状态机文档为准。
 
 相关现状文档：
 

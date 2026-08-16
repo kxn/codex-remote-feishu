@@ -143,6 +143,7 @@ func (t *Translator) observeTurnStarted(message map[string]any) Result {
 	initiator := t.resolveTurnInitiator(threadID, turnID, trafficClass)
 	if turnID != "" {
 		t.turnInitiators[turnID] = initiator
+		t.activeTurnByThread[threadID] = turnID
 	}
 	t.Debugf(
 		"observe server turn/started: thread=%s turn=%s initiator=%s traffic=%s pendingRemoteSurface=%s pendingLocal=%t",
@@ -290,6 +291,9 @@ func (t *Translator) observeTurnCompleted(message map[string]any) Result {
 	}
 	delete(t.turnInitiators, turnID)
 	delete(t.internalTurnIDs, turnID)
+	if t.activeTurnByThread[threadID] == turnID {
+		delete(t.activeTurnByThread, threadID)
+	}
 	t.clearReasoningSummaryIndexesForTurn(threadID, turnID)
 	t.Debugf("observe server turn/completed: thread=%s turn=%s status=%s initiator=%s", threadID, turnID, status, initiator.Kind)
 	event := agentproto.Event{

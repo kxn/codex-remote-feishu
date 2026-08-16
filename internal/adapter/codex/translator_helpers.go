@@ -267,6 +267,13 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 			metadata["durationMs"] = durationMs
 		}
 	case "command_execution":
+		if source := xutil.FirstNonEmpty(
+			xutil.LookupStringFromAny(item["source"]),
+			xutil.LookupStringFromAny(item["commandExecutionSource"]),
+			xutil.LookupStringFromAny(item["command_execution_source"]),
+		); source != "" {
+			metadata["source"] = source
+		}
 		if command := xutil.FirstNonEmpty(
 			xutil.LookupStringFromAny(item["command"]),
 			xutil.LookupStringFromAny(item["cmd"]),

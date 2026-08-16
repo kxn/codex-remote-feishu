@@ -31,9 +31,11 @@ type runtimeResolvedCommandResponse struct {
 }
 
 type runtimeCommandPhase struct {
-	OutboundToChild [][]byte
-	ResponseGate    *runtimeCommandResponseGate
-	Abort           func()
+	OutboundToChild   [][]byte
+	ResponseGate      *runtimeCommandResponseGate
+	Abort             func()
+	Cleanup           func(success bool)
+	PreserveOnTimeout bool
 }
 
 type runtimeCommandResult struct {
@@ -70,6 +72,12 @@ type runtimeDebugLogger interface {
 	SetDebugLogger(func(string, ...any))
 }
 
+func cleanupBackendRuntime(runtime backendRuntime) {
+	if cleanup, ok := runtime.(interface{ Cleanup() }); ok {
+		cleanup.Cleanup()
+	}
+}
+
 func newBackendRuntime(cfg Config) backendRuntime {
 	backend, ok := agentproto.ParseBackend(cfg.Backend)
 	if !ok {
@@ -93,7 +101,10 @@ func newBackendRuntime(cfg Config) backendRuntime {
 			translator: acpadapter.NewTranslator(cfg.InstanceID, cfg.WorkspaceRoot),
 		}
 	default:
-		return &codexBackendRuntime{translator: codex.NewTranslator(cfg.InstanceID)}
+		return &codexBackendRuntime{
+			translator:   codex.NewTranslator(cfg.InstanceID),
+			shellCommand: newShellCommandRuntime(cfg.RuntimePaths.StateDir, cfg.InstanceID),
+		}
 	}
 }
 
@@ -252,8 +263,9 @@ func mapOpenCodeResolvedCommandResponses(responses []acpadapter.ResolvedCommandR
 }
 
 type codexBackendRuntime struct {
-	mu         sync.Mutex
-	translator *codex.Translator
+	mu           sync.Mutex
+	translator   *codex.Translator
+	shellCommand *shellCommandRuntime
 }
 
 func (r *codexBackendRuntime) Backend() agentproto.Backend {
@@ -294,6 +306,7 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 	if err != nil {
 		return runtimeObserveResult{}, err
 	}
+	r.shellCommand.observeEvents(result.Events)
 	return runtimeObserveResult{
 		Events:           result.Events,
 		OutboundToChild:  result.OutboundToCodex,
@@ -305,8 +318,18 @@ func (r *codexBackendRuntime) ObserveServer(line []byte) (runtimeObserveResult, 
 func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runtimeCommandResult, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	outbound, err := r.translator.TranslateCommand(command)
+	translatedCommand := command
+	cleanup := func(bool) {}
+	if command.Kind == agentproto.CommandThreadShellCommand {
+		var err error
+		translatedCommand, cleanup, err = r.shellCommand.prepare(command)
+		if err != nil {
+			return runtimeCommandResult{}, err
+		}
+	}
+	outbound, err := r.translator.TranslateCommand(translatedCommand)
 	if err != nil {
+		cleanup(false)
 		return runtimeCommandResult{}, err
 	}
 	result := runtimeCommandResult{Phases: singleRuntimeCommandPhases(outbound)}
@@ -317,14 +340,34 @@ func (r *codexBackendRuntime) TranslateCommand(command agentproto.Command) (runt
 		}
 		result.Phases[0].ResponseGate = gate
 	}
+	if command.Kind == agentproto.CommandThreadShellCommand && len(result.Phases) > 0 {
+		gate, err := newShellCommandResponseGate(command, outbound[0])
+		if err != nil {
+			cleanup(false)
+			return runtimeCommandResult{}, err
+		}
+		result.Phases[0].ResponseGate = gate
+		result.Phases[0].Cleanup = cleanup
+		result.Phases[0].PreserveOnTimeout = true
+	}
 	return result, nil
 }
 
 func (r *codexBackendRuntime) PrepareChildRestart(_ string, _ agentproto.PromptDispatchPlan, policy *agentproto.CodexResumePolicy) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.shellCommand.invalidateDetection()
 	r.translator.PrepareChildRestartRestorePolicy(policy)
 	return nil
+}
+
+func (r *codexBackendRuntime) Cleanup() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.shellCommand.cleanupCurrentRuntime()
 }
 
 func (r *codexBackendRuntime) BuildChildRestartRestoreFrame(commandID string) ([]byte, string, bool, error) {
@@ -625,6 +668,49 @@ func newTurnSteerResponseGate(command agentproto.Command, frame []byte) (*runtim
 			Stage:            "command_response",
 			Operation:        string(command.Kind),
 			Message:          "等待本地 Codex 确认追加输入时超时。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		},
+		SuppressFrame: true,
+	}, nil
+}
+
+func newShellCommandResponseGate(command agentproto.Command, frame []byte) (*runtimeCommandResponseGate, error) {
+	requestID := lookupStringFromRawFrame(frame, "id")
+	if strings.TrimSpace(requestID) == "" {
+		return nil, agentproto.ErrorInfo{
+			Code:      "missing_command_request_id",
+			Layer:     "wrapper",
+			Stage:     "translate_command",
+			Operation: string(command.Kind),
+			Message:   "wrapper 生成 shell command 请求时缺少 request id。",
+			CommandID: command.CommandID,
+			ThreadID:  command.Target.ThreadID,
+			TurnID:    command.Target.TurnID,
+		}
+	}
+	return &runtimeCommandResponseGate{
+		RequestID: requestID,
+		RejectProblem: agentproto.ErrorInfo{
+			Code:             "shell_command_rejected",
+			Layer:            "wrapper",
+			Stage:            "command_response",
+			Operation:        string(command.Kind),
+			Message:          "本地 Codex 拒绝了这次 shell command。",
+			SurfaceSessionID: command.Origin.Surface,
+			CommandID:        command.CommandID,
+			ThreadID:         command.Target.ThreadID,
+			TurnID:           command.Target.TurnID,
+		},
+		Timeout: steerCommandResponseTimeout,
+		TimeoutProblem: agentproto.ErrorInfo{
+			Code:             "shell_command_response_timeout",
+			Layer:            "wrapper",
+			Stage:            "command_response",
+			Operation:        string(command.Kind),
+			Message:          "等待本地 Codex 确认 shell command 时超时，结果未知。",
 			SurfaceSessionID: command.Origin.Surface,
 			CommandID:        command.CommandID,
 			ThreadID:         command.Target.ThreadID,

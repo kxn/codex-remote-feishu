@@ -56,6 +56,8 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 			)
 			if event.Command.Kind == agentproto.CommandReviewStart {
 				a.service.BindPendingReviewStartCommand(event.SurfaceSessionID, event.Command.CommandID)
+			} else if event.Command.Kind == agentproto.CommandThreadShellCommand {
+				a.service.BindPendingShellCommand(event.SurfaceSessionID, event.Command.CommandID)
 			} else if !orchestrator.NonTurnAgentCommand(event.Command.Kind) {
 				a.service.BindPendingRemoteCommand(event.SurfaceSessionID, event.Command.CommandID)
 			}

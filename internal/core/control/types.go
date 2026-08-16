@@ -370,6 +370,7 @@ type PendingInputState struct {
 	TypingOn        bool
 	TypingOff       bool
 	ThumbsUp        bool
+	Applause        bool
 	ThumbsDown      bool
 }
 

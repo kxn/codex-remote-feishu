@@ -52,6 +52,7 @@ type Service struct {
 	nextRequestCommandID      int
 	nextHeadlessID            int
 	nextAutoContinueEpisodeID int
+	nextShellBindingSequence  int
 	handoffUntil              map[string]time.Time
 	pausedUntil               map[string]time.Time
 	abandoningUntil           map[string]time.Time
@@ -153,6 +154,18 @@ type pendingSteerBinding struct {
 	ThreadID           string
 	TurnID             string
 	QueueIndex         int
+}
+
+type pendingShellBinding struct {
+	InstanceID       string
+	SurfaceSessionID string
+	QueueItemID      string
+	SourceMessageID  string
+	CommandID        string
+	ThreadID         string
+	TurnID           string
+	QueueIndex       int
+	Sequence         int
 }
 
 type completedTextItem struct {

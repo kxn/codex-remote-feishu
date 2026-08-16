@@ -199,6 +199,14 @@ func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {
 	if s.bindPendingSteerCommand(surfaceID, commandID) {
 		return
 	}
+	s.bindPendingShellCommand(surfaceID, commandID)
+}
+
+func (s *Service) BindPendingShellCommand(surfaceID, commandID string) {
+	if strings.TrimSpace(commandID) == "" {
+		return
+	}
+	s.bindPendingShellCommand(surfaceID, commandID)
 }
 
 func (s *Service) BindPendingReviewStartCommand(surfaceID, commandID string) {
@@ -238,6 +246,12 @@ func (s *Service) HandleCommandDispatchFailure(surfaceID, commandID string, err 
 		notice.Text = appendSteerRestoreHint(notice.Text)
 		return s.restorePendingSteer(key, &notice)
 	}
+	if key, binding := s.pendingShellForCommand("", commandID); binding != nil {
+		_ = binding
+		notice.Code = "shell_command_failed"
+		notice.Text = appendShellRestoreHint(notice.Text)
+		return s.restorePendingShell(key, &notice, false)
+	}
 	if surface == nil || surface.ActiveQueueItemID == "" {
 		return nil
 	}
@@ -261,6 +275,28 @@ func (s *Service) HandleCommandAccepted(instanceID string, ack agentproto.Comman
 			return []eventcontract.Event{s.requestPromptDeliveryEvent(surface, request, "")}
 		}
 		return nil
+	}
+	if key, binding := s.pendingShellForCommand(instanceID, ack.CommandID); binding != nil {
+		surface := s.root.Surfaces[binding.SurfaceSessionID]
+		if surface == nil {
+			s.clearPendingShell(key)
+			return nil
+		}
+		s.clearPendingShell(key)
+		item := surface.QueueItems[binding.QueueItemID]
+		if item == nil || item.Status != state.QueueItemShellCommanding {
+			return nil
+		}
+		item.Status = state.QueueItemShellCommanded
+		item.ShellCommandThreadID = binding.ThreadID
+		item.ShellCommandTurnID = binding.TurnID
+		events := s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: item.ID,
+			Status:      string(item.Status),
+			QueueOff:    true,
+			Applause:    true,
+		}, []string{binding.SourceMessageID})
+		return s.insertExecCommandProgressBoundary(binding.InstanceID, binding.ThreadID, binding.TurnID, events)
 	}
 	key, binding := s.pendingSteerForCommand(instanceID, ack.CommandID)
 	if binding == nil {
@@ -306,6 +342,19 @@ func (s *Service) HandleCommandRejected(instanceID string, ack agentproto.Comman
 	}
 	if events := s.restorePendingCompactCommand(instanceID, ack.CommandID, commandAckProblem("", ack)); len(events) != 0 {
 		return events
+	}
+	if key, binding := s.pendingShellForCommand(instanceID, ack.CommandID); binding != nil {
+		if ack.Problem != nil && strings.TrimSpace(ack.Problem.Code) == "shell_command_response_timeout" {
+			return s.restorePendingShell(key, &control.Notice{
+				Code:  "shell_command_unknown",
+				Title: "处理结果未知",
+				Text:  "shell command 的接收结果未知，未自动重试；原消息已保留当前状态。",
+			}, true)
+		}
+		notice := NoticeForProblem(commandAckProblem(binding.SurfaceSessionID, ack))
+		notice.Code = "shell_command_failed"
+		notice.Text = appendShellRestoreHint(notice.Text)
+		return s.restorePendingShell(key, &notice, false)
 	}
 	if key, binding := s.pendingSteerForCommand(instanceID, ack.CommandID); binding != nil {
 		notice := NoticeForProblem(commandAckProblem(binding.SurfaceSessionID, ack))
@@ -445,7 +494,62 @@ func (s *Service) restorePendingSteersForInstance(instanceID string) []eventcont
 	for _, key := range s.pendingSteerKeysForInstance(instanceID) {
 		events = append(events, s.restorePendingSteer(key, nil)...)
 	}
+	for _, key := range s.pendingShellKeysForInstance(instanceID) {
+		events = append(events, s.restorePendingShell(key, nil, false)...)
+	}
 	return events
+}
+
+func (s *Service) restorePendingShell(key string, notice *control.Notice, unknown bool) []eventcontract.Event {
+	binding := s.pendingShellBinding(key)
+	if binding == nil {
+		return nil
+	}
+	s.clearPendingShell(key)
+	surface := s.root.Surfaces[binding.SurfaceSessionID]
+	if surface == nil {
+		return nil
+	}
+	item := surface.QueueItems[binding.QueueItemID]
+	if item == nil {
+		return nil
+	}
+	if unknown {
+		item.Status = state.QueueItemShellUnknown
+		events := s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: item.ID,
+			Status:      string(item.Status),
+			QueueOff:    true,
+		}, []string{binding.SourceMessageID})
+		if notice != nil {
+			events = append(events, eventcontract.Event{Kind: eventcontract.KindNotice, SurfaceSessionID: surface.SurfaceSessionID, Notice: notice})
+		}
+		return s.insertExecCommandProgressBoundary(binding.InstanceID, binding.ThreadID, binding.TurnID, events)
+	}
+	item.Status = state.QueueItemQueued
+	surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)
+	surface.QueuedQueueItemIDs = insertString(surface.QueuedQueueItemIDs, binding.QueueIndex, item.ID)
+	events := s.pendingInputEvents(surface, control.PendingInputState{
+		QueueItemID: item.ID,
+		Status:      string(item.Status),
+	}, []string{binding.SourceMessageID})
+	if notice != nil {
+		events = append(events, eventcontract.Event{Kind: eventcontract.KindNotice, SurfaceSessionID: surface.SurfaceSessionID, Notice: notice})
+	}
+	events = append(events, s.dispatchNext(surface)...)
+	events = append(events, s.finishSurfaceAfterWork(surface)...)
+	return s.insertExecCommandProgressBoundary(binding.InstanceID, binding.ThreadID, binding.TurnID, events)
+}
+
+func appendShellRestoreHint(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return "shell command 发送失败，已恢复原排队位置。"
+	}
+	if strings.Contains(text, "恢复") {
+		return text
+	}
+	return text + " 已恢复原排队位置。"
 }
 
 func appendSteerRestoreHint(text string) string {

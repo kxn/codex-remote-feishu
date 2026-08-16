@@ -9,6 +9,7 @@ type Translator struct {
 	adapterkit.TranslatorBase
 	instanceID                 string
 	currentThreadID            string
+	activeTurnByThread         map[string]string
 	knownThreadCWD             map[string]string
 	observedThreads            map[string]codexObservedThread
 	pendingRemoteTurnByThread  map[string]string
@@ -141,6 +142,7 @@ func NewTranslator(instanceID string) *Translator {
 	return &Translator{
 		instanceID:                 instanceID,
 		knownThreadCWD:             map[string]string{},
+		activeTurnByThread:         map[string]string{},
 		observedThreads:            map[string]codexObservedThread{},
 		pendingRemoteTurnByThread:  map[string]string{},
 		pendingLocalTurnByThread:   map[string]bool{},
