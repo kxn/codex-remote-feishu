@@ -218,6 +218,7 @@
 - [feishu-inline-card-update-design.md](./draft/feishu-inline-card-update-design.md)
 - [feishu-file-preview-handler-design.md](./draft/feishu-file-preview-handler-design.md)
 - [feishu-system-markdown-boundary-design.md](./draft/feishu-system-markdown-boundary-design.md)
+- [feishu-queued-message-applause-shell-command-design.md](./draft/feishu-queued-message-applause-shell-command-design.md)
 - [feishu-workspace-new-dir-subdirectory-design.md](./draft/feishu-workspace-new-dir-subdirectory-design.md)
 - [feishu-text-pipeline-governance.md](./draft/feishu-text-pipeline-governance.md)
 - [multi-feishu-app-design.md](./draft/multi-feishu-app-design.md)
