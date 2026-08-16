@@ -200,6 +200,7 @@ func buildFeishuCommandBindings() map[string]FeishuCommandBinding {
 	bindings[FeishuCommandDetach] = ownerEntryBindingWithPolicy(FeishuCommandDetach)
 
 	bindings[FeishuCommandDebug] = daemonCommandBinding(FeishuCommandDebug, DaemonCommandDebug, false)
+	bindings[FeishuCommandGPUStatus] = daemonCommandBinding(FeishuCommandGPUStatus, DaemonCommandGPUStatus, true)
 	bindings[FeishuCommandAdminSubcommand] = daemonCommandBinding(FeishuCommandAdminSubcommand, DaemonCommandAdmin, false)
 	bindings[FeishuCommandCron] = daemonCommandBinding(FeishuCommandCron, DaemonCommandCron, false)
 	bindings[FeishuCommandMCPOAuth] = daemonCommandBinding(FeishuCommandMCPOAuth, DaemonCommandMCPOAuthLogin, false)

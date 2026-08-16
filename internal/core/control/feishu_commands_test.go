@@ -415,6 +415,23 @@ func TestParseFeishuTextActionRecognizesReviewCommand(t *testing.T) {
 	}
 }
 
+func TestParseFeishuGPUStatusCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, input := range []string{"/gpu", "/nvidia-smi"} {
+		action, ok := ParseFeishuTextActionWithoutCatalog(input)
+		if !ok || action.Kind != ActionGPUStatus || action.CommandID != FeishuCommandGPUStatus {
+			t.Fatalf("input %q => action %#v, ok %v", input, action, ok)
+		}
+	}
+	for _, key := range []string{"gpu", "nvidia-smi"} {
+		action, ok := ParseFeishuMenuActionWithoutCatalog(key)
+		if !ok || action.Kind != ActionGPUStatus || action.CommandID != FeishuCommandGPUStatus {
+			t.Fatalf("menu key %q => action %#v, ok %v", key, action, ok)
+		}
+	}
+}
+
 func TestParseFeishuMenuActionRecognizesReviewCommand(t *testing.T) {
 	tests := map[string]string{
 		"review":             "/review",
@@ -630,6 +647,7 @@ func TestFeishuRecommendedMenusStayInSuggestedOrder(t *testing.T) {
 		{Key: "reasoning", Name: "推理强度", Description: "打开推理强度参数卡；如果知道完整 key，也可直接使用 `reasoning_high` 这类直达入口。"},
 		{Key: "model", Name: "使用模型", Description: "打开模型卡片；如果知道完整 key，也可直接使用 `model_gpt-5.5` 这类直达入口。"},
 		{Key: "access", Name: "执行权限", Description: "打开执行权限参数卡；如果知道完整 key，也可直接使用 `access_confirm` 这类直达入口。"},
+		{Key: "gpu", Name: "GPU 状态", Description: "直接读取本机 GPU 状态，不经过 AI。"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("recommended menus mismatch:\n got: %#v\nwant: %#v", got, want)
