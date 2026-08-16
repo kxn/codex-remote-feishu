@@ -426,20 +426,23 @@ function renderClaudeProfileDetailCard(props: ClaudeDetailCardProps) {
         </select>
         </label>
         <label className="field">
-          <span>视觉能力</span>
-          <input
-            type="checkbox"
-            aria-label="主模型支持直接看图"
-            checked={draft.visionSupported}
-            onChange={(event) =>
-              onDraftChange((current) => ({
-                ...current,
-                visionSupported: event.target.checked,
-              }))
-            }
-          />
+          <span className="sr-only">视觉能力</span>
+          <span className="checkbox-line">
+            <input
+              type="checkbox"
+              aria-label="主模型支持直接看图"
+              checked={draft.visionSupported}
+              onChange={(event) =>
+                onDraftChange((current) => ({
+                  ...current,
+                  visionSupported: event.target.checked,
+                }))
+              }
+            />
+            <span>视觉能力</span>
+          </span>
           <span className="field-hint">
-            勾选后该 profile 的主模型视为支持直接看图，不再注入 describe_image 图片描述辅助工具。
+            如果模型支持看图，可以勾选不注入相关辅助 MCP 以节省上下文
           </span>
         </label>
         <label className="field form-grid-span-2 stack-top">
