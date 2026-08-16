@@ -3,10 +3,116 @@ package daemon
 import (
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+func TestSurfaceResumeOpenCodeProfileContractControlsExactThreadFallback(t *testing.T) {
+	tests := []struct {
+		name             string
+		currentProfileID string
+		currentRevision  uint64
+		wantReset        bool
+	}{
+		{name: "same profile and admission", wantReset: false},
+		{name: "profile id changed", currentProfileID: "op_new", currentRevision: 2, wantReset: true},
+		{name: "profile revision changed", currentProfileID: "op_old", currentRevision: 2, wantReset: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stateDir := t.TempDir()
+			surfaceID := "feishu:app-1:user:user-1"
+			workspaceDir := evalSymlinkForTest(t, t.TempDir())
+			putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+				SurfaceSessionID:  surfaceID,
+				GatewayID:         "app-1",
+				ChatID:            "chat-1",
+				ActorUserID:       "user-1",
+				ProductMode:       string(state.ProductModeNormal),
+				Backend:           string(agentproto.BackendOpenCode),
+				OpenCodeProfileID: "op_old",
+				OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+					ProfileRef: state.OpenCodeProfileRef{ID: "op_old", Revision: 1},
+				},
+				ResumeInstanceID:   "inst-old",
+				ResumeThreadID:     "ses-old",
+				ResumeThreadTitle:  "旧 OpenCode 会话",
+				ResumeThreadCWD:    workspaceDir,
+				ResumeWorkspaceKey: workspaceDir,
+				ResumeRouteMode:    string(state.RouteModePinned),
+				ResumeHeadless:     true,
+			})
+
+			if tt.currentProfileID != "" {
+				store, err := botcapabilitysettings.LoadStore(botcapabilitysettings.StatePath(stateDir))
+				if err != nil {
+					t.Fatalf("load bot capability store: %v", err)
+				}
+				if err := store.Put(state.BotCapabilitySettingsRecord{
+					GatewayID:         "app-1",
+					ProductMode:       state.ProductModeNormal,
+					Backend:           agentproto.BackendOpenCode,
+					OpenCodeProfileID: tt.currentProfileID,
+					OpenCodeAdmissionRef: &state.OpenCodeAdmissionRef{
+						ProfileRef: state.OpenCodeProfileRef{ID: tt.currentProfileID, Revision: tt.currentRevision},
+					},
+				}); err != nil {
+					t.Fatalf("persist current bot capability: %v", err)
+				}
+			}
+
+			app := newRestoreHintTestApp(stateDir)
+			entry := app.SurfaceResumeState(surfaceID)
+			if entry == nil {
+				t.Fatal("expected surface resume entry")
+			}
+			if !tt.wantReset {
+				if entry.ResumeThreadID != "ses-old" || entry.ResumeInstanceID != "inst-old" || entry.ResumeRouteMode != string(state.RouteModePinned) || !entry.ResumeHeadless {
+					t.Fatalf("same OpenCode contract must preserve exact resume target, got %#v", entry)
+				}
+				return
+			}
+
+			if entry.OpenCodeProfileID != tt.currentProfileID || entry.OpenCodeAdmissionRef == nil ||
+				entry.OpenCodeAdmissionRef.ProfileRef.ID != tt.currentProfileID ||
+				entry.OpenCodeAdmissionRef.ProfileRef.Revision != tt.currentRevision {
+				t.Fatalf("expected current OpenCode contract after materialization, got %#v", entry)
+			}
+			if entry.ResumeInstanceID != "" || entry.ResumeThreadID != "" || entry.ResumeThreadTitle != "" || entry.ResumeThreadCWD != "" || entry.ResumeHeadless {
+				t.Fatalf("profile mismatch must clear exact resume target, got %#v", entry)
+			}
+			if entry.ResumeWorkspaceKey != workspaceDir || entry.ResumeRouteMode != string(state.RouteModeNewThreadReady) {
+				t.Fatalf("profile mismatch must retain workspace new-thread route, got %#v", entry)
+			}
+
+			recovery := app.surfaceResumeRuntime.recovery[surfaceID]
+			if recovery == nil || recovery.Entry.ResumeThreadID != "" || recovery.Entry.ResumeRouteMode != string(state.RouteModeNewThreadReady) {
+				t.Fatalf("startup recovery retained stale exact-thread target, got %#v", recovery)
+			}
+			events, result := app.service.TryAutoResumeHeadlessSurface(surfaceID, orchestrator.SurfaceResumeAttempt{
+				WorkspaceKey:     recovery.Entry.ResumeWorkspaceKey,
+				Backend:          agentproto.BackendOpenCode,
+				PrepareNewThread: true,
+			}, true)
+			if result.Status != orchestrator.SurfaceResumeStatusStarting {
+				t.Fatalf("expected fresh OpenCode workspace start, got result=%#v events=%#v", result, events)
+			}
+			if len(events) == 0 || events[len(events)-1].DaemonCommand == nil || events[len(events)-1].DaemonCommand.Kind != control.DaemonCommandStartHeadless {
+				t.Fatalf("expected fresh OpenCode start command, got %#v", events)
+			}
+			command := events[len(events)-1].DaemonCommand
+			if command.ThreadID != "" || command.OpenCodeProfileID != tt.currentProfileID || command.OpenCodeAdmissionRef == nil ||
+				command.OpenCodeAdmissionRef.ProfileRef.Revision != tt.currentRevision {
+				t.Fatalf("fresh OpenCode command reused stale target or contract, got %#v", command)
+			}
+		})
+	}
+}
 
 func TestSurfaceResumeStatePersistsOpenCodeProfileID(t *testing.T) {
 	t.Parallel()

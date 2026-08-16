@@ -260,13 +260,21 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 			entry.ResumeHeadless = target.ResumeHeadless
 		} else if previous, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok {
 			if previousSurfaceResumeTargetMatchesWorkspace(previous, effectiveWorkspaceKey) {
-				entry.ResumeInstanceID = previous.ResumeInstanceID
-				entry.ResumeThreadID = previous.ResumeThreadID
-				entry.ResumeThreadTitle = previous.ResumeThreadTitle
-				entry.ResumeThreadCWD = previous.ResumeThreadCWD
-				entry.ResumeWorkspaceKey = previous.ResumeWorkspaceKey
-				entry.ResumeRouteMode = previous.ResumeRouteMode
-				entry.ResumeHeadless = previous.ResumeHeadless
+				if shouldResetOpenCodeResumeTarget(previous, entry) {
+					entry.ResumeWorkspaceKey = state.ResolveHeadlessResumeWorkspaceKey(previous.ResumeWorkspaceKey, previous.ResumeThreadCWD)
+					entry.ResumeRouteMode = ""
+					if entry.ResumeWorkspaceKey != "" {
+						entry.ResumeRouteMode = string(state.RouteModeNewThreadReady)
+					}
+				} else {
+					entry.ResumeInstanceID = previous.ResumeInstanceID
+					entry.ResumeThreadID = previous.ResumeThreadID
+					entry.ResumeThreadTitle = previous.ResumeThreadTitle
+					entry.ResumeThreadCWD = previous.ResumeThreadCWD
+					entry.ResumeWorkspaceKey = previous.ResumeWorkspaceKey
+					entry.ResumeRouteMode = previous.ResumeRouteMode
+					entry.ResumeHeadless = previous.ResumeHeadless
+				}
 			} else {
 				log.Printf(
 					"drop stale surface resume fallback: surface=%s previous_workspace=%s effective_workspace=%s",

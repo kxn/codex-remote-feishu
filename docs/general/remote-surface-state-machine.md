@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-15`
-> Summary: detached Feishu 私聊按 bot 配置所有权开放 model/reasoning/access，并保留真实 runtime capability 门禁。
+> Updated: `2026-08-16`
+> Summary: 补充 OpenCode Profile/admission 变化时 startup resume 的 exact-thread 清理与 workspace 新会话语义。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1994,7 +1994,7 @@ retained-offline overlay 额外规则：
 
 49. **群聊 on-demand / detached headless restore 在启动前仍可能被全局 `threads.snapshot` 拷贝到其它实例的同名 thread 误导，把恢复目标 workspace 解析成无关实例的工作区并误报 `workspace_busy` / `thread_busy`**：已修复。`mergedThreadViewForBackend` / `resolveSurfaceResumeVisibleInstance` 现在按线程真实 `CWD` 判断实例归属，忽略被快照合并改写 `WorkspaceKey` 的跨实例副本；旧实例离线后恢复会回落到 resume entry / persisted thread 的真实 workspace，再启动新的 managed headless，而不是在启动前被占用检查拦截。
 
-50. **OpenCode 切换 Profile 后仍 exact-thread 恢复旧 session，导致新实例只声明 Gemini provider/model 时，旧 DeepSeek session 在请求上游前报 `ProviderModelNotFoundError`**：已修复。Profile ID 或 revision 变化的当前 surface 与同 gateway sibling 收敛都保留 workspace、清空 continuation 的 `ThreadID` 并设置 `PrepareNewThread=true`；忙碌 sibling 的延迟收敛会从当前实例与目标 Profile/revision 的差异重新识别该语义。新实例连回后进入 `R5 NewThreadReady`，不会再把旧 session 的 provider/model 强塞进目标 overlay；单纯 `/access` runtime relaunch 不受影响，仍可恢复原 session。
+50. **OpenCode 切换 Profile 后仍 exact-thread 恢复旧 session，导致新实例只声明 Gemini provider/model 时，旧 DeepSeek session 在请求上游前报 `ProviderModelNotFoundError`**：已修复。Profile ID 或 revision 变化的当前 surface 与同 gateway sibling 收敛都保留 workspace、清空 continuation 的 `ThreadID` 并设置 `PrepareNewThread=true`；忙碌 sibling 的延迟收敛会从当前实例与目标 Profile/revision 的差异重新识别该语义。startup resume 先以当前 gateway bot capability 投影覆盖 resume entry 的 execution hint；若 fallback 到旧 entry 时发现 OpenCode Profile ID 或 admission revision 不一致，也会清空 instance/thread/title/cwd/headless，仅保留 workspace 并进入 `R5 NewThreadReady`，不会把旧 admission ref 写回当前 Profile。新实例连回后不会再把旧 session 的 provider/model 强塞进目标 overlay；单纯 `/access` runtime relaunch 不受影响，仍可恢复原 session。
 
 当前审计范围内，未再发现“attach/use 成功后用户没有任何可恢复下一步”的 bug-grade 状态。
 

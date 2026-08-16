@@ -155,6 +155,9 @@ func (s *Service) MaterializeSurfaceResumeContractWithOpenCodeRef(surfaceID, gat
 	if surface == nil {
 		return
 	}
+	if _, status := state.LookupSurfaceBotCapabilitySettings(s.root, surface); status == state.BotCapabilitySettingsLookupValid {
+		return
+	}
 	if ref := state.NormalizeOpenCodeAdmissionRef(openCodeAdmissionRef); ref != nil &&
 		state.NormalizeOpenCodeProfileID(ref.ProfileRef.ID) == state.EffectiveSurfaceOpenCodeProfileID(contract) {
 		surface.OpenCodeAdmissionRef = ref

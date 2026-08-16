@@ -9,6 +9,23 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
+func shouldResetOpenCodeResumeTarget(previous, current surfaceresume.Entry) bool {
+	if state.NormalizeProductMode(state.ProductMode(previous.ProductMode)) != state.NormalizeProductMode(state.ProductMode(current.ProductMode)) ||
+		state.NormalizeHeadlessBackend(agentproto.Backend(previous.Backend)) != agentproto.BackendOpenCode ||
+		state.NormalizeHeadlessBackend(agentproto.Backend(current.Backend)) != agentproto.BackendOpenCode {
+		return false
+	}
+	if state.NormalizeOpenCodeProfileID(previous.OpenCodeProfileID) != state.NormalizeOpenCodeProfileID(current.OpenCodeProfileID) {
+		return true
+	}
+	previousRef := state.NormalizeOpenCodeAdmissionRef(previous.OpenCodeAdmissionRef)
+	currentRef := state.NormalizeOpenCodeAdmissionRef(current.OpenCodeAdmissionRef)
+	if previousRef == nil || currentRef == nil {
+		return previousRef != nil || currentRef != nil
+	}
+	return *previousRef != *currentRef
+}
+
 func shouldPreserveOpenCodeAdmissionRef(previous, current surfaceresume.Entry, clearResumeTarget bool) bool {
 	if clearResumeTarget || previous.OpenCodeAdmissionRef == nil || strings.TrimSpace(current.ResumeThreadID) == "" ||
 		strings.TrimSpace(previous.ResumeThreadID) != strings.TrimSpace(current.ResumeThreadID) {
