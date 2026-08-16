@@ -1426,6 +1426,7 @@ export function AdminRoute() {
       );
       setVisionAssist(saved);
       setVisionAssistError("");
+      setDetailNotice({ tone: "good", message: "辅助模型配置已保存。" });
     } catch (error) {
       setVisionAssistError(formatError(error));
     } finally {
