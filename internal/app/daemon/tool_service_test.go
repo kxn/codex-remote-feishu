@@ -13,6 +13,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	toolruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -133,6 +134,11 @@ func newToolServiceTestApp(t *testing.T, gateway feishu.Gateway) (*App, relayrun
 	app := New("127.0.0.1:0", "127.0.0.1:0", gateway, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{Paths: paths})
 	app.SetToolRuntime(toolruntime.Config{ListenAddr: "127.0.0.1:0", StateFile: paths.ToolServiceFile})
+	configPath := filepath.Join(stateDir, "config.json")
+	if err := config.WriteAppConfig(configPath, config.DefaultAppConfig()); err != nil {
+		t.Fatalf("WriteAppConfig() error = %v", err)
+	}
+	app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
 	return app, paths
 }
 
