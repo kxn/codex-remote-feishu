@@ -31,18 +31,17 @@ func TestBuildCodexChildLaunchAddsFeishuMCPForHeadless(t *testing.T) {
 
 	args, env := app.buildCodexChildLaunch([]string{"app-server", "-c", `model="gpt-5"`})
 
-	if len(args) != 5 {
-		t.Fatalf("expected base args plus MCP override, got %d args: %#v", len(args), args)
+	if len(args) != 7 {
+		t.Fatalf("expected base args plus MCP overrides, got %d args: %#v", len(args), args)
 	}
 	if args[0] != "app-server" || args[1] != "-c" || args[2] != `model="gpt-5"` {
 		t.Fatalf("expected base args to stay intact, got %#v", args[:3])
 	}
-	if args[3] != "-c" {
-		t.Fatalf("expected -c before MCP override, got %#v", args[3:])
+	if args[3] != "-c" || args[4] != `mcp_servers.codex_remote_feishu.url="http://127.0.0.1:9702?codex_remote_instance_id=inst-1"` {
+		t.Fatalf("unexpected url override args: %#v", args[3:5])
 	}
-	wantOverride := `mcp_servers.codex_remote_feishu={url="http://127.0.0.1:9702?codex_remote_instance_id=inst-1",bearer_token_env_var="CODEX_REMOTE_FEISHU_MCP_BEARER"}`
-	if args[4] != wantOverride {
-		t.Fatalf("unexpected MCP override args: got %q want %q", args[4], wantOverride)
+	if args[5] != "-c" || args[6] != `mcp_servers.codex_remote_feishu.bearer_token_env_var="CODEX_REMOTE_FEISHU_MCP_BEARER"` {
+		t.Fatalf("unexpected bearer override args: %#v", args[5:7])
 	}
 	if got := lookupEnv(env, feishuMCPBearerEnvName); got != "secret-token" {
 		t.Fatalf("expected injected bearer env, got %q", got)
@@ -68,12 +67,12 @@ func TestBuildCodexChildLaunchKeepsFeishuMCPForMimoCatalog(t *testing.T) {
 		`model_catalog_json="/state/codex-model-catalogs/mimo-models-v1.json"`,
 	})
 
-	if len(args) != 5 {
-		t.Fatalf("expected mimo catalog args plus MCP override, got %d args: %#v", len(args), args)
+	if len(args) != 7 {
+		t.Fatalf("expected mimo catalog args plus MCP overrides, got %d args: %#v", len(args), args)
 	}
-	if args[3] != "-c" || !strings.Contains(args[4], `mcp_servers.codex_remote_feishu={url=`) ||
+	if args[3] != "-c" || !strings.Contains(args[4], `mcp_servers.codex_remote_feishu.url=`) ||
 		!strings.Contains(args[4], `codex_remote_instance_id=inst-1`) ||
-		!strings.Contains(args[4], `bearer_token_env_var="CODEX_REMOTE_FEISHU_MCP_BEARER"`) {
+		!strings.Contains(args[6], `bearer_token_env_var="CODEX_REMOTE_FEISHU_MCP_BEARER"`) {
 		t.Fatalf("unexpected MCP override args: %#v", args[3:])
 	}
 	if got := lookupEnv(env, feishuMCPBearerEnvName); got != "secret-token" {

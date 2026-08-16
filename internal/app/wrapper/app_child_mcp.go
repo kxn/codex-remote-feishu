@@ -33,7 +33,8 @@ func (a *App) applyCodexFeishuMCPPublication(baseArgs, baseEnv []string) ([]stri
 	}
 	args = append(
 		args,
-		"-c", codexMCPServerOverride(info.URL),
+		"-c", codexMCPOverride("url", info.URL),
+		"-c", codexMCPOverride("bearer_token_env_var", feishuMCPBearerEnvName),
 	)
 	env = upsertEnvValue(env, feishuMCPBearerEnvName, strings.TrimSpace(info.Token))
 	return args, env
@@ -103,17 +104,8 @@ func (a *App) feishuMCPPublicationEligible() bool {
 	return !state.IsInstanceSource(a.config.Source, state.InstanceSourceVSCode)
 }
 
-// codexMCPServerOverride 以单个 TOML 表覆盖注入整个 MCP server 配置。
-// codex 0.147.0 的会话运行时不会把分散的 mcp_servers.<name>.url /
-// bearer_token_env_var 覆盖组装成可用配置（codex mcp list 能看到但会话
-// 不会加载），必须一次传入完整的内联表。
-func codexMCPServerOverride(rawURL string) string {
-	return fmt.Sprintf(
-		"mcp_servers.%s={url=%s,bearer_token_env_var=%s}",
-		feishuMCPServerID,
-		strconv.Quote(strings.TrimSpace(rawURL)),
-		strconv.Quote(feishuMCPBearerEnvName),
-	)
+func codexMCPOverride(field, value string) string {
+	return fmt.Sprintf("mcp_servers.%s.%s=%s", feishuMCPServerID, strings.TrimSpace(field), strconv.Quote(strings.TrimSpace(value)))
 }
 
 func appendToolCallerInstanceParam(rawURL, instanceID string) (string, bool) {
