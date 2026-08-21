@@ -134,15 +134,20 @@ func renderSystemdUserUnit(state InstallState) (string, error) {
 		"Environment=XDG_CONFIG_HOME=" + systemdEscapeValue(configHome),
 		"Environment=XDG_DATA_HOME=" + systemdEscapeValue(dataHome),
 		"Environment=XDG_STATE_HOME=" + systemdEscapeValue(stateHome),
+	}
+	if codexHome := normalizeServicePathValue(state.CodexHome); codexHome != "" {
+		lines = append(lines, "Environment=CODEX_HOME="+systemdEscapeValue(codexHome))
+	}
+	lines = append(lines,
 		"Restart=on-failure",
 		"RestartSec=2s",
-		"StandardOutput=append:" + serviceLogPath,
-		"StandardError=append:" + serviceLogPath,
+		"StandardOutput=append:"+serviceLogPath,
+		"StandardError=append:"+serviceLogPath,
 		"",
 		"[Install]",
 		"WantedBy=default.target",
 		"",
-	}
+	)
 	return strings.Join(lines, "\n"), nil
 }
 

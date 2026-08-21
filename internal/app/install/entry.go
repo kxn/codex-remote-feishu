@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	"github.com/kxn/codex-remote-feishu/internal/pathcompare"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -85,6 +86,10 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 	resolvedBaseDir := selection.BaseDir
 	resolvedInstallBinDir := resolveTargetInstallBinDir(selection, *installBinDir)
 	preInteractiveInstallBinDir := resolvedInstallBinDir
+	codexHome, err := config.ResolveExplicitCodexHomeDir(os.Environ())
+	if err != nil {
+		return err
+	}
 
 	service := NewService()
 	opts := Options{
@@ -102,6 +107,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 		RelaydBinary:       *legacyRelaydBinary,
 		RelayServerURL:     *relayURL,
 		CodexRealBinary:    *codexBinary,
+		CodexHome:          codexHome,
 		VSCodeSettingsPath: *settingsPath,
 		BundleEntrypoint:   *bundleEntrypoint,
 		FeishuGatewayID:    *feishuGatewayID,
@@ -210,6 +216,9 @@ func preserveInstallOptionsFromExistingState(flagSet *flag.FlagSet, statePath st
 	}
 	if !flagWasProvided(flagSet, "bundle-entrypoint") && strings.TrimSpace(existing.BundleEntrypoint) != "" {
 		opts.BundleEntrypoint = existing.BundleEntrypoint
+	}
+	if strings.TrimSpace(opts.CodexHome) == "" {
+		opts.CodexHome = existing.CodexHome
 	}
 }
 
