@@ -328,6 +328,9 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		switch action.Kind {
 		case control.ActionStatus:
 			return s.filterEventsForSurfaceVisibility([]eventcontract.Event{{Kind: eventcontract.KindSnapshot, SurfaceSessionID: surface.SurfaceSessionID, Snapshot: s.buildSnapshot(surface)}})
+		case control.ActionGPUStatus:
+			events, _ := s.boundDaemonCommandEvents(surface, action)
+			return s.filterEventsForSurfaceVisibility(events)
 		case control.ActionAutoWhipCommand:
 			return s.filterEventsForSurfaceVisibility(s.handleAutoWhipCommand(surface, action))
 		case control.ActionAutoContinueCommand:

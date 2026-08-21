@@ -12,6 +12,7 @@ type ActionKind string
 const (
 	ActionListInstances               ActionKind = "surface.menu.list_instances"
 	ActionStatus                      ActionKind = "surface.menu.status"
+	ActionGPUStatus                   ActionKind = "surface.menu.gpu_status"
 	ActionStop                        ActionKind = "surface.menu.stop"
 	ActionCompact                     ActionKind = "surface.menu.compact"
 	ActionSteerAll                    ActionKind = "surface.menu.steer_all"
@@ -642,6 +643,7 @@ const (
 	DaemonCommandKillHeadless               DaemonCommandKind = "headless.kill"
 	DaemonCommandAdmin                      DaemonCommandKind = "admin.command"
 	DaemonCommandDebug                      DaemonCommandKind = "debug.command"
+	DaemonCommandGPUStatus                  DaemonCommandKind = "gpu.status"
 	DaemonCommandCron                       DaemonCommandKind = "cron.command"
 	DaemonCommandMCPOAuthLogin              DaemonCommandKind = "mcp.oauth.login"
 	DaemonCommandUpgrade                    DaemonCommandKind = "upgrade.command"

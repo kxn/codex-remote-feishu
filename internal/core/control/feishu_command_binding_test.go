@@ -65,6 +65,15 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantPropagateCard: true,
 		},
 		{
+			name:              "gpu status daemon command",
+			action:            Action{Kind: ActionGPUStatus, Text: "/gpu"},
+			wantFamily:        FeishuCommandGPUStatus,
+			wantKind:          FeishuCommandBindingDaemonCommand,
+			wantDirectDaemon:  DaemonCommandGPUStatus,
+			wantContinuation:  DaemonCommandGPUStatus,
+			wantPropagateCard: true,
+		},
+		{
 			name:             "admin subcommand daemon command",
 			action:           Action{Kind: ActionAdminCommand, Text: "/admin web"},
 			wantFamily:       FeishuCommandAdminSubcommand,

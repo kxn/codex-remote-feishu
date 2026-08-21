@@ -114,6 +114,7 @@ func FeishuRecommendedMenus() []FeishuRecommendedMenu {
 		FeishuCommandReasoning,
 		FeishuCommandModel,
 		FeishuCommandAccess,
+		FeishuCommandGPUStatus,
 	}
 	menus := make([]FeishuRecommendedMenu, 0, len(order))
 	for _, commandID := range order {
@@ -163,7 +164,7 @@ func feishuCommandDisplayRank(groupID, commandID string) int {
 			FeishuCommandFollow,
 		)
 	case FeishuCommandGroupCommonTools:
-		return commandRank(commandID, FeishuCommandReview, FeishuCommandPatch, FeishuCommandAutoWhip, FeishuCommandPrimary, FeishuCommandCoworkers, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
+		return commandRank(commandID, FeishuCommandGPUStatus, FeishuCommandReview, FeishuCommandPatch, FeishuCommandAutoWhip, FeishuCommandPrimary, FeishuCommandCoworkers, FeishuCommandHistory, FeishuCommandCron, FeishuCommandSendFile)
 	case FeishuCommandGroupMaintenance:
 		return commandRank(commandID, FeishuCommandAdmin, FeishuCommandUpgrade, FeishuCommandDebug, FeishuCommandHelp, FeishuCommandVSCodeMigrate)
 	default:

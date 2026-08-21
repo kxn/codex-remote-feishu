@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-15`
-> Summary: detached 私聊配置卡按 bot setting 所有权开放，并对 OpenCode reasoning 保留 ACP capability 门禁。
+> Updated: `2026-08-16`
+> Summary: detached 私聊配置卡按 bot setting 所有权开放，并补充跨后端可用的本机 GPU 状态卡及同卡刷新入口。
 
 ## 1. 文档定位
 
@@ -529,8 +529,9 @@ MCP request 卡片当前新增的可视语义：
   - `opencode` 的 `send_settings` 分组当前保留 `/mode`、`/reasoning`、`/access`、`/plan`、`/verbose`、`/opencodeprofile`；`/model` 继续 hidden + reject
   - detached 合法私聊的参数卡与带参数 apply 共享 backend-aware gate：Codex `/model`、`/reasoning`、`/access`，Claude `/reasoning`、`/access`，OpenCode `/access` 不要求 attached instance；Codex 无 catalog 时展示手动输入降级，OpenCode `/reasoning` 在没有当前 ACP `effort` 证据时仍显示 attachment-required 状态。VS Code、非 Feishu surface 和群聊不进入这条放行路径
   - Feishu 群聊 context 下，`send_settings` 会隐藏 `/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 这些 bot 能力设置，只保留 `/verbose` 等 surface/context 设置；同一卡片回调若仍尝试执行这些设置，会原卡显示私聊修改提示
-  - `codex` 的 `common_tools` 分组当前可见 `/autowhip`、`/history`、`/cron`、`/sendfile`，并在 Feishu 群聊 context 下额外展示状态化 `/primary` 与 `/coworkers`
-  - `claude` 的 `common_tools` 分组当前显示 `/history` 与 `/sendfile`，并在 Feishu 群聊 context 下额外展示状态化 `/primary` 与 `/coworkers`
+  - `codex` 的 `common_tools` 分组当前可见 `/gpu`、`/autowhip`、`/history`、`/cron`、`/sendfile`，并在 Feishu 群聊 context 下额外展示状态化 `/primary` 与 `/coworkers`
+  - `claude` 的 `common_tools` 分组当前显示 `/gpu`、`/history` 与 `/sendfile`，并在 Feishu 群聊 context 下额外展示状态化 `/primary` 与 `/coworkers`
+  - `/gpu` 是 backend-neutral daemon command：固定参数调用本机 `nvidia-smi`，动态投影全部 GPU 的负载、温度、显存和功耗，不创建 agent turn；结果卡上的刷新按钮通过 stamped `page_local_action` 将首张结果同位替回当前卡
   - `/primary` 的状态化按钮由 `CatalogContext.SurfaceScopeKind`、`PrimaryBotState` 与 `PrimaryPermissionState` 投影生成，仍携带统一 catalog provenance；单聊菜单通过 display policy 隐藏，不在 projector 或 daemon 里维护第二套餐单入口
   - `maintenance` 分组当前可见 `/admin`、`/upgrade`、`/debug`、`/help`、`/menu`
   - `switch_target` 分组当前还带一层 mode-aware display projection：
