@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -59,6 +60,7 @@ type packagedInstallOptions struct {
 	CurrentTrack   ReleaseTrack
 	VersionsRoot   string
 	CurrentSlot    string
+	CodexHome      string
 	OutputFormat   string
 	ResultFilePath string
 	GOOS           string
@@ -129,6 +131,10 @@ func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version
 	if err != nil {
 		return err
 	}
+	codexHome, err := config.ResolveExplicitCodexHomeDir(os.Environ())
+	if err != nil {
+		return err
+	}
 	opts := packagedInstallOptions{
 		Selection:      selection,
 		StatePath:      resolvedStatePath,
@@ -139,6 +145,7 @@ func RunPackagedInstall(args []string, _ io.Reader, stdout, _ io.Writer, version
 		CurrentTrack:   ParseReleaseTrack(*currentTrack),
 		VersionsRoot:   strings.TrimSpace(*versionsRoot),
 		CurrentSlot:    requestedSlot,
+		CodexHome:      codexHome,
 		OutputFormat:   outputFormat,
 		ResultFilePath: strings.TrimSpace(*resultFile),
 		GOOS:           defaults.GOOS,
@@ -207,6 +214,7 @@ func runPackagedFirstInstall(ctx context.Context, opts packagedInstallOptions) (
 		CurrentTrack:   opts.CurrentTrack,
 		VersionsRoot:   versionsRoot,
 		CurrentSlot:    targetSlot,
+		CodexHome:      opts.CodexHome,
 		BootstrapOnly:  true,
 	})
 	result := packagedInstallResultForState(packagedInstallModeFirstInstall, state)
@@ -270,6 +278,7 @@ func runPackagedRepair(ctx context.Context, flagSet *flag.FlagSet, opts packaged
 	}
 	state.CurrentBinaryPath = liveBinaryPath
 	state.VersionsRoot = xutil.FirstNonEmpty(strings.TrimSpace(opts.VersionsRoot), strings.TrimSpace(state.VersionsRoot), defaultVersionsRootForStatePath(state.StatePath))
+	state.CodexHome = choosePreservedValue(opts.CodexHome, state.CodexHome)
 
 	// Migrate version-scoped legacy live binary to canonical instance bin dir.
 	if canonicalDir, needsMigration := canonicalInstallBinDirForMigration(opts.GOOS, state); needsMigration {

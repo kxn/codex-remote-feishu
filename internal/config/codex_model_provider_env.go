@@ -153,17 +153,18 @@ func supplementCodexModelProviderEnv(env, args []string) ([]string, error) {
 }
 
 func resolveCodexConfigPath(env []string) (string, error) {
-	envMap := envSliceToMap(env)
-	if codexHome := strings.TrimSpace(envMap["CODEX_HOME"]); codexHome != "" {
-		info, err := os.Stat(codexHome)
-		if err != nil {
-			return "", fmt.Errorf("resolve CODEX_HOME %q: %w", codexHome, err)
-		}
-		if !info.IsDir() {
-			return "", fmt.Errorf("CODEX_HOME %q is not a directory", codexHome)
-		}
-		return filepath.Join(codexHome, codexConfigFileName), nil
+	codexHome, err := ResolveCodexHomeDir(env)
+	if err != nil {
+		return "", err
 	}
+	return filepath.Join(codexHome, codexConfigFileName), nil
+}
+
+func ResolveCodexHomeDir(env []string) (string, error) {
+	if codexHome, err := ResolveExplicitCodexHomeDir(env); codexHome != "" || err != nil {
+		return codexHome, err
+	}
+	envMap := envSliceToMap(env)
 	home := strings.TrimSpace(envMap["HOME"])
 	if home == "" {
 		home = currentUserHomeDir()
@@ -171,7 +172,22 @@ func resolveCodexConfigPath(env []string) (string, error) {
 	if home == "" {
 		return "", fmt.Errorf("resolve codex home: home directory is unavailable")
 	}
-	return filepath.Join(home, ".codex", codexConfigFileName), nil
+	return filepath.Join(home, ".codex"), nil
+}
+
+func ResolveExplicitCodexHomeDir(env []string) (string, error) {
+	codexHome := strings.TrimSpace(envSliceToMap(env)["CODEX_HOME"])
+	if codexHome == "" {
+		return "", nil
+	}
+	info, err := os.Stat(codexHome)
+	if err != nil {
+		return "", fmt.Errorf("resolve CODEX_HOME %q: %w", codexHome, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("CODEX_HOME %q is not a directory", codexHome)
+	}
+	return filepath.Clean(codexHome), nil
 }
 
 func currentUserHomeDir() string {

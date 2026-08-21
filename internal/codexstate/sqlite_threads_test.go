@@ -118,6 +118,7 @@ func TestNewDefaultSQLiteThreadCatalogReturnsNilWhenStateFileMissing(t *testing.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home) // Windows: os.UserHomeDir() reads USERPROFILE
+	t.Setenv("CODEX_HOME", "")
 
 	catalog, err := NewDefaultSQLiteThreadCatalog(SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
 	if err != nil {
@@ -125,6 +126,22 @@ func TestNewDefaultSQLiteThreadCatalogReturnsNilWhenStateFileMissing(t *testing.
 	}
 	if catalog != nil {
 		t.Fatalf("expected nil catalog when state file is missing, got %#v", catalog)
+	}
+}
+
+func TestDefaultSQLiteStatePathUsesCodexHome(t *testing.T) {
+	home := t.TempDir()
+	codexHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("CODEX_HOME", codexHome)
+
+	path, err := DefaultSQLiteStatePath()
+	if err != nil {
+		t.Fatalf("DefaultSQLiteStatePath: %v", err)
+	}
+	if want := filepath.Join(codexHome, defaultCodexSQLiteFilename); path != want {
+		t.Fatalf("DefaultSQLiteStatePath = %q, want %q", path, want)
 	}
 }
 
