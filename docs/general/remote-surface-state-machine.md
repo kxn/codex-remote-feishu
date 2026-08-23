@@ -18,7 +18,7 @@
 
 这份文档描述的是**当前代码已经实现**的 remote surface 状态机，不是历史问题列表，也不是未来方案草稿。
 
-2026-08-08 #838 补充：`/detach` 与 `/workspace detach` 都是 detach-like route mutation，会清除当前私聊 surface 的全部 durable resume target（instance、thread、cwd、workspace、route、headless）。清理会在事件/UI/daemon dispatch 之前完成，并在 dispatch 后用同一清理意图再次同步，避免 dispatch 释放 app mutex 时被 recovery tick 插入；`E6 Abandoning` 期间 headless 与 VS Code auto-resume 都明确跳过，直到 surface 最终 detach。
+2026-08-08 #838 补充：`/detach` 与 `/workspace detach` 都是 detach-like route mutation，会清除当前私聊 surface 的全部 durable resume target（instance、thread、cwd、workspace、route、headless）。清理会在事件/UI/daemon dispatch 之前完成，并在 dispatch 后用同一清理意图再次同步，避免 dispatch 释放 app mutex 时被 recovery tick 插入；`E6 Abandoning` 期间 headless 与 VS Code auto-resume 都明确跳过，直到 surface 最终 detach。2026-08-23 #907 补充：surface 最终 detach 后，如果原 attachment 是当前没有其他 surface 使用的 daemon-owned managed headless，orchestrator 会发出定向 `headless.kill`，回收其 Codex app-server writer；这样终端可以立即执行同一 thread 的 `codex resume`，而不会停止其他实例或整个 daemon。active turn 会等收尾，超时强制 detach 也走同一释放路径。
 
 2026-08-08 #840 补充：Feishu 机器人进群事件 `im.chat.member.bot.added_v1` 现在是 room primary bootstrap 的独立入口。daemon 收到事件后先在 app 锁外复用 `feishufacts` scope 缓存确认 `im:chat:readonly`（兼容 `im:chat`），再通过 gateway `im.v1.chat.get` 读取 `chat_mode` 与 `bot_count`；只有 `chat_mode == group` 且 `bot_count == 1` 时才进入锁内尝试写 room primary。锁内写入是 compare-and-set：仅当 `PrimaryGatewayID` 仍为空时把当前 gateway 写入 room durable state 并刷新 primary snapshot；已有 primary 时 no-op，不替换，也不发成功提示。若 room state 持久化失败，daemon 会回滚刚写入的 runtime primary 并刷新 snapshot，不留下只在内存中生效的假 primary。`chat.get` 缺权限会进入现有 permission gap / call broker cooldown 路径，并给群内发送权限提示；事件是否已订阅仍由 setup/admin auto-config 基于已发布版本 `event_infos` 检查，runtime 不把“没有收到事件”推断成未订阅。
 
