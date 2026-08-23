@@ -138,6 +138,7 @@ func NormalizeClaudeProfiles(profiles []ClaudeProfileConfig) []ClaudeProfileConf
 			SubagentModel:   strings.TrimSpace(profile.SubagentModel),
 			Instruction:     strings.TrimSpace(profile.Instruction),
 			ReasoningEffort: NormalizeClaudeReasoningEffort(profile.ReasoningEffort),
+			VisionSupported: profile.VisionSupported,
 		}
 		current.ID = nextClaudeProfileID(current.ID, current.Name, used)
 		if strings.TrimSpace(current.Name) == "" {
