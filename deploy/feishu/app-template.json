@@ -38,6 +38,11 @@
         "key": "access",
         "name": "执行权限",
         "description": "打开执行权限参数卡；如果知道完整 key，也可直接使用 `access_confirm` 这类直达入口。"
+      },
+      {
+        "key": "gpu",
+        "name": "GPU 状态",
+        "description": "直接读取本机 GPU 状态，不经过 AI。"
       }
     ]
   },
@@ -88,7 +93,7 @@
     },
     {
       "event": "application.bot.menu_v6",
-      "purpose": "处理机器人静态菜单里的阶段入口和高频快捷键，例如 menu/stop/steerall/new/reasoning/model/access。"
+      "purpose": "处理机器人静态菜单里的阶段入口和高频快捷键，例如 menu/stop/steerall/new/reasoning/model/access/gpu。"
     }
   ],
   "callback_subscriptions": [

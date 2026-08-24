@@ -224,6 +224,7 @@ func TestMenuActionKindKnownValues(t *testing.T) {
 		"menu":             control.ActionShowCommandMenu,
 		"list":             control.ActionListInstances,
 		"status":           control.ActionStatus,
+		"gpu":              control.ActionGPUStatus,
 		"stop":             control.ActionStop,
 		"new":              control.ActionNewThread,
 		"new_thread":       control.ActionNewThread,

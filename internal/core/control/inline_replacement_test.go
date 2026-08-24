@@ -542,6 +542,26 @@ func TestResolveFeishuFrontstageActionContractLauncherDisposition(t *testing.T) 
 	}
 }
 
+func TestGPUStatusCardRefreshReplacesCurrentCardWithDaemonResult(t *testing.T) {
+	t.Parallel()
+
+	action := Action{
+		Kind: ActionGPUStatus,
+		Text: "/gpu",
+		Inbound: &ActionInboundMeta{
+			CardCallback:          true,
+			CardDaemonLifecycleID: "daemon-1",
+		},
+	}
+	contract := ResolveFeishuFrontstageActionContract(action)
+	if contract.CurrentCardMode != FeishuFrontstageCurrentCardFirstResultCard {
+		t.Fatalf("CurrentCardMode = %q, want %q", contract.CurrentCardMode, FeishuFrontstageCurrentCardFirstResultCard)
+	}
+	if contract.ContinuationDaemonCommand != DaemonCommandGPUStatus {
+		t.Fatalf("ContinuationDaemonCommand = %q, want %q", contract.ContinuationDaemonCommand, DaemonCommandGPUStatus)
+	}
+}
+
 func TestFeishuFollowupPolicyKeepClassOverridesDrop(t *testing.T) {
 	policy := FeishuFollowupPolicy{
 		DropClasses: []FeishuFollowupHandoffClass{

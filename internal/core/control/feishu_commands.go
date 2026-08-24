@@ -16,6 +16,7 @@ const (
 	FeishuCommandUseAll               = "useall"
 	FeishuCommandNew                  = "new"
 	FeishuCommandHistory              = "history"
+	FeishuCommandGPUStatus            = "gpu"
 	FeishuCommandPrimary              = "primary"
 	FeishuCommandCoworkers            = "coworkers"
 	FeishuCommandReview               = "review"
@@ -225,6 +226,7 @@ var feishuCommandSpecs = []feishuCommandSpec{
 	feishuPrimaryCommandSpec,
 	feishuCoworkersCommandSpec,
 	reviewCommandSpec(),
+	gpuStatusCommandSpec(),
 	sendFileCommandSpec(),
 	{
 		definition: FeishuCommandDefinition{

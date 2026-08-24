@@ -42,6 +42,8 @@ func (a *App) handleDaemonCommandLocked(command control.DaemonCommand) []eventco
 		return a.handleAdminDaemonCommand(command)
 	case control.DaemonCommandDebug:
 		return a.handleDebugDaemonCommand(command)
+	case control.DaemonCommandGPUStatus:
+		return a.handleGPUStatusDaemonCommand(command)
 	case control.DaemonCommandCron:
 		return a.handleCronDaemonCommandLocked(command)
 	case control.DaemonCommandMCPOAuthLogin:
