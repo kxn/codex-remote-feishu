@@ -191,6 +191,62 @@ func stripLeadingFeishuMentionKeys(text string, keys []string) (string, bool) {
 	return "", false
 }
 
+func isPureCurrentBotMentionText(rawText string, mentions []*larkim.MentionEvent, botOpenID string) bool {
+	botOpenID = strings.TrimSpace(botOpenID)
+	if botOpenID == "" || len(mentions) == 0 {
+		return false
+	}
+	keys := currentBotMentionKeys(mentions, botOpenID)
+	if len(keys) == 0 {
+		return false
+	}
+	rest := strings.TrimSpace(rawText)
+	stripped := false
+	for rest != "" {
+		matched := false
+		for _, key := range keys {
+			if !strings.HasPrefix(rest, key) {
+				continue
+			}
+			rest = strings.TrimSpace(rest[len(key):])
+			stripped = true
+			matched = true
+			break
+		}
+		if !matched {
+			return false
+		}
+	}
+	return stripped
+}
+
+func currentBotMentionKeys(mentions []*larkim.MentionEvent, botOpenID string) []string {
+	botOpenID = strings.TrimSpace(botOpenID)
+	keys := make([]string, 0, len(mentions))
+	seen := map[string]struct{}{}
+	for _, mention := range mentions {
+		if mention == nil || mention.Id == nil {
+			continue
+		}
+		if strings.TrimSpace(xutil.StringValue(mention.Id.OpenId)) != botOpenID {
+			continue
+		}
+		key := strings.TrimSpace(xutil.StringValue(mention.Key))
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	sort.SliceStable(keys, func(i, j int) bool {
+		return len(keys[i]) > len(keys[j])
+	})
+	return keys
+}
+
 type feishuMentionReplacement struct {
 	key   string
 	label string

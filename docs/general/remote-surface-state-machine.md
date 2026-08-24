@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-16`
-> Summary: 补充 OpenCode Profile/admission 变化时 startup resume 的 exact-thread 清理、workspace 新会话语义，以及 queued `APPLAUSE` UserShell 注入状态。
+> Updated: `2026-08-24`
+> Summary: 补充 Feishu 群聊纯 @ 当前机器人时的主机器人快捷切换规则。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -117,10 +117,11 @@ Feishu 群聊消息在进入 surface 状态机前还有一层 gateway 入站前�
 
 1. 私聊消息不要求 mention，继续按 `feishu:<gatewayID>:user:<preferredActorId>` 进入 surface。
 2. 群聊消息若 `mentions` 命中当前 gateway 缓存的 bot `open_id`，允许 materialize / reuse `feishu:<gatewayID>:chat:<chatID>` surface。
-3. 群聊消息若 `mentions` 存在但未命中当前 bot，fail closed 忽略，不记录 `messageID -> surfaceID`，不进入 queue / dispatch。
-4. 群聊无 mention 的用户消息只在 daemon 当前 primary snapshot 记录 `chatID -> current gateway`，且 daemon 短 TTL 权限缓存确认该 gateway 具备当前权限 `im:message.group_msg` 或历史兼容权限 `im:message.group_msg:readonly` 时放行；否则在 record / parse / image-file download / queue 前忽略。该 snapshot 由 room durable state 复制生成，gateway callback 热路径不读取 orchestrator mutable root。
-5. 群聊无 mention 且 sender 是 bot 的消息默认忽略，避免 bot 之间互相触发。
-6. 当前 bot `open_id` 在 gateway 启动时通过 bot info API 获取并缓存；主机器人权限热路径只读 daemon 缓存，不逐条调用飞书 API。
+3. 群聊文本若只有当前 bot mention 和空白字符，在 gateway planner 中转换为 `/primary on` 命令；若 daemon 当前 primary snapshot 已记录 `chatID -> current gateway`，则静默忽略，不记录 `messageID -> surfaceID`，不发用户卡片。
+4. 群聊消息若 `mentions` 存在但未命中当前 bot，fail closed 忽略，不记录 `messageID -> surfaceID`，不进入 queue / dispatch。
+5. 群聊无 mention 的用户消息只在 daemon 当前 primary snapshot 记录 `chatID -> current gateway`，且 daemon 短 TTL 权限缓存确认该 gateway 具备当前权限 `im:message.group_msg` 或历史兼容权限 `im:message.group_msg:readonly` 时放行；否则在 record / parse / image-file download / queue 前忽略。该 snapshot 由 room durable state 复制生成，gateway callback 热路径不读取 orchestrator mutable root。
+6. 群聊无 mention 且 sender 是 bot 的消息默认忽略，避免 bot 之间互相触发。
+7. 当前 bot `open_id` 在 gateway 启动时通过 bot info API 获取并缓存；主机器人权限热路径只读 daemon 缓存，不逐条调用飞书 API。
 
 Feishu 群聊 surface 之上现在还有一层 room context coordination record，并已参与 headless workspace claim 仲裁：
 
@@ -1811,7 +1812,7 @@ transport degraded retained attachment
 | bare `/debug` `/upgrade` | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 | 允许，返回状态 + 快捷按钮 + 表单卡 |
 | 带参数 `/model` `/reasoning` `/access` | Feishu 私聊 headless：Codex 三者均允许，Claude 允许 reasoning/access，OpenCode 允许 access；OpenCode reasoning 因缺 ACP `effort` 证据拒绝，Claude/OpenCode model 由 command support 拒绝。VS Code 与非 Feishu surface 保持拒绝 | 允许 | 允许 | 允许 | 允许 | 允许 |
 
-Feishu 群聊 surface 对 bot 能力设置有额外覆盖规则：`/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 的 bare open、带参数 apply 与同卡 callback 都不修改群 surface 或 bot SSOT，并提示到私聊修改；`/autowhip`、`/autocontinue`、`/verbose` 仍按当前群 surface/context 生效。`/primary` 只改 room primary gateway，不改 workspace/session/thread route；`/primary on` 只强制刷新当前 gateway 的群普通消息权限并写入 `PrimaryGatewayID`，不查询飞书群管理员。机器人进群自动 bootstrap 只在 `chat.get` 证明群内唯一机器人且 room primary 为空时写入，不替换已有 primary。已有 room workspace 时，只有当前 primary bot 能切换；无 primary 或其他 bot 必须先对目标 bot 执行 `/primary on`。
+Feishu 群聊 surface 对 bot 能力设置有额外覆盖规则：`/mode`、provider/profile、`/model`、`/reasoning`、`/access`、`/plan` 的 bare open、带参数 apply 与同卡 callback 都不修改群 surface 或 bot SSOT，并提示到私聊修改；`/autowhip`、`/autocontinue`、`/verbose` 仍按当前群 surface/context 生效。`/primary` 只改 room primary gateway，不改 workspace/session/thread route；`/primary on` 只强制刷新当前 gateway 的群普通消息权限并写入 `PrimaryGatewayID`，不查询飞书群管理员；群聊纯 @ 当前 bot 且没有其它非空内容时等价于 `/primary on`，但已是当前 primary 时静默 no-op。机器人进群自动 bootstrap 只在 `chat.get` 证明群内唯一机器人且 room primary 为空时写入，不替换已有 primary。已有 room workspace 时，只有当前 primary bot 能切换；无 primary 或其他 bot 必须先对目标 bot 执行 `/primary on`。
 
 群聊 `/workspace detach` 不是上表裸 `/detach` 的 surface-level alias：私聊仍按 surface detach；群聊中它是 room-level workspace clear，只有当前 primary bot 可执行。成功或 room 本来无 workspace 时会 reset 同 room 全部 surface，并让 daemon 清同 room 全部 surface resume target；非 primary 拒绝时不改变 room、sibling surface 或 durable resume target。裸 `/detach` 保持兼容 surface-level detach，不清 room workspace；当 surface 已 detached 但 room 仍绑定 workspace 时，只返回可执行的 `/workspace detach` 提示。
 
