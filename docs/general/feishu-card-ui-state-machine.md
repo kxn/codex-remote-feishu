@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-15`
-> Summary: detached 私聊配置卡按 bot setting 所有权开放，并对 OpenCode reasoning 保留 ACP capability 门禁。
+> Updated: `2026-08-29`
+> Summary: 补充路径选择器 stale 初始路径会回退到最近存在父目录，不再中断 `/workspace new` 子步骤。
 
 ## 1. 文档定位
 
@@ -126,7 +126,7 @@
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | headless 主链下当前只负责用指定 workspace 重新打开 `/workspace list` 切换卡；legacy selection path 下才继续承担旧分页导航 |
 | `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 headless 主路径实际使用的是四张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` / `worktree` 直接落各自业务页，因此 `target_picker_select_workspace` 是 `/workspace list` 与 `/workspace new worktree` 都会使用的主路径回调，`target_picker_select_session` 则服务 `/workspace list` 的“会话 / 操作”下拉；该下拉现在可能是 `thread:<id>`、`new_thread` 或 `worktree_create`。旧 `target_picker_select_mode` / `target_picker_select_source` 与 mode/source 中间页已经删除，不再是 callback contract。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace、显式改选 session，或在 worktree 卡上切换基准工作区时，都会按当前卡状态重建 picker read model |
 | `target_picker_page` | `feishu-ui-owned` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页动作；payload 携带 `picker_id + field_name + cursor(start-index)`。命中当前 active picker 时继续 inline replace 当前卡，不直接改 route。target page 的 workspace lane 翻页会把 cursor 指向的新 workspace 设为当前工作区并重算 session 候选；session lane 翻页会保留 workspace cursor / 选中工作区，但若原 session 掉出可见页则清空选中并禁用 confirm。worktree 页的 workspace lane 翻页则只更新基准工作区选择，并保留同卡 branch / directory 草稿 |
-| `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡 |
+| `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡。若当前 surface 记住的 workspace 或主卡目录草稿已经被删除，path picker 会从最近存在的父目录打开，root 越界、symlink escape 或权限错误仍 fail closed |
 | `target_picker_cancel` | `feishu-ui-owned` | target picker 的显式退出动作；命中当前 active picker owner flow 时，会把当前卡同步 replace 成 sealed terminal card；普通编辑态是 `已取消`，Git import processing 态是 `已取消导入`，worktree processing 态是 `已取消创建`，并会分别 best-effort 停掉 clone / prepare 或 `git worktree add`；随后清掉 active target picker / owner-card flow |
 | `target_picker_back` | `feishu-ui-owned` | 当前只用于 `/workspace list` 内部选择 `worktree_create` 后进入的 Worktree 子页；点击后清掉内部 `PageOverride` 并回到原 target 页，保留已选 workspace，再按 list 默认规则恢复 `new_thread` 或唯一可用操作。它不是 `page_local_action`，不会返回 `/workspace` 父页，也不会改 route |
 | `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch、准备 `new_thread_ready`、按已检查最终目录执行接入/创建、按主卡 Git 表单 + 已选父目录执行导入，或按 worktree 主卡里的基准工作区 + 分支名 + 可选目录名执行创建，产品语义仍由 orchestrator 决定。当前 `/workspace list` 与 alias `/list` 在工作区已确定后也会暴露 `新建会话`，并把它放在会话候选第一项、默认选中；已有会话仍继续保留在同一列表后面；Git workspace 追加 `从这个工作区创建 Worktree` 操作，busy Git workspace 只能显示这一项，busy 非 Git workspace 不进入 workspace 下拉。确认 `worktree_create` 只进入同一 owner card 的 Worktree 子页，不发 daemon create。`/use`、`/useall`、`show_workspace_threads` 与锁定工作区的恢复 picker 继续保留各自既有 `新建会话` fallback。`/workspace new dir` 现在是显式两阶段：第一次确认只做同卡 `检查目标目录`，检查通过后才允许第二次确认继续，且目录或目录名草稿一旦变化就会使旧检查结果失效；`/workspace new git` 与 `/workspace new worktree` 则继续保持 submit-time validation。三条新建路径都会把同一张 owner card 推进到 processing / succeeded / failed，并在同卡 notice 区收口状态反馈；其中 Git/worktree 这两条依赖 Feishu 文本输入的 inline form 不再靠禁用按钮做前置校验，而是允许提交后由服务端原卡回写阻塞原因。Git import / worktree 长链路 processing 期间仍显式阻断普通输入，只保留 `/status` 与同卡取消 |
@@ -578,7 +578,7 @@ MCP request 卡片当前新增的可视语义：
   - `从目录新建` 检查通过后，主按钮才会切成 `接入并继续` 或 `创建并继续`；目录或新目录名任一变化，旧检查结果会失效并退回 `检查目标目录`
   - `从目录新建` 当前不再在 path picker 阶段隐藏 busy workspace 父目录；busy/known workspace/目标目录已存在/非法目录名这类最终目标路径语义统一后移到 `检查目标目录`
   - `从目录新建` 命中已知 workspace 时，检查结果会明确提示将复用该工作区，并允许第二次确认后进入新会话待命
-  - `target_picker_open_path_picker` 当前会把主卡 inline replace 成 path picker 子步骤；子步骤复用 owner-card 标题，并展示 step tag、单题问题、允许范围与当前位置；path picker confirm/cancel 后不会再走同步 inline restore，而是异步 ack 后把最新 target picker 主卡 patch 回同一张 owner card
+  - `target_picker_open_path_picker` 当前会把主卡 inline replace 成 path picker 子步骤；子步骤复用 owner-card 标题，并展示 step tag、单题问题、允许范围与当前位置；若 stale 初始路径已不存在，会回退到最近存在的父目录打开；path picker confirm/cancel 后不会再走同步 inline restore，而是异步 ack 后把最新 target picker 主卡 patch 回同一张 owner card
   - path picker 当前也不再把全部目录/文件候选直接灌进 `select_static`；目录模式单下拉、文件模式目录/文件双下拉，以及 target-picker owner-subpage 的 compact 目录下拉，都会按 Feishu transport byte budget 动态分页，并确保 footer 仍可见
   - path picker dropdown 翻页统一走 `path_picker_page(picker_id + field_name + cursor)`；`cursor` 是 start-index，不是固定页码，目录 lane 固定项 `.` / `..` 不参与分页计数
   - 目录页翻页只更新当前可见目录候选，并保留当前目录；文件页翻页会主动清空文件选择并禁用 confirm，避免 invisible confirm

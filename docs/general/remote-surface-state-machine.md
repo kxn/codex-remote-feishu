@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-24`
-> Summary: 补充 Feishu 群聊纯 @ 当前机器人时的主机器人快捷切换规则。
+> Updated: `2026-08-29`
+> Summary: 补充 Feishu 群聊纯 @ 主机器人快捷切换，以及 `/workspace new` 路径子步骤对已删除当前目录的回退规则。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1355,14 +1355,14 @@ R5 NewThreadReady
    4. `/workspace new dir`、`/workspace new git` 与 `/workspace new worktree` 是三张独立业务卡：前者直接做目录接入，后两者分别做 Git URL 导入与 Worktree 派生；`/workspace new` 只负责把这三条路径并列展示出来。
    5. headless 主链下的 `show_threads` / `show_all_threads` / `show_scoped_threads` / `show_workspace_threads` / `show_all_workspaces` / `show_recent_workspaces` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` 当前都只负责在 same-context 中重新打开或刷新 `/workspace list` 这张切换卡。
    6. `attach unbound`、`selected_thread_lost`、`thread_claim_lost` 当前也会复用这张切换卡，但会锁定在当前 workspace：工作区下拉隐藏、旧跨 workspace 选择会被驳回并刷新提示。
-   7. `/workspace list` 当前主路径会发出 `target_picker_select_workspace` / `target_picker_select_session` / `target_picker_back`；其中 `target_picker_back` 只服务 list 内部 Worktree 子页返回 target 页。`/workspace new dir` / `git` 会继续使用 `target_picker_open_path_picker` 打开目录子步骤；`/workspace new worktree` 则继续使用 `target_picker_select_workspace` / `target_picker_page` 切换与翻页基准工作区，并在同一张 owner card 内 inline replace 往返。
+   7. `/workspace list` 当前主路径会发出 `target_picker_select_workspace` / `target_picker_select_session` / `target_picker_back`；其中 `target_picker_back` 只服务 list 内部 Worktree 子页返回 target 页。`/workspace new dir` / `git` 会继续使用 `target_picker_open_path_picker` 打开目录子步骤；若初始目录来自已删除的当前 workspace 或主卡草稿，path picker 会回退到最近存在的父目录，不把整个新建流程打断。`/workspace new worktree` 则继续使用 `target_picker_select_workspace` / `target_picker_page` 切换与翻页基准工作区，并在同一张 owner card 内 inline replace 往返。
    8. `target_picker_confirm` 虽然仍是异步产品动作，但四条业务卡都会把 processing / terminal 结果收回同一张 owner card，而不再额外 append 主结果卡。
    9. 若 confirm 时原选择已经失效，当前会刷新一张最新 picker 并返回 `target_picker_selection_changed`，不会 silent fallback 到别的 thread / workspace；锁定当前工作区的恢复卡也遵守同一条规则。
 7. target picker confirm 的产品落点当前分三类：
    1. `/workspace list` 既有会话：复用现有 resolver 顺序 `当前 attached instance 内可见 thread -> free existing visible instance -> reusable managed headless -> create managed headless`。
    2. `/workspace list` 既有会话但需要跨 workspace / 跨实例：仍会先走 detach-like 清理，丢弃 staged/queued draft、清 request / capture / prompt override，再 attach 到新目标。
    3. `/workspace list` 的 `worktree_create` 操作：不会直接创建目录，而是把同一张 owner card 切到 Worktree 子页，保留当前 base workspace。用户填写分支名/目录名并再次确认后，才进入下述 Worktree 创建链路；内部 `target_picker_back` 会回到原 target 页并按 list 默认规则恢复 `new_thread` 或唯一可用操作。
-   4. `/workspace new dir`：不会立即改 route，而是先打开目录 path picker；confirm/cancel 回调会先异步 ack，再把最新主卡 patch 回同一张 owner card。只有主卡确认时才真正进入 `R5` / fresh managed headless `R5`，cancel 则保持当前 route 不变。
+   4. `/workspace new dir`：不会立即改 route，而是先打开目录 path picker；stale 初始路径只影响初始展示位置，会回退到最近存在父目录，root 越界、symlink escape 或权限错误仍 fail closed。confirm/cancel 回调会先异步 ack，再把最新主卡 patch 回同一张 owner card。只有主卡确认时才真正进入 `R5` / fresh managed headless `R5`，cancel 则保持当前 route 不变。
    5. `/workspace new git`：不会立即改 route，而是在同一张主卡上填写仓库地址/目录名、选择父目录，并由 daemon-side `workspace.git_import` 在持锁外执行 `git clone`；confirm 后 surface 进入 `G5 TargetPickerProcessing`，success / failure / cancel 都封回同卡 terminal，其中 success 最终进入 `R5`。
    6. `/workspace new worktree` 与 list 内部 Worktree 子页：不会立即改 route，而是在同一张主卡上填写基准工作区、新分支名与可选目录名，并由 daemon-side `workspace.git_worktree.create` 在持锁外执行 `git worktree add`；confirm 会先 dry-run 检查群 workspace change gate，primary/busy 不满足时同卡回写错误且不创建目录；通过后才进入 `G5 TargetPickerProcessing`。success / failure / cancel 都封回同卡 terminal，其中 success 最终进入 `R5`。如果 worktree 创建完成后当前 surface 立即进入 `new_thread_ready`，此前由非 `RoomNoWorkspace` gate 路径合法保存的 pending text 会在同一 completion path 里重放；若仍等待 headless 连接，则保留 pending text 交给 snapshot runtime 重放。
 8. attached `vscode /use` / `/useall` 当前有两条额外约束：
