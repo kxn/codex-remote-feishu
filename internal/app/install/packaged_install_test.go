@@ -214,6 +214,9 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 	liveBinary := seedBinary(t, filepath.Join(baseDir, "installed-bin", xutil.ExecutableName(runtime.GOOS)), "old-binary")
 	sourceBinary := seedBinary(t, filepath.Join(baseDir, "pkg", xutil.ExecutableName(runtime.GOOS)), "new-binary")
 	versionsRoot := filepath.Join(baseDir, "releases")
+	existingCodexHome := t.TempDir()
+	requestedCodexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", requestedCodexHome)
 	if err := WriteState(statePath, InstallState{
 		InstanceID:        defaultInstanceID,
 		BaseDir:           baseDir,
@@ -224,6 +227,7 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 		CurrentTrack:      ReleaseTrackProduction,
 		CurrentVersion:    "v1.0.0",
 		CurrentBinaryPath: liveBinary,
+		CodexHome:         existingCodexHome,
 		VersionsRoot:      versionsRoot,
 		CurrentSlot:       "v1.0.0",
 		PendingUpgrade: &PendingUpgrade{
@@ -309,6 +313,9 @@ func TestRunPackagedInstallRepairOverwritesLiveBinaryAndClearsUpgradeState(t *te
 	}
 	if updated.CurrentVersion != "v1.2.0-beta.1" {
 		t.Fatalf("CurrentVersion = %q, want new version", updated.CurrentVersion)
+	}
+	if updated.CodexHome != requestedCodexHome {
+		t.Fatalf("CodexHome = %q, want %q", updated.CodexHome, requestedCodexHome)
 	}
 
 	raw, err := os.ReadFile(liveBinary)
