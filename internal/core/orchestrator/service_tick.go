@@ -97,7 +97,9 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		if surface == nil || !surface.Abandoning {
 			continue
 		}
+		instanceID := surface.AttachedInstanceID
 		events = append(events, s.finalizeDetachedSurface(surface)...)
+		events = append(events, s.releaseManagedHeadlessAfterDetach(surface, instanceID)...)
 		events = append(events, eventcontract.Event{
 			Kind:             eventcontract.KindNotice,
 			SurfaceSessionID: surface.SurfaceSessionID,

@@ -942,7 +942,9 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 		if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil {
 			events = append(events, s.abortSurfaceActiveQueueItemForDetach(surface, item)...)
 		}
+		instanceID := surface.AttachedInstanceID
 		events = append(events, s.finalizeDetachedSurface(surface)...)
+		events = append(events, s.releaseManagedHeadlessAfterDetach(surface, instanceID)...)
 		return append(events, notice(surface, "detached", s.detachedText(surface))...)
 	}
 	if s.surfaceNeedsDelayedDetach(surface, inst) {
@@ -967,7 +969,9 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 		}
 		return append(events, notice(surface, "detach_pending", s.detachPendingText(surface))...)
 	}
+	instanceID := surface.AttachedInstanceID
 	events = append(events, s.finalizeDetachedSurface(surface)...)
+	events = append(events, s.releaseManagedHeadlessAfterDetach(surface, instanceID)...)
 	return append(events, notice(surface, "detached", s.detachedText(surface))...)
 }
 
