@@ -2,6 +2,7 @@ package wrapper
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os/exec"
 	"sync/atomic"
@@ -49,7 +50,9 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 	}
 	a.debugf("child started: binary=%s pid=%d cwd=%s", a.config.CodexRealBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
 
-	bootstrappedStdout, err := a.bootstrapHeadlessCodex(childStdin, childStdout, rawLogger, reportProblem)
+	bootstrappedStdout, err := a.runChildBootstrap(ctx, wrapperBootstrapTimeout, childCancel, func() (io.Reader, error) {
+		return a.bootstrapHeadlessCodex(childStdin, childStdout, rawLogger, reportProblem)
+	})
 	if err != nil {
 		childCancel()
 		_ = cmd.Wait()
@@ -71,6 +74,37 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 		waitErr:     waitErr,
 		cancel:      childCancel,
 	}, nil
+}
+
+// runChildBootstrap bounds the synthetic initialize handshake. A child that
+// never answers initialize would otherwise block the launch forever, keeping
+// the session process and its whole child tree resident and accumulating under
+// repeated launches (issue #910). On timeout or parent cancellation the child
+// context is cancelled so the process is killed and its stdout pipe closes,
+// which unblocks the bootstrap goroutine and lets it drain into the buffered
+// channel instead of leaking. The caller still owns reaping via cmd.Wait().
+func (a *App) runChildBootstrap(ctx context.Context, timeout time.Duration, childCancel context.CancelFunc, boot func() (io.Reader, error)) (io.Reader, error) {
+	type bootstrapResult struct {
+		stdout io.Reader
+		err    error
+	}
+	done := make(chan bootstrapResult, 1)
+	go func() {
+		stdout, err := boot()
+		done <- bootstrapResult{stdout, err}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case res := <-done:
+		return res.stdout, res.err
+	case <-ctx.Done():
+		childCancel()
+		return nil, ctx.Err()
+	case <-timer.C:
+		childCancel()
+		return nil, fmt.Errorf("child bootstrap: initialize response not received within %s", timeout)
+	}
 }
 
 func startChildSessionIO(ctx context.Context, session *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, runtime backendRuntime, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, debugf func(string, ...any), rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) {

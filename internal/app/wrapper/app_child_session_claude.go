@@ -3,6 +3,7 @@ package wrapper
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"strings"
 
@@ -31,7 +32,9 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 	}
 	a.debugf("claude child started: binary=%s pid=%d cwd=%s", claudeBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
 
-	bootstrappedStdout, err := a.bootstrapClaude(childStdin, childStdout, rawLogger, reportProblem)
+	bootstrappedStdout, err := a.runChildBootstrap(ctx, wrapperBootstrapTimeout, childCancel, func() (io.Reader, error) {
+		return a.bootstrapClaude(childStdin, childStdout, rawLogger, reportProblem)
+	})
 	if err != nil {
 		childCancel()
 		_ = cmd.Wait()
