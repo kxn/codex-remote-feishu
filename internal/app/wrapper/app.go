@@ -29,6 +29,7 @@ const (
 	steerCommandResponseTimeout = 5 * time.Second
 	wrapperChildStopGrace       = 2 * time.Second
 	wrapperChildWaitTimeout     = 5 * time.Second
+	wrapperBootstrapTimeout     = 15 * time.Second
 )
 
 type shutdownRequest struct {
