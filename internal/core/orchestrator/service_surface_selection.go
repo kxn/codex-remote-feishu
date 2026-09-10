@@ -404,7 +404,7 @@ func threadBelongsToInstanceWorkspace(inst *state.InstanceRecord, thread *state.
 	if inst == nil || thread == nil {
 		return false
 	}
-	return cwdBelongsToInstanceWorkspace(inst, xutil.FirstNonEmpty(threadWorkspaceKeyFromRecord(thread), thread.CWD))
+	return cwdBelongsToInstanceWorkspace(inst, xutil.FirstNonEmpty(thread.CWD, threadWorkspaceKeyFromRecord(thread)))
 }
 
 // threadBelongsToInstanceWorkspaceForTarget judges instance ownership from the

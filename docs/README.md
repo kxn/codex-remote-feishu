@@ -162,6 +162,7 @@
 - [cron-bitable-scheduler-design.md](./implemented/cron-bitable-scheduler-design.md)
 - [feishu-md-preview-design.md](./implemented/feishu-md-preview-design.md)
 - [feishu-request-approval-design.md](./implemented/feishu-request-approval-design.md)
+- [headless-pool-workspace-thread-selection-fix.md](./implemented/headless-pool-workspace-thread-selection-fix.md)
 - [managed-headless-pool-design.md](./implemented/managed-headless-pool-design.md)
 - [feishu-queued-message-applause-shell-command-design.md](./implemented/feishu-queued-message-applause-shell-command-design.md)
 - [new-thread-command-design.md](./implemented/new-thread-command-design.md)

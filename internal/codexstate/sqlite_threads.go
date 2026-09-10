@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -30,8 +31,10 @@ type SQLiteThreadCatalogOptions struct {
 }
 
 type SQLiteThreadCatalog struct {
-	path string
-	logf func(string, ...any)
+	path              string
+	logf              func(string, ...any)
+	hasNameColumnOnce sync.Once
+	hasNameColumn     bool
 }
 
 func NewDefaultSQLiteThreadCatalog(opts SQLiteThreadCatalogOptions) (*SQLiteThreadCatalog, error) {
@@ -71,14 +74,52 @@ func NewSQLiteThreadCatalog(path string, opts SQLiteThreadCatalogOptions) *SQLit
 	}
 }
 
+func (c *SQLiteThreadCatalog) nameColumnAvailable(db *sql.DB) bool {
+	if c == nil || db == nil {
+		return false
+	}
+	c.hasNameColumnOnce.Do(func() {
+		rows, err := db.Query(`PRAGMA table_info(threads)`)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var (
+				cid       int
+				colName   string
+				colType   string
+				notNull   int
+				dfltValue any
+				pk        int
+			)
+			if err := rows.Scan(&cid, &colName, &colType, &notNull, &dfltValue, &pk); err == nil {
+				if strings.EqualFold(colName, "name") {
+					c.hasNameColumn = true
+					break
+				}
+			}
+		}
+	})
+	return c.hasNameColumn
+}
+
+func (c *SQLiteThreadCatalog) titleColumnSelect(db *sql.DB) string {
+	if c.nameColumnAvailable(db) {
+		return "COALESCE(NULLIF(name, ''), title)"
+	}
+	return "title"
+}
+
 func (c *SQLiteThreadCatalog) RecentThreads(limit int) ([]state.ThreadRecord, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 	var threads []state.ThreadRecord
 	err := c.readWithRetry("query recent threads", func(db *sql.DB) error {
+		titleSelect := c.titleColumnSelect(db)
 		rows, err := db.Query(`
-SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message
+SELECT id, `+titleSelect+`, cwd, updated_at, archived, model, reasoning_effort, first_user_message
 FROM threads
 WHERE archived = 0
   AND source IN ('cli', 'vscode')
@@ -178,8 +219,9 @@ func (c *SQLiteThreadCatalog) ThreadByID(threadID string) (*state.ThreadRecord, 
 	}
 	var thread *state.ThreadRecord
 	err := c.readWithRetry("query thread by id", func(db *sql.DB) error {
+		titleSelect := c.titleColumnSelect(db)
 		row := db.QueryRow(`
-SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message
+SELECT id, `+titleSelect+`, cwd, updated_at, archived, model, reasoning_effort, first_user_message
 FROM threads
 WHERE id = ?
   AND archived = 0

@@ -794,7 +794,15 @@ func threadWorkspaceKeyFromRecord(thread *state.ThreadRecord) string {
 	if thread == nil {
 		return ""
 	}
-	return normalizeWorkspaceClaimKey(xutil.FirstNonEmpty(strings.TrimSpace(thread.WorkspaceKey), strings.TrimSpace(thread.CWD)))
+	cwd := normalizeWorkspaceClaimKey(thread.CWD)
+	wk := normalizeWorkspaceClaimKey(thread.WorkspaceKey)
+	if wk != "" && cwd != "" {
+		if wk == cwd || strings.HasPrefix(cwd, wk+"/") {
+			return wk
+		}
+		return cwd
+	}
+	return xutil.FirstNonEmpty(wk, cwd)
 }
 
 func threadWorkspaceKey(view *mergedThreadView) string {

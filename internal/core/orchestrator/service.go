@@ -663,7 +663,17 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			if current == nil {
 				current = &state.ThreadRecord{ThreadID: thread.ThreadID}
 			}
-			current.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, current.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
+			effectiveWorkspaceKey := thread.WorkspaceKey
+			if effectiveWorkspaceKey == "" {
+				if thread.CWD != "" && cwdBelongsToInstanceWorkspace(inst, thread.CWD) {
+					effectiveWorkspaceKey = state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot, thread.CWD)
+				} else if thread.CWD != "" {
+					effectiveWorkspaceKey = state.ResolveWorkspaceKey(thread.CWD)
+				} else {
+					effectiveWorkspaceKey = state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot)
+				}
+			}
+			current.WorkspaceKey = state.ResolveWorkspaceKey(effectiveWorkspaceKey, current.WorkspaceKey)
 			current.TrafficClass = agentproto.TrafficClassPrimary
 			if thread.Name != "" {
 				current.Name = thread.Name
