@@ -162,6 +162,41 @@ func TestRenderLaunchdUserPlistContainsKeyElements(t *testing.T) {
 	}
 }
 
+func TestBootstrapPreservesCodexHomeInLaunchdUserPlist(t *testing.T) {
+	defer withDarwinGOOS(t)()
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+	codexHome := filepath.Join(baseDir, "custom-codex-home")
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatalf("MkdirAll CODEX_HOME: %v", err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("PATH", "/usr/bin:/bin")
+
+	service := NewService()
+	state, err := service.Bootstrap(Options{
+		BaseDir:        baseDir,
+		BinaryPath:     seedBinary(t, filepath.Join(baseDir, "source-bin", "codex-remote"), "binary"),
+		ServiceManager: ServiceManagerLaunchdUser,
+		CurrentVersion: "dev",
+		RelayServerURL: "ws://127.0.0.1:9500/ws/agent",
+		CodexHome:      codexHome,
+	})
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Setenv("CODEX_HOME", "")
+
+	plist, err := renderLaunchdUserPlist(state)
+	if err != nil {
+		t.Fatalf("renderLaunchdUserPlist: %v", err)
+	}
+	want := "<key>CODEX_HOME</key>\n        <string>" + xmlEscape(codexHome) + "</string>"
+	if !strings.Contains(plist, want) {
+		t.Fatalf("launchd plist missing preserved CODEX_HOME %q:\n%s", want, plist)
+	}
+}
+
 func TestRenderLaunchdUserPlistEscapesXMLSpecialChars(t *testing.T) {
 	defer withDarwinGOOS(t)()
 	baseDir := t.TempDir()

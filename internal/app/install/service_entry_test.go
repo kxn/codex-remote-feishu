@@ -168,6 +168,50 @@ func TestRenderSystemdUserUnitEscapesPathsWithoutQuotedAssignments(t *testing.T)
 	}
 }
 
+func TestBootstrapPreservesCodexHomeInSystemdUserUnit(t *testing.T) {
+	originalGOOS := serviceRuntimeGOOS
+	originalShellLookup := systemdShellEnvLookup
+	serviceRuntimeGOOS = "linux"
+	defer func() {
+		serviceRuntimeGOOS = originalGOOS
+		systemdShellEnvLookup = originalShellLookup
+	}()
+
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+	codexHome := filepath.Join(baseDir, "custom-codex-home")
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatalf("MkdirAll CODEX_HOME: %v", err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+	t.Setenv("PATH", "/usr/bin")
+	systemdShellEnvLookup = func(env []string, key string) (string, error) {
+		return "/usr/bin", nil
+	}
+
+	service := NewService()
+	state, err := service.Bootstrap(Options{
+		BaseDir:        baseDir,
+		BinaryPath:     seedBinary(t, filepath.Join(baseDir, "source-bin", "codex-remote"), "binary"),
+		ServiceManager: ServiceManagerSystemdUser,
+		CurrentVersion: "dev",
+		RelayServerURL: "ws://127.0.0.1:9500/ws/agent",
+		CodexHome:      codexHome,
+	})
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Setenv("CODEX_HOME", "")
+
+	unit, err := renderSystemdUserUnit(state)
+	if err != nil {
+		t.Fatalf("renderSystemdUserUnit: %v", err)
+	}
+	if want := "Environment=CODEX_HOME=" + systemdEscapeValue(codexHome); !strings.Contains(unit, want) {
+		t.Fatalf("systemd unit missing preserved CODEX_HOME %q:\n%s", want, unit)
+	}
+}
+
 func TestRenderSystemdUserUnitFallsBackToDefaultPATHWhenEnvironmentEmpty(t *testing.T) {
 	originalGOOS := serviceRuntimeGOOS
 	originalShellLookup := systemdShellEnvLookup

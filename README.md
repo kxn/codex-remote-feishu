@@ -136,7 +136,7 @@ daemon 不会在后台自动弹升级提示；升级只通过这条手动入口�
 - **Codex API Profile**：独立设置 base URL、API key、模型、推理强度等
 - **Claude Profile**：独立设置认证方式、base URL、模型、推理强度等
 
-这些 profile 保存在 codex-remote 自己的 `config.json` 里，不会改写 `~/.codex` 或 `~/.claude` 的原有配置，可以随时切换、并行使用。
+这些 profile 保存在 codex-remote 自己的 `config.json` 里，不会改写 `$CODEX_HOME`（默认 `~/.codex`）或 `~/.claude` 的原有配置，可以随时切换、并行使用。
 
 在飞书里切换：
 

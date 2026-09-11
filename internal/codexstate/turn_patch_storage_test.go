@@ -209,6 +209,22 @@ func TestTurnPatchStorageResolveThreadTargetFallsBackFromSQLiteDrift(t *testing.
 	}
 }
 
+func TestNewDefaultTurnPatchStorageUsesCodexHome(t *testing.T) {
+	codexHome := t.TempDir()
+	t.Setenv("CODEX_HOME", codexHome)
+
+	storage, err := NewDefaultTurnPatchStorage(TurnPatchStorageOptions{Logf: func(string, ...any) {}})
+	if err != nil {
+		t.Fatalf("NewDefaultTurnPatchStorage: %v", err)
+	}
+	if want := filepath.Join(codexHome, defaultCodexSessionsDirName); storage.sessionsRoot != want {
+		t.Fatalf("sessionsRoot = %q, want %q", storage.sessionsRoot, want)
+	}
+	if want := filepath.Join(codexHome, defaultTurnPatchStateDirName, defaultTurnPatchStateSubdir); storage.patchStateDir != want {
+		t.Fatalf("patchStateDir = %q, want %q", storage.patchStateDir, want)
+	}
+}
+
 func newTurnPatchStorageFixture(t *testing.T, lines []map[string]any) (*TurnPatchStorage, string, []byte) {
 	t.Helper()
 	baseDir := t.TempDir()

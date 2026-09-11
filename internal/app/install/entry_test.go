@@ -74,12 +74,45 @@ func TestRunMainBootstrapOnlyPreservesExistingRelayURLWhenFlagOmitted(t *testing
 	}
 }
 
+func TestRunMainBootstrapOnlyPersistsExplicitCodexHome(t *testing.T) {
+	t.Setenv(repoRootEnvVar, t.TempDir())
+	baseDir := t.TempDir()
+	codexHome := filepath.Join(baseDir, "custom-codex-home")
+	if err := os.MkdirAll(codexHome, 0o755); err != nil {
+		t.Fatalf("MkdirAll CODEX_HOME: %v", err)
+	}
+	t.Setenv("CODEX_HOME", codexHome)
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary")
+
+	originalValidator := sourceBinaryValidator
+	sourceBinaryValidator = func(string) error { return nil }
+	defer func() { sourceBinaryValidator = originalValidator }()
+
+	if err := RunMain([]string{
+		"-bootstrap-only",
+		"-base-dir", baseDir,
+		"-binary", binaryPath,
+	}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, "vtest"); err != nil {
+		t.Fatalf("RunMain bootstrap-only: %v", err)
+	}
+
+	state, err := LoadState(defaultInstallStatePath(baseDir))
+	if err != nil {
+		t.Fatalf("LoadState: %v", err)
+	}
+	if state.CodexHome != codexHome {
+		t.Fatalf("CodexHome = %q, want %q", state.CodexHome, codexHome)
+	}
+}
+
 func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t *testing.T) {
 	t.Setenv(repoRootEnvVar, t.TempDir())
+	t.Setenv("CODEX_HOME", "")
 	baseDir := t.TempDir()
 	installBinDir := filepath.Join(baseDir, "installed-bin")
 	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
 	existingBinary := seedBinary(t, filepath.Join(installBinDir, xutil.ExecutableName("linux")), "old-binary")
+	existingCodexHome := filepath.Join(baseDir, "existing-codex-home")
 	if err := WriteState(statePath, InstallState{
 		InstanceID:         defaultInstanceID,
 		BaseDir:            baseDir,
@@ -93,6 +126,7 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 		CurrentSlot:        "v1.4.0-beta.1",
 		VSCodeSettingsPath: filepath.Join(baseDir, "vscode", "settings.json"),
 		BundleEntrypoint:   filepath.Join(baseDir, "bundle", "codex"),
+		CodexHome:          existingCodexHome,
 	}); err != nil {
 		t.Fatalf("WriteState: %v", err)
 	}
@@ -141,6 +175,9 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 	}
 	if updated.BundleEntrypoint != filepath.Join(baseDir, "bundle", "codex") {
 		t.Fatalf("BundleEntrypoint = %q, want preserved value", updated.BundleEntrypoint)
+	}
+	if updated.CodexHome != existingCodexHome {
+		t.Fatalf("CodexHome = %q, want preserved %q", updated.CodexHome, existingCodexHome)
 	}
 }
 
