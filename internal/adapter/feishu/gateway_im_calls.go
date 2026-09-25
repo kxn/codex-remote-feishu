@@ -8,6 +8,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
@@ -179,7 +180,7 @@ func (g *LiveGateway) createMessage(ctx context.Context, receiveIDType, receiveI
 	})
 }
 
-func (g *LiveGateway) replyMessage(ctx context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+func (g *LiveGateway) replyMessage(ctx context.Context, messageID, msgType, content string, replyInThread bool) (*larkim.ReplyMessageResp, error) {
 	return DoSDK(ctx, g.broker, CallSpec{
 		GatewayID: g.config.GatewayID,
 		API:       "im.v1.message.reply",
@@ -196,6 +197,7 @@ func (g *LiveGateway) replyMessage(ctx context.Context, messageID, msgType, cont
 			Body(larkim.NewReplyMessageReqBodyBuilder().
 				MsgType(msgType).
 				Content(content).
+				ReplyInThread(replyInThread).
 				Build()).
 			Build())
 		if err != nil {
@@ -327,6 +329,7 @@ func (g *LiveGateway) recordSurfaceMessage(messageID, surfaceSessionID string) {
 	}
 	g.mu.Lock()
 	g.messages[messageID] = surfaceSessionID
+	g.surfaceReplyAnchors[surfaceSessionID] = messageID
 	g.mu.Unlock()
 }
 
@@ -416,4 +419,56 @@ func joinReceiveTarget(receiveIDType, receiveID string) string {
 		return ""
 	}
 	return receiveIDType + ":" + receiveID
+}
+
+func (g *LiveGateway) surfaceReplyAnchor(surfaceID string) string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.surfaceReplyAnchors[surfaceID]
+}
+
+// sendIMMediaMessage preserves an explicit destination without associating cross-chat
+// output with the source topic's reply anchor.
+func (g *LiveGateway) sendIMMediaMessage(ctx context.Context, surfaceID, receiveIDType, receiveID, msgType, content string) (string, error) {
+	ref, _ := feishuidentity.ParseSurfaceRef(surfaceID)
+	topic := ref.TopicRootID() != ""
+	sameTopic := topic && ref.GatewayID == g.config.GatewayID && receiveIDType == "chat_id" && receiveID == ref.ChatID()
+	messageID := ""
+	if sameTopic {
+		anchor := g.surfaceReplyAnchor(surfaceID)
+		if anchor == "" {
+			return "", fmt.Errorf("send topic media failed: missing source message id")
+		}
+		resp, err := g.replyMessageFn(ctx, anchor, msgType, content, true)
+		if err != nil {
+			return "", err
+		}
+		if resp == nil {
+			return "", fmt.Errorf("send topic media failed: empty reply response")
+		}
+		if !resp.Success() {
+			return "", newAPIError("im.v1.message.reply", resp.ApiResp, resp.CodeError)
+		}
+		if resp.Data != nil {
+			messageID = strings.TrimSpace(xutil.StringValue(resp.Data.MessageId))
+		}
+	} else {
+		resp, err := g.createMessageFn(ctx, receiveIDType, receiveID, msgType, content)
+		if err != nil {
+			return "", err
+		}
+		if resp == nil {
+			return "", fmt.Errorf("send media failed: empty create response")
+		}
+		if !resp.Success() {
+			return "", newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError)
+		}
+		if resp.Data != nil {
+			messageID = strings.TrimSpace(xutil.StringValue(resp.Data.MessageId))
+		}
+	}
+	if !topic || sameTopic {
+		g.recordSurfaceMessage(messageID, surfaceID)
+	}
+	return messageID, nil
 }

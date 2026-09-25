@@ -51,6 +51,24 @@ func (r SurfaceRef) IsChat() bool {
 	return r.valid() && strings.TrimSpace(r.ScopeKind) == ScopeKindChat
 }
 
+// ChatID returns the room identity shared by all topic surfaces in the chat.
+func (r SurfaceRef) ChatID() string {
+	if !r.IsChat() {
+		return ""
+	}
+	chatID, _, _ := strings.Cut(strings.TrimSpace(r.ScopeID), "@")
+	return chatID
+}
+
+// TopicRootID returns the routing key, which may be a root message ID or a thread ID.
+func (r SurfaceRef) TopicRootID() string {
+	if !r.IsChat() {
+		return ""
+	}
+	_, topicID, _ := strings.Cut(strings.TrimSpace(r.ScopeID), "@")
+	return topicID
+}
+
 func (r SurfaceRef) valid() bool {
 	if strings.TrimSpace(r.Platform) != PlatformFeishu {
 		return false
@@ -59,8 +77,11 @@ func (r SurfaceRef) valid() bool {
 		return false
 	}
 	switch strings.TrimSpace(r.ScopeKind) {
-	case ScopeKindUser, ScopeKindChat:
+	case ScopeKindUser:
 		return true
+	case ScopeKindChat:
+		chatID, topicID, hasTopic := strings.Cut(strings.TrimSpace(r.ScopeID), "@")
+		return chatID != "" && (!hasTopic || (strings.TrimSpace(topicID) != "" && !strings.Contains(topicID, "@")))
 	default:
 		return false
 	}

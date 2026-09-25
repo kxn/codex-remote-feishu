@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -596,5 +597,34 @@ func TestRoomWorkspaceDetachClearsSiblingResumeTargetsBeforeRestart(t *testing.T
 		if record.WorkspaceKey != "" {
 			t.Fatalf("restarted room state restored cleared workspace: %#v", restarted.service.FeishuRoomState())
 		}
+	}
+}
+
+func TestTopicSurfaceResumeUsesSharedRoom(t *testing.T) {
+	for _, conflict := range []bool{false, true} {
+		t.Run(fmt.Sprintf("conflict=%v", conflict), func(t *testing.T) {
+			stateDir, workspace := t.TempDir(), t.TempDir()
+			for _, topic := range []string{"om_a", "om_b"} {
+				if conflict && topic == "om_b" {
+					workspace = t.TempDir()
+				}
+				putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+					SurfaceSessionID: "feishu:app-1:chat:oc_room@" + topic, GatewayID: "app-1", ChatID: "oc_room", ProductMode: "normal", Backend: "codex", ResumeThreadID: "thread-" + topic, ResumeThreadCWD: workspace, ResumeWorkspaceKey: workspace, ResumeHeadless: true,
+				})
+			}
+			app := New(":0", ":0", nil, agentproto.ServerIdentity{StartedAt: time.Now().UTC()})
+			app.SetHeadlessRuntime(HeadlessRuntimeConfig{Paths: relayruntime.Paths{StateDir: stateDir}})
+			notice := app.feishuRoomWorkspaceConflictNotice(control.Action{SurfaceSessionID: "feishu:app-1:chat:oc_room@om_a", ChatID: "oc_room"})
+			if conflict {
+				if notice == nil || notice.Code != "room_workspace_recovery_conflict" {
+					t.Fatalf("conflict notice = %#v", notice)
+				}
+			} else {
+				records := app.service.FeishuRoomState()
+				if notice != nil || len(records) != 1 || records[0].ChatID != "oc_room" || records[0].WorkspaceKey != state.ResolveWorkspaceClaimKey(workspace) {
+					t.Fatalf("room records = %#v, notice=%#v", records, notice)
+				}
+			}
+		})
 	}
 }

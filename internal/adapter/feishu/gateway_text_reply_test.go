@@ -17,7 +17,7 @@ func TestApplySendTextRepliesToSourceMessage(t *testing.T) {
 		replyContent   string
 		createCalled   bool
 	)
-	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string, replyInThread bool) (*larkim.ReplyMessageResp, error) {
 		replyMessageID = messageID
 		replyMsgType = msgType
 		replyContent = content
@@ -75,7 +75,7 @@ func TestApplySendTextFallsBackToCreateWhenReplyFails(t *testing.T) {
 		createMsgType string
 		createContent string
 	)
-	gateway.replyMessageFn = func(_ context.Context, _, _, _ string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(_ context.Context, _, _, _ string, _ bool) (*larkim.ReplyMessageResp, error) {
 		replyCalls++
 		return &larkim.ReplyMessageResp{
 			ApiResp: &larkcore.ApiResp{},
@@ -141,7 +141,7 @@ func TestApplySendTextMentionRepliesWithPostPayload(t *testing.T) {
 		replyMsgType   string
 		replyContent   string
 	)
-	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string, replyInThread bool) (*larkim.ReplyMessageResp, error) {
 		replyMessageID = messageID
 		replyMsgType = msgType
 		replyContent = content
@@ -193,7 +193,7 @@ func TestApplySendTextMentionFallsBackToCreateWhenReplyFails(t *testing.T) {
 		createType    string
 		createContent string
 	)
-	gateway.replyMessageFn = func(_ context.Context, _, _, _ string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(_ context.Context, _, _, _ string, _ bool) (*larkim.ReplyMessageResp, error) {
 		replyCalls++
 		return &larkim.ReplyMessageResp{
 			ApiResp: &larkcore.ApiResp{},

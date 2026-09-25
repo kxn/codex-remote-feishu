@@ -22,7 +22,7 @@ func TestApplySendImageRepliesToSourceMessage(t *testing.T) {
 		uploadPath = path
 		return "img-key-1", nil
 	}
-	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string, replyInThread bool) (*larkim.ReplyMessageResp, error) {
 		replyMessageID = messageID
 		replyMsgType = msgType
 		replyContent = content

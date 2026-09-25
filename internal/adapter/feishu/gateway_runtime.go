@@ -16,6 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -168,6 +169,19 @@ func (g *LiveGateway) Apply(ctx context.Context, operations []Operation) error {
 }
 
 func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error {
+	ref, _ := feishuidentity.ParseSurfaceRef(operation.SurfaceSessionID)
+	replyInThread := ref.TopicRootID() != ""
+	if replyInThread && strings.TrimSpace(operation.ReplyToMessageID) == "" && (operation.Kind == OperationSendText || operation.Kind == OperationSendCard || operation.Kind == OperationSendImage) {
+		operation.ReplyToMessageID = g.surfaceReplyAnchor(operation.SurfaceSessionID)
+		if operation.ReplyToMessageID == "" {
+			return fmt.Errorf("send topic reply failed: missing source message id")
+		}
+	}
+	if replyInThread && operation.ReplyToMessageID != "" {
+		if sourceSurface := g.lookupSurfaceMessage(operation.ReplyToMessageID); sourceSurface != "" && sourceSurface != operation.SurfaceSessionID {
+			return fmt.Errorf("send topic reply failed: source message belongs to another surface")
+		}
+	}
 	switch operation.Kind {
 	case OperationSendText:
 		msgType, content, err := sendTextPayload(*operation)
@@ -182,13 +196,19 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			return fmt.Errorf("send text failed: missing receive target")
 		}
 		if strings.TrimSpace(operation.ReplyToMessageID) != "" {
-			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, msgType, content)
+			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, msgType, content, replyInThread)
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
 					operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
+			}
+			if replyInThread {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("send topic reply failed: code=%d msg=%s", replyRespCode(resp), replyRespMsg(resp))
 			}
 			log.Printf(
 				"feishu text reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
@@ -224,13 +244,19 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 			return fmt.Errorf("send card failed: missing receive target")
 		}
 		if strings.TrimSpace(operation.ReplyToMessageID) != "" {
-			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "interactive", string(card))
+			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "interactive", string(card), replyInThread)
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
 					operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
+			}
+			if replyInThread {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("send topic reply failed: code=%d msg=%s", replyRespCode(resp), replyRespMsg(resp))
 			}
 			log.Printf(
 				"feishu reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",
@@ -291,13 +317,19 @@ func (g *LiveGateway) applyOne(ctx context.Context, operation *Operation) error 
 		}
 		body, _ := json.Marshal(map[string]string{"image_key": imageKey})
 		if strings.TrimSpace(operation.ReplyToMessageID) != "" {
-			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "image", string(body))
+			resp, err := g.replyMessageFn(ctx, operation.ReplyToMessageID, "image", string(body), replyInThread)
 			if err == nil && resp != nil && resp.Success() {
 				if resp.Data != nil {
 					operation.MessageID = xutil.StringValue(resp.Data.MessageId)
 					g.recordSurfaceMessage(operation.MessageID, operation.SurfaceSessionID)
 				}
 				return nil
+			}
+			if replyInThread {
+				if err != nil {
+					return err
+				}
+				return fmt.Errorf("send topic reply failed: code=%d msg=%s", replyRespCode(resp), replyRespMsg(resp))
 			}
 			log.Printf(
 				"feishu image reply fallback: surface=%s reply_to=%s err=%v code=%d msg=%s",

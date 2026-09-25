@@ -403,6 +403,9 @@ func HandleInboundMessageEvent(ctx context.Context, env InboundEnv, event *larki
 		if lane != nil && lane.markActionDuplicate(*plan.Action) {
 			return nil
 		}
+		if env.RecordSurfaceMessage != nil {
+			env.RecordSurfaceMessage(plan.Action.MessageID, plan.Action.SurfaceSessionID)
+		}
 		return dispatch(ctx, *plan.Action)
 	}
 	if plan.Queue == nil {
@@ -449,8 +452,10 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 	chatType := xutil.StringValue(message.ChatType)
 	senderUserID := userIDFromMessage(event.Event.Sender)
 	gatewayID := strings.TrimSpace(env.GatewayID)
-	surfaceSessionID := SurfaceIDForInbound(gatewayID, chatID, chatType, senderUserID)
+	topicRootID := inboundTopicRootID(env, message)
+	surfaceSessionID := SurfaceIDForInboundTopic(gatewayID, chatID, chatType, senderUserID, topicRootID)
 	inbound := InboundMetaFromMessageEvent(event)
+
 	if reason := groupMessageMentionGateReason(env, message, senderTypeFromMessageSender(event.Event.Sender)); reason != "" {
 		logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, reason)
 		return PlannedInboundMessage{}, false, nil

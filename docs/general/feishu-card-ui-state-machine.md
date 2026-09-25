@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-29`
-> Summary: 补充路径选择器 stale 初始路径会回退到最近存在父目录，不再中断 `/workspace new` 子步骤。
+> Updated: `2026-09-25`
+> Summary: 群话题卡片按真实群 ID 校验 callback，文字、卡片和图片回复使用话题内发送，失败不回退群主聊天。
 
 ## 1. 文档定位
 
@@ -445,10 +445,12 @@ MCP request 卡片当前新增的可视语义：
 1. 优先用 `open_message_id -> 已记录的 surfaceSessionID`
 2. 如果消息映射找不到，再读取 callback payload 里的 `surface_session_id`
 3. `surface_session_id` 必须是 `feishu:<gatewayID>:user:<scopeID>` 或 `feishu:<gatewayID>:chat:<scopeID>`，并且 `gatewayID` 匹配当前 gateway
-4. `user` scope 还要求 `scopeID == callback operator preferred actor id`；`chat` scope 还要求 `scopeID == callback context open_chat_id`
+4. `user` scope 还要求 `scopeID == callback operator preferred actor id`；`chat` scope 通过 `SurfaceRef.ChatID()` 去除可选 `@topicRootID` 后，要求真实群 ID 与 callback context `open_chat_id` 完全相同；空或重复话题后缀拒绝解析
 5. 如果消息映射和可信 `surface_session_id` 都不存在，gateway 直接 fail closed，不再按 `open_chat_id + operator` 推导一个新 surface
 
 这个顺序是当前 P2P surface 不被拆裂、且 runtime hot rebuild 后旧卡仍能回到原 surface 的前提之一。
+
+群话题 surface 的文字、卡片与图片回复，以及目标仍为同群的工具图片/文件/视频发送，通过原消息 `message.reply` 并设置 `reply_in_thread=true`。未指定回复锚点时使用 gateway 已记录的同 surface 消息 ID（包括命令入站、有效卡片 callback 和成功出站），不把 `thread_id` 当作 `message_id`；缺少已知锚点或回复失败直接返回错误，不使用 `message.create` 发到群主聊天；显式发往其他聊天的工具媒体保持指定目标并创建独立消息，不更新来源话题的消息映射或回复锚点。私聊及旧群级 surface 保持既有回复与 fallback 行为。
 
 ## 5. 当前同步 Replace 与 Append 边界
 

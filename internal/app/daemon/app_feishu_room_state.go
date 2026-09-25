@@ -113,7 +113,7 @@ func (a *App) reconcileFeishuRoomWorkspaceStateLocked(entries map[string]surface
 			continue
 		}
 		workspaceKey := state.ResolveHeadlessResumeWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
-		roomID := state.FeishuRoomKey(ref.ScopeID)
+		roomID := state.FeishuRoomKey(ref.ChatID())
 		if workspaceKey == "" || roomID == "" {
 			continue
 		}
@@ -178,7 +178,7 @@ func (a *App) feishuRoomWorkspaceConflictNotice(action control.Action) *control.
 	if !ok || !ref.IsChat() {
 		return nil
 	}
-	roomID := state.FeishuRoomKey(ref.ScopeID)
+	roomID := state.FeishuRoomKey(ref.ChatID())
 	_, ok = a.feishuRoomState.workspaceConflicts[roomID]
 	if !ok {
 		return nil

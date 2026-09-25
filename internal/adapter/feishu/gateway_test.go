@@ -27,7 +27,7 @@ func TestApplySendCardRepliesToSourceMessageWithV2EnvelopeByDefault(t *testing.T
 		replyContent   string
 		createCalled   bool
 	)
-	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(_ context.Context, messageID, msgType, content string, replyInThread bool) (*larkim.ReplyMessageResp, error) {
 		replyMessageID = messageID
 		replyMsgType = msgType
 		replyContent = content
@@ -92,7 +92,7 @@ func TestApplySendCardFallsBackToCreateWithV2EnvelopeByDefault(t *testing.T) {
 		createMsgType string
 		createContent string
 	)
-	gateway.replyMessageFn = func(_ context.Context, _, _, _ string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(_ context.Context, _, _, _ string, _ bool) (*larkim.ReplyMessageResp, error) {
 		replyCalls++
 		return &larkim.ReplyMessageResp{
 			ApiResp: &larkcore.ApiResp{},
@@ -469,7 +469,7 @@ func TestParseMessageEventCommandPreservesGatewayID(t *testing.T) {
 	if action.GatewayID != "app-2" {
 		t.Fatalf("expected gateway id to be preserved, got %#v", action)
 	}
-	if action.SurfaceSessionID != "feishu:app-2:chat:oc_chat" {
+	if action.SurfaceSessionID != "feishu:app-2:chat:oc_chat@om-msg-1" {
 		t.Fatalf("unexpected surface routing: %#v", action)
 	}
 	if action.ChatID != "oc_chat" || action.ActorUserID != "ou_user" || action.MessageID != "om-msg-1" {

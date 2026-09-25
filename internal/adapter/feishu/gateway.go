@@ -52,17 +52,18 @@ type LiveGateway struct {
 	uploadVideoPathFn  func(context.Context, string) (string, string, error)
 	fetchMessageFn     func(context.Context, string) (*gatewayMessage, error)
 	createMessageFn    func(context.Context, string, string, string, string) (*larkim.CreateMessageResp, error)
-	replyMessageFn     func(context.Context, string, string, string) (*larkim.ReplyMessageResp, error)
+	replyMessageFn     func(context.Context, string, string, string, bool) (*larkim.ReplyMessageResp, error)
 	patchMessageFn     func(context.Context, string, string) (*larkim.PatchMessageResp, error)
 	deleteMessageFn    func(context.Context, string) (*larkim.DeleteMessageResp, error)
 	createReactionFn   func(context.Context, string, string) (*larkim.CreateMessageReactionResp, error)
 	deleteReactionFn   func(context.Context, string, string) (*larkim.DeleteMessageReactionResp, error)
 
-	mu        sync.Mutex
-	stateHook func(GatewayState, error)
-	reactions map[string]string
-	messages  map[string]string
-	botOpenID string
+	mu                  sync.Mutex
+	stateHook           func(GatewayState, error)
+	reactions           map[string]string
+	messages            map[string]string
+	surfaceReplyAnchors map[string]string
+	botOpenID           string
 }
 
 type gatewayMessage struct {
@@ -104,12 +105,13 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 	config.GatewayID = gatewaypkg.NormalizeGatewayID(config.GatewayID)
 	client := NewLarkClientWithOpenBaseURL(config.AppID, config.AppSecret, config.Domain)
 	gateway := &LiveGateway{
-		config:    config,
-		client:    client,
-		broker:    NewFeishuCallBroker(config.GatewayID, client),
-		reactions: map[string]string{},
-		messages:  map[string]string{},
-		botOpenID: strings.TrimSpace(config.BotOpenID),
+		config:              config,
+		client:              client,
+		broker:              NewFeishuCallBroker(config.GatewayID, client),
+		reactions:           map[string]string{},
+		messages:            map[string]string{},
+		surfaceReplyAnchors: map[string]string{},
+		botOpenID:           strings.TrimSpace(config.BotOpenID),
 	}
 	gateway.downloadImageFn = gateway.downloadImage
 	gateway.downloadFileFn = gateway.downloadFile

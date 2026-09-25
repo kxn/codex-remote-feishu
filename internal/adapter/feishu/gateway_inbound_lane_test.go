@@ -180,7 +180,7 @@ func TestQueuedInboundFailureSendsReplyCard(t *testing.T) {
 	}
 
 	replyCalled := make(chan string, 1)
-	gateway.replyMessageFn = func(ctx context.Context, messageID, msgType, content string) (*larkim.ReplyMessageResp, error) {
+	gateway.replyMessageFn = func(ctx context.Context, messageID, msgType, content string, replyInThread bool) (*larkim.ReplyMessageResp, error) {
 		replyCtx = ctx
 		if messageID != "om-img-1" {
 			t.Fatalf("unexpected reply target: %q", messageID)

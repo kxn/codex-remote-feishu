@@ -99,12 +99,16 @@ func (g *LiveGateway) surfaceForCardAction(lookup gatewaypkg.CardActionSurfaceLo
 	if surfaceID := g.lookupSurfaceMessage(lookup.MessageID); surfaceID != "" {
 		return surfaceID
 	}
-	return trustedPayloadSurfaceForCardAction(
+	surfaceID := trustedPayloadSurfaceForCardAction(
 		g.config.GatewayID,
 		lookup.PayloadSurfaceSessionID,
 		lookup.ChatID,
 		lookup.OperatorID,
 	)
+	if surfaceID != "" {
+		g.recordSurfaceMessage(lookup.MessageID, surfaceID)
+	}
+	return surfaceID
 }
 
 func trustedPayloadSurfaceForCardAction(gatewayID, surfaceSessionID, chatID, operatorID string) string {
@@ -118,7 +122,7 @@ func trustedPayloadSurfaceForCardAction(gatewayID, surfaceSessionID, chatID, ope
 			return ""
 		}
 	case ref.IsChat():
-		if ref.ScopeID != strings.TrimSpace(chatID) {
+		if ref.ChatID() != strings.TrimSpace(chatID) {
 			return ""
 		}
 	default:

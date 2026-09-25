@@ -61,8 +61,8 @@ func TestPlanInboundMessageEventQueuesUnmentionedGroupTextForPrimaryGateway(t *t
 		},
 		RecordSurfaceMessage: func(messageID, surfaceSessionID string) {
 			recorded = true
-			if messageID != "om-msg-primary" || surfaceSessionID != "feishu:app-1:chat:oc_chat" {
-				t.Fatalf("record = %s/%s, want om-msg-primary/feishu:app-1:chat:oc_chat", messageID, surfaceSessionID)
+			if messageID != "om-msg-primary" || surfaceSessionID != "feishu:app-1:chat:oc_chat@om-msg-primary" {
+				t.Fatalf("record = %s/%s, want om-msg-primary/feishu:app-1:chat:oc_chat@om-msg-primary", messageID, surfaceSessionID)
 			}
 		},
 	}
@@ -129,7 +129,7 @@ func TestPlanInboundMessageEventTreatsPureCurrentBotMentionAsPrimaryOnCommand(t 
 	if action.Kind != control.ActionPrimaryCommand || action.Text != "/primary on" || action.CommandID != control.FeishuCommandPrimary {
 		t.Fatalf("primary shortcut action = %#v", action)
 	}
-	if action.GatewayID != "app-2" || action.SurfaceSessionID != "feishu:app-2:chat:oc_chat" || action.ChatID != "oc_chat" || action.ActorUserID != "ou_user" || action.MessageID != "om-msg-mention-primary" {
+	if action.GatewayID != "app-2" || action.SurfaceSessionID != "feishu:app-2:chat:oc_chat@om-msg-mention-primary" || action.ChatID != "oc_chat" || action.ActorUserID != "ou_user" || action.MessageID != "om-msg-mention-primary" {
 		t.Fatalf("primary shortcut action routing metadata = %#v", action)
 	}
 }
@@ -241,8 +241,8 @@ func TestPlanInboundMessageEventQueuesUnmentionedGroupImageAndFileForPrimaryGate
 	}
 
 	want := []string{
-		"om-img-primary@feishu:app-1:chat:oc_chat",
-		"om-file-primary@feishu:app-1:chat:oc_chat",
+		"om-img-primary@feishu:app-1:chat:oc_chat@om-img-primary",
+		"om-file-primary@feishu:app-1:chat:oc_chat@om-file-primary",
 	}
 	if strings.Join(recorded, "|") != strings.Join(want, "|") {
 		t.Fatalf("recorded = %#v, want %#v", recorded, want)

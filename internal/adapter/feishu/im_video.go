@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	gatewaypkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/gateway"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 type IMVideoSender interface {
@@ -95,24 +94,12 @@ func (g *LiveGateway) SendIMVideo(ctx context.Context, req IMVideoSendRequest) (
 	}
 
 	body, _ := json.Marshal(map[string]string{"file_key": fileKey})
-	resp, err := g.createMessageFn(ctx, receiveIDType, receiveID, "media", string(body))
+	messageID, err := g.sendIMMediaMessage(ctx, result.SurfaceSessionID, receiveIDType, receiveID, "media", string(body))
 	if err != nil {
 		return result, &IMVideoSendError{
 			Code: IMVideoSendErrorSendFailed,
 			Err:  fmt.Errorf("send video failed: %w", err),
 		}
-	}
-	if !resp.Success() {
-		return result, &IMVideoSendError{
-			Code: IMVideoSendErrorSendFailed,
-			Err:  newAPIError("im.v1.message.create", resp.ApiResp, resp.CodeError),
-		}
-	}
-
-	messageID := ""
-	if resp.Data != nil {
-		messageID = strings.TrimSpace(xutil.StringValue(resp.Data.MessageId))
-		g.recordSurfaceMessage(messageID, result.SurfaceSessionID)
 	}
 	result.ReceiveID = receiveID
 	result.ReceiveIDType = receiveIDType
