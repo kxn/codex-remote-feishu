@@ -22,6 +22,9 @@ Build the current checkout, stage it into the current daemon self target's
 fixed local-upgrade artifact path, and request the built-in local-upgrade
 transaction against that same daemon instance.
 
+Recovery requires healthy admin endpoints and an installed binary matching the
+artifact built by this invocation.
+
 This path is intended for recovery cases where the currently installed daemon
 is too old or too broken to rely on its own `/upgrade dev` or `upgrade local`
 entrypoints. The upgrade request is driven by the freshly built repo binary,
@@ -53,8 +56,11 @@ resolve_build_branch() {
 wait_for_admin_recovery() {
   local admin_base="$1"
   local timeout_sec="$2"
+  local expected_binary_sha256="$3"
+  local current_binary_path="$4"
   local deadline=$(( $(date +%s) + timeout_sec ))
   local bootstrap=""
+  local current_binary_sha256=""
 
   while (( $(date +%s) < deadline )); do
     if curl --noproxy '*' -fsS "${admin_base%/}/healthz" >/dev/null 2>&1; then
@@ -65,7 +71,10 @@ wait_for_admin_recovery() {
       fi
       if curl --noproxy '*' -fsS "${admin_base%/}/api/admin/runtime-status" >/dev/null 2>&1 && \
          curl --noproxy '*' -fsS "${admin_base%/}/v1/status" >/dev/null 2>&1; then
-        return 0
+        current_binary_sha256="$(shasum -a 256 "${current_binary_path}" 2>/dev/null | awk '{print $1}')"
+        if [[ "${current_binary_sha256}" == "${expected_binary_sha256}" ]]; then
+          return 0
+        fi
       fi
     fi
     sleep 1
@@ -162,6 +171,7 @@ CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
   bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh"
 bash "${ROOT_DIR}/scripts/shim/prepare-shim-embed.sh"
 "${GO_BIN}" build -ldflags "-X main.branch=${BUILD_BRANCH}" -o "${BUILD_OUTPUT}" "${ROOT_DIR}/cmd/codex-remote"
+BUILD_SHA256="$(shasum -a 256 "${BUILD_OUTPUT}" | awk '{print $1}')"
 
 printf '[5/6] stage local artifact %s\n' "${CODEX_REMOTE_SELF_TARGET_LOCAL_UPGRADE_ARTIFACT_PATH}"
 mkdir -p "$(dirname "${CODEX_REMOTE_SELF_TARGET_LOCAL_UPGRADE_ARTIFACT_PATH}")"
@@ -182,7 +192,7 @@ if [[ "${NO_WAIT}" == "1" ]]; then
 fi
 
 printf 'waiting up to %ss for current daemon self target to recover via %s\n' "${WAIT_TIMEOUT_SEC}" "${CODEX_REMOTE_SELF_TARGET_ADMIN_URL}"
-if wait_for_admin_recovery "${CODEX_REMOTE_SELF_TARGET_ADMIN_URL}" "${WAIT_TIMEOUT_SEC}"; then
+if wait_for_admin_recovery "${CODEX_REMOTE_SELF_TARGET_ADMIN_URL}" "${WAIT_TIMEOUT_SEC}" "${BUILD_SHA256}" "${CODEX_REMOTE_SELF_TARGET_CURRENT_BINARY_PATH}"; then
   printf 'self upgrade recovered successfully\n'
   exit 0
 fi

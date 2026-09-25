@@ -29,7 +29,7 @@ func TestTargetPickerSessionOptionsIncludesThreadsWithCrossInstancePollutedWorks
 				ThreadID:     "thread-svm",
 				Name:         "svmnew0910",
 				CWD:          "/data/repo/svmpy",
-				WorkspaceKey: "/home/qagent/.local/state/codex-remote/headless-pool", // Cross-instance polluted WorkspaceKey
+				WorkspaceKey: "/home/demo/.local/state/codex-remote/headless-pool", // Cross-instance polluted WorkspaceKey
 				Loaded:       true,
 				LastUsedAt:   now,
 			},
@@ -79,8 +79,8 @@ func TestEventThreadsSnapshotDoesNotPolluteThreadWorkspaceKeyFromUnrelatedInstan
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-headless-pool",
 		DisplayName:   "headless-pool",
-		WorkspaceRoot: "/home/qagent/.local/state/codex-remote/headless-pool",
-		WorkspaceKey:  "/home/qagent/.local/state/codex-remote/headless-pool",
+		WorkspaceRoot: "/home/demo/.local/state/codex-remote/headless-pool",
+		WorkspaceKey:  "/home/demo/.local/state/codex-remote/headless-pool",
 		ShortName:     "headless-pool",
 		Source:        "headless",
 		Managed:       true,
@@ -108,7 +108,7 @@ func TestEventThreadsSnapshotDoesNotPolluteThreadWorkspaceKeyFromUnrelatedInstan
 	}
 
 	// The thread's WorkspaceKey should NOT be overwritten with inst.WorkspaceKey
-	if testutil.SamePath(thread.WorkspaceKey, "/home/qagent/.local/state/codex-remote/headless-pool") {
+	if testutil.SamePath(thread.WorkspaceKey, "/home/demo/.local/state/codex-remote/headless-pool") {
 		t.Fatalf("expected thread WorkspaceKey not to be polluted by headless-pool instance, got %q", thread.WorkspaceKey)
 	}
 	if !testutil.SamePath(thread.WorkspaceKey, "/data/repo/svmpy") {
