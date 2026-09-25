@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-29`
-> Summary: 补充路径选择器 stale 初始路径会回退到最近存在父目录，不再中断 `/workspace new` 子步骤。
+> Updated: `2026-09-25`
+> Summary: 补充最终回复的本轮模型与思考强度展示，运行证据在 turn 开始时绑定，未知值保持省略。
 
 ## 1. 文档定位
 
@@ -727,6 +727,8 @@ MCP request 卡片当前新增的可视语义：
   - 对没有用户可展示文本或图片结果的 `dynamic_tool_call`，当前实现保持静默，不再额外发“空结果”notice
   - 可见性当前分两层：`file_change` / `mcp_tool_call` / `context_compaction` 在 normal / verbose / chatty 可见，quiet 静默；`exec_command` / `web_search` / `dynamic_tool_call` 与 exploration 在 verbose / chatty 可见；reasoning 按上述四档独立投影。normal 继续保留 plan、final reply，以及会影响当前状态的共享过程项
   - 一旦首个非空 assistant 正文 delta 到达，orchestrator 就终结旧进度卡生命周期；文本即使尚未 flush 成可见块，后续工具也不会再 patch 文本之前的旧卡
+
+最终回复页脚的模型与思考强度来自本轮首次 `turn/started` 的运行证据（优先 `CodexEffectiveThread`，否则事件显式字段），在 remote turn binding 中冻结；translator 发出或观察到的 turn/start、thread/resume 若显式改变模型或思考强度，会先清除旧缓存的相应证据（换模型同时清除旧思考强度），等待新的服务端设置观测，绝不使用请求值充当确认值；未改变的已观测字段保持可用。不读取后续 thread 设置、请求 override 或全局默认。该轮收到 `ModelReroute.ToModel` 时展示目标模型并省略未确认的思考强度。模型未知时不显示模型行；没有 CWD 或不在 Git 仓库中仍可显示已确认的模型。已有工作区状态、文件列表和用量汇总继续保留，模型展示不增加 callback 或改变卡片生命周期。
 
 ### 5.4 当前保留的独立例外
 

@@ -42,6 +42,7 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 			}
 			applyCodexResumePolicyToThreadParams(params, command.CodexResume)
 			t.recordCodexPolicyForThread(threadID, command.CodexResume)
+			t.invalidateChangedModelEvidence(threadID, params)
 			payload := map[string]any{
 				"id":     requestID,
 				"method": "thread/resume",
@@ -397,6 +398,7 @@ func (t *Translator) translatePromptSendResumeOrDirect(command agentproto.Comman
 		}
 		applyCodexResumePolicyToThreadParams(params, command.CodexResume)
 		t.recordCodexPolicyForThread(command.Target.ThreadID, command.CodexResume)
+		t.invalidateChangedModelEvidence(command.Target.ThreadID, params)
 		payload := map[string]any{
 			"id":     requestID,
 			"method": "thread/resume",
@@ -519,6 +521,7 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	if err != nil {
 		return nil, "", err
 	}
+	t.invalidateChangedModelEvidence(threadID, template)
 	return append(bytes, '\n'), requestID, nil
 }
 

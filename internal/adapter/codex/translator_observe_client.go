@@ -41,6 +41,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		}}}, nil
 	case "thread/resume":
 		threadID, _ := params["threadId"].(string)
+		t.invalidateChangedModelEvidence(threadID, params)
 		cwd, _ := params["cwd"].(string)
 		t.currentThreadID = threadID
 		if cwd != "" {
@@ -64,6 +65,7 @@ func (t *Translator) ObserveClient(raw []byte) (Result, error) {
 		return Result{Events: configObservedEvents("", xutil.LookupStringFromAny(params["cwd"]), params, true)}, nil
 	case "turn/start":
 		threadID, _ := params["threadId"].(string)
+		t.invalidateChangedModelEvidence(threadID, params)
 		cwd, _ := params["cwd"].(string)
 		if isInternalLocalTurnStart(params) {
 			if requestID, ok := message["id"]; ok {

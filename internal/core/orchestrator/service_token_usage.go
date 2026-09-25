@@ -66,8 +66,15 @@ func finalTurnSummaryForBinding(now time.Time, binding *remoteTurnBinding, threa
 		return nil
 	}
 	summary := &control.FinalTurnSummary{
-		Elapsed:   elapsed,
-		ThreadCWD: strings.TrimSpace(bindingThreadCWD(binding)),
+		Elapsed:         elapsed,
+		ThreadCWD:       strings.TrimSpace(bindingThreadCWD(binding)),
+		Model:           strings.TrimSpace(binding.Model),
+		ReasoningEffort: strings.TrimSpace(binding.ReasoningEffort),
+	}
+	if reroute := binding.ModelReroute; reroute != nil && strings.TrimSpace(reroute.ToModel) != "" {
+		summary.Model = strings.TrimSpace(reroute.ToModel)
+		// A reroute confirms the model, but carries no reasoning-effort evidence.
+		summary.ReasoningEffort = ""
 	}
 	if thread != nil && thread.TokenUsage != nil {
 		summary.ThreadUsage = finalTurnUsageFromBreakdown(thread.TokenUsage.Total)

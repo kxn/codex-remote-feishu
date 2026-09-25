@@ -24,23 +24,24 @@ func (p *Projector) formatFinalWorktreeSummaryLine(summary *control.FinalTurnSum
 	if summary == nil || summary.Elapsed <= 0 {
 		return ""
 	}
+	modelLine := formatFinalModelSummaryLine(summary)
 	cwd := strings.TrimSpace(summary.ThreadCWD)
 	if cwd == "" || p == nil || p.readGitWorktree == nil {
-		return ""
+		return modelLine
 	}
 	worktree := p.readGitWorktree(cwd)
 	if worktree == nil {
-		return ""
+		return modelLine
 	}
 	if !worktree.Dirty {
-		return "**工作区** " + texttags.FormatNeutralTextTag("干净")
+		return strings.TrimSpace(modelLine + "  **工作区** " + texttags.FormatNeutralTextTag("干净"))
 	}
 	labels := displaypath.FileLabels(worktree.Files)
 	limit := len(worktree.Files)
 	if limit > maxEmbeddedWorktreePaths {
 		limit = maxEmbeddedWorktreePaths
 	}
-	parts := []string{"**工作区**", texttags.FormatNeutralTextTag("有改动")}
+	parts := []string{modelLine, "**工作区**", texttags.FormatNeutralTextTag("有改动")}
 	if worktree.ModifiedCount > 0 {
 		parts = append(parts, texttags.FormatNeutralTextTag(fmt.Sprintf("%d修改", worktree.ModifiedCount)))
 	}
@@ -49,6 +50,17 @@ func (p *Projector) formatFinalWorktreeSummaryLine(summary *control.FinalTurnSum
 	}
 	for index := 0; index < limit; index++ {
 		parts = append(parts, texttags.FormatNeutralTextTag(fileChangeDisplayLabel(worktree.Files[index], labels)))
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
+}
+
+func formatFinalModelSummaryLine(summary *control.FinalTurnSummary) string {
+	if summary == nil || strings.TrimSpace(summary.Model) == "" {
+		return ""
+	}
+	parts := []string{"**模型**", texttags.FormatNeutralTextTag(strings.TrimSpace(summary.Model))}
+	if effort := strings.TrimSpace(summary.ReasoningEffort); effort != "" {
+		parts = append(parts, texttags.FormatNeutralTextTag(effort))
 	}
 	return strings.Join(parts, " ")
 }

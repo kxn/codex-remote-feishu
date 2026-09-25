@@ -186,6 +186,24 @@ func (t *Translator) mergeObservedThread(threadID, providerID, model, reasoning 
 	t.observedThreads[threadID] = observed
 }
 
+// A request can invalidate old observations, but cannot confirm its own values.
+func (t *Translator) invalidateChangedModelEvidence(threadID string, params map[string]any) {
+	observed, ok := t.observedThreads[strings.TrimSpace(threadID)]
+	if !ok {
+		return
+	}
+	model, effort, _, _ := extractObservedConfig(params)
+	if model != "" && model != observed.Model {
+		observed.Model = ""
+		// A different model may resolve a different default reasoning effort.
+		observed.ReasoningEffort = ""
+	}
+	if effort != "" && effort != observed.ReasoningEffort {
+		observed.ReasoningEffort = ""
+	}
+	t.observedThreads[strings.TrimSpace(threadID)] = observed
+}
+
 func (t *Translator) codexEffectiveThreadFromObserved(threadID, turnID string, policy *agentproto.CodexResumePolicy, params map[string]any) (*agentproto.CodexEffectiveThreadContract, *agentproto.ErrorInfo) {
 	policy = agentproto.NormalizeCodexResumePolicy(policy)
 	if policy == nil {

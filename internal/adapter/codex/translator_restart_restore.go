@@ -34,6 +34,7 @@ func (t *Translator) BuildChildRestartRestoreFrame(commandID string) ([]byte, st
 		delete(t.pendingChildRestartRestore, requestID)
 		return nil, "", false, err
 	}
+	t.invalidateChangedModelEvidence(threadID, params)
 	return append(bytes, '\n'), requestID, true, nil
 }
 

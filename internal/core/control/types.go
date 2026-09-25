@@ -561,6 +561,8 @@ type FinalTurnUsage struct {
 }
 
 type FinalTurnSummary struct {
+	Model                string
+	ReasoningEffort      string
 	Elapsed              time.Duration
 	ThreadCWD            string
 	Usage                *FinalTurnUsage

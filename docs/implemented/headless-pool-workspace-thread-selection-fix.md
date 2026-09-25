@@ -7,9 +7,9 @@
 ## 1. 背景与问题现象
 
 在多工作区使用飞书管理远程 Codex 会话时，出现以下现象：
-1. **工作区内新会话在列表中不显示**：用户在特定物理工作区（如 `/home/qagent/program/svmpy`）中新开或重命名的会话，在飞书端发送 `/use` 或 `/list` 选择该工作区时，会话候选列表完全不包含该会话，甚至显示为无可用会话。
+1. **工作区内新会话在列表中不显示**：用户在特定物理工作区（如 `/home/demo/program/svmpy`）中新开或重命名的会话，在飞书端发送 `/use` 或 `/list` 选择该工作区时，会话候选列表完全不包含该会话，甚至显示为无可用会话。
 2. **会话名称未识别自定义重命名**：会话在终端 CLI 或 VS Code 中使用 `/rename` 重命名为自定义名称（如 `svmnew0910`）后，飞书端卡片顶部的标题与候选条目依然展示为创建会话时的首条输入长摘要或历史旧名称（如 `svmpy · svmpy_design_20260909`），自定义重命名完全失效。
-3. **工作区路径展示偏离**：飞书表面展示的会话工作区路径偶发变为系统内部状态目录 `/home/qagent/.local/state/codex-remote`。
+3. **工作区路径展示偏离**：飞书表面展示的会话工作区路径偶发变为系统内部状态目录 `/home/demo/.local/state/codex-remote`。
 
 ---
 
@@ -20,7 +20,7 @@
 ### 2.1 Headless Pool 预热机制与会话工作区标记污染
 
 - **旧架构（按需随起）**：
-  历史版本中，headless 实例在用户发起请求时按需直接在目标物理目录（如 `/home/qagent/program/svmpy`）下冷启动。启动时实例的 `inst.WorkspaceRoot` 与该目录天然一致，内部会话继承该实例路径也不会发生错位。
+  历史版本中，headless 实例在用户发起请求时按需直接在目标物理目录（如 `/home/demo/program/svmpy`）下冷启动。启动时实例的 `inst.WorkspaceRoot` 与该目录天然一致，内部会话继承该实例路径也不会发生错位。
 - **新架构（Managed Headless Pool 预热）**：
   最新版本引入预热池以加速响应。预热实例为了提前通用待命，启动时的默认工作目录为状态目录 `~/.local/state/codex-remote`。
 - **污染链路**：
@@ -31,7 +31,7 @@
      current.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, current.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
      ```
      由于 `thread.WorkspaceKey` 为空，所有会话（包括 `svmpy` 会话）全部被无差别盖戳赋予了预热实例的当前目录：`~/.local/state/codex-remote`。
-  4. 当该预热实例后续被飞书表面借用绑定到目标工作区（如 `/home/qagent/program/svmpy`）时，实例本身属性已切换，但内部缓存的 50 个会话身上的 `WorkspaceKey` 依然残留为 `~/.local/state/codex-remote`。
+  4. 当该预热实例后续被飞书表面借用绑定到目标工作区（如 `/home/demo/program/svmpy`）时，实例本身属性已切换，但内部缓存的 50 个会话身上的 `WorkspaceKey` 依然残留为 `~/.local/state/codex-remote`。
   5. 飞书在构建 `/use` 与 `/list` 候选会话列表时，执行 `threadBelongsToInstanceWorkspace`：
      ```go
      // 原实现：

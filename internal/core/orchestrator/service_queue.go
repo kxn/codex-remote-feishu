@@ -487,6 +487,13 @@ func (s *Service) markRemoteTurnRunning(instanceID string, event agentproto.Even
 	s.progress.captureRemoteTurnStartTotalUsage(instanceID, binding, queuedItemExecutionThreadID(item))
 	if binding.StartedAt.IsZero() {
 		binding.StartedAt = s.now().UTC()
+		// Keep this turn's runtime evidence independent of later settings changes.
+		binding.Model = strings.TrimSpace(event.Model)
+		binding.ReasoningEffort = strings.TrimSpace(event.ReasoningEffort)
+		if effective := event.CodexEffectiveThread; effective != nil {
+			binding.Model = strings.TrimSpace(effective.Model)
+			binding.ReasoningEffort = strings.TrimSpace(effective.ReasoningEffort)
+		}
 	}
 	item.Status = state.QueueItemRunning
 	if room := s.ensureFeishuRoomContextForSurface(surface); room != nil {
