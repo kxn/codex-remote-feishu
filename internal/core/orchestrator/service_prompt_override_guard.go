@@ -18,6 +18,55 @@ type promptOverrideGuardResult struct {
 	SupportedEfforts []string
 }
 
+func validCodexMessagePreset(value string) bool {
+	switch value {
+	case "luna", "terra", "sol", "astra":
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) codexMessagePresetDispatchGuard(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord) (promptOverrideGuardResult, string, bool) {
+	if item == nil || !validCodexMessagePreset(item.CodexMessagePreset) {
+		return promptOverrideGuardResult{}, "", false
+	}
+	inst := s.root.Instances[surface.AttachedInstanceID]
+	dynamic, _ := s.codexMessagePresetProfileMode(surface, inst)
+	_, guard := s.sanitizePromptOverridesForDispatch(surface, queuedItemPromptDispatchPlan(item), item.FrozenOverride)
+	if !dynamic {
+		if guard.DroppedModel || guard.DroppedReasoning {
+			return guard, "", true
+		}
+		return guard, "当前运行目标已不再是动态 GPT Codex Profile，未发送。", true
+	}
+	preset := codexMessagePreset{
+		Key:             item.CodexMessagePreset,
+		Model:           strings.TrimSpace(item.FrozenOverride.Model),
+		ReasoningEffort: normalizeModelReasoningEffort(item.FrozenOverride.ReasoningEffort),
+	}
+	if problem := codexMessagePresetCatalogProblem(inst, preset); problem != "" {
+		return guard, problem, true
+	}
+	return guard, "", guard.DroppedModel || guard.DroppedReasoning
+}
+
+func codexMessagePresetDispatchRejectedEvent(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, guard promptOverrideGuardResult, problem string) eventcontract.Event {
+	text := "本条消息冻结的单次模型配置与当前运行配置不再兼容，未发送。"
+	if strings.TrimSpace(problem) != "" {
+		text = strings.TrimSpace(problem)
+	} else if guard.DroppedModel {
+		text = "本条消息冻结的单次模型 " + strings.TrimSpace(guard.Model) + " 与当前固定模型 " + strings.TrimSpace(guard.FixedModel) + " 冲突，未发送。"
+	} else if guard.DroppedReasoning {
+		text = "本条消息冻结的单次模型 " + strings.TrimSpace(guard.Model) + " 不支持推理强度 " + strings.TrimSpace(guard.ReasoningEffort) + "，未发送。"
+	}
+	return surfaceEventFromPayload(
+		surface,
+		eventcontract.NoticePayload{Notice: control.Notice{Code: "codex_message_preset_dispatch_rejected", Text: text}},
+		eventcontract.EventMeta{SourceMessageID: item.SourceMessageID, SourceMessagePreview: item.SourceMessagePreview},
+	)
+}
+
 func (s *Service) sanitizePromptOverridesForDispatch(surface *state.SurfaceConsoleRecord, dispatchPlan agentproto.PromptDispatchPlan, override state.ModelConfigRecord) (state.ModelConfigRecord, promptOverrideGuardResult) {
 	override = compactPromptOverride(override)
 	if surface == nil {

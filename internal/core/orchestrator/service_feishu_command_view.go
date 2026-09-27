@@ -51,7 +51,7 @@ func (s *Service) buildConfigCommandViewState(
 
 	var summary control.PromptRouteSummary
 	if flow.UsesPromptSummary() {
-		summary = s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{})
+		summary = s.projectCodexConversationPromptSummary(surface, s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{}))
 	}
 
 	view.Config.CurrentValue = s.resolveConfigFlowValue(ctx, surface, summary, flow.CurrentValueKey)
@@ -104,7 +104,42 @@ func (s *Service) buildConfigCommandViewState(
 			}
 		}
 	}
+	if suspended := s.codexTopicOverrideSuspendedText(surface, flow.CommandID); suspended != "" && view.Config.StatusKind != "error" {
+		view.Config.StatusKind = "info"
+		if strings.TrimSpace(view.Config.StatusText) == "" {
+			view.Config.StatusText = suspended
+		} else {
+			view.Config.StatusText = strings.TrimSpace(view.Config.StatusText) + "\n" + suspended
+		}
+	}
 	return view
+}
+
+func (s *Service) codexTopicOverrideSuspendedText(surface *state.SurfaceConsoleRecord, commandID string) string {
+	if surface == nil || s.surfaceBackend(surface) != agentproto.BackendCodex {
+		return ""
+	}
+	profile, ok := s.surfaceCodexProfileSummary(surface)
+	if !ok {
+		return ""
+	}
+	if _, fixed := fixedCodexAPIProfileModel(profile); !fixed {
+		return ""
+	}
+	topic := state.NormalizeCodexPromptOverride(surface.CodexPromptOverride)
+	switch strings.TrimSpace(commandID) {
+	case control.FeishuCommandModel:
+		if topic.Model == "" && topic.ReasoningEffort == "" {
+			return ""
+		}
+	case control.FeishuCommandReasoning:
+		if topic.ReasoningEffort == "" {
+			return ""
+		}
+	default:
+		return ""
+	}
+	return "当前固定 Codex Profile 下，话题覆盖已暂停；切回动态 Profile 后会重新生效。"
 }
 
 func resolveConfigFlowValueSource(summary control.PromptRouteSummary, key control.FeishuConfigFlowValueKey) string {

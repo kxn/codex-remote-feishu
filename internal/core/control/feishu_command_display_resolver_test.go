@@ -192,38 +192,40 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 	}
 }
 
-func TestGroupCatalogContextHidesBotCapabilitySettings(t *testing.T) {
+func TestGroupCodexCatalogContextKeepsConversationSettings(t *testing.T) {
 	group := ResolveFeishuCommandDisplayProfileForContext(CatalogContext{
-		ProductMode:                   "normal",
-		BotCapabilitySettingsReadOnly: true,
+		Backend:                           agentproto.BackendCodex,
+		ProductMode:                       "normal",
+		BotCapabilitySettingsReadOnly:     true,
+		CodexConversationSettingsWritable: true,
 	})
 	for _, familyID := range []string{
 		FeishuCommandMode,
 		FeishuCommandCodexProfile,
 		FeishuCommandClaudeProfile,
 		FeishuCommandOpenCodeProfile,
-		FeishuCommandModel,
-		FeishuCommandReasoning,
 	} {
 		if group.IncludesFamily(familyID) {
 			t.Fatalf("group catalog should hide bot capability family %q", familyID)
 		}
 	}
-	for _, familyID := range []string{FeishuCommandAccess, FeishuCommandPlan, FeishuCommandAutoWhip, FeishuCommandAutoContinue, FeishuCommandVerbose} {
+	for _, familyID := range []string{FeishuCommandModel, FeishuCommandReasoning, FeishuCommandAccess, FeishuCommandPlan, FeishuCommandAutoWhip, FeishuCommandAutoContinue, FeishuCommandVerbose} {
 		if !group.IncludesFamily(familyID) {
 			t.Fatalf("group catalog should keep context family %q", familyID)
 		}
 	}
 	page := BuildFeishuCommandMenuGroupPageViewForContext(FeishuCommandGroupSendSettings, CatalogContext{
-		ProductMode:                   "normal",
-		BotCapabilitySettingsReadOnly: true,
+		Backend:                           agentproto.BackendCodex,
+		ProductMode:                       "normal",
+		BotCapabilitySettingsReadOnly:     true,
+		CodexConversationSettingsWritable: true,
 	})
-	for _, command := range []string{"/mode", "/codexprofile", "/opencodeprofile", "/model", "/reasoning"} {
+	for _, command := range []string{"/mode", "/codexprofile", "/opencodeprofile"} {
 		if catalogContainsCommand(page, command) {
 			t.Fatalf("group send settings menu should hide %q: %#v", command, page.Sections)
 		}
 	}
-	for _, command := range []string{"/access", "/plan", "/verbose"} {
+	for _, command := range []string{"/model", "/reasoning", "/access", "/plan", "/verbose"} {
 		if !catalogContainsCommand(page, command) {
 			t.Fatalf("group send settings menu should keep %q: %#v", command, page.Sections)
 		}

@@ -529,3 +529,69 @@ func TestGoalInterlockReconcileClearsStaleCommandIDs(t *testing.T) {
 		t.Fatal("restored stale pause command id must be removed on resend")
 	}
 }
+
+func TestVerifierRejectedPresetResumesGoal(t *testing.T) {
+	svc, surfaceID, instanceID := goalInterlockTestSetup(t)
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surfaceID,
+		ChatID:           "chat-1",
+		ActorUserID:      "user-1",
+		MessageID:        "om-1",
+		Text:             "[sol] 普通消息",
+	})
+	pause := findAgentCommand(events, agentproto.CommandThreadGoalSet)
+	if pause == nil {
+		t.Fatal("expected pause command")
+	}
+
+	resultEvents := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadGoalCommandResult,
+		CommandID: pause.CommandID,
+		ThreadID:  "thread-1",
+		ThreadGoal: &agentproto.ThreadGoalUpdate{
+			ThreadID:  "thread-1",
+			Status:    "paused",
+			CreatedAt: 1710000000123,
+			UpdatedAt: 1710000000999,
+		},
+	})
+	probe := findAgentCommand(resultEvents, agentproto.CommandThreadRead)
+	if probe == nil {
+		t.Fatalf("expected thread/read quiescence probe, got %#v", resultEvents)
+	}
+	lease := svc.goalInterlockLease(instanceID, "thread-1")
+	if lease == nil || lease.Phase != GoalInterlockQuiescing {
+		t.Fatalf("expected quiescing lease, got %#v", lease)
+	}
+
+	svc.root.Instances[instanceID].ModelCatalog = &agentproto.ModelCatalogSnapshot{}
+	drainEvents := svc.ApplyAgentEvent(instanceID, agentproto.Event{
+		Kind:      agentproto.EventThreadRuntimeStatusUpdated,
+		CommandID: probe.CommandID,
+		ThreadID:  "thread-1",
+		RuntimeStatus: &agentproto.ThreadRuntimeStatus{
+			Type: agentproto.ThreadRuntimeStatusTypeIdle,
+		},
+	})
+	if findAgentCommand(drainEvents, agentproto.CommandPromptSend) != nil {
+		t.Fatal("rejected preset still dispatched")
+	}
+	surface := svc.root.Surfaces[surfaceID]
+	if len(surface.QueuedQueueItemIDs) != 0 || surface.ActiveQueueItemID != "" {
+		t.Fatalf("queue not drained: %#v", surface)
+	}
+	get := findAgentCommand(drainEvents, agentproto.CommandThreadGoalGet)
+	if get == nil {
+		t.Fatalf("all queued work rejected, Goal has no resume flow: lease=%#v events=%#v", svc.goalInterlockLease(instanceID, "thread-1"), drainEvents)
+	}
+	resumed := svc.ApplyAgentEvent(instanceID, agentproto.Event{Kind: agentproto.EventThreadGoalCommandResult, CommandID: get.CommandID, ThreadID: "thread-1", ThreadGoal: &agentproto.ThreadGoalUpdate{ThreadID: "thread-1", Objective: "ship it", Status: "paused", CreatedAt: 1710000000123}})
+	resume := findAgentCommand(resumed, agentproto.CommandThreadGoalSet)
+	if resume == nil || resume.Goal.Status != "active" {
+		t.Fatalf("matching fingerprint did not resume Goal: %#v", resumed)
+	}
+	svc.ApplyAgentEvent(instanceID, agentproto.Event{Kind: agentproto.EventThreadGoalCommandResult, CommandID: resume.CommandID, ThreadID: "thread-1", ThreadGoal: &agentproto.ThreadGoalUpdate{ThreadID: "thread-1", Objective: "ship it", Status: "active", CreatedAt: 1710000000123}})
+	if svc.goalInterlockLease(instanceID, "thread-1") != nil {
+		t.Fatal("successful Goal resume retained queue lease")
+	}
+}

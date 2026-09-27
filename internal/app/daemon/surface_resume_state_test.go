@@ -130,16 +130,18 @@ func TestSurfaceResumeStoreDedupesSplitFeishuP2PSurfacesOnPut(t *testing.T) {
 
 	shadowUpdatedAt := time.Date(2026, 4, 11, 2, 47, 45, 0, time.UTC)
 	if err := store.Put(surfaceresume.Entry{
-		SurfaceSessionID:   "feishu:Codex-5:user:a756fefe",
-		GatewayID:          "Codex-5",
-		ChatID:             "oc_099318e4d660955369af84e8c8aea268",
-		ActorUserID:        "a756fefe",
-		ProductMode:        "normal",
-		ResumeInstanceID:   "inst-headless-pool-1",
-		ResumeWorkspaceKey: "/data/dl/.local/state/codex-remote",
-		ResumeRouteMode:    "unbound",
-		ResumeHeadless:     true,
-		UpdatedAt:          shadowUpdatedAt,
+		SurfaceSessionID:             "feishu:Codex-5:user:a756fefe",
+		GatewayID:                    "Codex-5",
+		ChatID:                       "oc_099318e4d660955369af84e8c8aea268",
+		ActorUserID:                  "a756fefe",
+		ProductMode:                  "normal",
+		CodexModelOverride:           " gpt-5.6-terra ",
+		CodexReasoningEffortOverride: " HIGH ",
+		ResumeInstanceID:             "inst-headless-pool-1",
+		ResumeWorkspaceKey:           "/data/dl/.local/state/codex-remote",
+		ResumeRouteMode:              "unbound",
+		ResumeHeadless:               true,
+		UpdatedAt:                    shadowUpdatedAt,
 	}); err != nil {
 		t.Fatalf("put shadow feishu surface: %v", err)
 	}
@@ -180,6 +182,9 @@ func TestSurfaceResumeStoreDedupesSplitFeishuP2PSurfacesOnPut(t *testing.T) {
 	}
 	if entry.ResumeThreadID != "thread-1" || entry.ResumeRouteMode != "pinned" || entry.ResumeWorkspaceKey != testCanonicalResumeWorkspace {
 		t.Fatalf("expected richer canonical resume target to win, got %#v", entry)
+	}
+	if entry.CodexModelOverride != "gpt-5.6-terra" || entry.CodexReasoningEffortOverride != "high" {
+		t.Fatalf("expected non-empty codex override to survive newer empty alias, got %#v", entry)
 	}
 	if !entry.UpdatedAt.Equal(canonicalUpdatedAt) {
 		t.Fatalf("expected latest updatedAt to be preserved, got %#v", entry)

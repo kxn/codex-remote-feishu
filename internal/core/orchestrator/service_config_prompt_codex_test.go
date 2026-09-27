@@ -52,10 +52,10 @@ func TestCodexHeadlessObservedCWDDefaultsDoNotPersistWorkspaceDefaults(t *testin
 	if snapshot == nil {
 		t.Fatal("expected surface snapshot")
 	}
-	if snapshot.NextPrompt.EffectiveModel != "gpt-5.5" || snapshot.NextPrompt.EffectiveModelSource != "surface_default" {
+	if snapshot.NextPrompt.EffectiveModel != "" || snapshot.NextPrompt.EffectiveModelSource != "unknown" {
 		t.Fatalf("expected codex observed cwd model not to affect snapshot, got %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.EffectiveReasoningEffort != "xhigh" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "surface_default" {
+	if snapshot.NextPrompt.EffectiveReasoningEffort != "" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "unknown" {
 		t.Fatalf("expected codex observed cwd effort not to affect snapshot, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeFullAccess || snapshot.NextPrompt.EffectiveAccessModeSource != "surface_default" {
@@ -77,8 +77,8 @@ func TestCodexHeadlessObservedCWDDefaultsDoNotPersistWorkspaceDefaults(t *testin
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.5" || item.FrozenOverride.ReasoningEffort != "" {
-		t.Fatalf("expected queue item to freeze fallback model without implicit reasoning override, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" {
+		t.Fatalf("expected ordinary dynamic Codex text to freeze explicit overrides only, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
 		t.Fatalf("expected queue item to freeze fallback access, got %#v", item.FrozenOverride)
@@ -154,8 +154,8 @@ func TestCodexHeadlessThreadObservedModelReasoningFeedPromptFreeze(t *testing.T)
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.3-codex" || item.FrozenOverride.ReasoningEffort != "" {
-		t.Fatalf("expected queue item to freeze thread model without observed reasoning override, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" {
+		t.Fatalf("expected ordinary dynamic Codex text to freeze explicit overrides only, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
 		t.Fatalf("expected queue item to keep default access, got %#v", item.FrozenOverride)
@@ -223,7 +223,73 @@ func TestDynamicCodexAPIProfileModelFeedsPromptFreeze(t *testing.T) {
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "deepseek-v4-flash" || item.FrozenOverride.ReasoningEffort != "" {
-		t.Fatalf("expected queue item to freeze API profile model without implicit reasoning override, got %#v", item.FrozenOverride)
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" {
+		t.Fatalf("expected queue item to keep API profile model and reasoning out of the explicit override, got %#v", item.FrozenOverride)
+	}
+}
+
+func TestCodexHeadlessAccessOnlyOverrideDoesNotFreezeImplicitModel(t *testing.T) {
+	now := time.Date(2026, 8, 25, 10, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		Backend:                 agentproto.BackendCodex,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", CWD: "/data/dl/repo", ExplicitModel: "gpt-5.6-sol"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.PromptOverride.AccessMode = agentproto.AccessModeConfirm
+
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: "surface-1", MessageID: "msg-1", Text: "继续"})
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected queue item")
+	}
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected explicit overrides only plus current access, got %#v", item.FrozenOverride)
+	}
+}
+
+func TestCodexTopicPromptOverrideControlsOrdinaryText(t *testing.T) {
+	now := time.Date(2026, 8, 25, 10, 5, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		WorkspaceRoot:           "/data/dl/repo",
+		WorkspaceKey:            "/data/dl/repo",
+		Backend:                 agentproto.BackendCodex,
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", CWD: "/data/dl/repo"},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	surface := svc.root.Surfaces["surface-1"]
+	surface.PromptOverride.AccessMode = agentproto.AccessModeConfirm
+	surface.CodexPromptOverride = state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"}
+
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionTextMessage, SurfaceSessionID: "surface-1", MessageID: "msg-1", Text: "继续"})
+	var item *state.QueueItemRecord
+	for _, current := range surface.QueueItems {
+		item = current
+	}
+	if item == nil {
+		t.Fatal("expected queue item")
+	}
+	if item.FrozenOverride.Model != "gpt-5.6-terra" || item.FrozenOverride.ReasoningEffort != "high" || item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected ordinary text to use explicit overrides only and preserve access, got %#v", item.FrozenOverride)
+	}
+	if surface.CodexPromptOverride != (state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"}) {
+		t.Fatalf("ordinary text mutated dormant topic override: %#v", surface.CodexPromptOverride)
 	}
 }

@@ -157,11 +157,7 @@ func (s *Service) codexTargetModelForGroupSwitch(inst *state.InstanceRecord, sur
 	if resolution.EffectiveModel.Source != "thread" && strings.TrimSpace(resolution.EffectiveModel.Value) != "" {
 		return strings.TrimSpace(resolution.EffectiveModel.Value), resolution.EffectiveModel.Source
 	}
-	if threadPolicy != nil {
-		if strings.TrimSpace(threadPolicy.ModelMode) == state.CodexThreadValueDefault {
-			return defaultPromptModelForBackend(agentproto.BackendCodex), "codex_thread_policy"
-		}
-	}
+
 	return "", ""
 }
 
@@ -173,8 +169,6 @@ func codexThreadPolicyModelGroup(policy *state.CodexThreadPolicy) string {
 	switch strings.TrimSpace(policy.ModelMode) {
 	case state.CodexThreadValueExplicit:
 		return codexModelGroup(policy.Model)
-	case state.CodexThreadValueDefault:
-		return codexModelGroup(defaultPromptModelForBackend(agentproto.BackendCodex))
 	default:
 		return ""
 	}

@@ -7,6 +7,25 @@ import { makeCodexProfile } from "../../test/fixtures";
 import { installMockFetch } from "../../test/http";
 
 describe("CodexProfileSection", () => {
+  it("updates the Remote default from the Codex settings form", async () => {
+    const user = userEvent.setup();
+    const { calls } = installMockFetch({
+      "/api/admin/codex/default-model": (call) => ({
+        body: call.init?.method === "PUT"
+          ? JSON.parse(String(call.init.body))
+          : { model: "gpt-6-sol", reasoningEffort: "high" },
+      }),
+    });
+    render(<CodexProfileSection profiles={[makeCodexProfile()]} loadError="" setProfiles={() => {}} onReload={async () => {}} />);
+    const model = await screen.findByLabelText("Remote 默认模型");
+    await user.clear(model);
+    await user.type(model, "gpt-6-luna");
+    await user.selectOptions(screen.getByLabelText("默认推理强度"), "medium");
+    await user.click(screen.getByRole("button", { name: "保存默认模型" }));
+    expect(calls.some((call) => call.path === "/api/admin/codex/default-model" && call.method === "PUT" &&
+      JSON.parse(String(call.init?.body)).model === "gpt-6-luna")).toBe(true);
+    expect(await screen.findByText("默认模型已保存。" )).toBeInTheDocument();
+  });
   it("uses canonical profile APIs, etags, review model, and context preference", async () => {
     const user = userEvent.setup();
     const initialProfiles = [

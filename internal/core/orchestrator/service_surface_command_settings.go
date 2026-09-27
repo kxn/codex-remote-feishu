@@ -692,16 +692,11 @@ func (s *Service) handleModelCommand(surface *state.SurfaceConsoleRecord, action
 		})
 	}
 	if fixedProfileModel != "" {
-		return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
-			override.Model = ""
-			override.ReasoningEffort = ""
-		}, func(control.PromptRouteSummary) surfaceSettingFeedback {
-			text := "已恢复使用当前 Codex Profile 的固定模型：" + fixedProfileModel + "。"
-			return surfaceSettingFeedback{
-				NoticeCode:     "surface_fixed_profile_model_restored",
-				NoticeText:     text,
-				CardStatusText: text,
-			}
+		text := "当前 Codex Profile 已使用固定模型：" + fixedProfileModel + "；已保存的话题覆盖保持暂停。"
+		return s.surfaceSettingFeedbackEvents(surface, action, surfaceSettingFeedback{
+			NoticeCode:     "surface_fixed_profile_model_restored",
+			NoticeText:     text,
+			CardStatusText: text,
 		})
 	}
 	effort := ""
@@ -800,15 +795,11 @@ func (s *Service) handleReasoningCommand(surface *state.SurfaceConsoleRecord, ac
 					FormDefaultValue: actionCommandArgumentText(action),
 				})
 			}
-			return s.applyPromptOverrideChange(surface, action, inst, func(override *state.ModelConfigRecord) {
-				override.ReasoningEffort = ""
-			}, func(control.PromptRouteSummary) surfaceSettingFeedback {
-				text := "已恢复使用当前 Codex Profile 的固定推理强度：" + fixedReasoning + "。"
-				return surfaceSettingFeedback{
-					NoticeCode:     "surface_fixed_profile_reasoning_restored",
-					NoticeText:     text,
-					CardStatusText: text,
-				}
+			text := "当前 Codex Profile 已使用固定推理强度：" + fixedReasoning + "；已保存的话题覆盖保持暂停。"
+			return s.surfaceSettingFeedbackEvents(surface, action, surfaceSettingFeedback{
+				NoticeCode:     "surface_fixed_profile_reasoning_restored",
+				NoticeText:     text,
+				CardStatusText: text,
 			})
 		}
 	}

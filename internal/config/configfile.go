@@ -227,6 +227,9 @@ func WriteAppConfig(path string, cfg AppConfig) error {
 	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
 		return err
 	}
+	if err := ValidateCodexRemoteDefault(cfg.Codex.DefaultModel, cfg.Codex.DefaultReasoningEffort); err != nil {
+		return err
+	}
 	if err := ValidateOpenCodeAPIProfileRecords(cfg.OpenCode.Profiles); err != nil {
 		return err
 	}
@@ -288,6 +291,9 @@ func readConfigFile(path string) (AppConfig, error) {
 	}
 	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
 		return AppConfig{}, fmt.Errorf("validate codex profile catalog %s: %w", path, err)
+	}
+	if err := ValidateCodexRemoteDefault(cfg.Codex.DefaultModel, cfg.Codex.DefaultReasoningEffort); err != nil {
+		return AppConfig{}, fmt.Errorf("validate codex remote default %s: %w", path, err)
 	}
 	if err := ValidateOpenCodeAPIProfileRecords(cfg.OpenCode.Profiles); err != nil {
 		return AppConfig{}, fmt.Errorf("validate opencode profile catalog %s: %w", path, err)
@@ -433,6 +439,8 @@ func (cfg AppConfig) normalized() AppConfig {
 	}
 
 	cfg.Codex.Providers = NormalizeLegacyCodexProviders(cfg.Codex.Providers)
+	cfg.Codex.DefaultModel = strings.TrimSpace(cfg.Codex.DefaultModel)
+	cfg.Codex.DefaultReasoningEffort = strings.TrimSpace(cfg.Codex.DefaultReasoningEffort)
 	cfg.Codex.Profiles = NormalizeCodexAPIProfileRecords(cfg.Codex.Profiles)
 	cfg.Claude.Profiles = NormalizeClaudeProfiles(cfg.Claude.Profiles)
 	cfg.OpenCode.BinaryPath = strings.TrimSpace(cfg.OpenCode.BinaryPath)

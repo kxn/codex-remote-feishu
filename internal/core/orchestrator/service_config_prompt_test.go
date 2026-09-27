@@ -122,11 +122,11 @@ func TestStatusUsesSurfaceDefaultsWhenObservedConfigUnknown(t *testing.T) {
 	if snapshot == nil {
 		t.Fatal("expected surface snapshot")
 	}
-	if snapshot.NextPrompt.EffectiveModel != "gpt-5.5" || snapshot.NextPrompt.EffectiveModelSource != "surface_default" {
-		t.Fatalf("expected default model fallback, got %#v", snapshot.NextPrompt)
+	if snapshot.NextPrompt.EffectiveModel != "" || snapshot.NextPrompt.EffectiveModelSource != "unknown" {
+		t.Fatalf("expected unresolved Codex default, got %#v", snapshot.NextPrompt)
 	}
-	if snapshot.NextPrompt.EffectiveReasoningEffort != "xhigh" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "surface_default" {
-		t.Fatalf("expected xhigh reasoning fallback, got %#v", snapshot.NextPrompt)
+	if snapshot.NextPrompt.EffectiveReasoningEffort != "" || snapshot.NextPrompt.EffectiveReasoningEffortSource != "unknown" {
+		t.Fatalf("expected unresolved Codex reasoning, got %#v", snapshot.NextPrompt)
 	}
 	if snapshot.NextPrompt.EffectiveAccessMode != agentproto.AccessModeFullAccess || snapshot.NextPrompt.EffectiveAccessModeSource != "surface_default" {
 		t.Fatalf("expected default full access, got %#v", snapshot.NextPrompt)
@@ -168,7 +168,7 @@ func TestHeadlessTextMessageIgnoresLegacyCWDDefaultsWhenNoSurfaceOverride(t *tes
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.5" || item.FrozenOverride.ReasoningEffort != "" {
+	if item.FrozenOverride.Model != "" || item.FrozenOverride.ReasoningEffort != "" {
 		t.Fatalf("expected queued item to ignore legacy cwd defaults and freeze surface defaults, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {
@@ -259,7 +259,7 @@ func TestTextMessageFreezesFallbackReasoningWhenConfigUnknown(t *testing.T) {
 	if item == nil {
 		t.Fatal("expected queue item")
 	}
-	if item.FrozenOverride.Model != "gpt-5.5" {
+	if item.FrozenOverride.Model != "" {
 		t.Fatalf("expected queued item to freeze default model, got %#v", item.FrozenOverride)
 	}
 	if item.FrozenOverride.ReasoningEffort != "" || item.FrozenOverride.AccessMode != agentproto.AccessModeFullAccess {

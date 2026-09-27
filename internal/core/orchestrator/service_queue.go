@@ -60,7 +60,7 @@ func (s *Service) replyAnchorForTurn(instanceID, threadID, turnID string) (strin
 }
 
 func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
-	return s.enqueueQueueItemWithTarget(
+	return s.enqueueQueueItemWithTargetAndPreset(
 		surface,
 		sourceMessageID,
 		sourceMessagePreview,
@@ -74,11 +74,24 @@ func (s *Service) enqueueQueueItem(surface *state.SurfaceConsoleRecord, sourceMe
 		"",
 		"",
 		"",
+		"",
 		front,
 	)
 }
 
 func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, purpose agentproto.PromptPurpose, front bool) []eventcontract.Event {
+	return s.enqueueQueueItemWithTargetAndPreset(surface, sourceMessageID, sourceMessagePreview, relatedMessageIDs, inputs, threadID, cwd, routeMode, overrides, "", executionMode, sourceThreadID, bindingPolicy, purpose, front)
+}
+
+func (s *Service) enqueueCodexMessagePresetQueueItem(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, preset string, front bool) []eventcontract.Event {
+	return s.enqueueQueueItemWithTargetAndPreset(surface, sourceMessageID, sourceMessagePreview, relatedMessageIDs, inputs, threadID, cwd, routeMode, overrides, preset, "", "", "", "", front)
+}
+
+func (s *Service) enqueueCodexMessagePresetQueueItemWithTarget(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, preset string, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, purpose agentproto.PromptPurpose, front bool) []eventcontract.Event {
+	return s.enqueueQueueItemWithTargetAndPreset(surface, sourceMessageID, sourceMessagePreview, relatedMessageIDs, inputs, threadID, cwd, routeMode, overrides, preset, executionMode, sourceThreadID, bindingPolicy, purpose, front)
+}
+
+func (s *Service) enqueueQueueItemWithTargetAndPreset(surface *state.SurfaceConsoleRecord, sourceMessageID, sourceMessagePreview string, relatedMessageIDs []string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, preset string, executionMode agentproto.PromptExecutionMode, sourceThreadID string, bindingPolicy agentproto.SurfaceBindingPolicy, purpose agentproto.PromptPurpose, front bool) []eventcontract.Event {
 	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
 		return blocked
 	}
@@ -94,7 +107,11 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	}
 	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
-	frozenOverride := s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides)
+	requestedOverride := overrides
+	if strings.TrimSpace(preset) == "" && s.promptConfigBackend(inst, surface) == agentproto.BackendCodex && !s.surfaceUsesLocalRequestedPromptOverrides(surface) {
+		requestedOverride = s.resolveCodexRequestedPromptOverride(surface, overrides)
+	}
+	frozenOverride := s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, requestedOverride)
 	frozenPlanMode := s.freezePlanModeForPrompt(surface)
 	if dispatchPlan.Purpose == agentproto.PromptPurposeReview && s.surfaceBackend(surface) == agentproto.BackendClaude {
 		frozenPlanMode = state.PlanModeSettingOn
@@ -104,7 +121,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	codexThreadPolicy := s.freezeCodexThreadPolicyForPrompt(surface)
 	openCodeAdmissionRef := s.freezeOpenCodeAdmissionRefForPrompt(surface)
 	var routeAdjustmentEvents []eventcontract.Event
-	adjustment := s.maybeStartNewThreadForCodexModelGroupSwitch(surface, inst, dispatchPlan, routeMode, overrides, frozenOverride, codexThreadPolicy)
+	adjustment := s.maybeStartNewThreadForCodexModelGroupSwitch(surface, inst, dispatchPlan, routeMode, requestedOverride, frozenOverride, codexThreadPolicy)
 	if adjustment.Applied {
 		dispatchPlan = adjustment.DispatchPlan
 		threadID = dispatchPlan.ExecutionThreadID
@@ -123,6 +140,7 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 		ReplyToMessageID:        sourceMessageID,
 		ReplyToMessagePreview:   normalizeSourceMessagePreview(sourceMessagePreview),
 		Inputs:                  inputs,
+		CodexMessagePreset:      strings.TrimSpace(preset),
 		FrozenDispatchPlan:      dispatchPlan,
 		FrozenOverride:          frozenOverride,
 		FrozenPlanMode:          frozenPlanMode,
@@ -140,11 +158,30 @@ func (s *Service) enqueueQueueItemWithTarget(surface *state.SurfaceConsoleRecord
 	return append(routeAdjustmentEvents, append(goalEvents, s.enqueuePreparedQueueItem(surface, item, front)...)...)
 }
 
-func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, front bool) []eventcontract.Event {
+func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, replyToMessageID, replyToMessagePreview string, inputs []agentproto.Input, threadID, cwd string, routeMode state.RouteMode, overrides state.ModelConfigRecord, preset string, front bool) []eventcontract.Event {
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	dispatchPlan := agentproto.DefaultPromptDispatchPlanForExecutionThread(threadID)
 	dispatchPlan.CWD = strings.TrimSpace(cwd)
 	dispatchPlan = agentproto.NormalizePromptDispatchPlan(dispatchPlan)
+	requestedOverride := overrides
+	frozenOverride := s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, requestedOverride)
+	if s.promptConfigBackend(inst, surface) == agentproto.BackendCodex {
+		// A missing parent model is also frozen: inherit native defaults rather than
+		// a topic override selected after the parent turn was submitted.
+		frozenOverride.Model = overrides.Model
+		frozenOverride.ReasoningEffort = overrides.ReasoningEffort
+	}
+	codexThreadPolicy := s.freezeCodexThreadPolicyForPrompt(surface)
+	var routeAdjustmentEvents []eventcontract.Event
+	adjustment := s.maybeStartNewThreadForCodexModelGroupSwitch(surface, inst, dispatchPlan, routeMode, requestedOverride, frozenOverride, codexThreadPolicy)
+	if adjustment.Applied {
+		dispatchPlan = adjustment.DispatchPlan
+		threadID = dispatchPlan.ExecutionThreadID
+		cwd = dispatchPlan.CWD
+		routeMode = adjustment.RouteMode
+		frozenOverride = adjustment.FrozenOverride
+		routeAdjustmentEvents = adjustment.Events
+	}
 	item := &state.QueueItemRecord{
 		SurfaceSessionID:        surface.SurfaceSessionID,
 		ActorUserID:             surface.ActorUserID,
@@ -152,17 +189,18 @@ func (s *Service) enqueueAutoWhipQueueItem(surface *state.SurfaceConsoleRecord, 
 		ReplyToMessageID:        strings.TrimSpace(replyToMessageID),
 		ReplyToMessagePreview:   normalizeSourceMessagePreview(replyToMessagePreview),
 		Inputs:                  inputs,
+		CodexMessagePreset:      strings.TrimSpace(preset),
 		FrozenDispatchPlan:      dispatchPlan,
-		FrozenOverride:          s.resolveFrozenPromptOverride(inst, surface, threadID, cwd, overrides),
+		FrozenOverride:          frozenOverride,
 		FrozenPlanMode:          s.freezePlanModeForPrompt(surface),
 		CodexAdmissionRef:       s.freezeCodexAdmissionRefForPrompt(surface),
 		CodexConnectionContract: s.freezeCodexConnectionContractForPrompt(surface),
-		CodexThreadPolicy:       s.freezeCodexThreadPolicyForPrompt(surface),
+		CodexThreadPolicy:       codexThreadPolicy,
 		OpenCodeAdmissionRef:    s.freezeOpenCodeAdmissionRefForPrompt(surface),
 		RouteModeAtEnqueue:      routeMode,
 		Status:                  state.QueueItemQueued,
 	}
-	return s.enqueuePreparedQueueItem(surface, item, front)
+	return append(routeAdjustmentEvents, s.enqueuePreparedQueueItem(surface, item, front)...)
 }
 
 func (s *Service) freezeCodexAdmissionRefForPrompt(surface *state.SurfaceConsoleRecord) *state.CodexAdmissionRef {
@@ -238,8 +276,12 @@ func (s *Service) enqueuePreparedQueueItem(surface *state.SurfaceConsoleRecord, 
 		QueuePosition: position,
 		QueueOn:       true,
 	}, queueItemSourceMessageIDs(item))...)
+	suppressID := item.ID
+	if isExplicitCodexMessagePreset(item) {
+		suppressID = ""
+	}
 	return append(events, s.dispatchNextWithOptions(surface, dispatchNextOptions{
-		suppressQueuedStartNoticeQueueItemID: item.ID,
+		suppressQueuedStartNoticeQueueItemID: suppressID,
 	})...)
 }
 
@@ -327,48 +369,71 @@ func (s *Service) dispatchNext(surface *state.SurfaceConsoleRecord) []eventcontr
 }
 
 func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, opts dispatchNextOptions) []eventcontract.Event {
+	var events []eventcontract.Event
+	for {
+		next, rejected := s.dispatchNextCandidateWithOptions(surface, opts)
+		events = append(events, next...)
+		if !rejected {
+			return events
+		}
+	}
+}
+
+func (s *Service) dispatchNextCandidateWithOptions(surface *state.SurfaceConsoleRecord, opts dispatchNextOptions) ([]eventcontract.Event, bool) {
 	if blocked, ok := s.invalidBotCapabilitySettingsDispatchGate(surface); ok {
-		return blocked
+		return blocked, false
 	}
 	if surface.DispatchMode != state.DispatchModeNormal || surface.ActiveQueueItemID != "" || len(surface.QueuedQueueItemIDs) == 0 {
 		if surface.DispatchMode != state.DispatchModeNormal || surface.ActiveQueueItemID != "" {
-			return nil
+			return nil, false
 		}
-		return s.maybeDispatchPendingAutoContinue(surface, s.now())
+		return s.maybeDispatchPendingAutoContinue(surface, s.now()), false
 	}
 	if autoContinue := s.maybeDispatchPendingAutoContinue(surface, s.now()); len(autoContinue) != 0 {
-		return autoContinue
+		return autoContinue, false
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if inst == nil || !inst.Online {
-		return nil
+		return nil, false
 	}
 	queueID := surface.QueuedQueueItemIDs[0]
 	item := surface.QueueItems[queueID]
 	if item == nil || item.Status != state.QueueItemQueued {
 		surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
-		return nil
+		return nil, false
 	}
 	if blocked, goalEvents := s.maybeBeginGoalInterlockForQueueItem(surface, inst, item); blocked || len(goalEvents) != 0 {
-		return goalEvents
+		return goalEvents, false
 	}
 	if inst.ActiveTurnID != "" || s.hasPendingRemoteTurn(inst.InstanceID) {
-		return nil
+		return nil, false
 	}
 	if lease := s.goalInterlockLease(inst.InstanceID, queuedItemExecutionThreadID(item)); lease != nil && lease.Phase != GoalInterlockDraining {
-		return nil
+		return nil, false
 	}
 	if s.progress.instanceHasCompact(inst.InstanceID) {
-		return nil
+		return nil, false
+	}
+	if guard, problem, rejected := s.codexMessagePresetDispatchGuard(surface, item); rejected {
+		surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
+		item.Status = state.QueueItemFailed
+		events := s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: item.ID,
+			Status:      string(item.Status),
+			QueueOff:    true,
+		}, queueItemSourceMessageIDs(item))
+		events = append(events, codexMessagePresetDispatchRejectedEvent(surface, item, guard, problem))
+		events = append(events, s.maybeResumeGoalInterlock(inst.InstanceID, queuedItemExecutionThreadID(item))...)
+		return events, true
 	}
 	if !s.reserveFeishuRoomActiveSlotForQueueItem(surface, item, "headless_prompt_dispatch") {
-		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。")
+		return notice(surface, "room_workspace_active", "当前群内已有机器人正在处理这个 workspace，请等待完成后再发送。"), false
 	}
 	if events, restarting := s.maybeRestartClaudeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
-		return events
+		return events, false
 	}
 	if events, restarting := s.maybeRestartOpenCodeHeadlessForPrompt(surface, inst, item.FrozenOverride, queueItemFrozenCWD(item)); restarting {
-		return events
+		return events, false
 	}
 	surface.QueuedQueueItemIDs = surface.QueuedQueueItemIDs[1:]
 	s.activateSurfaceQueueItemDispatch(surface, inst, item)
@@ -391,7 +456,7 @@ func (s *Service) dispatchNextWithOptions(surface *state.SurfaceConsoleRecord, o
 		SurfaceSessionID: surface.SurfaceSessionID,
 		Command:          command,
 	})
-	return events
+	return events, false
 }
 
 func (s *Service) promptSendCommandFromQueueItem(surface *state.SurfaceConsoleRecord, item *state.QueueItemRecord, actorUserID, originMessageID string) *agentproto.Command {

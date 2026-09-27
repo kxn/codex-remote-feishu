@@ -178,11 +178,9 @@ func (a *App) handleIngressOverload(instanceID string, connectionID uint64) {
 		a.debugf("transport degraded connection already replaced: instance=%s connection=%d", instanceID, connectionID)
 	}
 }
-
 func (a *App) HandleAction(ctx context.Context, action control.Action) {
 	_ = a.handleAction(ctx, action)
 }
-
 func (a *App) HandleGatewayAction(ctx context.Context, action control.Action) *feishu.ActionResult {
 	return a.handleAction(ctx, action)
 }
@@ -191,8 +189,20 @@ type ingressEpisodeOptions struct {
 	allowGroupOnDemandResume bool
 }
 
+const codexTopicModelMigrationMaintenanceText = "模型设置迁移未完成，请修复状态目录后重启。"
+const codexTopicSettingPersistFailureText = orchestrator.CodexTopicSettingPersistFailureText
+
+var errSurfaceResumeStateNotWritable = errors.New("surface resume state is not writable")
+
 func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.ActionResult {
 	if action.Kind == control.ActionFeishuBotAddedToGroup {
+		a.mu.Lock()
+		if a.surfaceResumeRuntime.codexTopicModelMigrationErr != nil {
+			a.deliverCodexTopicModelMigrationMaintenanceTextLocked(ctx, action)
+			a.mu.Unlock()
+			return nil
+		}
+		a.mu.Unlock()
 		return a.handleFeishuBotAddedToGroup(ctx, action)
 	}
 	a.mu.Lock()
@@ -234,6 +244,10 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		actionTextPreview(action.Text),
 	)
 	if notice := rejectedInboundNotice(action); notice != nil {
+		if a.surfaceResumeRuntime.codexTopicModelMigrationErr != nil {
+			a.deliverFeishuPreSurfaceTextLocked(ctx, action, strings.TrimSpace(notice.Title+"\n"+notice.Text))
+			return nil
+		}
 		a.ensureSurfaceRouteForNotice(action)
 		a.handleUIEventsLocked(ctx, []eventcontract.Event{{
 			Kind:             eventcontract.KindNotice,
@@ -243,6 +257,10 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		}})
 		a.syncSurfaceResumeStateLocked(nil)
 		a.syncClaudeWorkspaceProfileStateLocked()
+		return nil
+	}
+	if a.surfaceResumeRuntime.codexTopicModelMigrationErr != nil {
+		a.deliverCodexTopicModelMigrationMaintenanceTextLocked(ctx, action)
 		return nil
 	}
 	if notice := a.feishuRoomWorkspaceConflictNotice(action); notice != nil {
@@ -295,9 +313,17 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 	}
 	events := a.applyIngressActionLocked(action)
 	clearTargets := a.surfaceResumeClearTargetsForActionLocked(action, before, events)
+	var skipSurfaceResumeSync map[string]bool
+	for _, event := range events {
+		if payload, ok := event.CanonicalPayload().(eventcontract.NoticePayload); ok && payload.Notice.Code == "codex_topic_setting_persist_failed" {
+			skipSurfaceResumeSync = map[string]bool{action.SurfaceSessionID: true}
+			break
+		}
+	}
+
 	// Persist detach clearing before dispatching events: daemon/agent dispatch can
 	// release the app lock and allow a recovery tick to run concurrently.
-	a.syncSurfaceResumeStateLocked(clearTargets)
+	a.syncSurfaceResumeStateWithSkipLocked(clearTargets, skipSurfaceResumeSync)
 	coworkersLimitChanged := false
 	if action.Kind == control.ActionCoworkersCommand {
 		coworkersLimitChanged = !sameOptionalInt(previousCoworkersLimit, a.service.FeishuRoomConcurrencyLimit(action.SurfaceSessionID))
@@ -326,7 +352,7 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		a.handleUIEventsLocked(ctx, appendEvents)
 	}
 	a.maybeReplayPendingRequestVisibilityAfterActionLocked(ctx, action)
-	a.syncSurfaceResumeStateLocked(clearTargets)
+	a.syncSurfaceResumeStateWithSkipLocked(clearTargets, skipSurfaceResumeSync)
 	a.syncClaudeWorkspaceProfileStateLocked()
 	a.syncBotCapabilitySettingsStateLocked()
 	if action.Kind != control.ActionCoworkersCommand || !coworkersLimitChanged {
@@ -362,6 +388,33 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		a.handleUIEventsLocked(ctx, recoveryEvents)
 	}
 	return inlineResult
+}
+func (a *App) deliverCodexTopicModelMigrationMaintenanceTextLocked(ctx context.Context, action control.Action) {
+	a.deliverFeishuPreSurfaceTextLocked(ctx, action, codexTopicModelMigrationMaintenanceText)
+}
+
+func (a *App) deliverFeishuPreSurfaceTextLocked(ctx context.Context, action control.Action, text string) {
+	gatewayID := strings.TrimSpace(action.GatewayID)
+	chatID := strings.TrimSpace(action.ChatID)
+	text = strings.TrimSpace(text)
+	if gatewayID == "" || chatID == "" || text == "" || a.gateway == nil {
+		return
+	}
+	applyCtx, applyCancel := a.newTimeoutContext(ctx, a.gatewayApplyTimeout)
+	a.mu.Unlock()
+	err := a.gateway.Apply(applyCtx, []feishu.Operation{{
+		Kind:          feishu.OperationSendText,
+		GatewayID:     gatewayID,
+		ChatID:        chatID,
+		ReceiveIDType: "chat_id",
+		ReceiveID:     chatID,
+		Text:          text,
+	}})
+	applyCancel()
+	a.mu.Lock()
+	if err != nil {
+		log.Printf("pre-surface Feishu notice failed: gateway=%s chat=%s err=%v", gatewayID, chatID, err)
+	}
 }
 
 func (a *App) maybeReplayPendingRequestVisibilityAfterActionLocked(ctx context.Context, action control.Action) {

@@ -125,6 +125,10 @@ func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCa
 	merged.ResumeWorkspaceKey = bestResume.entry.ResumeWorkspaceKey
 	merged.ResumeRouteMode = bestResume.entry.ResumeRouteMode
 	merged.ResumeHeadless = bestResume.entry.ResumeHeadless
+	override := newestCodexPromptOverride(candidates)
+	merged.CodexModelOverride = override.CodexModelOverride
+	merged.CodexReasoningEffortOverride = override.CodexReasoningEffortOverride
+	merged.CodexPromptOverrideUpdatedAt = override.CodexPromptOverrideUpdatedAt
 	merged.CodexProfileSelectionStatus = mergedCodexProfileSelectionStatus(candidates)
 	merged.UpdatedAt = latestAt
 
@@ -133,6 +137,33 @@ func mergeFeishuP2PSurfaceResumeCandidates(candidates []feishuP2PSurfaceResumeCa
 		return merged
 	}
 	return normalized
+}
+
+func newestCodexPromptOverride(candidates []feishuP2PSurfaceResumeCandidate) Entry {
+	var selected Entry
+	found := false
+	for _, candidate := range candidates {
+		entry := candidate.entry
+		explicit := !entry.CodexPromptOverrideUpdatedAt.IsZero()
+		if !explicit && entry.CodexModelOverride == "" && entry.CodexReasoningEffortOverride == "" {
+			continue
+		}
+		selectedExplicit := !selected.CodexPromptOverrideUpdatedAt.IsZero()
+		at, selectedAt := entry.CodexPromptOverrideUpdatedAt, selected.CodexPromptOverrideUpdatedAt
+		if !explicit {
+			at = entry.UpdatedAt
+		}
+		if !selectedExplicit {
+			selectedAt = selected.UpdatedAt
+		}
+		if !found || (explicit && !selectedExplicit) || (explicit == selectedExplicit &&
+			(at.After(selectedAt) || (at.Equal(selectedAt) && entry.SurfaceSessionID < selected.SurfaceSessionID))) {
+			selected, found = entry, true
+		}
+	}
+	// Stamped clears are intentional. Unstamped empty legacy aliases are absent.
+	// Keep the entire tuple together and never order settings by later route writes.
+	return selected
 }
 
 func mergedCodexProfileSelectionStatus(candidates []feishuP2PSurfaceResumeCandidate) string {

@@ -1,6 +1,10 @@
 package config
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+	"unicode"
+)
 
 const (
 	legacyCodexDefaultProviderID = "default"
@@ -8,11 +12,29 @@ const (
 )
 
 type CodexSettings struct {
+	DefaultModel                   string                            `json:"defaultModel,omitempty"`
+	DefaultReasoningEffort         string                            `json:"defaultReasoningEffort,omitempty"`
 	ProfileCatalogMigrationVersion int                               `json:"profileCatalogMigrationVersion,omitempty"`
 	MigrationDiagnostics           []CodexProfileMigrationDiagnostic `json:"profileCatalogMigrationDiagnostics,omitempty"`
 	Profiles                       []CodexAPIProfileRecord           `json:"profiles,omitempty"`
 	// Providers is a load-only legacy migration input; WriteAppConfig omits it.
 	Providers []LegacyCodexProviderConfig `json:"providers,omitempty"`
+}
+
+func ValidateCodexRemoteDefault(model, effort string) error {
+	model, effort = strings.TrimSpace(model), strings.TrimSpace(effort)
+	if model == "" && effort == "" {
+		return nil
+	}
+	if model == "" || effort == "" || len(model) > 128 || strings.IndexFunc(model, unicode.IsControl) >= 0 {
+		return fmt.Errorf("default model and reasoning effort must both be valid or both be empty")
+	}
+	switch effort {
+	case "low", "medium", "high", "xhigh", "max":
+		return nil
+	default:
+		return fmt.Errorf("unsupported default reasoning effort %q", effort)
+	}
 }
 
 type LegacyCodexProviderConfig struct {

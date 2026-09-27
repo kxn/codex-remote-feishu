@@ -244,3 +244,42 @@ func promptSendCommandFromEvents(t *testing.T, events []eventcontract.Event) *ag
 	t.Fatalf("expected prompt-send command, got %#v", events)
 	return nil
 }
+
+func TestVerifierVSCodeTopicWithAccess(t *testing.T) {
+	now := time.Date(2026, 5, 3, 16, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	materializeVSCodeSurfaceForTest(svc, "surface-1")
+	svc.UpsertInstance(&state.InstanceRecord{
+		InstanceID:              "inst-1",
+		DisplayName:             "droid",
+		WorkspaceRoot:           "/data/dl/droid",
+		WorkspaceKey:            "/data/dl/droid",
+		ShortName:               "droid",
+		Source:                  "vscode",
+		Online:                  true,
+		ObservedFocusedThreadID: "thread-1",
+		Threads: map[string]*state.ThreadRecord{
+			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid", Loaded: true},
+		},
+		CWDDefaults: map[string]state.ModelConfigRecord{
+			"/data/dl/droid": {AccessMode: agentproto.AccessModeConfirm},
+		},
+	})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModelCommand, SurfaceSessionID: "surface-1", Text: "/model gpt-5.5 high"})
+
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAccessCommand, SurfaceSessionID: "surface-1", Text: "/access confirm"})
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-1",
+		Text:             "继续",
+	})
+	command := promptSendCommandFromEvents(t, events)
+	if command.Overrides.Model != "gpt-5.5" || command.Overrides.ReasoningEffort != "high" {
+		t.Fatalf("expected explicit model/reasoning override, got %#v", command.Overrides)
+	}
+	if command.Overrides.AccessMode != agentproto.AccessModeConfirm || command.Overrides.PlanMode != "" {
+		t.Fatalf("expected observed access/plan to stay out of vscode override, got %#v", command.Overrides)
+	}
+}

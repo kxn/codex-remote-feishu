@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -216,6 +217,39 @@ func applyCodexResumePolicyToTurnStart(template map[string]any, policy *agentpro
 		delete(collaborationMode, "settings")
 		template["collaborationMode"] = collaborationMode
 	}
+}
+
+func (t *Translator) completeCollaborationSettings(threadID string, params map[string]any) error {
+	mode := lookupMapFromAny(params["collaborationMode"])
+	if len(mode) == 0 {
+		return nil
+	}
+	settings := lookupMapFromAny(mode["settings"])
+	observed := t.observedThreads[threadID]
+	model := choose(xutil.LookupStringFromAny(settings["model"]), observed.Model)
+	if model == "" {
+		return fmt.Errorf("Codex 未返回当前会话模型，无法设置协作模式；请重新连接会话后重试")
+	}
+	settings["model"] = model
+	if _, exists := settings["reasoning_effort"]; !exists {
+		effort := xutil.LookupStringFromAny(params["effort"])
+		if effort == "" && model == observed.Model {
+			effort = observed.ReasoningEffort
+		}
+		settings["reasoning_effort"] = nil
+		if effort != "" {
+			settings["reasoning_effort"] = effort
+		}
+	}
+	if _, exists := settings["developer_instructions"]; !exists {
+		settings["developer_instructions"] = nil
+	}
+	if value := xutil.LookupStringFromAny(mode["mode"]); value == "" || value == "custom" {
+		mode["mode"] = "default"
+	}
+	mode["settings"] = settings
+	params["collaborationMode"] = mode
+	return nil
 }
 
 func normalizeObservedPlanMode(value string) string {

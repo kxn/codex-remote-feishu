@@ -78,6 +78,12 @@ func NormalizeModelConfigRecord(record ModelConfigRecord) ModelConfigRecord {
 	return record
 }
 
+func NormalizeCodexPromptOverride(record CodexPromptOverrideRecord) CodexPromptOverrideRecord {
+	record.Model = strings.TrimSpace(record.Model)
+	record.ReasoningEffort = NormalizeReasoningEffort(record.ReasoningEffort)
+	return record
+}
+
 func BackendAcceptsFeishuPromptOverrides(backend agentproto.Backend) bool {
 	switch agentproto.NormalizeBackend(backend) {
 	case agentproto.BackendOpenCode:
@@ -140,6 +146,14 @@ func EffectiveSurfaceCapabilitySettings(root *Root, surface *SurfaceConsoleRecor
 	if status == BotCapabilitySettingsLookupValid {
 		contract := BotCapabilitySettingsContract(record)
 		promptOverride := NormalizePromptOverrideForBackend(contract.Backend, record.PromptOverride)
+		if contract.Backend == agentproto.BackendCodex {
+			codexOverride := CodexPromptOverrideRecord{}
+			if surface != nil {
+				codexOverride = NormalizeCodexPromptOverride(surface.CodexPromptOverride)
+			}
+			promptOverride.Model = codexOverride.Model
+			promptOverride.ReasoningEffort = codexOverride.ReasoningEffort
+		}
 		// access/plan 是会话级设置：飞书 surface 用自己的字段，bot record 只提供
 		// model/reasoning 等机器人级默认。
 		accessMode := ""
@@ -172,9 +186,15 @@ func EffectiveSurfaceCapabilitySettings(root *Root, surface *SurfaceConsoleRecor
 	}
 	contract := SurfaceDesiredBackendContract(surface)
 	planMode, planModeOverrideSet := NormalizePlanOverrideForBackend(contract.Backend, surface.PlanMode, surface.PlanModeOverrideSet)
+	promptOverride := NormalizePromptOverrideForBackend(contract.Backend, surface.PromptOverride)
+	if contract.Backend == agentproto.BackendCodex {
+		codexOverride := NormalizeCodexPromptOverride(surface.CodexPromptOverride)
+		promptOverride.Model = codexOverride.Model
+		promptOverride.ReasoningEffort = codexOverride.ReasoningEffort
+	}
 	return SurfaceCapabilitySettings{
 		Contract:            contract,
-		PromptOverride:      NormalizePromptOverrideForBackend(contract.Backend, surface.PromptOverride),
+		PromptOverride:      promptOverride,
 		PlanMode:            planMode,
 		PlanModeOverrideSet: planModeOverrideSet,
 		Source:              SurfaceCapabilitySettingsSourceSurface,

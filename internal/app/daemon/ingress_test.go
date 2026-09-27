@@ -3,15 +3,311 @@ package daemon
 import (
 	"context"
 	"errors"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+func TestCodexTopicSettingWriteFailureRollsBackBeforeSuccessUI(t *testing.T) {
+	tests := []struct {
+		name            string
+		text            string
+		kind            control.ActionKind
+		stamped         bool
+		storeFailure    string
+		wantCardTitle   string
+		wantOldOverride state.CodexPromptOverrideRecord
+	}{
+		{
+			name:            "stamped model card",
+			text:            "/model gpt-5.6-terra",
+			kind:            control.ActionModelCommand,
+			stamped:         true,
+			storeFailure:    "write",
+			wantCardTitle:   "设置失败",
+			wantOldOverride: state.CodexPromptOverrideRecord{Model: "gpt-5.5", ReasoningEffort: "high"},
+		},
+		{
+			name:            "plain reasoning slash",
+			text:            "/reasoning max",
+			kind:            control.ActionReasoningCommand,
+			storeFailure:    "write",
+			wantCardTitle:   "设置失败",
+			wantOldOverride: state.CodexPromptOverrideRecord{Model: "gpt-5.5", ReasoningEffort: "high"},
+		},
+		{
+			name:            "nil store",
+			text:            "/model gpt-5.6-terra",
+			kind:            control.ActionModelCommand,
+			storeFailure:    "nil",
+			wantCardTitle:   "设置失败",
+			wantOldOverride: state.CodexPromptOverrideRecord{Model: "gpt-5.5", ReasoningEffort: "high"},
+		},
+		{
+			name:            "empty path store",
+			text:            "/reasoning max",
+			kind:            control.ActionReasoningCommand,
+			stamped:         true,
+			storeFailure:    "empty_path",
+			wantCardTitle:   "设置失败",
+			wantOldOverride: state.CodexPromptOverrideRecord{Model: "gpt-5.5", ReasoningEffort: "high"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			app, gateway, persistedPath := newCodexTopicSettingTestApp(t, tc.wantOldOverride, dynamicNonGPTCodexTopicSettingProfile())
+			switch tc.storeFailure {
+			case "nil":
+				app.surfaceResumeRuntime.store = nil
+			case "empty_path":
+				store := surfaceresume.NewStore("")
+				store.SetEntries(app.surfaceResumeRuntime.store.Entries())
+				app.surfaceResumeRuntime.store = store
+			default:
+				failingParent := filepath.Join(t.TempDir(), "not-a-directory")
+				if err := os.WriteFile(failingParent, []byte("block writes"), 0o600); err != nil {
+					t.Fatalf("create deterministic surface store blocker: %v", err)
+				}
+				store := surfaceresume.NewStore(filepath.Join(failingParent, surfaceresume.StateFileName))
+				store.SetEntries(app.surfaceResumeRuntime.store.Entries())
+				app.surfaceResumeRuntime.store = store
+			}
+
+			action := control.Action{
+				Kind:             tc.kind,
+				GatewayID:        "app-1",
+				SurfaceSessionID: "surface-1",
+				ChatID:           "chat-1",
+				ActorUserID:      "user-1",
+				Text:             tc.text,
+			}
+			if tc.stamped {
+				action.Inbound = &control.ActionInboundMeta{CardDaemonLifecycleID: app.daemonLifecycleID}
+			}
+
+			result := handleGatewayActionForTest(context.Background(), app, action)
+
+			if got := app.service.Surface("surface-1").CodexPromptOverride; got != tc.wantOldOverride {
+				t.Fatalf("in-memory Codex prompt override = %#v, want rollback to %#v", got, tc.wantOldOverride)
+			}
+			assertPersistedCodexPromptOverride(t, persistedPath, tc.wantOldOverride)
+			if tc.stamped {
+				if result == nil || result.ReplaceCurrentCard == nil {
+					t.Fatalf("expected same-card persist failure, got %#v", result)
+				}
+				if len(gateway.operations) != 0 {
+					t.Fatalf("stamped persist failure appended gateway operations: %#v", gateway.operations)
+				}
+				assertCodexTopicSettingPersistFailureOperation(t, *result.ReplaceCurrentCard, tc.wantCardTitle)
+				return
+			}
+			if result != nil {
+				t.Fatalf("plain slash unexpectedly replaced a current card: %#v", result)
+			}
+			if len(gateway.operations) != 1 {
+				t.Fatalf("plain slash persist failure operations = %#v, want one failure notice", gateway.operations)
+			}
+			assertCodexTopicSettingPersistFailureOperation(t, gateway.operations[0], tc.wantCardTitle)
+		})
+	}
+	t.Run("new surface without durable entry", func(t *testing.T) {
+		stateDir := t.TempDir()
+		gateway := &recordingGateway{}
+		app := newRestoreHintTestApp(stateDir)
+		app.gateway = gateway
+		const surfaceID = "surface-new-setting"
+		profile := dynamicNonGPTCodexTopicSettingProfile()
+		app.service.MaterializeCodexProfiles([]state.CodexProfileSummary{profile})
+		app.service.MaterializeSurfaceResumeWithCodexProfile(surfaceID, "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, profile.ID, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+		seedHeadlessInstance(app, "inst-1", "thread-1")
+		app.service.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: surfaceID, ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+		persistedPath := surfaceresume.StatePath(stateDir)
+		assertNoPersistedSurfaceResumeEntry(t, persistedPath, surfaceID)
+
+		failingParent := filepath.Join(t.TempDir(), "not-a-directory")
+		if err := os.WriteFile(failingParent, []byte("block writes"), 0o600); err != nil {
+			t.Fatalf("create deterministic surface store blocker: %v", err)
+		}
+		app.surfaceResumeRuntime.store = surfaceresume.NewStore(filepath.Join(failingParent, surfaceresume.StateFileName))
+		var logs strings.Builder
+		oldLogOutput := log.Writer()
+		log.SetOutput(&logs)
+		t.Cleanup(func() { log.SetOutput(oldLogOutput) })
+
+		result := handleGatewayActionForTest(context.Background(), app, control.Action{
+			Kind: control.ActionModelCommand, GatewayID: "app-1", SurfaceSessionID: surfaceID, ChatID: "chat-1", ActorUserID: "user-1", Text: "/model gpt-5.6-terra",
+			Inbound: &control.ActionInboundMeta{CardDaemonLifecycleID: app.daemonLifecycleID},
+		})
+
+		if got := app.service.Surface(surfaceID).CodexPromptOverride; got != (state.CodexPromptOverrideRecord{}) {
+			t.Fatalf("new surface in-memory override = %#v, want empty rollback", got)
+		}
+		assertNoPersistedSurfaceResumeEntry(t, persistedPath, surfaceID)
+		if result == nil || result.ReplaceCurrentCard == nil || len(gateway.operations) != 0 {
+			t.Fatalf("new surface failure delivery = result %#v operations %#v", result, gateway.operations)
+		}
+		assertCodexTopicSettingPersistFailureOperation(t, *result.ReplaceCurrentCard, "设置失败")
+		if strings.Contains(logs.String(), "persist surface resume state failed: surface="+surfaceID) {
+			t.Fatalf("generic surface sync retried the rolled-back setting:\n%s", logs.String())
+		}
+	})
+}
+
+func TestCodexTopicSettingPersistsBeforeSuccessUI(t *testing.T) {
+	tests := []struct {
+		name, text, successText string
+		kind                    control.ActionKind
+		stamped                 bool
+		want                    state.CodexPromptOverrideRecord
+	}{
+		{name: "plain model slash", text: "/model gpt-5.6-terra", successText: "已更新飞书临时模型覆盖", kind: control.ActionModelCommand, want: state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"}},
+		{name: "stamped reasoning card", text: "/reasoning max", successText: "已更新飞书临时推理强度覆盖", kind: control.ActionReasoningCommand, stamped: true, want: state.CodexPromptOverrideRecord{Model: "gpt-5.5", ReasoningEffort: "max"}},
+	}
+	old := state.CodexPromptOverrideRecord{Model: "gpt-5.5", ReasoningEffort: "high"}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			app, gateway, persistedPath := newCodexTopicSettingTestApp(t, old, dynamicNonGPTCodexTopicSettingProfile())
+			app.surfaceResumeRuntime.groupTerminalFailureNotices = map[string]string{"surface-1": "old_failure"}
+			app.surfaceResumeRuntime.vscodeDetachedPromptScanDue = false
+			action := control.Action{Kind: tc.kind, GatewayID: "app-1", SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", Text: tc.text}
+			if tc.stamped {
+				action.Inbound = &control.ActionInboundMeta{CardDaemonLifecycleID: app.daemonLifecycleID}
+			}
+
+			result := handleGatewayActionForTest(context.Background(), app, action)
+
+			if got := app.service.Surface("surface-1").CodexPromptOverride; got != tc.want {
+				t.Fatalf("in-memory Codex prompt override = %#v, want %#v", got, tc.want)
+			}
+			assertPersistedCodexPromptOverride(t, persistedPath, tc.want)
+			if _, ok := app.surfaceResumeRuntime.groupTerminalFailureNotices["surface-1"]; ok {
+				t.Fatal("successful durable Put did not clear the terminal failure notice")
+			}
+			if !app.surfaceResumeRuntime.vscodeDetachedPromptScanDue {
+				t.Fatal("successful durable Put did not schedule the VS Code detached prompt scan")
+			}
+			var operation feishu.Operation
+			if tc.stamped {
+				if result == nil || result.ReplaceCurrentCard == nil || len(gateway.operations) != 0 {
+					t.Fatalf("stamped success delivery = result %#v operations %#v", result, gateway.operations)
+				}
+				operation = *result.ReplaceCurrentCard
+			} else {
+				if result != nil || len(gateway.operations) != 1 {
+					t.Fatalf("plain success delivery = result %#v operations %#v", result, gateway.operations)
+				}
+				operation = gateway.operations[0]
+			}
+			text := operationCardText(operation)
+			if !strings.Contains(text, tc.successText) || strings.Contains(text, codexTopicSettingPersistFailureText) {
+				t.Fatalf("unexpected success UI: %#v", operation)
+			}
+		})
+	}
+}
+
+func TestCodexPrefixPersistFailureDoesNotEnqueueOrDispatch(t *testing.T) {
+	for _, action := range []control.Action{
+		{Kind: control.ActionTextMessage, Text: "[sol:high] check this"},
+		{Kind: control.ActionModelCommand, Text: "/model gpt-6-sol high"},
+		{Kind: control.ActionReasoningCommand, Text: "/reasoning low"},
+	} {
+		t.Run(action.Text, func(t *testing.T) {
+			old := state.CodexPromptOverrideRecord{Model: "gpt-6-astra", ReasoningEffort: "high"}
+			app, gateway, persistedPath := newCodexTopicSettingTestApp(t, old, state.CodexProfileSummary{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Available: true})
+			app.surfaceResumeRuntime.store = nil
+			action.GatewayID = "app-1"
+			action.SurfaceSessionID = "surface-1"
+			action.ChatID = "chat-1"
+			action.ActorUserID = "user-1"
+			action.MessageID = "msg-prefix"
+			handleGatewayActionForTest(context.Background(), app, action)
+			surface := app.service.Surface("surface-1")
+			if surface.CodexPromptOverride != old || surface.ActiveQueueItemID != "" || len(surface.QueueItems) != 0 || len(surface.QueuedQueueItemIDs) != 0 {
+				t.Fatalf("failed durable write mutated execution state: override=%#v active=%q queued=%d", surface.CodexPromptOverride, surface.ActiveQueueItemID, len(surface.QueueItems))
+			}
+			assertPersistedCodexPromptOverride(t, persistedPath, old)
+			if len(gateway.operations) != 1 {
+				t.Fatalf("expected failure notice only, got %#v", gateway.operations)
+			}
+			assertCodexTopicSettingPersistFailureOperation(t, gateway.operations[0], "设置失败")
+		})
+	}
+}
+
+func dynamicNonGPTCodexTopicSettingProfile() state.CodexProfileSummary {
+	return state.CodexProfileSummary{
+		ID: "dynamic-non-gpt", Kind: state.CodexProfileKindAPI, BaseURL: "https://api.deepseek.com/", Model: "deepseek-v4-flash", ReasoningEffort: "high", Available: true,
+	}
+}
+
+func newCodexTopicSettingTestApp(t *testing.T, initial state.CodexPromptOverrideRecord, profile state.CodexProfileSummary) (*App, *recordingGateway, string) {
+	t.Helper()
+	stateDir := t.TempDir()
+	gateway := &recordingGateway{}
+	app := newRestoreHintTestApp(stateDir)
+	app.gateway = gateway
+	app.service.MaterializeCodexProfiles([]state.CodexProfileSummary{profile})
+	app.service.MaterializeSurfaceResumeWithCodexProfile("surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, profile.ID, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff)
+	seedHeadlessInstance(app, "inst-1", "thread-1")
+	app.service.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
+	app.service.RestoreSurfaceCodexPromptOverride("surface-1", initial, time.Time{})
+	app.mu.Lock()
+	app.syncSurfaceResumeStateLocked(nil)
+	app.mu.Unlock()
+	path := surfaceresume.StatePath(stateDir)
+	assertPersistedCodexPromptOverride(t, path, initial)
+	return app, gateway, path
+}
+
+func assertPersistedCodexPromptOverride(t *testing.T, path string, want state.CodexPromptOverrideRecord) {
+	t.Helper()
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load persisted surface resume state: %v", err)
+	}
+	entry, ok := store.Get("surface-1")
+	if !ok {
+		t.Fatal("persisted surface resume entry missing")
+	}
+	if entry.CodexModelOverride != want.Model || entry.CodexReasoningEffortOverride != want.ReasoningEffort {
+		t.Fatalf("persisted Codex prompt override = %q/%q, want %q/%q", entry.CodexModelOverride, entry.CodexReasoningEffortOverride, want.Model, want.ReasoningEffort)
+	}
+}
+
+func assertNoPersistedSurfaceResumeEntry(t *testing.T, path, surfaceID string) {
+	t.Helper()
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load persisted surface resume state: %v", err)
+	}
+	if entry, ok := store.Get(surfaceID); ok {
+		t.Fatalf("unexpected persisted surface resume entry: %#v", entry)
+	}
+}
+
+func assertCodexTopicSettingPersistFailureOperation(t *testing.T, operation feishu.Operation, wantTitle string) {
+	t.Helper()
+	text := operationCardText(operation)
+	if operation.CardTitle != wantTitle || !strings.Contains(text, "未能保存") || !strings.Contains(text, "当前配置未改变") {
+		t.Fatalf("unexpected Codex topic setting persist failure UI: %#v", operation)
+	}
+	if strings.Contains(text, "已更新飞书临时") {
+		t.Fatalf("persist failure leaked success UI: %#v", operation)
+	}
+}
 
 func TestEventAffectsSurfaceResumeState(t *testing.T) {
 	t.Parallel()
@@ -629,5 +925,35 @@ func TestAppHandleIngressOverloadKeepsAttachmentUntilPreservedTurnCompletes(t *t
 	pending := app.service.PendingRemoteTurns()
 	if len(pending) != 1 || pending[0].SourceMessageID != "msg-2" {
 		t.Fatalf("expected queued work to resume after preserved turn completion, got %#v", pending)
+	}
+}
+
+func TestCodexInitialClearPersistsSettingPresence(t *testing.T) {
+	app, _, path := newCodexTopicSettingTestApp(t, state.CodexPromptOverrideRecord{}, state.CodexProfileSummary{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Available: true})
+	handleGatewayActionForTest(context.Background(), app, control.Action{Kind: control.ActionModelCommand, GatewayID: "app-1", SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", Text: "/model clear"})
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, _ := store.Get("surface-1")
+	if entry.CodexPromptOverrideUpdatedAt.IsZero() || entry.CodexModelOverride != "" || entry.CodexReasoningEffortOverride != "" {
+		t.Fatalf("initial clear lost explicit presence: %#v", entry)
+	}
+	stamp := entry.CodexPromptOverrideUpdatedAt
+	app.mu.Lock()
+	app.syncSurfaceResumeStateLocked(nil)
+	app.mu.Unlock()
+	store, err = surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, _ = store.Get("surface-1")
+	if !entry.CodexPromptOverrideUpdatedAt.Equal(stamp) {
+		t.Fatalf("ordinary route sync advanced topic setting clock: %#v", entry)
+	}
+	restarted := newRestoreHintTestApp(filepath.Dir(path))
+	surface := restarted.service.Surface("surface-1")
+	if surface == nil || !surface.CodexPromptOverrideUpdatedAt.Equal(stamp) {
+		t.Fatalf("restart lost explicit clear stamp: %#v", surface)
 	}
 }

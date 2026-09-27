@@ -3,6 +3,7 @@ package control
 import (
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -104,10 +105,18 @@ func promptValueCardSections(view FeishuCatalogConfigView) []FeishuCardTextSecti
 	if view.UsesLocalRequestedOverrides {
 		currentLabel = sharedAuthorityCurrentValueLabel(view.EffectiveValueSource)
 	}
+	effectiveFallback := "未设置"
+	overrideLabel := "飞书覆盖"
+	if view.CatalogBackend == agentproto.BackendCodex {
+		overrideLabel = "话题覆盖"
+		if strings.TrimSpace(view.CommandID) == FeishuCommandModel {
+			effectiveFallback = "跟随 Codex/Profile 默认"
+		}
+	}
 	return dualValueCardSections(
 		currentLabel,
-		commandDisplayValue(view.EffectiveValue, "未设置"),
-		"飞书覆盖",
+		commandDisplayValue(view.EffectiveValue, effectiveFallback),
+		overrideLabel,
 		promptOverrideDisplayValue(view),
 	)
 }

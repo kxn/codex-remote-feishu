@@ -38,6 +38,21 @@ func (s *Service) surfaceSettingFeedbackEvents(surface *state.SurfaceConsoleReco
 }
 
 func (s *Service) applyPromptOverrideChange(surface *state.SurfaceConsoleRecord, action control.Action, inst *state.InstanceRecord, mutate func(*state.ModelConfigRecord), build func(control.PromptRouteSummary) surfaceSettingFeedback) []eventcontract.Event {
+	if s.surfaceBackend(surface) == agentproto.BackendCodex {
+		override := state.ModelConfigRecord{
+			Model:           surface.CodexPromptOverride.Model,
+			ReasoningEffort: surface.CodexPromptOverride.ReasoningEffort,
+		}
+		mutate(&override)
+		if failed := s.setCodexTopicOverride(surface, state.CodexPromptOverrideRecord{
+			Model:           override.Model,
+			ReasoningEffort: override.ReasoningEffort,
+		}); failed != nil {
+			return failed
+		}
+		summary := s.projectCodexConversationPromptSummary(surface, s.resolveNextPromptSummary(inst, surface, "", "", state.ModelConfigRecord{}))
+		return s.surfaceSettingFeedbackEvents(surface, action, build(summary))
+	}
 	s.applySurfaceCapabilitySettingsMutation(surface, func(record *state.BotCapabilitySettingsRecord) {
 		override := record.PromptOverride
 		mutate(&override)
@@ -53,15 +68,40 @@ func (s *Service) applyPromptOverrideChange(surface *state.SurfaceConsoleRecord,
 	return s.surfaceSettingFeedbackEvents(surface, action, build(summary))
 }
 
+func (s *Service) projectCodexConversationPromptSummary(surface *state.SurfaceConsoleRecord, summary control.PromptRouteSummary) control.PromptRouteSummary {
+	if surface == nil || s.surfaceBackend(surface) != agentproto.BackendCodex {
+		return summary
+	}
+	topic := state.NormalizeCodexPromptOverride(surface.CodexPromptOverride)
+	summary.OverrideModel = topic.Model
+	summary.OverrideReasoningEffort = topic.ReasoningEffort
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if model, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			summary.EffectiveModel = model
+			summary.EffectiveModelSource = "profile"
+			summary.EffectiveReasoningEffort = fixedCodexAPIProfileReasoning(profile)
+			summary.EffectiveReasoningEffortSource = "profile"
+		}
+	}
+	return summary
+}
+
 func (s *Service) promptSettingCanRunDetached(surface *state.SurfaceConsoleRecord, kind control.ActionKind) bool {
-	if surface == nil || !state.IsHeadlessProductMode(s.normalizeSurfaceProductMode(surface)) || !s.surfaceCanWriteBotCapabilitySettings(surface) {
+	if surface == nil || !state.IsHeadlessProductMode(s.normalizeSurfaceProductMode(surface)) {
+		return false
+	}
+	backend := s.surfaceBackend(surface)
+	if backend == agentproto.BackendCodex && s.surfaceCanWriteCodexConversationSettings(surface) &&
+		(kind == control.ActionModelCommand || kind == control.ActionReasoningCommand) {
+		return true
+	}
+	if !s.surfaceCanWriteBotCapabilitySettings(surface) {
 		return false
 	}
 	switch kind {
 	case control.ActionModelCommand:
-		return s.surfaceBackend(surface) == agentproto.BackendCodex
+		return backend == agentproto.BackendCodex
 	case control.ActionReasoningCommand:
-		backend := s.surfaceBackend(surface)
 		return backend == agentproto.BackendCodex || backend == agentproto.BackendClaude
 	case control.ActionAccessCommand:
 		return true

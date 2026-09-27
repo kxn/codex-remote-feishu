@@ -42,6 +42,8 @@ type PrimaryBotPermissionDecision struct {
 }
 
 type Service struct {
+	persistCodexTopicOverride func(*state.SurfaceConsoleRecord) error
+	codexRemoteDefault        state.CodexPromptOverrideRecord
 	now                       func() time.Time
 	config                    Config
 	root                      *state.Root
@@ -223,8 +225,6 @@ const (
 	requestCaptureModeDeclineWithFeedback = "decline_with_feedback"
 	requestCaptureModeSameRequestDecline  = "same_request_decline_with_feedback"
 	requestCaptureModePlanReviseFeedback  = "plan_revise_feedback"
-	defaultModel                          = "gpt-5.5"
-	defaultReasoningEffort                = "xhigh"
 )
 
 func NewService(now func() time.Time, cfg Config, planner *renderer.Planner) *Service {

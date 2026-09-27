@@ -2,6 +2,7 @@ import {
   type Dispatch,
   type FormEvent,
   type SetStateAction,
+  useEffect,
   useState,
 } from "react";
 import {
@@ -60,9 +61,44 @@ const codexReasoningOptions = ["low", "medium", "high", "xhigh"] as const;
 const codexContextModeDefault = "codex_default";
 const codexInstructionMaxChars = 16000;
 
+type CodexRemoteDefault = { model: string; reasoningEffort: string };
+
 export function CodexProfileSection(props: CodexProfileSectionProps) {
   const { profiles, loadError, setProfiles, onReload } = props;
   const [deleteReferences, setDeleteReferences] = useState<CodexProfileReference[]>([]);
+  const [remoteDefault, setRemoteDefault] = useState<CodexRemoteDefault>({ model: "", reasoningEffort: "" });
+  const [defaultLoaded, setDefaultLoaded] = useState(false);
+  const [defaultBusy, setDefaultBusy] = useState(false);
+  const [defaultNotice, setDefaultNotice] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    requestJSON<CodexRemoteDefault>("/api/admin/codex/default-model")
+      .then((value) => {
+        if (active) {
+          setRemoteDefault(value);
+          setDefaultLoaded(true);
+        }
+      })
+      .catch((error) => {
+        if (active) setDefaultNotice(`默认模型读取失败：${formatError(error)}`);
+      });
+    return () => { active = false; };
+  }, []);
+
+  async function saveRemoteDefault(value: CodexRemoteDefault) {
+    setDefaultBusy(true);
+    setDefaultNotice("");
+    try {
+      const saved = await sendJSON<CodexRemoteDefault>("/api/admin/codex/default-model", "PUT", value);
+      setRemoteDefault(saved);
+      setDefaultNotice("默认模型已保存。");
+    } catch (error) {
+      setDefaultNotice(`保存失败：${formatError(error)}`);
+    } finally {
+      setDefaultBusy(false);
+    }
+  }
   const editor = useConfigEditorSection<CodexProfileSummary, CodexProfileDraft>({
     items: profiles,
     newItemID: newCodexProfileID,
@@ -218,6 +254,34 @@ export function CodexProfileSection(props: CodexProfileSectionProps) {
 
   return (
     <>
+      <section className="hero-card">
+        <h3>Remote 默认模型</h3>
+        <p>用于 Codex 本机或 ChatGPT 登录配置中未指定模型的对话。已有话题的显式模型设置优先；排队中的请求保持原选择。</p>
+        <form onSubmit={(event) => { event.preventDefault(); void saveRemoteDefault(remoteDefault); }}>
+          <div className="form-grid stack-top">
+            <label>Remote 默认模型
+              <input list="codex-remote-default-models" value={remoteDefault.model} disabled={!defaultLoaded || defaultBusy}
+                onChange={(event) => setRemoteDefault((current) => ({
+                  model: event.target.value,
+                  reasoningEffort: event.target.value ? current.reasoningEffort || "high" : "",
+                }))} />
+            </label>
+            <datalist id="codex-remote-default-models">
+              <option value="gpt-6-sol" /><option value="gpt-6-luna" /><option value="gpt-6-astra" />
+            </datalist>
+            <label>默认推理强度
+              <select value={remoteDefault.reasoningEffort} disabled={!defaultLoaded || defaultBusy}
+                onChange={(event) => setRemoteDefault((current) => ({ ...current, reasoningEffort: event.target.value }))}>
+                <option value="">跟随本机</option>
+                {(["low", "medium", "high", "xhigh", "max"] as const).map((effort) => <option key={effort} value={effort}>{effort}</option>)}
+              </select>
+            </label>
+          </div>
+          <button type="submit" disabled={!defaultLoaded || defaultBusy}>保存默认模型</button>
+          <button type="button" disabled={!defaultLoaded || defaultBusy} onClick={() => void saveRemoteDefault({ model: "", reasoningEffort: "" })}>继承 Codex 配置</button>
+        </form>
+        {defaultNotice ? <p role="status">{defaultNotice}</p> : null}
+      </section>
       <ConfigSectionShell
         sectionTitle="Codex"
         sectionDescription="管理 Codex 连接与上下文偏好"

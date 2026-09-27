@@ -71,6 +71,105 @@ func TestQueuedUserMessageRepliesWhenDispatchStartsAfterWaiting(t *testing.T) {
 	}
 }
 
+func TestQueuedMessageStartedShowsPresetAfterDelayedDispatch(t *testing.T) {
+	now := time.Date(2026, 8, 26, 10, 10, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	surface := svc.root.Surfaces["surface-1"]
+	surface.CodexPromptOverride = state.CodexPromptOverrideRecord{Model: "gpt-6-sol", ReasoningEffort: "max"}
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionTextMessage, SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID: "msg-first", Text: "先执行",
+	})
+	svc.ApplyAgentEvent("inst-1", agentproto.Event{
+		Kind: agentproto.EventTurnStarted, ThreadID: "thread-1", TurnID: "turn-1",
+		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
+	})
+	queued := svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionTextMessage, SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID: "msg-terra", Text: "[terra] 再执行",
+	})
+	if notice := findQueuedStartNotice(queued); notice != nil {
+		t.Fatalf("waiting preset should not report start before dispatch: %#v", notice)
+	}
+
+	finished := completeRemoteTurnWithFinalText(t, svc, "turn-1", "completed", "", "", nil)
+	notice := findQueuedStartNotice(finished)
+	if notice == nil || notice.TimelineText.Text != "开始执行这条排队消息。请求模型：gpt-5.6-terra / high（话题设置）。" {
+		t.Fatalf("delayed preset start notice = %#v", notice)
+	}
+}
+
+func TestQueuedMessageStartedShowsPresetOnImmediateDispatch(t *testing.T) {
+	now := time.Date(2026, 8, 26, 10, 15, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	surface := svc.root.Surfaces["surface-1"]
+	surface.CodexPromptOverride = state.CodexPromptOverrideRecord{Model: "gpt-5.6-luna", ReasoningEffort: "low"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionTextMessage, SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID: "msg-sol", Text: "[sol] 立即执行",
+	})
+
+	notice := findQueuedStartNotice(events)
+	if notice == nil || notice.TimelineText.Text != "开始执行这条排队消息。请求模型：gpt-6-sol / high（话题设置）。" {
+		t.Fatalf("immediate preset start notice = %#v", notice)
+	}
+	if command := findPromptSendCommand(events); command == nil {
+		t.Fatalf("preset message did not dispatch immediately: %#v", events)
+	}
+}
+
+func TestQueuedMessageStartedShowsAstraPresetOnImmediateDispatch(t *testing.T) {
+	now := time.Date(2026, 9, 5, 9, 0, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	surface := svc.root.Surfaces["surface-1"]
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionTextMessage, SurfaceSessionID: surface.SurfaceSessionID,
+		MessageID: "msg-astra", Text: "[astra] 立即执行",
+	})
+
+	notice := findQueuedStartNotice(events)
+	if notice == nil || notice.TimelineText.Text != "开始执行这条排队消息。请求模型：gpt-6-astra / high（话题设置）。" {
+		t.Fatalf("immediate Astra preset start notice = %#v", notice)
+	}
+}
+
+func TestQueuedMessageStartedPresetDoesNotMislabelOtherQueueItems(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		sourceKind state.QueueItemSourceKind
+		preset     string
+		review     bool
+	}{
+		{name: "topic override", sourceKind: state.QueueItemSourceUser},
+		{name: "fixed override", sourceKind: state.QueueItemSourceUser, preset: "provider-custom"},
+		{name: "non exact marker", sourceKind: state.QueueItemSourceUser, preset: " terra "},
+		{name: "review", sourceKind: state.QueueItemSourceUser, preset: "terra", review: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Date(2026, 8, 26, 10, 20, 0, 0, time.UTC)
+			svc := newServiceForTest(&now)
+			surface := setupQueuedStartNoticeSurface(t, svc)
+			item := &state.QueueItemRecord{
+				SourceKind: tc.sourceKind, SourceMessageID: "msg-1", SourceMessagePreview: "检查",
+				Inputs:             []agentproto.Input{{Type: agentproto.InputText, Text: "检查"}},
+				CodexMessagePreset: tc.preset,
+				FrozenOverride:     state.ModelConfigRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"},
+				Status:             state.QueueItemQueued,
+			}
+			if tc.review {
+				item.FrozenDispatchPlan.Purpose = agentproto.PromptPurposeReview
+			}
+			events := svc.enqueuePreparedQueueItem(surface, item, false)
+			if notice := findQueuedStartNotice(events); notice != nil {
+				t.Fatalf("non-preset item received immediate single-use notice: %#v", notice)
+			}
+		})
+	}
+}
+
 func TestAutoWhipQueueItemDoesNotSendQueuedStartReply(t *testing.T) {
 	now := time.Date(2026, 8, 9, 10, 5, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
@@ -92,6 +191,7 @@ func TestAutoWhipQueueItemDoesNotSendQueuedStartReply(t *testing.T) {
 		"/data/dl/droid",
 		state.RouteModePinned,
 		state.ModelConfigRecord{},
+		"",
 		false,
 	)
 	if event := findQueuedStartNotice(events); event != nil {

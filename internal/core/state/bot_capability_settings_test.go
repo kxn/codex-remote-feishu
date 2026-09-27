@@ -138,6 +138,40 @@ func TestBotCapabilitySettingsKeyRequiresGateway(t *testing.T) {
 	}
 }
 
+func TestEffectiveCodexPromptOverrideUsesSurfaceNotBot(t *testing.T) {
+	root := NewRoot()
+	root.BotCapabilitySettings[BotCapabilitySettingsKey("app-1")] = BotCapabilitySettingsRecord{
+		GatewayID:      "app-1",
+		Backend:        agentproto.BackendCodex,
+		CodexProfileID: NativeCodexProfileID,
+		PromptOverride: ModelConfigRecord{Model: "gpt-5.6-luna", ReasoningEffort: "high"},
+	}
+	surface := &SurfaceConsoleRecord{
+		SurfaceSessionID: "feishu:app-1:chat:oc_room@om_topic_a",
+		Platform:         "feishu",
+		GatewayID:        "app-1",
+		ChatID:           "oc_room",
+		PromptOverride:   ModelConfigRecord{AccessMode: agentproto.AccessModeConfirm},
+	}
+
+	got := EffectiveSurfaceCapabilitySettings(root, surface)
+	if got.PromptOverride.Model != "" || got.PromptOverride.ReasoningEffort != "" {
+		t.Fatalf("new topic inherited bot model/reasoning: %#v", got.PromptOverride)
+	}
+	if got.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("new topic access = %q, want surface confirm", got.PromptOverride.AccessMode)
+	}
+
+	surface.CodexPromptOverride = CodexPromptOverrideRecord{Model: " gpt-5.6-terra ", ReasoningEffort: " HIGH "}
+	got = EffectiveSurfaceCapabilitySettings(root, surface)
+	if got.PromptOverride.Model != "gpt-5.6-terra" || got.PromptOverride.ReasoningEffort != "high" {
+		t.Fatalf("topic override not effective: %#v", got.PromptOverride)
+	}
+	if got.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("topic override access = %q, want surface confirm", got.PromptOverride.AccessMode)
+	}
+}
+
 func TestEffectiveSurfaceCapabilitySettingsUsesBotRecordForFeishuRoom(t *testing.T) {
 	root := NewRoot()
 	root.BotCapabilitySettings["feishu:gateway:app-1"] = BotCapabilitySettingsRecord{

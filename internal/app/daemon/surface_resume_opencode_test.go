@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"os"
 	"testing"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/botcapabilitysettings"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
@@ -10,6 +12,131 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+func TestSurfaceResumeStateRoundTripsCodexPromptOverridesPerTopic(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	app := newRestoreHintTestApp(stateDir)
+	for _, surfaceID := range []string{"topic-a", "topic-b"} {
+		app.service.MaterializeSurfaceResumeWithCodexProfile(
+			surfaceID,
+			"app-1",
+			"chat-1",
+			"user-1",
+			state.ProductModeNormal,
+			agentproto.BackendCodex,
+			"team-proxy",
+			"",
+			state.SurfaceVerbosityNormal,
+			state.PlanModeSettingOff,
+		)
+	}
+	app.service.Surface("topic-a").CodexPromptOverride = state.CodexPromptOverrideRecord{
+		Model:           " gpt-5.6-terra ",
+		ReasoningEffort: " HIGH ",
+	}
+
+	app.mu.Lock()
+	app.syncSurfaceResumeStateLocked(nil)
+	app.mu.Unlock()
+
+	entryA := app.SurfaceResumeState("topic-a")
+	entryB := app.SurfaceResumeState("topic-b")
+	if entryA == nil || entryA.CodexModelOverride != "gpt-5.6-terra" || entryA.CodexReasoningEffortOverride != "high" {
+		t.Fatalf("expected normalized topic-a override in persisted state, got %#v", entryA)
+	}
+	if entryB == nil || entryB.CodexModelOverride != "" || entryB.CodexReasoningEffortOverride != "" {
+		t.Fatalf("expected topic-b to keep empty override, got %#v", entryB)
+	}
+
+	restarted := newRestoreHintTestApp(stateDir)
+	if got := restarted.service.Surface("topic-a").CodexPromptOverride; got != (state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"}) {
+		t.Fatalf("expected topic-a override restored after restart, got %#v", got)
+	}
+	if got := restarted.service.Surface("topic-b").CodexPromptOverride; got != (state.CodexPromptOverrideRecord{}) {
+		t.Fatalf("expected topic-b override to stay empty after restart, got %#v", got)
+	}
+}
+
+func TestSurfaceResumeStoreLoadsLegacyStateWithoutCodexPromptOverrides(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	path := surfaceresume.StatePath(stateDir)
+	raw := []byte("{\n  \"version\": 1,\n  \"entries\": {\n    \"surface-1\": {\n      \"surfaceSessionID\": \"surface-1\",\n      \"productMode\": \"normal\"\n    }\n  }\n}\n")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatalf("write legacy surface resume state: %v", err)
+	}
+
+	store, err := surfaceresume.LoadStore(path)
+	if err != nil {
+		t.Fatalf("load legacy store: %v", err)
+	}
+	entry, ok := store.Get("surface-1")
+	if !ok || entry.CodexModelOverride != "" || entry.CodexReasoningEffortOverride != "" {
+		t.Fatalf("expected legacy state to load with empty codex overrides, got %#v", entry)
+	}
+}
+
+func TestSurfaceResumeStateRetainsDormantCodexPromptOverrideAcrossBackendSwitch(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	putSurfaceResumeStateForTest(t, stateDir, surfaceresume.Entry{
+		SurfaceSessionID:             "surface-1",
+		GatewayID:                    "app-1",
+		ChatID:                       "chat-1",
+		ActorUserID:                  "user-1",
+		ProductMode:                  string(state.ProductModeNormal),
+		Backend:                      string(agentproto.BackendClaude),
+		ClaudeProfileID:              "default",
+		CodexModelOverride:           " gpt-5.6-terra ",
+		CodexReasoningEffortOverride: " HIGH ",
+	})
+
+	app := newRestoreHintTestApp(stateDir)
+	if got := app.service.Surface("surface-1").CodexPromptOverride; got != (state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"}) {
+		t.Fatalf("expected dormant codex override to materialize on claude surface, got %#v", got)
+	}
+
+	app.service.MaterializeSurfaceResumeWithCodexProfile(
+		"surface-1", "app-1", "chat-1", "user-1", state.ProductModeNormal,
+		agentproto.BackendCodex, "team-proxy", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	seedHeadlessInstance(app, "inst-1", "thread-1")
+	surface := app.service.Surface("surface-1")
+	surface.AttachedInstanceID = "inst-1"
+	surface.SelectedThreadID = "thread-1"
+	snapshot := app.service.SurfaceSnapshot("surface-1")
+	if snapshot == nil || snapshot.NextPrompt.OverrideModel != "gpt-5.6-terra" || snapshot.NextPrompt.OverrideReasoningEffort != "high" {
+		t.Fatalf("expected dormant override to reactivate for codex prompts, got %#v", snapshot)
+	}
+}
+
+func TestSurfaceResumeP2PDedupesCodexPromptOverridesDeterministicallyOnTie(t *testing.T) {
+	t.Parallel()
+
+	updatedAt := time.Date(2026, 8, 25, 0, 0, 0, 0, time.UTC)
+	for range 100 {
+		entries, _ := surfaceresume.CanonicalizeEntries(map[string]surfaceresume.Entry{
+			"feishu:app-1:user:legacy": {
+				SurfaceSessionID: "feishu:app-1:user:legacy", GatewayID: "app-1", ChatID: "chat-1", ActorUserID: "legacy",
+				ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex),
+				CodexModelOverride: "gpt-5.6-terra", CodexReasoningEffortOverride: "high", UpdatedAt: updatedAt,
+			},
+			"feishu:app-1:user:ou_user": {
+				SurfaceSessionID: "feishu:app-1:user:ou_user", GatewayID: "app-1", ChatID: "chat-1", ActorUserID: "ou_user",
+				ProductMode: string(state.ProductModeNormal), Backend: string(agentproto.BackendCodex),
+				CodexModelOverride: "gpt-5.6-luna", CodexReasoningEffortOverride: "medium", UpdatedAt: updatedAt,
+			},
+		})
+		entry := entries["feishu:app-1:user:ou_user"]
+		if entry.CodexModelOverride != "gpt-5.6-terra" || entry.CodexReasoningEffortOverride != "high" {
+			t.Fatalf("expected surface id tie-break to select Terra/high, got %#v", entry)
+		}
+	}
+}
 
 func TestSurfaceResumeOpenCodeProfileContractControlsExactThreadFallback(t *testing.T) {
 	tests := []struct {

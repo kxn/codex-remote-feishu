@@ -30,10 +30,11 @@ const surfaceResumeRetryBackoff = 30 * time.Second
 func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	path := surfaceresume.StatePath(stateDir)
 	a.surfaceResumeRuntime.persistedStoreRuntimeState = loadPersistedStore("surface resume", path, surfaceresume.LoadStore)
-	store := a.surfaceResumeRuntime.store
-	if store == nil {
+	if err := a.runLegacyCodexTopicOverrideMigrationLocked(); err != nil {
+		log.Printf("legacy Codex topic override migration blocked startup surface materialization: err=%v", err)
 		return
 	}
+	store := a.surfaceResumeRuntime.store
 	a.reconcileFeishuRoomWorkspaceStateLocked(store.Entries())
 	a.materializeFeishuRoomStateLocked()
 	a.materializeSurfaceResumeStateLocked()
@@ -57,7 +58,7 @@ func (a *App) SurfaceResumeState(surfaceID string) *surfaceresume.Entry {
 }
 
 func (a *App) materializeSurfaceResumeStateLocked() {
-	if a.surfaceResumeRuntime.store == nil {
+	if a.surfaceResumeRuntime.codexTopicModelMigrationErr != nil || a.surfaceResumeRuntime.store == nil {
 		return
 	}
 	entries := a.surfaceResumeRuntime.store.Entries()
@@ -82,9 +83,14 @@ func storedVSCodeResumeExists(store *surfaceresume.Store) bool {
 	}
 	return false
 }
-
 func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
+	a.syncSurfaceResumeStateWithSkipLocked(clearTargets, nil)
+}
+func (a *App) syncSurfaceResumeStateWithSkipLocked(clearTargets, skipSurfaceIDs map[string]bool) {
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
+		return
+	}
+	if a.legacyCodexTopicMigrationBlocksEmptySurfaceSyncLocked() {
 		return
 	}
 	existing := a.surfaceResumeRuntime.store.Entries()
@@ -94,10 +100,14 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 		if surface == nil {
 			continue
 		}
-		clearResumeTarget := false
-		if clearTargets != nil {
-			clearResumeTarget = clearTargets[strings.TrimSpace(surface.SurfaceSessionID)]
+		surfaceID := strings.TrimSpace(surface.SurfaceSessionID)
+		if skipSurfaceIDs[surfaceID] {
+			if previous, ok := existing[surfaceID]; ok {
+				desired[surfaceID] = previous
+			}
+			continue
 		}
+		clearResumeTarget := clearTargets[surfaceID]
 		entry, ok := a.currentSurfaceResumeEntryLocked(surface, clearResumeTarget)
 		if !ok {
 			continue
@@ -114,7 +124,6 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 	a.syncVSCodeResumeNoticeStateLocked(desired)
 	a.syncSurfaceResumeRecoveryStateLocked()
 }
-
 func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTargets map[string]bool) {
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
 		return
@@ -147,7 +156,6 @@ func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTa
 	a.syncVSCodeResumeNoticeStateLocked(nil)
 	a.syncSurfaceResumeRecoveryStateLocked()
 }
-
 func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clearTargets map[string]bool) {
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil || len(surfaceIDs) == 0 {
 		return
@@ -192,7 +200,6 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 	a.syncVSCodeResumeNoticeStateLocked(nil)
 	a.syncSurfaceResumeRecoveryStateLocked()
 }
-
 func (a *App) putSurfaceResumeEntryLocked(entry surfaceresume.Entry, now time.Time) bool {
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
 		return false
@@ -200,16 +207,11 @@ func (a *App) putSurfaceResumeEntryLocked(entry surfaceresume.Entry, now time.Ti
 	if current, ok := a.surfaceResumeRuntime.store.Get(entry.SurfaceSessionID); ok && surfaceresume.SameEntryContent(current, entry) {
 		return false
 	}
-	entry.UpdatedAt = now
-	if err := a.surfaceResumeRuntime.store.Put(entry); err != nil {
+	if err := a.persistSurfaceResumeEntryLocked(entry, now); err != nil {
 		log.Printf("persist surface resume state failed: surface=%s err=%v", entry.SurfaceSessionID, err)
-	} else {
-		a.clearGroupOnDemandTerminalFailureLocked(entry.SurfaceSessionID)
 	}
-	a.markVSCodeDetachedPromptScanDueLocked()
 	return true
 }
-
 func (a *App) deleteSurfaceResumeEntryLocked(surfaceID string) bool {
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
 		return false
@@ -224,26 +226,28 @@ func (a *App) deleteSurfaceResumeEntryLocked(surfaceID string) bool {
 	a.markVSCodeDetachedPromptScanDueLocked()
 	return true
 }
-
 func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecord, clearResumeTarget bool) (surfaceresume.Entry, bool) {
 	if surface == nil {
 		return surfaceresume.Entry{}, false
 	}
 	entry := surfaceresume.Entry{
-		SurfaceSessionID:     strings.TrimSpace(surface.SurfaceSessionID),
-		GatewayID:            strings.TrimSpace(surface.GatewayID),
-		ChatID:               strings.TrimSpace(surface.ChatID),
-		ActorUserID:          strings.TrimSpace(surface.ActorUserID),
-		ProductMode:          string(state.NormalizeProductMode(surface.ProductMode)),
-		Backend:              string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
-		CodexProfileID:       strings.TrimSpace(a.service.SurfaceCodexProfileID(surface.SurfaceSessionID)),
-		ClaudeProfileID:      strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
-		OpenCodeProfileID:    strings.TrimSpace(a.service.SurfaceOpenCodeProfileID(surface.SurfaceSessionID)),
-		OpenCodeAdmissionRef: state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef),
-		Verbosity:            string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
-		AccessMode:           strings.TrimSpace(surface.PromptOverride.AccessMode),
-		PlanMode:             string(state.NormalizePlanModeSetting(surface.PlanMode)),
-		PlanModeOverrideSet:  surface.PlanModeOverrideSet,
+		SurfaceSessionID:             strings.TrimSpace(surface.SurfaceSessionID),
+		GatewayID:                    strings.TrimSpace(surface.GatewayID),
+		ChatID:                       strings.TrimSpace(surface.ChatID),
+		ActorUserID:                  strings.TrimSpace(surface.ActorUserID),
+		ProductMode:                  string(state.NormalizeProductMode(surface.ProductMode)),
+		Backend:                      string(a.service.SurfaceBackend(surface.SurfaceSessionID)),
+		CodexProfileID:               strings.TrimSpace(a.service.SurfaceCodexProfileID(surface.SurfaceSessionID)),
+		CodexPromptOverrideUpdatedAt: surface.CodexPromptOverrideUpdatedAt,
+		CodexModelOverride:           surface.CodexPromptOverride.Model,
+		CodexReasoningEffortOverride: surface.CodexPromptOverride.ReasoningEffort,
+		ClaudeProfileID:              strings.TrimSpace(a.service.SurfaceClaudeProfileID(surface.SurfaceSessionID)),
+		OpenCodeProfileID:            strings.TrimSpace(a.service.SurfaceOpenCodeProfileID(surface.SurfaceSessionID)),
+		OpenCodeAdmissionRef:         state.NormalizeOpenCodeAdmissionRef(surface.OpenCodeAdmissionRef),
+		Verbosity:                    string(state.NormalizeSurfaceVerbosity(surface.Verbosity)),
+		AccessMode:                   strings.TrimSpace(surface.PromptOverride.AccessMode),
+		PlanMode:                     string(state.NormalizePlanModeSetting(surface.PlanMode)),
+		PlanModeOverrideSet:          surface.PlanModeOverrideSet,
 	}
 	if entry.SurfaceSessionID == "" {
 		return surfaceresume.Entry{}, false
@@ -305,7 +309,6 @@ func (a *App) currentSurfaceResumeEntryLocked(surface *state.SurfaceConsoleRecor
 	normalized, ok := surfaceresume.NormalizeEntry(entry)
 	return normalized, ok
 }
-
 func (a *App) surfaceProfileSelectionExplicitlyUpdated(previous, current surfaceresume.Entry) bool {
 	if strings.TrimSpace(previous.CodexProfileSelectionStatus) == "" || strings.TrimSpace(previous.GatewayID) == "" {
 		return false
@@ -318,12 +321,10 @@ func (a *App) surfaceProfileSelectionExplicitlyUpdated(previous, current surface
 	}
 	return false
 }
-
 func sameCodexProfileSelection(previous, current surfaceresume.Entry) bool {
 	previousProfileID := strings.TrimSpace(previous.CodexProfileID)
 	return state.NormalizeCodexProfileID(previousProfileID) == state.NormalizeCodexProfileID(current.CodexProfileID)
 }
-
 func shouldPreserveCodexAdmissionRef(previous, current surfaceresume.Entry, clearResumeTarget bool) bool {
 	if clearResumeTarget || previous.CodexAdmissionRef == nil || strings.TrimSpace(current.ResumeThreadID) == "" ||
 		strings.TrimSpace(previous.ResumeThreadID) != strings.TrimSpace(current.ResumeThreadID) {
@@ -333,7 +334,6 @@ func shouldPreserveCodexAdmissionRef(previous, current surfaceresume.Entry, clea
 	return previous.CodexAdmissionRef.ProfileRef.ID == profileID &&
 		previous.CodexAdmissionRef.ContextPreferenceRef.ProfileID == profileID
 }
-
 func (a *App) currentSurfaceResumeTargetLocked(surface *state.SurfaceConsoleRecord) (surfaceResumeTarget, bool) {
 	target, _, ok := a.currentSurfaceResumeTargetAndWorkspaceLocked(surface)
 	return target, ok
@@ -419,7 +419,6 @@ func (a *App) currentSurfaceResumeTargetAndWorkspaceLocked(surface *state.Surfac
 	}
 	return surfaceResumeTarget{}, workspaceKey, false
 }
-
 func pendingHeadlessWorkspaceRouteMode(pending *state.HeadlessLaunchRecord) (state.RouteMode, bool) {
 	if pending == nil {
 		return "", false
@@ -435,7 +434,6 @@ func pendingHeadlessWorkspaceRouteMode(pending *state.HeadlessLaunchRecord) (sta
 		return "", false
 	}
 }
-
 func previousSurfaceResumeTargetMatchesWorkspace(entry surfaceresume.Entry, effectiveWorkspaceKey string) bool {
 	effectiveWorkspaceKey = state.ResolveWorkspaceClaimKey(effectiveWorkspaceKey)
 	if effectiveWorkspaceKey == "" || !surfaceResumeEntryNeedsRecovery(entry) {
@@ -444,7 +442,6 @@ func previousSurfaceResumeTargetMatchesWorkspace(entry surfaceresume.Entry, effe
 	previousWorkspaceKey := state.ResolveHeadlessResumeWorkspaceKey(entry.ResumeWorkspaceKey, entry.ResumeThreadCWD)
 	return previousWorkspaceKey != "" && previousWorkspaceKey == effectiveWorkspaceKey
 }
-
 func (a *App) surfaceResumeClearTargetsForActionLocked(action control.Action, before *control.Snapshot, events []eventcontract.Event) map[string]bool {
 	targets := map[string]bool{}
 	add := func(surfaceID string) {

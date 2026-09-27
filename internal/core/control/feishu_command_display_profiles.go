@@ -225,6 +225,12 @@ func ResolveFeishuCommandDisplayProfileForContext(ctx CatalogContext) FeishuComm
 	}
 	if normalized.BotCapabilitySettingsReadOnly {
 		profile = profile.withAdditionalFamilies(botCapabilitySettingsReadOnlyFamilies()...)
+		if normalized.CodexConversationSettingsWritable && VisibleModeForCatalogContext(normalized) == "codex" {
+			profile = profile.withAdditionalFamilies(
+				commandSupportVisible(FeishuCommandModel),
+				commandSupportVisible(FeishuCommandReasoning),
+			)
+		}
 	}
 	return profile
 }

@@ -69,9 +69,54 @@ func TestAccessConfigPageShowsUnmappedObservedThreadAccess(t *testing.T) {
 	}
 }
 
+func TestCodexModelCardShowsProfileDefaultFallbackWithoutOverride(t *testing.T) {
+	page := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:      FeishuCommandModel,
+		CatalogBackend: agentproto.BackendCodex,
+	})
+	text := configPageSummaryText(page)
+	if !strings.Contains(text, "下条消息\n跟随 Codex/Profile 默认") {
+		t.Fatalf("expected Codex default fallback, got %q", text)
+	}
+	if !strings.Contains(text, "话题覆盖\n无") {
+		t.Fatalf("expected empty topic override, got %q", text)
+	}
+}
+
+func TestCodexModelCardShowsSuspendedTopicOverrideForFixedProfile(t *testing.T) {
+	page := BuildFeishuCommandConfigPageView(FeishuCatalogConfigView{
+		CommandID:          FeishuCommandModel,
+		CatalogBackend:     agentproto.BackendCodex,
+		EffectiveValue:     "provider-custom",
+		OverrideValue:      "gpt-5.6-terra",
+		OverrideExtraValue: "high",
+		StatusKind:         "info",
+		StatusText:         "当前固定 Codex Profile 下，话题覆盖已暂停；切回动态 Profile 后会重新生效。",
+	})
+	body := configPageSummaryText(page)
+	if !strings.Contains(body, "下条消息\nprovider-custom") || !strings.Contains(body, "话题覆盖\ngpt-5.6-terra") || !strings.Contains(body, "附带推理覆盖\nhigh") {
+		t.Fatalf("expected effective and dormant topic values, got %q", body)
+	}
+	notice := configPageNoticeText(page)
+	if !strings.Contains(notice, "话题覆盖已暂停") {
+		t.Fatalf("expected suspended notice, got %q", notice)
+	}
+}
+
 func configPageSummaryText(page FeishuPageView) string {
 	var parts []string
 	for _, section := range page.SummarySections {
+		if section.Label != "" {
+			parts = append(parts, section.Label)
+		}
+		parts = append(parts, section.Lines...)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func configPageNoticeText(page FeishuPageView) string {
+	var parts []string
+	for _, section := range page.NoticeSections {
 		if section.Label != "" {
 			parts = append(parts, section.Label)
 		}

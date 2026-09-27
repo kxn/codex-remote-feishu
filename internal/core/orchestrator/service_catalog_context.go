@@ -54,16 +54,17 @@ func (s *Service) buildCatalogContextWithInstance(surface *state.SurfaceConsoleR
 		primaryBotState = string(primaryBotStateForSurface(surface, s.ensureFeishuRoomContextForSurface(surface)))
 	}
 	return control.NormalizeCatalogContext(control.CatalogContext{
-		Backend:                       backend,
-		ProductMode:                   string(productMode),
-		MenuStage:                     string(s.commandMenuStage(surface)),
-		AttachedKind:                  attachedKind,
-		WorkspaceKey:                  workspaceKey,
-		InstanceID:                    instanceID,
-		SurfaceScopeKind:              surfaceScopeKind,
-		PrimaryBotState:               primaryBotState,
-		Capabilities:                  capabilities,
-		CapabilitiesDeclared:          inst != nil && inst.CapabilitiesDeclared,
-		BotCapabilitySettingsReadOnly: surfaceFeishuRoomID(surface) != "",
+		Backend:                           backend,
+		ProductMode:                       string(productMode),
+		MenuStage:                         string(s.commandMenuStage(surface)),
+		AttachedKind:                      attachedKind,
+		WorkspaceKey:                      workspaceKey,
+		InstanceID:                        instanceID,
+		SurfaceScopeKind:                  surfaceScopeKind,
+		PrimaryBotState:                   primaryBotState,
+		Capabilities:                      capabilities,
+		CapabilitiesDeclared:              inst != nil && inst.CapabilitiesDeclared,
+		BotCapabilitySettingsReadOnly:     surfaceFeishuRoomID(surface) != "",
+		CodexConversationSettingsWritable: backend == agentproto.BackendCodex && state.IsHeadlessProductMode(productMode) && s.surfaceCanWriteCodexConversationSettings(surface),
 	})
 }

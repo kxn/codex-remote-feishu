@@ -248,6 +248,7 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		finalPreviewTimeout:         90 * time.Second,
 		commandAnchorRecallDelay:    8 * time.Second,
 	}
+	app.service.SetCodexTopicOverridePersister(app.persistCodexTopicOverrideLocked)
 	app.service.SetPrimaryBotPermissionChecker(app)
 	app.codexUpgradeRuntime.Inspect = func(ctx context.Context, opts codexupgrade.InspectOptions) (codexupgrade.Installation, error) {
 		return codexupgrade.Inspect(ctx, opts), nil

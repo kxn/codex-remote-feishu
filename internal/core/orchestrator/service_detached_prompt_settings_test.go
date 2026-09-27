@@ -96,7 +96,7 @@ func TestDetachedFeishuPrivatePromptSettingViewsFollowBackendRuntimeRequirements
 	}
 }
 
-func TestDetachedFeishuPrivateCodexPromptCommandsCreateAndProjectBotSettings(t *testing.T) {
+func TestDetachedFeishuPrivateCodexPromptCommandsStayOnCurrentTopic(t *testing.T) {
 	now := time.Date(2026, 8, 15, 9, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.MaterializeSurfaceResumeWithCodexProfile(
@@ -168,24 +168,15 @@ func TestDetachedFeishuPrivateCodexPromptCommandsCreateAndProjectBotSettings(t *
 		}
 	}
 
-	record, ok := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if !ok {
-		t.Fatal("expected first detached mutation to create bot capability settings")
+	if record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]; record.PromptOverride != (state.ModelConfigRecord{}) {
+		t.Fatalf("topic setting leaked into bot: %#v", record)
 	}
-	wantBot := state.ModelConfigRecord{
-		Model:           "gpt-5.5",
-		ReasoningEffort: "low",
+	wantTopic := state.CodexPromptOverrideRecord{Model: "gpt-5.5", ReasoningEffort: "low"}
+	if surface.CodexPromptOverride != wantTopic || surface.PromptOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("topic settings = %#v / %#v", surface.CodexPromptOverride, surface.PromptOverride)
 	}
-	wantSurface := state.ModelConfigRecord{
-		Model:           "gpt-5.5",
-		ReasoningEffort: "low",
-		AccessMode:      agentproto.AccessModeConfirm,
-	}
-	if record.PromptOverride != wantBot || surface.PromptOverride != wantSurface {
-		t.Fatalf("private bot settings = %#v / %#v, want %#v / %#v", record.PromptOverride, surface.PromptOverride, wantBot, wantSurface)
-	}
-	if group := svc.root.Surfaces["feishu:app-1:chat:oc_room"]; group.PromptOverride != wantBot {
-		t.Fatalf("group projection = %#v, want bot-scoped %#v", group.PromptOverride, wantBot)
+	if group := svc.root.Surfaces["feishu:app-1:chat:oc_room"]; group.CodexPromptOverride != (state.CodexPromptOverrideRecord{}) {
+		t.Fatalf("topic leaked to group: %#v", group.CodexPromptOverride)
 	}
 
 	for _, tt := range []struct {
@@ -221,9 +212,8 @@ func TestDetachedFeishuPrivateCodexPromptCommandsCreateAndProjectBotSettings(t *
 	if eventsContainNotice(clearEvents, "not_attached", "") {
 		t.Fatalf("detached model clear was rejected: %#v", clearEvents)
 	}
-	record = svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PromptOverride != (state.ModelConfigRecord{}) {
-		t.Fatalf("model clear should leave empty bot record override, got %#v", record.PromptOverride)
+	if surface.CodexPromptOverride != (state.CodexPromptOverrideRecord{}) {
+		t.Fatalf("model clear left topic override: %#v", surface.CodexPromptOverride)
 	}
 }
 

@@ -263,7 +263,7 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 			secondKind: control.ActionCodexProfileCommand,
 			secondText: "/codexprofile team-proxy",
 			check: func(record state.BotCapabilitySettingsRecord) bool {
-				return record.CodexProfileID == "team-proxy" && record.PromptOverride.Model == "gpt-5.5" && record.PromptOverride.ReasoningEffort == "high"
+				return record.CodexProfileID == "team-proxy" && record.PromptOverride == (state.ModelConfigRecord{})
 			},
 		},
 		{
@@ -276,7 +276,7 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 			secondKind: control.ActionReasoningCommand,
 			secondText: "/reasoning low",
 			check: func(record state.BotCapabilitySettingsRecord) bool {
-				return record.PromptOverride.Model == "gpt-5.5" && record.PromptOverride.ReasoningEffort == "low"
+				return record.PromptOverride == (state.ModelConfigRecord{})
 			},
 		},
 		{
@@ -329,6 +329,16 @@ func TestPrivateCapabilityCommandInterleavingsPreserveUnrelatedFields(t *testing
 			}
 			if record.PromptOverride.AccessMode != "" || record.PlanModeOverrideSet {
 				t.Fatalf("access/plan must not be written to bot record: %#v", record)
+			}
+			if tc.firstKind == control.ActionModelCommand {
+				topicA := svc.root.Surfaces["feishu:app-1:user:ou_a"].CodexPromptOverride
+				topicB := svc.root.Surfaces["feishu:app-1:user:ou_b"].CodexPromptOverride
+				if topicA.Model != "gpt-5.5" || topicA.ReasoningEffort != "high" || topicB.Model != "" {
+					t.Fatalf("topic settings leaked across users: %#v / %#v", topicA, topicB)
+				}
+				if tc.secondKind == control.ActionReasoningCommand && topicB.ReasoningEffort != "low" {
+					t.Fatalf("topic B reasoning = %#v", topicB)
+				}
 			}
 			if tc.name == "access then plan" {
 				surfaceA := svc.root.Surfaces["feishu:app-1:user:ou_a"]
@@ -973,7 +983,7 @@ func TestPrivateAccessCommandWritesSurfaceSettings(t *testing.T) {
 	}
 }
 
-func TestGroupPromptSummaryUsesBotCapabilitySettings(t *testing.T) {
+func TestGroupPromptSummaryIgnoresLegacyBotModelSettings(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -1014,7 +1024,7 @@ func TestGroupPromptSummaryUsesBotCapabilitySettings(t *testing.T) {
 	setSurfacePlanModeOverride(surface, state.PlanModeSettingOn)
 
 	summary := svc.resolveNextPromptSummary(svc.root.Instances["inst-1"], surface, "", "", state.ModelConfigRecord{})
-	if summary.OverrideModel != "gpt-5.5" || summary.OverrideReasoningEffort != "high" {
+	if summary.OverrideModel != "" || summary.OverrideReasoningEffort != "" {
 		t.Fatalf("summary override = %q/%q, want gpt-5.5/high", summary.OverrideModel, summary.OverrideReasoningEffort)
 	}
 	if summary.EffectiveAccessMode != agentproto.AccessModeConfirm {
@@ -1076,7 +1086,7 @@ func TestPrivateProviderAndProfileCommandsWriteBotCapabilitySettings(t *testing.
 	}
 }
 
-func TestPrivateModelAndReasoningCommandsWriteBotCapabilitySettings(t *testing.T) {
+func TestPrivateModelAndReasoningCommandsWriteTopicSettings(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(&state.InstanceRecord{
@@ -1100,15 +1110,15 @@ func TestPrivateModelAndReasoningCommandsWriteBotCapabilitySettings(t *testing.T
 	surface.AttachedInstanceID = "inst-1"
 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModelCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/model gpt-5.5 high"})
-	record := svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PromptOverride.Model != "gpt-5.5" || record.PromptOverride.ReasoningEffort != "high" {
-		t.Fatalf("bot model/reasoning = %#v, want gpt-5.5/high", record.PromptOverride)
+	record := surface.CodexPromptOverride
+	if record.Model != "gpt-5.5" || record.ReasoningEffort != "high" {
+		t.Fatalf("bot model/reasoning = %#v, want gpt-5.5/high", record)
 	}
 
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionReasoningCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/reasoning low"})
-	record = svc.root.BotCapabilitySettings[state.BotCapabilitySettingsKey("app-1")]
-	if record.PromptOverride.ReasoningEffort != "low" {
-		t.Fatalf("bot reasoning = %q, want low", record.PromptOverride.ReasoningEffort)
+	record = surface.CodexPromptOverride
+	if record.ReasoningEffort != "low" {
+		t.Fatalf("bot reasoning = %q, want low", record.ReasoningEffort)
 	}
 }
 
@@ -1123,8 +1133,8 @@ func TestGroupCapabilityCommandsRejectMutation(t *testing.T) {
 		{name: "mode", kind: control.ActionModeCommand, text: "/mode claude", reject: true},
 		{name: "codex profile", kind: control.ActionCodexProfileCommand, text: "/codexprofile team-proxy", reject: true},
 		{name: "claude profile", kind: control.ActionClaudeProfileCommand, text: "/claudeprofile devseek", reject: true},
-		{name: "model", kind: control.ActionModelCommand, text: "/model gpt-5.5 high", reject: true},
-		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning low", reject: true},
+		{name: "model", kind: control.ActionModelCommand, text: "/model gpt-5.5 high", reject: false},
+		{name: "reasoning", kind: control.ActionReasoningCommand, text: "/reasoning low", reject: false},
 		{name: "access", kind: control.ActionAccessCommand, text: "/access confirm", reject: false},
 		{name: "plan", kind: control.ActionPlanCommand, text: "/plan on", reject: false},
 	}

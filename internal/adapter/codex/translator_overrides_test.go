@@ -176,6 +176,10 @@ func TestTranslatePromptSendPlanModeOnMapsToUpstreamPlanMode(t *testing.T) {
 		t.Fatalf("observe current thread turn start: %v", err)
 	}
 
+	if _, err := tr.ObserveServer([]byte(`{"method":"thread/settings/updated","params":{"threadId":"thread-1","settings":{"model":"native-default-model","reasoningEffort":"high"}}}`)); err != nil {
+		t.Fatal(err)
+	}
+
 	commands, err := tr.TranslateCommand(agentproto.Command{
 		Kind:      agentproto.CommandPromptSend,
 		Origin:    agentproto.Origin{ChatID: "surface-1"},
@@ -205,6 +209,10 @@ func TestTranslatePromptSendPlanModeOffMapsToUpstreamDefaultMode(t *testing.T) {
 	tr := NewTranslator("inst-1")
 	if _, err := tr.ObserveClient([]byte(`{"method":"turn/start","params":{"threadId":"thread-1","cwd":"/tmp/project"}}`)); err != nil {
 		t.Fatalf("observe current thread turn start: %v", err)
+	}
+
+	if _, err := tr.ObserveServer([]byte(`{"method":"thread/settings/updated","params":{"threadId":"thread-1","settings":{"model":"native-default-model","reasoningEffort":"high"}}}`)); err != nil {
+		t.Fatal(err)
 	}
 
 	commands, err := tr.TranslateCommand(agentproto.Command{

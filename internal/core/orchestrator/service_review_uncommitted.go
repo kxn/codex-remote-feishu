@@ -109,6 +109,9 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 	if !start.Ready {
 		return notice(surface, start.FailureCode, start.FailureText)
 	}
+	if s.surfaceBackend(surface) == agentproto.BackendCodex && !s.codexNativeReviewTopicOverrideCompatible(surface, start.ParentThreadID) {
+		return notice(surface, "review_codex_topic_model_mismatch", "当前话题选择的 Codex 模型或推理强度与待审阅会话不一致；请先在本话题发送一条普通消息，以建立使用当前所选模型的会话，然后重试 /review。")
+	}
 	if blocked := s.blockFeishuRoomActiveDispatch(surface); blocked != nil {
 		return blocked
 	}
@@ -205,6 +208,43 @@ func (s *Service) startReview(surface *state.SurfaceConsoleRecord, start reviewS
 			},
 		},
 	}
+}
+
+func (s *Service) codexNativeReviewTopicOverrideCompatible(surface *state.SurfaceConsoleRecord, parentThreadID string) bool {
+	if profile, ok := s.surfaceCodexProfileSummary(surface); ok {
+		if _, fixed := fixedCodexAPIProfileModel(profile); fixed {
+			return true
+		}
+	}
+	topic := state.NormalizeCodexPromptOverride(surface.CodexPromptOverride)
+	if topic.Model == "" && topic.ReasoningEffort == "" {
+		return true
+	}
+	inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+	if inst == nil {
+		return false
+	}
+	thread := inst.Threads[strings.TrimSpace(parentThreadID)]
+	if thread == nil {
+		return false
+	}
+	if topic.Model != "" && !strings.EqualFold(topic.Model, codexThreadModelForGroupSwitch(thread)) {
+		return false
+	}
+	if topic.ReasoningEffort == "" {
+		return true
+	}
+	observedEffort := ""
+	if thread.CodexEffectiveThread != nil {
+		observedEffort = thread.CodexEffectiveThread.ReasoningEffort
+	}
+	if strings.TrimSpace(observedEffort) == "" {
+		observedEffort = thread.ExplicitReasoningEffort
+	}
+	if strings.TrimSpace(observedEffort) == "" && thread.ThreadSettings != nil {
+		observedEffort = thread.ThreadSettings.ReasoningEffort
+	}
+	return topic.ReasoningEffort == state.NormalizeReasoningEffort(observedEffort)
 }
 
 func reviewExecutorForBackend(backend agentproto.Backend) state.ReviewExecutorKind {

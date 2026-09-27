@@ -40,6 +40,7 @@ type vscodeMigrationFlowRecord struct {
 
 type surfaceResumeRuntimeState struct {
 	persistedStoreRuntimeState[*surfaceresume.Store]
+	codexTopicModelMigrationErr error
 	recovery                    map[string]*surfaceResumeRecoveryState
 	groupOnDemandContinuations  map[string]*groupOnDemandResumeContinuation
 	groupTerminalFailureNotices map[string]string

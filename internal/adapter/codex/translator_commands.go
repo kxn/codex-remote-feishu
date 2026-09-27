@@ -488,7 +488,6 @@ func (t *Translator) buildThreadStartParamsWithPolicy(cwd string, overrides agen
 
 func (t *Translator) directTurnStart(threadID string, command agentproto.Command, newThread bool) ([]byte, string, error) {
 	delete(t.pendingLocalTurnByThread, threadID)
-	t.pendingRemoteTurnByThread[threadID] = choose(command.Origin.Surface, command.Origin.ChatID)
 	template := t.selectTurnTemplate(threadID, newThread)
 	template["threadId"] = threadID
 	template["input"] = t.buildInputs(command.Prompt.Inputs)
@@ -503,6 +502,10 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 	setDefault(template, "attachments", []any{})
 	applyCodexResumePolicyToTurnStart(template, command.CodexResume)
 	applyPromptOverridesToTurnStart(template, command.Overrides)
+	if err := t.completeCollaborationSettings(threadID, template); err != nil {
+		return nil, "", err
+	}
+	t.pendingRemoteTurnByThread[threadID] = choose(command.Origin.Surface, command.Origin.ChatID)
 	t.recordCodexPolicyForThread(threadID, command.CodexResume)
 	requestID := t.NextRequest("turn-start")
 	payload := map[string]any{

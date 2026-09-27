@@ -223,6 +223,9 @@ func (a *App) upgradeHelperLogPathLocked() string {
 }
 
 func (a *App) maybeFlushUpgradeResultLocked(now time.Time) []eventcontract.Event {
+	if a.surfaceResumeRuntime.codexTopicModelMigrationErr != nil {
+		return nil
+	}
 	if a.upgradeRuntime.ResultScanEvery <= 0 {
 		return nil
 	}

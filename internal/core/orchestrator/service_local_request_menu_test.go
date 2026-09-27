@@ -430,7 +430,7 @@ func TestBareReasoningCommandFiltersOptionsByCurrentModelCatalog(t *testing.T) {
 	svc.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
-	surface.PromptOverride.Model = "gpt-5.6"
+	surface.CodexPromptOverride.Model = "gpt-5.6"
 	svc.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-1",
 		WorkspaceRoot: "/data/dl/droid",

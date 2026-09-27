@@ -191,6 +191,11 @@ type ModelConfigRecord struct {
 	AccessMode      string
 }
 
+type CodexPromptOverrideRecord struct {
+	Model           string
+	ReasoningEffort string
+}
+
 type ClaudeWorkspaceProfileSnapshotRecord struct {
 	ReasoningEffort string
 	AccessMode      string
@@ -347,6 +352,7 @@ type SurfaceConsoleRecord struct {
 	PreparedFromThreadID    string
 	PreparedAt              time.Time
 	PromptOverride          ModelConfigRecord
+	CodexPromptOverride     CodexPromptOverrideRecord
 	PendingHeadless         *HeadlessLaunchRecord
 	PendingRequests         map[string]*RequestPromptRecord
 	PendingRequestOrder     []string
@@ -362,6 +368,8 @@ type SurfaceConsoleRecord struct {
 	AutoContinue            AutoContinueRuntimeRecord
 	ReviewSession           *ReviewSessionRecord
 	PendingTextInput        *PendingTextInputRecord
+
+	CodexPromptOverrideUpdatedAt time.Time
 }
 
 type FeishuRoomContextRecord struct {
@@ -566,6 +574,8 @@ type AutoWhipRuntimeRecord struct {
 	Enabled                      bool
 	PendingReason                AutoWhipReason
 	PendingDueAt                 time.Time
+	PendingPreset                string
+	PendingOverride              ModelConfigRecord
 	ConsecutiveCount             int
 	LastTriggeredTurnID          string
 	PendingReplyToMessageID      string
@@ -798,6 +808,7 @@ type QueueItemRecord struct {
 	ReplyToMessagePreview string
 	Inputs                []agentproto.Input
 	SteerInputs           []agentproto.Input
+	CodexMessagePreset    string
 	RestoreAsStagedImage  bool
 	ShellCommandThreadID  string
 	ShellCommandTurnID    string

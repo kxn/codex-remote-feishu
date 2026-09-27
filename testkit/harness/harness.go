@@ -49,6 +49,9 @@ func New() *Harness {
 	})
 	h.Service = service
 	h.Codex = codexMock
+	if err := h.processServerOutput([]byte(`{"method":"thread/settings/updated","params":{"threadId":"thread-1","settings":{"model":"mock-codex-model","reasoningEffort":"high"}}}`)); err != nil {
+		panic(err)
+	}
 	return h
 }
 

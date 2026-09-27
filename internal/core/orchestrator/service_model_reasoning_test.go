@@ -39,15 +39,15 @@ func TestModelCommandClearsIncompatibleReasoningForKnownCatalogModel(t *testing.
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
 	surface := svc.root.Surfaces["surface-1"]
-	surface.PromptOverride = state.ModelConfigRecord{Model: "model-a", ReasoningEffort: "high"}
+	surface.CodexPromptOverride = state.CodexPromptOverrideRecord{Model: "model-a", ReasoningEffort: "high"}
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionModelCommand,
 		SurfaceSessionID: "surface-1",
 		Text:             "/model model-b",
 	})
-	if surface.PromptOverride.Model != "model-b" || surface.PromptOverride.ReasoningEffort != "" {
-		t.Fatalf("expected model switch to clear incompatible reasoning, got %#v", surface.PromptOverride)
+	if surface.CodexPromptOverride.Model != "model-b" || surface.CodexPromptOverride.ReasoningEffort != "" {
+		t.Fatalf("expected model switch to clear incompatible reasoning, got %#v", surface.CodexPromptOverride)
 	}
 	if len(events) != 1 || events[0].Notice == nil || !strings.Contains(events[0].Notice.Text, "已回到模型默认思考强度") {
 		t.Fatalf("expected cleanup notice, got %#v", events)
@@ -86,7 +86,7 @@ func TestModelCommandRejectsKnownCatalogUnsupportedReasoningTuple(t *testing.T) 
 	if !strings.Contains(summary, "当前模型不支持这个推理强度") || !strings.Contains(summary, "medium、high") {
 		t.Fatalf("expected supported efforts in error summary, got %q", summary)
 	}
-	if got := svc.root.Surfaces["surface-1"].PromptOverride; got != (state.ModelConfigRecord{}) {
+	if got := svc.root.Surfaces["surface-1"].CodexPromptOverride; got != (state.CodexPromptOverrideRecord{}) {
 		t.Fatalf("expected rejected tuple not to mutate override, got %#v", got)
 	}
 }
@@ -111,7 +111,8 @@ func TestReasoningCommandRejectsUnsupportedEffortForCurrentKnownModel(t *testing
 		Threads: map[string]*state.ThreadRecord{},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-	svc.root.Surfaces["surface-1"].PromptOverride.Model = "model-a"
+	surface := svc.root.Surfaces["surface-1"]
+	surface.CodexPromptOverride.Model = "model-a"
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionReasoningCommand,
@@ -123,7 +124,7 @@ func TestReasoningCommandRejectsUnsupportedEffortForCurrentKnownModel(t *testing
 	if !strings.Contains(summary, "当前模型不支持这个推理强度") || !strings.Contains(summary, "medium") {
 		t.Fatalf("expected model-scoped reasoning rejection, got %q", summary)
 	}
-	if got := svc.root.Surfaces["surface-1"].PromptOverride.ReasoningEffort; got != "" {
+	if got := svc.root.Surfaces["surface-1"].CodexPromptOverride.ReasoningEffort; got != "" {
 		t.Fatalf("expected rejected reasoning not to mutate override, got %q", got)
 	}
 }
@@ -155,8 +156,8 @@ func TestUnknownModelReasoningOverrideIsPreservedWithValidationWarning(t *testin
 		Text:             "/model future-model max",
 	})
 	surface := svc.root.Surfaces["surface-1"]
-	if surface.PromptOverride.Model != "future-model" || surface.PromptOverride.ReasoningEffort != "max" {
-		t.Fatalf("expected unknown model advanced override to be preserved, got %#v", surface.PromptOverride)
+	if surface.CodexPromptOverride.Model != "future-model" || surface.CodexPromptOverride.ReasoningEffort != "max" {
+		t.Fatalf("expected unknown model advanced override to be preserved, got %#v", surface.CodexPromptOverride)
 	}
 	if len(events) != 1 || events[0].Notice == nil || !strings.Contains(events[0].Notice.Text, "无法本地校验") {
 		t.Fatalf("expected validation warning notice, got %#v", events)
@@ -243,7 +244,7 @@ func TestModelCommandRejectsOtherModelForFixedCodexAPIProfile(t *testing.T) {
 	if !strings.Contains(summary, "当前 Codex Profile 使用固定模型 provider-custom") {
 		t.Fatalf("expected fixed profile rejection, got %q", summary)
 	}
-	if got := surface.PromptOverride; got != (state.ModelConfigRecord{}) {
+	if got := surface.CodexPromptOverride; got != (state.CodexPromptOverrideRecord{}) {
 		t.Fatalf("expected rejected fixed profile model not to mutate override, got %#v", got)
 	}
 }
@@ -276,7 +277,7 @@ func TestModelCommandRejectsReasoningForFixedCodexAPIProfileWithoutReasoning(t *
 	if !strings.Contains(summary, "未配置固定推理强度时请保持自动") {
 		t.Fatalf("expected fixed profile reasoning rejection, got %q", summary)
 	}
-	if got := surface.PromptOverride; got != (state.ModelConfigRecord{}) {
+	if got := surface.CodexPromptOverride; got != (state.CodexPromptOverrideRecord{}) {
 		t.Fatalf("expected rejected fixed profile reasoning not to mutate override, got %#v", got)
 	}
 }
@@ -384,7 +385,7 @@ func TestReasoningCardUsesDynamicCatalogForDeepSeekCodexAPIProfile(t *testing.T)
 	})
 	surface := svc.root.Surfaces["surface-1"]
 	surface.AttachedInstanceID = "inst-1"
-	surface.PromptOverride.Model = "deepseek-v4-pro"
+	surface.CodexPromptOverride.Model = "deepseek-v4-pro"
 
 	flow, ok := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandReasoning)
 	if !ok {
@@ -430,7 +431,8 @@ func TestReasoningCardDoesNotUseStaleCatalogAfterRefreshFailure(t *testing.T) {
 		Threads: map[string]*state.ThreadRecord{},
 	})
 	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-	svc.root.Surfaces["surface-1"].PromptOverride.Model = "model-a"
+	surface := svc.root.Surfaces["surface-1"]
+	surface.CodexPromptOverride.Model = "model-a"
 
 	events := svc.ApplySurfaceAction(control.Action{
 		Kind:             control.ActionReasoningCommand,
@@ -484,5 +486,93 @@ func TestPromptSendDispatchDoesNotDropReasoningWhenCatalogRefreshFailed(t *testi
 	}
 	if len(guardEvents) != 0 {
 		t.Fatalf("expected no guard event for stale catalog, got %#v", guardEvents)
+	}
+}
+
+func TestFixedCodexProfileSuspendsTopicOverrideWithoutDeleting(t *testing.T) {
+	now := time.Date(2026, 8, 25, 13, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "fixed", Kind: state.CodexProfileKindAPI, Name: "Fixed", Model: "provider-custom", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, state.NativeCodexProfileID, "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+	svc.UpsertInstance(&state.InstanceRecord{InstanceID: "inst-1", Backend: agentproto.BackendCodex, Online: true, Threads: map[string]*state.ThreadRecord{}})
+	surface.AttachedInstanceID = "inst-1"
+	want := state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "xhigh"}
+	surface.CodexPromptOverride = want
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionCodexProfileCommand, SurfaceSessionID: surface.SurfaceSessionID,
+		ChatID: surface.ChatID, ActorUserID: surface.ActorUserID, Text: "/codexprofile fixed",
+	})
+
+	if got := surface.CodexPromptOverride; got != want {
+		t.Fatalf("fixed Profile deleted topic override: got %#v want %#v", got, want)
+	}
+	surface.AttachedInstanceID = "inst-1"
+	flow, _ := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandModel)
+	view := svc.buildConfigCommandViewState(surface, flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil || view.Config.EffectiveValue != "provider-custom" || view.Config.OverrideValue != want.Model || view.Config.OverrideExtraValue != want.ReasoningEffort {
+		t.Fatalf("fixed Profile card did not separate effective and topic values: %#v", view.Config)
+	}
+	if !strings.Contains(view.Config.StatusText, "暂停") {
+		t.Fatalf("fixed Profile card did not mark topic override suspended: %#v", view.Config)
+	}
+}
+
+func TestDynamicCodexProfileReactivatesDormantTopicOverride(t *testing.T) {
+	now := time.Date(2026, 8, 25, 13, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: state.NativeCodexProfileID, Kind: state.CodexProfileKindNative, Name: "本机默认", Available: true},
+		{ID: "fixed", Kind: state.CodexProfileKindAPI, Name: "Fixed", Model: "provider-custom", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProfile("surface-1", "", "chat-1", "user-1", state.ProductModeNormal, agentproto.BackendCodex, "fixed", "", "", "")
+	surface := svc.root.Surfaces["surface-1"]
+	svc.UpsertInstance(&state.InstanceRecord{InstanceID: "inst-1", Backend: agentproto.BackendCodex, Online: true, Threads: map[string]*state.ThreadRecord{}})
+	surface.AttachedInstanceID = "inst-1"
+	want := state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "xhigh"}
+	surface.CodexPromptOverride = want
+
+	svc.ApplySurfaceAction(control.Action{
+		Kind: control.ActionCodexProfileCommand, SurfaceSessionID: surface.SurfaceSessionID,
+		ChatID: surface.ChatID, ActorUserID: surface.ActorUserID, Text: "/codexprofile " + state.NativeCodexProfileID,
+	})
+
+	if got := surface.CodexPromptOverride; got != want {
+		t.Fatalf("dynamic Profile switch changed dormant topic override: got %#v want %#v", got, want)
+	}
+	surface.AttachedInstanceID = "inst-1"
+	flow, _ := control.FeishuConfigFlowDefinitionByCommandID(control.FeishuCommandModel)
+	view := svc.buildConfigCommandViewState(surface, flow, control.FeishuCatalogConfigView{})
+	if view.Config == nil || view.Config.EffectiveValue != want.Model || view.Config.OverrideValue != want.Model || view.Config.OverrideExtraValue != want.ReasoningEffort {
+		t.Fatalf("dynamic Profile did not reactivate topic override: %#v", view.Config)
+	}
+	if strings.Contains(view.Config.StatusText, "暂停") {
+		t.Fatalf("dynamic Profile card still marks topic override suspended: %#v", view.Config)
+	}
+}
+
+func TestClaudeReasoningDoesNotOverwriteDormantCodexTopicOverride(t *testing.T) {
+	now := time.Date(2026, 8, 25, 13, 20, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.MaterializeSurfaceResumeWithCodexProfile(
+		"feishu:app-1:user:ou_user", "app-1", "ou_user", "ou_user",
+		state.ProductModeNormal, agentproto.BackendCodex, state.NativeCodexProfileID, "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	surface := svc.root.Surfaces["feishu:app-1:user:ou_user"]
+	want := state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"}
+	surface.CodexPromptOverride = want
+
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/mode claude"})
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionReasoningCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/reasoning max"})
+	if got := surface.CodexPromptOverride; got != want {
+		t.Fatalf("Claude reasoning overwrote dormant Codex topic override: got %#v want %#v", got, want)
+	}
+	svc.ApplySurfaceAction(control.Action{Kind: control.ActionModeCommand, SurfaceSessionID: surface.SurfaceSessionID, GatewayID: "app-1", ChatID: "ou_user", ActorUserID: "ou_user", Text: "/mode codex"})
+	if got := surface.CodexPromptOverride; got != want {
+		t.Fatalf("Codex mode reactivation changed topic override: got %#v want %#v", got, want)
 	}
 }

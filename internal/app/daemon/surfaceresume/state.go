@@ -18,31 +18,34 @@ const (
 )
 
 type Entry struct {
-	SurfaceSessionID            string                      `json:"surfaceSessionID"`
-	GatewayID                   string                      `json:"gatewayID,omitempty"`
-	ChatID                      string                      `json:"chatID,omitempty"`
-	ActorUserID                 string                      `json:"actorUserID,omitempty"`
-	ProductMode                 string                      `json:"productMode,omitempty"`
-	Backend                     string                      `json:"backend,omitempty"`
-	LegacyCodexProviderID       string                      `json:"codexProviderID,omitempty"`
-	CodexProfileID              string                      `json:"codexProfileID,omitempty"`
-	CodexProfileSelectionStatus string                      `json:"codexProfileSelectionStatus,omitempty"`
-	CodexAdmissionRef           *state.CodexAdmissionRef    `json:"codexAdmissionRef,omitempty"`
-	ClaudeProfileID             string                      `json:"claudeProfileID,omitempty"`
-	OpenCodeProfileID           string                      `json:"openCodeProfileID,omitempty"`
-	OpenCodeAdmissionRef        *state.OpenCodeAdmissionRef `json:"openCodeAdmissionRef,omitempty"`
-	Verbosity                   string                      `json:"verbosity,omitempty"`
-	AccessMode                  string                      `json:"accessMode,omitempty"`
-	PlanMode                    string                      `json:"planMode,omitempty"`
-	PlanModeOverrideSet         bool                        `json:"planModeOverrideSet,omitempty"`
-	ResumeInstanceID            string                      `json:"resumeInstanceID,omitempty"`
-	ResumeThreadID              string                      `json:"resumeThreadID,omitempty"`
-	ResumeThreadTitle           string                      `json:"resumeThreadTitle,omitempty"`
-	ResumeThreadCWD             string                      `json:"resumeThreadCWD,omitempty"`
-	ResumeWorkspaceKey          string                      `json:"resumeWorkspaceKey,omitempty"`
-	ResumeRouteMode             string                      `json:"resumeRouteMode,omitempty"`
-	ResumeHeadless              bool                        `json:"resumeHeadless,omitempty"`
-	UpdatedAt                   time.Time                   `json:"updatedAt,omitempty"`
+	SurfaceSessionID             string                      `json:"surfaceSessionID"`
+	GatewayID                    string                      `json:"gatewayID,omitempty"`
+	ChatID                       string                      `json:"chatID,omitempty"`
+	ActorUserID                  string                      `json:"actorUserID,omitempty"`
+	ProductMode                  string                      `json:"productMode,omitempty"`
+	Backend                      string                      `json:"backend,omitempty"`
+	LegacyCodexProviderID        string                      `json:"codexProviderID,omitempty"`
+	CodexProfileID               string                      `json:"codexProfileID,omitempty"`
+	CodexProfileSelectionStatus  string                      `json:"codexProfileSelectionStatus,omitempty"`
+	CodexAdmissionRef            *state.CodexAdmissionRef    `json:"codexAdmissionRef,omitempty"`
+	CodexPromptOverrideUpdatedAt time.Time                   `json:"codexPromptOverrideUpdatedAt,omitzero"`
+	CodexModelOverride           string                      `json:"codexModelOverride,omitempty"`
+	CodexReasoningEffortOverride string                      `json:"codexReasoningEffortOverride,omitempty"`
+	ClaudeProfileID              string                      `json:"claudeProfileID,omitempty"`
+	OpenCodeProfileID            string                      `json:"openCodeProfileID,omitempty"`
+	OpenCodeAdmissionRef         *state.OpenCodeAdmissionRef `json:"openCodeAdmissionRef,omitempty"`
+	Verbosity                    string                      `json:"verbosity,omitempty"`
+	AccessMode                   string                      `json:"accessMode,omitempty"`
+	PlanMode                     string                      `json:"planMode,omitempty"`
+	PlanModeOverrideSet          bool                        `json:"planModeOverrideSet,omitempty"`
+	ResumeInstanceID             string                      `json:"resumeInstanceID,omitempty"`
+	ResumeThreadID               string                      `json:"resumeThreadID,omitempty"`
+	ResumeThreadTitle            string                      `json:"resumeThreadTitle,omitempty"`
+	ResumeThreadCWD              string                      `json:"resumeThreadCWD,omitempty"`
+	ResumeWorkspaceKey           string                      `json:"resumeWorkspaceKey,omitempty"`
+	ResumeRouteMode              string                      `json:"resumeRouteMode,omitempty"`
+	ResumeHeadless               bool                        `json:"resumeHeadless,omitempty"`
+	UpdatedAt                    time.Time                   `json:"updatedAt,omitempty"`
 }
 
 func StatePath(stateDir string) string {
@@ -138,6 +141,7 @@ func NormalizeEntry(entry Entry) (Entry, bool) {
 	entry.CodexProfileID = strings.TrimSpace(entry.CodexProfileID)
 	entry.CodexProfileSelectionStatus = strings.TrimSpace(entry.CodexProfileSelectionStatus)
 	entry.CodexAdmissionRef = normalizeCodexAdmissionRef(entry.CodexAdmissionRef)
+	entry.CodexModelOverride, entry.CodexReasoningEffortOverride = normalizeCodexPromptOverride(entry.CodexModelOverride, entry.CodexReasoningEffortOverride)
 	entry.ClaudeProfileID = strings.TrimSpace(entry.ClaudeProfileID)
 	entry.OpenCodeProfileID = strings.TrimSpace(entry.OpenCodeProfileID)
 	entry.OpenCodeAdmissionRef = normalizeOpenCodeAdmissionRef(entry.OpenCodeAdmissionRef)
@@ -208,6 +212,7 @@ func SameEntryContent(left, right Entry) bool {
 		strings.TrimSpace(left.CodexProfileID) == strings.TrimSpace(right.CodexProfileID) &&
 		strings.TrimSpace(left.CodexProfileSelectionStatus) == strings.TrimSpace(right.CodexProfileSelectionStatus) &&
 		sameCodexAdmissionRef(left.CodexAdmissionRef, right.CodexAdmissionRef) &&
+		sameCodexPromptOverride(left, right) &&
 		strings.TrimSpace(left.ClaudeProfileID) == strings.TrimSpace(right.ClaudeProfileID) &&
 		strings.TrimSpace(left.OpenCodeProfileID) == strings.TrimSpace(right.OpenCodeProfileID) &&
 		sameOpenCodeAdmissionRef(left.OpenCodeAdmissionRef, right.OpenCodeAdmissionRef) &&
@@ -250,6 +255,20 @@ func CanonicalizeEntryProfileSelection(entry Entry) Entry {
 	entry.CodexProfileID = state.NormalizeCodexProfileID(entry.CodexProfileID)
 	entry.LegacyCodexProviderID = ""
 	return entry
+}
+
+func normalizeCodexPromptOverride(model, reasoningEffort string) (string, string) {
+	override := state.NormalizeCodexPromptOverride(state.CodexPromptOverrideRecord{
+		Model:           model,
+		ReasoningEffort: reasoningEffort,
+	})
+	return override.Model, override.ReasoningEffort
+}
+
+func sameCodexPromptOverride(left, right Entry) bool {
+	leftModel, leftReasoningEffort := normalizeCodexPromptOverride(left.CodexModelOverride, left.CodexReasoningEffortOverride)
+	rightModel, rightReasoningEffort := normalizeCodexPromptOverride(right.CodexModelOverride, right.CodexReasoningEffortOverride)
+	return leftModel == rightModel && leftReasoningEffort == rightReasoningEffort && left.CodexPromptOverrideUpdatedAt.Equal(right.CodexPromptOverrideUpdatedAt)
 }
 
 func normalizeCodexAdmissionRef(value *state.CodexAdmissionRef) *state.CodexAdmissionRef {

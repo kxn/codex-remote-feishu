@@ -181,6 +181,9 @@ func goalGetCommand(threadID, purpose string) *agentproto.Command {
 }
 
 func (s *Service) issueGoalCommand(surface *state.SurfaceConsoleRecord, threadID, actionName string, command *agentproto.Command, sourceMessageID string) []eventcontract.Event {
+	if actionName == "pause" || actionName == "clear" {
+		s.revokeGoalInterlockOnExternalMutation(surface.AttachedInstanceID, threadID)
+	}
 	commandID := s.nextAgentCommandID()
 	command.CommandID = commandID
 	if s.goalUserCommands == nil {

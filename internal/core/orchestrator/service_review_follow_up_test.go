@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -8,6 +9,121 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/render"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
+
+func TestCodexNativeReviewRejectsTopicPromptOverrideMismatch(t *testing.T) {
+	tests := []struct {
+		name     string
+		override state.CodexPromptOverrideRecord
+		observed agentproto.CodexEffectiveThreadContract
+	}{
+		{
+			name:     "model group mismatch",
+			override: state.CodexPromptOverrideRecord{Model: "deepseek-v4-flash", ReasoningEffort: "high"},
+			observed: agentproto.CodexEffectiveThreadContract{Model: "gpt-5.6-sol", ReasoningEffort: "high"},
+		},
+		{
+			name:     "reasoning mismatch",
+			override: state.CodexPromptOverrideRecord{Model: "gpt-5.6-sol", ReasoningEffort: "xhigh"},
+			observed: agentproto.CodexEffectiveThreadContract{Model: "gpt-5.6-sol", ReasoningEffort: "high"},
+		},
+		{
+			name:     "same group model mismatch",
+			override: state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra"},
+			observed: agentproto.CodexEffectiveThreadContract{Model: "gpt-5.6-sol"},
+		},
+		{
+			name:     "observed values unavailable",
+			override: state.CodexPromptOverrideRecord{Model: "gpt-5.6-sol"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, surface, cwd := newReviewSessionService(t)
+			surface.CodexPromptOverride = tt.override
+			svc.root.Instances["inst-1"].Threads["thread-main"].CodexEffectiveThread = &tt.observed
+
+			events := svc.startReview(surface, reviewStartState{
+				Ready:           true,
+				ParentThreadID:  "thread-main",
+				ThreadCWD:       cwd,
+				SourceMessageID: "msg-review",
+				Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+			})
+
+			if noticeCode(events, "review_codex_topic_model_mismatch") == "" {
+				t.Fatalf("expected topic model mismatch notice, got %#v", events)
+			}
+			if hasAgentCommand(events) || surface.ReviewSession != nil {
+				t.Fatalf("mismatched topic override must not start native review, events=%#v session=%#v", events, surface.ReviewSession)
+			}
+			if !strings.Contains(events[0].Notice.Text, "先在本话题发送一条普通消息") || !strings.Contains(events[0].Notice.Text, "重试 /review") {
+				t.Fatalf("expected actionable mismatch notice, got %#v", events[0].Notice)
+			}
+		})
+	}
+}
+
+func TestCodexNativeReviewContinuesWhenTopicOverrideIsCompatibleOrAbsent(t *testing.T) {
+	tests := []struct {
+		name     string
+		override state.CodexPromptOverrideRecord
+		observed *agentproto.CodexEffectiveThreadContract
+	}{
+		{name: "no topic override"},
+		{
+			name:     "exact topic override match",
+			override: state.CodexPromptOverrideRecord{Model: "gpt-5.6-sol", ReasoningEffort: "high"},
+			observed: &agentproto.CodexEffectiveThreadContract{Model: "gpt-5.6-sol", ReasoningEffort: "high"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, surface, cwd := newReviewSessionService(t)
+			surface.CodexPromptOverride = tt.override
+			svc.root.Instances["inst-1"].Threads["thread-main"].CodexEffectiveThread = tt.observed
+
+			events := svc.startReview(surface, reviewStartState{
+				Ready:           true,
+				ParentThreadID:  "thread-main",
+				ThreadCWD:       cwd,
+				SourceMessageID: "msg-review",
+				Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+			})
+
+			if len(events) != 2 || events[1].Command == nil || events[1].Command.Kind != agentproto.CommandReviewStart {
+				t.Fatalf("expected unchanged native review start, got %#v", events)
+			}
+		})
+	}
+}
+
+func TestCodexNativeReviewIgnoresDormantTopicOverrideForFixedProfile(t *testing.T) {
+	svc, surface, cwd := newReviewSessionService(t)
+	svc.MaterializeCodexProfiles([]state.CodexProfileSummary{
+		{ID: "fixed", Kind: state.CodexProfileKindAPI, Name: "Fixed", Model: "provider-custom", ReasoningEffort: "high", Available: true},
+	})
+	svc.MaterializeSurfaceResumeWithCodexProfile(
+		surface.SurfaceSessionID, surface.GatewayID, surface.ChatID, surface.ActorUserID,
+		state.ProductModeNormal, agentproto.BackendCodex, "fixed", "", state.SurfaceVerbosityNormal, state.PlanModeSettingOff,
+	)
+	surface = svc.root.Surfaces[surface.SurfaceSessionID]
+	surface.CodexPromptOverride = state.CodexPromptOverrideRecord{Model: "gpt-5.6-terra", ReasoningEffort: "high"}
+	svc.root.Instances["inst-1"].Threads["thread-main"].CodexEffectiveThread = &agentproto.CodexEffectiveThreadContract{
+		Model: "provider-custom", ReasoningEffort: "high",
+	}
+
+	events := svc.startReview(surface, reviewStartState{
+		Ready:           true,
+		ParentThreadID:  "thread-main",
+		ThreadCWD:       cwd,
+		SourceMessageID: "msg-review",
+		Target:          agentproto.ReviewTarget{Kind: agentproto.ReviewTargetKindUncommittedChanges},
+	})
+
+	if len(events) != 2 || events[1].Command == nil || events[1].Command.Kind != agentproto.CommandReviewStart {
+		t.Fatalf("expected fixed Profile native review to ignore dormant topic override, got %#v", events)
+	}
+}
 
 func TestReviewSessionTextWithoutExplicitFollowUpIsBlocked(t *testing.T) {
 	svc, surface, _ := newReviewSessionService(t)

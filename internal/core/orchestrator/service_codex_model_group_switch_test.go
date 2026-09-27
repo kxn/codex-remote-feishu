@@ -69,7 +69,8 @@ func TestCodexSameModelGroupSwitchKeepsThread(t *testing.T) {
 		threadModel string
 		targetModel string
 	}{
-		{name: "gpt to gpt", threadModel: "gpt-5.5", targetModel: "gpt-5.5"},
+		{name: "sol to terra", threadModel: "gpt-5.6-sol", targetModel: "gpt-5.6-terra"},
+		{name: "terra to luna", threadModel: "gpt-5.6-terra", targetModel: "gpt-5.6-luna"},
 		{name: "non gpt to non gpt", threadModel: "deepseek-v4-flash", targetModel: "qwen-coder"},
 	}
 	for _, tt := range tests {
@@ -112,7 +113,39 @@ func TestCodexSameModelGroupSwitchKeepsThread(t *testing.T) {
 	}
 }
 
-func TestCodexDefaultTargetPolicyStartsNewThreadAcrossModelGroup(t *testing.T) {
+func TestCodexTopicOverrideControlsOrdinaryMessage(t *testing.T) {
+	now := time.Date(2026, 8, 25, 10, 10, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	svc.UpsertInstance(codexModelGroupSwitchInstance("gpt-5.6-sol"))
+	surface := codexModelGroupSwitchSurface(t, svc)
+	surface.PromptOverride.AccessMode = agentproto.AccessModeConfirm
+	surface.CodexPromptOverride = state.CodexPromptOverrideRecord{Model: "deepseek-v4-flash", ReasoningEffort: "high"}
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: surface.SurfaceSessionID,
+		ChatID:           surface.ChatID,
+		ActorUserID:      surface.ActorUserID,
+		MessageID:        "msg-topic-deepseek",
+		Text:             "继续",
+	})
+
+	command := firstCodexCommand(events, agentproto.CommandPromptSend)
+	if command == nil {
+		t.Fatalf("expected prompt command, got %#v", events)
+	}
+	if command.Target.ExecutionMode != agentproto.PromptExecutionModeStartNew || command.Target.ThreadID != "" || !command.Target.CreateThreadIfMissing {
+		t.Fatalf("expected topic model to switch groups, got %#v", command.Target)
+	}
+	if command.Overrides.Model != "deepseek-v4-flash" || command.Overrides.ReasoningEffort != "high" || command.Overrides.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected ordinary text to use topic model/high and preserve access, got %#v", command.Overrides)
+	}
+	if surface.CodexPromptOverride != (state.CodexPromptOverrideRecord{Model: "deepseek-v4-flash", ReasoningEffort: "high"}) {
+		t.Fatalf("message preset mutated dormant topic override: %#v", surface.CodexPromptOverride)
+	}
+}
+
+func TestCodexDefaultTargetPolicyDoesNotInventModelGroup(t *testing.T) {
 	now := time.Date(2026, 8, 2, 10, 10, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)
 	svc.UpsertInstance(codexModelGroupSwitchInstance("deepseek-v4-flash"))
@@ -138,16 +171,16 @@ func TestCodexDefaultTargetPolicyStartsNewThreadAcrossModelGroup(t *testing.T) {
 	if command == nil {
 		t.Fatalf("expected prompt command, got %#v", events)
 	}
-	if command.Target.ExecutionMode != agentproto.PromptExecutionModeStartNew ||
-		command.Target.ThreadID != "" ||
-		!command.Target.CreateThreadIfMissing {
-		t.Fatalf("expected codex default target policy to start a new thread, got %#v", command.Target)
+	if command.Target.ExecutionMode != agentproto.PromptExecutionModeResumeExisting ||
+		command.Target.ThreadID != "thread-1" ||
+		command.Target.CreateThreadIfMissing {
+		t.Fatalf("expected unknown native default not to invent a target model group, got %#v", command.Target)
 	}
 	if command.CodexResume == nil || command.CodexResume.ModelMode != state.CodexThreadValueDefault {
 		t.Fatalf("expected codex default policy to remain default-owned, got %#v", command.CodexResume)
 	}
-	if got := command.Overrides.Model; got != "" {
-		t.Fatalf("expected default target policy to drop old thread model override, got %q", got)
+	if command.Overrides.Model != "" || command.Overrides.ReasoningEffort != "" {
+		t.Fatalf("expected native defaults to stay implicit, got %#v", command.Overrides)
 	}
 }
 

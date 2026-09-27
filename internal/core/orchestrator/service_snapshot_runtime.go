@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -178,6 +179,20 @@ func (s *Service) RestoreSurfaceSessionSettings(surfaceID, accessMode string, pl
 	surface.PromptOverride.AccessMode = strings.TrimSpace(accessMode)
 	surface.PlanMode = state.NormalizePlanModeSetting(planMode)
 	surface.PlanModeOverrideSet = planModeOverrideSet
+}
+
+// RestoreSurfaceCodexPromptOverride 恢复 surface 保存的 Codex topic 级 model/reasoning 覆盖。
+// 必须在 MaterializeSurfaceResumeContract（含 bot settings 投影）之后调用。
+func (s *Service) RestoreSurfaceCodexPromptOverride(surfaceID string, value state.CodexPromptOverrideRecord, updatedAt time.Time) {
+	if strings.TrimSpace(surfaceID) == "" {
+		return
+	}
+	surface := s.root.Surfaces[surfaceID]
+	if surface == nil {
+		return
+	}
+	surface.CodexPromptOverride = state.NormalizeCodexPromptOverride(value)
+	surface.CodexPromptOverrideUpdatedAt = updatedAt
 }
 
 func (s *Service) BindPendingRemoteCommand(surfaceID, commandID string) {

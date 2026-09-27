@@ -218,6 +218,8 @@ func (a *App) registerAPIRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/runtime-status", a.requireAdmin(a.handleRuntimeStatus))
 	mux.HandleFunc("GET /api/admin/config", a.requireAdmin(a.handleAdminConfig))
 	mux.HandleFunc("GET /api/admin/codex/profiles", a.requireAdmin(a.handleCodexProfilesList))
+	mux.HandleFunc("GET /api/admin/codex/default-model", a.requireAdmin(a.handleCodexRemoteDefaultGet))
+	mux.HandleFunc("PUT /api/admin/codex/default-model", a.requireAdmin(a.handleCodexRemoteDefaultPut))
 	mux.HandleFunc("POST /api/admin/codex/profiles", a.requireAdmin(a.handleCodexProfileCreate))
 	mux.HandleFunc("PUT /api/admin/codex/profiles/{id}", a.requireAdmin(a.handleCodexProfileUpdate))
 	mux.HandleFunc("DELETE /api/admin/codex/profiles/{id}", a.requireAdmin(a.handleCodexProfileDelete))

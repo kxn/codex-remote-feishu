@@ -42,18 +42,19 @@ const (
 )
 
 type CatalogContext struct {
-	Backend                       agentproto.Backend
-	ProductMode                   string
-	MenuStage                     string
-	AttachedKind                  string
-	WorkspaceKey                  string
-	InstanceID                    string
-	SurfaceScopeKind              string
-	PrimaryBotState               string
-	PrimaryPermissionState        string
-	Capabilities                  agentproto.Capabilities
-	CapabilitiesDeclared          bool
-	BotCapabilitySettingsReadOnly bool
+	Backend                           agentproto.Backend
+	ProductMode                       string
+	MenuStage                         string
+	AttachedKind                      string
+	WorkspaceKey                      string
+	InstanceID                        string
+	SurfaceScopeKind                  string
+	PrimaryBotState                   string
+	PrimaryPermissionState            string
+	Capabilities                      agentproto.Capabilities
+	CapabilitiesDeclared              bool
+	BotCapabilitySettingsReadOnly     bool
+	CodexConversationSettingsWritable bool
 }
 
 func NormalizeCatalogAttachedKind(value string) CatalogAttachedKind {
@@ -138,18 +139,19 @@ func NormalizeCatalogContext(ctx CatalogContext) CatalogContext {
 		caps = ctx.Capabilities
 	}
 	return CatalogContext{
-		Backend:                       backend,
-		ProductMode:                   productMode,
-		MenuStage:                     string(menuStage),
-		AttachedKind:                  string(attachedKind),
-		WorkspaceKey:                  workspaceKey,
-		InstanceID:                    instanceID,
-		SurfaceScopeKind:              string(NormalizeCatalogSurfaceScopeKind(ctx.SurfaceScopeKind)),
-		PrimaryBotState:               string(NormalizeCatalogPrimaryBotState(ctx.PrimaryBotState)),
-		PrimaryPermissionState:        string(NormalizeCatalogPrimaryPermissionState(ctx.PrimaryPermissionState)),
-		Capabilities:                  caps,
-		CapabilitiesDeclared:          ctx.CapabilitiesDeclared,
-		BotCapabilitySettingsReadOnly: ctx.BotCapabilitySettingsReadOnly,
+		Backend:                           backend,
+		ProductMode:                       productMode,
+		MenuStage:                         string(menuStage),
+		AttachedKind:                      string(attachedKind),
+		WorkspaceKey:                      workspaceKey,
+		InstanceID:                        instanceID,
+		SurfaceScopeKind:                  string(NormalizeCatalogSurfaceScopeKind(ctx.SurfaceScopeKind)),
+		PrimaryBotState:                   string(NormalizeCatalogPrimaryBotState(ctx.PrimaryBotState)),
+		PrimaryPermissionState:            string(NormalizeCatalogPrimaryPermissionState(ctx.PrimaryPermissionState)),
+		Capabilities:                      caps,
+		CapabilitiesDeclared:              ctx.CapabilitiesDeclared,
+		BotCapabilitySettingsReadOnly:     ctx.BotCapabilitySettingsReadOnly,
+		CodexConversationSettingsWritable: ctx.CodexConversationSettingsWritable,
 	}
 }
 

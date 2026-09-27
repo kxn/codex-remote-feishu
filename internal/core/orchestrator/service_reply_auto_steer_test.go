@@ -75,6 +75,37 @@ func TestReplyToActiveRunningSourceAutoSteersText(t *testing.T) {
 	}
 }
 
+func TestReplyAutoSteerCodexMessagePresetQueuesInsteadOfSteering(t *testing.T) {
+	now := time.Date(2026, 8, 25, 10, 20, 0, 0, time.UTC)
+	svc := newReplyAutoSteerServiceFixture(&now)
+	svc.root.Surfaces["surface-1"].PromptOverride.AccessMode = agentproto.AccessModeConfirm
+	svc.root.Surfaces["surface-1"].CodexPromptOverride = state.CodexPromptOverrideRecord{Model: "gpt-5.6-sol", ReasoningEffort: "medium"}
+	startReplyAutoSteerTurn(svc)
+
+	events := svc.ApplySurfaceAction(control.Action{
+		Kind:             control.ActionTextMessage,
+		SurfaceSessionID: "surface-1",
+		MessageID:        "msg-reply-topic-override",
+		TargetMessageID:  "msg-active",
+		Text:             "[terra] 补充说明",
+		Inputs:           []agentproto.Input{{Type: agentproto.InputText, Text: "[terra] 补充说明"}},
+		SteerInputs:      []agentproto.Input{{Type: agentproto.InputText, Text: "[terra] 补充说明"}},
+	})
+
+	item := svc.root.Surfaces["surface-1"].QueueItems["queue-2"]
+	if item == nil || item.Status != state.QueueItemQueued || item.CodexMessagePreset != "terra" {
+		t.Fatalf("expected queued terra item, got %#v", item)
+	}
+	if item.FrozenOverride.Model != "gpt-5.6-terra" || item.FrozenOverride.ReasoningEffort != "high" || item.FrozenOverride.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatalf("expected reply queue item to freeze the message preset, got %#v", item.FrozenOverride)
+	}
+	for _, event := range events {
+		if event.Command != nil && event.Command.Kind == agentproto.CommandTurnSteer {
+			t.Fatalf("codex preset reply must not steer active turn: %#v", events)
+		}
+	}
+}
+
 func TestOpenCodeReplyToActiveRunningSourceReturnsUnsupportedNotice(t *testing.T) {
 	now := time.Date(2026, 8, 12, 15, 30, 0, 0, time.UTC)
 	svc := newReplyAutoSteerServiceFixture(&now)

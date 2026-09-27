@@ -118,6 +118,8 @@ func (s *Service) clearAutoWhipPending(surface *state.SurfaceConsoleRecord) {
 	}
 	surface.AutoWhip.PendingReason = ""
 	surface.AutoWhip.PendingDueAt = time.Time{}
+	surface.AutoWhip.PendingPreset = ""
+	surface.AutoWhip.PendingOverride = state.ModelConfigRecord{}
 	surface.AutoWhip.PendingReplyToMessageID = ""
 	surface.AutoWhip.PendingReplyToMessagePreview = ""
 }
@@ -175,6 +177,8 @@ func (s *Service) scheduleAutoWhip(surface *state.SurfaceConsoleRecord, item *st
 	}
 	surface.AutoWhip.PendingReason = reason
 	surface.AutoWhip.PendingDueAt = s.now().Add(delay)
+	surface.AutoWhip.PendingPreset = strings.TrimSpace(item.CodexMessagePreset)
+	surface.AutoWhip.PendingOverride = item.FrozenOverride
 	surface.AutoWhip.ConsecutiveCount = count
 	surface.AutoWhip.LastTriggeredTurnID = turnID
 	surface.AutoWhip.PendingReplyToMessageID = xutil.FirstNonEmpty(item.ReplyToMessageID, item.SourceMessageID)
@@ -260,6 +264,9 @@ func (s *Service) maybeDispatchPendingAutoWhip(surface *state.SurfaceConsoleReco
 	replyToMessagePreview := surface.AutoWhip.PendingReplyToMessagePreview
 	reason := surface.AutoWhip.PendingReason
 	count := surface.AutoWhip.ConsecutiveCount
+	preset := strings.TrimSpace(surface.AutoWhip.PendingPreset)
+	override := surface.AutoWhip.PendingOverride
+
 	s.clearAutoWhipPending(surface)
 	events := make([]eventcontract.Event, 0, 2)
 	if reason == state.AutoWhipReasonIncompleteStop {
@@ -273,7 +280,8 @@ func (s *Service) maybeDispatchPendingAutoWhip(surface *state.SurfaceConsoleReco
 		threadID,
 		cwd,
 		routeMode,
-		surface.PromptOverride,
+		override,
+		preset,
 		false,
 	)...)
 	return events

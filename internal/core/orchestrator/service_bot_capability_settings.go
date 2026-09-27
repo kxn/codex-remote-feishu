@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -149,6 +150,10 @@ func (s *Service) projectBotCapabilitySettingsToSurface(surface *state.SurfaceCo
 		surface.OpenCodeAdmissionRef = nil
 	}
 	surface.PromptOverride = normalized.PromptOverride
+	if normalized.Backend == agentproto.BackendCodex {
+		surface.PromptOverride.Model = ""
+		surface.PromptOverride.ReasoningEffort = ""
+	}
 	// access/plan 为会话级设置，bot record 投影不覆盖 surface 自己的值。
 	surface.PromptOverride.AccessMode = previousAccessMode
 	surface.PlanMode = previousPlanMode
@@ -249,9 +254,23 @@ func (s *Service) surfaceCanWriteBotCapabilitySettings(surface *state.SurfaceCon
 	return ok && ref.IsUser()
 }
 
+func (s *Service) surfaceCanWriteCodexConversationSettings(surface *state.SurfaceConsoleRecord) bool {
+	if surface == nil {
+		return false
+	}
+	ref, ok := feishuidentity.ParseSurfaceRef(surface.SurfaceSessionID)
+	return ok && ref.GatewayID == strings.TrimSpace(surface.GatewayID) && (ref.IsUser() || ref.IsChat())
+}
+
 func (s *Service) rejectBotCapabilityMutationInReadOnlySurface(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
 	if surface == nil || surfaceFeishuRoomID(surface) == "" || !isBotCapabilitySettingsAction(action.Kind) {
 		return nil
+	}
+	if s.surfaceBackend(surface) == agentproto.BackendCodex && s.surfaceCanWriteCodexConversationSettings(surface) {
+		switch action.Kind {
+		case control.ActionModelCommand, control.ActionReasoningCommand:
+			return nil
+		}
 	}
 	text := "此设置请在和机器人的私聊中修改。群聊里只保留当前群会话设置。"
 	if commandCardOwnsInlineResult(action) {

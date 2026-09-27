@@ -16,6 +16,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
 type recordingGateway struct {
@@ -575,6 +576,7 @@ func TestHandleGatewayActionReplacesCardOwnedModelPresetApply(t *testing.T) {
 		PID:       42,
 		StartedAt: time.Date(2026, 4, 19, 10, 1, 0, 0, time.UTC),
 	})
+	app.SetHeadlessRuntime(HeadlessRuntimeConfig{Paths: relayruntime.Paths{StateDir: t.TempDir()}})
 	app.service.MaterializeSurface("surface-1", "app-1", "chat-1", "user-1")
 	app.service.UpsertInstance(&state.InstanceRecord{
 		InstanceID:    "inst-1",

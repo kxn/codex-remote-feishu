@@ -66,7 +66,14 @@ func (a *App) seedSurfaceSessionSettingsFromBotRecordsLocked(entry *surfaceresum
 }
 
 func (a *App) materializeSurfaceResumeEntryLocked(entry surfaceresume.Entry) {
-	if a.seedSurfaceSessionSettingsFromBotRecordsLocked(&entry) {
+	// Bot override migration finishes before materialization. Freeze a legacy
+	// setting's old timestamp before any ordinary route/settings write advances it.
+	seededClock := entry.CodexPromptOverrideUpdatedAt.IsZero() && !entry.UpdatedAt.IsZero() &&
+		(entry.CodexModelOverride != "" || entry.CodexReasoningEffortOverride != "")
+	if seededClock {
+		entry.CodexPromptOverrideUpdatedAt = entry.UpdatedAt.UTC()
+	}
+	if a.seedSurfaceSessionSettingsFromBotRecordsLocked(&entry) || seededClock {
 		a.putSurfaceResumeEntryLocked(entry, time.Now())
 	}
 	a.service.MaterializeSurfaceResumeContractWithOpenCodeRef(
@@ -91,6 +98,10 @@ func (a *App) materializeSurfaceResumeEntryLocked(entry surfaceresume.Entry) {
 		state.PlanModeSetting(entry.PlanMode),
 		entry.PlanModeOverrideSet,
 	)
+	a.service.RestoreSurfaceCodexPromptOverride(entry.SurfaceSessionID, state.CodexPromptOverrideRecord{
+		Model:           entry.CodexModelOverride,
+		ReasoningEffort: entry.CodexReasoningEffortOverride,
+	}, entry.CodexPromptOverrideUpdatedAt)
 }
 
 // seedSurfaceSessionSettingsFromBotRecordsLocked 把旧版机器人级 access/plan

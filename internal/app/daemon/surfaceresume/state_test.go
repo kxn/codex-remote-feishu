@@ -210,3 +210,37 @@ func TestNormalizeEntryPreservesOpenCodeProfileForOpenCodeBackend(t *testing.T) 
 		t.Fatalf("opencode entry lost admission ref: %#v", entry.OpenCodeAdmissionRef)
 	}
 }
+
+func TestCanonicalizeCodexOverridePreservesLatestClearAndTuple(t *testing.T) {
+	for _, current := range []state.CodexPromptOverrideRecord{{}, {ReasoningEffort: "low"}} {
+		previous := Entry{SurfaceSessionID: "feishu:main:user:legacy", GatewayID: "main", ChatID: "chat", ActorUserID: "legacy", ProductMode: "normal", Backend: "codex", CodexModelOverride: "gpt-6-astra", CodexReasoningEffortOverride: "high", UpdatedAt: time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)}
+		latest := previous
+		latest.SurfaceSessionID = "feishu:main:user:ou_user"
+		latest.ActorUserID = "ou_user"
+		latest.UpdatedAt = previous.UpdatedAt.Add(time.Hour)
+		latest.CodexPromptOverrideUpdatedAt = latest.UpdatedAt
+		latest.CodexModelOverride = current.Model
+		latest.CodexReasoningEffortOverride = current.ReasoningEffort
+		entries, _ := CanonicalizeEntries(map[string]Entry{previous.SurfaceSessionID: previous, latest.SurfaceSessionID: latest})
+		merged := entries[latest.SurfaceSessionID]
+		if merged.CodexModelOverride != current.Model || merged.CodexReasoningEffortOverride != current.ReasoningEffort {
+			t.Fatalf("older override resurrected or tuple mixed: %#v", merged)
+		}
+	}
+}
+
+func TestCanonicalizeCodexSettingClockIgnoresLaterRouteUpdate(t *testing.T) {
+	now := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
+	oldSetting := Entry{SurfaceSessionID: "feishu:main:user:legacy", GatewayID: "main", ChatID: "chat", ActorUserID: "legacy", ProductMode: "normal", Backend: "codex", CodexModelOverride: "gpt-6-astra", CodexReasoningEffortOverride: "high", CodexPromptOverrideUpdatedAt: now, UpdatedAt: now.Add(3 * time.Hour)}
+	cleared := oldSetting
+	cleared.SurfaceSessionID = "feishu:main:user:ou_user"
+	cleared.ActorUserID = "ou_user"
+	cleared.CodexModelOverride, cleared.CodexReasoningEffortOverride = "", ""
+	cleared.CodexPromptOverrideUpdatedAt = now.Add(time.Hour)
+	cleared.UpdatedAt = cleared.CodexPromptOverrideUpdatedAt
+	entries, _ := CanonicalizeEntries(map[string]Entry{oldSetting.SurfaceSessionID: oldSetting, cleared.SurfaceSessionID: cleared})
+	merged := entries[cleared.SurfaceSessionID]
+	if merged.CodexModelOverride != "" || merged.CodexReasoningEffortOverride != "" || !merged.CodexPromptOverrideUpdatedAt.Equal(cleared.CodexPromptOverrideUpdatedAt) {
+		t.Fatalf("route timestamp overwrote explicit clear: %#v", merged)
+	}
+}
