@@ -29,6 +29,7 @@ type Options struct {
 	RelaydBinary       string
 	RelayServerURL     string
 	CodexRealBinary    string
+	CodexHome          string
 	IntegrationMode    WrapperIntegrationMode
 	Integrations       []WrapperIntegrationMode
 	VSCodeSettingsPath string
@@ -51,6 +52,7 @@ type InstallState struct {
 	CurrentTrack           ReleaseTrack             `json:"currentTrack,omitempty"`
 	CurrentVersion         string                   `json:"currentVersion,omitempty"`
 	CurrentBinaryPath      string                   `json:"currentBinaryPath,omitempty"`
+	CodexHome              string                   `json:"codexHome,omitempty"`
 	VersionsRoot           string                   `json:"versionsRoot,omitempty"`
 	CurrentSlot            string                   `json:"currentSlot,omitempty"`
 	RollbackCandidate      *RollbackCandidate       `json:"rollbackCandidate,omitempty"`
@@ -158,6 +160,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		StatePath:          statePath,
 		ServiceManager:     opts.ServiceManager,
 		CurrentBinaryPath:  installedBinary,
+		CodexHome:          strings.TrimSpace(opts.CodexHome),
 		Integrations:       integrations,
 		VSCodeSettingsPath: opts.VSCodeSettingsPath,
 		BundleEntrypoint:   opts.BundleEntrypoint,

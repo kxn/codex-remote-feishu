@@ -14,11 +14,11 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
 const (
-	defaultCodexStateDir       = ".codex"
 	defaultCodexSQLiteFilename = "state_5.sqlite"
 	internalProbeThreadPrefix  = "_tmp-codex-thread-latency-"
 	internalProbeAppPrefix     = "_tmp-codex-appserver-"
@@ -56,11 +56,11 @@ func NewDefaultSQLiteThreadCatalog(opts SQLiteThreadCatalogOptions) (*SQLiteThre
 }
 
 func DefaultSQLiteStatePath() (string, error) {
-	home, err := os.UserHomeDir()
+	codexHome, err := config.ResolveCodexHomeDir(os.Environ())
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, defaultCodexStateDir, defaultCodexSQLiteFilename), nil
+	return filepath.Join(codexHome, defaultCodexSQLiteFilename), nil
 }
 
 func NewSQLiteThreadCatalog(path string, opts SQLiteThreadCatalogOptions) *SQLiteThreadCatalog {

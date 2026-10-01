@@ -1,8 +1,8 @@
 # 使用说明书
 
 > Type: `general`
-> Updated: `2026-08-05`
-> Summary: 更新安装方式与首次配置流程，并补充模型后端说明：默认使用机器现有 Codex / Claude Code 配置，可通过独立 Profile 并行使用多套模型参数。
+> Updated: `2026-08-21`
+> Summary: 补充非默认 `CODEX_HOME` 的安装与自动启动合同，并同步 Codex 配置目录说明。
 
 ## 1. 这是什么
 
@@ -132,7 +132,24 @@
 - VS Code Remote SSH 使用，就装在那台 SSH 目标机器上
 - 如果两边都会各自运行 Codex，两边都可以各装一套，但它们是两套独立环境
 
-### 5.2 原生安装器（Windows / macOS）
+### 5.2 使用非默认 CODEX_HOME
+
+如果本机 Codex 通过 `CODEX_HOME` 使用非默认配置与会话目录，请在运行安装命令前导出该变量，并确保目录已经存在：
+
+```bash
+export CODEX_HOME="/path/to/codex-home"
+```
+
+安装时显式设置的 `CODEX_HOME` 会同时用于：
+
+- headless Codex 的配置、认证和会话
+- `/list`、`/use`、`/useall` 使用的本地会话索引
+- turn patch 使用的 sessions 与状态目录
+- Linux systemd 和 macOS launchd 自动启动
+
+未设置时继续使用 Codex 默认目录 `~/.codex`。如果要切换到另一个 Codex Home，请先确保新目录有效，再带着新的 `CODEX_HOME` 重新运行安装命令，使安装状态和自动启动定义一起更新。
+
+### 5.3 原生安装器（Windows / macOS）
 
 如果你更习惯桌面安装器，可以直接从 [GitHub Releases](https://github.com/kxn/codex-remote-feishu/releases) 下载对应平台的 native installer。
 
@@ -156,7 +173,7 @@ codex-remote-feishu_<version>_darwin_universal_installer.dmg
 
 运行 DMG 里的 **Install Codex Remote.app**。首次安装可以选择安装目录；完成后在结果页打开 WebSetup。已经安装过时再次运行，会按 repair / 升级处理。
 
-### 5.3 一条命令安装
+### 5.4 一条命令安装
 
 macOS / Linux：
 
@@ -198,7 +215,7 @@ curl -fsSL https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/inst
 & ([scriptblock]::Create((irm https://raw.githubusercontent.com/kxn/codex-remote-feishu/master/install-release.ps1))) -Version <version>
 ```
 
-### 5.4 手动安装 release 包
+### 5.5 手动安装 release 包
 
 macOS / Linux：
 
@@ -423,7 +440,7 @@ Windows PowerShell：
 
 两个 headless 后端默认都直接使用机器上已经配好的环境：
 
-- `codex`：使用本机 `~/.codex` 已有的登录状态、模型和配置
+- `codex`：使用 `$CODEX_HOME` 已有的登录状态、模型和配置；未设置时默认使用 `~/.codex`
 - `claude`：使用本机 `~/.claude` 已有的 Claude Code 登录状态和配置
 
 默认不需要额外配置任何模型参数，开箱就用机器现有环境。
@@ -433,7 +450,7 @@ Windows PowerShell：
 - **Codex API Profile**：独立设置 base URL、API key、模型、review model、推理强度等
 - **Claude Profile**：独立设置认证方式、base URL、auth token、模型、small model、推理强度等
 
-这些 profile 保存在 codex-remote 自己的 `config.json` 里，不会写回 `~/.codex` 或 `~/.claude` 的原有配置。Claude 自定义 profile 通过临时 `--settings` overlay 注入，不改动用户自己的 Claude 配置。
+这些 profile 保存在 codex-remote 自己的 `config.json` 里，不会写回 `$CODEX_HOME`（默认 `~/.codex`）或 `~/.claude` 的原有配置。Claude 自定义 profile 通过临时 `--settings` overlay 注入，不改动用户自己的 Claude 配置。
 
 在飞书里查看或切换：
 

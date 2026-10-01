@@ -33,10 +33,14 @@ func RuntimeEnvForState(state InstallState) []string {
 	if configPath == "" {
 		configPath = filepath.Join(layout.ConfigDir, "config.json")
 	}
-	return []string{
+	env := []string{
 		"CODEX_REMOTE_CONFIG=" + configPath,
 		"XDG_CONFIG_HOME=" + layout.ConfigHome,
 		"XDG_DATA_HOME=" + layout.DataHome,
 		"XDG_STATE_HOME=" + layout.StateHome,
 	}
+	if codexHome := strings.TrimSpace(state.CodexHome); codexHome != "" {
+		env = append(env, "CODEX_HOME="+codexHome)
+	}
+	return env
 }

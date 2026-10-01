@@ -117,8 +117,16 @@ func renderLaunchdUserPlist(state InstallState) (string, error) {
 		`        <string>` + xmlEscape(dataHome) + `</string>`,
 		`        <key>XDG_STATE_HOME</key>`,
 		`        <string>` + xmlEscape(stateHome) + `</string>`,
+	}
+	if codexHome := normalizeServicePathValue(state.CodexHome); codexHome != "" {
+		lines = append(lines,
+			`        <key>CODEX_HOME</key>`,
+			`        <string>`+xmlEscape(codexHome)+`</string>`,
+		)
+	}
+	lines = append(lines,
 		`        <key>PATH</key>`,
-		`        <string>` + xmlEscape(systemdUserServicePATH()) + `</string>`,
+		`        <string>`+xmlEscape(systemdUserServicePATH())+`</string>`,
 		`    </dict>`,
 		`    <key>RunAtLoad</key>`,
 		`    <true/>`,
@@ -128,13 +136,13 @@ func renderLaunchdUserPlist(state InstallState) (string, error) {
 		`        <false/>`,
 		`    </dict>`,
 		`    <key>StandardOutPath</key>`,
-		`    <string>` + xmlEscape(logPath) + `</string>`,
+		`    <string>`+xmlEscape(logPath)+`</string>`,
 		`    <key>StandardErrorPath</key>`,
-		`    <string>` + xmlEscape(logPath) + `</string>`,
+		`    <string>`+xmlEscape(logPath)+`</string>`,
 		`</dict>`,
 		`</plist>`,
 		``,
-	}
+	)
 	return strings.Join(lines, "\n"), nil
 }
 
