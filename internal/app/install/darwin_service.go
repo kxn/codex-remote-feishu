@@ -289,11 +289,11 @@ func launchdUserStopAndWait(ctx context.Context, state InstallState, timeout, po
 	deadline := time.Now().Add(timeout)
 	label := launchdLabelForInstance(state.InstanceID)
 	for {
-		running, err := launchdUserIsRunning(ctx, state)
+		unloaded, err := launchdUserIsUnloaded(ctx, state)
 		if err != nil {
 			return fmt.Errorf("confirm launchd stop for %s: %w", label, err)
 		}
-		if !running {
+		if unloaded {
 			return nil
 		}
 		if timeout <= 0 || time.Now().After(deadline) {
@@ -324,6 +324,25 @@ func launchdUserStatus(ctx context.Context, state InstallState) (string, error) 
 		return "", err
 	}
 	return launchctlUserRunner(ctx, "print", launchdUserServiceTarget(state))
+}
+
+// launchdUserIsUnloaded 仅在服务已从 launchd domain 完全卸载后返回 true。
+// bootout 之后服务会先进入 state = SIGTERMed（进程仍在优雅关闭），此时对同一 label
+// 执行 bootstrap 会得到 "Bootstrap failed: 5: Input/output error"，而该错误既不是
+// "already loaded" 也不是 missing，会被上层当成未知失败并触发回滚。
+// 因此这里必须等到 print 报 missing，不能只判断 state 是否等于 running。
+func launchdUserIsUnloaded(ctx context.Context, state InstallState) (bool, error) {
+	state, err := launchdUserServiceState(state)
+	if err != nil {
+		return false, err
+	}
+	if _, err := launchctlUserRunner(ctx, "print", launchdUserServiceTarget(state)); err != nil {
+		if isLaunchdMissingErr(err) {
+			return true, nil
+		}
+		return false, err
+	}
+	return false, nil
 }
 
 func launchdUserIsRunning(ctx context.Context, state InstallState) (bool, error) {
