@@ -196,6 +196,7 @@ func TestOAuthProbeLaunchMaterialClearsConflictingAuthentication(t *testing.T) {
 	material := OAuthProbeLaunchMaterial(baseEnv)
 	if got := strings.Join(material.Args, "\x00"); got != strings.Join([]string{
 		"app-server",
+		"--listen=stdio://",
 		"-c", `model_provider="openai"`,
 		"-c", `openai_base_url=""`,
 	}, "\x00") {

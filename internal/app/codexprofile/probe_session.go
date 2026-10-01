@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/kxn/codex-remote-feishu/internal/app/appserverargs"
 )
 
 const (
@@ -88,10 +90,11 @@ func OAuthProbeLaunchMaterial(baseEnv []string) ProbeLaunchMaterial {
 	return ProbeLaunchMaterial{
 		Args: []string{
 			"app-server",
+			"--listen=stdio://",
 			"-c", `model_provider="openai"`,
 			"-c", `openai_base_url=""`,
 		},
-		Env: removeEnvKeys(baseEnv, conflictingCodexAuthEnvKeys),
+		Env: appserverargs.PrivateStdioEnv(removeEnvKeys(baseEnv, conflictingCodexAuthEnvKeys)),
 	}
 }
 

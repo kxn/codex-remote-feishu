@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-08-29`
+> Updated: `2026-10-01`
 > Summary: 补充 Feishu 群聊纯 @ 主机器人快捷切换，以及 `/workspace new` 路径子步骤对已删除当前目录的回退规则。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
@@ -1587,6 +1587,14 @@ G1 PendingHeadlessStarting
   -- /detach --> kill headless + G0 None + R0 Detached
   -- Tick timeout --> kill headless + clear pending；thread/fresh workspace 路径按需 detach，`workspace_route_restart` / `prompt_dispatch_restart` 保留当前 workspace route
 ```
+
+Codex 自有 headless 的版本与上游服务边界（2026-10-01）：
+
+1. daemon 在 API 已开始服务、能力探测和 headless pool 启动之前，先准备私有稳定版，最长等待两分钟；后续每十五分钟在后台检查并下载。成功的官方 npm 稳定版检查缓存十五分钟，失败不缓存。安装目录为 runtime `StateDir/codex-runtime/releases/<version>`，先在独立 staging 安装、验证真实二进制版本，再原子发布；并发启动共用更新锁，坏 release 会隔离后重新安装。
+2. 每次 daemon-owned managed headless 的真实 child 启动仍检查版本，最长五秒，选择配置版本和已验证私有版本中较新的版本；不降级，显式预览版本保留原选择。确认有更新但安装失败时，不悄悄启动已知旧版；官方 registry 不可达时允许使用已验证的现有版本，并记录检查失败。
+3. 自动检查和下载不停止正在运行的 child。`process.child.restart` 在停止旧 child、重置协议状态之前完成版本准备；准备失败直接返回错误并保留旧 child，准备成功才进入原有的 stop → launch → restore 合同。初次启动失败仍由 `G1 PendingHeadlessStarting` 的现有超时、`/detach` 和 `/mode` 退出路径收口，不增加持久 gate。
+4. wrapper 只包装私有 stdio app-server，明确使用 `--listen=stdio://`；拒绝 app-server 子命令、Unix/WebSocket/off transport、`--managed-daemon` 和启动时的 `--remote-control`。所有本机 config/OAuth/capability probes 同样显式使用 stdio，并通过进程级环境标记关闭继承的 Remote Control enrollment，不修改用户持久化偏好。
+5. 私有自动更新只用于 daemon-owned managed headless，不改变 VS Code host-bound 客户端自己的版本、全局 npm CLI、上游默认 daemon 的安装包或控制 socket；`CODEX_HOME` 和现有凭据保留。现有显式 standalone Codex upgrade 事务仍是独立的全局升级入口，不用作后台自动更新。
 
 daemon startup 的 headless resume 额外规则：
 

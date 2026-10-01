@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
+	"github.com/kxn/codex-remote-feishu/internal/app/appserverargs"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
@@ -34,9 +35,18 @@ type childSession struct {
 }
 
 func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+	privateArgs, err := appserverargs.PrivateStdioArgs(a.config.Args)
+	if err != nil {
+		return nil, err
+	}
+	childArgs, childEnv := a.buildCodexChildLaunch(privateArgs)
+	childEnv = appserverargs.PrivateStdioEnv(childEnv)
+	childBinary, err := a.selectCodexChildBinary(ctx, childEnv, nil)
+	if err != nil {
+		return nil, err
+	}
 	childCtx, childCancel := context.WithCancel(ctx)
-	childArgs, childEnv := a.buildCodexChildLaunch(a.config.Args)
-	cmd := execlaunch.CommandContext(childCtx, a.config.CodexRealBinary, childArgs...)
+	cmd := execlaunch.CommandContext(childCtx, childBinary, childArgs...)
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
@@ -48,7 +58,7 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 		childCancel()
 		return nil, err
 	}
-	a.debugf("child started: binary=%s pid=%d cwd=%s", a.config.CodexRealBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
+	a.debugf("child started: binary=%s pid=%d cwd=%s", childBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
 
 	bootstrappedStdout, err := a.runChildBootstrap(ctx, wrapperBootstrapTimeout, childCancel, func() (io.Reader, error) {
 		return a.bootstrapHeadlessCodex(childStdin, childStdout, rawLogger, reportProblem)
@@ -215,6 +225,16 @@ func waitForSessionStdoutStopped(session *childSession, timeout time.Duration) b
 }
 
 func (a *App) restartChildSession(ctx context.Context, request restartRequest, current *childSession, parentStdout, parentStderr io.Writer, writeCh chan []byte, client *relayws.Client, commandResponses *commandResponseTracker, turnTracker *runtimeTurnTracker, activeGeneration *int64, generation int64, errCh chan<- error, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
+	if a.runtime.Backend() == agentproto.BackendCodex {
+		_, env := a.buildCodexChildLaunch(a.config.Args)
+		binary, err := a.selectCodexChildBinary(ctx, env, nil)
+		if err != nil {
+			// A download or update lock failure must leave the current child alive
+			// and must not reset its protocol state.
+			return current, err
+		}
+		ctx = context.WithValue(ctx, preparedCodexBinaryKey{}, binary)
+	}
 	if err := a.runtime.PrepareChildRestart(request.CommandID, derefRestartDispatchPlan(request.DispatchPlan), request.CodexResume); err != nil {
 		return nil, err
 	}
