@@ -467,8 +467,12 @@ func targetPickerSessionOptions(options []control.FeishuTargetPickerSessionOptio
 		if value == "" {
 			continue
 		}
+		label := option.Label
+		if option.Kind == control.FeishuTargetPickerSessionThread {
+			label = xutil.TruncateRunes(strings.TrimSpace(label), 80, xutil.TruncateOptions{Ellipsis: "…（名称过长，已截断）", ReserveEllipsis: true})
+		}
 		result = append(result, map[string]any{
-			"text":  cardkit.PlainText(targetPickerOptionLabel(option.Label, option.MetaText)),
+			"text":  cardkit.PlainText(targetPickerOptionLabel(label, option.MetaText)),
 			"value": value,
 		})
 	}
