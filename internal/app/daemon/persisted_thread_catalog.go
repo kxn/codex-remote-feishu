@@ -47,6 +47,13 @@ func (c *daemonPersistedThreadCatalog) ThreadByID(threadID string) (*state.Threa
 	return c.ThreadByIDForBackend(agentproto.BackendCodex, threadID)
 }
 
+func (c *daemonPersistedThreadCatalog) ExplicitThreadNames(threadIDs []string) (map[string]string, error) {
+	if c == nil || c.codex == nil {
+		return nil, nil
+	}
+	return c.codex.ExplicitThreadNames(threadIDs)
+}
+
 func (c *daemonPersistedThreadCatalog) RecentThreadsForBackend(backend agentproto.Backend, limit int) ([]state.ThreadRecord, error) {
 	switch agentproto.NormalizeBackend(backend) {
 	case agentproto.BackendClaude:

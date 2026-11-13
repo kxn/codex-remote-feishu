@@ -241,7 +241,7 @@ func (s *Service) mergedThreadViewForBackend(surface *state.SurfaceConsoleRecord
 				view.Thread = cloneThreadRecord(thread)
 				view.Backend = backend
 			} else {
-				view.Thread = mergeThreadMetadata(view.Thread, thread)
+				view.Thread = mergePersistedThreadName(view.Thread, thread, backend)
 			}
 		}
 	}

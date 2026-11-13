@@ -1,8 +1,8 @@
 # 会话描述统一方案
 
 > Type: `implemented`
-> Updated: `2026-04-26`
-> Summary: 已落地 canonical thread DisplayName contract，并进一步把展示 / 存储 / 恢复的 thread title 语义收口到单一 `threadtitle` owner。
+> Updated: `2026-11-13`
+> Summary: 补充 Codex 桌面显式名称按 ID 的只读批量投影，以及 schema 变化和读取失败时的回退规则。
 
 ## 背景
 
@@ -80,6 +80,9 @@
 - orchestrator 的 `threadTitle / displayThreadTitle / threadSelectionButtonLabel` 已降为 owner package 的薄包装，不再独立维护 title contract
 - preview/assistant 已移出主显示名链路
 - persisted sqlite thread 会把旧库里的 `firstUserMessage` 映射到 `FirstUserMessage`，不再伪装成 `Name`
+- Codex SQLite 的显式 `name` 与旧 `title` 分开读取，列探测保持大小写不敏感，并在每次读取时重查，兼容运行中新增 `name` 列；缺列或名称为空时沿用旧标题回退。
+- 当前实例列表、全局 merged list 与 snapshot 按 thread ID 刷新显式名称，SQLite 每批最多 200 个 ID，不依赖 recent 窗口或活动时间；只复制展示记录，不修改原 runtime、工作区或 thread 选择。
+- `PersistedName` 只表示新鲜 catalog 读取到的显式名称，不序列化。名称读取失败时不复用旧映射；recent metadata 缓存中的旧显式名称也会被移除，保留原生名称及其余 metadata。该名称能力只对 Codex 生效。
 
 ### Carrier
 
