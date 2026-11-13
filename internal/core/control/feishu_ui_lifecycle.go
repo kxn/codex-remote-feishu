@@ -63,6 +63,9 @@ func ResolveFeishuFrontstageActionContract(action Action) FeishuFrontstageAction
 	if _, ok := FeishuUIIntentFromAction(action); ok {
 		contract.RejectsUnstampedCallback = true
 	}
+	if action.Kind == ActionAsyncUserInput {
+		contract.RejectsUnstampedCallback = true
+	}
 
 	switch {
 	case inlineReplaceableFeishuUIIntentAction(action):

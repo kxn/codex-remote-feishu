@@ -179,6 +179,7 @@ type activePathPickerRecord struct {
 }
 
 type surfaceUIRuntimeRecord struct {
+	AsyncUserInputs     map[string]*asyncUserInputRecord
 	ActiveOwnerCardFlow *activeOwnerCardFlowRecord
 	ActiveTargetPicker  *activeTargetPickerRecord
 	ActiveThreadHistory *activeThreadHistoryRecord

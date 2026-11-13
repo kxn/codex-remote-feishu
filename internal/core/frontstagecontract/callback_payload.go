@@ -57,6 +57,7 @@ const (
 	CardActionKindKickThreadConfirm           = "kick_thread_confirm"
 	CardActionKindKickThreadCancel            = "kick_thread_cancel"
 	CardActionKindRequestRespond              = "request_respond"
+	CardActionKindAsyncUserInput              = "async_user_input"
 	CardActionKindRequestControl              = "request_control"
 	CardActionKindPageAction                  = "page_action"
 	CardActionKindPageLocalAction             = "page_local_action"

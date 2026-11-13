@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-29`
-> Summary: 补充路径选择器 stale 初始路径会回退到最近存在父目录，不再中断 `/workspace new` 子步骤。
+> Updated: `2026-11-13`
+> Summary: 补充原生异步问题卡的逐题回答、原会话绑定、回调校验与拒绝后保留问题卡的规则。
 
 ## 1. 文档定位
 
@@ -221,6 +221,7 @@
 - `page_local_action` / `page_local_submit` 当前用于菜单内与 page-owner 内的本地导航或本地提交；gateway 解析后会把 `Action.LocalPageAction` 置为 `true`，并刻意不回填 `Action.Catalog*`。这类动作仍受当前卡 freshness / owner-flow / final-card runtime 语义约束，但不会先被 `command_entry_expired` 拦截
 - `page_action` / `page_submit` 当前除 `action_kind` 与参数字段外，还会在有来源上下文时附带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 解析后会直接回填 `Action.Catalog*`。当前 live 命令入口要求这组 provenance 完整可用：缺失字段、legacy default variant，或当前 surface 上下文已变化的旧卡，都会在 runtime 收到 `command_entry_expired`
 - `request_respond` / `submit_request_form` 与 `upgrade_owner_flow` / `vscode_migrate_owner_flow` 当前在 gateway 解析后只写入 `Action.Request` / `Action.OwnerFlow` family；这些回调不再依赖 root `Action.Request*` 或 root `PickerID/OptionID` 兼容字段作为 live 路径输入
+- `async_user_input` 用于原生异步问题消息，复用 page card 的按钮和 `answer` 输入表单。payload 仅传 `request_id`、`request_revision`、`option_id`，gateway 写入 `Action.Request`；题目、选项文本和 instance/thread 目标以服务端草稿为准。此动作要求当前 daemon stamp；每答一题增加 revision 并按原 MessageID 更新同一卡；拒绝回答只追加提示，不覆盖问题卡，最后封卡提示“回答已进入发送队列”。草稿在 daemon 内独立保存，不建立同步 RPC、普通输入 gate 或 active owner flow；换会话、非原发起者、旧 revision、重复提交、重启后旧卡均拒绝，未知消息结构保留文本回退。
 - 分页导航与 target/path picker / selection dropdown 当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view、thread selection view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target/path picker / VS Code thread dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
 - workspace/session family 的 selection / target picker callback 当前也会在有来源上下文时继续补写 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`。这意味着 bare `/list` `/use` `/useall`、菜单按钮、selection refresh、target-picker 翻页/确认这些后续动作，都能继续把 family provenance 带回 gateway / orchestrator，而不是只剩 `ActionKind` / `field_name`。
 - adapter 内部这组 lane/read-model contract 现统一由 `internal/adapter/feishu/selectflow` 承接：`PaginatedSelectFlowDefinition` 拥有默认 `field_name`、payload value key、共享 pagination hint，以及按 flow 显式声明的 recover precedence；projector 与 gateway 通过同一份定义对齐 lane 字段、hint 和 callback recover 规则。

@@ -50,6 +50,23 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 	}
 
 	switch kind {
+	case frontstagecontract.CardActionKindAsyncUserInput:
+		requestID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestID))
+		if requestID == "" {
+			return control.Action{}, false
+		}
+		answers := requestAnswersFromFormValue(event.Event.Action.FormValue)
+		if len(answers) == 0 && strings.TrimSpace(event.Event.Action.InputValue) != "" {
+			answers = map[string][]string{"answer": {strings.TrimSpace(event.Event.Action.InputValue)}}
+		}
+		return control.Action{
+			Kind: control.ActionAsyncUserInput, GatewayID: gatewayID, SurfaceSessionID: surfaceSessionID,
+			ChatID: chatID, ActorUserID: operatorID, MessageID: messageID, Inbound: meta,
+			Request: &control.ActionRequestResponse{
+				RequestID: requestID, RequestRevision: intMapValue(value, frontstagecontract.CardActionPayloadKeyRequestRevision),
+				RequestOptionID: strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyOptionID)), Answers: answers,
+			},
+		}, true
 	case cardActionKindAttachInstance:
 		instanceID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
 		if instanceID == "" {

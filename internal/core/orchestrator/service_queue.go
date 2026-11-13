@@ -807,6 +807,10 @@ func (s *Service) completeItem(instanceID string, event agentproto.Event) []even
 	if event.ItemID == "" {
 		return nil
 	}
+	if events, handled := s.presentAsyncUserInput(instanceID, event); handled {
+		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
+		return events
+	}
 	if event.ItemKind == "file_change" {
 		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
 		s.progress.recordTurnFileChanges(instanceID, event)
