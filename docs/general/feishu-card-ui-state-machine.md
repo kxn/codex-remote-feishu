@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-29`
-> Summary: 补充路径选择器 stale 初始路径会回退到最近存在父目录，不再中断 `/workspace new` 子步骤。
+> Updated: `2026-11-13`
+> Summary: 明确 Goal 文字与卡片回显、原会话目标绑定及暂停/恢复控制边界。
 
 ## 1. 文档定位
 
@@ -16,9 +16,17 @@
 
 2026-08-13 #888/#889 补充：Claude 与 OpenCode `/review` 均从 hidden reject 改为 common tools 可见的 approximation；bare `/review`、review 页面和 final-card 待提交/commit 按钮复用与 Codex 相同的卡片交互，底层分别走独立 Claude fork session 与 OpenCode ACP fork/review mode。结果卡、一次性追问 capture、退出和应用动作保持 backend-neutral；active turn 上的退出动作先发送一次 interrupt，并在匹配终态后才清 overlay，不能提前释放并发 ownership。OpenCode fork 在 review mode gate 前已经按 typed binding 标记 `source=review`，mode/config 失败会清 overlay 与 active queue，不产生可操作结果卡。
 
-2026-08-15 #896 补充：`/goal` 是新增 config-flow slash command，完全复用现有命令卡体系：bare `/goal` 经现有命令解析与 freshness 校验，通过 `pageEvent` inline replace 回显 Goal 状态页；`/goal clear` 的确认/取消通过 `CommandText` 命令重放（`/goal clear --confirm`、`/goal`），不引入新 callback payload、不新增 owner 分类、不改 `daemon_lifecycle_id` stamping。状态页按钮均声明在 `FeishuCommandBinding` 上（`CommandID=goal`），走 `CommandCatalogButtonCallbackAction`，与 `/codexprofile` 等配置命令同一条路由，Goal 控制面不产生第二套卡片 carrier 或 freshness 规则。
+2026-08-15 #896 补充：`/goal` 是新增 config-flow slash command，完全复用现有命令卡体系：bare `/goal` 经现有命令解析与 freshness 校验，通过 `pageEvent` 回显 Goal 状态页；文字入口发送新卡，带有效当前卡片上下文的入口可原位更新。`/goal clear` 的确认/取消通过 `CommandText` 命令重放（`/goal clear --confirm`、`/goal`），复用现有 callback kind 与 `thread_id` / `instance_id` 字段，不新增 owner 分类、不改 `daemon_lifecycle_id` stamping。状态页按钮绑定 `CommandID=goal`，通过带有目标与 catalog 信息的 `CommandCatalogButtonCallbackAction` 实际投影；Goal 控制面不产生第二套卡片 carrier 或 freshness 规则。
 
 2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时服务端暂存 Goal fingerprint，命令重放执行前比对、漂移 fail closed；goal 命令发送失败会清理 pending 并回错误卡；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；错误页复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+
+Goal 当前的回显约束：
+
+- 查询、创建、编辑、暂停、恢复和清除都只在 `commandCardOwnsInlineResult(action)` 成立时保留原消息作为 patch 目标；普通文字消息 ID 不可作为卡片 ID。
+- 查询明确返回 `GoalMissing` 时清除旧 Goal 缓存并显示“当前会话没有 Goal”；设置操作未带完整快照时仍显示正在同步。清除必须收到 `GoalCleared` 才显示已清除。
+- Goal 按钮和 new/edit 表单绑定生成时的 thread 与 instance；修改按钮和表单另携带 `goal_operation_id`，服务端分别保存每次操作的 Goal 快照并一次性消费，十分钟后失效。同会话更换 Goal、状态变化、缺少或重放操作标识时拒绝修改，不能借用另一张卡片的确认快照。目标缺失或与当前选中目标不符时拒绝操作，提示发送 `/goal` 重新打开。只有未携带目标的 bare `/goal` 菜单入口可以查询当前会话；它不执行修改。文字命令保留原有确认规则。
+- 异步结果仍更新原会话的已确认状态；若触发操作的 surface 已改选其他会话或实例，则不再向该 surface 展示原操作的可操作结果卡。
+- 用户创建、编辑、暂停、恢复或清除操作成功后，撤销旧队列互锁的自动恢复权；处于 `pause_pending` / `quiescing` 时保留原 idle 屏障；通过 idle 屏障的旧 lease 可直接退役，后续输入重新建立暂停保护；早期保留的屏障在队列排空后清理。自动恢复前还必须确认 Goal 仍为 `paused`，不能重新激活已完成或被阻塞的 Goal；如果同目标还有尚未返回结果的用户控制请求，放弃这次自动恢复，其余调度机制不变。
 
 它关注的是：
 

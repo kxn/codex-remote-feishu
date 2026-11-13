@@ -335,7 +335,7 @@ func (s *Service) applyGoalCommandResult(instanceID string, event agentproto.Eve
 					thread.ThreadGoal = agentproto.CloneThreadGoalUpdate(update)
 					s.touchThread(thread)
 				}
-			case event.GoalCleared:
+			case event.GoalCleared || event.GoalMissing:
 				if thread := inst.Threads[event.ThreadID]; thread != nil {
 					thread.ThreadGoal = nil
 					s.touchThread(thread)
@@ -506,7 +506,7 @@ func (s *Service) pumpAndResumeGoalInterlock(instanceID, threadID string) []even
 
 func (s *Service) maybeResumeGoalInterlock(instanceID, threadID string) []eventcontract.Event {
 	lease := s.goalInterlockLease(instanceID, threadID)
-	if lease == nil || lease.Phase != GoalInterlockDraining || lease.ExternalMutationSeen {
+	if lease == nil || lease.Phase != GoalInterlockDraining {
 		return nil
 	}
 	surface := s.root.Surfaces[lease.TriggerSurfaceID]
@@ -515,6 +515,10 @@ func (s *Service) maybeResumeGoalInterlock(instanceID, threadID string) []eventc
 		return nil
 	}
 	if surface.ActiveQueueItemID != "" || len(surface.QueuedQueueItemIDs) != 0 || s.surfaceHasLiveRemoteWork(surface) {
+		return nil
+	}
+	if lease.ExternalMutationSeen {
+		s.clearGoalInterlockLease(instanceID, threadID)
 		return nil
 	}
 	lease.Phase = GoalInterlockResumePending
@@ -539,6 +543,14 @@ func (s *Service) applyGoalGetResult(key string, event agentproto.Event) []event
 	lease := s.goalInterlocks[key]
 	if lease == nil || lease.Phase != GoalInterlockResumePending {
 		return nil
+	}
+	for _, command := range s.goalUserCommands {
+		if command.InstanceID == lease.InstanceID && command.ThreadID == lease.ThreadID && command.Action != "get" {
+			// A user control request is still unresolved. Do not let a delayed
+			// automatic status check send active after that user request.
+			s.clearGoalInterlockLease(lease.InstanceID, lease.ThreadID)
+			return nil
+		}
 	}
 	if event.ErrorMessage != "" || event.GoalMissing || event.ThreadGoal == nil {
 		events := goalInterlockDiagnosticNotice(lease.TriggerSurfaceID, "goal_resume_failed", "Goal 恢复失败", "无法确认 Goal 状态，已放弃自动恢复。请稍后重试或检查 Codex 状态。")
@@ -572,7 +584,7 @@ func (s *Service) applyGoalGetResult(key string, event agentproto.Event) []event
 }
 
 func goalInterlockFingerprintMatches(lease *GoalInterlockLease, goal *agentproto.ThreadGoalUpdate) bool {
-	if goal == nil {
+	if goal == nil || goal.Status != "paused" {
 		return false
 	}
 	if lease.GoalCreatedAt != 0 && goal.CreatedAt != 0 && lease.GoalCreatedAt != goal.CreatedAt {
@@ -587,6 +599,19 @@ func goalInterlockFingerprintMatches(lease *GoalInterlockLease, goal *agentproto
 		}
 	}
 	return true
+}
+
+func (s *Service) revokeGoalInterlockOnUserMutation(instanceID, threadID string) {
+	lease := s.goalInterlockLease(instanceID, threadID)
+	if lease != nil && (lease.Phase == GoalInterlockPausePending || lease.Phase == GoalInterlockQuiescing) {
+		// Explicit user control cancels automatic restoration, but does not prove
+		// that the current turn is idle. Keep its existing dispatch barrier.
+		lease.ExternalMutationSeen = true
+		return
+	}
+	// The idle barrier has already passed in later phases. Retire the old
+	// lease so a subsequent input must acquire a fresh pause barrier.
+	s.clearGoalInterlockLease(instanceID, threadID)
 }
 
 func (s *Service) revokeGoalInterlockOnExternalMutation(instanceID, threadID string) {
