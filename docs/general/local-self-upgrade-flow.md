@@ -1,8 +1,8 @@
 # 本地自升级流程
 
 > Type: `general`
-> Updated: `2026-04-27`
-> Summary: 说明 repo 构建产物触发本地自升级时的完整时序、内嵌 upgrade shim 的释放与启动方式、与 `/upgrade dev` 的边界、自动回滚规则，以及 repo install target 与当前 daemon self target 的语义边界。
+> Updated: `2026-11-13`
+> Summary: 明确 macOS 升级必须等旧 launchd 服务完全卸载，并说明 install 停止链变更需要重建内嵌 shim。
 
 ## 1. 这份文档回答什么问题
 
@@ -284,6 +284,7 @@ helper shim 入口是一个独立 binary，本身不再接受 `upgrade-helper -s
 3. 停掉当前 daemon/service
    - 当前实现不会只看 `stop` 命令是否已发出
    - 只有在 helper 确认旧 daemon/service 已真正退出后，才会继续进入 binary 切换
+   - macOS 还必须等到 `launchctl print` 返回服务不存在；`SIGTERM sent`、`exited` 等非 running 状态仍可能占着服务标签，不能视为卸载完成。等待超时或查询出错时返回错误，不继续切换 binary。
 4. 若 `CurrentBinaryPath` 位于 `VersionsRoot` 下（legacy version-scoped 入口），先迁移到 canonical 无版本稳定入口，再把 `PendingUpgrade.TargetBinaryPath` 复制覆盖到迁移后的 `CurrentBinaryPath`
 5. 把 phase 改成 `observing`
 6. 用新的 live binary 重新启动 daemon/service
@@ -352,7 +353,9 @@ helper shim 入口是一个独立 binary，本身不再接受 `upgrade-helper -s
 ### 10.3 helper 不再来自“当前执行 `local-upgrade` 的 binary 副本”
 
 当前实现里，主 binary 只负责携带并释放内嵌 shim 资产。  
-是否更新 shim，不由普通业务发版直接驱动；只有 shim 本身或 sidecar schema 发生变化时，才需要重新准备对应平台的嵌入资产。
+是否更新 shim，不由普通业务发版直接驱动；shim 本身、它依赖的 install 停止链或 sidecar schema 发生变化时，需要重新准备对应平台的嵌入资产。
+
+当前 `scripts/shim/prepare-shim-embed.sh` 的缓存摘要不包含 `internal/app/install`。仅修改 install 停止链时，发布构建需强制重建对应平台的内嵌 shim；只重建主程序可能继续携带旧停止逻辑。
 
 ### 10.4 `systemd_user` 下 helper 不是原 service 的一部分
 
