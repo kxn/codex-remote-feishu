@@ -257,6 +257,7 @@ type ThreadRecord struct {
 	ForkedFromID             string
 	Source                   *agentproto.ThreadSourceRecord
 	Name                     string
+	PersistedName            string `json:"-"` // Explicit name from a fresh catalog read; projection-only.
 	Preview                  string
 	FirstUserMessage         string
 	LastUserMessage          string

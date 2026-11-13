@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-10-01`
-> Summary: 补充 Feishu 群聊纯 @ 主机器人快捷切换，以及 `/workspace new` 路径子步骤对已删除当前目录的回退规则。
+> Updated: `2026-11-13`
+> Summary: 补充 Codex 桌面改名按 thread ID 批量投影，以及读失败时不提升缓存旧名称。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -1345,8 +1345,8 @@ R5 NewThreadReady
    2. 该 thread busy 时不会插入旧 final/旧 notice，候选保留到后续 idle 的 `/attach` 或 `/use`。
 5. headless 主链 `/list` / `/use` / `/useall` 当前共享同一套 workspace candidate / resolver 基础，但不同入口会套用不同 capability mode：
    1. workspace 候选来自 runtime 可见 workspace 与 merged recent thread / persisted recent thread 导出的 recoverable workspace。
-   2. persisted sqlite 只负责补 freshness，不旁路 resolver；busy / claim / free-visible / reusable-headless / create-headless 仍只由现有 runtime resolver 决定。
-   3. sqlite read 失败或 schema 不兼容时，会安全回退到 runtime/catalog-only 行为。
+   2. persisted sqlite 只负责补 freshness，不旁路 resolver；busy / claim / free-visible / reusable-headless / create-headless 仍只由现有 runtime resolver 决定。Codex 桌面显式名称独立于活动时间，按 thread ID 每批最多 200 个读取并投影到 merged list、当前实例列表和选中会话 snapshot；运行快照未变化或会话落在 recent 窗口外时也能刷新。该投影不改 runtime 记录、workspace、claim 或所选 thread，不向 Claude/OpenCode 投影 Codex 名称。
+   3. sqlite read 失败或 schema 不兼容时，会安全回退到 runtime/catalog-only 行为。名称新鲜读取失败时不复用上次名称映射；recent metadata 的失败缓存会去掉旧显式名称，避免其活动时间较新时覆盖原生新名称。
    4. attach/use 类入口仍会过滤 busy workspace，以及没有任何 merged thread / online instance 支撑的历史脏 workspace key；`/workspace list` / `/list` 会保留 busy Git workspace 作为仅 Worktree base 的候选，busy 非 Git workspace 仍过滤。
 6. target picker 当前承担的是 headless 主链下四张独立工作会话业务卡，而不是旧的 unified 大卡：
    1. bare `/workspace` 是父页；bare `/workspace new` 是新建方式子页；它们都走 `FeishuPageView`，不直接承接目标选择。

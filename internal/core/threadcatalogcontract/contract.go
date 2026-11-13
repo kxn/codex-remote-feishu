@@ -18,3 +18,9 @@ type BackendAwarePersistedThreadCatalog interface {
 	RecentWorkspacesForBackend(agentproto.Backend, int) (map[string]time.Time, error)
 	ThreadByIDForBackend(agentproto.Backend, string) (*state.ThreadRecord, error)
 }
+
+// Optional read-only capability for current explicit Codex names. Consumers
+// must gate it to BackendCodex; absent/blank names are not returned.
+type ExplicitThreadNameCatalog interface {
+	ExplicitThreadNames(threadIDs []string) (map[string]string, error)
+}

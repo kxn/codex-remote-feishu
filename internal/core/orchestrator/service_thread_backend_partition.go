@@ -30,7 +30,20 @@ func (s *Service) mergePersistedRecentThreadsForBackend(viewsByID map[string]*me
 			}
 			continue
 		}
-		view.Thread = mergeThreadMetadata(view.Thread, &thread)
+		view.Thread = mergePersistedThreadName(view.Thread, &thread, view.Backend)
+	}
+	// Loaded identities outside the recent window still receive fresh names.
+	ids := make([]string, 0, len(viewsByID))
+	for id, view := range viewsByID {
+		if agentproto.NormalizeBackend(view.Backend) == agentproto.BackendCodex {
+			ids = append(ids, id)
+		}
+	}
+	names := s.catalog.explicitThreadNames(agentproto.BackendCodex, ids)
+	for _, view := range viewsByID {
+		if agentproto.NormalizeBackend(view.Backend) == agentproto.BackendCodex {
+			view.Thread = threadWithPersistedName(view.Thread, names)
+		}
 	}
 }
 
