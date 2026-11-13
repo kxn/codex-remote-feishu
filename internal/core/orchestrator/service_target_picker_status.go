@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func targetPickerDefaultPage(source control.TargetPickerRequestSource) control.FeishuTargetPickerPage {
@@ -88,7 +89,7 @@ func targetPickerSwitchProcessingStatus(workspaceLabel, sessionLabel string) fei
 	if workspaceLabel = strings.TrimSpace(workspaceLabel); workspaceLabel != "" {
 		lines = append(lines, "工作区："+workspaceLabel)
 	}
-	if sessionLabel = strings.TrimSpace(sessionLabel); sessionLabel != "" {
+	if sessionLabel = targetPickerDisplaySessionName(sessionLabel, 80); sessionLabel != "" {
 		lines = append(lines, "会话："+sessionLabel)
 	}
 	sections := []control.FeishuCardTextSection{}
@@ -146,4 +147,8 @@ func targetPickerWorktreeCreateProcessingStatus(baseWorkspaceLabel, branchName, 
 		},
 	})
 	return feishuCardStatusPayload{Sections: sections}
+}
+
+func targetPickerDisplaySessionName(name string, limit int) string {
+	return xutil.TruncateRunes(strings.TrimSpace(name), limit, xutil.TruncateOptions{Ellipsis: "…（名称过长，已截断）", ReserveEllipsis: true})
 }
