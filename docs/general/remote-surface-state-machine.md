@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-10-01`
-> Summary: 补充 Feishu 群聊纯 @ 主机器人快捷切换，以及 `/workspace new` 路径子步骤对已删除当前目录的回退规则。
+> Updated: `2026-11-13`
+> Summary: 补充原生异步问题消息的独立草稿、原会话投递与配置切换门禁，保留同步请求和普通输入规则。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -524,6 +524,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 | `G10 StandaloneCodexUpgradeRunning` | daemon 侧 active standalone Codex upgrade transaction 非空 | 这是 daemon 顶层的独立 upgrade gate，不复用现有 `codex-remote` owner-flow。发起 surface 的普通输入会被直接挡住；其它真正依赖 standalone Codex 的 attached surface 会继续走“写入队列 + notice + `paused_for_local`”语义；VS Code surface / instance 当前完全排除在这条 gate 之外；非 queueable 命令/卡片动作当前仍直接拒绝。事务只有在 install 完成、child restart `ack` 已确认、且匹配的 restore outcome 成功/失败/超时收口后才会退出，不会在 bare restart ack 后提前解 gate |
 | `G11 TurnPatchTransactionRunning` | daemon 侧存在当前 instance 的 active turn-patch transaction | 发起 surface 与同 instance 上其它 attached surface 的状态改写类输入都会被挡住；当前只保留 `/status`、`/list`、`/help`、`/menu`、`/history`、`/debug`、reaction/recall 等查看类动作，直到 patch apply / rollback 收口。事务只会在 rollout 写盘后对应的 child restart 最终 outcome 成功，或在失败/超时后自动回滚并完成恢复 restart 收口后退出 |
 | `G12 BotCapabilitySettingsInvalid` | 合法 Feishu surface 对应的 gateway record 已存在，但 record 无法规范化或 storage key 与 record gateway 不一致 | capability effective read、配置与 lifecycle mutation、普通 action、queue 和 AutoContinue dispatch 全部 fail closed，不回退 raw surface；只保留 `/stop`、`/detach` 与 `/workspace detach` 释放执行和 route 资源。详细节流与恢复规则见 6.2 覆盖门禁 |
+
+原生 `agent_message.delivery=async` 的 `questions(title/options)` 使用独立内存草稿和问题卡，不进入 `PendingRequests`、不占用 active owner flow，也不捕获普通聊天或 staged 附件。多题逐题作答后，一次性将问题与答案加入原 thread 的现有队列；仅在派发正常、原 thread 正在执行且没有 pending steer 时，将本次答案单独 steer。暂停派发时保留排队；同步确认或 feedback capture 未处理时拒绝最终提交并保留草稿；steer 与 turn 结束相撞时沿现有恢复队列处理。turn 结束不清此草稿，换 instance/thread、旧 revision、非原发起者、重复提交和重启后旧卡均不能投递。跨模型组设置不兼容时提示恢复设置，不自动创建 thread；`ContractRefreshPending` 且实例契约不兼容时拒绝最终提交并保留草稿，明确提示任务结束后直接在聊天中发送回答，由普通输入入口触发配置切换，或恢复原配置后重试本卡。`/new` 首轮可凭精确 Remote binding 复用已有输出绑定路径显示问题卡；无效结构沿用文本回退。
 
 补充说明：
 
