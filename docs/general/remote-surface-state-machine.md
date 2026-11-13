@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-10-01`
-> Summary: 补充 Feishu 群聊纯 @ 主机器人快捷切换，以及 `/workspace new` 路径子步骤对已删除当前目录的回退规则。
+> Updated: `2026-11-13`
+> Summary: 补充持久会话的统一工作区根解析，以及合并后可见实例和恢复目标的归属校验。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -684,6 +684,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
    4. `/workspace list` / `/list` 的 list 模式会把 busy Git workspace 保留为 Worktree base；它不会暴露旧会话或新建会话，只暴露 `worktree_create` 操作。busy 非 Git workspace 仍过滤。
    5. `/workspace new worktree` 与 list 内部 Worktree 子页使用 worktree-base 模式，只保留可识别的 Git workspace；busy Git workspace 可以作为基准工作区。
    6. 若 surface 带有 `PendingHeadless`，target picker 默认高亮、`new_thread` success 判断、Git import / Worktree processing continuation 与 cancel 匹配，都用 `state.ResolveHeadlessResumeWorkspaceKey(pending.WorkspaceKey, pending.ThreadCWD)` 判定工作区身份；不再直接 `FirstNonEmpty(WorkspaceKey, ThreadCWD)`。当 `ThreadCWD` 不在 `WorkspaceKey` 下时，以 `ThreadCWD` 作为当前 workspace claim，避免旧 workspace root 误接管新路径。
+   7. 合并较新的持久会话记录时，如果记录只提供 `CWD`、没有显式 `WorkspaceKey`，按该目录匹配的最具体已知根目录校正归属；有效的原根目录、同 backend 实例根目录和恢复后 headless surface 的工作区均参与匹配，无匹配才回退到 `CWD`。SQLite `RecentWorkspaces` 按原始 `CWD` 聚合，不能作为独立根目录证据。新建 persisted-only 视图、按 backend 精确读取和全局精确回退使用同一解析；恢复的 room workspace 无需已有运行实例。
+   8. 可见实例指针在持久元数据合并后重新计算。headless 实例必须匹配最终工作区根；启动恢复的 preferred instance 也遵守该校验，不能用父工作区里的全局 thread 副本绕过子工作区恢复。普通 CWD 子目录、较新的原生记录和显式持久根仍按既有优先级处理。
 2. bare `/workspace` / `/workspace new` 的直接动作，以及 `codex headless` 下从菜单首页点 `工作会话`，当前都会先产出 `UIEventFeishuPageView`。
    1. bare `/workspace` 固定打开工作会话父页，展示 `切换`、`从目录新建`、`从 GIT URL 新建`、`从 Worktree 新建`、`解除接管` 五个入口。
    2. bare `/workspace new` 固定打开新建方式子页，展示 `从目录新建`、`从 GIT URL 新建` 与 `从 Worktree 新建` 三个入口。
