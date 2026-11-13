@@ -289,15 +289,17 @@ func launchdUserStopAndWait(ctx context.Context, state InstallState, timeout, po
 	deadline := time.Now().Add(timeout)
 	label := launchdLabelForInstance(state.InstanceID)
 	for {
-		running, err := launchdUserIsRunning(ctx, state)
+		// A service in "SIGTERM sent" or "exited" state can still be registered.
+		// Starting its replacement before launchd removes it fails with EALREADY.
+		_, err := launchctlUserRunner(ctx, "print", launchdUserServiceTarget(state))
+		if isLaunchdMissingErr(err) {
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("confirm launchd stop for %s: %w", label, err)
 		}
-		if !running {
-			return nil
-		}
 		if timeout <= 0 || time.Now().After(deadline) {
-			return fmt.Errorf("launchd service %s still active after %s", label, timeout)
+			return fmt.Errorf("launchd service %s still registered after %s", label, timeout)
 		}
 		select {
 		case <-ctx.Done():
