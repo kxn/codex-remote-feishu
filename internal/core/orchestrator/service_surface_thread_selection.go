@@ -454,7 +454,7 @@ func surfaceResumeAttachFailureCode(events []eventcontract.Event) string {
 			continue
 		}
 		switch strings.TrimSpace(event.Notice.Code) {
-		case "surface_resume_workspace_busy":
+		case "surface_resume_workspace_busy", "headless_restore_workspace_busy":
 			return "workspace_busy"
 		case "surface_resume_workspace_instance_busy":
 			return "workspace_instance_busy"
@@ -482,7 +482,11 @@ func (s *Service) tryAutoResumeManagedHeadlessTarget(surface *state.SurfaceConso
 	target := s.resolveHeadlessRestoreTargetFromView(surface, view)
 	switch target.Mode {
 	case threadAttachFreeVisible, threadAttachReuseHeadless:
-		return s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadHeadlessRestore), SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
+		events := s.attachSurfaceToKnownThread(surface, target.Instance, target.View, attachSurfaceToKnownThreadHeadlessRestore)
+		if failureCode := surfaceResumeAttachFailureCode(events); failureCode != "" {
+			return events, SurfaceResumeResult{Status: SurfaceResumeStatusFailed, FailureCode: failureCode}
+		}
+		return events, SurfaceResumeResult{Status: SurfaceResumeStatusThreadAttached}
 	case threadAttachCreateHeadless:
 		if attempt.ReserveRoomSlot {
 			if ok, events := s.reserveFeishuRoomGroupOnDemandSlot(surface); !ok {
