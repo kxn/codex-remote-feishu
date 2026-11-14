@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,6 +26,43 @@ func TestAcquireLockClearsStaleFile(t *testing.T) {
 	lock, err := AcquireLock(context.Background(), path, false)
 	if err != nil {
 		t.Fatalf("AcquireLock: %v", err)
+	}
+	defer lock.Release()
+}
+
+func TestAcquireLockClearsLockWhosePIDWasReused(t *testing.T) {
+	pid := os.Getpid()
+	start, ok := processStartTime(pid)
+	if !ok || start.Before(time.Now().Add(-24*time.Hour)) {
+		t.Skip("process start time is not usable in this environment")
+	}
+
+	path := filepath.Join(t.TempDir(), "relay.lock")
+	// 当前进程 PID 存活，但锁记录是很久以前创建的：说明这个 PID 是在锁创建之后
+	// 才被系统复用给当前进程的，原持有者早已消失。
+	createdAt := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	raw := `{"pid":` + strconv.Itoa(pid) + `,"token":"reused-pid","createdAt":"` + createdAt + `"}`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatalf("write reused-pid lock: %v", err)
+	}
+
+	lock, err := AcquireLock(context.Background(), path, false)
+	if err != nil {
+		t.Fatalf("AcquireLock should clear a lock whose PID was reused: %v", err)
+	}
+	defer lock.Release()
+}
+
+func TestAcquireLockClearsCorruptLockFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "relay.lock")
+	// 写锁过程中被强杀会留下截断的 JSON；这种锁无法解析，同样必须清理。
+	if err := os.WriteFile(path, []byte(`{"pid":`), 0o600); err != nil {
+		t.Fatalf("write corrupt lock: %v", err)
+	}
+
+	lock, err := AcquireLock(context.Background(), path, false)
+	if err != nil {
+		t.Fatalf("AcquireLock should clear a corrupt lock file: %v", err)
 	}
 	defer lock.Release()
 }
