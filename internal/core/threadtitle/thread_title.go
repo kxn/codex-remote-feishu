@@ -1,6 +1,7 @@
 package threadtitle
 
 import (
+	"encoding/xml"
 	"fmt"
 	"strings"
 
@@ -93,7 +94,7 @@ func LastUserSnippet(thread *state.ThreadRecord, limit int) string {
 }
 
 func NormalizeStoredInput(title string, ctx Context) string {
-	title = normalizeText(title)
+	title = normalizeText(stripBrowserContextPrefix(title))
 	if title == "" {
 		return ""
 	}
@@ -128,7 +129,7 @@ stripWorkspacePrefix:
 	}
 
 finalize:
-	title = normalizeText(title)
+	title = normalizeText(stripBrowserContextPrefix(title))
 	switch {
 	case title == "":
 		return ""
@@ -152,7 +153,7 @@ func StoredTitle(snapshotTitle string, ctx Context, thread *state.ThreadRecord) 
 }
 
 func normalizedThreadName(name string) string {
-	name = normalizeText(name)
+	name = normalizeText(stripBrowserContextPrefix(name))
 	if name == "" || isPlaceholderThreadName(name) {
 		return ""
 	}
@@ -169,7 +170,7 @@ func isPlaceholderThreadName(name string) bool {
 }
 
 func previewLine(text string) string {
-	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(stripBrowserContextPrefix(text), "\r\n", "\n")
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return ""
@@ -182,6 +183,52 @@ func previewLine(text string) string {
 		return line
 	}
 	return normalizeText(text)
+}
+
+// Desktop messages may include browser metadata before the actual user request.
+// Only remove complete leading ambient blocks; other tags stay literal.
+func stripBrowserContextPrefix(text string) string {
+	text = strings.TrimSpace(text)
+	const tag = "in-app-browser-context"
+	const close = "</in-app-browser-context>"
+	stripped := false
+	for strings.HasPrefix(text, "<"+tag) {
+		decoder := xml.NewDecoder(strings.NewReader(text))
+		token, err := decoder.Token()
+		start, ok := token.(xml.StartElement)
+		if err != nil || !ok || start.Name.Local != tag || start.Name.Space != "" {
+			break
+		}
+		source, sources := "", 0
+		for _, attr := range start.Attr {
+			if attr.Name.Local == "source" && attr.Name.Space == "" {
+				source, sources = attr.Value, sources+1
+			}
+		}
+		if sources != 1 || source != "ambient-ui-state" {
+			break
+		}
+		startEnd := int(decoder.InputOffset())
+		if strings.HasSuffix(text[:startEnd], "/>") {
+			break
+		}
+		// The body is browser text, not XML. Parse only the opening tag.
+		rest := text[startEnd:]
+		closeStart := strings.Index(rest, close)
+		if closeStart < 0 {
+			break
+		}
+		text = strings.TrimSpace(rest[closeStart+len(close):])
+		stripped = true
+	}
+	const heading = "## My request:"
+	if stripped && strings.HasPrefix(text, heading) {
+		rest := strings.TrimPrefix(text, heading)
+		if rest == "" || strings.ContainsRune(" \t\r\n", rune(rest[0])) {
+			text = strings.TrimSpace(rest)
+		}
+	}
+	return text
 }
 
 func normalizeText(text string) string {

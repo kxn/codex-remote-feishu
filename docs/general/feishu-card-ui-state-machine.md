@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-29`
-> Summary: 补充路径选择器 stale 初始路径会回退到最近存在父目录，不再中断 `/workspace new` 子步骤。
+> Updated: `2026-11-09`
+> Summary: 明确浏览器附带上下文在会话显示标题及桥接恢复标题中的清理范围。
 
 ## 1. 文档定位
 
@@ -184,6 +184,7 @@
   - VS Code thread dropdown 当前会直接隐藏 disabled thread，并用 plain-text hint 提示“已省略当前不可切换的会话”
   - VS Code `/use` / `/useall` 的大候选集不再整包塞进单个 `select_static`；projector 会按 Feishu transport byte budget 做动态分页，并通过 `thread_selection_page(view_mode + cursor)` 同卡翻页
   - 若当前 thread 不在当前 dropdown 可见页，projector 不会再给 `select_static` 写 `initial_option`
+- 会话显示标题与桥接层恢复标题快照沿用共享 `threadtitle` 语义：仅清理开头完整且 `source="ambient-ui-state"` 的 `in-app-browser-context` 块，以及紧随其后的 `## My request:` 标记，保留原有会话名称与消息摘要的优先级。无 source、未知 source、相似标签、未闭合块及正文中间的标签保持字面含义；不改写 Codex 原始会话名称、数据库或消息历史。
 - `control.FeishuDirectSelectionPrompt` 仍然保留，但当前只剩测试 / mockfeishu 兼容用途，不再是 live adapter 输入：
   - workspace/thread selection live 路径已经不再从 `FeishuSelectionView` 回退投影成 `FeishuDirectSelectionPrompt`
   - kick-thread confirm 等 live selection 也直接消费 `FeishuSelectionView`
