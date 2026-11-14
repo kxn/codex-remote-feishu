@@ -3,12 +3,14 @@ package install
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func withDarwinGOOS(t *testing.T) func() {
@@ -761,5 +763,55 @@ func TestXmlEscape(t *testing.T) {
 		if got != tc.want {
 			t.Fatalf("xmlEscape(%q) = %q, want %q", tc.input, got, tc.want)
 		}
+	}
+}
+
+func TestLaunchdUserStopAndWaitWaitsForFullUnload(t *testing.T) {
+	defer withDarwinGOOS(t)()
+	baseDir := t.TempDir()
+	stubServiceUserHome(t, baseDir)
+	binaryPath := seedBinary(t, filepath.Join(baseDir, "bin", "codex-remote"), "binary")
+	t.Setenv("PATH", "/usr/bin")
+
+	state := InstallState{
+		InstanceID:        "stable",
+		BaseDir:           baseDir,
+		StatePath:         defaultInstallStatePath(baseDir),
+		CurrentBinaryPath: binaryPath,
+	}
+	ApplyStateMetadata(&state, StateMetadataOptions{
+		InstanceID:     state.InstanceID,
+		StatePath:      state.StatePath,
+		BaseDir:        state.BaseDir,
+		ServiceManager: ServiceManagerLaunchdUser,
+	})
+
+	// bootout 之后服务不会立刻消失，而是先停在 state = SIGTERMed
+	// （daemon 仍在优雅关闭 headless 实例）。此时对同一 label 执行 bootstrap 会返回
+	// "Bootstrap failed: 5: Input/output error"，因此 StopAndWait 必须等到 print 报
+	// missing 才能返回，不能把 state != running 当作已停止。
+	printCalls := 0
+	defer withMockLaunchctl(t, func(_ context.Context, args ...string) (string, error) {
+		if len(args) == 0 {
+			return "", nil
+		}
+		switch args[0] {
+		case "bootout":
+			return "", nil
+		case "print":
+			printCalls++
+			if printCalls < 3 {
+				return "state = SIGTERMed\n", nil
+			}
+			return "", errors.New(`Could not find service "com.codex-remote.service" in domain for user gui: 501`)
+		}
+		return "", nil
+	})()
+
+	if err := launchdUserStopAndWait(context.Background(), state, 5*time.Second, 5*time.Millisecond); err != nil {
+		t.Fatalf("launchdUserStopAndWait: %v", err)
+	}
+	if printCalls < 3 {
+		t.Fatalf("StopAndWait returned while the service was still SIGTERMed; print calls=%d", printCalls)
 	}
 }
