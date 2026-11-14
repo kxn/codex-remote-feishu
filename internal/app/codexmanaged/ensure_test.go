@@ -268,6 +268,15 @@ func TestEnsureSerializesAcrossProcesses(t *testing.T) {
 	}
 	type running struct{ wait func() error }
 	var children []running
+	waitChildren := func() {
+		for _, child := range children {
+			if err := child.wait(); err != nil {
+				t.Error(err)
+			}
+		}
+		children = nil
+	}
+	defer waitChildren()
 	for i := 0; i < 3; i++ {
 		cmd := execlaunch.Command(os.Args[0], "-test.run=^TestEnsureSubprocessWorker$", "-test.timeout=10s")
 		cmd.Env = append(os.Environ(), "CODEX_MANAGED_TEST_ROOT="+root)
@@ -277,10 +286,9 @@ func TestEnsureSerializesAcrossProcesses(t *testing.T) {
 		}
 		children = append(children, running{wait: cmd.Wait})
 	}
-	for _, child := range children {
-		if err := child.wait(); err != nil {
-			t.Fatal(err)
-		}
+	waitChildren()
+	if t.Failed() {
+		return
 	}
 	raw, err := os.ReadFile(filepath.Join(root, "installs"))
 	if err != nil || string(raw) != "0.159.3\n" {

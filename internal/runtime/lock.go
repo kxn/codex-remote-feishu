@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -43,17 +44,11 @@ func AcquireLock(ctx context.Context, path string, wait bool) (*FileLock, error)
 	}
 
 	for {
-		file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		err := publishLock(path, func(writer io.Writer) error {
+			_, err := writer.Write(raw)
+			return err
+		})
 		if err == nil {
-			if _, writeErr := file.Write(raw); writeErr != nil {
-				_ = file.Close()
-				_ = os.Remove(path)
-				return nil, writeErr
-			}
-			if closeErr := file.Close(); closeErr != nil {
-				_ = os.Remove(path)
-				return nil, closeErr
-			}
 			return &FileLock{path: path, token: token}, nil
 		}
 		if !os.IsExist(err) {
@@ -75,6 +70,26 @@ func AcquireLock(ctx context.Context, path string, wait bool) (*FileLock, error)
 		case <-time.After(150 * time.Millisecond):
 		}
 	}
+}
+
+// publishLock exposes the owner record only after it is fully written and closed.
+// A hard link creates the lock name exclusively; rename could replace an owner.
+func publishLock(path string, writeRecord func(io.Writer) error) error {
+	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = file.Close()
+		_ = os.Remove(file.Name())
+	}()
+	if err := writeRecord(file); err != nil {
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	return os.Link(file.Name(), path)
 }
 
 func (l *FileLock) Release() error {
