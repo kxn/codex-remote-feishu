@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -64,7 +65,44 @@ func TestNativeTaskSchedulerRegistrationPreservesSettings(t *testing.T) {
 	if task.Settings.ExecutionTimeLimit != "PT0S" || task.Settings.DisallowStartIfOnBatteries || task.Settings.StopIfGoingOnBatteries || !task.Settings.StartWhenAvailable || task.Settings.MultipleInstancesPolicy != "IgnoreNew" {
 		t.Fatalf("actual registered task lost settings: %#v", task.Settings)
 	}
-	if task.Triggers.LogonTrigger.UserID == "" || task.Triggers.LogonTrigger.UserID != task.Principals.Principal.UserID || task.Principals.Principal.LogonType != "InteractiveToken" || task.Principals.Principal.RunLevel != "LeastPrivilege" {
+	current, err := user.Current()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Exported XML may preserve the trigger account name while normalizing the
+	// principal to a SID. Compare both to the current process user's native SID.
+	triggerSID := registeredTaskAccountSID(t, task.Triggers.LogonTrigger.UserID)
+	principalSID := registeredTaskAccountSID(t, task.Principals.Principal.UserID)
+	if triggerSID != current.Uid || principalSID != current.Uid || task.Principals.Principal.LogonType != "InteractiveToken" {
 		t.Fatalf("actual registered task lost current-user scope: %#v", task)
 	}
+	// Task Scheduler can omit the default RunLevel from exported XML. Read the
+	// native task definition instead: TASK_RUNLEVEL_LUA is 0; highest is 1.
+	name := strings.ReplaceAll(taskSchedulerTaskNameForInstance(state.InstanceID), "'", "''")
+	level, err := taskSchedulerPowerShellRunner(ctx, fmt.Sprintf(
+		"$ErrorActionPreference='Stop'; $scheduler = New-Object -ComObject Schedule.Service; $scheduler.Connect(); $task = $scheduler.GetFolder('\\').GetTask('%s'); [int]$task.Definition.Principal.RunLevel", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(level) != "0" {
+		t.Fatalf("actual registered task must use least privilege, got native RunLevel %q (XML %q)", level, task.Principals.Principal.RunLevel)
+	}
+}
+
+func registeredTaskAccountSID(t *testing.T, account string) string {
+	t.Helper()
+	if strings.TrimSpace(account) == "" {
+		t.Fatal("actual registered task omitted its account identity")
+	}
+	var resolved *user.User
+	var err error
+	if strings.HasPrefix(strings.ToUpper(account), "S-") {
+		resolved, err = user.LookupId(account)
+	} else {
+		resolved, err = user.Lookup(account)
+	}
+	if err != nil {
+		t.Fatalf("resolve registered task account %q: %v", account, err)
+	}
+	return resolved.Uid
 }
