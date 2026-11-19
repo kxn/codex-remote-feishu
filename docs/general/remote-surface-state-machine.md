@@ -1,8 +1,8 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-11-19`
-> Summary: 补充异步问题卡的原文说明、完整答文投递，以及有界草稿与重放记录回收。
+> Updated: `2026-11-20`
+> Summary: 明确目标选择器草稿导航使用冻结读模型，确认时重新验证实时目标与接管条件。
 > 1. visible 但 contract mismatch 的 workspace/session 仍然可见，不会再被 `/list`、`/use`、workspace recency、target picker 直接吞掉；
 > 2. 这些 mismatch 候选不会再假装“可直接接管”；
 > 3. detached `/use`、headless exact-thread restore、workspace attach、startup resume、`/mode` backend switch、`/claudeprofile`、`/codexprofile`、`/opencodeprofile` 现在都会统一先判定 `attach visible compatible / reuse managed compatible / restart managed incompatible / fresh-start matching headless / reject`，而不是各自维护平行 continuation；
@@ -918,6 +918,8 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 8. `Purpose=prompt_dispatch_restart` 的 attach 完成后不会重走 fresh workspace / exact-thread restore 的大路径；surface 只做最小 reattach，然后由统一 dispatch owner 继续原本那条 queued 或 auto-continue 发送，避免在“切推理强度”时把 queue/runtime 状态清空。
 
 ### 4.4 选择卡片不再是服务端持久 modal 状态
+
+目标选择器的 Target 页面首次打开时冻结全部工作区与各工作区会话选项（含展示元数据）。同一 picker 的工作区/会话选择及翻页只修改内存草稿并 inline 刷新，不重新访问 catalog、SQLite 或 Git/文件系统。冻结快照不持久化，沿用 picker 的 owner、TTL、daemon freshness 与路由清理；取消、过期和重启不改 route。最终确认先废弃快照，重新计算实时可见性、claim 与兼容性，目标消失或被接管时保留当前 route 并提示重新选择。目录/Git/Worktree 表单仍走原有验证路径。
 
 当前服务端已经不再保存 `FeishuDirectSelectionPrompt` 状态，也不再把“纯数字文本”解释成选择。
 

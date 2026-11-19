@@ -18,6 +18,9 @@ const (
 )
 
 func (s *Service) targetPickerWorkspaceEntriesForRecord(surface *state.SurfaceConsoleRecord, record *activeTargetPickerRecord) []workspaceSelectionEntry {
+	if record != nil && record.OptionSnapshot != nil && targetPickerEffectivePage(record) == control.FeishuTargetPickerPageTarget {
+		return append([]workspaceSelectionEntry(nil), record.OptionSnapshot.Workspaces...)
+	}
 	mode := targetPickerWorkspaceEntryModeAttach
 	if record != nil {
 		page := targetPickerDefaultPage(record.Source)
@@ -136,11 +139,15 @@ func (s *Service) targetPickerWorkspaceEntriesForMode(surface *state.SurfaceCons
 }
 
 func (s *Service) targetPickerSessionOptions(surface *state.SurfaceConsoleRecord, entry workspaceSelectionEntry, source control.TargetPickerRequestSource, allowNewThread bool) []control.FeishuTargetPickerSessionOption {
+	views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
+	return s.targetPickerSessionOptionsFromViews(surface, entry, source, allowNewThread, views)
+}
+
+func (s *Service) targetPickerSessionOptionsFromViews(surface *state.SurfaceConsoleRecord, entry workspaceSelectionEntry, source control.TargetPickerRequestSource, allowNewThread bool, views []*mergedThreadView) []control.FeishuTargetPickerSessionOption {
 	workspaceKey := normalizeWorkspaceClaimKey(entry.workspaceKey)
 	if workspaceKey == "" {
 		return nil
 	}
-	views := s.threadViewsVisibleInNormalList(surface, s.mergedThreadViews(surface))
 	options := make([]control.FeishuTargetPickerSessionOption, 0, len(views)+1)
 	canUseWorkspace := !entry.busy
 	if canUseWorkspace && targetPickerAllowsNewThread(source, allowNewThread) && source == control.TargetPickerRequestSourceList {

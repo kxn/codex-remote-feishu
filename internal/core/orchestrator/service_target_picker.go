@@ -255,7 +255,7 @@ func (s *Service) handleTargetPickerPage(surface *state.SurfaceConsoleRecord, pi
 	case frontstagecontract.CardTargetPickerSessionFieldName:
 		workspaceEntries := s.targetPickerWorkspaceEntriesForRecord(surface, record)
 		entry, _ := targetPickerWorkspaceEntryByKey(workspaceEntries, record.SelectedWorkspaceKey)
-		options := s.targetPickerSessionOptions(surface, entry, record.Source, record.AllowNewThread)
+		options := s.targetPickerSessionOptionsForRecord(surface, record, entry)
 		record.SessionCursor = normalizePickerDropdownCursor(cursor, len(options))
 		record.SelectedSessionValue = ""
 	default:
@@ -323,6 +323,9 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 	if blocked != nil {
 		return blocked
 	}
+	// Navigation edits only the frozen read model. Confirmation is the live
+	// acceptance boundary: refresh eligibility before any route mutation.
+	record.OptionSnapshot = nil
 	s.applyTargetPickerDraftAnswers(record, answers)
 	requestedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.SelectedWorkspaceKey)
 	requestedSessionValue := strings.TrimSpace(record.SelectedSessionValue)
@@ -547,6 +550,9 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		page = record.PageOverride
 	}
 	record.Page = page
+	if page == control.FeishuTargetPickerPageTarget && record.OptionSnapshot == nil {
+		s.freezeTargetPickerOptions(surface, record)
+	}
 	workspaceEntries := s.targetPickerWorkspaceEntriesForRecord(surface, record)
 
 	lockedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.LockedWorkspaceKey)
@@ -569,7 +575,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	selectedWorkspaceEntry, _ := targetPickerWorkspaceEntryByKey(workspaceEntries, selectedWorkspace)
 	usesSessionSelection := page == control.FeishuTargetPickerPageTarget && targetPickerUsesSessionSelection(record.Source)
 	if usesSessionSelection {
-		sessionOptions = s.targetPickerSessionOptions(surface, selectedWorkspaceEntry, record.Source, record.AllowNewThread)
+		sessionOptions = s.targetPickerSessionOptionsForRecord(surface, record, selectedWorkspaceEntry)
 	}
 	selectedSession := strings.TrimSpace(record.SelectedSessionValue)
 	if usesSessionSelection {

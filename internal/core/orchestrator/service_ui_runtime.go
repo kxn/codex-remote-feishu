@@ -97,6 +97,7 @@ type activeTargetPickerRecord struct {
 	SessionCursor           int
 	SelectedWorkspaceKey    string
 	SelectedSessionValue    string
+	OptionSnapshot          *targetPickerOptionSnapshot
 	LocalDirectoryPath      string
 	LocalDirectoryName      string
 	LocalDirectoryValidated *targetPickerLocalDirectoryValidatedRecord

@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-11-19`
-> Summary: 补充异步问题卡的原文说明、完整答文投递，以及有界草稿与重放记录回收。
+> Updated: `2026-11-20`
+> Summary: 明确目标选择器的内存草稿导航与最终确认的实时校验边界。
 
 ## 1. 文档定位
 
@@ -235,6 +235,7 @@ Goal 当前的回显约束：
   - 问题卡标明一小时有效。每个 surface 最多 32 份活跃草稿，超过时最早草稿失效；提交或过期即释放正文/题目/答案，仅留去重记录。去重记录最多保留最近 128 份且最长 24 小时，tick 和新事件入口都会回收；保留窗口内重放不重新出卡。过期或被淘汰的回调拒绝并提示直接回复，不阻塞普通输入。
 - 分页导航与 target/path picker / selection dropdown 当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view、thread selection view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target/path picker / VS Code thread dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
 - target picker 的会话标题只在显示时限长：下拉选项和切换进度最多 80 个字符，已选会话摘要最多 1000 个字符，含“名称过长，已截断”标记。完整语义原名、选项 `value` 与真实 thread 身份保持不变；分页继续按真实发送字节预算计算，避免单个长标题挤掉普通选项或确认按钮。
+- target picker 的 Target 页在打开时冻结完整选项读模型，工作区/会话选择与翻页只做内存草稿更新并原位替换，不在 callback 中重新读取 catalog、SQLite、Git 或目录；最终确认重新读取实时选项与接管条件，旧目标不可继续确认。表单页面、owner/freshness 校验、回调 schema、确认/失败结果的原卡收口规则不变。
 - workspace/session family 的 selection / target picker callback 当前也会在有来源上下文时继续补写 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`。这意味着 bare `/list` `/use` `/useall`、菜单按钮、selection refresh、target-picker 翻页/确认这些后续动作，都能继续把 family provenance 带回 gateway / orchestrator，而不是只剩 `ActionKind` / `field_name`。
 - adapter 内部这组 lane/read-model contract 现统一由 `internal/adapter/feishu/selectflow` 承接：`PaginatedSelectFlowDefinition` 拥有默认 `field_name`、payload value key、共享 pagination hint，以及按 flow 显式声明的 recover precedence；projector 与 gateway 通过同一份定义对齐 lane 字段、hint 和 callback recover 规则。
 
