@@ -11,6 +11,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
+	"github.com/kxn/codex-remote-feishu/internal/testutil"
 )
 
 func desktopNameFixture(t *testing.T) (*Service, *state.SurfaceConsoleRecord, *sql.DB) {
@@ -89,7 +90,7 @@ func TestDesktopRenameRefreshesListAndStatusWithoutRetargeting(t *testing.T) {
 	if after.Name != beforeThread.Name || after.CWD != beforeThread.CWD || after.WorkspaceKey != beforeThread.WorkspaceKey || !after.LastUsedAt.Equal(beforeThread.LastUsedAt) {
 		t.Fatal("name projection mutated runtime identity, name or activity")
 	}
-	if surface.SelectedThreadID != beforeSurface.SelectedThreadID || surface.AttachedInstanceID != beforeSurface.AttachedInstanceID || surface.ClaimedWorkspaceKey != beforeSurface.ClaimedWorkspaceKey || surface.RouteMode != beforeSurface.RouteMode {
+	if surface.SelectedThreadID != beforeSurface.SelectedThreadID || surface.AttachedInstanceID != beforeSurface.AttachedInstanceID || !testutil.SamePath(surface.ClaimedWorkspaceKey, beforeSurface.ClaimedWorkspaceKey) || surface.RouteMode != beforeSurface.RouteMode {
 		t.Fatal("name projection retargeted the surface")
 	}
 }

@@ -29,7 +29,14 @@ func TestPersistedWorkspaceSQLiteCWDDoesNotReplaceExplicitRoot(t *testing.T) {
 				}
 				catalog := sqliteWorkspaceCatalogForTest(t, cwd, now)
 				workspaces, err := catalog.RecentWorkspaces(10)
-				if err != nil || workspaces[cwd].IsZero() {
+				foundCWD := false
+				for path, usedAt := range workspaces {
+					if testutil.SamePath(path, cwd) && !usedAt.IsZero() {
+						foundCWD = true
+						break
+					}
+				}
+				if err != nil || !foundCWD {
 					t.Fatalf("real catalog must expose the current cwd as a recent workspace: %v (%v)", workspaces, err)
 				}
 				svc.SetPersistedThreadCatalog(catalog)
