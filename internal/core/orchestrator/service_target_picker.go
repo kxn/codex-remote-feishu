@@ -338,10 +338,15 @@ func (s *Service) handleTargetPickerConfirm(surface *state.SurfaceConsoleRecord,
 	// acceptance boundary: refresh eligibility before any route mutation.
 	record.OptionSnapshot = nil
 	s.applyTargetPickerDraftAnswers(record, answers)
-	requestedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.SelectedWorkspaceKey)
+	// Confirmations also accept host paths from API/form callers. Resolve their
+	// physical identity here, rather than comparing an alias to canonical option
+	// keys as if it were an already-emitted navigation value.
+	record.SelectedWorkspaceKey = normalizeWorkspaceClaimKey(record.SelectedWorkspaceKey)
+	record.LockedWorkspaceKey = normalizeWorkspaceClaimKey(record.LockedWorkspaceKey)
+	requestedWorkspaceKey := record.SelectedWorkspaceKey
 	requestedSessionValue := strings.TrimSpace(record.SelectedSessionValue)
-	lockedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.LockedWorkspaceKey)
-	if key := normalizeTargetPickerWorkspaceSelection(workspaceKey); key != "" {
+	lockedWorkspaceKey := record.LockedWorkspaceKey
+	if key := normalizeWorkspaceClaimKey(workspaceKey); key != "" {
 		if lockedWorkspaceKey != "" && key != lockedWorkspaceKey {
 			setTargetPickerMessages(record, control.FeishuTargetPickerMessage{
 				Level: control.FeishuTargetPickerMessageWarning,
