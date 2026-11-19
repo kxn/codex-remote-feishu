@@ -385,3 +385,71 @@ func TestRestartChildSessionStopsCurrentIOBeforeLaunchingReplacement(t *testing.
 	cancel()
 	waitForSessionIOStopped(next, 2*time.Second)
 }
+
+func TestRunChildBootstrapReturnsBootstrappedStdout(t *testing.T) {
+	app := New(Config{Source: "headless", Version: "test"})
+	stdout, err := app.runChildBootstrap(context.Background(), wrapperBootstrapTimeout, func() {}, func() (io.Reader, error) {
+		return strings.NewReader("bootstrapped"), nil
+	})
+	if err != nil {
+		t.Fatalf("runChildBootstrap: %v", err)
+	}
+	data, err := io.ReadAll(stdout)
+	if err != nil {
+		t.Fatalf("read stdout: %v", err)
+	}
+	if string(data) != "bootstrapped" {
+		t.Fatalf("expected stdout %q, got %q", "bootstrapped", string(data))
+	}
+}
+
+func TestRunChildBootstrapTimesOutWedgedChild(t *testing.T) {
+	pipeReader, pipeWriter := io.Pipe()
+	defer pipeReader.Close()
+	cancelCalled := make(chan struct{})
+	childCancel := func() {
+		// Simulate the kill path: cancelling the child closes its stdout pipe,
+		// which is what unblocks a wedged bootstrap read.
+		_ = pipeWriter.Close()
+		close(cancelCalled)
+	}
+	boot := func() (io.Reader, error) {
+		buf := make([]byte, 1)
+		if _, err := pipeReader.Read(buf); err != nil {
+			return nil, err
+		}
+		return strings.NewReader("unexpected"), nil
+	}
+
+	app := New(Config{Source: "headless", Version: "test"})
+	_, err := app.runChildBootstrap(context.Background(), 20*time.Millisecond, childCancel, boot)
+	if err == nil || !strings.Contains(err.Error(), "not received within") {
+		t.Fatalf("expected bootstrap timeout error, got %v", err)
+	}
+	select {
+	case <-cancelCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("child cancel was not invoked on bootstrap timeout")
+	}
+}
+
+func TestRunChildBootstrapHonorsParentCancel(t *testing.T) {
+	block := make(chan struct{})
+	defer close(block)
+	ctx, cancelParent := context.WithCancel(context.Background())
+	cancelParent()
+	cancelCalled := make(chan struct{})
+	app := New(Config{Source: "headless", Version: "test"})
+	_, err := app.runChildBootstrap(ctx, wrapperBootstrapTimeout, func() { close(cancelCalled) }, func() (io.Reader, error) {
+		<-block
+		return nil, errors.New("bootstrap should not complete")
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
+	}
+	select {
+	case <-cancelCalled:
+	case <-time.After(2 * time.Second):
+		t.Fatal("child cancel was not invoked on parent cancellation")
+	}
+}

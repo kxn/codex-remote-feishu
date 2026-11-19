@@ -338,15 +338,15 @@ func TestDaemonKillInstanceStopsManagedHeadlessProcess(t *testing.T) {
 		ActorUserID:      "user-1",
 	})
 
-	if stoppedPID != 0 {
-		t.Fatalf("expected detach not to stop managed headless pid, got %d", stoppedPID)
+	if stoppedPID != 4321 {
+		t.Fatalf("expected detach to stop managed headless pid 4321, got %d", stoppedPID)
 	}
 	snapshot := app.service.SurfaceSnapshot("surface-1")
 	if snapshot == nil || snapshot.Attachment.InstanceID != "" {
 		t.Fatalf("expected surface to detach after detach, got %#v", snapshot)
 	}
-	if app.service.Instance("inst-headless-1") == nil {
-		t.Fatalf("expected managed headless instance to remain after detach")
+	if app.service.Instance("inst-headless-1") != nil {
+		t.Fatalf("expected detached managed headless instance to be removed")
 	}
 }
 

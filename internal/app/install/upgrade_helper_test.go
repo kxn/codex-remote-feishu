@@ -324,8 +324,8 @@ func TestRunUpgradeHelperWithStatePathTaskSchedulerLogonStopsInstallsAndStartsTa
 	}; strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("task scheduler calls = %#v, want %#v", got, want)
 	}
-	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-AtLogOn") {
-		t.Fatalf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", psScript)
+	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-Xml (Get-Content -LiteralPath") {
+		t.Fatalf("PowerShell script missing Register-ScheduledTask or XML input: %s", psScript)
 	}
 	currentRaw, err := os.ReadFile(currentBinary)
 	if err != nil {

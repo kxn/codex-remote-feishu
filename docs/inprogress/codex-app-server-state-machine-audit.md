@@ -584,7 +584,7 @@ Headless / cron synthetic initialize 当前 opt-out：
 | `thread/goal/*` / `thread/settings/updated` | 遵循但仅 state-only | goal/settings latest state 已保存，不做 Feishu goal UI |
 | `thread/compact/start` | 遵循但有适配压缩 | 已接通，能看到 `contextCompaction` |
 | `thread/rollback` | 未遵循/未实现 | 无 command 建模 |
-| `thread/shellCommand` | 未遵循/未实现 | 无 command 建模 |
+| `thread/shellCommand` | 遵循但有产品适配 | relay 以 `thread.shell_command` 建模；仅 Codex 声明能力时由 queued `APPLAUSE` 触发，wrapper 使用 payload-file 固定读取命令，并按 UserShell item 完成清理临时载荷 |
 | `turn/start -> turn/started -> item/* -> turn/completed` | 遵循但有适配压缩 | 核心 turn 生命周期已接住 |
 | `turn/steer` | 严格遵循 | `expectedTurnId`、无新 `turn/started` 都已保持 |
 | `turn/interrupt` | 严格遵循 | 终态 `interrupted` 已承接 |

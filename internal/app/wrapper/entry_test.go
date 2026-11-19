@@ -15,6 +15,16 @@ func TestWrapperBackendFromArgs(t *testing.T) {
 		wantErr string
 	}{
 		{
+			name:    "shared daemon lifecycle is rejected",
+			args:    []string{"app-server", "daemon", "start"},
+			wantErr: "subcommands are unsupported",
+		},
+		{
+			name:    "shared socket listener is rejected",
+			args:    []string{"app-server", "--listen", "unix://"},
+			wantErr: "only supports --listen stdio://",
+		},
+		{
 			name: "codex app server",
 			args: []string{"app-server", "--analytics-default-enabled"},
 			want: agentproto.BackendCodex,

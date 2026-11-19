@@ -50,7 +50,9 @@ func (s *Service) finishSurfaceAfterWork(surface *state.SurfaceConsoleRecord) []
 	}
 	inst := s.root.Instances[surface.AttachedInstanceID]
 	if surface.Abandoning && !s.surfaceNeedsDelayedDetach(surface, inst) {
+		instanceID := surface.AttachedInstanceID
 		events := s.finalizeDetachedSurface(surface)
+		events = append(events, s.releaseManagedHeadlessAfterDetach(surface, instanceID)...)
 		return append(events, notice(surface, "detached", s.detachedText(surface))...)
 	}
 	if surface.RouteMode == state.RouteModeFollowLocal && !s.surfaceHasLiveRemoteWork(surface) {

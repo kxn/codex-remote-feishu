@@ -1,9 +1,11 @@
 package gateway
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	larkim "github.com/larksuite/oapi-sdk-go/v3/service/im/v1"
 )
 
@@ -96,6 +98,92 @@ func TestPlanInboundMessageEventQueuesUnmentionedGroupTextWhenPrimaryPermissionC
 	}
 	if !ok || planned.Queue == nil || planned.Queue.text != "请接一下" || !recorded {
 		t.Fatalf("expected primary unmentioned group text to queue even when permission cache is missing, ok=%v planned=%#v recorded=%v", ok, planned, recorded)
+	}
+}
+
+func TestPlanInboundMessageEventTreatsPureCurrentBotMentionAsPrimaryOnCommand(t *testing.T) {
+	env := InboundEnv{
+		GatewayID:                     "app-2",
+		BotOpenID:                     "ou_bot",
+		ParseTextActionWithoutCatalog: parseTextAction,
+		PrimaryGatewayForChat: func(chatID string) string {
+			if chatID != "oc_chat" {
+				t.Fatalf("primary lookup chat = %q, want oc_chat", chatID)
+			}
+			return "app-1"
+		},
+		RecordSurfaceMessage: func(messageID, surfaceSessionID string) {
+			t.Fatalf("pure mention shortcut should not record surface message, got %s/%s", messageID, surfaceSessionID)
+		},
+	}
+	event := groupTextEventWithCurrentBotMention("om-msg-mention-primary", "oc_chat", "@_user_1 \n\t", "OpenCode")
+
+	planned, ok, err := PlanInboundMessageEvent(env, event)
+	if err != nil {
+		t.Fatalf("PlanInboundMessageEvent returned error: %v", err)
+	}
+	if !ok || planned.Action == nil || planned.Queue != nil {
+		t.Fatalf("expected pure current-bot mention to become primary command action, ok=%v planned=%#v", ok, planned)
+	}
+	action := planned.Action
+	if action.Kind != control.ActionPrimaryCommand || action.Text != "/primary on" || action.CommandID != control.FeishuCommandPrimary {
+		t.Fatalf("primary shortcut action = %#v", action)
+	}
+	if action.GatewayID != "app-2" || action.SurfaceSessionID != "feishu:app-2:chat:oc_chat" || action.ChatID != "oc_chat" || action.ActorUserID != "ou_user" || action.MessageID != "om-msg-mention-primary" {
+		t.Fatalf("primary shortcut action routing metadata = %#v", action)
+	}
+}
+
+func TestPlanInboundMessageEventIgnoresPureCurrentBotMentionWhenAlreadyPrimary(t *testing.T) {
+	env := InboundEnv{
+		GatewayID:                     "app-1",
+		BotOpenID:                     "ou_bot",
+		ParseTextActionWithoutCatalog: parseTextAction,
+		PrimaryGatewayForChat: func(chatID string) string {
+			if chatID != "oc_chat" {
+				t.Fatalf("primary lookup chat = %q, want oc_chat", chatID)
+			}
+			return "app-1"
+		},
+		RecordSurfaceMessage: func(messageID, surfaceSessionID string) {
+			t.Fatalf("already-primary pure mention should be silent, got record %s/%s", messageID, surfaceSessionID)
+		},
+	}
+	event := groupTextEventWithCurrentBotMention("om-msg-mention-current", "oc_chat", "@_user_1", "OpenCode")
+
+	planned, ok, err := PlanInboundMessageEvent(env, event)
+	if err != nil {
+		t.Fatalf("PlanInboundMessageEvent returned error: %v", err)
+	}
+	if ok || planned.Action != nil || planned.Queue != nil {
+		t.Fatalf("expected already-primary pure mention to be ignored, ok=%v planned=%#v", ok, planned)
+	}
+}
+
+func TestPlanInboundMessageEventQueuesCurrentBotMentionWithText(t *testing.T) {
+	recorded := false
+	env := InboundEnv{
+		GatewayID:                     "app-2",
+		BotOpenID:                     "ou_bot",
+		ParseTextActionWithoutCatalog: parseTextAction,
+		PrimaryGatewayForChat: func(chatID string) string {
+			return "app-1"
+		},
+		RecordSurfaceMessage: func(messageID, surfaceSessionID string) {
+			recorded = true
+		},
+	}
+	event := groupTextEventWithCurrentBotMention("om-msg-mention-text", "oc_chat", "@_user_1 继续看一下", "OpenCode")
+
+	planned, ok, err := PlanInboundMessageEvent(env, event)
+	if err != nil {
+		t.Fatalf("PlanInboundMessageEvent returned error: %v", err)
+	}
+	if !ok || planned.Queue == nil || planned.Action != nil || !recorded {
+		t.Fatalf("expected current-bot mention with text to queue normally, ok=%v planned=%#v recorded=%v", ok, planned, recorded)
+	}
+	if planned.Queue.text != "@OpenCode 继续看一下" {
+		t.Fatalf("queued text = %q, want mention display text", planned.Queue.text)
 	}
 }
 
@@ -263,6 +351,29 @@ func groupTextEventWithoutMention(messageID, chatID, text string) *larkim.P2Mess
 				ChatType:    stringRef("group"),
 				MessageType: stringRef("text"),
 				Content:     stringRef(`{"text":"` + text + `"}`),
+			},
+		},
+	}
+}
+
+func groupTextEventWithCurrentBotMention(messageID, chatID, rawText, botName string) *larkim.P2MessageReceiveV1 {
+	return &larkim.P2MessageReceiveV1{
+		Event: &larkim.P2MessageReceiveV1Data{
+			Sender: &larkim.EventSender{
+				SenderId:   &larkim.UserId{OpenId: stringRef("ou_user")},
+				SenderType: stringRef("user"),
+			},
+			Message: &larkim.EventMessage{
+				MessageId:   stringRef(messageID),
+				ChatId:      stringRef(chatID),
+				ChatType:    stringRef("group"),
+				MessageType: stringRef("text"),
+				Content:     stringRef(`{"text":` + strconv.Quote(rawText) + `}`),
+				Mentions: []*larkim.MentionEvent{{
+					Key:  stringRef("@_user_1"),
+					Name: stringRef(botName),
+					Id:   &larkim.UserId{OpenId: stringRef("ou_bot")},
+				}},
 			},
 		},
 	}

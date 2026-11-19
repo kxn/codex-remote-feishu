@@ -84,6 +84,17 @@ func (s *Service) instanceHasPendingSteer(instanceID string) bool {
 			found = true
 		}
 	})
+	s.turns.forEachPendingShell(func(_ string, binding *pendingShellBinding) {
+		if found || binding.InstanceID != instanceID {
+			return
+		}
+		surface := s.root.Surfaces[binding.SurfaceSessionID]
+		if surface != nil {
+			if item := surface.QueueItems[binding.QueueItemID]; item != nil && item.Status == state.QueueItemShellCommanding {
+				found = true
+			}
+		}
+	})
 	return found
 }
 

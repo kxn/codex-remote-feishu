@@ -29,6 +29,7 @@ const (
 	steerCommandResponseTimeout = 5 * time.Second
 	wrapperChildStopGrace       = 2 * time.Second
 	wrapperChildWaitTimeout     = 5 * time.Second
+	wrapperBootstrapTimeout     = 15 * time.Second
 )
 
 type shutdownRequest struct {
@@ -209,6 +210,7 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 	if rawLogger != nil {
 		defer rawLogger.Close()
 	}
+	defer cleanupBackendRuntime(a.runtime)
 
 	manager := relayruntime.NewManager(relayruntime.ManagerConfig{
 		RelayServerURL: a.config.RelayServerURL,

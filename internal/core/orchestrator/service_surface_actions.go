@@ -490,7 +490,13 @@ func (s *Service) prepareFeishuRoomWorkspaceForDetachedInput(surface *state.Surf
 }
 
 func (s *Service) handleReactionCreated(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
-	if surface == nil || !isThumbsUpReaction(action.ReactionType) {
+	if surface == nil {
+		return nil
+	}
+	if isApplauseReaction(action.ReactionType) {
+		return s.handleApplauseReaction(surface, action)
+	}
+	if !isThumbsUpReaction(action.ReactionType) {
 		return nil
 	}
 	targetMessageID := strings.TrimSpace(action.TargetMessageID)
@@ -509,6 +515,65 @@ func (s *Service) handleReactionCreated(surface *state.SurfaceConsoleRecord, act
 			return notice(surface, "opencode_steer_not_supported", opencodeSteerUnsupportedNoticeText)
 		}
 		return s.dispatchSteerCandidates(surface, inst, activeThreadID, activeTurnID, []steerCandidate{candidate}, targetMessageID, "")
+	}
+	return nil
+}
+
+func (s *Service) handleApplauseReaction(surface *state.SurfaceConsoleRecord, action control.Action) []eventcontract.Event {
+	targetMessageID := strings.TrimSpace(action.TargetMessageID)
+	if targetMessageID == "" {
+		return nil
+	}
+	inst, activeThreadID, activeTurnID, ok := s.activeSteerTarget(surface)
+	if !ok || surface.ActiveRequestCapture != nil || activePendingRequest(surface) != nil {
+		return nil
+	}
+	if state.EffectiveInstanceBackend(inst) != agentproto.BackendCodex || !inst.CapabilitiesDeclared || !state.EffectiveInstanceCapabilities(inst).ThreadShellCommand {
+		return nil
+	}
+	for queueIndex, queueID := range surface.QueuedQueueItemIDs {
+		item := surface.QueueItems[queueID]
+		if item == nil || item.Status != state.QueueItemQueued || strings.TrimSpace(item.SourceMessageID) != targetMessageID {
+			continue
+		}
+		if queuedItemExecutionThreadID(item) != activeThreadID {
+			return nil
+		}
+		payload, ok, err := queuedItemShellPayload(item)
+		if err != nil || !ok {
+			return nil
+		}
+		item.Status = state.QueueItemShellCommanding
+		surface.QueuedQueueItemIDs = removeString(surface.QueuedQueueItemIDs, item.ID)
+		s.bindPendingShell(item.ID, &pendingShellBinding{
+			InstanceID:       inst.InstanceID,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			QueueItemID:      item.ID,
+			SourceMessageID:  targetMessageID,
+			ThreadID:         activeThreadID,
+			TurnID:           activeTurnID,
+			QueueIndex:       queueIndex,
+		})
+		events := s.pendingInputEvents(surface, control.PendingInputState{
+			QueueItemID: item.ID,
+			Status:      string(item.Status),
+		}, []string{targetMessageID})
+		events = append(events, eventcontract.Event{
+			Kind:             eventcontract.KindAgentCommand,
+			SurfaceSessionID: surface.SurfaceSessionID,
+			Command: &agentproto.Command{
+				Kind: agentproto.CommandThreadShellCommand,
+				Origin: agentproto.Origin{
+					Surface:   surface.SurfaceSessionID,
+					UserID:    surface.ActorUserID,
+					ChatID:    surface.ChatID,
+					MessageID: targetMessageID,
+				},
+				Target:       agentproto.Target{ThreadID: activeThreadID, TurnID: activeTurnID},
+				ShellCommand: agentproto.ShellCommand{Payload: payload},
+			},
+		})
+		return events
 	}
 	return nil
 }
@@ -724,6 +789,13 @@ func isThumbsUpReaction(value string) bool {
 	return normalized == "thumbsup"
 }
 
+func isApplauseReaction(value string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	normalized = strings.ReplaceAll(normalized, "_", "")
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	return normalized == "applause"
+}
+
 func (s *Service) stopSurface(surface *state.SurfaceConsoleRecord) []eventcontract.Event {
 	var events []eventcontract.Event
 	discarded := countPendingDrafts(surface)
@@ -870,7 +942,9 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 		if item := surface.QueueItems[surface.ActiveQueueItemID]; item != nil {
 			events = append(events, s.abortSurfaceActiveQueueItemForDetach(surface, item)...)
 		}
+		instanceID := surface.AttachedInstanceID
 		events = append(events, s.finalizeDetachedSurface(surface)...)
+		events = append(events, s.releaseManagedHeadlessAfterDetach(surface, instanceID)...)
 		return append(events, notice(surface, "detached", s.detachedText(surface))...)
 	}
 	if s.surfaceNeedsDelayedDetach(surface, inst) {
@@ -895,7 +969,9 @@ func (s *Service) detach(surface *state.SurfaceConsoleRecord) []eventcontract.Ev
 		}
 		return append(events, notice(surface, "detach_pending", s.detachPendingText(surface))...)
 	}
+	instanceID := surface.AttachedInstanceID
 	events = append(events, s.finalizeDetachedSurface(surface)...)
+	events = append(events, s.releaseManagedHeadlessAfterDetach(surface, instanceID)...)
 	return append(events, notice(surface, "detached", s.detachedText(surface))...)
 }
 

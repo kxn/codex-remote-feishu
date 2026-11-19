@@ -104,14 +104,17 @@ func NormalizePlanModeSetting(value PlanModeSetting) PlanModeSetting {
 type QueueItemStatus string
 
 const (
-	QueueItemQueued      QueueItemStatus = "queued"
-	QueueItemDispatching QueueItemStatus = "dispatching"
-	QueueItemRunning     QueueItemStatus = "running"
-	QueueItemSteering    QueueItemStatus = "steering"
-	QueueItemSteered     QueueItemStatus = "steered"
-	QueueItemCompleted   QueueItemStatus = "completed"
-	QueueItemFailed      QueueItemStatus = "failed"
-	QueueItemDiscarded   QueueItemStatus = "discarded"
+	QueueItemQueued          QueueItemStatus = "queued"
+	QueueItemDispatching     QueueItemStatus = "dispatching"
+	QueueItemRunning         QueueItemStatus = "running"
+	QueueItemSteering        QueueItemStatus = "steering"
+	QueueItemSteered         QueueItemStatus = "steered"
+	QueueItemShellCommanding QueueItemStatus = "shell-commanding"
+	QueueItemShellCommanded  QueueItemStatus = "shell-commanded"
+	QueueItemShellUnknown    QueueItemStatus = "shell-command-unknown"
+	QueueItemCompleted       QueueItemStatus = "completed"
+	QueueItemFailed          QueueItemStatus = "failed"
+	QueueItemDiscarded       QueueItemStatus = "discarded"
 )
 
 type QueueItemSourceKind string
@@ -254,6 +257,7 @@ type ThreadRecord struct {
 	ForkedFromID             string
 	Source                   *agentproto.ThreadSourceRecord
 	Name                     string
+	PersistedName            string `json:"-"` // Explicit name from a fresh catalog read; projection-only.
 	Preview                  string
 	FirstUserMessage         string
 	LastUserMessage          string
@@ -796,6 +800,8 @@ type QueueItemRecord struct {
 	Inputs                []agentproto.Input
 	SteerInputs           []agentproto.Input
 	RestoreAsStagedImage  bool
+	ShellCommandThreadID  string
+	ShellCommandTurnID    string
 	// #429 execution carrier; runtime/product follow-ups are in #430/#428.
 	FrozenDispatchPlan      agentproto.PromptDispatchPlan
 	FrozenOverride          ModelConfigRecord

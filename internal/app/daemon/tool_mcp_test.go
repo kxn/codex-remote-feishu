@@ -361,6 +361,7 @@ func TestToolMCPDescribeImagePublicationDependsOnEndpointAndProfile(t *testing.T
 	}{
 		{name: "unconfigured endpoint", cfg: config.DefaultAppConfig(), instanceID: "inst-plain", profileID: "cp_native", wantPublished: false},
 		{name: "configured endpoint default profile", cfg: visionCfg, instanceID: "inst-default", profileID: "cp_native", wantPublished: true},
+		{name: "configured endpoint codex oauth profile", cfg: visionCfg, instanceID: "inst-oauth", profileID: state.OAuthCodexProfileID, wantPublished: false},
 		{name: "configured endpoint vision profile", cfg: visionCfg, instanceID: "inst-vision", profileID: "cp_v3", wantPublished: false},
 	}
 	for _, tt := range tests {

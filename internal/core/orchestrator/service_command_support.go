@@ -13,7 +13,7 @@ func (s *Service) commandSupportBlocked(surface *state.SurfaceConsoleRecord, act
 	if surface == nil {
 		return nil
 	}
-	support, ok := control.ResolveFeishuActionSupport(s.buildCatalogContext(surface), action)
+	support, ok := control.ResolveFeishuActionSupport(s.buildCatalogContextForAction(surface, action), action)
 	if !ok || support.DispatchAllowed {
 		return nil
 	}

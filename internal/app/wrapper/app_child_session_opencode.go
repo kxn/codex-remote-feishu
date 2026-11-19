@@ -46,7 +46,9 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 	}
 	a.debugf("opencode child started: binary=%s pid=%d cwd=%s", openCodeBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
 
-	bootstrappedStdout, err := a.bootstrapOpenCodeACP(translator, childStdin, childStdout, rawLogger, reportProblem)
+	bootstrappedStdout, err := a.runChildBootstrap(ctx, wrapperBootstrapTimeout, childCancel, func() (io.Reader, error) {
+		return a.bootstrapOpenCodeACP(translator, childStdin, childStdout, rawLogger, reportProblem)
+	})
 	if err != nil {
 		childCancel()
 		_ = cmd.Wait()

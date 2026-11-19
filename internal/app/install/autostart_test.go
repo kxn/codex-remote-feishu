@@ -219,8 +219,8 @@ func TestApplyAutostartInstallsAndEnablesTaskSchedulerLogonService(t *testing.T)
 		calls[1] != "/Query /TN "+taskName+" /XML" {
 		t.Fatalf("task scheduler calls = %#v", calls)
 	}
-	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-AtLogOn") {
-		t.Fatalf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", psScript)
+	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-Xml (Get-Content -LiteralPath") {
+		t.Fatalf("PowerShell script missing Register-ScheduledTask or XML input: %s", psScript)
 	}
 
 	loaded, err := LoadState(statePath)

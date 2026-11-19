@@ -70,6 +70,14 @@ func (a *App) callerProfileVisionSupported(req *http.Request) bool {
 }
 
 func (a *App) callerInstanceProfileVisionSupported(instanceID string) bool {
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return false
+	}
+	return a.callerInstanceProfileVisionSupportedWithConfig(loaded.Config, instanceID)
+}
+
+func (a *App) callerInstanceNeedsVisionAssist(instanceID string) bool {
 	instanceID = strings.TrimSpace(instanceID)
 	if instanceID == "" {
 		return false
@@ -82,30 +90,53 @@ func (a *App) callerInstanceProfileVisionSupported(instanceID string) bool {
 	if err != nil {
 		return false
 	}
+	if !visionAssistConfigured(loaded.Config.VisionAssist) {
+		return false
+	}
+	return !instanceProfileVisionSupported(loaded.Config, inst)
+}
+
+func (a *App) callerRequestNeedsVisionAssist(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	return a.callerInstanceNeedsVisionAssist(toolCallerInstanceIDFromContext(req.Context()))
+}
+
+func (a *App) callerInstanceProfileVisionSupportedWithConfig(cfg config.AppConfig, instanceID string) bool {
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return false
+	}
+	inst := a.service.Instance(instanceID)
+	if inst == nil {
+		return false
+	}
+	return instanceProfileVisionSupported(cfg, inst)
+}
+
+func instanceProfileVisionSupported(cfg config.AppConfig, inst *state.InstanceRecord) bool {
+	if inst == nil {
+		return false
+	}
 	switch agentproto.NormalizeBackend(inst.Backend) {
 	case agentproto.BackendCodex:
-		return codexProfileVisionSupported(loaded.Config, inst.CodexProfileID)
+		return codexProfileVisionSupported(cfg, inst.CodexProfileID)
 	case agentproto.BackendClaude:
-		return claudeProfileVisionSupported(loaded.Config, inst.ClaudeProfileID)
+		return claudeProfileVisionSupported(cfg, inst.ClaudeProfileID)
 	case agentproto.BackendOpenCode:
-		return openCodeProfileVisionSupported(loaded.Config, inst.OpenCodeProfileID)
+		return openCodeProfileVisionSupported(cfg, inst.OpenCodeProfileID)
 	default:
 		return false
 	}
 }
 
-// visionAssistEndpointConfigured 判断辅助模型端点是否已配置（协议 + BaseURL）。
-func (a *App) visionAssistEndpointConfigured() bool {
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		return false
-	}
-	return visionAssistConfigured(loaded.Config.VisionAssist)
-}
-
 func codexProfileVisionSupported(cfg config.AppConfig, profileID string) bool {
 	profileID = state.NormalizeCodexProfileID(profileID)
-	if profileID == config.CodexNativeProfileID || profileID == config.CodexOAuthProfileID {
+	if profileID == config.CodexOAuthProfileID {
+		return true
+	}
+	if profileID == config.CodexNativeProfileID {
 		return false
 	}
 	index := config.IndexOfCodexAPIProfile(cfg.Codex.Profiles, profileID)

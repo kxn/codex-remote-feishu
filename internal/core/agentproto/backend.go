@@ -68,11 +68,12 @@ func DefaultCapabilitiesForBackend(backend Backend) Capabilities {
 		}
 	default:
 		return Capabilities{
-			ThreadsRefresh:   true,
-			TurnSteer:        true,
-			RequestRespond:   true,
-			ResumeByThreadID: true,
-			VSCodeMode:       true,
+			ThreadsRefresh:     true,
+			TurnSteer:          true,
+			ThreadShellCommand: true,
+			RequestRespond:     true,
+			ResumeByThreadID:   true,
+			VSCodeMode:         true,
 		}
 	}
 }
@@ -84,6 +85,9 @@ func EffectiveCapabilitiesForBackend(backend Backend, caps Capabilities) Capabil
 	}
 	if caps.TurnSteer {
 		base.TurnSteer = true
+	}
+	if caps.ThreadShellCommand {
+		base.ThreadShellCommand = true
 	}
 	if caps.RequestRespond {
 		base.RequestRespond = true

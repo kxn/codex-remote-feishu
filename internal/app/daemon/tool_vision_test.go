@@ -201,6 +201,11 @@ func TestCallerProfileVisionSupported(t *testing.T) {
 		t.Fatal("expected opencode profile with vision support to be detected")
 	}
 
+	registerVisionTestInstance(app, agentproto.BackendCodex, state.OAuthCodexProfileID)
+	if !app.callerInstanceProfileVisionSupported("inst-vision-1") {
+		t.Fatal("expected codex oauth profile to be treated as vision-capable")
+	}
+
 	registerVisionTestInstance(app, agentproto.BackendCodex, "cp_native")
 	if app.callerInstanceProfileVisionSupported("inst-vision-1") {
 		t.Fatal("expected native codex profile to default to no vision support")

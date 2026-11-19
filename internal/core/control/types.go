@@ -54,6 +54,7 @@ const (
 	ActionOpenCodeProfileCommand      ActionKind = "surface.command.opencode_profile"
 	ActionSendFile                    ActionKind = "surface.command.send_file"
 	ActionRespondRequest              ActionKind = "surface.request.respond"
+	ActionAsyncUserInput              ActionKind = "surface.message.async_user_input"
 	ActionControlRequest              ActionKind = "surface.request.control"
 	ActionTextMessage                 ActionKind = "surface.message.text"
 	ActionImageMessage                ActionKind = "surface.message.image"
@@ -150,6 +151,7 @@ type Action struct {
 	CatalogVariantID    string
 	CatalogBackend      agentproto.Backend
 	CommandID           string
+	GoalOperationID     string
 	ParentCommandText   string
 	InstanceID          string
 	WorkspaceKey        string
@@ -370,6 +372,7 @@ type PendingInputState struct {
 	TypingOn        bool
 	TypingOff       bool
 	ThumbsUp        bool
+	Applause        bool
 	ThumbsDown      bool
 }
 

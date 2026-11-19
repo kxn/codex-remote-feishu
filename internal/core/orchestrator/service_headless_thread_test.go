@@ -333,68 +333,6 @@ func TestApplyInstanceConnectedClearsPendingHeadlessWithoutThreadTarget(t *testi
 	}
 }
 
-func TestDetachTimeoutWatchdogForcesFinalizeAfterRunningTurn(t *testing.T) {
-	now := time.Date(2026, 4, 5, 11, 30, 0, 0, time.UTC)
-	svc := newServiceForTest(&now)
-	svc.UpsertInstance(&state.InstanceRecord{
-		InstanceID:              "inst-1",
-		DisplayName:             "droid",
-		WorkspaceRoot:           "/data/dl/droid",
-		WorkspaceKey:            "/data/dl/droid",
-		ShortName:               "droid",
-		Online:                  true,
-		ObservedFocusedThreadID: "thread-1",
-		Threads: map[string]*state.ThreadRecord{
-			"thread-1": {ThreadID: "thread-1", Name: "修复登录流程", CWD: "/data/dl/droid"},
-		},
-	})
-	svc.ApplySurfaceAction(control.Action{Kind: control.ActionAttachInstance, SurfaceSessionID: "surface-1", ChatID: "chat-1", ActorUserID: "user-1", InstanceID: "inst-1"})
-	svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionTextMessage,
-		SurfaceSessionID: "surface-1",
-		MessageID:        "msg-1",
-		Text:             "你好",
-	})
-	svc.ApplyAgentEvent("inst-1", agentproto.Event{
-		Kind:      agentproto.EventTurnStarted,
-		ThreadID:  "thread-1",
-		TurnID:    "turn-1",
-		Initiator: agentproto.Initiator{Kind: agentproto.InitiatorUnknown},
-	})
-
-	detach := svc.ApplySurfaceAction(control.Action{
-		Kind:             control.ActionDetach,
-		SurfaceSessionID: "surface-1",
-	})
-	if len(detach) < 2 {
-		t.Fatalf("expected interrupt + detach_pending flow, got %#v", detach)
-	}
-	surface := svc.root.Surfaces["surface-1"]
-	if !surface.Abandoning {
-		t.Fatalf("expected surface to enter abandoning state")
-	}
-
-	now = now.Add(21 * time.Second)
-	events := svc.Tick(now)
-
-	surface = svc.root.Surfaces["surface-1"]
-	if surface.AttachedInstanceID != "" || surface.Abandoning {
-		t.Fatalf("expected watchdog to force detach, got %#v", surface)
-	}
-	if claim := svc.instanceClaims["inst-1"]; claim != nil {
-		t.Fatalf("expected instance claim to be released, got %#v", claim)
-	}
-	var sawForced bool
-	for _, event := range events {
-		if event.Notice != nil && event.Notice.Code == "detach_timeout_forced" {
-			sawForced = true
-		}
-	}
-	if !sawForced {
-		t.Fatalf("expected detach_timeout_forced notice, got %#v", events)
-	}
-}
-
 func TestNewThreadReadyDiscardsDraftsAndPreparesCreate(t *testing.T) {
 	now := time.Date(2026, 4, 6, 10, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

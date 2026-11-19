@@ -1,8 +1,8 @@
 # Relay Protocol Spec
 
 > Type: `general`
-> Updated: `2026-07-17`
-> Summary: 继续作为当前 canonical 协议文档，并同步 `turn.steer`、Feishu reaction steering、daemon 驱动的 wrapper 退出命令、`thread/tokenUsage/updated` usage 事件、`turn.plan.updated + planSnapshot` 的结构化计划快照事件、`thread.history.read` 定向历史查询 command/event、`thread/status/changed` 到 `thread.runtime_status.updated` 的 authoritative thread runtime status 链路、`thread/archived` / `thread/deleted` / `thread/unarchived` / `thread/closed` / `thread/goal/*` / `thread/settings/updated` 到 state-only thread state carrier、`turn/diff/updated` 到 `turn.diff.updated` 的 authoritative turn-level aggregated diff 链路、`model/rerouted` 到 `turn.model_rerouted` 的 turn 级模型改路由语义、`model/verification` / `model/safetyBuffering/updated` 到 state-only model adjunct carrier、`warning` / `guardianWarning` / `deprecationNotice` / `configWarning` 到 state-only `protocol.notice` 的受控 notice carrier、`skills/changed` / `mcpServer/startupStatus/updated` / `mcpServer/oauthLogin/completed` / `app/list/updated` / `account/*` passive notifications 到 state-only `capability.state.updated` carrier、`threads.snapshot` / `thread.discovered` 上新增的结构化 `runtimeStatus` 投影、`config.observed` 上新增的结构化 `observedPermission` 投影、`contextCompaction` 到 compact notice 的标准化语义，以及新的 `thread.compact.start` 手动上下文整理 command、`thread/goal/set|get|clear` + `thread/read(includeTurns=false)` 的 Goal control carrier 与 queue interlock（#895）。
+> Updated: `2026-08-16`
+> Summary: 在既有 canonical 协议基础上补充 `thread.shell_command`、Codex capability 声明、payload-file UserShell 注入和 queued `APPLAUSE` ack/恢复边界（#901）。
 
 ## 1. 文档定位
 
@@ -33,6 +33,7 @@
 - `thread/start`
 - `thread/resume`
 - `thread/fork`
+- `thread/shellCommand`
 - `thread/name/set`
 - `thread/list`
 - `thread/read`
@@ -225,11 +226,12 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 
 ## 4. Canonical Command
 
-当前只实现八个公共 command：
+当前只实现九个公共 command：
 
 - `prompt.send`
 - `thread.compact.start`
 - `turn.steer`
+- `thread.shell_command`
 - `turn.interrupt`
 - `request.respond`
 - `threads.refresh`
@@ -299,6 +301,18 @@ wrapper 收到 `command` 后总是回传 accept/reject：
 - steering 的单位是整个 `queue item`，不是裸文本；
 - 若该 item 已绑定图片，则 `inputs[]` 会把主文本和同 item 图片一起带上；
 - 成功信号当前定义为 wrapper 返回 `command_ack.accepted=true`。
+
+### 4.3 `thread.shell_command`
+
+用于把 queued 主文本及其绑定附件引用作为 UserShell command 注入当前 Codex active turn。它不是 `turn.steer` 的别名，也不为 Claude/OpenCode 伪造能力。
+
+关键字段：
+
+- `target.threadId`
+- `target.turnId`：relay 侧 expected active turn；只用于 stale-turn guard，不发送给 native app-server
+- `shellCommand.payload`：`queued_input_bundle.v1` UTF-8 文本，由 Codex wrapper 写入同机专用 `0600` 临时文件
+
+wrapper 只向 native `thread/shellCommand` 发送固定读取命令：POSIX 使用 `cat`，PowerShell 使用 `Get-Content -Raw -Encoding UTF8 -LiteralPath`，CMD 使用 `type`。用户文本和附件路径不进入 shell command 字符串。native RPC accepted 只表示请求已接收；payload 要等 UserShell `item/completed` 后清理，明确拒绝立即清理，timeout/结果未知保留 TTL 且不自动重试。
 
 ### 4.3 `thread.compact.start`
 
@@ -873,7 +887,7 @@ queue interlock 状态机（`pause_pending -> quiescing -> draining -> resume_pe
 
 - `requestOptionId` 是主路径，来自飞书卡片按钮值
 - `approved` 只是旧卡片兼容字段
-- `reactionType + targetMessageId` 当前用于 queued 文本点赞 steering
+- `reactionType + targetMessageId` 当前用于 queued 主文本的 `ThumbsUp` steering 或 `APPLAUSE` UserShell 注入；两个动作对同一 queue item 互斥
 
 ### 6.2 Outbound UI events
 
@@ -930,6 +944,7 @@ queue interlock 状态机（`pause_pending -> quiescing -> draining -> resume_pe
 `pending.input.state` 当前除 queue/typing/discard 外，还会投影：
 
 - steering 成功后的 `QueueOff + ThumbsUp`
+- `APPLAUSE` UserShell accepted 后的 `QueueOff + Applause`（只补主文本 reaction）
 - 对同一 queue item 主文本和已绑定图片的统一反馈
 
 ## 7. 当前不暴露的能力

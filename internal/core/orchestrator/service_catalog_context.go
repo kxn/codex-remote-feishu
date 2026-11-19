@@ -23,12 +23,32 @@ func (s *Service) buildCatalogContextWithInstance(surface *state.SurfaceConsoleR
 	if s == nil {
 		return control.NormalizeCatalogContext(control.CatalogContext{})
 	}
-	productMode := state.ProductModeNormal
 	workspaceKey := ""
+	if surface != nil {
+		workspaceKey = state.ResolveWorkspaceKey(s.surfaceCurrentWorkspaceKey(surface))
+	}
+	if inst != nil {
+		workspaceKey = state.ResolveWorkspaceKey(workspaceKey, instanceWorkspaceClaimKey(inst))
+	}
+	return s.buildCatalogContextWithWorkspaceKey(surface, inst, workspaceKey)
+}
+
+func (s *Service) buildCatalogContextForAction(surface *state.SurfaceConsoleRecord, action control.Action) control.CatalogContext {
+	if s.IsTargetPickerDraftNavigation(action) {
+		inst := s.root.Instances[strings.TrimSpace(surface.AttachedInstanceID)]
+		return s.buildCatalogContextWithWorkspaceKey(surface, inst, s.targetPickerNavigationWorkspaceProjection(surface))
+	}
+	return s.buildCatalogContext(surface)
+}
+
+func (s *Service) buildCatalogContextWithWorkspaceKey(surface *state.SurfaceConsoleRecord, inst *state.InstanceRecord, workspaceKey string) control.CatalogContext {
+	if s == nil {
+		return control.NormalizeCatalogContext(control.CatalogContext{})
+	}
+	productMode := state.ProductModeNormal
 	backend := agentproto.BackendCodex
 	if surface != nil {
 		productMode = s.normalizeSurfaceProductMode(surface)
-		workspaceKey = state.ResolveWorkspaceKey(s.surfaceCurrentWorkspaceKey(surface))
 		backend = s.surfaceBackend(surface)
 	}
 	capabilities := agentproto.DefaultCapabilitiesForBackend(backend)
@@ -37,7 +57,6 @@ func (s *Service) buildCatalogContextWithInstance(surface *state.SurfaceConsoleR
 		backend = state.EffectiveInstanceBackend(inst)
 		capabilities = state.EffectiveInstanceCapabilities(inst)
 		instanceID = strings.TrimSpace(inst.InstanceID)
-		workspaceKey = state.ResolveWorkspaceKey(workspaceKey, instanceWorkspaceClaimKey(inst))
 	}
 	attachedKind := string(control.CatalogAttachedKindDetached)
 	if instanceID != "" {

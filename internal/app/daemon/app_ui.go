@@ -56,6 +56,8 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 			)
 			if event.Command.Kind == agentproto.CommandReviewStart {
 				a.service.BindPendingReviewStartCommand(event.SurfaceSessionID, event.Command.CommandID)
+			} else if event.Command.Kind == agentproto.CommandThreadShellCommand {
+				a.service.BindPendingShellCommand(event.SurfaceSessionID, event.Command.CommandID)
 			} else if !orchestrator.NonTurnAgentCommand(event.Command.Kind) {
 				a.service.BindPendingRemoteCommand(event.SurfaceSessionID, event.Command.CommandID)
 			}
@@ -89,11 +91,13 @@ func (a *App) handleUIEventsLocked(ctx context.Context, events []eventcontract.E
 				a.handleUIEventsLocked(context.Background(), rollback)
 				continue
 			}
-			if !orchestrator.NonTurnAgentCommand(event.Command.Kind) {
-				a.traceSteerCommand(event.SurfaceSessionID, instanceID, *event.Command)
+			dispatchCommand := *event.Command
+			if !orchestrator.NonTurnAgentCommand(dispatchCommand.Kind) {
+				a.traceSteerCommand(event.SurfaceSessionID, instanceID, dispatchCommand)
 			}
+			dispatchCommand = a.prepareAgentCommandForDispatch(instanceID, dispatchCommand)
 			a.mu.Unlock()
-			err := a.sendAgentCommand(instanceID, *event.Command)
+			err := a.sendAgentCommand(instanceID, dispatchCommand)
 			a.mu.Lock()
 			if err != nil {
 				log.Printf("relay send command failed: instance=%s kind=%s err=%v", instanceID, event.Command.Kind, err)

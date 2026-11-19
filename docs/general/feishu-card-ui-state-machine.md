@@ -1,8 +1,8 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-08-15`
-> Summary: detached 私聊配置卡按 bot setting 所有权开放，并对 OpenCode reasoning 保留 ACP capability 门禁。
+> Updated: `2026-11-20`
+> Summary: 明确目标选择器的内存草稿导航与最终确认的实时校验边界。
 
 ## 1. 文档定位
 
@@ -16,9 +16,17 @@
 
 2026-08-13 #888/#889 补充：Claude 与 OpenCode `/review` 均从 hidden reject 改为 common tools 可见的 approximation；bare `/review`、review 页面和 final-card 待提交/commit 按钮复用与 Codex 相同的卡片交互，底层分别走独立 Claude fork session 与 OpenCode ACP fork/review mode。结果卡、一次性追问 capture、退出和应用动作保持 backend-neutral；active turn 上的退出动作先发送一次 interrupt，并在匹配终态后才清 overlay，不能提前释放并发 ownership。OpenCode fork 在 review mode gate 前已经按 typed binding 标记 `source=review`，mode/config 失败会清 overlay 与 active queue，不产生可操作结果卡。
 
-2026-08-15 #896 补充：`/goal` 是新增 config-flow slash command，完全复用现有命令卡体系：bare `/goal` 经现有命令解析与 freshness 校验，通过 `pageEvent` inline replace 回显 Goal 状态页；`/goal clear` 的确认/取消通过 `CommandText` 命令重放（`/goal clear --confirm`、`/goal`），不引入新 callback payload、不新增 owner 分类、不改 `daemon_lifecycle_id` stamping。状态页按钮均声明在 `FeishuCommandBinding` 上（`CommandID=goal`），走 `CommandCatalogButtonCallbackAction`，与 `/codexprofile` 等配置命令同一条路由，Goal 控制面不产生第二套卡片 carrier 或 freshness 规则。
+2026-08-15 #896 补充：`/goal` 是新增 config-flow slash command，完全复用现有命令卡体系：bare `/goal` 经现有命令解析与 freshness 校验，通过 `pageEvent` 回显 Goal 状态页；文字入口发送新卡，带有效当前卡片上下文的入口可原位更新。`/goal clear` 的确认/取消通过 `CommandText` 命令重放（`/goal clear --confirm`、`/goal`），复用现有 callback kind 与 `thread_id` / `instance_id` 字段，不新增 owner 分类、不改 `daemon_lifecycle_id` stamping。状态页按钮绑定 `CommandID=goal`，通过带有目标与 catalog 信息的 `CommandCatalogButtonCallbackAction` 实际投影；Goal 控制面不产生第二套卡片 carrier 或 freshness 规则。
 
 2026-08-15 #896 review 修复补充：确认卡/编辑表单打开时服务端暂存 Goal fingerprint，命令重放执行前比对、漂移 fail closed；goal 命令发送失败会清理 pending 并回错误卡；卡片入口触发的 loading 与结果卡通过 `MessageID + Patchable` 在同一 message 上 patch；错误页复用 config 命令 builder（非 sealed），失败原因不伪装成 no-goal 状态。
+
+Goal 当前的回显约束：
+
+- 查询、创建、编辑、暂停、恢复和清除都只在 `commandCardOwnsInlineResult(action)` 成立时保留原消息作为 patch 目标；普通文字消息 ID 不可作为卡片 ID。
+- 查询明确返回 `GoalMissing` 时清除旧 Goal 缓存并显示“当前会话没有 Goal”；设置操作未带完整快照时仍显示正在同步。清除必须收到 `GoalCleared` 才显示已清除。
+- Goal 按钮和 new/edit 表单绑定生成时的 thread 与 instance；修改按钮和表单另携带 `goal_operation_id`，服务端分别保存每次操作的 Goal 快照并一次性消费，十分钟后失效。同会话更换 Goal、状态变化、缺少或重放操作标识时拒绝修改，不能借用另一张卡片的确认快照。目标缺失或与当前选中目标不符时拒绝操作，提示发送 `/goal` 重新打开。只有未携带目标的 bare `/goal` 菜单入口可以查询当前会话；它不执行修改。文字命令保留原有确认规则。
+- 异步结果仍更新原会话的已确认状态；若触发操作的 surface 已改选其他会话或实例，则不再向该 surface 展示原操作的可操作结果卡。
+- 用户创建、编辑、暂停、恢复或清除操作成功后，撤销旧队列互锁的自动恢复权；处于 `pause_pending` / `quiescing` 时保留原 idle 屏障；通过 idle 屏障的旧 lease 可直接退役，后续输入重新建立暂停保护；早期保留的屏障在队列排空后清理。自动恢复前还必须确认 Goal 仍为 `paused`，不能重新激活已完成或被阻塞的 Goal；如果同目标还有尚未返回结果的用户控制请求，放弃这次自动恢复，其余调度机制不变。
 
 它关注的是：
 
@@ -126,7 +134,7 @@
 | `show_workspace_threads` / `show_all_thread_workspaces` / `show_recent_thread_workspaces` | `feishu-ui-owned` | headless 主链下当前只负责用指定 workspace 重新打开 `/workspace list` 切换卡；legacy selection path 下才继续承担旧分页导航 |
 | `target_picker_select_workspace` / `target_picker_select_session` | `feishu-ui-owned` | 当前 headless 主路径实际使用的是四张独立工作会话卡：`/workspace list` 直接落 `target` 页，`/workspace new dir` / `git` / `worktree` 直接落各自业务页，因此 `target_picker_select_workspace` 是 `/workspace list` 与 `/workspace new worktree` 都会使用的主路径回调，`target_picker_select_session` 则服务 `/workspace list` 的“会话 / 操作”下拉；该下拉现在可能是 `thread:<id>`、`new_thread` 或 `worktree_create`。旧 `target_picker_select_mode` / `target_picker_select_source` 与 mode/source 中间页已经删除，不再是 callback contract。命中当前 active picker 时都只原地替换当前卡，不直接改 route；切真实 workspace、显式改选 session，或在 worktree 卡上切换基准工作区时，都会按当前卡状态重建 picker read model |
 | `target_picker_page` | `feishu-ui-owned` | `/workspace list` target page 与 `/workspace new worktree` 基准工作区 dropdown 的翻页动作；payload 携带 `picker_id + field_name + cursor(start-index)`。命中当前 active picker 时继续 inline replace 当前卡，不直接改 route。target page 的 workspace lane 翻页会把 cursor 指向的新 workspace 设为当前工作区并重算 session 候选；session lane 翻页会保留 workspace cursor / 选中工作区，但若原 session 掉出可见页则清空选中并禁用 confirm。worktree 页的 workspace lane 翻页则只更新基准工作区选择，并保留同卡 branch / directory 草稿 |
-| `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡 |
+| `target_picker_open_path_picker` | `feishu-ui-owned` | 当前用于从 `/workspace new dir` / `/workspace new git` 主卡打开目录 path picker，并在打开前保留主卡草稿；命中当前 active picker 时直接原地替换当前卡。若当前 surface 记住的 workspace 或主卡目录草稿已经被删除，path picker 会从最近存在的父目录打开，root 越界、symlink escape 或权限错误仍 fail closed |
 | `target_picker_cancel` | `feishu-ui-owned` | target picker 的显式退出动作；命中当前 active picker owner flow 时，会把当前卡同步 replace 成 sealed terminal card；普通编辑态是 `已取消`，Git import processing 态是 `已取消导入`，worktree processing 态是 `已取消创建`，并会分别 best-effort 停掉 clone / prepare 或 `git worktree add`；随后清掉 active target picker / owner-card flow |
 | `target_picker_back` | `feishu-ui-owned` | 当前只用于 `/workspace list` 内部选择 `worktree_create` 后进入的 Worktree 子页；点击后清掉内部 `PageOverride` 并回到原 target 页，保留已选 workspace，再按 list 默认规则恢复 `new_thread` 或唯一可用操作。它不是 `page_local_action`，不会返回 `/workspace` 父页，也不会改 route |
 | `target_picker_confirm` | `mixed` | callback 协议、picker ownership 与 freshness 校验仍属 Feishu UI；真正 attach / switch、准备 `new_thread_ready`、按已检查最终目录执行接入/创建、按主卡 Git 表单 + 已选父目录执行导入，或按 worktree 主卡里的基准工作区 + 分支名 + 可选目录名执行创建，产品语义仍由 orchestrator 决定。当前 `/workspace list` 与 alias `/list` 在工作区已确定后也会暴露 `新建会话`，并把它放在会话候选第一项、默认选中；已有会话仍继续保留在同一列表后面；Git workspace 追加 `从这个工作区创建 Worktree` 操作，busy Git workspace 只能显示这一项，busy 非 Git workspace 不进入 workspace 下拉。确认 `worktree_create` 只进入同一 owner card 的 Worktree 子页，不发 daemon create。`/use`、`/useall`、`show_workspace_threads` 与锁定工作区的恢复 picker 继续保留各自既有 `新建会话` fallback。`/workspace new dir` 现在是显式两阶段：第一次确认只做同卡 `检查目标目录`，检查通过后才允许第二次确认继续，且目录或目录名草稿一旦变化就会使旧检查结果失效；`/workspace new git` 与 `/workspace new worktree` 则继续保持 submit-time validation。三条新建路径都会把同一张 owner card 推进到 processing / succeeded / failed，并在同卡 notice 区收口状态反馈；其中 Git/worktree 这两条依赖 Feishu 文本输入的 inline form 不再靠禁用按钮做前置校验，而是允许提交后由服务端原卡回写阻塞原因。Git import / worktree 长链路 processing 期间仍显式阻断普通输入，只保留 `/status` 与同卡取消 |
@@ -184,6 +192,7 @@
   - VS Code thread dropdown 当前会直接隐藏 disabled thread，并用 plain-text hint 提示“已省略当前不可切换的会话”
   - VS Code `/use` / `/useall` 的大候选集不再整包塞进单个 `select_static`；projector 会按 Feishu transport byte budget 做动态分页，并通过 `thread_selection_page(view_mode + cursor)` 同卡翻页
   - 若当前 thread 不在当前 dropdown 可见页，projector 不会再给 `select_static` 写 `initial_option`
+- 会话显示标题与桥接层恢复标题快照沿用共享 `threadtitle` 语义：仅清理开头完整且 `source="ambient-ui-state"` 的 `in-app-browser-context` 块，以及紧随其后的 `## My request:` 标记，保留原有会话名称与消息摘要的优先级。无 source、未知 source、相似标签、未闭合块及正文中间的标签保持字面含义；不改写 Codex 原始会话名称、数据库或消息历史。
 - `control.FeishuDirectSelectionPrompt` 仍然保留，但当前只剩测试 / mockfeishu 兼容用途，不再是 live adapter 输入：
   - workspace/thread selection live 路径已经不再从 `FeishuSelectionView` 回退投影成 `FeishuDirectSelectionPrompt`
   - kick-thread confirm 等 live selection 也直接消费 `FeishuSelectionView`
@@ -221,7 +230,14 @@
 - `page_local_action` / `page_local_submit` 当前用于菜单内与 page-owner 内的本地导航或本地提交；gateway 解析后会把 `Action.LocalPageAction` 置为 `true`，并刻意不回填 `Action.Catalog*`。这类动作仍受当前卡 freshness / owner-flow / final-card runtime 语义约束，但不会先被 `command_entry_expired` 拦截
 - `page_action` / `page_submit` 当前除 `action_kind` 与参数字段外，还会在有来源上下文时附带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 解析后会直接回填 `Action.Catalog*`。当前 live 命令入口要求这组 provenance 完整可用：缺失字段、legacy default variant，或当前 surface 上下文已变化的旧卡，都会在 runtime 收到 `command_entry_expired`
 - `request_respond` / `submit_request_form` 与 `upgrade_owner_flow` / `vscode_migrate_owner_flow` 当前在 gateway 解析后只写入 `Action.Request` / `Action.OwnerFlow` family；这些回调不再依赖 root `Action.Request*` 或 root `PickerID/OptionID` 兼容字段作为 live 路径输入
+- `async_user_input` 用于原生异步问题消息，复用 page card 的按钮和 `answer` 输入表单。payload 仅传 `request_id`、`request_revision`、`option_id`，gateway 写入 `Action.Request`；题目、选项文本和 instance/thread 目标以服务端草稿为准。此动作要求当前 daemon stamp；每答一题增加 revision 并按原 MessageID 更新同一卡；拒绝回答只追加提示，不覆盖问题卡，最后封卡提示“回答已进入发送队列”。草稿在 daemon 内独立保存，不建立同步 RPC、普通输入 gate 或 active owner flow；换会话、非原发起者、旧 revision、重复提交、重启后旧卡均拒绝，未知消息结构保留文本回退。
+  - 原 `agentMessage.text` 作为题前说明保留；超过 1000 字符时通过普通文本 renderer 完整输出，卡中仅留带截断提示的预览。已答题目和答案只在卡面共享显示预算，发往原会话的完整题目/答案不截断。最多 16 题、每题 16 选项、全部题目/选项合计不超过 1000 字符才使用交互卡；超出时完整输出正文、题目和全部选项并提示直接回复，不发送超预算卡，也不静默删选项。
+  - 问题卡标明一小时有效。每个 surface 最多 32 份活跃草稿，超过时最早草稿失效；提交或过期即释放正文/题目/答案，仅留去重记录。去重记录最多保留最近 128 份且最长 24 小时，tick 和新事件入口都会回收；保留窗口内重放不重新出卡。过期或被淘汰的回调拒绝并提示直接回复，不阻塞普通输入。
 - 分页导航与 target/path picker / selection dropdown 当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view、thread selection view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target/path picker / VS Code thread dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
+- target picker 的会话标题只在显示时限长：下拉选项和切换进度最多 80 个字符，已选会话摘要最多 1000 个字符，含“名称过长，已截断”标记。完整语义原名、选项 `value` 与真实 thread 身份保持不变；分页继续按真实发送字节预算计算，避免单个长标题挤掉普通选项或确认按钮。
+- target picker 的 Target 页在打开时冻结完整选项读模型，工作区/会话选择与翻页只做内存草稿更新并原位替换，不在 callback 中重新读取 catalog、SQLite、Git 或目录；草稿使用已规范化的选项身份、冻结的默认选择和工作区 context，不在共用 admission 或 UI 投影中再次解析 host 路径/符号链接；owner、freshness、catalog provenance 仍实时校验。最终确认重新读取实时选项与接管条件，旧目标不可继续确认。表单页面、owner/freshness 校验、回调 schema、确认/失败结果的原卡收口规则不变。
+  - daemon 对 Target 页选择/翻页及其失效回调走 UI-only ingress episode：保留 lifecycle、owner、upgrade/turn-patch 门禁与 App 锁内顺序处理，返回同步 replacement；不构造无关 SurfaceSnapshot，不触发 group auto-resume，不执行全局 resume/profile/bot/room/context 持久化或 Git exclude 同步。已存在 surface 上的旧生命周期回调也不为错误提示额外执行 status/snapshot 和持久化。不增加 early ACK、后台动作队列或新的恢复生命周期。
+- 工作区/会话 picker 的 typed 导航动作优先保持自身 UI intent；随卡回传的 `catalog_family_id` 只用于来源/能力校验，不再被 workspace command binding 当作 `/list`、`/use` 或 `/useall` launcher 重放。失效 ID、过期或已结束 picker 的导航重试同样通过现有 owner/freshness 拒绝，不为拒绝结果重新解析 host 路径。
 - workspace/session family 的 selection / target picker callback 当前也会在有来源上下文时继续补写 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`。这意味着 bare `/list` `/use` `/useall`、菜单按钮、selection refresh、target-picker 翻页/确认这些后续动作，都能继续把 family provenance 带回 gateway / orchestrator，而不是只剩 `ActionKind` / `field_name`。
 - adapter 内部这组 lane/read-model contract 现统一由 `internal/adapter/feishu/selectflow` 承接：`PaginatedSelectFlowDefinition` 拥有默认 `field_name`、payload value key、共享 pagination hint，以及按 flow 显式声明的 recover precedence；projector 与 gateway 通过同一份定义对齐 lane 字段、hint 和 callback recover 规则。
 
@@ -578,7 +594,7 @@ MCP request 卡片当前新增的可视语义：
   - `从目录新建` 检查通过后，主按钮才会切成 `接入并继续` 或 `创建并继续`；目录或新目录名任一变化，旧检查结果会失效并退回 `检查目标目录`
   - `从目录新建` 当前不再在 path picker 阶段隐藏 busy workspace 父目录；busy/known workspace/目标目录已存在/非法目录名这类最终目标路径语义统一后移到 `检查目标目录`
   - `从目录新建` 命中已知 workspace 时，检查结果会明确提示将复用该工作区，并允许第二次确认后进入新会话待命
-  - `target_picker_open_path_picker` 当前会把主卡 inline replace 成 path picker 子步骤；子步骤复用 owner-card 标题，并展示 step tag、单题问题、允许范围与当前位置；path picker confirm/cancel 后不会再走同步 inline restore，而是异步 ack 后把最新 target picker 主卡 patch 回同一张 owner card
+  - `target_picker_open_path_picker` 当前会把主卡 inline replace 成 path picker 子步骤；子步骤复用 owner-card 标题，并展示 step tag、单题问题、允许范围与当前位置；若 stale 初始路径已不存在，会回退到最近存在的父目录打开；path picker confirm/cancel 后不会再走同步 inline restore，而是异步 ack 后把最新 target picker 主卡 patch 回同一张 owner card
   - path picker 当前也不再把全部目录/文件候选直接灌进 `select_static`；目录模式单下拉、文件模式目录/文件双下拉，以及 target-picker owner-subpage 的 compact 目录下拉，都会按 Feishu transport byte budget 动态分页，并确保 footer 仍可见
   - path picker dropdown 翻页统一走 `path_picker_page(picker_id + field_name + cursor)`；`cursor` 是 start-index，不是固定页码，目录 lane 固定项 `.` / `..` 不参与分页计数
   - 目录页翻页只更新当前可见目录候选，并保留当前目录；文件页翻页会主动清空文件选择并禁用 confirm，避免 invisible confirm

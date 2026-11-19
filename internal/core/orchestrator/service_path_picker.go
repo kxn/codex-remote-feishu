@@ -1,6 +1,7 @@
 package orchestrator
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -716,7 +717,18 @@ func resolvePathPickerInitialState(rootPath string, mode pathPickerMode, initial
 	}
 	resolved, err := resolvePathPickerExistingTarget(rootPath, initialPath)
 	if err != nil {
-		return "", "", err
+		fallback, ok := resolveMissingPathPickerInitialDirectory(rootPath, initialPath, err)
+		if !ok {
+			return "", "", err
+		}
+		switch mode {
+		case pathPickerModeDirectory:
+			return fallback.path, fallback.path, nil
+		case pathPickerModeFile:
+			return fallback.path, "", nil
+		default:
+			return "", "", fmt.Errorf("路径选择器模式无效")
+		}
 	}
 	switch mode {
 	case pathPickerModeDirectory:
@@ -731,6 +743,33 @@ func resolvePathPickerInitialState(rootPath string, mode pathPickerMode, initial
 		return resolved.path, "", nil
 	default:
 		return "", "", fmt.Errorf("路径选择器模式无效")
+	}
+}
+
+func resolveMissingPathPickerInitialDirectory(rootPath, initialPath string, initialErr error) (resolvedPathPickerTarget, bool) {
+	if !errors.Is(initialErr, os.ErrNotExist) && !os.IsNotExist(initialErr) {
+		return resolvedPathPickerTarget{}, false
+	}
+	initialPath = strings.TrimSpace(initialPath)
+	if initialPath == "" {
+		return resolvedPathPickerTarget{}, false
+	}
+	absolute, err := filepath.Abs(initialPath)
+	if err != nil {
+		return resolvedPathPickerTarget{}, false
+	}
+	for candidate := filepath.Dir(filepath.Clean(absolute)); ; candidate = filepath.Dir(candidate) {
+		resolved, err := resolvePathPickerExistingTarget(rootPath, candidate)
+		if err == nil {
+			return resolved, resolved.kind == pathPickerModeDirectory
+		}
+		if !errors.Is(err, os.ErrNotExist) && !os.IsNotExist(err) {
+			return resolvedPathPickerTarget{}, false
+		}
+		parent := filepath.Dir(candidate)
+		if parent == candidate {
+			return resolvedPathPickerTarget{}, false
+		}
 	}
 }
 

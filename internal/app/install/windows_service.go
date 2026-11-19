@@ -68,37 +68,24 @@ func serviceCurrentUser() (string, error) {
 // buildTaskSchedulerRegisterScript renders a PowerShell script that registers
 // the logon task via the Task Scheduler COM API. Values are embedded with
 // PowerShell single-quote quoting so paths with spaces, $, or backticks are
-// passed through literally.
+// passed through literally. The written XML owns the entire task definition;
+// rebuilding task objects here would discard its settings and user binding.
 func buildTaskSchedulerRegisterScript(state InstallState) (string, error) {
-	binaryPath := normalizeServicePathValue(strings.TrimSpace(state.CurrentBinaryPath))
-	if binaryPath == "" {
-		return "", fmt.Errorf("installed binary path is missing")
-	}
-	arguments := windowsCommandLineArgs(windowsDaemonArgsForState(state)...)
-	workingDirectory := normalizeServicePathValue(state.BaseDir)
-	taskName := taskSchedulerTaskNameForInstance(state.InstanceID)
-	currentUser, err := serviceCurrentUser()
+	state, err := taskSchedulerLogonServiceState(state)
 	if err != nil {
 		return "", err
 	}
+	taskName := taskSchedulerTaskNameForInstance(state.InstanceID)
 	psSingleQuote := func(value string) string {
 		return "'" + strings.ReplaceAll(value, "'", "''") + "'"
 	}
 	script := fmt.Sprintf(
 		"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $ErrorActionPreference='Stop'; "+
 			"try { "+
-			"$action = New-ScheduledTaskAction -Execute %s -Argument %s -WorkingDirectory %s; "+
-			"$trigger = New-ScheduledTaskTrigger -AtLogOn -User %s; "+
-			"$principal = New-ScheduledTaskPrincipal -UserId %s -LogonType Interactive -RunLevel Limited; "+
-			"Register-ScheduledTask -TaskName %s -Action $action -Trigger $trigger -Principal $principal -Description %s -Force | Out-Null "+
+			"Register-ScheduledTask -TaskName %s -Xml (Get-Content -LiteralPath %s -Raw) -Force | Out-Null "+
 			"} catch { Write-Error ($_.Exception.Message); exit 1 }",
-		psSingleQuote(binaryPath),
-		psSingleQuote(arguments),
-		psSingleQuote(workingDirectory),
-		psSingleQuote(currentUser),
-		psSingleQuote(currentUser),
 		psSingleQuote(taskName),
-		psSingleQuote("codex-remote auto start at logon"),
+		psSingleQuote(normalizeServicePathValue(state.ServiceUnitPath)),
 	)
 	return script, nil
 }
@@ -183,20 +170,27 @@ func renderTaskSchedulerLogonXML(state InstallState) (string, error) {
 	arguments := windowsCommandLineArgs(windowsDaemonArgsForState(state)...)
 	taskName := taskSchedulerTaskNameForInstance(state.InstanceID)
 	workingDirectory := normalizeServicePathValue(state.BaseDir)
+	currentUser, err := serviceCurrentUser()
+	if err != nil {
+		return "", err
+	}
 
 	lines := []string{
 		`<?xml version="1.0" encoding="UTF-16"?>`,
 		`<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">`,
 		`  <RegistrationInfo>`,
+		`    <Description>codex-remote auto start at logon</Description>`,
 		`    <URI>` + xmlEscape(taskName) + `</URI>`,
 		`  </RegistrationInfo>`,
 		`  <Triggers>`,
 		`    <LogonTrigger>`,
 		`      <Enabled>true</Enabled>`,
+		`      <UserId>` + xmlEscape(currentUser) + `</UserId>`,
 		`    </LogonTrigger>`,
 		`  </Triggers>`,
 		`  <Principals>`,
 		`    <Principal id="Author">`,
+		`      <UserId>` + xmlEscape(currentUser) + `</UserId>`,
 		`      <LogonType>InteractiveToken</LogonType>`,
 		`      <RunLevel>LeastPrivilege</RunLevel>`,
 		`    </Principal>`,

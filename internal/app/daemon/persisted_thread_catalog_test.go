@@ -9,6 +9,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/threadcatalogcontract"
 	"github.com/kxn/codex-remote-feishu/internal/opencodestate"
 )
 
@@ -179,4 +180,26 @@ VALUES ('opencode-session-1', 'proj-opencode', NULL, 'one', ?, 'OpenCode session
 		t.Fatalf("create opencode schema: %v", err)
 	}
 	return dbPath
+}
+
+func TestDaemonPersistedThreadCatalogReadsDesktopNamesByID(t *testing.T) {
+	dbPath := createDaemonCodexThreadCatalogTestDB(t)
+	db, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec("ALTER TABLE threads ADD COLUMN NaMe TEXT"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("UPDATE threads SET name = '桌面新名' WHERE id = 'codex-thread-1'"); err != nil {
+		t.Fatal(err)
+	}
+	var catalog threadcatalogcontract.ExplicitThreadNameCatalog = &daemonPersistedThreadCatalog{
+		codex: codexstate.NewSQLiteThreadCatalog(dbPath, codexstate.SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}}),
+	}
+	names, err := catalog.ExplicitThreadNames([]string{"codex-thread-1", "not-found"})
+	if err != nil || len(names) != 1 || names["codex-thread-1"] != "桌面新名" {
+		t.Fatalf("daemon catalog must expose fresh batch names: %v, %v", names, err)
+	}
 }

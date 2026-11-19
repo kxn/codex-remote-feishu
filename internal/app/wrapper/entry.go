@@ -37,6 +37,9 @@ func wrapperBackendFromArgs(args []string) (agentproto.Backend, error) {
 	if !ok {
 		return "", fmt.Errorf("wrapper role only supports app-server, claude-app-server, or opencode-acp mode")
 	}
+	if _, err := appserverargs.PrivateStdioArgs(args); err != nil {
+		return "", err
+	}
 	switch mode.Mode {
 	case appserverargs.ModeClaude:
 		return agentproto.BackendClaude, nil

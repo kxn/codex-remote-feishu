@@ -50,6 +50,23 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 	}
 
 	switch kind {
+	case frontstagecontract.CardActionKindAsyncUserInput:
+		requestID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyRequestID))
+		if requestID == "" {
+			return control.Action{}, false
+		}
+		answers := requestAnswersFromFormValue(event.Event.Action.FormValue)
+		if len(answers) == 0 && strings.TrimSpace(event.Event.Action.InputValue) != "" {
+			answers = map[string][]string{"answer": {strings.TrimSpace(event.Event.Action.InputValue)}}
+		}
+		return control.Action{
+			Kind: control.ActionAsyncUserInput, GatewayID: gatewayID, SurfaceSessionID: surfaceSessionID,
+			ChatID: chatID, ActorUserID: operatorID, MessageID: messageID, Inbound: meta,
+			Request: &control.ActionRequestResponse{
+				RequestID: requestID, RequestRevision: intMapValue(value, frontstagecontract.CardActionPayloadKeyRequestRevision),
+				RequestOptionID: strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyOptionID)), Answers: answers,
+			},
+		}, true
 	case cardActionKindAttachInstance:
 		instanceID := strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
 		if instanceID == "" {
@@ -293,6 +310,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			catalogVariantID = ""
 			catalogBackend = ""
 		}
+		var threadID, instanceID, goalOperationID string
+		if actionKind == control.ActionGoalCommand {
+			threadID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyThreadID))
+			instanceID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
+			goalOperationID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyGoalOperationID))
+		}
 		return control.Action{
 			Kind:             actionKind,
 			GatewayID:        gatewayID,
@@ -300,6 +323,9 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			ThreadID:         threadID,
+			InstanceID:       instanceID,
+			GoalOperationID:  goalOperationID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
 			CatalogFamilyID:  catalogFamilyID,
 			CatalogVariantID: catalogVariantID,
@@ -388,6 +414,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			catalogVariantID = ""
 			catalogBackend = ""
 		}
+		var threadID, instanceID, goalOperationID string
+		if actionKind == control.ActionGoalCommand {
+			threadID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyThreadID))
+			instanceID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
+			goalOperationID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyGoalOperationID))
+		}
 		return control.Action{
 			Kind:             actionKind,
 			GatewayID:        gatewayID,
@@ -395,6 +427,9 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			ThreadID:         threadID,
+			InstanceID:       instanceID,
+			GoalOperationID:  goalOperationID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
 			CatalogFamilyID:  catalogFamilyID,
 			CatalogVariantID: catalogVariantID,

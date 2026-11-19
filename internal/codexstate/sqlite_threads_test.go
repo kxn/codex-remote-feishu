@@ -51,6 +51,50 @@ func TestSQLiteThreadCatalogThreadByIDReturnsSingleMappedThread(t *testing.T) {
 	}
 }
 
+func TestSQLiteThreadCatalogPrefersRenamedNameColumn(t *testing.T) {
+	dbPath := createThreadCatalogTestDB(t)
+	db, err := sql.Open("sqlite", "file:"+dbPath)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`ALTER TABLE threads ADD COLUMN name TEXT`); err != nil {
+		t.Fatalf("alter table add name: %v", err)
+	}
+	if _, err := db.Exec(`UPDATE threads SET name = '自定义重命名会话' WHERE id = 'thread-1'`); err != nil {
+		t.Fatalf("update thread name: %v", err)
+	}
+
+	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})
+	thread, err := catalog.ThreadByID("thread-1")
+	if err != nil {
+		t.Fatalf("thread by id: %v", err)
+	}
+	if thread == nil {
+		t.Fatal("expected thread")
+	}
+	if thread.Name != "自定义重命名会话" {
+		t.Fatalf("expected thread name %q, got %q", "自定义重命名会话", thread.Name)
+	}
+
+	recent, err := catalog.RecentThreads(10)
+	if err != nil {
+		t.Fatalf("recent threads: %v", err)
+	}
+	var found bool
+	for _, th := range recent {
+		if th.ThreadID == "thread-1" {
+			found = true
+			if th.Name != "自定义重命名会话" {
+				t.Fatalf("expected recent thread name %q, got %q", "自定义重命名会话", th.Name)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("thread-1 not found in recent threads")
+	}
+}
+
 func TestSQLiteThreadCatalogThreadByIDSkipsFilteredRows(t *testing.T) {
 	dbPath := createThreadCatalogTestDB(t)
 	catalog := NewSQLiteThreadCatalog(dbPath, SQLiteThreadCatalogOptions{Logf: func(string, ...any) {}})

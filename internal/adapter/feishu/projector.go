@@ -63,6 +63,7 @@ const (
 	emojiQueuePending = "OneSecond"
 	emojiThinking     = "THINKING"
 	emojiSteered      = "THUMBSUP"
+	emojiApplause     = "APPLAUSE"
 	emojiDiscarded    = "ThumbsDown"
 )
 
@@ -285,6 +286,16 @@ func (p *Projector) projectEventBase(chatID string, event eventcontract.Event) [
 				ChatID:           chatID,
 				MessageID:        payload.State.SourceMessageID,
 				EmojiType:        emojiSteered,
+			})
+		}
+		if payload.State.Applause {
+			ops = append(ops, Operation{
+				Kind:             OperationAddReaction,
+				GatewayID:        event.GatewayID,
+				SurfaceSessionID: event.SurfaceSessionID,
+				ChatID:           chatID,
+				MessageID:        payload.State.SourceMessageID,
+				EmojiType:        emojiApplause,
 			})
 		}
 		if payload.State.ThumbsDown {

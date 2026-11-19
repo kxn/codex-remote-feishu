@@ -95,7 +95,9 @@ func (s *Service) ensureSurface(action control.Action) *state.SurfaceConsoleReco
 		}
 		s.projectLatestBotCapabilitySettingsToSurface(surface)
 		s.normalizeSurfaceProductMode(surface)
-		s.surfaceCurrentWorkspaceKey(surface)
+		if !s.IsTargetPickerDraftNavigation(action) {
+			s.surfaceCurrentWorkspaceKey(surface)
+		}
 		s.ensureFeishuRoomContextForSurface(surface)
 		surface.LastInboundAt = s.now()
 		return surface

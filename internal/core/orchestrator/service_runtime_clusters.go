@@ -184,7 +184,16 @@ func (r *serviceCatalogRuntime) recentPersistedThreadsForBackend(backend agentpr
 		if len(r.persistedThreadsLast[backend]) == 0 {
 			return nil
 		}
-		return clonePersistedThreads(r.persistedThreadsLast[backend])
+		cached := clonePersistedThreads(r.persistedThreadsLast[backend])
+		for i := range cached {
+			// A failed read may retain fallback metadata, but it must not turn
+			// an old desktop name into a fresh authoritative rename.
+			if cached[i].PersistedName != "" {
+				cached[i].Name = ""
+				cached[i].PersistedName = ""
+			}
+		}
+		return cached
 	}
 	if r.persistedThreadsLast == nil {
 		r.persistedThreadsLast = map[agentproto.Backend][]state.ThreadRecord{}
@@ -257,6 +266,7 @@ type serviceTurnRuntime struct {
 	pendingReview map[string]string
 	activeRemote  map[string]*remoteTurnBinding
 	pendingSteers map[string]*pendingSteerBinding
+	pendingShells map[string]*pendingShellBinding
 	compactTurns  map[string]*compactTurnBinding
 }
 
@@ -267,6 +277,7 @@ func newServiceTurnRuntime(service *Service) *serviceTurnRuntime {
 		pendingReview: map[string]string{},
 		activeRemote:  map[string]*remoteTurnBinding{},
 		pendingSteers: map[string]*pendingSteerBinding{},
+		pendingShells: map[string]*pendingShellBinding{},
 		compactTurns:  map[string]*compactTurnBinding{},
 	}
 }
@@ -455,6 +466,38 @@ func (r *serviceTurnRuntime) forEachPendingSteer(fn func(string, *pendingSteerBi
 	}
 }
 
+func (r *serviceTurnRuntime) pendingShellBinding(key string) *pendingShellBinding {
+	if r == nil {
+		return nil
+	}
+	return r.pendingShells[strings.TrimSpace(key)]
+}
+
+func (r *serviceTurnRuntime) bindPendingShell(key string, binding *pendingShellBinding) {
+	if r == nil || strings.TrimSpace(key) == "" || binding == nil {
+		return
+	}
+	r.pendingShells[strings.TrimSpace(key)] = binding
+}
+
+func (r *serviceTurnRuntime) clearPendingShell(key string) {
+	if r == nil || strings.TrimSpace(key) == "" {
+		return
+	}
+	delete(r.pendingShells, strings.TrimSpace(key))
+}
+
+func (r *serviceTurnRuntime) forEachPendingShell(fn func(string, *pendingShellBinding)) {
+	if r == nil || fn == nil {
+		return
+	}
+	for key, binding := range r.pendingShells {
+		if binding != nil {
+			fn(key, binding)
+		}
+	}
+}
+
 func (r *serviceTurnRuntime) runtimeInstancesForSurface(surfaceID string) map[string]bool {
 	instances := map[string]bool{}
 	if r == nil {
@@ -478,6 +521,11 @@ func (r *serviceTurnRuntime) runtimeInstancesForSurface(surfaceID string) map[st
 		}
 	}
 	for _, binding := range r.pendingSteers {
+		if binding != nil {
+			collect(binding.InstanceID, binding.SurfaceSessionID)
+		}
+	}
+	for _, binding := range r.pendingShells {
 		if binding != nil {
 			collect(binding.InstanceID, binding.SurfaceSessionID)
 		}
@@ -508,6 +556,11 @@ func (r *serviceTurnRuntime) purgeSurface(surfaceID string) {
 	for key, binding := range r.pendingSteers {
 		if binding != nil && strings.TrimSpace(binding.SurfaceSessionID) == surfaceID {
 			delete(r.pendingSteers, key)
+		}
+	}
+	for key, binding := range r.pendingShells {
+		if binding != nil && strings.TrimSpace(binding.SurfaceSessionID) == surfaceID {
+			delete(r.pendingShells, key)
 		}
 	}
 	for instanceID, binding := range r.compactTurns {

@@ -36,6 +36,7 @@ func TestWriteAppConfigNormalizesClaudeProfiles(t *testing.T) {
 			Model:           " mimo-v2.5-pro ",
 			SmallModel:      " mimo-v2.5-haiku ",
 			ReasoningEffort: " MAX ",
+			VisionSupported: true,
 		},
 		{
 			Name:     "Dev Seek",
@@ -67,6 +68,9 @@ func TestWriteAppConfigNormalizesClaudeProfiles(t *testing.T) {
 	}
 	if profiles[0].Model != "mimo-v2.5-pro" || profiles[0].SmallModel != "mimo-v2.5-haiku" || profiles[0].ReasoningEffort != "max" {
 		t.Fatalf("unexpected normalized model fields: %#v", profiles[0])
+	}
+	if !profiles[0].VisionSupported {
+		t.Fatalf("expected vision support flag to survive normalization: %#v", profiles[0])
 	}
 
 	if profiles[1].ID != "dev-seek" || profiles[1].AuthMode != ClaudeAuthModeInherit {

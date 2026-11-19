@@ -583,6 +583,7 @@ func (s *Service) completeRemoteTurn(outcome *remoteTurnOutcome) []eventcontract
 	if outcome.Cause == terminalCauseCompleted {
 		s.finishAutoContinueEpisode(outcome)
 	}
+	events = append(events, s.releaseCompletedShellCommandAttachments(surface, outcome.ThreadID, outcome.TurnID)...)
 	events = append(events, s.maybeScheduleAutoWhipAfterRemoteTurn(surface, item, outcome.TurnID, outcome.Cause, outcome.FinalText, outcome.Summary)...)
 	s.clearRemoteTurn(outcome.InstanceID, outcome.TurnID)
 	return events
@@ -805,6 +806,10 @@ func (s *Service) trackItemDelta(instanceID string, event agentproto.Event) {
 func (s *Service) completeItem(instanceID string, event agentproto.Event) []eventcontract.Event {
 	if event.ItemID == "" {
 		return nil
+	}
+	if events, handled := s.presentAsyncUserInput(instanceID, event); handled {
+		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)
+		return events
 	}
 	if event.ItemKind == "file_change" {
 		s.discardItemBuffer(instanceID, event.ThreadID, event.TurnID, event.ItemID)

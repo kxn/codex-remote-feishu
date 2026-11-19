@@ -33,6 +33,7 @@ func (s *Service) currentInstanceThreadViews(surface *state.SurfaceConsoleRecord
 		return nil
 	}
 	owner := s.instanceClaimSurface(inst.InstanceID)
+	names := s.persistedThreadNames(state.EffectiveInstanceBackend(inst), inst.Threads, surface.SelectedThreadID)
 	views := make([]*mergedThreadView, 0, len(inst.Threads))
 	for _, thread := range ordinaryVisibleThreads(inst) {
 		if thread == nil {
@@ -42,7 +43,7 @@ func (s *Service) currentInstanceThreadViews(surface *state.SurfaceConsoleRecord
 			ThreadID:       thread.ThreadID,
 			Backend:        state.EffectiveInstanceBackend(inst),
 			Inst:           inst,
-			Thread:         thread,
+			Thread:         threadWithPersistedName(thread, names),
 			CurrentVisible: true,
 		}
 		if inst.Online {

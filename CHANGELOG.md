@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.1.3
+
+### 项目目录下的历史会话更容易找回了
+
+- 修复桌面端创建的历史会话被错误归到其他工作区、选择真实项目目录后看不到的问题；恢复时保留正确的工作目录与实例归属（[#912](https://github.com/kxn/codex-remote-feishu/pull/912)、[#931](https://github.com/kxn/codex-remote-feishu/pull/931)）。
+- 桌面端仅改会话名称、没有新活动时，列表和当前会话状态也能刷新；较旧会话不再因超出 recent 窗口而漏刷（[#930](https://github.com/kxn/codex-remote-feishu/pull/930)）。
+- 清理浏览器附带上下文造成的冗长标题；超长会话名不再挤掉目标选择卡的正常选项（[#924](https://github.com/kxn/codex-remote-feishu/pull/924)、[#932](https://github.com/kxn/codex-remote-feishu/pull/932)）。
+
+### 飞书里的选择、问答和排队操作更稳了
+
+- 工作区与会话下拉只更新当前选择草稿，移除同步回调中的重复读取和落盘，减少飞书提示回调超时；确认前不改变实际会话（[#909](https://github.com/kxn/codex-remote-feishu/issues/909)）。
+- 支持 Codex 原生异步问题卡，可逐题选择或填写答案；保留完整说明和答文，过大内容回退为文本，失效草稿自动回收（[#929](https://github.com/kxn/codex-remote-feishu/pull/929)）。
+- Goal 操作绑定原会话和原目标，旧卡、重复提交或目标变化不会误改新目标，手动控制不会被自动恢复覆盖（[#928](https://github.com/kxn/codex-remote-feishu/pull/928)）。
+- Codex 排队消息新增 `👏` 入口，可把文字与附件引用补充到当前任务；群聊仅提及某个机器人时，可直接将它切为主机器人。
+- 修复已移动目录的选择卡恢复，以及工作区恢复冲突后的退避，减少无效切换和重复通知（[#926](https://github.com/kxn/codex-remote-feishu/pull/926)）。
+
+### 安装、升级和后台运行更可靠了
+
+- Windows 登录自启使用完整任务定义，不再丢失“无限运行”和电池供电设置，避免 daemon 连续运行 72 小时后被任务计划程序终止（[#903](https://github.com/kxn/codex-remote-feishu/issues/903)）。
+- macOS 升级等待旧服务完全卸载；本地自升级只有在事务提交、服务恢复且安装文件与本次产物一致后才报告成功（[#916](https://github.com/kxn/codex-remote-feishu/pull/916)、[#919](https://github.com/kxn/codex-remote-feishu/pull/919)）。
+- 内嵌升级 helper 的缓存覆盖完整平台依赖，安装或运行时修复不会因复用旧 shim 而遗漏；进程锁同时识别 PID 复用并原子发布完整记录（[#915](https://github.com/kxn/codex-remote-feishu/pull/915)、[#927](https://github.com/kxn/codex-remote-feishu/pull/927)）。
+- Codex 后台运行时使用私有安装与独立 app-server，减少和本机 CLI、共享进程相互干扰；补齐启动握手超时、解绑后资源释放与 OpenCode 配置恢复校验。
+- 图片输入与视觉辅助配置保持一致，减少重复注入或遗漏图片内容。
+
+### 兼容范围
+
+- 工作区仍以目录为单位；桌面客户端的“项目名 → 多个根目录”分组同步（[#923](https://github.com/kxn/codex-remote-feishu/issues/923)）继续单独跟踪，本版未加入该层级。
+
+[查看 v2.1.2 到 v2.1.3 的完整变化](https://github.com/kxn/codex-remote-feishu/compare/v2.1.2...v2.1.3)
+
 ## v2.0.0
 
 ### OpenCode 现在可以直接接入飞书了

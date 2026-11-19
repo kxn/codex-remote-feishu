@@ -203,6 +203,7 @@ const (
 	CommandReviewStart         CommandKind = "review.start"
 	CommandThreadCompactStart  CommandKind = "thread.compact.start"
 	CommandTurnSteer           CommandKind = "turn.steer"
+	CommandThreadShellCommand  CommandKind = "thread.shell_command"
 	CommandTurnInterrupt       CommandKind = "turn.interrupt"
 	CommandRequestRespond      CommandKind = "request.respond"
 	CommandMCPOAuthLogin       CommandKind = "mcp.oauth_login.start"
@@ -234,19 +235,28 @@ type Input struct {
 }
 
 type Command struct {
-	CommandID   string             `json:"commandId,omitempty"`
-	IssuedAt    time.Time          `json:"issuedAt,omitempty"`
-	Kind        CommandKind        `json:"kind"`
-	Origin      Origin             `json:"origin"`
-	Target      Target             `json:"target"`
-	Prompt      Prompt             `json:"prompt,omitempty"`
-	Overrides   PromptOverrides    `json:"overrides,omitempty"`
-	CodexResume *CodexResumePolicy `json:"codexResume,omitempty"`
-	Request     Request            `json:"request,omitempty"`
-	ModelList   ModelListCommand   `json:"modelList,omitempty"`
-	MCP         MCPCommand         `json:"mcp,omitempty"`
-	Review      ReviewRequest      `json:"review,omitempty"`
-	Goal        GoalCommand        `json:"goal,omitempty"`
+	CommandID    string             `json:"commandId,omitempty"`
+	IssuedAt     time.Time          `json:"issuedAt,omitempty"`
+	Kind         CommandKind        `json:"kind"`
+	Origin       Origin             `json:"origin"`
+	Target       Target             `json:"target"`
+	Prompt       Prompt             `json:"prompt,omitempty"`
+	Overrides    PromptOverrides    `json:"overrides,omitempty"`
+	CodexResume  *CodexResumePolicy `json:"codexResume,omitempty"`
+	Request      Request            `json:"request,omitempty"`
+	ModelList    ModelListCommand   `json:"modelList,omitempty"`
+	MCP          MCPCommand         `json:"mcp,omitempty"`
+	Review       ReviewRequest      `json:"review,omitempty"`
+	Goal         GoalCommand        `json:"goal,omitempty"`
+	ShellCommand ShellCommand       `json:"shellCommand,omitempty"`
+}
+
+// ShellCommand is a user-initiated command sent to a backend's native
+// thread/shellCommand endpoint. Payload is consumed by the local wrapper and
+// never placed in the shell command string.
+type ShellCommand struct {
+	Payload string `json:"payload,omitempty"`
+	Command string `json:"command,omitempty"`
 }
 
 type GoalCommand struct {

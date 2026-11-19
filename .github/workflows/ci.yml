@@ -57,6 +57,9 @@ jobs:
       - name: Check Feishu broker guardrail
         run: bash scripts/check/feishu-call-broker.sh
 
+      - name: Check target picker navigation has no host filesystem IO
+        run: bash scripts/check/target-picker-navigation-io-selftest.sh
+
       - name: Check formatting
         run: |
           files="$(find cmd internal testkit -name '*.go' | sort)"
@@ -74,6 +77,9 @@ jobs:
 
       - name: Check release asset verification script
         run: bash scripts/check/release-assets-verify-selftest.sh
+
+      - name: Check shim dependency cache
+        run: bash scripts/check/shim-embed-cache-selftest.sh
 
       - name: Test web
         working-directory: web
@@ -124,6 +130,8 @@ jobs:
 
       - name: Test
         timeout-minutes: 12
+        env:
+          CODEX_REMOTE_TEST_TASK_SCHEDULER: ${{ runner.os == 'Windows' && '1' || '0' }}
         run: go test -v -timeout=8m ./...
 
   release-artifacts:

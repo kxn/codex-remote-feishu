@@ -77,8 +77,12 @@ func (c *SQLiteThreadCatalog) RecentThreads(limit int) ([]state.ThreadRecord, er
 	}
 	var threads []state.ThreadRecord
 	err := c.readWithRetry("query recent threads", func(db *sql.DB) error {
+		nameColumn, err := desktopNameColumn(db)
+		if err != nil {
+			return err
+		}
 		rows, err := db.Query(`
-SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message
+SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message, `+nameColumn+`
 FROM threads
 WHERE archived = 0
   AND source IN ('cli', 'vscode')
@@ -178,8 +182,12 @@ func (c *SQLiteThreadCatalog) ThreadByID(threadID string) (*state.ThreadRecord, 
 	}
 	var thread *state.ThreadRecord
 	err := c.readWithRetry("query thread by id", func(db *sql.DB) error {
+		nameColumn, err := desktopNameColumn(db)
+		if err != nil {
+			return err
+		}
 		row := db.QueryRow(`
-SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message
+SELECT id, title, cwd, updated_at, archived, model, reasoning_effort, first_user_message, `+nameColumn+`
 FROM threads
 WHERE id = ?
   AND archived = 0
@@ -335,6 +343,19 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
+// Older Codex databases do not have name. Probe on each read so an app upgrade
+// can add it without restarting Remote; all access remains read-only.
+func desktopNameColumn(db *sql.DB) (string, error) {
+	var exists bool
+	if err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM pragma_table_info('threads') WHERE lower(name) = 'name')").Scan(&exists); err != nil {
+		return "", err
+	}
+	if exists {
+		return "name", nil
+	}
+	return "NULL", nil
+}
+
 func scanPersistedThread(scanner rowScanner) (*state.ThreadRecord, error) {
 	var (
 		threadID         string
@@ -345,6 +366,7 @@ func scanPersistedThread(scanner rowScanner) (*state.ThreadRecord, error) {
 		model            sql.NullString
 		reasoningEffort  sql.NullString
 		firstUserMessage sql.NullString
+		desktopName      sql.NullString
 	)
 	if err := scanner.Scan(
 		&threadID,
@@ -355,6 +377,7 @@ func scanPersistedThread(scanner rowScanner) (*state.ThreadRecord, error) {
 		&model,
 		&reasoningEffort,
 		&firstUserMessage,
+		&desktopName,
 	); err != nil {
 		return nil, err
 	}
@@ -371,9 +394,14 @@ func scanPersistedThread(scanner rowScanner) (*state.ThreadRecord, error) {
 	if preview == "" {
 		preview = title
 	}
+	name := strings.TrimSpace(desktopName.String)
+	if name == "" {
+		name = title
+	}
 	return &state.ThreadRecord{
 		ThreadID:                threadID,
-		Name:                    title,
+		Name:                    name,
+		PersistedName:           strings.TrimSpace(desktopName.String),
 		Preview:                 preview,
 		FirstUserMessage:        preview,
 		CWD:                     cwd,

@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/appserverargs"
+
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
@@ -65,9 +67,9 @@ func RunNativeConfigProbe(ctx context.Context, options NativeConfigProbeOptions)
 
 	childCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	cmd := execlaunch.CommandContext(childCtx, binaryPath, "app-server")
+	cmd := execlaunch.CommandContext(childCtx, binaryPath, "app-server", "--listen=stdio://")
 	cmd.Dir = workDir
-	cmd.Env = append([]string{}, options.Env...)
+	cmd.Env = appserverargs.PrivateStdioEnv(options.Env)
 	cmd.Stderr = io.Discard
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

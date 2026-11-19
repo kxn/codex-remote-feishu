@@ -154,6 +154,33 @@ func TestOpenPathPickerDirectoryModeNavigatesAndConfirmsCurrentDirectory(t *test
 	}
 }
 
+func TestOpenPathPickerDirectoryModeFallsBackFromMissingInitialPath(t *testing.T) {
+	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
+	svc := newServiceForTest(&now)
+	root := t.TempDir()
+	parent := filepath.Join(root, "parent")
+	if err := os.Mkdir(parent, 0o755); err != nil {
+		t.Fatalf("mkdir parent: %v", err)
+	}
+	missing := filepath.Join(parent, "deleted-workspace")
+
+	events := svc.OpenPathPicker(control.Action{
+		SurfaceSessionID: "surface-1",
+		ActorUserID:      "user-1",
+	}, control.PathPickerRequest{
+		Mode:        control.PathPickerModeDirectory,
+		RootPath:    root,
+		InitialPath: missing,
+	})
+	view := singlePathPickerEvent(t, events)
+	if !testutil.SamePath(view.CurrentPath, parent) || !testutil.SamePath(view.SelectedPath, parent) {
+		t.Fatalf("expected missing initial path to fall back to existing parent, got %#v", view)
+	}
+	if !view.CanConfirm || !view.CanGoUp {
+		t.Fatalf("expected fallback parent directory to remain usable, got %#v", view)
+	}
+}
+
 func TestOpenPathPickerFileModeSelectsFileAndRejectsDirectorySelection(t *testing.T) {
 	now := time.Date(2026, 4, 12, 20, 0, 0, 0, time.UTC)
 	svc := newServiceForTest(&now)

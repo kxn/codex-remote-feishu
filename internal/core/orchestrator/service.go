@@ -52,6 +52,7 @@ type Service struct {
 	nextRequestCommandID      int
 	nextHeadlessID            int
 	nextAutoContinueEpisodeID int
+	nextShellBindingSequence  int
 	handoffUntil              map[string]time.Time
 	pausedUntil               map[string]time.Time
 	abandoningUntil           map[string]time.Time
@@ -153,6 +154,18 @@ type pendingSteerBinding struct {
 	ThreadID           string
 	TurnID             string
 	QueueIndex         int
+}
+
+type pendingShellBinding struct {
+	InstanceID       string
+	SurfaceSessionID string
+	QueueItemID      string
+	SourceMessageID  string
+	CommandID        string
+	ThreadID         string
+	TurnID           string
+	QueueIndex       int
+	Sequence         int
 }
 
 type completedTextItem struct {
@@ -470,6 +483,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handleGoalCommand(surface, action)
 	case control.ActionRespondRequest:
 		events = s.respondRequest(surface, action)
+	case control.ActionAsyncUserInput:
+		events = s.handleAsyncUserInput(surface, action)
 	case control.ActionControlRequest:
 		events = s.controlRequest(surface, action)
 	case control.ActionUseThread:
@@ -650,7 +665,17 @@ func (s *Service) ApplyAgentEvent(instanceID string, event agentproto.Event) []e
 			if current == nil {
 				current = &state.ThreadRecord{ThreadID: thread.ThreadID}
 			}
-			current.WorkspaceKey = state.ResolveWorkspaceKey(thread.WorkspaceKey, current.WorkspaceKey, inst.WorkspaceKey, inst.WorkspaceRoot)
+			effectiveWorkspaceKey := thread.WorkspaceKey
+			if effectiveWorkspaceKey == "" {
+				if thread.CWD != "" && cwdBelongsToInstanceWorkspace(inst, thread.CWD) {
+					effectiveWorkspaceKey = state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot, thread.CWD)
+				} else if thread.CWD != "" {
+					effectiveWorkspaceKey = state.ResolveWorkspaceKey(thread.CWD)
+				} else {
+					effectiveWorkspaceKey = state.ResolveWorkspaceKey(inst.WorkspaceKey, inst.WorkspaceRoot)
+				}
+			}
+			current.WorkspaceKey = state.ResolveWorkspaceKey(effectiveWorkspaceKey, current.WorkspaceKey)
 			current.TrafficClass = agentproto.TrafficClassPrimary
 			if thread.Name != "" {
 				current.Name = thread.Name

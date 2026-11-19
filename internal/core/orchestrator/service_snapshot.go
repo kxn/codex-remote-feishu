@@ -43,8 +43,10 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			RequestedAt:           pending.RequestedAt,
 		}
 	}
+	var persistedNames map[string]string
 	if inst := s.root.Instances[surface.AttachedInstanceID]; inst != nil {
-		selected := inst.Threads[surface.SelectedThreadID]
+		persistedNames = s.persistedThreadNames(state.EffectiveInstanceBackend(inst), inst.Threads, surface.SelectedThreadID)
+		selected := threadWithPersistedName(inst.Threads[surface.SelectedThreadID], persistedNames)
 		if !threadVisible(selected) {
 			selected = nil
 		}
@@ -97,6 +99,7 @@ func (s *Service) buildSnapshot(surface *state.SurfaceConsoleRecord) *control.Sn
 			continue
 		}
 		for _, thread := range visibleThreads(inst) {
+			thread = threadWithPersistedName(thread, persistedNames)
 			snapshot.Threads = append(snapshot.Threads, control.ThreadSummary{
 				ThreadID:           thread.ThreadID,
 				Name:               thread.Name,

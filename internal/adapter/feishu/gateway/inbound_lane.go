@@ -478,6 +478,23 @@ func PlanInboundMessageEvent(env InboundEnv, event *larkim.P2MessageReceiveV1) (
 			logInboundMessageParseFailed(gatewayID, surfaceSessionID, inbound, message, "parse_text_content", err)
 			return PlannedInboundMessage{}, false, err
 		}
+		if !strings.EqualFold(strings.TrimSpace(chatType), "p2p") && isPureCurrentBotMentionText(commandText, message.Mentions, env.BotOpenID) {
+			if env.PrimaryGatewayForChat != nil && strings.TrimSpace(env.PrimaryGatewayForChat(chatID)) == gatewayID {
+				logInboundMessageIgnored(gatewayID, surfaceSessionID, inbound, message, "ignored_primary_mention_already_current")
+				return PlannedInboundMessage{}, false, nil
+			}
+			commandAction, handled := env.ParseTextActionWithoutCatalog("/primary on")
+			if handled {
+				commandAction.GatewayID = gatewayID
+				commandAction.SurfaceSessionID = surfaceSessionID
+				commandAction.ChatID = chatID
+				commandAction.ActorUserID = baseAction.ActorUserID
+				commandAction.MessageID = baseAction.MessageID
+				commandAction.TargetMessageID = baseAction.TargetMessageID
+				commandAction.Inbound = cloneInboundMeta(inbound)
+				return PlannedInboundMessage{Action: &commandAction}, true, nil
+			}
+		}
 		commandAction, handled := env.ParseTextActionWithoutCatalog(commandText)
 		if handled {
 			commandAction.GatewayID = gatewayID

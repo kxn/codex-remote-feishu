@@ -213,8 +213,8 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		return nil
 	}
 	action = a.classifyInboundAction(action)
+	draftNavigation := a.service.IsTargetPickerDraftNavigation(action)
 	a.traceUserTextAction(action)
-	before := a.service.SurfaceSnapshot(action.SurfaceSessionID)
 	log.Printf(
 		"surface action: surface=%s chat=%s actor=%s kind=%s message=%s instance=%s thread=%s verdict=%s reason=%s event=%s request=%s message_time=%s menu_time=%s card_lifecycle=%s text=%q",
 		action.SurfaceSessionID,
@@ -234,15 +234,19 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		actionTextPreview(action.Text),
 	)
 	if notice := rejectedInboundNotice(action); notice != nil {
-		a.ensureSurfaceRouteForNotice(action)
+		if !draftNavigation || a.service.Surface(action.SurfaceSessionID) == nil {
+			a.ensureSurfaceRouteForNotice(action)
+		}
 		a.handleUIEventsLocked(ctx, []eventcontract.Event{{
 			Kind:             eventcontract.KindNotice,
 			GatewayID:        action.GatewayID,
 			SurfaceSessionID: action.SurfaceSessionID,
 			Notice:           notice,
 		}})
-		a.syncSurfaceResumeStateLocked(nil)
-		a.syncClaudeWorkspaceProfileStateLocked()
+		if !draftNavigation {
+			a.syncSurfaceResumeStateLocked(nil)
+			a.syncClaudeWorkspaceProfileStateLocked()
+		}
 		return nil
 	}
 	if notice := a.feishuRoomWorkspaceConflictNotice(action); notice != nil {
@@ -278,6 +282,19 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		a.syncWorkspaceSurfaceContextFilesLocked()
 		return inlineResult
 	}
+	// Editing the existing target picker only mutates its in-memory draft.
+	// Its read model was captured on open; do not run durable-state or workspace
+	// synchronization (or construct an unrelated catalog-backed snapshot) before
+	// returning the synchronous card replacement.
+	if draftNavigation {
+		events := a.service.ApplySurfaceAction(action)
+		contract := control.ResolveFeishuFrontstageActionContract(action)
+		result, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, events)
+		if len(appendEvents) != 0 {
+			a.handleUIEventsLocked(ctx, appendEvents)
+		}
+		return result
+	}
 	if options.allowGroupOnDemandResume {
 		if events, handled := a.maybeStartFeishuGroupOnDemandResumeLocked(action); handled {
 			a.handleUIEventsLocked(ctx, events)
@@ -293,6 +310,7 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 	if action.Kind == control.ActionCoworkersCommand {
 		previousCoworkersLimit = a.service.FeishuRoomConcurrencyLimit(action.SurfaceSessionID)
 	}
+	before := a.service.SurfaceSnapshot(action.SurfaceSessionID)
 	events := a.applyIngressActionLocked(action)
 	clearTargets := a.surfaceResumeClearTargetsForActionLocked(action, before, events)
 	// Persist detach clearing before dispatching events: daemon/agent dispatch can
