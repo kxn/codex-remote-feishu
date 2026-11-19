@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source <(sed -n '/^binary_sha256() {/,/^}/p' "${ROOT_DIR}/upgrade-self.sh")
 source <(sed -n '/^self_upgrade_artifact_committed() (/,/^)/p' "${ROOT_DIR}/upgrade-self.sh")
 source <(sed -n '/^wait_for_admin_recovery() {/,/^}/p' "${ROOT_DIR}/upgrade-self.sh")
 
@@ -24,7 +25,7 @@ write_target() {
 }
 write_target committed "${installed}" > "${target_file}"
 printf 'new artifact\n' > "${installed}"
-expected="$(shasum -a 256 "${installed}" | awk '{print $1}')"
+expected="$(binary_sha256 "${installed}")"
 setup_required=false
 
 # Stub only HTTP: no service, credentials, or installed executable is touched.
@@ -94,17 +95,46 @@ if self_upgrade_artifact_committed "${expected}" "${state_path}"; then
   exit 1
 fi
 write_target committed "${legacy}" > "${target_file}"
-shasum() { return 1; }
+binary_sha256() { return 1; }
 if self_upgrade_artifact_committed "${expected}" "${state_path}"; then
   echo 'hash command failure was incorrectly accepted' >&2
   exit 1
 fi
-unset -f shasum
-shasum() { return 0; }
+unset -f binary_sha256
+binary_sha256() { return 0; }
 if self_upgrade_artifact_committed "${expected}" "${state_path}"; then
   echo 'empty hash output was incorrectly accepted' >&2
   exit 1
 fi
-unset -f shasum
+unset -f binary_sha256
+source <(sed -n '/^binary_sha256() {/,/^}/p' "${ROOT_DIR}/upgrade-self.sh")
+
+# Exercise each platform's tool without depending on both being installed.
+# The primary old/new-file cases above use the real host tool.
+hash_bin="${test_dir}/hash tools"
+mkdir "${hash_bin}"
+ln -s "$(command -v awk)" "${hash_bin}/awk"
+export expected installed
+cat > "${hash_bin}/shasum" <<'EOF'
+#!/bin/bash
+[[ "$#" == 3 && "$1" == -a && "$2" == 256 && "$3" == "${installed}" ]] || exit 1
+printf '%s  %s\n' "${expected}" "${installed}"
+EOF
+chmod +x "${hash_bin}/shasum"
+[[ "$(PATH="${hash_bin}" binary_sha256 "${installed}")" == "${expected}" ]]
+cat > "${hash_bin}/sha256sum" <<'EOF'
+#!/bin/bash
+[[ "$#" == 1 && "$1" == "${installed}" ]] || exit 1
+printf '%s  %s\n' "${expected}" "${installed}"
+EOF
+chmod +x "${hash_bin}/sha256sum"
+[[ "$(PATH="${hash_bin}" binary_sha256 "${installed}")" == "${expected}" ]]
+rm "${hash_bin}/shasum"
+[[ "$(PATH="${hash_bin}" binary_sha256 "${installed}")" == "${expected}" ]]
+rm "${hash_bin}/sha256sum"
+if PATH="${hash_bin}" binary_sha256 "${installed}" 2>/dev/null; then
+  echo 'missing hash tools were incorrectly accepted' >&2
+  exit 1
+fi
 
 echo 'upgrade-self recovery selftest: passed'

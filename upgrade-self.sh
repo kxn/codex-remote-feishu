@@ -53,6 +53,17 @@ resolve_build_branch() {
   printf '%s\n' "dev"
 }
 
+binary_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  elif command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  else
+    echo "SHA-256 requires sha256sum or shasum" >&2
+    return 1
+  fi
+}
+
 self_upgrade_artifact_committed() (
   local expected_binary_sha256="$1"
   local expected_state_path="$2"
@@ -69,7 +80,7 @@ self_upgrade_artifact_committed() (
   [[ "${CODEX_REMOTE_SELF_TARGET_STATE_PATH:-}" == "${expected_state_path}" ]] || return 1
   [[ "${CODEX_REMOTE_SELF_TARGET_PENDING_UPGRADE_PHASE:-}" == "committed" ]] || return 1
   [[ -n "${CODEX_REMOTE_SELF_TARGET_CURRENT_BINARY_PATH:-}" ]] || return 1
-  current_binary_sha256="$(shasum -a 256 "${CODEX_REMOTE_SELF_TARGET_CURRENT_BINARY_PATH}" 2>/dev/null | awk '{print $1}')" || return 1
+  current_binary_sha256="$(binary_sha256 "${CODEX_REMOTE_SELF_TARGET_CURRENT_BINARY_PATH}" 2>/dev/null)" || return 1
   [[ "${current_binary_sha256}" == "${expected_binary_sha256}" ]]
 )
 
@@ -189,7 +200,7 @@ CLOUDFLARED_EMBED_ALLOW_DOWNLOAD=0 \
   bash "${ROOT_DIR}/scripts/externalaccess/prepare-cloudflared-embed.sh"
 bash "${ROOT_DIR}/scripts/shim/prepare-shim-embed.sh"
 "${GO_BIN}" build -ldflags "-X main.branch=${BUILD_BRANCH}" -o "${BUILD_OUTPUT}" "${ROOT_DIR}/cmd/codex-remote"
-BUILD_SHA256="$(shasum -a 256 "${BUILD_OUTPUT}" | awk '{print $1}')"
+BUILD_SHA256="$(binary_sha256 "${BUILD_OUTPUT}")"
 if ! [[ "${BUILD_SHA256}" =~ ^[[:xdigit:]]{64}$ ]]; then
   echo "unable to calculate built artifact SHA-256" >&2
   exit 1
