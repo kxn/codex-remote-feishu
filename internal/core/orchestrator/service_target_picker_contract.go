@@ -30,7 +30,7 @@ func targetPickerBodySections(
 	if section, ok := targetPickerSummarySection("工作区", workspaceLabel, workspaceMeta); ok {
 		sections = append(sections, section)
 	}
-	if section, ok := targetPickerSummarySection("会话", sessionLabel, sessionMeta); ok {
+	if section, ok := targetPickerSummarySection("会话", targetPickerDisplaySessionName(sessionLabel, 1000), sessionMeta); ok {
 		sections = append(sections, section)
 	}
 	if section, ok := targetPickerSummarySection("目录", localDirectoryPath, ""); ok {
