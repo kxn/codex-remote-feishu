@@ -22,6 +22,7 @@ const (
 	CardActionPayloadKeyRequestControl        = "request_control"
 	CardActionPayloadKeyQuestionID            = "question_id"
 	CardActionPayloadKeyCommandID             = "command_id"
+	CardActionPayloadKeyGoalOperationID       = "goal_operation_id"
 	CardActionPayloadKeyActionKind            = "action_kind"
 	CardActionPayloadKeyActionArg             = "action_arg"
 	CardActionPayloadKeyActionArgPrefix       = "action_arg_prefix"
