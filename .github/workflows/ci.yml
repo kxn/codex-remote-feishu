@@ -75,6 +75,9 @@ jobs:
       - name: Check release asset verification script
         run: bash scripts/check/release-assets-verify-selftest.sh
 
+      - name: Check shim dependency cache
+        run: bash scripts/check/shim-embed-cache-selftest.sh
+
       - name: Test web
         working-directory: web
         run: npm run test:run

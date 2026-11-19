@@ -22,10 +22,63 @@ checksum_first_field() {
   "${checksum_cmd[@]}" "$1" | awk '{print $1}'
 }
 
+# Use the Go compiler's dependency identities instead of maintaining a second,
+# incomplete source-directory list. Keep these flags identical for list/build;
+# VCS metadata is intentionally excluded from this reproducible embedded helper.
+shim_build_flags=(-trimpath -buildvcs=false -ldflags "-s -w")
+
+shim_source_digest() {
+  local build_inputs="${tmp_dir}/shim-build-inputs"
+  local go_version=""
+  local go_flags=""
+  local go_work=""
+  local zstd_version=""
+  local script_checksum=""
+  (
+    cd "${ROOT_DIR}" || exit 1
+    CGO_ENABLED=0 GOOS="${GOOS_VALUE}" GOARCH="${GOARCH_VALUE}" \
+      go list -export -deps "${shim_build_flags[@]}" \
+      -f '{{.ImportPath}} {{.BuildID}}{{with .Module}} {{.Path}} {{.Version}} {{.Sum}}{{with .Replace}} => {{.Path}} {{.Version}} {{.Sum}}{{end}}{{end}}' ./cmd/shim
+  ) >"${build_inputs}" || return 1
+
+  # Embedding this script's own outputs in cmd/shim would create a recursive
+  # asset and make its cache key depend on the previous generated asset.
+  if grep -Eq '(^|/)internal/shim/embed ' "${build_inputs}"; then
+    echo "cmd/shim must not depend on its generated internal/shim/embed outputs" >&2
+    return 1
+  fi
+  go_version="$(cd "${ROOT_DIR}" && go env GOVERSION)" || return 1
+  go_flags="$(cd "${ROOT_DIR}" && go env GOFLAGS)" || return 1
+  go_work="$(cd "${ROOT_DIR}" && go env GOWORK)" || return 1
+  zstd_version="$(zstd --version)" || return 1
+  script_checksum="$(checksum_first_field "${SCRIPT_PATH}")" || return 1
+  {
+    printf 'goversion=%s\ngoos=%s\ngoarch=%s\ncgo=0\n' "${go_version}" "${GOOS_VALUE}" "${GOARCH_VALUE}"
+    printf 'buildflag=%s\n' "${shim_build_flags[@]}"
+    printf 'goflags=%s\nzstd=%s\nscript=%s\n' "${go_flags}" "${zstd_version}" "${script_checksum}"
+    LC_ALL=C sort "${build_inputs}"
+    local file=""
+    for file in go.mod go.sum; do
+      if [[ -f "${ROOT_DIR}/${file}" ]]; then
+        printf '%s=%s\n' "${file}" "$(checksum_first_field "${ROOT_DIR}/${file}")"
+      fi
+    done
+    if [[ -n "${go_work}" && "${go_work}" != "off" ]]; then
+      printf 'go.work=%s\n' "$(checksum_first_field "${go_work}")"
+      if [[ -f "${go_work}.sum" ]]; then
+        printf 'go.work.sum=%s\n' "$(checksum_first_field "${go_work}.sum")"
+      fi
+    fi
+  } | "${checksum_cmd[@]}" | awk '{print $1}'
+}
+
 tmp_dir="$(mktemp -d)"
+generated_go_tmp=""
 cleanup() {
   rm -rf "${tmp_dir}"
-  rm -f "${generated_go_tmp}"
+  if [[ -n "${generated_go_tmp}" ]]; then
+    rm -f "${generated_go_tmp}"
+  fi
 }
 trap cleanup EXIT
 
@@ -35,24 +88,7 @@ if [[ "${GOOS_VALUE}" == "windows" ]]; then
   binary_path="${binary_path}.exe"
 fi
 
-source_digest="$(
-  {
-    printf 'goversion=%s\n' "$(go env GOVERSION)"
-    printf 'script=%s\n' "$(checksum_first_field "${SCRIPT_PATH}")"
-    while IFS= read -r -d '' file; do
-      printf '%s  %s\n' "$(checksum_first_field "${file}")" "${file}"
-    done < <(
-      find "${ROOT_DIR}/cmd/shim" \
-        "${ROOT_DIR}/internal/app/vscodeshim" \
-        "${ROOT_DIR}/internal/app/upgradeshim" \
-        "${ROOT_DIR}/internal/shim" \
-        -type f -name '*.go' \
-        ! -path "${ROOT_DIR}/internal/shim/embed/*" \
-        -print0 |
-        sort -z
-    )
-  } | "${checksum_cmd[@]}" | awk '{print $1}'
-)"
+source_digest="$(shim_source_digest)"
 
 mkdir -p "${ASSET_DIR}"
 compressed_path="${ASSET_DIR}/${asset_name}.zst"
@@ -64,8 +100,11 @@ if [[ -f "${generated_go}" && -f "${compressed_path}" ]] && grep -Fq "SourceDige
   exit 0
 fi
 
-CGO_ENABLED=0 GOOS="${GOOS_VALUE}" GOARCH="${GOARCH_VALUE}" \
-  go build -trimpath -ldflags "-s -w" -o "${binary_path}" ./cmd/shim
+(
+  cd "${ROOT_DIR}"
+  CGO_ENABLED=0 GOOS="${GOOS_VALUE}" GOARCH="${GOARCH_VALUE}" \
+    go build "${shim_build_flags[@]}" -o "${binary_path}" ./cmd/shim
+)
 
 binary_sha256="$(checksum_first_field "${binary_path}")"
 
