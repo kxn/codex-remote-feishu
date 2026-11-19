@@ -1,8 +1,8 @@
 # 本地自升级流程
 
 > Type: `general`
-> Updated: `2026-04-27`
-> Summary: 说明 repo 构建产物触发本地自升级时的完整时序、内嵌 upgrade shim 的释放与启动方式、与 `/upgrade dev` 的边界、自动回滚规则，以及 repo install target 与当前 daemon self target 的语义边界。
+> Updated: `2026-11-19`
+> Summary: 明确 self-upgrade 的成功等待复用已提交事务、当前安装路径及本次产物校验，避免旧 daemon 健康响应或入口迁移造成误判。
 
 ## 1. 这份文档回答什么问题
 
@@ -63,7 +63,9 @@
 - 用当前 repo checkout 重新构建 `./bin/codex-remote`
 - 把构建产物复制到当前 daemon 的 fixed local-upgrade artifact 路径
 - 用刚构建出的 binary 直接执行 `local-upgrade -state-path <selfStatePath>`
-- 可选地等待 admin health 恢复
+- 默认等待同一 self target 的 `PendingUpgrade.phase = committed`、admin health 恢复，且当前安装文件的 SHA-256 与本次构建产物一致；`--no-wait` 仍只提交后台事务
+
+等待时通过现有 self-target resolver 重新读取 install state，而不沿用升级前的 binary 路径。这样既不会把旧 daemon 尚未退出时的健康响应当成升级成功，也兼容 helper 将 legacy version-scoped 入口迁移到 canonical 稳定入口。每次检查都保持原 state path 身份，读取失败、非 committed 阶段、文件缺失或哈希不匹配均继续等待，超过 `--timeout` 返回失败。原 helper 仍负责停服、切换、观测和回滚；文件哈希本身不被用作运行 PID 的身份凭证。
 
 它的设计目标就是规避“当前已安装版本太旧，无法可靠执行 `/upgrade dev` 或 `upgrade local`”这一类恢复问题。
 
