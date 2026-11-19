@@ -293,6 +293,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			catalogVariantID = ""
 			catalogBackend = ""
 		}
+		var threadID, instanceID, goalOperationID string
+		if actionKind == control.ActionGoalCommand {
+			threadID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyThreadID))
+			instanceID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
+			goalOperationID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyGoalOperationID))
+		}
 		return control.Action{
 			Kind:             actionKind,
 			GatewayID:        gatewayID,
@@ -300,6 +306,9 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			ThreadID:         threadID,
+			InstanceID:       instanceID,
+			GoalOperationID:  goalOperationID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
 			CatalogFamilyID:  catalogFamilyID,
 			CatalogVariantID: catalogVariantID,
@@ -388,6 +397,12 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			catalogVariantID = ""
 			catalogBackend = ""
 		}
+		var threadID, instanceID, goalOperationID string
+		if actionKind == control.ActionGoalCommand {
+			threadID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyThreadID))
+			instanceID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyInstanceID))
+			goalOperationID = strings.TrimSpace(stringMapValue(value, frontstagecontract.CardActionPayloadKeyGoalOperationID))
+		}
 		return control.Action{
 			Kind:             actionKind,
 			GatewayID:        gatewayID,
@@ -395,6 +410,9 @@ func ParseCardActionTriggerEvent(env RoutingEnv, event *larkcallback.CardActionT
 			ChatID:           chatID,
 			ActorUserID:      operatorID,
 			MessageID:        messageID,
+			ThreadID:         threadID,
+			InstanceID:       instanceID,
+			GoalOperationID:  goalOperationID,
 			Text:             control.BuildFeishuActionText(actionKind, actionArg),
 			CatalogFamilyID:  catalogFamilyID,
 			CatalogVariantID: catalogVariantID,
