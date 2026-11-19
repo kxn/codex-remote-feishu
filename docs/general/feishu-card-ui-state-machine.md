@@ -783,8 +783,6 @@ MCP request 卡片当前新增的可视语义：
 
 拒绝提示里的动作详情只负责解释“哪次旧动作被忽略”，不参与 product mutation。command 类动作的 label/command 由 `FeishuCommandBinding` 与 command catalog 统一提供；无法解析到 catalog 的 owner-card、picker、request 或 review exit/apply 等本地 callback 使用 UI-only local label。
 
-拒绝提示里的动作详情只负责解释“哪次旧动作被忽略”，不参与 product mutation。command 类动作的 label/command 由 `FeishuCommandBinding` 与 command catalog 统一提供；无法解析到 catalog 的 owner-card、picker、request 或 review exit/apply 等本地 callback 使用 UI-only local label。
-
 通过 lifecycle gate 的当前 callback 若命中 room workspace 恢复冲突，会在 frontstage contract / owner mutation 之前停止：daemon append 一张独立冲突提示并返回 `nil` action result，原卡保持不变。这个 gate 不得提前到 lifecycle 判定之前，否则旧卡会被错误解释为当前 room 操作；也不得进入 inline replacement，否则会把诊断提示伪装成菜单或 owner card 的业务结果。
 
 ### 6.2 当前一个重要边界
