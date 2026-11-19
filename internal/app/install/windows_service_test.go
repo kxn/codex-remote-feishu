@@ -153,13 +153,9 @@ func TestInstallTaskSchedulerLogonRegistersXMLTask(t *testing.T) {
 	taskName := taskSchedulerTaskNameForInstance("stable")
 	mustContain := []string{
 		"Register-ScheduledTask",
-		"-AtLogOn",
+		"-Xml (Get-Content -LiteralPath",
 		taskName,
-		"codex-remote.exe",
-		"-config",
-		"-xdg-config-home",
-		"-xdg-data-home",
-		"-xdg-state-home",
+		normalizeServicePathValue(updated.ServiceUnitPath),
 	}
 	for _, s := range mustContain {
 		if !strings.Contains(psScript, s) {
@@ -264,8 +260,8 @@ func TestRunServiceInstallUserWindowsWritesTaskState(t *testing.T) {
 	if !strings.Contains(stdout.String(), "service manager: task_scheduler_logon") {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
-	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-AtLogOn") {
-		t.Fatalf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", psScript)
+	if !strings.Contains(psScript, "Register-ScheduledTask") || !strings.Contains(psScript, "-Xml (Get-Content -LiteralPath") {
+		t.Fatalf("PowerShell script missing Register-ScheduledTask or XML input: %s", psScript)
 	}
 }
 
@@ -300,8 +296,8 @@ func TestRunServiceWindowsLifecycleCommandsUseTaskScheduler(t *testing.T) {
 
 	var psCalls int
 	withMockTaskSchedulerPowerShell(t, func(_ context.Context, script string) (string, error) {
-		if !strings.Contains(script, "Register-ScheduledTask") || !strings.Contains(script, "-AtLogOn") {
-			t.Errorf("PowerShell script missing Register-ScheduledTask or -AtLogOn: %s", script)
+		if !strings.Contains(script, "Register-ScheduledTask") || !strings.Contains(script, "-Xml (Get-Content -LiteralPath") {
+			t.Errorf("PowerShell script missing Register-ScheduledTask or XML input: %s", script)
 		}
 		psCalls++
 		return "", nil
