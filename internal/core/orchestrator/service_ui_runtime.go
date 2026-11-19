@@ -179,13 +179,15 @@ type activePathPickerRecord struct {
 }
 
 type surfaceUIRuntimeRecord struct {
-	ActiveOwnerCardFlow *activeOwnerCardFlowRecord
-	ActiveTargetPicker  *activeTargetPickerRecord
-	ActiveThreadHistory *activeThreadHistoryRecord
-	ActiveReviewPicker  *activeReviewPickerRecord
-	ActivePathPicker    *activePathPickerRecord
-	ActivePlanProposal  *activePlanProposalRecord
-	ActiveWorkspacePage *activeWorkspacePageRecord
+	AsyncUserInputs        map[string]*asyncUserInputRecord
+	AsyncUserInputSequence uint64
+	ActiveOwnerCardFlow    *activeOwnerCardFlowRecord
+	ActiveTargetPicker     *activeTargetPickerRecord
+	ActiveThreadHistory    *activeThreadHistoryRecord
+	ActiveReviewPicker     *activeReviewPickerRecord
+	ActivePathPicker       *activePathPickerRecord
+	ActivePlanProposal     *activePlanProposalRecord
+	ActiveWorkspacePage    *activeWorkspacePageRecord
 }
 
 type SurfaceUIRuntimeSummary struct {

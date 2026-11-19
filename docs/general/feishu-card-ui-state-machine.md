@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-19`
-> Summary: 明确 Goal 文字与卡片回显、原会话目标绑定及暂停/恢复控制边界。
+> Summary: 补充异步问题卡的原文说明、完整答文投递，以及有界草稿与重放记录回收。
 
 ## 1. 文档定位
 
@@ -230,6 +230,9 @@ Goal 当前的回显约束：
 - `page_local_action` / `page_local_submit` 当前用于菜单内与 page-owner 内的本地导航或本地提交；gateway 解析后会把 `Action.LocalPageAction` 置为 `true`，并刻意不回填 `Action.Catalog*`。这类动作仍受当前卡 freshness / owner-flow / final-card runtime 语义约束，但不会先被 `command_entry_expired` 拦截
 - `page_action` / `page_submit` 当前除 `action_kind` 与参数字段外，还会在有来源上下文时附带 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`；gateway 解析后会直接回填 `Action.Catalog*`。当前 live 命令入口要求这组 provenance 完整可用：缺失字段、legacy default variant，或当前 surface 上下文已变化的旧卡，都会在 runtime 收到 `command_entry_expired`
 - `request_respond` / `submit_request_form` 与 `upgrade_owner_flow` / `vscode_migrate_owner_flow` 当前在 gateway 解析后只写入 `Action.Request` / `Action.OwnerFlow` family；这些回调不再依赖 root `Action.Request*` 或 root `PickerID/OptionID` 兼容字段作为 live 路径输入
+- `async_user_input` 用于原生异步问题消息，复用 page card 的按钮和 `answer` 输入表单。payload 仅传 `request_id`、`request_revision`、`option_id`，gateway 写入 `Action.Request`；题目、选项文本和 instance/thread 目标以服务端草稿为准。此动作要求当前 daemon stamp；每答一题增加 revision 并按原 MessageID 更新同一卡；拒绝回答只追加提示，不覆盖问题卡，最后封卡提示“回答已进入发送队列”。草稿在 daemon 内独立保存，不建立同步 RPC、普通输入 gate 或 active owner flow；换会话、非原发起者、旧 revision、重复提交、重启后旧卡均拒绝，未知消息结构保留文本回退。
+  - 原 `agentMessage.text` 作为题前说明保留；超过 1000 字符时通过普通文本 renderer 完整输出，卡中仅留带截断提示的预览。已答题目和答案只在卡面共享显示预算，发往原会话的完整题目/答案不截断。最多 16 题、每题 16 选项、全部题目/选项合计不超过 1000 字符才使用交互卡；超出时完整输出正文、题目和全部选项并提示直接回复，不发送超预算卡，也不静默删选项。
+  - 问题卡标明一小时有效。每个 surface 最多 32 份活跃草稿，超过时最早草稿失效；提交或过期即释放正文/题目/答案，仅留去重记录。去重记录最多保留最近 128 份且最长 24 小时，tick 和新事件入口都会回收；保留窗口内重放不重新出卡。过期或被淘汰的回调拒绝并提示直接回复，不阻塞普通输入。
 - 分页导航与 target/path picker / selection dropdown 当前也复用这套 schema：projector 负责写入 `page` / `view_mode` / `return_page` / `picker_id` / `field_name` / `cursor`，gateway 负责解析回 `control.Action`，Feishu UI controller 再用这些字段重建当前页 view、thread selection view 或当前 picker 并 inline replace 原卡。其中 thread/history 等固定分页仍用 `page`，target/path picker / VS Code thread dropdown 的动态 byte-budget 分页改用 `cursor(start-index)`。
 - target picker 的会话标题只在显示时限长：下拉选项和切换进度最多 80 个字符，已选会话摘要最多 1000 个字符，含“名称过长，已截断”标记。完整语义原名、选项 `value` 与真实 thread 身份保持不变；分页继续按真实发送字节预算计算，避免单个长标题挤掉普通选项或确认按钮。
 - workspace/session family 的 selection / target picker callback 当前也会在有来源上下文时继续补写 `catalog_family_id` / `catalog_variant_id` / `catalog_backend`。这意味着 bare `/list` `/use` `/useall`、菜单按钮、selection refresh、target-picker 翻页/确认这些后续动作，都能继续把 family provenance 带回 gateway / orchestrator，而不是只剩 `ActionKind` / `field_name`。

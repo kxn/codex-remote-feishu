@@ -110,6 +110,7 @@ func (s *Service) Tick(now time.Time) []eventcontract.Event {
 		})
 	}
 	for _, surface := range s.root.Surfaces {
+		pruneAsyncUserInputs(s.surfaceUIRuntimeState(surface), now)
 		if pending := surface.PendingHeadless; pending != nil && !pending.ExpiresAt.IsZero() && !now.Before(pending.ExpiresAt) {
 			events = append(events, s.expirePendingHeadless(surface, pending)...)
 		}

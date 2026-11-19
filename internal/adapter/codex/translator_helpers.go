@@ -117,6 +117,13 @@ func extractItemMetadata(itemKind string, item map[string]any) map[string]any {
 		metadata["text"] = text
 	}
 	switch itemKind {
+	case "agent_message":
+		if delivery, ok := item["delivery"].(string); ok {
+			metadata["delivery"] = delivery
+		}
+		if questions := xutil.CloneJSONValue(item["questions"]); questions != nil {
+			metadata["questions"] = questions
+		}
 	case "entered_review_mode", "exited_review_mode":
 		if review := xutil.FirstNonEmpty(
 			xutil.LookupStringFromAny(item["review"]),

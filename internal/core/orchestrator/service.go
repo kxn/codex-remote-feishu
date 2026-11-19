@@ -483,6 +483,8 @@ func (s *Service) ApplySurfaceAction(action control.Action) []eventcontract.Even
 		events = s.handleGoalCommand(surface, action)
 	case control.ActionRespondRequest:
 		events = s.respondRequest(surface, action)
+	case control.ActionAsyncUserInput:
+		events = s.handleAsyncUserInput(surface, action)
 	case control.ActionControlRequest:
 		events = s.controlRequest(surface, action)
 	case control.ActionUseThread:

@@ -54,6 +54,7 @@ const (
 	ActionOpenCodeProfileCommand      ActionKind = "surface.command.opencode_profile"
 	ActionSendFile                    ActionKind = "surface.command.send_file"
 	ActionRespondRequest              ActionKind = "surface.request.respond"
+	ActionAsyncUserInput              ActionKind = "surface.message.async_user_input"
 	ActionControlRequest              ActionKind = "surface.request.control"
 	ActionTextMessage                 ActionKind = "surface.message.text"
 	ActionImageMessage                ActionKind = "surface.message.image"
