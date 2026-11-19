@@ -1,6 +1,8 @@
 package orchestrator
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -38,6 +40,11 @@ func TestTargetPickerNavigationHostIOBoundary(t *testing.T) {
 				if selectedWorkspace == "" {
 					t.Fatal("fixture has no workspace option")
 				}
+				confirmationWorkspace := selectedWorkspace
+				alias := filepath.Join(t.TempDir(), "workspace-alias")
+				if err := os.Symlink(cwd, alias); err == nil {
+					confirmationWorkspace = alias
+				}
 				state.TargetPickerHostResolutionReads = 0
 				state.TargetPickerHostResolutionForbidden = true
 				defer func() { state.TargetPickerHostResolutionForbidden = false }()
@@ -47,6 +54,7 @@ func TestTargetPickerNavigationHostIOBoundary(t *testing.T) {
 					{Kind: control.ActionTargetPickerPage, FieldName: frontstagecontract.CardTargetPickerSessionFieldName},
 					{Kind: control.ActionTargetPickerPage, FieldName: frontstagecontract.CardTargetPickerWorkspaceFieldName},
 					{Kind: control.ActionTargetPickerSelectWorkspace, WorkspaceKey: "/not-an-emitted-workspace"},
+					{Kind: control.ActionTargetPickerSelectWorkspace, WorkspaceKey: alias},
 					{Kind: control.ActionTargetPickerSelectSession, TargetPickerValue: "thread:not-an-emitted-thread"},
 				} {
 					action.SurfaceSessionID, action.ActorUserID, action.PickerID = surface.SurfaceSessionID, "user-1", picker.PickerID
@@ -77,9 +85,12 @@ func TestTargetPickerNavigationHostIOBoundary(t *testing.T) {
 				}
 				assertRejected("old-picker-id")
 				state.TargetPickerHostResolutionForbidden = false
-				svc.ApplySurfaceAction(control.Action{Kind: control.ActionTargetPickerConfirm, SurfaceSessionID: surface.SurfaceSessionID, ActorUserID: "user-1", PickerID: picker.PickerID, WorkspaceKey: selectedWorkspace, TargetPickerValue: targetPickerThreadValue("thread")})
+				svc.ApplySurfaceAction(control.Action{Kind: control.ActionTargetPickerConfirm, SurfaceSessionID: surface.SurfaceSessionID, ActorUserID: "user-1", PickerID: picker.PickerID, WorkspaceKey: confirmationWorkspace, TargetPickerValue: targetPickerThreadValue("thread")})
 				if state.TargetPickerHostResolutionReads == 0 {
 					t.Fatal("confirmation must retain live path validation")
+				}
+				if svc.activeTargetPicker(surface) != nil {
+					t.Fatal("confirmation failed to accept the canonical identity of a host alias")
 				}
 				state.TargetPickerHostResolutionForbidden = true
 				assertRejected(picker.PickerID) // replay after confirmation cleared runtime
