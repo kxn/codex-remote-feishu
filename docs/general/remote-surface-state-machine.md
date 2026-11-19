@@ -919,7 +919,7 @@ review mode 第一版当前不是新的 route state，而是挂在 surface 上�
 
 ### 4.4 选择卡片不再是服务端持久 modal 状态
 
-目标选择器的 Target 页面首次打开时冻结全部工作区与各工作区会话选项（含展示元数据）。同一 picker 的工作区/会话选择及翻页只修改内存草稿并 inline 刷新，不重新访问 catalog、SQLite 或 Git/文件系统。冻结快照不持久化，沿用 picker 的 owner、TTL、daemon freshness 与路由清理；取消、过期和重启不改 route。草稿只把已规范化的选项值当作身份键，使用冻结的默认选择与工作区投影；既有 admission、owner 和 catalog provenance 校验继续执行，但不再次解析 host 路径或符号链接。最终确认先废弃快照，重新计算实时可见性、claim 与兼容性，目标消失或被接管时保留当前 route 并提示重新选择。目录/Git/Worktree 表单仍走原有验证路径。 随 picker 导航携带的命令来源只参与原有 admission 校验，不覆盖 typed picker UI intent；旧 ID、过期和结束后的重试沿同一读侧拒绝路径处理，不重新探测 host 工作区。
+目标选择器的 Target 页面首次打开时冻结全部工作区与各工作区会话选项（含展示元数据）。同一 picker 的工作区/会话选择及翻页只修改内存草稿并 inline 刷新，不重新访问 catalog、SQLite 或 Git/文件系统。daemon 在 Target 页编辑选择/翻页及失效拒绝上走 UI-only episode，跳过无关 snapshot、group resume 与 durable/workspace context 同步；保持相同 App 锁和同步 callback replacement，不引入 ACK 后丢动作的新窗口。冻结快照不持久化，沿用 picker 的 owner、TTL、daemon freshness 与路由清理；取消、过期和重启不改 route。草稿只把已规范化的选项值当作身份键，使用冻结的默认选择与工作区投影；既有 admission、owner 和 catalog provenance 校验继续执行，但不再次解析 host 路径或符号链接。最终确认先废弃快照，重新计算实时可见性、claim 与兼容性，目标消失或被接管时保留当前 route 并提示重新选择。目录/Git/Worktree 表单仍走原有验证路径。 随 picker 导航携带的命令来源只参与原有 admission 校验，不覆盖 typed picker UI intent；旧 ID、过期和结束后的重试沿同一读侧拒绝路径处理，不重新探测 host 工作区。
 
 当前服务端已经不再保存 `FeishuDirectSelectionPrompt` 状态，也不再把“纯数字文本”解释成选择。
 

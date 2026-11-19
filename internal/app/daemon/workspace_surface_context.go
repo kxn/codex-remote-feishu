@@ -16,6 +16,8 @@ import (
 const workspaceSurfaceContextDir = ".codex-remote"
 const workspaceSurfaceContextFile = "surface-context.json"
 
+var workspaceSurfaceContextWriteFile = writeWorkspaceSurfaceContext
+
 type workspaceSurfaceContextPayload struct {
 	SurfaceSessionID string    `json:"surface_session_id"`
 	GatewayID        string    `json:"gateway_id,omitempty"`
@@ -54,7 +56,7 @@ func (a *App) syncWorkspaceSurfaceContextFilesLocked() {
 	}
 
 	for workspaceRoot, payload := range desired {
-		if err := writeWorkspaceSurfaceContext(workspaceRoot, payload); err != nil {
+		if err := workspaceSurfaceContextWriteFile(workspaceRoot, payload); err != nil {
 			log.Printf("write workspace surface context failed: workspace=%s err=%v", workspaceRoot, err)
 			continue
 		}
