@@ -103,8 +103,8 @@ func TestTargetPickerDraftNavigationRejectsOtherPagesAndOldPickers(t *testing.T)
 	}
 	record.PageOverride = ""
 	action.PickerID = "old-picker"
-	if svc.IsTargetPickerDraftNavigation(action) {
-		t.Fatal("unrelated picker must not use the navigation episode")
+	if !svc.IsTargetPickerDraftNavigation(action) {
+		t.Fatal("stale picker rejection must not enter host path IO")
 	}
 }
 

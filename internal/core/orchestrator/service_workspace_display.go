@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/gitmeta"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/displaypath"
 )
 
@@ -41,7 +42,7 @@ func targetPickerWorkspaceMetaByKey(entries []workspaceSelectionEntry) map[strin
 			if branch == "" {
 				continue
 			}
-			key := normalizeWorkspaceClaimKey(entry.workspaceKey)
+			key := state.ResolveWorkspaceKey(entry.workspaceKey)
 			if key == "" {
 				continue
 			}
@@ -54,7 +55,7 @@ func targetPickerWorkspaceMetaByKey(entries []workspaceSelectionEntry) map[strin
 			}
 			suffixes := targetPickerWorkspaceShortTails(branchEntries)
 			for _, entry := range branchEntries {
-				key := normalizeWorkspaceClaimKey(entry.workspaceKey)
+				key := state.ResolveWorkspaceKey(entry.workspaceKey)
 				if key == "" {
 					continue
 				}
@@ -76,7 +77,7 @@ func targetPickerWorkspaceShortTails(entries []workspaceSelectionEntry) map[stri
 	paths := make([]string, 0, len(entries))
 	keys := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		workspaceKey := normalizeWorkspaceClaimKey(entry.workspaceKey)
+		workspaceKey := state.ResolveWorkspaceKey(entry.workspaceKey)
 		if workspaceKey == "" {
 			continue
 		}

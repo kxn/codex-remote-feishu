@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
+	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
@@ -26,17 +27,17 @@ func targetPickerWorkspaceMetaText(entry workspaceSelectionEntry, metaByKey map[
 	if len(metaByKey) == 0 {
 		return ""
 	}
-	return strings.TrimSpace(metaByKey[normalizeWorkspaceClaimKey(entry.workspaceKey)])
+	return strings.TrimSpace(metaByKey[state.ResolveWorkspaceKey(entry.workspaceKey)])
 }
 
 func targetPickerLockedWorkspaceSummary(entries []workspaceSelectionEntry, workspaceKey string) (string, string) {
-	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	workspaceKey = state.ResolveWorkspaceKey(workspaceKey)
 	if workspaceKey == "" {
 		return "", ""
 	}
 	metaByKey := targetPickerWorkspaceMetaByKey(entries)
 	for _, entry := range entries {
-		if normalizeWorkspaceClaimKey(entry.workspaceKey) != workspaceKey {
+		if state.ResolveWorkspaceKey(entry.workspaceKey) != workspaceKey {
 			continue
 		}
 		label := strings.TrimSpace(xutil.FirstNonEmpty(entry.label, workspaceSelectionLabel(workspaceKey)))
@@ -67,12 +68,12 @@ func targetPickerSessionMetaText(source control.TargetPickerRequestSource, value
 }
 
 func targetPickerWorkspaceEntryByKey(entries []workspaceSelectionEntry, workspaceKey string) (workspaceSelectionEntry, bool) {
-	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	workspaceKey = state.ResolveWorkspaceKey(workspaceKey)
 	if workspaceKey == "" {
 		return workspaceSelectionEntry{}, false
 	}
 	for _, entry := range entries {
-		if normalizeWorkspaceClaimKey(entry.workspaceKey) == workspaceKey {
+		if state.ResolveWorkspaceKey(entry.workspaceKey) == workspaceKey {
 			return entry, true
 		}
 	}
@@ -126,7 +127,9 @@ func targetPickerWorkspaceValueAtCursor(options []control.FeishuTargetPickerWork
 }
 
 func normalizeTargetPickerWorkspaceSelection(value string) string {
-	return normalizeWorkspaceClaimKey(value)
+	// Dropdown values are already canonical workspace identities. Interpreting
+	// them must not probe the host filesystem; acceptance resolves live paths.
+	return state.ResolveWorkspaceKey(value)
 }
 
 func targetPickerHasSessionOption(options []control.FeishuTargetPickerSessionOption, value string) bool {

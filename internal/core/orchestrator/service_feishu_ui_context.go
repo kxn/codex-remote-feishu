@@ -22,6 +22,10 @@ func (s *Service) buildFeishuUIOwnerCardFlowContext(flow *activeOwnerCardFlowRec
 }
 
 func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecord) control.FeishuUISurfaceContext {
+	return s.buildFeishuUISurfaceContextWithWorkspaceKey(surface, s.surfaceCurrentWorkspaceKey(surface))
+}
+
+func (s *Service) buildFeishuUISurfaceContextWithWorkspaceKey(surface *state.SurfaceConsoleRecord, workspaceKey string) control.FeishuUISurfaceContext {
 	if surface == nil {
 		return control.FeishuUISurfaceContext{
 			InlineReplaceFreshness:         control.FeishuUIInlineReplaceFreshnessDaemonLifecycle,
@@ -36,7 +40,7 @@ func (s *Service) buildFeishuUISurfaceContext(surface *state.SurfaceConsoleRecor
 		GatewayID:                      surface.GatewayID,
 		ProductMode:                    string(s.normalizeSurfaceProductMode(surface)),
 		AttachedInstanceID:             strings.TrimSpace(surface.AttachedInstanceID),
-		CurrentWorkspaceKey:            s.surfaceCurrentWorkspaceKey(surface),
+		CurrentWorkspaceKey:            workspaceKey,
 		RouteMode:                      string(surface.RouteMode),
 		SelectedThreadID:               strings.TrimSpace(surface.SelectedThreadID),
 		Gate:                           s.snapshotGateSummary(surface),
@@ -126,9 +130,16 @@ func (s *Service) buildFeishuPathPickerContextFromView(surface *state.SurfaceCon
 }
 
 func (s *Service) buildFeishuTargetPickerContextFromView(surface *state.SurfaceConsoleRecord, view control.FeishuTargetPickerView) *control.FeishuUITargetPickerContext {
+	var surfaceContext control.FeishuUISurfaceContext
+	if record := s.activeTargetPicker(surface); record != nil && record.PickerID == view.PickerID &&
+		record.Stage == control.FeishuTargetPickerStageEditing && record.OptionSnapshot != nil && targetPickerEffectivePage(record) == control.FeishuTargetPickerPageTarget {
+		surfaceContext = s.buildFeishuUISurfaceContextWithWorkspaceKey(surface, record.OptionSnapshot.CurrentWorkspaceKey)
+	} else {
+		surfaceContext = s.buildFeishuUISurfaceContext(surface)
+	}
 	return &control.FeishuUITargetPickerContext{
 		DTOOwner:                 control.FeishuUIDTOwnerTargetPicker,
-		Surface:                  s.buildFeishuUISurfaceContext(surface),
+		Surface:                  surfaceContext,
 		PickerID:                 strings.TrimSpace(view.PickerID),
 		Source:                   view.Source,
 		CatalogFamilyID:          strings.TrimSpace(view.CatalogFamilyID),

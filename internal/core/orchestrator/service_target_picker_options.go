@@ -211,6 +211,11 @@ func (s *Service) targetPickerSessionOptionsFromViews(surface *state.SurfaceCons
 
 func (s *Service) defaultTargetPickerSessionValue(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, workspaceKey string, options []control.FeishuTargetPickerSessionOption) string {
 	workspaceKey = normalizeWorkspaceClaimKey(workspaceKey)
+	currentWorkspaceKey := s.surfaceCurrentWorkspaceKey(surface)
+	return targetPickerDefaultSessionValueFromRoute(surface, source, workspaceKey, currentWorkspaceKey, options)
+}
+
+func targetPickerDefaultSessionValueFromRoute(surface *state.SurfaceConsoleRecord, source control.TargetPickerRequestSource, workspaceKey, currentWorkspaceKey string, options []control.FeishuTargetPickerSessionOption) string {
 	if workspaceKey == "" {
 		return ""
 	}
@@ -220,7 +225,7 @@ func (s *Service) defaultTargetPickerSessionValue(surface *state.SurfaceConsoleR
 	if source == control.TargetPickerRequestSourceList && len(options) == 1 && options[0].Kind == control.FeishuTargetPickerSessionWorktree {
 		return options[0].Value
 	}
-	if s.surfaceCurrentWorkspaceKey(surface) != workspaceKey {
+	if currentWorkspaceKey != workspaceKey {
 		return ""
 	}
 	if surface != nil && surface.RouteMode == state.RouteModeNewThreadReady {

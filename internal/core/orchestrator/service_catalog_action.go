@@ -15,7 +15,7 @@ func (s *Service) resolveCatalogActionFromSurfaceContext(surface *state.SurfaceC
 	if action.IsCardAction() {
 		return action
 	}
-	resolved, ok := control.ResolveFeishuActionCatalog(s.buildCatalogContext(surface), action)
+	resolved, ok := control.ResolveFeishuActionCatalog(s.buildCatalogContextForAction(surface, action), action)
 	if !ok {
 		return action
 	}

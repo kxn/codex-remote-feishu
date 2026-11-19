@@ -57,6 +57,9 @@ jobs:
       - name: Check Feishu broker guardrail
         run: bash scripts/check/feishu-call-broker.sh
 
+      - name: Check target picker navigation has no host filesystem IO
+        run: bash scripts/check/target-picker-navigation-io-selftest.sh
+
       - name: Check formatting
         run: |
           files="$(find cmd internal testkit -name '*.go' | sort)"

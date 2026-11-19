@@ -173,6 +173,12 @@ func (s *Service) handleTargetPickerSelectWorkspace(surface *state.SurfaceConsol
 	s.applyTargetPickerDraftAnswers(record, answers)
 	lockedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(record.LockedWorkspaceKey)
 	requestedWorkspaceKey := normalizeTargetPickerWorkspaceSelection(workspaceKey)
+	if record.OptionSnapshot != nil && targetPickerEffectivePage(record) == control.FeishuTargetPickerPageTarget {
+		if _, exists := targetPickerWorkspaceEntryByKey(record.OptionSnapshot.Workspaces, requestedWorkspaceKey); !exists {
+			setTargetPickerMessages(record, control.FeishuTargetPickerMessage{Level: control.FeishuTargetPickerMessageWarning, Text: "当前工作区选项无效，请从卡片中的选项重新选择。"})
+			return s.targetPickerDraftSelectionError(surface, record)
+		}
+	}
 	if lockedWorkspaceKey != "" {
 		record.SelectedWorkspaceKey = lockedWorkspaceKey
 		record.SelectedSessionValue = ""
@@ -218,6 +224,11 @@ func (s *Service) handleTargetPickerSelectSession(surface *state.SurfaceConsoleR
 	}
 	resetTargetPickerEditingState(record)
 	s.applyTargetPickerDraftAnswers(record, answers)
+	if record.OptionSnapshot != nil && targetPickerEffectivePage(record) == control.FeishuTargetPickerPageTarget && strings.TrimSpace(value) != "" &&
+		!targetPickerHasSessionOption(record.OptionSnapshot.Sessions[record.SelectedWorkspaceKey], strings.TrimSpace(value)) {
+		setTargetPickerMessages(record, control.FeishuTargetPickerMessage{Level: control.FeishuTargetPickerMessageWarning, Text: "当前会话选项无效，请从卡片中的选项重新选择。"})
+		return s.targetPickerDraftSelectionError(surface, record)
+	}
 	return mutatePickerAndRebuild(
 		func() {
 			record.SelectedSessionValue = strings.TrimSpace(value)
@@ -563,7 +574,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 		selectedWorkspace = lockedWorkspaceKey
 	} else {
 		if !targetPickerHasWorkspaceOption(workspaceOptions, selectedWorkspace) {
-			selectedWorkspace = normalizeWorkspaceClaimKey(s.surfaceCurrentWorkspaceKey(surface))
+			selectedWorkspace = s.targetPickerCurrentWorkspaceKeyForRecord(surface, record)
 		}
 		if !targetPickerHasWorkspaceOption(workspaceOptions, selectedWorkspace) {
 			selectedWorkspace = targetPickerDefaultWorkspaceSelection(workspaceOptions)
@@ -581,7 +592,7 @@ func (s *Service) buildTargetPickerView(surface *state.SurfaceConsoleRecord, rec
 	if usesSessionSelection {
 		switch {
 		case selectedSession == targetPickerAutoSession:
-			selectedSession = s.defaultTargetPickerSessionValue(surface, record.Source, selectedWorkspace, sessionOptions)
+			selectedSession = s.targetPickerDefaultSessionValueForRecord(surface, record, selectedWorkspace, sessionOptions)
 		case selectedSession == "":
 			if targetPickerShouldAutoSelectNewThread(sessionOptions, record.AllowNewThread) {
 				selectedSession = targetPickerNewThreadValue

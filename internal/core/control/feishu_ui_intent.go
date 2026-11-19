@@ -77,9 +77,13 @@ type FeishuUIIntent struct {
 }
 
 func FeishuUIIntentFromAction(action Action) (*FeishuUIIntent, bool) {
-	if binding, ok := ResolveFeishuCommandBindingFromAction(action); ok {
-		if intent, ok := binding.IntentFromAction(action); ok {
-			return intent, true
+	// Provenance can disambiguate a command entry, but a typed owner callback
+	// keeps its own intent even when it carries that launcher's catalog fields.
+	if _, commandEntry := FeishuCommandIDForActionKind(action.Kind); commandEntry || action.Kind == "" {
+		if binding, ok := ResolveFeishuCommandBindingFromAction(action); ok {
+			if intent, ok := binding.IntentFromAction(action); ok {
+				return intent, true
+			}
 		}
 	}
 	switch action.Kind {
