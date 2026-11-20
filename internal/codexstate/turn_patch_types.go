@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
 const (
@@ -175,11 +177,7 @@ func NewTurnPatchStorage(opts TurnPatchStorageOptions) (*TurnPatchStorage, error
 }
 
 func defaultCodexHomeDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, defaultCodexStateDir), nil
+	return config.ResolveCodexHomeDir(os.Environ())
 }
 
 type noopTurnPatchMetadataReconciler struct{}
