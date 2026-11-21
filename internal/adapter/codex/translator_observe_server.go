@@ -27,33 +27,43 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 		}
 		if pending, ok := t.pendingSuppressedResponse[requestID]; ok {
 			delete(t.pendingSuppressedResponse, requestID)
+			if pending.Action == "turn/steer" {
+				return nativeSteerResponse(pending, requestID, message), nil
+			}
 			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 				delete(t.pendingRemoteTurnByThread, pending.ThreadID)
 				t.Debugf("observe server suppressed response error: request=%s action=%s thread=%s error=%s", requestID, pending.Action, pending.ThreadID, errMsg)
 				if pending.Action == "turn/start" {
-					return Result{Events: []agentproto.Event{{
-						Kind:                 agentproto.EventTurnCompleted,
-						ThreadID:             pending.ThreadID,
-						Status:               "failed",
-						ErrorMessage:         errMsg,
-						TurnCompletionOrigin: agentproto.TurnCompletionOriginTurnStartRejected,
-					}}}, nil
+					return Result{Events: []agentproto.Event{nativePromptRejectedEvent(
+						pending.CommandID, requestID, pending.ThreadID,
+						agentproto.TurnCompletionOriginTurnStartRejected, errMsg, pending.Initiator,
+					)}}, nil
 				}
 				if pending.Action == "thread/compact/start" {
-					return Result{Events: []agentproto.Event{agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
+					return Result{Events: []agentproto.Event{correlatedCommandErrorEvent(agentproto.ErrorInfo{
 						Code:             "compact_start_failed",
 						Layer:            "server",
 						Stage:            "command_response",
 						Operation:        "thread.compact.start",
 						Message:          "Codex 拒绝了这次上下文压缩请求。",
 						Details:          errMsg,
+						CommandID:        pending.CommandID,
+						RequestID:        requestID,
 						SurfaceSessionID: pending.SurfaceSessionID,
 						ThreadID:         pending.ThreadID,
 					})}}, nil
 				}
 				return Result{}, nil
 			}
+			if pending.Action == "thread/compact/start" && pending.CommandID != "" && pending.ManagedMaintenance {
+				return Result{Suppress: true, Events: []agentproto.Event{{Kind: agentproto.EventNativeMaintenanceStarted, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, Status: "accepted"}}}, nil
+			}
 			t.Debugf("observe server suppressed response: request=%s", requestID)
+			if pending.Action == "turn/start" && pending.CommandID != "" {
+				if turnID := lookupString(message, "result", "turn", "id"); turnID != "" {
+					return Result{Suppress: true, Events: []agentproto.Event{{Kind: agentproto.EventNativeTurnBindingObserved, CommandID: pending.CommandID, RequestID: requestID, ThreadID: pending.ThreadID, TurnID: turnID, Status: "accepted", Initiator: pending.Initiator}}}, nil
+				}
+			}
 			return Result{Suppress: true}, nil
 		}
 		if t.pendingInternalTurnSet[requestID] {
@@ -156,12 +166,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 				delete(t.pendingInternalThreadSet, requestID)
 				action := choose(strings.TrimSpace(pending.Action), "thread/start")
 				t.Debugf("observe server %s error: request=%s error=%s", action, requestID, errMsg)
-				return Result{Events: []agentproto.Event{{
-					Kind:                 agentproto.EventTurnCompleted,
-					Status:               "failed",
-					ErrorMessage:         errMsg,
-					TurnCompletionOrigin: agentproto.TurnCompletionOriginThreadStartRejected,
-				}}}, nil
+				return Result{Events: []agentproto.Event{nativePromptRejectedEvent(
+					pending.Command.CommandID, requestID, "",
+					agentproto.TurnCompletionOriginThreadStartRejected, errMsg, commandFailureInitiator(pending.Command),
+				)}}, nil
 			}
 			threadID := lookupString(message, "result", "thread", "id")
 			if threadID == "" {
@@ -204,10 +212,12 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 			if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
 				t.Debugf("observe server thread/resume error: request=%s thread=%s kind=%s error=%s", requestID, pending.ThreadID, pending.Command.Kind, errMsg)
 				if pending.Command.Kind == agentproto.CommandThreadCompactStart {
-					return Result{Events: []agentproto.Event{agentproto.NewSystemErrorEvent(agentproto.ErrorInfo{
+					return Result{Events: []agentproto.Event{correlatedCommandErrorEvent(agentproto.ErrorInfo{
 						Code:             "compact_start_failed",
 						Layer:            "server",
 						Stage:            "thread_resume_response",
+						CommandID:        pending.Command.CommandID,
+						RequestID:        requestID,
 						Operation:        "thread.compact.start",
 						Message:          "Codex 拒绝了这次上下文压缩请求。",
 						Details:          errMsg,
@@ -215,13 +225,10 @@ func (t *Translator) ObserveServer(raw []byte) (Result, error) {
 						ThreadID:         pending.ThreadID,
 					})}}, nil
 				}
-				return Result{Events: []agentproto.Event{{
-					Kind:                 agentproto.EventTurnCompleted,
-					ThreadID:             pending.ThreadID,
-					Status:               "failed",
-					ErrorMessage:         errMsg,
-					TurnCompletionOrigin: agentproto.TurnCompletionOriginThreadResumeRejected,
-				}}}, nil
+				return Result{Events: []agentproto.Event{nativePromptRejectedEvent(
+					pending.Command.CommandID, requestID, pending.ThreadID,
+					agentproto.TurnCompletionOriginThreadResumeRejected, errMsg, commandFailureInitiator(pending.Command),
+				)}}, nil
 			}
 			t.currentThreadID = pending.ThreadID
 			if pending.Command.Target.CWD != "" {

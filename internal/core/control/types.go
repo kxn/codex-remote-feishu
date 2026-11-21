@@ -35,8 +35,6 @@ const (
 	ActionCronCommand                 ActionKind = "surface.command.cron"
 	ActionMCPOAuthCommand             ActionKind = "surface.command.mcp_oauth"
 	ActionUpgradeCommand              ActionKind = "surface.command.upgrade"
-	ActionTurnPatchCommand            ActionKind = "surface.command.turn_patch"
-	ActionTurnPatchRollback           ActionKind = "surface.command.turn_patch.rollback"
 	ActionVSCodeMigrateCommand        ActionKind = "surface.command.vscode_migrate"
 	ActionUpgradeOwnerFlow            ActionKind = "surface.command.upgrade_owner_flow"
 	ActionModelCommand                ActionKind = "surface.command.model"

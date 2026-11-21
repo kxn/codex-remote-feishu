@@ -24,7 +24,10 @@ func TestBuildOpenCodeChildLaunchStripsWrapperModeAndKeepsProfileEnv(t *testing.
 		ChildProxyEnv: []string{"HTTPS_PROXY=http://child-proxy.invalid"},
 	}}
 
-	args, env := app.buildOpenCodeChildLaunch()
+	args, env, err := app.buildOpenCodeChildLaunch()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Join(args, "\x00") != strings.Join([]string{"acp", "--cwd", workspaceRoot}, "\x00") {
 		t.Fatalf("opencode child args = %#v", args)
 	}
@@ -46,7 +49,10 @@ func TestBuildOpenCodeChildLaunchDefaultsToACPWorkspaceArgs(t *testing.T) {
 	workspaceRoot := "/tmp/opencode-default-work"
 	app := &App{config: Config{WorkspaceRoot: workspaceRoot}}
 
-	args, _ := app.buildOpenCodeChildLaunch()
+	args, _, err := app.buildOpenCodeChildLaunch()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if strings.Join(args, "\x00") != strings.Join([]string{"acp", "--cwd", pathcanon.Native(workspaceRoot)}, "\x00") {
 		t.Fatalf("default opencode child args = %#v", args)
 	}
@@ -81,7 +87,10 @@ func TestBootstrapOpenCodeACPWaitsForInitializeAndReplaysBufferedStdout(t *testi
 
 func TestBuildOpenCodeChildLaunchStripsWindowsExtendedWorkspace(t *testing.T) {
 	app := &App{config: Config{WorkspaceRoot: `\\?\C:\repo`}}
-	args, _ := app.buildOpenCodeChildLaunch()
+	args, _, err := app.buildOpenCodeChildLaunch()
+	if err != nil {
+		t.Fatal(err)
+	}
 	joined := strings.Join(args, "\x00")
 	if strings.Contains(joined, `\\?\`) || strings.Contains(joined, "//?/") {
 		t.Fatalf("extended-length workspace leaked into opencode child args: %q", joined)

@@ -62,11 +62,16 @@ type InstanceHello struct {
 }
 
 type Hello struct {
-	Protocol             string        `json:"protocol"`
-	Probe                bool          `json:"probe,omitempty"`
-	Instance             InstanceHello `json:"instance"`
-	Capabilities         Capabilities  `json:"capabilities,omitempty"`
-	CapabilitiesDeclared bool          `json:"capabilitiesDeclared,omitempty"`
+	CarrierProcess                   *RuntimeProcessIdentity `json:"carrierProcess,omitempty"`
+	RuntimeInspectionProtocolVersion int                     `json:"runtimeInspectionProtocolVersion,omitempty"`
+	JournalProtocolVersion           int                     `json:"journalProtocolVersion,omitempty"`
+	CarrierIncarnation               string                  `json:"carrierIncarnation,omitempty"`
+	WorkerProtocolVersion            int                     `json:"workerProtocolVersion,omitempty"`
+	Protocol                         string                  `json:"protocol"`
+	Probe                            bool                    `json:"probe,omitempty"`
+	Instance                         InstanceHello           `json:"instance"`
+	Capabilities                     Capabilities            `json:"capabilities,omitempty"`
+	CapabilitiesDeclared             bool                    `json:"capabilitiesDeclared,omitempty"`
 }
 
 type Welcome struct {
@@ -88,11 +93,12 @@ type EventBatch struct {
 }
 
 type CommandAck struct {
-	InstanceID string     `json:"instanceId,omitempty"`
-	CommandID  string     `json:"commandId,omitempty"`
-	Accepted   bool       `json:"accepted"`
-	Error      string     `json:"error,omitempty"`
-	Problem    *ErrorInfo `json:"problem,omitempty"`
+	RuntimeReceipt *RuntimeCommandReceipt `json:"runtimeReceipt,omitempty"`
+	InstanceID     string                 `json:"instanceId,omitempty"`
+	CommandID      string                 `json:"commandId,omitempty"`
+	Accepted       bool                   `json:"accepted"`
+	Error          string                 `json:"error,omitempty"`
+	Problem        *ErrorInfo             `json:"problem,omitempty"`
 }
 
 type ErrorEnvelope struct {
@@ -102,13 +108,14 @@ type ErrorEnvelope struct {
 }
 
 type Envelope struct {
-	Type       EnvelopeType   `json:"type"`
-	Hello      *Hello         `json:"hello,omitempty"`
-	Welcome    *Welcome       `json:"welcome,omitempty"`
-	EventBatch *EventBatch    `json:"eventBatch,omitempty"`
-	Command    *Command       `json:"command,omitempty"`
-	CommandAck *CommandAck    `json:"commandAck,omitempty"`
-	Error      *ErrorEnvelope `json:"error,omitempty"`
+	EventReceipt *EventReceipt  `json:"eventReceipt,omitempty"`
+	Type         EnvelopeType   `json:"type"`
+	Hello        *Hello         `json:"hello,omitempty"`
+	Welcome      *Welcome       `json:"welcome,omitempty"`
+	EventBatch   *EventBatch    `json:"eventBatch,omitempty"`
+	Command      *Command       `json:"command,omitempty"`
+	CommandAck   *CommandAck    `json:"commandAck,omitempty"`
+	Error        *ErrorEnvelope `json:"error,omitempty"`
 }
 
 func MarshalEnvelope(envelope Envelope) ([]byte, error) {

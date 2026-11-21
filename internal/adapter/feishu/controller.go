@@ -32,6 +32,7 @@ type PermissionBlockController interface {
 }
 
 type GatewayAppConfig struct {
+	RawIngressHook        *RawIngressHook
 	GatewayID             string
 	Name                  string
 	AppID                 string
@@ -155,6 +156,7 @@ func NewMultiGatewayController() *MultiGatewayController {
 	}
 	controller.newGateway = func(cfg GatewayAppConfig) gatewayRuntime {
 		return NewLiveGateway(LiveGatewayConfig{
+			RawIngressHook:        cfg.RawIngressHook,
 			GatewayID:             cfg.GatewayID,
 			AppID:                 cfg.AppID,
 			AppSecret:             cfg.AppSecret,

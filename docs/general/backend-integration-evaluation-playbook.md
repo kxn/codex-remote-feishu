@@ -478,7 +478,7 @@ Feishu 输入不是简单的一条 text prompt。接入前要确认 backend 能�
 - 是否需要新增 command display profile。
 - 每个命令是 native、approximation、passthrough、reject。
 - `/model`、`/reasoning`、`/access`、`/plan` 是 launch-only 还是 runtime configurable。
-- `/review`、`/patch`、`/cron`、`/auto-continue`、`/auto-whip`、`/primary`、`/coworkers`、`/sendfile` 是否 native、best_effort、deferred 或 unsupported。
+- `/review`、`/cron`、`/auto-continue`、`/auto-whip`、`/primary`、`/coworkers`、`/sendfile` 是否 native、best_effort、deferred 或 unsupported。
 - backend-specific reject 文案是否准确。
 - 菜单阶段是否正确，例如 normal working、VS Code working、headless detached。
 - config flow 是否能显示当前值、effective value、override value。
@@ -669,7 +669,7 @@ backend 接入容易把 secret、代理、路径、权限做错。
 | surface resume compatibility | `surfaceresume/state.go`、`app_surface_resume_state.go`、`service_surface_contract_*` | old state、backend/profile mismatch、missing profile 怎么恢复 | old schema、conflict diagnostic、fresh fallback |
 | headless preflight / restart | `service_claude_headless_preflight*`、`service_headless_contract_switch*` | profile/override 变化是复用、重启、exact resume 还是 fresh | reservation cleanup、auto-continue、restart restore |
 | child restart restore | `adapter/codex/translator_restart_restore*`、`wrapper/backend_runtime*` | wrapper restart 后如何恢复 focused thread 和 pending command | restore suppress replay、failure event、pending drop |
-| product commands | `translator_review*`、`translator_compact*`、`codexstate/turn_patch_*`、`service_review_session*` | `/review`、`/compact`、`/patch` 是否 native/unsupported/best_effort | command support、reject、lifecycle fixture |
+| product commands | `translator_review*`、`translator_compact*`、`service_review_session*` | `/review`、`/compact` 是否 native/unsupported/best_effort | command support、reject、lifecycle fixture |
 | model catalog / adjunct | `translator_model_catalog*`、`translator_model_adjunct*`、`feishu_reasoning_options.go` | model list、reasoning options、reroute/verification/safety 是否存在 | catalog updated、unsupported catalog、adjunct events |
 | token usage | `translator_token_usage*`、`agentproto/token_usage.go` | usage 是 per-turn、cumulative、cache 分项还是不可得 | accumulation、cache/reasoning fields、unknown handling |
 | MCP publication / OAuth | `app_child_mcp.go`、`translator_mcp_oauth*`、`service_mcp*` | MCP config 注入和 OAuth 是否同协议可复用 | injection、bearer redaction、oauth URL/completion |

@@ -760,16 +760,9 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 	}
 	dispatchPlan := agentproto.PromptDispatchPlanFromTarget(command.Target)
 	if dispatchPlan.ExecutionMode == agentproto.PromptExecutionModeForkEphemeral {
-		sourceThreadID := strings.TrimSpace(dispatchPlan.SourceThreadID)
-		if sourceThreadID == "" {
-			return nil, nil
-		}
-		resume, found, err := r.lookupForkSourceTarget(dispatchPlan)
+		resume, err := r.resolveLaunchResumeTarget(dispatchPlan)
 		if err != nil {
 			return nil, err
-		}
-		if !found || resume == nil {
-			return nil, nil
 		}
 		dispatchPlan.SourceThreadID = resume.ThreadID
 		if strings.TrimSpace(dispatchPlan.CWD) == "" {
@@ -802,7 +795,16 @@ func (r *claudeBackendRuntime) restartPlanForCommand(command agentproto.Command)
 		return nil, err
 	}
 	if !found || resume == nil {
-		return nil, nil
+		return nil, agentproto.ErrorInfo{
+			Code:             "claude_resume_thread_not_found",
+			Layer:            "wrapper",
+			Stage:            "prepare_child_restart",
+			Operation:        string(command.Kind),
+			Message:          "目标 Claude 会话当前不可恢复，当前不能直接切回这个会话。",
+			CommandID:        command.CommandID,
+			ThreadID:         targetThreadID,
+			SurfaceSessionID: command.Origin.Surface,
+		}
 	}
 	dispatchPlan.ExecutionThreadID = resume.ThreadID
 	if strings.TrimSpace(dispatchPlan.CWD) == "" {

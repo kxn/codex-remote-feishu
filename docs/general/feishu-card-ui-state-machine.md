@@ -1,8 +1,56 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-11-20`
-> Summary: 明确目标选择器的内存草稿导航与最终确认的实时校验边界。
+> Updated: `2026-11-21`
+> Summary: 增加持久团队视图、真实 SDK 回调、原位更新与未知结果的状态规则。
+
+## 0. 持久团队界面：本分支的新入口
+
+私聊引用无法证明工作归属时，`private.reply.notice` 仅显示原因及重新进入相应工作的操作说明，不附带默认批准或执行动作。提示入 outbox 与原消息进入 ignored 状态在同一事务完成，原始内容保留；发送失败仍沿用统一发送恢复。独立评审结果另用 `review.result` 展示已保存原文及分页，源工作暂停或繁忙不影响展示；“回到发起工作”只切换导航，不执行评审建议或恢复暂停。
+
+业务卡片回调必须已有非空、与实际 SDK 回调相同的 `ExternalMessageID`；发送结果未知时，仅收到点击不授予业务变更资格。系统先用同一机器人读取实际消息，核对冻结卡片版本和回调后保存收据，再校验当前对象并处理。核对失败则保留未确认事实并明确告知，不执行动作；已失效卡片即使补齐发送收据也不能重新生效。
+
+Codex 程序维护使用单独的确认／进度／结果视图，确认目标绑定实际安装指纹与固定版本，同一候选重复点击只能查询原事务。安装已登记时，迟到的取消操作返回真实进度，不能谎称取消成功。未知或完成状态各通知一次，初始进度卡未能登记也能从原确认来源恢复通知；更换 Bot 后不借新身份向旧私聊地址发送。
+
+新团队运行时使用持久 UIView、HumanInteraction 和共用 outbox。后文旧 projector／surface 卡片规则仅用于未进入新引擎的旧实现和迁移审计；新卡不再要求旧 daemon lifecycle token，而是校验持久视图及其业务目标。旧卡回调会明确提示入口已停用，不重新唤起旧执行引擎。
+
+### 接收与身份
+
+SDK 卡片回调先保存实际 App、用户、群、消息、事件和字段值，再返回“已收到”。菜单事件没有群和消息字段，不伪造这些字段；第一次菜单操作通过真实私聊发送回执建立目的地。卡片中的用户 ID、scope、权限标志都不能充当授权。
+
+UIView 只拥有展示，不拥有任务或原生会话。按钮再次校验对应业务对象的版本、Bot 身份代次和项目访问范围。转发卡、旧代次卡、已失效卡不能修改当前业务对象。原生问题还校验精确 worker／carrier／controller／request 语义；同请求 ID 的题目变化会使旧答复失效。
+
+### 原位更新与新增消息
+
+导航、设置和分页只有在真人操作的原卡已经确认发送、目的地和展示归属完全相同的情况下，才冻结该消息 ID 原位更新。Slash 命令和主动通知仍产生可见的新回复，不把更新藏到很早以前的菜单。决定结果和正式成果可作为独立交付保留。
+
+更新使用独立持久操作，旧 view 的按钮权限随新 view 登记失效。原位更新保持最初平台消息的会话映射，不用新的操作覆盖原消息归属。尚未发送且已经被替代的视图会取消，避免发送过时菜单。
+
+PATCH 没有 create 的 UUID 去重语义。响应丢失后保存 unknown，不重新发送可能覆盖后来界面的旧正文；后续明确打开入口可以创建新卡继续。普通新增消息在平台去重时间窗外同样不能盲目重发。
+
+### 问题、资料与错误
+
+原生多题请求按完整表单逐步保存草稿，只有最后确认才发送原生答复。密码等敏感字段不放入默认值或回显正文；可选跳过必须由人明确选择。表单不可渲染时显示具体限制并保留未答请求，不能默认批准或丢掉题目。
+
+错误提示说明发生了什么、哪些工作仍保留以及用户能做什么，不向用户暴露内部代号代替解释。资料和成果入口读取实际保存的版本；指向当前源文档的链接不能被标成历史版本链接。业务评审与版本回看入口仍在整体验收中，具体接线和验证见 [实施账本](../inprogress/feishu-agent-team-implementation.md)。
+
+### 外部结果未知和话题恢复
+
+资料未知写入使用 `resource.write.recovery` 与确认视图。创建无已知 ID 时，人明确提供现有资料入口；其他写入读取被冻结的原目标和精确区域。系统保存真实读取观察，人再次确认采用后，保存独立决策，原写入仍为 unknown 并禁止重放；这不等于原请求成功、被撤销或不再迟到生效。迟到原回执另存，不覆盖已经采用的观察。正常仍在本进程实际调用中的写入不产生恢复卡；这个活动标记只调节提示，不用来证明远端写入状态。
+
+项目归档只识别具备完整真实回调、消息收据、目标版本和读取观察的恢复决策。明确纯读取的资料操作不作为外部写入阻塞归档，其原记录仍然保留。
+
+`publication.recovery` 和 `project.recovery` 只展示被冻结的具体操作，真实点击后再核对身份、当前成员资格和对象版本。恢复卡本身发送未知不递归制造更多恢复卡。原卡实际 SDK 回调与同一 Bot 的 GetMessage、冻结按钮正文及话题一致时，可以补齐原卡发送回执；仅有相同文字不足以认领纯文本发送。过期卡可以作为只读收据观察来源，仍不能重新取得业务操作权限。
+
+首次任务消息发送未知、没有已知话题根时，或真实 SDK／同 Bot 精确 GetMessage 已证明原根撤回或删除时，人可明确点击“从这里继续后续进展”。以该已确认恢复卡消息作新根，保存独立人工操作及旧话题版本；原发送的 unknown/失败事实不改成成功，旧冻结发送不能重放。共用原话题的任务一起迁到新根，平台消息的原始归属映射不改写。恢复卡不能回复到已撤回的根。回执补读在独立恢复通道进行，每轮最多 16 个话题，优先读取最久未核查的项；权限错误、404 或没有响应不等于已删除。后到的删除证据会产生可操作的新恢复视图。
+
+正式成果保存媒体字节及哈希，缺少媒体或无法同版保存的嵌入内容明确标为不完整。查看保存版本从固定版本读取；当前源链接与已保存版本分开标注，原位文档编辑仍承认飞书没有提供跨全部资料的强事务或统一 CAS。
+
+### 当前回归证据
+
+`workpublish/ui_patch_test.go` 覆盖原位更新保持消息、重复登记、未知 PATCH 不重放及新入口恢复；`project_patch_card_test.go` 检查真实 SDK PATCH 请求目标和写入不重试；`ui_delivery_test.go` 覆盖转发、旧卡和未发送视图替代。本轮完整 UI 审计同时核对了业务决定、独立评审、程序维护、项目资料目录、未知写入恢复和原生请求。`app_work_resource_recovery_test.go`、`app_work_review_views_test.go`、`app_work_codex_upgrade_ui_test.go` 与 `workpublish/recovery_observation_test.go` 记录新增边界；实际飞书客户端呈现仍需生产环境验收。
+
+2026-11-21：`/bendtomywill` 的命令、菜单、回调、rollout 改写和回滚实现已完全删除。下文历史沿革不再代表该能力存在，也没有 hidden alias。
 
 ## 1. 文档定位
 
@@ -144,7 +192,6 @@ Goal 当前的回显约束：
 | `/mcpoauth <server>` / `/mcp-oauth <server>` | `daemon-command + append-only notice` | 文本命令解析成 `ActionMCPOAuthCommand`，再通过 `DaemonCommandMCPOAuthLogin` 发起 `mcpServer/oauth/login`。这条链路没有 Feishu card callback payload、没有 current-card replace、没有 request revision，也不占用 `G2 PendingRequest`；daemon 只把 command id 记为 pending OAuth flow，URL-ready 与 completed/error 都向发起 surface append 普通 notice。授权链接一次性展示完整 URL，完成/失败再发一条终态 notice；不会为了打字机效果频繁 patch 卡片 |
 | `/coworkers N` / `/coworkers status` / stamped `common_tools -> /coworkers` | `mixed (terminal command)` | 文本、slash 与菜单 exact/dynamic route 都由同一 `FeishuCommandSpec` 归一为 `ActionCoworkersCommand`。群聊内 `status` 可由任意 bot 查询，设置上限要求当前 bot 已通过 `/primary on` 成为 primary；单聊拒绝。菜单 callback 属于 `terminal_page + enter_terminal`，命中 stamped 当前菜单卡时以首个结果卡替换当前卡；纯文本 slash 保持 append-only。并发上限与 active 数量由 orchestrator 计算，设置成功后由 daemon 写入 room durable state，写失败保持旧配置并返回失败 notice |
 | bare `/compact` | `mixed` | 文本入口当前会先由 orchestrator 建立 compact owner-card flow，并 append 一张 patchable direct-command card；若入口来自 stamped `/menu current_work` 卡，则当前菜单卡会直接被绑定成 compact owner card。dispatching / running / completed / failed 都继续 patch 同一张卡。被动 compact completion 不复用这条前台 owner card；quiet 静默，normal/verbose 则继续并入共享过程卡 |
-| bare `/bendtomywill` / stamped `/menu common_tools -> /bendtomywill` | `mixed` | 文本或菜单入口当前都先走 daemon-side patch flow runtime：打开时会读取当前 attached thread 的 latest completed assistant turn 预览，并命中 refusal / placeholder 候选后生成一张 `request_user_input` 风格的多题 patch 卡。逐题回答时同一张卡会按 `request_revision` inline replace；全部题目完成后当前卡会切到 patchable progress page，随后 success / failure / rollback 结果继续 patch 同一张卡。若首卡还没有 `message_id`，runtime 会先用 `TrackingKey=flow_id` append，再在 gateway 分配 `message_id` 后回写；最近一次回滚按钮则通过 `page_action(ActionTurnPatchRollback, patch_id)` 继续收口到同一张卡。旧卡、他人点击、busy / VS Code / detached 拒绝，以及候选点不存在等路径，若入口来自 stamped 当前卡，会优先走 page-result replacement 收口，否则继续 append-only notice |
 | stamped `/menu maintenance -> /help` / `/status` | `launcher -> terminal` | 点击后 daemon 会把 handler 的首个结果卡（帮助目录或 snapshot 状态卡）直接 `ReplaceCurrentCard`，同时把 `command_menu` launcher flow 标记为 terminal/已退出。纯文本 `/help` / `/status` 仍保持 append-only。Snapshot 若表示 detached Feishu 群 surface 只有 room workspace binding、没有 attached runtime 或 pending headless，状态卡显示“群绑定目录”和“解除群绑定：/workspace detach”，不再把该目录投影成“当前目录” |
 | bare `/admin` / stamped `/menu maintenance -> /admin` | `launcher -> owner` | bare `/admin` 当前会直接打开系统管理根页；若从菜单 handoff 进入，则当前菜单卡会同位替成 `/admin` 根页，并通过 breadcrumb/related button 保留 `返回菜单`。该根页当前显式暴露 `管理页`、`网络模式` 两条入口，并只在 Linux/macOS 暴露 `自动启动`；`/admin web`、`/admin network` 与 `/admin autostart...` 的继续执行则分别进入 daemon command 路径。Windows 下 `/admin autostart` 不会在根页显示，但用户手动输入时仍会收到 unsupported/状态反馈，而不是静默吞掉 |
 | stamped `/menu 首页 -> 工作会话` 与后续 `/workspace` / `/workspace new` / `/workspace list` / `/workspace new dir` / `/workspace new git` / `/workspace new worktree` | `launcher -> owner` | `codex headless` 下从菜单首页点 `工作会话` 会先把原菜单卡替成 bare `/workspace` 父页；该父页当前直接显示 `切换 / 从目录新建 / 从 GIT URL 新建 / 从 Worktree 新建 / 解除接管`，`/workspace new` 子页也继续保留三条新建入口。workspace page owner runtime 现在会显式记录 handoff 来源卡的 `message_id` 与 `from_menu`，而 target-picker owner runtime 会继续保存一份结构化父页 back payload；因此从这些父页继续进入目录/Git/worktree 业务卡时，子卡 footer 的 `返回上一层` 会稳定回到父页或菜单，不再依赖命令字符串重放或退化到内部 no-op。该路径当前通过显式 `launcher -> owner` handoff 进入业务卡，不再依赖旧 `MenuFlow` 长驻语义。旧 alias `/list` / `/use` / `/useall` 直接输入时也会落到相同业务卡，但不再作为菜单主展示 |
@@ -893,9 +940,6 @@ MCP request 卡片当前新增的可视语义：
 - [internal/app/daemon/app_ui.go](../../internal/app/daemon/app_ui.go)
 - [internal/app/daemon/app_upgrade.go](../../internal/app/daemon/app_upgrade.go)
 - [internal/app/daemon/app_upgrade_owner_card.go](../../internal/app/daemon/app_upgrade_owner_card.go)
-- [internal/app/daemon/app_turn_patch.go](../../internal/app/daemon/app_turn_patch.go)
-- [internal/app/daemon/app_turn_patch_tx.go](../../internal/app/daemon/app_turn_patch_tx.go)
-- [internal/app/daemon/app_turn_patch_view.go](../../internal/app/daemon/app_turn_patch_view.go)
 - [internal/app/daemon/app_thread_history.go](../../internal/app/daemon/app_thread_history.go)
 - [internal/app/daemon/app_mcp_oauth.go](../../internal/app/daemon/app_mcp_oauth.go)
 - [internal/app/daemon/app_inbound_lifecycle.go](../../internal/app/daemon/app_inbound_lifecycle.go)
@@ -936,8 +980,6 @@ MCP request 卡片当前新增的可视语义：
   - 锁定 callback payload 解析、同步等待 replace 的触发条件（inline navigation + stamped command result replacement + dormant command submission anchor compatibility branch）、无 lifecycle 导航仍异步 ack、card/text attention annotation 的 reply/fallback 出站路径，以及共享更新卡的 `message.patch` 出站路径
 - [internal/app/daemon/app_review_mode_test.go](../../internal/app/daemon/app_review_mode_test.go)
   - 锁定菜单 `review` 与 bare `/review` 都先进入同一张 `审阅代码变更` root page，并在 root page 内显式分流 `Review 待提交内容` / `Review 指定提交`；同时锁定普通 final card 上的 `Review 待提交内容` 与 `评审 <short-sha>` footer 继续 append-only、不覆盖源 final card，以及 ready review session final card 的 `继续追问审阅` / `退出审阅` / `按审阅意见继续修改` 路径
-- [internal/app/daemon/app_turn_patch_test.go](../../internal/app/daemon/app_turn_patch_test.go)
-  - 锁定 `/bendtomywill` 打开多题 request 卡、owner/revision 校验、busy/VS Code 拒绝、apply 成功后的 rollout 改写与 reasoning 清理，以及 child restart 失败后的自动回滚收口
 - [internal/app/daemon/app_upgrade_owner_card_test.go](../../internal/app/daemon/app_upgrade_owner_card_test.go)
   - 锁定 `/upgrade latest` checking / confirm / cancel 的 owner-card flow 会通过 page `TrackingKey -> message_id` 回写继续 patch 同一张升级卡
 - [internal/app/daemon/app_codex_upgrade_owner_card_test.go](../../internal/app/daemon/app_codex_upgrade_owner_card_test.go)
@@ -1064,5 +1106,7 @@ MCP request 卡片当前新增的可视语义：
 11. AppID 替换或删除时，旧 gateway generation 的 callback 是否在旧 surface/UI runtime 清理前完成关闭与排空；identity pending transition 是否能挡住清理失败后的旧 AppID unchanged 启动；新 App 不得因复用 GatewayID 而继承旧 card owner 或 turn patch owner runtime
 
 ## 待讨论取舍
+
+以下为旧界面的历史取舍；本分支新入口及尚未验证项目见实施账本。
 
 - final reply split 当前采用“主卡保留原标题与 footer，overflow 统一标题为 `✅ 最后答复（续）`”的最小语义；是否要进一步升级成显式 `1/N` 编号、或把 footer 改挂到最后一张 continuation card，仍是产品取舍。

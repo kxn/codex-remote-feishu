@@ -119,9 +119,6 @@ func TestResolveFeishuCommandDisplayFamilySupportsMenuStageProjection(t *testing
 		{name: "new hidden when detached", familyID: FeishuCommandNew, productMode: "normal", menuStage: string(FeishuCommandMenuStageDetached), wantVisible: false},
 		{name: "new visible in normal working", familyID: FeishuCommandNew, productMode: "normal", menuStage: string(FeishuCommandMenuStageNormalWorking), wantVisible: true},
 		{name: "new hidden in vscode working", familyID: FeishuCommandNew, productMode: "vscode", menuStage: string(FeishuCommandMenuStageVSCodeWorking), wantVisible: false},
-		{name: "patch hidden when detached", familyID: FeishuCommandPatch, productMode: "normal", menuStage: string(FeishuCommandMenuStageDetached), wantVisible: false},
-		{name: "patch visible in normal working", familyID: FeishuCommandPatch, productMode: "normal", menuStage: string(FeishuCommandMenuStageNormalWorking), wantVisible: true},
-		{name: "patch hidden in vscode working", familyID: FeishuCommandPatch, productMode: "vscode", menuStage: string(FeishuCommandMenuStageVSCodeWorking), wantVisible: false},
 		{name: "status stays visible for unknown stage", familyID: FeishuCommandStatus, productMode: "normal", menuStage: "unknown-stage", wantVisible: true},
 		{name: "follow stays hidden for unknown stage", familyID: FeishuCommandFollow, productMode: "vscode", menuStage: "unknown-stage", wantVisible: false},
 	}
@@ -157,7 +154,6 @@ func TestResolveFeishuCommandDisplayProfileTracksModeSpecificFamilies(t *testing
 	}
 	if got, want := codex.VisibleFamiliesForGroup(FeishuCommandGroupCommonTools), []string{
 		FeishuCommandReview,
-		FeishuCommandPatch,
 		FeishuCommandAutoWhip,
 		FeishuCommandPrimary,
 		FeishuCommandCoworkers,
@@ -366,7 +362,6 @@ func TestResolveFeishuCommandDisplayProfileForContextUsesOpenCodeProfile(t *test
 		{familyID: FeishuCommandAccess, kind: FeishuCommandSupportNative, notePart: ""},
 		{familyID: FeishuCommandPlan, kind: FeishuCommandSupportNative, notePart: ""},
 		{familyID: FeishuCommandModel, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
-		{familyID: FeishuCommandPatch, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandAutoWhip, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandAutoContinue, kind: FeishuCommandSupportReject, notePart: "OpenCode"},
 		{familyID: FeishuCommandCodexProfile, kind: FeishuCommandSupportReject, notePart: "/mode codex"},

@@ -79,26 +79,6 @@ func TestParseFeishuTextActionRecognizesUpgradeCommand(t *testing.T) {
 	}
 }
 
-func TestParseFeishuTextActionRecognizesBendToMyWillRollbackCommand(t *testing.T) {
-	tests := []string{
-		"/bendtomywill",
-		"/bendtomywill rollback",
-		"/bendtomywill rollback patch-thread-1-1",
-	}
-	for _, input := range tests {
-		action, ok := ParseFeishuTextActionWithoutCatalog(input)
-		if !ok {
-			t.Fatalf("expected %q to be parsed", input)
-		}
-		if action.Kind != ActionTurnPatchCommand {
-			t.Fatalf("input %q => kind %q, want %q", input, action.Kind, ActionTurnPatchCommand)
-		}
-		if action.Text != input {
-			t.Fatalf("input %q => text %q, want raw command", input, action.Text)
-		}
-	}
-}
-
 func TestParseFeishuTextActionRecognizesAutoWhipCommand(t *testing.T) {
 	tests := []string{
 		"/autowhip",
@@ -497,7 +477,6 @@ func TestFeishuCommandRegistryActionRoundTrip(t *testing.T) {
 		{commandID: FeishuCommandNew, wantKind: ActionNewThread, wantSlash: "/new"},
 		{commandID: FeishuCommandDetach, wantKind: ActionDetach, wantSlash: "/detach"},
 		{commandID: FeishuCommandFollow, wantKind: ActionFollowLocal, wantSlash: "/follow"},
-		{commandID: FeishuCommandPatch, wantKind: ActionTurnPatchCommand, wantSlash: "/bendtomywill"},
 		{commandID: FeishuCommandCoworkers, wantKind: ActionCoworkersCommand, wantSlash: "/coworkers"},
 		{commandID: FeishuCommandWorkspaceNewWorktree, wantKind: ActionWorkspaceNewWorktree, wantSlash: "/workspace new worktree"},
 	}

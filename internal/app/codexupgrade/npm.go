@@ -67,6 +67,10 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 	if strings.TrimSpace(name) == "" {
 		return "", exec.ErrNotFound
 	}
+	name, args, resolveErr := npmInvocation(name, args)
+	if resolveErr != nil {
+		return "", resolveErr
+	}
 	cmd := execlaunch.CommandContext(ctx, name, args...)
 	output, err := cmd.CombinedOutput()
 	if err == nil {

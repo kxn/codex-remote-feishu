@@ -10,6 +10,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/app/installshim"
+	"github.com/kxn/codex-remote-feishu/internal/app/teamcli"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
 )
 
@@ -25,6 +26,7 @@ type Options struct {
 }
 
 type RunnerSet struct {
+	RunTeam                 func(context.Context, []string, io.Reader, io.Writer, io.Writer) error
 	RunDaemon               func(context.Context, []string, string, string) error
 	RunInstall              func([]string, io.Reader, io.Writer, io.Writer, string) error
 	RunPackagedInstall      func([]string, io.Reader, io.Writer, io.Writer, string) error
@@ -75,6 +77,12 @@ func Main(opts Options) int {
 	defer stop()
 
 	switch decision.Role {
+	case RoleTeam:
+		if err := opts.Runners.RunTeam(ctx, decision.Args, opts.Stdin, opts.Stdout, opts.Stderr); err != nil {
+			_, _ = fmt.Fprintf(opts.Stderr, "team error: %v\n", err)
+			return 1
+		}
+		return 0
 	case RoleDaemon:
 		if err := opts.Runners.RunDaemon(ctx, decision.Args, opts.Version, opts.Branch); err != nil && err != context.Canceled {
 			_, _ = fmt.Fprintf(opts.Stderr, "service error: %v\n", err)
@@ -149,6 +157,9 @@ func withDefaults(opts Options) Options {
 	if opts.Branch == "" {
 		opts.Branch = "dev"
 	}
+	if opts.Runners.RunTeam == nil {
+		opts.Runners.RunTeam = teamcli.RunMain
+	}
 	if opts.Runners.RunDaemon == nil {
 		opts.Runners.RunDaemon = daemon.RunMainWithArgs
 	}
@@ -180,6 +191,7 @@ func usageText() string {
 	return `Usage:
   codex-remote
   codex-remote daemon [flags]
+  codex-remote team <command> --run-ref <run_ref> [--file <path>|--stdin]
   codex-remote install [flags]
   codex-remote packaged-install [flags]
   codex-remote packaged-install-probe [flags]

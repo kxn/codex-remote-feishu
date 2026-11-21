@@ -37,6 +37,7 @@ type LoadedAppConfig struct {
 }
 
 type AppConfig struct {
+	Work           WorkSettings           `json:"work,omitempty"`
 	Version        int                    `json:"version"`
 	Relay          RelaySettings          `json:"relay"`
 	Admin          AdminSettings          `json:"admin"`
@@ -165,6 +166,7 @@ func DefaultConfigPath() string {
 func DefaultAppConfig() AppConfig {
 	return AppConfig{
 		Version: currentConfigVersion,
+		Work:    WorkSettings{DefaultGoalTokenBudget: DefaultWorkGoalTokenBudget},
 		Relay: RelaySettings{
 			ServerURL:  defaultRelayServerURL(defaultRelayListenPort),
 			ListenHost: defaultRelayListenHost,
@@ -222,6 +224,9 @@ func WriteAppConfig(path string, cfg AppConfig) error {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	if err := cfg.Work.Validate(); err != nil {
 		return err
 	}
 	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
@@ -285,6 +290,9 @@ func readConfigFile(path string) (AppConfig, error) {
 			return AppConfig{}, unsupportedLegacyConfigPathError(path)
 		}
 		return AppConfig{}, fmt.Errorf("parse json config %s: %w", path, err)
+	}
+	if err := cfg.Work.Validate(); err != nil {
+		return AppConfig{}, err
 	}
 	if err := ValidateCodexAPIProfileRecords(cfg.Codex.Profiles); err != nil {
 		return AppConfig{}, fmt.Errorf("validate codex profile catalog %s: %w", path, err)
@@ -364,6 +372,9 @@ func feishuAppEnabled(app FeishuAppConfig) bool {
 
 func (cfg AppConfig) normalized() AppConfig {
 	defaults := DefaultAppConfig()
+	if cfg.Work.DefaultGoalTokenBudget == 0 {
+		cfg.Work.DefaultGoalTokenBudget = defaults.Work.DefaultGoalTokenBudget
+	}
 
 	if cfg.Version <= 0 {
 		cfg.Version = defaults.Version

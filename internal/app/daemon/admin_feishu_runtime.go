@@ -139,6 +139,7 @@ func (a *App) gatewayRuntimeHooks() gatewayRuntimeHooks {
 		return gatewayRuntimeHooks{}
 	}
 	return gatewayRuntimeHooks{
+		RawIngressHook:        a.teamIngressHook(),
 		PrimaryGatewayForChat: a.feishuPrimaryGatewayForChat,
 		BotOpenIDForGateway:   a.feishuFactBotOpenID,
 	}

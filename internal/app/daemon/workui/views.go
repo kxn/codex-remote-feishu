@@ -1,0 +1,136 @@
+// Package workui projects durable business objects into Feishu. View records
+// own presentation and callback freshness, never tasks or native sessions.
+package workui
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu/cardkit"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/core/work"
+)
+
+type Button struct {
+	Label, Action string
+	Values        map[string]any
+}
+type Panel struct {
+	Title      string
+	Paragraphs []string
+	Buttons    []Button
+}
+
+func ID(parts ...string) string {
+	body, _ := json.Marshal(parts)
+	sum := sha256.Sum256(body)
+	return "view_" + hex.EncodeToString(sum[:20])
+}
+
+func Card(viewID string, panel Panel) (json.RawMessage, error) {
+	if panel.Title == "" {
+		return nil, fmt.Errorf("view title required")
+	}
+	elements := []any{}
+	for _, text := range panel.Paragraphs {
+		if block := cardkit.PlainTextBlockElement(text); block != nil {
+			elements = append(elements, block)
+		}
+	}
+	for _, button := range panel.Buttons {
+		value := cardkit.CloneMap(button.Values)
+		if value == nil {
+			value = map[string]any{}
+		}
+		value["team_view"] = viewID
+		value["action"] = button.Action
+		elements = append(elements, map[string]any{"tag": "button", "text": cardkit.PlainText(button.Label), "behaviors": []any{map[string]any{"type": "callback", "value": value}}})
+	}
+	if len(elements) > 150 {
+		return nil, fmt.Errorf("view needs pagination")
+	}
+	return json.Marshal(map[string]any{"schema": "2.0", "config": map[string]any{"update_multi": true}, "header": map[string]any{"title": cardkit.PlainText(panel.Title)}, "body": map[string]any{"elements": elements}})
+}
+
+// Queue is atomic with its caller's business transaction. Failed publication
+// uses the same outbox, UUID, binding checks and recovery as role messages.
+func Queue(tx *workstore.Tx, view workstore.UIView, card json.RawMessage) (workstore.UIView, error) {
+	if view.ID == "" || len(card) == 0 || len(card) > 28*1024 || !json.Valid(card) {
+		return view, fmt.Errorf("invalid view body")
+	}
+	projection := workservice.MessageProjection{RoleID: view.Binding.RoleID, GatewayRef: view.Binding.GatewayRef, AppID: view.Binding.AppID, BotGeneration: view.Binding.IdentityGeneration, Tenant: view.Tenant, ChatID: view.ChatID, ChannelGeneration: view.ChannelGeneration, ReplyToMessageID: view.ReplyToMessageID, Card: card, UIViewID: view.ID}
+	if view.ReplacesViewID != "" {
+		old, e := tx.GetUIView(view.ReplacesViewID)
+		if e != nil {
+			return view, e
+		}
+		op, e := tx.GetOperation(old.OperationID)
+		if e != nil {
+			return view, e
+		}
+		existing, lookupErr := tx.GetUIView(view.ID)
+		replay := lookupErr == nil && existing.ReplacesViewID == view.ReplacesViewID
+		if lookupErr != nil && !errors.Is(lookupErr, workstore.ErrNotFound) {
+			return view, lookupErr
+		}
+		if (old.Invalidated && !replay) || old.ExternalMessageID == "" || op.State != work.OperationConfirmed ||
+			old.ScopeID != view.ScopeID || old.SurfaceKey != view.SurfaceKey || old.Binding != view.Binding ||
+			old.ChatID != view.ChatID || old.Tenant != view.Tenant || old.PrincipalID != view.PrincipalID {
+			return view, fmt.Errorf("replacement no longer owns the displayed message")
+		}
+		projection.ReplaceMessageID = old.ExternalMessageID
+		projection.ReplyToMessageID = ""
+	}
+	body, err := json.Marshal(projection)
+	if err != nil {
+		return view, err
+	}
+	content := work.NewContent(view.ID+":body", view.ScopeID, "application/json", body, time.Now().UTC())
+	if old, e := tx.GetUIView(view.ID); e == nil {
+		stored, e := tx.GetContent(old.ScopeID, old.BodyRef)
+		if e != nil {
+			return view, e
+		}
+		if stored.SHA256 != content.SHA256 {
+			return view, workstore.ErrIdempotencyConflict
+		}
+		return old, nil
+	} else if !errors.Is(e, workstore.ErrNotFound) {
+		return view, e
+	}
+	if err = tx.PutContent(content); err != nil {
+		return view, err
+	}
+	view.BodyRef = content.ID
+	view.OperationID = view.ID + ":publish"
+	view.Revision = 1
+	view.CreatedAt = time.Now().UTC()
+	op := work.Operation{ID: view.OperationID, ScopeID: view.ScopeID, ContextID: view.ContextID, Actor: work.Actor{Kind: work.ActorSystem, ID: "team-ui"}, Kind: "feishu.publish", TargetID: view.ChatID, TargetGeneration: view.Binding.IdentityGeneration, IdempotencyKey: view.OperationID, RequestRef: content.ID, RequestHash: content.SHA256, State: work.OperationPrepared, Revision: 1, CreatedAt: view.CreatedAt, UpdatedAt: view.CreatedAt}
+	if _, _, err = tx.PutOperation(op, 0); err != nil {
+		return view, err
+	}
+	if err = tx.PutOutbox(work.Outbox{ID: view.ID + ":outbox", ScopeID: view.ScopeID, OperationID: op.ID, Target: view.ChatID, EventID: op.ID, PayloadRef: content.ID, State: work.OutboxPending, Revision: 1}, 0); err != nil {
+		return view, err
+	}
+	previous, err := tx.ListUIViews(view.ScopeID)
+	if err != nil {
+		return view, err
+	}
+	for _, old := range previous {
+		if old.SurfaceKey == view.SurfaceKey && !old.Invalidated {
+			revision := old.Revision
+			old.Revision++
+			old.Invalidated = true
+			if err = tx.PutUIView(old, revision); err != nil {
+				return view, err
+			}
+		}
+	}
+	err = tx.PutUIView(view, 0)
+	return view, err
+}

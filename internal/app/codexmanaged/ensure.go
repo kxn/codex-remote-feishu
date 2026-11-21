@@ -78,6 +78,10 @@ func ensure(ctx context.Context, configuredBinary, root string, ops operations) 
 	}
 	defer lock.Release()
 
+	if binary, pinned, err := readExactPin(ctx, root, ops); pinned {
+		return binary, err
+	}
+
 	configured, configuredErr := verifyCandidate(ctx, configuredBinary, ops)
 	if configuredErr != nil {
 		return "", fmt.Errorf("verify configured Codex before private update: %w", configuredErr)

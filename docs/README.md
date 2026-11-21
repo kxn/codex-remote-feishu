@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-21`
-> Summary: 增加面向阅读和讨论的 Agent 团队产品说明，与研发实施规格分开呈现。
+> Summary: 汇总 Agent 团队产品说明、实施规格、执行记录与验收证据，并保留已退役功能的历史设计。
 
 ## 1. 适用范围
 
@@ -178,6 +178,9 @@
 
 ### 6.3 `inprogress`
 
+- [feishu-agent-team-acceptance.md](./inprogress/feishu-agent-team-acceptance.md) — 产品场景与实际实现、测试证据及真实环境边界映射。
+- [feishu-agent-team-implementation.md](./inprogress/feishu-agent-team-implementation.md) — 完整产品实施计划、子代理分工、依赖与验证记录。
+
 - [claude-backend-integration-plan.md](./inprogress/claude-backend-integration-plan.md)
 - [claude-plan-confirmation-permission-panel-design.md](./inprogress/claude-plan-confirmation-permission-panel-design.md)
 - [claude-live-projection-semantics-design.md](./inprogress/claude-live-projection-semantics-design.md)
@@ -199,8 +202,6 @@
 - [codex-session-patcher-research-2026-04.md](./draft/codex-session-patcher-research-2026-04.md)
 - [codex-profile-oauth-isolation-design.md](./draft/codex-profile-oauth-isolation-design.md)
 - [claude-cli-blackbox-test-plan.md](./draft/claude-cli-blackbox-test-plan.md)
-- [current-thread-patch-v1-prd.md](./draft/current-thread-patch-v1-prd.md)
-- [current-thread-patch-v1-tech-plan.md](./draft/current-thread-patch-v1-tech-plan.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
 - [feishu-agent-team-product-overview.md](./draft/feishu-agent-team-product-overview.md) — 产品阅读入口：从建立项目到协作、交付和日常管理，连贯说明使用体验。
 - [feishu-agent-team-product-design.md](./draft/feishu-agent-team-product-design.md) — 面向研发的产品实施规格：用户故事、交互细节与验收场景。
@@ -243,6 +244,9 @@
 - [workspace-mode-redesign.md](./draft/workspace-mode-redesign.md)
 
 ### 6.5 `obsoleted`
+
+- [current-thread-patch-v1-prd.md](./obsoleted/current-thread-patch-v1-prd.md)
+- [current-thread-patch-v1-tech-plan.md](./obsoleted/current-thread-patch-v1-tech-plan.md)
 
 - [app-server-redesign.md](./obsoleted/app-server-redesign.md)
 - [claude-feidex-reassessment.md](./obsoleted/claude-feidex-reassessment.md)

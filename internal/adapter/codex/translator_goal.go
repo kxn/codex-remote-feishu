@@ -63,9 +63,12 @@ func (t *Translator) observeThreadGoalCommandResponse(pending pendingGoalRequest
 	event := agentproto.Event{
 		Kind:      agentproto.EventThreadGoalCommandResult,
 		CommandID: pending.CommandID,
+		RequestID: fmt.Sprint(message["id"]),
+		Status:    "accepted",
 		ThreadID:  pending.ThreadID,
 	}
 	if errMsg := jsonrpcutil.ExtractErrorMessage(message); errMsg != "" {
+		event.Status = "failed"
 		event.ErrorMessage = errMsg
 		return Result{Events: []agentproto.Event{event}}
 	}

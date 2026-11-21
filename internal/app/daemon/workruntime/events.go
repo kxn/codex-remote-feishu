@@ -1,0 +1,405 @@
+package workruntime
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/work"
+)
+
+func (c *Coordinator) HandleEvent(ctx context.Context, currentTransportInstance string, event agentproto.Event) error {
+	if event.Journal == nil {
+		if event.Kind == agentproto.EventItemDelta || event.Kind == agentproto.EventThreadTokenUsageUpdated {
+			return nil
+		}
+		return fmt.Errorf("critical worker event requires durable journal identity")
+	}
+	var receipt agentproto.EventReceipt
+	var attemptID string
+	err := c.store.Within(ctx, func(tx *workstore.Tx) error {
+		carrier, err := tx.GetCarrier(event.Journal.CarrierIncarnation)
+		if err != nil {
+			return err
+		}
+		if err := c.validateTransport(tx, carrier, currentTransportInstance); err != nil {
+			return err
+		}
+		receipt, _, err = tx.AcceptRuntimeEvent(carrier.OriginInstanceID, event, c.options.Clock(), func(tx *workstore.Tx) error {
+			var e error
+			attemptID, e = c.applyEvent(tx, carrier, event, true)
+			return e
+		})
+		if err == nil && attemptID == "" && nativeLifecycleKind(event.Kind) {
+			if binding, e := c.resolveBinding(tx, carrier, event); e == nil {
+				if worker, e := tx.GetWorker(binding.WorkerSessionID); e == nil && carrier.Matches(worker) {
+					attemptID = binding.AttemptID
+				}
+			}
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	var receiptErr error
+	if c.options.SendReceipt != nil {
+		receipt.InstanceID = currentTransportInstance
+		receiptErr = c.options.SendReceipt(currentTransportInstance, receipt)
+	}
+	if attemptID != "" {
+		err = c.scheduleReconcile(ctx, attemptID)
+	}
+	if receiptErr != nil {
+		return receiptErr
+	}
+	return err
+}
+
+func (c *Coordinator) resolveBinding(tx *workstore.Tx, carrier workstore.CarrierRegistration, event agentproto.Event) (agentproto.ExecutionBinding, error) {
+	if event.Execution != nil {
+		if !carrier.Owner.SameOwner(*event.Execution) {
+			return agentproto.ExecutionBinding{}, fmt.Errorf("event carrier owner mismatch")
+		}
+		if _, err := tx.ValidateNativeBinding(*event.Execution); err != nil {
+			return agentproto.ExecutionBinding{}, err
+		}
+		if event.CommandID != "" {
+			command, err := tx.ResolveNativeCommand(carrier.Incarnation, event.CommandID)
+			if err != nil {
+				return agentproto.ExecutionBinding{}, err
+			}
+			if command.Incarnation != carrier.Incarnation || command.Binding != *event.Execution {
+				return agentproto.ExecutionBinding{}, fmt.Errorf("event command binding mismatch")
+			}
+		}
+		return *event.Execution, nil
+	}
+	if event.CommandID != "" {
+		command, err := tx.ResolveNativeCommand(carrier.Incarnation, event.CommandID)
+		if err != nil {
+			return agentproto.ExecutionBinding{}, err
+		}
+		if command.Incarnation != carrier.Incarnation {
+			return agentproto.ExecutionBinding{}, fmt.Errorf("event command belongs to another incarnation")
+		}
+		return command.Binding, nil
+	}
+	if event.ThreadID != "" && event.TurnID != "" {
+		turn, err := tx.GetNativeTurn(carrier.Incarnation, event.ThreadID, event.TurnID)
+		if err == nil {
+			return turn.Binding, nil
+		}
+		if !errors.Is(err, workstore.ErrNotFound) {
+			return agentproto.ExecutionBinding{}, err
+		}
+	}
+	if event.Kind == agentproto.EventTurnStarted || event.Kind == agentproto.EventThreadGoalUpdated || event.Kind == agentproto.EventThreadGoalCommandResult {
+		grant, err := tx.GetContinuationGrant(carrier.Incarnation, event.ThreadID)
+		if err == nil && grant.Active && grant.Reconciled {
+			worker, e := tx.GetWorker(grant.Binding.WorkerSessionID)
+			if e != nil {
+				return agentproto.ExecutionBinding{}, e
+			}
+			occupied, e := tx.HasCarrierOccupancy(carrier, grant.Binding.AttemptID)
+			if e != nil {
+				return agentproto.ExecutionBinding{}, e
+			}
+			if carrier.Matches(worker) && worker.Controller == work.ControllerAutomatic && occupied {
+				return grant.Binding, nil
+			}
+		}
+	}
+	return agentproto.ExecutionBinding{}, workstore.ErrNotFound
+}
+
+func (c *Coordinator) applyEvent(tx *workstore.Tx, carrier workstore.CarrierRegistration, event agentproto.Event, drain bool) (string, error) {
+	if event.Kind == agentproto.EventRuntimeMCPResult || event.Kind == agentproto.EventMCPOAuthLoginURLReady || event.Kind == agentproto.EventMCPOAuthLoginCompleted {
+		return "", c.applyMCPReceipt(tx, carrier, event)
+	}
+	if event.Kind == agentproto.EventItemCompleted && event.ItemKind == "agent_message" && c.options.ApplyReviewEvent != nil {
+		return "", c.applyReviewOutput(tx, carrier, event)
+	}
+	if event.Kind == agentproto.EventThreadGoalCommandResult && event.Execution != nil && event.Execution.AttemptID == "" && event.Execution.RunRef == "" {
+		return "", c.applyOwnerGoalReceipt(tx, carrier, event)
+	}
+	if event.Kind == agentproto.EventNativeMaintenanceStarted || event.Kind == agentproto.EventNativeMaintenanceTerminal {
+		return "", c.applyMaintenanceEvent(tx, carrier, event)
+	}
+	if event.Kind == agentproto.EventModelCatalogUpdated {
+		if event.CommandID == "" {
+			return "", nil
+		}
+		return "", tx.RecordRuntimeModelCatalog(event)
+	}
+	switch event.Kind {
+	case agentproto.EventNativeTurnBindingObserved, agentproto.EventTurnStarted, agentproto.EventTurnCompleted, agentproto.EventThreadGoalCommandResult, agentproto.EventThreadGoalUpdated, agentproto.EventRequestStarted, agentproto.EventRequestResolved, agentproto.EventNativeTurnInputAccepted, agentproto.EventNativeTurnInputRejected:
+	default:
+		return "", nil
+	}
+	binding, err := c.resolveBinding(tx, carrier, event)
+	if err != nil {
+		if e := tx.QuarantineRuntimeEvent(event, "native_ownership_unproven"); e != nil {
+			return "", e
+		}
+		return "", c.gate(tx, carrier, "", "native_ownership_unproven")
+	}
+	worker, err := tx.GetWorker(binding.WorkerSessionID)
+	if err != nil {
+		return "", err
+	}
+	current := carrier.Matches(worker)
+	if event.Kind == agentproto.EventNativeTurnInputAccepted || event.Kind == agentproto.EventNativeTurnInputRejected {
+		return binding.AttemptID, c.applyInputAdmissionReceipt(tx, binding, event)
+	}
+	if event.Kind == agentproto.EventRequestStarted || event.Kind == agentproto.EventRequestResolved {
+		if c.options.ApplyNativeRequest == nil {
+			return "", c.gate(tx, carrier, binding.AttemptID, "native_request_handler_unavailable")
+		}
+		return "", c.options.ApplyNativeRequest(tx, carrier, binding, event)
+	}
+	if event.Kind == agentproto.EventThreadGoalCommandResult || event.Kind == agentproto.EventThreadGoalUpdated {
+		if event.Kind == agentproto.EventThreadGoalCommandResult && event.RequestID == "" {
+			if err := tx.QuarantineRuntimeEvent(event, "native_goal_rpc_unproven"); err != nil {
+				return "", err
+			}
+			return "", c.gate(tx, carrier, binding.AttemptID, "native_goal_rpc_unproven")
+		}
+		if event.ErrorMessage != "" {
+			if event.Kind == agentproto.EventThreadGoalCommandResult {
+				if err := c.failGoalReceipt(tx, event); err != nil {
+					return "", err
+				}
+			}
+			if current {
+				return "", c.gate(tx, carrier, binding.AttemptID, "native_continuation_result_unknown")
+			}
+			return "", nil
+		}
+		if err := c.confirmGoalReceipt(tx, event); err != nil {
+			return "", err
+		}
+		active := false
+		if event.ThreadGoal != nil {
+			switch event.ThreadGoal.Status {
+			case "active":
+				active = true
+			case "paused", "completed", "budget_exhausted":
+			default:
+				return "", c.gate(tx, carrier, binding.AttemptID, "native_continuation_state_unknown")
+			}
+		}
+		if !event.GoalCleared && event.ThreadGoal == nil && !event.GoalMissing {
+			return "", c.gate(tx, carrier, binding.AttemptID, "native_continuation_state_unknown")
+		}
+		if active {
+			allowed, e := nativeGoalAdmission(tx, worker)
+			if e != nil {
+				return "", e
+			}
+			if !allowed {
+				return "", c.gate(tx, carrier, binding.AttemptID, "native_goal_paused")
+			}
+			context, e := tx.GetContext(worker.ContextID)
+			if e != nil {
+				return "", e
+			}
+			if context.Purpose == work.PurposeControl {
+				return "", c.gate(tx, carrier, binding.AttemptID, "management_continuation_forbidden")
+			}
+		}
+		if active && current && worker.Controller != work.ControllerAutomatic {
+			return "", c.gate(tx, carrier, binding.AttemptID, "continuation_requires_automatic_control")
+		}
+		version := int64(0)
+		if event.ThreadGoal != nil {
+			version = event.ThreadGoal.UpdatedAt
+		}
+		commandID := event.CommandID
+		budget := int64(0)
+		objective := ""
+		if event.ThreadGoal != nil {
+			objective = event.ThreadGoal.Objective
+			if event.ThreadGoal.TokenBudget != nil {
+				budget = *event.ThreadGoal.TokenBudget
+			}
+		}
+		source, e := c.resolveGoalSource(tx, carrier, binding, event, active, version, budget, objective)
+		if e != nil {
+			if errors.Is(e, workstore.ErrNotFound) || errors.Is(e, workstore.ErrScopeDenied) {
+				return "", c.gate(tx, carrier, binding.AttemptID, "continuation_state_conflict")
+			}
+			return "", e
+		}
+		if source.Pending {
+			return "", nil
+		}
+		commandID, budget, objective, version = source.CommandID, source.Budget, source.Objective, source.Version
+
+		if active {
+			owned, e := tx.HasNativeSessionOwner(carrier.Incarnation, event.ThreadID, binding.AttemptID)
+			if e != nil {
+				return "", e
+			}
+			occupied, e := tx.HasCarrierOccupancy(carrier, binding.AttemptID)
+			if e != nil {
+				return "", e
+			}
+			if !owned || !occupied || version <= 0 || budget <= 0 {
+				return "", c.gate(tx, carrier, binding.AttemptID, "continuation_authorization_incomplete")
+			}
+		}
+		if err := tx.PutContinuationGrant(workstore.ContinuationGrant{AuthorizationKind: source.Kind, SourceTurnID: source.TurnID, BudgetSource: source.BudgetSource, Source: source.Source, Incarnation: carrier.Incarnation, SessionID: event.ThreadID, Binding: binding, CommandID: commandID, GoalVersion: version, Active: active, ConfirmedSequence: event.Journal.Sequence, Reconciled: true, TokenBudget: budget, Objective: objective}); err != nil {
+			return "", err
+		}
+		if current && event.ThreadGoal != nil && event.ThreadGoal.Status == "budget_exhausted" {
+			if err := c.noteNativeGoalBudgetStop(tx, carrier, binding, event); err != nil {
+				return "", err
+			}
+		}
+		if active && current {
+			if err := c.replayGrantedSession(tx, carrier, binding, event.ThreadID); err != nil {
+				return "", err
+			}
+		}
+
+		if !active && current {
+			return binding.AttemptID, nil
+		}
+		return "", nil
+	}
+	if event.Kind == agentproto.EventTurnCompleted && event.TurnID == "" && event.CommandID != "" && event.RequestID != "" && event.Status == "failed" {
+		switch event.TurnCompletionOrigin {
+		case agentproto.TurnCompletionOriginThreadStartRejected, agentproto.TurnCompletionOriginThreadResumeRejected, agentproto.TurnCompletionOriginTurnStartRejected:
+			if err := tx.RecordNativeRejection(event.CommandID, event); err != nil {
+				return "", err
+			}
+			if current {
+				return binding.AttemptID, nil
+			}
+			return "", nil
+		}
+	}
+	if event.Kind == agentproto.EventTurnCompleted && event.Status != "completed" && event.Status != "failed" && event.Status != "interrupted" {
+		if err := tx.QuarantineRuntimeEvent(event, "native_terminal_status_unknown"); err != nil {
+			return "", err
+		}
+		return "", c.gate(tx, carrier, binding.AttemptID, "native_terminal_status_unknown")
+	}
+	if event.ThreadID == "" || event.TurnID == "" {
+		if err := tx.QuarantineRuntimeEvent(event, "native_ids_missing"); err != nil {
+			return "", err
+		}
+		return "", c.gate(tx, carrier, binding.AttemptID, "native_ids_missing")
+	}
+	turn := workstore.NativeTurn{CarrierIncarnation: carrier.Incarnation, SessionID: event.ThreadID, TurnID: event.TurnID, Binding: binding, Started: event.Kind == agentproto.EventTurnStarted, LastSequence: event.Journal.Sequence, UpdatedAt: c.options.Clock()}
+	if event.Kind == agentproto.EventTurnStarted && event.CommandID == "" && event.Execution == nil {
+		if grant, e := tx.GetContinuationGrant(carrier.Incarnation, event.ThreadID); e == nil && grant.Active && grant.Binding == binding {
+			turn.ContinuationAuthorization = grant.CommandID
+			turn.AuthorizationSequence = grant.ConfirmedSequence
+		}
+	}
+	if event.Kind == agentproto.EventTurnCompleted {
+		turn.TerminalStatus = event.Status
+		turn.TerminalSequence = event.Journal.Sequence
+	}
+	if err := tx.PutNativeTurn(turn); err != nil {
+		if e := tx.QuarantineRuntimeEvent(event, "native_turn_binding_conflict"); e != nil {
+			return "", e
+		}
+		return "", c.gate(tx, carrier, binding.AttemptID, "native_turn_binding_conflict")
+	}
+	if current {
+		if err := tx.BindObservedNativeSession(carrier.Incarnation, event.ThreadID, event.TurnID, event.CommandID); err != nil {
+			if e := tx.QuarantineRuntimeEvent(event, "native_session_binding_conflict"); e != nil {
+				return "", e
+			}
+			return "", c.gate(tx, carrier, binding.AttemptID, "native_session_binding_conflict")
+		}
+	}
+	if current && event.Kind == agentproto.EventTurnStarted {
+		attempt, err := tx.GetAttempt(binding.AttemptID)
+		if err != nil {
+			return "", err
+		}
+		if attempt.State == work.AttemptDispatchPending || attempt.State == work.AttemptReconciling {
+			expected := attempt.Revision
+			attempt.Revision++
+			attempt.State = work.AttemptRunning
+			attempt.UpdatedAt = c.options.Clock()
+			if err := tx.PutAttempt(attempt, expected); err != nil {
+				return "", err
+			}
+		}
+	}
+	if current && event.Kind == agentproto.EventTurnStarted {
+		if err := c.prepareSessionGoalIntent(tx, binding.AttemptID, event.ThreadID); err != nil {
+			return "", err
+		}
+	}
+	if drain {
+		pending, err := tx.QuarantinedNativeEvents(carrier.Incarnation, event.ThreadID, event.TurnID)
+		if err != nil {
+			return "", err
+		}
+		for _, old := range pending {
+			resolved, e := c.resolveBinding(tx, carrier, old)
+			if e != nil || resolved != binding {
+				continue
+			}
+			if _, err := c.applyEvent(tx, carrier, old, false); err != nil {
+				return "", err
+			}
+			if err := tx.ResolveQuarantine(carrier.Incarnation, old.Journal.Sequence); err != nil {
+				return "", err
+			}
+		}
+	}
+	if event.Kind == agentproto.EventTurnCompleted && c.options.ApplyReviewEvent != nil {
+		context, e := tx.GetContext(binding.ContextID)
+		if e != nil {
+			return "", e
+		}
+		if context.Purpose == work.PurposeReview {
+			if e = c.options.ApplyReviewEvent(tx, carrier, binding, event); e != nil {
+				return "", e
+			}
+		}
+	}
+	if current && drain {
+		count, e := tx.CountUnresolvedNativeEvents(carrier.Incarnation)
+		if e != nil {
+			return "", e
+		}
+		if count == 0 {
+			gate, e := tx.GetRuntimeGate(worker.ID)
+			if e == nil && gate.Reason == "native_ownership_unproven" && gate.RecoveryReason == "" {
+				if e = tx.ClearRuntimeGate(worker.ID, gate.Reason); e != nil {
+					return "", e
+				}
+			} else if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+				return "", e
+			}
+		}
+	}
+	if current {
+		stored, err := tx.GetNativeTurn(carrier.Incarnation, event.ThreadID, event.TurnID)
+		if err != nil {
+			return "", err
+		}
+		if stored.TerminalStatus != "" {
+			return binding.AttemptID, nil
+		}
+	}
+	return "", nil
+}
+
+func nativeLifecycleKind(kind agentproto.EventKind) bool {
+	switch kind {
+	case agentproto.EventNativeTurnBindingObserved, agentproto.EventTurnStarted, agentproto.EventTurnCompleted, agentproto.EventThreadGoalCommandResult, agentproto.EventThreadGoalUpdated:
+		return true
+	}
+	return false
+}

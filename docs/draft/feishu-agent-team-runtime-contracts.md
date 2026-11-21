@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 按现有代码与固定 Raft 快照拆解两后端的会话时序、上下文注入、回执和恢复缺口，定义实施接线与验证要求。
+> Summary: 按用户决定取消原生会话人工接管，保留飞书指导、审阅、暂停、恢复与旧状态迁移边界。
 
 ## 1. 范围与证据等级
 
@@ -159,7 +159,7 @@ Raft 的[Codex 恢复降级](https://github.com/botiverse/raft-source/blob/5214e
 
 当前 headless pool [syncManagedHeadlessLocked](../../internal/app/daemon/app_headless_pool.go:14)以 surface attachment／ActiveTurn 判 busy。新系统没有 surface 挂靠但有角色身份、收件箱或恢复中的 WorkerSession 时，不能被当作无归属空闲实例。预热可复用未绑定的进程能力；一旦包含 scope 凭据、角色说明、自动记忆或 session 状态，就按明确隔离与归还合同复用。
 
-VS Code attached 保留人控制原会话的价值，但不能假定有和 headless 一样的 launch/env 注入能力。现有 Feishu MCP 自动发布明确排除 VS Code；自动运行接管须验证 instruction/tool readiness 并取得唯一控制权。不满足时保持观察／人工控制，或把工作转给已完整配置的 WorkerSession，不冒充“接上 thread 就获得团队身份”。
+2026-11-21 用户取消新版 VS Code 式原生会话接管。受管 worker 由新宿主持有执行权，不借用正在被人操作的本地会话；编辑器可用于独立查看，但不是团队原生会话的第二控制端。旧 attached／人工控制状态只保留迁移事实并隔离核查，不因 thread ID 或 cwd 相同就纳入新调度。暂停、请求答复和恢复仍须遵循精确原生身份及真实停止证据。
 
 ## 9. 验证结果与实施验收矩阵
 

@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 保留执行原则与 Raft 对照证据；实施状态、事务、后端生命周期和迁移统一转由技术主文档规定。
+> Summary: 按用户决定取消原生会话人工接管，保留飞书指导、审阅、暂停、恢复与旧状态迁移边界。
 
 文档定位：本文件是专项依据／附录，不是另一份实施入口。用户行为以[产品主文档](./feishu-agent-team-product-design.md)为准，领域所有权、状态与迁移以[技术主文档](./feishu-agent-team-technical-design.md)为准，后端具体时序见[原生运行合同](./feishu-agent-team-runtime-contracts.md)。本文件保留原调查证据和解释；实现拆分、异常处理及验收统一按主文档的 US／T／UAT 编号追踪。
 
@@ -47,7 +47,7 @@ Raft 公开源码用于研究行为和接口，不将其实现代码移入本仓
 
 协作库是团队模式 Project、资源引用、执行位置绑定、调度策略与执行事实的权威写源。issue-backed Task 的业务要求／状态以 issue 为源，内库存采用版本和调度事实；未接 issue 的 Task 由内库维护业务事实。Bot 模型配置仍以已有 Bot capability store 为唯一写源；不能为了协作再复制一套可独立修改的模型配置。
 
-该库同时保存个人 WorkScope、记忆与执行事实，是统一工作存储。Bot backend/model/profile 的默认策略共享，headless／本地接管等执行控制属于具体 session；私聊选择本地控制不能改变同 Bot 的所有项目执行方式。
+该库同时保存个人 WorkScope、记忆与执行事实，是统一工作存储。Bot backend/model/profile 的默认策略共享，停止和恢复等执行控制属于具体 session；不提供本地原生会话接管，也不能改变同 Bot 的所有项目执行方式。
 
 执行 owner 最终统一为 WorkerSession，单聊与项目均使用它。legacy surface owner 仅作为迁移过渡。现有 `AttachedInstanceID`、`SelectedThreadID` 和 `ActiveQueueItemID` 不能继续承担执行权威；queue、claim、approval、pending launch 与原生 turn 统一关联真正的执行 owner，surface 仅保存交互关联与读模型。
 
@@ -166,13 +166,13 @@ Project 的长期方向、Task 的需求／验收和原生 Session Goal 是三�
 
 共享资料保存人和团队可共同维护的需求、规范、业务数据与交付；MemoryEntry 保存摘要、经验和恢复线索，必须引用资料版本，不能成为隐藏的另一份需求原文。资料更改使关联摘要过期，活动任务收到变化事件；已确认验收基线只能通过明确修订更新。完整的资料归属、API 接线、版本与冲突处理见 [共享资料设计](./feishu-agent-team-materials-design.md)。
 
-## 7. 执行宿主与人类接管
+## 7. 执行宿主与人的指导
 
-后台托管 worker 是持续工作所需的执行宿主，与用户打开哪个界面无关。飞书、桌面和编辑器是查看、指导、接管工作的入口，surface 不再拥有唯一的执行身份。
+后台托管 worker 是持续工作的执行宿主，与用户打开哪个界面无关。人通过飞书指导、审阅、暂停和继续；surface 不拥有唯一执行身份。
 
-已有手动会话可以观察、附着或在明确交接后绑定团队工作流。一个 session 的控制权只能由自动 dispatcher 或人工控制者持有；人工接管期间暂停自动派发，后台信息仍进入收件箱。归还时提交检查点、工作区与当前任务版本，再恢复自动调度。
+2026-11-21 用户决定取消原生会话人工接管。已有手动会话不自动绑定团队工作流，新版不实现领取／归还控制权或进入桌面／终端操作同一原生会话。旧人工控制状态保留迁移事实，核实执行、续轮与后台工作后才能恢复新的自动工作。
 
-用户操作的本地会话不能被后台悄悄借用；后台会话也不能只因 cwd 和模型相同就被替换。绑定须核对 role、scope/context、workstream、execution-location generation、instruction version、backend 和 controller lease；personal scope 核对稳定 principal，project scope 核对项目绑定。
+用户自行操作的本地会话不能被后台借用；后台会话也不能只因 cwd 和模型相同就被替换。绑定仍核对 role、scope/context、workstream、执行位置代次、指令版本和 backend；personal scope 核对稳定 principal，project scope 核对项目绑定。
 
 不具备受控身份或生命周期接口的外部 Bot 可以作为群参与者；要成为可调度 worker，必须实现身份、inbox/ack、执行状态和结果回执合同。这是执行能力边界，不由群里显示一个 Bot 名字自动获得。
 
@@ -184,7 +184,7 @@ Project 的长期方向、Task 的需求／验收和原生 Session Goal 是三�
 
 旧群切换团队模式使用有 journal 的显式迁移：
 
-1. 记录旧 room/surface/config 的快照与预期 generation，冻结该群新的旧式工作区写入；已有执行排空或经明确接管转交。
+1. 记录旧 room/surface/config 的快照与预期 generation，冻结该群新的旧式工作区写入；已有执行排空，无法确认结束的保留隔离。
 2. 导入 Project、ChannelBinding、ProjectResource 和调度策略，保存旧目录与未完成执行的归属。原用户 checkout 保留，不强制 reset／clean。
 3. 准备角色身份、执行位置及 session 绑定，核对可恢复性和平台成员状态。
 4. 提交 mode/authority generation，工作库接管该群项目配置；旧群 `/workspace`、primary、并发菜单退出主流程，残留卡只提示已迁移／打开当前项目，不继续旧写入。
@@ -209,7 +209,7 @@ Project 的长期方向、Task 的需求／验收和原生 Session Goal 是三�
 - 两个项目同时集成同一目标分支时共享竞争检查；目标在用户脏工作区检出时，不覆盖修改或造成 HEAD／索引失配。
 - 提交结果、更新目标分支、发送飞书消息之后立即崩溃，恢复能识别已发生与未确定的操作。
 - 依赖等待、预算满额、角色离线后自动恢复，无需人类再次唤醒；依赖循环形成明确阻塞。
-- 人工接管与归还期间没有双重控制；任务暂停后不会提前释放仍被子进程使用的写入资源。
+- 旧人工控制状态不会被新调度自动认领；任务暂停后不会提前释放仍被子进程使用的写入资源。
 - 会话重建、换模型、记忆纠正后职责与任务连续；原生自动记忆不会把项目知识串到另一个项目。
 - 迁移中用户改配置或进程崩溃不会产生双写；既有未提交文件与历史任务可以追溯。
 

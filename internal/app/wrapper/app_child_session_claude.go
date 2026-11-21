@@ -24,10 +24,17 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 	cmd.Stderr = nil
 	cmd.Dir = pathcanon.Native(a.config.WorkspaceRoot)
 	cmd.Env = childEnv
+	a.prepareWorkProcess(cmd)
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)
 	if err != nil {
 		childCancel()
+		return nil, err
+	}
+	scope, err := a.bindWorkProcess(cmd)
+	if err != nil {
+		childCancel()
+		_ = cmd.Wait()
 		return nil, err
 	}
 	a.debugf("claude child started: binary=%s pid=%d cwd=%s", claudeBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
@@ -43,18 +50,29 @@ func (a *App) launchClaudeChildSession(ctx context.Context, rawLogger *debuglog.
 
 	waitErr := make(chan error, 1)
 	go func() {
-		waitErr <- cmd.Wait()
+		err := cmd.Wait()
+		if scope != nil {
+			scope.MarkWaitObserved()
+			if a.work != nil {
+				a.work.inspection.mu.Lock()
+				a.work.inspection.dirty = true
+				a.work.inspection.mu.Unlock()
+				_ = a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner)
+			}
+		}
+		waitErr <- err
 	}()
 
 	return &childSession{
-		cmd:         cmd,
-		stdin:       childStdin,
-		stdout:      bootstrappedStdout,
-		stderr:      childStderr,
-		stdoutClose: childStdout,
-		stderrClose: childStderr,
-		waitErr:     waitErr,
-		cancel:      childCancel,
+		workProcessScope: scope,
+		cmd:              cmd,
+		stdin:            childStdin,
+		stdout:           bootstrappedStdout,
+		stderr:           childStderr,
+		stdoutClose:      childStdout,
+		stderrClose:      childStderr,
+		waitErr:          waitErr,
+		cancel:           childCancel,
 	}, nil
 }
 
@@ -106,7 +124,8 @@ func (a *App) buildClaudeChildLaunch(resume *claudeLaunchResumeTarget) ([]string
 	env = append(env, a.config.ChildProxyEnv...)
 	args, env = a.applyClaudeRuntimeSettingsOverlay(args, env)
 	args, env = a.applyClaudeFeishuMCPPublication(args, env)
-	return args, env
+	args = a.applyWorkClaudeReadOnly(args)
+	return args, a.applyWorkChildEnv(env)
 }
 
 func removeArgWithOptionalValue(args []string, key string) []string {

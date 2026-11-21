@@ -11,7 +11,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/codexprofile"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
-	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
 	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
@@ -472,44 +471,6 @@ func TestFeishuGroupOnDemandReplayRechecksUpgradeOwnerGate(t *testing.T) {
 	}
 	if !gatewayOperationsContainText(gateway.operations, "普通输入和其他操作已暂停") {
 		t.Fatalf("expected upgrade running notice after replay, got %#v", gateway.operations)
-	}
-}
-
-func TestFeishuGroupOnDemandReplayRechecksTurnPatchTransactionGate(t *testing.T) {
-	stateDir := t.TempDir()
-	workspaceDir := t.TempDir()
-	putGroupOnDemandResumeStateForTest(t, stateDir, workspaceDir)
-	app := newRestoreHintTestApp(stateDir)
-	var sent []agentproto.Command
-	app.sendAgentCommand = func(_ string, command agentproto.Command) error {
-		sent = append(sent, command)
-		return nil
-	}
-
-	pendingInstanceID := startGroupOnDemandPendingForTest(t, app, workspaceDir)
-	app.turnPatchRuntime.ActiveTx[pendingInstanceID] = &turnpatchruntime.Transaction{
-		ID:               "tx-1",
-		InstanceID:       pendingInstanceID,
-		Kind:             turnpatchruntime.TransactionKindApply,
-		InitiatorSurface: "feishu:app-1:chat:oc_room",
-		PausedSurfaceIDs: map[string]bool{"feishu:app-1:chat:oc_room": true},
-		Stage:            turnpatchruntime.TransactionStageApplyingRestart,
-		StartedAt:        time.Now().UTC(),
-		UpdatedAt:        time.Now().UTC(),
-	}
-	gateway := app.gateway.(*recordingGateway)
-	gateway.operations = nil
-
-	connectGroupOnDemandPendingForTest(app, pendingInstanceID, workspaceDir)
-
-	if prompts := promptCommands(sent); len(prompts) != 0 {
-		t.Fatalf("expected turn patch gate to block replayed prompt dispatch, got %#v", prompts)
-	}
-	if continuation := app.surfaceResumeRuntime.groupOnDemandContinuations["feishu:app-1:chat:oc_room"]; continuation != nil {
-		t.Fatalf("expected blocked replay to clear continuation, got %#v", continuation)
-	}
-	if !gatewayOperationsContainText(gateway.operations, "当前正在修补当前会话") {
-		t.Fatalf("expected turn patch running notice after replay, got %#v", gateway.operations)
 	}
 }
 

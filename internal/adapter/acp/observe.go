@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
@@ -52,6 +53,20 @@ func (t *Translator) observeResponseFrame(frame map[string]any, result Result) (
 	payload, _ := frame["result"].(map[string]any)
 	switch pending.Kind {
 	case "initialize":
+		return result, nil
+	case "session/new.catalog":
+		sessionID := strings.TrimSpace(xutil.LookupStringFromAny(payload["sessionId"]))
+		if sessionID == "" {
+			return result, fmt.Errorf("model discovery response missing sessionId")
+		}
+		session := t.upsertSession(sessionID, t.commandCWD(pending.Command), payload)
+		t.currentSessionID = sessionID
+		event, _ := modelCatalogEventForConfigOptions(session, pending.Command.CommandID)
+		event.RequestID = requestID
+		if event.ModelCatalog == nil || len(event.ModelCatalog.Entries) == 0 {
+			event.ModelCatalog = &agentproto.ModelCatalogSnapshot{Unsupported: true, ErrorMessage: "OpenCode native session did not expose model config options", RefreshedAt: time.Now().UTC()}
+		}
+		result.Events = append(result.Events, event)
 		return result, nil
 	case "session/new", "session/resume", "session/fork":
 		return t.observeSessionReady(pending, payload, result)
@@ -326,6 +341,11 @@ func (t *Translator) observeSessionLoadResponse(pending pendingRPC, payload map[
 }
 
 func (t *Translator) observeRPCError(pending pendingRPC, errorPayload any, result Result) Result {
+	if pending.Kind == "session/new.catalog" {
+		result.Events = append(result.Events, agentproto.Event{Kind: agentproto.EventModelCatalogUpdated, CommandID: pending.Command.CommandID, ModelCatalog: &agentproto.ModelCatalogSnapshot{Unsupported: true, ErrorMessage: fmt.Sprint(errorPayload), RefreshedAt: time.Now().UTC()}})
+		return result
+	}
+
 	if pending.Kind == "session/load" {
 		delete(t.historyHydrations, strings.TrimSpace(pending.Command.Target.ThreadID))
 	}

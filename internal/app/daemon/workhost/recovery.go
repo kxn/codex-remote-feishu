@@ -1,0 +1,343 @@
+package workhost
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workengine"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workruntime"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/work"
+	"time"
+)
+
+func (h *Host) checkDesiredLocation(ctx context.Context, worker work.WorkerSession) error {
+	return h.store.Within(ctx, func(tx *workstore.Tx) error {
+		desired, err := tx.GetDesiredExecutionLocation(worker.ContextID)
+		if errors.Is(err, workstore.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if desired.ScopeID != worker.ScopeID {
+			return workstore.ErrScopeDenied
+		}
+		if desired.LocationID != worker.LocationID || desired.LocationGeneration != worker.LocationGeneration {
+			return fmt.Errorf("%w: verified execution location changed", workengine.ErrPreparationRequired)
+		}
+		return nil
+	})
+}
+
+func (h *Host) prepareExisting(ctx context.Context, previous *work.WorkerSession, role work.Role, binding work.RoleBotBinding, settings LaunchSettings, bundle agentproto.InstructionBundle) (bool, error) {
+	var record LaunchRecord
+	var operation work.Operation
+	var carrier workstore.CarrierRegistration
+	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
+		var err error
+		operation, err = tx.GetOperation(launchID(*previous))
+		if err != nil {
+			return err
+		}
+		// Reading the original record intentionally permits a newer controller
+		// generation after a verified return: its immutable old owner is inspected.
+		body, err := tx.GetContent(previous.ScopeID, operation.RequestRef)
+		if err != nil {
+			return err
+		}
+		if err = json.Unmarshal(body.Data, &record); err != nil {
+			return err
+		}
+		if record.WorkerID != previous.ID || record.Generation != previous.Generation || record.Snapshot.CarrierIncarnation != previous.CarrierIncarnation {
+			return fmt.Errorf("launch recovery ownership mismatch")
+		}
+		carrier, err = tx.GetCarrier(previous.CarrierIncarnation)
+		if errors.Is(err, workstore.ErrNotFound) && operation.State == work.OperationPrepared {
+			return nil
+		}
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	same := record.Snapshot.NativeBinaryPath == settings.NativeBinaryPath && record.Snapshot.NativeBinaryVersion == settings.NativeBinaryVersion && record.Snapshot.HostID == h.config.HostID && sameRuntimePolicy(record, settings) && record.Snapshot.NativeMemoryPolicyVersion == agentproto.NativeMemoryPolicyVersion && record.SettingsRevision == role.SettingsRevision && record.RoleDescriptionVersion == role.DescriptionVersion && record.Snapshot.Owner.BotGeneration == binding.IdentityGeneration && record.Snapshot.Owner.ControllerGeneration == previous.ControllerGeneration && record.Snapshot.InstructionBundle.Revision == bundle.Revision && record.ProfileID == settings.ProfileID && record.Backend == settings.Backend && record.Snapshot.CWD == settings.Location.Cwd && previous.LocationID == settings.Location.ID && previous.LocationGeneration == settings.Location.Generation
+	if operation.State == work.OperationSending || operation.State == work.OperationUnknown {
+		if err = h.confirmObservedLaunch(ctx, *previous, &operation); err != nil {
+			return false, err
+		}
+	}
+	switch operation.State {
+	case work.OperationPrepared:
+		if same {
+			carrier = workstore.CarrierRegistration{Incarnation: previous.CarrierIncarnation, OriginInstanceID: previous.InstanceID, Owner: record.Snapshot.Owner, Backend: previous.Backend, InstanceGeneration: previous.InstanceGeneration, ProcessGeneration: previous.ProcessGeneration, LocationGeneration: previous.LocationGeneration}
+			if err = h.config.Registry.RegisterCarrier(ctx, carrier); err != nil {
+				return false, err
+			}
+			token, err := h.issueToken(record.Snapshot.Owner)
+			if err != nil {
+				return false, err
+			}
+			return false, h.startPrepared(ctx, *previous, operation, record, settings, token)
+		}
+		// Prepared means no launch side effect was attempted, so supersession does
+		// not need to infer whether a native process survived.
+		err = h.store.Within(ctx, func(tx *workstore.Tx) error {
+			current, e := tx.GetOperation(operation.ID)
+			if e != nil {
+				return e
+			}
+			if current.Revision != operation.Revision || current.State != work.OperationPrepared {
+				return workstore.ErrConflict
+			}
+			current.State = work.OperationTerminal
+			current.Revision++
+			current.LastError = "superseded before launch"
+			current.UpdatedAt = h.config.Now()
+			_, _, e = tx.PutOperation(current, operation.Revision)
+			return e
+		})
+		return err == nil, err
+	case work.OperationConfirmed:
+		if previous.State == work.WorkerRecovering {
+			if err = h.store.Within(ctx, func(tx *workstore.Tx) error {
+				gate, e := tx.GetRuntimeGate(previous.ID)
+				if e == nil && gate.Reason == "snapshot_rebuild_required" {
+					same = false
+				}
+				if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+					return e
+				}
+				return nil
+			}); err != nil {
+				return false, err
+			}
+		}
+		if same {
+			return false, nil
+		}
+	default:
+		return false, fmt.Errorf("worker launch state cannot be recovered: %s", operation.State)
+	}
+	if settings.Backend != previous.Backend {
+		return false, fmt.Errorf("backend change requires a replacement worker identity")
+	}
+	if h.config.Runtime == nil || h.config.StopCarrier == nil {
+		return false, fmt.Errorf("verified safe rebuild requires native inspector and exact carrier stop")
+	}
+	if err = h.rebuildCarrier(ctx, previous, carrier); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (h *Host) issueToken(owner agentproto.ExecutionBinding) (string, error) {
+	return h.signer.Issue(workauth.Claims{Purpose: "worker", RoleID: owner.RoleID, BotGeneration: owner.BotGeneration, ScopeID: owner.ScopeID, ContextID: owner.ContextID, WorkerID: owner.WorkerSessionID, SessionGeneration: owner.SessionGeneration, ControllerGeneration: owner.ControllerGeneration}, 30*24*time.Hour)
+}
+
+func (h *Host) rebuildCarrier(ctx context.Context, worker *work.WorkerSession, carrier workstore.CarrierRegistration) error {
+	id := idFor("rebuild", worker.ID, fmt.Sprint(worker.Generation))
+	var operation work.Operation
+	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
+		current, err := tx.GetWorker(worker.ID)
+		if err != nil {
+			return err
+		}
+		if current.Revision != worker.Revision || current.Controller != work.ControllerAutomatic || (current.State != work.WorkerReady && current.State != work.WorkerRecovering) {
+			return fmt.Errorf("busy, human-controlled or changed worker cannot rebuild")
+		}
+		occupied, err := tx.HasAnyCarrierOccupancy(carrier)
+		if err != nil {
+			return err
+		}
+		if occupied {
+			return fmt.Errorf("worker retains unreconciled attempt occupancy")
+		}
+		count, err := tx.CountControllerOccupancy(worker.ID)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return fmt.Errorf("worker retains controller location occupancy")
+		}
+		gate, err := tx.GetRuntimeGate(worker.ID)
+		if err == nil && (gate.Reason != "snapshot_rebuild_required" || gate.RecoveryReason != "") {
+			return fmt.Errorf("worker recovery gate requires explicit resolution: %s", gate.Reason)
+		}
+		if err != nil && !errors.Is(err, workstore.ErrNotFound) {
+			return err
+		}
+		if current.State == work.WorkerReady {
+			before := current.Revision
+			current.State = work.WorkerRecovering
+			current.Revision++
+			current.UpdatedAt = h.config.Now()
+			if err = tx.PutWorker(current, before); err != nil {
+				return err
+			}
+			*worker = current
+		}
+		operation, err = tx.GetOperation(id)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, workstore.ErrNotFound) {
+			return err
+		}
+		if err = tx.PutRuntimeGate(workstore.RuntimeGate{WorkerID: worker.ID, ScopeID: worker.ScopeID, Reason: "snapshot_rebuild_required", CreatedAt: h.config.Now()}); err != nil {
+			return err
+		}
+		requestData, e := json.Marshal(carrier)
+		if e != nil {
+			return e
+		}
+		requestBody := work.NewContent(id+":body", worker.ScopeID, "application/json", requestData, h.config.Now())
+		if e = tx.PutContent(requestBody); e != nil {
+			return e
+		}
+		operation = work.Operation{RequestRef: requestBody.ID, RequestHash: requestBody.SHA256, ID: id, ScopeID: worker.ScopeID, ContextID: worker.ContextID, Actor: work.Actor{Kind: work.ActorSystem, ID: "work-host"}, Kind: "worker.rebuild", TargetID: worker.ID, TargetGeneration: worker.Generation, IdempotencyKey: id, State: work.OperationPrepared, Revision: 1, CreatedAt: h.config.Now(), UpdatedAt: h.config.Now()}
+		_, _, err = tx.PutOperation(operation, 0)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if operation.State == work.OperationConfirmed {
+		return nil
+	}
+	if operation.State != work.OperationPrepared {
+		return h.resumeCarrierStop(ctx, *worker, operation, carrier)
+	}
+	request := workruntime.InspectionRequest{Carrier: carrier, Binding: carrier.Owner, SessionID: worker.NativeSessionID, LocationID: worker.LocationID, LocationGeneration: worker.LocationGeneration}
+	observed, err := h.config.Runtime.Inspect(ctx, request)
+	if err != nil {
+		var attemptID string
+		if e := h.store.Within(ctx, func(tx *workstore.Tx) error {
+			gate, e := tx.GetRuntimeGate(worker.ID)
+			attemptID = gate.AttemptID
+			return e
+		}); e != nil {
+			return errors.Join(err, e)
+		}
+		var e error
+		observed, e = workruntime.VerifyRetiredQuiescence(ctx, h.store, h.config.Paths.StateDir, h.config.HostID, *worker, attemptID)
+		if e != nil {
+			return errors.Join(err, e)
+		}
+	}
+	if observed.RetiredCarrierVerified {
+		request.SessionID = observed.SessionID
+		request.TurnID = observed.TurnID
+	}
+	if err = observed.ValidateStopped(request); err != nil {
+		return err
+	}
+	data, err := json.Marshal(observed)
+	if err != nil {
+		return err
+	}
+	content := work.NewContent(idFor("rebuild_proof", id), worker.ScopeID, "application/json", data, h.config.Now())
+	err = h.store.Within(ctx, func(tx *workstore.Tx) error {
+		fresh, e := tx.GetWorker(worker.ID)
+		if e != nil {
+			return e
+		}
+		if fresh.Revision != worker.Revision {
+			return workstore.ErrConflict
+		}
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if op.Revision != operation.Revision {
+			return workstore.ErrConflict
+		}
+		if e = tx.PutContent(content); e != nil {
+			return e
+		}
+		op.ExternalReceipt = content.ID
+		op.State = work.OperationSending
+		op.Revision++
+		op.UpdatedAt = h.config.Now()
+		_, _, e = tx.PutOperation(op, operation.Revision)
+		operation = op
+		return e
+	})
+	if err != nil {
+		return err
+	}
+	stopErr := h.config.StopCarrier(ctx, *worker)
+	err = h.store.Within(ctx, func(tx *workstore.Tx) error {
+		op, e := tx.GetOperation(id)
+		if e != nil {
+			return e
+		}
+		if op.Revision != operation.Revision {
+			return workstore.ErrConflict
+		}
+		op.Revision++
+		op.UpdatedAt = h.config.Now()
+		if stopErr != nil {
+			op.State = work.OperationUnknown
+			op.LastError = stopErr.Error()
+		} else {
+			op.State = work.OperationConfirmed
+			op.LastError = ""
+		}
+		_, _, e = tx.PutOperation(op, operation.Revision)
+		return e
+	})
+	if err != nil {
+		return err
+	}
+	return stopErr
+}
+
+func (h *Host) resumeCarrierStop(ctx context.Context, worker work.WorkerSession, operation work.Operation, carrier workstore.CarrierRegistration) error {
+	if operation.State != work.OperationSending && operation.State != work.OperationUnknown {
+		return fmt.Errorf("carrier shutdown state requires reconciliation")
+	}
+	var observed workruntime.NativeObservation
+	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
+		body, e := tx.GetContent(worker.ScopeID, operation.ExternalReceipt)
+		if e != nil {
+			return e
+		}
+		return json.Unmarshal(body.Data, &observed)
+	})
+	request := workruntime.InspectionRequest{Carrier: carrier, Binding: carrier.Owner, SessionID: worker.NativeSessionID, LocationID: worker.LocationID, LocationGeneration: worker.LocationGeneration}
+	if err != nil {
+		return err
+	}
+	if observed.RetiredCarrierVerified {
+		request.SessionID = observed.SessionID
+		request.TurnID = observed.TurnID
+	}
+	if err = observed.ValidateStopped(request); err != nil {
+		return err
+	}
+	// StopCarrier must itself persist a unique exit operation and never resend an
+	// uncertain shutdown. Its retry only observes the exact durable OS identity.
+	if err = h.config.StopCarrier(ctx, worker); err != nil {
+		return err
+	}
+	return h.store.Within(ctx, func(tx *workstore.Tx) error {
+		op, e := tx.GetOperation(operation.ID)
+		if e != nil {
+			return e
+		}
+		if op.Revision != operation.Revision {
+			return workstore.ErrConflict
+		}
+		op.State = work.OperationConfirmed
+		op.Revision++
+		op.UpdatedAt = h.config.Now()
+		op.LastError = ""
+		_, _, e = tx.PutOperation(op, operation.Revision)
+		return e
+	})
+}

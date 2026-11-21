@@ -10,6 +10,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/relayws"
 	"github.com/kxn/codex-remote-feishu/internal/app/appserverargs"
+	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/debuglog"
 	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
@@ -18,20 +19,21 @@ import (
 )
 
 type childSession struct {
-	cmd         *exec.Cmd
-	stdin       io.WriteCloser
-	stdout      io.Reader
-	stderr      io.Reader
-	stdoutClose io.Closer
-	stderrClose io.Closer
-	generation  int64
-	waitErr     chan error
-	cancel      context.CancelFunc
-	ioCancel    context.CancelFunc
-	writeCancel context.CancelFunc
-	stdoutDone  chan struct{}
-	stderrDone  chan struct{}
-	writeDone   chan struct{}
+	workProcessScope *hostinventory.Scope
+	cmd              *exec.Cmd
+	stdin            io.WriteCloser
+	stdout           io.Reader
+	stderr           io.Reader
+	stdoutClose      io.Closer
+	stderrClose      io.Closer
+	generation       int64
+	waitErr          chan error
+	cancel           context.CancelFunc
+	ioCancel         context.CancelFunc
+	writeCancel      context.CancelFunc
+	stdoutDone       chan struct{}
+	stderrDone       chan struct{}
+	writeDone        chan struct{}
 }
 
 func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.RawLogger, reportProblem func(agentproto.ErrorInfo)) (*childSession, error) {
@@ -52,10 +54,17 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 	cmd.Stderr = nil
 	cmd.Dir = pathcanon.Native(a.config.WorkspaceRoot)
 	cmd.Env = childEnv
+	a.prepareWorkProcess(cmd)
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)
 	if err != nil {
 		childCancel()
+		return nil, err
+	}
+	scope, err := a.bindWorkProcess(cmd)
+	if err != nil {
+		childCancel()
+		_ = cmd.Wait()
 		return nil, err
 	}
 	a.debugf("child started: binary=%s pid=%d cwd=%s", childBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
@@ -71,18 +80,29 @@ func (a *App) launchCodexChildSession(ctx context.Context, rawLogger *debuglog.R
 
 	waitErr := make(chan error, 1)
 	go func() {
-		waitErr <- cmd.Wait()
+		err := cmd.Wait()
+		if scope != nil {
+			scope.MarkWaitObserved()
+			if a.work != nil {
+				a.work.inspection.mu.Lock()
+				a.work.inspection.dirty = true
+				a.work.inspection.mu.Unlock()
+				_ = a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner)
+			}
+		}
+		waitErr <- err
 	}()
 
 	return &childSession{
-		cmd:         cmd,
-		stdin:       childStdin,
-		stdout:      bootstrappedStdout,
-		stderr:      childStderr,
-		stdoutClose: childStdout,
-		stderrClose: childStderr,
-		waitErr:     waitErr,
-		cancel:      childCancel,
+		workProcessScope: scope,
+		cmd:              cmd,
+		stdin:            childStdin,
+		stdout:           bootstrappedStdout,
+		stderr:           childStderr,
+		stdoutClose:      childStdout,
+		stderrClose:      childStderr,
+		waitErr:          waitErr,
+		cancel:           childCancel,
 	}, nil
 }
 
@@ -138,6 +158,9 @@ func startChildSessionIO(ctx context.Context, session *childSession, parentStdou
 }
 
 func signalStopChildSession(session *childSession, debugf func(string, ...any)) {
+	if session != nil && session.workProcessScope != nil {
+		session.workProcessScope.MarkControlledStop()
+	}
 	if session == nil {
 		return
 	}

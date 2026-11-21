@@ -69,6 +69,7 @@ func (t *Translator) observeModelListResponse(requestID string, message map[stri
 			Suppress: true,
 			Events: []agentproto.Event{{
 				Kind:         agentproto.EventModelCatalogUpdated,
+				RequestID:    requestID,
 				CommandID:    pending.CommandID,
 				ModelCatalog: &snapshot,
 			}},
@@ -92,6 +93,7 @@ func (t *Translator) observeModelListResponse(requestID string, message map[stri
 		Suppress: true,
 		Events: []agentproto.Event{{
 			Kind:         agentproto.EventModelCatalogUpdated,
+			RequestID:    requestID,
 			CommandID:    pending.CommandID,
 			ModelCatalog: &snapshot,
 		}},

@@ -19,6 +19,12 @@ func (a *App) selectCodexChildBinary(ctx context.Context, env []string, ensure e
 	if binary, ok := ctx.Value(preparedCodexBinaryKey{}).(string); ok {
 		return binary, nil
 	}
+	if a.work != nil && (a.work.snapshot.NativeBinaryPath != "" || a.work.snapshot.NativeBinaryVersion != "") {
+		if err := codexmanaged.VerifyExactBinaryWithEnv(ctx, a.work.snapshot.NativeBinaryPath, a.work.snapshot.NativeBinaryVersion, env); err != nil {
+			return "", err
+		}
+		return a.work.snapshot.NativeBinaryPath, nil
+	}
 	if !a.config.Managed || a.config.Lifetime != string(lifetimeDaemonOwned) ||
 		!state.IsInstanceSource(a.config.Source, state.InstanceSourceHeadless) {
 		return a.config.CodexRealBinary, nil

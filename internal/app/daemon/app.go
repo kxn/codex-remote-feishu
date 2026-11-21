@@ -21,10 +21,8 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/goalinterlockstore"
 	headlessruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/headlessruntime"
 	toolruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
-	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
 	upgraderuntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/upgraderuntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
-	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -93,6 +91,7 @@ type vscodeCompatibilityCacheState struct {
 }
 
 type App struct {
+	teamRuntime         *teamRuntime // constructed before Run; one durable work authority
 	service             *orchestrator.Service
 	projector           *feishu.Projector
 	gateway             feishu.Gateway
@@ -173,7 +172,6 @@ type App struct {
 	surfaceResumeRuntime       surfaceResumeRuntimeState
 	codexUpgradeRuntime        codexupgraderuntime.State
 	upgradeRuntime             upgraderuntime.State
-	turnPatchRuntime           turnpatchruntime.State
 
 	relayListener          net.Listener
 	apiListener            net.Listener
@@ -222,7 +220,6 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		childRestartWaiters:         map[string]*childRestartWaiter{},
 		codexUpgradeRuntime:         codexupgraderuntime.NewState(),
 		upgradeRuntime:              upgraderuntime.NewState(),
-		turnPatchRuntime:            turnpatchruntime.NewState(),
 		cronRuntime:                 newCronRuntimeState(),
 		feishuRuntime:               newFeishuRuntimeState(),
 		pendingThreadHistoryReads:   map[string]pendingThreadHistoryRead{},
@@ -303,12 +300,6 @@ func New(relayAddr, apiAddr string, gateway feishu.Gateway, serverIdentity agent
 		}),
 	}
 	return app
-}
-
-func (a *App) SetTurnPatchStorage(storage *codexstate.TurnPatchStorage) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.turnPatchRuntime.Storage = storage
 }
 
 func gitExecutableAvailable() bool {
@@ -457,7 +448,11 @@ func (a *App) Run(ctx context.Context) error {
 	go a.runManagedCodexUpdates(managedUpdateCtx)
 	a.ensureCodexRuntimeCapability(ctx)
 	a.ensureCodexNativeConnectionEvidence(ctx)
-	a.startIngressPump(ctx, errCh)
+	ingressCtx := ctx
+	if a.teamRuntime != nil {
+		ingressCtx = context.WithoutCancel(ctx)
+	}
+	a.startIngressPump(ingressCtx, errCh)
 	a.requestCodexOAuthProbe(ctx, false)
 
 	go func() {
@@ -478,6 +473,9 @@ func (a *App) Run(ctx context.Context) error {
 				log.Printf("pprof server stopped: %v", err)
 			}
 		}()
+	}
+	if a.teamRuntime != nil && a.teamRuntime.active.Load() {
+		a.teamRuntime.run(context.WithoutCancel(ctx))
 	}
 	gatewayCtx, gatewayCancel := context.WithCancel(context.Background())
 	gatewayDone := make(chan struct{})

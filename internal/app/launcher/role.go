@@ -19,6 +19,7 @@ const (
 	RoleService              Role = "service"
 	RoleUpgradeHelper        Role = "upgrade_helper"
 	RoleWrapper              Role = "wrapper"
+	RoleTeam                 Role = "team"
 )
 
 type Decision struct {
@@ -36,6 +37,8 @@ func Detect(args []string) (Decision, error) {
 		return Decision{Role: RoleHelp}, nil
 	case "version", "--version":
 		return Decision{Role: RoleVersion}, nil
+	case "team":
+		return Decision{Role: RoleTeam, Args: args[1:]}, nil
 	case "daemon":
 		return Decision{Role: RoleDaemon, Args: args[1:]}, nil
 	case "install":

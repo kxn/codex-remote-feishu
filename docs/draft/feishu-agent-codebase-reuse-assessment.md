@@ -140,7 +140,7 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 | 会话与历史（7） | `/new` 新会话；`/history` 历史；`/list` 工作区／实例；`/use` 当前工作区会话；`/useall` 跨工作区会话；`/detach` 解除接管；`/follow` 跟随 VS Code | 通过任务／项目定位工作上下文，不让人管理原生 thread | 保留导航、历史和手动控制，不保留旧 surface 执行所有权 |
 | 工作区（7） | `/workspace`、`/workspace list`、`/workspace new`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree`、`/workspace detach` | 已有资源精确选择；内部工作位置由 Agent 自主组织 | 保留显式资源与目录操作，不因群自动化取消单聊入口 |
 | 运行配置（10） | `/mode`、`/model`、`/reasoning`、`/access`、`/plan`、`/verbose`、`/codexprofile`、`/claudeprofile`、`/opencodeprofile`、`/mcpoauth` | 对话引导选择控件，跨项目 Bot 配置在适当设置面处理 | 保留后端适用配置及认证入口，准确显示影响范围 |
-| 持续工作与审阅（5） | `/goal` 会话目标；`/autowhip` 空闲催办；`/autocontinue` 可重试失败恢复；`/review` 审阅；`/bendtomywill` 修补当前会话最新助手回复 | 持久协作、方法库和工作状态承接，不靠循环催办或改写回复判业务完成 | 保留适用直接操作；局部工具不擅自改团队事实 |
+| 持续工作与审阅（4） | `/goal` 会话目标；`/autowhip` 空闲催办；`/autocontinue` 可重试失败恢复；`/review` 审阅 | 持久协作、方法库和工作状态承接，不靠循环催办或改写回复判业务完成 | 保留适用直接操作；局部工具不擅自改团队事实 |
 | 文件交付（1） | `/sendfile` 从工作区选文件发送 | Agent 按实际需要显式交付，使用稳定入口 | 保留，接共用发送／资料能力 |
 | 旧群专用（2） | `/primary` 未 @ 消息的默认 Bot；`/coworkers` 群并发上限 | 旧命令退役，由负责人路由和调度预算承接 | 原 handler 就只允许群，不新增到单聊 |
 | 导航与维护（7） | `/status`、`/help`、`/menu`、`/admin`、`/upgrade`、`/debug`、`/vscode-migrate` | 项目原生入口及自然语言状态查询；管理移至已有管理入口 | 保留适用命令并投影新内核状态 |

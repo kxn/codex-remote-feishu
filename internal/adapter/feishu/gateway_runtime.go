@@ -24,26 +24,54 @@ const (
 )
 
 func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
+	g.mu.Lock()
+	hook := g.rawIngressHook
+	g.mu.Unlock()
+	if hook != nil && (hook.Authorize == nil || hook.Receive == nil) {
+		return fmt.Errorf("durable ingress hook is incomplete")
+	}
 	g.refreshBotIdentity(ctx)
 	inboundLane := gatewaypkg.NewSurfaceInboundLane(ctx, g.inboundEnv(), gatewayDispatcher(handler))
 	dispatch := dispatcher.NewEventDispatcher("", "")
 	dispatch.OnP2MessageReceiveV1(func(ctx context.Context, event *larkim.P2MessageReceiveV1) error {
-		return gatewaypkg.HandleInboundMessageEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
+		return g.handleMessageIngress(ctx, event, func() error {
+			return gatewaypkg.HandleInboundMessageEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
+		})
 	})
 	dispatch.OnP2MessageRecalledV1(func(ctx context.Context, event *larkim.P2MessageRecalledV1) error {
+		if handled, err := g.handleTeamRecall(ctx, event); handled {
+			return err
+		}
 		return gatewaypkg.HandleInboundMessageRecalledEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
 	})
 	dispatch.OnP2MessageReactionCreatedV1(func(ctx context.Context, event *larkim.P2MessageReactionCreatedV1) error {
+		if handled, err := g.handleTeamReaction(ctx, event); handled {
+			return err
+		}
 		return gatewaypkg.HandleInboundMessageReactionCreatedEvent(ctx, g.inboundEnv(), event, inboundLane, gatewayDispatcher(handler))
 	})
 	dispatch.OnP2ChatMemberBotAddedV1(func(ctx context.Context, event *larkim.P2ChatMemberBotAddedV1) error {
+		if handled, err := g.handleTeamBotAdded(ctx, event); handled {
+			return err
+		}
 		action, ok := gatewaypkg.ParseBotAddedToGroupEvent(g.inboundEnv(), event)
 		if !ok {
 			return nil
 		}
 		return handleGatewayEventAction(ctx, action, handler)
 	})
+	dispatch.OnP2ChatMemberBotDeletedV1(func(ctx context.Context, event *larkim.P2ChatMemberBotDeletedV1) error {
+		_, err := g.handleTeamBotRemoved(ctx, event)
+		return err
+	})
+	dispatch.OnP2ChatDisbandedV1(func(ctx context.Context, event *larkim.P2ChatDisbandedV1) error {
+		_, err := g.handleTeamChatDeleted(ctx, event)
+		return err
+	})
 	dispatch.OnP2CardActionTrigger(func(ctx context.Context, event *larkcallback.CardActionTriggerEvent) (*larkcallback.CardActionTriggerResponse, error) {
+		if response, handled, err := g.handleTeamCard(ctx, event); handled {
+			return response, err
+		}
 		action, ok := gatewaypkg.ParseCardActionTriggerEvent(g.routingEnv(), event)
 		if ok {
 			return handleCardActionTrigger(ctx, action, handler)
@@ -51,6 +79,9 @@ func (g *LiveGateway) Start(ctx context.Context, handler ActionHandler) error {
 		return &larkcallback.CardActionTriggerResponse{}, nil
 	})
 	dispatch.OnP2BotMenuV6(func(ctx context.Context, event *larkapplication.P2BotMenuV6) error {
+		if handled, err := g.handleTeamMenu(ctx, event); handled {
+			return err
+		}
 		action, ok := gatewaypkg.ParseMenuEvent(g.config.GatewayID, event)
 		if !ok {
 			return nil

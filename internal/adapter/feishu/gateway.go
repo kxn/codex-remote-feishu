@@ -29,6 +29,7 @@ func (NopGateway) Start(context.Context, ActionHandler) error { return nil }
 func (NopGateway) Apply(context.Context, []Operation) error   { return nil }
 
 type LiveGatewayConfig struct {
+	RawIngressHook        *RawIngressHook
 	GatewayID             string
 	AppID                 string
 	AppSecret             string
@@ -58,11 +59,12 @@ type LiveGateway struct {
 	createReactionFn   func(context.Context, string, string) (*larkim.CreateMessageReactionResp, error)
 	deleteReactionFn   func(context.Context, string, string) (*larkim.DeleteMessageReactionResp, error)
 
-	mu        sync.Mutex
-	stateHook func(GatewayState, error)
-	reactions map[string]string
-	messages  map[string]string
-	botOpenID string
+	mu             sync.Mutex
+	stateHook      func(GatewayState, error)
+	rawIngressHook *RawIngressHook
+	reactions      map[string]string
+	messages       map[string]string
+	botOpenID      string
 }
 
 type gatewayMessage struct {
@@ -110,6 +112,10 @@ func NewLiveGateway(config LiveGatewayConfig) *LiveGateway {
 		reactions: map[string]string{},
 		messages:  map[string]string{},
 		botOpenID: strings.TrimSpace(config.BotOpenID),
+	}
+	if config.RawIngressHook != nil {
+		copy := *config.RawIngressHook
+		gateway.rawIngressHook = &copy
 	}
 	gateway.downloadImageFn = gateway.downloadImage
 	gateway.downloadFileFn = gateway.downloadFile

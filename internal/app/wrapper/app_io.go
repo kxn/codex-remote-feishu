@@ -293,7 +293,7 @@ func writeChildFrameForRuntime(childStdin io.Writer, line []byte, runtime backen
 		debugf("write to child: %s", summarizeFrame(line))
 	}
 	logRawFrame(rawLogger, "codex.stdin", "out", line, "", "")
-	if _, err := childStdin.Write(line); err != nil {
+	if err := writeJournaledChildFrame(childStdin, line, runtime); err != nil {
 		if reportProblem != nil {
 			reportProblem(agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
 				Code:      runtimeWriteStdinCode(runtime),

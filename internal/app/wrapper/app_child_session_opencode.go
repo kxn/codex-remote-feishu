@@ -25,7 +25,11 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 		return nil, fmt.Errorf("opencode translator is nil")
 	}
 	childCtx, childCancel := context.WithCancel(ctx)
-	childArgs, childEnv := a.buildOpenCodeChildLaunch()
+	childArgs, childEnv, err := a.buildOpenCodeChildLaunch()
+	if err != nil {
+		childCancel()
+		return nil, err
+	}
 	translator.SetMCPServers(a.openCodeFeishuMCPServers())
 	openCodeBinary, err := a.resolveOpenCodeBinary(childEnv)
 	if err != nil {
@@ -38,10 +42,17 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 	cmd.Stderr = nil
 	cmd.Dir = pathcanon.Native(a.config.WorkspaceRoot)
 	cmd.Env = childEnv
+	a.prepareWorkProcess(cmd)
 
 	childStdin, childStdout, childStderr, err := startChild(cmd)
 	if err != nil {
 		childCancel()
+		return nil, err
+	}
+	scope, err := a.bindWorkProcess(cmd)
+	if err != nil {
+		childCancel()
+		_ = cmd.Wait()
 		return nil, err
 	}
 	a.debugf("opencode child started: binary=%s pid=%d cwd=%s", openCodeBinary, cmd.Process.Pid, a.config.WorkspaceRoot)
@@ -57,26 +68,36 @@ func (a *App) launchOpenCodeChildSession(ctx context.Context, rawLogger *debuglo
 
 	waitErr := make(chan error, 1)
 	go func() {
-		waitErr <- cmd.Wait()
+		err := cmd.Wait()
+		if scope != nil {
+			scope.MarkWaitObserved()
+			a.work.inspection.mu.Lock()
+			a.work.inspection.dirty = true
+			a.work.inspection.mu.Unlock()
+			_ = a.work.inspection.persist(a.work.journal, a.work.snapshot.Owner)
+		}
+		waitErr <- err
 	}()
 
 	return &childSession{
-		cmd:         cmd,
-		stdin:       childStdin,
-		stdout:      bootstrappedStdout,
-		stderr:      childStderr,
-		stdoutClose: childStdout,
-		stderrClose: childStderr,
-		waitErr:     waitErr,
-		cancel:      childCancel,
+		workProcessScope: scope,
+		cmd:              cmd,
+		stdin:            childStdin,
+		stdout:           bootstrappedStdout,
+		stderr:           childStderr,
+		stdoutClose:      childStdout,
+		stderrClose:      childStderr,
+		waitErr:          waitErr,
+		cancel:           childCancel,
 	}, nil
 }
 
-func (a *App) buildOpenCodeChildLaunch() ([]string, []string) {
+func (a *App) buildOpenCodeChildLaunch() ([]string, []string, error) {
 	args := openCodeChildArgs(a.config.Args, a.config.WorkspaceRoot)
 	env := config.FilterEnvWithoutProxy(append([]string{}, os.Environ()...))
 	env = append(env, a.config.ChildProxyEnv...)
-	return args, env
+	env, err := a.applyWorkOpenCodeEnv(a.applyWorkChildEnv(env))
+	return args, env, err
 }
 
 func openCodeChildArgs(wrapperArgs []string, workspaceRoot string) []string {
@@ -157,6 +178,7 @@ func (a *App) bootstrapOpenCodeACP(translator *acpadapter.Translator, childStdin
 				return nil, err
 			}
 			if matched {
+				a.markWorkBootstrap(frame, line)
 				if _, err := translator.ObserveServer(line); err != nil {
 					return nil, err
 				}

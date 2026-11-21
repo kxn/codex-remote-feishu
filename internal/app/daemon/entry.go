@@ -19,7 +19,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/desktopsession"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
-	"github.com/kxn/codex-remote-feishu/internal/codexstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/conversationtrace"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -75,6 +74,11 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 	}
 	defer lock.Release()
 
+	legacySnapshot, err := captureTeamLegacyFiles(paths.StateDir)
+	if err != nil {
+		return fmt.Errorf("capture legacy state before startup: %w", err)
+	}
+
 	startedAt := time.Now().UTC()
 	identity, err := relayruntime.NewServerIdentityWithBranch(version, branch, cfg.ConfigPath, startedAt)
 	if err != nil {
@@ -129,16 +133,7 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		log.Printf("persisted thread catalog disabled: %v", err)
 	} else if catalog != nil {
 		app.service.SetPersistedThreadCatalog(catalog)
-		if catalog.codex != nil {
-			if storage, err := codexstate.NewDefaultTurnPatchStorage(codexstate.TurnPatchStorageOptions{
-				SQLiteCatalog: catalog.codex,
-				Logf:          log.Printf,
-			}); err != nil {
-				log.Printf("turn patch storage disabled: %v", err)
-			} else if storage != nil {
-				app.SetTurnPatchStorage(storage)
-			}
-		}
+
 	}
 	app.ConfigureAdmin(AdminRuntimeOptions{
 		ConfigPath:           loadedConfig.Path,
@@ -152,6 +147,12 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		EnvOverrideActive:    envOverrideActive,
 		EnvOverrideGatewayID: cfg.FeishuGatewayID,
 	})
+	if err := app.configureWorkRuntime(ctx, teamPrivateCommands{app: app}, app.authorizeTeamControl); err != nil {
+		return err
+	}
+	if err := app.activateWorkRuntime(ctx, legacySnapshot); err != nil {
+		return err
+	}
 	if err := app.applyRuntimeFeishuConfigs(loadedConfig.Config); err != nil {
 		return err
 	}
@@ -316,6 +317,7 @@ func resolveDesktopSessionInstanceID() string {
 }
 
 type gatewayRuntimeHooks struct {
+	RawIngressHook        *feishu.RawIngressHook
 	PrimaryGatewayForChat func(chatID string) string
 	BotOpenIDForGateway   func(gatewayID string) string
 }
@@ -369,6 +371,7 @@ build:
 		}
 		enabled := app.Enabled == nil || *app.Enabled
 		values = append(values, feishu.GatewayAppConfig{
+			RawIngressHook:        hooks.RawIngressHook,
 			GatewayID:             gatewayID,
 			Name:                  strings.TrimSpace(app.Name),
 			AppID:                 strings.TrimSpace(app.AppID),

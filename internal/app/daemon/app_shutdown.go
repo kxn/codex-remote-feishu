@@ -49,6 +49,13 @@ func (a *App) Shutdown(ctx context.Context) error {
 	}
 
 	events := a.beginShutdownNotices()
+	if a.teamRuntime != nil && a.teamRuntime.legacyFenced.Load() {
+		teamErr := a.shutdownWorkRuntime(context.WithoutCancel(ctx))
+		a.stopIngressAndServers()
+		a.deliverShutdownNotices(events)
+		a.stopGatewayRuntime(true)
+		return a.finishShutdown(teamErr)
+	}
 	handledRelayTargets, relayDrainErr := a.shutdownRelayInstancesWithTimeout(a.shutdownDrainTimeoutValue(), a.shutdownDrainPollValue())
 	a.stopIngressAndServers()
 
@@ -73,6 +80,14 @@ func (a *App) shutdownForConsoleClose() error {
 	a.mu.Lock()
 	a.shuttingDown = true
 	a.mu.Unlock()
+	if a.teamRuntime != nil && a.teamRuntime.legacyFenced.Load() {
+		ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+		defer cancel()
+		teamErr := a.shutdownWorkRuntime(ctx)
+		a.stopIngressAndServers()
+		a.stopGatewayRuntime(false)
+		return a.finishShutdown(teamErr)
+	}
 	handledRelayTargets, relayDrainErr := a.shutdownRelayInstancesWithTimeout(250*time.Millisecond, 25*time.Millisecond)
 	cleanupErr := a.shutdownManagedHeadless(handledRelayTargets)
 	a.stopIngressAndServers()
@@ -363,6 +378,20 @@ func (a *App) stopIngressAndServers() {
 }
 
 func (a *App) finishShutdown(errs ...error) error {
+	if r := a.teamRuntime; r != nil && r.store != nil {
+		joined := r.runDone == nil
+		if r.runDone != nil {
+			select {
+			case <-r.runDone:
+				joined = true
+			default:
+			}
+		}
+		if joined {
+			errs = append(errs, r.store.Close())
+		}
+	}
+
 	if a.rawLogger != nil {
 		_ = a.rawLogger.Close()
 	}

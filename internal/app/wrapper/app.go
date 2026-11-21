@@ -23,6 +23,8 @@ import (
 type App struct {
 	config  Config
 	runtime backendRuntime
+	work    *workExecutionState
+	workErr error
 }
 
 const (
@@ -45,11 +47,12 @@ type restartRequest struct {
 }
 
 type Config struct {
-	RelayServerURL  string
-	CodexRealBinary string
-	NameMode        string
-	Args            []string
-	ConfigPath      string
+	WorkLaunchSnapshot *agentproto.RuntimeLaunchSnapshot
+	RelayServerURL     string
+	CodexRealBinary    string
+	NameMode           string
+	Args               []string
+	ConfigPath         string
 
 	InstanceID                string
 	DisplayName               string
@@ -143,7 +146,12 @@ func LoadConfig(args []string, version, branch string) (Config, error) {
 	if parsed, ok := agentproto.ParseBackend(backend); ok {
 		backend = parsed
 	}
+	snapshot, err := readWorkLaunchSnapshot(os.Getenv(config.WorkLaunchSnapshotEnv))
+	if err != nil {
+		return Config{}, err
+	}
 	return Config{
+		WorkLaunchSnapshot:        snapshot,
 		RelayServerURL:            loaded.RelayServerURL,
 		CodexRealBinary:           loaded.CodexRealBinary,
 		NameMode:                  loaded.NameMode,
@@ -193,7 +201,13 @@ func New(cfg Config) *App {
 			})
 		}
 	}
-	return &App{config: cfg, runtime: runtime}
+	work, workErr := newWorkExecutionState(cfg)
+	if work != nil {
+		snapshotCopy := work.snapshot
+		cfg.WorkLaunchSnapshot = &snapshotCopy
+		runtime = &workExecutionRuntime{backendRuntime: runtime, work: work}
+	}
+	return &App{config: cfg, runtime: runtime, work: work, workErr: workErr}
 }
 
 func (a *App) debugf(format string, args ...any) {
@@ -203,6 +217,9 @@ func (a *App) debugf(format string, args ...any) {
 }
 
 func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if a.workErr != nil {
+		return 1, a.workErr
+	}
 	rawLogger, err := a.openRawLogger()
 	if err != nil {
 		log.Printf("relay raw wrapper log disabled: %v", err)
@@ -272,11 +289,33 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 			problems.Flush()
 			return nil
 		},
+		RuntimeCommandReceipt: a.runtimeCommandReceipt,
 		OnError: func(_ context.Context, problem agentproto.ErrorInfo) error {
 			problems.Emit(problem)
 			return nil
 		},
 		OnCommand: func(ctx context.Context, command agentproto.Command) error {
+			originalCommand := command
+			var err error
+			command, err = a.prepareWorkCommand(command)
+			if err != nil {
+				return err
+			}
+			duplicate, err := a.prepareJournalCommand(originalCommand)
+			if err != nil {
+				return err
+			}
+			if duplicate {
+				return nil
+			}
+			if command.Kind == agentproto.CommandRuntimeInspect {
+				if a.work == nil {
+					return workCommandProblem(command, "work_execution_not_supported", "当前 wrapper 未启用团队原生检查。")
+				}
+				event := a.inspectNative(ctx, command, writeCh)
+				event.Execution = agentproto.CloneExecutionBinding(command.Execution)
+				return client.SendEvents([]agentproto.Event{event})
+			}
 			if command.Kind == agentproto.CommandProcessExit {
 				a.debugf("relay shutdown command received: command=%s", command.CommandID)
 				select {
@@ -441,6 +480,9 @@ func (a *App) Run(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer
 		},
 	})
 	problems.SetClient(client)
+	if a.work != nil && a.work.journal != nil {
+		client.SetEventJournal(a.work.journal)
+	}
 	client.SetRawLogger(rawLogger)
 
 	activeChild, err = a.runtime.Launch(ctx, a, rawLogger, problems.Emit)
@@ -538,10 +580,15 @@ func (a *App) relayHello() agentproto.Hello {
 		instance.CodexProfileID = strings.TrimSpace(a.config.CodexProfileID)
 	}
 	return agentproto.Hello{
-		Protocol:             agentproto.WireProtocol,
-		Instance:             instance,
-		Capabilities:         a.runtime.Capabilities(),
-		CapabilitiesDeclared: true,
+		Protocol:                         agentproto.WireProtocol,
+		CarrierProcess:                   a.carrierProcessIdentity(),
+		WorkerProtocolVersion:            a.workProtocolVersion(),
+		RuntimeInspectionProtocolVersion: a.inspectionProtocolVersion(),
+		JournalProtocolVersion:           a.journalProtocolVersion(),
+		CarrierIncarnation:               a.carrierIncarnation(),
+		Instance:                         instance,
+		Capabilities:                     a.runtime.Capabilities(),
+		CapabilitiesDeclared:             true,
 	}
 }
 

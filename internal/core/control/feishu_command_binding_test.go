@@ -73,12 +73,6 @@ func TestResolveFeishuCommandBindingFromActionClassifiesEntryKinds(t *testing.T)
 			wantContinuation: DaemonCommandAdmin,
 		},
 		{
-			name:       "owner entry",
-			action:     Action{Kind: ActionTurnPatchCommand, Text: "/bendtomywill"},
-			wantFamily: FeishuCommandPatch,
-			wantKind:   FeishuCommandBindingOwnerEntry,
-		},
-		{
 			name:       "review owner entry",
 			action:     Action{Kind: ActionReviewCommand, Text: "/review uncommitted"},
 			wantFamily: FeishuCommandReview,
@@ -131,16 +125,6 @@ func TestResolveFeishuCommandDisplayFromActionUsesBindingDefinition(t *testing.T
 	}
 	if display.Title != "停止推理" || display.CanonicalSlash != "/stop" || display.FamilyID != FeishuCommandStop {
 		t.Fatalf("unexpected stop display: %#v", display)
-	}
-}
-
-func TestResolveFeishuCommandDisplayFromActionUsesRouteTitle(t *testing.T) {
-	display, ok := ResolveFeishuCommandDisplayFromAction(Action{Kind: ActionTurnPatchRollback})
-	if !ok {
-		t.Fatal("expected turn patch rollback action to resolve command display")
-	}
-	if display.Title != "回滚最近一次修补" || display.CanonicalSlash != "/bendtomywill rollback" || display.FamilyID != FeishuCommandPatch {
-		t.Fatalf("unexpected rollback display: %#v", display)
 	}
 }
 

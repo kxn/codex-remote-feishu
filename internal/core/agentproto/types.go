@@ -94,6 +94,10 @@ type FileChangeRecord struct {
 }
 
 type Event struct {
+	RuntimeMCP           *RuntimeMCPResult             `json:"runtimeMcp,omitempty"`
+	RuntimeInspection    *RuntimeInspectionResult      `json:"runtimeInspection,omitempty"`
+	Journal              *RuntimeEventIdentity         `json:"journal,omitempty"`
+	Execution            *ExecutionBinding             `json:"execution,omitempty"`
 	Seq                  uint64                        `json:"seq,omitempty"`
 	Kind                 EventKind                     `json:"kind"`
 	CommandID            string                        `json:"commandId,omitempty"`
@@ -235,20 +239,26 @@ type Input struct {
 }
 
 type Command struct {
-	CommandID    string             `json:"commandId,omitempty"`
-	IssuedAt     time.Time          `json:"issuedAt,omitempty"`
-	Kind         CommandKind        `json:"kind"`
-	Origin       Origin             `json:"origin"`
-	Target       Target             `json:"target"`
-	Prompt       Prompt             `json:"prompt,omitempty"`
-	Overrides    PromptOverrides    `json:"overrides,omitempty"`
-	CodexResume  *CodexResumePolicy `json:"codexResume,omitempty"`
-	Request      Request            `json:"request,omitempty"`
-	ModelList    ModelListCommand   `json:"modelList,omitempty"`
-	MCP          MCPCommand         `json:"mcp,omitempty"`
-	Review       ReviewRequest      `json:"review,omitempty"`
-	Goal         GoalCommand        `json:"goal,omitempty"`
-	ShellCommand ShellCommand       `json:"shellCommand,omitempty"`
+	NativeInputAdmission *NativeInputAdmissionCommand `json:"nativeInputAdmission,omitempty"`
+	RuntimeMCP           *RuntimeMCPQuery             `json:"runtimeMcp,omitempty"`
+	Maintenance          *NativeMaintenanceCommand    `json:"maintenance,omitempty"`
+	RuntimeInspection    *RuntimeInspectionRequest    `json:"runtimeInspection,omitempty"`
+	Execution            *ExecutionBinding            `json:"execution,omitempty"`
+	InstructionRevision  string                       `json:"instructionRevision,omitempty"`
+	CommandID            string                       `json:"commandId,omitempty"`
+	IssuedAt             time.Time                    `json:"issuedAt,omitempty"`
+	Kind                 CommandKind                  `json:"kind"`
+	Origin               Origin                       `json:"origin"`
+	Target               Target                       `json:"target"`
+	Prompt               Prompt                       `json:"prompt,omitempty"`
+	Overrides            PromptOverrides              `json:"overrides,omitempty"`
+	CodexResume          *CodexResumePolicy           `json:"codexResume,omitempty"`
+	Request              Request                      `json:"request,omitempty"`
+	ModelList            ModelListCommand             `json:"modelList,omitempty"`
+	MCP                  MCPCommand                   `json:"mcp,omitempty"`
+	Review               ReviewRequest                `json:"review,omitempty"`
+	Goal                 GoalCommand                  `json:"goal,omitempty"`
+	ShellCommand         ShellCommand                 `json:"shellCommand,omitempty"`
 }
 
 // ShellCommand is a user-initiated command sent to a backend's native

@@ -107,6 +107,7 @@ func (t *Translator) completeOpenTextItems(turn *turnState) []agentproto.Event {
 			ItemID:   current.item.ItemID,
 			ItemKind: current.item.Kind,
 			Status:   "completed",
+			Metadata: map[string]any{"text": current.item.Text.String()},
 		}))
 	}
 	return events

@@ -58,6 +58,7 @@ func (a *App) bootstrapHeadlessCodex(childStdin io.Writer, childStdout io.Reader
 				if err := writeChildFrameForRuntime(childStdin, initializedFrame, a.runtime, a.debugf, rawLogger, reportProblem); err != nil {
 					return nil, err
 				}
+				a.markWorkBootstrap(initializeFrame, line)
 				return io.MultiReader(bytes.NewReader(replay.Bytes()), reader), nil
 			}
 			replay.Write(line)

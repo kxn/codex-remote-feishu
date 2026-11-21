@@ -13,7 +13,6 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishufacts"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishuroomstate"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
-	turnpatchruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/turnpatchruntime"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
@@ -66,44 +65,6 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	app.syncBotCapabilitySettingsStateLocked()
 	app.syncFeishuRoomStateLocked()
 	app.feishuRuntime.attentionRequests[privateSurfaceID+"::request-1::1"] = time.Now().UTC()
-	app.turnPatchRuntime.ActiveFlows["req-main"] = &turnpatchruntime.FlowRecord{
-		FlowID:           "flow-main",
-		RequestID:        "req-main",
-		SurfaceSessionID: privateSurfaceID,
-		Stage:            turnpatchruntime.FlowStageEditing,
-	}
-	app.turnPatchRuntime.ActiveFlows["req-main-orphan"] = &turnpatchruntime.FlowRecord{
-		FlowID:    "flow-main-orphan",
-		RequestID: "req-main-orphan",
-		Stage:     turnpatchruntime.FlowStageApplying,
-	}
-	app.turnPatchRuntime.ActiveFlows["req-other"] = &turnpatchruntime.FlowRecord{
-		FlowID:           "flow-other",
-		RequestID:        "req-other",
-		SurfaceSessionID: "feishu:other:user:ou_other",
-		Stage:            turnpatchruntime.FlowStageEditing,
-	}
-	app.turnPatchRuntime.ActiveTx["inst-main"] = &turnpatchruntime.Transaction{
-		ID:               "tx-main",
-		FlowID:           "flow-main",
-		InstanceID:       "inst-main",
-		InitiatorSurface: privateSurfaceID,
-		PausedSurfaceIDs: map[string]bool{privateSurfaceID: true},
-	}
-	app.turnPatchRuntime.ActiveTx["inst-main-orphan"] = &turnpatchruntime.Transaction{
-		ID:               "tx-main-orphan",
-		FlowID:           "flow-main-orphan",
-		InstanceID:       "inst-main-orphan",
-		InitiatorSurface: privateSurfaceID,
-		PausedSurfaceIDs: map[string]bool{},
-	}
-	app.turnPatchRuntime.ActiveTx["inst-other"] = &turnpatchruntime.Transaction{
-		ID:               "tx-other",
-		FlowID:           "flow-other",
-		InstanceID:       "inst-other",
-		InitiatorSurface: "feishu:other:user:ou_other",
-		PausedSurfaceIDs: map[string]bool{},
-	}
 	app.mu.Unlock()
 
 	app.feishuRuntime.permissionMu.Lock()
@@ -153,24 +114,6 @@ func TestFeishuAppIDChangePurgesGatewayIdentityStateAndPreservesRoomWorkspace(t 
 	}
 	if got := app.gatewayRuntimeHooks().PrimaryGatewayForChat("oc_room"); got != "" {
 		t.Fatalf("primary snapshot after identity change = %q, want empty", got)
-	}
-	if _, ok := app.turnPatchRuntime.ActiveFlows["req-main"]; ok {
-		t.Fatal("old turn patch flow survived identity change")
-	}
-	if _, ok := app.turnPatchRuntime.ActiveTx["inst-main"]; ok {
-		t.Fatal("old turn patch transaction survived identity change")
-	}
-	if _, ok := app.turnPatchRuntime.ActiveFlows["req-main-orphan"]; ok {
-		t.Fatal("old turn patch orphan flow survived identity change")
-	}
-	if _, ok := app.turnPatchRuntime.ActiveTx["inst-main-orphan"]; ok {
-		t.Fatal("old turn patch orphan transaction survived identity change")
-	}
-	if _, ok := app.turnPatchRuntime.ActiveFlows["req-other"]; !ok {
-		t.Fatal("other gateway turn patch flow was removed")
-	}
-	if _, ok := app.turnPatchRuntime.ActiveTx["inst-other"]; !ok {
-		t.Fatal("other gateway turn patch transaction was removed")
 	}
 	for key := range app.feishuRuntime.attentionRequests {
 		if strings.HasPrefix(key, privateSurfaceID+"::") {

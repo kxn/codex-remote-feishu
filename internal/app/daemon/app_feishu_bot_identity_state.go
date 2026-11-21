@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/feishubotidentity"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/surfaceresume"
-	"github.com/kxn/codex-remote-feishu/internal/core/eventcontract"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 	"github.com/kxn/codex-remote-feishu/internal/feishuidentity"
 )
@@ -291,7 +289,6 @@ func (a *App) purgeFeishuGatewayRuntimeStateLocked(gatewayID string, surfaceIDs 
 			}
 		}
 	}
-	turnPatchResumeEvents := a.purgeFeishuGatewayTurnPatchRuntimeLocked(gatewayID, surfaceSet, addSurface)
 	for surfaceID := range surfaceSet {
 		delete(a.surfaceResumeRuntime.recovery, surfaceID)
 		delete(a.surfaceResumeRuntime.groupOnDemandContinuations, surfaceID)
@@ -346,58 +343,6 @@ func (a *App) purgeFeishuGatewayRuntimeStateLocked(gatewayID string, surfaceIDs 
 		_ = a.feishuFactsState.store.Delete(gatewayID)
 		a.feishuFactsState.mu.Unlock()
 	}
-	if len(turnPatchResumeEvents) != 0 {
-		a.handleUIEventsLocked(context.Background(), turnPatchResumeEvents)
-	}
-}
-
-func (a *App) purgeFeishuGatewayTurnPatchRuntimeLocked(gatewayID string, surfaceSet map[string]bool, addSurface func(string)) []eventcontract.Event {
-	removedFlowIDs := map[string]bool{}
-	for requestID, flow := range a.turnPatchRuntime.ActiveFlows {
-		if flow == nil {
-			delete(a.turnPatchRuntime.ActiveFlows, requestID)
-			continue
-		}
-		surfaceID := strings.TrimSpace(flow.SurfaceSessionID)
-		if !surfaceSet[surfaceID] && !feishuSurfaceIDBelongsToGateway(surfaceID, gatewayID) {
-			continue
-		}
-		addSurface(surfaceID)
-		if flowID := strings.TrimSpace(flow.FlowID); flowID != "" {
-			removedFlowIDs[flowID] = true
-		}
-		delete(a.turnPatchRuntime.ActiveFlows, requestID)
-	}
-
-	var resumeEvents []eventcontract.Event
-	for instanceID, tx := range a.turnPatchRuntime.ActiveTx {
-		if tx == nil {
-			delete(a.turnPatchRuntime.ActiveTx, instanceID)
-			continue
-		}
-		if !removedFlowIDs[strings.TrimSpace(tx.FlowID)] && !feishuSurfaceIDBelongsToGateway(tx.InitiatorSurface, gatewayID) {
-			continue
-		}
-		delete(a.turnPatchRuntime.ActiveTx, instanceID)
-		if flowID := strings.TrimSpace(tx.FlowID); flowID != "" {
-			removedFlowIDs[flowID] = true
-		}
-		for surfaceID := range tx.PausedSurfaceIDs {
-			resumeEvents = append(resumeEvents, a.service.ResumeSurfaceDispatch(surfaceID, nil)...)
-		}
-	}
-	for requestID, flow := range a.turnPatchRuntime.ActiveFlows {
-		if flow == nil {
-			delete(a.turnPatchRuntime.ActiveFlows, requestID)
-			continue
-		}
-		if !removedFlowIDs[strings.TrimSpace(flow.FlowID)] {
-			continue
-		}
-		addSurface(flow.SurfaceSessionID)
-		delete(a.turnPatchRuntime.ActiveFlows, requestID)
-	}
-	return resumeEvents
 }
 
 func feishuSurfaceIDBelongsToGateway(surfaceID, gatewayID string) bool {

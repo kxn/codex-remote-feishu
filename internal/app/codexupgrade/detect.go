@@ -21,6 +21,10 @@ func Inspect(ctx context.Context, opts InspectOptions) Installation {
 		PackageName:      defaultPackageName,
 		SourceKind:       SourceUnknown,
 	}
+	// Freeze the actual installer location in confirmation fingerprints.
+	if resolved, err := exec.LookPath(info.NPMCommand); err == nil {
+		info.NPMCommand = resolved
+	}
 	if info.ConfiguredBinary == "" {
 		info.Problem = "missing configured codex binary"
 		return info

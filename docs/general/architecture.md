@@ -1,14 +1,30 @@
 # 架构
 
 > Type: `general`
-> Updated: `2026-07-31`
-> Summary: 对齐当前统一二进制入口、兼容 launcher 与实际目录结构，并补充 daemon 作为组合根的 runtime owner 收口、durable JSON store 的统一 fail-closed load policy、Feishu room primary 的 daemon snapshot 热路径、Feishu gateway 级 bot capability 单写源与 surface 执行投影、Feishu adapter 的 controller/gateway/projector/preview 边界、Feishu surface identity 与 ordinary inbound planner 的单一实现、gateway-local FIFO lane、orchestrator service-owned UI/runtime cluster、`control.Action` 的 request / owner-flow family 收口、`UIEvent` 的 view-kind 命名、daemon 本地 Feishu tool listener 的 MCP-native streamable HTTP 协议面、current-surface 显式图片/文件投递 contract，以及 editor 侧共享 VS Code bundle entrypoint 探测边界。
+> Updated: `2026-11-21`
+> Summary: 增加持久团队执行内核、业务 CLI、迁移与原生协议分层，明确旧 surface 结构的复用和历史范围。
 
 ## 1. 当前状态
 
 当前仓库只维护 Go 版本实现。
 
 旧的 Node.js / Rust 版本已经不再随仓库发布，也不是当前文档和测试的讨论对象。
+
+本分支的飞书群聊与私聊已接入持久团队内核。`app_work_setup.go` 是组合入口，`app_work_runtime.go` 驱动相互独立的接收、调度、原生维护、项目建立、资料与通知通道。团队事实保存在状态目录的 `team-work.db`；旧 JSON 状态先备份、迁移并停止旧执行权，不与新调度器同时写业务事实。
+
+| 层 | 当前职责 |
+| --- | --- |
+| `core/work`、`workstore` | 身份与范围、工作上下文、任务版本、输入、执行、原生关联、外部操作和资料证据；SQLite 事务与明确版本约束 |
+| `workservice`、`workcmd`、`workhttp`、`teamcli` | 共用业务用例和命令注册表；多身份 CLI 通过绑定 worker 的凭据及本次 run_ref 调用，不把全部工具 schema 放进提示词 |
+| `workingress`、`workengine` | 实际 SDK 输入持久接单，私聊导航与引用归属冻结；公平调度、并发额度、任务与写目录占用分别管理 |
+| `workhost`、`worktransport`、`workruntime` | 原生启动快照、准备与重建、协议命令、回执、Goal、停止与恢复；业务执行不等于一个 native turn |
+| wrapper journal 与 host inventory | 精确执行身份、可靠事件、实际进程及后台工作证据；断线或超时不伪造停止 |
+| `workprovision`、资料连接器、`workpublish`、`workui` | 项目建立、文档与表格原位操作、明确交付、飞书卡片和真实发送回执；未知写入保留证据并走明确恢复 |
+| `workupgrade` | Codex 专用执行池维护、受管安装进程、固定目标版本及恢复，不调用旧 surface 升级总编排 |
+
+人主要与负责人沟通，角色之间通过内部消息和任务关系协作，不依赖飞书把一个 Bot 的消息转给另一个 Bot。目录、原生 thread、飞书群和长期记忆分别拥有身份，不能相互替代。独立评审、资料版本和人的决定同样有明确归属。
+
+下文关于旧 surface／room／orchestrator 调度的细节保留作既有代码复用和迁移说明；新引擎激活后，不再由其执行旧群 primary／coworker 或 Cron。原生人工接管已取消，历史改写命令 `/bendtomywill` 已完整删除。当前运行规则以两份[执行状态机](./remote-surface-state-machine.md)和[卡片状态机](./feishu-card-ui-state-machine.md)的团队章节为准；场景与验证见[团队验收映射](../inprogress/feishu-agent-team-acceptance.md)。
 
 ## 2. 运行角色与入口
 
@@ -18,6 +34,7 @@
    - 无参数时默认进入 `daemon` role
    - `install` role 负责 bootstrap、写配置和启动 WebSetup
    - `app-server` / `wrapper` role 负责包装真实 `codex`
+   - `team` role 提供 Agent 按需查询帮助并调用的业务 CLI
 
 仓库里仍保留三个兼容 launcher：
 
@@ -280,7 +297,7 @@ Feishu room primary 的 durable SSOT 仍在 orchestrator room context 与 `Feish
 
 五个 durable JSON store 共享同一条 fail-closed load policy：文件不存在时得到 writable 空 store；成功载入时允许 materialize 和 sync；读取、JSON、schema version 或 dirty sanitation 保存失败时进入显式 read-only degraded。纯载入失败不会创建替代空 store、不会把虚假空状态 materialize 到 orchestrator，也不会清掉现有内存 recovery episode；已成功解码但 sanitation 保存失败时仍可读取和 materialize 规范化数据，但所有后续 sync 写入都会被统一门禁。修复状态文件后，下一次 runtime configure（通常是 daemon restart）会重新载入并退出 degraded。
 
-Feishu 多 gateway 的 identity 边界进一步区分两层事实：`GatewayID` 是可复用配置槽位，`feishu-bot-identities.json` 中已提交的 AppID/generation 才是该槽位当前 bot identity。startup、admin apply 与 retry 都必须在 runtime upsert 前经过同一个 identity reconcile owner。仅 AppSecret 变化时保留业务状态；AppID 替换或配置删除时，旧 gateway generation 会先停止接收新 action 并排空已进入的 action，再在 identity store 写入 pending transition，之后以可重放事务撤销旧 surface/resume、bot capability、匹配的 room primary 与相关内存 runtime，room workspace 不随 bot identity 删除。pending transition 是失败恢复栅栏：任一 durable 清理或 identity commit 失败时，新 App runtime 不得启动；即使后续配置改回旧 AppID 或同槽位重建同 AppID，也必须先完成清理并提交新 generation，下一次 apply 从仍未提交的 identity transition 重放。清理范围包括 daemon 侧 `/bendtomywill` turn patch flow/transaction，避免旧 owner card 或异步事务在新 bot identity 下继续投递。
+Feishu 多 gateway 的 identity 边界进一步区分两层事实：`GatewayID` 是可复用配置槽位，`feishu-bot-identities.json` 中已提交的 AppID/generation 才是该槽位当前 bot identity。startup、admin apply 与 retry 都必须在 runtime upsert 前经过同一个 identity reconcile owner。仅 AppSecret 变化时保留业务状态；AppID 替换或配置删除时，旧 gateway generation 会先停止接收新 action 并排空已进入的 action，再在 identity store 写入 pending transition，之后以可重放事务撤销旧 surface/resume、bot capability、匹配的 room primary 与相关内存 runtime，room workspace 不随 bot identity 删除。pending transition 是失败恢复栅栏：任一 durable 清理或 identity commit 失败时，新 App runtime 不得启动；即使后续配置改回旧 AppID 或同槽位重建同 AppID，也必须先完成清理并提交新 generation，下一次 apply 从仍未提交的 identity transition 重放。
 
 其中 daemon 自带的本地 Feishu tool listener 当前固定监听 `127.0.0.1:9502`，对外暴露的是 MCP-native streamable HTTP 协议面，而不再是仓库自定义 `manifest/call` 路由。它继续保留：
 
@@ -390,12 +407,10 @@ HTTP /v1/status
   -> current in-memory state dump
 ```
 
-## 7. 当前仍然刻意不做的事
+## 7. 当前边界
 
-- 对外公开 control/render 协议
-- 多 agent 统一插件系统
-- block update/replace
-- 远端 `turn.steer`
-- 复杂的进程托管器抽象
-
-这些可以以后再做，但不应影响现有三层边界。
+- 业务 CLI 与注册表是团队能力入口；旧 control/render 协议并未因此成为对外稳定接口。
+- 各原生后端继续拥有自己的上下文管理与工具能力，没有另造统一插件运行时。
+- Docx 原位编辑、卡片替换与 Codex 精确 steer 已实现；对其他后端或平台未提供的保证明确区分，不宣称等价能力。
+- Worktree 由 Agent 的 Git 操作完成。平台登记实际执行位置与占用，不要求人管理一套 Worktree 流程。
+- 平台提供可靠事实和恢复边界；具体项目采用哪些工程方法、何时请人验收，仍由项目与人的参与约定决定。

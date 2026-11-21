@@ -126,9 +126,13 @@ type codexObservedThread struct {
 }
 
 type suppressedResponseContext struct {
-	Action           string
-	ThreadID         string
-	SurfaceSessionID string
+	ManagedMaintenance bool
+	ExpectedTurnID     string
+	CommandID          string
+	Initiator          agentproto.Initiator
+	Action             string
+	ThreadID           string
+	SurfaceSessionID   string
 }
 
 type Result struct {

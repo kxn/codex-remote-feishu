@@ -100,7 +100,7 @@ func TestObserveServerGoalSetResponseProducesCorrelatedResult(t *testing.T) {
 		t.Fatalf("expected one result event, got %#v", result.Events)
 	}
 	event := result.Events[0]
-	if event.Kind != agentproto.EventThreadGoalCommandResult || event.CommandID != "cmd-goal-set" || event.ThreadID != "thread-1" {
+	if event.Kind != agentproto.EventThreadGoalCommandResult || event.CommandID != "cmd-goal-set" || event.ThreadID != "thread-1" || event.RequestID != requestID {
 		t.Fatalf("unexpected result event: %#v", event)
 	}
 	if event.ThreadGoal == nil || event.ThreadGoal.Status != "paused" || event.ThreadGoal.CreatedAt != 1710000000123 || event.ThreadGoal.UpdatedAt != 1710000000999 {

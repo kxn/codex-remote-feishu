@@ -328,8 +328,8 @@ func TestWrapperClaudePromptAndRequestRespondMainChain(t *testing.T) {
 		Kind:      agentproto.CommandPromptSend,
 		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
 		Target: agentproto.Target{
-			ThreadID: "thread-1",
-			CWD:      testutil.WorkspacePath("data", "dl", "droid"),
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           wrapperTestRepoRoot(t),
 		},
 		Prompt: agentproto.Prompt{
 			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "run the mock tool flow"}},
@@ -403,8 +403,8 @@ func TestWrapperClaudeInterruptMainChain(t *testing.T) {
 		Kind:      agentproto.CommandPromptSend,
 		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
 		Target: agentproto.Target{
-			ThreadID: "thread-1",
-			CWD:      testutil.WorkspacePath("data", "dl", "droid"),
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           wrapperTestRepoRoot(t),
 		},
 		Prompt: agentproto.Prompt{
 			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "start a long running action"}},
@@ -456,8 +456,8 @@ func TestWrapperClaudeTurnSteerUsesDispatchAcceptanceWithoutCommandResponse(t *t
 		Kind:      agentproto.CommandPromptSend,
 		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
 		Target: agentproto.Target{
-			ThreadID: "thread-1",
-			CWD:      testutil.WorkspacePath("data", "dl", "droid"),
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           wrapperTestRepoRoot(t),
 		},
 		Prompt: agentproto.Prompt{
 			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "先开始处理这个任务"}},
@@ -526,8 +526,8 @@ func TestWrapperClaudeReconcilesFailedTurnWhenChildExitsWithoutResult(t *testing
 		Kind:      agentproto.CommandPromptSend,
 		Origin:    agentproto.Origin{Surface: "feishu:app-1:chat:test"},
 		Target: agentproto.Target{
-			ThreadID: "thread-1",
-			CWD:      testutil.WorkspacePath("data", "dl", "droid"),
+			ExecutionMode: agentproto.PromptExecutionModeStartNew,
+			CWD:           wrapperTestRepoRoot(t),
 		},
 		Prompt: agentproto.Prompt{
 			Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "start and then exit before sending result"}},

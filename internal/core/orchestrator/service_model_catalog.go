@@ -294,20 +294,10 @@ func (s *Service) checkModelReasoningSupport(inst *state.InstanceRecord, model, 
 }
 
 func modelCatalogEntryForModel(inst *state.InstanceRecord, model string) (agentproto.ModelCatalogEntry, bool) {
-	model = strings.TrimSpace(model)
-	if model == "" || inst == nil || inst.ModelCatalog == nil || len(inst.ModelCatalog.Entries) == 0 {
+	if inst == nil {
 		return agentproto.ModelCatalogEntry{}, false
 	}
-	for _, entry := range inst.ModelCatalog.Entries {
-		entryModel := strings.TrimSpace(entry.Model)
-		entryID := strings.TrimSpace(entry.ID)
-		if strings.EqualFold(entryModel, model) || (entryID != "" && strings.EqualFold(entryID, model)) {
-			entry.Model = entryModel
-			entry.ID = entryID
-			return agentproto.CloneModelCatalogEntry(entry), true
-		}
-	}
-	return agentproto.ModelCatalogEntry{}, false
+	return ModelCatalogEntryForModel(inst.ModelCatalog, model)
 }
 
 func modelReasoningSupportedEfforts(entry agentproto.ModelCatalogEntry) []string {

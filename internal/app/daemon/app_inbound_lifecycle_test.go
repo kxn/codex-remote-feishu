@@ -138,11 +138,6 @@ func TestRejectedInboundActionDetailUsesCommandCatalogRouteTitle(t *testing.T) {
 		want string
 	}{
 		{
-			name: "turn patch rollback",
-			kind: control.ActionTurnPatchRollback,
-			want: "回滚最近一次修补（对应 /bendtomywill rollback）",
-		},
-		{
 			name: "review uncommitted",
 			kind: control.ActionReviewStartUncommitted,
 			want: "审阅待提交内容（对应 /review uncommitted）",

@@ -25,6 +25,7 @@ type ResolvedCommandResponse struct {
 }
 
 type Translator struct {
+	nativeUserCommands map[string]agentproto.Command
 	adapterkit.DebugLogger
 	instanceID string
 
@@ -49,6 +50,8 @@ type Translator struct {
 }
 
 type turnState struct {
+	UserCommandUUID          string
+	UserCommandUUIDObserved  bool
 	CommandID                string
 	Initiator                agentproto.Initiator
 	ThreadID                 string
@@ -73,6 +76,16 @@ func (t *turnState) trafficClass() agentproto.TrafficClass {
 func (t *turnState) annotateEvent(event *agentproto.Event) {
 	if t == nil || event == nil {
 		return
+	}
+	if t.UserCommandUUID != "" {
+		if event.Metadata == nil {
+			event.Metadata = make(map[string]any)
+		}
+		event.Metadata["nativeUserUUID"] = t.UserCommandUUID
+		event.Metadata["turnIdSource"] = "synthetic_from_sent_user_uuid"
+		if t.UserCommandUUIDObserved {
+			event.Metadata["turnIdSource"] = "synthetic_from_observed_user_uuid"
+		}
 	}
 	if t.trafficClass() != agentproto.TrafficClassInternalHelper {
 		return
@@ -169,6 +182,8 @@ func (t *Translator) ObserveServer(line []byte) (Result, error) {
 	}
 	var result Result
 	switch strings.TrimSpace(xutil.LookupStringFromAny(message["type"])) {
+	case "command_lifecycle":
+		result = t.observeCommandLifecycle(message)
 	case "system":
 		result = t.observeSystemMessage(message)
 	case "stream_event":
@@ -190,6 +205,7 @@ func (t *Translator) ObserveServer(line []byte) (Result, error) {
 }
 
 func (t *Translator) PrepareForChildLaunch(resumeThreadID string) {
+	t.nativeUserCommands = nil
 	t.activeTurn = nil
 	t.completedTurn = nil
 	t.pendingTurns = nil

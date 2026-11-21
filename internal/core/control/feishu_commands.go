@@ -43,7 +43,6 @@ const (
 	FeishuCommandCron                 = "cron"
 	FeishuCommandMCPOAuth             = "mcp_oauth"
 	FeishuCommandUpgrade              = "upgrade"
-	FeishuCommandPatch                = "patch"
 	FeishuCommandVSCodeMigrate        = "vscode_migrate"
 )
 
@@ -906,12 +905,13 @@ var feishuCommandSpecs = []feishuCommandSpec{
 			ArgumentFormHint: "github",
 			ArgumentFormNote: "输入需要认证的 MCP 服务名。",
 			ArgumentSubmit:   "生成授权链接",
-			Description:      "对当前接管实例发起某个 MCP 服务的 OAuth 认证。",
+			Description:      "查询当前会话的 MCP 服务，或发起服务 OAuth 认证。",
 			Examples:         []string{"/mcpoauth github"},
 			ShowInHelp:       true,
 			ShowInMenu:       false,
 		},
 		textPrefixes: []feishuCommandPrefixMatch{
+			{alias: "/mcp", kind: ActionMCPOAuthCommand},
 			{alias: "/mcpoauth", kind: ActionMCPOAuthCommand},
 			{alias: "/mcp-oauth", kind: ActionMCPOAuthCommand},
 		},
@@ -942,28 +942,6 @@ var feishuCommandSpecs = []feishuCommandSpec{
 		menuDynamic: []feishuCommandDynamicMenuMatch{
 			{prefix: "upgrade_", kind: ActionUpgradeCommand, parseArgument: normalizeUpgradeMenuArgument},
 			{prefix: "upgrade-", kind: ActionUpgradeCommand, parseArgument: normalizeUpgradeMenuArgument},
-		},
-	},
-	{
-		definition: FeishuCommandDefinition{
-			ID:               FeishuCommandPatch,
-			GroupID:          FeishuCommandGroupCommonTools,
-			Title:            "修补当前会话",
-			CanonicalSlash:   "/bendtomywill",
-			CanonicalMenuKey: "patch",
-			ArgumentKind:     FeishuCommandArgumentNone,
-			Description:      "对当前会话最新一轮助手回复打开受控修补卡；只支持 headless 模式，且当前实例必须空闲。",
-			ShowInHelp:       true,
-			ShowInMenu:       true,
-		},
-		textPrefixes: []feishuCommandPrefixMatch{
-			{alias: "/bendtomywill", kind: ActionTurnPatchCommand},
-		},
-		menuExact: []feishuCommandMatch{
-			{alias: "patch", action: Action{Kind: ActionTurnPatchCommand, Text: "/bendtomywill"}},
-		},
-		extraActionRoutes: []feishuCommandActionRoute{
-			{kind: ActionTurnPatchRollback, title: "回滚最近一次修补", canonicalSlash: "/bendtomywill rollback"},
 		},
 	},
 	{

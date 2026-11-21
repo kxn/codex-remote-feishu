@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 将完整产品故事映射到 12 个实现工作面，明确持久所有权、Codex／Claude 会话与注入差异、事务恢复、迁移和工程验收。
+> Summary: 按用户决定取消原生会话人工接管，保留飞书指导、审阅、暂停、恢复与旧状态迁移边界。
 
 ## 1. 文档地位、依据与结论
 
@@ -62,7 +62,7 @@ flowchart TD
 | [detach headless](../../internal/core/orchestrator/service_detach_headless.go:15) | 从“最后 surface 离开即终止”改为 session lifecycle／controller | 私聊 detach 只是查看解绑，工作继续或明确交接 |
 | [request ownership](../../internal/core/orchestrator/service_helpers_request.go:126)、[request handling](../../internal/core/orchestrator/service_request.go:75) | 保留 frozen owner/revision 原则，owner 换 session/attempt/request generation | 无当前 surface 也保存授权请求，选择适用展示入口 |
 | [群恢复](../../internal/app/daemon/app_surface_resume_policy.go:12)、[按需恢复](../../internal/app/daemon/app_group_on_demand_resume.go) | 工作库驱动恢复；旧 resume JSON 用作导入 | 无新用户消息仍能处理持久待办 |
-| [Bot settings](../../internal/core/orchestrator/service_bot_capability_settings.go) | 抽 typed 设置用例，保持配置单写源；控制宿主归 session | 私聊模型配置影响全角色后续执行，接管只影响当前工作 |
+| [Bot settings](../../internal/core/orchestrator/service_bot_capability_settings.go) | 抽 typed 设置用例，保持配置单写源；控制宿主归 session | 私聊模型配置影响全角色后续执行，暂停和恢复限定具体工作 |
 | [tool caller](../../internal/app/daemon/tool_service.go:419) | 增 worker credential＋run_ref，不从 active surface 猜 | 后台协作、单聊和附件工具均有正确身份 |
 | [入站归并](../../internal/app/daemon/app_ingress.go:77) | 新持久接收及事件归并 worker，保留有界内存缓冲 | FIFO 不再被误当崩溃持久性；慢操作移出 App 全局锁 |
 | [旧 primary](../../internal/core/orchestrator/service_feishu_primary_command.go)、room/shared-workspace admission | 对迁移群退出生产路由；公共 transport/request 部分保留 | 旧群 UX 全弃，不牵连私聊和新卡片 |
@@ -150,7 +150,7 @@ CLI 只承担解析、帮助、发现和 daemon API 调用。常驻注入只包�
 
 会话凭据绑定 role/scope/context/session/Bot generation；每轮另注入显式 opaque `run_ref`，CLI 请求必须携带并核对。**禁止用“当前最新 attempt”替代缺失的 run_ref**，否则迟到工具调用会写入新一轮。凭据只进入对应进程，模型帮助与日志不输出 secret。已受理异步 operation 固定原身份，可在原 turn 结束后完成；新来的过期 run 调用被拒绝。
 
-共享 registry 定义命令名、输入 schema、作用范围、结果和版本，UI 与 CLI 调相同用例。核心用例包括 AcceptInput、CreateProject、AssignTask、DelegateAndWait、ApplyTaskRevision、ApplyAgreement、PublishDelivery、RequestControl、RespondRequest、UpdateSettings、ResourceOperation、MemoryUpdate；不暴露万能 `call_feishu_api(path,body)` 让模型绕开产品合同。大正文用 stdin/文件，结果分页和引用，避免工具帮助重新占满上下文。
+共享 registry 定义命令名、输入 schema、作用范围、结果和版本，UI 与 CLI 调相同用例。核心用例包括 AcceptInput、CreateProject、AssignTask、DelegateAndWait、ApplyTaskRevision、ApplyAgreement、PublishDelivery、PauseWork、StopWork、RecoverWork、RespondRequest、UpdateSettings、ResourceOperation、MemoryUpdate；不暴露万能 `call_feishu_api(path,body)` 让模型绕开产品合同。大正文用 stdin/文件，结果分页和引用，避免工具帮助重新占满上下文。
 
 命令结果固定含 `status=completed|accepted|pending_external|conflict|blocked|failed`、operation/object/revision、实际 applied refs、可重试条件；accepted 不能包装为完成。业务幂等 key 可跨重试重复，命令数据 hash 不同则冲突。
 
@@ -161,7 +161,7 @@ CLI 只承担解析、帮助、发现和 daemon API 调用。常驻注入只包�
 | 状态轴 | 迁移合同 | 禁止的推断 |
 | --- | --- | --- |
 | Task | todo → active ↔ waiting；按采用要求进入 checking 或 done；取消独立终态 | native turn.completed、PR merged、外部 closed 不等于人验收 |
-| PauseGate | 按项目／任务／人工控制等来源分别 open/closed | 项目恢复不能消除用户单独的任务暂停 |
+| PauseGate | 按项目／任务／用户暂停等来源分别 open/closed | 项目恢复不能消除用户单独的任务暂停 |
 | WorkerSession | preparing → ready ↔ busy；另有 maintaining/recovering/handoff/unavailable/retired | 断线或租约过期不是 ready |
 | Attempt | prepared → dispatch_pending → running → completed/interrupted/failed；不确定进入 reconciling | timeout 不是 failed-and-safe-to-rerun；interrupted 不是业务完成 |
 | Inbox | pending → claimed → processed；撤销用户未派发输入有 cancelled 记录 | notified/read/native accepted 不等于 processed |
@@ -206,13 +206,13 @@ Task 不规定强制流水线。要求和 adopted practices 决定 needed eviden
 
 资源租约包含 holder/generation/expiry，但 expiry 只触发 reconciliation。连接断开、PID 消失都可能残留子进程或外部操作，不能立刻安排另一个 writer。托管进程停止需要 process group／已知后台任务证据；无法证明则保留占用并转恢复检查。Agent 自行启动的远程后台服务另有资源回执与责任，不能假定停止模型就停止一切。
 
-### 6.2 自动与人工控制
+### 6.2 自动执行与人的暂停、恢复
 
-接管顺序：持久请求和关闭派发 gate → 保存当前输入／检查点 → 请求当前 turn 和 native continuation 停止 → 核实执行及写占用 → 增加 controller generation → 交给人。观察窗口不取得 lease。归还先核对当前原生会话、目录、Git 状态、未决请求和输入，再切 automatic；不能凭“窗口关闭”判断已归还。
+用户于 2026-11-21 决定取消原生会话人工接管。新版不提供 human controller 的领取／归还用例和客户端交接入口；人的控制通过飞书指导、审阅、暂停、停止和恢复完成。停止顺序仍为持久请求、关闭派发、保存输入／检查点、停止原生 turn 与 continuation、核实后台写入和资源占用。旧人工控制记录只在迁移中隔离核查，不自动变成可运行的 automatic worker。
 
 停止／暂停走运行控制用例，绕过模型输入队列。Task、Project、WorkerSession 各有明确目标；级联作用保存快照与来源，项目恢复不消除任务独立暂停。取消保留 inbox/result 历史；私聊 `/stop` 可撤销该个人工作中未发送的用户排队输入，不能删除同事回信。中断请求已发送与实际 terminal 分开；归档在运行未停时仍为 archiving。
 
-原生 Goal 可能在 turn terminal 后自发开始后续 turn。等待、暂停、接管、预算不足和更换工作前须关闭相应 continuation，并观察实际状态；不能只等一个 turn.completed 就释放整个执行归属。合法原生续跑在已授予的 bounded continuation lease 内保持同一个业务 Attempt 和 run_ref，各 native turn 独立记录 ID、开始／终态和输入证据；一个 native turn 结束只更新子记录，直到 continuation 结束／暂停并确认不再自动续跑才结束该 Attempt。换任务、换范围或恢复重建时才创建新 Attempt 并注入新的 run_ref；不能先创建 successor attempt，再假定原生自发 turn 的首个工具调用前已经收到新 run_ref。重连后发现无法归属的 active turn 先接管为 reconciliation，不丢事件、不默认允许继续。scheduler 和 native Goal 不能同时当无条件启动器。
+原生 Goal 可能在 turn terminal 后自发开始后续 turn。等待、暂停、预算不足和更换工作前须关闭相应 continuation，并观察实际状态；不能只等一个 turn.completed 就释放整个执行归属。合法原生续跑在已授予的 bounded continuation lease 内保持同一个业务 Attempt 和 run_ref，各 native turn 独立记录 ID、开始／终态和输入证据；一个 native turn 结束只更新子记录，直到 continuation 结束／暂停并确认不再自动续跑才结束该 Attempt。换任务、换范围或恢复重建时才创建新 Attempt 并注入新的 run_ref；不能先创建 successor attempt，再假定原生自发 turn 的首个工具调用前已经收到新 run_ref。重连后发现无法归属的 active turn 先接管为 reconciliation，不丢事件、不默认允许继续。scheduler 和 native Goal 不能同时当无条件启动器。
 
 ### 6.3 关键运行事件需要新增 durable 合同
 
@@ -322,7 +322,7 @@ Agent 用原生 shell／Git 自主建立 worktree、分支、合并、修冲突�
 
 集成使用 repository＋target ref 的跨项目协调记录，保存 owner/expiry/evidence；Agent 在真正写 ref 前再读实际 HEAD，用 Git／远端支持的竞争检测。协调记录不能阻止外部人直接改 ref，因此 HEAD 前移时重新整合。平台不实现 merge 引擎，也不把 cronrepo 的 mirror、force remove 和自动清理当新基座。人的脏 checkout 不 reset／clean，不把未验证的强推作为默认冲突处理。
 
-完成计算 turn 不自动释放仍在写的后台命令占用；停工、接管、重启都先核实。执行位置丢失时从持久成果与 checkpoint 恢复，无法恢复的未发布工作如实列缺口；不从旧摘要猜出文件后当成原版。
+完成计算 turn 不自动释放仍在写的后台命令占用；停工、重启都先核实。执行位置丢失时从持久成果与 checkpoint 恢复，无法恢复的未发布工作如实列缺口；不从旧摘要猜出文件后当成原版。
 
 ## 10. T09 参与约定、方法、记忆与设置
 
@@ -423,14 +423,14 @@ Conversation 先有内部 ID，创建根消息 outbox 成功后取得平台 root
 - `/detach /follow /mode`：区分观察、controller 和 native 宿主；原入口功能保留，底层改为有证据交接，不再最后 surface detach 就杀后台执行。
 - `/stop /steerall /compact /goal`：按选定 context/session 调运行用例；能力不足给真实说明。`/stop` 在个人工作撤销尚未派发的用户输入并留审计；私聊选中项目工作时走项目暂停语义，保留所有项目 inbox，不撤销其他成员要求。同事结果始终保留。
 - `/model /reasoning /*profile`：统一 Bot 策略；`/access /plan`：当前 session 控制；不能归为一个全局“设置”对象。
-- `/review /autowhip /autocontinue /bendtomywill`：保留原 backend 支持的局部能力，绑定新 owner；不以 native 最后回复改写或停止词作为 Task 完成证明。AutoContinue 只做已归属执行恢复，不与团队 scheduler 再发第二份工作。
+- `/review /autowhip /autocontinue`：保留原 backend 支持的局部能力，绑定新 owner；不以 native 最后回复改写或停止词作为 Task 完成证明。AutoContinue 只做已归属执行恢复，不与团队 scheduler 再发第二份工作。
 - workspace、sendfile、admin/upgrade/debug 等复用适用功能；worktree 人工命令保留可选私聊能力，不作为群用户必经步骤。`/primary /coworkers` 不移植到 DM；Cron 不因兼容恢复。
 
 现有注册 44 specs／43 canonical 及别名、隐藏但可派发和不支持的分支详见[Slash 盘点](./feishu-agent-codebase-reuse-assessment.md#51-slash-command-盘点与去向)。没有注册的 `/attach /patch /cancel` 不列兼容承诺。
 
 ### 12.3 原生请求与业务决定分开
 
-原生 Request 以 worker/session generation＋attempt/native turn＋native request ID 唯一定位，冻结允许操作者、动作、工具内容与 response contract。没有 surface 时也落库；route policy 选择当前工作话题、适用私聊或接管入口。原生 request 没有相应协议重放能力且重启后失效时标 aborted/unknown，不能批准旧卡去解新 request。
+原生 Request 以 worker/session generation＋attempt/native turn＋native request ID 唯一定位，冻结允许操作者、动作、工具内容与 response contract。没有 surface 时也落库；route policy 选择当前工作话题或适用私聊入口。原生 request 没有相应协议重放能力且重启后失效时标 aborted/unknown，不能批准旧卡去解新 request。
 
 响应时以唯一条件写提交决定，再发给 wrapper；原生收到后才 resolved。用户重复点击返回已登记决定与应用状态；发送失败保留 retry/reconcile，不改成人拒绝。业务“你决定即可”改变 DecisionRequest 责任，不自动回答一个不相关的原生 shell 权限问题。原生既有权限策略按当前 session 配置处理，避免额外造一套每个工具都需人审的产品。
 

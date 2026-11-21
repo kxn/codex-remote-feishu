@@ -21,7 +21,13 @@ func (a *App) buildCodexChildLaunch(baseArgs []string) ([]string, []string) {
 	args := append([]string{}, baseArgs...)
 	env := childEnvWithProxy(a.config.ChildProxyEnv, args)
 	args, env = a.applyCodexFeishuMCPPublication(args, env)
-	return args, env
+	if a.work != nil {
+		args = append(args, "-c", "features.memories=false", "-c", "memories.use_memories=false", "-c", "memories.generate_memories=false")
+	}
+	if a.work != nil && a.work.snapshot.ReadOnly {
+		args = append(args, "-c", "features.goals=false", "-c", "features.hooks=false", "-c", "enable_mcp_apps=false", "-c", "mcp_servers={}", "-c", `sandbox_mode="read-only"`, "-c", `approval_policy="never"`)
+	}
+	return args, a.applyWorkChildEnv(env)
 }
 
 func (a *App) applyCodexFeishuMCPPublication(baseArgs, baseEnv []string) ([]string, []string) {
@@ -101,7 +107,7 @@ func (a *App) readFeishuMCPPublicationInfo() (toolservicecontract.ServiceInfo, b
 }
 
 func (a *App) feishuMCPPublicationEligible() bool {
-	return !state.IsInstanceSource(a.config.Source, state.InstanceSourceVSCode)
+	return a.work == nil && a.config.WorkLaunchSnapshot == nil && !state.IsInstanceSource(a.config.Source, state.InstanceSourceVSCode)
 }
 
 func codexMCPOverride(field, value string) string {

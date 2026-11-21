@@ -18,10 +18,12 @@ import (
 )
 
 type ClientCallbacks struct {
-	OnCommand func(context.Context, agentproto.Command) error
-	OnWelcome func(context.Context, agentproto.Welcome) error
-	OnConnect func(context.Context) error
-	OnError   func(context.Context, agentproto.ErrorInfo) error
+	OnEventReceipt        func(context.Context, agentproto.EventReceipt) error
+	RuntimeCommandReceipt func(string) (*agentproto.RuntimeCommandReceipt, error)
+	OnCommand             func(context.Context, agentproto.Command) error
+	OnWelcome             func(context.Context, agentproto.Welcome) error
+	OnConnect             func(context.Context) error
+	OnError               func(context.Context, agentproto.ErrorInfo) error
 }
 
 type relayConn interface {
@@ -33,6 +35,7 @@ type relayConn interface {
 type dialRelayConnFunc func(context.Context, string, http.Header) (relayConn, error)
 
 type Client struct {
+	journal   EventJournal
 	url       string
 	hello     agentproto.Hello
 	callbacks ClientCallbacks
@@ -162,10 +165,17 @@ func (c *Client) SetRawLogger(logger *debuglog.RawLogger) {
 }
 
 func (c *Client) SendEvents(events []agentproto.Event) error {
+	if c.journal != nil {
+		var err error
+		events, err = c.journal.PersistEvents(events)
+		if err != nil {
+			return err
+		}
+	}
 	if len(events) == 0 {
 		return nil
 	}
-	return c.enqueue(&c.dataOutbox, c.dataMax, queuedEnvelope{
+	err := c.enqueue(&c.dataOutbox, c.dataMax, queuedEnvelope{
 		epoch: atomic.LoadUint64(&c.epoch),
 		envelope: agentproto.Envelope{
 			Type: agentproto.EnvelopeEventBatch,
@@ -175,6 +185,17 @@ func (c *Client) SendEvents(events []agentproto.Event) error {
 			},
 		},
 	}, errors.New("relay client outbox full"))
+	if err != nil && c.journal != nil {
+		// A durable event which could not enter the live queue must get a new
+		// replay pass rather than wait indefinitely on an otherwise idle socket.
+		c.mu.RLock()
+		conn := c.conn
+		c.mu.RUnlock()
+		if conn != nil {
+			_ = conn.Close()
+		}
+	}
+	return err
 }
 
 func (c *Client) SendCommandAck(ack agentproto.CommandAck) error {
@@ -270,6 +291,11 @@ func (c *Client) RunOnce(ctx context.Context) error {
 	writeErr := make(chan error, 1)
 	welcomed := false
 	go func() {
+		if err := c.replayJournal(conn); err != nil {
+			_ = conn.Close()
+			writeErr <- err
+			return
+		}
 		var pendingData *queuedEnvelope
 		for {
 			item, nextPendingData, err := c.nextOutbound(runCtx, pendingData)
@@ -360,36 +386,16 @@ func (c *Client) RunOnce(ctx context.Context) error {
 					return err
 				}
 			}
-		case agentproto.EnvelopeCommand:
-			if envelope.Command == nil {
-				continue
-			}
-			if c.callbacks.OnCommand != nil {
-				if err := c.callbacks.OnCommand(ctx, *envelope.Command); err != nil {
-					problem := agentproto.ErrorInfoFromError(err, agentproto.ErrorInfo{
-						Code:             "command_rejected",
-						Layer:            "wrapper",
-						Stage:            "handle_command",
-						Operation:        string(envelope.Command.Kind),
-						Message:          "wrapper 拒绝执行 relay 命令。",
-						SurfaceSessionID: envelope.Command.Origin.Surface,
-						CommandID:        envelope.Command.CommandID,
-						ThreadID:         envelope.Command.Target.ThreadID,
-						TurnID:           envelope.Command.Target.TurnID,
-					})
-					_ = c.SendCommandAck(agentproto.CommandAck{
-						CommandID: envelope.Command.CommandID,
-						Accepted:  false,
-						Error:     problem.Message,
-						Problem:   &problem,
-					})
-					continue
+		case agentproto.EnvelopeEventReceipt:
+			if envelope.EventReceipt != nil {
+				if err := c.handleEventReceipt(ctx, *envelope.EventReceipt); err != nil {
+					return err
 				}
 			}
-			_ = c.SendCommandAck(agentproto.CommandAck{
-				CommandID: envelope.Command.CommandID,
-				Accepted:  true,
-			})
+		case agentproto.EnvelopeCommand:
+			if envelope.Command != nil {
+				c.handleCommand(ctx, *envelope.Command)
+			}
 		case agentproto.EnvelopeError:
 			problem := relayEnvelopeProblem(envelope.Error)
 			if c.callbacks.OnError != nil {

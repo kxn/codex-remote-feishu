@@ -91,6 +91,10 @@ func (t *Translator) TranslateCommand(command agentproto.Command) ([][]byte, err
 				"input":          t.buildInputs(command.Prompt.Inputs),
 			},
 		}
+		if command.NativeInputAdmission != nil {
+			requestID := fmt.Sprint(payload["id"])
+			t.pendingSuppressedResponse[requestID] = suppressedResponseContext{CommandID: command.CommandID, Action: "turn/steer", ThreadID: command.Target.ThreadID, ExpectedTurnID: command.Target.TurnID, Initiator: commandFailureInitiator(command)}
+		}
 		bytes, err := json.Marshal(payload)
 		if err != nil {
 			return nil, err
@@ -511,6 +515,8 @@ func (t *Translator) directTurnStart(threadID string, command agentproto.Command
 		"params": template,
 	}
 	t.pendingSuppressedResponse[xutil.LookupStringFromAny(payload["id"])] = suppressedResponseContext{
+		CommandID:        command.CommandID,
+		Initiator:        commandFailureInitiator(command),
 		Action:           "turn/start",
 		ThreadID:         threadID,
 		SurfaceSessionID: choose(command.Origin.Surface, command.Origin.ChatID),
@@ -547,9 +553,12 @@ func (t *Translator) directCompactStart(command agentproto.Command) ([]byte, str
 		},
 	}
 	t.pendingSuppressedResponse[requestID] = suppressedResponseContext{
-		Action:           "thread/compact/start",
-		ThreadID:         threadID,
-		SurfaceSessionID: surfaceID,
+		CommandID:          command.CommandID,
+		Initiator:          commandFailureInitiator(command),
+		Action:             "thread/compact/start",
+		ManagedMaintenance: command.Maintenance != nil,
+		ThreadID:           threadID,
+		SurfaceSessionID:   surfaceID,
 	}
 	bytes, err := json.Marshal(payload)
 	if err != nil {

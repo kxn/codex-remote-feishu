@@ -201,6 +201,9 @@ func (a *App) handleAction(ctx context.Context, action control.Action) *feishu.A
 }
 
 func (a *App) handleActionLocked(ctx context.Context, action control.Action, options ingressEpisodeOptions) *feishu.ActionResult {
+	if a.teamRuntime != nil && a.teamRuntime.legacyFenced.Load() {
+		return nil
+	}
 	if a.shuttingDown {
 		log.Printf(
 			"surface action ignored during shutdown: surface=%s chat=%s actor=%s kind=%s message=%s",
@@ -269,19 +272,7 @@ func (a *App) handleActionLocked(ctx context.Context, action control.Action, opt
 		a.syncClaudeWorkspaceProfileStateLocked()
 		return nil
 	}
-	if events, handled := a.interceptTurnPatchActionLocked(action); handled {
-		contract := control.ResolveFeishuFrontstageActionContract(action)
-		inlineResult, appendEvents := a.synchronousCurrentCardActionResultLocked(action, contract, events)
-		inlineNavigationReplace := inlineResult != nil && contract.CurrentCardMode == control.FeishuFrontstageCurrentCardInlineView
-		if !inlineNavigationReplace || len(appendEvents) != 0 {
-			a.handleUIEventsLocked(ctx, appendEvents)
-		}
-		a.maybeReplayPendingRequestVisibilityAfterActionLocked(ctx, action)
-		a.syncSurfaceResumeStateLocked(nil)
-		a.syncClaudeWorkspaceProfileStateLocked()
-		a.syncWorkspaceSurfaceContextFilesLocked()
-		return inlineResult
-	}
+
 	// Editing the existing target picker only mutates its in-memory draft.
 	// Its read model was captured on open; do not run durable-state or workspace
 	// synchronization (or construct an unrelated catalog-backed snapshot) before
@@ -540,6 +531,9 @@ func (a *App) Service() *orchestrator.Service {
 }
 
 func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
+	if a.handleWorkHello(ctx, hello) {
+		return
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.shuttingDown {
@@ -680,6 +674,9 @@ func (a *App) onHello(ctx context.Context, hello agentproto.Hello) {
 }
 
 func (a *App) onEvents(ctx context.Context, instanceID string, events []agentproto.Event) {
+	if a.handleWorkEvents(ctx, instanceID, events) {
+		return
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.shuttingDown {
@@ -822,6 +819,9 @@ func eventAffectsBotCapabilitySettingsState(event agentproto.Event) bool {
 }
 
 func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentproto.CommandAck) {
+	if a.handleWorkAck(ctx, instanceID, ack) {
+		return
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.shuttingDown {
@@ -859,6 +859,9 @@ func (a *App) onCommandAck(ctx context.Context, instanceID string, ack agentprot
 }
 
 func (a *App) onDisconnect(ctx context.Context, instanceID string) {
+	if a.handleWorkDisconnect(ctx, instanceID) {
+		return
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.shuttingDown {
@@ -918,6 +921,11 @@ func (a *App) onTick(ctx context.Context, now time.Time) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.shuttingDown {
+		return
+	}
+	if a.teamRuntime != nil && a.teamRuntime.legacyFenced.Load() {
+		a.maybeStartFeishuFactsRefreshLocked(now)
+		a.maybeShutdownExternalAccessIdleLocked(now)
 		return
 	}
 	a.drainDaemonAsyncResultsLocked(ctx)

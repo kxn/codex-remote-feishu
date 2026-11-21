@@ -86,12 +86,19 @@ func (a *App) checkStandaloneCodexUpgrade(ctx context.Context, initiatorSurfaceI
 		}}
 		return result, nil
 	}
+	if a.teamRuntime != nil && (a.teamRuntime.legacyFenced.Load() || a.teamRuntime.active.Load()) {
+		result.BusyReasons = []codexUpgradeBusyReason{{Reason: "团队运行时需要独立的执行池维护流程，旧升级入口不可用"}}
+		return result, nil
+	}
 	result.BusyReasons = a.codexUpgradeBusyReasonsLocked(strings.TrimSpace(initiatorSurfaceID))
 	result.CanUpgrade = installation.Upgradeable() && result.HasUpdate && len(result.BusyReasons) == 0
 	return result, nil
 }
 
 func (a *App) startStandaloneCodexUpgrade(ctx context.Context, req codexUpgradeStartRequest) error {
+	if a.teamRuntime != nil && (a.teamRuntime.legacyFenced.Load() || a.teamRuntime.active.Load()) {
+		return fmt.Errorf("团队运行时已接管执行；旧 Codex 升级流程不能安全协调这些工作，本次未更新原生程序")
+	}
 	check, err := a.checkStandaloneCodexUpgrade(ctx, req.SurfaceSessionID)
 	if err != nil {
 		return err

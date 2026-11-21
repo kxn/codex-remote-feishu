@@ -29,7 +29,7 @@ type OwnerCardClaims struct {
 
 // VerifyOwnerCard 是 owner 卡片判定的唯一实现：按 flowID 匹配 → 未过期 →
 // surface 匹配 → owner 决策的顺序返回判定结果。所有调用方（core 通用卡片、
-// daemon upgrade / codex_upgrade / turn_patch）必须委托本函数，禁止复制
+// daemon upgrade / codex_upgrade）必须委托本函数，禁止复制
 // 判定序列。错误码/文案/事件构造与过期清理（状态变更）由调用方负责。
 //
 // SurfaceSessionID 为空表示不校验 surface（flow 按 surface 存储的场景）。

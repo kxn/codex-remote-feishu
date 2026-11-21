@@ -168,6 +168,7 @@ func (t *Translator) translateRequestRespond(command agentproto.Command) (Result
 	return Result{
 		Events: []agentproto.Event{{
 			Kind:      agentproto.EventRequestResolved,
+			CommandID: command.CommandID,
 			ThreadID:  pending.ThreadID,
 			TurnID:    pending.TurnID,
 			RequestID: requestID,
@@ -219,7 +220,20 @@ func (t *Translator) translateThreadHistoryRead(command agentproto.Command) (Res
 }
 
 func (t *Translator) translateModelList(command agentproto.Command) (Result, error) {
-	session := t.sessions[t.currentSessionID]
+	sessionID := t.currentSessionID
+	if command.Target.ThreadID != "" {
+		sessionID = command.Target.ThreadID
+	}
+	session := t.sessions[sessionID]
+	if command.IsOwnerOnlyRuntimeCommand() && sessionID == "" {
+		requestID := t.NextRequest("model-catalog-session")
+		t.pendingRPC[requestID] = pendingRPC{Kind: "session/new.catalog", Command: command}
+		frame, err := marshalLine(map[string]any{"jsonrpc": "2.0", "id": requestID, "method": "session/new", "params": map[string]any{"cwd": t.commandCWD(command), "mcpServers": t.mcpServersParam()}})
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{OutboundToChild: [][]byte{frame}}, nil
+	}
 	event, _ := modelCatalogEventForConfigOptions(session, command.CommandID)
 	if event.ModelCatalog == nil {
 		event = agentproto.Event{

@@ -278,6 +278,9 @@ func (t *Translator) upsertSession(sessionID, cwd string, payload map[string]any
 
 func (t *Translator) newTurn(sessionID string, command agentproto.Command) *turnState {
 	turnID := "opencode-turn-" + strconv.Itoa(t.NextID())
+	if command.Execution != nil && command.CommandID != "" {
+		turnID = "opencode-turn-" + command.CommandID
+	}
 	initiator := commandInitiator(command)
 	traffic := agentproto.TrafficClass("")
 	if command.Target.InternalHelper {
