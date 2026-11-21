@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 补充飞书原生固定入口接线，并将评审／交付工作方法从产品强制流程调整为项目演进约定。
+> Summary: 完整盘点现有 Slash：新群退出旧命令流程，单聊适用命令保留并重接统一内核；方法库与人的参与约定分开。
 
 ## 1. 决策与范围
 
@@ -11,7 +11,7 @@
 本次用户明确的优先级：
 
 1. 最高优先级是 Raft 式群工作体验：固定同事、负责人协调、同事直接协作、并行执行、评审、交付与持续记忆。
-2. 单聊迁入同一底层并获得记忆；保留对话、工作的便利与连续性，不要求旧菜单逐项原样保留。
+2. 单聊迁入同一底层并获得记忆；保留对话、工作的便利与连续性，以及现有适用的单聊 Slash Command；显示布局可调整，功能接到统一内核。
 3. 原群聊体验可以整体丢弃，不维持旧 primary/workspace/coworkers 操作流程。
 4. Worktree 由 Agent 通过原生 Git 自主管理，平台不另造目录生命周期或合并引擎，用户无需理解或管理。
 5. 模型、已有工作目录等精确选择保留控件；用户明确给出的选择直接采用，Agent 不自行猜选已有资源。
@@ -45,7 +45,7 @@
 | 多 Bot 与飞书投递 | [controller gateway](../../internal/adapter/feishu/controller_gateway.go)、[SDK 调用](../../internal/adapter/feishu/gateway_im_calls.go) | 保留连接、按 Bot 发消息、回复、附件、卡片更新；输入与输出目标由 scope/task/attempt 明确提供 |
 | 身份与卡片校验 | [入口身份](../../internal/adapter/feishu/gateway/routing.go:709)、[回调校验](../../internal/adapter/feishu/gateway_runtime_support.go:95)、[request 校验](../../internal/core/orchestrator/service_request.go:75) | 保留操作者、gateway、chat、revision 的校验；冻结 owner 从 surface 上移到 session/run，surface 只负责交互 |
 | 展示组件 | [projector](../../internal/adapter/feishu/projector.go)、[renderer](../../internal/core/renderer/planner.go) | 复用文本、卡片、文件／差异展示；新群业务投影重写，不保留人工管理底层运行的菜单逻辑 |
-| 本地 Git worktree | [CreateWorktree](../../internal/app/gitworkspace/worktree.go:36)、[preview](../../internal/core/gitmeta) | 已有 Git 调用与诊断可按需保留；不要求扩建管理器。Agent 使用原生 shell/Git，人工 picker 不继承 |
+| 本地 Git worktree | [CreateWorktree](../../internal/app/gitworkspace/worktree.go:36)、[preview](../../internal/core/gitmeta) | 已有 Git 调用与诊断可按需保留；不要求扩建管理器。群内 Agent 使用原生 shell/Git；单聊显式目录命令与必要选择控件保留 |
 | 进程与安装升级 | [runtime](../../internal/runtime)、[local upgrade](../../internal/app/install/local_upgrade.go:37) | 保留平台、安装、版本和恢复基础；调度升级/回收前必须考虑统一运行层的活动执行及持久待办 |
 | 配置存储与组合根 | [statestore](../../internal/app/daemon/statestore/statestore.go)、[App wiring](../../internal/app/daemon/app.go:195) | 保留配置 atomic save 和 daemon wiring；任务/记忆/待办需要事务库，不能把单文件保存当跨对象事务 |
 
@@ -108,13 +108,13 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 | --- | --- | --- | --- |
 | 选择模型／provider | 下拉或明确指令选择，知道影响哪个 Bot | 读取配置、在安全边界应用，解释待生效状态 | 保留 catalog、选择组件和配置；抽统一用例 |
 | 选择已有目录／仓库 | 明确指定或用目录选择器选真实资源 | 校验与登记，不猜选其他目录；之后管理内部工作副本 | 保留路径浏览／校验；分离资源选择与执行目录 |
-| 新建 worktree／分支／派生目录 | 表达任务，不填写内部路径 | Agent 原生 Git 自主管理并登记恢复位置，平台记录绑定与成果 | 人工 picker 退出主流程，不另建目录生命周期／自动合并引擎 |
-| `/list`、`/use`、`/attach`、`/follow` | 打开某项工作、切换项目、接管执行 | 自动绑定正确 session 和后台进程 | 保留工作导航与接管能力，原生 instance/thread 列表转诊断 |
+| 新建 worktree／分支／派生目录 | 表达任务，不填写内部路径 | Agent 原生 Git 自主管理并登记恢复位置，平台记录绑定与成果 | 人工 picker 退出群主流程；单聊可显式使用，不另建目录生命周期／自动合并引擎 |
+| `/list`、`/use`、`/useall`、`/detach`、`/follow` | 单聊可直接选择、查看、接管；群里表达工作目标 | 群自动定位 context；单聊命令绑定真正 session owner | 保留适用单聊入口；当前未注册 `/attach`，不能按旧印象列为现有 Slash |
 | `/new` | 表达新事项或重新开始，必要时选择是否沿用资料 | 判断 context/session 的复用或新建 | 保留原生创建能力；不能把新模型 thread 当新项目或删记忆 |
 | `/compact`、会话重建 | 不必管理上下文窗口 | 运行层整理检查点、compact／恢复／重建并继续投递 | 保留已有命令能力，替换“先选线程再清空队列点卡”的主流程 |
 | `/review` 与 commit 选择 | 按项目阶段提出检查重点或反馈 | 在实际需要时安排审查、返工和复查，不要求所有工作都经专职评审 | 复用差异／审阅构件；固定版本评审采用时绑定真实版本 |
 | `/autocontinue` | 控制是否暂停／取消工作 | 按明确剩余工作和错误原因恢复，有退避和边界 | 复用可用恢复策略，状态归 attempt，不要求人逐群打开开关 |
-| `/autowhip` | 不需要反复催或配置停止口令 | 用任务、依赖、成果和阻塞决定继续／结束 | 旧提示循环不作为新内核，停止口令完成判定退役 |
+| `/autowhip` | 单聊按需保留显式催办工具；群不要求使用 | 群由持久任务与依赖推进；单聊可在支持后端调用局部功能 | 不作为团队调度内核；局部循环不能自行判定项目任务完成 |
 | `/cron` | 新主流程没有此入口 | 不导入旧计划为自动运行，不沿用 scheduler、run、cronrepo 业务模型 | 旧产品与实现退役；确需定时业务时另行完整设计，不是本次交付前提 |
 | `/goal` | 可查看、调整当前工作的持续执行约束与预算 | 支持的 backend 使用会话 Goal，暂停与任务修订联动 | 当前仅 Codex headless；移到执行详情，不升格为项目目标管理 |
 | `/sendfile`、成果发布 | 打开资料、指定更新或下载版本 | Agent 更新同一资料或登记成果，群内发送稳定链接 | IM 传输保留；临时预览与长期资料存储及清理彻底分开 |
@@ -127,6 +127,32 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 上述操作归属不替项目规定工作流程。是否需要 issue、何时测试／评审／人验收、交付到修改／PR／合入／部署哪一步，均从项目及当前事项的约定确定并可随阶段变化。程序保留可靠执行、来源及状态真实性，不能把“当前项目采用了某流程”固化成所有项目必须遵守的产品规则。
 
 固定入口可新增薄 Feishu adapter：现有 SDK 已支持 ChatTab Create/ListTabs/UpdateTabs/DeleteTabs/SortTabs，生产尚未接入；TopNotice 与 Pin 同样可经 broker 调用。项目绑定自有 tab/message IDs 并指向稳定资料，用户群内的其他入口保持其原有归属。API 事实见 [入口能力表](./feishu-agent-team-materials-design.md#21-群原生固定入口)。
+
+### 5.1 Slash Command 盘点与去向
+
+本轮核查 [主 specs](../../internal/core/control/feishu_commands.go)、[附加 Goal spec](../../internal/core/control/feishu_commands_goal.go)、[parser](../../internal/core/control/feishu_commands_parse.go)、[display profiles](../../internal/core/control/feishu_command_display_profiles.go) 与关键 handler。现有 44 条 spec 对应 43 个不同 canonical slash；两条 `/admin` spec 分别处理根入口与隐藏参数路径。菜单显示、解析成功和可执行是三个不同事实。
+
+| 能力组 | 现有 canonical 命令与用途 | 新群模式 | 单聊 |
+| --- | --- | --- | --- |
+| 执行控制（3） | `/stop` 中断并清未发输入；`/steerall` 合并排队输入；`/compact` 压缩会话 | 自然语言指导＋直接到运行层的停止／暂停控件 | 保留适用命令，重接统一 session |
+| 会话与历史（7） | `/new` 新会话；`/history` 历史；`/list` 工作区／实例；`/use` 当前工作区会话；`/useall` 跨工作区会话；`/detach` 解除接管；`/follow` 跟随 VS Code | 通过任务／项目定位工作上下文，不让人管理原生 thread | 保留导航、历史和手动控制，不保留旧 surface 执行所有权 |
+| 工作区（7） | `/workspace`、`/workspace list`、`/workspace new`、`/workspace new dir`、`/workspace new git`、`/workspace new worktree`、`/workspace detach` | 已有资源精确选择；内部工作位置由 Agent 自主组织 | 保留显式资源与目录操作，不因群自动化取消单聊入口 |
+| 运行配置（10） | `/mode`、`/model`、`/reasoning`、`/access`、`/plan`、`/verbose`、`/codexprofile`、`/claudeprofile`、`/opencodeprofile`、`/mcpoauth` | 对话引导选择控件，跨项目 Bot 配置在适当设置面处理 | 保留后端适用配置及认证入口，准确显示影响范围 |
+| 持续工作与审阅（5） | `/goal` 会话目标；`/autowhip` 空闲催办；`/autocontinue` 可重试失败恢复；`/review` 审阅；`/bendtomywill` 修补当前会话最新助手回复 | 持久协作、方法库和工作状态承接，不靠循环催办或改写回复判业务完成 | 保留适用直接操作；局部工具不擅自改团队事实 |
+| 文件交付（1） | `/sendfile` 从工作区选文件发送 | Agent 按实际需要显式交付，使用稳定入口 | 保留，接共用发送／资料能力 |
+| 旧群专用（2） | `/primary` 未 @ 消息的默认 Bot；`/coworkers` 群并发上限 | 旧命令退役，由负责人路由和调度预算承接 | 原 handler 就只允许群，不新增到单聊 |
+| 导航与维护（7） | `/status`、`/help`、`/menu`、`/admin`、`/upgrade`、`/debug`、`/vscode-migrate` | 项目原生入口及自然语言状态查询；管理移至已有管理入口 | 保留适用命令并投影新内核状态 |
+| 已决定弃用（1） | `/cron` 旧定时运行与多维表格流程 | 按此前决定退役 | 单独的 Cron 弃用决定仍有效，不因保留单聊入口恢复旧功能 |
+
+实际 Slash 别名为 `/effort`→`/reasoning`、`/approval`→`/access`、`/threads`与`/sessions`→`/use`、`/sessionsall`与`/sessions/all`→`/useall`、`/mcp-oauth`→`/mcpoauth`。`patch`、`newthread` 等菜单 key 不等于 Slash alias；当前未注册 `/attach`、`/patch`、`/cancel`。`/goal` 的 new/edit/pause/resume/clear 与 `/review` 的 uncommitted/commit 等是参数，不重复计数。
+
+不能把“保留命令”解释成所有后端已支持所有操作。当前 Goal 仅 Codex headless；Claude／OpenCode 的模型设置通过各自 profile，不能直接套用 `/model`；它们的 compact、持续催办等也有拒绝分支。`/list /use /useall /detach` 在部分 headless 目录隐藏但仍可 dispatch；`/mcpoauth` 已注册、隐藏且有后端限制。迁移保留真实可用能力与明确限制，不用一个通用菜单假装能力齐全。
+
+新群不发布 Slash 目录，旧命令文本不再路由到旧 surface/room handler；识别为旧操作意图时给当前自然语言或按钮入口，引用／代码里的文本不当命令。单聊继续按 specs／后端规则解析，并通过相同业务用例操作新执行 owner。群紧急停止按钮直接进入运行层，即使负责人忙碌也可用；群退出 Slash 不等于把停止控制完全交给模型。
+
+### 5.2 方法库与单聊命令不是同一层
+
+`/review` 是人显式启动一次操作；“同行评审”方法说明何时值得评审、谁承担、怎样反馈。两者可以调用相同检查能力，但方法库不能退化为命令别名集合。群由角色根据当前约定采用方法；单聊用户仍能直接调用操作。人的参与和汇报约定只决定何时找谁，不等于开关所有质量实践。
 
 ## 6. 单聊的推荐体验与记忆边界
 
@@ -164,7 +190,7 @@ Backend 能力仍有具体实现缺口：Codex 已有 compact 命令链；Claude
 
 迁移期逐个 context 进行 authority cutover：保存旧 surface/native thread/目录关联，核对运行证据，建立新 context/session，提交归属代次后旧执行字段停止写入。单聊和群都迁入同一执行 owner；旧 owner union 只是过渡，不是永久双内核。
 
-没有必要为新群保留旧命令兼容适配器。共享代码按职责抽取后删除旧群专用流程；单聊的普通输入输出、精确选择和直接控制改接新用例。复用验证的是底层行为，不是要求所有旧测试永远保持旧产品假设。
+没有必要为新群保留旧命令兼容适配器。共享代码按职责抽取后删除旧群专用流程；单聊的普通输入输出、适用 Slash、精确选择和直接控制改接新用例。复用验证的是底层行为，不是要求所有旧测试永远保持旧产品假设。
 
 ## 9. 验证证据与目标回归
 
