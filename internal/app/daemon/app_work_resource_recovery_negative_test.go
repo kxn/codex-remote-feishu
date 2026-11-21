@@ -82,7 +82,7 @@ func TestResourceRecoveryArchiveProofRejectsForgedAuditAndPureReadsKeepTheirStat
 	}
 	g := newResourceRecoveryFixture(t)
 	if err := g.a.teamRuntime.store.Within(t.Context(), func(tx *workstore.Tx) error {
-		for i, kind := range []string{"resource.register", "resource.capture", "resource.comments.read", "resource.write.observe", "resource.write.inspect"} {
+		for i, kind := range []string{"resource.register", "resource.capture", "resource.comments.read", "resource.write.observe", "resource.write.inspect", workstore.ProjectDocumentAccessObservationKind} {
 			op := work.Operation{ID: fmt.Sprint("read-", i), ScopeID: "scope", Actor: work.Actor{Kind: work.ActorRole, ID: "leader"}, Kind: kind, TargetID: "target", TargetGeneration: 1, IdempotencyKey: fmt.Sprint(i), RequestHash: "read-only", State: work.OperationSending, Revision: 1}
 			if _, _, e := tx.PutOperation(op, 0); e != nil {
 				return e

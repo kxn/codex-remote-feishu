@@ -37,6 +37,19 @@ func (a *App) receiveTeamInteraction(ctx context.Context, raw work.HumanInteract
 		if id, _ := raw.Values["team_view"].(string); id == "" && raw.Values["team_setup_ingress"] == nil && interaction.State == "pending" {
 			return tx.FinishHumanInteraction(interaction.ID, interaction.Revision, "legacy_view_retired")
 		}
+		if selectionID, _ := raw.Values["team_setup_ingress"].(string); selectionID != "" && interaction.State == "pending" {
+			notice, e := tx.GetSelectionNotice(selectionID)
+			if e != nil && !errors.Is(e, workstore.ErrNotFound) {
+				return e
+			}
+			if e != nil || notice.Gateway != gateway || notice.Tenant != raw.Tenant || notice.ChatID != raw.ChatID {
+				rejection = "这张负责人选择卡已过期。请在群里 @ 已加入的负责人。"
+				return tx.FinishHumanInteraction(interaction.ID, interaction.Revision, "obsolete_leader_selection")
+			}
+			if notice.State != work.OperationConfirmed {
+				rejection = "已收到，正在核对卡片发送结果。如果项目没有继续建立，请在群里 @ 已加入的负责人。"
+			}
+		}
 		if viewID, _ := raw.Values["team_view"].(string); viewID != "" && interaction.State == "pending" {
 			view, e := tx.GetUIView(viewID)
 			if e != nil && !errors.Is(e, workstore.ErrNotFound) {
@@ -177,6 +190,8 @@ func (a *App) processTeamInteraction(ctx context.Context, interaction workstore.
 			err = a.handleTeamProjectNavigation(ctx, interaction, view, action)
 		case view.Kind == "project.recovery":
 			err = a.handleTeamProvisionRecovery(ctx, interaction, view, action)
+		case view.Kind == "project.delivery-index" || (view.Kind == "project.status" && action == "project.deliveries.open"):
+			err = a.openTeamProjectDeliveries(ctx, interaction, view, action)
 		case view.Kind == "business.decision" || view.Kind == "project.artifacts":
 			err = a.handleTeamBusinessView(ctx, interaction, view, action)
 		case strings.HasPrefix(action, "runtime."):

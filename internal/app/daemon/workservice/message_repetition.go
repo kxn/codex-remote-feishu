@@ -14,7 +14,11 @@ import (
 // text, conversation and task revision, with no newer human instruction. It
 // does not pretend to judge the merit of different technical arguments.
 func (s *Service) guardRepeatedMessage(tx *workstore.Tx, c Caller, req SendMessageRequest) (string, error) {
-	humanRevision, err := tx.ConversationHumanRevision(c.Worker.ScopeID, req.ConversationID, req.TaskID)
+	conversationTaskID := req.RelatedTaskID
+	if conversationTaskID == "" {
+		conversationTaskID = req.TaskID
+	}
+	humanRevision, err := tx.ConversationHumanRevision(c.Worker.ScopeID, req.ConversationID, conversationTaskID)
 	if err != nil {
 		return "", err
 	}
@@ -32,7 +36,16 @@ func (s *Service) guardRepeatedMessage(tx *workstore.Tx, c Caller, req SendMessa
 	fingerprint := struct {
 		Sender, Recipient, Context, Conversation, Task, Body string
 		HumanRevision, TaskRevision                          int64
-	}{c.Worker.RoleID, req.RecipientRoleID, req.RecipientContextID, req.ConversationID, req.TaskID, strings.TrimSpace(req.Body), humanRevision, taskRevision}
+		RelatedTaskID                                        string `json:",omitempty"`
+		RelatedTaskRevision                                  int64  `json:",omitempty"`
+	}{c.Worker.RoleID, req.RecipientRoleID, req.RecipientContextID, req.ConversationID, req.TaskID, strings.TrimSpace(req.Body), humanRevision, taskRevision, req.RelatedTaskID, 0}
+	if req.RelatedTaskID != "" {
+		related, err := tx.GetTask(req.RelatedTaskID)
+		if err != nil {
+			return "", err
+		}
+		fingerprint.RelatedTaskRevision = related.Revision
+	}
 	raw, err := json.Marshal(fingerprint)
 	if err != nil {
 		return "", err
@@ -77,13 +90,13 @@ func (s *Service) guardRepeatedMessage(tx *workstore.Tx, c Caller, req SendMessa
 		}
 		recipient = project.LeaderRoleID
 	}
-	text := "同一事项的相同消息已经反复发送，期间没有新的人工要求或任务状态变化。本次未再次唤醒接收者，请负责人检查对方是否仍在处理、是否缺少信息或需要调整分工。不要仅换消息编号继续重复；有新信息时可正常发送。\n原始交接记录：" + id + "\n任务：" + req.TaskID + "\n发送角色：" + c.Worker.RoleID + "\n接收角色：" + req.RecipientRoleID
+	text := "同一事项的相同消息已经反复发送，期间没有新的人工要求或任务状态变化。本次未再次唤醒接收者，请负责人检查对方是否仍在处理、是否缺少信息或需要调整分工。不要仅换消息编号继续重复；有新信息时可正常发送。\n原始交接记录：" + id + "\n任务：" + conversationTaskID + "\n发送角色：" + c.Worker.RoleID + "\n接收角色：" + req.RecipientRoleID
 	body := work.NewContent(noticeID+":body", scope.ID, "text/plain; charset=utf-8", []byte(text), s.now())
 	if err = tx.PutContent(body); err != nil {
 		return "", err
 	}
 	message := work.Message{ID: noticeID, ScopeID: scope.ID, ConversationID: req.ConversationID, Source: work.Actor{Kind: work.ActorSystem, ID: "collaboration-repetition"}, BodyRef: body.ID, Revision: 1, CreatedAt: s.now()}
-	input := work.Inbox{ID: noticeID + ":inbox", ScopeID: scope.ID, RecipientRoleID: recipient, EventID: noticeID, MessageID: noticeID, State: work.InboxPending, ContentState: work.InputContentReady, AvailableAt: s.now(), Revision: 1}
+	input := work.Inbox{ID: noticeID + ":inbox", ScopeID: scope.ID, RelatedTaskID: conversationTaskID, RecipientRoleID: recipient, EventID: noticeID, MessageID: noticeID, State: work.InboxPending, ContentState: work.InputContentReady, AvailableAt: s.now(), Revision: 1}
 	_, _, err = tx.AcceptMessage(message, []work.Inbox{input})
 	return noticeID, err
 }

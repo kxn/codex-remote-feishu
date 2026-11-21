@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/worklocation"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workui"
@@ -58,22 +59,23 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 		if content.SHA256 != strings.TrimPrefix(version.ContentHash, "sha256:") {
 			return fmt.Errorf("saved version integrity mismatch")
 		}
-		var saved struct {
-			Assets []workservice.SavedDocumentAsset `json:"assets"`
-		}
-		if err = json.Unmarshal(content.Data, &saved); err != nil {
-			return err
-		}
 		index, err := businessPageInt(interaction.Envelope.Values["asset"])
 		if err != nil {
 			return err
 		}
-		if index < 0 || index >= len(saved.Assets) {
-			return fmt.Errorf("attachment selection invalid")
+		if version.FileName != "" && index == 0 {
+			asset = workservice.SavedDocumentAsset{FileName: version.FileName, MediaType: content.MediaType, Content: content.Data, SHA256: content.SHA256}
+		} else {
+			var saved struct {
+				Assets []workservice.SavedDocumentAsset `json:"assets"`
+			}
+			if version.FileName != "" || json.Unmarshal(content.Data, &saved) != nil || index < 0 || index >= len(saved.Assets) {
+				return fmt.Errorf("attachment selection invalid")
+			}
+			asset = saved.Assets[index]
 		}
-		asset = saved.Assets[index]
 		sum := sha256.Sum256(asset.Content)
-		if hex.EncodeToString(sum[:]) != asset.SHA256 || len(asset.Content) == 0 || len(asset.Content) > 30_000_000 {
+		if hex.EncodeToString(sum[:]) != asset.SHA256 || len(asset.Content) == 0 || len(asset.Content) > worklocation.MaxDeliveryFileBytes {
 			return fmt.Errorf("saved attachment bytes or digest invalid")
 		}
 		id := workui.ID("artifact.file", version.ID, asset.SHA256, view.ChatID, interaction.PrincipalID, fmt.Sprint(view.Binding.IdentityGeneration))
@@ -147,12 +149,12 @@ func (a *App) sendTeamSavedArtifactAsset(ctx context.Context, interaction workst
 	// Recheck authorization before sending. Upload success is retained even when
 	// membership or bot identity changed while the upload was in flight.
 	err = r.store.Within(ctx, func(tx *workstore.Tx) error {
-		binding, e := tx.GetRoleBotBinding(view.Binding.RoleID)
+		currentView, e := tx.GetUIView(view.ID)
 		if e != nil {
 			return e
 		}
-		if binding != view.Binding {
-			return workstore.ErrConflict
+		if e = tx.ValidateViewInteraction(currentView, interaction); e != nil {
+			return e
 		}
 		scope, e := tx.GetScope(view.ScopeID)
 		if e != nil {

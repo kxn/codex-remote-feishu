@@ -60,6 +60,7 @@ func (h *Host) startPrepared(ctx context.Context, worker work.WorkerSession, op 
 	}
 	env := launchEnvironment(settings.Environment, map[string]string{
 		config.WorkLaunchSnapshotEnv: path, config.WorkSessionTokenEnv: token,
+		config.WorkTeamBinaryEnv:             h.config.BinaryPath,
 		config.CodexRemoteInstanceBackendEnv: string(worker.Backend),
 		"CODEX_REMOTE_INSTANCE_ID":           worker.InstanceID, "CODEX_REMOTE_INSTANCE_SOURCE": "headless",
 		"CODEX_REMOTE_INSTANCE_MANAGED": "1", "CODEX_REMOTE_LIFETIME": "daemon-owned",

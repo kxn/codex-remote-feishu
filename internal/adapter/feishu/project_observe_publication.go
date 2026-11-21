@@ -31,7 +31,10 @@ func (a *ProjectChatAPI) ReadPublishedMessage(ctx context.Context, id string) (O
 	}
 	const api = "im.v1.message.get"
 	resp, err := DoSDK(ctx, a.broker, a.callSpec(api, "", true), func(callCtx context.Context, client *lark.Client) (*larkim.GetMessageResp, error) {
-		response, e := client.Im.V1.Message.Get(callCtx, larkim.NewGetMessageReqBuilder().MessageId(id).UserIdType("open_id").Build())
+		// The default interactive body is a rendering projection without
+		// callbacks. Recovery needs the original send-time card JSON.
+		request := larkim.NewGetMessageReqBuilder().MessageId(id).UserIdType("open_id").CardMsgContentType("user_card_content").Build()
+		response, e := client.Im.V1.Message.Get(callCtx, request)
 		if e != nil {
 			return response, e
 		}

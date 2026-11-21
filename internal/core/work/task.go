@@ -121,18 +121,23 @@ func (v TaskRequirementRef) Validate() error {
 }
 
 type Task struct {
-	ID                   string               `json:"id"`
-	ScopeID              string               `json:"scope_id"`
-	Title                string               `json:"title"`
-	OwnerRoleID          string               `json:"owner_role_id"`
-	RequirementsRevision int64                `json:"requirements_revision"`
-	AssignmentGeneration int64                `json:"assignment_generation"`
-	State                TaskState            `json:"state"`
-	BusinessSource       *SourceRef           `json:"business_source,omitempty"`
-	Requirements         []TaskRequirementRef `json:"requirements"`
-	Revision             int64                `json:"revision"`
-	CreatedAt            time.Time            `json:"created_at"`
-	UpdatedAt            time.Time            `json:"updated_at"`
+	ID                      string               `json:"id"`
+	ScopeID                 string               `json:"scope_id"`
+	Title                   string               `json:"title"`
+	OwnerRoleID             string               `json:"owner_role_id"`
+	RequirementsRevision    int64                `json:"requirements_revision"`
+	AssignmentGeneration    int64                `json:"assignment_generation"`
+	AvailableResultRevision int64                `json:"available_result_revision,omitempty"`
+	State                   TaskState            `json:"state"`
+	BusinessSource          *SourceRef           `json:"business_source,omitempty"`
+	Requirements            []TaskRequirementRef `json:"requirements"`
+	Revision                int64                `json:"revision"`
+	CreatedAt               time.Time            `json:"created_at"`
+	UpdatedAt               time.Time            `json:"updated_at"`
+}
+
+func (v Task) HasAvailableResult() bool {
+	return v.State == TaskChecking || v.State == TaskDone
 }
 
 func (v Task) Validate() error {

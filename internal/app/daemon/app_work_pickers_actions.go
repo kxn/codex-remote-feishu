@@ -30,6 +30,7 @@ func (a *App) handleTeamPickerAction(ctx context.Context, interaction workstore.
 		}
 	}
 	source := teamHumanSource{NavigationRevision: revision, Key: interaction.ID, ScopeID: view.ScopeID, PrincipalID: interaction.PrincipalID, RoleID: interaction.Gateway.RoleID, Tenant: interaction.Envelope.Tenant, ChatID: interaction.Envelope.ChatID, MessageID: interaction.Envelope.MessageID, Gateway: interaction.Gateway, SenderIDs: interaction.Envelope.SenderIDs, Authority: workstore.PrivateActionSource{PersonalScopeID: view.ScopeID, InteractionID: interaction.ID}}
+	source.BootstrapSourceMessageID, _ = values["bootstrap_source_message_id"].(string)
 	if strings.HasSuffix(action, ".page") {
 		text, _ := values["page"].(string)
 		page, e := strconv.Atoi(text)

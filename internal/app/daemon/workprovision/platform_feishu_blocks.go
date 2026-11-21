@@ -18,7 +18,10 @@ func renderIndex(index HomeIndex) (string, string) {
 	states := map[work.ProjectState]string{work.ProjectProvisioning: "正在建立", work.ProjectActive: "进行中", work.ProjectDegraded: "部分工作待恢复", work.ProjectPausing: "正在暂停", work.ProjectPaused: "已暂停", work.ProjectArchiving: "正在归档", work.ProjectArchived: "已归档"}
 	text := "项目：" + index.ProjectName + "\n项目状态：" + states[index.ProjectState] + "\n可用同事：" + strconv.Itoa(index.ReadyMembers) + " / " + strconv.Itoa(index.TotalMembers) + "\n待办：" + strconv.Itoa(index.PendingTasks) + "\n进行中：" + strconv.Itoa(index.ActiveTasks) + "\n已完成：" + strconv.Itoa(index.DoneTasks)
 	for _, resource := range index.Resources {
-		text += "\n\n资料：" + resource.Label + "\n当前源文档：" + resource.URL
+		text += "\n\n资料：" + resource.Label
+		if resource.URL != "" {
+			text += "\n原件链接（访问以飞书为准）：" + resource.URL
+		}
 	}
 	for _, delivery := range index.Deliveries {
 		text += "\n\n成果：" + delivery.Summary
@@ -26,9 +29,17 @@ func renderIndex(index HomeIndex) (string, string) {
 			text += "\n需要您：" + delivery.NeededAction
 		}
 		for _, resource := range delivery.Resources {
-			text += "\n" + resource.Label + " · 已保存版本 " + resource.Version + "\n当前源文档（可能已有更新）：" + resource.URL
+			text += "\n" + resource.Label
+			if resource.Version != "" {
+				text += " · 已保存版本 " + resource.Version
+			}
+			if resource.URL != "" {
+				text += "\n原件链接（内容和访问可能变化）：" + resource.URL
+			}
 		}
-		text += "\n发布时的保存版本请从成果卡查看。"
+	}
+	if len(index.Deliveries) > 0 {
+		text += "\n\n从群导航打开「查看工作 → 查看成果与历史」，可回看发布时保存的版本。"
 	}
 	status := "索引更新时间：" + index.UpdatedAt.UTC().Format(time.RFC3339) + "\n同步状态：" + index.SyncState
 	return text, status

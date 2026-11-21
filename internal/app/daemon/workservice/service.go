@@ -15,6 +15,7 @@ import (
 )
 
 type Service struct {
+	artifactHost         string
 	resourceCalls        *resourceCallActivity
 	nativeDispatcher     NativeCommandDispatcher
 	store                *workstore.Store
@@ -23,6 +24,7 @@ type Service struct {
 	connectors           map[string]ResourceConnector
 	connectorResolver    ResourceConnectorResolver
 	managementAuthorizer ManagementAuthorizer
+	bootstrapPlatform    BootstrapPlatform
 }
 
 func New(store *workstore.Store, signer *workauth.Signer, now func() time.Time) (*Service, error) {

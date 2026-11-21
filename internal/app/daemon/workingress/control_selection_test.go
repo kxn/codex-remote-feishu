@@ -122,6 +122,16 @@ func TestBootstrapLeaderChoiceRequiresOriginalHumanCardAndReplaysOriginalInput(t
 			return e
 		}
 		req.InteractionID = action.ID
+		if _, e = tx.SelectBootstrapLeader(req); e == nil {
+			t.Fatal("the click alone confirmed unknown publication")
+		}
+		notice, e = tx.GetSelectionNotice(receipt.IngressID)
+		if e != nil {
+			return e
+		}
+		if e = tx.ObserveSelectionNotice(notice.IngressID, notice.Revision, workstore.SelectionNoticeOutcome{State: work.OperationConfirmed, ExternalMessageID: raw.MessageID, ChatID: raw.ChatID, Now: ingressNow}, []byte(`{"observed_on_feishu":true}`)); e != nil {
+			return e
+		}
 		if _, e = tx.SelectBootstrapLeader(req); e != nil {
 			return e
 		}
@@ -130,7 +140,7 @@ func TestBootstrapLeaderChoiceRequiresOriginalHumanCardAndReplaysOriginalInput(t
 			return e
 		}
 		if notice.State != work.OperationConfirmed || notice.ExternalMessageID != raw.MessageID {
-			t.Fatal("real callback did not reconcile unknown notice")
+			t.Fatal("verified message observation did not reconcile unknown notice")
 		}
 		return nil
 	})

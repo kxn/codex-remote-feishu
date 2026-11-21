@@ -15,6 +15,8 @@ func TestCommandDiscoveryMatchesExecutableDTOs(t *testing.T) {
 	s, token, run := runningService(t)
 	dtos := map[string]any{"context": struct{}{}, "task.assign": AssignTaskRequest{}, "task.revise": ReviseTaskRequest{}, "message.send": SendMessageRequest{}, "outcome.report": ReportOutcomeRequest{}, "project.create": CreateProjectRequest{}, "content.read": ContentReadRequest{}, "bootstrap.context": struct{}{}, "message.publish": PublishMessageRequest{}}
 	dtos["control.consume"] = ControlConsumeRequest{}
+	dtos["bootstrap.location.pick"] = BootstrapPickLocationRequest{}
+	dtos["bootstrap.team.resolve"] = BootstrapResolveTeamRequest{}
 	dtos["execution.locations"] = struct{}{}
 	dtos["execution.location.use"] = ExecutionLocationRequest{}
 	for name, dto := range extendedCommandDTOs() {

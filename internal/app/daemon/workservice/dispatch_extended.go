@@ -15,6 +15,7 @@ func extendedCommandDTOs() map[string]any {
 		"decision.list": KnowledgeListRequest{}, "decision.mine": KnowledgeListRequest{}, "decision.respond": DecisionRespondRequest{}, "agreement.list": KnowledgeListRequest{}, "agreement.apply": AgreementApplyRequest{},
 	}
 	dtos["decision.request"] = RequestDecisionRequest{}
+	dtos["resource.file.save"] = SaveResourceFileRequest{}
 	dtos["session.goal"] = SessionGoalRequest{}
 	dtos["control.context"] = struct{}{}
 	dtos["control.resume-current"] = ControlResumeCurrentRequest{}
@@ -74,6 +75,8 @@ func (s *Service) executeExtended(ctx context.Context, token string, req workcmd
 		return executeDTO(ctx, token, req, s.PracticePublish)
 	case "resource.register":
 		return executeDTO(ctx, token, req, s.ResourceRegister)
+	case "resource.file.save":
+		return executeDTO(ctx, token, req, s.ResourceSaveFile)
 	case "resource.capture":
 		return executeDTO(ctx, token, req, s.ResourceCapture)
 	case "resource.read-version":

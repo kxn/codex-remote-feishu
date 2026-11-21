@@ -65,6 +65,12 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		return err
 	}
 	service = service.WithManagementAuthorizer(teamManagementAuthorizer{app: a})
+	service = service.WithBootstrapPlatform(workservice.BootstrapPlatform{
+		ConfiguredApps:      a.teamBootstrapConfiguredApps,
+		RegisterLocations:   a.registerTeamLocationCandidates,
+		QueueLocationPicker: a.queueBootstrapLocationPicker,
+		VerifyMembership:    a.verifyWorkMembership,
+	})
 	driver, err := worktransport.New(store, a.relay)
 	if err != nil {
 		return err
@@ -76,6 +82,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		return err
 	}
 	hostID := teamID("host", hostname+":"+paths.StateDir)
+	service.WithArtifactHost(hostID)
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return err

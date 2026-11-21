@@ -120,6 +120,9 @@ func (a *App) queueTeamPicker(ctx context.Context, source teamHumanSource, kind,
 			return e
 		}
 		generation := int64(0)
+		if scope.Kind == work.ScopeBootstrap {
+			generation = scope.BindingGeneration
+		}
 		if scope.Kind == work.ScopeProject {
 			channel, e := tx.GetProjectChannelBinding(source.Tenant, source.ChatID)
 			if e != nil {
@@ -205,7 +208,7 @@ func (a *App) validateTeamPickerSource(tx *workstore.Tx, source teamHumanSource)
 		if scope.PrincipalID != source.PrincipalID || scope.RoleID != source.RoleID || scope.Tenant != source.Tenant || scope.ChatID != source.ChatID {
 			return workstore.ErrScopeDenied
 		}
-		return nil
+		return tx.RequireOpenBootstrapScope(scope)
 	}
 	return tx.RequireProjectPrincipalAccess(scope.ID, source.PrincipalID, time.Now().UTC())
 }

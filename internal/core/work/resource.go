@@ -27,6 +27,8 @@ type Resource struct {
 	Revision          int64  `json:"revision"`
 }
 
+const SavedFileConnector = "relay-local-file"
+
 func (v Resource) Validate() error {
 	if err := required(v.ID, v.ScopeID, v.CollectionID, v.ConnectorIdentity, v.SourceIdentity, v.CanonicalURI, v.Purpose); err != nil {
 		return err
@@ -59,6 +61,7 @@ type ResourceVersion struct {
 	Source           SourceRef   `json:"source"`
 	ContentRef       string      `json:"content_ref,omitempty"`
 	ContentHash      string      `json:"content_hash,omitempty"`
+	FileName         string      `json:"file_name,omitempty"`
 	ObservationRange string      `json:"observation_range,omitempty"`
 	Consistency      Consistency `json:"consistency"`
 	Complete         bool        `json:"complete"`

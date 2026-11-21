@@ -13,22 +13,33 @@ import (
 )
 
 func TestSDKGroupLeaderExpertReplyNativePipeline(t *testing.T) {
+	binary := buildPipelineTeamCLI(t)
 	for _, capacity := range []int{1, 2} {
-		t.Run("capacity-"+strconv.Itoa(capacity), func(t *testing.T) { runSDKNativePipeline(t, work.BackendCodex, capacity) })
+		t.Run("capacity-"+strconv.Itoa(capacity), func(t *testing.T) { runSDKNativePipeline(t, binary, work.BackendCodex, capacity) })
 	}
 }
 
-func pipelineSeedGroup(tx *workstore.Tx) error {
+func pipelineSeedGroup(tx *workstore.Tx, collaboration bool) error {
 	if err := tx.PutRole(work.Role{ID: "pipeline-expert", Name: "Expert", Description: "Perform the delegated analysis and reply internally to the leader", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); err != nil {
 		return err
 	}
 	if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "pipeline-expert", GatewayRef: "pipeline-gateway-expert", AppID: "pipeline-app-expert", IdentityGeneration: 1}, 0); err != nil {
 		return err
 	}
+	roles := []string{"pipeline-role", "pipeline-expert"}
+	if collaboration {
+		if err := tx.PutRole(work.Role{ID: "pipeline-reviewer", Name: "Reviewer", Description: "Check the export independently", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); err != nil {
+			return err
+		}
+		if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "pipeline-reviewer", GatewayRef: "pipeline-gateway-reviewer", AppID: "pipeline-app-reviewer", IdentityGeneration: 1}, 0); err != nil {
+			return err
+		}
+		roles = append(roles, "pipeline-reviewer")
+	}
 	if err := tx.PutTeam(work.Team{ID: "pipeline-team", Name: "Pipeline team", LeaderRoleID: "pipeline-role", Revision: 1}, 0); err != nil {
 		return err
 	}
-	for _, role := range []string{"pipeline-role", "pipeline-expert"} {
+	for _, role := range roles {
 		if err := tx.PutTeamMember(work.TeamMember{TeamID: "pipeline-team", RoleID: role, Active: true, Revision: 1}, 0); err != nil {
 			return err
 		}
@@ -39,7 +50,7 @@ func pipelineSeedGroup(tx *workstore.Tx) error {
 	if err := tx.PutProject(work.Project{ID: "pipeline-project", ScopeID: "pipeline-project-scope", TeamID: "pipeline-team", Name: "Actual group handoff", LeaderRoleID: "pipeline-role", State: work.ProjectActive, Revision: 1}, 0); err != nil {
 		return err
 	}
-	for _, role := range []string{"pipeline-role", "pipeline-expert"} {
+	for _, role := range roles {
 		if err := tx.PutProjectMember(work.ProjectMember{ProjectID: "pipeline-project", RoleID: role, State: work.ProjectMemberReady, Revision: 1}, 0); err != nil {
 			return err
 		}

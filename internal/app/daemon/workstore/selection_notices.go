@@ -25,6 +25,7 @@ type SelectionNotice struct {
 	State             work.OperationState `json:"state"`
 	ExternalMessageID string              `json:"external_message_id,omitempty"`
 	LastError         string              `json:"last_error,omitempty"`
+	Observation       json.RawMessage     `json:"observation,omitempty"`
 	Revision          int64               `json:"revision"`
 	CreatedAt         time.Time           `json:"created_at"`
 	UpdatedAt         time.Time           `json:"updated_at"`
@@ -116,12 +117,38 @@ func (t *Tx) FinishSelectionNotice(id string, expected int64, outcome SelectionN
 	if outcome.State == work.OperationConfirmed && (outcome.ExternalMessageID == "" || outcome.ChatID != notice.ChatID) {
 		return fmt.Errorf("selection receipt does not match original group")
 	}
+	return t.finishSelectionNotice(notice, outcome)
+}
+
+// ObserveSelectionNotice is used only after the bound gateway read the exact
+// message and verified the original card and callback. No CLI calls it.
+func (t *Tx) ObserveSelectionNotice(id string, expected int64, outcome SelectionNoticeOutcome, observation json.RawMessage) error {
+	notice, err := t.GetSelectionNotice(id)
+	if err != nil {
+		return err
+	}
+	if notice.State == work.OperationConfirmed && notice.ExternalMessageID == outcome.ExternalMessageID && notice.ChatID == outcome.ChatID {
+		return nil
+	}
+	if notice.Revision != expected || notice.State != work.OperationUnknown && notice.State != work.OperationSending {
+		return ErrConflict
+	}
+	if outcome.State != work.OperationConfirmed || outcome.ExternalMessageID == "" || outcome.ChatID != notice.ChatID || outcome.Now.IsZero() ||
+		notice.ExternalMessageID != "" && notice.ExternalMessageID != outcome.ExternalMessageID || !json.Valid(observation) {
+		return ErrScopeDenied
+	}
+	notice.Observation = observation
+	return t.finishSelectionNotice(notice, outcome)
+}
+
+func (t *Tx) finishSelectionNotice(notice SelectionNotice, outcome SelectionNoticeOutcome) error {
+	expected := notice.Revision
 	notice.State = outcome.State
 	notice.ExternalMessageID = outcome.ExternalMessageID
 	notice.LastError = outcome.LastError
 	notice.Revision++
 	notice.UpdatedAt = outcome.Now
-	result, err := t.tx.ExecContext(t.ctx, "UPDATE ingress_selection_notices SET revision=?,payload=? WHERE ingress_id=? AND revision=?", notice.Revision, mustJSON(notice), id, expected)
+	result, err := t.tx.ExecContext(t.ctx, "UPDATE ingress_selection_notices SET revision=?,payload=? WHERE ingress_id=? AND revision=?", notice.Revision, mustJSON(notice), notice.IngressID, expected)
 	if err != nil {
 		return err
 	}

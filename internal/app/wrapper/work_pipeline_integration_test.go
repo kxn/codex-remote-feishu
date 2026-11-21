@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -31,6 +32,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 	relayruntime "github.com/kxn/codex-remote-feishu/internal/runtime"
 )
 
@@ -57,7 +59,10 @@ func (pipelineDirectory) ResolveGateway(_ context.Context, gateway, app string) 
 func (pipelineDirectory) ResolveLeader(context.Context, string, string, string) (string, error) {
 	return "pipeline-role", nil
 }
-func (pipelineDirectory) ResolveMention(context.Context, work.IngressGateway, work.RawMention) (string, error) {
+func (pipelineDirectory) ResolveMention(_ context.Context, _ work.IngressGateway, mention work.RawMention) (string, error) {
+	if mention.IDs.OpenID == "pipeline-leader-open" {
+		return "pipeline-role", nil
+	}
 	return "", fmt.Errorf("unexpected mention")
 }
 
@@ -87,17 +92,33 @@ func (p *pipelinePublisher) PublishText(_ context.Context, r feishu.ProjectPubli
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.requests = append(p.requests, r)
-	return feishu.ProjectPublishReceipt{MessageID: "pipeline-source-receipt", ChatID: r.ChatID}, nil
+	return feishu.ProjectPublishReceipt{MessageID: fmt.Sprintf("pipeline-source-receipt-%d", len(p.requests)), ChatID: r.ChatID, RootID: r.ReplyToMessageID}, nil
 }
 
 func TestSDKEngineHostDriverWrapperNativePipePipeline(t *testing.T) {
+	binary := buildPipelineTeamCLI(t)
 	for _, backend := range []work.Backend{work.BackendCodex, work.BackendClaude} {
-		t.Run(string(backend), func(t *testing.T) { runSDKNativePipeline(t, backend) })
+		t.Run(string(backend), func(t *testing.T) { runSDKNativePipeline(t, binary, backend) })
 	}
 }
 
-func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...int) {
+func buildPipelineTeamCLI(t *testing.T) string {
+	t.Helper()
+	name := "installed team client"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	binary := filepath.Join(t.TempDir(), name)
+	if output, err := execlaunch.CommandContext(t.Context(), "go", "build", "-o", binary, "../../../cmd/codex-remote").CombinedOutput(); err != nil {
+		t.Fatalf("build actual CLI executable: %v\n%s", err, output)
+	}
+	return binary
+}
+
+func runSDKNativePipeline(t *testing.T, binary string, backend work.Backend, groupCapacity ...int) {
 	group := len(groupCapacity) > 0
+	collaboration := os.Getenv("FSC_NATIVE_PIPELINE_COLLABORATION") != ""
+	dependency := os.Getenv("FSC_NATIVE_PIPELINE_DEPENDENCY") != ""
 	capacity, reserve := 2, 1
 	if group {
 		capacity = groupCapacity[0]
@@ -132,7 +153,7 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 			return err
 		}
 		if group {
-			return pipelineSeedGroup(tx)
+			return pipelineSeedGroup(tx, collaboration)
 		}
 		return nil
 	})
@@ -144,6 +165,9 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 	if group {
 		raw.ChatID = "pipeline-group-chat"
 		raw.ChatType = "group"
+	}
+	if collaboration {
+		raw.RawContent = `{"text":"Add CSV and Excel export. Ask the reviewer to check the result."}`
 	}
 	if _, err = ingress.Receive(ctx, raw); err != nil {
 		t.Fatal(err)
@@ -188,6 +212,11 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 		expert := work.ExecutionLocation{ID: "pipeline-expert-location", HostID: "pipeline-host", Cwd: t.TempDir(), Generation: 1, Revision: 1}
 		locations["pipeline-expert"] = expert
 		selectedLocations = append(selectedLocations, expert.ID)
+	}
+	if collaboration {
+		reviewer := work.ExecutionLocation{ID: "pipeline-reviewer-location", HostID: "pipeline-host", Cwd: t.TempDir(), Generation: 1, Revision: 1}
+		locations["pipeline-reviewer"] = reviewer
+		selectedLocations = append(selectedLocations, reviewer.ID)
 	}
 	tx(func(tx *workstore.Tx) error {
 		for role, extra := range locations {
@@ -293,7 +322,7 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 					return 0, e
 				}
 			}
-			if key == config.WorkSessionTokenEnv {
+			if key == config.WorkSessionTokenEnv || key == config.WorkTeamBinaryEnv {
 				t.Setenv(key, value)
 			}
 		}
@@ -312,7 +341,7 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 		}()
 		return os.Getpid(), nil
 	}
-	host, err := workhost.New(store, service, signer, workhost.Config{Paths: relayruntime.Paths{StateDir: root}, HostID: "pipeline-host", BinaryPath: "pipeline-wrapper", ToolEndpoint: cliServer.URL, Settings: pipelineSettings{backend: backend, location: location, locations: locations}, Registry: coordinator, Start: start, Runtime: actualDriver})
+	host, err := workhost.New(store, service, signer, workhost.Config{Paths: relayruntime.Paths{StateDir: root}, HostID: "pipeline-host", BinaryPath: binary, ToolEndpoint: cliServer.URL, Settings: pipelineSettings{backend: backend, location: location, locations: locations}, Registry: coordinator, Start: start, Runtime: actualDriver})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -334,6 +363,12 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 		}
 	}()
 	var attempt work.ExecutionAttempt
+	sender := &pipelinePublisher{}
+	publisher, err := workpublish.New(store, sender, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	journey := pipelineCollaborationJourney{store: store, scopeID: scope.ID, ingress: ingress, original: raw}
 	deadline := time.Now().Add(12 * time.Second)
 	for time.Now().Before(deadline) {
 		tick, e := engine.Tick(ctx)
@@ -357,6 +392,15 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 		default:
 		}
 		complete := false
+		if collaboration {
+			if _, e = publisher.RunOnce(ctx, 16); e != nil {
+				t.Fatal(e)
+			}
+			complete, e = journey.advance(ctx)
+			if e != nil {
+				t.Fatal(e)
+			}
+		}
 		tx(func(tx *workstore.Tx) error {
 			attempts, e := tx.ListAttempts(scope.ID)
 			if e != nil {
@@ -377,7 +421,12 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 			if group {
 				want = 3
 			}
-			complete = finished >= want
+			if dependency {
+				want = 5
+			}
+			if !collaboration {
+				complete = finished >= want
+			}
 
 			return nil
 		})
@@ -423,13 +472,15 @@ func runSDKNativePipeline(t *testing.T, backend work.Backend, groupCapacity ...i
 		}
 		return nil
 	})
-	if group && capacity > 1 && !overlap.observed.Load() {
+	if group && capacity == 2 && !overlap.observed.Load() {
 		t.Fatal("capacity >1 never produced overlapping actual native turns")
 	}
-	sender := &pipelinePublisher{}
-	publisher, err := workpublish.New(store, sender, nil)
-	if err != nil {
-		t.Fatal(err)
+	if collaboration {
+		journey.check(t, sender)
+		return
+	}
+	if dependency {
+		checkPipelineDependency(t, store, scope.ID)
 	}
 	if n, e := publisher.RunOnce(ctx, 16); e != nil || n != 1 {
 		t.Fatalf("actual source reply publication=%d %v", n, e)

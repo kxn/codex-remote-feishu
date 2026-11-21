@@ -3,6 +3,7 @@ package wrapper
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper/hostinventory"
@@ -121,7 +122,7 @@ func (a *App) applyWorkChildEnv(base []string) []string {
 			if a.work != nil || a.config.WorkLaunchSnapshot != nil {
 				continue
 			}
-		case config.WorkLaunchSnapshotEnv, config.WorkSessionTokenEnv, config.WorkToolEndpointEnv, config.WorkSessionCredentialRefEnv, config.WorkOwnerBindingEnv:
+		case config.WorkLaunchSnapshotEnv, config.WorkSessionTokenEnv, config.WorkToolEndpointEnv, config.WorkSessionCredentialRefEnv, config.WorkOwnerBindingEnv, config.WorkTeamBinaryEnv:
 			continue
 		}
 		env = append(env, item)
@@ -140,6 +141,9 @@ func (a *App) applyWorkChildEnv(base []string) []string {
 	)
 	if a.work.token != "" {
 		env = append(env, config.WorkSessionTokenEnv+"="+a.work.token)
+	}
+	if binary := os.Getenv(config.WorkTeamBinaryEnv); filepath.IsAbs(binary) {
+		env = append(env, config.WorkTeamBinaryEnv+"="+binary)
 	}
 	return env
 }

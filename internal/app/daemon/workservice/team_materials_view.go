@@ -10,6 +10,10 @@ func teamViewForScope(tx *workstore.Tx, team work.Team, scope work.WorkScope) (w
 	if team.Materials == nil {
 		return team, nil
 	}
+	if scope.Kind == work.ScopeBootstrap {
+		team.Materials = nil
+		return team, nil
+	}
 	if scope.PrincipalID != "" {
 		owner, err := tx.GetTeamOwnership(team.ID)
 		if err != nil && !errors.Is(err, workstore.ErrNotFound) {

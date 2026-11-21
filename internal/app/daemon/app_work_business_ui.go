@@ -52,6 +52,11 @@ func (a *App) handleTeamBusinessView(ctx context.Context, interaction workstore.
 	if action != "artifacts.open" && action != "artifacts.page" {
 		return fmt.Errorf("unknown business view action")
 	}
+	if projectScope {
+		if err := a.teamRuntime.service.RefreshArtifactAccessFromInteraction(ctx, interaction.ID, view.ID); err != nil {
+			return err
+		}
+	}
 	return a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		if err := tx.ValidateViewInteraction(view, interaction); err != nil {
 			return err
@@ -82,7 +87,11 @@ func (a *App) handleTeamBusinessView(ctx context.Context, interaction workstore.
 				if err != nil {
 					return err
 				}
-				cursor.References = delivery.References
+				for _, ref := range delivery.References {
+					if !ref.Current {
+						cursor.References = append(cursor.References, ref)
+					}
+				}
 			default:
 				return workstore.ErrScopeDenied
 			}
@@ -126,9 +135,12 @@ func (a *App) handleTeamBusinessView(ctx context.Context, interaction workstore.
 		if content.SHA256 != strings.TrimPrefix(version.ContentHash, "sha256:") {
 			return fmt.Errorf("saved artifact integrity mismatch")
 		}
-		rendered, err := renderSavedArtifact(content)
-		if err != nil {
-			return err
+		rendered := "已完整保存附件 " + version.FileName + "。请下载本次交付的文件。"
+		if version.FileName == "" || strings.HasPrefix(content.MediaType, "text/") {
+			rendered, err = renderSavedArtifact(content)
+			if err != nil {
+				return err
+			}
 		}
 		runes := []rune(rendered)
 		const pageSize = 3500
@@ -144,7 +156,16 @@ func (a *App) handleTeamBusinessView(ctx context.Context, interaction workstore.
 			end = len(runes)
 		}
 		id := workui.ID(interaction.ID, "artifact", strconv.Itoa(cursor.Index), strconv.Itoa(cursor.Page))
-		panel := workui.Panel{Title: resource.Purpose + " · 已保存版本", Paragraphs: []string{fmt.Sprintf("资料%d/%d · 正文第%d页；以下是发布/请求决定时保存的内容。", cursor.Index+1, len(cursor.References), cursor.Page+1), string(runes[offset:end]), "当前源文档（可能已经更新）：" + resource.CanonicalURI}}
+		panel := workui.Panel{Title: resource.Purpose + " · 已保存版本", Paragraphs: []string{fmt.Sprintf("资料%d/%d · 版本%s · 第%d页", cursor.Index+1, len(cursor.References), version.Source.Version, cursor.Page+1), string(runes[offset:end])}}
+		managed, access, err := tx.CurrentProjectDocumentAccess(resource, view.Tenant, view.ChatID, view.ChannelGeneration)
+		if err != nil {
+			return err
+		}
+		if managed && !access {
+			panel.Paragraphs = append(panel.Paragraphs, "原件的群访问待核对或恢复。可在群里请项目负责人处理。")
+		} else if resource.ConnectorIdentity != work.SavedFileConnector {
+			panel.Paragraphs = append(panel.Paragraphs, "当前原件（可能已经更新）："+resource.CanonicalURI)
+		}
 		if !version.Complete {
 			panel.Paragraphs = append(panel.Paragraphs, "此份保存内容不完整，请勿将它视为全文。")
 		} else if version.Consistency == work.ConsistencyObserved {
@@ -168,7 +189,9 @@ func (a *App) handleTeamBusinessView(ctx context.Context, interaction workstore.
 		var saved struct {
 			Assets []workservice.SavedDocumentAsset `json:"assets"`
 		}
-		if json.Unmarshal(content.Data, &saved) == nil {
+		if version.FileName != "" {
+			panel.Buttons = append(panel.Buttons, workui.Button{Label: "下载此版本文件", Action: "artifacts.download", Values: map[string]any{"asset": 0}})
+		} else if json.Unmarshal(content.Data, &saved) == nil {
 			for index, asset := range saved.Assets {
 				label := fmt.Sprintf("下载附件%d", index+1)
 				if strings.HasPrefix(asset.MediaType, "image/") {
@@ -194,7 +217,7 @@ func (a *App) handleTeamBusinessView(ctx context.Context, interaction workstore.
 		next.Revision = 0
 		next.ID = id
 		next.Kind = "project.artifacts"
-		next.SurfaceKey = "artifact-reader:" + view.TargetID
+		next.SurfaceKey = "artifact-reader:" + view.TargetID + ":" + interaction.PrincipalID
 		next.ReplyToMessageID = ""
 		next.PrincipalID = interaction.PrincipalID
 		if err = workui.ReplaceFromInteraction(tx, &next, interaction.ID); err != nil {

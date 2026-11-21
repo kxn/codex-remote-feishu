@@ -164,6 +164,15 @@ func (s *Service) taskTransition(ctx context.Context, token, run, kind string, r
 			if err = tx.PutTask(task, req.ExpectedRevision); err != nil {
 				return "", 0, err
 			}
+			if task.HasAvailableResult() {
+				task, err = tx.GetTask(task.ID)
+				if err != nil {
+					return "", 0, err
+				}
+				if err = s.notifyDependentTaskOwners(tx, task); err != nil {
+					return "", 0, err
+				}
+			}
 			return task.ID, task.Revision, nil
 		})
 		return err

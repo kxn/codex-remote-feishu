@@ -16,14 +16,24 @@ import (
 )
 
 type resourceWriteIntent struct {
-	Kind     string                         `json:"kind"`
-	ScopeID  string                         `json:"scope_id"`
-	Binding  work.RoleBotBinding            `json:"binding"`
-	Resource work.Resource                  `json:"resource"`
-	Create   *CreateResourceDocumentRequest `json:"create,omitempty"`
-	Append   *AppendResourceDocumentRequest `json:"append,omitempty"`
-	Update   *UpdateResourceDocumentRequest `json:"update,omitempty"`
-	Sheet    *WriteResourceSheetRequest     `json:"sheet,omitempty"`
+	ConnectorIdentity string                         `json:"connector_identity,omitempty"`
+	SharedFeishu      bool                           `json:"shared_feishu,omitempty"`
+	Kind              string                         `json:"kind"`
+	ScopeID           string                         `json:"scope_id"`
+	Binding           work.RoleBotBinding            `json:"binding"`
+	Resource          work.Resource                  `json:"resource"`
+	Create            *CreateResourceDocumentRequest `json:"create,omitempty"`
+	Append            *AppendResourceDocumentRequest `json:"append,omitempty"`
+	Update            *UpdateResourceDocumentRequest `json:"update,omitempty"`
+	Sheet             *WriteResourceSheetRequest     `json:"sheet,omitempty"`
+}
+
+func (i resourceWriteIntent) executionConnectorID() string {
+	if i.ConnectorIdentity != "" {
+		return i.ConnectorIdentity
+	}
+	// Earlier operations could only execute with the registration connector.
+	return i.Resource.ConnectorIdentity
 }
 
 func (s *Service) ResourceCreateDocument(ctx context.Context, token, run string, req CreateResourceDocumentRequest) (ResourceWriteResult, error) {
@@ -58,7 +68,7 @@ func (s *Service) ResourceUpdateDocument(ctx context.Context, token, run string,
 		}
 		seen[key] = true
 	}
-	return s.executeResourceWrite(ctx, token, run, req.Key, "resource.document.update-text", req.ResourceID, req.ExpectedResourceRevision, resourceWriteIntent{Update: &req})
+	return s.executeResourceWrite(ctx, token, run, req.Key, work.ResourceDocumentUpdateOperation, req.ResourceID, req.ExpectedResourceRevision, resourceWriteIntent{Update: &req})
 }
 func (s *Service) ResourceWriteSheet(ctx context.Context, token, run string, req WriteResourceSheetRequest) (ResourceWriteResult, error) {
 	if req.SheetID == "" || req.Range == "" || len(req.ExpectedDataSHA256) != 64 || len(req.Values) < 1 || len(req.Values) > 5000 {
@@ -127,7 +137,7 @@ func (s *Service) executeResourceWrite(ctx context.Context, token, run, key, kin
 		if !ok {
 			return &workcmd.Error{Code: "invalid_argument", Message: "this registered connection does not provide document or sheet editing"}
 		}
-		if resource.ConnectorIdentity != bound.Identity() {
+		if !resourceConnectorAllowed(scope, resource, bound) {
 			return workauth.ErrUnauthorized
 		}
 		if intent.Create != nil && !resourceDirectory(resource) {
@@ -137,6 +147,9 @@ func (s *Service) executeResourceWrite(ctx context.Context, token, run, key, kin
 		intent.ScopeID = scope.ID
 		intent.Binding = binding
 		intent.Resource = resource
+		intent.ConnectorIdentity = bound.Identity()
+		_, feishu := bound.(*FeishuResourceConnector)
+		intent.SharedFeishu = feishu && scope.Kind == work.ScopeProject
 		raw, err := json.Marshal(intent)
 		if err != nil {
 			return err
@@ -271,12 +284,16 @@ func (s *Service) commitResourceWrite(ctx context.Context, original work.Operati
 			if receipt.ExternalID == "" || receipt.SourceIdentity == "" || receipt.CanonicalURI == "" {
 				return fmt.Errorf("document creation returned incomplete identity")
 			}
-			id := stableID("resource", intent.ScopeID, intent.Resource.ConnectorIdentity, receipt.SourceIdentity)
-			resource := work.Resource{ID: id, ScopeID: intent.ScopeID, ConnectorIdentity: intent.Resource.ConnectorIdentity, SourceIdentity: receipt.SourceIdentity, CanonicalURI: receipt.CanonicalURI, CollectionID: intent.Create.CollectionID, Purpose: intent.Create.Purpose, Revision: 1}
-			if existing, e := tx.GetResource(intent.ScopeID, id); e == nil {
-				resource = existing
-			} else if e != workstore.ErrNotFound {
+			resource := work.Resource{ScopeID: intent.ScopeID, ConnectorIdentity: intent.executionConnectorID(), SourceIdentity: receipt.SourceIdentity, CanonicalURI: receipt.CanonicalURI, CollectionID: intent.Create.CollectionID, Purpose: intent.Create.Purpose, Revision: 1}
+			shared := intent.SharedFeishu && work.IsFeishuResource(resource)
+			resource.ID = newRegisteredResourceID(resource, shared)
+			if existing, found, e := findRegisteredResource(tx, resource, shared); e != nil {
 				return e
+			} else if found {
+				resource = existing
+				if err = tx.AddResourceCollection(resource.ScopeID, resource.ID, intent.Create.CollectionID); err != nil {
+					return err
+				}
 			} else if err = tx.PutResource(resource, 0); err != nil {
 				return err
 			}

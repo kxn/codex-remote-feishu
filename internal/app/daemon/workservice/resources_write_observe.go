@@ -50,7 +50,7 @@ func (s *Service) ResourceObserveWrite(ctx context.Context, token, run string, r
 		if err != nil {
 			return err
 		}
-		if original.ScopeID != c.Worker.ScopeID || original.Actor != (work.Actor{Kind: work.ActorRole, ID: c.Worker.RoleID}) || !resourceWriteKind(original.Kind) {
+		if original.ScopeID != c.Worker.ScopeID || original.Actor != (work.Actor{Kind: work.ActorRole, ID: c.Worker.RoleID}) || !work.ResourceWriteCanBeInspected(original.Kind) {
 			return workstore.ErrScopeDenied
 		}
 		id := stableID("resource-write-observation", original.ID, req.Key)
@@ -90,7 +90,7 @@ func (s *Service) ResourceObserveWrite(ctx context.Context, token, run string, r
 		if err != nil {
 			return err
 		}
-		if connector.Identity() != intent.Resource.ConnectorIdentity {
+		if connector.Identity() != intent.executionConnectorID() {
 			return workstore.ErrScopeDenied
 		}
 		var ok bool
@@ -204,11 +204,4 @@ func (s *Service) ResourceObserveWrite(ctx context.Context, token, run string, r
 		return result, err
 	}
 	return result, callErr
-}
-func resourceWriteKind(kind string) bool {
-	switch kind {
-	case "resource.document.create", "resource.document.append", "resource.document.update", "resource.sheet.write":
-		return true
-	}
-	return false
 }

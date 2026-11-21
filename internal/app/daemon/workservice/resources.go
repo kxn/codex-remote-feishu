@@ -35,6 +35,7 @@ type ReconcileResourceRequest struct {
 }
 
 type resourceIntent struct {
+	Binding           *work.RoleBotBinding     `json:"binding,omitempty"`
 	ScopeID           string                   `json:"scope_id"`
 	RoleID            string                   `json:"role_id"`
 	ContextID         string                   `json:"context_id"`
@@ -92,6 +93,9 @@ func (s *Service) ResourceReadVersion(ctx context.Context, token, runRef string,
 			if err != nil {
 				return err
 			}
+			if version.FileName != "" && !strings.HasPrefix(body.MediaType, "text/") {
+				return nil
+			}
 			page, err := knowledgeContentPage(body, req.Offset, req.Limit)
 			if err != nil {
 				return err
@@ -135,6 +139,9 @@ func (s *Service) ResourceReconcile(ctx context.Context, token, runRef string, r
 		if err = json.Unmarshal(body.Data, &intent); err != nil {
 			return err
 		}
+		if intent.ScopeID != operation.ScopeID || intent.OperationID != operation.ID || intent.RoleID != operation.Actor.ID {
+			return workauth.ErrUnauthorized
+		}
 		binding, err := tx.GetRoleBotBinding(intent.RoleID)
 		if err != nil {
 			return err
@@ -143,7 +150,7 @@ func (s *Service) ResourceReconcile(ctx context.Context, token, runRef string, r
 		if resolveErr != nil {
 			return resolveErr
 		}
-		if err != nil || connector == nil || connector.Identity() != intent.ConnectorIdentity || binding.IdentityGeneration != intent.BotGeneration {
+		if connector.Identity() != intent.ConnectorIdentity || binding.IdentityGeneration != intent.BotGeneration || intent.Binding != nil && binding != *intent.Binding {
 			return workauth.ErrUnauthorized
 		}
 		if operation.State == work.OperationUnknown {
@@ -182,12 +189,16 @@ func (s *Service) prepareResource(ctx context.Context, token, runRef, kind, key 
 		if resolveErr != nil {
 			return resolveErr
 		}
+		scope, err := tx.GetScope(c.Worker.ScopeID)
+		if err != nil {
+			return err
+		}
 		if capture != nil {
 			resource, err := tx.GetResource(c.Worker.ScopeID, capture.ResourceID)
 			if err != nil {
 				return err
 			}
-			if resource.ConnectorIdentity != connector.Identity() {
+			if !resourceConnectorAllowed(scope, resource, connector) {
 				return workauth.ErrUnauthorized
 			}
 		}
@@ -196,7 +207,7 @@ func (s *Service) prepareResource(ctx context.Context, token, runRef, kind, key 
 			return err
 		}
 		id := stableID("op", c.Worker.ScopeID, c.Worker.RoleID, kind, key)
-		intent = resourceIntent{ScopeID: c.Worker.ScopeID, RoleID: c.Worker.RoleID, ContextID: c.Worker.ContextID, AttemptID: c.Attempt.ID, BotGeneration: c.Claims.BotGeneration, ConnectorIdentity: connector.Identity(), OperationID: id, Register: register, Capture: capture}
+		intent = resourceIntent{Binding: &binding, ScopeID: c.Worker.ScopeID, RoleID: c.Worker.RoleID, ContextID: c.Worker.ContextID, AttemptID: c.Attempt.ID, BotGeneration: c.Claims.BotGeneration, ConnectorIdentity: connector.Identity(), OperationID: id, Register: register, Capture: capture}
 		requestRef := stableID("resource-intent", id)
 		if _, e := tx.GetOperation(id); errors.Is(e, workstore.ErrNotFound) {
 			payload, e := json.Marshal(intent)

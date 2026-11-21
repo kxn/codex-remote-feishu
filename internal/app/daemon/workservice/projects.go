@@ -48,6 +48,10 @@ func (s *Service) CreateProjectInRun(ctx context.Context, token, runRef string, 
 	if claims.Purpose == "bootstrap" && req.SourceMessageID == "" {
 		req.SourceMessageID = stableID("form_input", claims.Tenant, claims.ChatID, claims.OperationID)
 	}
+	apps, err := s.bootstrapConfiguredApps()
+	if err != nil {
+		return Result{}, err
+	}
 	var result Result
 	err = s.store.Within(ctx, func(tx *workstore.Tx) error {
 		binding, err := tx.GetRoleBotBinding(claims.RoleID)
@@ -88,6 +92,17 @@ func (s *Service) CreateProjectInRun(ctx context.Context, token, runRef string, 
 			}
 			if source.ScopeID != scope.ID || source.Source != (work.Actor{Kind: work.ActorPrincipal, ID: scope.PrincipalID}) {
 				return workauth.ErrUnauthorized
+			}
+			if source.RecalledEvidenceRef != "" {
+				return workauth.ErrUnauthorized
+			}
+			if req.DocumentContainer != "" {
+				if err = validateSelectedDirectoryURL(req.DocumentContainer); err != nil {
+					return err
+				}
+				if err = directorySourceContainsURL(tx, source, req.DocumentContainer); err != nil {
+					return err
+				}
 			}
 		}
 		if req.LeaderRoleID != claims.RoleID {
@@ -145,8 +160,12 @@ func (s *Service) CreateProjectInRun(ctx context.Context, token, runRef string, 
 			if e != nil || !member.Active {
 				return fmt.Errorf("selected role is not an active team member")
 			}
-			if _, e = tx.GetRoleBotBinding(roleID); e != nil {
+			bot, e := tx.GetRoleBotBinding(roleID)
+			if e != nil {
 				return fmt.Errorf("selected role has no configured bot: %w", e)
+			}
+			if !bootstrapAppEnabled(apps, bot) {
+				return fmt.Errorf("selected role %q no longer has an enabled Bot", roleID)
 			}
 		}
 		for _, id := range req.LocationIDs {

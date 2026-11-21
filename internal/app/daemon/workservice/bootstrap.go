@@ -2,6 +2,7 @@ package workservice
 
 import (
 	"context"
+	"errors"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
@@ -45,9 +46,11 @@ type BootstrapTeam struct {
 	Roles []work.Role `json:"roles"`
 }
 type BootstrapView struct {
-	Scope  work.WorkScope   `json:"scope"`
-	Teams  []BootstrapTeam  `json:"teams"`
-	Inputs []BootstrapInput `json:"inputs"`
+	Scope           work.WorkScope                 `json:"scope"`
+	Teams           []BootstrapTeam                `json:"teams"`
+	Roles           []work.Role                    `json:"configured_roles"`
+	Inputs          []BootstrapInput               `json:"inputs"`
+	DirectoryChoice *workstore.ExecutionPreference `json:"directory_choice,omitempty"`
 }
 type BootstrapInput struct {
 	ID      string       `json:"id"`
@@ -63,12 +66,38 @@ func (s *Service) BootstrapContext(ctx context.Context, token, runRef string) (B
 	if err != nil {
 		return view, err
 	}
+	apps, err := s.bootstrapConfiguredApps()
+	if err != nil {
+		return view, err
+	}
 	err = s.store.Within(ctx, func(tx *workstore.Tx) error {
 		c, scope, err := s.authorizeBootstrapWorker(tx, claims, runRef)
 		if err != nil {
 			return err
 		}
 		view.Scope = scope
+		roles, err := tx.ListRoles()
+		if err != nil {
+			return err
+		}
+		for _, role := range roles {
+			binding, err := tx.GetRoleBotBinding(role.ID)
+			if err != nil {
+				if errors.Is(err, workstore.ErrNotFound) {
+					continue
+				}
+				return err
+			}
+			if bootstrapAppEnabled(apps, binding) {
+				view.Roles = append(view.Roles, role)
+			}
+		}
+		choice, err := tx.GetExecutionPreference(scope.ID)
+		if err == nil {
+			view.DirectoryChoice = &choice
+		} else if !errors.Is(err, workstore.ErrNotFound) {
+			return err
+		}
 		teams, err := tx.ListTeams()
 		if err != nil {
 			return err
@@ -91,8 +120,12 @@ func (s *Service) BootstrapContext(ctx context.Context, token, runRef string) (B
 				if !candidate.Active {
 					continue
 				}
-				if _, e = tx.GetRoleBotBinding(candidate.RoleID); e != nil {
+				binding, e := tx.GetRoleBotBinding(candidate.RoleID)
+				if errors.Is(e, workstore.ErrNotFound) || e == nil && !bootstrapAppEnabled(apps, binding) {
 					continue
+				}
+				if e != nil {
+					return e
 				}
 				role, e := tx.GetRole(candidate.RoleID)
 				if e != nil {

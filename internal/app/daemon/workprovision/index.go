@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
@@ -76,32 +77,66 @@ func (s *Service) index(ctx context.Context, state snapshot) (HomeIndex, error) 
 			return err
 		}
 		for _, resource := range resources {
-			if resource.ID != state.home.ResourceID {
-				result.Resources = append(result.Resources, HomeResource{Label: resource.Purpose, URL: resource.CanonicalURI})
+			if resource.ID != state.home.ResourceID && resource.ConnectorIdentity != work.SavedFileConnector {
+				resourceIndex, err := homeResourceIndex(tx, state, resource)
+				if err != nil {
+					return err
+				}
+				result.Resources = append(result.Resources, resourceIndex)
 			}
 		}
 		deliveries, err := tx.ListDeliveries(project.ScopeID)
 		if err != nil {
 			return err
 		}
+		sort.Slice(deliveries, func(i, j int) bool {
+			if deliveries[i].CreatedAt.Equal(deliveries[j].CreatedAt) {
+				return deliveries[i].ID > deliveries[j].ID
+			}
+			return deliveries[i].CreatedAt.After(deliveries[j].CreatedAt)
+		})
 		for _, delivery := range deliveries {
+			if delivery.ConversationTarget != state.request.ChatID {
+				continue
+			}
 			item := HomeDelivery{Summary: delivery.Summary, NeededAction: delivery.NeededAction}
 			for _, ref := range delivery.References {
 				resource, err := tx.GetResource(project.ScopeID, ref.ResourceID)
 				if err != nil {
 					return err
 				}
-				version, err := tx.GetResourceVersion(project.ScopeID, ref.VersionID)
+				entry, err := homeResourceIndex(tx, state, resource)
 				if err != nil {
 					return err
 				}
-				item.Resources = append(item.Resources, HomeResource{Label: resource.Purpose, URL: resource.CanonicalURI, Version: version.Source.Version})
+				if !ref.Current {
+					version, err := tx.GetResourceVersion(project.ScopeID, ref.VersionID)
+					if err != nil {
+						return err
+					}
+					entry.Version = version.Source.Version
+				}
+				item.Resources = append(item.Resources, entry)
 			}
 			result.Deliveries = append(result.Deliveries, item)
 		}
 		return nil
 	})
 	return result, err
+}
+
+func homeResourceIndex(tx *workstore.Tx, state snapshot, resource work.Resource) (HomeResource, error) {
+	index := HomeResource{Label: resource.Purpose, URL: resource.CanonicalURI}
+	if resource.ConnectorIdentity == work.SavedFileConnector {
+		index.URL = ""
+		return index, nil
+	}
+	managed, granted, err := tx.CurrentProjectDocumentAccess(resource, state.request.Tenant, state.request.ChatID, state.home.ChannelGeneration)
+	if managed && !granted {
+		index.URL = ""
+		index.Label += "（原件群访问待确认）"
+	}
+	return index, err
 }
 func (s *Service) initializeIndex(ctx context.Context, state *snapshot, platform Platform) error {
 	if state.home.SyncState == "synced" && state.home.IndexBaseline != "" {

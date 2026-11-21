@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -30,25 +29,6 @@ func NewFeishuResourceConnector(identity string, gateway *feishu.LiveGateway) (*
 }
 func (c *FeishuResourceConnector) Identity() string { return c.identity }
 
-func resourceLink(value string) (kind, token string, err error) {
-	parsed, err := url.Parse(value)
-	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil {
-		return "", "", fmt.Errorf("an HTTPS cloud document URL is required")
-	}
-	host := strings.ToLower(parsed.Hostname())
-	if !strings.HasSuffix(host, ".feishu.cn") && !strings.HasSuffix(host, ".larksuite.com") && !strings.HasSuffix(host, ".larkoffice.com") {
-		return "", "", fmt.Errorf("resource link must use a recognized Feishu or Lark document host")
-	}
-	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	if len(parts) != 2 || parts[1] == "" || strings.ContainsAny(parts[1], "/\\?# !:") {
-		return "", "", fmt.Errorf("cloud document URL must identify one existing object")
-	}
-	switch parts[0] {
-	case "docx", "wiki", "sheets", "base":
-		return parts[0], parts[1], nil
-	}
-	return "", "", fmt.Errorf("cloud document URL type is not docx, wiki, sheets or base")
-}
 func observedSource(kind, id string, evidence any) (work.SourceRef, json.RawMessage, error) {
 	data, err := json.Marshal(evidence)
 	if err != nil {
@@ -60,7 +40,7 @@ func observedSource(kind, id string, evidence any) (work.SourceRef, json.RawMess
 }
 
 func (c *FeishuResourceConnector) Resolve(ctx context.Context, link string) (ResolvedResource, error) {
-	kind, token, err := resourceLink(link)
+	kind, token, err := work.ParseFeishuDocumentLink(link)
 	if err != nil {
 		return ResolvedResource{}, err
 	}
@@ -142,8 +122,8 @@ func (c *FeishuResourceConnector) Capture(ctx context.Context, resource work.Res
 	}
 }
 
-// FeishuConnectorIdentity fences application rebinding, not merely a gateway's
-// display name. Registering under one app cannot silently borrow a new bot's rights.
+// FeishuConnectorIdentity fences an operation's credential and application
+// generation independently from a resource's Feishu object identity.
 func FeishuConnectorIdentity(binding work.RoleBotBinding) string {
 	return "feishu:" + binding.GatewayRef + ":" + binding.AppID + ":" + strconv.FormatInt(binding.IdentityGeneration, 10)
 }

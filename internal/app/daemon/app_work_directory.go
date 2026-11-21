@@ -18,6 +18,20 @@ type teamDirectory struct {
 	store *workstore.Store
 }
 
+func (a *App) teamBootstrapConfiguredApps() (map[string]string, error) {
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return nil, err
+	}
+	apps := map[string]string{}
+	for _, app := range a.runtimeGatewayApps(loaded.Config) {
+		if app.Enabled && app.AppID != "" {
+			apps[app.GatewayID] = app.AppID
+		}
+	}
+	return apps, nil
+}
+
 func (d teamDirectory) gateway(ctx context.Context, binding work.RoleBotBinding) (*feishu.LiveGateway, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -75,7 +89,11 @@ func (d teamDirectory) ResolveGateway(ctx context.Context, gatewayRef, appID str
 
 func (d teamDirectory) ResolveLeader(ctx context.Context, tenant, chat, observingRole string) (string, error) {
 	leader := ""
-	err := d.store.Within(ctx, func(tx *workstore.Tx) error {
+	apps, err := d.app.teamBootstrapConfiguredApps()
+	if err != nil {
+		return "", err
+	}
+	err = d.store.Within(ctx, func(tx *workstore.Tx) error {
 		binding, e := tx.GetProjectChannelBinding(tenant, chat)
 		if e == nil && binding.Active {
 			project, e := tx.GetProject(binding.ProjectID)
@@ -92,7 +110,20 @@ func (d teamDirectory) ResolveLeader(ctx context.Context, tenant, chat, observin
 		leaders := map[string]bool{}
 		for _, team := range teams {
 			member, e := tx.GetTeamMember(team.ID, team.LeaderRoleID)
-			if e == nil && member.Active {
+			if errors.Is(e, workstore.ErrNotFound) || e == nil && !member.Active {
+				continue
+			}
+			if e != nil {
+				return e
+			}
+			binding, e := tx.GetRoleBotBinding(team.LeaderRoleID)
+			if errors.Is(e, workstore.ErrNotFound) {
+				continue
+			}
+			if e != nil {
+				return e
+			}
+			if apps[binding.GatewayRef] == binding.AppID {
 				leaders[team.LeaderRoleID] = true
 			}
 		}
@@ -104,7 +135,30 @@ func (d teamDirectory) ResolveLeader(ctx context.Context, tenant, chat, observin
 		}
 		return fmt.Errorf("请明确 @ 一位负责人，或使用负责人选择入口建立项目")
 	})
-	return leader, err
+	if err != nil || leader == observingRole {
+		return leader, err
+	}
+	var binding work.RoleBotBinding
+	err = d.store.Within(ctx, func(tx *workstore.Tx) error {
+		var e error
+		binding, e = tx.GetRoleBotBinding(leader)
+		return e
+	})
+	if err != nil {
+		return "", err
+	}
+	gateway, err := d.gateway(ctx, binding)
+	if err != nil {
+		return "", fmt.Errorf("请指定已在群里的项目负责人：%w", err)
+	}
+	present, err := gateway.ProjectChatAPI().IsCallerInChat(ctx, chat)
+	if err != nil {
+		return "", fmt.Errorf("核对默认负责人是否入群：%w", err)
+	}
+	if !present {
+		return "", fmt.Errorf("默认负责人尚未入群，请先添加或指定已在群里的负责人")
+	}
+	return leader, nil
 }
 
 func (d teamDirectory) ResolveMention(ctx context.Context, gateway work.IngressGateway, mention work.RawMention) (string, error) {

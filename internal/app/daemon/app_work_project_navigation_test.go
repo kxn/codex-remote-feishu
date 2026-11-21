@@ -33,6 +33,7 @@ func (p *projectNavigationPlatform) PinNavigation(_ context.Context, id string) 
 
 func TestProjectNavigationTickPublishesBeforePinAndDetectsHumanRemoval(t *testing.T) {
 	ctx := t.Context()
+	const homeURL = "https://a.feishu.cn/docx/project-home"
 	fixture := newResourceRecoveryFixture(t)
 	app := fixture.a
 	r := app.teamRuntime
@@ -53,7 +54,7 @@ func TestProjectNavigationTickPublishesBeforePinAndDetectsHumanRemoval(t *testin
 		if _, _, err = tx.PutOperation(work.Operation{ID: opID, ScopeID: "scope", Actor: actor, Kind: "project.provision", TargetID: "project", TargetGeneration: 1, IdempotencyKey: opID, RequestRef: body.ID, RequestHash: body.SHA256, State: work.OperationConfirmed, ExternalReceipt: "provisioned", Revision: 1}, 0); err != nil {
 			return err
 		}
-		return tx.PutProjectHome(workstore.ProjectHome{ID: "project", ScopeID: "scope", OperationID: opID, ChannelGeneration: 1, Identity: platform.binding, NavigationCardWanted: true, SyncState: "pending", Revision: 1}, 0)
+		return tx.PutProjectHome(workstore.ProjectHome{ID: "project", ScopeID: "scope", OperationID: opID, ChannelGeneration: 1, Identity: platform.binding, URL: homeURL, NavigationCardWanted: true, SyncState: "pending", Revision: 1}, 0)
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -112,6 +113,14 @@ func TestProjectNavigationTickPublishesBeforePinAndDetectsHumanRemoval(t *testin
 		}
 		if !strings.Contains(string(body.Data), "project.navigation.open") || !strings.Contains(string(body.Data), "project.navigation.pause") {
 			t.Fatalf("navigation lacks work and pause actions: %s", body.Data)
+		}
+		var projection workservice.MessageProjection
+		if err := json.Unmarshal(body.Data, &projection); err != nil {
+			return err
+		}
+		card := string(projection.Card)
+		if !strings.Contains(card, `"default_url":"`+homeURL+`","type":"open_url"`) || !strings.Contains(card, "打开项目首页") || !strings.Contains(card, "互动按钮失效时，可在群里请负责人重新打开工作入口。") {
+			t.Fatalf("navigation lacks a direct durable homepage link and fallback guidance: %s", card)
 		}
 		if !home.NavigationPinMissing || home.NavigationGeneration != 1 {
 			t.Fatalf("unpin not persisted: %+v", home)

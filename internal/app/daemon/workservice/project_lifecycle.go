@@ -96,6 +96,11 @@ func projectQuiescent(tx *workstore.Tx, project work.Project, archive bool) (boo
 			return false, err
 		}
 		for _, op := range ops {
+			// Archiving retains authorized read access to existing materials. An
+			// uncertain earlier grant to that frozen group stays recorded.
+			if op.Kind == workstore.ProjectDocumentShareKind {
+				continue
+			}
 			if workstore.ResourceReadHasNoExternalWrite(op.Kind) || op.Kind == "feishu.membership.query" ||
 				op.Kind == "feishu.publish" && op.Actor == (work.Actor{Kind: work.ActorSystem, ID: "team-ui"}) {
 				continue

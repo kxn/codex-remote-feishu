@@ -14,8 +14,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-func teamPickerFixture(t *testing.T) (*App, teamHumanSource) {
+func teamPickerFixture(t *testing.T, appIDs ...string) (*App, teamHumanSource) {
 	t.Helper()
+	appID := "app"
+	if len(appIDs) > 0 {
+		appID = appIDs[0]
+	}
 	s, e := workstore.Open(t.Context(), filepath.Join(t.TempDir(), "work.db"))
 	if e != nil {
 		t.Fatal(e)
@@ -36,7 +40,7 @@ func teamPickerFixture(t *testing.T) (*App, teamHumanSource) {
 		if e := tx.PutRole(work.Role{ID: "leader", Name: "Leader", Description: "Coordinate", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); e != nil {
 			return e
 		}
-		gateway := work.IngressGateway{GatewayRef: "gateway", AppID: "app", RoleID: "leader", BotGeneration: 1}
+		gateway := work.IngressGateway{GatewayRef: "gateway", AppID: appID, RoleID: "leader", BotGeneration: 1}
 		if e := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: gateway.RoleID, GatewayRef: gateway.GatewayRef, AppID: gateway.AppID, IdentityGeneration: 1}, 0); e != nil {
 			return e
 		}

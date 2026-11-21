@@ -7,10 +7,11 @@ import (
 
 func resourceWriteCommandDTOs() map[string]any {
 	return map[string]any{
-		"project.directory.select": ProjectDirectoryRequest{},
-		"resource.comments.read":   ReadResourceCommentsRequest{},
-		"resource.write.observe":   ObserveResourceWriteRequest{},
-		"resource.list":            ResourceListRequest{}, "resource.document.create": CreateResourceDocumentRequest{}, "resource.document.inspect": InspectResourceDocumentRequest{}, "resource.document.append": AppendResourceDocumentRequest{}, "resource.document.update": UpdateResourceDocumentRequest{}, "resource.sheet.read": ReadResourceSheetRequest{}, "resource.sheet.write": WriteResourceSheetRequest{},
+		"project.directory.select":        ProjectDirectoryRequest{},
+		"resource.comments.read":          ReadResourceCommentsRequest{},
+		"resource.write.observe":          ObserveResourceWriteRequest{},
+		"resource.document.share-project": ShareProjectDocumentRequest{},
+		"resource.list":                   ResourceListRequest{}, "resource.document.create": CreateResourceDocumentRequest{}, "resource.document.inspect": InspectResourceDocumentRequest{}, "resource.document.append": AppendResourceDocumentRequest{}, "resource.document.update": UpdateResourceDocumentRequest{}, "resource.sheet.read": ReadResourceSheetRequest{}, "resource.sheet.write": WriteResourceSheetRequest{},
 	}
 }
 func (s *Service) executeResourceWrites(ctx context.Context, token string, req workcmd.DispatchRequest) (any, bool, error) {
@@ -25,6 +26,8 @@ func (s *Service) executeResourceWrites(ctx context.Context, token string, req w
 		return executeDTO(ctx, token, req, s.ResourceList)
 	case "resource.document.create":
 		return executeDTO(ctx, token, req, s.ResourceCreateDocument)
+	case "resource.document.share-project":
+		return executeDTO(ctx, token, req, s.ShareProjectDocument)
 	case "resource.document.inspect":
 		return executeDTO(ctx, token, req, s.ResourceInspectDocument)
 	case "resource.document.append":

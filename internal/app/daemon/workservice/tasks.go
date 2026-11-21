@@ -31,7 +31,7 @@ func (s *Service) AssignTask(ctx context.Context, token, runRef string, req Assi
 			if strings.TrimSpace(req.Title) == "" {
 				return "", 0, fmt.Errorf("task title is required")
 			}
-			if err := ensureMember(tx, c.Worker.ScopeID, req.OwnerRoleID); err != nil {
+			if err := ensureEnrolledMember(tx, c.Worker.ScopeID, req.OwnerRoleID); err != nil {
 				return "", 0, err
 			}
 			task := work.Task{ID: id, ScopeID: c.Worker.ScopeID, Title: req.Title, OwnerRoleID: req.OwnerRoleID, RequirementsRevision: 1, AssignmentGeneration: 1, State: work.TaskTodo, Requirements: req.Requirements, BusinessSource: req.BusinessSource, Revision: 1, CreatedAt: s.now(), UpdatedAt: s.now()}
@@ -100,7 +100,7 @@ func (s *Service) ReviseTask(ctx context.Context, token, runRef string, req Revi
 			if task.State == work.TaskDone || task.State == work.TaskCancelled {
 				return "", 0, fmt.Errorf("terminal task cannot be revised; create a follow-up task")
 			}
-			if err = ensureMember(tx, task.ScopeID, req.OwnerRoleID); err != nil {
+			if err = ensureEnrolledMember(tx, task.ScopeID, req.OwnerRoleID); err != nil {
 				return "", 0, err
 			}
 			if task.OwnerRoleID != req.OwnerRoleID {

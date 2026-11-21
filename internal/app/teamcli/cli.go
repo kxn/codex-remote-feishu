@@ -115,7 +115,7 @@ func parse(args []string) (invocation, error) {
 	if !call.help && command.CredentialPurpose == "bootstrap" && call.runRef != "" {
 		return call, fmt.Errorf("bootstrap project creation must not supply --run-ref")
 	}
-	if !call.help && call.name != "context" && !call.stdin && call.file == "" {
+	if !call.help && len(command.InputFields) != 0 && !call.stdin && call.file == "" {
 		return call, fmt.Errorf("command payload requires --file <path>, --file -, or --stdin")
 	}
 	return call, nil

@@ -9,11 +9,14 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/kxn/codex-remote-feishu/internal/app/teamcli"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/work"
+	"github.com/kxn/codex-remote-feishu/internal/execlaunch"
 )
 
 // A real OS child of the production wrapper runs deterministic native protocol
@@ -103,15 +106,17 @@ func runPipelineNativeChild(backend string) error {
 }
 
 type pipelineWorkEnvelope struct {
-	RunRef string `json:"run_ref"`
-	Inputs []struct {
-		ID      string `json:"id"`
-		Message *struct {
-			Source struct {
-				Kind string `json:"kind"`
-			} `json:"source"`
-		} `json:"message,omitempty"`
-	} `json:"inputs"`
+	RunRef string                       `json:"run_ref"`
+	Task   *workservice.FrozenTaskInput `json:"task,omitempty"`
+	Inputs []pipelineWorkInput          `json:"inputs"`
+}
+
+type pipelineWorkInput struct {
+	ID          string        `json:"id"`
+	EventID     string        `json:"event_id"`
+	Body        string        `json:"body"`
+	RelatedTask *work.Task    `json:"related_task_read_only,omitempty"`
+	Message     *work.Message `json:"message,omitempty"`
 }
 
 func pipelineFindEnvelope(value any) (pipelineWorkEnvelope, bool) {
@@ -147,22 +152,25 @@ func pipelineChildBusiness(frame map[string]any) error {
 		return fmt.Errorf("native prompt lacks the explicit admitted work envelope")
 	}
 
-	var help bytes.Buffer
-	if err := teamcli.Run(context.Background(), teamcli.Options{Args: []string{"help", "outcome.report"}, Stdout: &help, Stderr: io.Discard}); err != nil {
+	help, err := pipelineTeamCLI(nil, "help", "outcome.report")
+	if err != nil {
 		return err
 	}
-	if !strings.Contains(help.String(), "outcome.report") {
+	if !bytes.Contains(help, []byte("outcome.report")) {
 		return fmt.Errorf("actual team CLI help did not expose report contract")
 	}
-	call := func(name string, payload any) error {
+	execute := func(name string, payload, result any) error {
 		body, err := json.Marshal(payload)
 		if err != nil {
 			return err
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		return teamcli.Run(ctx, teamcli.Options{Args: []string{name, "--run-ref", envelope.RunRef, "--stdin"}, Stdin: bytes.NewReader(body), Stdout: io.Discard, Stderr: io.Discard})
+		output, err := pipelineTeamCLI(body, name, "--run-ref", envelope.RunRef, "--stdin")
+		if err == nil && result != nil {
+			err = json.Unmarshal(output, result)
+		}
+		return err
 	}
+	call := func(name string, payload any) error { return execute(name, payload, nil) }
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -175,7 +183,17 @@ func pipelineChildBusiness(frame map[string]any) error {
 		time.Sleep(5 * time.Millisecond)
 	}
 	disposition := "complete"
-	if os.Getenv("FSC_NATIVE_PIPELINE_GROUP") != "" {
+	if os.Getenv("FSC_NATIVE_PIPELINE_COLLABORATION") != "" {
+		disposition, err = pipelineCollaborate(envelope, execute)
+		if err != nil {
+			return err
+		}
+	} else if os.Getenv("FSC_NATIVE_PIPELINE_DEPENDENCY") != "" {
+		disposition, err = pipelineDependency(envelope, execute)
+		if err != nil {
+			return err
+		}
+	} else if os.Getenv("FSC_NATIVE_PIPELINE_GROUP") != "" {
 		owner := map[string]any{}
 		_ = json.Unmarshal([]byte(os.Getenv(config.WorkOwnerBindingEnv)), &owner)
 		role, _ := owner["roleId"].(string)
@@ -222,4 +240,20 @@ func pipelineChildBusiness(frame map[string]any) error {
 		ids = append(ids, input.ID)
 	}
 	return call("outcome.report", map[string]any{"key": "pipeline-outcome:" + envelope.RunRef, "expected_revision": 0, "processed_input_ids": ids, "summary": "pipeline explicit business report", "checkpoint": "pipeline checkpoint", "work_disposition": disposition})
+}
+
+func pipelineTeamCLI(body []byte, args ...string) ([]byte, error) {
+	binary := os.Getenv(config.WorkTeamBinaryEnv)
+	if !filepath.IsAbs(binary) {
+		return nil, fmt.Errorf("native process did not receive an absolute team CLI path")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	cmd := execlaunch.CommandContext(ctx, binary, append([]string{"team"}, args...)...)
+	cmd.Stdin = bytes.NewReader(body)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("team %s: %w: %s", args[0], err, output)
+	}
+	return output, nil
 }

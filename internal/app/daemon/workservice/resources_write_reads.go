@@ -75,7 +75,7 @@ func (s *Service) resourceReader(ctx context.Context, token, run, id string) (wo
 		if err != nil {
 			return err
 		}
-		if connector.Identity() != resource.ConnectorIdentity {
+		if !resourceConnectorAllowed(scope, resource, connector) {
 			return workstore.ErrScopeDenied
 		}
 		var ok bool

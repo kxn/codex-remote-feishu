@@ -45,7 +45,11 @@ type TeamView struct {
 
 func (s *Service) TeamCreate(ctx context.Context, token, run string, req TeamCreateRequest) (Result, error) {
 	var result Result
-	err := s.withContentWorker(ctx, token, run, func(tx *workstore.Tx, c Caller) error {
+	apps, err := s.bootstrapConfiguredApps()
+	if err != nil {
+		return result, err
+	}
+	err = s.withContentWorker(ctx, token, run, func(tx *workstore.Tx, c Caller) error {
 		scope, err := tx.GetScope(c.Worker.ScopeID)
 		if err != nil {
 			return err
@@ -62,6 +66,9 @@ func (s *Service) TeamCreate(ctx context.Context, token, run string, req TeamCre
 		}
 		id := stableID("team", scope.ID, scope.PrincipalID, req.Key)
 		result, err = s.mutate(tx, c, "team.create", req.Key, id, req, func() (string, int64, error) {
+			if err := tx.RequireOpenBootstrapScope(scope); err != nil {
+				return "", 0, err
+			}
 			if strings.TrimSpace(req.Name) == "" {
 				return "", 0, fmt.Errorf("team name required")
 			}
@@ -76,8 +83,12 @@ func (s *Service) TeamCreate(ctx context.Context, token, run string, req TeamCre
 				if _, err = tx.GetRole(role); err != nil {
 					return "", 0, err
 				}
-				if _, err = tx.GetRoleBotBinding(role); err != nil {
-					return "", 0, err
+				binding, e := tx.GetRoleBotBinding(role)
+				if e != nil {
+					return "", 0, e
+				}
+				if !bootstrapAppEnabled(apps, binding) {
+					return "", 0, fmt.Errorf("selected role %q no longer has an enabled Bot", role)
 				}
 			}
 			team := work.Team{ID: id, Name: req.Name, LeaderRoleID: req.LeaderRoleID, Revision: 1}

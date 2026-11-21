@@ -2,6 +2,19 @@ package work
 
 import "time"
 
+const (
+	ResourceDocumentUpdateOperation       = "resource.document.update-text"
+	ResourceDocumentUpdateLegacyOperation = "resource.document.update"
+)
+
+func ResourceWriteCanBeInspected(kind string) bool {
+	switch kind {
+	case "resource.document.create", "resource.document.append", ResourceDocumentUpdateOperation, ResourceDocumentUpdateLegacyOperation, "resource.sheet.write":
+		return true
+	}
+	return false
+}
+
 // ResourceWriteRecoveryObservation freezes the actual read selected by a real
 // human. DataRef holds bounded platform evidence, not an original write receipt.
 type ResourceWriteRecoveryObservation struct {
@@ -9,6 +22,7 @@ type ResourceWriteRecoveryObservation struct {
 	OriginalRevision     int64          `json:"original_revision"`
 	Kind                 string         `json:"kind"`
 	Binding              RoleBotBinding `json:"binding"`
+	ConnectorIdentity    string         `json:"connector_identity,omitempty"`
 	Resource             Resource       `json:"resource"`
 	CandidateURL         string         `json:"candidate_url,omitempty"`
 	InspectInteractionID string         `json:"inspect_interaction_id"`

@@ -79,11 +79,16 @@ type resourceRecoveryFixture struct {
 	resource  work.Resource
 }
 
-func newResourceRecoveryFixture(t *testing.T) *resourceRecoveryFixture {
+func newResourceRecoveryFixture(t *testing.T, appIDs ...string) *resourceRecoveryFixture {
 	t.Helper()
-	a := teamProjectViewFixture(t)
+	appID := "app"
+	if len(appIDs) > 0 {
+		appID = appIDs[0]
+	}
+	a := teamProjectViewFixture(t, appID)
+	gateway := work.IngressGateway{GatewayRef: "gateway", AppID: appID, RoleID: "leader", BotGeneration: 1}
 	f := &resourceRecoveryFixture{a: a, now: time.Now().UTC()}
-	f.connector = &recoveryReadConnector{identity: workservice.FeishuConnectorIdentity(work.RoleBotBinding{RoleID: "leader", GatewayRef: "gateway", AppID: "app", IdentityGeneration: 1})}
+	f.connector = &recoveryReadConnector{identity: workservice.FeishuConnectorIdentity(work.RoleBotBinding{RoleID: gateway.RoleID, GatewayRef: gateway.GatewayRef, AppID: gateway.AppID, IdentityGeneration: gateway.BotGeneration})}
 	var err error
 	f.signer, err = workauth.New([]byte("0123456789abcdef0123456789abcdef"), func() time.Time { return f.now })
 	if err != nil {
@@ -98,7 +103,7 @@ func newResourceRecoveryFixture(t *testing.T) *resourceRecoveryFixture {
 		t.Fatal(err)
 	}
 	err = a.teamRuntime.store.Within(t.Context(), func(tx *workstore.Tx) error {
-		initial, _, e := tx.AcceptHumanInteraction(work.HumanInteractionEnvelope{GatewayRef: "gateway", AppID: "app", EventID: "actual-owner-source", Tenant: "tenant", SenderIDs: work.SenderIDs{OpenID: "owner"}, ChatID: "chat", MessageID: "actual-owner-card", Kind: "card", Values: map[string]any{"action": "initial-owner"}, ReceivedAt: f.now}, work.IngressGateway{GatewayRef: "gateway", AppID: "app", RoleID: "leader", BotGeneration: 1})
+		initial, _, e := tx.AcceptHumanInteraction(work.HumanInteractionEnvelope{GatewayRef: gateway.GatewayRef, AppID: gateway.AppID, EventID: "actual-owner-source", Tenant: "tenant", SenderIDs: work.SenderIDs{OpenID: "owner"}, ChatID: "chat", MessageID: "actual-owner-card", Kind: "card", Values: map[string]any{"action": "initial-owner"}, ReceivedAt: f.now}, gateway)
 		if e != nil {
 			return e
 		}
@@ -130,7 +135,7 @@ func (f *resourceRecoveryFixture) unknown(t *testing.T, kind string) string {
 			intent["create"] = workservice.CreateResourceDocumentRequest{Key: "create", ParentResourceID: resource.ID, ExpectedParentRevision: 1, Title: "Requested document", Purpose: "Work", CollectionID: "materials"}
 		case "resource.document.append":
 			intent["append"] = workservice.AppendResourceDocumentRequest{Key: "append", ResourceID: resource.ID, ExpectedResourceRevision: 1, ObservedDocumentRevision: 7, ParentBlockID: "document", Paragraphs: []string{"uncertain appended text"}}
-		case "resource.document.update":
+		case work.ResourceDocumentUpdateOperation, work.ResourceDocumentUpdateLegacyOperation:
 			intent["update"] = workservice.UpdateResourceDocumentRequest{Key: "update", ResourceID: resource.ID, ExpectedResourceRevision: 1, ObservedDocumentRevision: 7, Edits: []workservice.ResourceTextRunEdit{{BlockID: "block", TextRunIndex: 0, ExpectedBlockSHA256: strings.Repeat("c", 64), Text: "uncertain changed text"}}}
 		case "resource.sheet.write":
 			resource.ID = "sheet-target"
@@ -244,7 +249,7 @@ func (f *resourceRecoveryFixture) inspectAndConfirm(t *testing.T) (workservice.R
 	return result, second
 }
 func TestResourceRecoveryActualUICurrentObservationAndHumanAdoptionAllowsArchive(t *testing.T) {
-	for _, kind := range []string{"resource.document.create", "resource.document.append", "resource.document.update", "resource.sheet.write"} {
+	for _, kind := range []string{"resource.document.create", "resource.document.append", work.ResourceDocumentUpdateOperation, work.ResourceDocumentUpdateLegacyOperation, "resource.sheet.write"} {
 		t.Run(kind, func(t *testing.T) {
 			f := newResourceRecoveryFixture(t)
 			id := f.unknown(t, kind)

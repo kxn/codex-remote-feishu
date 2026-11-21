@@ -10,6 +10,12 @@ func (s *Service) Execute(ctx context.Context, token string, req workcmd.Dispatc
 		return nil, err
 	}
 	switch req.Name {
+	case "bootstrap.location.pick":
+		result, _, err := executeDTO(ctx, token, req, s.BootstrapPickLocation)
+		return result, err
+	case "bootstrap.team.resolve":
+		result, _, err := executeDTO(ctx, token, req, s.BootstrapResolveTeam)
+		return result, err
 	case "execution.locations":
 		var input struct{}
 		if err := workcmd.DecodePayload(req.Payload, &input); err != nil {

@@ -55,7 +55,7 @@ func (s *Service) resourceRecoveryAuthority(tx *workstore.Tx, interactionID, vie
 	if err != nil {
 		return interaction, view, op, intent, err
 	}
-	if op.ScopeID != view.ScopeID || !resourceWriteKind(op.Kind) || (op.State != work.OperationUnknown && op.State != work.OperationSending) || op.Revision != view.TargetRevision || resourceRecoverySealed(op) {
+	if op.ScopeID != view.ScopeID || !work.ResourceWriteCanBeInspected(op.Kind) || (op.State != work.OperationUnknown && op.State != work.OperationSending) || op.Revision != view.TargetRevision || resourceRecoverySealed(op) {
 		return interaction, view, op, intent, workstore.ErrConflict
 	}
 	owner, err := tx.ResourceRecoveryOwner(op.ScopeID)
@@ -135,7 +135,7 @@ func (s *Service) InspectResourceWriteRecovery(ctx context.Context, interactionI
 		if err != nil {
 			return err
 		}
-		if connector.Identity() != intent.Resource.ConnectorIdentity {
+		if connector.Identity() != intent.executionConnectorID() {
 			return workstore.ErrScopeDenied
 		}
 		selected := ""
@@ -147,7 +147,7 @@ func (s *Service) InspectResourceWriteRecovery(ctx context.Context, interactionI
 			}
 			resource.ID = ""
 		}
-		result.Observation = work.ResourceWriteRecoveryObservation{OriginalOperationID: op.ID, OriginalRevision: op.Revision, Kind: op.Kind, Binding: intent.Binding, Resource: resource, CandidateURL: selected, InspectInteractionID: interaction.ID, InspectViewID: view.ID, ReadOperationID: id, DataRef: id + ":data", ObservedAt: s.now()}
+		result.Observation = work.ResourceWriteRecoveryObservation{OriginalOperationID: op.ID, OriginalRevision: op.Revision, Kind: op.Kind, Binding: intent.Binding, ConnectorIdentity: intent.ConnectorIdentity, Resource: resource, CandidateURL: selected, InspectInteractionID: interaction.ID, InspectViewID: view.ID, ReadOperationID: id, DataRef: id + ":data", ObservedAt: s.now()}
 		raw, _ := json.Marshal(result.Observation)
 		request := work.NewContent(id+":request", op.ScopeID, "application/json", raw, s.now())
 		if err = tx.PutContent(request); err != nil {
@@ -176,7 +176,9 @@ func (s *Service) InspectResourceWriteRecovery(ctx context.Context, interactionI
 			err = fmt.Errorf("请改用实际 Docx 文档，不能以目录或其他类型代替")
 		}
 		if err == nil {
-			result.Observation.Resource = work.Resource{ID: stableID("resource", original.ScopeID, connector.Identity(), resolved.SourceIdentity), ScopeID: original.ScopeID, ConnectorIdentity: connector.Identity(), SourceIdentity: resolved.SourceIdentity, CanonicalURI: resolved.CanonicalURI, CollectionID: intent.Create.CollectionID, Purpose: intent.Create.Purpose, Revision: 1}
+			resource := work.Resource{ScopeID: original.ScopeID, ConnectorIdentity: intent.executionConnectorID(), SourceIdentity: resolved.SourceIdentity, CanonicalURI: resolved.CanonicalURI, CollectionID: intent.Create.CollectionID, Purpose: intent.Create.Purpose, Revision: 1}
+			resource.ID = newRegisteredResourceID(resource, intent.SharedFeishu && work.IsFeishuResource(resource))
+			result.Observation.Resource = resource
 			result.Observation.ObservationRange = "human-selected existing document metadata; not a receipt for the old creation"
 		}
 	}
@@ -230,15 +232,13 @@ func (s *Service) InspectResourceWriteRecovery(ctx context.Context, interactionI
 			return workstore.ErrConflict
 		}
 		if callErr == nil && intent.Create != nil {
-			resources, e := tx.ListResources(original.ScopeID)
+			candidate := result.Observation.Resource
+			resource, found, e := findRegisteredResource(tx, candidate, intent.SharedFeishu && work.IsFeishuResource(candidate))
 			if e != nil {
 				return e
 			}
-			for _, r := range resources {
-				if r.ConnectorIdentity == result.Observation.Resource.ConnectorIdentity && r.SourceIdentity == result.Observation.Resource.SourceIdentity {
-					result.Observation.Resource = r
-					break
-				}
+			if found {
+				result.Observation.Resource = resource
 			}
 		}
 		data, e := json.Marshal(result.Data)

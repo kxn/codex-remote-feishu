@@ -8,6 +8,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/core/workcmd"
 )
 
 func (s *Service) projectExecutionChoice(tx *workstore.Tx, claims workauth.Claims, req *CreateProjectRequest) ([]byte, error) {
@@ -24,6 +25,15 @@ func (s *Service) projectExecutionChoice(tx *workstore.Tx, claims workauth.Claim
 			Default     string   `json:"default"`
 			PrincipalID string   `json:"principal_id"`
 		}{req.LocationIDs, req.DefaultLocationID, req.PrincipalID})
+	}
+	views, err := tx.ListUIViews(claims.ScopeID)
+	if err != nil {
+		return nil, err
+	}
+	for _, view := range views {
+		if view.Kind == "execution.location-picker" && !view.Invalidated {
+			return nil, &workcmd.Error{Code: "blocked", Message: "waiting for the human to select an execution directory or isolated scratch"}
+		}
 	}
 	selection, err := tx.GetExecutionPreference(claims.ScopeID)
 	if errors.Is(err, workstore.ErrNotFound) {

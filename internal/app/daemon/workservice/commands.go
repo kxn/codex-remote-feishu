@@ -27,6 +27,14 @@ func stableID(prefix string, parts ...string) string {
 }
 
 func ensureMember(tx *workstore.Tx, scopeID, roleID string) error {
+	return requireMember(tx, scopeID, roleID, true)
+}
+
+func ensureEnrolledMember(tx *workstore.Tx, scopeID, roleID string) error {
+	return requireMember(tx, scopeID, roleID, false)
+}
+
+func requireMember(tx *workstore.Tx, scopeID, roleID string, ready bool) error {
 	scope, err := tx.GetScope(scopeID)
 	if err != nil {
 		return err
@@ -42,7 +50,7 @@ func ensureMember(tx *workstore.Tx, scopeID, roleID string) error {
 		return workauth.ErrUnauthorized
 	}
 	projectMember, err := tx.GetProjectMember(scope.ProjectID, roleID)
-	if err != nil || projectMember.State != work.ProjectMemberReady {
+	if err != nil || projectMember.State == work.ProjectMemberRemoved || ready && projectMember.State != work.ProjectMemberReady {
 		return workauth.ErrUnauthorized
 	}
 	return nil

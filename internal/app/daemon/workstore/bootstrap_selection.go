@@ -64,29 +64,11 @@ func (t *Tx) SelectBootstrapLeader(req SelectBootstrapLeaderRequest) (result Boo
 		if notice.Gateway != action.Gateway || notice.Tenant != action.Envelope.Tenant || notice.ChatID != action.Envelope.ChatID || (notice.ExternalMessageID != "" && notice.ExternalMessageID != action.Envelope.MessageID) || !slices.Contains(notice.CandidateRoleIDs, req.RoleID) {
 			return ErrScopeDenied
 		}
-		if notice.State != work.OperationConfirmed && notice.State != work.OperationUnknown && notice.State != work.OperationSending {
+		if notice.State != work.OperationConfirmed || notice.ExternalMessageID == "" {
 			return ErrScopeDenied
 		}
 		if action.Envelope.Values["team_setup_ingress"] != raw.ID {
 			return ErrScopeDenied
-		}
-		if notice.State != work.OperationConfirmed {
-			previous := notice.Revision
-			notice.Revision++
-			notice.State = work.OperationConfirmed
-			notice.ExternalMessageID = action.Envelope.MessageID
-			notice.UpdatedAt = action.Envelope.ReceivedAt
-			changed, e := t.tx.ExecContext(t.ctx, "UPDATE ingress_selection_notices SET revision=?,payload=? WHERE ingress_id=? AND revision=?", notice.Revision, mustJSON(notice), raw.ID, previous)
-			if e != nil {
-				return e
-			}
-			count, e := changed.RowsAffected()
-			if e != nil {
-				return e
-			}
-			if count != 1 {
-				return ErrConflict
-			}
 		}
 		binding, e := t.GetRoleBotBinding(req.RoleID)
 		if e != nil {

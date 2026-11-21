@@ -53,9 +53,17 @@ func (a *App) queueTeamResourcePickerPage(ctx context.Context, source teamHumanS
 			return "", err
 		}
 	}
-	hostname, err := os.Hostname()
+	panel, err := a.teamResourcePickerPanel(source, target, page, preference, locations)
 	if err != nil {
 		return "", err
+	}
+	return a.queueTeamPicker(ctx, source, "execution.location-picker", target, max(1, preference.Revision), panel)
+}
+
+func (a *App) teamResourcePickerPanel(source teamHumanSource, target string, page int, preference workstore.ExecutionPreference, locations []work.ExecutionLocation) (workui.Panel, error) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return workui.Panel{}, err
 	}
 	hostID := teamID("host", hostname+":"+a.headlessRuntime.Paths.StateDir)
 	visible := []work.ExecutionLocation{}
@@ -67,10 +75,13 @@ func (a *App) queueTeamResourcePickerPage(ctx context.Context, source teamHumanS
 	sort.Slice(visible, func(i, j int) bool { return visible[i].Cwd < visible[j].Cwd })
 	start := page * teamPickerPageSize
 	if start > len(visible) {
-		return "", workstore.ErrConflict
+		return workui.Panel{}, workstore.ErrConflict
 	}
 	end := min(start+teamPickerPageSize, len(visible))
 	panel := workui.Panel{Title: "选择执行目录", Paragraphs: []string{"点击目录会将它加入可用目录并设为默认。已经选择的其他目录会保留；当前执行会先完成或停止，再使用新目录。"}}
+	if source.BootstrapSourceMessageID != "" {
+		panel.Paragraphs = []string{"请项目发起人选择目录。选择后，负责人会继续处理原来的需求。"}
+	}
 	values := func(id string, generation int64) map[string]any {
 		return map[string]any{"target_scope_id": target, "location_id": id, "location_generation": strconv.FormatInt(generation, 10), "preference_revision": strconv.FormatInt(preference.Revision, 10), "navigation_revision": strconv.FormatInt(source.NavigationRevision, 10)}
 	}
@@ -88,13 +99,21 @@ func (a *App) queueTeamResourcePickerPage(ctx context.Context, source teamHumanS
 		panel.Paragraphs = append(panel.Paragraphs, "还没有可用的目录记录。先在本机打开所需目录，之后重新打开此选择器；也可以继续使用独立临时工作区。")
 	}
 	panel.Buttons = append(panel.Buttons, workui.Button{Label: "清空目录选择，使用独立临时工作区", Action: "picker.location.scratch", Values: values("", 0)})
+	if source.BootstrapSourceMessageID != "" {
+		panel.Buttons[len(panel.Buttons)-1].Label = "使用独立临时工作区"
+	}
 	if page > 0 {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "上一页", Action: "picker.location.page", Values: map[string]any{"page": strconv.Itoa(page - 1), "navigation_revision": strconv.FormatInt(source.NavigationRevision, 10)}})
 	}
 	if end < len(visible) {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "下一页", Action: "picker.location.page", Values: map[string]any{"page": strconv.Itoa(page + 1), "navigation_revision": strconv.FormatInt(source.NavigationRevision, 10)}})
 	}
-	return a.queueTeamPicker(ctx, source, "execution.location-picker", target, max(1, preference.Revision), panel)
+	if source.BootstrapSourceMessageID != "" {
+		for i := range panel.Buttons {
+			panel.Buttons[i].Values["bootstrap_source_message_id"] = source.BootstrapSourceMessageID
+		}
+	}
+	return panel, nil
 }
 func (a *App) teamPickerTarget(tx *workstore.Tx, source teamHumanSource) (string, error) {
 	if err := a.validateTeamPickerSource(tx, source); err != nil {
@@ -258,10 +277,19 @@ func (a *App) applyTeamLocationChoice(ctx context.Context, source teamHumanSourc
 		preference.SelectedBy = work.Actor{Kind: work.ActorPrincipal, ID: source.PrincipalID}
 		preference.SourceRef = receipt.ID
 		preference.Revision++
-		return tx.PutExecutionPreference(preference, expected)
+		if e = tx.PutExecutionPreference(preference, expected); e != nil {
+			return e
+		}
+		if source.BootstrapSourceMessageID != "" {
+			return resumeBootstrapWithDirectory(tx, source, view, receipt.ID)
+		}
+		return nil
 	})
 	if err != nil {
 		return "", err
+	}
+	if source.BootstrapSourceMessageID != "" {
+		return "bootstrap_directory_selected", nil
 	}
 	if action == "picker.location.select" {
 		if receipt, resumed, e := a.resumeTeamPendingReview(ctx, source, view.ContextID); e != nil {

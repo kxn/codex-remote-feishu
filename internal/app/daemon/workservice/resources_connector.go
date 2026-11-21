@@ -101,5 +101,8 @@ func (s *Service) resolveResourceConnector(ctx context.Context, binding work.Rol
 	if connector == nil || connector.Identity() == "" {
 		return nil, &workcmd.Error{Code: "blocked", Message: "this role has no configured resource connector"}
 	}
+	if _, feishu := connector.(*FeishuResourceConnector); feishu && connector.Identity() != FeishuConnectorIdentity(binding) {
+		return nil, workauth.ErrUnauthorized
+	}
 	return connector, nil
 }

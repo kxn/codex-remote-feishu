@@ -14,12 +14,23 @@ func (t *Tx) invalidateSupersededResourceMemory(current work.ResourceVersion) er
 	if current.Kind == work.VersionCurrentReference || !current.Saved {
 		return nil
 	}
-	previous, err := t.ListResourceVersions(current.ScopeID, current.ResourceID)
+	aliases, err := t.projectFeishuResourceSources(current.ScopeID)
+	if err != nil {
+		return err
+	}
+	var previous []work.ResourceVersion
+	if aliases[current.ResourceID] != "" {
+		previous, err = listRecords[work.ResourceVersion](t, "resource_versions",
+			" WHERE scope_id=? AND json_extract(payload,'$.source.kind')=? AND json_extract(payload,'$.source.id')=?",
+			current.ScopeID, current.Source.Kind, current.Source.ID)
+	} else {
+		previous, err = t.ListResourceVersions(current.ScopeID, current.ResourceID)
+	}
 	if err != nil {
 		return err
 	}
 	for _, old := range previous {
-		if !resourceObservationSupersedes(current, old) {
+		if !resourceObservationSupersedes(current, old, aliases) {
 			continue
 		}
 		memories, err := listRecords[work.MemoryEntry](t, "memories", " WHERE scope_id=? AND state='valid'", current.ScopeID)
@@ -52,6 +63,25 @@ func (t *Tx) invalidateSupersededResourceMemory(current work.ResourceVersion) er
 	}
 	return nil
 }
+
+func (t *Tx) projectFeishuResourceSources(scopeID string) (map[string]string, error) {
+	scope, err := t.GetScope(scopeID)
+	if err != nil || scope.Kind != work.ScopeProject {
+		return nil, err
+	}
+	resources, err := t.ListResources(scopeID)
+	if err != nil {
+		return nil, err
+	}
+	sources := make(map[string]string, len(resources))
+	for _, resource := range resources {
+		if work.IsFeishuResource(resource) {
+			sources[resource.ID] = resource.SourceIdentity
+		}
+	}
+	return sources, nil
+}
+
 func normalizedMemoryObservationRange(version work.ResourceVersion) string {
 	// Docx's capture range labels its revision, while the observed range is the
 	// same document. The native numeric revision independently orders changes.
@@ -61,8 +91,10 @@ func normalizedMemoryObservationRange(version work.ResourceVersion) string {
 	return strings.TrimSpace(version.ObservationRange)
 }
 
-func resourceObservationSupersedes(current, old work.ResourceVersion) bool {
-	if current.ID == old.ID || current.ResourceID != old.ResourceID || current.ScopeID != old.ScopeID || current.Kind == work.VersionCurrentReference || !current.Saved || old.Source.Kind != current.Source.Kind || old.Source.ID != current.Source.ID || old.Source.Version == current.Source.Version || normalizedMemoryObservationRange(old) != normalizedMemoryObservationRange(current) {
+func resourceObservationSupersedes(current, old work.ResourceVersion, aliases map[string]string) bool {
+	source := aliases[current.ResourceID]
+	sameResource := current.ResourceID == old.ResourceID || source != "" && source == aliases[old.ResourceID]
+	if current.ID == old.ID || !sameResource || current.ScopeID != old.ScopeID || current.Kind == work.VersionCurrentReference || !current.Saved || old.Source.Kind != current.Source.Kind || old.Source.ID != current.Source.ID || old.Source.Version == current.Source.Version || normalizedMemoryObservationRange(old) != normalizedMemoryObservationRange(current) {
 		return false
 	}
 	oldNumber, oldErr := strconv.ParseInt(old.Source.Version, 10, 64)
@@ -77,6 +109,13 @@ func (t *Tx) validateMemoryResourceSources(entry work.MemoryEntry) error {
 	if err != nil {
 		return err
 	}
+	if len(versions) < 2 {
+		return nil
+	}
+	aliases, err := t.projectFeishuResourceSources(entry.StorageScopeID)
+	if err != nil {
+		return err
+	}
 	for _, source := range entry.Sources {
 		for _, old := range versions {
 			matches := reflect.DeepEqual(source, old.Source) || (source.Kind == "resource_version" && source.ID == old.ID && source.EvidenceRef == old.ContentRef)
@@ -84,7 +123,7 @@ func (t *Tx) validateMemoryResourceSources(entry work.MemoryEntry) error {
 				continue
 			}
 			for _, newer := range versions {
-				if !resourceObservationSupersedes(newer, old) {
+				if !resourceObservationSupersedes(newer, old, aliases) {
 					continue
 				}
 				adopted := false

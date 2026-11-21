@@ -19,6 +19,7 @@ import (
 type Button struct {
 	Label, Action string
 	Values        map[string]any
+	URL           string
 }
 type Panel struct {
 	Title      string
@@ -43,6 +44,10 @@ func Card(viewID string, panel Panel) (json.RawMessage, error) {
 		}
 	}
 	for _, button := range panel.Buttons {
+		if button.URL != "" {
+			elements = append(elements, map[string]any{"tag": "button", "text": cardkit.PlainText(button.Label), "behaviors": []any{map[string]any{"type": "open_url", "default_url": button.URL}}})
+			continue
+		}
 		value := cardkit.CloneMap(button.Values)
 		if value == nil {
 			value = map[string]any{}

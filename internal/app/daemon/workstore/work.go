@@ -181,6 +181,10 @@ func (t *Tx) putTask(v work.Task, expected int64) error {
 	if expected == 0 && v.RequirementsRevision != 1 {
 		return fmt.Errorf("initial requirements revision must be 1")
 	}
+	v.AvailableResultRevision = 0
+	if v.HasAvailableResult() {
+		v.AvailableResultRevision = v.Revision
+	}
 	if expected > 0 {
 		old, err := t.GetTask(v.ID)
 		if err != nil {
@@ -191,6 +195,9 @@ func (t *Tx) putTask(v work.Task, expected int64) error {
 		}
 		if err = work.ValidateTaskTransition(old.State, v.State); err != nil {
 			return err
+		}
+		if old.HasAvailableResult() && v.HasAvailableResult() {
+			v.AvailableResultRevision = old.AvailableResultRevision
 		}
 		if v.AssignmentGeneration < old.AssignmentGeneration || v.AssignmentGeneration > old.AssignmentGeneration+1 {
 			return fmt.Errorf("invalid assignment generation")
@@ -331,6 +338,15 @@ func (t *Tx) AddDependency(v work.Dependency) error {
 }
 func (t *Tx) ListDependencies(taskID string) ([]work.Dependency, error) {
 	rows, err := t.tx.QueryContext(t.ctx, "SELECT parent_id,child_id,condition,satisfied_by FROM dependencies WHERE parent_id=? ORDER BY child_id,condition", taskID)
+	return readDependencies(rows, err)
+}
+
+func (t *Tx) ListPendingDependentTasks(childID string, condition work.DependencyCondition) ([]work.Dependency, error) {
+	rows, err := t.tx.QueryContext(t.ctx, "SELECT parent_id,child_id,condition,satisfied_by FROM dependencies WHERE child_id=? AND condition=? AND satisfied_by IS NULL ORDER BY parent_id", childID, condition)
+	return readDependencies(rows, err)
+}
+
+func readDependencies(rows *sql.Rows, err error) ([]work.Dependency, error) {
 	if err != nil {
 		return nil, err
 	}

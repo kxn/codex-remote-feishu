@@ -99,10 +99,10 @@ func TestFeishuResourceConnectorPreservesSeparateSheetValueAndFormulaRevisions(t
 }
 
 func TestFeishuResourceLinkDoesNotClaimForeignHosts(t *testing.T) {
-	if _, _, err := resourceLink("https://evil.example/docx/real-document"); err == nil {
+	if _, _, err := work.ParseFeishuDocumentLink("https://evil.example/docx/real-document"); err == nil {
 		t.Error("foreign URL could be advertised as canonical Feishu resource")
 	}
-	if _, _, err := resourceLink("https://a.feishu.cn/wiki/node/extra"); err == nil {
+	if _, _, err := work.ParseFeishuDocumentLink("https://a.feishu.cn/wiki/node/extra"); err == nil {
 		t.Error("ambiguous path accepted")
 	}
 }

@@ -18,6 +18,7 @@ import (
 
 type teamPrivateCommands struct{ app *App }
 type teamHumanSource struct {
+	BootstrapSourceMessageID                                     string
 	NavigationRevision                                           int64
 	Key, ScopeID, PrincipalID, RoleID, Tenant, ChatID, MessageID string
 	Gateway                                                      work.IngressGateway
@@ -245,6 +246,9 @@ func (a *App) handleTeamViewAction(ctx context.Context, interaction workstore.Hu
 	}
 	if err != nil {
 		return err
+	}
+	if result == "bootstrap_directory_selected" {
+		return nil
 	}
 	return a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
 		return tx.FinishHumanInteraction(interaction.ID, interaction.Revision, result)

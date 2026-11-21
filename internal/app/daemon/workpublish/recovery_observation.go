@@ -92,7 +92,7 @@ func (p *Publisher) ObserveUnknownCardInteraction(ctx context.Context, outboxID,
 		if view.PrincipalID != "" && view.PrincipalID != interaction.PrincipalID {
 			return workstore.ErrScopeDenied
 		}
-		if !cardHasActualCallback(job.Projection.Card, interaction.Envelope.Values) {
+		if !CardHasActualCallback(job.Projection.Card, interaction.Envelope.Values) {
 			return fmt.Errorf("SDK callback does not match any callback in the original frozen card")
 		}
 		if view.ExternalMessageID != "" && interaction.Envelope.MessageID != view.ExternalMessageID {
@@ -253,7 +253,7 @@ func (p *Publisher) ObserveUnknownCardInteraction(ctx context.Context, outboxID,
 	return p.finish(ctx, job, feishu.ProjectPublishReceipt{MessageID: actual.MessageID, ChatID: actual.ChatID, RootID: actual.RootID, ParentID: actual.ParentID}, nil, false)
 }
 
-func cardHasActualCallback(card json.RawMessage, actual map[string]any) bool {
+func CardHasActualCallback(card json.RawMessage, actual map[string]any) bool {
 	var document any
 	if json.Unmarshal(card, &document) != nil {
 		return false

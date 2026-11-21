@@ -1,9 +1,11 @@
 package workstore
 
 import (
-	"github.com/kxn/codex-remote-feishu/internal/core/work"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
 func TestNewSourceCaptureInvalidatesOnlyExactObsoleteMemoryAndKeepsHistory(t *testing.T) {
@@ -83,6 +85,84 @@ func TestNewSourceCaptureInvalidatesOnlyExactObsoleteMemoryAndKeepsHistory(t *te
 		}
 		if _, _, e = tx.ReadMemory(work.ReadScope{ScopeID: "s", RoleID: "r"}, rangeNote.ID); e != nil {
 			return e
+		}
+		return nil
+	})
+}
+
+func TestFeishuResourceAliasesInvalidateMemoryOnlyWithinProjectAndKeepHistory(t *testing.T) {
+	s, _ := openTestStore(t)
+	seedPersonal(t, s)
+	seedOtherProject(t, s)
+	requireTx(t, s, func(tx *Tx) error {
+		old := work.Resource{ID: "old-bot-doc", ScopeID: "s", ConnectorIdentity: "feishu:legacy:old-app:1", SourceIdentity: "docx:shared",
+			CanonicalURI: "https://a.feishu.cn/wiki/previous-alias", CollectionID: "materials", Purpose: "Project source", Revision: 1}
+		canonical := old
+		canonical.ID, canonical.ConnectorIdentity, canonical.CanonicalURI = "project-doc", "feishu:current:other-app:1", "https://a.feishu.cn/docx/shared"
+		unrelated := canonical
+		unrelated.ID, unrelated.ConnectorIdentity = "other-connector", "test:external"
+		foreign := canonical
+		foreign.ID, foreign.ScopeID = "other-project-doc", "s2"
+		for _, resource := range []work.Resource{old, canonical, unrelated, foreign} {
+			if err := tx.PutResource(resource, 0); err != nil {
+				return err
+			}
+		}
+		now := time.Now().UTC()
+		capture := func(resource work.Resource, revision string, captured time.Time) (work.ResourceVersion, error) {
+			body := work.NewContent(resource.ID+":body:"+revision, resource.ScopeID, "text/plain", []byte("same body across versions"), captured)
+			if err := tx.PutContent(body); err != nil {
+				return work.ResourceVersion{}, err
+			}
+			version := work.ResourceVersion{ID: resource.ID + ":" + revision, ResourceID: resource.ID, ScopeID: resource.ScopeID, Kind: work.VersionImmutableSnapshot,
+				Source:     work.SourceRef{Kind: "feishu_docx", ID: resource.SourceIdentity, Version: revision, EvidenceRef: body.ID},
+				ContentRef: body.ID, ContentHash: body.SHA256, ObservationRange: "document revision " + revision, Consistency: work.ConsistencyAtomic,
+				Complete: true, Saved: true, StartedAt: captured, CapturedAt: captured}
+			return version, tx.PutResourceVersion(version)
+		}
+		var previous []work.MemoryEntry
+		for _, resource := range []work.Resource{old, unrelated, foreign} {
+			version, err := capture(resource, "1", now)
+			if err != nil {
+				return err
+			}
+			scope, err := tx.GetScope(resource.ScopeID)
+			if err != nil {
+				return err
+			}
+			note := memory(resource.ID+"-memory", work.MemoryScope{Kind: work.MemoryProject, ProjectID: scope.ProjectID})
+			note.StorageScopeID, note.ContentRef = scope.ID, version.ContentRef
+			note.Sources = []work.SourceRef{version.Source}
+			if err = tx.PutMemory(note, 0); err != nil {
+				return err
+			}
+			previous = append(previous, note)
+		}
+		updated, err := capture(canonical, "2", now.Add(time.Second))
+		if err != nil {
+			return err
+		}
+		read := work.ReadScope{ScopeID: "s", RoleID: "r"}
+		if _, _, err = tx.ReadMemory(read, previous[0].ID); err != ErrNotFound {
+			return fmt.Errorf("legacy alias's obsolete memory remained visible: %v", err)
+		}
+		for _, note := range previous[1:] {
+			if _, _, err = tx.ReadMemory(work.ReadScope{ScopeID: note.StorageScopeID, RoleID: "r"}, note.ID); err != nil {
+				return fmt.Errorf("another connector or project's memory was invalidated: %w", err)
+			}
+		}
+		stale := previous[0]
+		stale.ID = "stale-alias-republication"
+		if err = tx.PutMemory(stale, 0); err == nil {
+			return fmt.Errorf("old alias was accepted without applying the newer observation")
+		}
+		stale.Sources = append(stale.Sources, updated.Source)
+		if err = tx.PutMemory(stale, 0); err != nil {
+			return err
+		}
+		versions, err := tx.ListResourceVersions("s", old.ID)
+		if err != nil || len(versions) != 1 || versions[0].ResourceID != old.ID || versions[0].Source.Version != "1" {
+			return fmt.Errorf("historical alias or version was rewritten: %+v %v", versions, err)
 		}
 		return nil
 	})

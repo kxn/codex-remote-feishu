@@ -264,6 +264,7 @@ func teamProjectPanel(v teamProjectProjection) workui.Panel {
 		panel.Paragraphs = append(panel.Paragraphs, "团队资料连接待核对。")
 	}
 	panel.Buttons = append(panel.Buttons, workui.Button{Label: "查看团队资料", Action: "team.materials.open"})
+	panel.Buttons = append(panel.Buttons, workui.Button{Label: "查看成果与历史", Action: "project.deliveries.open"})
 	if v.DirectorySelectable {
 		panel.Buttons = append(panel.Buttons, workui.Button{Label: "更换资料目录", Action: "project.directory.open"})
 	}

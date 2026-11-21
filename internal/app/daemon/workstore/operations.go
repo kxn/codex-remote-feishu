@@ -138,5 +138,17 @@ func (t *Tx) PutEvidence(v work.RequirementEvidence) error {
 	return err
 }
 func (t *Tx) ListEvidence(taskID string) ([]work.RequirementEvidence, error) {
-	return listRecords[work.RequirementEvidence](t, "evidence", " WHERE task_id=?", taskID)
+	evidence, err := listRecords[work.RequirementEvidence](t, "evidence", " WHERE task_id=?", taskID)
+	if err != nil || len(evidence) == 0 {
+		return evidence, err
+	}
+	task, err := t.GetTask(taskID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range evidence {
+		record := &evidence[i]
+		record.Obsolete = record.Obsolete || record.RequirementsRevision != task.RequirementsRevision || record.AssignmentGeneration != task.AssignmentGeneration
+	}
+	return evidence, nil
 }

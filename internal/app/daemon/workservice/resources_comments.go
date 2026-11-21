@@ -91,7 +91,7 @@ func (s *Service) ResourceReadComments(ctx context.Context, token, run string, r
 		if e != nil {
 			return e
 		}
-		if connector.Identity() != resource.ConnectorIdentity {
+		if !resourceConnectorAllowed(scope, resource, connector) {
 			return workstore.ErrScopeDenied
 		}
 		var ok bool

@@ -3,6 +3,7 @@ package workservice
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -21,19 +22,23 @@ type PublishDeliveryRequest struct {
 	Audience           []work.Actor        `json:"audience"`
 	ConversationTarget string              `json:"conversation_target,omitempty"`
 	ReplyToInputID     string              `json:"reply_to_input_id,omitempty"`
+	TaskID             string              `json:"task_id,omitempty"`
 	Retention          work.RetentionClass `json:"retention"`
 }
 
 func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req PublishDeliveryRequest) (Result, error) {
+	if err := s.refreshDeliveryProjectAccess(ctx, token, runRef, req); err != nil {
+		return Result{}, err
+	}
 	var result Result
-	err := s.withWorker(ctx, token, runRef, func(tx *workstore.Tx, c Caller) error {
+	err := s.withDeliveryPublisher(ctx, token, runRef, req.TaskID, func(tx *workstore.Tx, c Caller) error {
 		id := stableID("delivery", c.Worker.ScopeID, c.Worker.RoleID, req.Key)
 		var err error
 		result, err = s.mutate(tx, c, "delivery.publish", req.Key, id, req, func() (string, int64, error) {
 			if len(req.References) == 0 {
 				return "", 0, fmt.Errorf("delivery requires an explicit resource manifest")
 			}
-			projection, err := s.messageDestination(tx, c, req.ReplyToInputID)
+			projection, err := s.messageDestination(tx, c, req.ReplyToInputID, req.TaskID)
 			if err != nil {
 				return "", 0, err
 			}
@@ -77,16 +82,29 @@ func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req
 			}
 			var navigation strings.Builder
 			navigation.WriteString(req.Purpose + "\n" + req.Summary)
+			var links []any
+			fixed := false
 			for _, ref := range req.References {
 				resource, err := tx.GetResource(c.Worker.ScopeID, ref.ResourceID)
 				if err != nil {
 					return "", 0, err
 				}
+				managed, access, err := tx.CurrentProjectDocumentAccess(resource, projection.Tenant, projection.ChatID, projection.ChannelGeneration)
+				if err != nil {
+					return "", 0, err
+				}
+				accessPending := managed && !access
 				if ref.Current {
+					if resource.ConnectorIdentity == work.SavedFileConnector {
+						return "", 0, fmt.Errorf("a saved file delivery must name its exact version")
+					}
 					if req.Retention == work.RetentionPermanent {
 						return "", 0, fmt.Errorf("permanent delivery needs saved fixed versions, not changing current references")
 					}
-					navigation.WriteString("\n" + resource.CanonicalURI + " [当前引用，会变化]")
+					if accessPending {
+						return "", 0, fmt.Errorf("current access to this project document is unconfirmed or withdrawn; deliver its saved version, or have the project leader or creating role verify or restore access from the current human instruction")
+					}
+					links = append(links, currentResourceButton(resource.Purpose+"（当前，会变化）", resource.CanonicalURI))
 				} else {
 					version, err := tx.GetResourceVersion(c.Worker.ScopeID, ref.VersionID)
 					if err != nil {
@@ -95,17 +113,27 @@ func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req
 					if version.ResourceID != resource.ID || !version.Complete {
 						return "", 0, fmt.Errorf("delivery fixed version must be complete for the selected resource range")
 					}
-					if req.Retention == work.RetentionPermanent && version.ContentRef == "" {
-						return "", 0, fmt.Errorf("permanent delivery requires a retained content snapshot")
+					if version.ContentRef == "" {
+						return "", 0, fmt.Errorf("fixed delivery requires a retained content snapshot")
 					}
-					navigation.WriteString("\n原文（可能更新）：" + resource.CanonicalURI + "\n发布时的内容已独立保存，可从成果卡回看。")
+					fixed = true
+					navigation.WriteString("\n已保存：" + resource.Purpose)
+					if accessPending {
+						navigation.WriteString("（当前原件的群访问待确认）")
+					} else if resource.ConnectorIdentity != work.SavedFileConnector {
+						links = append(links, currentResourceButton(resource.Purpose+"（当前原件）", resource.CanonicalURI))
+					}
 				}
 			}
 			if req.NeededAction != "" {
 				navigation.WriteString("\n需要处理：" + req.NeededAction)
 			}
 			viewID := stableID("delivery-view", id)
-			card, err := json.Marshal(map[string]any{"schema": "2.0", "header": map[string]any{"title": cardkit.PlainText(req.Purpose)}, "body": map[string]any{"elements": []any{cardkit.PlainTextBlockElement(navigation.String()), map[string]any{"tag": "button", "text": cardkit.PlainText("查看已保存版本"), "behaviors": []any{map[string]any{"type": "callback", "value": map[string]any{"team_view": viewID, "action": "artifacts.open"}}}}}}})
+			elements := append([]any{cardkit.PlainTextBlockElement(navigation.String())}, links...)
+			if fixed {
+				elements = append(elements, map[string]any{"tag": "button", "text": cardkit.PlainText("查看已保存版本"), "behaviors": []any{map[string]any{"type": "callback", "value": map[string]any{"team_view": viewID, "action": "artifacts.open"}}}})
+			}
+			card, err := json.Marshal(map[string]any{"schema": "2.0", "header": map[string]any{"title": cardkit.PlainText(req.Purpose)}, "body": map[string]any{"elements": elements}})
 			if err != nil {
 				return "", 0, err
 			}
@@ -149,4 +177,16 @@ func (s *Service) PublishDelivery(ctx context.Context, token, runRef string, req
 		result.Status = "accepted"
 	}
 	return result, err
+}
+
+func (s *Service) withDeliveryPublisher(ctx context.Context, token, runRef, taskID string, apply func(*workstore.Tx, Caller) error) error {
+	err := s.withWorker(ctx, token, runRef, apply)
+	if errors.Is(err, workauth.ErrUnauthorized) && taskID != "" {
+		return s.withCompletedTaskPublication(ctx, token, runRef, taskID, apply)
+	}
+	return err
+}
+
+func currentResourceButton(label, link string) map[string]any {
+	return map[string]any{"tag": "button", "text": cardkit.PlainText(label), "behaviors": []any{map[string]any{"type": "open_url", "default_url": link}}}
 }

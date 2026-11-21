@@ -12,14 +12,7 @@ import (
 // unknown/sending state into a fabricated completion or cancellation.
 func ResourceReadHasNoExternalWrite(kind string) bool {
 	switch kind {
-	case "resource.register", "resource.capture", "resource.comments.read", "resource.write.observe", "resource.write.inspect":
-		return true
-	}
-	return false
-}
-func resourceRecoverableWrite(kind string) bool {
-	switch kind {
-	case "resource.document.create", "resource.document.append", "resource.document.update", "resource.sheet.write":
+	case "resource.register", "resource.capture", "resource.comments.read", "resource.write.observe", "resource.write.inspect", ProjectDocumentAccessObservationKind:
 		return true
 	}
 	return false
@@ -28,7 +21,7 @@ func resourceRecoverableWrite(kind string) bool {
 // ResourceWriteWasRecovered recognizes only a confirmed real-human adoption of
 // an independently read current object/range. The original write stays unknown.
 func (t *Tx) ResourceWriteWasRecovered(op work.Operation) (bool, error) {
-	if !resourceRecoverableWrite(op.Kind) || op.State != work.OperationUnknown {
+	if !work.ResourceWriteCanBeInspected(op.Kind) || op.State != work.OperationUnknown {
 		return false, nil
 	}
 	for _, step := range op.Steps {
@@ -88,7 +81,7 @@ func (t *Tx) ResourceWriteWasRecovered(op work.Operation) (bool, error) {
 		if observation.OriginalOperationID != op.ID || observation.OriginalRevision != record.OriginalRevision || observation.Kind != op.Kind || observation.ReadOperationID != observed.ID || observation.Resource.ID != record.ResourceID || observation.Resource.ScopeID != op.ScopeID {
 			return false, ErrScopeDenied
 		}
-		if frozenRead.OriginalOperationID != op.ID || frozenRead.OriginalRevision != record.OriginalRevision || frozenRead.Kind != op.Kind || frozenRead.Binding != observation.Binding || frozenRead.CandidateURL != observation.CandidateURL || frozenRead.InspectInteractionID != observation.InspectInteractionID || frozenRead.InspectViewID != observation.InspectViewID || frozenRead.ReadOperationID != observed.ID || observation.DataRef != observed.ID+":data" {
+		if frozenRead.OriginalOperationID != op.ID || frozenRead.OriginalRevision != record.OriginalRevision || frozenRead.Kind != op.Kind || frozenRead.Binding != observation.Binding || frozenRead.ConnectorIdentity != observation.ConnectorIdentity || frozenRead.CandidateURL != observation.CandidateURL || frozenRead.InspectInteractionID != observation.InspectInteractionID || frozenRead.InspectViewID != observation.InspectViewID || frozenRead.ReadOperationID != observed.ID || observation.DataRef != observed.ID+":data" {
 			return false, ErrScopeDenied
 		}
 		if op.Kind != "resource.document.create" && (frozenRead.Resource.ID != observation.Resource.ID || frozenRead.Resource.SourceIdentity != observation.Resource.SourceIdentity) {
@@ -99,13 +92,18 @@ func (t *Tx) ResourceWriteWasRecovered(op work.Operation) (bool, error) {
 			return false, err
 		}
 		var intent struct {
-			Binding  work.RoleBotBinding `json:"binding"`
-			Resource work.Resource       `json:"resource"`
+			Binding           work.RoleBotBinding `json:"binding"`
+			ConnectorIdentity string              `json:"connector_identity,omitempty"`
+			Resource          work.Resource       `json:"resource"`
 		}
 		if err = json.Unmarshal(request.Data, &intent); err != nil {
 			return false, err
 		}
-		if observation.Binding != intent.Binding || observation.Resource.ConnectorIdentity != intent.Resource.ConnectorIdentity {
+		if observation.Binding != intent.Binding || observation.ConnectorIdentity != intent.ConnectorIdentity {
+			return false, ErrScopeDenied
+		}
+		if op.Kind != "resource.document.create" && observation.Resource != intent.Resource ||
+			op.Kind == "resource.document.create" && intent.ConnectorIdentity == "" && observation.Resource.ConnectorIdentity != intent.Resource.ConnectorIdentity {
 			return false, ErrScopeDenied
 		}
 		if _, err = t.GetContent(op.ScopeID, observation.DataRef); err != nil {

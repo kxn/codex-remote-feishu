@@ -21,7 +21,7 @@ func resourceRecoveryKind(kind string) string {
 		return "新建资料文档"
 	case "resource.document.append":
 		return "补充文档内容"
-	case "resource.document.update":
+	case work.ResourceDocumentUpdateOperation, work.ResourceDocumentUpdateLegacyOperation:
 		return "修改文档段落"
 	case "resource.sheet.write":
 		return "修改表格区域"

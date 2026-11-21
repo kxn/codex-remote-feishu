@@ -54,7 +54,7 @@ func (s *Service) AdoptResourceWriteRecovery(ctx context.Context, interactionID,
 		if err = json.Unmarshal(observed.Data, &observation); err != nil {
 			return err
 		}
-		if observation.OriginalOperationID != original.ID || observation.OriginalRevision != original.Revision || observation.ReadOperationID != readOp.ID || observation.Binding != intent.Binding || observation.Resource.ConnectorIdentity != intent.Resource.ConnectorIdentity {
+		if observation.OriginalOperationID != original.ID || observation.OriginalRevision != original.Revision || observation.ReadOperationID != readOp.ID || observation.Binding != intent.Binding || observation.ConnectorIdentity != intent.ConnectorIdentity {
 			return workstore.ErrScopeDenied
 		}
 		inspect, err := tx.GetHumanInteraction(observation.InspectInteractionID)
@@ -68,22 +68,19 @@ func (s *Service) AdoptResourceWriteRecovery(ctx context.Context, interactionID,
 			if observation.Resource.SourceIdentity == "" || observation.Resource.ID == "" {
 				return fmt.Errorf("existing document identity was not actually read")
 			}
-			resources, err := tx.ListResources(original.ScopeID)
+			candidate := observation.Resource
+			resource, exists, err := findRegisteredResource(tx, candidate, intent.SharedFeishu && work.IsFeishuResource(candidate))
 			if err != nil {
 				return err
 			}
-			exists := false
-			for _, resource := range resources {
-				if resource.ConnectorIdentity == observation.Resource.ConnectorIdentity && resource.SourceIdentity == observation.Resource.SourceIdentity {
-					if resource.ID != observation.Resource.ID {
-						return workstore.ErrConflict
-					}
-					observation.Resource = resource
-					exists = true
-					break
+			if exists {
+				if resource != candidate {
+					return workstore.ErrConflict
 				}
-			}
-			if !exists {
+			} else {
+				if candidate.ConnectorIdentity != intent.executionConnectorID() {
+					return workstore.ErrScopeDenied
+				}
 				if err = tx.PutResource(observation.Resource, 0); err != nil {
 					return err
 				}
@@ -96,7 +93,8 @@ func (s *Service) AdoptResourceWriteRecovery(ctx context.Context, interactionID,
 			if err != nil {
 				return err
 			}
-			if resource.SourceIdentity != intent.Resource.SourceIdentity || resource.ConnectorIdentity != intent.Resource.ConnectorIdentity {
+			if resource.ID != intent.Resource.ID || resource.SourceIdentity != intent.Resource.SourceIdentity ||
+				resource.CanonicalURI != intent.Resource.CanonicalURI || resource.ConnectorIdentity != intent.Resource.ConnectorIdentity {
 				return workstore.ErrScopeDenied
 			}
 		}

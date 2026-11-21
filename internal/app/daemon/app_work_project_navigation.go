@@ -79,12 +79,15 @@ func (a *App) advanceTeamProjectNavigation(ctx context.Context, home workstore.P
 			return workstore.ErrConflict
 		}
 		id := workui.ID("project.navigation", home.ID, workRevision(home.NavigationGeneration))
-		panel := workui.Panel{Title: "项目 · " + facts.Project.Name, Paragraphs: []string{"项目负责人：" + facts.MemberNames[facts.Project.LeaderRoleID]}, Buttons: []workui.Button{
+		panel := workui.Panel{Title: "项目 · " + facts.Project.Name, Paragraphs: []string{
+			"项目负责人：" + facts.MemberNames[facts.Project.LeaderRoleID],
+			"互动按钮失效时，可在群里请负责人重新打开工作入口。",
+		}, Buttons: []workui.Button{
 			{Label: "查看工作", Action: "project.navigation.open"},
 			{Label: "暂停项目", Action: "project.navigation.pause"},
 		}}
 		if current.URL != "" {
-			panel.Paragraphs = append(panel.Paragraphs, "项目首页："+current.URL)
+			panel.Buttons = append(panel.Buttons, workui.Button{Label: "打开项目首页", URL: current.URL})
 		}
 		card, err := workui.Card(id, panel)
 		if err != nil {

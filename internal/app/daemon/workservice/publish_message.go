@@ -18,6 +18,7 @@ type PublishMessageRequest struct {
 	Key            string `json:"key"`
 	Body           string `json:"body"`
 	ReplyToInputID string `json:"reply_to_input_id,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
 }
 
 // MessageProjection freezes the sending identity and destination. A later Bot
@@ -64,7 +65,7 @@ func (s *Service) PublishMessage(ctx context.Context, token, runRef string, req 
 			if strings.TrimSpace(req.Body) == "" {
 				return "", 0, fmt.Errorf("publication body is required")
 			}
-			projection, e := s.messageDestination(tx, c, req.ReplyToInputID)
+			projection, e := s.messageDestination(tx, c, req.ReplyToInputID, req.TaskID)
 			if e != nil {
 				return "", 0, e
 			}
@@ -100,6 +101,9 @@ func (s *Service) PublishMessage(ctx context.Context, token, runRef string, req 
 		})
 	} else {
 		err = s.withManagementWorker(ctx, token, runRef, apply)
+		if errors.Is(err, workauth.ErrUnauthorized) && req.TaskID != "" {
+			err = s.withCompletedTaskPublication(ctx, token, runRef, req.TaskID, apply)
+		}
 	}
 	if err == nil {
 		result.Status = "accepted"
@@ -107,7 +111,39 @@ func (s *Service) PublishMessage(ctx context.Context, token, runRef string, req 
 	return result, err
 }
 
-func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID string) (MessageProjection, error) {
+// A task turn may deliver its own result after recording completion. It still
+// needs the live run, current membership and the exact completed task version.
+func (s *Service) withCompletedTaskPublication(ctx context.Context, token, runRef, taskID string, fn func(*workstore.Tx, Caller) error) error {
+	return s.withWorkerReceipt(ctx, token, runRef, func(tx *workstore.Tx, c Caller) error {
+		if c.Attempt.TaskID != taskID {
+			return workauth.ErrUnauthorized
+		}
+		task, err := tx.GetTask(taskID)
+		if err != nil {
+			return err
+		}
+		if task.State != work.TaskDone || task.OwnerRoleID != c.Worker.RoleID || task.RequirementsRevision != c.Attempt.FrozenRequirementsRevision || task.AssignmentGeneration != c.Attempt.FrozenAssignmentGeneration {
+			return workauth.ErrUnauthorized
+		}
+		binding, err := tx.GetRoleBotBinding(c.Worker.RoleID)
+		if err != nil {
+			return err
+		}
+		gates, err := tx.ListPauseGates(c.Worker.ScopeID)
+		if err != nil {
+			return err
+		}
+		if err = workauth.AuthorizeRun(c.Claims, runRef, c.Worker, c.Attempt, binding, gates); err != nil {
+			return err
+		}
+		if err = ensureMember(tx, c.Worker.ScopeID, c.Worker.RoleID); err != nil {
+			return err
+		}
+		return fn(tx, c)
+	})
+}
+
+func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID, taskID string) (MessageProjection, error) {
 	var target MessageProjection
 	target.TaskID = c.Attempt.TaskID
 	binding, err := tx.GetRoleBotBinding(c.Worker.RoleID)
@@ -118,6 +154,26 @@ func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID st
 	scope, err := tx.GetScope(c.Worker.ScopeID)
 	if err != nil {
 		return target, err
+	}
+	if taskID != "" {
+		if scope.Kind != work.ScopeProject {
+			return target, workauth.ErrUnauthorized
+		}
+		wc, err := tx.GetContext(c.Worker.ContextID)
+		if err != nil {
+			return target, err
+		}
+		if wc.Purpose == work.PurposeReview || wc.Purpose == work.PurposeControl {
+			return target, workauth.ErrUnauthorized
+		}
+		task, err := tx.GetTask(taskID)
+		if err != nil {
+			return target, err
+		}
+		if err = mayManageTask(tx, c, task); err != nil {
+			return target, err
+		}
+		target.TaskID = task.ID
 	}
 	if scope.Kind == work.ScopeBootstrap {
 		target.Tenant, target.ChatID, target.ChannelGeneration = scope.Tenant, scope.ChatID, scope.BindingGeneration
@@ -167,6 +223,9 @@ func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID st
 		if input.ScopeID != scope.ID || input.MessageID == "" {
 			return target, workauth.ErrUnauthorized
 		}
+		if taskID != "" && (input.TaskID != "" && input.TaskID != taskID || input.RelatedTaskID != "" && input.RelatedTaskID != taskID) {
+			return target, fmt.Errorf("reply input belongs to a different task")
+		}
 		message, e := tx.GetMessage(input.MessageID)
 		if e != nil {
 			return target, e
@@ -199,6 +258,9 @@ func (s *Service) messageDestination(tx *workstore.Tx, c Caller, replyInputID st
 		mapping, e := tx.GetPlatformMessageMapping(key.Tenant, key.ChatID, key.MessageID)
 		if e == nil {
 			if mapping.ScopeID == scope.ID {
+				if taskID != "" && mapping.TaskID != "" && mapping.TaskID != taskID {
+					return target, fmt.Errorf("reply message belongs to a different task")
+				}
 				target.RootMessageID = mapping.RootMessageID
 			}
 		} else if !errors.Is(e, workstore.ErrNotFound) {

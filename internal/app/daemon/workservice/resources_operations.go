@@ -15,26 +15,25 @@ import (
 )
 
 func (s *Service) performResource(ctx context.Context, intent resourceIntent) (Result, error) {
-
 	var resource work.Resource
 	var binding work.RoleBotBinding
+	var scope work.WorkScope
 	err := s.store.Within(ctx, func(tx *workstore.Tx) error {
 		var err error
 		binding, err = tx.GetRoleBotBinding(intent.RoleID)
 		if err != nil {
 			return err
 		}
-		if binding.IdentityGeneration != intent.BotGeneration {
+		if binding.IdentityGeneration != intent.BotGeneration || intent.Binding != nil && binding != *intent.Binding {
 			return workauth.ErrUnauthorized
+		}
+		scope, err = tx.GetScope(intent.ScopeID)
+		if err != nil {
+			return err
 		}
 		if intent.Capture != nil {
 			resource, err = tx.GetResource(intent.ScopeID, intent.Capture.ResourceID)
-			if err != nil {
-				return err
-			}
-			if resource.ConnectorIdentity != intent.ConnectorIdentity {
-				return workauth.ErrUnauthorized
-			}
+			return err
 		}
 		return nil
 	})
@@ -46,6 +45,9 @@ func (s *Service) performResource(ctx context.Context, intent resourceIntent) (R
 		return Result{}, resolveErr
 	}
 	if connector.Identity() != intent.ConnectorIdentity {
+		return Result{}, workauth.ErrUnauthorized
+	}
+	if intent.Capture != nil && !resourceConnectorAllowed(scope, resource, connector) {
 		return Result{}, workauth.ErrUnauthorized
 	}
 	// No database transaction spans either remote operation.
@@ -70,7 +72,8 @@ func (s *Service) performResource(ctx context.Context, intent resourceIntent) (R
 		if err := resolved.Source.Validate(); err != nil {
 			return s.recordResourceFailure(intent, err)
 		}
-		return s.commitResourceRegistration(ctx, intent, resolved)
+		_, feishu := connector.(*FeishuResourceConnector)
+		return s.commitResourceRegistration(ctx, intent, resolved, feishu && scope.Kind == work.ScopeProject)
 	}
 	if intent.Capture != nil {
 		captured, err := connector.Capture(ctx, resource, *intent.Capture)
@@ -120,7 +123,7 @@ func (s *Service) recordResourceFailure(intent resourceIntent, cause error) (Res
 	return result, cause
 }
 
-func (s *Service) commitResourceRegistration(ctx context.Context, intent resourceIntent, resolved ResolvedResource) (Result, error) {
+func (s *Service) commitResourceRegistration(ctx context.Context, intent resourceIntent, resolved ResolvedResource, sharedFeishu bool) (Result, error) {
 	var result Result
 	err := s.store.Within(ctx, func(tx *workstore.Tx) error {
 		operation, err := tx.GetOperation(intent.OperationID)
@@ -135,21 +138,15 @@ func (s *Service) commitResourceRegistration(ctx context.Context, intent resourc
 		if operation.State != work.OperationSending && operation.State != work.OperationUnknown {
 			return &workcmd.Error{Code: "conflict", Message: "resource operation is no longer awaiting a receipt"}
 		}
-		id := stableID("resource", intent.ScopeID, intent.ConnectorIdentity, resolved.SourceIdentity)
-		registered := work.Resource{ID: id, ScopeID: intent.ScopeID, CollectionID: intent.Register.CollectionID, ConnectorIdentity: intent.ConnectorIdentity, SourceIdentity: resolved.SourceIdentity, CanonicalURI: resolved.CanonicalURI, Purpose: intent.Register.Purpose, Revision: 1}
-		existing, err := tx.ListResources(intent.ScopeID)
+		registered := work.Resource{ScopeID: intent.ScopeID, CollectionID: intent.Register.CollectionID, ConnectorIdentity: intent.ConnectorIdentity, SourceIdentity: resolved.SourceIdentity, CanonicalURI: resolved.CanonicalURI, Purpose: intent.Register.Purpose, Revision: 1}
+		shared := sharedFeishu && work.IsFeishuResource(registered)
+		registered.ID = newRegisteredResourceID(registered, shared)
+		existing, found, err := findRegisteredResource(tx, registered, shared)
 		if err != nil {
 			return err
 		}
-		found := false
-		for _, item := range existing {
-			if item.ConnectorIdentity == intent.ConnectorIdentity && item.SourceIdentity == resolved.SourceIdentity {
-				registered = item
-				found = true
-				break
-			}
-		}
 		if found {
+			registered = existing
 			if err = tx.AddResourceCollection(intent.ScopeID, registered.ID, intent.Register.CollectionID); err != nil {
 				return err
 			}

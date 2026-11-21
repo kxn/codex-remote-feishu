@@ -12,8 +12,12 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
 
-func teamProjectViewFixture(t *testing.T) *App {
+func teamProjectViewFixture(t *testing.T, appIDs ...string) *App {
 	t.Helper()
+	appID := "app"
+	if len(appIDs) > 0 {
+		appID = appIDs[0]
+	}
 	store, err := workstore.Open(t.Context(), filepath.Join(t.TempDir(), "work.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -24,7 +28,7 @@ func teamProjectViewFixture(t *testing.T) *App {
 		if err := tx.PutRole(work.Role{ID: "leader", Name: "Leader", Description: "Lead", DescriptionVersion: 1, SettingsRevision: 1, Revision: 1}, 0); err != nil {
 			return err
 		}
-		if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "leader", GatewayRef: "gateway", AppID: "app", IdentityGeneration: 1}, 0); err != nil {
+		if err := tx.PutRoleBotBinding(work.RoleBotBinding{RoleID: "leader", GatewayRef: "gateway", AppID: appID, IdentityGeneration: 1}, 0); err != nil {
 			return err
 		}
 		if err := tx.PutTeam(work.Team{ID: "team", Name: "Team", LeaderRoleID: "leader", Revision: 1}, 0); err != nil {

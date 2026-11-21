@@ -53,11 +53,12 @@ func (s *Service) taskDependency(ctx context.Context, token, run string, req Tas
 				return "", 0, workstore.ErrConflict
 			}
 			dep := work.Dependency{TaskID: task.ID, DependsOnTaskID: child.ID, Condition: req.Condition}
+			newlySatisfied := false
 			if satisfy {
 				if req.Source == nil {
 					return "", 0, fmt.Errorf("dependency satisfaction needs an explicit evidence source")
 				}
-				if req.Condition == work.DependencyResultAvailable && child.State != work.TaskChecking && child.State != work.TaskDone {
+				if req.Condition == work.DependencyResultAvailable && !child.HasAvailableResult() {
 					return "", 0, fmt.Errorf("dependency result is not declared available")
 				}
 				if req.Condition == work.DependencyReviewAccepted || req.Condition == work.DependencyIntegrated || req.Condition == work.DependencyResultAvailable {
@@ -75,6 +76,15 @@ func (s *Service) taskDependency(ctx context.Context, token, run string, req Tas
 						return "", 0, fmt.Errorf("dependency must cite the exact current child result or adopted evidence for the declared condition")
 					}
 				}
+				dependencies, err := tx.ListDependencies(task.ID)
+				if err != nil {
+					return "", 0, err
+				}
+				for _, existing := range dependencies {
+					if existing.DependsOnTaskID == child.ID && existing.Condition == req.Condition && existing.SatisfiedBy == nil {
+						newlySatisfied = true
+					}
+				}
 				dep.SatisfiedBy = req.Source
 				if err = tx.SatisfyDependency(dep); err != nil {
 					return "", 0, err
@@ -86,11 +96,21 @@ func (s *Service) taskDependency(ctx context.Context, token, run string, req Tas
 				if err = tx.AddDependency(dep); err != nil {
 					return "", 0, err
 				}
+				if req.Condition == work.DependencyResultAvailable && child.HasAvailableResult() {
+					if err = s.notifyDependentTaskOwner(tx, task, child); err != nil {
+						return "", 0, err
+					}
+				}
 			}
 			task.Revision++
 			task.UpdatedAt = s.now()
 			if err = tx.PutTask(task, req.ExpectedRevision); err != nil {
 				return "", 0, err
+			}
+			if newlySatisfied {
+				if err = s.queueUnblockedTask(tx, task); err != nil {
+					return "", 0, err
+				}
 			}
 			return task.ID, task.Revision, nil
 		})

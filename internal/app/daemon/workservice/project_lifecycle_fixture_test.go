@@ -95,6 +95,7 @@ func lifecycleProjectService(t *testing.T, bootstrap bool, admittedHumans ...str
 			personMessage.Source.ID = person.ID
 			personMessage.ConversationID = "conversation:" + name
 			personMessage.PlatformKey = &work.MessageKey{Tenant: raw.Tenant, ChatID: raw.ChatID, MessageID: raw.MessageID}
+			personMessage.CreatedAt = raw.ReceivedAt
 			personInbox := inbox
 			personInbox.ID, personInbox.EventID = "input-"+name, name
 			if _, _, e = tx.AcceptMessage(personMessage, []work.Inbox{personInbox}); e != nil {
