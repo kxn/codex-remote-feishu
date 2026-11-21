@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 按完整 Raft 式协作重定执行归属、并行工作区、生命周期和迁移目标，撤回以共享目录串行作为交付范围的设计。
+> Summary: 基于代码审计确定同仓库统一运行层，单聊与项目共用记忆和恢复，替换旧群 UX 并重分人和 Agent 的操作职责。
 
 ## 1. 结论与范围
 
@@ -18,8 +18,12 @@
 6. 团队运行层拥有独立 WorkerSession、后台调度与恢复；桌面／编辑器通过明确的控制权交接参与，不由群 surface 独占执行。
 7. 角色指令和项目记忆复用后端注入通道，但须新增组合、版本、生效及恢复合同。
 8. 多角色、多工作流并行、独立执行目录、成果评审及集成属于目标本身；容量为 1 只是资源不足时的退化情况，不能替代完整交付。
+9. 单聊也进入相同运行层，使用个人 scope 和记忆；旧群使用体验可全部替换，旧 surface owner 仅在迁移期存在。
+10. 人保留模型与已有工作目录等精确选择，内部工作区、原生会话、compact 与例行协作由 Agent／运行层管理，不复刻旧手动菜单。
 
 完整对象、并行与迁移合同见 [执行与工作区设计](./feishu-agent-team-execution-design.md)。实施顺序只表达工程依赖，不将后续依赖项移出目标。原文中“第一版共享目录串行”“工作区和每任务会话留待扩展”的取舍已撤回。
+
+[代码复用与操作归属审计](./feishu-agent-codebase-reuse-assessment.md) 给出同仓库演进依据。群协作是最高产品优先级，单聊是相同内核的个人工作入口，不形成第二套产品编排。
 
 飞书权限是否已经开通不作为本次可行性阻塞。接口范围、调用主体、幂等、任务归属和配置生效时机仍是实现正确性的一部分，不能因未来会授权而省略。
 
@@ -92,7 +96,7 @@ flowchart TD
 
 业务命令返回结构化结果，例如 accepted、completed、conflict、waiting、failed，并包含 operation/task/revision。UI 根据结果生成展示；工具把同一结果返回模型。agent 调用不需要先生成一张供自己点击的卡片。
 
-团队运行层不是启动参数集合。它包含上下文组装、worker 生命周期、inbox 投递、调度、工作区与成果管理。底层 adapter 继续负责原生协议。执行 owner 应区分 legacy surface 与 team WorkerSession；queue、claim、approval、pending launch 和 turn 归属均须贯穿该区分，不能伪造更多群 surface 来容纳并行任务。
+统一运行层包含上下文组装、worker 生命周期、inbox 投递、调度、工作区与成果管理，底层 adapter 继续负责原生协议。最终单聊与项目都由 WorkerSession 拥有执行，WorkScope 区分 personal/project；legacy surface owner 只作迁移桥。queue、claim、approval、pending launch 和 turn 归属须贯穿该合同，不能伪造更多 surface 来容纳并行任务。
 
 ## 4. 稳定对象及事实所有权
 
@@ -100,6 +104,7 @@ flowchart TD
 | --- | --- | --- |
 | `Role` | 稳定 ID、名称、职责版本、通用方法 | 新协作存储 |
 | `RoleBotBinding` | role、gateway、AppID 和 identity generation | 协作引用现有 Bot identity，不复制密钥 |
+| `WorkScope` / `PersonalScope` | 个人或项目作用域、稳定用户与角色关联 | 统一工作存储；入口 surface 只作关联 |
 | `Project` | 稳定 ID、名称、状态、负责人、群绑定 | 新协作存储 |
 | `ProjectChannelBinding` / `ProjectResource` | 群及资源关联、repository 身份、目标分支、绑定代次 | 新协作存储 |
 | `ProjectMember` | role、加入意图、平台成员证据、ready 状态 | 新协作存储 |
@@ -107,7 +112,7 @@ flowchart TD
 | `Task` | owner、目标、验收、依赖、状态、revision、成果引用 | 新协作存储 |
 | `Message` / `InboxItem` | 来源、正文或引用、接收角色、处理状态 | 新协作存储 |
 | `Outbox` / `Operation` | 外部副作用意图、幂等键、状态、回执 | 新协作存储 |
-| `ExecutionAttempt` | run、role/project/task、thread/turn 证据、冻结版本、运行状态 | 新协作存储；运行投影交给现有执行 cluster |
+| `ExecutionAttempt` | run、role/scope/context/session、可选 project/task、thread/turn 证据与冻结版本 | 统一工作存储；运行投影交给现有执行 cluster |
 | `WorkerSession` / `ExecutionWorkspace` | 工作流上下文、原生会话、独立 checkout、基线与写入租约 | 新协作存储；宿主与 Git 状态为外部执行证据 |
 | `ArtifactVersion` / `Review` / `Integration` | 不可变成果、对应评审与集成状态 | 新协作存储；不可变文件／Git 引用作为成果载体 |
 | `MemoryEntry` | scope、key、内容、来源、版本、撤销状态 | 新协作存储 |
@@ -116,9 +121,11 @@ flowchart TD
 
 `RoleID` 不等于模型名称或 gateway 槽位；换模型保留身份。换 AppID 属于 identity 变更，必须显式处理绑定与失效，不能仅因槽位同名而继承旧执行权限。
 
+旧 Bot record 中的 ProductMode（headless/vscode）不能继续决定全部项目的执行控制。backend/model/profile 仍是统一 Bot 策略，实际宿主与控制权归 WorkerSession；私聊接管编辑器不影响其他项目 worker。普通单聊不必创建 Task，但其输入、attempt 和记忆具有与项目相同的持久归属。
+
 `ProjectID` 不由群或目录字符串生成。Project 关联资源与沟通入口，实际执行目录归 ExecutionWorkspace。多个项目可关联同一仓库，不共用可变会话和可写 checkout。不同角色及工作流可以并行，同一个原生 session 和同一可写 checkout 分别保持单 owner。
 
-项目建立与旧群迁移均采用持久 operation。团队模式切换事务记录 authority generation，之后协作库成为项目配置权威；旧 JSON 是迁移来源／兼容投影，不能继续独立写入。旧 `/workspace`、primary 和并发入口转入新业务用例。切换前可退回旧模式，切换后已有新工作时按 journal 前滚修复，不能用旧快照覆盖新任务。
+项目建立、旧群与个人上下文迁移均采用持久 operation。切换事务记录 authority generation，之后统一工作库拥有相关工作事实；旧 JSON 是迁移来源／只读投影，不能继续独立写入。旧群命令和菜单无需兼容，新群直接使用项目业务入口；单聊保留有用的精确选择与工作控制并接入新用例。切换前可退回旧状态，切换后已有新工作时按 journal 前滚修复，不能用旧快照覆盖新任务。
 
 群默认指向一个明确项目，项目可关联主群和其他讨论入口。建立／迁移保存预期 binding generation、资源基线和 Bot identity；重放时发现更新转 conflict/superseded，不覆盖后来的决定。单个 SQL 事务不能覆盖飞书 API、Git 与进程启动，各步骤分别记回执并对账。未 ready 的资源不准入对应任务，不把不完整建立结果显示为全体就绪。
 
@@ -201,8 +208,8 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 
 推荐引入两级绑定，兼容 CLI 环境与 MCP 配置通常在进程／session 启动时注入的事实：
 
-1. **运行会话绑定**：daemon 为托管 worker 签发绑定凭据，关联 role、project、instance/session、Bot generation。wrapper 只把该凭据注入对应 child，不继续为新团队工具分发一个可任意声明 instance 的全局 bearer。
-2. **单轮执行引用**：每次派发分配 `run_ref`，把 task、回复目标和指令／记忆版本登记在服务端；将不承担身份认证的 opaque run reference 放进当轮输入。团队工具请求携带该引用，服务端同时验证会话绑定和 active run，不接受模型自行声明 actor/project。
+1. **运行会话绑定**：daemon 为 worker 签发凭据，关联 role、scope/context、instance/session、Bot generation；personal scope 关联稳定 principal，project scope 关联 ProjectID。wrapper 只把该凭据注入对应 child，不继续分发一个可任意声明 instance 的全局 bearer。单聊不伪造 ProjectID 或 TaskID。
+2. **单轮执行引用**：每次派发分配 `run_ref`，把可选 task、回复目标和指令／记忆版本登记在服务端；将不承担身份认证的 opaque run reference 放进当轮输入。工具请求携带该引用，服务端同时验证会话绑定和 active run，不接受模型自行声明 actor/scope。
 
 这避免依赖“每一轮热改 MCP Authorization header”才能工作。旧轮迟到请求携带旧 run reference 时应被拒绝，不应被重新解释成当前轮操作。
 
@@ -220,7 +227,7 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 
 ### 7.1 统一输入合同
 
-常驻说明组合：既有 profile instruction、团队协作规则、角色职责与版本。每轮材料提供 project/task/run、已确认需求、相关记忆摘要、待处理事件及回复目标。
+常驻说明组合：既有 profile instruction、适用的协作规则、角色职责与版本。每轮材料提供 scope/context/session/run、可选 project/task、已确认需求、相关记忆摘要、待处理事件及回复目标；个人普通对话不需要创建项目任务。
 
 现有项目的 `AGENTS.md`、`CLAUDE.md` 等规则继续由 backend 原有机制读取。不把动态项目记忆写入全局 profile，不覆盖既有 instruction，也不通过更换 cwd 到角色记忆目录破坏项目规则与工具路径。
 
@@ -240,9 +247,9 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 
 ### 7.3 生命周期
 
-1. dispatcher 选定待办，确定 role/project/task，取得执行预算。
-2. 生成 ExecutionAttempt，冻结模型、profile、指令版本与当前任务 revision。
-3. 准备／恢复该 role×project×workstream 的 WorkerSession 与独立执行目录，注入工具绑定并等待真实 ready。
+1. dispatcher 选定输入／待办，确定 role、scope、context 和可选 project/task，取得执行预算。
+2. 生成 ExecutionAttempt，冻结模型、profile、指令／记忆版本，有 Task 时同时冻结其 revision。
+3. 准备／恢复该 role×scope×workstream 的 WorkerSession 与适用执行目录，注入工具绑定并等待真实 ready。
 4. 新会话带入简短记忆入口；已有会话仅追加必要的版本变化和当前任务信息。
 5. 执行中通过 memory 工具按需查详细资料；重要反馈及时写入，不只等待会话结束。
 6. turn 结束记录执行结果与未完成事项；下一轮根据任务事实恢复。
@@ -264,6 +271,7 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 | Scope | 内容 | 更新规则 |
 | --- | --- | --- |
 | role | 核心职责、通用方法、明确适用于所有项目的规则 | 职责配置与经验分别管理，记录跨项目影响 |
+| personal / role_personal | 个人偏好、私聊资料及该角色的个人工作恢复线索 | 按稳定用户和 scope 隔离，不自动写入 role/project |
 | project | 需求、约定、决定和资料索引 | 项目内共享；决定有来源和版本 |
 | role_project | 角色在本项目的经验、恢复索引 | 该角色维护，避免覆盖其他角色笔记 |
 | task | 当前任务的检查点、证据与下一步 | 关联任务 revision，不替代 Task 状态 |
@@ -273,6 +281,8 @@ Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更�
 memory_update 使用 expected revision，记录作者、来源任务/消息、作用范围和撤销历史。冲突时先重新读取，不让模型盲目整文件覆盖。删除或纠正后，使后续注入与查询使用新版本；对正在执行的上下文需要显式通知或重建，不能保证删除存储就使模型立即忘记。
 
 项目经验默认不提升为角色通用记忆。跨项目提炼保存适用条件和来源；其他项目的原始对话不会被自动全量注入。
+
+私聊进入项目上下文需有用户明确目标或选择；角色可以查询相应项目资料，但私人对话不会自动发布到群或共享记忆。memory owner 不取群 surface 的最近 ActorUserID；App 重绑要核对稳定身份，不能仅凭 gateway 字符串继承个人记忆。
 
 ## 9. 飞书通信与话题路由
 
@@ -396,13 +406,13 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 
 同一 Bot 跨项目使用独立 worker/session 和记忆命名空间；不能把项目 A 的已有 runtime 会话改标签后直接借给项目 B。更换群目录时保留 ProjectID 和长期资料，旧 workspace generation 的结果保留在原 attempt／成果版本，但禁止自动应用到新目录、更新新任务版本或通过验收；需要重新验证才能纳入当前交付。新项目复用旧群必须显式创建新项目绑定。
 
-这需要修改现有 headless 复用合同。当前 [候选选择](../../internal/core/orchestrator/service_surface_contract_resolution.go)、[目录亲和评分](../../internal/core/orchestrator/service_thread_global.go) 和 [预热池](../../internal/app/daemon/app_headless_pool.go) 不以团队工作流为独立绑定键。团队 worker 的复用／恢复必须检查 role、project、workstream、workspace generation、controller lease、Bot generation、工具绑定代次和常驻指令版本；相同模型、profile 和目录不足以证明可复用。未绑定预热实例完成受控初始化后才能使用，已绑定实例不得通过改 surface 归属借给另一角色；不能热改工具配置时安全重建 child。
+这需要修改现有 headless 复用合同。当前 [候选选择](../../internal/core/orchestrator/service_surface_contract_resolution.go)、[目录亲和评分](../../internal/core/orchestrator/service_thread_global.go) 和 [预热池](../../internal/app/daemon/app_headless_pool.go) 不以工作流为独立绑定键。worker 的复用／恢复必须检查 role、scope/context（含个人 principal 或项目绑定）、workstream、workspace generation、controller lease、Bot generation、工具绑定代次和常驻指令版本；相同模型、profile 和目录不足以证明可复用。未绑定预热实例完成受控初始化后才能使用，已绑定实例不得通过改 surface 归属借给另一角色；不能热改工具配置时安全重建 child。
 
 ## 13. 实施依赖与完整交付
 
 | 工作面 | 实现内容 | 完成证据 |
 | --- | --- | --- |
-| A 领域与迁移 | Role、Project、资源、执行 owner、协作库、旧群权威切换 | 没有双写配置，原目录和已有工作归属可追溯 |
+| A 领域与迁移 | Role、个人／项目 scope、资源、执行 owner、统一工作库、单聊及旧群归属切换 | 没有双写配置，原目录和已有工作归属可追溯 |
 | B 原生运行生命周期 | 多身份 CLI、上下文组装、start/resume/steer/compact/rebuild、控制权交接 | Claude／Codex 等受支持后端具有明确 ready、输入回执、版本生效和恢复行为 |
 | C 持续协作 | 任务依赖、inbox/outbox、多 WorkerSession 调度、提醒和公平预算 | 并行工作、忙碌消息、依赖等待与无人工唤醒恢复成立 |
 | D 工作区与交付 | 独立 checkout、成果版本、评审、返工、冲突处理和集成 | 并行实现到集成交付闭环，崩溃后可核对 Git 与业务记录 |
@@ -415,6 +425,7 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 - Codex、Claude、OpenCode：工具发现、一次调用、start/resume、常驻指令变更、compact/restart 后角色不丢失。
 - 默认／built-in profile 也得到角色指令；同模型同目录的两个角色不会借用彼此已绑定的 worker。
 - 同一 Bot 两项目：工具凭据、run 引用、输出话题、记忆查询和模型配置各自归属正确。
+- 同 Bot 多用户私聊与项目群共用内核，个人记忆隔离；精确模型／已有目录选择保留，内部工作区无需用户操作。
 - 同角色同项目两个独立工作流并行，任务、原生会话和可写目录不串用；不同项目可关联同仓库。
 - 两个实现任务并行交付，第三个角色在指定版本评审；基线前移、冲突和返工进入集成闭环。
 - 工作区创建、目标 ref 更新与回执落库各崩溃窗口可恢复；迁移前后只有一个项目配置权威。
@@ -457,6 +468,7 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 
 - [产品草案](./feishu-agent-team-product-design.md)
 - [完整执行与工作区设计](./feishu-agent-team-execution-design.md)
+- [代码复用与操作归属审计](./feishu-agent-codebase-reuse-assessment.md)
 - [架构与产品状态所有权](../general/architecture.md)
 - [配置冻结与持久化规则](../general/config-state-storage-guidelines.md)
 - [Profile instruction 设计](../inprogress/codex-claude-profile-instruction-design.md)
