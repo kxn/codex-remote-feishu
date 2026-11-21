@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-08-11`
-> Summary: 收紧 docs lifecycle 规则：排除 `docs/superpowers/**`，强制 obsoleted `Superseded By`，并同步 unified binary 文档归档。
+> Updated: `2026-11-21`
+> Summary: 索引飞书项目群与 Agent 团队的产品草案和技术可行性方案。
 
 ## 1. 适用范围
 
@@ -202,6 +202,8 @@
 - [current-thread-patch-v1-prd.md](./draft/current-thread-patch-v1-prd.md)
 - [current-thread-patch-v1-tech-plan.md](./draft/current-thread-patch-v1-tech-plan.md)
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
+- [feishu-agent-team-product-design.md](./draft/feishu-agent-team-product-design.md)
+- [feishu-agent-team-technical-design.md](./draft/feishu-agent-team-technical-design.md)
 - [feishu-group-context-multi-bot-design.md](./draft/feishu-group-context-multi-bot-design.md)
 - [feishu-group-on-demand-resume-design.md](./draft/feishu-group-on-demand-resume-design.md)
 - [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)
