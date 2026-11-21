@@ -26,6 +26,9 @@ func (a *App) materializeBotCapabilitySettingsStateLocked() {
 }
 
 func (a *App) syncBotCapabilitySettingsStateLocked() {
+	if a.legacyWorkRetired() {
+		return
+	}
 	if !a.botCapabilitySettingsState.writable() || a.botCapabilitySettingsState.store == nil {
 		return
 	}

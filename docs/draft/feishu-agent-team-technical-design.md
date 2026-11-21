@@ -1,12 +1,12 @@
 # 飞书 Agent 团队技术设计：领域、运行合同与代码改造
 
 > Type: `draft`
-> Updated: `2026-11-21`
-> Summary: 按用户决定取消原生会话人工接管，保留飞书指导、审阅、暂停、恢复与旧状态迁移边界。
+> Updated: `2026-11-22`
+> Summary: 明确 Agent 原生 Git 责任、旧私聊命令的委托语义与现行证据入口。
 
 ## 1. 文档地位、依据与结论
 
-本文与[产品主文档](./feishu-agent-team-product-design.md)组成实施入口。产品故事 `US-*`、验收 `UAT-*` 是行为合同；本文 `T01`—`T12` 是实现工作面。专项附录只展开协议和证据，不另立并行架构。本文没有修改生产实现，不把设计中的类型、表、命令或接口声称为现有能力。
+本文与[产品主文档](./feishu-agent-team-product-design.md)组成实施入口。产品故事 `US-*`、验收 `UAT-*` 是行为合同；本文 `T01`—`T12` 是实现工作面。专项附录只展开协议和证据，不另立并行架构。实际接线与验证范围见[验收映射](../inprogress/feishu-agent-team-acceptance.md)，当前运行行为见[远程执行状态机](../general/remote-surface-state-machine.md)。
 
 代码审计基线：本仓 `dbd006c55ea4195e46e4066c324b75cfd9f76222`；Raft 参考快照：`botiverse/raft-source@5214e34e726ed715f455e78c96fa521791ef2de3`。源码细节见[原生运行合同](./feishu-agent-team-runtime-contracts.md)、[代码复用审计](./feishu-agent-codebase-reuse-assessment.md)、[共享资料接口证据](./feishu-agent-team-materials-design.md)、[Raft 交付机制调查](./feishu-agent-team-human-delivery-design.md)。产品规范优先解释用户行为；当前生产行为仍以 canonical 文档和代码为准，实现时同步它们。
 
@@ -66,7 +66,7 @@ flowchart TD
 | [tool caller](../../internal/app/daemon/tool_service.go:419) | 增 worker credential＋run_ref，不从 active surface 猜 | 后台协作、单聊和附件工具均有正确身份 |
 | [入站归并](../../internal/app/daemon/app_ingress.go:77) | 新持久接收及事件归并 worker，保留有界内存缓冲 | FIFO 不再被误当崩溃持久性；慢操作移出 App 全局锁 |
 | [旧 primary](../../internal/core/orchestrator/service_feishu_primary_command.go)、room/shared-workspace admission | 对迁移群退出生产路由；公共 transport/request 部分保留 | 旧群 UX 全弃，不牵连私聊和新卡片 |
-| `internal/app/gitworkspace`、旧 worktree picker | 私聊明确工具能力保留；群日常 Agent 原生 Git | 不建平台自动 worktree 生命周期服务 |
+| `internal/app/gitworkspace`、旧 worktree picker | 旧 picker 留作迁移和复用参考；团队群与私聊均由 Agent 使用原生 Git | 不建平台自动 worktree 生命周期服务 |
 | `cronrepo` 与 Cron scheduler/command/schema | 停止注册与执行，保留只读迁移证据后清理代码 | 不自动把旧定时计划重投到新队列 |
 
 ## 3. T02 对象、数据库与唯一事实所有权
@@ -424,7 +424,7 @@ Conversation 先有内部 ID，创建根消息 outbox 成功后取得平台 root
 - `/stop /steerall /compact /goal`：按选定 context/session 调运行用例；能力不足给真实说明。`/stop` 在个人工作撤销尚未派发的用户输入并留审计；私聊选中项目工作时走项目暂停语义，保留所有项目 inbox，不撤销其他成员要求。同事结果始终保留。
 - `/model /reasoning /*profile`：统一 Bot 策略；`/access /plan`：当前 session 控制；不能归为一个全局“设置”对象。
 - `/review /autowhip /autocontinue`：保留原 backend 支持的局部能力，绑定新 owner；不以 native 最后回复改写或停止词作为 Task 完成证明。AutoContinue 只做已归属执行恢复，不与团队 scheduler 再发第二份工作。
-- workspace、sendfile、admin/upgrade/debug 等复用适用功能；worktree 人工命令保留可选私聊能力，不作为群用户必经步骤。`/primary /coworkers` 不移植到 DM；Cron 不因兼容恢复。
+- workspace、sendfile、admin/upgrade/debug 等复用适用功能。人在 `/workspace` 选择允许使用的已有目录；旧私聊目录创建命令在选好目录后交给当前 Agent 处理，执行结果在原工作中回复。`/primary /coworkers` 不移植到 DM；Cron 不因兼容恢复。
 
 现有注册 44 specs／43 canonical 及别名、隐藏但可派发和不支持的分支详见[Slash 盘点](./feishu-agent-codebase-reuse-assessment.md#51-slash-command-盘点与去向)。没有注册的 `/attach /patch /cancel` 不列兼容承诺。
 

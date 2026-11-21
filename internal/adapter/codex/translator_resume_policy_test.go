@@ -423,3 +423,64 @@ func payloadConfig(t *testing.T, params map[string]any) map[string]any {
 	}
 	return config
 }
+
+func TestNativeInheritedProviderPolicySendsContextOnStartAndResume(t *testing.T) {
+	policy := agentproto.CodexResumePolicy{
+		Mode: agentproto.CodexResumeApplyTargetProfile, ConnectionContractID: "native-connection", ThreadPolicyID: "context-policy",
+		InheritNativeProvider: true, ModelMode: agentproto.CodexThreadValueDefault, ReasoningMode: agentproto.CodexThreadValueDefault,
+		ReviewModelMode: agentproto.CodexReviewModelConfig, ContextMode: "price_guard_272k", ContextWindow: 272000, AutoCompactLimit: 244800,
+		DeveloperInstruction: "Frozen team instructions",
+	}
+	raw, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip agentproto.CodexResumePolicy
+	if err := json.Unmarshal(raw, &roundTrip); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		method   string
+		threadID string
+	}{
+		{method: "thread/start"},
+		{method: "thread/resume", threadID: "thread-original"},
+	} {
+		t.Run(tc.method, func(t *testing.T) {
+			tr := NewTranslator("inst-native")
+			if _, err := tr.ObserveClient([]byte(`{"method":"thread/start","params":{"cwd":"/tmp/old","modelProvider":"stale-provider","model":"stale-model"}}`)); err != nil {
+				t.Fatal(err)
+			}
+			frames, err := tr.TranslateCommand(agentproto.Command{
+				Kind: agentproto.CommandPromptSend, Target: agentproto.Target{CWD: "/tmp/project", ThreadID: tc.threadID},
+				Prompt:      agentproto.Prompt{Inputs: []agentproto.Input{{Type: agentproto.InputText, Text: "start"}}},
+				CodexResume: &roundTrip,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			params := payloadParams(t, decodeSinglePayload(t, frames), tc.method)
+			if _, exists := params["modelProvider"]; exists {
+				t.Fatalf("inheritance guessed or reused a provider: %+v", params)
+			}
+			configuration := payloadConfig(t, params)
+			if configuration["model_context_window"] != float64(272000) ||
+				configuration["model_auto_compact_token_limit"] != float64(244800) ||
+				params["developerInstructions"] != policy.DeveloperInstruction {
+				t.Fatalf("native policy did not send requested configuration and instructions: %+v", params)
+			}
+
+			if effective, problem := tr.codexEffectiveThreadFromObserved("thread-proof", "turn", &roundTrip, nil); effective != nil || problem == nil {
+				t.Fatal("inheritance treated missing native provider evidence as success")
+			}
+			tr.mergeObservedThread("thread-proof", "observed-native-provider", "model", "")
+			effective, problem := tr.codexEffectiveThreadFromObserved("thread-proof", "turn", &roundTrip, nil)
+			if problem != nil || effective == nil || effective.ModelProviderID != "observed-native-provider" {
+				t.Fatalf("native provider evidence was lost: observed=%+v problem=%+v", effective, problem)
+			}
+			if effective.EffectiveContextWindow != 0 || effective.ContextStatus != "" {
+				t.Fatal("unreported context window was presented as effective")
+			}
+		})
+	}
+}

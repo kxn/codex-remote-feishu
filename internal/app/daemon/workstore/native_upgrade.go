@@ -134,9 +134,3 @@ func (t *Tx) LatestCompletedNativeUpgrade(host string) (NativeUpgrade, error) {
 	}
 	return v, err
 }
-
-func (t *Tx) NativeUpgradeLaunchUnsent(worker work.WorkerSession) (bool, error) {
-	var n int
-	err := t.tx.QueryRowContext(t.ctx, `SELECT count(*) FROM operations WHERE json_extract(payload,'$.kind')='worker.launch' AND json_extract(payload,'$.target_id')=? AND json_extract(payload,'$.target_generation')=? AND json_extract(payload,'$.state')='prepared'`, worker.ID, worker.Generation).Scan(&n)
-	return n == 1, err
-}

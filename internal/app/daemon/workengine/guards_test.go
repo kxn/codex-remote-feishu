@@ -2,11 +2,100 @@ package workengine
 
 import (
 	"context"
-	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
-	"github.com/kxn/codex-remote-feishu/internal/core/work"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
+	"github.com/kxn/codex-remote-feishu/internal/core/work"
 )
+
+func TestPreferenceChangeBetweenPlanAndClaimKeepsInputPendingUntilReplanned(t *testing.T) {
+	ctx := t.Context()
+	s, _ := fixture(t)
+	gateway := work.IngressGateway{GatewayRef: "gateway", AppID: "leader", RoleID: "leader", BotGeneration: 1}
+	var menu workstore.MenuInteraction
+	transaction(t, s, func(tx *workstore.Tx) error {
+		var err error
+		menu, _, err = tx.AcceptMenuInteraction(work.MenuInteractionEnvelope{
+			GatewayRef: "gateway", AppID: "leader", Tenant: "tenant", EventID: "menu", EventKey: "menu",
+			SenderIDs: work.SenderIDs{OpenID: "person"}, ReceivedAt: testNow,
+		}, gateway)
+		if err != nil {
+			return err
+		}
+		sending, _, err := tx.BeginMenuDestination(menu.ID, menu.Revision, "SDK destination receipt")
+		if err != nil {
+			return err
+		}
+		if err = tx.FinishMenuDestination(menu.ID, sending.Revision, "private-chat", "entry-message", "", true); err != nil {
+			return err
+		}
+		return tx.PutWorker(work.WorkerSession{
+			ID: "worker", ContextID: menu.ContextID, ScopeID: menu.ScopeID, RoleID: gateway.RoleID, Backend: work.BackendCodex,
+			State: work.WorkerReady, Generation: 1, InstanceID: "instance", InstanceGeneration: 1, ProcessGeneration: 1,
+			CarrierIncarnation: "carrier", Controller: work.ControllerAutomatic, ControllerGeneration: 1, Revision: 1,
+		}, 0)
+	})
+	enqueue(t, s, "input", menu.ScopeID, gateway.RoleID, "", menu.ContextID)
+	planner := &testPlanner{}
+	dispatcher := &testDispatcher{}
+	e := engine(t, s, 1, planner, dispatcher)
+	candidates, _, _, err := e.snapshot(ctx)
+	if err != nil || len(candidates) != 1 {
+		t.Fatalf("candidate count=%d err=%v", len(candidates), err)
+	}
+	candidate := candidates[0]
+	stale, err := planner.Plan(ctx, candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := workstore.PrivateActionSource{PersonalScopeID: menu.ScopeID, MenuInteractionID: menu.ID}
+	var preferences work.ContextPreferences
+	transaction(t, s, func(tx *workstore.Tx) error {
+		_, ref, err := tx.ValidatePrivateAction(source)
+		if err != nil {
+			return err
+		}
+		access := agentproto.AccessModeConfirm
+		return tx.PutContextPreferences(work.ContextPreferences{
+			ContextID: menu.ContextID, ScopeID: menu.ScopeID, AccessMode: &access,
+			UpdatedBy: work.Actor{Kind: work.ActorPrincipal, ID: menu.PrincipalID},
+			Source:    ref, Revision: 1, UpdatedAt: testNow,
+		}, 0, source)
+	})
+	if _, err = e.admit(ctx, candidate, stale); !errors.Is(err, workstore.ErrConflict) {
+		t.Fatalf("stale plan acquired new input: %v", err)
+	}
+	transaction(t, s, func(tx *workstore.Tx) error {
+		input, err := tx.GetInbox("input")
+		if err != nil {
+			return err
+		}
+		if input.State != work.InboxPending {
+			t.Fatal("preference race consumed input")
+		}
+		preferences, err = tx.GetContextPreferences(menu.ContextID)
+		return err
+	})
+	fresh, err := planner.Plan(ctx, candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh.PreferencesRevision = preferences.Revision
+	fresh.Command.Overrides.AccessMode = *preferences.AccessMode
+	pending, err := e.admit(ctx, candidate, fresh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if outcome := e.send(ctx, pending); outcome.Err != nil || outcome.State != work.OperationConfirmed {
+		t.Fatalf("fresh plan did not start: %+v", outcome)
+	}
+	if dispatcher.count() != 1 || dispatcher.calls[0].command.Overrides.AccessMode != agentproto.AccessModeConfirm {
+		t.Fatal("replanned input did not use the current context preferences")
+	}
+}
 
 func TestSharedCarrierCannotReceiveTwoClaims(t *testing.T) {
 	s, _ := fixture(t, "a")
@@ -166,4 +255,84 @@ func TestQueueCarriesExplicitTaskInsteadOfParsingEventText(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+func TestAdmissionRefreshesRoleSettingsAfterPlanningBeforeClaim(t *testing.T) {
+	ctx := t.Context()
+	store, _ := fixture(t, "a")
+	enqueue(t, store, "input", "a", "leader", "", "context:a:leader")
+	transaction(t, store, func(tx *workstore.Tx) error {
+		return tx.SyncRoleSettingsReference("leader", "planned")
+	})
+	planner := &testPlanner{}
+	dispatcher := &testDispatcher{}
+	e := engine(t, store, 1, planner, dispatcher)
+	candidates, _, _, err := e.snapshot(ctx)
+	if err != nil || len(candidates) != 1 {
+		t.Fatalf("candidate count=%d err=%v", len(candidates), err)
+	}
+	candidate := candidates[0]
+	plan, err := planner.Plan(ctx, candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate an authoritative profile write after Plan, before the periodic
+	// projection. The admission guard refreshes the role before the claim.
+	e.config.SettingsAdmission = func(_ context.Context, roleID string, commit func() error) error {
+		if roleID != candidate.Role.ID {
+			t.Fatalf("admission role = %q, want %q", roleID, candidate.Role.ID)
+		}
+		transaction(t, store, func(tx *workstore.Tx) error {
+			return tx.SyncRoleSettingsReference(roleID, "changed")
+		})
+		return commit()
+	}
+	if _, err := e.admit(ctx, candidate, plan); !errors.Is(err, workstore.ErrConflict) {
+		t.Fatalf("stale role plan acquired input: %v", err)
+	}
+	transaction(t, store, func(tx *workstore.Tx) error {
+		input, err := tx.GetInbox("input")
+		if err != nil {
+			return err
+		}
+		if input.State != work.InboxPending || dispatcher.count() != 0 {
+			t.Fatal("role settings race consumed input")
+		}
+		return nil
+	})
+}
+
+func TestRecoveringWorkerWithUnsentLaunchCanReenterPreparation(t *testing.T) {
+	ctx := t.Context()
+	store, _ := fixture(t, "a")
+	enqueue(t, store, "input", "a", "leader", "", "context:a:leader")
+	transaction(t, store, func(tx *workstore.Tx) error {
+		worker, err := tx.GetWorker("worker:a:leader")
+		if err != nil {
+			return err
+		}
+		worker.State = work.WorkerRecovering
+		worker.Revision++
+		if err := tx.PutWorker(worker, worker.Revision-1); err != nil {
+			return err
+		}
+		content := work.NewContent("prepared-content", worker.ScopeID, "application/json", []byte("{}"), testNow)
+		if err := tx.PutContent(content); err != nil {
+			return err
+		}
+		_, _, err = tx.PutOperation(work.Operation{
+			ID: "prepared-launch", Actor: work.Actor{Kind: work.ActorSystem, ID: "work-host"},
+			ScopeID: worker.ScopeID, ContextID: worker.ContextID, Kind: "worker.launch",
+			TargetID: worker.ID, TargetGeneration: worker.Generation, IdempotencyKey: "prepared-launch",
+			RequestRef: content.ID, RequestHash: content.SHA256, State: work.OperationPrepared,
+			Revision: 1, CreatedAt: testNow, UpdatedAt: testNow,
+		}, 0)
+		return err
+	})
+	engine := engine(t, store, 1, &testPlanner{}, &testDispatcher{})
+	candidates, _, needs, err := engine.snapshot(ctx)
+	if err != nil || len(candidates) != 0 || len(needs) != 1 || needs[0].ContextID != "context:a:leader" {
+		t.Fatalf("unsent launch was not eligible for preparation: candidates=%d needs=%+v err=%v", len(candidates), needs, err)
+	}
 }

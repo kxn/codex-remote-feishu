@@ -1,8 +1,8 @@
 # 安装与部署设计
 
 > Type: `general`
-> Updated: `2026-08-11`
-> Summary: 修正 upgrade helper 当前来源：安装文档只保留升级事务边界，完整时序以本地自升级流程文档为准。
+> Updated: `2026-11-22`
+> Summary: 统一 CLI 与发行包的安装语义，记录旧 VS Code shim 的检测和清理。
 
 ## 1. 范围
 
@@ -69,21 +69,19 @@ Windows PowerShell:
 - 写入统一配置
 - 启动 daemon 与嵌入式 Web UI
 
-后续飞书与 VS Code 配置都在 `/setup` 和 `/` 管理页中完成。
+后续飞书配置在 `/setup` 和管理页中完成。
 
 ### 2.3 WebSetup / Admin UI
 
 产品配置入口已经收敛到 WebSetup：
 
 - 飞书 App 凭证与多 App 管理
-- VS Code detect / apply
-- `managed_shim` reinstall
+- 系统设置中的旧版 VS Code 集成清理
 - bootstrap state / runtime state 展示
 
 也就是说，release 安装器不再做这些事情：
 
 - CLI 交互采集飞书 `App ID` / `App Secret`
-- CLI 交互采集 VS Code settings/bundle 路径
 - 直接在 release 包里分发 `setup.sh` / `setup.ps1` 作为产品入口
 
 ### 2.4 仓库 helper
@@ -127,14 +125,11 @@ Windows PowerShell:
 - 不直接改 VS Code
 - 启动 daemon 并输出 WebSetup / Admin URL
 
-### 3.2 仍保留的高级模式
+### 3.2 交互配置与兼容参数
 
-`codex-remote install` 仍然保留旧的完整安装能力，方便仓库联调和特殊场景：
+直接运行 `codex-remote install` 也只安装二进制和配置。`-interactive` 可交互填写安装路径、飞书凭证和 Codex 可执行文件路径。`-bootstrap-only` 作为已有发行脚本使用的兼容参数保留。
 
-- `-interactive`
-- `-integration managed_shim`
-
-这些能力主要用于源码仓库或定向调试，不再作为发布包默认路径。
+`-integration` 接受 `auto` 和 `none`。旧的 `-integration managed_shim` 和非空的 `-bundle-entrypoint` 会在写入前报错。已有安装的编辑器入口和设置路径仍保存在安装状态里，供显式清理时使用。
 
 ### 3.3 `codex-remote packaged-install` shared contract
 
@@ -464,78 +459,13 @@ Windows 下文件名为 `codex-remote.exe`。
 
 - [local-self-upgrade-flow.md](./local-self-upgrade-flow.md)
 
-## 5. VS Code 接管模型
+## 5. 旧版 VS Code 集成清理
 
-### 5.1 当前产品策略
+飞书团队工作通过私聊菜单或项目群进行。安装与升级不会新增或重装 VS Code 会话接管集成。现行工作入口见 [使用说明书](./user-guide.md)。
 
-当前产品已经收敛到 `managed_shim` 单一路径：
+旧安装可能保留 `settings.json` 的 `chatgpt.cliExecutable` 覆盖，或在历史扩展目录留下托管 shim。旧 shim 将原版可执行文件保存在同目录的 `codex.real` 或 `codex.real.exe`，相邻的 sidecar 记录归属的安装实例和配置路径。安装状态保留既有设置路径与扩展入口，方便诊断和清理。
 
-1. WebSetup / Admin UI / daemon 内部迁移卡片都只会执行 `managed_shim`。
-2. 执行 `managed_shim` apply/reinstall 时，会同时清理旧的 `chatgpt.cliExecutable`，避免 host 侧 `settings.json` override 继续污染 Remote SSH。
-3. 若检测到存量 `editor_settings` 状态且存在可接管入口，系统会默认静默自动迁到 `managed_shim`；迁移成功时不再额外弹显式迁移提示卡。
-4. 若缺少可接管入口、自动迁移失败，或扩展升级导致 managed shim 失效，系统才保留必要的失败/修复反馈，而不是继续把 `editor_settings` 当成可选策略。
-
-### 5.2 `managed_shim`
-
-当前 `managed_shim` 已从“复制主 binary 到扩展入口”收敛为“tiny shim + sidecar 绑定”：
-
-1. 原始 `codex` 重命名为 `codex.real` 或 `codex.real.exe`
-2. 在原始入口路径写入独立 tiny shim（不再复制整份 `codex-remote`）
-3. 在入口旁写入 sidecar 绑定配置，记录该入口对应的 install target / state/config 定位信息
-4. 运行时由 tiny shim 读取 sidecar，再解析 install-state / config，定位该实例当前可用的 `codex-remote` 并 `exec`
-5. 若 sidecar 或目标安装失效，shim 会回退执行同目录 `codex.real`，避免 VS Code 入口直接不可用
-
-detect/apply/reinstall 的当前规则也同步收紧：
-
-- 每个扩展版本只按当前主机平台选择唯一入口（例如 Windows 只看 `windows-*`，不会误 patch `linux-*`）
-- 不再只处理“最新入口”，会一并处理当前实例已知的历史 repo-managed 入口
-- 若 probe 显示 live daemon 与当前 shim 版本不兼容或 fingerprint 不匹配，runtime manager 会拒绝替换，避免 stale shim 误停健康实例
-
-适用：
-
-- 当前机器本地 VS Code
-- VS Code Remote
-- 希望不依赖 `settings.json` 的场景
-
-当前 wrapper / headless 在真正拉起 `codex.real` 前，还会补一条稳定规则：
-
-- wrapper 自己仍按本地 relay 通信要求清理代理环境
-- 启动 `codex.real` 时会恢复已捕获的 proxy env
-- 若当前 active provider 的 `env_key` 不在父进程环境中，会按同一套 child-env 规则定向补齐这个 key，而不是整包导入 shell 环境
-
-### 5.3 legacy `settings.json` 迁移
-
-旧版本可能还会留下：
-
-- VS Code `settings.json` 中的 `chatgpt.cliExecutable`
-- `wrapper.integrationMode=editor_settings`
-- 历史扩展目录中的 repo-managed copied shim
-
-当前处理方式：
-
-1. detect 仍会识别这些 legacy 状态。
-2. 若 detect 时已经存在可接管的扩展入口，daemon 默认会直接静默尝试迁到 `managed_shim`，不再先弹“确认迁移”主提示卡。
-3. 自动迁移或用户显式重试时，系统会：
-   - 按当前平台 patch 目标入口，并把当前实例已知历史 repo-managed 入口统一迁到 tiny shim + sidecar 绑定模型
-   - 更新 install-state / config / sidecar 绑定信息
-   - 清掉旧的 `chatgpt.cliExecutable`
-4. 若缺少 target、自动迁移失败，或迁移后状态检查仍异常，才保留必要的失败/重试反馈。
-5. 迁移完成后，不再保留 `editor_settings` 作为产品可选路径。
-
-### 5.4 当前产品约束
-
-对 release 用户：
-
-- 安装器 bootstrap 完成后，`wrapper.integrationMode` 默认会记录为 `none`
-- 真正的 VS Code 接入统一在 WebSetup / Admin UI / daemon 迁移卡片中执行 `managed_shim`
-
-对仓库联调：
-
-- `go build -o ./bin/codex-remote ./cmd/codex-remote`
-- `./bin/codex-remote install -bootstrap-only -start-daemon`
-- `codex-remote install -interactive`
-
-仍然可以直接在 CLI 里触发接管，但当前只保留 `managed_shim` 这一条接入路径。
+管理页的系统设置在检测到本安装的遗留集成后提供移除入口。有原版备份的托管 shim 会还原扩展的可执行文件。指向当前安装二进制的旧 `chatgpt.cliExecutable` 覆盖也可以清理。
 
 ## 6. release 打包与发布
 

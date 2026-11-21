@@ -47,6 +47,8 @@ func (p teamBotSettingsPort) Snapshot(ctx context.Context, binding work.RoleBotB
 		return snapshot, err
 	}
 	a := p.app
+	a.adminConfigMu.Lock()
+	defer a.adminConfigMu.Unlock()
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return snapshot, err
@@ -64,7 +66,7 @@ func (p teamBotSettingsPort) Snapshot(ctx context.Context, binding work.RoleBotB
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	snapshot.Settings = a.workBotSettingsLocked(binding.GatewayRef)
-	snapshot.Fingerprint = workSettingsFingerprint(snapshot.Settings, loaded.Config)
+	snapshot.Fingerprint = a.resolveWorkBotSettings(snapshot.Settings, loaded.Config).fingerprint
 	for _, profile := range a.materializeCodexProfileSummariesLocked(loaded.Config) {
 		model, reasoning, fixed := orchestrator.FixedCodexProfileSelection(profile)
 		option := worksettings.Profile{ID: profile.ID, Name: profile.Name, Backend: agentproto.BackendCodex, Available: profile.Available}
@@ -98,64 +100,28 @@ func teamSettingsProfile(record state.BotCapabilitySettingsRecord) string {
 func (p teamBotSettingsPort) ApplyBot(ctx context.Context, binding work.RoleBotBinding, expected string, next state.BotCapabilitySettingsRecord, evidence worksettings.Evidence) (worksettings.Applied, error) {
 	var applied worksettings.Applied
 	a := p.app
-	if _, _, err := p.facts(ctx, binding); err != nil {
-		return applied, err
+	if a == nil || a.teamRuntime == nil {
+		return applied, worksettings.ErrUnavailable
 	}
 	if evidence.PrincipalID == "" || evidence.Source.Validate() != nil || evidence.OperationID == "" || next.GatewayID != binding.GatewayRef {
 		return applied, worksettings.ErrUnavailable
 	}
-	// This serializes physical App switches, independently of worker execution.
+	// Use the same configuration lock as launch and dispatch admission.
+	// Keep Feishu gateway identity changes outside the save/projection pair.
 	a.feishuApplyMu.Lock()
-	loaded, err := a.loadAdminConfig()
-	if err != nil {
-		a.feishuApplyMu.Unlock()
+	defer a.feishuApplyMu.Unlock()
+	a.adminConfigMu.Lock()
+	defer a.adminConfigMu.Unlock()
+	if _, _, err := p.facts(ctx, binding); err != nil {
 		return applied, err
 	}
-	apps := a.runtimeGatewayApps(loaded.Config)
-	found := false
-	for _, app := range apps {
-		if app.GatewayID == binding.GatewayRef && app.AppID == binding.AppID && app.Enabled {
-			found = true
-		}
-	}
-	if !found {
-		a.feishuApplyMu.Unlock()
-		return applied, worksettings.ErrConflict
-	}
-	a.mu.Lock()
-	current := a.workBotSettingsLocked(binding.GatewayRef)
-	if workSettingsFingerprint(current, loaded.Config) != expected {
-		a.mu.Unlock()
-		a.feishuApplyMu.Unlock()
-		return applied, worksettings.ErrConflict
-	}
-	if !a.botCapabilitySettingsState.writable() || a.botCapabilitySettingsState.store == nil {
-		a.mu.Unlock()
-		a.feishuApplyMu.Unlock()
-		return applied, worksettings.ErrUnavailable
-	}
-	next.UpdatedBy = evidence.PrincipalID
-	next.UpdatedAt = time.Now().UTC()
-	next, valid := state.NormalizeBotCapabilitySettingsRecord(next)
-	if !valid {
-		a.mu.Unlock()
-		a.feishuApplyMu.Unlock()
-		return applied, worksettings.ErrUnavailable
-	}
-	err = a.botCapabilitySettingsState.store.Put(next)
-	if err == nil {
-		// Persisted Bot settings remain the unique source; old Surfaces are projected
-		// from it and cannot seed this mutation or overwrite its selected identity.
-		a.materializeBotCapabilitySettingsStateLocked()
-		applied.Fingerprint = workSettingsFingerprint(next, loaded.Config)
-		applied.Evidence = "Bot settings persisted; active native executions retain their frozen configuration."
-	}
-	a.mu.Unlock()
-	a.feishuApplyMu.Unlock()
+	var err error
+	applied.Fingerprint, err = a.persistWorkBotSettingsLocked(binding, expected, next, evidence.PrincipalID)
 	if err != nil {
 		return applied, err
 	}
-	if err = a.syncWorkRoles(ctx, a.teamRuntime.store); err != nil {
+	applied.Evidence = "Bot settings persisted; active native executions retain their frozen configuration."
+	if err = a.syncWorkRolesLocked(ctx, a.teamRuntime.store, binding.RoleID); err != nil {
 		return applied, err
 	}
 	err = a.teamRuntime.store.Within(ctx, func(tx *workstore.Tx) error {
@@ -167,11 +133,59 @@ func (p teamBotSettingsPort) ApplyBot(ctx context.Context, binding work.RoleBotB
 			return fmt.Errorf("settings persisted under the original Bot; current identity changed before role projection")
 		}
 		role, err := tx.GetRole(binding.RoleID)
+		if err != nil {
+			return err
+		}
+		if err := tx.CheckRoleSettingsReference(role.ID, applied.Fingerprint, role.SettingsRevision); err != nil {
+			return err
+		}
 		applied.DesiredRevision = role.SettingsRevision
-		return err
+		return nil
 	})
 	return applied, err
 }
+func (a *App) persistWorkBotSettingsLocked(binding work.RoleBotBinding, expected string, next state.BotCapabilitySettingsRecord, principal string) (string, error) {
+	loaded, err := a.loadAdminConfig()
+	if err != nil {
+		return "", err
+	}
+	configured := false
+	for _, app := range a.runtimeGatewayApps(loaded.Config) {
+		if app.GatewayID == binding.GatewayRef && app.AppID == binding.AppID && app.Enabled {
+			configured = true
+			break
+		}
+	}
+	if !configured {
+		return "", worksettings.ErrConflict
+	}
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	current := a.workBotSettingsLocked(binding.GatewayRef)
+	if a.resolveWorkBotSettings(current, loaded.Config).fingerprint != expected {
+		return "", worksettings.ErrConflict
+	}
+	if !a.botCapabilitySettingsState.writable() || a.botCapabilitySettingsState.store == nil {
+		return "", worksettings.ErrUnavailable
+	}
+	next.UpdatedBy = principal
+	next.UpdatedAt = time.Now().UTC()
+	next, valid := state.NormalizeBotCapabilitySettingsRecord(next)
+	if !valid {
+		return "", worksettings.ErrUnavailable
+	}
+	resolved := a.resolveWorkBotSettings(next, loaded.Config)
+	if resolved.err != nil {
+		return "", fmt.Errorf("%w: selected profile is no longer available: %v", worksettings.ErrConflict, resolved.err)
+	}
+	if err := a.botCapabilitySettingsState.store.Put(next); err != nil {
+		return "", err
+	}
+	a.materializeBotCapabilitySettingsStateLocked()
+	return resolved.fingerprint, nil
+}
+
 func (a *App) teamPreferencesService() (*worksettings.Service, error) {
 	if a.teamRuntime == nil {
 		return nil, worksettings.ErrUnavailable

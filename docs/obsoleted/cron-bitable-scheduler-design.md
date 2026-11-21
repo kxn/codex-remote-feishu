@@ -1,28 +1,15 @@
 # Cron 多维表格与 owner-bound 调度设计
 
-> Type: `implemented`
-> Updated: `2026-04-21`
-> Summary: 把 `#23`、`#224`、`#239`、`#243` 与 `#252` 的最终实现结论收敛为当前 `/cron` source of truth，补齐 owner-bound 配置表、工作区/ Git 双来源任务、Cron 命令入口拆分、历史 `gateway_id` 到正式 owner 的静默硬迁移、repair 接管语义，以及 scheduler 的 hidden run 物化策略。
+> Type: `obsoleted`
+> Updated: `2026-11-22`
+> Summary: 归档已退役的 Cron 多维表格、调度器与写回设计，保留旧数据的历史与迁移依据。
+> Superseded By: `docs/general/remote-surface-state-machine.md`
 
-## 1. 文档定位
+## 1. 历史范围
 
-这份文档描述的是仓库里 **已经落地** 的 Cron 能力，而不是 issue 讨论过程的摘录。
+本文保留旧版实现期记录，用来辨认旧配置表、owner 身份、调度状态与历史写回。当前飞书团队运行停用旧 Cron，旧任务不会自动运行。当前入口见[飞书使用说明书](../general/user-guide.md#8-从旧版本迁移)，迁移行为见[远程执行状态机](../general/remote-surface-state-machine.md)。
 
-它回答五件事：
-
-1. 当前 daemon 如何把 Cron 配置表绑定为实例级、owner-bound 的飞书资源。
-2. `/cron`、`/cron status`、`/cron list`、`/cron edit`、`/cron repair`、`/cron reload` 现在各自负责什么。
-3. 多 bot / 多 surface 下，后台读写为什么始终走 resolved owner bot，而不是当前发命令的 surface bot。
-4. scheduler 与 hidden run 为什么要在启动时冻结写回目标。
-5. 当前实现明确不做哪些事情。
-
-相关 source of truth：
-
-- [README.md](../../README.md)
-- [QUICKSTART.md](../../QUICKSTART.md)
-- [remote-surface-state-machine.md](../general/remote-surface-state-machine.md)
-
-## 2. 当前实现概览
+## 2. 退役前的实现概览
 
 当前 `/cron` 已经收敛成“**实例级 Cron 多维表格 + owner-bound 后台管理 + daemon 本地 scheduler + hidden run 结果回写**”这条产品路径：
 
@@ -287,11 +274,11 @@ Git Cron run 的真实工作目录属于 daemon 内部状态，而不是用户�
 关键实现：
 
 - owner 绑定、legacy 迁移与本地状态：
-  - [app_cron_state.go](../../internal/app/daemon/app_cron_state.go)
-  - [app_cron_owner.go](../../internal/app/daemon/app_cron_owner.go)
+  - `internal/app/daemon/app_cron_state.go`（旧版路径）
+  - `internal/app/daemon/app_cron_owner.go`（旧版路径）
 - 任务来源模型、Git source 解析与运行物化：
-  - [app_cron_source.go](../../internal/app/daemon/app_cron_source.go)
-  - [app_cron_reload_result.go](../../internal/app/daemon/app_cron_reload_result.go)
+  - `internal/app/daemon/app_cron_source.go`（旧版路径）
+  - `internal/app/daemon/app_cron_reload_result.go`（旧版路径）
   - [app_cron_launch.go](../../internal/app/daemon/app_cron_launch.go)
   - [source.go](../../internal/app/cronrepo/source.go)
   - [manager.go](../../internal/app/cronrepo/manager.go)
@@ -299,7 +286,7 @@ Git Cron run 的真实工作目录属于 daemon 内部状态，而不是用户�
   - [app_cron_bitable.go](../../internal/app/daemon/app_cron_bitable.go)
   - [app_cron_repair.go](../../internal/app/daemon/app_cron_repair.go)
   - [app_cron_commands.go](../../internal/app/daemon/app_cron_commands.go)
-  - [app_cron_ui.go](../../internal/app/daemon/app_cron_ui.go)
+  - `internal/app/daemon/app_cron_ui.go`（旧版路径）
 - scheduler、hidden run 生命周期与冻结写回：
   - [app_cron_scheduler.go](../../internal/app/daemon/app_cron_scheduler.go)
   - [app_cron_runtime.go](../../internal/app/daemon/app_cron_runtime.go)

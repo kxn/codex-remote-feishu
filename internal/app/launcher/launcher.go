@@ -40,18 +40,8 @@ type RunnerSet struct {
 func Main(opts Options) int {
 	opts = withDefaults(opts)
 
-	// Register the editor integration used by install flows (bundle entrypoint
-	// detection + managed-shim patching). The unified shim binary does not go
-	// through launcher and never registers these, which keeps shim/embed
-	// out of the shim's link graph.
-	install.RegisterEditorHooks(editor.DetectBundleEntrypoints, func(p install.BundleEntrypointPatchOptions) error {
-		return editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
-			EntrypointPath:   p.EntrypointPath,
-			InstallStatePath: p.InstallStatePath,
-			ConfigPath:       p.ConfigPath,
-			InstanceID:       p.InstanceID,
-		})
-	})
+	// Register read-only editor detection for cleaning up retired integrations.
+	install.RegisterEditorHooks(editor.DetectBundleEntrypoints)
 	install.RegisterUpgradeHelperShimHook(installshim.PrepareUpgradeHelperShim)
 
 	decision, err := Detect(opts.Args)

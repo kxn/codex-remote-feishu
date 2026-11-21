@@ -256,3 +256,65 @@ func TestSafeRebuildUsesNewExecutionDirectoryAndRejectsBusyChanges(t *testing.T)
 		t.Fatal("new native process retained old cwd or history generation")
 	}
 }
+
+func TestPreparedRecoveryReplacesUnsentIntentWhenRoleSettingsChangeAtStart(t *testing.T) {
+	ctx := t.Context()
+	calls := 0
+	host, store := hostFixture(t, func(relayruntime.HeadlessLaunchOptions) (int, error) { calls++; return 1234, nil })
+	registry := &failingRegistry{fail: true, testRegistry: testRegistry{store: store}}
+	host.config.Registry = registry
+	need := workengine.WorkerNeed{ScopeID: "scope", RoleID: "role"}
+	if err := host.Prepare(ctx, need); err == nil || calls != 0 {
+		t.Fatal("missing persisted prepared intent without native start")
+	}
+	before := hostWorker(t, store)
+	registry.fail = false
+	refreshed := false
+	host.config.SettingsAdmission = func(_ context.Context, roleID string, commit func() error) error {
+		if !refreshed {
+			refreshed = true
+			if err := store.Within(ctx, func(tx *workstore.Tx) error {
+				role, err := tx.GetRole(roleID)
+				if err != nil {
+					return err
+				}
+				role.SettingsRevision++
+				role.Revision++
+				return tx.PutRole(role, role.Revision-1)
+			}); err != nil {
+				return err
+			}
+		}
+		return commit()
+	}
+	recovered, err := New(store, host.service, host.signer, host.config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := recovered.Prepare(ctx, need); !errors.Is(err, workstore.ErrConflict) || calls != 0 {
+		t.Fatalf("recovered old settings started: launches=%d, err=%v", calls, err)
+	}
+	if err := recovered.Prepare(ctx, need); err != nil {
+		t.Fatalf("fresh recovery after settings change: %v", err)
+	}
+	after := hostWorker(t, store)
+	if calls != 1 || after.Generation != before.Generation+1 || after.AppliedSettingsRevision != before.AppliedSettingsRevision+1 {
+		t.Fatalf("fresh recovery did not replace stale generation: launches=%d worker=%+v", calls, after)
+	}
+	if err := store.Within(ctx, func(tx *workstore.Tx) error {
+		oldLaunch, err := tx.GetOperation(launchID(before))
+		if err != nil {
+			return err
+		}
+		count, err := tx.CountNativePoolCarriers(host.config.HostID)
+		if err != nil {
+			return err
+		}
+		if oldLaunch.State != work.OperationTerminal || count != 1 {
+			t.Fatalf("superseded launch retained its reservation: launch=%s count=%d", oldLaunch.State, count)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

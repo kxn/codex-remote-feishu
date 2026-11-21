@@ -15,7 +15,10 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
+var errVSCodeIntegrationRetired = errors.New("新版已停止安装 VS Code 会话接管集成。")
+
 type vscodeDetectResponse struct {
+	CanRemoveLegacyIntegration bool                        `json:"canRemoveLegacyIntegration"`
 	SSHSession                 bool                        `json:"sshSession"`
 	RecommendedMode            string                      `json:"recommendedMode"`
 	CurrentMode                string                      `json:"currentMode"`
@@ -62,6 +65,10 @@ func (a *App) handleVSCodeApply(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := a.applyVSCodeIntegration(req); err != nil {
+		if errors.Is(err, errVSCodeIntegrationRetired) {
+			writeAPIError(w, http.StatusGone, apiError{Code: "vscode_integration_retired", Message: err.Error()})
+			return
+		}
 		writeAPIError(w, http.StatusBadRequest, apiError{
 			Code:    "vscode_apply_failed",
 			Message: "failed to apply vscode integration",
@@ -148,12 +155,32 @@ func (a *App) uninstallVSCodeIntegration() error {
 	if err != nil {
 		return err
 	}
+	shimSettingsPath := settingsPath
+	if a.legacyWorkRetired() {
+		// Legacy uninstall repoints the editor at the restored binary. Team
+		// cleanup must leave any independently configured executable alone.
+		shimSettingsPath = ""
+	}
 	for _, entrypoint := range targets {
-		if err := editor.UninstallManagedShim(entrypoint, settingsPath); err != nil {
+		if err := editor.UninstallManagedShim(entrypoint, shimSettingsPath); err != nil {
 			return err
 		}
 	}
-
+	if a.legacyWorkRetired() {
+		settings, err := editor.DetectVSCodeSettings(settingsPath, currentBinary)
+		if err != nil {
+			return err
+		}
+		ownsOverride := settings.MatchesBinary
+		for _, entrypoint := range targets {
+			ownsOverride = ownsOverride || samePlatformPath(settings.CLIExecutable, entrypoint)
+		}
+		if ownsOverride {
+			if err := editor.ClearVSCodeSettingsExecutable(settingsPath); err != nil {
+				return err
+			}
+		}
+	}
 	if state != nil {
 		state.BundleEntrypoint = ""
 		state.Integrations = nil
@@ -193,6 +220,9 @@ func managedShimUninstallTargets(recordedEntrypoint string, statuses map[string]
 		if status.Kind == "" {
 			continue
 		}
+		if status.Kind == editor.ManagedShimKindTiny && status.SidecarValid && !managedShimOwnedByInstall(status, configPath, statePath) {
+			continue
+		}
 		filtered = append(filtered, entrypoint)
 	}
 	return filtered, nil
@@ -209,6 +239,10 @@ func (a *App) handleVSCodeReinstallShim(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := a.reinstallVSCodeShim(req.BundleEntrypoint); err != nil {
+		if errors.Is(err, errVSCodeIntegrationRetired) {
+			writeAPIError(w, http.StatusGone, apiError{Code: "vscode_integration_retired", Message: err.Error()})
+			return
+		}
 		writeAPIError(w, http.StatusBadRequest, apiError{
 			Code:    "vscode_reinstall_failed",
 			Message: "failed to reinstall vscode managed shim",
@@ -317,7 +351,21 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 	_ = admin
 	needsReinstall := computeShimReinstallNeed(currentMode, recordedEntrypoint, latestEntrypoint, latestShim, candidateStatuses, loaded.Path, installStatePath)
 
+	recordedInstallEntrypoint := ""
+	if installState != nil {
+		recordedInstallEntrypoint = installState.BundleEntrypoint
+	}
+	targets, err := managedShimUninstallTargets(recordedInstallEntrypoint, candidateStatuses, loaded.Path, installStatePath, currentBinary)
+	if err != nil {
+		return vscodeDetectResponse{}, err
+	}
+	if a.legacyWorkRetired() {
+		recommendedMode = ""
+		needsReinstall = false
+	}
+
 	return vscodeDetectResponse{
+		CanRemoveLegacyIntegration: settingsStatus.MatchesBinary || len(targets) > 0,
 		SSHSession:                 admin.sshSession,
 		RecommendedMode:            recommendedMode,
 		CurrentMode:                displayVSCodeMode(currentMode),
@@ -335,6 +383,9 @@ func (a *App) buildVSCodeDetectResponse() (vscodeDetectResponse, error) {
 }
 
 func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
+	if a.legacyWorkRetired() {
+		return errVSCodeIntegrationRetired
+	}
 	defaults, err := a.platformDefaults()
 	if err != nil {
 		return err
@@ -427,6 +478,9 @@ func (a *App) applyVSCodeIntegration(req vscodeApplyRequest) error {
 }
 
 func (a *App) reinstallVSCodeShim(bundleEntrypoint string) error {
+	if a.legacyWorkRetired() {
+		return errVSCodeIntegrationRetired
+	}
 	defaults, err := a.platformDefaults()
 	if err != nil {
 		return err

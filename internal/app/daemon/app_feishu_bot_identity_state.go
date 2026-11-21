@@ -74,16 +74,16 @@ func (a *App) planFeishuBotIdentityTransition(gatewayID, desiredAppID string) (f
 }
 
 func (a *App) ensureFeishuIdentityCleanupStoresWritableLocked() error {
-	if err := persistedStateWriteError("surface resume", a.surfaceResumeRuntime.persistedStoreRuntimeState); err != nil {
-		return err
-	}
 	if err := persistedStateWriteError("bot capability settings", a.botCapabilitySettingsState.persistedStoreRuntimeState); err != nil {
 		return err
 	}
-	if err := persistedStateWriteError("Feishu room", a.feishuRoomState.persistedStoreRuntimeState); err != nil {
+	if a.legacyWorkRetired() {
+		return nil
+	}
+	if err := persistedStateWriteError("surface resume", a.surfaceResumeRuntime.persistedStoreRuntimeState); err != nil {
 		return err
 	}
-	return nil
+	return persistedStateWriteError("Feishu room", a.feishuRoomState.persistedStoreRuntimeState)
 }
 
 func persistedStateWriteError[T persistedStore](label string, runtime persistedStoreRuntimeState[T]) error {
@@ -181,16 +181,19 @@ func feishuBotIdentityPendingStartedAt(record feishubotidentity.Record, fallback
 }
 
 func (a *App) purgeFeishuGatewayDurableStateLocked(gatewayID string) ([]string, error) {
-	resumeEntries := a.surfaceResumeRuntime.store.Entries()
 	removedSurfaceIDs := make([]string, 0)
-	for surfaceID, entry := range resumeEntries {
-		if surfaceResumeEntryBelongsToGateway(entry, gatewayID) {
-			removedSurfaceIDs = append(removedSurfaceIDs, surfaceID)
-			delete(resumeEntries, surfaceID)
+	if !a.legacyWorkRetired() {
+		resumeEntries := a.surfaceResumeRuntime.store.Entries()
+		for surfaceID, entry := range resumeEntries {
+			if surfaceResumeEntryBelongsToGateway(entry, gatewayID) {
+				removedSurfaceIDs = append(removedSurfaceIDs, surfaceID)
+				delete(resumeEntries, surfaceID)
+			}
 		}
-	}
-	if err := a.surfaceResumeRuntime.store.ReplaceAll(resumeEntries); err != nil {
-		return nil, fmt.Errorf("clear surface resume state for gateway %s: %w", gatewayID, err)
+		if err := a.surfaceResumeRuntime.store.ReplaceAll(resumeEntries); err != nil {
+			return nil, fmt.Errorf("clear surface resume state for gateway %s: %w", gatewayID, err)
+		}
+
 	}
 
 	settings := a.botCapabilitySettingsState.store.Entries()
@@ -202,6 +205,10 @@ func (a *App) purgeFeishuGatewayDurableStateLocked(gatewayID string) ([]string, 
 	}
 	if err := a.botCapabilitySettingsState.store.ReplaceAll(settingsRecords); err != nil {
 		return nil, fmt.Errorf("clear bot capability settings for gateway %s: %w", gatewayID, err)
+	}
+
+	if a.legacyWorkRetired() {
+		return removedSurfaceIDs, nil
 	}
 
 	rooms := a.feishuRoomState.store.Entries()

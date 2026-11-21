@@ -108,8 +108,15 @@ func (e *Engine) snapshot(ctx context.Context) (candidates []Candidate, deferred
 							return gerr
 						}
 						eligible := worker.State == work.WorkerPreparing && (errors.Is(gerr, workstore.ErrNotFound) || gate.Reason == "snapshot_rebuild_required")
-						if worker.State == work.WorkerRecovering && gerr == nil && gate.Reason == "snapshot_rebuild_required" {
-							eligible = true
+						if worker.State == work.WorkerRecovering {
+							if gerr == nil && gate.Reason == "snapshot_rebuild_required" {
+								eligible = true
+							} else if errors.Is(gerr, workstore.ErrNotFound) {
+								eligible, e = tx.WorkerLaunchUnsent(worker)
+								if e != nil {
+									return e
+								}
+							}
 						}
 						if !occupied && eligible {
 							prepare := need

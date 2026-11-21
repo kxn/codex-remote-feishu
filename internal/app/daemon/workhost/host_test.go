@@ -187,3 +187,72 @@ func TestUncertainHostLaunchIsNotSpawnedAgain(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPrepareRejectsPreferencesSavedAfterLaunchSettingsWereResolved(t *testing.T) {
+	ctx := t.Context()
+	launches := 0
+	host, store := hostFixture(t, func(relayruntime.HeadlessLaunchOptions) (int, error) {
+		launches++
+		return 1234, nil
+	})
+	var menu workstore.MenuInteraction
+	gateway := work.IngressGateway{GatewayRef: "gateway", AppID: "app", RoleID: "role", BotGeneration: 1}
+	now := host.config.Now()
+	if err := store.Within(ctx, func(tx *workstore.Tx) error {
+		var err error
+		menu, _, err = tx.AcceptMenuInteraction(work.MenuInteractionEnvelope{
+			GatewayRef: gateway.GatewayRef, AppID: gateway.AppID, Tenant: "tenant", EventID: "menu", EventKey: "menu",
+			SenderIDs: work.SenderIDs{OpenID: "person"}, ReceivedAt: now,
+		}, gateway)
+		if err != nil {
+			return err
+		}
+		sending, _, err := tx.BeginMenuDestination(menu.ID, menu.Revision, "SDK destination")
+		if err != nil {
+			return err
+		}
+		return tx.FinishMenuDestination(menu.ID, sending.Revision, "private-chat", "entry-message", "", true)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// The guard is entered after ResolveLaunch returns revision zero, and
+	// before the launch intent can commit its occupation and generation.
+	host.config.SettingsAdmission = func(_ context.Context, roleID string, commit func() error) error {
+		if roleID != gateway.RoleID {
+			t.Fatalf("guard role = %q, want %q", roleID, gateway.RoleID)
+		}
+		if err := store.Within(ctx, func(tx *workstore.Tx) error {
+			source := workstore.PrivateActionSource{PersonalScopeID: menu.ScopeID, MenuInteractionID: menu.ID}
+			_, ref, err := tx.ValidatePrivateAction(source)
+			if err != nil {
+				return err
+			}
+			mode := agentproto.AccessModeConfirm
+			return tx.PutContextPreferences(work.ContextPreferences{
+				ContextID: menu.ContextID, ScopeID: menu.ScopeID, AccessMode: &mode,
+				UpdatedBy: work.Actor{Kind: work.ActorPrincipal, ID: menu.PrincipalID},
+				Source:    ref, Revision: 1, UpdatedAt: now,
+			}, 0, source)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return commit()
+	}
+	need := workengine.WorkerNeed{ScopeID: menu.ScopeID, RoleID: gateway.RoleID, ContextID: menu.ContextID}
+	if err := host.Prepare(ctx, need); !errors.Is(err, workstore.ErrConflict) {
+		t.Fatalf("stale launch returned %v, want revision conflict", err)
+	}
+	if launches != 0 {
+		t.Fatal("stale launch settings reached the native starter")
+	}
+	if err := store.Within(ctx, func(tx *workstore.Tx) error {
+		_, err := tx.CurrentContextWorker(menu.ContextID)
+		if !errors.Is(err, workstore.ErrNotFound) {
+			t.Fatalf("stale settings left worker state: %v", err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

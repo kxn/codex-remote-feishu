@@ -207,7 +207,7 @@ func (a *App) verifyProfileMigrationStoresWritable() error {
 	if !a.botCapabilitySettingsState.writable() || a.botCapabilitySettingsState.store == nil {
 		return fmt.Errorf("bot capability settings store is unavailable for profile migration")
 	}
-	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
+	if !a.legacyWorkRetired() && (!a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil) {
 		return fmt.Errorf("surface resume store is unavailable for profile migration")
 	}
 	return nil
@@ -227,6 +227,9 @@ func (a *App) migrateDurableProfileSelections(knownRevisions map[string]uint64) 
 	}
 	if err := a.botCapabilitySettingsState.store.ReplaceAll(botRecords); err != nil {
 		return nil, fmt.Errorf("migrate bot profile selections: %w", err)
+	}
+	if a.legacyWorkRetired() {
+		return diagnostics, nil
 	}
 
 	surfaceEntries := a.surfaceResumeRuntime.store.Entries()

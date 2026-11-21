@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workauth"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workengine"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workservice"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
@@ -41,6 +42,7 @@ type CarrierRegistry interface {
 	RegisterCarrier(context.Context, workstore.CarrierRegistration) error
 }
 type Config struct {
+	SettingsAdmission            workengine.SettingsAdmission
 	ResolveConfiguredCodexBinary func(context.Context) (string, error)
 	ControlReservedCarriers      int
 	MaxLiveCarriers              int // includes prepared and uncertain launches until exact exit

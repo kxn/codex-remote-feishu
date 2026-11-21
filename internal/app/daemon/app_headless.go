@@ -424,7 +424,6 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 	if agentproto.NormalizeBackend(backend) != agentproto.BackendOpenCode {
 		return env, args, nil, nil
 	}
-	env = applyOpenCodeHeadlessRuntimePathEnv(env, a.headlessRuntime.Paths)
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return nil, nil, nil, err
@@ -433,6 +432,11 @@ func (a *App) applyOpenCodeHeadlessProfileConfigLocked(baseEnv, baseArgs []strin
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	return a.compileOpenCodeHeadlessProfile(env, profile, command)
+}
+
+func (a *App) compileOpenCodeHeadlessProfile(env []string, profile config.OpenCodeProfile, command control.DaemonCommand) ([]string, []string, *state.OpenCodeAdmissionRef, error) {
+	env = applyOpenCodeHeadlessRuntimePathEnv(env, a.headlessRuntime.Paths)
 	workspaceRoot := headlessCommandWorkspaceKey(command)
 	material, err := opencodeprofile.CompileLaunchMaterial(opencodeprofile.CompileInput{
 		Profile:           profile,

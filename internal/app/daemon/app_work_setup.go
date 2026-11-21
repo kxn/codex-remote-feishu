@@ -88,6 +88,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		return err
 	}
 	settings := teamSettingsResolver{app: a, store: store, hostID: hostID}
+	settingsAdmission := a.workSettingsAdmission(store)
 	resolveCodexBinary := func(context.Context) (string, error) {
 		current, e := a.loadAdminConfig()
 		if e != nil {
@@ -96,7 +97,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 		binary, _ := resolvedCodexRealBinarySetting(current)
 		return binary, nil
 	}
-	r.host, err = workhost.New(store, service, signer, workhost.Config{MaxLiveCarriers: 8, MaxConcurrentLaunches: 4, ControlReservedCarriers: 1, Paths: paths, BinaryPath: a.headlessRuntime.BinaryPath, ConfigPath: a.headlessRuntime.ConfigPath, HostID: hostID, ToolEndpoint: "http://" + net.JoinHostPort("127.0.0.1", port), Start: a.startHeadless, Settings: settings, Registry: r.coordinator, Runtime: driver, StopCarrier: a.stopWorkCarrier, ResolveConfiguredCodexBinary: resolveCodexBinary})
+	r.host, err = workhost.New(store, service, signer, workhost.Config{SettingsAdmission: settingsAdmission, MaxLiveCarriers: 8, MaxConcurrentLaunches: 4, ControlReservedCarriers: 1, Paths: paths, BinaryPath: a.headlessRuntime.BinaryPath, ConfigPath: a.headlessRuntime.ConfigPath, HostID: hostID, ToolEndpoint: "http://" + net.JoinHostPort("127.0.0.1", port), Start: a.startHeadless, Settings: settings, Registry: r.coordinator, Runtime: driver, StopCarrier: a.stopWorkCarrier, ResolveConfiguredCodexBinary: resolveCodexBinary})
 	if err != nil {
 		return err
 	}
@@ -106,7 +107,7 @@ func (a *App) configureWorkRuntime(ctx context.Context, commands workingress.Pri
 	if err != nil {
 		return err
 	}
-	r.engine, err = workengine.New(store, workengine.Config{MaxConcurrent: 8, ControlReservedSlots: 1, MaxInputsPerAttempt: 16, Provisioner: r.host}, r.host, driver)
+	r.engine, err = workengine.New(store, workengine.Config{SettingsAdmission: settingsAdmission, MaxConcurrent: 8, ControlReservedSlots: 1, MaxInputsPerAttempt: 16, Provisioner: r.host}, r.host, driver)
 	if err != nil {
 		return err
 	}

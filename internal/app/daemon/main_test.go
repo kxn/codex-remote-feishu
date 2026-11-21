@@ -44,14 +44,7 @@ func TestMain(m *testing.M) {
 	// Mirror the main-process registration in launcher.Main: install flows
 	// reach editor detection/patching and upgrade-shim release through hooks,
 	// and the daemon test binary must register them like the real daemon does.
-	install.RegisterEditorHooks(editor.DetectBundleEntrypoints, func(p install.BundleEntrypointPatchOptions) error {
-		return editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
-			EntrypointPath:   p.EntrypointPath,
-			InstallStatePath: p.InstallStatePath,
-			ConfigPath:       p.ConfigPath,
-			InstanceID:       p.InstanceID,
-		})
-	})
+	install.RegisterEditorHooks(editor.DetectBundleEntrypoints)
 	install.RegisterUpgradeHelperShimHook(installshim.PrepareUpgradeHelperShim)
 
 	code := m.Run()

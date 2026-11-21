@@ -106,5 +106,5 @@ func (h *Host) Plan(ctx context.Context, candidate workengine.Candidate) (worken
 	}
 	command := agentproto.Command{CommandID: commandID, IssuedAt: h.config.Now(), Kind: agentproto.CommandPromptSend, Execution: &binding, InstructionRevision: record.Snapshot.InstructionBundle.Revision, Target: agentproto.Target{ExecutionMode: mode, ThreadID: candidate.Worker.NativeSessionID, CWD: record.Snapshot.CWD, SurfaceBindingPolicy: agentproto.SurfaceBindingPolicyKeepSurfaceSelection}, Prompt: agentproto.Prompt{Inputs: inputs}, Overrides: record.Overrides, CodexResume: record.CodexResume}
 	refs := []work.SourceRef{{Kind: "instruction_bundle", ID: candidate.Worker.ID, Version: record.Snapshot.InstructionBundle.Revision, EvidenceRef: idFor("launch_body", candidate.Worker.ID, fmt.Sprint(candidate.Worker.Generation))}}
-	return workengine.DispatchPlan{WorkerRevision: candidate.Worker.Revision, InstructionRevision: record.Snapshot.InstructionBundle.Revision, Command: command, FrozenRefs: refs}, nil
+	return workengine.DispatchPlan{WorkerRevision: candidate.Worker.Revision, PreferencesRevision: record.PreferencesRevision, InstructionRevision: record.Snapshot.InstructionBundle.Revision, Command: command, FrozenRefs: refs}, nil
 }

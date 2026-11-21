@@ -11,7 +11,9 @@
    - `im.message.receive_v1`
    - `im.message.recalled_v1`
    - `im.message.reaction.created_v1`
-   - `im.message.reaction.deleted_v1`
+   - `im.chat.member.bot.added_v1`
+   - `im.chat.member.bot.deleted_v1`
+   - `im.chat.disbanded_v1`
    - `application.bot.menu_v6`
 4. 在同一个“事件与回调”页面，继续完成回调配置：
    - 点击“回调订阅方式”
@@ -24,51 +26,16 @@
    - 点击“保存并申请开通”
 6. 打开“机器人菜单”，创建以下菜单 key：
    - `menu`
-   - `stop`
+   - `status`
    - `steerall`
-   - `new`
-   - `reasoning`
-   - `model`
-   - `access`
+   - `projects`
+   - `resources`
+   - `history`
+   - `settings`
 
-WebSetup 里的推荐菜单、`app-template.json` 里的菜单清单，以及飞书里的 `/help` / `menu` 现在都来自同一套命令定义；按当前列表配置即可，不需要自己再推测一份菜单组合。注意：`/help` 保持文本帮助，`/menu` 和参数命令卡片走紧凑按钮布局，回首页直接用 bot 菜单里的 `menu` 即可。
+按 WebSetup 的推荐菜单配置机器人。私聊中 `/menu` 和 `/help` 会打开工作入口；项目群由负责人协调工作。文本命令无需在飞书控制台注册，详见 [飞书使用说明书](../../docs/general/user-guide.md)。
 
-`card.action.trigger` 现在不仅用于 attach / 切换会话，也用于 `/menu` 面包屑/子菜单、参数卡和 `model` capture/apply fallback；如果这个回调没配，飞书里的按钮卡片会点了没反应。
-
-文本命令不需要在飞书控制台单独注册，直接给机器人发消息即可。当前建议保留这些命令：
-
-- `/list`
-- `/status`
-- `/new`
-- `/use`
-- `/useall`
-- `/history`
-- `/follow`
-- `/detach`
-- `/stop`
-- `/compact`
-- `/steerall`
-- `/sendfile`
-- `/primary`
-- `/mode`
-- `/autowhip`
-- `/model`
-- `/reasoning`
-- `/access`
-- `/verbose`
-- `/cron`
-- `/upgrade`
-- `/debug`
-- `/help`
-- `/menu`
-
-alias 仍兼容，但不建议继续当成新的主展示入口：
-
-- `/threads`、`/sessions` -> `/use`
-- `/approval` -> `/access`
-- `/effort` -> `/reasoning`
-- `/autocontinue` -> `/autowhip`
-- `menu` -> `/menu`
+`card.action.trigger` 用来接收工作导航、设置和业务卡片上的按钮操作。
 
 ## 当前实现必需能力
 
@@ -105,32 +72,29 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 - 接收群聊普通消息和 @ 消息
 - 添加和移除消息 reaction
 
-如果你计划使用 `/cron` 定时任务，再额外确认：
-
-- `bitable:app` 已开通，用于创建和访问当前 daemon 实例的专属多维表格
-
-群聊普通消息读取现在按基础安装处理。没有开通时，机器人仍可处理单聊消息和群里明确 `@` 它的消息；但 `/primary on` 会拒绝设置，未 `@` 群消息也不会被它承接。开通权限后，重新执行 `/primary on` 或 `/primary refresh` 即可刷新运行时缓存。
+读取项目群普通消息是基础安装的一部分，负责人通过该权限接收群里的需求和跟进。飞书多维表格用作项目资料时，需要对应的 API 权限和资料访问权限。
 
 ### 2. 事件订阅
 
-当前实现依赖这 5 个事件：
+为飞书团队启用以下事件：
 
 - `im.message.receive_v1`
 - `im.message.recalled_v1`
 - `im.message.reaction.created_v1`
-- `im.message.reaction.deleted_v1`
+- `im.chat.member.bot.added_v1`
+- `im.chat.member.bot.deleted_v1`
+- `im.chat.disbanded_v1`
 - `application.bot.menu_v6`
 
 进入事件列表前，先点击“订阅方式”，默认就是“长连接”，点击保存。
 
 其中：
 
-- `im.message.reaction.created_v1` 负责 queued 文本的 `ThumbsUp` steering
-- `im.message.reaction.deleted_v1` 负责在用户撤销 reaction 时同步撤销对应的反馈动作
-- `im.message.recalled_v1` 负责撤回尚未发送的排队输入，或取消 staged image
-- `application.bot.menu_v6` 负责静态 bot 菜单里的 `menu/stop/steerall/new/reasoning/model/access`
-
-群主机器人能力不需要新增事件类型，仍复用 `im.message.receive_v1`；区别只在于是否额外开通群普通消息读取权限。
+- `im.message.reaction.created_v1` 接收支持的消息反馈。
+- `im.message.recalled_v1` 接收消息撤回。
+- `im.chat.member.bot.added_v1` 记录机器人加入项目群。
+- `im.chat.member.bot.deleted_v1` 和 `im.chat.disbanded_v1` 记录机器人被移出或群解散，封存受影响的群接入。
+- `application.bot.menu_v6` 接收上方配置的静态机器人菜单操作。
 
 ### 3. 回调配置
 
@@ -150,49 +114,6 @@ alias 仍兼容，但不建议继续当成新的主展示入口：
 
 如果你主要通过单聊与机器人交互，还需要额外开通 P2P 消息接收权限。
 
-## 文档预览额外权限
+## 文件发送与团队资料
 
-如果你希望 assistant 最终回复里的本地文档链接自动变成“飞书内可点击预览链接”，推荐直接给应用开通：
-
-- `drive:drive`
-
-这是当前实现里最省事、最不容易漏项的配置，因为预览链路会实际调用这些能力：
-
-- 在应用云空间中自动创建目录
-- 上传 Markdown 文件
-- 查询文件访问 URL
-- 给目录和文件增加协作者权限
-
-如果不开通这部分权限：
-
-- 机器人基础对话仍然可用
-- 但本地 `.md` 和单文件 `.html` 链接会保留原样，不会被替换成飞书预览链接
-
-## 文档预览的可见性与授权要求
-
-当前实现不是“只上传文件”，而是“上传 + 授权”一起完成。
-
-默认授权策略：
-
-- 单聊：授权给当前对话用户
-- 群聊：同时授权给当前对话用户和当前群
-
-这样做是为了避免“机器人创建成功，但当前用户点开是死文件”。
-
-因此在群聊里还要注意：
-
-- 应用需要已经在目标群中可见
-- 如果你用群聊测试文档预览，机器人本身必须已经被加入该群
-
-## 运行时可观察行为
-
-当前文档预览实现只会处理：
-
-- assistant 最终回复
-- Markdown 链接格式，例如 ``[README](docs/README.md)`` 或 ``[mock](docs/mock.html)``
-
-当前不会处理：
-
-- 纯文本里的裸路径
-- 代码块里的路径
-- 用户输入里的路径
+私聊使用 `/sendfile` 发送当前工作允许读取的文件。将成果发布为团队资料时，机器人还需要对应飞书资料 API 的权限以及目标资料的访问权限。

@@ -40,17 +40,17 @@ const (
 )
 
 type onboardingWorkflowResponse struct {
-	Apps                []adminFeishuAppSummary           `json:"apps"`
-	SelectedAppID       string                            `json:"selectedAppId,omitempty"`
-	CurrentStage        string                            `json:"currentStage"`
-	MachineState        string                            `json:"machineState"`
-	Completion          onboardingWorkflowCompletionView  `json:"completion"`
-	RuntimeRequirements runtimeRequirementsResponse       `json:"runtimeRequirements"`
-	App                 *onboardingWorkflowAppView        `json:"app,omitempty"`
-	Autostart           onboardingWorkflowMachineStepView `json:"autostart"`
-	VSCode              onboardingWorkflowMachineStepView `json:"vscode"`
-	Guide               onboardingWorkflowGuideView       `json:"guide,omitempty"`
-	Stages              []onboardingWorkflowStageView     `json:"stages,omitempty"`
+	Apps                []adminFeishuAppSummary            `json:"apps"`
+	SelectedAppID       string                             `json:"selectedAppId,omitempty"`
+	CurrentStage        string                             `json:"currentStage"`
+	MachineState        string                             `json:"machineState"`
+	Completion          onboardingWorkflowCompletionView   `json:"completion"`
+	RuntimeRequirements runtimeRequirementsResponse        `json:"runtimeRequirements"`
+	App                 *onboardingWorkflowAppView         `json:"app,omitempty"`
+	Autostart           onboardingWorkflowMachineStepView  `json:"autostart"`
+	VSCode              *onboardingWorkflowMachineStepView `json:"vscode,omitempty"`
+	Guide               onboardingWorkflowGuideView        `json:"guide,omitempty"`
+	Stages              []onboardingWorkflowStageView      `json:"stages,omitempty"`
 }
 
 type onboardingWorkflowCompletionView struct {
@@ -144,7 +144,6 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 	}
 
 	autostartStage := a.buildOnboardingAutostartStage(loaded.Config)
-	vscodeStage := a.buildOnboardingVSCodeStage(loaded.Config)
 
 	stages := []onboardingWorkflowStageView{
 		stageView(onboardingStageRuntimeRequirements, "环境检查", runtimeRequirementsSummaryStatus(runtimeReqs.Ready), runtimeReqs.Summary, !runtimeReqs.Ready, false, []string{"retry"}),
@@ -152,7 +151,16 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 		autoConfig.onboardingWorkflowStageView,
 		menu,
 		autostartStage.onboardingWorkflowStageView,
-		vscodeStage.onboardingWorkflowStageView,
+	}
+
+	var vscode *onboardingWorkflowMachineStepView
+	vscodeStage := onboardingWorkflowMachineStepView{
+		onboardingWorkflowStageView: onboardingWorkflowStageView{Status: onboardingStageStatusNotApplicable},
+	}
+	if !a.legacyWorkRetired() {
+		vscodeStage = a.buildOnboardingVSCodeStage(loaded.Config)
+		vscode = &vscodeStage
+		stages = append(stages, vscodeStage.onboardingWorkflowStageView)
 	}
 
 	canComplete := runtimeReqs.Ready &&
@@ -197,7 +205,7 @@ func (a *App) buildOnboardingWorkflow(preferredAppID string) (onboardingWorkflow
 		Completion:          completion,
 		RuntimeRequirements: runtimeReqs,
 		Autostart:           autostartStage,
-		VSCode:              vscodeStage,
+		VSCode:              vscode,
 		Guide:               guide,
 		Stages:              stages,
 	}

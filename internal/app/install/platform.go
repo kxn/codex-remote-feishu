@@ -1,7 +1,6 @@
 package install
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,7 +16,6 @@ type PlatformDefaults struct {
 	InstallBinDir              string
 	VSCodeSettingsPath         string
 	CandidateBundleEntrypoints []string
-	DefaultIntegrations        []WrapperIntegrationMode
 }
 
 func DetectPlatformDefaults() (PlatformDefaults, error) {
@@ -33,7 +31,6 @@ func DetectPlatformDefaults() (PlatformDefaults, error) {
 		InstallBinDir:              defaultInstallBinDir(goos, homeDir),
 		VSCodeSettingsPath:         defaultVSCodeSettingsPath(goos, homeDir),
 		CandidateBundleEntrypoints: detectBundleEntrypointsFunc(goos, runtime.GOARCH, homeDir),
-		DefaultIntegrations:        DefaultIntegrations(goos),
 	}, nil
 }
 
@@ -67,22 +64,4 @@ func defaultVSCodeSettingsPath(goos, homeDir string) string {
 
 func detectBundleEntrypoints(goos, goarch, homeDir string) []string {
 	return detectBundleEntrypointsFunc(goos, goarch, homeDir)
-}
-
-func recommendedBundleEntrypoint(defaults PlatformDefaults) string {
-	if len(defaults.CandidateBundleEntrypoints) == 0 {
-		return ""
-	}
-	return defaults.CandidateBundleEntrypoints[0]
-}
-
-func integrationHelpText(goos string) string {
-	return strings.TrimSpace(fmt.Sprintf(`
-1. managed_shim
-   当前唯一推荐的 VS Code 接入方式。安装器会直接替换扩展 bundle 里的 codex 入口，并保留原始 codex.real。
-   这不会修改客户端侧 settings.json，因此不会把 host 机器上的 override 带进 Remote SSH 会话。
-
-当前平台默认：
-- %s
-`, integrationsConfigValue(DefaultIntegrations(goos))))
 }

@@ -1,25 +1,18 @@
 # 飞书菜单卡使用规约
 
 > Type: `general`
-> Updated: `2026-05-03`
-> Summary: 固化菜单卡的 launcher/owner/terminal 契约、页面本地导航 callback substrate 与扩展清单，禁止回退到旧菜单基座或半菜单半业务混合实现。
+> Updated: `2026-11-22`
+> Summary: 明确持久团队菜单的页面、归属和回调规则，限定旧菜单契约的适用范围。
 
-## 1. 文档定位
+## 1. 持久团队菜单
 
-本文是“菜单卡如何实现与扩展”的工程规约，约束以下内容：
+菜单为用户提供工作导航。进入业务后，所选工作或业务卡承载进展、结果和可恢复的失败。按钮和反馈使用[业务卡原则](./feishu-business-card-interaction-principles.md)及[卡片交互模型](./feishu-card-interaction-model.md)中的通用呈现原则。
 
-- 菜单卡与业务卡的边界
-- 菜单动作进入业务时的 handoff 语义
-- 何时允许同卡 replace，何时必须 append-only
-- 新增菜单项时必须同步修改和补测的位置
+当前私聊菜单与业务卡使用持久 UIView、交互记录和共用 outbox。菜单按钮只引用已登记的视图及业务目标，用户、Bot 身份、来源消息和业务版本在实际回调中核对。菜单导航和分页仅在已确认送达且目的地及归属相同时原位更新；Slash 和主动通知发新消息。业务进展遵循对应视图的恢复规则。新增入口时核对按钮是否可达、来源是否可验证、重触发是否安全，以及旧卡能否给出重新进入的说明。完整规则见[卡片 UI 状态机的团队章节](./feishu-card-ui-state-machine.md#0-持久团队界面本分支的新入口)。
 
-产品原则与交互模型仍以以下文档为准：
+第 2 至 7 节保留旧 surface 实现及评审清单，适用于维护仍使用旧栈的路径与迁移核对。新 UIView 使用本节和状态机中的团队规则。
 
-- `docs/general/feishu-business-card-interaction-principles.md`
-- `docs/general/feishu-card-interaction-model.md`
-- `docs/general/feishu-card-ui-state-machine.md`
-
-## 2. 菜单卡三态契约
+## 2. 旧 surface：菜单卡三态契约
 
 菜单相关动作必须落在三种前台处置之一，来源是 `ResolveFeishuFrontstageActionContract(...)`：
 
@@ -35,7 +28,7 @@
 - 菜单层 `返回上一层` / `返回菜单` / 进入子页默认必须投影为 `page_local_action` 或 `page_local_submit`
 - `page_action` / `page_submit` 只保留给真正需要继续走命令 provenance 的动作，不再拿来表达纯前台导航
 
-## 3. 菜单卡与业务卡边界
+## 3. 旧 surface：菜单卡与业务卡边界
 
 菜单卡只负责分流，不承载业务执行状态。
 
@@ -46,7 +39,7 @@
 - 进入业务后不可返回菜单：业务未结束前，所有进度、成功、失败、取消都在业务 owner card 内收口
 - `help/status` 归类为 terminal：结果即完成，不再视为可继续返回的 preview
 
-## 4. 单卡推进与换卡规则
+## 4. 旧 surface：单卡推进与换卡规则
 
 菜单来源 callback 想 replace 当前卡，必须同时满足：
 
@@ -60,7 +53,7 @@
 - 恢复 bare command continuation 作为菜单过渡
 - 把“仅 blocker notice（如 `path_picker_active` / `target_picker_processing`）”替成新卡
 
-## 5. 明确禁止项
+## 5. 旧 surface：明确禁止项
 
 后续实现中，以下做法视为违规：
 
@@ -69,7 +62,7 @@
 - 菜单卡同时承接业务编辑/执行态（半菜单半业务）
 - 新增菜单功能却只改文案或按钮，不补契约分流与测试
 
-## 6. 新增菜单项的必做清单
+## 6. 旧 surface：新增菜单项的必做清单
 
 新增或改造菜单项时，必须按顺序完成：
 
@@ -83,7 +76,7 @@
 
 未同时满足以上四项，不应合并。
 
-## 7. 变更评审最小核对项
+## 7. 旧 surface：变更评审最小核对项
 
 每次菜单改动至少核对：
 

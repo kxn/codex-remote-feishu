@@ -1281,3 +1281,21 @@ describe("AdminRoute", () => {
     });
   });
 });
+
+it("removes an existing legacy VS Code integration from the system page", async () => {
+  window.history.replaceState({}, "", "/admin");
+  const user = userEvent.setup();
+  const { calls } = installMockFetch(makeSingleRobotAdminRoutes(undefined, {
+    "/api/admin/vscode/detect": { body: makeVSCodeDetect({ canRemoveLegacyIntegration: true }) },
+    "/api/admin/vscode/disable": { body: makeVSCodeDetect({ canRemoveLegacyIntegration: false }) },
+  }));
+
+  render(<AdminRoute />);
+  await openAdminArea(user, "系统");
+  expect(await screen.findByRole("heading", { name: "旧版 VS Code 集成" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /修复|安装/ })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "移除旧版集成" }));
+  expect(await screen.findByText("旧版 VS Code 集成已移除。")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "移除旧版集成" })).not.toBeInTheDocument();
+  expect(calls.some((call) => call.path === "/api/admin/vscode/disable" && call.method === "POST")).toBe(true);
+});

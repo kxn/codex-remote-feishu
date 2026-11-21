@@ -1,8 +1,8 @@
 # 人与 Agent 的交付：Raft 源码与适配依据
 
 > Type: `draft`
-> Updated: `2026-11-21`
-> Summary: 保留 Raft 显式发布、Artifact 和人工反馈的源码依据；具体用户流程与交付状态以产品及技术主文档为准。
+> Updated: `2026-11-22`
+> Summary: 标明交付专项的设计依据及现行实现和验收入口。
 
 文档定位：本文件是专项依据／附录，不是另一份实施入口。用户行为以[产品主文档](./feishu-agent-team-product-design.md)为准，领域所有权、状态与迁移以[技术主文档](./feishu-agent-team-technical-design.md)为准，后端具体时序见[原生运行合同](./feishu-agent-team-runtime-contracts.md)。本文件保留原调查证据和解释；实现拆分、异常处理及验收统一按主文档的 US／T／UAT 编号追踪。
 
@@ -14,7 +14,7 @@
 
 结论：借鉴 Raft 的**明确发布、稳定成果身份、版本反馈和负责人筛选信息**。它没有用统一目录规则解决所有文件管理问题。我们针对飞书补充可执行的交付与存放约定，但不扩展成平台代管 Agent 所有文件／Git 操作。
 
-本文件的飞书适配是待讨论设计，尚未实现。底层资料接口与限制见 [共享资料设计](./feishu-agent-team-materials-design.md)，完整体验见 [产品设计](./feishu-agent-team-product-design.md)。
+本文保留飞书交付设计的依据与细节。哪些操作已接入及仍需真实环境验证，见[验收映射](../inprogress/feishu-agent-team-acceptance.md)。底层资料接口与限制见 [共享资料设计](./feishu-agent-team-materials-design.md)，完整体验见 [产品设计](./feishu-agent-team-product-design.md)。
 
 ## 2. Raft 已经怎样做
 

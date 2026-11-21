@@ -8,8 +8,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-
-	"github.com/kxn/codex-remote-feishu/internal/core/control"
 )
 
 func TestDeployTemplateStaysInSyncWithManifest(t *testing.T) {
@@ -85,16 +83,10 @@ func TestDeployTemplateStaysInSyncWithManifest(t *testing.T) {
 		t.Fatalf("menu keys mismatch: %#v vs %#v", gotMenus, wantMenus)
 	}
 
-	if len(manifest.Menus) != len(control.FeishuRecommendedMenus()) {
-		t.Fatalf("manifest menus count = %d, want %d", len(manifest.Menus), len(control.FeishuRecommendedMenus()))
-	}
-	for index, item := range manifest.Menus {
-		want := control.FeishuRecommendedMenus()[index]
-		if item.Key != want.Key || item.Name != want.Name || item.Description != want.Description {
-			t.Fatalf("manifest menu[%d] = %#v, want %#v", index, item, want)
-		}
-		if parsed.Bot.Menus[index].Key != want.Key {
-			t.Fatalf("template menu[%d] key = %q, want %q", index, parsed.Bot.Menus[index].Key, want.Key)
+	for _, menu := range manifest.Menus {
+		route := ResolveTeamMenu(menu.Key)
+		if string(route.Action) != menu.Key || route.Note != "" {
+			t.Fatalf("advertised menu %q does not route directly: %#v", menu.Key, route)
 		}
 	}
 
@@ -150,7 +142,7 @@ func TestDefaultManifestRequirementsMetadata(t *testing.T) {
 	}
 }
 
-func TestDefaultManifestIncludesChatInfoScopeForPrimaryBootstrap(t *testing.T) {
+func TestDefaultManifestIncludesChatInfoScopeForProjectMembership(t *testing.T) {
 	manifest := DefaultManifest()
 	foundScope := false
 	for _, scope := range manifest.Scopes.Scopes.Tenant {
@@ -159,30 +151,30 @@ func TestDefaultManifestIncludesChatInfoScopeForPrimaryBootstrap(t *testing.T) {
 		}
 	}
 	if !foundScope {
-		t.Fatal("default manifest must require im:chat:readonly for primary bootstrap")
+		t.Fatal("default manifest must require im:chat:readonly for project membership")
 	}
 	foundRequirement := false
 	for _, item := range manifest.ScopeRequirements {
-		if strings.TrimSpace(item.Scope) == "im:chat:readonly" && item.ScopeType == "tenant" && item.Feature == "primary_room_auto_bootstrap" && item.Required {
+		if strings.TrimSpace(item.Scope) == "im:chat:readonly" && item.ScopeType == "tenant" && item.Feature == "project_group_membership" && item.Required {
 			foundRequirement = true
 		}
 	}
 	if !foundRequirement {
-		t.Fatal("default manifest must describe required im:chat:readonly primary bootstrap scope")
+		t.Fatal("default manifest must describe required im:chat:readonly project membership scope")
 	}
 }
 
-func TestDefaultManifestIncludesBotAddedEventForPrimaryBootstrap(t *testing.T) {
+func TestDefaultManifestIncludesBotAddedEventForProjectMembership(t *testing.T) {
 	manifest := DefaultManifest()
 	for _, item := range manifest.Events {
 		if strings.TrimSpace(item.Event) == "im.chat.member.bot.added_v1" {
-			if item.Feature != "primary_room_auto_bootstrap" || !item.Required {
-				t.Fatalf("bot added event requirement = %#v, want required primary bootstrap event", item)
+			if item.Feature != "project_group_membership" || !item.Required {
+				t.Fatalf("bot added event requirement = %#v, want required project membership event", item)
 			}
 			return
 		}
 	}
-	t.Fatal("default manifest must subscribe im.chat.member.bot.added_v1 for primary bootstrap")
+	t.Fatal("default manifest must subscribe im.chat.member.bot.added_v1 for project membership")
 }
 
 func TestDefaultManifestUsesCurrentGroupMessageScope(t *testing.T) {
@@ -222,5 +214,20 @@ func TestDefaultFixedPolicy(t *testing.T) {
 	}
 	if !policy.PreserveExistingEncryptKV {
 		t.Fatal("expected preserve-existing encryption strategy in stage 1")
+	}
+}
+
+func TestResolveTeamMenuPublishedCompatibility(t *testing.T) {
+	for _, key := range []string{"stop", "new", "unknown"} {
+		got := ResolveTeamMenu(key)
+		if got.Action != TeamMenuHome || got.Note == "" {
+			t.Errorf("key %q must explain the fallback: %#v", key, got)
+		}
+	}
+	for _, key := range []string{"model", "reasoning", "access"} {
+		got := ResolveTeamMenu(key)
+		if got.Action != TeamMenuSettings || got.Argument != key || got.Note != "" {
+			t.Errorf("key %q must open its settings page: %#v", key, got)
+		}
 	}
 }

@@ -2,7 +2,6 @@ package install
 
 import (
 	"bytes"
-	"github.com/kxn/codex-remote-feishu/internal/xutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/xutil"
 )
 
 func TestRunMainHelpReturnsNil(t *testing.T) {
@@ -23,13 +23,6 @@ func TestRunMainHelpReturnsNil(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "optional Codex path override") {
 		t.Fatalf("help output missing optional Codex override wording: %q", stdout.String())
-	}
-}
-
-func TestRunMainRejectsInteractiveBootstrapOnly(t *testing.T) {
-	err := RunMain([]string{"-interactive", "-bootstrap-only"}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, "vtest")
-	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
-		t.Fatalf("RunMain interactive bootstrap-only error = %v", err)
 	}
 }
 
@@ -93,6 +86,7 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 		CurrentSlot:        "v1.4.0-beta.1",
 		VSCodeSettingsPath: filepath.Join(baseDir, "vscode", "settings.json"),
 		BundleEntrypoint:   filepath.Join(baseDir, "bundle", "codex"),
+		Integrations:       []WrapperIntegrationMode{IntegrationManagedShim},
 	}); err != nil {
 		t.Fatalf("WriteState: %v", err)
 	}
@@ -138,6 +132,9 @@ func TestRunMainBootstrapOnlyPreservesExistingInstallMetadataWhenFlagsOmitted(t 
 	}
 	if updated.VSCodeSettingsPath != filepath.Join(baseDir, "vscode", "settings.json") {
 		t.Fatalf("VSCodeSettingsPath = %q, want preserved value", updated.VSCodeSettingsPath)
+	}
+	if len(updated.Integrations) != 1 || updated.Integrations[0] != IntegrationManagedShim {
+		t.Fatalf("old integration evidence = %v", updated.Integrations)
 	}
 	if updated.BundleEntrypoint != filepath.Join(baseDir, "bundle", "codex") {
 		t.Fatalf("BundleEntrypoint = %q, want preserved value", updated.BundleEntrypoint)
@@ -375,5 +372,47 @@ func TestResolveTargetInstallBinDirExplicitValueOverridesMigration(t *testing.T)
 	got := resolveTargetInstallBinDir(selection, explicitDir)
 	if got != explicitDir {
 		t.Fatalf("resolveTargetInstallBinDir = %q, want %q (explicit value overrides)", got, explicitDir)
+	}
+}
+
+func TestRunMainDefaultInstallDoesNotPatchDetectedEditor(t *testing.T) {
+	t.Setenv(repoRootEnvVar, t.TempDir())
+	baseDir := t.TempDir()
+	entrypoint := seedBinary(t, filepath.Join(baseDir, "extension", "codex"), "native-codex")
+	source := seedBinary(t, filepath.Join(baseDir, "src", xutil.ExecutableName(runtime.GOOS)), "installer")
+	originalDetector := detectBundleEntrypointsFunc
+	originalValidator := sourceBinaryValidator
+	detectBundleEntrypointsFunc = func(string, string, string) []string { return []string{entrypoint} }
+	sourceBinaryValidator = func(string) error { return nil }
+	t.Cleanup(func() {
+		detectBundleEntrypointsFunc = originalDetector
+		sourceBinaryValidator = originalValidator
+	})
+
+	args := []string{"-base-dir", baseDir, "-install-bin-dir", filepath.Join(baseDir, "installed"), "-binary", source}
+	for _, extra := range [][]string{{"-integration", "managed_shim"}, {"-bundle-entrypoint", entrypoint}, {"-bootstrap-only", "-integration", "managed_shim"}} {
+		err := RunMain(append(args, extra...), strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, "vtest")
+		if err == nil || !strings.Contains(err.Error(), "has been retired") {
+			t.Fatalf("install %v error = %v, want retired integration rejection", extra, err)
+		}
+	}
+	statePath := defaultInstallStatePathForInstance(baseDir, defaultInstanceID)
+	if _, err := os.Stat(statePath); !os.IsNotExist(err) {
+		t.Fatalf("rejected CLI install wrote state, stat err = %v", err)
+	}
+
+	if err := RunMain(args, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, "vtest"); err != nil {
+		t.Fatal(err)
+	}
+	state, err := LoadState(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(entrypoint)
+	if err != nil || string(data) != "native-codex" {
+		t.Fatalf("default install changed editor executable: %q, %v", data, err)
+	}
+	if len(state.Integrations) != 0 || state.BundleEntrypoint != "" {
+		t.Fatalf("default install claimed editor integration: %#v", state)
 	}
 }

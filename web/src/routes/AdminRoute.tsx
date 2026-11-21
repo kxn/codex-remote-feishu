@@ -37,8 +37,6 @@ import {
   loadAutostartState,
   loadVSCodeState,
   readAPIError,
-  vscodeApplyModeForScenario,
-  vscodeIsReady,
 } from "./shared/helpers";
 import {
   resolveRuntimeApplyFailureTarget,
@@ -569,36 +567,15 @@ export function AdminRoute() {
     }
   }
 
-  async function repairVSCode() {
+  async function removeLegacyVSCodeIntegration() {
     setActionBusy("vscode");
     try {
-      if (!vscode) {
-        await loadAdminPage({ preferredRobotID: selectedRobotID });
-        return;
-      }
-      if (vscode.needsShimReinstall && vscode.latestBundleEntrypoint) {
-        const response = await sendJSON<VSCodeDetectResponse>(
-          "/api/admin/vscode/reinstall-shim",
-          "POST",
-          { bundleEntrypoint: vscode.latestBundleEntrypoint },
-        );
-        setVSCode(response);
-        setVSCodeError("");
-        return;
-      }
-      const mode = vscodeApplyModeForScenario(vscode, "current_machine");
-      const response = await sendJSON<VSCodeDetectResponse>(
-        "/api/admin/vscode/apply",
-        "POST",
-        {
-          mode: mode || "managed_shim",
-          bundleEntrypoint: vscode.latestBundleEntrypoint,
-        },
-      );
+      const response = await sendJSON<VSCodeDetectResponse>("/api/admin/vscode/disable", "POST");
       setVSCode(response);
       setVSCodeError("");
+      setDetailNotice({ tone: "good", message: "旧版 VS Code 集成已移除。" });
     } catch {
-      setVSCodeError("VS Code 集成暂时没有更新成功。");
+      setVSCodeError("暂时无法移除旧版 VS Code 集成，请稍后重试。");
     } finally {
       setActionBusy("");
     }
@@ -1194,18 +1171,6 @@ export function AdminRoute() {
                 <span className={`dot ${autostart?.enabled ? "good" : "idle"}`} />
                 自动运行{autostart?.enabled ? "已启用" : "未启用"}
               </span>
-              <span className="status-line">
-                <span
-                  className={`dot ${
-                    vscodeError
-                      ? "warn"
-                      : vscode && vscodeIsReady(vscode)
-                        ? "good"
-                        : "idle"
-                  }`}
-                />
-                VS Code{vscode && vscodeIsReady(vscode) ? "已接入" : "未接入"}
-              </span>
             </div>
           </article>
         </div>
@@ -1252,14 +1217,6 @@ export function AdminRoute() {
           robotID: app.id,
         });
       }
-    }
-    if (vscodeError || (vscode && !vscodeIsReady(vscode))) {
-      items.push({
-        id: "vscode",
-        text: "VS Code 集成需要修复",
-        tone: "warn",
-        area: "system",
-      });
     }
     if (!autostartError && autostart?.supported && !autostart.enabled) {
       items.push({
@@ -1574,34 +1531,23 @@ export function AdminRoute() {
             <span>{describeNetworkMode(bootstrap)}</span>
           </div>
         </section>
-        <section className="card">
-          <h3>VS Code 集成</h3>
-          <div className="status-line">
-            <span
-              className={`dot ${
-                vscodeError
-                  ? "warn"
-                  : vscode && vscodeIsReady(vscode)
-                    ? "good"
-                    : "idle"
-              }`}
-            />
-            <span>{describeVSCode(vscode, vscodeError)}</span>
-          </div>
-          {vscodeError ? (
-            <div className="notice-banner warn">{vscodeError}</div>
-          ) : null}
-          <div className="button-row">
-            <button
-              className={vscode && vscodeIsReady(vscode) ? "secondary-button" : "primary-button"}
-              type="button"
-              disabled={actionBusy === "vscode"}
-              onClick={() => void repairVSCode()}
-            >
-              {vscode && vscodeIsReady(vscode) ? "重新检查" : "重新检查并修复"}
-            </button>
-          </div>
-        </section>
+        {vscode?.canRemoveLegacyIntegration ? (
+          <section className="card">
+            <h3>旧版 VS Code 集成</h3>
+            <p>可以移除旧版集成，恢复 VS Code 原有的运行方式。</p>
+            {vscodeError ? <div className="notice-banner warn">{vscodeError}</div> : null}
+            <div className="button-row">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={actionBusy === "vscode"}
+                onClick={() => void removeLegacyVSCodeIntegration()}
+              >
+                移除旧版集成
+              </button>
+            </div>
+          </section>
+        ) : null}
         <section className="card">
           <h3>存储维护</h3>
           {previewError ? <div className="notice-banner warn">{previewError}</div> : null}
@@ -1826,21 +1772,6 @@ function describeAutostart(
     return "当前系统不支持。";
   }
   return autostart.enabled ? "当前已启用。" : "当前未启用。";
-}
-
-function describeVSCode(
-  vscode: VSCodeDetectResponse | null,
-  error: string,
-): string {
-  if (error) {
-    return "暂时没有读取成功。";
-  }
-  if (!vscode) {
-    return "暂时没有读取成功。";
-  }
-  return vscodeIsReady(vscode)
-    ? "当前已接入。"
-    : "检测到 VS Code 集成未完成，请先修复。";
 }
 
 function StorageCleanupRow(props: {

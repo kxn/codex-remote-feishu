@@ -57,14 +57,7 @@ func TestMain(m *testing.M) {
 		launchctlUserRunner = originalLaunchctl
 	}()
 
-	RegisterEditorHooks(editor.DetectBundleEntrypoints, func(p BundleEntrypointPatchOptions) error {
-		return editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
-			EntrypointPath:   p.EntrypointPath,
-			InstallStatePath: p.InstallStatePath,
-			ConfigPath:       p.ConfigPath,
-			InstanceID:       p.InstanceID,
-		})
-	})
+	RegisterEditorHooks(editor.DetectBundleEntrypoints)
 	RegisterUpgradeHelperShimHook(installshim.PrepareUpgradeHelperShim)
 
 	code := m.Run()

@@ -118,7 +118,7 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 	if !info.IsDir() {
 		return fmt.Errorf("execution location is not a directory")
 	}
-	if settings.Backend == work.BackendCodex && (settings.CodexResume == nil || settings.CodexResume.ModelProviderID == "") {
+	if settings.Backend == work.BackendCodex && agentproto.NormalizeCodexResumePolicy(settings.CodexResume) == nil {
 		return fmt.Errorf("Codex requires a complete resolved provider policy, including defaults")
 	}
 	bundle, err := h.service.BuildInstructions(ctx, wc.ID)
@@ -178,7 +178,7 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 	}
 	content := work.NewContent(idFor("launch_body", worker.ID, fmt.Sprint(worker.Generation)), scope.ID, "application/json", data, h.config.Now())
 	op := work.Operation{ID: launchID(worker), ScopeID: scope.ID, ContextID: wc.ID, Actor: work.Actor{Kind: work.ActorSystem, ID: "work-host"}, Kind: "worker.launch", TargetID: worker.ID, TargetGeneration: worker.Generation, IdempotencyKey: launchID(worker), RequestRef: content.ID, RequestHash: content.SHA256, State: work.OperationPrepared, Revision: 1, CreatedAt: h.config.Now(), UpdatedAt: h.config.Now()}
-	err = h.store.Within(ctx, func(tx *workstore.Tx) error {
+	reserve := func(tx *workstore.Tx) error {
 		freshRole, e := tx.GetRole(role.ID)
 		if e != nil {
 			return e
@@ -189,6 +189,9 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 		}
 		if freshRole.Revision != role.Revision || freshBinding != binding {
 			return workstore.ErrConflict
+		}
+		if e := tx.CheckContextPreferencesRevision(wc.ID, settings.PreferencesRevision); e != nil {
+			return e
 		}
 		if existing, e := tx.GetLocation(settings.Location.ID); errors.Is(e, workstore.ErrNotFound) {
 			if e = tx.PutLocation(settings.Location, 0); e != nil {
@@ -246,7 +249,8 @@ func (h *Host) Prepare(ctx context.Context, need workengine.WorkerNeed) error {
 		}
 		_, _, e = tx.PutOperation(op, 0)
 		return e
-	})
+	}
+	err = h.config.SettingsAdmission.Within(ctx, role.ID, func() error { return h.store.Within(ctx, reserve) })
 	if err != nil {
 		return err
 	}

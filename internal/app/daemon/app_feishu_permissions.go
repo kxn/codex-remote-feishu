@@ -253,7 +253,7 @@ func feishuScopePermissionDecisionFromScopes(requirement feishuapp.ScopeRequirem
 }
 
 func primaryPermissionScopeRequirement() (feishuapp.ScopeRequirement, bool) {
-	return feishuScopeRequirementByFeature("primary_room_bot")
+	return feishuScopeRequirementByFeature("project_group_messages")
 }
 
 func feishuScopeRequirementByFeature(feature string) (feishuapp.ScopeRequirement, bool) {

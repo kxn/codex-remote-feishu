@@ -1,7 +1,7 @@
 # Remote Surface 核心状态机
 
 > Type: `general`
-> Updated: `2026-11-21`
+> Updated: `2026-11-22`
 > Summary: 持久团队运行时的执行归属、原生会话恢复、项目收尾与参与门禁规则；旧 surface 引擎仅供迁移审计。
 ## 0. 持久团队运行时：本分支的新入口
 
@@ -18,6 +18,18 @@
 引用旧工作的私聊命令同样使用冻结目标；例如 `/stop` 停止旧工作而不误停当前新工作。群内引用旧任务时，若原负责角色已移除或在团队停用，输入改交当前有效负责人协调并保留旧任务关联，不重开任务或改写责任代次；暂时不可用的成员仍按既有排队语义处理。成员退出后，旧执行仍可结算已承接输入，但不能再次领取新工作。
 
 计算并发、carrier、任务责任和执行位置分别占用。daemon 当前总计算额度为 8，其中 1 个保留给管理上下文；普通业务最多使用 7 个，管理执行仍需满足总额度、carrier 和位置约束，不无界增加进程。Agent 可在用户选定的代码资源内准备独立目录并登记下一次执行位置；登记不移动仍在运行的原生进程，也不释放旧目录。没有用户选定的代码资源时，非代码工作在该上下文独立的临时目录进行。
+
+### 配置、状态和旧入口的唯一归属
+
+Bot 全局的 backend／Profile／模型选择由既有持久配置和 Bot settings store 持有，SQLite Role 只保存引用与变化指纹；不能从旧 orchestrator 镜像反向恢复配置。Claude 的模型、推理和上下文偏好与 Profile 一起解析为有效配置，指纹与原生启动使用同一个结果，并保留内置配置继承的认证。Codex 的独立上下文偏好同样参与设置版本。私聊的 access／plan 由 WorkContext preferences 持有，先应用再编译后端启动参数；清除偏好回到后端默认，不继承旧 surface/Bot 值。新 Worker 的启动记录冻结当次配置，旧 Worker 的冻结记录不能反向覆盖之后的选择。配置更新和最终启动/任务准入共享短的配置门禁，先同步 Role 的实际设置引用；启动占位与任务领取还在 SQLite 事务内校验上下文偏好版本。旧计划冲突时保留待处理输入，由下一次计划读取当前配置。
+
+Codex 原生 Profile 没有显式 provider 时，只有已解析的原生连接与线程策略才可使用 `InheritNativeProvider`；start/resume 不发送 `modelProvider`，仍发送冻结的上下文窗口、自动压缩值与指令。服务端观察到的 provider 才是实际值，缺少回执仍是不完整证据。API/OAuth Profile 仍要求明确 provider；旧协议 JSON 未提供新字段时保持原有校验语义。
+
+`/v1/status` 和 `/api/admin/runtime-status` 使用同一状态投影。团队模式 `authority=persistent_teams`，`work` 从单一 SQLite 事务读取计数和有界详情；旧 instances／surfaces／pendingRemoteTurns／activeRemoteTurns 返回空数组。库不可用时明确返回 `work.available=false`，不能伪装成无任务或回退旧引擎。网关连通状态仍由真实网关读取。
+
+生产启动在装载旧文件之前设置 history-only 边界。旧 room/surface 文件即使需要格式规范化也不保存；配置目录迁移和 Bot 身份替换不得改写它们，也不得因这些历史文件损坏而阻止现行配置变更。原始迁移快照仍在装载前保存。旧 instance/surface MCP 服务不再发布；过渡环境保留的旧处理器明确返回停用，不能使用旧 token 绕过团队 CLI。旧 VS Code 安装/重装入口停用，只保留已有集成的明确清理操作。
+
+本次具体发现、责任表和回归证据见 [SSOT 审计记录](../inprogress/feishu-agent-team-ssot-audit.md)。
 
 ### 迁移与持续输入
 
@@ -92,7 +104,7 @@ Codex Goal 是会话续轮约束，不是项目目标或任务验收。续轮必
 
 2026-08-01 #766 补充：Codex Profile-aware resume 不再把 requested policy 当作 observed actual。普通 dispatch、compact 与 `process.child.restart` restore 在目标 thread 已有同 connection/provider 的 `CodexEffectiveThreadContract` 时使用 `preserve_thread_settings`，保留 observed model/reasoning，同时仍请求当前 Profile 的 context preference；否则使用 `apply_target_profile`。`CodexEffectiveThreadContract` 只记录 `thread/started` 或 `thread.settings.updated` 已证明的 provider/model/reasoning，以及 `turn/started` 的 requested/effective context window；缺少 provider evidence 或 observed provider 与 Resume Policy 冲突时，wrapper 在 `turn.started` 上附带 `codex_protocol_incomplete`，不把 requested provider/model/reasoning 伪装成 actual。2026-08-02 补充：Codex headless 的跨模型组自动新会话有两道状态机边界：`/codexprofile` 在生成 headless continuation 时先比较当前 thread/source runtime 组与目标 Profile 组，普通 dispatch 在冻结 queue item 时再比较旧 thread 已证明模型组与当前目标模型组；目前模型组只分 `gpt` 与 `non_gpt`。目标 Profile 组优先由 Profile 声明的模型推导，DeepSeek catalog-backed dynamic API Profile 不再因为走动态目录而被归到 GPT 组。双方都可判定且不同组时，不再复用旧 thread；profile/backend 切换进入 `workspace_route_restart + PrepareNewThread=true`，dispatch guard 同步把 surface 切到 `new_thread_ready`，并提示用户已自动新建会话。目标模型继续由 typed `CodexResumePolicy`、目标 Profile 或用户显式 override 持有，不在 wrapper/adapter 清理历史 item。
 
-这份文档描述的是**当前代码已经实现**的 remote surface 状态机，不是历史问题列表，也不是未来方案草稿。
+本文第 0 节描述当前持久团队运行时；以下第 1 节及后续旧 surface 状态机仅用于历史实现、迁移和复用基础设施审计，其中的“当前”指该历史实现，不定义团队产品的新入口。
 
 2026-08-08 #838 补充：`/detach` 与 `/workspace detach` 都是 detach-like route mutation，会清除当前私聊 surface 的全部 durable resume target（instance、thread、cwd、workspace、route、headless）。清理会在事件/UI/daemon dispatch 之前完成，并在 dispatch 后用同一清理意图再次同步，避免 dispatch 释放 app mutex 时被 recovery tick 插入；`E6 Abandoning` 期间 headless 与 VS Code auto-resume 都明确跳过，直到 surface 最终 detach。2026-08-23 #907 补充：surface 最终 detach 后，如果原 attachment 是当前没有其他 surface 使用的 daemon-owned managed headless，orchestrator 会发出定向 `headless.kill`，回收其 Codex app-server writer；这样终端可以立即执行同一 thread 的 `codex resume`，而不会停止其他实例或整个 daemon。active turn 会等收尾，超时强制 detach 也走同一释放路径。
 

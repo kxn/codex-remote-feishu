@@ -29,7 +29,11 @@ func sameOptionalInt(left, right *int) bool {
 
 func (a *App) configureFeishuRoomStateLocked(stateDir string) {
 	path := feishuroomstate.StatePath(stateDir)
-	a.feishuRoomState.persistedStoreRuntimeState = loadPersistedStore("Feishu room", path, feishuroomstate.LoadStore)
+	if a.legacyWorkRetired() {
+		a.feishuRoomState.persistedStoreRuntimeState = loadHistoryStore("Feishu room", path, feishuroomstate.LoadStore)
+	} else {
+		a.feishuRoomState.persistedStoreRuntimeState = loadPersistedStore("Feishu room", path, feishuroomstate.LoadStore)
+	}
 	a.materializeFeishuRoomStateLocked()
 }
 
@@ -47,6 +51,9 @@ func (a *App) materializeFeishuRoomStateLocked() {
 }
 
 func (a *App) syncFeishuRoomStateLocked() error {
+	if a.legacyWorkRetired() {
+		return nil
+	}
 	a.refreshFeishuPrimaryGatewaySnapshotLocked()
 	if a.feishuRoomState.store == nil {
 		return nil
@@ -102,6 +109,9 @@ func (a *App) feishuPrimaryGatewayForChat(chatID string) string {
 }
 
 func (a *App) reconcileFeishuRoomWorkspaceStateLocked(entries map[string]surfaceresume.Entry) {
+	if a.legacyWorkRetired() {
+		return
+	}
 	a.feishuRoomState.workspaceConflicts = map[string]bool{}
 	if a.feishuRoomState.store == nil || len(entries) == 0 {
 		return

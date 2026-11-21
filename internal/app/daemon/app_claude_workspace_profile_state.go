@@ -8,7 +8,11 @@ import (
 
 func (a *App) configureClaudeWorkspaceProfileStateLocked(stateDir string) {
 	path := claudeworkspaceprofile.StatePath(stateDir)
-	a.claudeWorkspaceProfileState.persistedStoreRuntimeState = loadPersistedStore("Claude workspace profile", path, claudeworkspaceprofile.LoadStore)
+	if a.legacyWorkRetired() {
+		a.claudeWorkspaceProfileState.persistedStoreRuntimeState = loadHistoryStore("Claude workspace profile", path, claudeworkspaceprofile.LoadStore)
+	} else {
+		a.claudeWorkspaceProfileState.persistedStoreRuntimeState = loadPersistedStore("Claude workspace profile", path, claudeworkspaceprofile.LoadStore)
+	}
 	store := a.claudeWorkspaceProfileState.store
 	if store != nil {
 		a.service.MaterializeClaudeWorkspaceProfileSnapshots(store.Entries())
@@ -16,6 +20,9 @@ func (a *App) configureClaudeWorkspaceProfileStateLocked(stateDir string) {
 }
 
 func (a *App) syncClaudeWorkspaceProfileStateLocked() {
+	if a.legacyWorkRetired() {
+		return
+	}
 	if !a.claudeWorkspaceProfileState.writable() || a.claudeWorkspaceProfileState.store == nil {
 		return
 	}

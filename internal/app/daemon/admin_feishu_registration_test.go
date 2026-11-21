@@ -38,9 +38,10 @@ func TestFeishuOnboardingRegistrationRunnerUpdatesSession(t *testing.T) {
 	}
 	if got, want := run.Options.Addons.Events.Items.Tenant, []string{
 		"application.bot.menu_v6",
+		"im.chat.disbanded_v1",
 		"im.chat.member.bot.added_v1",
+		"im.chat.member.bot.deleted_v1",
 		"im.message.reaction.created_v1",
-		"im.message.reaction.deleted_v1",
 		"im.message.recalled_v1",
 		"im.message.receive_v1",
 	}; !reflect.DeepEqual(got, want) {

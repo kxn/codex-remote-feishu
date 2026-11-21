@@ -16,6 +16,7 @@ type persistedStoreStatus uint8
 const (
 	persistedStoreStatusWritable persistedStoreStatus = iota
 	persistedStoreStatusDegraded
+	persistedStoreStatusHistoryOnly
 )
 
 type persistedStoreRuntimeState[T persistedStore] struct {
@@ -46,6 +47,18 @@ func loadPersistedStore[T persistedStore](label, path string, load func(string) 
 
 func (s persistedStoreRuntimeState[T]) writable() bool {
 	return s.status == persistedStoreStatusWritable
+}
+
+// History files may need normalization to interpret them, but no migration or
+// sanitization is allowed to rewrite the original evidence after cutover.
+func loadHistoryStore[T persistedStore](label, path string, load func(string) (T, error)) persistedStoreRuntimeState[T] {
+	path = strings.TrimSpace(path)
+	store, err := load(path)
+	if err != nil {
+		var zero T
+		return degradedPersistedStore(label, path, zero, fmt.Errorf("load history: %w", err))
+	}
+	return persistedStoreRuntimeState[T]{store: store, status: persistedStoreStatusHistoryOnly, path: path}
 }
 
 func degradedPersistedStore[T persistedStore](label, path string, store T, err error) persistedStoreRuntimeState[T] {

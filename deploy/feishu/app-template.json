@@ -6,38 +6,38 @@
     "menus": [
       {
         "key": "menu",
-        "name": "命令菜单",
-        "description": "打开阶段感知的命令菜单首页。"
+        "name": "工作菜单",
+        "description": "打开私人工作入口。"
       },
       {
-        "key": "stop",
-        "name": "停止推理",
-        "description": "中断当前执行，并丢弃飞书侧尚未发送的排队输入。"
+        "key": "status",
+        "name": "工作状态",
+        "description": "查看当前工作及执行状态。"
       },
       {
         "key": "steerall",
-        "name": "全部加速",
-        "description": "把当前队列里可并入本轮执行的输入一次性并入当前 running turn。"
+        "name": "追加待办",
+        "description": "当前 Codex 执行支持时，将可追加的待办并入本轮。"
       },
       {
-        "key": "new",
-        "name": "新建会话",
-        "description": "仅 headless 模式可用：准备一个新会话，下一条消息会作为首条输入。"
+        "key": "projects",
+        "name": "项目",
+        "description": "打开有权访问的项目列表。"
       },
       {
-        "key": "reasoning",
-        "name": "推理强度",
-        "description": "打开推理强度参数卡；如果知道完整 key，也可直接使用 `reasoning_high` 这类直达入口。"
+        "key": "resources",
+        "name": "工作资料",
+        "description": "查看当前工作的资料和目录。"
       },
       {
-        "key": "model",
-        "name": "使用模型",
-        "description": "打开模型卡片；如果知道完整 key，也可直接使用 `model_gpt-5.5` 这类直达入口。"
+        "key": "history",
+        "name": "历史工作",
+        "description": "回看已有的私人工作。"
       },
       {
-        "key": "access",
-        "name": "执行权限",
-        "description": "打开执行权限参数卡；如果知道完整 key，也可直接使用 `access_confirm` 这类直达入口。"
+        "key": "settings",
+        "name": "执行设置",
+        "description": "查看和调整当前工作的执行设置。"
       }
     ]
   },
@@ -72,29 +72,33 @@
     },
     {
       "event": "im.message.recalled_v1",
-      "purpose": "用户撤回尚未执行的输入时，取消排队消息或 staged image。"
+      "purpose": "记录用户撤回的输入及其处理状态。"
     },
     {
       "event": "im.message.reaction.created_v1",
-      "purpose": "用户给 queued 文本加 ThumbsUp 时，可把它升级成对当前执行回复的跟进。"
-    },
-    {
-      "event": "im.message.reaction.deleted_v1",
-      "purpose": "用户撤销消息 reaction 时，同步撤销对应的反馈动作。"
+      "purpose": "记录飞书消息反馈。"
     },
     {
       "event": "im.chat.member.bot.added_v1",
-      "purpose": "机器人被加入群时，如果它是群内唯一机器人，自动引导成为本群主机器人。"
+      "purpose": "记录机器人加入项目群。"
+    },
+    {
+      "event": "im.chat.member.bot.deleted_v1",
+      "purpose": "处理机器人从项目群移除。"
+    },
+    {
+      "event": "im.chat.disbanded_v1",
+      "purpose": "处理项目群解散。"
     },
     {
       "event": "application.bot.menu_v6",
-      "purpose": "处理机器人静态菜单里的阶段入口和高频快捷键，例如 menu/stop/steerall/new/reasoning/model/access。"
+      "purpose": "处理工作菜单、项目、资料和执行设置等私人入口。"
     }
   ],
   "callback_subscriptions": [
     {
       "callback": "card.action.trigger",
-      "purpose": "通过飞书回调长连接处理消息卡片里的 attach / 切换会话按钮、命令菜单导航、参数卡和 approval request 交互。"
+      "purpose": "处理项目卡片、私人工作导航、设置和待处理请求。"
     }
   ],
   "permissions_checklist": [
@@ -115,7 +119,7 @@
         "开启 P2P 消息接收事件",
         "开启消息撤回事件",
         "开启消息 reaction 创建事件",
-        "开启机器人进群事件",
+        "开启机器人进群、退群和群解散事件",
         "开启机器人菜单点击事件"
       ]
     },
@@ -144,7 +148,7 @@
   "notes": [
     "此文件是项目模板，不保证可直接导入飞书控制台。",
     "请按 deploy/feishu/README.md 的说明，把这里的菜单、事件和权限逐项配置到你的自建应用。",
-    "WebSetup 页面里的推荐菜单和飞书里的 /help 使用同一套命令定义。",
+    "WebSetup 页面里的推荐菜单对应团队运行时的机器人菜单入口。",
     "当前 .md 预览默认上传到应用云空间目录 Codex Remote Previews/，并按会话给用户或群授权。"
   ]
 }

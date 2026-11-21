@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"time"
 
@@ -29,15 +28,11 @@ type Options struct {
 	RelaydBinary       string
 	RelayServerURL     string
 	CodexRealBinary    string
-	IntegrationMode    WrapperIntegrationMode
-	Integrations       []WrapperIntegrationMode
 	VSCodeSettingsPath string
-	BundleEntrypoint   string
 	FeishuGatewayID    string
 	FeishuAppID        string
 	FeishuAppSecret    string
 	UseSystemProxy     bool
-	BootstrapOnly      bool
 }
 
 type InstallState struct {
@@ -74,6 +69,10 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		return InstallState{}, err
 	}
 	layout := installLayoutForInstance(opts.BaseDir, instanceID)
+	previousState, err := LoadState(layout.StatePath)
+	if err != nil && !os.IsNotExist(err) {
+		return InstallState{}, fmt.Errorf("read existing install state: %w", err)
+	}
 	configDir := layout.ConfigDir
 	stateDir := layout.StateDir
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
@@ -91,18 +90,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		return InstallState{}, err
 	}
 
-	integrations := opts.Integrations
-	if !opts.BootstrapOnly && len(integrations) == 0 {
-		if opts.IntegrationMode != "" {
-			integrations = []WrapperIntegrationMode{opts.IntegrationMode}
-		} else {
-			integrations = DefaultIntegrations(runtime.GOOS)
-		}
-	}
-	integrations = normalizeIntegrations(integrations)
-
 	configPath := filepath.Join(configDir, "config.json")
-	statePath := layout.StatePath
 	configExists := false
 	if info, statErr := os.Stat(configPath); statErr == nil && !info.IsDir() {
 		configExists = true
@@ -118,18 +106,13 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		installedBinary = sourceBinary
 	}
 
-	emptyIntegrationMode := string(IntegrationManagedShim)
-	if opts.BootstrapOnly {
-		emptyIntegrationMode = "none"
-	}
-
 	if err := applyInstanceConfigDefaults(&cfg, instanceID, !configExists); err != nil {
 		return InstallState{}, err
 	}
 	cfg.Relay.ServerURL = xutil.FirstNonEmpty(opts.RelayServerURL, cfg.Relay.ServerURL)
 	cfg.Wrapper.CodexRealBinary = choosePreservedValue(codexRealBinary, cfg.Wrapper.CodexRealBinary)
 	cfg.Wrapper.NameMode = xutil.FirstNonEmpty(cfg.Wrapper.NameMode, "workspace_basename")
-	cfg.Wrapper.IntegrationMode = integrationsConfigValueOr(integrations, emptyIntegrationMode)
+	cfg.Wrapper.IntegrationMode = "none"
 	cfg.Feishu.UseSystemProxy = opts.UseSystemProxy
 	cfg.Feishu.Apps, err = mergePrimaryFeishuApp(cfg.Feishu.Apps, opts.FeishuGatewayID, opts.FeishuAppID, opts.FeishuAppSecret)
 	if err != nil {
@@ -140,31 +123,20 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		return InstallState{}, err
 	}
 
-	if hasIntegration(integrations, IntegrationManagedShim) && strings.TrimSpace(opts.BundleEntrypoint) != "" {
-		if err := patchBundleEntrypointFunc(BundleEntrypointPatchOptions{
-			EntrypointPath:   opts.BundleEntrypoint,
-			InstallStatePath: statePath,
-			ConfigPath:       configPath,
-			InstanceID:       instanceID,
-		}); err != nil {
-			return InstallState{}, err
-		}
-	}
-
 	state := InstallState{
 		InstanceID:         instanceID,
 		BaseDir:            opts.BaseDir,
 		ConfigPath:         configPath,
-		StatePath:          statePath,
+		StatePath:          layout.StatePath,
 		ServiceManager:     opts.ServiceManager,
 		CurrentBinaryPath:  installedBinary,
-		Integrations:       integrations,
-		VSCodeSettingsPath: opts.VSCodeSettingsPath,
-		BundleEntrypoint:   opts.BundleEntrypoint,
+		Integrations:       previousState.Integrations,
+		VSCodeSettingsPath: choosePreservedValue(opts.VSCodeSettingsPath, previousState.VSCodeSettingsPath),
+		BundleEntrypoint:   previousState.BundleEntrypoint,
 	}
 	ApplyStateMetadata(&state, StateMetadataOptions{
 		InstanceID:      instanceID,
-		StatePath:       statePath,
+		StatePath:       layout.StatePath,
 		SourceBinary:    sourceBinary,
 		InstalledBinary: installedBinary,
 		CurrentVersion:  opts.CurrentVersion,
@@ -174,7 +146,7 @@ func (s *Service) Bootstrap(opts Options) (InstallState, error) {
 		CurrentSlot:     opts.CurrentSlot,
 		ServiceManager:  opts.ServiceManager,
 	})
-	if err := WriteState(statePath, state); err != nil {
+	if err := WriteState(layout.StatePath, state); err != nil {
 		return InstallState{}, err
 	}
 

@@ -207,7 +207,6 @@ func runPackagedFirstInstall(ctx context.Context, opts packagedInstallOptions) (
 		CurrentTrack:   opts.CurrentTrack,
 		VersionsRoot:   versionsRoot,
 		CurrentSlot:    targetSlot,
-		BootstrapOnly:  true,
 	})
 	result := packagedInstallResultForState(packagedInstallModeFirstInstall, state)
 	if err != nil {

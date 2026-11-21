@@ -34,15 +34,18 @@ import (
 )
 
 type HeadlessRuntimeConfig struct {
-	BinaryPath      string
-	CodexRealBinary string
-	ConfigPath      string
-	BaseEnv         []string
-	Paths           relayruntime.Paths
-	LaunchArgs      []string
-	IdleTTL         time.Duration
-	KillGrace       time.Duration
-	StartTTL        time.Duration
+	// LegacyHistoryOnly preserves old JSON as import evidence, never as a
+	// writable runtime. The production entry selects this before loading it.
+	LegacyHistoryOnly bool
+	BinaryPath        string
+	CodexRealBinary   string
+	ConfigPath        string
+	BaseEnv           []string
+	Paths             relayruntime.Paths
+	LaunchArgs        []string
+	IdleTTL           time.Duration
+	KillGrace         time.Duration
+	StartTTL          time.Duration
 
 	IdleRefreshInterval time.Duration
 	IdleRefreshTimeout  time.Duration

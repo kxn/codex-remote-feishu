@@ -11,13 +11,16 @@ import (
 )
 
 const (
-	feishuPrimaryBootstrapFeature = "primary_room_auto_bootstrap"
+	feishuPrimaryBootstrapFeature = "project_group_membership"
 
 	feishuPrimaryBootstrapSuccessText = "当前机器人是群内唯一机器人，已自动成为本群主机器人。之后未 @ 的普通消息将由它承接，可用 /primary off 取消。"
 	feishuPrimaryBootstrapScopeText   = "当前机器人已进群，但还不能自动设置为本群主机器人：请在飞书开放平台开通“获取群组信息”权限，并确认已订阅机器人进群事件后再发布应用。"
 )
 
 func (a *App) handleFeishuBotAddedToGroup(ctx context.Context, action control.Action) *feishu.ActionResult {
+	if a.legacyWorkRetired() {
+		return nil
+	}
 	action.GatewayID = canonicalGatewayID(action.GatewayID)
 	action.ChatID = strings.TrimSpace(action.ChatID)
 	action.SurfaceSessionID = strings.TrimSpace(action.SurfaceSessionID)

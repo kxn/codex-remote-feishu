@@ -35,3 +35,9 @@ func (t *Tx) GetNativeLaunchSnapshot(workerID string, generation int64) (agentpr
 	}
 	return snapshot, snapshot.Validate()
 }
+
+func (t *Tx) WorkerLaunchUnsent(worker work.WorkerSession) (bool, error) {
+	var n int
+	err := t.tx.QueryRowContext(t.ctx, `SELECT count(*) FROM operations WHERE json_extract(payload,'$.kind')='worker.launch' AND json_extract(payload,'$.target_id')=? AND json_extract(payload,'$.target_generation')=? AND json_extract(payload,'$.state')='prepared'`, worker.ID, worker.Generation).Scan(&n)
+	return n == 1, err
+}

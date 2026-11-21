@@ -281,7 +281,7 @@ func (c *Coordinator) verifyExited(ctx context.Context, incarnation string) erro
 
 func (c *Coordinator) unsent(ctx context.Context, worker work.WorkerSession) (bool, error) {
 	var unsent bool
-	err := c.store.Within(ctx, func(tx *workstore.Tx) error { var e error; unsent, e = tx.NativeUpgradeLaunchUnsent(worker); return e })
+	err := c.store.Within(ctx, func(tx *workstore.Tx) error { var e error; unsent, e = tx.WorkerLaunchUnsent(worker); return e })
 	return unsent, err
 }
 func (c *Coordinator) assertFrozenPool(ctx context.Context, v Record) error {

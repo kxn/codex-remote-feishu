@@ -185,8 +185,12 @@ function describeAutoConfigFeature(feature: string): string {
       return "卡片交互能力";
     case "markdown_preview":
       return "Markdown 预览";
-    case "cron_bitable":
-      return "/cron 多维表格";
+    case "team_bitable_resources":
+      return "项目多维表格资料";
+    case "project_group_messages":
+      return "项目群消息";
+    case "project_group_membership":
+      return "项目群机器人身份";
     case "group_mentions":
       return "群聊 @ 消息";
     case "p2p_chat":

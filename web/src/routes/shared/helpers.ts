@@ -1,8 +1,6 @@
 import { type APIErrorShape, formatError, requestJSON } from "../../lib/api";
 import type { AutostartDetectResponse, VSCodeDetectResponse } from "../../lib/types";
 
-export type VSCodeUsageScenario = "current_machine" | "remote_only";
-
 export function blankToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
@@ -45,54 +43,4 @@ export async function loadAutostartState(path: string): Promise<{ data: Autostar
       error: "自动运行状态暂时无法读取，请稍后重试。",
     };
   }
-}
-
-export function vscodeIsReady(vscode: VSCodeDetectResponse | null): boolean {
-  if (!vscode) {
-    return false;
-  }
-  return (
-    vscode.latestShim.kind === "tiny_shim" &&
-    vscode.latestShim.installed &&
-    vscode.latestShim.sidecarValid &&
-    !vscode.needsShimReinstall &&
-    !vscode.settings.matchesBinary
-  );
-}
-
-export function vscodeApplyModeForScenario(vscode: VSCodeDetectResponse | null, scenario: VSCodeUsageScenario | null): string | null {
-  if (!vscode) {
-    return null;
-  }
-  if (vscode.sshSession) {
-    return "managed_shim";
-  }
-  switch (scenario) {
-    case "current_machine":
-      return "managed_shim";
-    default:
-      return null;
-  }
-}
-
-export function currentVSCodeSummary(vscode: VSCodeDetectResponse | null): string {
-  if (!vscode) {
-    return "暂未处理";
-  }
-  if (vscode.settings.matchesBinary) {
-    return "检测到旧版 settings.json 接入，需迁移到扩展入口";
-  }
-  if (vscode.needsShimReinstall) {
-    return "VS Code 集成需要修复";
-  }
-  if (vscodeIsReady(vscode)) {
-    if (!vscode.latestShim.matchesBinary) {
-      return "VS Code 集成可用，可稍后更新";
-    }
-    if (vscode.sshSession) {
-      return "已在这台远程机器上接入（扩展入口）";
-    }
-    return "已在这台机器上接入（扩展入口）";
-  }
-  return "暂未处理";
 }

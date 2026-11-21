@@ -156,7 +156,7 @@ func TestFeishuManifestRoute(t *testing.T) {
 	if len(manifestResp.Manifest.Menus) != 7 {
 		t.Fatalf("unexpected manifest menus: %#v", manifestResp.Manifest.Menus)
 	}
-	wantMenuKeys := []string{"menu", "stop", "steerall", "new", "reasoning", "model", "access"}
+	wantMenuKeys := []string{"menu", "status", "steerall", "projects", "resources", "history", "settings"}
 	for index, want := range wantMenuKeys {
 		got := manifestResp.Manifest.Menus[index].Key
 		if got != want {

@@ -22,7 +22,23 @@ func (h *Host) startPrepared(ctx context.Context, worker work.WorkerSession, op 
 	if err := writeSnapshot(path, record.Snapshot); err != nil {
 		return err
 	}
-	err := h.store.Within(ctx, func(tx *workstore.Tx) error {
+	markSending := func(tx *workstore.Tx) error {
+		role, err := tx.GetRole(worker.RoleID)
+		if err != nil {
+			return err
+		}
+		binding, err := tx.GetRoleBotBinding(worker.RoleID)
+		if err != nil {
+			return err
+		}
+		if role.SettingsRevision != record.SettingsRevision ||
+			role.DescriptionVersion != record.RoleDescriptionVersion ||
+			binding.IdentityGeneration != record.Snapshot.Owner.BotGeneration {
+			return workstore.ErrConflict
+		}
+		if err := tx.CheckContextPreferencesRevision(worker.ContextID, record.PreferencesRevision); err != nil {
+			return err
+		}
 		if err := h.assertUpgradeLaunch(ctx, tx, worker.Backend); err != nil {
 			return err
 		}
@@ -37,7 +53,8 @@ func (h *Host) startPrepared(ctx context.Context, worker work.WorkerSession, op 
 		_, _, err = tx.PutOperation(current, op.Revision)
 		op = current
 		return err
-	})
+	}
+	err := h.config.SettingsAdmission.Within(ctx, worker.RoleID, func() error { return h.store.Within(ctx, markSending) })
 	if err != nil {
 		return err
 	}

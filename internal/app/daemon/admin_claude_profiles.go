@@ -8,6 +8,7 @@ import (
 
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/profilecontextstate"
 	"github.com/kxn/codex-remote-feishu/internal/config"
+	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/state"
 )
 
@@ -405,6 +406,15 @@ func (a *App) handleClaudeProfileDelete(w http.ResponseWriter, r *http.Request) 
 		})
 		return
 	}
+	if gateway := a.teamClaudeProfileSelectionLocked(updated, profileID); gateway != "" {
+		a.adminConfigMu.Unlock()
+		writeAPIError(w, http.StatusConflict, apiError{
+			Code:    "profile_in_use",
+			Message: "Choose another Claude profile for this Bot before deleting the selected profile.",
+			Details: gateway,
+		})
+		return
+	}
 
 	updated.Claude.Profiles = append(updated.Claude.Profiles[:index], updated.Claude.Profiles[index+1:]...)
 	if err := config.WriteAppConfig(loaded.Path, updated); err != nil {
@@ -431,6 +441,25 @@ func (a *App) handleClaudeProfileDelete(w http.ResponseWriter, r *http.Request) 
 	a.syncClaudeProfilesCatalogLocked(updated)
 	a.mu.Unlock()
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *App) teamClaudeProfileSelectionLocked(cfg config.AppConfig, profileID string) string {
+	if !a.legacyWorkRetired() {
+		return ""
+	}
+	apps := a.runtimeGatewayApps(cfg)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, app := range apps {
+		if !app.Enabled || app.AppID == "" {
+			continue
+		}
+		record := a.workBotSettingsLocked(app.GatewayID)
+		if record.Backend == agentproto.BackendClaude && teamSettingsProfile(record) == profileID {
+			return app.GatewayID
+		}
+	}
+	return ""
 }
 
 func (a *App) handleClaudeContextPreferenceUpdate(w http.ResponseWriter, r *http.Request) {

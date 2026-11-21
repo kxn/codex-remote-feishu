@@ -17,9 +17,8 @@ import type {
   OnboardingWorkflowResponse,
   RuntimeRequirementsDetectResponse,
   SetupCompleteResponse,
-  VSCodeDetectResponse,
 } from "../lib/types";
-import { blankToUndefined, vscodeApplyModeForScenario, vscodeIsReady } from "./shared/helpers";
+import { blankToUndefined } from "./shared/helpers";
 import {
   autoConfigClipboardFailureMessage,
   buildMissingScopesImportJSON,
@@ -42,7 +41,6 @@ type SetupStepID =
   | "auto_config"
   | "menu"
   | "autostart"
-  | "vscode"
   | "done";
 
 type SetupActID = 1 | 2 | 3;
@@ -77,11 +75,9 @@ const setupStepOrder: SetupStepID[] = [
   "auto_config",
   "menu",
   "autostart",
-  "vscode",
   "done",
 ];
 
-const vscodeApplyTimeoutMs = 10_000;
 export function SetupRoute() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
@@ -121,7 +117,6 @@ export function SetupRoute() {
   );
   const menuStage = workflow?.app?.menu;
   const autostartStage = workflow?.autostart || null;
-  const vscodeStage = workflow?.vscode || null;
   const title = buildSetupPageTitle(bootstrap);
   const adminURL = relativeLocalPath(bootstrap?.admin.url || "/");
   const activeConsoleLinks = activeApp?.consoleLinks;
@@ -141,14 +136,13 @@ export function SetupRoute() {
     auto_config: isResolvedStageStatus(stageMap.get("auto_config") || ""),
     menu: isResolvedStageStatus(stageMap.get("menu") || ""),
     autostart: isResolvedStageStatus(stageMap.get("autostart") || ""),
-    vscode: isResolvedStageStatus(stageMap.get("vscode") || ""),
     done: currentStep === "done" || normalizeSetupStepID(workflow?.currentStage) === "done",
   };
   const currentAct = setupActForStep(currentStep);
   const actDone: Record<SetupActID, boolean> = {
     1: stepDone.runtime_requirements,
     2: stepDone.connect && stepDone.auto_config && stepDone.menu,
-    3: stepDone.autostart && stepDone.vscode,
+    3: stepDone.autostart,
   };
   const {
     connectMode,
@@ -524,77 +518,6 @@ export function SetupRoute() {
     }
   }
 
-  async function disableVSCode() {
-    setActionBusy("vscode-disable");
-    try {
-      await sendJSON("/api/setup/vscode/disable", "POST");
-      await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
-      setNotice({ tone: "good", message: "已关闭 VS Code 集成。" });
-    } catch {
-      setNotice({ tone: "danger", message: "当前还不能关闭 VS Code 集成，请稍后重试。" });
-    } finally {
-      setActionBusy("");
-    }
-  }
-
-  async function applyVSCodeAndContinue() {
-    if (!vscodeStage?.vscode) {
-      setNotice({ tone: "danger", message: "暂时还不能完成 VS Code 集成，请稍后重试。" });
-      return;
-    }
-    setActionBusy("vscode-apply");
-    try {
-      const mode = vscodeApplyModeForScenario(vscodeStage.vscode, "current_machine");
-      await sendJSON<VSCodeDetectResponse>(
-        "/api/setup/vscode/apply",
-        "POST",
-        {
-          mode: mode || "managed_shim",
-          bundleEntrypoint: vscodeStage.vscode.latestBundleEntrypoint,
-        },
-        { timeoutMs: vscodeApplyTimeoutMs },
-      );
-      await loadSetupPage({ preferredAppID: activeApp?.id || selectedAppID });
-      setNotice({ tone: "good", message: "VS Code 集成已完成。" });
-    } catch (error: unknown) {
-      if (await maybeRecoverVSCodeApply(error)) {
-        return;
-      }
-      setNotice({
-        tone: "danger",
-        message: "当前还不能确认 VS Code 集成结果，请稍后重试。",
-      });
-    } finally {
-      setActionBusy("");
-    }
-  }
-
-  async function maybeRecoverVSCodeApply(error: unknown): Promise<boolean> {
-    try {
-      const refreshed = await requestJSON<OnboardingWorkflowResponse>(
-        buildOnboardingWorkflowPath(activeApp?.id || selectedAppID),
-      );
-      setWorkflow(refreshed);
-      setSelectedAppID(refreshed.selectedAppId || "");
-      if (vscodeIsReady(refreshed.vscode?.vscode || null)) {
-        setNotice({ tone: "good", message: "VS Code 集成已完成。" });
-        return true;
-      }
-    } catch {
-      // fall through to timeout-specific message
-    }
-
-    if (error instanceof APIRequestError && error.code === "request_timeout") {
-      setNotice({
-        tone: "warn",
-        message: "集成请求返回超时，当前还不能确认已完成，请稍后重试。",
-      });
-      return true;
-    }
-
-    return false;
-  }
-
   async function finishSetup() {
     setFinishingSetup(true);
     try {
@@ -651,7 +574,6 @@ export function SetupRoute() {
       case "menu":
         return renderMenuStep();
       case "autostart":
-      case "vscode":
         return renderMachineIntegrationStep();
       case "done":
         return renderDoneStep();
@@ -687,10 +609,7 @@ export function SetupRoute() {
         <div className="step-stage-head">
           <h2>本机集成</h2>
         </div>
-        <div className="two-col">
-          {renderAutostartCard()}
-          {renderVSCodeCard()}
-        </div>
+        {renderAutostartCard()}
         <div className="button-row">
           <button
             className="primary-button"
@@ -749,53 +668,6 @@ export function SetupRoute() {
               onClick={() => void disableAutostart()}
             >
               关闭自动启动
-            </button>
-          ) : null}
-        </div>
-      </article>
-    );
-  }
-
-  function renderVSCodeCard() {
-    if (!vscodeStage) {
-      return (
-        <article className="opt-card">
-          <h3>VS Code 集成</h3>
-          <div className="opt-tag">可选</div>
-          <p className="opt-status">VS Code 集成状态暂不可用。</p>
-        </article>
-      );
-    }
-    const vscodeReady = vscodeIsReady(vscodeStage.vscode ?? null);
-    return (
-      <article className="opt-card">
-        <h3>VS Code 集成</h3>
-        <div className="opt-tag">可选</div>
-        <div className="status-line">
-          <span className={`dot ${vscodeReady ? "good" : "idle"}`} />
-          <span className={vscodeReady ? "txt good" : "txt idle"}>
-            {vscodeStage.summary}
-          </span>
-        </div>
-        <div className="button-row">
-          {vscodeStage.allowedActions?.includes("apply") ? (
-            <button
-              className="primary-button"
-              type="button"
-              disabled={actionBusy === "vscode-apply"}
-              onClick={() => void applyVSCodeAndContinue()}
-            >
-              启用 VS Code 集成
-            </button>
-          ) : null}
-          {vscodeStage.allowedActions?.includes("disable") ? (
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={actionBusy === "vscode-disable"}
-              onClick={() => void disableVSCode()}
-            >
-              关闭 VS Code 集成
             </button>
           ) : null}
         </div>
@@ -1360,7 +1232,6 @@ function normalizeSetupStepID(value: string | undefined): SetupStepID {
     case "auto_config":
     case "menu":
     case "autostart":
-    case "vscode":
     case "done":
       return value;
     default:
@@ -1530,7 +1401,6 @@ function setupActForStep(stepID: SetupStepID): SetupActID | 4 {
     case "menu":
       return 2;
     case "autostart":
-    case "vscode":
       return 3;
     case "done":
       return 4;

@@ -131,7 +131,7 @@ func TestPlanAppAutoConfigReportsDiffAndRequirementState(t *testing.T) {
 	}
 }
 
-func TestPlanAppAutoConfigDefaultManifestReportsPrimaryBootstrapRequirements(t *testing.T) {
+func TestPlanAppAutoConfigDefaultManifestReportsProjectMembershipRequirements(t *testing.T) {
 	restoreAutoConfigHooks(t)
 	autoConfigGetApplication = func(context.Context, *FeishuCallBroker, *lark.Client, string) (*larkapplication.Application, error) {
 		return &larkapplication.Application{
@@ -174,7 +174,6 @@ func TestPlanAppAutoConfigDefaultManifestReportsPrimaryBootstrapRequirements(t *
 					{EventType: strp("im.message.receive_v1")},
 					{EventType: strp("im.message.recalled_v1")},
 					{EventType: strp("im.message.reaction.created_v1")},
-					{EventType: strp("im.message.reaction.deleted_v1")},
 					{EventType: strp("application.bot.menu_v6")},
 				},
 			},
@@ -188,14 +187,17 @@ func TestPlanAppAutoConfigDefaultManifestReportsPrimaryBootstrapRequirements(t *
 	if !containsScopeRef(plan.Diff.MissingScopes, "im:chat:readonly", "tenant") {
 		t.Fatalf("missing scopes = %#v, want im:chat:readonly tenant", plan.Diff.MissingScopes)
 	}
-	if !reflect.DeepEqual(plan.Diff.MissingEvents, []string{"im.chat.member.bot.added_v1"}) {
-		t.Fatalf("missing events = %#v, want bot added event", plan.Diff.MissingEvents)
+	membershipEvents := []string{"im.chat.disbanded_v1", "im.chat.member.bot.added_v1", "im.chat.member.bot.deleted_v1"}
+	if !reflect.DeepEqual(plan.Diff.MissingEvents, membershipEvents) {
+		t.Fatalf("missing events = %#v, want %#v", plan.Diff.MissingEvents, membershipEvents)
 	}
 	if !hasRequirement(plan.BlockingRequirements, AutoConfigRequirementKindScope, "im:chat:readonly") {
 		t.Fatalf("blocking requirements = %#v, want im:chat:readonly", plan.BlockingRequirements)
 	}
-	if !hasRequirement(plan.BlockingRequirements, AutoConfigRequirementKindEvent, "im.chat.member.bot.added_v1") {
-		t.Fatalf("blocking requirements = %#v, want bot added event", plan.BlockingRequirements)
+	for _, event := range membershipEvents {
+		if !hasRequirement(plan.BlockingRequirements, AutoConfigRequirementKindEvent, event) {
+			t.Fatalf("blocking requirements = %#v, want %q", plan.BlockingRequirements, event)
+		}
 	}
 }
 

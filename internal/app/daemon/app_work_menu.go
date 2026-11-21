@@ -4,12 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
+
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/control"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
-	"strings"
-	"time"
+	"github.com/kxn/codex-remote-feishu/internal/feishuapp"
 )
 
 // SDK ACK follows this durable receipt. Destination discovery and publication
@@ -106,37 +107,40 @@ func (a *App) advanceTeamMenu(ctx context.Context, menu workstore.MenuInteractio
 	source := teamHumanSource{NavigationRevision: menu.NavigationRevision, Key: menu.ID, ScopeID: menu.ScopeID, PrincipalID: menu.PrincipalID, RoleID: menu.Gateway.RoleID, Tenant: menu.Envelope.Tenant, ChatID: menu.ChatID, MessageID: menu.MessageID, Gateway: menu.Gateway, SenderIDs: menu.Envelope.SenderIDs, Authority: workstore.PrivateActionSource{PersonalScopeID: menu.ScopeID, MenuInteractionID: menu.ID}}
 	var result string
 	var err error
-	switch strings.TrimSpace(strings.ToLower(menu.Envelope.EventKey)) {
-	case "steerall", "steer_all":
+	route := feishuapp.ResolveTeamMenu(menu.Envelope.EventKey)
+	switch route.Action {
+	case feishuapp.TeamMenuSteer:
 		result, err = a.steerTeamPendingInputs(ctx, source)
-	case "review":
+	case feishuapp.TeamMenuReview:
 		result, err = a.queueTeamReview(ctx, source, control.Action{Kind: control.ActionReviewCommand, Text: "/review"})
-	case "autowhip", "autocontinue":
+	case feishuapp.TeamMenuAutoWhip, feishuapp.TeamMenuAutoContinue:
 		kind := control.ActionAutoWhipCommand
-		if menu.Envelope.EventKey == "autocontinue" {
+		if route.Action == feishuapp.TeamMenuAutoContinue {
 			kind = control.ActionAutoContinueCommand
 		}
-		result, err = a.handleTeamAutomation(ctx, source, control.Action{Kind: kind, Text: "/" + menu.Envelope.EventKey + " status"})
-	case "autowhip_on", "autowhip_off", "autowhip_status", "autocontinue_on", "autocontinue_off", "autocontinue_status":
-		key := strings.ToLower(menu.Envelope.EventKey)
-		kind := control.ActionAutoWhipCommand
-		if strings.HasPrefix(key, "autocontinue") {
-			kind = control.ActionAutoContinueCommand
+		mode := route.Argument
+		if mode == "" {
+			mode = "status"
 		}
-		parts := strings.Split(key, "_")
-		result, err = a.handleTeamAutomation(ctx, source, control.Action{Kind: kind, Text: "/" + parts[0] + " " + parts[1]})
-	case "settings", "model":
-		result, err = a.queueTeamSettings(ctx, source, "overview", "")
-	case "projects", "project":
+		result, err = a.handleTeamAutomation(ctx, source, control.Action{Kind: kind, Text: "/" + string(route.Action) + " " + mode})
+	case feishuapp.TeamMenuSettings:
+		page := route.Argument
+		if page == "" {
+			page = "overview"
+		}
+		result, err = a.queueTeamSettings(ctx, source, page, "")
+	case feishuapp.TeamMenuProjects:
 		result, err = a.queueTeamProjectPicker(ctx, source)
-	case "resources", "workspace":
+	case feishuapp.TeamMenuResources:
 		result, err = a.queueTeamResourcePicker(ctx, source)
-	case "history":
+	case feishuapp.TeamMenuHistory:
 		result, err = a.queuePrivatePanel(ctx, source, "contexts", "")
-	case "status":
+	case feishuapp.TeamMenuStatus:
 		result, err = a.queuePrivatePanel(ctx, source, "status", "")
+	case feishuapp.TeamMenuHome:
+		result, err = a.queuePrivatePanel(ctx, source, "menu", route.Note)
 	default:
-		result, err = a.queuePrivatePanel(ctx, source, "menu", "")
+		return fmt.Errorf("unsupported team menu action %q", route.Action)
 	}
 	if err != nil {
 		return err

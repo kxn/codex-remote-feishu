@@ -7,81 +7,28 @@ import (
 	"testing"
 )
 
-func TestRunInteractiveWizardManagedShimBlankCodexBinaryUsesAutoResolution(t *testing.T) {
+func TestRunInteractiveWizardConfiguresFeishuWithoutEditorIntegration(t *testing.T) {
+	baseDir := t.TempDir()
+	codex := filepath.Join(baseDir, "bin", "codex")
 	defaults := PlatformDefaults{
 		GOOS:                       "linux",
-		BaseDir:                    "/tmp/demo",
-		InstallBinDir:              "/tmp/demo/bin",
-		VSCodeSettingsPath:         "/tmp/demo/settings.json",
-		CandidateBundleEntrypoints: []string{"/tmp/demo/.vscode-server/extensions/openai.chatgpt/bin/linux-x86_64/codex"},
-		DefaultIntegrations:        []WrapperIntegrationMode{IntegrationManagedShim},
+		BaseDir:                    baseDir,
+		InstallBinDir:              filepath.Join(baseDir, "installed"),
+		CandidateBundleEntrypoints: []string{filepath.Join(baseDir, "extensions", "codex")},
 	}
-	input := strings.Join([]string{
-		"2",
-		"",
-		"",
-		"cli_demo",
-		"secret_demo",
-		"n",
-		"",
-		"",
-		"",
-	}, "\n")
+	input := strings.Join([]string{"", "", "main", "cli_demo", "secret_demo", "n", "", "", ""}, "\n")
 	var out bytes.Buffer
-	opts, err := RunInteractiveWizard(strings.NewReader(input), &out, defaults, Options{})
+	opts, err := RunInteractiveWizard(strings.NewReader(input), &out, defaults, Options{CodexRealBinary: codex})
 	if err != nil {
 		t.Fatalf("RunInteractiveWizard: %v", err)
 	}
-	if len(opts.Integrations) != 1 || opts.Integrations[0] != IntegrationManagedShim {
-		t.Fatalf("unexpected integrations: %#v", opts.Integrations)
+	if opts.FeishuGatewayID != "main" || opts.FeishuAppID != "cli_demo" || opts.FeishuAppSecret != "secret_demo" {
+		t.Fatal("wizard did not retain Feishu inputs")
 	}
-	if !strings.Contains(out.String(), "Codex 路径覆盖（可选）") {
-		t.Fatalf("wizard output missing optional Codex override copy: %q", out.String())
+	if opts.CodexRealBinary != codex {
+		t.Fatalf("wizard Codex path = %q, want %q", opts.CodexRealBinary, codex)
 	}
-	if strings.Contains(out.String(), "真实 Codex 配置说明") {
-		t.Fatalf("wizard output kept stale Codex-only copy: %q", out.String())
-	}
-	if opts.CodexRealBinary != "" {
-		t.Fatalf("expected blank codex binary for managed shim auto-resolution, got %q", opts.CodexRealBinary)
-	}
-	if opts.BundleEntrypoint != defaults.CandidateBundleEntrypoints[0] {
-		t.Fatalf("unexpected bundle entrypoint: %q", opts.BundleEntrypoint)
-	}
-}
-
-func TestRunInteractiveWizardHonorsExplicitIntegrationSeed(t *testing.T) {
-	defaults := PlatformDefaults{
-		GOOS:                "darwin",
-		BaseDir:             "/tmp/demo-home",
-		InstallBinDir:       "/tmp/demo-home/Library/Application Support/codex-remote/bin",
-		VSCodeSettingsPath:  "/tmp/demo-home/Library/Application Support/Code/User/settings.json",
-		DefaultIntegrations: []WrapperIntegrationMode{IntegrationManagedShim},
-	}
-	input := strings.Join([]string{
-		"",
-		"",
-		"",
-		"cli_demo",
-		"secret_demo",
-		"y",
-		"",
-		"",
-	}, "\n")
-	var out bytes.Buffer
-	seed := Options{
-		Integrations:       []WrapperIntegrationMode{IntegrationManagedShim},
-		BinaryPath:         filepath.Join("/opt", "homebrew", "bin", "codex-remote"),
-		CodexRealBinary:    filepath.Join("/opt", "homebrew", "bin", "codex"),
-		VSCodeSettingsPath: defaults.VSCodeSettingsPath,
-	}
-	opts, err := RunInteractiveWizard(strings.NewReader(input), &out, defaults, seed)
-	if err != nil {
-		t.Fatalf("RunInteractiveWizard: %v", err)
-	}
-	if len(opts.Integrations) != 1 || opts.Integrations[0] != IntegrationManagedShim {
-		t.Fatalf("unexpected integrations: %#v", opts.Integrations)
-	}
-	if opts.CodexRealBinary != filepath.Join("/opt", "homebrew", "bin", "codex") {
-		t.Fatalf("unexpected codex binary: %q", opts.CodexRealBinary)
+	if strings.Contains(out.String(), "VS Code") || !strings.Contains(out.String(), "Codex 路径覆盖（可选）") {
+		t.Fatalf("unexpected wizard prompts: %s", out.String())
 	}
 }

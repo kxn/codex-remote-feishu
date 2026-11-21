@@ -1,7 +1,5 @@
 package feishuapp
 
-import "github.com/kxn/codex-remote-feishu/internal/core/control"
-
 type Manifest struct {
 	Scopes            ScopesImport          `json:"scopesImport"`
 	ScopeRequirements []ScopeRequirement    `json:"scopeRequirements,omitempty"`
@@ -56,15 +54,6 @@ type ChecklistSection struct {
 }
 
 func DefaultManifest() Manifest {
-	menus := control.FeishuRecommendedMenus()
-	manifestMenus := make([]MenuRequirement, 0, len(menus))
-	for _, menu := range menus {
-		manifestMenus = append(manifestMenus, MenuRequirement{
-			Key:         menu.Key,
-			Name:        menu.Name,
-			Description: menu.Description,
-		})
-	}
 	return Manifest{
 		Scopes: ScopesImport{
 			Scopes: PermissionScopes{
@@ -102,7 +91,7 @@ func DefaultManifest() Manifest {
 			{
 				Scope:     "bitable:app",
 				ScopeType: "tenant",
-				Feature:   "cron_bitable",
+				Feature:   "team_bitable_resources",
 				Required:  true,
 			},
 			{
@@ -126,13 +115,13 @@ func DefaultManifest() Manifest {
 			{
 				Scope:     "im:message.group_msg",
 				ScopeType: "tenant",
-				Feature:   "primary_room_bot",
+				Feature:   "project_group_messages",
 				Required:  true,
 			},
 			{
 				Scope:     "im:chat:readonly",
 				ScopeType: "tenant",
-				Feature:   "primary_room_auto_bootstrap",
+				Feature:   "project_group_membership",
 				Required:  true,
 			},
 			{
@@ -186,15 +175,21 @@ func DefaultManifest() Manifest {
 				Required: true,
 			},
 			{
-				Event:    "im.message.reaction.deleted_v1",
-				Purpose:  "处理用户对消息的反馈动作",
-				Feature:  "reaction_feedback",
+				Event:    "im.chat.member.bot.added_v1",
+				Purpose:  "记录机器人加入项目群",
+				Feature:  "project_group_membership",
 				Required: true,
 			},
 			{
-				Event:    "im.chat.member.bot.added_v1",
-				Purpose:  "机器人被加入群时自动引导唯一机器人成为本群主机器人",
-				Feature:  "primary_room_auto_bootstrap",
+				Event:    "im.chat.member.bot.deleted_v1",
+				Purpose:  "处理机器人从项目群移除",
+				Feature:  "project_group_membership",
+				Required: true,
+			},
+			{
+				Event:    "im.chat.disbanded_v1",
+				Purpose:  "处理项目群解散",
+				Feature:  "project_group_membership",
 				Required: true,
 			},
 			{
@@ -212,7 +207,7 @@ func DefaultManifest() Manifest {
 				Required: true,
 			},
 		},
-		Menus: manifestMenus,
+		Menus: append([]MenuRequirement(nil), teamMenus[:]...),
 		Checklist: []ChecklistSection{
 			{
 				Area: "凭证与基础信息",

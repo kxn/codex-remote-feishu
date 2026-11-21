@@ -6,11 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
-	"sync"
-	"time"
 )
 
 type Candidate struct {
@@ -24,6 +25,7 @@ type Candidate struct {
 }
 type DispatchPlan struct {
 	WorkerRevision      int64
+	PreferencesRevision int64
 	InstructionRevision string
 	Command             agentproto.Command
 	FrozenRefs          []work.SourceRef
@@ -58,7 +60,20 @@ type WorkerNeed struct {
 type Provisioner interface {
 	Prepare(context.Context, WorkerNeed) error
 }
+
+// SettingsAdmission keeps the desired role settings stable through the
+// transaction that acquires work. Planning and transport run outside it.
+type SettingsAdmission func(context.Context, string, func() error) error
+
+func (guard SettingsAdmission) Within(ctx context.Context, roleID string, commit func() error) error {
+	if guard == nil {
+		return commit()
+	}
+	return guard(ctx, roleID, commit)
+}
+
 type Config struct {
+	SettingsAdmission    SettingsAdmission
 	ControlReservedSlots int
 	MaxConcurrent        int
 	MaxInputsPerAttempt  int

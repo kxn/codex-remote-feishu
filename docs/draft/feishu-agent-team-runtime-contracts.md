@@ -1,8 +1,8 @@
 # 飞书 Agent 团队：Codex／Claude 运行合同附录
 
 > Type: `draft`
-> Updated: `2026-11-21`
-> Summary: 按用户决定取消原生会话人工接管，保留飞书指导、审阅、暂停、恢复与旧状态迁移边界。
+> Updated: `2026-11-22`
+> Summary: 区分旧 wrapper 的 MCP 注入与现行团队 CLI 的执行授权。
 
 ## 1. 范围与证据等级
 
@@ -99,7 +99,7 @@ Claude profile [ApplyClaudeProfileLaunchEnv](../../internal/config/claude_profil
 
 ### 5.2 工具身份与每轮 run_ref
 
-现有 [app_child_mcp.go](../../internal/app/wrapper/app_child_mcp.go:20) 为 Codex 加 `-c mcp_servers...`，为 Claude 加 `--mcp-config`；调用身份以 caller instance 为线索，VS Code source 明确不自动发布。团队 CLI 的 process credential 应绑定 role/scope/session generation，输入提供本次 attempt/run_ref；服务端核对二者，不信任模型任意填写另一个项目 ID。
+旧 wrapper 在读到旧 MCP 服务发布记录时，才会为 Codex 加 `-c mcp_servers...`，为 Claude 加 `--mcp-config`。调用身份以 caller instance 为线索，VS Code 来源不自动注入。当前团队生产入口停用该旧服务，Agent 使用绑定本次执行的团队 CLI。CLI 进程凭据关联 role、scope 与 session generation，调用提供本次 attempt 的 run_ref，由服务端核对归属。旧注入逻辑见 [app_child_mcp.go](../../internal/app/wrapper/app_child_mcp.go)。
 
 环境在进程创建后不会因为每轮输入而改变。同一 WorkerSession 跨 Attempt 时，不能只设置一次 RUN_ID 环境变量就认为后续工具自动归属正确。采用 session credential＋显式 run_ref，并由服务端校验其固定执行绑定；缺失 run_ref 时拒绝操作，不用当前最新 Attempt 补全；如果允许一个原生 session 并发多个 turn，就必须做到工具级精确关联，不能从“最近一个 Attempt”推断。此附录建议同一 WorkerSession 只保留一个主动执行 owner，并行工作分配不同 WorkerSession，项目并行能力不缩减。
 

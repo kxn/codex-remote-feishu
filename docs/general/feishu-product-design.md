@@ -1,20 +1,18 @@
 # Feishu 产品设计
 
 > Type: `general`
-> Updated: `2026-08-16`
-> Summary: 描述当前 Go 版本的 Feishu surface 行为，并补充 queued `APPLAUSE` 到 Codex UserShell 注入的产品语义、reaction 互斥和图片引用边界。
+> Updated: `2026-11-22`
+> Summary: 说明持久团队群聊和私聊的现行入口，并保留旧 surface 产品行为供迁移核对。
 
-## 1. 文档定位
+## 1. 飞书团队的现行入口
 
-这份文档描述的是**当前 Go 版本实现中的 Feishu 产品层行为**。
+群聊和私聊由持久团队运行时接入同一执行机制。项目群由负责人理解要求、安排角色并协调交付。私聊通过 `/menu` 开始或继续已有工作、查看授权项目、选择模型与已有工作目录。人通过飞书补充要求、审阅、暂停和继续，Agent 负责 Git 和 worktree 操作。
 
-当前链路是：
+现行用法见[用户使用说明书](./user-guide.md)，执行和交互分别以[远程执行状态机](./remote-surface-state-machine.md)和[卡片 UI 状态机](./feishu-card-ui-state-machine.md)的团队章节为准。目标与验收条件见[产品合同](../draft/feishu-agent-team-product-design.md)。
 
-`Feishu Gateway -> control.Action -> orchestrator -> control.UIEvent -> Feishu Projector`
+下文第 2 节起记录旧引擎的 surface、命令与 projector，用于迁移识别和组件复用审计。旧群 Slash 控制、Cron、VS Code 原生接管与历史改写均已退出飞书团队入口。
 
-它不再是独立 bot 进程，也不再依赖公开的 `relay.render.v1` 拉流接口。
-
-## 2. Surface 模型
+## 2. 旧引擎的 Surface 模型
 
 产品状态按 `surfaceSessionId` 建模，而不是按裸 `userId` 建模。
 
@@ -40,7 +38,7 @@
 
 这个规则定义在 [gateway/routing.go](../../internal/adapter/feishu/gateway/routing.go)、[gateway_runtime_support.go](../../internal/adapter/feishu/gateway_runtime_support.go) 与相关 user-id 解析函数中。
 
-## 3. 当前支持的飞书入口
+## 3. 旧引擎的飞书入口
 
 ### 3.1 文本消息
 
@@ -288,7 +286,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 
 但在 ordinary inbound 的 gateway-local FIFO lane 内，当前已经补了一层 daemon 生命周期内的短窗 `event_id/request_id` 去重，用来压住飞书普通消息、reaction 和 recalled 的重复投递执行风险。
 
-## 4. Attachment 与 thread 路由
+## 4. 旧引擎的 Attachment 与 thread 路由
 
 ### 4.1 产品模式与 `/mode`
 
@@ -435,7 +433,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 若首条消息已进入 queued/dispatching/running，第二条文本与新图片会被挡住，直到新 thread 落地
 - 若此时改走 `/use`、重复 `/new`、`/detach` 或 `/stop`，会先按当前规则处理未发送 draft
 
-## 5. Queue、Typing 与本地优先
+## 5. 旧引擎的 Queue、Typing 与本地优先
 
 ### 5.1 文本 queue
 
@@ -666,7 +664,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - `/access full` 或菜单 `access_full` 会恢复为全放行
 - `/access clear` 会清除 surface override，并回到默认的 `full access`
 
-## 6. 图片语义
+## 6. 旧引擎的图片语义
 
 图片在当前实现中是**暂存**语义，不会单独触发 turn。
 
@@ -680,7 +678,7 @@ approval request 卡片当前按动态 option 渲染，常见选项包括：
 - 若所属 queue item 被 queued 文本点赞升级为 steering，绑定图片会跟着主文本一起 steer，并在成功后收到 bot `ThumbsUp`
 - 若所属 queue item 被主文本 `APPLAUSE` 领取，绑定图片会随结构化文件引用一起注入当前 Codex turn；图片消息自身的 `APPLAUSE` 不触发动作
 
-## 7. 飞书输出投影
+## 7. 旧引擎的飞书输出投影
 
 当前投影由 [projector.go](../../internal/adapter/feishu/projector.go) 完成。
 
@@ -818,7 +816,7 @@ final `block.committed`：
 
 - 卡片正文使用 fenced code block
 
-## 8. 当前已实现但值得注意的限制
+## 8. 旧引擎的限制
 
 - attach/use 当前已经收敛到按钮直达交互；普通数字文本会按普通消息处理
 - reaction deleted 事件未接入
@@ -826,7 +824,7 @@ final `block.committed`：
 - queued steering 当前只认 `ThumbsUp`，而 queued UserShell 注入只认 `APPLAUSE`；两者都只认主文本消息，不支持其他 emoji 和图片独立动作
 - 当前主要按 P2P 场景测试，group chat 虽有 surface id 规则，但不是主要联调路径
 
-## 9. 与旧设计文档的关系
+## 9. 历史设计来源
 
 如果你看到旧文档里还在讨论：
 

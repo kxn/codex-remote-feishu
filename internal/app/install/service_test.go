@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kxn/codex-remote-feishu/internal/adapter/editor"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 )
 
@@ -34,7 +33,6 @@ func TestBootstrapWritesConfigsAndStateWithoutLegacySettingsPatch(t *testing.T) 
 		CurrentVersion:     "dev",
 		RelayServerURL:     "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary:    "/usr/local/bin/codex",
-		Integrations:       []WrapperIntegrationMode{IntegrationManagedShim},
 		VSCodeSettingsPath: settingsPath,
 		FeishuGatewayID:    "main",
 		FeishuAppID:        "cli_xxx",
@@ -60,7 +58,7 @@ func TestBootstrapWritesConfigsAndStateWithoutLegacySettingsPatch(t *testing.T) 
 	if app.ID != "main" || app.AppID != "cli_xxx" || app.AppSecret != "secret" {
 		t.Fatalf("unexpected feishu app: %#v", app)
 	}
-	if cfg.Wrapper.IntegrationMode != "managed_shim" {
+	if cfg.Wrapper.IntegrationMode != "none" {
 		t.Fatalf("unexpected wrapper integration mode: %s", cfg.Wrapper.IntegrationMode)
 	}
 	if _, err := os.Stat(settingsPath); !os.IsNotExist(err) {
@@ -234,63 +232,7 @@ func TestBootstrapAllocatesFallbackPortsWhenPreferredBundleBusy(t *testing.T) {
 	}
 }
 
-func TestBootstrapManagedShimInstallsTinyShimAndPreservesRealBinary(t *testing.T) {
-	baseDir := t.TempDir()
-	entrypoint := filepath.Join(baseDir, ".vscode-server", "extensions", "openai.chatgpt-test", "bin", "linux-x86_64", "codex")
-	sourceDir := filepath.Join(baseDir, "source-bin")
-	installBinDir := filepath.Join(baseDir, "installed-bin")
-	binaryPath := seedBinary(t, filepath.Join(sourceDir, "codex-remote"), "codex-remote")
-	seedBinary(t, entrypoint, "original-codex")
-
-	service := NewService()
-	state, err := service.Bootstrap(Options{
-		BaseDir:          baseDir,
-		InstallBinDir:    installBinDir,
-		BinaryPath:       binaryPath,
-		CurrentVersion:   "dev",
-		RelayServerURL:   "ws://127.0.0.1:9500/ws/agent",
-		Integrations:     []WrapperIntegrationMode{IntegrationManagedShim},
-		BundleEntrypoint: entrypoint,
-	})
-	if err != nil {
-		t.Fatalf("bootstrap managed shim: %v", err)
-	}
-
-	if state.BundleEntrypoint != entrypoint {
-		t.Fatalf("unexpected bundle entrypoint in state: %s", state.BundleEntrypoint)
-	}
-
-	raw, err := os.ReadFile(entrypoint)
-	if err != nil {
-		t.Fatalf("read bundle entrypoint: %v", err)
-	}
-	if string(raw) == "codex-remote" {
-		t.Fatalf("expected tiny shim payload instead of copied main binary")
-	}
-
-	realRaw, err := os.ReadFile(editor.ManagedShimRealBinaryPath(entrypoint))
-	if err != nil {
-		t.Fatalf("read real binary: %v", err)
-	}
-	if string(realRaw) != "original-codex" {
-		t.Fatalf("expected preserved real binary content, got %q", string(realRaw))
-	}
-
-	status, err := editor.DetectManagedShim(entrypoint, "")
-	if err != nil {
-		t.Fatalf("DetectManagedShim: %v", err)
-	}
-	if status.Kind != editor.ManagedShimKindTiny || !status.SidecarValid || !status.MatchesBinary {
-		t.Fatalf("unexpected managed shim status: %#v", status)
-	}
-
-	cfg := loadAppConfigForTest(t, state.ConfigPath)
-	if cfg.Wrapper.CodexRealBinary != "codex" {
-		t.Fatalf("expected managed shim config to keep shared codex path, got %s", cfg.Wrapper.CodexRealBinary)
-	}
-}
-
-func TestBootstrapOnlyWritesConfigWithoutTouchingVSCode(t *testing.T) {
+func TestBootstrapWritesConfigWithoutTouchingVSCode(t *testing.T) {
 	baseDir := t.TempDir()
 	settingsPath := filepath.Join(baseDir, "Code", "User", "settings.json")
 	entrypoint := filepath.Join(baseDir, ".vscode-server", "extensions", "openai.chatgpt-test", "bin", "linux-x86_64", "codex")
@@ -305,8 +247,6 @@ func TestBootstrapOnlyWritesConfigWithoutTouchingVSCode(t *testing.T) {
 		CurrentVersion:     "dev",
 		RelayServerURL:     "ws://127.0.0.1:9500/ws/agent",
 		VSCodeSettingsPath: settingsPath,
-		BundleEntrypoint:   entrypoint,
-		BootstrapOnly:      true,
 	})
 	if err != nil {
 		t.Fatalf("bootstrap only: %v", err)
@@ -358,7 +298,6 @@ func TestBootstrapPreservesExistingFeishuSecretsWhenFlagsAreEmpty(t *testing.T) 
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -394,7 +333,6 @@ func TestBootstrapPreservesExistingDebugRelayFlowFlag(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -426,7 +364,6 @@ func TestBootstrapPreservesExistingDebugRelayRawFlag(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -462,7 +399,6 @@ func TestBootstrapPreservesExistingPprofConfig(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap: %v", err)
@@ -536,7 +472,6 @@ func TestBootstrapRejectsLegacySplitConfigFiles(t *testing.T) {
 		CurrentVersion:  "dev",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err == nil || !strings.Contains(err.Error(), "legacy env config files are no longer supported") {
 		t.Fatalf("expected legacy split config rejection, got state=%#v err=%v", state, err)
@@ -581,7 +516,6 @@ func TestBootstrapPreservesReleaseInstallMetadata(t *testing.T) {
 		CurrentSlot:     "v1.2.3-beta.4",
 		RelayServerURL:  "ws://127.0.0.1:9500/ws/agent",
 		CodexRealBinary: "/usr/local/bin/codex",
-		Integrations:    []WrapperIntegrationMode{IntegrationManagedShim},
 	})
 	if err != nil {
 		t.Fatalf("bootstrap release metadata: %v", err)

@@ -37,8 +37,8 @@ func formatStatusSnapshotBinary(identity agentproto.ServerIdentity) string {
 	return strings.Join(parts, " / ")
 }
 
-func (a *App) handleStatus(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, a.runtimeStatusPayload())
+func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.runtimeStatusPayload(r.Context()))
 }
 
 func summarizeRemoteStatuses(values []orchestrator.RemoteTurnStatus) string {

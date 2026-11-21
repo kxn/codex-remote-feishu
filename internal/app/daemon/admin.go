@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	"github.com/kxn/codex-remote-feishu/internal/app/adminauth"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/adminui"
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/branding"
 	"github.com/kxn/codex-remote-feishu/internal/config"
 	"github.com/kxn/codex-remote-feishu/internal/core/orchestrator"
@@ -160,12 +162,20 @@ type adminFeishuAppView struct {
 }
 
 type runtimeStatusPayload struct {
+	Authority          string                          `json:"authority"`
+	Work               *runtimeWorkStatus              `json:"work,omitempty"`
 	Instances          []*state.InstanceRecord         `json:"instances"`
 	Surfaces           []*state.SurfaceConsoleRecord   `json:"surfaces"`
 	SurfaceStatuses    []adminSurfaceStatusSummary     `json:"surfaceStatuses,omitempty"`
 	Gateways           []feishu.GatewayStatus          `json:"gateways,omitempty"`
 	PendingRemoteTurns []orchestrator.RemoteTurnStatus `json:"pendingRemoteTurns"`
 	ActiveRemoteTurns  []orchestrator.RemoteTurnStatus `json:"activeRemoteTurns"`
+}
+
+type runtimeWorkStatus struct {
+	Available bool   `json:"available"`
+	ReadError string `json:"readError,omitempty"`
+	*workstore.RuntimeStatus
 }
 
 func (a *App) registerAPIRoutes(mux *http.ServeMux) {
@@ -457,8 +467,8 @@ func (a *App) handleSetupComplete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (a *App) handleRuntimeStatus(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, a.runtimeStatusPayload())
+func (a *App) handleRuntimeStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, a.runtimeStatusPayload(r.Context()))
 }
 
 func (a *App) handleAdminConfig(w http.ResponseWriter, _ *http.Request) {
@@ -688,11 +698,37 @@ func redactAdminConfig(cfg config.AppConfig) adminConfigView {
 	return view
 }
 
-func (a *App) runtimeStatusPayload() runtimeStatusPayload {
+func (a *App) runtimeStatusPayload(ctx context.Context) runtimeStatusPayload {
 	a.mu.Lock()
+	if a.legacyWorkRetired() {
+		runtime, gateways := a.teamRuntime, gatewayStatuses(a.gateway)
+		a.mu.Unlock()
+		payload := runtimeStatusPayload{
+			Authority:          "persistent_teams",
+			Instances:          []*state.InstanceRecord{},
+			Surfaces:           []*state.SurfaceConsoleRecord{},
+			Gateways:           gateways,
+			PendingRemoteTurns: []orchestrator.RemoteTurnStatus{},
+			ActiveRemoteTurns:  []orchestrator.RemoteTurnStatus{},
+			Work:               &runtimeWorkStatus{},
+		}
+		if runtime == nil || runtime.store == nil {
+			payload.Work.ReadError = "team work store is unavailable"
+			return payload
+		}
+		status, err := runtime.store.ReadRuntimeStatus(ctx)
+		if err != nil {
+			payload.Work.ReadError = "unable to read team work store"
+			return payload
+		}
+		payload.Work.Available = true
+		payload.Work.RuntimeStatus = &status
+		return payload
+	}
 	defer a.mu.Unlock()
 	surfaces := a.service.Surfaces()
 	return runtimeStatusPayload{
+		Authority:          "legacy",
 		Instances:          a.service.Instances(),
 		Surfaces:           surfaces,
 		SurfaceStatuses:    a.runtimeSurfaceStatusesLocked(surfaces),

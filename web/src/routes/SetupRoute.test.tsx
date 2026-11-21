@@ -431,7 +431,7 @@ describe("SetupRoute", () => {
     ).toBe(true);
   });
 
-  it("offers toggle-off actions for completed machine integrations", async () => {
+  it("offers autostart controls without exposing the retired VS Code integration", async () => {
     window.history.replaceState({}, "", "/setup");
     const user = userEvent.setup();
 
@@ -454,13 +454,13 @@ describe("SetupRoute", () => {
         }),
       },
       "/api/setup/autostart/disable": { status: 200, body: { supported: true, enabled: false } },
-      "/api/setup/vscode/disable": { status: 200, body: {} },
     });
 
     render(<SetupRoute />);
 
     expect(await screen.findByRole("button", { name: "关闭自动启动" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "关闭 VS Code 集成" })).toBeInTheDocument();
+    expect(screen.queryByText("VS Code 集成已启用。")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "关闭 VS Code 集成" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "关闭自动启动" }));
     expect(

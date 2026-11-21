@@ -52,6 +52,21 @@ export interface BootstrapState {
 }
 
 export interface RuntimeStatus {
+  authority: "persistent_teams" | "legacy";
+  work?:
+    | { available: false; readError: string }
+    | {
+        available: true;
+        projectTotal: number;
+        contextTotal: number;
+        workerTotal: number;
+        pendingInput: number;
+        runningAttempts: number;
+        occupiedAttempts: number;
+        detailLimit: number;
+        projects: Array<{ id: string; state: string }>;
+        workers: Array<{ id: string; state: string; backend: string }>;
+      };
   instances: Array<Record<string, unknown>>;
   surfaces: Array<Record<string, unknown>>;
   gateways?: GatewayStatus[];
@@ -489,6 +504,7 @@ export interface ManagedShimStatus {
 }
 
 export interface VSCodeDetectResponse {
+  canRemoveLegacyIntegration?: boolean;
   sshSession: boolean;
   recommendedMode: string;
   currentMode: string;
@@ -605,7 +621,7 @@ export interface OnboardingWorkflowResponse {
   runtimeRequirements: RuntimeRequirementsDetectResponse;
   app?: OnboardingWorkflowApp;
   autostart: OnboardingWorkflowMachineStep;
-  vscode: OnboardingWorkflowMachineStep;
+  vscode?: OnboardingWorkflowMachineStep;
   guide?: OnboardingWorkflowGuide;
   stages: OnboardingWorkflowStage[];
 }

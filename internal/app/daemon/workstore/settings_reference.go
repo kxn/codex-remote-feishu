@@ -59,3 +59,15 @@ func (t *Tx) CheckRoleSettingsReference(roleID, sourceHash string, revision int6
 	}
 	return nil
 }
+
+// CheckContextPreferencesRevision treats a context without overrides as revision zero.
+func (t *Tx) CheckContextPreferencesRevision(contextID string, expected int64) error {
+	preferences, err := t.GetContextPreferences(contextID)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	if preferences.Revision != expected {
+		return ErrConflict
+	}
+	return nil
+}

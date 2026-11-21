@@ -1,8 +1,8 @@
 # 架构
 
 > Type: `general`
-> Updated: `2026-11-21`
-> Summary: 增加持久团队执行内核、业务 CLI、迁移与原生协议分层，明确旧 surface 结构的复用和历史范围。
+> Updated: `2026-11-22`
+> Summary: 标明现行团队执行所有权与旧 surface/orchestrator 的适用范围。
 
 ## 1. 当前状态
 
@@ -27,6 +27,8 @@
 下文关于旧 surface／room／orchestrator 调度的细节保留作既有代码复用和迁移说明；新引擎激活后，不再由其执行旧群 primary／coworker 或 Cron。原生人工接管已取消，历史改写命令 `/bendtomywill` 已完整删除。当前运行规则以两份[执行状态机](./remote-surface-state-machine.md)和[卡片状态机](./feishu-card-ui-state-machine.md)的团队章节为准；场景与验证见[团队验收映射](../inprogress/feishu-agent-team-acceptance.md)。
 
 ## 2. 运行角色与入口
+
+`GET /v1/status` 和 `GET /api/admin/runtime-status` 返回当前执行权威。团队模式返回 `authority: persistent_teams`，以单一 SQLite 快照提供项目、工作上下文、worker、待处理输入、运行和占用统计。项目和 worker 明细各最多 50 条。工作库不可读时返回 `work.available: false` 及读取错误，旧 surface 和 turn 字段仍为空数组。
 
 当前产品入口已经收敛到统一二进制：
 
@@ -162,7 +164,7 @@ testkit/
 
 这类状态只服务于当前进程内的交互门禁和回调继续处理，不作为领域状态根长期保存。
 
-当前 `Service` 仍是唯一产品状态中心，但内部已经开始按 owner 收口成显式 runtime cluster，而不是继续把所有字段平铺在根 struct 上。当前稳定的第一批 cluster 包括：
+在旧 surface 调度模型中，`Service` 是旧产品状态中心，但内部已经开始按 owner 收口成显式 runtime cluster，而不是继续把所有字段平铺在根 struct 上。当前稳定的第一批 cluster 包括：
 
 - `turns`
   - 负责 queue / remote-turn runtime 热状态，包括 `pendingRemote`、`activeRemote`、`pendingSteers`、`compactTurns` 及其生命周期 helper
@@ -291,7 +293,7 @@ Feishu surface identity 的跨层 contract 由零 adapter 依赖的 `internal/fe
 - `feishuRuntime` 负责 runtime-apply、permission gap refresh、onboarding 与 time-sensitive runtime
 - `persistedStoreRuntimeState[T]` 负责 surface resume、bot capability settings、Feishu room state、Feishu bot identity、Claude workspace profile 五个 durable JSON store 的统一载入状态与可写门禁
 
-Feishu room primary 的 durable SSOT 仍在 orchestrator room context 与 `FeishuRoomStateRecord`，但 Feishu SDK callback goroutine 不直接读取 orchestrator mutable root。daemon 在 room state materialize、primary sync 和 AppID identity cleanup 后构建 copy-on-write `chatID -> gatewayID` snapshot，adapter 的无 @ 群消息 gate 只读该 snapshot，再结合 permission cache 判定是否放行。
+旧 Feishu room primary 的持久数据来自 orchestrator room context 与 `FeishuRoomStateRecord`，但 Feishu SDK callback goroutine 不直接读取 orchestrator mutable root。daemon 在 room state materialize、primary sync 和 AppID identity cleanup 后构建 copy-on-write `chatID -> gatewayID` snapshot，adapter 的无 @ 群消息 gate 只读该 snapshot，再结合 permission cache 判定是否放行。
 
 这些 runtime 仍留在 `internal/app/daemon` 同包内，但状态拥有者、receiver 和顶层调度边界已经分开；`App` 主要保留 lifecycle、依赖注入、跨 runtime 编排，以及少量必须集中托管的共享资源。
 
@@ -344,7 +346,7 @@ wrapper 不做：
 
 wrapper 当前不再直接依赖 `app/install`；如果需要探测 VS Code extension bundle 候选，会复用 `adapter/editor` 提供的共享探测能力。
 
-### 5.2 Orchestrator 是唯一产品状态中心
+### 5.2 旧 surface 调度的产品状态中心
 
 所有这些都必须在 orchestrator 决策：
 

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -600,6 +601,79 @@ func TestProfileCatalogMigrationFailsClosedWhenSelectionStateIsCorrupt(t *testin
 			})
 			if launched {
 				t.Fatal("corrupt selection state did not block managed Codex launch")
+			}
+		})
+	}
+}
+
+func TestTeamProfileCatalogMigrationIgnoresRetiredSurfaceState(t *testing.T) {
+	for _, corrupt := range []bool{false, true} {
+		t.Run(map[bool]string{false: "readable-history", true: "corrupt-history"}[corrupt], func(t *testing.T) {
+			root := t.TempDir()
+			configPath := filepath.Join(root, "config.json")
+			stateDir := filepath.Join(root, "state")
+			cfg := config.DefaultAppConfig()
+			cfg.Codex.Providers = []config.LegacyCodexProviderConfig{{
+				ID: "team-proxy", Name: "Team Proxy", BaseURL: "https://proxy.example/v1", APIKey: "secret", Model: "gpt-5.5", ReasoningEffort: "high",
+			}}
+			writeLegacyCodexProvidersConfig(t, configPath, cfg)
+			surfacePath := surfaceresume.StatePath(stateDir)
+			history := surfaceresume.NewStore(surfacePath)
+			if err := history.Put(surfaceresume.Entry{
+				SurfaceSessionID: "feishu:main:user:owner",
+				GatewayID:        "main",
+				ActorUserID:      "owner",
+				Backend:          string(agentproto.BackendCodex),
+				CodexProfileID:   "team-proxy",
+				ResumeThreadID:   "old-thread",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if corrupt {
+				if err := os.WriteFile(surfacePath, []byte("{"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			botStore := botcapabilitysettings.NewStore(botcapabilitysettings.StatePath(stateDir))
+			if err := botStore.Put(state.BotCapabilitySettingsRecord{
+				GatewayID: "main", ProductMode: state.ProductModeNormal, Backend: agentproto.BackendCodex, CodexProfileID: "team-proxy",
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			app := New(":0", ":0", nil, agentproto.ServerIdentity{})
+			app.SetHeadlessRuntime(HeadlessRuntimeConfig{LegacyHistoryOnly: true, Paths: relayruntime.Paths{StateDir: stateDir}})
+			original, err := os.ReadFile(surfacePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			app.ConfigureAdmin(AdminRuntimeOptions{ConfigPath: configPath})
+			if err := app.profileCatalogMutationError(); err != nil {
+				t.Fatal(err)
+			}
+			migrated, err := config.LoadAppConfigAtPath(configPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if migrated.Config.Codex.ProfileCatalogMigrationVersion != profileCatalogMigrationVersion || len(migrated.Config.Codex.Providers) != 0 || len(migrated.Config.Codex.Profiles) != 1 {
+				t.Fatalf("expected migrated catalog: %+v", migrated.Config.Codex)
+			}
+			prefs, err := app.profileContextPreferenceStore()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := prefs.CodexCurrent("team-proxy"); !ok {
+				t.Fatal("active profile context preference was not migrated")
+			}
+			if record, ok := app.botCapabilitySettingsState.store.Get(state.BotCapabilitySettingsKey("main")); !ok || record.CodexProfileID != "team-proxy" {
+				t.Fatalf("lost current Bot selection: %+v", record)
+			}
+			got, err := os.ReadFile(surfacePath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(original, got) {
+				t.Fatal("profile migration changed retired surface state")
 			}
 		})
 	}

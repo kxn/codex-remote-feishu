@@ -113,6 +113,10 @@ func toolDefinitions() []toolDefinition {
 
 func (a *App) requireToolAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if a.legacyWorkRetired() {
+			writeToolError(w, http.StatusGone, toolError{Code: "legacy_tool_service_retired", Message: "The surface-based tool service is retired. Use the team's run-scoped CLI."})
+			return
+		}
 		if !adminauth.IsLoopbackRequest(r) {
 			writeToolError(w, http.StatusForbidden, toolError{
 				Code:    "loopback_required",

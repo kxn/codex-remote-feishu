@@ -81,7 +81,11 @@ func applyCodexResumePolicyToThreadParams(params map[string]any, policy *agentpr
 	if policy == nil {
 		return
 	}
-	params["modelProvider"] = policy.ModelProviderID
+	if policy.InheritNativeProvider {
+		delete(params, "modelProvider")
+	} else {
+		params["modelProvider"] = policy.ModelProviderID
+	}
 	if shouldSendCodexPolicyValue(policy.ModelMode) && policy.Model != "" {
 		params["model"] = policy.Model
 	} else {

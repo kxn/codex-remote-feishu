@@ -19,30 +19,57 @@ func (a *App) applyClaudeHeadlessProfileEnv(baseEnv []string, backend agentproto
 	if err != nil {
 		return nil, config.ClaudeRuntimeSettings{}, err
 	}
-	profile, ok := config.ResolveClaudeProfile(loaded.Config, profileID)
-	if !ok {
-		return nil, config.ClaudeRuntimeSettings{}, fmt.Errorf("claude profile %q not found", strings.TrimSpace(profileID))
-	}
-	preferenceStore, err := a.profileContextPreferenceStore()
+	profile, _, err := a.resolveClaudeLaunchProfile(loaded.Config, profileID, state.ModelConfigRecord{})
 	if err != nil {
 		return nil, config.ClaudeRuntimeSettings{}, err
 	}
+	return applyResolvedClaudeLaunchProfile(env, profile)
+}
+
+func applyResolvedClaudeLaunchProfile(env []string, profile config.ClaudeProfile) ([]string, config.ClaudeRuntimeSettings, error) {
+	if profile.BuiltIn {
+		// Native defaults inherit provider and authentication. Explicit model
+		// and effort still need to reach the child process and settings overlay.
+		settings := config.ClaudeReasoningRuntimeSettings(profile.ReasoningEffort)
+		if profile.Model != "" {
+			settings = config.MergeClaudeRuntimeSettings(settings, config.ClaudeRuntimeSettings{Env: map[string]string{config.ClaudeModelEnv: profile.Model}})
+		}
+		return config.ApplyClaudeRuntimeSettingsEnv(env, settings), settings, nil
+	}
+	env, err := config.ApplyClaudeProfileLaunchEnv(env, profile)
+	if err != nil {
+		return nil, config.ClaudeRuntimeSettings{}, err
+	}
+	return env, config.ClaudeProfileRuntimeSettings(profile), nil
+}
+
+func (a *App) resolveClaudeLaunchProfile(cfg config.AppConfig, profileID string, overrides state.ModelConfigRecord) (config.ClaudeProfile, state.ProfileContextPreference, error) {
+	profile, ok := config.ResolveClaudeProfile(cfg, profileID)
+	if !ok {
+		return profile, state.ProfileContextPreference{}, fmt.Errorf("claude profile %q not found", strings.TrimSpace(profileID))
+	}
+	preferenceStore, err := a.profileContextPreferenceStore()
+	if err != nil {
+		return profile, state.ProfileContextPreference{}, err
+	}
 	preference, ok := preferenceStore.ClaudeCurrent(profile.ID)
 	if !ok {
-		return nil, config.ClaudeRuntimeSettings{}, fmt.Errorf("claude profile %q context preference not found", profile.ID)
+		return profile, preference, fmt.Errorf("claude profile %q context preference not found", profile.ID)
+	}
+	if model := strings.TrimSpace(overrides.Model); model != "" {
+		profile.Model = model
+	}
+	if effort := config.NormalizeClaudeReasoningEffort(overrides.ReasoningEffort); effort != "" {
+		profile.ReasoningEffort = effort
 	}
 	if preference.Mode == state.ClaudeContextModeExtended {
 		model, _ := config.SplitClaudeExtendedContextSuffix(profile.Model)
-		if profile.BuiltIn {
+		if profile.BuiltIn && model == "" {
 			model = "sonnet"
 		}
 		if model != "" {
 			profile.Model = model + "[1m]"
 		}
 	}
-	env, err = config.ApplyClaudeProfileLaunchEnv(env, profile)
-	if err != nil {
-		return nil, config.ClaudeRuntimeSettings{}, err
-	}
-	return env, config.ClaudeProfileRuntimeSettings(profile), nil
+	return profile, preference, nil
 }

@@ -9,13 +9,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/kxn/codex-remote-feishu/internal/adapter/feishu"
 	previewpkg "github.com/kxn/codex-remote-feishu/internal/adapter/feishu/preview"
-	toolruntime "github.com/kxn/codex-remote-feishu/internal/app/daemon/toolruntime"
 	"github.com/kxn/codex-remote-feishu/internal/app/desktopsession"
 	"github.com/kxn/codex-remote-feishu/internal/app/install"
 	"github.com/kxn/codex-remote-feishu/internal/app/wrapper"
@@ -112,17 +110,17 @@ func RunMainWithArgs(ctx context.Context, args []string, version, branch string)
 		codexRealBinary = resolved
 	}
 	app.SetHeadlessRuntime(HeadlessRuntimeConfig{
-		BinaryPath:      identity.BinaryPath,
-		CodexRealBinary: codexRealBinary,
-		ConfigPath:      cfg.ConfigPath,
-		BaseEnv:         baseEnv,
-		Paths:           paths,
-		MinIdle:         1,
+		LegacyHistoryOnly: true,
+		BinaryPath:        identity.BinaryPath,
+		CodexRealBinary:   codexRealBinary,
+		ConfigPath:        cfg.ConfigPath,
+		BaseEnv:           baseEnv,
+		Paths:             paths,
+		MinIdle:           1,
 	})
-	app.SetToolRuntime(toolruntime.Config{
-		ListenAddr: net.JoinHostPort(loadedConfig.Config.Tool.ListenHost, strconv.Itoa(loadedConfig.Config.Tool.ListenPort)),
-		StateFile:  paths.ToolServiceFile,
-	})
+	// Persistent teams expose their run-scoped CLI service on the daemon API.
+	// Retired instance/surface MCP endpoints must not publish a second sender.
+
 	app.SetFinalBlockPreviewer(finalBlockPreviewer)
 	app.SetDebugRelayFlow(cfg.DebugRelayFlow)
 	app.SetExternalAccess(ExternalAccessRuntimeConfig{

@@ -1,8 +1,8 @@
 # Documentation Index
 
 > Type: `general`
-> Updated: `2026-11-21`
-> Summary: 汇总 Agent 团队产品说明、实施规格、执行记录与验收证据，并保留已退役功能的历史设计。
+> Updated: `2026-11-22`
+> Summary: 明确飞书团队的现行使用入口、目标合同、验收证据及退役设计。
 
 ## 1. 适用范围
 
@@ -126,6 +126,12 @@
 
 ## 6. 当前索引
 
+- 使用飞书团队，请读[飞书使用说明书](./general/user-guide.md)。
+- 核对当前运行与卡片事实，请读[远程执行状态机](./general/remote-surface-state-machine.md)与[飞书卡片 UI 状态机](./general/feishu-card-ui-state-machine.md)的团队章节。
+- 核对设计目标，请读[产品合同](./draft/feishu-agent-team-product-design.md)与[技术合同](./draft/feishu-agent-team-technical-design.md)。专项附录展开设计依据与后端限制。
+- 核对实现与证据，请读[验收映射](./inprogress/feishu-agent-team-acceptance.md)与[实施账本](./inprogress/feishu-agent-team-implementation.md)。旧功能设计见「已退役」索引。
+
+
 ### 6.1 `general`
 
 - [adding-new-ai-backend.md](./general/adding-new-ai-backend.md)
@@ -159,7 +165,6 @@
 
 ### 6.2 `implemented`
 
-- [cron-bitable-scheduler-design.md](./implemented/cron-bitable-scheduler-design.md)
 - [feishu-md-preview-design.md](./implemented/feishu-md-preview-design.md)
 - [feishu-request-approval-design.md](./implemented/feishu-request-approval-design.md)
 - [headless-pool-workspace-thread-selection-fix.md](./implemented/headless-pool-workspace-thread-selection-fix.md)
@@ -177,6 +182,8 @@
 - [web-admin-ui-redesign.md](./implemented/web-admin-ui-redesign.md)
 
 ### 6.3 `inprogress`
+
+- [feishu-agent-team-ssot-audit.md](./inprogress/feishu-agent-team-ssot-audit.md) — 团队改版后的状态所有权、旧入口退役、配置执行一致性与回归证据。
 
 - [feishu-agent-team-acceptance.md](./inprogress/feishu-agent-team-acceptance.md) — 产品场景与实际实现、测试证据及真实环境边界映射。
 - [feishu-agent-team-implementation.md](./inprogress/feishu-agent-team-implementation.md) — 完整产品实施计划、子代理分工、依赖与验证记录。
@@ -244,6 +251,8 @@
 - [workspace-mode-redesign.md](./draft/workspace-mode-redesign.md)
 
 ### 6.5 `obsoleted`
+
+- [cron-bitable-scheduler-design.md](./obsoleted/cron-bitable-scheduler-design.md) — 已退役的定时任务与历史数据。
 
 - [current-thread-patch-v1-prd.md](./obsoleted/current-thread-patch-v1-prd.md)
 - [current-thread-patch-v1-tech-plan.md](./obsoleted/current-thread-patch-v1-tech-plan.md)

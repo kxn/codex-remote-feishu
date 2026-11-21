@@ -9,6 +9,10 @@ import (
 
 func (a *App) configureGoalInterlockStateLocked(stateDir string) {
 	path := goalinterlockstore.StatePath(stateDir)
+	if a.legacyWorkRetired() {
+		a.goalInterlockRuntime = loadHistoryStore("goal queue interlock", path, goalinterlockstore.LoadStore)
+		return
+	}
 	a.goalInterlockRuntime = loadPersistedStore("goal queue interlock", path, goalinterlockstore.LoadStore)
 	if a.goalInterlockRuntime.store == nil || !a.goalInterlockRuntime.writable() {
 		return
@@ -17,6 +21,9 @@ func (a *App) configureGoalInterlockStateLocked(stateDir string) {
 }
 
 func (a *App) persistGoalInterlockStateLocked(now time.Time) {
+	if a.legacyWorkRetired() {
+		return
+	}
 	if a.goalInterlockRuntime.store == nil || !a.goalInterlockRuntime.writable() {
 		return
 	}

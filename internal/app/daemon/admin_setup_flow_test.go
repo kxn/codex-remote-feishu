@@ -222,6 +222,7 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 	})
 
 	app, token := newRemoteSetupTestApp(t, home)
+	app.headlessRuntime.LegacyHistoryOnly = true
 	cookie := exchangeSetupSessionCookie(t, app, token)
 
 	req := performSetupRequestWithCookie(http.MethodPost, "/api/setup/feishu/apps", `{"id":"main","name":"Main Bot","appId":"cli_xxx","appSecret":"secret_xxx"}`, cookie)
@@ -261,8 +262,13 @@ func TestSetupOnboardingWorkflowTracksMachineDecisionsWithoutManualStepPersisten
 	if payload.Autostart.Status != onboardingStageStatusComplete && payload.Autostart.Status != onboardingStageStatusNotApplicable {
 		t.Fatalf("autostart status = %q, want complete or not_applicable", payload.Autostart.Status)
 	}
-	if payload.VSCode.Status != onboardingStageStatusComplete {
-		t.Fatalf("vscode status = %q, want complete", payload.VSCode.Status)
+	if payload.VSCode != nil {
+		t.Fatalf("retired VS Code integration is still shown: %#v", payload.VSCode)
+	}
+	for _, stage := range payload.Stages {
+		if stage.ID == onboardingStageVSCode {
+			t.Fatalf("retired VS Code integration is still an onboarding stage: %#v", stage)
+		}
 	}
 	if payload.App == nil {
 		t.Fatalf("expected selected app view, got %#v", payload)

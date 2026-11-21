@@ -329,7 +329,10 @@ func TestRuntimeStatusPayloadOmitsSurfaceProgressSummaries(t *testing.T) {
 		},
 	}
 
-	payload := app.runtimeStatusPayload()
+	payload := app.runtimeStatusPayload(context.Background())
+	if payload.Authority != "legacy" || payload.Work != nil {
+		t.Fatalf("unexpected legacy authority: %#v", payload)
+	}
 	if len(payload.SurfaceStatuses) != 1 {
 		t.Fatalf("expected one surface summary, got %#v", payload.SurfaceStatuses)
 	}

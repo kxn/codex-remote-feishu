@@ -285,7 +285,6 @@ func TestVSCodeDetectAndApplyManagedShimUseWindowsEntrypoint(t *testing.T) {
 			BaseDir:                    home,
 			VSCodeSettingsPath:         settingsPath,
 			CandidateBundleEntrypoints: []string{windowsEntrypoint},
-			DefaultIntegrations:        install.DefaultIntegrations("windows"),
 		}, nil
 	}
 	if err := install.WriteState(installStatePath, install.InstallState{
@@ -778,4 +777,152 @@ func readFileString(t *testing.T, path string) string {
 		t.Fatalf("ReadFile(%s): %v", path, err)
 	}
 	return string(raw)
+}
+
+func TestTeamRuntimeRetiresVSCodeInstallButAllowsRemovingExistingShim(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+	binary := filepath.Join(home, "bin", "codex-remote")
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, binary, "wrapper-binary")
+	writeExecutableFile(t, entrypoint, "original-binary")
+	app, configPath, installStatePath := newVSCodeAdminTestApp(t, home, binary, true)
+
+	// Existing users may have installed a shim before switching to team work.
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/apply", `{"mode":"managed_shim"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("install old shim: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	beforeBinary := readFileString(t, entrypoint)
+	beforeConfig := readFileString(t, configPath)
+	beforeState := readFileString(t, installStatePath)
+	app.headlessRuntime.LegacyHistoryOnly = true
+
+	for _, action := range []string{"apply", "reinstall-shim"} {
+		rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/"+action, `{"mode":"managed_shim"}`)
+		if rec.Code != http.StatusGone {
+			t.Fatalf("retired action %q: status=%d body=%s", action, rec.Code, rec.Body.String())
+		}
+	}
+	if readFileString(t, entrypoint) != beforeBinary || readFileString(t, configPath) != beforeConfig || readFileString(t, installStatePath) != beforeState {
+		t.Fatal("retired actions modified installed integration")
+	}
+
+	rec = performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	var detected vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detected); rec.Code != http.StatusOK || err != nil {
+		t.Fatalf("detect old shim: status=%d err=%v", rec.Code, err)
+	}
+	if !detected.CanRemoveLegacyIntegration || detected.NeedsShimReinstall || detected.RecommendedMode != "" {
+		t.Fatalf("detection should offer cleanup only: %#v", detected)
+	}
+
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/disable", "")
+	var disabled vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&disabled); rec.Code != http.StatusOK || err != nil {
+		t.Fatalf("remove old shim: status=%d err=%v", rec.Code, err)
+	}
+	if disabled.CanRemoveLegacyIntegration || readFileString(t, entrypoint) != "original-binary" {
+		t.Fatalf("cleanup should restore the native binary and clear its own entry: %#v", disabled)
+	}
+}
+
+func TestTeamVSCodeCleanupClearsOwnedSettingsAfterRemovingOrphanedShim(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+	binary := filepath.Join(home, "bin", "codex-remote")
+	entrypoint := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, binary, "wrapper")
+	writeExecutableFile(t, entrypoint, "native")
+	app, configPath, statePath := newVSCodeAdminTestApp(t, home, binary, true)
+	app.headlessRuntime.LegacyHistoryOnly = true
+	if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+		EntrypointPath: entrypoint, InstallStatePath: statePath, ConfigPath: configPath, InstanceID: "stable",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(editor.ManagedShimRealBinaryPath(entrypoint)); err != nil {
+		t.Fatal(err)
+	}
+	defaults, err := app.platformDefaults()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := defaults.VSCodeSettingsPath
+	writeExecutableFile(t, settingsPath, `{"editor.fontSize":16}`)
+	if err := editor.SetVSCodeSettingsExecutable(settingsPath, binary); err != nil {
+		t.Fatal(err)
+	}
+	rec := performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/disable", "")
+	var disabled vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&disabled); rec.Code != http.StatusOK || err != nil {
+		t.Fatalf("disable status=%d err=%v", rec.Code, err)
+	}
+	if disabled.CanRemoveLegacyIntegration || disabled.Settings.CLIExecutable != "" {
+		t.Fatalf("first cleanup left something to remove: %+v", disabled.Settings)
+	}
+	var settings map[string]any
+	if err := json.Unmarshal([]byte(readFileString(t, settingsPath)), &settings); err != nil || settings["editor.fontSize"] != float64(16) {
+		t.Fatalf("unrelated settings were lost: %v", err)
+	}
+	if _, err := os.Stat(editor.ManagedShimSidecarPath(entrypoint)); !os.IsNotExist(err) {
+		t.Fatalf("orphaned sidecar remained: %v", err)
+	}
+}
+
+func TestTeamVSCodeCleanupPreservesForeignSidecarAndSettingsDespiteRecordedPath(t *testing.T) {
+	home := t.TempDir()
+	setTestHome(t, home)
+	t.Setenv("VSCODE_SERVER_EXTENSIONS_DIR", filepath.Join(home, ".vscode-server", "extensions"))
+	binary := filepath.Join(home, "bin", "codex-remote")
+	foreign := testVSCodeBundleEntrypoint(home, ".vscode-server", "2")
+	owned := testVSCodeBundleEntrypoint(home, ".vscode-server", "1")
+	writeExecutableFile(t, binary, "wrapper")
+	writeExecutableFile(t, foreign, "other native")
+	writeExecutableFile(t, owned, "my native")
+	app, configPath, statePath := newVSCodeAdminTestApp(t, home, binary, true)
+	app.headlessRuntime.LegacyHistoryOnly = true
+	otherStateDir := filepath.Join(home, "other")
+	if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+		EntrypointPath: foreign, InstallStatePath: filepath.Join(otherStateDir, "install-state.json"),
+		ConfigPath: filepath.Join(otherStateDir, "config.json"), InstanceID: "other",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := install.WriteState(statePath, install.InstallState{BundleEntrypoint: foreign}); err != nil {
+		t.Fatal(err)
+	}
+	defaults, err := app.platformDefaults()
+	if err != nil {
+		t.Fatal(err)
+	}
+	settingsPath := defaults.VSCodeSettingsPath
+	writeExecutableFile(t, settingsPath, "{}")
+	if err := editor.SetVSCodeSettingsExecutable(settingsPath, foreign); err != nil {
+		t.Fatal(err)
+	}
+	rec := performAdminRequest(t, app, http.MethodGet, "/api/admin/vscode/detect", "")
+	var detected vscodeDetectResponse
+	if err := json.NewDecoder(rec.Body).Decode(&detected); rec.Code != http.StatusOK || err != nil || detected.CanRemoveLegacyIntegration {
+		t.Fatalf("recorded path wrongly superseded sidecar ownership: status=%d detected=%t err=%v", rec.Code, detected.CanRemoveLegacyIntegration, err)
+	}
+	if err := editor.PatchBundleEntrypoint(editor.PatchBundleEntrypointOptions{
+		EntrypointPath: owned, InstallStatePath: statePath, ConfigPath: configPath, InstanceID: "stable",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	beforeForeign := readFileString(t, editor.ManagedShimSidecarPath(foreign))
+	beforeSettings := readFileString(t, settingsPath)
+	rec = performAdminRequest(t, app, http.MethodPost, "/api/admin/vscode/disable", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("remove owned shim: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if readFileString(t, owned) != "my native" {
+		t.Fatal("owned binary was not restored")
+	}
+	if readFileString(t, editor.ManagedShimSidecarPath(foreign)) != beforeForeign || readFileString(t, settingsPath) != beforeSettings {
+		t.Fatal("cleanup disturbed the other install")
+	}
 }

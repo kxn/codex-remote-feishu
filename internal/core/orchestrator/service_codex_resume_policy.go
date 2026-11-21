@@ -10,13 +10,15 @@ import (
 func CodexResumePolicyFromContract(connection *state.CodexConnectionContract, threadPolicy *state.CodexThreadPolicy) *agentproto.CodexResumePolicy {
 	connection = state.CloneCodexConnectionContract(connection)
 	threadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
-	if connection == nil || strings.TrimSpace(connection.ModelProviderID) == "" {
+	if connection == nil {
 		return nil
 	}
+	inheritNativeProvider := connection.ModelProviderID == "" && connection.Kind == state.CodexProfileKindNative
 	policy := &agentproto.CodexResumePolicy{
-		Mode:                 agentproto.CodexResumeApplyTargetProfile,
-		ConnectionContractID: connection.ConnectionContractID,
-		ModelProviderID:      connection.ModelProviderID,
+		Mode:                  agentproto.CodexResumeApplyTargetProfile,
+		ConnectionContractID:  connection.ConnectionContractID,
+		ModelProviderID:       connection.ModelProviderID,
+		InheritNativeProvider: inheritNativeProvider,
 	}
 	if threadPolicy != nil {
 		policy.ThreadPolicyID = threadPolicy.ThreadPolicyID
@@ -37,7 +39,7 @@ func CodexResumePolicyFromContract(connection *state.CodexConnectionContract, th
 func CodexResumePolicyForThread(connection *state.CodexConnectionContract, threadPolicy *state.CodexThreadPolicy, thread *state.ThreadRecord) *agentproto.CodexResumePolicy {
 	connection = state.CloneCodexConnectionContract(connection)
 	threadPolicy = state.CloneCodexThreadPolicy(threadPolicy)
-	if connection == nil || strings.TrimSpace(connection.ModelProviderID) == "" {
+	if connection == nil {
 		return nil
 	}
 	if preserved := codexPreservePolicyFromObserved(connection, threadPolicy, thread); preserved != nil {

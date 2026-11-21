@@ -1,7 +1,7 @@
 # Feishu 卡片 UI 状态机
 
 > Type: `general`
-> Updated: `2026-11-21`
+> Updated: `2026-11-22`
 > Summary: 持久团队视图、固定导航恢复、团队资料共享、真实回调与旧决定失效规则。
 
 ## 0. 持久团队界面：本分支的新入口
@@ -13,6 +13,12 @@
 Codex 程序维护使用单独的确认／进度／结果视图，确认目标绑定实际安装指纹与固定版本，同一候选重复点击只能查询原事务。安装已登记时，迟到的取消操作返回真实进度，不能谎称取消成功。未知或完成状态各通知一次，初始进度卡未能登记也能从原确认来源恢复通知；更换 Bot 后不借新身份向旧私聊地址发送。
 
 新团队运行时使用持久 UIView、HumanInteraction 和共用 outbox。后文旧 projector／surface 卡片规则仅用于未进入新引擎的旧实现和迁移审计；新卡不再要求旧 daemon lifecycle token，而是校验持久视图及其业务目标。旧卡回调会明确提示入口已停用，不重新唤起旧执行引擎。
+
+### 菜单与退役入口
+
+当前应用发布菜单和 daemon 菜单分发共享 `internal/feishuapp/team_menu.go`：工作菜单、工作状态、追加待办、项目、工作资料、历史工作、执行设置。已发布应用仍可能发送旧 key：model／reasoning／access 进入真实设置页；stop／new 明确提示在私聊使用 `/stop`／`/new`，不会回到首页后假装已执行。未知旧 key 显示不可用说明和当前工作菜单。群内的项目协作继续使用自然语言。
+
+Setup 不再包含 VS Code 接管步骤，Admin 只对检测到的旧集成提供明确清理，不提供安装或重装。旧 HTTP 安装调用在团队模式返回停用，不写配置、替换二进制或制造成功状态。飞书发布模板的事件订阅与实际 SDK 分发一致；多维表格权限用于团队资料，不用于已删除的 Cron 产品。
 
 ### 接收与身份
 
@@ -68,7 +74,7 @@ PATCH 没有 create 的 UUID 去重语义。响应丢失后保存 unknown，不�
 
 ## 1. 文档定位
 
-这份文档描述的是 **当前代码已经实现** 的 Feishu 卡片 UI / callback 层行为。
+本文第 0 节描述当前持久团队的卡片与回调；以下旧 surface 卡片规则只用于历史实现、迁移和复用组件审计，不恢复已退役入口。
 
 2026-08-11 #873 补充：Codex Profile 配置卡的可见入口是 `/codexprofile`；旧 `/codexprovider` 文本命令和 `codex_provider` 菜单 action 均拒绝解析，不再作为 hidden alias。配置卡以 canonical Profile catalog 为 read model，legacy Provider catalog 不再反向合成 Profile 候选；分页 `select_static` 会放入可用与不可用 Profile，不可用项在 label 上追加“不可用”，并在 notice 区显示用户可读原因。不可用 OAuth/API Profile 可被选中提交，但 submit 阶段会同卡拒绝，不会写入 `CodexProfileID`，也不会启动或重启实例。分页按钮走 `page_local_action + cursor` 并 inline replace 当前卡，submit 成功只写 canonical `CodexProfileID`。
 

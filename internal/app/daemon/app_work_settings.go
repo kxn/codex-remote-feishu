@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workengine"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workhost"
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/config"
@@ -35,8 +36,8 @@ func teamID(prefix, value string) string {
 }
 
 func (a *App) workBotSettingsLocked(gateway string) state.BotCapabilitySettingsRecord {
-	for _, record := range a.service.BotCapabilitySettings() {
-		if record.GatewayID == gateway {
+	if store := a.botCapabilitySettingsState.store; store != nil {
+		if record, ok := store.Get(state.BotCapabilitySettingsKey(gateway)); ok {
 			return record
 		}
 	}
@@ -48,32 +49,80 @@ func (a *App) workBotSettingsLocked(gateway string) state.BotCapabilitySettingsR
 
 // The digest detects global profile changes without duplicating editable
 // credentials in the work database. Only this digest crosses the store boundary.
-func workSettingsFingerprint(record state.BotCapabilitySettingsRecord, cfg config.AppConfig) string {
+type resolvedWorkBotSettings struct {
+	fingerprint string
+	claude      config.ClaudeProfile
+	openCode    config.OpenCodeProfile
+	err         error
+}
+
+func (a *App) resolveWorkBotSettings(record state.BotCapabilitySettingsRecord, cfg config.AppConfig) resolvedWorkBotSettings {
+	var result resolvedWorkBotSettings
 	var profile any
 	switch record.Backend {
 	case agentproto.BackendClaude:
-		profile, _ = config.ResolveClaudeProfile(cfg, record.ClaudeProfileID)
+		var preference state.ProfileContextPreference
+		result.claude, preference, result.err = a.resolveClaudeLaunchProfile(cfg, record.ClaudeProfileID, record.PromptOverride)
+		profile = struct {
+			Profile            config.ClaudeProfile
+			PreferenceRevision uint64
+		}{result.claude, preference.Revision}
 	case agentproto.BackendOpenCode:
-		profile = cfg.OpenCode
+		result.openCode, result.err = resolveOpenCodeLaunchProfile(cfg, record.OpenCodeProfileID, nil)
+		profile = result.openCode
 	default:
-		profile = cfg.Codex
+		var preference state.ProfileContextPreference
+		if store, err := a.profileContextPreferenceStore(); err == nil {
+			preference, _ = store.CodexCurrent(teamSettingsProfile(record))
+		}
+		profile = struct {
+			Catalog            config.CodexSettings
+			PreferenceRevision uint64
+		}{cfg.Codex, preference.Revision}
 	}
+	// Those legacy values belong to surface execution, not team work admission.
+	record.PromptOverride.AccessMode = ""
+	record.PlanMode = ""
+	record.PlanModeOverrideSet = false
+	record.OpenCodeAdmissionRef = nil
 	raw, _ := json.Marshal(struct {
 		Bot     state.BotCapabilitySettingsRecord
 		Profile any
 	}{record, profile})
 	hash := sha256.Sum256(raw)
-	return hex.EncodeToString(hash[:])
+	result.fingerprint = hex.EncodeToString(hash[:])
+	return result
 }
 
 func (a *App) syncWorkRoles(ctx context.Context, store *workstore.Store) error {
+	a.adminConfigMu.Lock()
+	defer a.adminConfigMu.Unlock()
+	return a.syncWorkRolesLocked(ctx, store, "")
+}
+
+func (a *App) workSettingsAdmission(store *workstore.Store) workengine.SettingsAdmission {
+	return func(ctx context.Context, roleID string, commit func() error) error {
+		// Identity replacement can also clear the Bot's settings.
+		a.feishuApplyMu.Lock()
+		defer a.feishuApplyMu.Unlock()
+		a.adminConfigMu.Lock()
+		defer a.adminConfigMu.Unlock()
+		if err := a.syncWorkRolesLocked(ctx, store, roleID); err != nil {
+			return err
+		}
+		return commit()
+	}
+}
+
+func (a *App) syncWorkRolesLocked(ctx context.Context, store *workstore.Store, onlyRoleID string) error {
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return err
 	}
 	apps := a.runtimeGatewayApps(loaded.Config)
 	for _, app := range apps {
-		if !app.Enabled || app.AppID == "" {
+		id := teamID("role", app.GatewayID)
+		if !app.Enabled || app.AppID == "" || onlyRoleID != "" && id != onlyRoleID {
 			continue
 		}
 		a.mu.Lock()
@@ -85,9 +134,8 @@ func (a *App) syncWorkRoles(ctx context.Context, store *workstore.Store) error {
 			}
 		}
 		a.mu.Unlock()
-		fingerprint := workSettingsFingerprint(settings, loaded.Config)
+		fingerprint := a.resolveWorkBotSettings(settings, loaded.Config).fingerprint
 		err = store.Within(ctx, func(tx *workstore.Tx) error {
-			id := teamID("role", app.GatewayID)
 			role, e := tx.GetRole(id)
 			if errors.Is(e, workstore.ErrNotFound) {
 				name := strings.TrimSpace(app.Name)
@@ -121,6 +169,12 @@ func (a *App) syncWorkRoles(ctx context.Context, store *workstore.Store) error {
 		if err != nil {
 			return err
 		}
+		if onlyRoleID != "" {
+			return nil
+		}
+	}
+	if onlyRoleID != "" {
+		return workstore.ErrConflict
 	}
 	return nil
 }
@@ -136,6 +190,8 @@ func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.Work
 		return result, err
 	}
 	a := r.app
+	a.adminConfigMu.Lock()
+	defer a.adminConfigMu.Unlock()
 	loaded, err := a.loadAdminConfig()
 	if err != nil {
 		return result, err
@@ -152,33 +208,14 @@ func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.Work
 	}
 	a.mu.Lock()
 	record := a.workBotSettingsLocked(binding.GatewayRef)
-	fingerprint := workSettingsFingerprint(record, loaded.Config)
-	result = workhost.LaunchSettings{Backend: work.Backend(record.Backend), Location: location, Environment: append([]string{}, a.headlessRuntime.BaseEnv...), LaunchArgs: append([]string{}, a.headlessRuntime.LaunchArgs...), Overrides: agentproto.PromptOverrides{Model: record.PromptOverride.Model, ReasoningEffort: record.PromptOverride.ReasoningEffort, AccessMode: record.PromptOverride.AccessMode}}
-	if record.PlanModeOverrideSet {
-		result.Overrides.PlanMode = string(record.PlanMode)
-	}
-	switch record.Backend {
-	case agentproto.BackendClaude:
-		result.ProfileID = record.ClaudeProfileID
-		result.Environment, _, err = a.applyClaudeHeadlessProfileEnv(result.Environment, record.Backend, result.ProfileID)
-	case agentproto.BackendOpenCode:
-		result.ProfileID = record.OpenCodeProfileID
-		result.Environment, result.LaunchArgs, _, err = a.applyOpenCodeHeadlessProfileConfigLocked(result.Environment, result.LaunchArgs, record.Backend, control.DaemonCommand{InstanceID: teamID("worker", wc.ID), WorkspaceKey: location.Cwd, OpenCodeProfileID: record.OpenCodeProfileID, OpenCodeAdmissionRef: record.OpenCodeAdmissionRef, OpenCodeRuntimeAccessMode: record.PromptOverride.AccessMode})
-	default:
-		result.ProfileID = record.CodexProfileID
-		env, args, projection, e := a.applyCodexHeadlessProfileConfigLocked(result.Environment, result.LaunchArgs, agentproto.BackendCodex, result.ProfileID, nil)
-		err = e
-		result.Environment, result.LaunchArgs = env, args
-		if e == nil && projection != nil {
-			result.CodexResume = orchestrator.CodexResumePolicyFromContract(&projection.Connection, &projection.Thread)
-		}
-	}
+	resolved := a.resolveWorkBotSettings(record, loaded.Config)
 	a.mu.Unlock()
-	if err != nil {
-		return result, err
+	if resolved.err != nil {
+		return result, resolved.err
 	}
+	result = workhost.LaunchSettings{Backend: work.Backend(record.Backend), Location: location, Environment: append([]string{}, a.headlessRuntime.BaseEnv...), LaunchArgs: append([]string{}, a.headlessRuntime.LaunchArgs...), Overrides: agentproto.PromptOverrides{Model: record.PromptOverride.Model, ReasoningEffort: record.PromptOverride.ReasoningEffort}}
 	err = r.store.Within(ctx, func(tx *workstore.Tx) error {
-		if e := tx.CheckRoleSettingsReference(role.ID, fingerprint, role.SettingsRevision); e != nil {
+		if e := tx.CheckRoleSettingsReference(role.ID, resolved.fingerprint, role.SettingsRevision); e != nil {
 			return e
 		}
 		preferences, e := tx.GetContextPreferences(wc.ID)
@@ -197,6 +234,33 @@ func (r teamSettingsResolver) ResolveLaunch(ctx context.Context, scope work.Work
 		}
 		return nil
 	})
+	if err != nil {
+		return result, err
+	}
+	result.ProfileID = teamSettingsProfile(record)
+	switch record.Backend {
+	case agentproto.BackendClaude:
+		var settings config.ClaudeRuntimeSettings
+		result.Environment, settings, err = applyResolvedClaudeLaunchProfile(result.Environment, resolved.claude)
+		if err == nil && !settings.Empty() {
+			var raw string
+			raw, err = config.MarshalClaudeRuntimeSettings(settings)
+			if err == nil {
+				result.Environment = config.UpsertEnvValue(result.Environment, config.ClaudeRuntimeSettingsJSONEnv, raw)
+			}
+		}
+	case agentproto.BackendOpenCode:
+		result.Environment, result.LaunchArgs, _, err = a.compileOpenCodeHeadlessProfile(result.Environment, resolved.openCode, control.DaemonCommand{InstanceID: teamID("worker", wc.ID), WorkspaceKey: location.Cwd, OpenCodeRuntimeAccessMode: result.Overrides.AccessMode})
+	default:
+		a.mu.Lock()
+		env, args, projection, e := a.applyCodexHeadlessProfileConfigLocked(result.Environment, result.LaunchArgs, agentproto.BackendCodex, result.ProfileID, nil)
+		a.mu.Unlock()
+		err = e
+		result.Environment, result.LaunchArgs = env, args
+		if e == nil && projection != nil {
+			result.CodexResume = orchestrator.CodexResumePolicyFromContract(&projection.Connection, &projection.Thread)
+		}
+	}
 	return result, err
 }
 

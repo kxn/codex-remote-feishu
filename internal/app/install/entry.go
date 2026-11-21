@@ -30,7 +30,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 	flagSet.SetOutput(stdout)
 
 	interactive := flagSet.Bool("interactive", false, "run interactive installer wizard")
-	bootstrapOnly := flagSet.Bool("bootstrap-only", false, "install binary and config only; do not patch VS Code integration")
+	flagSet.Bool("bootstrap-only", false, "compatibility flag; installing binary and config is the default")
 	instanceIDFlag := flagSet.String("instance", "", "install instance id; empty auto-resolves to workspace binding or stable")
 	startDaemon := flagSet.Bool("start-daemon", false, "ensure the local service is running after install")
 	baseDir := flagSet.String("base-dir", "", "base directory for config and install state; empty auto-resolves to workspace binding or platform default")
@@ -43,14 +43,14 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 	currentSlot := flagSet.String("current-slot", "", "current version slot metadata")
 	serviceManagerFlag := flagSet.String("service-manager", string(ServiceManagerDetached), "service lifecycle manager: detached, systemd_user, launchd_user, or task_scheduler_logon")
 	relayURL := flagSet.String("relay-url", "", "relay websocket url; empty preserves existing or default config")
-	codexBinary := flagSet.String("codex-binary", "", "optional Codex path override; empty keeps wrapper default and lets managed_shim auto-resolve codex.real")
-	integrationMode := flagSet.String("integration", "auto", "integration mode: auto or managed_shim")
+	codexBinary := flagSet.String("codex-binary", "", "optional Codex path override; empty preserves the configured default")
+	integrationMode := flagSet.String("integration", "auto", "compatibility flag; accepts auto or none")
 	feishuGatewayID := flagSet.String("feishu-gateway-id", "", "feishu gateway id")
 	feishuAppID := flagSet.String("feishu-app-id", "", "feishu app id")
 	feishuSecret := flagSet.String("feishu-app-secret", "", "feishu app secret")
 	useSystemProxy := flagSet.Bool("use-system-proxy", false, "whether relayd should use system proxy for Feishu API")
-	settingsPath := flagSet.String("vscode-settings", defaults.VSCodeSettingsPath, "vscode settings path")
-	bundleEntrypoint := flagSet.String("bundle-entrypoint", recommendedBundleEntrypoint(defaults), "VS Code extension bundle codex entrypoint path")
+	settingsPath := flagSet.String("vscode-settings", "", "path to the settings of an existing legacy VS Code integration")
+	bundleEntrypoint := flagSet.String("bundle-entrypoint", "", "retired VS Code integration option")
 
 	legacyWrapperBinary := flagSet.String("wrapper-binary", "", "deprecated: use -binary")
 	legacyRelaydBinary := flagSet.String("relayd-binary", "", "deprecated: use -binary")
@@ -62,16 +62,11 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 		return err
 	}
 
-	if *interactive && *bootstrapOnly {
-		return fmt.Errorf("-interactive cannot be combined with -bootstrap-only")
+	if err := validateInstallIntegration(*integrationMode); err != nil {
+		return err
 	}
-
-	var integrations []WrapperIntegrationMode
-	if !*bootstrapOnly {
-		integrations, err = ParseIntegrations(*integrationMode, defaults.GOOS)
-		if err != nil {
-			return err
-		}
+	if strings.TrimSpace(*bundleEntrypoint) != "" {
+		return fmt.Errorf("-bundle-entrypoint: VS Code session takeover integration has been retired")
 	}
 	serviceManager, err := ParseServiceManager(*serviceManagerFlag, defaults.GOOS)
 	if err != nil {
@@ -103,13 +98,10 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 		RelayServerURL:     *relayURL,
 		CodexRealBinary:    *codexBinary,
 		VSCodeSettingsPath: *settingsPath,
-		BundleEntrypoint:   *bundleEntrypoint,
 		FeishuGatewayID:    *feishuGatewayID,
 		FeishuAppID:        *feishuAppID,
 		FeishuAppSecret:    *feishuSecret,
 		UseSystemProxy:     *useSystemProxy,
-		Integrations:       integrations,
-		BootstrapOnly:      *bootstrapOnly,
 	}
 	preserveInstallOptionsFromExistingState(flagSet, selection.StatePath, &opts)
 	if *interactive {
@@ -147,7 +139,7 @@ func RunMain(args []string, stdin io.Reader, stdout, stderr io.Writer, version s
 
 	_, err = fmt.Fprintf(
 		stdout,
-		"installed config: %s\nstate: %s\nbinary: %s\nintegrations: %v\n",
+		"installed config: %s\nstate: %s\nbinary: %s\nlegacy integrations retained for cleanup: %v\n",
 		state.ConfigPath,
 		state.StatePath,
 		state.CurrentBinaryPath,
@@ -205,12 +197,7 @@ func preserveInstallOptionsFromExistingState(flagSet *flag.FlagSet, statePath st
 	if !flagWasProvided(flagSet, "current-slot") {
 		opts.CurrentSlot = existing.CurrentSlot
 	}
-	if !flagWasProvided(flagSet, "vscode-settings") && strings.TrimSpace(existing.VSCodeSettingsPath) != "" {
-		opts.VSCodeSettingsPath = existing.VSCodeSettingsPath
-	}
-	if !flagWasProvided(flagSet, "bundle-entrypoint") && strings.TrimSpace(existing.BundleEntrypoint) != "" {
-		opts.BundleEntrypoint = existing.BundleEntrypoint
-	}
+
 }
 
 func defaultBinaryPath(goos string) string {

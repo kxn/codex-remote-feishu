@@ -78,7 +78,7 @@ func TestUpgradeFreezeIncludesLaunchWhoseStartHasNotReturned(t *testing.T) {
 		if len(workers) != 1 {
 			t.Fatalf("sending launch absent from frozen pool: %d", len(workers))
 		}
-		unsent, e := tx.NativeUpgradeLaunchUnsent(workers[0])
+		unsent, e := tx.WorkerLaunchUnsent(workers[0])
 		if e != nil {
 			return e
 		}

@@ -29,9 +29,17 @@ const surfaceResumeRetryBackoff = 30 * time.Second
 
 func (a *App) configureSurfaceResumeStateLocked(stateDir string) {
 	path := surfaceresume.StatePath(stateDir)
-	a.surfaceResumeRuntime.persistedStoreRuntimeState = loadPersistedStore("surface resume", path, surfaceresume.LoadStore)
+	if a.legacyWorkRetired() {
+		a.surfaceResumeRuntime.persistedStoreRuntimeState = loadHistoryStore("surface resume", path, surfaceresume.LoadStore)
+	} else {
+		a.surfaceResumeRuntime.persistedStoreRuntimeState = loadPersistedStore("surface resume", path, surfaceresume.LoadStore)
+	}
 	store := a.surfaceResumeRuntime.store
 	if store == nil {
+		return
+	}
+	if a.legacyWorkRetired() {
+		a.materializeSurfaceResumeStateLocked()
 		return
 	}
 	a.reconcileFeishuRoomWorkspaceStateLocked(store.Entries())
@@ -84,6 +92,9 @@ func storedVSCodeResumeExists(store *surfaceresume.Store) bool {
 }
 
 func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
+	if a.legacyWorkRetired() {
+		return
+	}
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
 		return
 	}
@@ -116,6 +127,9 @@ func (a *App) syncSurfaceResumeStateLocked(clearTargets map[string]bool) {
 }
 
 func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTargets map[string]bool) {
+	if a.legacyWorkRetired() {
+		return
+	}
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
 		return
 	}
@@ -149,6 +163,9 @@ func (a *App) syncSurfaceResumeStateForInstanceLocked(instanceID string, clearTa
 }
 
 func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clearTargets map[string]bool) {
+	if a.legacyWorkRetired() {
+		return
+	}
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil || len(surfaceIDs) == 0 {
 		return
 	}
@@ -194,6 +211,9 @@ func (a *App) syncSurfaceResumeStateForSurfacesLocked(surfaceIDs []string, clear
 }
 
 func (a *App) putSurfaceResumeEntryLocked(entry surfaceresume.Entry, now time.Time) bool {
+	if a.legacyWorkRetired() {
+		return false
+	}
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
 		return false
 	}
@@ -211,6 +231,9 @@ func (a *App) putSurfaceResumeEntryLocked(entry surfaceresume.Entry, now time.Ti
 }
 
 func (a *App) deleteSurfaceResumeEntryLocked(surfaceID string) bool {
+	if a.legacyWorkRetired() {
+		return false
+	}
 	if !a.surfaceResumeRuntime.writable() || a.surfaceResumeRuntime.store == nil {
 		return false
 	}
@@ -951,42 +974,4 @@ func (a *App) gateUngatedManagedHeadlessResumeOutcomeEventsLocked(events []event
 		filtered = append(filtered, event)
 	}
 	return filtered
-}
-
-func (a *App) shouldDeferHeadlessResumeUntilInitialRefreshLocked(entry surfaceresume.Entry, allowMissingTargetFailure bool) bool {
-	if allowMissingTargetFailure {
-		return false
-	}
-	instanceID := strings.TrimSpace(entry.ResumeInstanceID)
-	if instanceID == "" {
-		return false
-	}
-	inst := a.service.Instance(instanceID)
-	if inst == nil {
-		return false
-	}
-	// Give a connected visible-instance resume one startup refresh round before
-	// falling back to a managed headless restart for the same persisted target.
-	return !state.IsInstanceSource(inst.Source, state.InstanceSourceHeadless)
-}
-
-func (a *App) markStartupThreadsRefreshRequestedLocked(instanceID string) {
-	instanceID = strings.TrimSpace(instanceID)
-	if instanceID == "" {
-		return
-	}
-	if a.surfaceResumeRuntime.startupRefreshPending == nil {
-		a.surfaceResumeRuntime.startupRefreshPending = map[string]bool{}
-	}
-	a.surfaceResumeRuntime.startupRefreshSeen = true
-	a.surfaceResumeRuntime.startupRefreshPending[instanceID] = true
-}
-
-func (a *App) markStartupThreadsRefreshSettledLocked(instanceID string) {
-	a.surfaceResumeRuntime.startupRefreshSeen = true
-	delete(a.surfaceResumeRuntime.startupRefreshPending, strings.TrimSpace(instanceID))
-}
-
-func (a *App) initialThreadsRefreshRoundCompleteLocked() bool {
-	return a.surfaceResumeRuntime.startupRefreshSeen && len(a.surfaceResumeRuntime.startupRefreshPending) == 0
 }

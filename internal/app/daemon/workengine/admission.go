@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
 	"github.com/kxn/codex-remote-feishu/internal/app/daemon/workstore"
 	"github.com/kxn/codex-remote-feishu/internal/core/agentproto"
 	"github.com/kxn/codex-remote-feishu/internal/core/work"
@@ -63,7 +64,7 @@ func (e *Engine) admit(ctx context.Context, candidate Candidate, plan DispatchPl
 		revisions[input.ID] = input.Revision
 	}
 	operation := work.Operation{ID: command.CommandID, ScopeID: candidate.Scope.ID, Actor: work.Actor{Kind: work.ActorRole, ID: candidate.Worker.RoleID}, ContextID: candidate.Context.ID, Kind: "native.dispatch", TargetID: candidate.Worker.ID, TargetGeneration: candidate.Worker.Generation, IdempotencyKey: command.CommandID, RequestHash: hash, RequestRef: requestRef, State: work.OperationPrepared, Revision: 1, CreatedAt: now, UpdatedAt: now}
-	err = e.store.Within(ctx, func(tx *workstore.Tx) error {
+	claim := func(tx *workstore.Tx) error {
 		worker, err := tx.GetWorker(candidate.Worker.ID)
 		if err != nil {
 			return err
@@ -82,6 +83,9 @@ func (e *Engine) admit(ctx context.Context, candidate Candidate, plan DispatchPl
 		}
 		if worker.Revision != candidate.Worker.Revision || role.Revision != candidate.Role.Revision || binding != candidate.BotBinding || context.Revision != candidate.Context.Revision {
 			return workstore.ErrConflict
+		}
+		if err := tx.CheckContextPreferencesRevision(context.ID, plan.PreferencesRevision); err != nil {
+			return err
 		}
 		if candidate.Task != nil {
 			task, err := tx.GetTask(candidate.Task.ID)
@@ -111,7 +115,8 @@ func (e *Engine) admit(ctx context.Context, candidate Candidate, plan DispatchPl
 		}
 		cursor.RoleByScope[candidate.Scope.ID] = candidate.Worker.RoleID
 		return tx.PutSchedulingCursor(cursor, expected)
-	})
+	}
+	err = e.config.SettingsAdmission.Within(ctx, candidate.Role.ID, func() error { return e.store.Within(ctx, claim) })
 	if err != nil {
 		return pending, err
 	}

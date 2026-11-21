@@ -21,20 +21,21 @@ const (
 )
 
 type CodexResumePolicy struct {
-	Mode                 CodexResumeMode `json:"mode,omitempty"`
-	ConnectionContractID string          `json:"connectionContractId,omitempty"`
-	ThreadPolicyID       string          `json:"threadPolicyId,omitempty"`
-	ModelProviderID      string          `json:"modelProviderId,omitempty"`
-	ModelMode            string          `json:"modelMode,omitempty"`
-	Model                string          `json:"model,omitempty"`
-	ReviewModelMode      string          `json:"reviewModelMode,omitempty"`
-	ReviewModel          string          `json:"reviewModel,omitempty"`
-	ReasoningMode        string          `json:"reasoningMode,omitempty"`
-	ReasoningEffort      string          `json:"reasoningEffort,omitempty"`
-	DeveloperInstruction string          `json:"developerInstruction,omitempty"`
-	ContextMode          string          `json:"contextMode,omitempty"`
-	ContextWindow        int64           `json:"contextWindow,omitempty"`
-	AutoCompactLimit     int64           `json:"autoCompactLimit,omitempty"`
+	Mode                  CodexResumeMode `json:"mode,omitempty"`
+	ConnectionContractID  string          `json:"connectionContractId,omitempty"`
+	ThreadPolicyID        string          `json:"threadPolicyId,omitempty"`
+	ModelProviderID       string          `json:"modelProviderId,omitempty"`
+	InheritNativeProvider bool            `json:"inheritNativeProvider,omitempty"`
+	ModelMode             string          `json:"modelMode,omitempty"`
+	Model                 string          `json:"model,omitempty"`
+	ReviewModelMode       string          `json:"reviewModelMode,omitempty"`
+	ReviewModel           string          `json:"reviewModel,omitempty"`
+	ReasoningMode         string          `json:"reasoningMode,omitempty"`
+	ReasoningEffort       string          `json:"reasoningEffort,omitempty"`
+	DeveloperInstruction  string          `json:"developerInstruction,omitempty"`
+	ContextMode           string          `json:"contextMode,omitempty"`
+	ContextWindow         int64           `json:"contextWindow,omitempty"`
+	AutoCompactLimit      int64           `json:"autoCompactLimit,omitempty"`
 }
 
 type CodexEffectiveThreadContract struct {
@@ -71,13 +72,19 @@ func NormalizeCodexResumePolicy(policy *CodexResumePolicy) *CodexResumePolicy {
 	clone.ReasoningEffort = strings.TrimSpace(clone.ReasoningEffort)
 	clone.DeveloperInstruction = strings.TrimSpace(clone.DeveloperInstruction)
 	clone.ContextMode = strings.TrimSpace(clone.ContextMode)
+	if clone.InheritNativeProvider {
+		// Inheritance is a resolved native profile contract, never a
+		// substitute for a missing provider in another profile.
+		if clone.Mode != CodexResumeApplyTargetProfile || clone.ModelProviderID != "" || clone.ConnectionContractID == "" || clone.ThreadPolicyID == "" {
+			return nil
+		}
+	} else if clone.ModelProviderID == "" {
+		return nil
+	}
 	switch clone.Mode {
 	case CodexResumeApplyTargetProfile, CodexResumePreserveThreadSettings:
 	default:
 		clone.Mode = CodexResumeApplyTargetProfile
-	}
-	if clone.ModelProviderID == "" {
-		return nil
 	}
 	return &clone
 }
