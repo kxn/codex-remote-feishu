@@ -2,7 +2,7 @@
 
 > Type: `draft`
 > Updated: `2026-11-21`
-> Summary: 核查现有 MCP、指令注入、群路由及恢复链路，提出共享业务用例、持久协作状态和受控执行身份方案。
+> Summary: 根据 Raft CLI/API 调用链修订能力入口，采用薄 CLI 与按需帮助，保留原生延迟 MCP 的适配空间。
 
 ## 1. 结论与范围
 
@@ -10,7 +10,7 @@
 
 推荐选择：
 
-1. Agent 的主调用入口复用现有 Streamable HTTP MCP；不先建设另一套 CLI 或 Codex 专用 dynamic tools。
+1. 托管 Agent 的团队能力主入口采用薄 CLI，按需发现命令和读取帮助；CLI、现有 MCP 与 UI 共用业务用例。支持并验证原生工具搜索的 backend 可另用延迟 MCP，不将完整工具 schema 常驻作为统一前提。
 2. 人类 UI 和 agent 工具调用同一组 typed application use cases，不让 agent 伪造卡片点击或私聊命令。
 3. 同一 daemon 管理的角色通过内部持久 inbox 可靠交接；飞书承载真实角色身份下的公开讨论和人类交互。
 4. 角色、项目、任务和执行身份独立；不把 Bot、群、目录、runtime thread 视为同一个对象。
@@ -62,7 +62,9 @@
 ```mermaid
 flowchart TD
     UI[飞书卡片 / 管理页面] --> UC[共享业务用例]
-    MCP[Agent MCP 工具] --> UC
+    CLI[Agent 团队 CLI] --> API[Daemon 受控能力 API]
+    API --> UC
+    MCP[可选 MCP 适配] --> UC
     IN[群消息 / 团队事件] --> UC
     UC --> CORE[Orchestrator 协作领域决策]
     CORE --> TX[Daemon 事务与持久协作存储]
@@ -70,6 +72,7 @@ flowchart TD
     OUT --> FS[Feishu adapter / projector]
     TX --> DIS[待办调度与执行准入]
     DIS --> RUN[现有 queue / headless / wrapper / backend]
+    RUN --> CLI
     RUN --> MCP
 ```
 
@@ -79,7 +82,7 @@ flowchart TD
 | `core/state` / 协作领域类型 | 角色、项目、任务、待办及执行关联 | 把 durable 任务全部塞入 UI surface 字段 |
 | `core/orchestrator` 协作 cluster | 成员与任务规则、路由、状态迁移、唤醒资格、影响范围 | HTTP MCP 协议、飞书网络调用或磁盘写入细节 |
 | `app/daemon` application / repository | 事务、外部操作调度、执行身份、重启对账 | 在工具 handler 里另建一套任务状态机 |
-| `app/daemon` MCP adapter | schema、输入解析、验证调用上下文、用例结果转工具结果 | 直接操作 UI modal 或任意调用管理 HTTP API |
+| CLI / daemon API / MCP adapter | 输入解析、schema、验证调用上下文、用例结果转命令或工具结果 | 直接操作 UI modal、任意调用管理 HTTP API、复制领域规则 |
 | `adapter/feishu` | 平台消息和成员 API、保留来源与话题字段 | 自行判定任务完成、负责人或项目归属 |
 | renderer / projector | 将同一领域结果投影为菜单、卡片与消息 | 用卡片发送成功代表任务已经被处理 |
 | wrapper / backend adapter | 指令、工具与输入注入，原生协议翻译 | 项目规划、任务分配、长期记忆业务规则 |
@@ -113,11 +116,54 @@ flowchart TD
 
 V1 对有效 project↔room 绑定设置唯一约束，operation 保存预期 room generation、目录、primary 和 Bot identity。每步重放和最终 ready 前重新检查；旧 `/workspace`、primary、AppID 清理路径改变这些事实时，协作层必须收到失效／对账事件。过期建立操作转 conflict/superseded，不能覆盖用户后来选择的新目录或新负责人。失败补偿只撤销仍由本 operation 拥有的变更；不能安全撤销时保留可修复状态。Project 未 ready 时不启动团队任务。
 
-## 5. MCP 工具路线与最小接口
+## 5. 能力入口、按需发现与最小接口
 
-MCP 解决模型如何发现和调用能力，不定义任务应如何运转。V1 扩展已有 server 即可；CLI 将来如有需要，应调用相同用例，不额外维护一套业务协议。
+### 5.1 Raft 的实际做法
 
-建议按领域发布少量工具，名字为设计示意，不是现有接口：
+Raft 公开托管 Agent 提示词规定使用 `raft` CLI 做沟通与管理，由 daemon 把身份绑定的 wrapper 加入 PATH。常驻说明列出命令族，详细参数通过子命令 `--help` 和 `raft manual get/search` 查询；它没有把整套协作操作都声明成模型原生工具。原生 runtime 的 MCP、CLI 和浏览器能力仍然可以独立使用。
+
+公开源码的 managed-runner 路径为：模型调用原生 shell → `raft` wrapper → CLI HTTP client → daemon 本地凭据代理 → Raft agent API。CLI 持有本地代理凭据，daemon 持有服务端 agent 凭据。外接 agent 还可使用 CLI 直连或 SDK。因而“CLI”和“调用 API”是不同层次，可以同时成立；这也不表示 Raft 必须自己直接驱动底层模型 API。
+
+官方服务 CLI 迁移指南进一步建议：当第三方应用操作集增长时，将完整能力放进服务 CLI，发现／登录与兼容操作保留在 manifest。这是应用集成建议，与上述 Raft 自身协作 CLI 的源码证据分开理解。
+
+CLI 仍消耗上下文：入口说明、已查询帮助、执行结果都会进入会话。优势是通常复用原生 shell 工具，未查询命令的完整参数不必预加载；没有实测前不承诺固定 token 节省比例。Raft 的完整提示词还包含大量协作与记忆规则，不应照搬全文并假定天然精简。
+
+### 5.2 本项目推荐路线
+
+V1 给托管 worker 注入一个随产品发布的薄 CLI。下列 `team` 为设计示意命令名，不是现有可执行文件：
+
+```text
+team context
+team discover "邀请测试角色加入项目"
+team project member add --help
+team project member add --role tester --run-ref <current-run>
+```
+
+常驻说明只放当前角色／项目入口、少量协作规则、如何发现操作。高频操作如收件箱、回信、任务状态可给简短例子；邀请、设置、记忆管理等长尾操作按需查。发现结果返回少量相关操作和精确帮助入口，不能用一次“搜索”再把全目录倒进上下文。先用命令名、描述、标签检索，不必先引入模型或向量库。
+
+CLI 调 daemon 的受控能力 API，daemon 调共享业务用例，再由 adapter 调飞书。CLI 不持有飞书 App secret、不自判任务状态、不调用私有管理 UI。配置仍集中在 Bot；身份由 wrapper 注入对应 worker，模型不必在每条命令重填 Bot、群、项目。单轮 `run_ref` 继续显式携带并校验，不能由“当前运行是哪一轮”覆盖旧请求归属。
+
+在共享 command registry 维护操作名、简述、输入 schema、结果合同和作用域；CLI 帮助、发现目录与可选 MCP schema 从同一合同生成。CLI 新增的是调用适配与发布工作，不是第二套任务系统。正文／复杂输入支持 stdin 或 JSON 文件，避免把长消息拼进 shell 参数；结果支持摘要、分页、引用和 JSON，写操作返回既有 operation/idempotency 状态。
+
+保留现有少量 MCP 工具；后端支持原生延迟加载且通过实测时可发布团队 MCP。一次执行为同一能力选择一个推荐入口，避免并列重复目录。暂不支持 shell 的后端可用固定的发现／执行桥接工具：发现返回限定操作 schema，执行仍走白名单和服务端校验；这是一种兼容适配，不伪装成原生工具热注册。
+
+### 5.3 动态工具不等于延迟加载
+
+必须区分三个能力：运行中工具目录改变；宿主注册自定义工具；模型只在需要时获得完整工具定义。前两者不自动带来第三种效果。MCP server 连接或后台拉取目录，也不等于所有 schema 已进入模型请求。不能靠提示词里写“需要时再用”省去已经发送的 schema。
+
+截至本次调查，上游能力与本仓库接入必须分开判断：
+
+| Backend | 当前官方能力 | 本项目判断 |
+| --- | --- | --- |
+| Claude Code | MCP Tool Search 按需加载完整定义，启动仍有工具名与 server instructions；模型、网关、配置可使其退回提前加载 | 已有 MCP 注入，可利用原生搜索；实际版本与网关必须验证 |
+| Codex app-server | 官方 main 有 experimental `thread/start.dynamicTools`；`deferLoading` 默认 false。搜索要求模型 `supports_search_tool`、允许 `tool_search`、且存在带搜索信息的 deferred 工具；原生 MCP 也有搜索曝光选择 | 本仓库自定义工具未形成执行闭环，不能仅添加 schema；MCP 接入与自定义 callback 两条路线分别验收 |
+| OpenCode | 当前 V2 文档默认 MCP 经 `execute` Code Mode 使用；`codemode:false` 可直接曝光，禁止 `execute` 也会退回直接工具定义 | 当前仓库走 ACP 注入 `mcpServers`，未证明实际安装版本和该路径具备 V2 效果；先验证兼容，再利用原生发现 |
+
+Codex 的动态工具注册不是保证运行中任意热挂载的承诺，更不是默认延迟加载。上述源码 main／当前官方文档不等于本机已发布版本。不能仅把服务接上 MCP 就声称节省已经实现；同样不能再笼统说三个 backend 的 MCP 都只能全量常驻。CLI 基线路线不要求重写这些 runtime 的模型请求循环。
+
+### 5.4 共享业务操作
+
+以下是业务能力清单，名字为设计示意，不代表必须全部作为常驻 MCP 工具发布：
 
 | 工具 | 输入意图 | 核心业务效果 |
 | --- | --- | --- |
@@ -137,7 +183,7 @@ MCP 解决模型如何发现和调用能力，不定义任务应如何运转。V
 
 不暴露一个拥有全应用能力的 `call_feishu_api(path, body)` 作为主接口。群成员、消息、设置是可解释的产品操作，系统负责选择正确 Bot 凭据、调用 SDK、去重和恢复。
 
-工具目录先以固定版本发布；不要假定所有 runtime 都支持运行中动态发现新增工具。目录更新可以在安全会话边界重新连接或恢复，具体行为纳入 backend 验证。
+目录与 CLI/API 合同版本化。CLI 帮助按需读取，不依赖 runtime 热增工具；MCP 目录变更是否可热刷新、刷新后是否仍延迟加载，需要分别验证。必要时在安全会话边界重新连接／恢复，不在活跃执行中静默切换调用合同。
 
 ## 6. 工具身份不能继续只靠当前飞书消息
 
@@ -145,7 +191,7 @@ MCP 解决模型如何发现和调用能力，不定义任务应如何运转。V
 
 团队执行可能由同事回信、任务指派或提醒触发，没有新的人类消息。不能伪造用户 turn、任意传 `surface_session_id`，或者从多个 active turn 中取第一个来决定项目。
 
-推荐引入两级绑定，兼容 MCP 配置通常在进程／session 启动时注入的事实：
+推荐引入两级绑定，兼容 CLI 环境与 MCP 配置通常在进程／session 启动时注入的事实：
 
 1. **运行会话绑定**：daemon 为托管 worker 签发绑定凭据，关联 role、project、instance/session、Bot generation。wrapper 只把该凭据注入对应 child，不继续为新团队工具分发一个可任意声明 instance 的全局 bearer。
 2. **单轮执行引用**：每次派发分配 `run_ref`，把 task、回复目标和指令／记忆版本登记在服务端；将不承担身份认证的 opaque run reference 放进当轮输入。团队工具请求携带该引用，服务端同时验证会话绑定和 active run，不接受模型自行声明 actor/project。
@@ -253,7 +299,7 @@ memory_update 使用 expected revision，记录作者、来源任务/消息、�
 
 Conversation 先有逻辑 ID，再取得平台根消息／话题 ID。相关 outbox 按锚点创建依赖排序；根消息未发送成功时，后续回复等待映射，不能降级投到主群或最近消息。根消息删除或不可访问时进入显式重新锚定操作，并保留旧、新关联记录。
 
-阶段进度和最终交付复用现有事件输出；MCP 显式发送用于跨角色消息和交接说明。需要指定单一内容 owner，避免工具已经发送成果、最终回复又原样发一遍。
+阶段进度和最终交付复用现有事件输出；团队命令显式发送用于跨角色消息和交接说明。需要指定单一内容 owner，避免工具已经发送成果、最终回复又原样发一遍。
 
 卡片按钮携带 task/project/revision，点击时重新读取事实。反馈表单和后续话题输入绑定具体任务与操作者，替换团队模式下“吃掉群下一条普通消息”的捕获方式。
 
@@ -271,7 +317,7 @@ Conversation 先有逻辑 ID，再取得平台根消息／话题 ID。相关 out
 
 ### 10.2 设置与角色维护
 
-现有设置写入依赖人类私聊 surface，不能让 Bot 伪造私聊来复用。抽出接受真实 principal 和字段变更的统一用例，UI、MCP 均调用；审计记录区分 human、role、system。
+现有设置写入依赖人类私聊 surface，不能让 Bot 伪造私聊来复用。抽出接受真实 principal 和字段变更的统一用例，UI、CLI、MCP 均调用；审计记录区分 human、role、system。
 
 分开三类操作：
 
@@ -344,10 +390,10 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 
 | 阶段 | 交付范围 | 验证后才进入下一阶段 |
 | --- | --- | --- |
-| A 能力验证 | 各 runtime 指令与 MCP 的真实 start/resume 冒烟；运行绑定和一个无副作用 team context 工具 | 三后端分别记录发现、调用、回复归属和恢复证据；不支持项显式降级 |
+| A 能力验证 | 各 runtime 指令、CLI 与原生按需 MCP 的真实 start/resume 冒烟；运行绑定和无副作用 context 查询 | 分别记录发现、调用、归属、恢复及上下文成本；原生按需工具不可用时验证 CLI 路径 |
 | B 角色与项目 | 稳定 ID、群登记、成员记录、统一模型、版本化记忆入口 | 同 Bot 两项目不串上下文；新 session 可恢复职责与项目资料 |
 | C 最小协作闭环 | typed task/message 用例、inbox/outbox、执行 dispatcher、话题映射 | 并发 1 下委派→执行→回信→负责人继续；重启后不丢交接 |
-| D 完整产品交互 | 项目／任务卡、话题反馈、邀请角色、记忆作用范围与统一设置用例 | 卡片与 MCP 使用同一事实；旧卡、多人反馈、设置生效可解释 |
+| D 完整产品交互 | 项目／任务卡、话题反馈、邀请角色、记忆作用范围与统一设置用例 | 卡片、CLI 与可选 MCP 使用同一事实；旧卡、多人反馈、设置生效可解释 |
 | E 扩展 | 多任务并行、独立工作目录、提醒、更多 backend 能力 | 并行写入、恢复和发布证据覆盖后才扩大支持范围 |
 
 阶段 A 是验证缺口，不把工具参数存在当成真实 runtime 已支持。阶段 C 之前不能把功能宣传为自主团队；单纯开放 bot 消息或增加角色提示词不足以形成闭环。
@@ -365,7 +411,8 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 - 崩溃窗口：事务前后、飞书发送前后、worker 启动前后、结果提交前后均有可解释恢复。
 - 群无新用户消息：已有待办可以恢复；没有待办的普通群不被无条件启动。
 - Bot 邀请：已在群、超时后实际成功、事件延迟、目标 runtime 不可用分别有状态。
-- UI/MCP 并发改设置或记忆：版本冲突可见，没有最后写入者静默覆盖。
+- UI/CLI/MCP 并发改设置或记忆：版本冲突可见，没有最后写入者静默覆盖。
+- 工具规模：分别用小目录和扩展目录测空闲开发轮、首次查帮助、重复操作、恢复后的输入成本与调用成功率；网关降级不得被误记为仍在延迟加载。
 - 话题反馈：文字、图片、引用与卡片反馈均定位正确；不捕获群里无关下一条消息。
 - 目录变更：保留长期资料，旧执行不能把成果写到新项目；共享 checkout 写入策略有效。
 - Provisioning 期间用户改目录：旧 operation 不覆盖新选择，未 ready 项目不启动团队执行。
@@ -378,7 +425,7 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 
 本次已只读核查 MCP publication、指令注入、工具目录及 caller 解析、群队列与恢复、消息接口和 Bot 设置实现。产品与技术文档是本次唯一仓库变更。
 
-2026-11-21 新鲜验证：`internal/app/wrapper`、`internal/app/daemon`、`internal/adapter/codex` 三个包的 11 个定向测试入口及其子测试通过，使用 `-count=1`，清除 proxy 环境变量后执行。覆盖 Codex/Claude/OpenCode MCP publication、VS Code 排除、Claude initialize 指令、MCP 工具目录与 caller 解析、Codex profile policy 以及 compact/restart 恢复。未启动真实 Bot 群协作或修改本机服务配置。
+2026-11-21 初版草案验证：`internal/app/wrapper`、`internal/app/daemon`、`internal/adapter/codex` 三个包的 11 个定向测试入口及其子测试通过，使用 `-count=1`，清除 proxy 环境变量后执行。覆盖 Codex/Claude/OpenCode MCP publication、VS Code 排除、Claude initialize 指令、MCP 工具目录与 caller 解析、Codex profile policy 以及 compact/restart 恢复。未启动真实 Bot 群协作或修改本机服务配置。后续 CLI／按需加载修订仅为文档研究，尚未实现或实测，也不把这些既有测试视为新路线验收。
 
 可复核测试入口：
 
@@ -401,6 +448,16 @@ ExecutionAttempt 则表示待启动、运行、已结束、失败、待对账。
 - [飞书卡片状态机](../general/feishu-card-ui-state-machine.md)
 - [Raft Agent 与记忆](https://docs.raft.build/features/agents/)
 - [Raft durable inbox 与唤醒](https://docs.raft.build/developers/sdk/external-agents/wake-and-status/)
+- [Raft Agent 提示词源码](https://github.com/botiverse/raft-source/blob/main/packages/daemon/src/drivers/__snapshots__/systemPrompt/common.md)
+- [Raft CLI HTTP client](https://github.com/botiverse/raft-source/blob/main/packages/cli/src/client.ts)
+- [Raft CLI wrapper 注入](https://github.com/botiverse/raft-source/blob/main/packages/daemon/src/drivers/cliTransport.ts)
+- [Raft 服务 CLI 迁移建议](https://docs.raft.build/developers/best-practices/service-cli-migration/)
+- [Claude Code MCP Tool Search](https://code.claude.com/docs/en/mcp#scale-with-mcp-tool-search)
+- [Codex app-server](https://developers.openai.com/codex/app-server/)
+- [Codex dynamic tool 协议](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/dynamic_tools.rs)
+- [Codex deferred tool 与搜索选择](https://github.com/openai/codex/blob/main/codex-rs/core/src/tools/spec_plan.rs)
+- [OpenCode execute / Code Mode](https://opencode.ai/docs/tools/#execute)
+- [OpenCode MCP](https://opencode.ai/docs/mcp-servers/)
 - [飞书机器人互聊事件](https://open.feishu.cn/document/server-docs/im-v1/message/events/receive)
 - [飞书添加已有用户或机器人](https://open.feishu.cn/document/server-docs/group/chat-member/create)
 - [飞书话题回复](https://open.feishu.cn/document/server-docs/im-v1/message/reply)
