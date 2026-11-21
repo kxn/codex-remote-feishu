@@ -2,7 +2,7 @@
 
 > Type: `general`
 > Updated: `2026-11-21`
-> Summary: 索引飞书项目群与 Agent 团队的产品草案和技术可行性方案。
+> Summary: 索引飞书 Agent 团队的产品、技术与完整执行设计，补充 Raft 源码对照和并行工作区合同。
 
 ## 1. 适用范围
 
@@ -204,6 +204,7 @@
 - [daemon-package-refactor-plan.md](./draft/daemon-package-refactor-plan.md)
 - [feishu-agent-team-product-design.md](./draft/feishu-agent-team-product-design.md)
 - [feishu-agent-team-technical-design.md](./draft/feishu-agent-team-technical-design.md)
+- [feishu-agent-team-execution-design.md](./draft/feishu-agent-team-execution-design.md)
 - [feishu-group-context-multi-bot-design.md](./draft/feishu-group-context-multi-bot-design.md)
 - [feishu-group-on-demand-resume-design.md](./draft/feishu-group-on-demand-resume-design.md)
 - [feishu-call-broker-design.md](./draft/feishu-call-broker-design.md)
